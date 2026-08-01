@@ -10,7 +10,9 @@
     "./audit": "./audit/index.ts",
     "./auth": "./auth/index.ts",
     "./money": "./money/index.ts",
-    "./rbac": "./rbac/index.ts"
+    "./rbac": "./rbac/index.ts",
+    "./scheduling": "./scheduling/index.ts",
+    "./events": "./events/index.ts"
   },
   "dependencies": {
     "@rental/db": "*",

@@ -224,10 +224,16 @@ describe('rate limiting', () => {
     expect(blocked.retryAfterMs).toBeGreaterThan(0)
   })
 
-  // Without SELECT ... FOR UPDATE, simultaneous attempts all read the same
-  // count and all decide they are under the limit - which turns the limiter
-  // into a suggestion exactly when it is under attack.
-  it('does not let concurrent attempts exceed the limit', async () => {
+  // Without the advisory lock, simultaneous attempts all find no counter row
+  // yet, all conclude they are opening a fresh window, and all are allowed -
+  // which turns the limiter into a suggestion exactly when it is under attack.
+  // (SELECT ... FOR UPDATE does NOT fix this: there is no row to lock.)
+  //
+  // Twenty transactions serialized behind one advisory lock, each a round trip
+  // to a hosted database. Slow by construction, and slower when the rest of the
+  // suite is competing for the same pool - so it gets a real timeout rather
+  // than the 5s default it was quietly exceeding under load.
+  it('does not let concurrent attempts exceed the limit', { timeout: 60_000 }, async () => {
     const key = `${RATE_KEY_PREFIX}${nextSubject()}`
     const policy = { limit: 5, windowMs: 60_000 }
 
@@ -262,7 +268,7 @@ describe('rate limiting', () => {
     expect((await consumeRateLimit(b, policy)).allowed).toBe(true)
   })
 
-  it('uses a real login budget that is tight enough to matter', async () => {
+  it('uses a real login budget that is tight enough to matter', { timeout: 60_000 }, async () => {
     const key = `${RATE_KEY_PREFIX}${nextSubject()}`
     const attempts = await Promise.all(
       Array.from({ length: RATE_LIMITS.login.limit + 5 }, () =>

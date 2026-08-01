@@ -52,6 +52,11 @@ export const AUDIT_ACTIONS = [
   /// break-in dispute.
   'accesscode.revealed',
 
+  /// Scheduled work that did not complete (R-006). Recorded rather than only
+  /// logged, because a nightly job failing silently is how a month of missing
+  /// late fees happens - and AuditLog is still there when someone finally asks.
+  'job.failed',
+
   // Compliance overrides
   'entry_notice.overridden',
   'screening.decided',

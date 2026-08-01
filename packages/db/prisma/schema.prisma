@@ -328,6 +328,8 @@ model Property {
   documents        Document[]
   auditLogs        AuditLog[]
   assignments      StaffAssignment[]
+  outboxEvents     OutboxEvent[]
+  jobRuns          JobRun[]
 
   @@index([legalEntityId])
   @@index([state])
@@ -547,6 +549,113 @@ model LeaseTenant {
 
   @@unique([leaseId, tenantId])
   @@index([tenantId])
+}
+
+// ---------------------------------------------------------------------------
+// Jobs and events (R-006)
+//
+// NOT a second work queue. D-9 forbids inventing one, and this is not one:
+// `Task` is the queue of work a PERSON has to do, and everything below is the
+// record of work a MACHINE has done. A staff member never sees a JobRun.
+//
+// Two idempotency mechanisms, because there are two distinct failure modes:
+//
+//   OutboxEvent + EventConsumption - "this event must reach each consumer
+//   exactly once", even though delivery is at-least-once.
+//
+//   JobRun - "this job must run once per property per local day", even though
+//   the cron ticks hourly, fires twice through a fall-back hour, and may be
+//   late or retried.
+// ---------------------------------------------------------------------------
+
+enum JobRunStatus {
+  RUNNING
+  SUCCEEDED
+  FAILED
+}
+
+/// Transactional outbox. An event is written in the SAME transaction as the
+/// change that caused it, so the two cannot disagree: no event for a change
+/// that was rolled back, and no change that failed to announce itself. A
+/// dispatcher publishes them afterwards.
+///
+/// The alternative - emitting after commit - drops events whenever the process
+/// dies in the gap, and drops them silently.
+model OutboxEvent {
+  id   String @id @default(cuid())
+  /// Event name from packages/core/events. A closed vocabulary, for the same
+  /// reason audit actions are.
+  type String
+  /// What the event is about, so a consumer can load it without the payload
+  /// having to carry the whole record.
+  aggregateType String
+  aggregateId   String
+  /// Scopes the event for R-004 filtering, and lets a per-property job pick up
+  /// only its own. Null for portfolio-level events.
+  propertyId    String?
+  payload       Json
+  /// When the thing happened, which is not when the row was written and not
+  /// when it was published.
+  occurredAt    DateTime @default(now())
+  publishedAt   DateTime?
+  attempts      Int      @default(0)
+  lastError     String?
+  createdAt     DateTime @default(now())
+
+  property     Property?          @relation(fields: [propertyId], references: [id])
+  consumptions EventConsumption[]
+
+  /// The dispatcher's query: unpublished, oldest first.
+  @@index([publishedAt, occurredAt])
+  @@index([aggregateType, aggregateId])
+  @@index([propertyId])
+}
+
+/// One row per (event, consumer). The unique constraint IS the idempotency:
+/// a consumer that has already handled an event cannot handle it again, no
+/// matter how many times delivery is retried.
+///
+/// Recorded in the same transaction as the consumer's own effects, so a
+/// consumer that half-succeeded is retried rather than skipped.
+model EventConsumption {
+  id         String   @id @default(cuid())
+  eventId    String
+  /// Stable consumer name. Renaming one makes it re-consume every event it
+  /// has already handled, which is why the name belongs in code review.
+  consumer   String
+  processedAt DateTime @default(now())
+
+  event OutboxEvent @relation(fields: [eventId], references: [id])
+
+  @@unique([eventId, consumer])
+  @@index([consumer])
+}
+
+/// The ledger of scheduled work. One row per (job, property, local day), which
+/// is what makes a nightly job run exactly once even though the cron ticks
+/// hourly and `isDue` stays true for the rest of the local day.
+///
+/// `businessDate` is a property-LOCAL calendar day (D-3), never a UTC one.
+model JobRun {
+  id           String       @id @default(cuid())
+  jobType      String
+  /// Null for a portfolio-wide job that is not run per property.
+  propertyId   String?
+  businessDate DateTime     @db.Date
+  status       JobRunStatus @default(RUNNING)
+  startedAt    DateTime     @default(now())
+  finishedAt   DateTime?
+  /// Free-form result summary - counts, ids touched. Small enough to read in
+  /// a support conversation, not a log stream.
+  result       Json?
+  error        String?
+  attempts     Int          @default(1)
+
+  property Property? @relation(fields: [propertyId], references: [id])
+
+  @@index([jobType, businessDate])
+  @@index([propertyId, businessDate])
+  @@index([status])
 }
 
 // ---------------------------------------------------------------------------
