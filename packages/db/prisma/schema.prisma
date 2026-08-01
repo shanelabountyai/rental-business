@@ -361,8 +361,9 @@ model Unit {
 // People & tenancy
 // ---------------------------------------------------------------------------
 
-/// Identity only. No password, no MFA secret, no role, no permission bits.
-/// R-003 adds credentials; R-004 adds roles-as-data and the property/entity
+/// Identity and account state. Secrets live on StaffCredential, never here,
+/// so an ordinary `staffUser.findMany()` cannot leak a password hash or a TOTP
+/// secret by accident. R-004 adds roles-as-data and the property/entity
 /// assignment rows that scope them. There is no `isSuperuser` and there never
 /// will be (D-5).
 model StaffUser {
@@ -372,8 +373,16 @@ model StaffUser {
   phone         String?
   active        Boolean   @default(true)
   deactivatedAt DateTime?
+  /// Sessions issued before this instant are rejected (R-003). Bumping it is
+  /// how a password reset, a deactivation, or a "sign out everywhere" takes
+  /// effect immediately - Auth.js Credentials sessions are JWTs and cannot be
+  /// deleted server-side, so revocation is a watermark comparison instead.
+  /// ROLE-06's "access killed within 1 minute" depends on this column.
+  sessionsValidFrom DateTime @default(now())
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
+
+  credential StaffCredential?
 
   paymentsReceived     Payment[]    @relation("PaymentReceivedBy")
   chargesWaived        Charge[]     @relation("ChargeWaivedBy")
@@ -398,9 +407,13 @@ model Tenant {
   phone     String?
   active    Boolean  @default(true)
   notes     String?
+  /// Same revocation watermark as StaffUser. A tenant who moves out or whose
+  /// magic link leaked has every issued session invalidated by bumping this.
+  sessionsValidFrom DateTime @default(now())
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  credential   TenantCredential?
   leaseTenants LeaseTenant[]
   leasePayers  LeasePayer[]
   tickets      Ticket[]
@@ -523,6 +536,121 @@ model LeaseTenant {
 
   @@unique([leaseId, tenantId])
   @@index([tenantId])
+}
+
+// ---------------------------------------------------------------------------
+// Authentication (R-003)
+//
+// Secrets are isolated from their identity rows on purpose: StaffUser and
+// Tenant are read constantly by ordinary product code, and a password hash
+// that rides along on every one of those reads eventually lands in a log, a
+// serialized payload, or a debug dump. Fetching a credential requires asking
+// for it by name.
+//
+// Three things are never stored in plaintext here: passwords (scrypt hash),
+// MFA secrets (AES-256-GCM, key derived from AUTH_SECRET) and single-use
+// tokens (SHA-256 hash). A dump of this database yields no working magic link
+// and no usable authenticator seed.
+// ---------------------------------------------------------------------------
+
+enum AuthTokenPurpose {
+  TENANT_MAGIC_LINK
+  STAFF_PASSWORD_RESET
+  TENANT_PASSWORD_RESET
+  /// Issued after a correct staff password, redeemed by the MFA step. It
+  /// exists so the second factor is a separate request that does not carry the
+  /// password again - no re-prompting the user, and no password sitting in a
+  /// hidden form field waiting to be autofilled or screenshotted. Lives in an
+  /// httpOnly cookie, never in a URL.
+  STAFF_MFA_CHALLENGE
+  /// D-6: a vendor gets a signed, expiring, single-use work-order link and
+  /// never an account. R-025 builds the dispatch flow on top of this purpose -
+  /// it should NOT invent a parallel VendorLink token table.
+  VENDOR_WORK_ORDER
+}
+
+model StaffCredential {
+  id           String @id @default(cuid())
+  staffUserId  String @unique
+  /// scrypt, encoded as `scrypt$N$r$p$salt$hash`. Never a bare digest.
+  passwordHash String
+  passwordUpdatedAt DateTime @default(now())
+  /// AES-256-GCM ciphertext of the TOTP secret. Null until enrolment starts.
+  mfaSecret         String?
+  /// Set only once a correct code has been entered - possessing a secret is
+  /// not the same as having proved possession of the device.
+  mfaEnrolledAt     DateTime?
+  /// SHA-256 hashes of single-use recovery codes. Removed as they are spent.
+  mfaRecoveryCodes  String[]
+  /// Account lockout. Per-account, so credential stuffing against one inbox
+  /// cannot be spread across IPs to evade the per-IP limiter.
+  failedLoginCount  Int       @default(0)
+  lockedUntil       DateTime?
+  lastLoginAt       DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  staffUser StaffUser @relation(fields: [staffUserId], references: [id])
+}
+
+/// A tenant's password is optional by design (ROLE-05): magic link is the
+/// primary path because friction is what keeps tenants off the portal, and a
+/// tenant who never sets a password must still be able to get in.
+model TenantCredential {
+  id           String @id @default(cuid())
+  tenantId     String @unique
+  passwordHash String?
+  passwordUpdatedAt DateTime?
+  failedLoginCount  Int       @default(0)
+  lockedUntil       DateTime?
+  lastLoginAt       DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+}
+
+/// One table for every short-lived single-use token in the product - tenant
+/// magic links, password resets, and vendor work-order links. Deliberately not
+/// three tables: they differ by purpose and subject, not by shape, and D-9's
+/// lesson about parallel queues applies just as well to parallel token stores.
+///
+/// `tokenHash` is a SHA-256 of the token that was actually sent; the raw value
+/// exists only in the URL. Single use is enforced by `consumedAt`, and the
+/// consuming update is conditional on it still being null so two simultaneous
+/// clicks cannot both succeed.
+model AuthToken {
+  id          String           @id @default(cuid())
+  purpose     AuthTokenPurpose
+  tokenHash   String           @unique
+  /// "Tenant", "StaffUser", "WorkOrder" - what the token grants access to.
+  subjectType String
+  subjectId   String
+  expiresAt   DateTime
+  consumedAt  DateTime?
+  /// Where the request to issue it came from, for abuse investigation.
+  requestedIp String?
+  /// Purpose-specific extras - the vendor link's scope, for instance.
+  metadata    Json?
+  createdAt   DateTime         @default(now())
+
+  @@index([purpose, subjectId])
+  @@index([expiresAt])
+}
+
+/// Fixed-window request counter, keyed by something like `login:ip:1.2.3.4`.
+///
+/// ponytail: DB-backed fixed window, not a sliding window or a token bucket.
+/// It is exact enough to stop credential stuffing at this scale and needs no
+/// Redis. Move to Upstash/Redis if login volume ever makes a write-per-attempt
+/// look expensive - the interface in packages/core/auth is the seam.
+model RateLimitCounter {
+  key             String   @id
+  windowStartedAt DateTime
+  count           Int      @default(0)
+  updatedAt       DateTime @updatedAt
+
+  @@index([windowStartedAt])
 }
 
 // ---------------------------------------------------------------------------

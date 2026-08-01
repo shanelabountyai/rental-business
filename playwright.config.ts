@@ -22,7 +22,11 @@ export default defineConfig({
   ],
   webServer: {
     command: 'npm run dev',
-    env: { PORT: port },
+    // AUTH_URL has to agree with the port, or Auth.js builds its post-sign-in
+    // redirect against whatever .env.local says and the browser is sent to a
+    // different origin than the one under test. dotenv-cli does not override
+    // variables already present in the environment, so these win.
+    env: { PORT: port, AUTH_URL: baseURL },
     url: baseURL,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,

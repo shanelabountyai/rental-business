@@ -14,7 +14,7 @@
     "typecheck": "npm run typecheck -w web",
     "test": "dotenv -e .env.local -- vitest run",
     "test:watch": "dotenv -e .env.local -- vitest",
-    "test:e2e": "playwright test",
+    "test:e2e": "dotenv -e .env.local -- playwright test",
     "db:generate": "dotenv -e .env.local -- prisma generate --schema packages/db/prisma/schema.prisma",
     "db:migrate": "dotenv -e .env.local -- prisma migrate dev --schema packages/db/prisma/schema.prisma",
     "db:seed": "dotenv -e .env.local -- node packages/db/prisma/seed.mts",

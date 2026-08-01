@@ -7,9 +7,11 @@
   "types": "./index.ts",
   "exports": {
     ".": "./index.ts",
+    "./auth": "./auth/index.ts",
     "./money": "./money/index.ts"
   },
   "dependencies": {
-    "@rental/db": "*"
+    "@rental/db": "*",
+    "otpauth": "^9.5.1"
   }
 }
