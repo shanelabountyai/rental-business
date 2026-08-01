@@ -28,10 +28,18 @@
     "**/*.tsx",
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts",
-    "**/*.mts"
+    "**/*.mts",
+    // The workspace packages are typechecked here rather than from their own
+    // tsconfigs. tsc only follows the import graph, so before this line a type
+    // error in packages/db - which nothing in apps/web imports yet - passed
+    // `npm run typecheck` silently. R-002 puts the whole Prisma layer there.
+    "../../packages/**/*.ts",
+    "../../packages/**/*.mts"
   ],
   "exclude": [
     "node_modules",
+    // Prisma's emitted client. Generated, gitignored, and not ours to check.
+    "../../packages/db/generated",
     // iCloud Drive syncs this working copy and resolves its own conflicts by
     // writing "file 2.ts" beside "file.ts". Inside .next/types that produces a
     // duplicate of every generated route type and fails `tsc`. Carried over

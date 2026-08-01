@@ -20,7 +20,7 @@ Everything else builds on this: repo, schema, auth, RBAC, jurisdiction rules, jo
 
 | # | ID | Item | PRD/Feature | Size | Depends on | Phase |
 |---|---|---|---|---|---|---|
-| 1 | R-001 | Monorepo & app scaffold: Next.js (App Router) + TypeScript, Tailwind/shadcn, Prisma + Postgres, Vitest/Playwright, CI (incl. axe + Lighthouse hooks), env/secret handling | D-1; PRD §6.5 | M | — | MVP |
+| 1 | ✅ R-001 | Monorepo & app scaffold: Next.js (App Router) + TypeScript, Tailwind/shadcn, Prisma + Postgres, Vitest/Playwright, CI (incl. axe + Lighthouse hooks), env/secret handling | D-1; PRD §6.5 | M | — | MVP |
 | 2 | R-002 | Core data model & migrations: LegalEntity, Property, Unit, Tenant, Guarantor, Lease, Charge, Payment, LedgerEntry, Deposit, Ticket, WorkOrder, Vendor, Inspection, Thread/Message, Notice, Task, Document, JurisdictionRule, AuditLog, StaffUser — money as integer cents, `propertyId` everywhere, **two-payer ledger shape decided here (OQ-2)** | PRD §13; D-3 | L | R-001 | MVP |
 | 3 | R-003 | Auth foundation: Auth.js staff sessions (password + MFA enrolment), tenant magic-link + optional password, **signed single-use vendor links** (no account, per D-6); rate-limited login, password reset | PRD ROLE-05 | M | R-002 | MVP |
 | 4 | R-004 | RBAC roles-as-data (tenant/guarantor/tech/manager/owner/read-only) + server-side **property and legal-entity scoping on every endpoint**; monetary authority ceilings config; **deactivation that preserves all history and kills access within a minute** (departing staff, past tenants). **No superuser flag, ever** (D-5) | PRD ROLE-01, ROLE-02, ROLE-06 | M | R-003 | MVP |
