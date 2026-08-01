@@ -1,23 +1,33 @@
-// Deliberately empty of models.
+// Core data model (R-002). Entity names are the canonical ones from
+// docs/prds/00-master-prd.md §13 - use them here and in conversation.
 //
-// R-002 owns the core data model - LegalEntity, Property, Unit, Tenant,
-// Guarantor, Lease, Charge, Payment, LedgerEntry, Deposit, Ticket, WorkOrder,
-// Vendor, Inspection, Thread/Message, Notice, Task, Document, JurisdictionRule,
-// AuditLog, StaffUser - and it is the most consequential item in the backlog.
-// Scaffolding it here would decide the two-payer ledger shape (OQ-12) as a
-// side effect of a config file, which is exactly the kind of silent decision
-// docs/prds/07-decisions.md exists to prevent.
+// Invariants this file encodes, from docs/prds/07-decisions.md:
+//   D-3  Money is integer cents, always a suffix-`Cents` Int. No floats, no
+//        Decimal, anywhere in money. Percentages are basis points (`Bps`), so
+//        a "5% late fee" is 500 and stays exact. Timestamps are UTC; fields
+//        that mean a property-local calendar day are `@db.Date`, never a
+//        DateTime, because "the 3rd" in Houston is not an instant.
+//   D-4  Jurisdiction rules are versioned, effective-dated ROWS. No statutory
+//        number appears as a default, a constant, or an enum in this file.
+//   D-5  No superuser flag. StaffUser carries no permission bits at all;
+//        R-004 adds roles-as-data and the assignment table that scopes them.
+//   D-9  ONE Task table serves every staff queue. Do not add a second.
+//   D-11 LedgerEntry is an append-only PROJECTION of Stripe, not the origin
+//        of charges. Enforced by a trigger in the migration, not by manners.
+//   D-12 Statutory amounts are computed in core and stored with the
+//        JurisdictionRule version that produced them, so a charge raised in
+//        2026 can still be explained in a 2029 courtroom.
 //
-// Constraints R-002 must honour, from the decision log:
-//   D-3  money is integer cents; timestamps UTC in the DB, property-local for
-//        display; every entity that a nightly job touches needs a resolvable
-//        property timezone.
-//   D-4  jurisdiction rules are versioned and effective-dated rows, not enums.
-//   D-5  no superuser flag - unrestricted access is an ordinary assignment row.
-//   D-11 LedgerEntry is an append-only projection of Stripe, not the origin of
-//        charges; it needs the Stripe object ids to reconcile against.
-//   D-12 statutory amounts are computed in core and stored with the rule
-//        version that produced them, so an old charge can be explained later.
+// Scoping: every operational and financial row carries `propertyId` directly,
+// per §13. It is denormalized on purpose - R-004 scopes every query by
+// property and legal entity, and a scope check that has to join three tables
+// to find out who owns a row is a scope check that gets skipped.
+//
+// Never stored anywhere in this schema: SSNs, taxpayer IDs, card numbers,
+// bank account numbers. Screening is provider-hosted (D-7) and payment
+// instruments are Stripe-hosted (D-11). LegalEntity deliberately has no EIN
+// field - a single-member LLC often uses the owner's SSN as its TIN, and the
+// safest place for that is nowhere.
 
 generator client {
   provider = "prisma-client-js"
@@ -28,4 +38,1186 @@ datasource db {
   provider  = "postgresql"
   url       = env("DATABASE_URL")
   directUrl = env("DIRECT_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+//
+// An enum here means "a closed set the code branches on". Anything a statute
+// could change is a JurisdictionRule column instead (D-4). LateFeeType is an
+// enum because it names a formula shape; the rate, cap and grace days that
+// feed the formula are rule columns.
+// ---------------------------------------------------------------------------
+
+enum LegalEntityType {
+  LLC
+  PERSONAL
+  TRUST
+  CORPORATION
+  PARTNERSHIP
+}
+
+enum PropertyType {
+  SINGLE_FAMILY
+  DUPLEX
+  TRIPLEX
+  FOURPLEX
+  TOWNHOUSE
+  CONDO
+  MANUFACTURED
+}
+
+enum UnitStatus {
+  OCCUPIED
+  VACANT
+  MAKE_READY
+  DOWN
+}
+
+enum LeaseStatus {
+  DRAFT
+  PENDING_SIGNATURE
+  ACTIVE
+  MONTH_TO_MONTH
+  ENDED
+  TERMINATED
+}
+
+/// Who owes a portion of a lease's rent. A voucher lease has a
+/// HOUSING_AUTHORITY payer alongside the TENANT payer; an ordinary lease has
+/// exactly one TENANT payer carrying the whole charge. See PayerAllocation.
+enum PayerType {
+  TENANT
+  HOUSING_AUTHORITY
+  GUARANTOR
+  OTHER
+}
+
+enum ChargeType {
+  RENT
+  LATE_FEE
+  NSF_FEE
+  UTILITY
+  RUBS_ALLOCATION
+  PET_RENT
+  PET_FEE
+  DEPOSIT
+  CHARGEBACK
+  CONCESSION
+  LEGAL_COST
+  OTHER
+}
+
+enum PaymentChannel {
+  ACH
+  CARD
+  RETAIL_CASH
+  OFFLINE_CHECK
+  MONEY_ORDER
+  OFFLINE_CASH
+  HAP_ACH
+  OTHER
+}
+
+enum PaymentStatus {
+  PENDING
+  SETTLED
+  FAILED
+  REVERSED
+  REFUNDED
+}
+
+/// Amounts are signed: CHARGE is positive (increases what is owed), PAYMENT
+/// and CREDIT are negative. A REVERSAL carries the opposite sign of the entry
+/// it reverses and points at it via `reversesId` - corrections are never
+/// edits or deletes (D-11).
+enum LedgerEntryType {
+  CHARGE
+  PAYMENT
+  CREDIT
+  REVERSAL
+  ADJUSTMENT
+}
+
+enum DepositType {
+  SECURITY
+  PET
+  LAST_MONTH
+  SURETY_BOND
+}
+
+enum TicketSource {
+  PORTAL
+  SMS
+  EMAIL
+  PHONE_LOGGED
+  STAFF
+}
+
+enum TicketStatus {
+  NEW
+  TRIAGED
+  WAITING_ON_TENANT
+  CONVERTED
+  MERGED
+  CLOSED
+}
+
+enum Priority {
+  EMERGENCY
+  URGENT
+  ROUTINE
+}
+
+enum WorkOrderStatus {
+  SUBMITTED
+  TRIAGED
+  PENDING_APPROVAL
+  APPROVED
+  ASSIGNED
+  SCHEDULED
+  IN_PROGRESS
+  WORK_COMPLETE
+  VERIFIED
+  INVOICED
+  CLOSED
+  ON_HOLD_WARRANTY
+  WAITING_ON_TENANT
+  CANCELED
+}
+
+enum TaskStatus {
+  OPEN
+  IN_PROGRESS
+  BLOCKED
+  DONE
+  CANCELED
+}
+
+enum InspectionType {
+  MOVE_IN
+  MOVE_OUT
+  PRE_MOVE_OUT
+  PERIODIC
+  SEASONAL
+  DRIVE_BY
+}
+
+enum ItemCondition {
+  NEW
+  GOOD
+  FAIR
+  POOR
+  DAMAGED
+  MISSING
+}
+
+enum MessageChannel {
+  PORTAL
+  SMS
+  EMAIL
+  CALL_LOG
+}
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum DeliveryStatus {
+  QUEUED
+  SENT
+  DELIVERED
+  READ
+  FAILED
+  BOUNCED
+}
+
+/// How a legally significant notice was served. Which of these are valid for
+/// a given notice type is jurisdiction config (D-4), not a property of this
+/// enum - these are only the mechanics the product can record proof for.
+enum NoticeServiceMethod {
+  PERSONAL
+  POSTED_WITH_PHOTO
+  CERTIFIED_MAIL
+  FIRST_CLASS_MAIL
+  EMAIL
+  PORTAL
+  PROCESS_SERVER
+}
+
+enum LateFeeType {
+  NONE
+  FLAT
+  PERCENT_OF_RENT
+  DAILY
+  FLAT_PLUS_DAILY
+}
+
+enum ActorType {
+  STAFF
+  TENANT
+  VENDOR
+  SYSTEM
+}
+
+// ---------------------------------------------------------------------------
+// Ownership & inventory
+// ---------------------------------------------------------------------------
+
+model LegalEntity {
+  id              String          @id @default(cuid())
+  name            String
+  type            LegalEntityType
+  formationState  String? // two-letter, e.g. "TX"
+  registeredAgent String?
+  notes           String?
+  active          Boolean         @default(true)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  properties Property[]
+
+  @@index([active])
+}
+
+model Property {
+  id            String  @id @default(cuid())
+  legalEntityId String
+  name          String
+  addressLine1  String
+  addressLine2  String?
+  city          String
+  /// Two-letter state code. Drives EVERY jurisdiction lookup (D-4) - a
+  /// property with the wrong state silently gets another state's grace
+  /// period, deposit deadline and notice periods.
+  state         String
+  postalCode    String
+  county        String?
+  country       String  @default("US")
+  latitude      Decimal? @db.Decimal(9, 6)
+  longitude     Decimal? @db.Decimal(9, 6)
+  /// IANA zone, e.g. "America/Chicago". Every nightly job runs in this zone,
+  /// not UTC (D-3). Not nullable: a property without one cannot be billed.
+  timezone      String
+  propertyType  PropertyType
+  bedrooms      Int?
+  bathrooms     Decimal?  @db.Decimal(3, 1)
+  yearBuilt     Int?
+  acquiredOn    DateTime? @db.Date
+  active        Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  legalEntity      LegalEntity       @relation(fields: [legalEntityId], references: [id])
+  units            Unit[]
+  leases           Lease[]
+  leasePayers      LeasePayer[]
+  charges          Charge[]
+  payments         Payment[]
+  ledgerEntries    LedgerEntry[]
+  deposits         Deposit[]
+  recurringCharges RecurringCharge[]
+  tickets          Ticket[]
+  workOrders       WorkOrder[]
+  inspections      Inspection[]
+  threads          Thread[]
+  notices          Notice[]
+  tasks            Task[]
+  documents        Document[]
+  auditLogs        AuditLog[]
+
+  @@index([legalEntityId])
+  @@index([state])
+  @@index([active])
+}
+
+model Unit {
+  id              String     @id @default(cuid())
+  propertyId      String
+  /// "Main house", "ADU", "Unit A". Unique per property.
+  name            String
+  status          UnitStatus @default(VACANT)
+  marketRentCents Int?
+  bedrooms        Int?
+  bathrooms       Decimal?   @db.Decimal(3, 1)
+  squareFeet      Int?
+  notes           String?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  property    Property     @relation(fields: [propertyId], references: [id])
+  leases      Lease[]
+  tickets     Ticket[]
+  workOrders  WorkOrder[]
+  inspections Inspection[]
+  documents   Document[]
+
+  @@unique([propertyId, name])
+  @@index([status])
+}
+
+// ---------------------------------------------------------------------------
+// People & tenancy
+// ---------------------------------------------------------------------------
+
+/// Identity only. No password, no MFA secret, no role, no permission bits.
+/// R-003 adds credentials; R-004 adds roles-as-data and the property/entity
+/// assignment rows that scope them. There is no `isSuperuser` and there never
+/// will be (D-5).
+model StaffUser {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String
+  phone         String?
+  active        Boolean   @default(true)
+  deactivatedAt DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  paymentsReceived     Payment[]    @relation("PaymentReceivedBy")
+  chargesWaived        Charge[]     @relation("ChargeWaivedBy")
+  workOrdersApproved   WorkOrder[]  @relation("WorkOrderApprovedBy")
+  workOrdersAssigned   WorkOrder[]  @relation("WorkOrderAssignedTo")
+  tasksAssigned        Task[]       @relation("TaskAssignedTo")
+  tasksCompleted       Task[]       @relation("TaskCompletedBy")
+  inspectionsPerformed Inspection[] @relation("InspectionPerformedBy")
+  noticesServed        Notice[]     @relation("NoticeServedBy")
+  messagesSent         Message[]    @relation("MessageSentBy")
+  documentsUploaded    Document[]   @relation("DocumentUploadedBy")
+  auditLogs            AuditLog[]   @relation("AuditLogActor")
+
+  @@index([active])
+}
+
+model Tenant {
+  id        String   @id @default(cuid())
+  firstName String
+  lastName  String
+  email     String?
+  phone     String?
+  active    Boolean  @default(true)
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  leaseTenants LeaseTenant[]
+  leasePayers  LeasePayer[]
+  tickets      Ticket[]
+  threads      Thread[]
+  messages     Message[]     @relation("MessageFromTenant")
+  documents    Document[]
+
+  @@index([lastName, firstName])
+  @@index([email])
+}
+
+/// Financially liable on the ledger, no portal access to maintenance or
+/// comms (LEASE-06). A guarantor guarantees exactly one lease; a person
+/// guaranteeing two leases is two rows, which is the honest shape - their
+/// liability is per-lease.
+model Guarantor {
+  id        String   @id @default(cuid())
+  leaseId   String
+  firstName String
+  lastName  String
+  email     String?
+  phone     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  lease Lease @relation(fields: [leaseId], references: [id])
+
+  @@index([leaseId])
+}
+
+model Vendor {
+  id            String    @id @default(cuid())
+  name          String
+  /// Free-form trade tags ("plumbing", "hvac"). Not an enum - the trade list
+  /// is operator data, and a new trade should not need a migration.
+  trades        String[]
+  contactName   String?
+  email         String?
+  phone         String?
+  serviceAreas  String[]
+  licenseNumber String?
+  /// Payment is blocked or flagged without a W-9 on file (MAINT-11). The W-9
+  /// itself is a Document; this is the flag the dispatch check reads.
+  w9OnFile      Boolean   @default(false)
+  coiExpiresOn  DateTime? @db.Date
+  /// Lower sorts first within a trade. Null = no stated preference.
+  preferredRank Int?
+  active        Boolean   @default(true)
+  notes         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  workOrders WorkOrder[]
+  threads    Thread[]
+  messages   Message[]   @relation("MessageFromVendor")
+  documents  Document[]
+
+  @@index([active])
+}
+
+model Lease {
+  id             String      @id @default(cuid())
+  propertyId     String
+  unitId         String
+  status         LeaseStatus @default(DRAFT)
+  startsOn       DateTime    @db.Date
+  endsOn         DateTime?   @db.Date
+  rentCents      Int
+  /// Day of month rent is due, property-local. The Stripe subscription anchor
+  /// is computed from this in local time, then expressed to Stripe (D-11).
+  rentDueDay     Int         @default(1)
+  depositCents   Int         @default(0)
+  isMonthToMonth Boolean     @default(false)
+  /// Rate applied on MTM rollover (LEASE-09). Null = keep the current rent.
+  mtmRentCents   Int?
+  /// Who pays which utility. Shape is a lease-template concern (R-063), not
+  /// something to normalize before there is a template to normalize against.
+  utilityResponsibility Json?
+  moveInAt          DateTime?
+  moveOutAt         DateTime?
+  noticeGivenAt     DateTime?
+  terminationReason String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  property         Property          @relation(fields: [propertyId], references: [id])
+  unit             Unit              @relation(fields: [unitId], references: [id])
+  leaseTenants     LeaseTenant[]
+  guarantors       Guarantor[]
+  leasePayers      LeasePayer[]
+  charges          Charge[]
+  payments         Payment[]
+  ledgerEntries    LedgerEntry[]
+  deposits         Deposit[]
+  recurringCharges RecurringCharge[]
+  tickets          Ticket[]
+  inspections      Inspection[]
+  threads          Thread[]
+  notices          Notice[]
+  documents        Document[]
+
+  @@index([propertyId])
+  @@index([unitId])
+  @@index([status])
+  @@index([endsOn])
+}
+
+/// A lease has one row per adult occupant (LEASE-06). Separate from
+/// LeasePayer: every adult is jointly liable, but not every adult is a
+/// distinct Stripe payer.
+model LeaseTenant {
+  id        String   @id @default(cuid())
+  leaseId   String
+  tenantId  String
+  isPrimary Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  lease  Lease  @relation(fields: [leaseId], references: [id])
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@unique([leaseId, tenantId])
+  @@index([tenantId])
+}
+
+// ---------------------------------------------------------------------------
+// Money
+//
+// The two-payer shape (OQ-2, answered 2026-08-01 "unsure / possible later";
+// OQ-12 for the Stripe mechanics). A Stripe invoice has exactly one payer, so
+// a rent obligation split between a housing authority and a tenant cannot be
+// one Stripe invoice. LeasePayer is therefore one Stripe Customer plus one
+// Subscription each, and PayerAllocation splits each Charge across them so
+// the lease still shows ONE balance in our projection.
+//
+// An ordinary lease is exactly one LeasePayer holding the whole charge. There
+// is one code path, not two: allocation always happens, and for a
+// single-payer lease it allocates the full amount to that payer. Nothing in
+// R-002 knows what a housing authority is - the voucher FEATURES
+// (recertification proration, bulk HAP deposit reconciliation, abatement, HQS
+// re-inspection deadlines, and "dunning never pursues the HAP portion") are
+// R-048's, and R-048 stays gated on OQ-2.
+// ---------------------------------------------------------------------------
+
+model LeasePayer {
+  id                String    @id @default(cuid())
+  leaseId           String
+  propertyId        String
+  payerType         PayerType
+  /// Set when payerType = TENANT. Null for a housing authority or any other
+  /// external payer, which is named by `externalPayerName` instead.
+  tenantId          String?
+  externalPayerName String?
+  /// The payer's default share of monthly rent, in cents. Null means "the
+  /// remainder" - which is how a single-payer lease works without anyone
+  /// having to keep a number in sync with the rent. Historical shares live on
+  /// PayerAllocation, so a mid-stream recertification change never rewrites
+  /// what was already billed.
+  portionCents      Int?
+  /// One Stripe Customer and one Subscription per payer (OQ-12). Null until
+  /// R-034 provisions them.
+  stripeCustomerId     String?
+  stripeSubscriptionId String?
+  active            Boolean   @default(true)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  lease         Lease             @relation(fields: [leaseId], references: [id])
+  property      Property          @relation(fields: [propertyId], references: [id])
+  tenant        Tenant?           @relation(fields: [tenantId], references: [id])
+  allocations   PayerAllocation[]
+  payments      Payment[]
+  ledgerEntries LedgerEntry[]
+
+  @@unique([stripeCustomerId])
+  @@unique([stripeSubscriptionId])
+  @@index([leaseId])
+  @@index([propertyId])
+}
+
+/// What core decided this charge is worth and why. Charges originate here,
+/// not in Stripe: if a statute could change the number, core computes it and
+/// pushes it to Stripe as an invoice item (D-12).
+model Charge {
+  id          String     @id @default(cuid())
+  propertyId  String
+  leaseId     String
+  type        ChargeType
+  amountCents Int
+  description String
+  /// Property-local calendar day the charge is due (D-3).
+  dueOn       DateTime   @db.Date
+  periodStart DateTime?  @db.Date
+  periodEnd   DateTime?  @db.Date
+  /// The rule version that produced a statutory amount - the late fee cap in
+  /// force on the day it was assessed (D-12). Null for amounts no statute
+  /// touches, like agreed pet rent.
+  jurisdictionRuleId  String?
+  recurringChargeId   String?
+  stripeInvoiceId     String?
+  stripeInvoiceItemId String?
+  waivedAt            DateTime?
+  waivedByStaffId     String?
+  waiveReason         String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  property         Property          @relation(fields: [propertyId], references: [id])
+  lease            Lease             @relation(fields: [leaseId], references: [id])
+  jurisdictionRule JurisdictionRule? @relation(fields: [jurisdictionRuleId], references: [id])
+  recurringCharge  RecurringCharge?  @relation(fields: [recurringChargeId], references: [id])
+  waivedBy         StaffUser?        @relation("ChargeWaivedBy", fields: [waivedByStaffId], references: [id])
+  allocations      PayerAllocation[]
+  ledgerEntries    LedgerEntry[]
+
+  @@index([leaseId, dueOn])
+  @@index([propertyId, dueOn])
+  @@index([type])
+}
+
+/// Splits one Charge across the lease's payers. The allocation rows for a
+/// charge must sum to the charge amount; that is core's invariant to hold and
+/// core's test to prove - Postgres cannot check a sum across sibling rows
+/// without a trigger, and a trigger here would fire mid-insert on a
+/// legitimately half-built allocation.
+model PayerAllocation {
+  id           String   @id @default(cuid())
+  chargeId     String
+  leasePayerId String
+  amountCents  Int
+  createdAt    DateTime @default(now())
+
+  charge     Charge     @relation(fields: [chargeId], references: [id])
+  leasePayer LeasePayer @relation(fields: [leasePayerId], references: [id])
+
+  @@unique([chargeId, leasePayerId])
+  @@index([leasePayerId])
+}
+
+model RecurringCharge {
+  id          String     @id @default(cuid())
+  propertyId  String
+  leaseId     String
+  type        ChargeType
+  amountCents Int
+  description String
+  /// Property-local day of month to post.
+  dayOfMonth  Int        @default(1)
+  startsOn    DateTime   @db.Date
+  endsOn      DateTime?  @db.Date
+  stripePriceId            String?
+  stripeSubscriptionItemId String?
+  active      Boolean    @default(true)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  property Property @relation(fields: [propertyId], references: [id])
+  lease    Lease    @relation(fields: [leaseId], references: [id])
+  charges  Charge[]
+
+  @@index([leaseId])
+  @@index([propertyId])
+}
+
+model Payment {
+  id           String         @id @default(cuid())
+  propertyId   String
+  leaseId      String
+  /// Which payer's money this is. A voucher lease's HAP deposit and its
+  /// tenant's portion are separate Payments against separate LeasePayers.
+  leasePayerId String
+  channel      PaymentChannel
+  status       PaymentStatus  @default(PENDING)
+  amountCents  Int
+  receivedAt   DateTime
+  /// Required for every offline channel (PAY-05) - a cash payment with no
+  /// named recipient is an unauditable cash payment. Nullable in the schema
+  /// because Stripe-originated payments have no receiving staff member;
+  /// core enforces the offline case.
+  receivedByStaffId     String?
+  checkNumber           String?
+  stripePaymentIntentId String?
+  stripeInvoiceId       String?
+  reversedAt            DateTime?
+  reversalReason        String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  property      Property      @relation(fields: [propertyId], references: [id])
+  lease         Lease         @relation(fields: [leaseId], references: [id])
+  leasePayer    LeasePayer    @relation(fields: [leasePayerId], references: [id])
+  receivedBy    StaffUser?    @relation("PaymentReceivedBy", fields: [receivedByStaffId], references: [id])
+  ledgerEntries LedgerEntry[]
+
+  @@unique([stripePaymentIntentId])
+  @@index([leaseId, receivedAt])
+  @@index([propertyId, receivedAt])
+  @@index([status])
+}
+
+/// Append-only projection of Stripe (D-11). Rows are INSERTed by the webhook
+/// pipeline (R-034) and never updated or deleted - a database trigger in the
+/// migration enforces that, because "append-only by convention" is a property
+/// that survives exactly until the first production incident. A correction is
+/// a new REVERSAL row pointing at the entry it reverses.
+///
+/// A row here that Stripe does not know about is a reconciliation bug, not a
+/// shortcut.
+model LedgerEntry {
+  id           String          @id @default(cuid())
+  propertyId   String
+  leaseId      String
+  /// Null only for lease-level entries that belong to no single payer.
+  leasePayerId String?
+  type         LedgerEntryType
+  /// Signed. Positive increases the balance owed, negative reduces it.
+  amountCents  Int
+  description  String
+  /// When the money event happened, per Stripe - not when we projected it.
+  occurredAt   DateTime
+  chargeId     String?
+  paymentId    String?
+  /// Set on a REVERSAL, pointing at the entry being reversed.
+  reversesId   String?         @unique
+  /// The Stripe event that produced this row. Indexed, not unique: one event
+  /// can legitimately project to several entries. R-034 owns the
+  /// processed-event log that makes webhook handling idempotent.
+  stripeEventId  String?
+  stripeObjectId String?
+  createdAt      DateTime      @default(now())
+
+  property   Property     @relation(fields: [propertyId], references: [id])
+  lease      Lease        @relation(fields: [leaseId], references: [id])
+  leasePayer LeasePayer?  @relation(fields: [leasePayerId], references: [id])
+  charge     Charge?      @relation(fields: [chargeId], references: [id])
+  payment    Payment?     @relation(fields: [paymentId], references: [id])
+  reverses   LedgerEntry? @relation("LedgerReversal", fields: [reversesId], references: [id])
+  reversedBy LedgerEntry? @relation("LedgerReversal")
+
+  @@index([leaseId, occurredAt])
+  @@index([propertyId, occurredAt])
+  @@index([stripeEventId])
+}
+
+/// A liability, never income (PAY-07). `heldCents` is what is still held;
+/// applied and refunded amounts account for the rest. The disposition
+/// deadline is computed from the property's JurisdictionRule at move-out and
+/// stored, so a later rule change never moves a deadline already running.
+model Deposit {
+  id                   String      @id @default(cuid())
+  propertyId           String
+  leaseId              String
+  type                 DepositType @default(SECURITY)
+  heldCents            Int
+  receivedAt           DateTime?
+  /// Set where the state requires a separate or escrow account (D-4).
+  escrowAccountRef     String?
+  interestAccruedCents Int         @default(0)
+  /// Property-local statutory deadline, frozen at move-out (D-12).
+  dispositionDueOn     DateTime?   @db.Date
+  dispositionSentAt    DateTime?
+  forwardingAddress    String?
+  appliedCents         Int         @default(0)
+  refundedCents        Int         @default(0)
+  createdAt            DateTime    @default(now())
+  updatedAt            DateTime    @updatedAt
+
+  property Property @relation(fields: [propertyId], references: [id])
+  lease    Lease    @relation(fields: [leaseId], references: [id])
+
+  @@index([leaseId])
+  @@index([propertyId])
+  @@index([dispositionDueOn])
+}
+
+// ---------------------------------------------------------------------------
+// Maintenance
+// ---------------------------------------------------------------------------
+
+/// The tenant-facing request (D-10: tenants say "maintenance request";
+/// "ticket" and "work order" are staff words and must not reach a tenant
+/// route).
+model Ticket {
+  id              String       @id @default(cuid())
+  propertyId      String
+  unitId          String
+  leaseId         String?
+  tenantId        String?
+  source          TicketSource
+  category        String
+  description     String
+  priority        Priority     @default(ROUTINE)
+  status          TicketStatus @default(NEW)
+  entryPermission Boolean      @default(false)
+  petWarning      Boolean      @default(false)
+  /// Set when intake detects habitability language - mold, leak, no heat,
+  /// sewage, infestation (MAINT-02, RISK-05). The response clock that hangs
+  /// off this is the whole point of recording it.
+  habitabilityFlag   Boolean   @default(false)
+  firstResponseAt    DateTime?
+  mergedIntoTicketId String?
+  closedAt           DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  property      Property    @relation(fields: [propertyId], references: [id])
+  unit          Unit        @relation(fields: [unitId], references: [id])
+  lease         Lease?      @relation(fields: [leaseId], references: [id])
+  tenant        Tenant?     @relation(fields: [tenantId], references: [id])
+  mergedInto    Ticket?     @relation("TicketMerge", fields: [mergedIntoTicketId], references: [id])
+  mergedTickets Ticket[]    @relation("TicketMerge")
+  workOrders    WorkOrder[]
+  threads       Thread[]
+  documents     Document[]
+
+  @@index([propertyId, status])
+  @@index([unitId])
+  @@index([status, priority])
+}
+
+model WorkOrder {
+  id                String          @id @default(cuid())
+  propertyId        String
+  unitId            String
+  ticketId          String?
+  vendorId          String?
+  assignedStaffId   String?
+  status            WorkOrderStatus @default(SUBMITTED)
+  priority          Priority        @default(ROUTINE)
+  scope             String
+  estimateCents     Int?
+  approvedByStaffId String?
+  approvedAt        DateTime?
+  actualLaborCents     Int?
+  actualMaterialsCents Int?
+  invoiceCents         Int?
+  scheduledStart       DateTime?
+  scheduledEnd         DateTime?
+  completedAt          DateTime?
+  verifiedAt           DateTime?
+  /// Drives the mid-lease chargeback flow (MAINT-07) - distinct from a
+  /// move-out deposit deduction.
+  tenantCaused         Boolean       @default(false)
+  warrantyClaim        Boolean       @default(false)
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+
+  property   Property   @relation(fields: [propertyId], references: [id])
+  unit       Unit       @relation(fields: [unitId], references: [id])
+  ticket     Ticket?    @relation(fields: [ticketId], references: [id])
+  vendor     Vendor?    @relation(fields: [vendorId], references: [id])
+  assignedTo StaffUser? @relation("WorkOrderAssignedTo", fields: [assignedStaffId], references: [id])
+  approvedBy StaffUser? @relation("WorkOrderApprovedBy", fields: [approvedByStaffId], references: [id])
+  threads    Thread[]
+  documents  Document[]
+
+  @@index([propertyId, status])
+  @@index([unitId])
+  @@index([vendorId])
+  @@index([status, priority])
+}
+
+// ---------------------------------------------------------------------------
+// Evidence & communication
+//
+// Every message, notice, photo and approval is timestamped and exportable.
+// The evidence trail is the product.
+// ---------------------------------------------------------------------------
+
+model Thread {
+  id          String   @id @default(cuid())
+  propertyId  String
+  leaseId     String?
+  tenantId    String?
+  vendorId    String?
+  ticketId    String?
+  workOrderId String?
+  subject     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  property  Property   @relation(fields: [propertyId], references: [id])
+  lease     Lease?     @relation(fields: [leaseId], references: [id])
+  tenant    Tenant?    @relation(fields: [tenantId], references: [id])
+  vendor    Vendor?    @relation(fields: [vendorId], references: [id])
+  ticket    Ticket?    @relation(fields: [ticketId], references: [id])
+  workOrder WorkOrder? @relation(fields: [workOrderId], references: [id])
+  messages  Message[]
+
+  @@index([propertyId])
+  @@index([leaseId])
+  @@index([tenantId])
+  @@index([vendorId])
+}
+
+/// Immutable once written (COMM-05), enforced by the same trigger that
+/// protects LedgerEntry and AuditLog. A logged phone call is a Message with
+/// channel = CALL_LOG; contemporaneous notes carry legal weight, and a note
+/// that can be edited later carries none. Delivery status is the one thing
+/// that legitimately changes after the fact, so it lives on MessageDelivery
+/// rather than on the immutable row.
+model Message {
+  id          String           @id @default(cuid())
+  threadId    String
+  channel     MessageChannel
+  direction   MessageDirection
+  body        String
+  sentAt      DateTime
+  staffUserId String?
+  tenantId    String?
+  vendorId    String?
+  /// Provider message id (Twilio SID, Resend id) for delivery reconciliation.
+  externalId  String?
+  createdAt   DateTime         @default(now())
+
+  thread    Thread             @relation(fields: [threadId], references: [id])
+  staffUser StaffUser?         @relation("MessageSentBy", fields: [staffUserId], references: [id])
+  tenant    Tenant?            @relation("MessageFromTenant", fields: [tenantId], references: [id])
+  vendor    Vendor?            @relation("MessageFromVendor", fields: [vendorId], references: [id])
+  delivery  MessageDelivery?
+
+  @@index([threadId, sentAt])
+  @@index([externalId])
+}
+
+/// The mutable half of a Message: what the provider told us afterwards.
+/// Separated so the message body itself can be trigger-protected as evidence
+/// while a webhook is still free to move QUEUED -> DELIVERED -> READ.
+model MessageDelivery {
+  id          String         @id @default(cuid())
+  messageId   String         @unique
+  status      DeliveryStatus @default(QUEUED)
+  deliveredAt DateTime?
+  readAt      DateTime?
+  failedAt    DateTime?
+  failureCode String?
+  updatedAt   DateTime       @updatedAt
+
+  message Message @relation(fields: [messageId], references: [id])
+
+  @@index([status])
+}
+
+/// A legally significant notice and the proof it was served. `addressOfRecord`
+/// is stored as rendered rather than joined at read time: what matters in a
+/// dispute is the address the notice actually carried on the day it went out,
+/// not the tenant's address today.
+model Notice {
+  id              String @id @default(cuid())
+  propertyId      String
+  leaseId         String
+  /// Notice types are jurisdiction config (D-4), not an enum here - a state
+  /// that invents a new notice must not require a migration.
+  type            String
+  addressOfRecord String
+  bodyText        String?
+  /// The generated PDF.
+  documentId      String?
+  serviceMethod   NoticeServiceMethod?
+  servedAt        DateTime?
+  servedByStaffId String?
+  /// Photo of the posted notice, certified-mail receipt, delivery scan.
+  proofDocumentId String?
+  trackingNumber  String?
+  /// The rule version whose notice period produced this notice's deadlines.
+  jurisdictionRuleId String?
+  generatedAt        DateTime @default(now())
+  createdAt          DateTime @default(now())
+
+  property         Property          @relation(fields: [propertyId], references: [id])
+  lease            Lease             @relation(fields: [leaseId], references: [id])
+  servedBy         StaffUser?        @relation("NoticeServedBy", fields: [servedByStaffId], references: [id])
+  jurisdictionRule JurisdictionRule? @relation(fields: [jurisdictionRuleId], references: [id])
+  document         Document?         @relation("NoticeDocument", fields: [documentId], references: [id])
+  proofDocument    Document?         @relation("NoticeProofDocument", fields: [proofDocumentId], references: [id])
+
+  @@index([leaseId])
+  @@index([propertyId, servedAt])
+}
+
+model Inspection {
+  id                 String         @id @default(cuid())
+  propertyId         String
+  unitId             String
+  leaseId            String?
+  type               InspectionType
+  scheduledFor       DateTime?
+  performedAt        DateTime?
+  performedByStaffId String?
+  tenantSignedAt     DateTime?
+  /// Once locked the report is immutable evidence (INSP-01). The move-out
+  /// comparison is only worth anything if the move-in side cannot be edited
+  /// after the damage is found.
+  lockedAt           DateTime?
+  notes              String?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  property    Property         @relation(fields: [propertyId], references: [id])
+  unit        Unit             @relation(fields: [unitId], references: [id])
+  lease       Lease?           @relation(fields: [leaseId], references: [id])
+  performedBy StaffUser?       @relation("InspectionPerformedBy", fields: [performedByStaffId], references: [id])
+  items       InspectionItem[]
+
+  @@index([propertyId, type])
+  @@index([unitId])
+  @@index([leaseId])
+}
+
+/// `moveInItemId` links a move-out item to its move-in counterpart. That pair
+/// - the photo then next to the photo now - is the deposit-disposition
+/// evidence (INSP-02), so it is a real foreign key, not a convention.
+model InspectionItem {
+  id           String        @id @default(cuid())
+  inspectionId String
+  room         String
+  item         String
+  condition    ItemCondition
+  notes        String?
+  moveInItemId String?       @unique
+  createdAt    DateTime      @default(now())
+
+  inspection  Inspection      @relation(fields: [inspectionId], references: [id])
+  moveInItem  InspectionItem? @relation("MoveInToMoveOut", fields: [moveInItemId], references: [id])
+  moveOutItem InspectionItem? @relation("MoveInToMoveOut")
+
+  @@index([inspectionId])
+}
+
+/// Attaches to whatever it is evidence of. The nullable foreign keys below
+/// are the entities with real query paths ("every photo on this work order",
+/// "this lease's file"); anything rarer gets a row on the entity that needs
+/// it rather than a fifteenth column here.
+///
+/// `capturedAt` is the EXIF timestamp and must never be stripped: a photo's
+/// timestamp IS the evidence.
+model Document {
+  id          String  @id @default(cuid())
+  propertyId  String?
+  unitId      String?
+  leaseId     String?
+  tenantId    String?
+  vendorId    String?
+  ticketId    String?
+  workOrderId String?
+  /// Document class - lease, notice, invoice, w9, coi, inspection_photo, etc.
+  /// Drives the retention rules R-012 configures (DOC-05).
+  type        String
+  fileName    String
+  contentType String
+  sizeBytes   Int
+  /// Object-store key. Files never live in Postgres.
+  storageKey  String
+  sha256      String?
+  version     Int     @default(1)
+  /// Original capture time from EXIF, preserved. Distinct from createdAt,
+  /// which is only when it was uploaded.
+  capturedAt        DateTime?
+  uploadedByStaffId String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  property          Property?  @relation(fields: [propertyId], references: [id])
+  unit              Unit?      @relation(fields: [unitId], references: [id])
+  lease             Lease?     @relation(fields: [leaseId], references: [id])
+  tenant            Tenant?    @relation(fields: [tenantId], references: [id])
+  vendor            Vendor?    @relation(fields: [vendorId], references: [id])
+  ticket            Ticket?    @relation(fields: [ticketId], references: [id])
+  workOrder         WorkOrder? @relation(fields: [workOrderId], references: [id])
+  uploadedBy        StaffUser? @relation("DocumentUploadedBy", fields: [uploadedByStaffId], references: [id])
+  noticesAsDocument Notice[]   @relation("NoticeDocument")
+  noticesAsProof    Notice[]   @relation("NoticeProofDocument")
+
+  @@index([propertyId, type])
+  @@index([leaseId])
+  @@index([workOrderId])
+}
+
+// ---------------------------------------------------------------------------
+// Operations & configuration
+// ---------------------------------------------------------------------------
+
+/// THE work queue (D-9). Delinquency steps, failed payments, move-out
+/// verification, inspection follow-ups, compliance items, bounced messages
+/// and vendor no-shows are all VIEWS over this table. Do not add a second
+/// queue table - the storage build had to consolidate seven of them after the
+/// fact, which is why this one exists before its first consumer.
+model Task {
+  id           String   @id @default(cuid())
+  propertyId   String
+  /// Free-form so a later item can add a task type without a migration.
+  type         String
+  /// What the task is about: "Lease", "WorkOrder", "Deposit", plus its id.
+  subjectType  String
+  subjectId    String
+  /// The property-local calendar day this task belongs to (D-3). Part of the
+  /// idempotency key, so a nightly job that runs twice creates one task.
+  businessDate DateTime @db.Date
+  priority     Priority @default(ROUTINE)
+  /// Null means anyone on the team can pick it up.
+  assigneeStaffId String?
+  status          TaskStatus @default(OPEN)
+  title           String
+  /// Typed completion proof - the photo, the reading, the confirmation the
+  /// task type demands. Shape is per task type and belongs to R-011.
+  proof              Json?
+  completedByStaffId String?
+  completedAt        DateTime?
+  /// The domain event that created this task, for tracing back through the
+  /// outbox (R-006).
+  sourceEventId      String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  property    Property   @relation(fields: [propertyId], references: [id])
+  assignee    StaffUser? @relation("TaskAssignedTo", fields: [assigneeStaffId], references: [id])
+  completedBy StaffUser? @relation("TaskCompletedBy", fields: [completedByStaffId], references: [id])
+
+  /// Idempotent creation (D-9). All three columns are NOT NULL so Postgres
+  /// actually enforces this - a nullable column in a unique index would let
+  /// duplicates through, because NULLs never equal each other.
+  @@unique([type, subjectId, businessDate])
+  @@index([propertyId, status, businessDate])
+  @@index([assigneeStaffId, status])
+}
+
+/// Every statutory number in the product, versioned and effective-dated
+/// (D-4). Nothing anywhere reads a grace period, a fee cap, a deposit
+/// deadline or a notice period any other way. Rules apply prospectively -
+/// changing a rule never rewrites history, which is why Charge, Notice and
+/// Deposit store the rule id that produced their numbers.
+///
+/// Texas is seeded at R-010, not here. R-002 owns the table; R-010 owns the
+/// resolver `rulesFor(property, asOf)` and the reviewed content.
+model JurisdictionRule {
+  id            String    @id @default(cuid())
+  /// Two-letter state code.
+  state         String
+  /// City or county for a local ordinance that overrides the state rule.
+  /// Null means statewide.
+  jurisdiction  String?
+  version       Int
+  effectiveFrom DateTime  @db.Date
+  effectiveTo   DateTime? @db.Date
+
+  // Late fees (PAY-04). Percentages are basis points: 5% is 500.
+  graceDays            Int
+  lateFeeType          LateFeeType @default(NONE)
+  lateFeeFlatCents     Int?
+  lateFeePercentBps    Int?
+  lateFeeDailyCents    Int?
+  /// The statutory ceiling core clamps to (D-12). Either or both may apply.
+  lateFeeMaxCents      Int?
+  lateFeeMaxPercentBps Int?
+
+  // Deposits (PAY-07, INSP-03).
+  depositMaxBps           Int?
+  depositDispositionDays  Int?
+  depositEscrowRequired   Boolean @default(false)
+  depositInterestRequired Boolean @default(false)
+
+  // Entry and notices (MAINT-05, PAY-14, LEASE-09).
+  entryNoticeHours       Int?
+  payOrQuitDays          Int?
+  noticeToVacateDays     Int?
+  rentIncreaseNoticeDays Int?
+  justCauseRequired      Boolean @default(false)
+
+  // Payments and applications (PAY-03, LEASE-03).
+  /// Ordered ChargeType names - "rent before fees" where the state says so.
+  paymentAllocationOrder String[]
+  applicationFeeCapCents Int?
+  rubsPermitted          Boolean @default(true)
+
+  /// Statute citation and who reviewed it. Every one of these numbers needs
+  /// an attorney's eyes before it governs a real tenancy; this is where that
+  /// review is recorded.
+  citation   String?
+  reviewedBy String?
+  notes      String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  charges Charge[]
+  notices Notice[]
+
+  @@unique([state, jurisdiction, version])
+  @@index([state, effectiveFrom])
+}
+
+/// Unmodifiable by any role (ROLE-03), enforced by trigger. Actor is nullable
+/// for SYSTEM actions; `actorType` says which kind of actor it was, because a
+/// tenant, a vendor on a magic link and a nightly job are all legitimate
+/// authors of an audit row and none of them is a StaffUser.
+model AuditLog {
+  id           String    @id @default(cuid())
+  propertyId   String?
+  actorType    ActorType
+  actorStaffId String?
+  /// Non-staff actor identity - tenant id, vendor id, or job name.
+  actorRef     String?
+  entityType   String
+  entityId     String
+  action       String
+  before       Json?
+  after        Json?
+  /// Why, where the action demands a reason: a fee waiver, an entry-notice
+  /// override, a deviation from order-of-completed-application.
+  reasonCode   String?
+  reason       String?
+  ipAddress    String?
+  userAgent    String?
+  occurredAt   DateTime  @default(now())
+
+  property   Property?  @relation(fields: [propertyId], references: [id])
+  actorStaff StaffUser? @relation("AuditLogActor", fields: [actorStaffId], references: [id])
+
+  @@index([entityType, entityId])
+  @@index([propertyId, occurredAt])
+  @@index([actorStaffId, occurredAt])
 }

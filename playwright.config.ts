@@ -1,6 +1,11 @@
 import { defineConfig, devices } from '@playwright/test'
 
-const baseURL = 'http://localhost:3000'
+// `reuseExistingServer` below means a server already listening on this port is
+// used as-is. That is the right default for local iteration, but the sibling
+// self-storage repo also runs on 3000, and pointing this suite at that app
+// wastes a debugging session. Overridable so both can run at once.
+const port = process.env.PORT ?? '3000'
+const baseURL = `http://localhost:${port}`
 
 export default defineConfig({
   testDir: './e2e',
@@ -17,6 +22,7 @@ export default defineConfig({
   ],
   webServer: {
     command: 'npm run dev',
+    env: { PORT: port },
     url: baseURL,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
