@@ -2,3 +2,4 @@
 // ledger projection and billing math join these as those items are built.
 export * from './auth/index.ts'
 export * from './money/index.ts'
+export * from './rbac/index.ts'

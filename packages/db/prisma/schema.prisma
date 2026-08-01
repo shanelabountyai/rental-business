@@ -276,7 +276,8 @@ model LegalEntity {
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
 
-  properties Property[]
+  properties  Property[]
+  assignments StaffAssignment[]
 
   @@index([active])
 }
@@ -326,6 +327,7 @@ model Property {
   tasks            Task[]
   documents        Document[]
   auditLogs        AuditLog[]
+  assignments      StaffAssignment[]
 
   @@index([legalEntityId])
   @@index([state])
@@ -379,10 +381,19 @@ model StaffUser {
   /// deleted server-side, so revocation is a watermark comparison instead.
   /// ROLE-06's "access killed within 1 minute" depends on this column.
   sessionsValidFrom DateTime @default(now())
+  /// Per-user monetary ceilings (ROLE-02). Null falls back to the role's
+  /// default; these exist so one manager can approve more than another
+  /// without inventing a second manager role. Zero is a meaningful value -
+  /// "may approve nothing" - which is why the fallback is on null, not on
+  /// falsiness.
+  approveWorkOrderCents Int?
+  waiveFeeCents         Int?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  credential StaffCredential?
+  credential  StaffCredential?
+  assignments StaffAssignment[]
+  assignmentsGranted StaffAssignment[] @relation("AssignmentGrantedBy")
 
   paymentsReceived     Payment[]    @relation("PaymentReceivedBy")
   chargesWaived        Charge[]     @relation("ChargeWaivedBy")
@@ -536,6 +547,84 @@ model LeaseTenant {
 
   @@unique([leaseId, tenantId])
   @@index([tenantId])
+}
+
+// ---------------------------------------------------------------------------
+// Authorization (R-004)
+//
+// Roles-as-data, per D-5. A role is a row holding a set of permission keys;
+// the keys themselves are a closed vocabulary in packages/core/rbac because
+// code is what checks them, and a permission no code reads is a lie.
+//
+// THERE IS NO SUPERUSER AND THERE NEVER WILL BE (D-5). Unrestricted access is
+// an ordinary StaffAssignment row with the `owner` role and a null scope -
+// grantable, revocable, and visible in the audit log like anything else.
+// Never add an `isSuperuser` column, and never add a short-circuit to can(),
+// propertyScope() or checkMonetaryAuthority().
+// ---------------------------------------------------------------------------
+
+model Role {
+  id   String @id @default(cuid())
+  /// Stable machine key: owner, manager, maintenance_tech, read_only,
+  /// tenant, guarantor. Code refers to roles by this, never by name or id.
+  key  String @unique
+  name String
+  description String
+  /// Permission keys from packages/core/rbac. Data rather than a join table:
+  /// the vocabulary is fixed in code, so a Permission table would only ever
+  /// mirror a TypeScript union with extra joins. ROLE-07 puts a custom role
+  /// builder out of scope for v1, so nothing needs to browse the catalogue.
+  permissions String[]
+  /// Default ceilings for staff holding this role, overridable per user
+  /// (ROLE-02). Null means "no authority at all" rather than "unlimited" -
+  /// the safe reading when a value is missing.
+  defaultApproveWorkOrderCents Int?
+  defaultWaiveFeeCents         Int?
+  /// Seeded roles the product depends on. Guards against deleting `owner`
+  /// and locking everyone out.
+  system      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  assignments StaffAssignment[]
+}
+
+/// One grant of one role over one scope. A staff user may hold several.
+///
+/// Scope is expressed by which column is set:
+///   both null           - every property in the portfolio (D-5's owner)
+///   legalEntityId set   - every property owned by that entity
+///   propertyId set      - that property only (ROLE-04)
+///
+/// Both set at once is meaningless and rejected by a check constraint in the
+/// migration, because a half-understood scope is how a "property-scoped" user
+/// quietly sees everything.
+model StaffAssignment {
+  id            String  @id @default(cuid())
+  staffUserId   String
+  roleId        String
+  legalEntityId String?
+  propertyId    String?
+  /// Who granted it and why - a permission change is a privileged action
+  /// (ROLE-03) and the audit trail starts with the row itself.
+  grantedByStaffId String?
+  grantedAt     DateTime @default(now())
+  /// Revocation is a timestamp, never a delete: ROLE-06 requires that
+  /// deactivation preserve all history. A revoked assignment stops granting
+  /// anything on the next request, because permissions are read per request.
+  revokedAt     DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  staffUser   StaffUser    @relation(fields: [staffUserId], references: [id])
+  role        Role         @relation(fields: [roleId], references: [id])
+  legalEntity LegalEntity? @relation(fields: [legalEntityId], references: [id])
+  property    Property?    @relation(fields: [propertyId], references: [id])
+  grantedBy   StaffUser?   @relation("AssignmentGrantedBy", fields: [grantedByStaffId], references: [id])
+
+  @@index([staffUserId, revokedAt])
+  @@index([propertyId])
+  @@index([legalEntityId])
 }
 
 // ---------------------------------------------------------------------------

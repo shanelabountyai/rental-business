@@ -1,5 +1,5 @@
+import { formatCents } from '@rental/core/money'
 import { prisma } from '@rental/db'
-import { redirect } from 'next/navigation'
 import { auth } from '@/auth.ts'
 import { MfaEnrolment } from '@/components/mfa-enrolment.tsx'
 import {
@@ -7,37 +7,107 @@ import {
   confirmMfaEnrolment,
   signOutEverywhere,
 } from '@/lib/auth/actions.ts'
+import { requireStaff } from '@/lib/auth/guard.ts'
 
 export const metadata = { title: 'Your account — Rental Operations' }
 
-// The only route R-003 protects. R-007 builds the admin shell and R-004 puts
-// real authorization in front of everything; this page exists so the session
-// and the MFA enrolment flow have somewhere to live and something to test.
-export default async function AccountPage() {
-  const session = await auth()
-  if (session?.principal.kind !== 'staff') redirect('/login')
+// The only route R-004 protects for real. R-007 builds the admin shell; this
+// page exists so the session, the MFA enrolment flow and the resolved
+// permission set all have somewhere to be looked at.
+export default async function AccountPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ mfa?: string }>
+}) {
+  const [actor, session, { mfa }] = await Promise.all([
+    requireStaff(),
+    auth(),
+    searchParams,
+  ])
 
-  const credential = await prisma.staffCredential.findUnique({
-    where: { staffUserId: session.principal.id },
-    select: { mfaEnrolledAt: true },
-  })
+  const [credential, assignments] = await Promise.all([
+    prisma.staffCredential.findUnique({
+      where: { staffUserId: actor.id },
+      select: { mfaEnrolledAt: true },
+    }),
+    prisma.staffAssignment.findMany({
+      where: { staffUserId: actor.id, revokedAt: null },
+      select: {
+        id: true,
+        role: { select: { name: true } },
+        property: { select: { name: true } },
+        legalEntity: { select: { name: true } },
+      },
+    }),
+  ])
+
+  const ceiling = (cents: number | null) =>
+    cents === null ? 'No limit' : formatCents(cents)
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-xl flex-col justify-center gap-8 p-6">
       <header className="flex flex-col gap-1">
         <h1 className="text-2xl font-semibold tracking-tight">Your account</h1>
         <p className="text-muted-foreground text-sm">
-          {session.principal.name} · {session.principal.email}
+          {session?.principal.name} · {session?.principal.email}
         </p>
       </header>
+
+      {/*
+        Set by the guard when a privileged action was refused for want of a
+        second factor (ROLE-05). The user IS allowed to do the thing - they
+        just have not proved possession of their device yet - so the message
+        says what to do rather than that they lack access.
+      */}
+      {mfa === 'required' && (
+        <p
+          role="alert"
+          className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-100"
+        >
+          That action needs two-factor authentication. Set it up below and try
+          again.
+        </p>
+      )}
+
+      <section aria-labelledby="access" className="flex flex-col gap-3">
+        <h2 id="access" className="text-lg font-semibold">
+          Your access
+        </h2>
+        {assignments.length === 0 ? (
+          <p className="text-muted-foreground text-sm">
+            You have no roles yet. Someone with access management needs to grant
+            you one before you can do anything.
+          </p>
+        ) : (
+          <ul className="flex flex-col gap-1 text-sm">
+            {assignments.map((assignment) => (
+              <li key={assignment.id}>
+                <strong>{assignment.role.name}</strong>
+                {' — '}
+                {assignment.property
+                  ? assignment.property.name
+                  : assignment.legalEntity
+                    ? `all properties of ${assignment.legalEntity.name}`
+                    : 'all properties'}
+              </li>
+            ))}
+          </ul>
+        )}
+        <dl className="text-muted-foreground grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+          <dt>Can approve work up to</dt>
+          <dd>{ceiling(actor.ceilings.approveWorkOrderCents)}</dd>
+          <dt>Can waive fees up to</dt>
+          <dd>{ceiling(actor.ceilings.waiveFeeCents)}</dd>
+        </dl>
+      </section>
 
       <section aria-labelledby="mfa" className="flex flex-col gap-3">
         <h2 id="mfa" className="text-lg font-semibold">
           Two-factor authentication
         </h2>
         <p className="text-muted-foreground text-sm">
-          Required before you can approve spending, adjust a ledger or change
-          anyone&rsquo;s access.
+          Required before you can approve spending, waive a fee, adjust a
+          ledger, reveal an access code or change anyone&rsquo;s access.
         </p>
         <MfaEnrolment
           enrolled={credential?.mfaEnrolledAt != null}

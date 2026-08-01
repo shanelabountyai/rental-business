@@ -110,6 +110,9 @@ test.afterAll(async () => {
   await prisma.authToken.deleteMany({
     where: { subjectId: { in: [...createdStaffIds, ...createdTenantIds] } },
   })
+  await prisma.staffAssignment.deleteMany({
+    where: { staffUserId: { in: createdStaffIds } },
+  })
   await prisma.staffCredential.deleteMany({
     where: { staffUserId: { in: createdStaffIds } },
   })
@@ -317,6 +320,98 @@ test.describe('staff MFA', () => {
     // Spent, so a stolen printout cannot be replayed.
     expect(credential!.mfaRecoveryCodes).toHaveLength(2)
     expect(credential!.mfaRecoveryCodes).not.toContain(hashToken(used))
+  })
+})
+
+test.describe('authorization (R-004)', () => {
+  async function grant(
+    staffUserId: string,
+    roleKey: string,
+    scope: { propertyId?: string; legalEntityId?: string } = {},
+  ) {
+    const role = await prisma.role.findUniqueOrThrow({ where: { key: roleKey } })
+    await prisma.staffAssignment.create({
+      data: { staffUserId, roleId: role.id, ...scope },
+    })
+  }
+
+  test('shows a staff user with no roles that they have none', async ({
+    page,
+  }) => {
+    const staff = await createStaffUser()
+    await signInAsStaff(page, staff.email)
+    // Deny by default is visible, not silent: a signed-in user with no
+    // assignment can do nothing, and the page says so rather than looking
+    // like an empty dashboard.
+    await expect(page.getByText(/You have no roles yet/)).toBeVisible()
+  })
+
+  test('shows an owner their portfolio-wide grant and no ceiling', async ({
+    page,
+  }) => {
+    const staff = await createStaffUser()
+    await grant(staff.id, 'owner')
+    await signInAsStaff(page, staff.email)
+
+    await expect(page.getByText('Owner —')).toBeVisible()
+    await expect(page.getByText('all properties')).toBeVisible()
+    // Null ceiling reads as unlimited - there is nobody above the owner to
+    // route an approval up to.
+    await expect(page.getByText('No limit').first()).toBeVisible()
+  })
+
+  test("shows a manager their role's seeded ceilings", async ({ page }) => {
+    const staff = await createStaffUser()
+    await grant(staff.id, 'manager')
+    await signInAsStaff(page, staff.email)
+
+    await expect(page.getByText('Manager —')).toBeVisible()
+    await expect(page.getByText('$500.00')).toBeVisible()
+    await expect(page.getByText('$100.00')).toBeVisible()
+  })
+
+  test('honours a personal ceiling override of zero', async ({ page }) => {
+    const staff = await createStaffUser()
+    await grant(staff.id, 'manager')
+    // Zero means "may approve nothing" and must not fall back to the role
+    // default - the `||` bug, asserted end to end.
+    await prisma.staffUser.update({
+      where: { id: staff.id },
+      data: { approveWorkOrderCents: 0 },
+    })
+    await signInAsStaff(page, staff.email)
+
+    await expect(page.getByText('$0.00')).toBeVisible()
+    await expect(page.getByText('$500.00')).toHaveCount(0)
+  })
+
+  // Revoking has to bite on the very next request, not at session expiry
+  // (ROLE-06). Permissions are read per request, so this needs no sign-out.
+  test('drops access the moment an assignment is revoked', async ({ page }) => {
+    const staff = await createStaffUser()
+    await grant(staff.id, 'owner')
+    await signInAsStaff(page, staff.email)
+    await expect(page.getByText('Owner —')).toBeVisible()
+
+    await prisma.staffAssignment.updateMany({
+      where: { staffUserId: staff.id },
+      data: { revokedAt: new Date() },
+    })
+
+    await page.reload()
+    await expect(page.getByText(/You have no roles yet/)).toBeVisible()
+    await expect(page.getByText('Owner —')).toHaveCount(0)
+  })
+
+  test('the account page has no accessibility violations', async ({ page }) => {
+    const staff = await createStaffUser()
+    await grant(staff.id, 'manager')
+    await signInAsStaff(page, staff.email)
+
+    const results = await new AxeBuilder({ page })
+      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+      .analyze()
+    expect(results.violations).toEqual([])
   })
 })
 
