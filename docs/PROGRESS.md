@@ -173,7 +173,7 @@ The running narrative of what has actually been built. One entry per completed b
 ---
 
 ## R-006 — Background jobs & event bus foundation
-**Commit:** _pending_  ·  **Date:** 2026-08-01
+**Commit:** `1105b29`  ·  **Date:** 2026-08-01
 
 **What it built.** The property-local scheduling primitive D-3 demands, a transactional event outbox with idempotent consumers, a scheduled-job runner, and the bearer-authenticated `/api/cron` endpoint the hourly Vercel Cron already pointed at. `packages/core/scheduling` is pure and has 23 tests covering both DST transitions; `apps/web/lib/jobs` has 14 integration tests against a real database; `e2e/cron.spec.ts` asserts the endpoint's authorization over real HTTP.
 
