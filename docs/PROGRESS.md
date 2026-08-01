@@ -141,7 +141,7 @@ The running narrative of what has actually been built. One entry per completed b
 ---
 
 ## R-005 — Append-only audit log service
-**Commit:** _pending_  ·  **Date:** 2026-08-01
+**Commit:** `39b1969`  ·  **Date:** 2026-08-01
 
 **What it built.** The shared audit service in `packages/core/audit`: a closed vocabulary of 26 actions and 12 reason codes, unconditional redaction of audit payloads, before/after diffing, a transaction-aware `recordAudit()` and an `auditTrailFor()` reader. `apps/web/lib/audit` resolves the current principal and request into an actor. Wired into every privileged action that exists today — assignment grant and revoke, MFA enrolment, password reset, sign-out-everywhere, successful sign-in, and lockout. 51 unit tests, 10 integration tests.
 
