@@ -111,7 +111,7 @@ The running narrative of what has actually been built. One entry per completed b
 ---
 
 ## R-004 — RBAC, scoping and monetary authority
-**Commit:** _pending_  ·  **Date:** 2026-08-01
+**Commit:** `a371329`  ·  **Date:** 2026-08-01
 
 **What it built.** Authorization. Six roles as seeded rows (`owner`, `manager`, `maintenance_tech`, `read_only`, `tenant`, `guarantor`), a `StaffAssignment` table that grants one role over one scope, per-user monetary ceilings, and the three functions D-5 names by hand — `can()`, `propertyScope()` and `checkMonetaryAuthority()` — in `packages/core/rbac`, none of them containing a bypass. `apps/web/lib/auth` turns a session into an `Actor` once per request and turns a scope into a Prisma `where` clause. 46 unit tests on the decisions, 14 integration tests proving the scope actually filters in Postgres, 12 e2e.
 
