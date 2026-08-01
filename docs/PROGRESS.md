@@ -43,7 +43,7 @@ The running narrative of what has actually been built. One entry per completed b
 ---
 
 ## R-002 — Core data model & migrations
-**Commit:** _pending_  ·  **Date:** 2026-08-01
+**Commit:** `e2f8565`  ·  **Date:** 2026-08-01
 
 **What it built.** The 27-model Prisma schema and the first migration, using the canonical entity names from master PRD §13: `LegalEntity` → `Property` → `Unit` → `Lease` → `LeaseTenant`/`Guarantor`, the money tables (`LeasePayer`, `Charge`, `PayerAllocation`, `RecurringCharge`, `Payment`, `LedgerEntry`, `Deposit`), maintenance (`Ticket`, `WorkOrder`, `Vendor`), evidence (`Thread`, `Message`, `MessageDelivery`, `Notice`, `Inspection`, `InspectionItem`, `Document`) and operations (`Task`, `JurisdictionRule`, `AuditLog`, `StaffUser`). Every money field is an integer-cents `Int`; every percentage is basis points; every operational row carries `propertyId` directly. The migration ends with raw SQL that makes `LedgerEntry`, `AuditLog` and `Message` append-only at the database level. `packages/db/schema.test.ts` proves the triggers reject and the two-payer split round-trips — 9 tests, each inside a transaction that never commits, so the suite leaves no rows behind.
 
