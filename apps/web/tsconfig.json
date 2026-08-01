@@ -1,0 +1,43 @@
+{
+  "compilerOptions": {
+    "target": "ES2017",
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "allowJs": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    // Scripts run directly by Node (apps/web/scripts/*.mts) need explicit
+    // extensions in their relative imports - Node's ESM resolution doesn't
+    // guess them the way bundler resolution does. Safe with noEmit: true.
+    "allowImportingTsExtensions": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "react-jsx",
+    "incremental": true,
+    "plugins": [{ "name": "next" }],
+    "paths": {
+      "@/*": ["./*"]
+    }
+  },
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts",
+    ".next/dev/types/**/*.ts",
+    "**/*.mts"
+  ],
+  "exclude": [
+    "node_modules",
+    // iCloud Drive syncs this working copy and resolves its own conflicts by
+    // writing "file 2.ts" beside "file.ts". Inside .next/types that produces a
+    // duplicate of every generated route type and fails `tsc`. Carried over
+    // from the storage repo, where it cost an afternoon to diagnose.
+    "**/* 2.ts",
+    "**/* 2.tsx",
+    "**/* 2.d.ts"
+  ]
+}

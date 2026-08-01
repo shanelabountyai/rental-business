@@ -1,0 +1,98 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+
+    # Throwaway Postgres so migrations are proven to apply from scratch and any
+    # raw-SQL constraints in them are exercised for real.
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      # Points at the throwaway service above. Real credentials live in
+      # Vercel/GitHub secrets and never in the repo.
+      - name: Provision CI env
+        run: |
+          {
+            echo 'DATABASE_URL=postgresql://ci:ci@localhost:5432/ci'
+            echo 'DIRECT_URL=postgresql://ci:ci@localhost:5432/ci'
+            echo "AUTH_SECRET=$(openssl rand -base64 32)"
+            echo 'AUTH_URL=http://localhost:3000'
+          } > .env.local
+
+      - run: npm run db:generate
+
+      # Fails if a migration is missing, out of order, or does not apply cleanly
+      # to an empty database. No-op until R-002 creates the first one.
+      - name: Apply migrations
+        run: npx dotenv -e .env.local -- npx prisma migrate deploy --schema packages/db/prisma/schema.prisma
+
+      - name: Seed reference data
+        run: npm run db:seed
+
+      # Catches a schema.prisma edit that was never turned into a migration:
+      # exit code 2 means the migrated database and the datamodel disagree.
+      - name: Check for schema drift
+        run: |
+          npx dotenv -e .env.local -- npx prisma migrate diff \
+            --from-schema-datasource packages/db/prisma/schema.prisma \
+            --to-schema-datamodel packages/db/prisma/schema.prisma \
+            --exit-code
+
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run test
+      - run: npm run build
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      # Covers the axe accessibility scan and the smoke suite.
+      - name: End-to-end + axe
+        run: npm run test:e2e
+
+      # Core Web Vitals budgets, asserted in lighthouserc.json.
+      - name: Lighthouse
+        run: npx lhci autorun
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+
+      - name: Dependency audit (report only)
+        continue-on-error: true
+        run: npm audit --audit-level=moderate

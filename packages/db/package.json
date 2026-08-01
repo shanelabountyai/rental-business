@@ -1,0 +1,17 @@
+{
+  "name": "@rental/db",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./index.ts",
+  "types": "./index.ts",
+  "exports": {
+    ".": "./index.ts"
+  },
+  "prisma": {
+    "seed": "node prisma/seed.mts"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.19.0"
+  }
+}

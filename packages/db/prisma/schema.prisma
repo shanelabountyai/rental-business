@@ -1,0 +1,31 @@
+// Deliberately empty of models.
+//
+// R-002 owns the core data model - LegalEntity, Property, Unit, Tenant,
+// Guarantor, Lease, Charge, Payment, LedgerEntry, Deposit, Ticket, WorkOrder,
+// Vendor, Inspection, Thread/Message, Notice, Task, Document, JurisdictionRule,
+// AuditLog, StaffUser - and it is the most consequential item in the backlog.
+// Scaffolding it here would decide the two-payer ledger shape (OQ-12) as a
+// side effect of a config file, which is exactly the kind of silent decision
+// docs/prds/07-decisions.md exists to prevent.
+//
+// Constraints R-002 must honour, from the decision log:
+//   D-3  money is integer cents; timestamps UTC in the DB, property-local for
+//        display; every entity that a nightly job touches needs a resolvable
+//        property timezone.
+//   D-4  jurisdiction rules are versioned and effective-dated rows, not enums.
+//   D-5  no superuser flag - unrestricted access is an ordinary assignment row.
+//   D-11 LedgerEntry is an append-only projection of Stripe, not the origin of
+//        charges; it needs the Stripe object ids to reconcile against.
+//   D-12 statutory amounts are computed in core and stored with the rule
+//        version that produced them, so an old charge can be explained later.
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/client"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}

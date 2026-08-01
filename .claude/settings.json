@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm audit *)",
+      "Bash(npm ls *)",
+      "Bash(npm run lint *)",
+      "Bash(npm run typecheck *)",
+      "Bash(npm run build *)",
+      "Bash(npm test *)",
+      "Bash(npm run test:e2e *)",
+      "Bash(npm run db:generate *)",
+      "Bash(node -e ' *)"
+    ]
+  }
+}
