@@ -18,7 +18,7 @@ The running narrative of what has actually been built. One entry per completed b
 ---
 
 ## R-001 — Monorepo & app scaffold
-**Commit:** _pending_  ·  **Date:** 2026-08-01
+**Commit:** `d99e929` (scaffold), `8171958` (verification fixes)  ·  **Date:** 2026-08-01
 
 **What it built.** The npm-workspaces monorepo (`apps/web`, `packages/core`, `packages/db`) on Next.js 16 App Router + TypeScript, Tailwind v4 + shadcn, Prisma 6 against Postgres, Vitest for unit tests and Playwright for e2e, and a CI workflow that runs migrate/seed/drift-check against a throwaway Postgres service before lint, typecheck, test, build, e2e + axe and Lighthouse. Secrets are handled by `.env.example` (names, committed) plus `.env.local` (values, gitignored), loaded through `dotenv-cli` so every script sees the same environment. The placeholder home route exercises the `packages/core` money helpers so the scaffold's own gates have something real to check.
 
