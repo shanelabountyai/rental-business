@@ -73,7 +73,7 @@ The running narrative of what has actually been built. One entry per completed b
 ---
 
 ## R-003 — Auth foundation
-**Commit:** _pending_  ·  **Date:** 2026-08-01
+**Commit:** `62700de`  ·  **Date:** 2026-08-01
 
 **What it built.** Authentication for all three principals. Staff sign in with email and password (scrypt) and a TOTP second factor with recovery codes; tenants sign in with a short-lived single-use magic link and no password; vendors get a signed single-use work-order link and no account at all (D-6). Plus per-IP rate limiting, per-account exponential lockout, password reset, and "sign out of every device". The pure logic — hashing, token minting, TOTP, MFA-secret encryption, rate-limit and lockout decisions — lives in `packages/core/auth` with 57 unit tests; the storage half lives in `apps/web/lib/auth` with 15 integration tests; the flows have 46 e2e tests including an axe scan on every auth screen.
 
