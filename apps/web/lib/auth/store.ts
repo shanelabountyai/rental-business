@@ -90,7 +90,15 @@ export async function issueToken(
 }
 
 export type RedeemResult =
-  | { ok: true; subjectId: string; metadata: Prisma.JsonValue }
+  | {
+      ok: true
+      subjectId: string
+      metadata: Prisma.JsonValue
+      /// Where the token was issued from. Carried through so a sign-in audit
+      /// entry can name an address even though the provider that completes the
+      /// sign-in has no request to read one from.
+      requestedIp: string | null
+    }
   | { ok: false; reason: string }
 
 /**
@@ -120,7 +128,12 @@ export async function redeemToken(
   })
   if (burned.count !== 1) return { ok: false, reason: 'already_used' }
 
-  return { ok: true, subjectId: stored!.subjectId, metadata: stored!.metadata }
+  return {
+    ok: true,
+    subjectId: stored!.subjectId,
+    metadata: stored!.metadata,
+    requestedIp: stored!.requestedIp,
+  }
 }
 
 /**

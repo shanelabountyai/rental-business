@@ -116,7 +116,28 @@ test.afterAll(async () => {
   await prisma.staffCredential.deleteMany({
     where: { staffUserId: { in: createdStaffIds } },
   })
-  await prisma.staffUser.deleteMany({ where: { id: { in: createdStaffIds } } })
+  // A staff user who has signed in has AuditLog rows pointing at them, and
+  // AuditLog is append-only - so the foreign key cannot be nulled and the row
+  // CANNOT BE DELETED. That is the intended product behaviour, not a test
+  // problem: ROLE-06 says deactivate and preserve history, never delete, and
+  // R-002 made actorStaffId a real foreign key precisely so the database
+  // enforces it. Test rows are subject to the same rule, so audited ones are
+  // deactivated and left behind.
+  const audited = new Set(
+    (
+      await prisma.auditLog.findMany({
+        where: { actorStaffId: { in: createdStaffIds } },
+        select: { actorStaffId: true },
+      })
+    ).map((row) => row.actorStaffId!),
+  )
+  await prisma.staffUser.deleteMany({
+    where: { id: { in: createdStaffIds.filter((id) => !audited.has(id)) } },
+  })
+  await prisma.staffUser.updateMany({
+    where: { id: { in: [...audited] } },
+    data: { active: false, deactivatedAt: new Date() },
+  })
   await prisma.tenantCredential.deleteMany({
     where: { tenantId: { in: createdTenantIds } },
   })

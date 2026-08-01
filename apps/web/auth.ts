@@ -1,3 +1,4 @@
+import { recordAudit } from '@rental/core/audit'
 import {
   isLockedOut,
   matchRecoveryCode,
@@ -123,6 +124,20 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           data: { lastLoginAt: new Date(), failedLoginCount: 0, lockedUntil: null },
         })
 
+        // §6.1 asks for access logging. Successful sign-ins are recorded;
+        // individual failures are not (see actions.ts for why).
+        await recordAudit(prisma, {
+          actor: {
+            type: 'STAFF',
+            staffUserId: staffUser.id,
+            ipAddress: redeemed.requestedIp,
+          },
+          action: 'auth.signed_in',
+          entityType: 'StaffUser',
+          entityId: staffUser.id,
+          after: { mfaVerified, method: enrolled ? 'password+totp' : 'password' },
+        })
+
         return {
           id: staffUser.id,
           email: staffUser.email,
@@ -156,6 +171,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           where: { id: redeemed.subjectId },
         })
         if (!tenant?.active) return null
+
+        await recordAudit(prisma, {
+          actor: {
+            type: 'TENANT',
+            ref: tenant.id,
+            ipAddress: redeemed.requestedIp,
+          },
+          action: 'auth.signed_in',
+          entityType: 'Tenant',
+          entityId: tenant.id,
+          after: { method: 'magic_link' },
+        })
 
         return {
           id: tenant.id,

@@ -44,8 +44,13 @@
     // writing "file 2.ts" beside "file.ts". Inside .next/types that produces a
     // duplicate of every generated route type and fails `tsc`. Carried over
     // from the storage repo, where it cost an afternoon to diagnose.
-    "**/* 2.ts",
-    "**/* 2.tsx",
-    "**/* 2.d.ts"
+    //
+    // The single-character wildcard, not a literal "2": iCloud numbers each
+    // successive conflict upward, and this repo hit " 3.ts" during R-005 with
+    // only " 2.ts" excluded - so the gate broke on a file nobody wrote. `?`
+    // covers every copy iCloud will realistically produce.
+    "**/* ?.ts",
+    "**/* ?.tsx",
+    "**/* ?.d.ts"
   ]
 }

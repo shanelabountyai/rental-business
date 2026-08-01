@@ -13,10 +13,12 @@ import {
   verifyPassword,
   verifyTotp,
 } from '@rental/core/auth'
+import { recordAudit } from '@rental/core/audit'
 import { prisma } from '@rental/db'
 import { cookies, headers } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { auth, signIn, signOut } from '@/auth.ts'
+import { currentAuditActor } from '@/lib/audit/index.ts'
 import { authUrl, deliverAuthLink } from './delivery.ts'
 import { consumeRateLimit, issueToken, redeemToken, revokeTokens } from './store.ts'
 
@@ -119,10 +121,24 @@ export async function startStaffSignIn(
   const correct = await verifyPassword(password, staffUser.credential.passwordHash)
   if (!correct) {
     const failedLoginCount = staffUser.credential.failedLoginCount + 1
+    const lockedUntil = lockoutUntil(failedLoginCount)
     await prisma.staffCredential.update({
       where: { id: staffUser.credential.id },
-      data: { failedLoginCount, lockedUntil: lockoutUntil(failedLoginCount) },
+      data: { failedLoginCount, lockedUntil },
     })
+    // Individual wrong guesses are NOT audited: the rate limiter already caps
+    // them, and an attacker would otherwise be able to fill the audit table -
+    // which is append-only and cannot be pruned. Crossing into lockout is a
+    // real security event and is recorded once.
+    if (lockedUntil && !staffUser.credential.lockedUntil) {
+      await recordAudit(prisma, {
+        actor: { type: 'SYSTEM', ref: 'auth.lockout', ipAddress: ip },
+        action: 'auth.locked_out',
+        entityType: 'StaffUser',
+        entityId: staffUser.id,
+        after: { failedLoginCount, lockedUntil },
+      })
+    }
     return { error: GENERIC_SIGN_IN_ERROR }
   }
 
@@ -187,6 +203,14 @@ export async function completeStaffMfa(
 export async function signOutEverywhere(): Promise<void> {
   const session = await auth()
   if (session?.principal) {
+    const actor = await currentAuditActor()
+    await recordAudit(prisma, {
+      actor,
+      action: 'auth.sessions_revoked',
+      entityType: session.principal.kind === 'staff' ? 'StaffUser' : 'Tenant',
+      entityId: session.principal.id,
+      after: { allDevices: true },
+    })
     // Bumping the watermark kills every other device too, which is the point:
     // "sign out" after a lost laptop has to mean everywhere.
     const now = new Date()
@@ -250,9 +274,22 @@ export async function confirmMfaEnrolment(
   }
 
   const recovery = mintRecoveryCodes()
-  await prisma.staffCredential.update({
-    where: { id: credential.id },
-    data: { mfaEnrolledAt: new Date(), mfaRecoveryCodes: recovery.hashes },
+  const actor = await currentAuditActor()
+  await prisma.$transaction(async (tx) => {
+    await tx.staffCredential.update({
+      where: { id: credential.id },
+      data: { mfaEnrolledAt: new Date(), mfaRecoveryCodes: recovery.hashes },
+    })
+    // The payload deliberately carries no secret and no codes - redaction
+    // would strip them anyway, and the auditable fact is "this account gained
+    // a second factor at this moment", not what the factor is.
+    await recordAudit(tx, {
+      actor,
+      action: 'auth.mfa_enrolled',
+      entityType: 'StaffUser',
+      entityId: session.principal.id,
+      after: { mfaEnrolled: true, recoveryCodesIssued: recovery.codes.length },
+    })
   })
 
   // Returned once and never again - only hashes were stored.
@@ -311,6 +348,7 @@ export async function completePasswordReset(
   const token = String(formData.get('token') ?? '')
   const password = String(formData.get('password') ?? '')
   const confirmation = String(formData.get('confirmPassword') ?? '')
+  const ip = await clientIp()
 
   if (password !== confirmation) {
     return { error: 'Those two passwords do not match.' }
@@ -333,8 +371,8 @@ export async function completePasswordReset(
   const passwordHash = await hashPassword(password)
   const now = new Date()
 
-  await prisma.$transaction([
-    prisma.staffCredential.update({
+  await prisma.$transaction(async (tx) => {
+    await tx.staffCredential.update({
       where: { staffUserId: redeemed.subjectId },
       data: {
         passwordHash,
@@ -345,14 +383,24 @@ export async function completePasswordReset(
         failedLoginCount: 0,
         lockedUntil: null,
       },
-    }),
+    })
     // Every existing session dies. A password reset that leaves the attacker's
     // session alive has not actually reset anything.
-    prisma.staffUser.update({
+    await tx.staffUser.update({
       where: { id: redeemed.subjectId },
       data: { sessionsValidFrom: now },
-    }),
-  ])
+    })
+    // Whoever is holding the reset link is not signed in, so the actor is the
+    // reset flow rather than a person - the link itself is the authorisation,
+    // and the IP is the only identifying detail there is.
+    await recordAudit(tx, {
+      actor: { type: 'SYSTEM', ref: 'auth.password_reset', ipAddress: ip },
+      action: 'auth.password_reset',
+      entityType: 'StaffUser',
+      entityId: redeemed.subjectId,
+      after: { passwordChangedAt: now, sessionsRevoked: true },
+    })
+  })
 
   // Any other reset link sitting in an inbox is now dead too.
   await revokeTokens('STAFF_PASSWORD_RESET', redeemed.subjectId, now)
