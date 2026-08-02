@@ -241,7 +241,7 @@ The running narrative of what has actually been built. One entry per completed b
 ---
 
 ## R-008 — LegalEntity + Property CRUD
-**Commit:** _pending_  ·  **Date:** 2026-08-02
+**Commit:** `878c72c`  ·  **Date:** 2026-08-02
 
 **What it built.** Full create/read/update for `LegalEntity` and `Property` (both modeled in R-002, untouched by this item — no migration). `packages/core/property` validates addresses, US state codes, IANA timezones and the rest of the property fields by hand, matching `packages/core/auth/password.ts`'s style rather than pulling in a schema library. The Properties list, an owning-entity-scoped create/edit flow for both models, a property detail page with PROP-01's five empty-state sections, and a duplicate-address warning that stops a second record rather than silently creating or silently blocking one. 36 core tests, 10 query-scoping integration tests, 34 e2e tests.
 
