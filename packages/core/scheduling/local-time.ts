@@ -55,6 +55,21 @@ function formatterFor(timeZone: string): Intl.DateTimeFormat {
   return formatter
 }
 
+/// The full IANA set Node's ICU build knows about. Computed once - the list
+/// is a few hundred entries and does not change during the process lifetime.
+let ianaTimezones: ReadonlySet<string> | null = null
+
+/**
+ * Whether `timeZone` is a real IANA identifier, for validating a form field
+ * before it ever reaches a Property row. `localParts`/`isDue` already refuse a
+ * bad zone at read time (D-3); this lets R-008's create/edit forms refuse it
+ * at write time instead, which is the cheaper place to catch it.
+ */
+export function isValidTimezone(timeZone: string): boolean {
+  ianaTimezones ??= new Set(Intl.supportedValuesOf('timeZone'))
+  return ianaTimezones.has(timeZone)
+}
+
 export class UnknownTimezoneError extends Error {
   // Declared and assigned explicitly rather than as a constructor parameter
   // property. Node's type stripping only ERASES types - it cannot emit the

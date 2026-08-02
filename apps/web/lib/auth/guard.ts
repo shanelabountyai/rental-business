@@ -9,6 +9,7 @@ import {
   can,
   checkMonetaryAuthority,
   propertyScope,
+  scopeIsEmpty,
 } from '@rental/core/rbac'
 import { redirect } from 'next/navigation'
 import { currentActor } from './actor.ts'
@@ -118,6 +119,39 @@ export async function currentScope(
   const actor = await currentActor()
   if (!actor) return { everything: false, legalEntityIds: [], propertyIds: [] }
   return propertyScope(actor, permission)
+}
+
+/**
+ * The guard for a SCOPED LIST or SUMMARY page - "Properties", a rent roll, a
+ * ticket queue - as opposed to `requirePermission()`, which answers "may this
+ * actor act on THIS one record".
+ *
+ * A resource-less `requirePermission(permission)` looks like the right guard
+ * for a list page and is NOT: per `can()`'s `assignmentCovers`, an empty
+ * resource only ever matches a portfolio-wide grant, so it wrongly sends an
+ * entity- or property-scoped actor to /no-access even though a scoped query
+ * would show them a perfectly real, non-empty list. That bug shipped
+ * dormant in R-007's section placeholders - every guard there was
+ * `requirePermission('x.read')` with no resource - and stayed hidden because
+ * R-007's own tests only ever exercised portfolio-wide roles. R-008's more
+ * pointed scoping tests caught it on the Properties list and detail pages.
+ *
+ * The correct question for a list is "does this actor hold `permission` over
+ * ANYTHING at all" - which is exactly what an empty `PropertyScope` means -
+ * and then let the scoped query (`propertyWhere`/`scopedByProperty`, or the
+ * switcher's own resolved scope) decide what shows up, down to zero rows.
+ */
+export async function requireScope(
+  permission: Permission,
+): Promise<{ actor: Actor; scope: PropertyScope }> {
+  const actor = await requireStaff()
+  const scope = propertyScope(actor, permission)
+  if (scopeIsEmpty(scope)) {
+    redirect(
+      `/no-access?permission=${encodeURIComponent(permission)}&reason=no_permission`,
+    )
+  }
+  return { actor, scope }
 }
 
 /**

@@ -12,7 +12,8 @@
     "./money": "./money/index.ts",
     "./rbac": "./rbac/index.ts",
     "./scheduling": "./scheduling/index.ts",
-    "./events": "./events/index.ts"
+    "./events": "./events/index.ts",
+    "./property": "./property/index.ts"
   },
   "dependencies": {
     "@rental/db": "*",

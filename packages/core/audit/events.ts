@@ -13,6 +13,12 @@
 // "show me every change to this lease" without a regex.
 
 export const AUDIT_ACTIONS = [
+  // Ownership & inventory (R-008)
+  'legal_entity.created',
+  'legal_entity.updated',
+  'property.created',
+  'property.updated',
+
   // Access and identity
   'auth.signed_in',
   'auth.locked_out',
