@@ -56,11 +56,17 @@ export interface AuditInput {
 }
 
 export class MissingAuditReasonError extends Error {
-  constructor(readonly action: AuditAction) {
+  // Not a constructor parameter property: Node's strip-only TypeScript support
+  // cannot emit the implied assignment, and the CLI scripts import this module
+  // under exactly that. It fails at import time, not at call time.
+  readonly action: AuditAction
+
+  constructor(action: AuditAction) {
     super(
       `${action} cannot be recorded without a reason. It is on REASON_REQUIRED because "why" is the point of the record.`,
     )
     this.name = 'MissingAuditReasonError'
+    this.action = action
   }
 }
 

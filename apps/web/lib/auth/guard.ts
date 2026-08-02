@@ -33,13 +33,22 @@ export { propertyWhere, scopedByProperty } from './scope.ts'
 //
 // Both go through packages/core. Nothing here decides anything itself.
 
+/// Retained for callers that need a hard failure rather than a redirect - an
+/// API route answering a machine, for instance. Page and action guards below
+/// redirect instead; see requirePermission.
 export class AuthorizationError extends Error {
-  constructor(
-    readonly permission: Permission,
-    readonly reason: string,
-  ) {
+  // Explicit fields rather than constructor parameter properties, matching
+  // packages/core. Next compiles this file properly so it would work either
+  // way, but keeping one rule across the repo is cheaper than remembering
+  // which files are reachable from a CLI script.
+  readonly permission: Permission
+  readonly reason: string
+
+  constructor(permission: Permission, reason: string) {
     super(`Not permitted: ${permission} (${reason})`)
     this.name = 'AuthorizationError'
+    this.permission = permission
+    this.reason = reason
   }
 }
 
@@ -78,8 +87,18 @@ export async function requirePermission(
   const decision = can(actor, permission, resource)
   if (decision.allowed) return actor
 
+  // Every denial is a redirect to somewhere that explains itself, because
+  // none of them is a fault. Throwing produced Next's "This page couldn't
+  // load" crash page for the entirely ordinary case of a maintenance tech
+  // opening a financial link.
+  //
+  // mfa_required goes to enrolment because the user IS allowed and only needs
+  // to prove a second factor (ROLE-05). The rest go to /no-access, which says
+  // which permission was missing.
   if (decision.reason === 'mfa_required') redirect('/account?mfa=required')
-  throw new AuthorizationError(permission, decision.reason)
+  redirect(
+    `/no-access?permission=${encodeURIComponent(permission)}&reason=${decision.reason}`,
+  )
 }
 
 /// Non-throwing variant, for deciding whether to render a control. NEVER the

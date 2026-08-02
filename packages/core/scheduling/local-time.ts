@@ -56,11 +56,18 @@ function formatterFor(timeZone: string): Intl.DateTimeFormat {
 }
 
 export class UnknownTimezoneError extends Error {
-  constructor(readonly timezone: string) {
+  // Declared and assigned explicitly rather than as a constructor parameter
+  // property. Node's type stripping only ERASES types - it cannot emit the
+  // assignment a parameter property implies - and the CLI scripts run under
+  // exactly that. See packages/db/prisma/create-owner.mts.
+  readonly timezone: string
+
+  constructor(timezone: string) {
     super(
       `"${timezone}" is not a recognised IANA timezone. Property.timezone drives every nightly job (D-3); a bad value must fail loudly rather than silently defaulting to UTC.`,
     )
     this.name = 'UnknownTimezoneError'
+    this.timezone = timezone
   }
 }
 

@@ -164,7 +164,7 @@ export async function startStaffSignIn(
 
   return signInOrFormError('staff-challenge', {
     challengeToken: challenge.token,
-    redirectTo: '/account',
+    redirectTo: '/dashboard',
   })
 }
 
@@ -191,7 +191,7 @@ export async function completeStaffMfa(
   const result = await signInOrFormError('staff-challenge', {
     challengeToken,
     code,
-    redirectTo: '/account',
+    redirectTo: '/dashboard',
   })
   // The challenge survives a wrong code on purpose - it is burned only after
   // the factor verifies - so the message says "try again", not "start over".

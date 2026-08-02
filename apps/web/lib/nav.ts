@@ -1,0 +1,59 @@
+import type { Permission } from '@rental/core/rbac'
+
+// The navigation, as data. One list, so "which sections exist and who sees
+// them" is answerable by reading a single array rather than by grepping JSX.
+//
+// Every entry names the permission that reveals it. Hiding a link is NOT
+// authorization - ROLE-01 is explicit that enforcement is server-side per role
+// and record scope, "not just hidden UI" - so each destination guards itself
+// as well. The permission here exists so a maintenance tech is not shown a
+// financial section that would refuse them anyway.
+
+export interface NavItem {
+  href: string
+  label: string
+  /// Shown only to an actor holding this permission somewhere in scope.
+  permission: Permission
+  /// Which backlog item fills the section in. Rendered on the placeholder, so
+  /// a half-built shell explains itself instead of looking broken.
+  ownedBy: string
+}
+
+export const NAV_ITEMS: readonly NavItem[] = [
+  {
+    href: '/dashboard',
+    label: 'Dashboard',
+    permission: 'property.read',
+    ownedBy: 'R-013',
+  },
+  {
+    href: '/properties',
+    label: 'Properties',
+    permission: 'property.read',
+    ownedBy: 'R-008',
+  },
+  {
+    href: '/leases',
+    label: 'Leases',
+    permission: 'lease.read',
+    ownedBy: 'R-016',
+  },
+  {
+    href: '/maintenance',
+    label: 'Maintenance',
+    permission: 'ticket.read',
+    ownedBy: 'R-022',
+  },
+  {
+    href: '/money',
+    label: 'Money',
+    permission: 'ledger.read',
+    ownedBy: 'R-035',
+  },
+  {
+    href: '/tasks',
+    label: 'Tasks',
+    permission: 'task.read',
+    ownedBy: 'R-011',
+  },
+]

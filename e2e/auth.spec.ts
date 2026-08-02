@@ -145,12 +145,26 @@ test.afterAll(async () => {
   await prisma.$disconnect()
 })
 
+/**
+ * Grants a role. Since R-007, sign-in lands on /dashboard, which needs
+ * `property.read` - so a test that wants to see the dashboard has to give its
+ * user a role first. A role-less staff user is redirected to /no-access, which
+ * is correct behaviour and has its own tests.
+ */
+async function grantRole(staffUserId: string, roleKey: string) {
+  const role = await prisma.role.findUniqueOrThrow({ where: { key: roleKey } })
+  await prisma.staffAssignment.create({
+    data: { staffUserId, roleId: role.id },
+  })
+}
+
 async function signInAsStaff(page: import('@playwright/test').Page, email: string) {
   await page.goto('/login')
   await page.getByLabel('Email').fill(email)
   await page.getByLabel('Password').fill(PASSWORD)
   await page.getByRole('button', { name: 'Sign in' }).click()
-  await page.waitForURL('**/account')
+  // Sign-in lands on the dashboard now that R-007's shell exists.
+  await page.waitForURL('**/dashboard')
 }
 
 test.describe('accessibility', () => {
@@ -181,6 +195,13 @@ test.describe('accessibility', () => {
 })
 
 test.describe('route protection', () => {
+  test('sends an anonymous visitor from /dashboard to the staff sign-in', async ({
+    page,
+  }) => {
+    await page.goto('/dashboard')
+    await expect(page).toHaveURL(/\/login/)
+  })
+
   test('sends an anonymous visitor from /account to the staff sign-in', async ({
     page,
   }) => {
@@ -199,9 +220,10 @@ test.describe('route protection', () => {
 test.describe('staff sign-in', () => {
   test('signs in with the right password', async ({ page }) => {
     const staff = await createStaffUser()
+    await grantRole(staff.id, 'owner')
     await signInAsStaff(page, staff.email)
     await expect(
-      page.getByRole('heading', { name: 'Your account', level: 1 }),
+      page.getByRole('heading', { name: 'Dashboard', level: 1 }),
     ).toBeVisible()
   })
 
@@ -284,21 +306,22 @@ test.describe('staff MFA', () => {
 
     await expect(page).toHaveURL(/\/login\/mfa/)
     // The password alone must not have produced a session.
-    await page.goto('/account')
+    await page.goto('/dashboard')
     await expect(page).toHaveURL(/\/login/)
   })
 
   test('signs in with a correct authenticator code', async ({ page }) => {
     const staff = await createEnrolledStaff()
+    await grantRole(staff.id, 'owner')
     await submitPassword(page, staff.email)
     await expect(page).toHaveURL(/\/login\/mfa/)
 
     await page.getByLabel(/code/i).fill(currentCode(staff.secret))
     await page.getByRole('button', { name: 'Verify' }).click()
 
-    await page.waitForURL('**/account')
+    await page.waitForURL('**/dashboard')
     await expect(
-      page.getByRole('heading', { name: 'Your account', level: 1 }),
+      page.getByRole('heading', { name: 'Dashboard', level: 1 }),
     ).toBeVisible()
   })
 
@@ -323,7 +346,7 @@ test.describe('staff MFA', () => {
 
     await page.getByLabel(/code/i).fill(currentCode(staff.secret))
     await page.getByRole('button', { name: 'Verify' }).click()
-    await page.waitForURL('**/account')
+    await page.waitForURL('**/dashboard')
   })
 
   test('accepts a recovery code and spends it', async ({ page }) => {
@@ -333,7 +356,7 @@ test.describe('staff MFA', () => {
     const used = staff.recoveryCodes[0]!
     await page.getByLabel(/code/i).fill(used)
     await page.getByRole('button', { name: 'Verify' }).click()
-    await page.waitForURL('**/account')
+    await page.waitForURL('**/dashboard')
 
     const credential = await prisma.staffCredential.findUnique({
       where: { staffUserId: staff.id },
@@ -361,6 +384,7 @@ test.describe('authorization (R-004)', () => {
   }) => {
     const staff = await createStaffUser()
     await signInAsStaff(page, staff.email)
+    await page.goto('/account')
     // Deny by default is visible, not silent: a signed-in user with no
     // assignment can do nothing, and the page says so rather than looking
     // like an empty dashboard.
@@ -373,9 +397,14 @@ test.describe('authorization (R-004)', () => {
     const staff = await createStaffUser()
     await grant(staff.id, 'owner')
     await signInAsStaff(page, staff.email)
+    await page.goto('/account')
 
     await expect(page.getByText('Owner —')).toBeVisible()
-    await expect(page.getByText('all properties')).toBeVisible()
+    // Scoped to the assignment list: the property switcher in the header now
+    // renders "All properties" too, so a bare text match is ambiguous.
+    await expect(
+      page.getByRole('listitem').filter({ hasText: 'Owner —' }),
+    ).toContainText('all properties')
     // Null ceiling reads as unlimited - there is nobody above the owner to
     // route an approval up to.
     await expect(page.getByText('No limit').first()).toBeVisible()
@@ -385,6 +414,7 @@ test.describe('authorization (R-004)', () => {
     const staff = await createStaffUser()
     await grant(staff.id, 'manager')
     await signInAsStaff(page, staff.email)
+    await page.goto('/account')
 
     await expect(page.getByText('Manager —')).toBeVisible()
     await expect(page.getByText('$500.00')).toBeVisible()
@@ -401,6 +431,7 @@ test.describe('authorization (R-004)', () => {
       data: { approveWorkOrderCents: 0 },
     })
     await signInAsStaff(page, staff.email)
+    await page.goto('/account')
 
     await expect(page.getByText('$0.00')).toBeVisible()
     await expect(page.getByText('$500.00')).toHaveCount(0)
@@ -412,6 +443,7 @@ test.describe('authorization (R-004)', () => {
     const staff = await createStaffUser()
     await grant(staff.id, 'owner')
     await signInAsStaff(page, staff.email)
+    await page.goto('/account')
     await expect(page.getByText('Owner —')).toBeVisible()
 
     await prisma.staffAssignment.updateMany({
@@ -428,6 +460,7 @@ test.describe('authorization (R-004)', () => {
     const staff = await createStaffUser()
     await grant(staff.id, 'manager')
     await signInAsStaff(page, staff.email)
+    await page.goto('/account')
 
     const results = await new AxeBuilder({ page })
       .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])

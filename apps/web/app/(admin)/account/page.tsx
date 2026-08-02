@@ -11,9 +11,9 @@ import { requireStaff } from '@/lib/auth/guard.ts'
 
 export const metadata = { title: 'Your account — Rental Operations' }
 
-// The only route R-004 protects for real. R-007 builds the admin shell; this
-// page exists so the session, the MFA enrolment flow and the resolved
-// permission set all have somewhere to be looked at.
+// Lives inside the admin shell (R-007). Shows the resolved permission set and
+// ceilings, and owns MFA enrolment - which every privileged action depends on
+// (ROLE-05), so it is reachable from the header on every screen.
 export default async function AccountPage({
   searchParams,
 }: {
@@ -45,7 +45,7 @@ export default async function AccountPage({
     cents === null ? 'No limit' : formatCents(cents)
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-xl flex-col justify-center gap-8 p-6">
+    <div className="flex w-full max-w-xl flex-col gap-8">
       <header className="flex flex-col gap-1">
         <h1 className="text-2xl font-semibold tracking-tight">Your account</h1>
         <p className="text-muted-foreground text-sm">
@@ -129,6 +129,6 @@ export default async function AccountPage({
           </button>
         </form>
       </section>
-    </main>
+    </div>
   )
 }
