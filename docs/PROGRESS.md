@@ -208,7 +208,7 @@ The running narrative of what has actually been built. One entry per completed b
 ---
 
 ## R-007 — Admin shell
-**Commit:** _pending_  ·  **Date:** 2026-08-01
+**Commit:** `da14b98`  ·  **Date:** 2026-08-01
 
 **What it built.** The staff shell everything later renders inside: skip link, header with property switcher and universal search, permission-filtered left nav, and six section routes that each guard themselves. Plus `db:create-owner`, the D-5 bootstrap that gives a new deployment its first human, and the route-guard test R-004 deferred until there was a tree worth walking. 24 shell e2e tests, 12 route-guard tests.
 
