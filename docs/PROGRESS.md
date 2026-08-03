@@ -271,7 +271,7 @@ The running narrative of what has actually been built. One entry per completed b
 ---
 
 ## R-009 — Unit management
-**Commit:** _pending_  ·  **Date:** 2026-08-03
+**Commit:** `2c628e6`  ·  **Date:** 2026-08-03
 
 **What it built.** Full create/read/update for `Unit` (modeled in R-002, untouched here — no migration), plus PROP-02's one automated rule: a scheduled job that flips a unit to `MAKE_READY` once its lease has ended without a renewal in place. This is the first item to register a real job into R-006's `SCHEDULED_JOBS`, so it also builds the registration convention R-006 left for "the items that own the nightly work" — a single `apps/web/lib/jobs/registrations.ts` that side-effect-imports every job module, which the cron route now imports instead of expecting jobs to appear on their own. 20 core validation tests, 15 job/query integration tests, 18 e2e tests — plus two real bugs found and fixed in already-shipped R-008 code, and one in R-003's, described below.
 
