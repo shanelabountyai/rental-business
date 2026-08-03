@@ -78,6 +78,13 @@ export const AUDIT_ACTIONS = [
   /// mutation this entity gets - versions are added, never edited in place
   /// (D-4), so there is no separate "updated" action.
   'jurisdiction_rule.versioned',
+
+  /// R-011 (D-9): resolution (completed or canceled) of a task whose TYPE is
+  /// in AUDITED_TASK_TYPES - not every task, just the ones a later item marks
+  /// as needing to show up in the evidence trail on top of the Task row's own
+  /// completedByStaffId/completedAt.
+  'task.completed',
+  'task.canceled',
 ] as const
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number]
