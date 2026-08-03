@@ -295,7 +295,7 @@ The running narrative of what has actually been built. One entry per completed b
 - **A pre-existing R-003 test (20 concurrent rate-limit attempts) was failing consistently, not just flaking, by the time this item's testing was done** — Prisma's default 5-second interactive-transaction timeout, measured from when a transaction *starts*, includes time spent queued behind the advisory lock the test is specifically designed to serialize every caller through. Under today's latency the 20th caller in that queue no longer reliably finished within 5 seconds. Fixed by raising `consumeRateLimit`'s transaction timeout to 15 seconds — a change to how long a rare, adversarial pile-up is allowed to queue before giving up, not to any ordinary, uncontended request.
 
 ## R-010 — JurisdictionRule engine
-**Commit:** `_pending_`  ·  **Date:** 2026-08-03
+**Commit:** `54f632b`  ·  **Date:** 2026-08-03
 
 **What it built.** The resolver every later item routes statutory numbers through: `rulesFor(property, asOf)`, backed by a pure `selectApplicableRule()` in `packages/core/jurisdiction` that picks the right version of the right (state, jurisdiction) row for a given day, plus a hand-rolled `validateJurisdictionRule()` covering all twenty-odd fields (late-fee consistency by type, deposit/notice ranges, a closed payment-allocation-order vocabulary). Texas is seeded statewide, version 1, unreviewed. A small portfolio-wide admin section (`/jurisdiction`, `/jurisdiction/new`) lists what's currently in force and lets an owner add a new effective-dated version, prefilled from whatever it replaces. 24 core tests, 7 query integration tests, 8 e2e tests.
 
