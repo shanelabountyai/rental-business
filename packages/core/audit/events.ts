@@ -18,6 +18,12 @@ export const AUDIT_ACTIONS = [
   'legal_entity.updated',
   'property.created',
   'property.updated',
+  'unit.created',
+  'unit.updated',
+  /// The one AUTOMATED unit mutation (PROP-02): a lease ended without a
+  /// renewal in place, so R-009's nightly job flipped the unit to
+  /// MAKE_READY. Attributed to SYSTEM, not a staff member.
+  'unit.auto_made_ready',
 
   // Access and identity
   'auth.signed_in',

@@ -1,6 +1,9 @@
 import { timingSafeEqual } from 'node:crypto'
 import { auditAsSystem } from '@/lib/audit/index.ts'
 import { dispatchOutbox } from '@/lib/jobs/outbox.ts'
+// Side-effect import: populates SCHEDULED_JOBS before runDueJobs() reads it.
+// See registrations.ts for why every job module is imported from exactly here.
+import '@/lib/jobs/registrations.ts'
 import { runDueJobs } from '@/lib/jobs/runner.ts'
 
 // The single scheduled entry point. Vercel Cron hits it hourly (vercel.json),

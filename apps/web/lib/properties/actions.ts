@@ -11,7 +11,7 @@ import { prisma } from '@rental/db'
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { audit } from '@/lib/audit/index.ts'
-import { requirePermission } from '@/lib/auth/guard.ts'
+import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
 import { candidateDuplicateProperties } from './queries.ts'
 
 // Writes for LegalEntity and Property (PROP-01, PROP-04).
@@ -282,7 +282,10 @@ export async function updateProperty(
   const existing = await prisma.property.findUniqueOrThrow({
     where: { id: propertyId },
   })
-  await requirePermission('property.write', { propertyId })
+  // Both ids, not just propertyId - see propertyResource's own comment. An
+  // entity-scoped manager editing a property that genuinely belongs to their
+  // entity was wrongly denied here until this fix.
+  await requirePermission('property.write', propertyResource(existing))
 
   const input = propertyInputFrom(formData)
   const violations = validateProperty(input)

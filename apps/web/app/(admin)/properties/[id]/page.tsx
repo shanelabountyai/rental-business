@@ -1,8 +1,16 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { actorCan, requireScope } from '@/lib/auth/guard.ts'
+import { actorCan, propertyResource, requireScope } from '@/lib/auth/guard.ts'
 import { currentScope as switcherScope } from '@/lib/scope/current-scope.ts'
 import { getPropertyDetail } from '@/lib/properties/queries.ts'
+import { listUnits } from '@/lib/units/queries.ts'
+
+const UNIT_STATUS_LABELS: Record<string, string> = {
+  OCCUPIED: 'Occupied',
+  VACANT: 'Vacant',
+  MAKE_READY: 'Make-ready',
+  DOWN: 'Down',
+}
 
 export const metadata = { title: 'Property — Rental Operations' }
 
@@ -57,7 +65,14 @@ export default async function PropertyDetailPage({
   const property = await getPropertyDetail(id, scope)
   if (!property) notFound()
 
-  const canWrite = await actorCan('property.write', { propertyId: id })
+  // Both ids (propertyResource), not just propertyId - an entity-scoped
+  // manager's Edit button was wrongly hidden here until this fix, the same
+  // gap as the edit page's own guard.
+  const canWrite = await actorCan('property.write', propertyResource(property))
+  const [units, canWriteUnits] = await Promise.all([
+    listUnits(id, scope),
+    actorCan('unit.write', propertyResource(property)),
+  ])
 
   return (
     <div className="flex max-w-2xl flex-col gap-6">
@@ -121,11 +136,43 @@ export default async function PropertyDetailPage({
       </dl>
 
       <div className="flex flex-col gap-3">
-        <EmptySection
-          title="Units"
-          ownedBy="R-009"
-          description="Main house, ADU, duplex side - each with its own status, market rent and attributes."
-        />
+        <section className="flex flex-col gap-3 rounded-md border p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-sm font-semibold">Units</h2>
+            {canWriteUnits && (
+              <Link
+                href={`/properties/${property.id}/units/new`}
+                className="border-input hover:bg-accent focus-visible:ring-ring flex min-h-11 items-center rounded-md border px-3 py-1.5 text-sm font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+              >
+                Add unit
+              </Link>
+            )}
+          </div>
+          {units.length === 0 ? (
+            <p className="text-muted-foreground text-sm">
+              No units yet. Most single-family properties are one unit; add an
+              ADU or a duplex side here too.
+            </p>
+          ) : (
+            <ul className="flex flex-col divide-y">
+              {units.map((unit) => (
+                <li key={unit.id}>
+                  <Link
+                    href={`/properties/${property.id}/units/${unit.id}`}
+                    className="hover:bg-accent focus-visible:ring-ring flex min-h-11 items-center justify-between gap-2 rounded-md px-2 py-2 text-sm focus-visible:ring-2 focus-visible:-outline-offset-2 focus-visible:outline-none"
+                  >
+                    <span className="font-medium">{unit.name}</span>
+                    <span className="text-muted-foreground">
+                      {UNIT_STATUS_LABELS[unit.status] ?? unit.status}
+                      {unit.marketRentCents != null &&
+                        ` · $${(unit.marketRentCents / 100).toLocaleString()}/mo`}
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
         <EmptySection
           title="Leases"
           ownedBy="R-016"

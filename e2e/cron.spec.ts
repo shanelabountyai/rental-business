@@ -54,8 +54,9 @@ test.describe('the cron endpoint', () => {
     })
     expect(response.status()).toBe(200)
 
-    // No jobs are registered yet - R-010 and R-030 bring the first ones - so
-    // this asserts the runner reports cleanly rather than that it did work.
+    // R-009 registered the first real job (unit auto-make-ready); this
+    // asserts the runner reports cleanly against whatever properties exist,
+    // not that any particular job did work - that is units.spec.ts's job.
     const body = await response.json()
     expect(body).toMatchObject({
       ok: true,

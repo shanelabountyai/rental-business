@@ -112,6 +112,30 @@ export async function actorCan(
   return actor ? can(actor, permission, resource).allowed : false
 }
 
+/**
+ * The full resource for a check against an EXISTING property (or anything
+ * scoped through one - a unit, a ticket, a work order). Pass both ids, not
+ * just `propertyId`.
+ *
+ * A record found while diagnosing R-009: `can()`'s `assignmentCovers` picks
+ * ONE branch per assignment - a property-scoped grant is checked against
+ * `resource.propertyId`, an entity-scoped grant against
+ * `resource.legalEntityId` - and it never falls back from one to the other.
+ * `requirePermission('property.write', { propertyId })` therefore denies an
+ * entity-scoped manager editing a property that genuinely belongs to their
+ * own entity, because `resource.legalEntityId` was never supplied for
+ * `assignmentCovers` to check against. This shipped in R-008 on the property
+ * edit page, its guard, and its Edit-button visibility check - all three
+ * fixed alongside this helper, which exists so the next item scoping through
+ * a property does not have to rediscover the same gap.
+ */
+export function propertyResource(property: {
+  id: string
+  legalEntityId: string
+}): Resource {
+  return { propertyId: property.id, legalEntityId: property.legalEntityId }
+}
+
 /// Convenience: the scope for a permission the current actor holds.
 export async function currentScope(
   permission: Permission,

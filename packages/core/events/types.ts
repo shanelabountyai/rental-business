@@ -46,6 +46,13 @@ export const DOMAIN_EVENTS = [
   // Scheduling. Emitted by the runner itself so a job that wants to fan out
   // per property does not have to re-derive the local date.
   'day.rolled_over',
+
+  /// A lease ended without a renewal in place, so R-009's nightly job flipped
+  /// the unit to MAKE_READY (PROP-02). The natural trigger for a turnover
+  /// checklist (R-011's task queue, once it exists) or a "unit needs prep"
+  /// notification (R-030) - neither consumer exists yet; this is the fact
+  /// they will subscribe to.
+  'unit.became_make_ready',
 ] as const
 
 export type DomainEvent = (typeof DOMAIN_EVENTS)[number]

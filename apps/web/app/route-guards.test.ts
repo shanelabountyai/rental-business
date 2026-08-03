@@ -39,6 +39,13 @@ const PUBLIC_ROUTES: Record<string, string> = {
 /// Any of these in a file counts as guarding it.
 const GUARD_CALLS = [
   'requirePermission(',
+  // Added in R-009 after this test passed R-008's own requireScope() pages
+  // for the WRONG reason: their explanatory comments happened to also
+  // contain the literal string "requirePermission(" while explaining why
+  // that is NOT the right guard here, which was enough to satisfy the naive
+  // substring match below even though the actual call was requireScope().
+  // The unit detail page, with no such comment, caught the gap for real.
+  'requireScope(',
   'requireStaff(',
   'requireTenant(',
   // The tenant portal placeholder checks the session kind directly, which is

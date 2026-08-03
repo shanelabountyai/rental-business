@@ -495,6 +495,35 @@ test.describe('editing a property', () => {
     await page.goto(`/properties/${theirs.id}/edit`)
     await expect(page).toHaveURL(/\/no-access/)
   })
+
+  // Regression test for a real bug found while building R-009: the edit
+  // page's guard checked only `{ propertyId }`, and assignmentCovers matches
+  // an entity-scoped grant on `resource.legalEntityId` alone - so an
+  // entity-scoped manager was denied editing a property that genuinely
+  // belongs to their own entity. Fixed with propertyResource(), which
+  // supplies both ids so either scope shape of grant can match.
+  test('lets an entity-scoped manager edit a property in their own entity', async ({
+    page,
+  }) => {
+    const entity = await seedEntity()
+    const property = await seedProperty(entity.id, { name: 'Entity Managed' })
+    const staff = await createStaff('manager', { legalEntityId: entity.id })
+    await signIn(page, staff.email)
+
+    // The Edit button itself must be offered, not just the route reachable.
+    await page.goto(`/properties/${property.id}`)
+    await expect(page.getByRole('link', { name: 'Edit' })).toBeVisible()
+
+    await page.goto(`/properties/${property.id}/edit`)
+    await expect(page).not.toHaveURL(/\/no-access/)
+    await page.getByLabel('Property name').fill('Entity Managed Renamed')
+    await page.getByRole('button', { name: 'Save changes' }).click()
+
+    await page.waitForURL(`**/properties/${property.id}`)
+    await expect(
+      page.getByRole('heading', { name: 'Entity Managed Renamed', level: 1 }),
+    ).toBeVisible()
+  })
 })
 
 test.describe('scoped visibility', () => {

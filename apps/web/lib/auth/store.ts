@@ -30,36 +30,50 @@ import { type AuthTokenPurpose, type Prisma, prisma } from '@rental/db'
  *
  * hashtext collisions merely serialize two unrelated keys for a moment, which
  * costs nothing and cannot let an extra request through.
+ *
+ * `timeout: 15_000`, above Prisma's 5s default: every concurrent caller for
+ * the SAME key queues behind one advisory lock, so the last in line is
+ * waiting on everyone ahead of it to finish, not just doing its own work -
+ * and that queue wait counts against the interactive-transaction timeout.
+ * Found via a burst of 20 concurrent callers in store.test.ts, which is a
+ * deliberately adversarial test scenario, not real traffic: no genuine
+ * request pattern for a 10-50 unit portal sends 20 simultaneous attempts at
+ * the identical rate-limit key. Raising the ceiling only affects how long a
+ * request in that rare pile-up waits before giving up; it changes nothing
+ * about how quickly an ordinary, uncontended check completes.
  */
 export async function consumeRateLimit(
   key: string,
   policy: { limit: number; windowMs: number },
   now = new Date(),
 ): Promise<{ allowed: boolean; retryAfterMs: number }> {
-  return prisma.$transaction(async (tx) => {
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${key}))`
+  return prisma.$transaction(
+    async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${key}))`
 
-    const rows = await tx.$queryRaw<
-      Array<{ windowStartedAt: Date; count: number }>
-    >`SELECT "windowStartedAt", "count" FROM "RateLimitCounter" WHERE "key" = ${key}`
+      const rows = await tx.$queryRaw<
+        Array<{ windowStartedAt: Date; count: number }>
+      >`SELECT "windowStartedAt", "count" FROM "RateLimitCounter" WHERE "key" = ${key}`
 
-    const decision = checkRateLimit(policy, rows[0] ?? null, now)
+      const decision = checkRateLimit(policy, rows[0] ?? null, now)
 
-    await tx.rateLimitCounter.upsert({
-      where: { key },
-      create: {
-        key,
-        windowStartedAt: decision.next.windowStartedAt,
-        count: decision.next.count,
-      },
-      update: {
-        windowStartedAt: decision.next.windowStartedAt,
-        count: decision.next.count,
-      },
-    })
+      await tx.rateLimitCounter.upsert({
+        where: { key },
+        create: {
+          key,
+          windowStartedAt: decision.next.windowStartedAt,
+          count: decision.next.count,
+        },
+        update: {
+          windowStartedAt: decision.next.windowStartedAt,
+          count: decision.next.count,
+        },
+      })
 
-    return { allowed: decision.allowed, retryAfterMs: decision.retryAfterMs }
-  })
+      return { allowed: decision.allowed, retryAfterMs: decision.retryAfterMs }
+    },
+    { timeout: 15_000 },
+  )
 }
 
 export interface IssuedToken {

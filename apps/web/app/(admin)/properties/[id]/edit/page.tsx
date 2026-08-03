@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation'
 import { prisma } from '@rental/db'
 import { PropertyForm } from '@/components/properties/property-form.tsx'
-import { requirePermission } from '@/lib/auth/guard.ts'
+import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
 import { updateProperty } from '@/lib/properties/actions.ts'
 
 export const metadata = { title: 'Edit property — Rental Operations' }
@@ -12,15 +12,20 @@ export default async function EditPropertyPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
-  // Scoped to THIS property, so a property-scoped manager may edit their own
-  // property but nothing outside it (ROLE-01).
-  await requirePermission('property.write', { propertyId: id })
 
+  // Fetched before the guard, not after: the guard needs the property's
+  // legalEntityId to correctly match an entity-scoped grant (propertyResource
+  // - see its own comment for the bug this fixes), so the row has to be in
+  // hand first.
   const property = await prisma.property.findUnique({
     where: { id },
     include: { legalEntity: { select: { id: true, name: true } } },
   })
   if (!property) notFound()
+
+  // Both ids, so a property-scoped OR an entity-scoped grant can match
+  // (ROLE-01).
+  await requirePermission('property.write', propertyResource(property))
 
   return (
     <div className="flex flex-col gap-6">
