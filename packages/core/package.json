@@ -13,6 +13,7 @@
     "./rbac": "./rbac/index.ts",
     "./scheduling": "./scheduling/index.ts",
     "./events": "./events/index.ts",
+    "./jurisdiction": "./jurisdiction/index.ts",
     "./property": "./property/index.ts",
     "./units": "./units/index.ts"
   },

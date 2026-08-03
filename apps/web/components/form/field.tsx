@@ -88,6 +88,51 @@ export function TextField({
   )
 }
 
+export function CheckboxField({
+  label,
+  name,
+  value,
+  defaultChecked,
+  hint,
+}: {
+  label: string
+  name: string
+  /// Set when several checkboxes share one `name` to submit a set of values
+  /// (a `formData.getAll(name)` field, e.g. a payment-allocation order) -
+  /// otherwise the checkbox submits the default "on" for a plain boolean
+  /// field. Folded into `id` too, since several checkboxes sharing one name
+  /// would otherwise share one id, which is invalid HTML and breaks the
+  /// label-to-input association for every one of them but the first.
+  value?: string
+  defaultChecked?: boolean
+  hint?: string
+}) {
+  const id = value ? `field-${name}-${value}` : `field-${name}`
+  const hintId = `${id}-hint`
+
+  return (
+    <div className="flex items-start gap-2">
+      <input
+        id={id}
+        name={name}
+        type="checkbox"
+        value={value}
+        defaultChecked={defaultChecked}
+        aria-describedby={hint ? hintId : undefined}
+        className="border-input mt-1 size-5 rounded"
+      />
+      <label htmlFor={id} className="flex flex-col text-sm">
+        <span className="font-medium">{label}</span>
+        {hint && (
+          <span id={hintId} className="text-muted-foreground">
+            {hint}
+          </span>
+        )}
+      </label>
+    </div>
+  )
+}
+
 export function SelectField({
   label,
   name,

@@ -3,6 +3,7 @@
 export * from './audit/index.ts'
 export * from './auth/index.ts'
 export * from './events/index.ts'
+export * from './jurisdiction/index.ts'
 export * from './money/index.ts'
 export * from './property/index.ts'
 export * from './rbac/index.ts'

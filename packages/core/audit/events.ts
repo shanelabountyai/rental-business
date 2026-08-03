@@ -73,6 +73,11 @@ export const AUDIT_ACTIONS = [
   'entry_notice.overridden',
   'screening.decided',
   'application_order.deviated',
+
+  /// R-010: a new effective-dated version of a JurisdictionRule. The one
+  /// mutation this entity gets - versions are added, never edited in place
+  /// (D-4), so there is no separate "updated" action.
+  'jurisdiction_rule.versioned',
 ] as const
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number]

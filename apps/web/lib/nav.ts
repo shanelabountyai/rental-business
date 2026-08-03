@@ -56,4 +56,10 @@ export const NAV_ITEMS: readonly NavItem[] = [
     permission: 'task.read',
     ownedBy: 'R-011',
   },
+  {
+    href: '/jurisdiction',
+    label: 'Jurisdiction rules',
+    permission: 'jurisdiction.read',
+    ownedBy: 'R-010',
+  },
 ]

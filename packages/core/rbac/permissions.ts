@@ -44,6 +44,13 @@ export const PERMISSIONS = [
   'accesscode.reveal',
   'report.financial',
   'audit.read',
+  /// Portfolio-wide only (R-010): a JurisdictionRule applies by state, not by
+  /// property or entity, so there is no scoped resource to check it against.
+  /// `requirePermission('jurisdiction.write')` with no resource is the
+  /// correct guard, not a bug - see propertyResource()'s own comment for the
+  /// failure mode a resource-less check usually is.
+  'jurisdiction.read',
+  'jurisdiction.write',
 ] as const
 
 export type Permission = (typeof PERMISSIONS)[number]
@@ -160,6 +167,9 @@ export const ROLE_DEFINITIONS: Record<
       'staff.read',
       'accesscode.reveal',
       'report.financial',
+      /// Read, not write: a jurisdiction config change is a legal release
+      /// gate (D-4), not day-to-day portfolio work.
+      'jurisdiction.read',
     ],
     // ROLE-02's example boundary, in cents. Owner-configurable per user.
     defaultApproveWorkOrderCents: 50_000,
@@ -209,6 +219,7 @@ export const ROLE_DEFINITIONS: Record<
       'message.read',
       'task.read',
       'report.financial',
+      'jurisdiction.read',
     ],
     defaultApproveWorkOrderCents: 0,
     defaultWaiveFeeCents: 0,
