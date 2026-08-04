@@ -2,6 +2,7 @@
 // ledger projection and billing math join these as those items are built.
 export * from './audit/index.ts'
 export * from './auth/index.ts'
+export * from './documents/index.ts'
 export * from './events/index.ts'
 export * from './jurisdiction/index.ts'
 export * from './money/index.ts'

@@ -1,7 +1,9 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { DocumentsSection } from '@/components/documents/documents-section.tsx'
 import { actorCan, propertyResource, requireScope } from '@/lib/auth/guard.ts'
 import { currentScope as switcherScope } from '@/lib/scope/current-scope.ts'
+import { listDeletedDocuments, listDocuments } from '@/lib/documents/queries.ts'
 import { getUnitDetail } from '@/lib/units/queries.ts'
 
 export const metadata = { title: 'Unit — Rental Operations' }
@@ -47,7 +49,14 @@ export default async function UnitDetailPage({
   const unit = await getUnitDetail(propertyId, unitId, scope)
   if (!unit) notFound()
 
-  const canWrite = await actorCan('unit.write', propertyResource(unit.property))
+  const [canWrite, documents, deletedDocuments, canWriteDocuments, canDeleteDocuments] =
+    await Promise.all([
+      actorCan('unit.write', propertyResource(unit.property)),
+      listDocuments(propertyId, scope, unitId),
+      listDeletedDocuments(propertyId, scope, unitId),
+      actorCan('document.write', propertyResource(unit.property)),
+      actorCan('document.delete', propertyResource(unit.property)),
+    ])
 
   return (
     <div className="flex max-w-2xl flex-col gap-6">
@@ -111,6 +120,14 @@ export default async function UnitDetailPage({
       </dl>
 
       <div className="flex flex-col gap-3">
+        <DocumentsSection
+          propertyId={propertyId}
+          unitId={unitId}
+          documents={documents}
+          deletedDocuments={deletedDocuments}
+          canWrite={canWriteDocuments}
+          canDelete={canDeleteDocuments}
+        />
         <EmptySection
           title="Operational data"
           ownedBy="R-014"

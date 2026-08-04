@@ -51,6 +51,10 @@ export const AUDIT_ACTIONS = [
   'workorder.chargeback_posted',
 
   // Evidence
+  /// R-012: every upload, not just deletion - a document IS evidence, and
+  /// "who added this and when" is as much chain-of-custody as "who removed
+  /// it". Unlike R-011's Task, which deliberately does not audit creation.
+  'document.uploaded',
   'document.delete_marked',
   'document.restored',
   'notice.served',

@@ -1,7 +1,9 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { DocumentsSection } from '@/components/documents/documents-section.tsx'
 import { actorCan, propertyResource, requireScope } from '@/lib/auth/guard.ts'
 import { currentScope as switcherScope } from '@/lib/scope/current-scope.ts'
+import { listDeletedDocuments, listDocuments } from '@/lib/documents/queries.ts'
 import { getPropertyDetail } from '@/lib/properties/queries.ts'
 import { listUnits } from '@/lib/units/queries.ts'
 
@@ -69,10 +71,15 @@ export default async function PropertyDetailPage({
   // manager's Edit button was wrongly hidden here until this fix, the same
   // gap as the edit page's own guard.
   const canWrite = await actorCan('property.write', propertyResource(property))
-  const [units, canWriteUnits] = await Promise.all([
-    listUnits(id, scope),
-    actorCan('unit.write', propertyResource(property)),
-  ])
+  const [units, canWriteUnits, documents, deletedDocuments, canWriteDocuments, canDeleteDocuments] =
+    await Promise.all([
+      listUnits(id, scope),
+      actorCan('unit.write', propertyResource(property)),
+      listDocuments(id, scope),
+      listDeletedDocuments(id, scope),
+      actorCan('document.write', propertyResource(property)),
+      actorCan('document.delete', propertyResource(property)),
+    ])
 
   return (
     <div className="flex max-w-2xl flex-col gap-6">
@@ -183,10 +190,12 @@ export default async function PropertyDetailPage({
           ownedBy="R-022"
           description="Tickets and work orders for this property."
         />
-        <EmptySection
-          title="Documents"
-          ownedBy="R-012"
-          description="Deed, insurance, warranties and the versioned photo library."
+        <DocumentsSection
+          propertyId={id}
+          documents={documents}
+          deletedDocuments={deletedDocuments}
+          canWrite={canWriteDocuments}
+          canDelete={canDeleteDocuments}
         />
         <EmptySection
           title="Financials"

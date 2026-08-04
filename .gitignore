@@ -28,6 +28,10 @@ build/
 dist/
 *.tsbuildinfo
 
+# local-disk document storage (R-012) - dev/test only; a deployed instance
+# points DOCUMENT_STORAGE_PATH at real durable storage instead
+.data/
+
 # vercel
 .vercel
 
