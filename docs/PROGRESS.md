@@ -496,7 +496,7 @@ The running narrative of what has actually been built. One entry per completed b
 - **Two pre-existing `schema.test.ts` tests broke on the new required `Thread.key`** — the correct consequence of adding a NOT NULL column, fixed by giving those fixtures a key.
 
 ## R-018 — Tenant portal shell
-**Commit:** `_pending_`  ·  **Date:** 2026-08-05
+**Commit:** `3472868`  ·  **Date:** 2026-08-05
 
 **What it built.** The real tenant portal, replacing R-003's placeholder: a mobile-first shell at `/portal` with Home (their home, rent, and PORTAL-channel updates), Papers (their own documents), and Messages (their side of R-017's threads, with a reply box). Magic-link sign-in was already R-003's; this is where a signed-in tenant finally has somewhere to be. DOC-03's "only mine" is enforced as one pure predicate (`tenantCanSeeDocument`) mirrored by the query's own `where`, with a test that walks every document in the fixture and asserts the two agree. `/api/documents/[id]/file` became dual-principal: staff keep R-004's property-scoped RBAC, tenants get the scope check, and neither path falls through to the other. A PWA manifest (D-8) makes the portal installable, scoped to `/portal`. 8 core tests, 13 permission/integration tests, 11 e2e tests including axe on every screen.
 
