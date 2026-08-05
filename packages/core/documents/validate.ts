@@ -30,6 +30,15 @@ export const DOCUMENT_TYPES = [
   'SHUTOFF_PHOTO',
   'SCREENING_REPORT',
   'APPLICATION',
+  /// R-015: the property filing cabinet (PROP-06). INSURANCE_DECLARATION is
+  /// deliberately distinct from INSURANCE_COI above - a COI is what a
+  /// VENDOR provides to prove their own coverage; a declarations page is
+  /// the property owner's own policy.
+  'DEED',
+  'MORTGAGE_DOC',
+  'INSURANCE_DECLARATION',
+  'HOA_DOC',
+  'WARRANTY_DOC',
   'OTHER',
 ] as const
 export type DocumentTypeValue = (typeof DOCUMENT_TYPES)[number]

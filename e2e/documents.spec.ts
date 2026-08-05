@@ -189,7 +189,11 @@ test.describe('uploading and downloading', () => {
     await signIn(page, staff.email)
 
     await page.goto(`/properties/${property.id}`)
-    await page.getByLabel('Type').selectOption('INSURANCE_COI')
+    // Not getByLabel('Type') - R-015's filing cabinet added a "Rate type"
+    // field (Mortgage form) to this same property page, and getByLabel does
+    // a substring match by default ("Rate type" contains "type");
+    // #field-doc-type is the upload form's select alone.
+    await page.locator('#field-doc-type').selectOption('INSURANCE_COI')
     await page
       .getByLabel('File')
       .setInputFiles({ name: 'coi.txt', mimeType: 'text/plain', buffer: Buffer.from('proof of insurance') })
@@ -246,7 +250,7 @@ test.describe('uploading and downloading', () => {
     const staff = await createStaff('owner')
     await signIn(page, staff.email)
     await page.goto(`/properties/${property.id}`)
-    await page.getByLabel('Type').selectOption('OTHER')
+    await page.locator('#field-doc-type').selectOption('OTHER')
     await page
       .getByLabel('File')
       .setInputFiles({ name: 'note.txt', mimeType: 'text/plain', buffer: Buffer.from('x') })
@@ -271,7 +275,7 @@ test.describe('soft delete and restore', () => {
     await createMfaVerifiedOwner(page)
 
     await page.goto(`/properties/${property.id}`)
-    await page.getByLabel('Type').selectOption('OTHER')
+    await page.locator('#field-doc-type').selectOption('OTHER')
     await page
       .getByLabel('File')
       .setInputFiles({ name: 'scratch.txt', mimeType: 'text/plain', buffer: Buffer.from('x') })
@@ -338,7 +342,7 @@ test.describe('scoping (ROLE-01)', () => {
     await signIn(page, staff.email)
 
     await page.goto(`/properties/${property.id}`)
-    await expect(page.getByLabel('Type')).toBeVisible()
+    await expect(page.locator('#field-doc-type')).toBeVisible()
   })
 
   test('a property-scoped manager cannot download a document from another property', async ({
@@ -349,7 +353,7 @@ test.describe('scoping (ROLE-01)', () => {
     const owner = await createStaff('owner')
     await signIn(page, owner.email)
     await page.goto(`/properties/${theirs.id}`)
-    await page.getByLabel('Type').selectOption('OTHER')
+    await page.locator('#field-doc-type').selectOption('OTHER')
     await page
       .getByLabel('File')
       .setInputFiles({ name: 'private.txt', mimeType: 'text/plain', buffer: Buffer.from('x') })

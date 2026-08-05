@@ -44,6 +44,11 @@ export const RETENTION_RULES: Record<DocumentTypeValue, RetentionRule> = {
     years: null,
     note: "DOC-05: retained per counsel's fair-housing-defense guidance - no fixed number given, so no automatic window is set.",
   },
+  DEED: { years: null, note: 'PROP-06: title record - kept indefinitely, superseded only on sale.' },
+  MORTGAGE_DOC: { years: null, note: 'PROP-06: kept indefinitely; supersedes on refinance, not purged.' },
+  INSURANCE_DECLARATION: { years: null, note: 'PROP-06: kept indefinitely; superseded by a newer policy, not purged.' },
+  HOA_DOC: { years: null, note: 'PROP-06: kept indefinitely.' },
+  WARRANTY_DOC: { years: null, note: 'PROP-06: kept indefinitely; expiry is tracked on the Warranty record, not by purging the document.' },
   OTHER: { years: null, note: 'Uncategorized - no automatic rule.' },
 }
 

@@ -1,9 +1,11 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { DocumentsSection } from '@/components/documents/documents-section.tsx'
+import { FilingCabinetSection } from '@/components/filing-cabinet/filing-cabinet-section.tsx'
 import { actorCan, propertyResource, requireScope } from '@/lib/auth/guard.ts'
 import { currentScope as switcherScope } from '@/lib/scope/current-scope.ts'
 import { listDeletedDocuments, listDocuments } from '@/lib/documents/queries.ts'
+import { getFilingCabinet } from '@/lib/filing-cabinet/queries.ts'
 import { getPropertyDetail } from '@/lib/properties/queries.ts'
 import { listUnits } from '@/lib/units/queries.ts'
 
@@ -71,7 +73,7 @@ export default async function PropertyDetailPage({
   // manager's Edit button was wrongly hidden here until this fix, the same
   // gap as the edit page's own guard.
   const canWrite = await actorCan('property.write', propertyResource(property))
-  const [units, canWriteUnits, documents, deletedDocuments, canWriteDocuments, canDeleteDocuments] =
+  const [units, canWriteUnits, documents, deletedDocuments, canWriteDocuments, canDeleteDocuments, filingCabinet] =
     await Promise.all([
       listUnits(id, scope),
       actorCan('unit.write', propertyResource(property)),
@@ -79,7 +81,11 @@ export default async function PropertyDetailPage({
       listDeletedDocuments(id, scope),
       actorCan('document.write', propertyResource(property)),
       actorCan('document.delete', propertyResource(property)),
+      getFilingCabinet(id, scope),
     ])
+  // Never null once getPropertyDetail above already confirmed this property
+  // is in scope - getFilingCabinet does the identical scope check.
+  if (!filingCabinet) notFound()
 
   return (
     <div className="flex max-w-2xl flex-col gap-6">
@@ -196,6 +202,15 @@ export default async function PropertyDetailPage({
           deletedDocuments={deletedDocuments}
           canWrite={canWriteDocuments}
           canDelete={canDeleteDocuments}
+        />
+        <FilingCabinetSection
+          propertyId={id}
+          costBasisCents={filingCabinet.costBasisCents}
+          mortgages={filingCabinet.mortgages}
+          insurancePolicies={filingCabinet.insurancePolicies}
+          hoaInfo={filingCabinet.hoaInfo}
+          warranties={filingCabinet.warranties}
+          canWrite={canWrite}
         />
         <EmptySection
           title="Financials"

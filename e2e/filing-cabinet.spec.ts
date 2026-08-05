@@ -1,0 +1,334 @@
+import { randomUUID } from 'node:crypto'
+import AxeBuilder from '@axe-core/playwright'
+import { hashPassword } from '@rental/core/auth'
+import { prisma } from '@rental/db'
+import { expect, test } from '@playwright/test'
+
+// The property filing cabinet (PROP-06, R-015): mortgages (ARM-adjustment
+// and balloon-maturity alerts), insurance (renewal alert), HOA info, and
+// warranties. None of these writes are privileged - unlike R-012's
+// document.delete or R-014's accesscode.reveal, 'property.write' is not in
+// PRIVILEGED_PERMISSIONS, so every test here signs in plainly.
+
+const PASSWORD = 'correct-horse-battery-staple'
+
+const staffIds: string[] = []
+const entityIds: string[] = []
+const propertyIds: string[] = []
+
+async function createStaff(
+  roleKey: string,
+  scope?: { propertyId?: string; legalEntityId?: string },
+) {
+  const email = `filing-cabinet-${randomUUID()}@example.test`
+  const staff = await prisma.staffUser.create({
+    data: {
+      email,
+      name: 'Filing Cabinet Test',
+      credential: { create: { passwordHash: await hashPassword(PASSWORD) } },
+    },
+  })
+  staffIds.push(staff.id)
+  const role = await prisma.role.findUniqueOrThrow({ where: { key: roleKey } })
+  await prisma.staffAssignment.create({
+    data: {
+      staffUserId: staff.id,
+      roleId: role.id,
+      propertyId: scope?.propertyId,
+      legalEntityId: scope?.legalEntityId,
+    },
+  })
+  return { ...staff, password: PASSWORD }
+}
+
+async function seedProperty(name = 'Seed House') {
+  const entity = await prisma.legalEntity.create({
+    data: { name: `Seed LLC-${randomUUID().slice(0, 8)}`, type: 'LLC' },
+  })
+  entityIds.push(entity.id)
+  const property = await prisma.property.create({
+    data: {
+      legalEntityId: entity.id,
+      name: `${name}-${randomUUID().slice(0, 8)}`,
+      addressLine1: '1 Test St',
+      city: 'Houston',
+      state: 'TX',
+      postalCode: '77002',
+      timezone: 'America/Chicago',
+      propertyType: 'SINGLE_FAMILY',
+    },
+  })
+  propertyIds.push(property.id)
+  return { entity, property }
+}
+
+test.beforeEach(async ({ page }) => {
+  const octet = () => Math.floor(Math.random() * 254) + 1
+  await page.setExtraHTTPHeaders({
+    'x-forwarded-for': `10.${octet()}.${octet()}.${octet()}`,
+  })
+})
+
+test.afterAll(async () => {
+  await prisma.mortgage.deleteMany({ where: { propertyId: { in: propertyIds } } })
+  await prisma.insurancePolicy.deleteMany({ where: { propertyId: { in: propertyIds } } })
+  await prisma.hoaInfo.deleteMany({ where: { propertyId: { in: propertyIds } } })
+  await prisma.warranty.deleteMany({ where: { propertyId: { in: propertyIds } } })
+
+  const auditedProperties = new Set(
+    (
+      await prisma.auditLog.findMany({
+        where: { propertyId: { in: propertyIds } },
+        select: { propertyId: true },
+      })
+    ).map((row) => row.propertyId!),
+  )
+  await prisma.property.deleteMany({
+    where: { id: { in: propertyIds.filter((id) => !auditedProperties.has(id)) } },
+  })
+  await prisma.property.updateMany({
+    where: { id: { in: [...auditedProperties] } },
+    data: { active: false },
+  })
+  const stillReferenced = new Set(
+    (
+      await prisma.property.findMany({
+        where: { legalEntityId: { in: entityIds } },
+        select: { legalEntityId: true },
+      })
+    ).map((row) => row.legalEntityId),
+  )
+  await prisma.legalEntity.deleteMany({
+    where: { id: { in: entityIds.filter((id) => !stillReferenced.has(id)) } },
+  })
+
+  await prisma.staffAssignment.deleteMany({ where: { staffUserId: { in: staffIds } } })
+  const auditedStaff = new Set(
+    (
+      await prisma.auditLog.findMany({
+        where: { actorStaffId: { in: staffIds } },
+        select: { actorStaffId: true },
+      })
+    ).map((row) => row.actorStaffId!),
+  )
+  await prisma.staffCredential.deleteMany({
+    where: { staffUserId: { in: staffIds.filter((id) => !auditedStaff.has(id)) } },
+  })
+  await prisma.staffUser.deleteMany({
+    where: { id: { in: staffIds.filter((id) => !auditedStaff.has(id)) } },
+  })
+  await prisma.staffUser.updateMany({
+    where: { id: { in: [...auditedStaff] } },
+    data: { active: false },
+  })
+  await prisma.$disconnect()
+})
+
+async function signIn(page: import('@playwright/test').Page, email: string) {
+  await page.goto('/login')
+  await page.getByLabel('Email').fill(email)
+  await page.getByLabel('Password').fill(PASSWORD)
+  await page.getByRole('button', { name: 'Sign in' }).click()
+  await page.waitForURL('**/dashboard')
+}
+
+test.describe('cost basis', () => {
+  test('sets and updates the cost basis', async ({ page }) => {
+    const { property } = await seedProperty()
+    const staff = await createStaff('owner')
+    await signIn(page, staff.email)
+
+    await page.goto(`/properties/${property.id}`)
+    // The cost-basis form is visible on first render, not revealed by a
+    // <details> click - unlike this suite's other forms, nothing naturally
+    // delays interaction past React's hydration attaching the real Server
+    // Action handler, so a deliberate wait is needed before the first
+    // submit (same race documented in e2e/documents.spec.ts's restore test).
+    await page.waitForTimeout(500)
+    await page.getByLabel('Cost basis ($)').fill('250000')
+    await page.getByRole('button', { name: 'Save' }).click()
+
+    // expect.poll(), not a single read - see e2e/operational.spec.ts's
+    // identical comment on cross-connection Neon read lag.
+    await expect
+      .poll(
+        async () =>
+          (await prisma.property.findUniqueOrThrow({ where: { id: property.id } })).costBasisCents,
+        { timeout: 10_000 },
+      )
+      .toBe(25_000_000)
+  })
+})
+
+test.describe('mortgages', () => {
+  test('adds a mortgage, then removes it', async ({ page }) => {
+    const { property } = await seedProperty()
+    const staff = await createStaff('owner')
+    await signIn(page, staff.email)
+
+    await page.goto(`/properties/${property.id}`)
+    await page.getByText('Add a mortgage').click()
+    await page.getByLabel('Lender').fill('First National')
+    await page.getByLabel('Rate type').selectOption('FIXED')
+    await page.getByLabel('Current balance ($)').fill('180000')
+    await page.getByRole('button', { name: 'Add mortgage' }).click()
+    await expect(page.getByText('First National — FIXED')).toBeVisible()
+
+    await page.getByRole('button', { name: 'Remove' }).click()
+    await expect(page.getByText('First National — FIXED')).toHaveCount(0)
+
+    const remaining = await prisma.mortgage.count({ where: { propertyId: property.id } })
+    expect(remaining).toBe(0)
+  })
+
+  test('requires an adjustment date for an ARM', async ({ page }) => {
+    const { property } = await seedProperty()
+    const staff = await createStaff('owner')
+    await signIn(page, staff.email)
+
+    await page.goto(`/properties/${property.id}`)
+    await page.getByText('Add a mortgage').click()
+    await page.getByLabel('Lender').fill('Second National')
+    await page.getByLabel('Rate type').selectOption('ARM')
+    await page.getByRole('button', { name: 'Add mortgage' }).click()
+    await expect(page.getByText('Enter the next adjustment date for an ARM.')).toBeVisible()
+  })
+
+  test('flags an ARM adjusting soon, but not one adjusting far out', async ({ page }) => {
+    const { property } = await seedProperty()
+    const soon = new Date()
+    soon.setDate(soon.getDate() + 30)
+    const farOut = new Date()
+    farOut.setDate(farOut.getDate() + 400)
+
+    await prisma.mortgage.createMany({
+      data: [
+        {
+          propertyId: property.id,
+          lender: 'Soon Bank',
+          rateType: 'ARM',
+          armAdjustmentDate: soon,
+          isBalloon: false,
+        },
+        {
+          propertyId: property.id,
+          lender: 'Later Bank',
+          rateType: 'ARM',
+          armAdjustmentDate: farOut,
+          isBalloon: false,
+        },
+      ],
+    })
+
+    const staff = await createStaff('owner')
+    await signIn(page, staff.email)
+    await page.goto(`/properties/${property.id}`)
+
+    const soonRow = page.getByRole('listitem').filter({ hasText: 'Soon Bank' })
+    await expect(soonRow.getByText('ARM adjusts')).toBeVisible()
+    const laterRow = page.getByRole('listitem').filter({ hasText: 'Later Bank' })
+    await expect(laterRow.getByText('ARM adjusts')).toHaveCount(0)
+  })
+})
+
+test.describe('insurance', () => {
+  test('adds a policy and flags a near renewal', async ({ page }) => {
+    const { property } = await seedProperty()
+    const renewsOn = new Date()
+    renewsOn.setDate(renewsOn.getDate() + 30)
+    const isoRenewsOn = renewsOn.toISOString().slice(0, 10)
+
+    const staff = await createStaff('owner')
+    await signIn(page, staff.email)
+
+    await page.goto(`/properties/${property.id}`)
+    await page.getByText('Add a policy').click()
+    await page.getByLabel('Carrier').fill('State Farm')
+    await page.getByLabel('Renews on').fill(isoRenewsOn)
+    await page.getByRole('button', { name: 'Add policy' }).click()
+    await expect(page.getByText(`State Farm · renews ${isoRenewsOn}`)).toBeVisible()
+    await expect(page.getByText('Renewal shopping window open')).toBeVisible()
+  })
+})
+
+test.describe('HOA', () => {
+  test('sets HOA info, then replaces it', async ({ page }) => {
+    const { property } = await seedProperty()
+    const staff = await createStaff('owner')
+    await signIn(page, staff.email)
+
+    await page.goto(`/properties/${property.id}`)
+    await page.getByText('Add HOA info').click()
+    await page.getByLabel('HOA name').fill('Maple Grove HOA')
+    await page.getByLabel('Has a rental cap or restriction').check()
+    await page.getByLabel('Rental cap policy').fill('Capped at 20% of units.')
+    await page.getByRole('button', { name: 'Save HOA info' }).click()
+    await expect(page.getByText('Maple Grove HOA · rental cap in effect')).toBeVisible()
+
+    const rows = await prisma.hoaInfo.findMany({ where: { propertyId: property.id } })
+    expect(rows).toHaveLength(1)
+
+    await page.getByText('Edit HOA info').click()
+    if (!(await page.getByLabel('HOA name').isVisible())) {
+      await page.getByText('Edit HOA info').click()
+    }
+    await page.getByLabel('HOA name').fill('Maple Grove HOA (renamed)')
+    await page.getByRole('button', { name: 'Update HOA info' }).click()
+    await expect(page.getByText('Maple Grove HOA (renamed) · rental cap in effect')).toBeVisible()
+
+    const rowsAfter = await prisma.hoaInfo.findMany({ where: { propertyId: property.id } })
+    expect(rowsAfter).toHaveLength(1)
+  })
+})
+
+test.describe('warranties', () => {
+  test('adds a warranty and removes it', async ({ page }) => {
+    const { property } = await seedProperty()
+    const staff = await createStaff('owner')
+    await signIn(page, staff.email)
+
+    await page.goto(`/properties/${property.id}`)
+    await page.getByText('Add a warranty').click()
+    await page.getByLabel('Category').selectOption('ROOF')
+    await page.getByLabel('Provider').fill('GAF')
+    await page.getByRole('button', { name: 'Add warranty' }).click()
+    await expect(page.getByText('Roof — GAF')).toBeVisible()
+
+    await page.getByRole('button', { name: 'Remove' }).click()
+    await expect(page.getByText('Roof — GAF')).toHaveCount(0)
+  })
+})
+
+test.describe('scoping (ROLE-01)', () => {
+  test('a property-scoped manager without property.write on this property sees no write controls', async ({
+    page,
+  }) => {
+    const { property: mine } = await seedProperty('Mine')
+    const { property: theirs } = await seedProperty('Theirs')
+    const staff = await createStaff('manager', { propertyId: mine.id })
+    await signIn(page, staff.email)
+
+    await page.goto(`/properties/${theirs.id}`)
+    await expect(page.getByText('Add a mortgage')).toHaveCount(0)
+    await expect(page.getByLabel('Cost basis ($)')).toHaveCount(0)
+  })
+})
+
+test.describe('accessibility', () => {
+  test('the property detail page with a filing cabinet has no detectable violations', async ({
+    page,
+  }) => {
+    const { property } = await seedProperty()
+    await prisma.mortgage.create({
+      data: { propertyId: property.id, lender: 'First National', rateType: 'FIXED', isBalloon: false },
+    })
+    const staff = await createStaff('owner')
+    await signIn(page, staff.email)
+
+    await page.goto(`/properties/${property.id}`)
+    const results = await new AxeBuilder({ page })
+      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+      .analyze()
+    expect(results.violations).toEqual([])
+  })
+})

@@ -306,6 +306,10 @@ model Property {
   bathrooms     Decimal?  @db.Decimal(3, 1)
   yearBuilt     Int?
   acquiredOn    DateTime? @db.Date
+  /// From the deed/closing disclosure (PROP-06). A single fact, not its own
+  /// model, unlike Mortgage/InsurancePolicy/Warranty below - there is only
+  /// ever one basis, not a repeating or versioned record.
+  costBasisCents Int?
   active        Boolean   @default(true)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
@@ -330,10 +334,112 @@ model Property {
   assignments      StaffAssignment[]
   outboxEvents     OutboxEvent[]
   jobRuns          JobRun[]
+  mortgages        Mortgage[]
+  insurancePolicies InsurancePolicy[]
+  hoaInfo          HoaInfo?
+  warranties       Warranty[]
 
   @@index([legalEntityId])
   @@index([state])
   @@index([active])
+}
+
+// ---------------------------------------------------------------------------
+// Property filing cabinet (PROP-06, R-015)
+//
+// Every "alert" PROP-06 asks for (ARM adjustment, balloon maturity, insurance
+// renewal) is computed by a query, never stored as a boolean or fired by a
+// job here - R-016 (notification engine) and R-077 (compliance calendar,
+// PROP-05) do not exist yet, so there is nothing to deliver an alert
+// through. This is the same "report, not automated action" shape R-012's
+// retention rules and R-014's reveal mechanism both already used for a
+// consumer that does not exist yet.
+//
+// Supporting documents (the deed itself, the mortgage note, the declarations
+// page, HOA CC&Rs, warranty contracts) attach through the existing Document
+// model (propertyId + a new `type`) - the same choice R-014 made for shutoff
+// photos, not a dedicated FK per record here, since a property typically has
+// one active mortgage and one active policy at a time and the document list
+// is filterable by type regardless.
+// ---------------------------------------------------------------------------
+
+model Mortgage {
+  id                  String    @id @default(cuid())
+  propertyId          String
+  lender              String
+  originalAmountCents Int?
+  currentBalanceCents Int?
+  /// FIXED or ARM.
+  rateType            String
+  interestRateBps     Int?
+  /// Set only when rateType = ARM.
+  armAdjustmentDate   DateTime? @db.Date
+  maturityDate        DateTime? @db.Date
+  isBalloon           Boolean   @default(false)
+  notes               String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  property Property @relation(fields: [propertyId], references: [id])
+
+  @@index([propertyId])
+}
+
+model InsurancePolicy {
+  id              String   @id @default(cuid())
+  propertyId      String
+  carrier         String
+  policyNumber    String?
+  limitsCents     Int?
+  deductibleCents Int?
+  lossOfRents     Boolean  @default(false)
+  /// Next renewal date - the field the 45-60 day shopping-window alert
+  /// reads (PROP-06).
+  renewsOn        DateTime @db.Date
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  property Property @relation(fields: [propertyId], references: [id])
+
+  @@index([propertyId, renewsOn])
+}
+
+/// One row per property, unlike Mortgage/InsurancePolicy/Warranty - a
+/// property belongs to at most one HOA.
+model HoaInfo {
+  id              String   @id @default(cuid())
+  propertyId      String   @unique
+  name            String?
+  contactInfo     String?
+  hasRentalCap    Boolean  @default(false)
+  /// Free text - "capped at 20% of units, waitlist as of 2024" is not
+  /// something a boolean or a single number represents honestly.
+  rentalCapPolicy String?
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  property Property @relation(fields: [propertyId], references: [id])
+}
+
+model Warranty {
+  id              String    @id @default(cuid())
+  propertyId      String
+  /// ROOF, HVAC, WATER_HEATER, APPLIANCE, HOME_WARRANTY, OTHER.
+  category        String
+  provider        String
+  coverageSummary String?
+  /// Null means no expiration on file, not "never expires" - treated as
+  /// "unknown", the safe direction for a coverage-before-dispatch check.
+  expiresOn       DateTime? @db.Date
+  notes           String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  property Property @relation(fields: [propertyId], references: [id])
+
+  @@index([propertyId])
 }
 
 model Unit {

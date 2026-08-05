@@ -16,6 +16,7 @@
     "./scheduling": "./scheduling/index.ts",
     "./tasks": "./tasks/index.ts",
     "./events": "./events/index.ts",
+    "./filing-cabinet": "./filing-cabinet/index.ts",
     "./jurisdiction": "./jurisdiction/index.ts",
     "./property": "./property/index.ts",
     "./units": "./units/index.ts"
