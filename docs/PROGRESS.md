@@ -555,7 +555,7 @@ The running narrative of what has actually been built. One entry per completed b
 - **Two assertions hit the same cross-connection Neon read lag documented since R-008**, reading the newly-created ticket immediately after the page's redirect rather than polling for it. Fixed with `expect.poll()`, matching the established pattern.
 
 ## R-020 — Emergency intake path
-**Commit:** `_pending_`  ·  **Date:** 2026-08-05
+**Commit:** `4c58f44`  ·  **Date:** 2026-08-05
 
 **What it built.** MAINT-01's emergency criterion, the branch R-019 deliberately left out. All nine emergencies the PRD names (gas smell, CO alarm, electrical burning/sparking, active flooding, sewage backup, no heat in freezing temps, no AC in dangerous heat, break-in, only toilet inoperable) as their own vocabulary, each with written safety-first instructions shown BEFORE anything is submitted, the relevant shutoff surfaced from R-014's unit record, no troubleshooting script at all, `priority: EMERGENCY`, and an on-call page sent immediately in the same request rather than waiting for the hourly cron. Reached from the top of the maintenance screen and from an escape hatch on the ordinary wizard. 17 core tests, 12 integration tests, 10 e2e tests including axe on the red safety screen.
 
