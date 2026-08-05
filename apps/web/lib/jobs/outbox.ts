@@ -134,8 +134,14 @@ export async function dispatchOutbox(batchSize = 100): Promise<DispatchResult> {
       }
     }
 
+    // updateMany, not update: the row can legitimately be gone by now (a
+    // caller that deletes its own OutboxEvent rows once it no longer cares,
+    // same as R-020's and R-021's e2e cleanup does) - update() throws P2025
+    // for that, which would abort the whole batch over one already-moot row.
+    // updateMany() just reports zero rows touched, which is correct: nothing
+    // left to mark.
     if (allSucceeded) {
-      await prisma.outboxEvent.update({
+      await prisma.outboxEvent.updateMany({
         where: { id: event.id },
         data: { publishedAt: new Date(), attempts: { increment: 1 } },
       })
@@ -144,7 +150,7 @@ export async function dispatchOutbox(batchSize = 100): Promise<DispatchResult> {
       // Left unpublished so the failed consumers are retried, up to
       // MAX_ATTEMPTS. Consumers that already succeeded are protected from a
       // second run by their EventConsumption row.
-      await prisma.outboxEvent.update({
+      await prisma.outboxEvent.updateMany({
         where: { id: event.id },
         data: {
           attempts: { increment: 1 },

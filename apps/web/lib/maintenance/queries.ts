@@ -1,9 +1,12 @@
 import 'server-only'
 
+import { OPEN_TICKET_STATUSES } from '@rental/core/comms'
 import type { TenantScope } from '@rental/core/portal'
 import { prisma } from '@rental/db'
+import type { ResolvedScope } from '@/lib/scope/current-scope.ts'
 
-// Reads for the tenant maintenance flow (MAINT-01, R-019).
+// Reads for the maintenance module: the tenant flow (MAINT-01, R-019) above,
+// staff-side reads (R-022) below.
 
 /**
  * The property, unit and lease a maintenance request should attach to: the
@@ -55,5 +58,71 @@ export async function getTenantTicket(id: string, scope: TenantScope) {
         select: { id: true, fileName: true, contentType: true, createdAt: true },
       },
     },
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Staff reads (R-022). Scoped by ResolvedScope, same as R-011's task queue
+// and R-008's property list - the switcher's selection, already intersected
+// with RBAC.
+// ---------------------------------------------------------------------------
+
+const OPEN_STATUSES = [...OPEN_TICKET_STATUSES]
+
+const staffTicketInclude = {
+  property: { select: { id: true, name: true } },
+  unit: { select: { id: true, name: true } },
+  tenant: { select: { id: true, firstName: true, lastName: true, phone: true } },
+} as const
+
+/// A bare list, sorted newest first - the full triage queue (priority
+/// override, merge, SLA timer) is R-023's. This exists so a logged phone
+/// request is actually visible somewhere and reachable by id, and so every
+/// ticket source (portal, SMS, phone-logged) already lands in one place
+/// before R-023 builds the real workflow on top.
+export async function listOpenTickets(scope: ResolvedScope) {
+  if (scope.propertyIds.length === 0) return []
+  return prisma.ticket.findMany({
+    where: { propertyId: { in: scope.propertyIds }, status: { in: OPEN_STATUSES } },
+    orderBy: { createdAt: 'desc' },
+    include: staffTicketInclude,
+  })
+}
+
+export async function getStaffTicket(id: string, scope: ResolvedScope) {
+  const ticket = await prisma.ticket.findUnique({
+    where: { id },
+    include: staffTicketInclude,
+  })
+  if (!ticket || !scope.propertyIds.includes(ticket.propertyId)) return null
+  return ticket
+}
+
+/// Every active lease's tenant, in scope - the picker for "who is this call
+/// about". One option per LeaseTenant rather than per Lease, so a lease with
+/// more than one tenant on it offers each by name instead of forcing staff
+/// to guess which one called.
+export async function listLoggableLeaseTenants(scope: ResolvedScope) {
+  if (scope.propertyIds.length === 0) return []
+  return prisma.leaseTenant.findMany({
+    where: {
+      lease: { propertyId: { in: scope.propertyIds }, status: 'ACTIVE' },
+      tenant: { active: true },
+    },
+    select: {
+      id: true,
+      tenantId: true,
+      isPrimary: true,
+      tenant: { select: { firstName: true, lastName: true, phone: true } },
+      lease: {
+        select: {
+          id: true,
+          unitId: true,
+          property: { select: { id: true, name: true } },
+          unit: { select: { name: true } },
+        },
+      },
+    },
+    orderBy: [{ lease: { property: { name: 'asc' } } }, { isPrimary: 'desc' }],
   })
 }

@@ -104,3 +104,56 @@ export function validateMaintenanceRequest(
 
   return violations
 }
+
+// ---------------------------------------------------------------------------
+// Staff-logged (phone-reported) requests (MAINT-01, D-10, R-022)
+// ---------------------------------------------------------------------------
+
+export interface PhoneLoggedRequestInput {
+  category: string
+  /// Staff's own summary of what the tenant reported - a phone call has no
+  /// structured prompts to answer, unlike the tenant's own wizard.
+  notes: string
+  entryPermission: boolean | undefined
+  petWarning: boolean | undefined
+  petNote?: string
+}
+
+/**
+ * Validates a staff phone-log submission. Deliberately lighter than
+ * validateMaintenanceRequest above: no clarifying prompts, no troubleshooting
+ * gate - staff is writing up a call, not walking a tenant through a wizard.
+ * Entry permission and the pet warning stay real yes/no answers for the same
+ * reason they do on the tenant path: both drive real downstream decisions
+ * (R-027's entry compliance, a vendor's safety), so "not asked yet" cannot
+ * default to "no".
+ */
+export function validatePhoneLoggedRequest(
+  input: PhoneLoggedRequestInput,
+): Violation[] {
+  const violations: Violation[] = []
+
+  if (!isMaintenanceCategory(input.category)) {
+    violations.push({ field: 'category', message: 'Choose a category.' })
+  }
+  if (!input.notes.trim()) {
+    violations.push({
+      field: 'notes',
+      message: 'Add a short note on what the tenant reported.',
+    })
+  }
+  if (input.entryPermission === undefined) {
+    violations.push({
+      field: 'entryPermission',
+      message: 'Ask whether we may enter if they are not home.',
+    })
+  }
+  if (input.petWarning === undefined) {
+    violations.push({
+      field: 'petWarning',
+      message: 'Ask whether there is a pet at home.',
+    })
+  }
+
+  return violations
+}

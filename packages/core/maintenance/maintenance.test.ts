@@ -3,11 +3,14 @@ import {
   CLARIFYING_PROMPTS,
   MAINTENANCE_CATEGORIES,
   type MaintenanceRequestInput,
+  type PhoneLoggedRequestInput,
   applicableTroubleshootingSteps,
   detectHabitabilityLanguage,
   formatMaintenanceDescription,
+  formatPhoneLoggedDescription,
   isMaintenanceCategory,
   validateMaintenanceRequest,
+  validatePhoneLoggedRequest,
 } from './index.ts'
 
 describe('the category vocabulary', () => {
@@ -203,5 +206,80 @@ describe('formatMaintenanceDescription', () => {
       petWarning: false,
     })
     expect(text).not.toContain('pet')
+  })
+})
+
+describe('validatePhoneLoggedRequest', () => {
+  const valid: PhoneLoggedRequestInput = {
+    category: 'PLUMBING',
+    notes: 'Tenant says the kitchen faucet drips constantly.',
+    entryPermission: true,
+    petWarning: false,
+  }
+
+  it('accepts a complete submission', () => {
+    expect(validatePhoneLoggedRequest(valid)).toEqual([])
+  })
+
+  it('rejects an unrecognized category', () => {
+    const violations = validatePhoneLoggedRequest({ ...valid, category: 'NOT_REAL' })
+    expect(violations.map((v) => v.field)).toContain('category')
+  })
+
+  it('rejects empty or whitespace-only notes', () => {
+    expect(
+      validatePhoneLoggedRequest({ ...valid, notes: '   ' }).map((v) => v.field),
+    ).toContain('notes')
+  })
+
+  it('requires a real answer for entry permission and pet warning, not a default', () => {
+    const violations = validatePhoneLoggedRequest({
+      ...valid,
+      entryPermission: undefined,
+      petWarning: undefined,
+    })
+    expect(violations.map((v) => v.field)).toEqual(
+      expect.arrayContaining(['entryPermission', 'petWarning']),
+    )
+  })
+
+  it('does NOT require clarifying prompts or troubleshooting - unlike the tenant path', () => {
+    // A staff phone-log submission has no prompts/troubleshooting keys at
+    // all, and that must still validate cleanly.
+    expect(validatePhoneLoggedRequest(valid)).toEqual([])
+  })
+})
+
+describe('formatPhoneLoggedDescription', () => {
+  it('leads with the category and the staff-written notes', () => {
+    const text = formatPhoneLoggedDescription('PLUMBING', {
+      category: 'PLUMBING',
+      notes: 'Kitchen faucet drips constantly, worse at night.',
+      entryPermission: true,
+      petWarning: false,
+    })
+    expect(text).toContain('Plumbing issue, reported by phone.')
+    expect(text).toContain('Kitchen faucet drips constantly, worse at night.')
+    expect(text).toContain('Entry permitted if the tenant is not home.')
+  })
+
+  it('includes the pet note when given, and omits the pet line when there is none', () => {
+    const withPet = formatPhoneLoggedDescription('LOCKS', {
+      category: 'LOCKS',
+      notes: "Front door won't lock.",
+      entryPermission: false,
+      petWarning: true,
+      petNote: 'Friendly dog, does not need to be secured.',
+    })
+    expect(withPet).toContain('There is a pet at home: Friendly dog')
+    expect(withPet).toContain('Entry NOT permitted unless the tenant is home.')
+
+    const withoutPet = formatPhoneLoggedDescription('LOCKS', {
+      category: 'LOCKS',
+      notes: "Front door won't lock.",
+      entryPermission: false,
+      petWarning: false,
+    })
+    expect(withoutPet).not.toContain('pet')
   })
 })

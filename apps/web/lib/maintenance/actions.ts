@@ -6,15 +6,20 @@ import {
   type EmergencyCategory,
   type EmergencyRequestInput,
   type MaintenanceRequestInput,
+  type PhoneLoggedRequestInput,
   formatEmergencyDescription,
   formatMaintenanceDescription,
+  formatPhoneLoggedDescription,
   detectHabitabilityLanguage,
   isMaintenanceCategory,
   validateEmergencyRequest,
   validateMaintenanceRequest,
+  validatePhoneLoggedRequest,
 } from '@rental/core/maintenance'
 import { prisma } from '@rental/db'
+import { redirect } from 'next/navigation'
 import { audit } from '@/lib/audit/index.ts'
+import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
 import { emitEvent } from '@/lib/jobs/outbox.ts'
 import { dispatchPendingNotifications, notify } from '@/lib/notifications/send.ts'
 import { requireTenantWithScope } from '@/lib/portal/guard.ts'
@@ -395,4 +400,111 @@ async function pageOnCall(
   } catch (error) {
     console.error(`[emergency] failed to page on-call for ticket ${ticketId}`, error)
   }
+}
+
+// ---------------------------------------------------------------------------
+// Staff-logged (phone-reported) requests (MAINT-01, D-10, R-022)
+// ---------------------------------------------------------------------------
+
+function str(formData: FormData, name: string): string {
+  const value = formData.get(name)
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+function optionalBool(formData: FormData, name: string): boolean | undefined {
+  const raw = str(formData, name)
+  if (raw === 'true') return true
+  if (raw === 'false') return false
+  return undefined
+}
+
+/**
+ * Creates a Ticket from a call staff is on right now - structurally
+ * identical to a tenant's own submission (same fields, same downstream
+ * triage), `source: PHONE_LOGGED` instead of `PORTAL`, so a tenant who never
+ * opens the portal is not a second-class record in the queue (the backlog's
+ * own framing for R-022).
+ *
+ * A plain `<form action>`, unlike the tenant wizard's imperative calls above
+ * - there is no per-category step sequence to walk here, so the ordinary
+ * Server Actions form binding (units/actions.ts, tasks/actions.ts) is the
+ * simpler fit. Permission is re-checked against the property actually on the
+ * submitted lease, not merely "did the page that rendered this form filter
+ * to properties this actor may write" - the same defense-in-depth every
+ * other lib/*\/actions.ts write in this repo applies.
+ */
+export async function logPhoneMaintenanceRequest(
+  _previous: MaintenanceFormState,
+  formData: FormData,
+): Promise<MaintenanceFormState> {
+  const leaseTenantId = str(formData, 'leaseTenantId')
+  if (!leaseTenantId) return { error: 'Choose who this call is about.' }
+
+  const leaseTenant = await prisma.leaseTenant.findUnique({
+    where: { id: leaseTenantId },
+    select: {
+      tenantId: true,
+      lease: {
+        select: {
+          id: true,
+          unitId: true,
+          property: { select: { id: true, legalEntityId: true } },
+        },
+      },
+    },
+  })
+  if (!leaseTenant) return { error: 'That tenant could not be found.' }
+  const { property } = leaseTenant.lease
+  await requirePermission('ticket.write', propertyResource(property))
+
+  const input: PhoneLoggedRequestInput = {
+    category: str(formData, 'category'),
+    notes: str(formData, 'notes'),
+    entryPermission: optionalBool(formData, 'entryPermission'),
+    petWarning: optionalBool(formData, 'petWarning'),
+    petNote: str(formData, 'petNote') || undefined,
+  }
+  if (!isMaintenanceCategory(input.category)) {
+    return { error: 'Choose a category.' }
+  }
+  const violations = validatePhoneLoggedRequest(input)
+  if (violations.length > 0) {
+    return {
+      error: 'A few things need an answer before this can be logged.',
+      fieldErrors: Object.fromEntries(violations.map((v) => [v.field, v.message])),
+    }
+  }
+
+  const description = formatPhoneLoggedDescription(input.category, input)
+  const habitabilityFlag = detectHabitabilityLanguage(input.notes)
+
+  const ticket = await prisma.$transaction(async (tx) => {
+    const created = await tx.ticket.create({
+      data: {
+        propertyId: property.id,
+        unitId: leaseTenant.lease.unitId,
+        leaseId: leaseTenant.lease.id,
+        tenantId: leaseTenant.tenantId,
+        source: 'PHONE_LOGGED',
+        category: input.category,
+        description,
+        entryPermission: input.entryPermission === true,
+        petWarning: input.petWarning === true,
+        habitabilityFlag,
+      },
+    })
+    await audit(
+      {
+        action: 'ticket.submitted',
+        entityType: 'Ticket',
+        entityId: created.id,
+        propertyId: property.id,
+        after: { source: 'PHONE_LOGGED', category: created.category, habitabilityFlag },
+      },
+      tx,
+    )
+    return created
+  })
+
+  redirect(`/maintenance/${ticket.id}`)
 }

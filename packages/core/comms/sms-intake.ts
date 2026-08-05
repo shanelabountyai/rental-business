@@ -21,16 +21,21 @@
 /// Ticket statuses that mean "somebody is already dealing with this", so a
 /// further text is part of the same conversation rather than a new problem.
 /// Mirrors the TicketStatus enum; MERGED and CLOSED are absent because a
-/// tenant texting after either really is raising something new.
-const OPEN_TICKET_STATUSES: ReadonlySet<string> = new Set([
+/// tenant texting after either really is raising something new. Exported as
+/// an array too - R-022's staff queue list filters `status: { in: [...] }`
+/// with this same list, and a second copy is exactly how the two would
+/// eventually disagree about what "open" means.
+export const OPEN_TICKET_STATUSES = [
   'NEW',
   'TRIAGED',
   'WAITING_ON_TENANT',
   'CONVERTED',
-])
+] as const
+
+const OPEN_TICKET_STATUS_SET: ReadonlySet<string> = new Set(OPEN_TICKET_STATUSES)
 
 export function isOpenTicketStatus(status: string): boolean {
-  return OPEN_TICKET_STATUSES.has(status)
+  return OPEN_TICKET_STATUS_SET.has(status)
 }
 
 export type SmsIntakeDecision =
