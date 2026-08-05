@@ -583,7 +583,7 @@ The running narrative of what has actually been built. One entry per completed b
 - **`jobs.test.ts`'s event-outbox test failed once during the full run and passed on re-run** - the pre-existing flake documented in R-015. Confirmed unrelated (it passes in isolation and on a full re-run of all 668). But this item IS the first to leave `ticket.created` events pending in the shared outbox, and `dispatchOutbox()` is global and batched, so the e2e spec now cleans up the events it emits - the same shared-state hygiene lesson R-019 learned with `UnroutedMessage`.
 
 ## R-021 — SMS-to-ticket
-**Commit:** `_pending_`  ·  **Date:** 2026-08-05
+**Commit:** `4455b1b`  ·  **Date:** 2026-08-05
 
 **What it built.** Twilio's inbound-SMS webhook at `POST /api/sms/inbound`, authenticated by request signature, on top of R-017's routing: a text from a known tenant threads into their conversation and opens a maintenance ticket (`source: SMS`), while a further text during an open ticket threads into it instead of opening another. Habitability language in a text starts the same response clock the portal path does. An unroutable text opens no ticket at all and lands in R-017's unrouted queue. 18 core tests (11 of them signature verification), 9 integration tests, 9 e2e tests hitting the real endpoint with genuine, forged, and tampered signatures.
 
