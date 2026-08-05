@@ -60,7 +60,7 @@ export default async function MaintenanceTicketPage({
         <h1 className="text-2xl font-semibold tracking-tight">
           {emergencyDefinition(ticket.category)?.label ??
             CATEGORY_LABELS[ticket.category as keyof typeof CATEGORY_LABELS] ??
-            ticket.category}
+            'What you texted us'}
         </h1>
         <p className="text-muted-foreground">
           {STATUS_WORDS[ticket.status] ?? ticket.status}

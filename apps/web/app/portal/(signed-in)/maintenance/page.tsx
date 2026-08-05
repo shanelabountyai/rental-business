@@ -74,7 +74,10 @@ export default async function PortalMaintenancePage() {
                       CATEGORY_LABELS[
                         ticket.category as keyof typeof CATEGORY_LABELS
                       ] ??
-                      ticket.category}
+                      // R-021: a ticket opened from a text has no category -
+                      // it was never asked one. "UNCATEGORIZED" is staff
+                      // vocabulary and must not reach a tenant (D-10).
+                      'What you texted us'}
                   </span>
                   <span className="text-muted-foreground">
                     {STATUS_WORDS[ticket.status] ?? ticket.status} ·{' '}

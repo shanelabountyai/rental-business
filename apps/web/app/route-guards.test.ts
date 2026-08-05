@@ -36,6 +36,8 @@ const PUBLIC_ROUTES: Record<string, string> = {
     'Authorized by a constant-time CRON_SECRET bearer check rather than a session - no human is signed in.',
   'manifest.webmanifest/route.ts':
     'The PWA manifest (D-8). A browser fetches it before any session exists, and it carries no data beyond the app name and icons.',
+  'api/sms/inbound/route.ts':
+    "Twilio's inbound-SMS webhook (R-021). Authenticated by an HMAC-SHA1 request signature rather than a session - Twilio has no credentials of ours to present. The signature check is the FIRST thing the route does and it refuses outright when TWILIO_AUTH_TOKEN is unset, the same posture api/cron takes with CRON_SECRET.",
 }
 
 /// Any of these in a file counts as guarding it.

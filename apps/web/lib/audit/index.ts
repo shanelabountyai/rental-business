@@ -61,14 +61,10 @@ export async function audit(
   await recordAudit(db, { ...input, actor: await currentAuditActor() })
 }
 
-/// For jobs and webhooks, which have no request and no session. `ref` names
-/// the job so an entry can be traced back to what produced it.
-export async function auditAsSystem(
-  ref: string,
-  input: Omit<AuditInput, 'actor'>,
-  db: AuditDb = prisma,
-): Promise<void> {
-  await recordAudit(db, { ...input, actor: { type: 'SYSTEM', ref } })
-}
+/// Re-exported for the callers that already had it from here. New callers
+/// that do NOT need a request - a job, a webhook - should import it from
+/// './system.ts' directly: this module pulls in Auth.js, which cannot load
+/// outside a request context. See system.ts's own comment.
+export { auditAsSystem } from './system.ts'
 
 export { auditTrailFor } from '@rental/core/audit'
