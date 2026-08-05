@@ -11,6 +11,7 @@
     "./auth": "./auth/index.ts",
     "./documents": "./documents/index.ts",
     "./money": "./money/index.ts",
+    "./notifications": "./notifications/index.ts",
     "./operational": "./operational/index.ts",
     "./rbac": "./rbac/index.ts",
     "./scheduling": "./scheduling/index.ts",

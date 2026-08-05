@@ -36,7 +36,10 @@ export const NAV_ITEMS: readonly NavItem[] = [
     href: '/leases',
     label: 'Leases',
     permission: 'lease.read',
-    ownedBy: 'R-016',
+    // R-033, not R-016 - R-016 is the notification engine. Corrected while
+    // building it, since the wrong item number here is how a later session
+    // goes looking for lease work in the wrong place.
+    ownedBy: 'R-033',
   },
   {
     href: '/maintenance',
@@ -55,6 +58,12 @@ export const NAV_ITEMS: readonly NavItem[] = [
     label: 'Tasks',
     permission: 'task.read',
     ownedBy: 'R-011',
+  },
+  {
+    href: '/notifications',
+    label: 'Notifications',
+    permission: 'message.read',
+    ownedBy: 'R-016',
   },
   {
     href: '/jurisdiction',

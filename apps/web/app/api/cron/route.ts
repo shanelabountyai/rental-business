@@ -5,6 +5,7 @@ import { dispatchOutbox } from '@/lib/jobs/outbox.ts'
 // See registrations.ts for why every job module is imported from exactly here.
 import '@/lib/jobs/registrations.ts'
 import { runDueJobs } from '@/lib/jobs/runner.ts'
+import { dispatchPendingNotifications } from '@/lib/notifications/send.ts'
 
 // The single scheduled entry point. Vercel Cron hits it hourly (vercel.json),
 // and the runner decides which properties are due in their own local time -
@@ -30,9 +31,13 @@ export async function GET(request: Request) {
   const startedAt = Date.now()
 
   // Jobs first, then dispatch: a job that emits an event gets it delivered in
-  // the same tick rather than waiting an hour for the next one.
+  // the same tick rather than waiting an hour for the next one. Notifications
+  // last for the same reason - a consumer that decided one during the dispatch
+  // above gets it sent now, not an hour from now, and this pass also picks up
+  // whatever quiet hours deferred overnight (R-016).
   const runs = await runDueJobs()
   const dispatch = await dispatchOutbox()
+  const notifications = await dispatchPendingNotifications()
 
   const ran = runs.filter((r) => r.outcome === 'ran')
   const failures = runs.filter((r) => r.outcome === 'failed')
@@ -59,6 +64,8 @@ export async function GET(request: Request) {
     alreadyRan: runs.filter((r) => r.outcome === 'already_ran').length,
     eventsPublished: dispatch.published,
     eventsFailed: dispatch.failed,
+    notificationsSent: notifications.sent,
+    notificationsFailed: notifications.failed,
     durationMs: Date.now() - startedAt,
   })
 }

@@ -2,12 +2,14 @@ import { formatCents } from '@rental/core/money'
 import { prisma } from '@rental/db'
 import { auth } from '@/auth.ts'
 import { MfaEnrolment } from '@/components/mfa-enrolment.tsx'
+import { NotificationPreferencesSection } from '@/components/notifications/preferences-section.tsx'
 import {
   beginMfaEnrolment,
   confirmMfaEnrolment,
   signOutEverywhere,
 } from '@/lib/auth/actions.ts'
 import { requireStaff } from '@/lib/auth/guard.ts'
+import { getPreferences } from '@/lib/notifications/queries.ts'
 
 export const metadata = { title: 'Your account — Rental Operations' }
 
@@ -25,7 +27,7 @@ export default async function AccountPage({
     searchParams,
   ])
 
-  const [credential, assignments] = await Promise.all([
+  const [credential, assignments, preferences] = await Promise.all([
     prisma.staffCredential.findUnique({
       where: { staffUserId: actor.id },
       select: { mfaEnrolledAt: true },
@@ -39,6 +41,7 @@ export default async function AccountPage({
         legalEntity: { select: { name: true } },
       },
     }),
+    getPreferences('STAFF', actor.id),
   ])
 
   const ceiling = (cents: number | null) =>
@@ -115,6 +118,8 @@ export default async function AccountPage({
           confirm={confirmMfaEnrolment}
         />
       </section>
+
+      <NotificationPreferencesSection preferences={preferences} />
 
       <section aria-labelledby="sessions" className="flex flex-col gap-3">
         <h2 id="sessions" className="text-lg font-semibold">

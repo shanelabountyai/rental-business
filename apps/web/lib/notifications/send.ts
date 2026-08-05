@@ -1,0 +1,396 @@
+import 'server-only'
+
+import {
+  type NotificationCategory,
+  type NotificationChannel,
+  type SuppressionReason,
+  bypassesQuietHours,
+  isNotificationCategory,
+  quietHoursEndAfter,
+  renderTemplate,
+  resolveChannels,
+  templateFor,
+  withinQuietHours,
+} from '@rental/core/notifications'
+import {
+  type NotificationRecipientType,
+  type Prisma,
+  prisma,
+} from '@rental/db'
+import { notificationConfig } from './config.ts'
+import { notificationAdapter } from './provider.ts'
+
+// The engine (NOTIF-01). Every module that wants to tell somebody something
+// calls `notify()` and nothing else - no module opens a provider client, and
+// no module decides on its own whether a channel is allowed or whether 3am is
+// an acceptable hour.
+//
+// DECIDING AND SENDING ARE SEPARATE STEPS, and that separation is the whole
+// design:
+//
+//   notify() decides and records, inside whatever transaction its caller is
+//   already in. An outbox consumer's notification therefore commits or rolls
+//   back with the consumer's own effects, which is what makes a retried
+//   consumer idempotent rather than a source of duplicate texts.
+//
+//   dispatchPendingNotifications() sends, outside any transaction. Network
+//   calls inside a database transaction hold a pooled connection open for the
+//   length of a third party's outage, and a transaction that commits after a
+//   provider accepted the message is a message sent twice on retry.
+//
+// The gap between them is bounded by the cron (hourly, D-3's tick) and closed
+// immediately by callers that want it to be - a staff-initiated send calls
+// both in the same request.
+
+export interface NotificationRecipient {
+  type: NotificationRecipientType
+  id: string
+  email?: string | null
+  phone?: string | null
+}
+
+export interface NotifyInput {
+  category: NotificationCategory
+  templateKey: string
+  recipient: NotificationRecipient
+  /// Template variables. Typed at the template, checked by the caller - see
+  /// packages/core/notifications/templates.ts.
+  context: unknown
+  /// Drives quiet hours, which are property-local (D-3). A notification with
+  /// no property never defers.
+  propertyId?: string | null
+  /// The OutboxEvent that caused this, when one did.
+  eventId?: string | null
+  /**
+   * The natural key of the thing being announced - "late-notice:<leaseId>:
+   * 2026-08-03", not a UUID. The engine suffixes the channel.
+   *
+   * This is the hard invariant: two calls with the same key send once. It has
+   * to be derivable from the FACT rather than from the attempt, or a retry
+   * generates a fresh key and the guarantee is worth nothing.
+   */
+  idempotencyKey: string
+  now?: Date
+}
+
+export interface ChannelOutcome {
+  channel: NotificationChannel
+  /// `recorded` - a new row was written. `duplicate` - this exact
+  /// (key, channel) was already decided, and nothing was written.
+  outcome: 'recorded' | 'duplicate'
+  status?: 'QUEUED' | 'SUPPRESSED' | 'DEFERRED'
+  reason?: SuppressionReason
+}
+
+type Db = Prisma.TransactionClient | typeof prisma
+
+/**
+ * Decides and records one logical notification across every channel it
+ * belongs on. Sends nothing.
+ *
+ * A channel that is turned off, unsupported, or killed by the switch still
+ * gets a row, marked SUPPRESSED with its reason. That is deliberate and is
+ * most of the value of the table: "why didn't the tenant get the late notice"
+ * is answerable, and answerable at the moment somebody asks rather than by
+ * reasoning about what the preferences were three weeks ago.
+ */
+export async function notify(
+  input: NotifyInput,
+  db: Db = prisma,
+): Promise<ChannelOutcome[]> {
+  if (!isNotificationCategory(input.category)) {
+    throw new Error(
+      `"${input.category}" is not a notification category. The vocabulary is closed - see packages/core/notifications/categories.ts.`,
+    )
+  }
+  const template = templateFor(input.templateKey)
+  if (!template) {
+    throw new Error(
+      `No template registered under "${input.templateKey}" (category ${input.category}).`,
+    )
+  }
+  if (template.category !== input.category) {
+    // Not pedantry: the category drives the recipient's preferences and the
+    // quiet-hours bypass, so a send whose category and template disagree is
+    // asking one question and answering another.
+    throw new Error(
+      `Template "${input.templateKey}" is registered under category "${template.category}", not "${input.category}".`,
+    )
+  }
+
+  const now = input.now ?? new Date()
+  const config = notificationConfig()
+
+  // Preferences are only meaningful for a channel we could actually reach
+  // them on, so resolution runs over the addressable subset - but the LOOP
+  // below walks every channel the template declares, so a channel with no
+  // address still gets a row saying so. Filtering here and iterating the
+  // filtered list was the original shape, and it silently dropped an
+  // address-less channel whenever some OTHER channel was addressable: the
+  // exact "notification the product promised and never recorded" failure the
+  // suppressed-row design exists to make impossible.
+  const addressable = template.channels.filter(
+    (channel) => addressFor(channel, input.recipient) !== null,
+  )
+
+  const preferences = await db.notificationPreference.findMany({
+    where: {
+      recipientType: input.recipient.type,
+      recipientId: input.recipient.id,
+      category: input.category,
+    },
+    select: { category: true, channel: true, enabled: true },
+  })
+
+  const decisions = new Map(
+    resolveChannels({
+      category: input.category,
+      candidates: addressable,
+      preferences,
+    }).map((decision) => [decision.channel, decision]),
+  )
+
+  // Quiet hours need the property's own timezone (D-3). Loaded once for the
+  // whole fan-out rather than per channel.
+  const timezone =
+    input.propertyId && !bypassesQuietHours(input.category)
+      ? (
+          await db.property.findUnique({
+            where: { id: input.propertyId },
+            select: { timezone: true },
+          })
+        )?.timezone
+      : undefined
+
+  const deferUntil =
+    timezone && withinQuietHours(now, timezone)
+      ? quietHoursEndAfter(now, timezone)
+      : null
+
+  const outcomes: ChannelOutcome[] = []
+
+  for (const channel of template.channels) {
+    const address = addressFor(channel, input.recipient)
+    const decision = decisions.get(channel)
+
+    const rendered = renderTemplate(input.templateKey, input.context, channel)
+
+    let status: 'QUEUED' | 'SUPPRESSED' | 'DEFERRED' = 'QUEUED'
+    let reason: SuppressionReason | undefined
+
+    if (address === null) {
+      status = 'SUPPRESSED'
+      reason = 'no_address'
+    } else if (!decision?.send) {
+      status = 'SUPPRESSED'
+      reason = decision?.reason ?? 'preference_off'
+    } else if (!config.enabled) {
+      status = 'SUPPRESSED'
+      reason = 'kill_switch'
+    } else if (!notificationAdapter.supports(channel)) {
+      status = 'SUPPRESSED'
+      reason = 'unsupported_channel'
+    } else if (deferUntil) {
+      status = 'DEFERRED'
+    }
+
+    outcomes.push(
+      await record(db, {
+        input,
+        channel,
+        // Recorded rather than left blank when there is nothing to send to:
+        // the column is the evidence of who this was for, and "(none on
+        // file)" says that honestly where an empty string would read as a bug.
+        toAddress: address ?? '(none on file)',
+        subject: rendered.subject,
+        body: rendered.body,
+        status,
+        reason,
+        sendAfter: status === 'DEFERRED' ? deferUntil : null,
+      }),
+    )
+  }
+
+  return outcomes
+}
+
+interface RecordInput {
+  input: NotifyInput
+  channel: NotificationChannel
+  toAddress: string
+  subject?: string
+  body: string
+  status: 'QUEUED' | 'SUPPRESSED' | 'DEFERRED'
+  reason?: SuppressionReason
+  sendAfter: Date | null
+}
+
+/**
+ * Writes the immutable decision and its mutable delivery row together.
+ *
+ * Together, not in sequence: the Notification is append-only, so a row
+ * written without its delivery could never have one added by a retry - the
+ * unique idempotency key would refuse the second attempt and the first would
+ * be permanently un-sendable. One insert of both, or neither.
+ */
+async function record(db: Db, args: RecordInput): Promise<ChannelOutcome> {
+  const key = `${args.input.idempotencyKey}:${args.channel}`
+  try {
+    await db.notification.create({
+      data: {
+        idempotencyKey: key,
+        category: args.input.category,
+        channel: args.channel,
+        recipientType: args.input.recipient.type,
+        recipientId: args.input.recipient.id,
+        toAddress: args.toAddress,
+        templateKey: args.input.templateKey,
+        subject: args.subject ?? null,
+        body: args.body,
+        propertyId: args.input.propertyId ?? null,
+        eventId: args.input.eventId ?? null,
+        delivery: {
+          create: {
+            status: args.status,
+            suppressedReason: args.reason ?? null,
+            sendAfter: args.sendAfter,
+          },
+        },
+      },
+    })
+    return {
+      channel: args.channel,
+      outcome: 'recorded',
+      status: args.status,
+      reason: args.reason,
+    }
+  } catch (error) {
+    if (isUniqueViolation(error)) {
+      // The invariant holding, not a failure. Some other call - a retried
+      // outbox consumer, a double-submitted form, a re-run job - already
+      // decided this exact notification.
+      return { channel: args.channel, outcome: 'duplicate' }
+    }
+    throw error
+  }
+}
+
+export interface DispatchResult {
+  sent: number
+  failed: number
+}
+
+/**
+ * Sends everything that is due, and records what the provider said.
+ *
+ * Picks up two populations, which are the same problem seen twice:
+ *
+ *   QUEUED - decided and never sent. Ordinarily sent moments later by the
+ *   caller; still here if the process died between the commit and the send,
+ *   which is exactly the gap that separating the two steps opens.
+ *
+ *   DEFERRED whose sendAfter has passed - held for quiet hours (NOTIF-05) and
+ *   now due.
+ *
+ * Never runs inside a transaction. See this file's header.
+ */
+export async function dispatchPendingNotifications(
+  now = new Date(),
+  limit = 100,
+): Promise<DispatchResult> {
+  const config = notificationConfig()
+  if (!config.enabled) return { sent: 0, failed: 0 }
+
+  const due = await prisma.notificationDelivery.findMany({
+    where: {
+      OR: [
+        { status: 'QUEUED' },
+        { status: 'DEFERRED', sendAfter: { lte: now } },
+      ],
+    },
+    orderBy: { id: 'asc' },
+    take: limit,
+    include: { notification: true },
+  })
+
+  let sent = 0
+  let failed = 0
+
+  for (const delivery of due) {
+    // Claim before sending. Two concurrent dispatchers - an hourly cron
+    // overlapping a staff action - would otherwise both see QUEUED and both
+    // send. The updateMany's own count tells the loser to stop, without a
+    // lock and without a read-then-write race.
+    const claimed = await prisma.notificationDelivery.updateMany({
+      where: { id: delivery.id, status: delivery.status },
+      data: { status: 'QUEUED', attempts: { increment: 1 } },
+    })
+    if (claimed.count === 0) continue
+
+    const { notification } = delivery
+    const to = config.sandboxTo ?? notification.toAddress
+    const body = config.sandboxTo
+      ? `[sandbox: intended for ${notification.toAddress}]\n\n${notification.body}`
+      : notification.body
+
+    try {
+      const result = await notificationAdapter.send({
+        channel: notification.channel as NotificationChannel,
+        to,
+        subject: notification.subject ?? undefined,
+        body,
+      })
+      await prisma.notificationDelivery.update({
+        where: { id: delivery.id },
+        data: {
+          status: 'SENT',
+          sentAt: new Date(),
+          externalId: result.externalId ?? null,
+        },
+      })
+      sent++
+    } catch (error) {
+      const code =
+        typeof error === 'object' && error !== null && 'code' in error
+          ? String((error as { code: unknown }).code)
+          : 'unknown'
+      await prisma.notificationDelivery.update({
+        where: { id: delivery.id },
+        data: {
+          status: 'FAILED',
+          failedAt: new Date(),
+          failureCode: code,
+        },
+      })
+      console.error(
+        `[notifications] send failed for ${notification.id} (${notification.channel})`,
+        error,
+      )
+      failed++
+    }
+  }
+
+  return { sent, failed }
+}
+
+/// PORTAL has no external address: the "address" is the account itself, and
+/// the notification IS the delivery - it is read in the portal (R-018) off
+/// the same log this engine writes. Recording the recipient id keeps the
+/// column meaningful rather than blank for a third of all rows.
+function addressFor(
+  channel: NotificationChannel,
+  recipient: NotificationRecipient,
+): string | null {
+  if (channel === 'EMAIL') return recipient.email?.trim() || null
+  if (channel === 'SMS') return recipient.phone?.trim() || null
+  return recipient.id
+}
+
+function isUniqueViolation(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    (error as { code: unknown }).code === 'P2002'
+  )
+}

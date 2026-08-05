@@ -231,6 +231,25 @@ enum DeliveryStatus {
   READ
   FAILED
   BOUNCED
+  /// R-016: decided, recorded, and deliberately not sent - preference off,
+  /// kill switch, or no address on file. A suppressed notification is still
+  /// a row, because "why didn't the tenant get the late notice?" is a real
+  /// support question and an absent record cannot answer it.
+  SUPPRESSED
+  /// R-016: held for quiet hours (NOTIF-05) and due to go out later. The
+  /// drain job moves these to SENT once `sendAfter` passes.
+  DEFERRED
+}
+
+/// Who a notification is addressed to (R-016). A discriminator rather than
+/// four nullable foreign keys: see Notification's own comment for why the
+/// engine stores the recipient as (type, id) plus the address as actually
+/// sent.
+enum NotificationRecipientType {
+  STAFF
+  TENANT
+  GUARANTOR
+  VENDOR
 }
 
 /// How a legally significant notice was served. Which of these are valid for
@@ -338,6 +357,7 @@ model Property {
   insurancePolicies InsurancePolicy[]
   hoaInfo          HoaInfo?
   warranties       Warranty[]
+  notifications    Notification[]
 
   @@index([legalEntityId])
   @@index([state])
@@ -821,8 +841,9 @@ model OutboxEvent {
   lastError     String?
   createdAt     DateTime @default(now())
 
-  property     Property?          @relation(fields: [propertyId], references: [id])
-  consumptions EventConsumption[]
+  property      Property?          @relation(fields: [propertyId], references: [id])
+  consumptions  EventConsumption[]
+  notifications Notification[]
 
   /// The dispatcher's query: unpublished, oldest first.
   @@index([publishedAt, occurredAt])
@@ -1486,6 +1507,146 @@ model MessageDelivery {
   message Message @relation(fields: [messageId], references: [id])
 
   @@index([status])
+}
+
+// ---------------------------------------------------------------------------
+// Notification engine (NOTIF-01, NOTIF-02, R-016)
+//
+// NOTIF-01: "All modules emit events into one notification engine (recipient,
+// channel per preference, template, delivery) - no module hand-rolls sending;
+// all attempts/failures/retries logged centrally."
+//
+// The Message/MessageDelivery split above is the precedent this follows and
+// for the same stated reason: the decided send is evidence and never changes,
+// while what the provider said afterwards legitimately does. Notification is
+// trigger-protected append-only alongside Message, LedgerEntry and AuditLog.
+//
+// Deliberately NOT written into Message/Thread: a Message requires a
+// threadId, threading is R-017's item and does not exist, and a notification
+// to a STAFF user ("approval needed") has no conversation to belong to. When
+// R-017 lands it can join the two; nothing here forecloses that.
+// ---------------------------------------------------------------------------
+
+/// One decided send, on one channel, to one recipient. Immutable.
+///
+/// The recipient is stored as (recipientType, recipientId) plus `toAddress`
+/// as actually used, rather than as four nullable foreign keys the way
+/// Thread does it. Three reasons, in order of weight:
+///
+///   1. `toAddress` is the evidence. "We emailed jane@example.com on the 3rd
+///      with this body" survives intact even if the Tenant row is later
+///      merged, renamed or deactivated - which is stronger proof than a
+///      foreign key to a record whose email has since changed.
+///   2. NotificationPreference needs a unique constraint on
+///      (recipient, category, channel), and a compound unique across nullable
+///      columns is not addressable in Prisma (the same wall R-010 hit on
+///      JurisdictionRule.jurisdiction). One (type, id) pair makes it trivial,
+///      and the engine resolves a notification and its preference the same way.
+///   3. A fifth recipient kind later is a vocabulary addition, not a fifth
+///      nullable column plus a fifth back-relation on a fifth model.
+///
+/// The cost is real and accepted: no referential integrity on recipientId.
+/// Tenants, staff, vendors and guarantors are deactivated rather than
+/// deleted in this product, so an orphaned row is a theoretical case, and
+/// point 1 means an orphan is still readable evidence rather than a dangling
+/// pointer.
+model Notification {
+  id String @id @default(cuid())
+
+  /// The idempotency key, and the hard invariant of this engine: the same
+  /// logical notification can be requested any number of times and is sent
+  /// once. Callers supply a natural key ("late-notice:<leaseId>:<date>"); the
+  /// engine suffixes the channel, since one logical notification fans out to
+  /// one row per channel.
+  idempotencyKey String @unique
+
+  /// Closed vocabulary in packages/core/notifications, not an enum here -
+  /// adding a notification category must not require a migration, the same
+  /// call Document.type and Task.type already make.
+  category String
+  channel  MessageChannel
+
+  recipientType NotificationRecipientType
+  recipientId   String
+  /// The address as it was actually used - email address or E.164 phone. See
+  /// this model's own comment, and Notice.addressOfRecord for the identical
+  /// reasoning applied to served notices.
+  toAddress     String
+
+  templateKey String
+  subject     String?
+  body        String
+
+  /// Null for a notification not tied to one property (a portfolio-wide
+  /// digest, an account-level message). Quiet hours are resolved from this
+  /// property's timezone when it is set - D-3.
+  propertyId String?
+  /// The OutboxEvent that caused this, when one did. A notification sent by a
+  /// staff member's direct action has none.
+  eventId    String?
+
+  createdAt DateTime @default(now())
+
+  property Property?    @relation(fields: [propertyId], references: [id])
+  event    OutboxEvent? @relation(fields: [eventId], references: [id])
+  delivery NotificationDelivery?
+
+  @@index([recipientType, recipientId, createdAt])
+  @@index([propertyId, createdAt])
+  @@index([category, createdAt])
+}
+
+/// The mutable half: what happened after the decision. Separated so the body
+/// above can be trigger-protected as evidence while a provider webhook stays
+/// free to move QUEUED -> SENT -> DELIVERED.
+model NotificationDelivery {
+  id             String         @id @default(cuid())
+  notificationId String         @unique
+  status         DeliveryStatus @default(QUEUED)
+  /// Why it was never sent, when status is SUPPRESSED. Closed vocabulary in
+  /// packages/core/notifications (preference off, kill switch, quiet hours,
+  /// no address on file).
+  suppressedReason String?
+  /// Set when status is DEFERRED: the earliest instant the drain job may send
+  /// this. Quiet hours defer, they do not discard (NOTIF-05).
+  sendAfter        DateTime?
+  attempts         Int            @default(0)
+  sentAt           DateTime?
+  deliveredAt      DateTime?
+  failedAt         DateTime?
+  failureCode      String?
+  /// Provider message id (Twilio SID, Resend id), for webhook reconciliation.
+  externalId       String?
+  updatedAt        DateTime       @updatedAt
+
+  notification Notification @relation(fields: [notificationId], references: [id])
+
+  @@index([status, sendAfter])
+  @@index([externalId])
+}
+
+/// A per-recipient, per-category, per-channel override (NOTIF-02).
+///
+/// Absence means "the category default applies" - this table holds only what
+/// somebody deliberately changed, so a new category does not need a backfill
+/// of a row per person per channel before it can be sent.
+///
+/// A row turning off a LOCKED category is refused by the engine, not by a
+/// constraint here: which categories are legally locked is product policy
+/// that changes with the law (NOTIF-02 names legal notices and emergency
+/// maintenance), and a check constraint would need a migration to follow it.
+model NotificationPreference {
+  id            String                    @id @default(cuid())
+  recipientType NotificationRecipientType
+  recipientId   String
+  category      String
+  channel       MessageChannel
+  enabled       Boolean
+  createdAt     DateTime                  @default(now())
+  updatedAt     DateTime                  @updatedAt
+
+  @@unique([recipientType, recipientId, category, channel])
+  @@index([recipientType, recipientId])
 }
 
 /// A legally significant notice and the proof it was served. `addressOfRecord`
