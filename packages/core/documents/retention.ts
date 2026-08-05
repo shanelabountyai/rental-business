@@ -49,6 +49,7 @@ export const RETENTION_RULES: Record<DocumentTypeValue, RetentionRule> = {
   INSURANCE_DECLARATION: { years: null, note: 'PROP-06: kept indefinitely; superseded by a newer policy, not purged.' },
   HOA_DOC: { years: null, note: 'PROP-06: kept indefinitely.' },
   WARRANTY_DOC: { years: null, note: 'PROP-06: kept indefinitely; expiry is tracked on the Warranty record, not by purging the document.' },
+  MAINTENANCE_PHOTO: { years: null, note: 'MAINT-01: evidence for the request it was attached to - kept indefinitely.' },
   OTHER: { years: null, note: 'Uncategorized - no automatic rule.' },
 }
 

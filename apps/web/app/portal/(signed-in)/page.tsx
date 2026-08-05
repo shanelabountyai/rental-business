@@ -114,6 +114,12 @@ export default async function PortalHomePage() {
         <h2 id="help" className="text-lg font-semibold">
           Need something?
         </h2>
+        <Link
+          href="/portal/maintenance/new"
+          className="bg-primary text-primary-foreground focus-visible:ring-ring flex min-h-12 items-center justify-center rounded-md px-6 py-2 text-base font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+        >
+          Report a problem
+        </Link>
         {/*
           §6.4: "every tenant flow has a staff-mediated fallback (P4 Gene is
           the acid test)." Gene does not want a portal at all. Saying so here
@@ -121,15 +127,15 @@ export default async function PortalHomePage() {
           person.
         */}
         <p>
-          You can{' '}
+          You can also{' '}
           <Link
             href="/portal/messages"
             className="focus-visible:ring-ring rounded-md underline underline-offset-2 focus-visible:ring-2 focus-visible:outline-none"
           >
             send us a message
           </Link>
-          . You can also call or text the number on your lease — you do not
-          have to use this site.
+          , or call or text the number on your lease — you do not have to use
+          this site.
         </p>
       </section>
     </div>

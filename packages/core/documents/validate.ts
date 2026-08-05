@@ -39,6 +39,12 @@ export const DOCUMENT_TYPES = [
   'INSURANCE_DECLARATION',
   'HOA_DOC',
   'WARRANTY_DOC',
+  /// R-019: a photo a tenant attaches to a maintenance request, uploaded
+  /// before the Ticket exists (see lib/maintenance/actions.ts's
+  /// uploadMaintenancePhoto) - distinct from UNIT_PHOTO, which is staff's
+  /// versioned condition-over-time library (PROP-08), not tenant-submitted
+  /// evidence of a single reported problem.
+  'MAINTENANCE_PHOTO',
   'OTHER',
 ] as const
 export type DocumentTypeValue = (typeof DOCUMENT_TYPES)[number]

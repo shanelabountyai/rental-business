@@ -21,6 +21,7 @@
     "./events": "./events/index.ts",
     "./filing-cabinet": "./filing-cabinet/index.ts",
     "./jurisdiction": "./jurisdiction/index.ts",
+    "./maintenance": "./maintenance/index.ts",
     "./property": "./property/index.ts",
     "./units": "./units/index.ts"
   },

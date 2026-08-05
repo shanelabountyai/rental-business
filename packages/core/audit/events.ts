@@ -95,6 +95,15 @@ export const AUDIT_ACTIONS = [
   /// completedByStaffId/completedAt.
   'task.completed',
   'task.canceled',
+
+  /// R-019: a tenant's maintenance request, at the moment they submitted it.
+  /// Ticket itself is NOT append-only - status, priority and category get
+  /// edited during triage (R-023) - so this is the one place the tenant's
+  /// original submission (their category, prompt answers, and whether they
+  /// tried the troubleshooting script) survives verbatim, the same "audit the
+  /// write too, not only what happens to it later" call R-012 made for
+  /// document.uploaded.
+  'ticket.submitted',
 ] as const
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number]

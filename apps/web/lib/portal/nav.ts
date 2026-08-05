@@ -20,6 +20,11 @@ export interface PortalNavItem {
 
 export const PORTAL_NAV_ITEMS: readonly PortalNavItem[] = [
   { href: '/portal', label: 'Home', description: 'Your home and recent updates' },
+  {
+    href: '/portal/maintenance',
+    label: 'Report a problem',
+    description: 'Report a maintenance problem and see past requests',
+  },
   { href: '/portal/papers', label: 'Papers', description: 'Your lease and other papers' },
   { href: '/portal/messages', label: 'Messages', description: 'Messages with your landlord' },
 ]
