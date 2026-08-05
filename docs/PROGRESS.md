@@ -466,7 +466,7 @@ The running narrative of what has actually been built. One entry per completed b
 - **Two consequences of the append-only trigger, anticipated rather than discovered, and worth stating for whoever writes the next test file:** `Notification.propertyId` is `ON DELETE SET NULL`, `SET NULL` is an `UPDATE`, and the trigger rejects it — so a property with notifications cannot be hard-deleted and must be deactivated instead, exactly as `AuditLog` already forces in every existing spec. `NotificationDelivery` is deliberately left unprotected so cleanup and provider callbacks both work.
 
 ## R-017 — Comms threading core
-**Commit:** `_pending_`  ·  **Date:** 2026-08-05
+**Commit:** `6a38a15`  ·  **Date:** 2026-08-05
 
 **What it built.** COMM-01's one threaded history per tenancy, property and vendor, across portal, SMS and email, with logged phone calls sitting in the same transcript. `Thread` gained a deterministic `key` so get-or-create is safe under concurrency, and a denormalized `lastMessageAt` the inbox sorts on. The inbound path — `receiveInboundMessage()` — normalizes the sender to E.164, looks up every party it could belong to, and files it **only when exactly one party matches**; anything else lands in a new `UnroutedMessage` table for a human to place. Staff attribution is on every outbound row and rendered in the transcript. `/messages` is the inbox, `/messages/[id]` the transcript with a reply box and a call-log form, `/messages/unrouted` the triage queue. 26 core tests, 16 integration tests against a real database, 7 e2e tests.
 
