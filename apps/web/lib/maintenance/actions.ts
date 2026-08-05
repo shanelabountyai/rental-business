@@ -2,16 +2,24 @@
 
 import { createHash } from 'node:crypto'
 import {
+  EMERGENCY_DEFINITIONS,
+  type EmergencyCategory,
+  type EmergencyRequestInput,
   type MaintenanceRequestInput,
+  formatEmergencyDescription,
   formatMaintenanceDescription,
   detectHabitabilityLanguage,
   isMaintenanceCategory,
+  validateEmergencyRequest,
   validateMaintenanceRequest,
 } from '@rental/core/maintenance'
 import { prisma } from '@rental/db'
 import { audit } from '@/lib/audit/index.ts'
+import { emitEvent } from '@/lib/jobs/outbox.ts'
+import { dispatchPendingNotifications, notify } from '@/lib/notifications/send.ts'
 import { requireTenantWithScope } from '@/lib/portal/guard.ts'
 import { generateStorageKey, storage } from '@/lib/storage/index.ts'
+import { onCallStaffForProperty, unitForEmergency } from './emergency.ts'
 import { getTenantCurrentHome } from './queries.ts'
 
 // Writes for the tenant maintenance flow (MAINT-01, R-019).
@@ -139,6 +147,8 @@ export interface SubmitMaintenanceRequestArgs extends MaintenanceRequestInput {
   photoDocumentIds: readonly string[]
 }
 
+export type SubmitMaintenanceRequestResult = MaintenanceFormState | { ticketId: string }
+
 /**
  * Creates the Ticket (MAINT-01's whole point) and attaches whatever photos
  * are ready.
@@ -146,13 +156,9 @@ export interface SubmitMaintenanceRequestArgs extends MaintenanceRequestInput {
  * `source: 'PORTAL'` and `priority` stays at its ROUTINE default - R-023's
  * triage queue is what turns category and the habitability flag into a
  * suggested priority with staff override; guessing at priority here would be
- * a second, competing opinion about the same decision.
- */
-export type SubmitMaintenanceRequestResult = MaintenanceFormState | { ticketId: string }
-
-/**
- * Creates the Ticket (MAINT-01's whole point) and attaches whatever photos
- * are ready.
+ * a second, competing opinion about the same decision. (The emergency path
+ * below is the one exception, and for a reason that is not a guess: the
+ * tenant selected an emergency category outright.)
  *
  * Returns `{ ticketId }` rather than calling `redirect()` itself - the
  * wizard needs the id BEFORE it navigates, so it can record it (as the
@@ -222,4 +228,171 @@ export async function submitMaintenanceRequest(
   }
 
   return { ticketId: ticket.id }
+}
+
+// ---------------------------------------------------------------------------
+// The emergency intake path (MAINT-01's emergency criterion, R-020)
+// ---------------------------------------------------------------------------
+
+export type SubmitEmergencyResult = MaintenanceFormState | { ticketId: string }
+
+/**
+ * Creates an EMERGENCY ticket and pages on-call immediately.
+ *
+ * THREE THINGS DIFFER FROM THE ORDINARY PATH, all of them deliberate:
+ *
+ *   `priority: 'EMERGENCY'` is set here rather than left to R-023's triage.
+ *   Everywhere else this build refuses to guess at priority, because a
+ *   category is weak evidence for one. Here it is not a guess: the tenant
+ *   read "I smell gas" and chose it.
+ *
+ *   The page is sent DIRECTLY, not through the outbox. R-006's dispatcher
+ *   already says so in its own comment - "a latency floor of one hour for
+ *   anything that only the bus drives, which is fine for nightly work and
+ *   NOT fine for an emergency maintenance page". `notify()` decides and
+ *   records, then `dispatchPendingNotifications()` runs in the same request,
+ *   which is exactly the "a staff-initiated send calls both in the same
+ *   request" pattern R-016 documented for latency that matters.
+ *
+ *   `ticket.created` is still emitted to the outbox afterwards, for
+ *   consumers that are not time-critical (R-023's triage queue, reporting).
+ *   The page does not depend on it.
+ *
+ * Quiet hours are bypassed automatically: `maintenance_emergency` is in
+ * R-016's EMERGENCY_CATEGORIES, so `notify()` never defers it. That is what
+ * makes "regardless of hour" true rather than merely intended - and it is
+ * also why nothing here re-implements a quiet-hours check.
+ */
+export async function submitEmergencyRequest(
+  args: EmergencyRequestInput,
+): Promise<SubmitEmergencyResult> {
+  const { tenant, scope } = await requireTenantWithScope()
+
+  const violations = validateEmergencyRequest(args)
+  if (violations.length > 0) {
+    return {
+      error: 'A couple of things still need an answer.',
+      fieldErrors: Object.fromEntries(violations.map((v) => [v.field, v.message])),
+    }
+  }
+  const category = args.category as EmergencyCategory
+
+  const home = await unitForEmergency(scope)
+  if (!home) {
+    return {
+      error:
+        'We do not have a home on file for you yet. Please call or text the number on your lease.',
+    }
+  }
+
+  const description = formatEmergencyDescription(category, args)
+  const definition = EMERGENCY_DEFINITIONS[category]
+
+  const ticket = await prisma.$transaction(async (tx) => {
+    const created = await tx.ticket.create({
+      data: {
+        propertyId: home.propertyId,
+        unitId: home.unitId,
+        leaseId: home.id,
+        tenantId: tenant.id,
+        source: 'PORTAL',
+        category,
+        description,
+        priority: 'EMERGENCY',
+        entryPermission: args.entryPermission === true,
+        petWarning: args.petWarning === true,
+        // Every one of MAINT-01's emergency categories is a habitability
+        // matter by definition - no heat in freezing temps, sewage, and a
+        // gas leak are the textbook examples. Set outright rather than run
+        // through R-019's keyword scan, which reads free text the tenant is
+        // not required to write here.
+        habitabilityFlag: true,
+      },
+    })
+    await audit(
+      {
+        action: 'ticket.submitted',
+        entityType: 'Ticket',
+        entityId: created.id,
+        propertyId: home.propertyId,
+        after: { category, priority: 'EMERGENCY', emergency: true },
+      },
+      tx,
+    )
+    await emitEvent(tx, {
+      type: 'ticket.created',
+      aggregateType: 'Ticket',
+      aggregateId: created.id,
+      propertyId: home.propertyId,
+      payload: { category, priority: 'EMERGENCY' },
+    })
+    return created
+  })
+
+  if (definition.pagesOnCall) {
+    await pageOnCall(ticket.id, home, category, tenant, args)
+  }
+
+  return { ticketId: ticket.id }
+}
+
+/**
+ * Pages everyone on call for this property, then flushes the queue in the
+ * same request.
+ *
+ * Wrapped in its own try/catch and never allowed to fail the submission: the
+ * ticket is already committed at this point, and a provider outage must not
+ * turn "we recorded your emergency" into an error screen that makes a tenant
+ * think nothing was reported. A failed page is recorded on the notification's
+ * own delivery row (R-016), which is where a support conversation looks.
+ */
+async function pageOnCall(
+  ticketId: string,
+  home: NonNullable<Awaited<ReturnType<typeof unitForEmergency>>>,
+  category: EmergencyCategory,
+  tenant: { id: string; name: string },
+  args: EmergencyRequestInput,
+): Promise<void> {
+  try {
+    const [recipients, tenantRecord] = await Promise.all([
+      onCallStaffForProperty(home.propertyId),
+      prisma.tenant.findUnique({
+        where: { id: tenant.id },
+        select: { phone: true },
+      }),
+    ])
+
+    for (const staff of recipients) {
+      await notify({
+        category: 'maintenance_emergency',
+        templateKey: 'maintenance.emergency',
+        recipient: {
+          type: 'STAFF',
+          id: staff.id,
+          email: staff.email,
+          phone: staff.phone,
+        },
+        context: {
+          emergencyLabel: EMERGENCY_DEFINITIONS[category].label,
+          propertyName: home.property.name,
+          addressLine1: home.property.addressLine1,
+          unitName: home.unit.name,
+          tenantName: tenant.name,
+          tenantPhone: tenantRecord?.phone ?? null,
+          petWarning: args.petWarning === true,
+          entryPermission: args.entryPermission === true,
+        },
+        propertyId: home.propertyId,
+        // Keyed on the ticket: one page per emergency per recipient, however
+        // many times a jittery tenant taps Send.
+        idempotencyKey: `emergency:${ticketId}:${staff.id}`,
+      })
+    }
+
+    // The "immediately" half. Without this the page waits for the hourly
+    // cron - see this function's own caller comment.
+    await dispatchPendingNotifications()
+  } catch (error) {
+    console.error(`[emergency] failed to page on-call for ticket ${ticketId}`, error)
+  }
 }

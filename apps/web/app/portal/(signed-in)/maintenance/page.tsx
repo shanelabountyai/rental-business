@@ -1,4 +1,4 @@
-import { CATEGORY_LABELS } from '@rental/core/maintenance'
+import { CATEGORY_LABELS, emergencyDefinition } from '@rental/core/maintenance'
 import Link from 'next/link'
 import { requireTenantWithScope } from '@/lib/portal/guard.ts'
 import { listTenantTickets } from '@/lib/maintenance/queries.ts'
@@ -39,6 +39,19 @@ export default async function PortalMaintenancePage() {
         <p>Report a problem, or check on one you already sent.</p>
       </div>
 
+      {/*
+        The emergency route is first and visually distinct - somebody who can
+        smell gas must not have to read past "Report a problem" to find it.
+        MAINT-01's emergency criterion is a safety requirement, and the
+        ordering of this screen is part of meeting it.
+      */}
+      <Link
+        href="/portal/maintenance/emergency"
+        className="focus-visible:ring-ring flex min-h-14 items-center justify-center rounded-md border-2 border-red-600 bg-red-50 px-6 py-3 text-base font-semibold text-red-950 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none dark:bg-red-950 dark:text-red-50"
+      >
+        Emergency — gas, flooding, no heat, break-in
+      </Link>
+
       <Link
         href="/portal/maintenance/new"
         className="bg-primary text-primary-foreground focus-visible:ring-ring flex min-h-12 items-center justify-center rounded-md px-6 py-2 text-base font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
@@ -57,7 +70,10 @@ export default async function PortalMaintenancePage() {
                   className="hover:bg-accent focus-visible:ring-ring flex min-h-14 flex-col justify-center gap-1 rounded-md border px-4 py-3 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
                 >
                   <span className="font-medium">
-                    {CATEGORY_LABELS[ticket.category as keyof typeof CATEGORY_LABELS] ??
+                    {emergencyDefinition(ticket.category)?.label ??
+                      CATEGORY_LABELS[
+                        ticket.category as keyof typeof CATEGORY_LABELS
+                      ] ??
                       ticket.category}
                   </span>
                   <span className="text-muted-foreground">

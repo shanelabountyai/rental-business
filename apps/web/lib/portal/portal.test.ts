@@ -22,7 +22,9 @@ import {
 let entityId: string
 let propertyId: string
 let myLeaseId: string
+let myUnitId: string
 let theirLeaseId: string
+let theirUnitId: string
 let meId: string
 let themId: string
 
@@ -33,6 +35,7 @@ async function makeDocument(
   data: Partial<{
     tenantId: string
     leaseId: string
+    unitId: string
     deletedAt: Date
     type: string
     fileName: string
@@ -43,6 +46,7 @@ async function makeDocument(
       propertyId,
       tenantId: data.tenantId ?? null,
       leaseId: data.leaseId ?? null,
+      unitId: data.unitId ?? null,
       deletedAt: data.deletedAt ?? null,
       type: data.type ?? 'OTHER',
       fileName: data.fileName ?? `${randomUUID().slice(0, 8)}.pdf`,
@@ -99,15 +103,17 @@ beforeAll(async () => {
     await prisma.leaseTenant.create({
       data: { leaseId: lease.id, tenantId: tenant.id },
     })
-    return { tenantId: tenant.id, leaseId: lease.id }
+    return { tenantId: tenant.id, leaseId: lease.id, unitId: unit.id }
   }
 
   const mine = await makeTenancy('me')
   const theirs = await makeTenancy('them')
   meId = mine.tenantId
   myLeaseId = mine.leaseId
+  myUnitId = mine.unitId
   themId = theirs.tenantId
   theirLeaseId = theirs.leaseId
+  theirUnitId = theirs.unitId
 })
 
 afterAll(async () => {
@@ -126,7 +132,7 @@ afterAll(async () => {
 })
 
 function myScope() {
-  return { tenantId: meId, leaseIds: [myLeaseId] }
+  return { tenantId: meId, leaseIds: [myLeaseId], unitIds: [myUnitId] }
 }
 
 describe('a tenant sees only their own papers (DOC-03)', () => {
@@ -198,6 +204,43 @@ describe('a tenant sees only their own papers (DOC-03)', () => {
     // An empty leaseIds array must match NOTHING - not every document whose
     // leaseId happens to be null, which is every landlord document there is.
     expect(ids).not.toContain(onLease.id)
+  })
+
+  it('allows a shutoff photo on their own unit, and refuses one on another (R-020)', async () => {
+    // The safety exception, through the real query rather than the predicate.
+    const mineShutoff = await makeDocument({
+      type: 'SHUTOFF_PHOTO',
+      unitId: myUnitId,
+      fileName: 'my-water-main.jpg',
+    })
+    const theirShutoff = await makeDocument({
+      type: 'SHUTOFF_PHOTO',
+      unitId: theirUnitId,
+      fileName: 'their-water-main.jpg',
+    })
+
+    const ids = (await listTenantDocuments(myScope())).map((d) => d.id)
+    expect(ids).toContain(mineShutoff.id)
+    expect(ids).not.toContain(theirShutoff.id)
+
+    // And by direct id, which is what the download route uses.
+    expect((await getTenantDocument(mineShutoff.id, myScope()))?.id).toBe(
+      mineShutoff.id,
+    )
+    expect(await getTenantDocument(theirShutoff.id, myScope())).toBeNull()
+  })
+
+  it('still refuses a NON-shutoff document on their own unit (R-020)', async () => {
+    // The exception is one named type. PROP-08's condition photo library
+    // lives on the same unit and can include previous tenancies' photos.
+    const unitPhoto = await makeDocument({
+      type: 'UNIT_PHOTO',
+      unitId: myUnitId,
+      fileName: 'condition.jpg',
+    })
+    const ids = (await listTenantDocuments(myScope())).map((d) => d.id)
+    expect(ids).not.toContain(unitPhoto.id)
+    expect(await getTenantDocument(unitPhoto.id, myScope())).toBeNull()
   })
 
   it('agrees with the pure rule on every document in the fixture', async () => {

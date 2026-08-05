@@ -71,10 +71,90 @@ export const unitMakeReadyTemplate: NotificationTemplate<UnitMakeReadyContext> =
     },
   }
 
+/// Context for `maintenance.emergency` (R-020).
+export interface MaintenanceEmergencyContext {
+  /// The emergency in the tenant's own words, from EMERGENCY_DEFINITIONS -
+  /// "I smell gas", not "GAS_SMELL". Whoever is woken up should read what
+  /// the tenant actually reported, not an enum.
+  emergencyLabel: string
+  propertyName: string
+  addressLine1: string
+  unitName: string
+  tenantName: string
+  tenantPhone: string | null
+  petWarning: boolean
+  entryPermission: boolean
+}
+
+/**
+ * A tenant reported an emergency (MAINT-01, R-020). Staff-facing, and the
+ * one template in this build whose whole job is to wake somebody up.
+ *
+ * Written to be ACTED ON FROM A LOCK SCREEN AT 2AM. The SMS variant leads
+ * with the word EMERGENCY, then the thing, then the address, then the
+ * tenant's phone number - in that order, because somebody half-awake reads
+ * the first line and needs to know whether to get out of bed, and the very
+ * next thing they will do is call the tenant. A pet warning rides along
+ * because whoever arrives may be opening a door in the dark.
+ *
+ * Deliberately does NOT include a link as the primary content: a link is
+ * useless to somebody who has to drive, and the phone number is the thing
+ * that actually starts the response.
+ */
+export const maintenanceEmergencyTemplate: NotificationTemplate<MaintenanceEmergencyContext> =
+  {
+    key: 'maintenance.emergency',
+    category: 'maintenance_emergency',
+    channels: ['SMS', 'EMAIL', 'PORTAL'],
+    render: (context, channel) => {
+      const where = `${context.addressLine1}${
+        context.unitName ? ` (${context.unitName})` : ''
+      }`
+      const contact = context.tenantPhone
+        ? `${context.tenantName} ${context.tenantPhone}`
+        : `${context.tenantName} (no phone on file)`
+
+      if (channel === 'SMS') {
+        return {
+          body: [
+            `EMERGENCY: ${context.emergencyLabel}`,
+            where,
+            contact,
+            context.petWarning ? 'Pet on site.' : null,
+          ]
+            .filter(Boolean)
+            .join('\n'),
+        }
+      }
+
+      return {
+        subject: `EMERGENCY: ${context.emergencyLabel} — ${where}`,
+        body: [
+          `${context.tenantName} reported an emergency at ${where}.`,
+          '',
+          `What they reported: ${context.emergencyLabel}`,
+          `Reach them on: ${context.tenantPhone ?? 'no phone on file'}`,
+          `Property: ${context.propertyName}`,
+          '',
+          context.petWarning
+            ? 'There is a pet at home.'
+            : 'No pet reported at home.',
+          context.entryPermission
+            ? 'Entry permitted if the tenant is not home.'
+            : 'Entry NOT permitted unless the tenant is home.',
+          '',
+          'Safety instructions were shown to the tenant before they submitted this.',
+        ].join('\n'),
+      }
+    },
+  }
+
 /// Every registered template, by key. Later items add theirs here.
 export const TEMPLATES: Readonly<Record<string, NotificationTemplate<never>>> = {
   [unitMakeReadyTemplate.key]:
     unitMakeReadyTemplate as unknown as NotificationTemplate<never>,
+  [maintenanceEmergencyTemplate.key]:
+    maintenanceEmergencyTemplate as unknown as NotificationTemplate<never>,
 }
 
 export class UnknownTemplateError extends Error {

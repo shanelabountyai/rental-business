@@ -4,6 +4,7 @@
 // database, no Next.js.
 export * from './categories.ts'
 export * from './describe.ts'
+export * from './emergencies.ts'
 export * from './habitability.ts'
 export * from './troubleshooting.ts'
 export * from './validate.ts'

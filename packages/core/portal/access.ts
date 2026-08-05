@@ -30,6 +30,16 @@
 export interface TenantScope {
   tenantId: string
   leaseIds: readonly string[]
+  /**
+   * The units those leases are on. Added at R-020 for exactly one purpose -
+   * the safety exception below - and used for nothing else.
+   *
+   * Optional so every existing caller keeps compiling and keeps its current
+   * behaviour: an absent list means the safety exception simply cannot
+   * match, which is the safe direction for a field whose only job is to
+   * widen access.
+   */
+  unitIds?: readonly string[]
 }
 
 /// The subset of a Document this decision needs. Structural rather than the
@@ -38,11 +48,34 @@ export interface TenantScope {
 export interface DocumentAccessFacts {
   tenantId: string | null
   leaseId: string | null
+  /// Added at R-020 for the shutoff-photo safety exception. Null for every
+  /// document not attached to a unit.
+  unitId?: string | null
+  /// Added at R-020 for the same reason - the exception is keyed on the
+  /// document CLASS, not merely on where it lives.
+  type?: string | null
   /// Soft-deleted documents (DOC-05's 30-day undelete window) are landlord
   /// bookkeeping. A tenant must not see one: from their side it was withdrawn,
   /// and showing it would leak the fact that it briefly existed.
   deletedAt: Date | null
 }
+
+/**
+ * The one document class a tenant may see purely because of WHERE it is
+ * rather than whose name is on it (R-020).
+ *
+ * MAINT-01 requires that an emergency intake "displays the relevant shutoff
+ * photo/location from the unit record". That photo is attached to the unit
+ * (R-014), not to the tenant or the lease, so the allow-list above would
+ * refuse it - and refusing to show somebody standing in rising water where
+ * their own stop tap is would be the wrong answer to a safety question.
+ *
+ * Kept to a single named type rather than a general "unit documents are
+ * visible" rule, because the unit record ALSO holds the versioned condition
+ * photo library (PROP-08) - including photos from previous tenancies of the
+ * same home, which are emphatically not this tenant's to see.
+ */
+const UNIT_SAFETY_DOCUMENT_TYPES: ReadonlySet<string> = new Set(['SHUTOFF_PHOTO'])
 
 /**
  * Whether this tenant may read this document.
@@ -55,12 +88,16 @@ export interface DocumentAccessFacts {
  *   The document belongs to a tenancy they are on (`leaseId`) - the lease
  *   itself, its addenda, a deposit disposition.
  *
- * Notably NOT `propertyId` or `unitId`, however tempting: those are the
- * landlord's operational records and, at a multi-unit property, other
- * people's. A move-in condition report is the one thing a tenant arguably
- * should see that this rule excludes today - it hangs off the inspection, and
- * INSP is R-070's. Whichever item builds it adds a third clause here, in one
- * place, with a test.
+ * ...plus, since R-020, exactly one narrow safety exception: a SHUTOFF_PHOTO
+ * on a unit they hold a lease on. See UNIT_SAFETY_DOCUMENT_TYPES for why that
+ * is one named type and not "unit documents".
+ *
+ * Notably still NOT `propertyId`, and not `unitId` in general, however
+ * tempting: those are the landlord's operational records and, at a
+ * multi-unit property, other people's. A move-in condition report is the one
+ * thing a tenant arguably should see that this rule still excludes - it
+ * hangs off the inspection, and INSP is R-070's. Whichever item builds it
+ * adds its clause here, in one place, with a test.
  */
 export function tenantCanSeeDocument(
   document: DocumentAccessFacts,
@@ -71,6 +108,14 @@ export function tenantCanSeeDocument(
     return true
   }
   if (document.leaseId !== null && scope.leaseIds.includes(document.leaseId)) {
+    return true
+  }
+  if (
+    document.type != null &&
+    UNIT_SAFETY_DOCUMENT_TYPES.has(document.type) &&
+    document.unitId != null &&
+    scope.unitIds?.includes(document.unitId)
+  ) {
     return true
   }
   return false

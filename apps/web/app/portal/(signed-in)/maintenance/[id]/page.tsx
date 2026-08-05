@@ -1,4 +1,4 @@
-import { CATEGORY_LABELS } from '@rental/core/maintenance'
+import { CATEGORY_LABELS, emergencyDefinition } from '@rental/core/maintenance'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { AddPhotoForm } from '@/components/portal/maintenance/add-photo-form.tsx'
@@ -18,10 +18,12 @@ const STATUS_WORDS: Record<string, string> = {
 
 export default async function MaintenanceTicketPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>
+  searchParams: Promise<{ emergency?: string }>
 }) {
-  const { id } = await params
+  const [{ id }, { emergency }] = await Promise.all([params, searchParams])
   const { scope } = await requireTenantWithScope()
 
   const ticket = await getTenantTicket(id, scope)
@@ -38,9 +40,26 @@ export default async function MaintenanceTicketPage({
         ← All requests
       </Link>
 
+      {/*
+        Shown once, on arrival from the emergency flow. The reassurance a
+        tenant needs at 2am is not "your request has been logged" - it is
+        that a person is being woken up, and that they can still reach one
+        directly if nobody calls back.
+      */}
+      {emergency === '1' && (
+        <p
+          role="status"
+          className="rounded-md border-2 border-red-600 bg-red-50 px-4 py-3 font-medium text-red-950 dark:bg-red-950 dark:text-red-50"
+        >
+          We have paged someone now. If this is life-threatening, call 911. If
+          you do not hear back shortly, call or text the number on your lease.
+        </p>
+      )}
+
       <div className="flex flex-col gap-1">
         <h1 className="text-2xl font-semibold tracking-tight">
-          {CATEGORY_LABELS[ticket.category as keyof typeof CATEGORY_LABELS] ??
+          {emergencyDefinition(ticket.category)?.label ??
+            CATEGORY_LABELS[ticket.category as keyof typeof CATEGORY_LABELS] ??
             ticket.category}
         </h1>
         <p className="text-muted-foreground">

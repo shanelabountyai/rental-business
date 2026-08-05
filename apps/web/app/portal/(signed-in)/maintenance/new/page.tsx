@@ -35,6 +35,17 @@ export default async function NewMaintenanceRequestPage() {
   return (
     <div className="flex flex-col gap-6">
       <h1 className="text-2xl font-semibold tracking-tight">Report a problem</h1>
+      {/*
+        An escape hatch at the top of the ordinary flow, not buried at the
+        bottom: a tenant who starts here and only then realises how bad it is
+        needs one tap to the emergency path, not a scroll (R-020).
+      */}
+      <Link
+        href="/portal/maintenance/emergency"
+        className="focus-visible:ring-ring flex min-h-12 items-center rounded-md border-2 border-red-600 bg-red-50 px-4 py-2 text-base font-medium text-red-950 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none dark:bg-red-950 dark:text-red-50"
+      >
+        Is this an emergency? Gas, flooding, no heat, break-in →
+      </Link>
       <MaintenanceWizard />
     </div>
   )

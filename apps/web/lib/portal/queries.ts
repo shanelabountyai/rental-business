@@ -9,27 +9,37 @@ import { prisma } from '@rental/db'
 // that reached the browser is disclosed whatever the markup did with it.
 
 /**
- * The documents this tenant may see (DOC-03).
+ * The SQL half of `tenantCanSeeDocument` (DOC-03), built once and shared by
+ * every query below.
  *
- * The `where` mirrors `tenantCanSeeDocument` exactly - allow-list on
- * `tenantId` or `leaseId`, never `propertyId`. The pure function is the
- * readable statement of the rule and what the permission tests exercise
- * directly; this is the same rule expressed as SQL so the database does the
- * filtering. `portal.test.ts` asserts the two agree, because two expressions
- * of one rule is exactly the shape that drifts.
+ * The pure function is the readable statement of the rule and what the
+ * permission tests exercise directly; this is the same rule expressed as SQL
+ * so the database does the filtering rather than the template. They exist
+ * twice by necessity, which is exactly the shape that drifts - so there is
+ * ONE builder rather than the clause copy-pasted per query, and
+ * `portal.test.ts` walks a whole fixture asserting the two agree row by row.
  */
+function visibleDocumentWhere(scope: TenantScope) {
+  return {
+    deletedAt: null,
+    OR: [
+      { tenantId: scope.tenantId },
+      // An empty leaseIds array makes this clause match nothing, which is
+      // the correct answer for a tenant with no lease on file - not "match
+      // every document with a null leaseId".
+      { leaseId: { in: [...scope.leaseIds] } },
+      // R-020's safety exception, kept to the one named type - see
+      // tenantCanSeeDocument. `?? []` mirrors the predicate's own behaviour
+      // for a scope built without unitIds: matches nothing.
+      { type: 'SHUTOFF_PHOTO', unitId: { in: [...(scope.unitIds ?? [])] } },
+    ],
+  }
+}
+
+/// The documents this tenant may see (DOC-03).
 export async function listTenantDocuments(scope: TenantScope) {
   return prisma.document.findMany({
-    where: {
-      deletedAt: null,
-      OR: [
-        { tenantId: scope.tenantId },
-        // An empty leaseIds array makes this clause match nothing, which is
-        // the correct answer for a tenant with no lease on file - not "match
-        // every document with a null leaseId".
-        { leaseId: { in: [...scope.leaseIds] } },
-      ],
-    },
+    where: visibleDocumentWhere(scope),
     orderBy: { createdAt: 'desc' },
     select: {
       id: true,
@@ -47,14 +57,7 @@ export async function listTenantDocuments(scope: TenantScope) {
 /// response confirms a document id belongs to somebody.
 export async function getTenantDocument(id: string, scope: TenantScope) {
   return prisma.document.findFirst({
-    where: {
-      id,
-      deletedAt: null,
-      OR: [
-        { tenantId: scope.tenantId },
-        { leaseId: { in: [...scope.leaseIds] } },
-      ],
-    },
+    where: { id, ...visibleDocumentWhere(scope) },
   })
 }
 

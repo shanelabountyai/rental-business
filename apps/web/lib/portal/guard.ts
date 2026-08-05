@@ -59,11 +59,16 @@ export async function requireTenant(): Promise<{
 export async function tenantScope(tenantId: string): Promise<TenantScope> {
   const leaseTenants = await prisma.leaseTenant.findMany({
     where: { tenantId },
-    select: { leaseId: true },
+    // unitId as well as leaseId since R-020: the shutoff-photo safety
+    // exception is keyed on the unit, because that is where R-014 attaches
+    // the photo. See tenantCanSeeDocument for why that exception is one
+    // named document type rather than "unit documents".
+    select: { leaseId: true, lease: { select: { unitId: true } } },
   })
   return {
     tenantId,
     leaseIds: leaseTenants.map((row) => row.leaseId),
+    unitIds: [...new Set(leaseTenants.map((row) => row.lease.unitId))],
   }
 }
 

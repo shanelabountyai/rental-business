@@ -25,6 +25,9 @@ const TYPE_WORDS: Record<string, string> = {
   APPLICATION: 'Your application',
   SCREENING_REPORT: 'Your screening report',
   UNIT_PHOTO: 'A photo of your home',
+  /// R-020: safety information about the tenant's own home, visible under
+  /// tenantCanSeeDocument's one unit-scoped exception.
+  SHUTOFF_PHOTO: 'Where your shutoffs are',
   OTHER: 'A document',
 }
 
