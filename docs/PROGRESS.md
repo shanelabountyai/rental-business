@@ -613,7 +613,7 @@ The running narrative of what has actually been built. One entry per completed b
 - **The e2e signature tests would have passed for the wrong reason without a token on the test server** - the route correctly refuses everything with 503 when `TWILIO_AUTH_TOKEN` is unset, so all five forgery tests would have skipped and the suite would have looked green having proved nothing about the security boundary. `playwright.config.ts` now sets a fixed fake token for the dev server and the test process, and the skip conditions state explicitly why they exist.
 
 ## R-022 — Staff-logged (phone-reported) requests
-**Commit:** `_pending_`  ·  **Date:** 2026-08-05
+**Commit:** `f0983d6`  ·  **Date:** 2026-08-05
 
 **What it built.** A staff form at `/maintenance/new` ("Log a phone-reported request") that turns a call into the same kind of `Ticket` a tenant's own portal submission or a text produces - `source: PHONE_LOGGED` instead of `PORTAL`/`SMS`, same category taxonomy, same entry-permission/pet-warning fields, same habitability keyword scan. A bare `/maintenance` list and `/maintenance/[id]` detail view came with it, replacing the placeholder that already named this item as its owner - not R-023's triage queue, just enough for a logged ticket to be visible and reachable by id regardless of which door it came through. 12 new core tests (validation, description formatting), an e2e spec covering the happy path, habitability flagging, server-side trim validation, and ROLE-01 scoping.
 
