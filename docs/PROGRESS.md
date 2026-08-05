@@ -528,7 +528,7 @@ The running narrative of what has actually been built. One entry per completed b
 - **One pre-existing assertion in `auth.spec.ts` broke by design** — it looked for the placeholder's "Welcome, Dana Reyes" heading, which is now "Hello, Dana" in the plainer register §6.4 asks for. Updated, with the reason recorded next to it.
 
 ## R-019 — Tenant maintenance request flow
-**Commit:** `_pending_`  ·  **Date:** 2026-08-05
+**Commit:** `bb16eda`  ·  **Date:** 2026-08-05
 
 **What it built.** MAINT-01's tenant-facing intake: category (seven of them - plumbing, electrical, HVAC, appliance, pests, exterior, locks) → 2-3 structured clarifying prompts → a category-specific troubleshooting script with pictures, only when one applies, gated so dispatch cannot proceed without a tried/declined answer for every step shown → photos, upload never blocking the flow → entry permission → pet warning → review → submit, one linear phone-first wizard with no dead ends. The seven named troubleshooting steps (breaker, GFCI, disposal reset, thermostat battery, furnace switch, pilot light, toilet flapper) all exist, each attached to the category - and in three cases the specific clarifying answer - it actually helps for. A submission becomes a real `Ticket` row (`source: PORTAL`), with `Ticket.habitabilityFlag` set by a keyword scan of the tenant's own words (mold, leak, no heat, sewage, infestation) for R-023's later triage to read. 22 core tests, 7 integration tests, 7 e2e tests including the troubleshooting gate, habitability detection, photo attachment, cross-tenant scoping, and axe on every screen.
 
