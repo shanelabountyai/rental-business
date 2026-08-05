@@ -133,9 +133,16 @@ test.describe('the shell', () => {
       .click()
 
     await page.waitForURL('**/properties')
+    // Scoped to the nav, and exact: an unscoped substring match here also
+    // catches any property row whose OWNING ENTITY happens to have
+    // "Properties" in its name (a thoroughly ordinary name for a rental
+    // LLC) - a real, if latent, fragility this test had from the start,
+    // exposed once the database held a property list with real names again.
     // A colour change alone says nothing to anyone who cannot see it.
     await expect(
-      page.getByRole('link', { name: 'Properties' }),
+      page
+        .getByRole('navigation', { name: 'Sections' })
+        .getByRole('link', { name: 'Properties', exact: true }),
     ).toHaveAttribute('aria-current', 'page')
   })
 

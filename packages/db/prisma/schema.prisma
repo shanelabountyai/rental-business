@@ -347,18 +347,130 @@ model Unit {
   bathrooms       Decimal?   @db.Decimal(3, 1)
   squareFeet      Int?
   notes           String?
+  /// Cosmetic, not operational in the safety sense (PROP-03) - kept as a
+  /// plain field on Unit rather than its own model, unlike the versioned/
+  /// structured data below, because it needs neither history nor structure.
+  paintColor      String?
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
 
-  property    Property     @relation(fields: [propertyId], references: [id])
-  leases      Lease[]
-  tickets     Ticket[]
-  workOrders  WorkOrder[]
-  inspections Inspection[]
-  documents   Document[]
+  property        Property         @relation(fields: [propertyId], references: [id])
+  leases          Lease[]
+  tickets         Ticket[]
+  workOrders      WorkOrder[]
+  inspections     Inspection[]
+  documents       Document[]
+  accessCodes     AccessCode[]
+  appliances      Appliance[]
+  utilityAccounts UtilityAccount[]
+  shutoffs        ShutoffLocation[]
 
   @@unique([propertyId, name])
   @@index([status])
+}
+
+// ---------------------------------------------------------------------------
+// Unit operational data (PROP-03, R-014)
+// ---------------------------------------------------------------------------
+
+/// A door/gate/lockbox code, versioned like JurisdictionRule (D-4's pattern
+/// reused): never edited in place, a new code supersedes the old one, and
+/// the "history log" PROP-03 asks for is just every row that ever existed
+/// for this (unitId, type) slot. `sealedCode` is ciphertext -
+/// packages/core/auth/secret-box.ts's sealSecret()/openSecret(), the same
+/// AES-256-GCM primitive R-003 built for the MFA seed - a code has to be
+/// read back, so it is encrypted, never hashed.
+///
+/// One current code per (unitId, type): a unit with two physical lockboxes
+/// needs a second `type` value (or OTHER with a distinguishing `label`) -
+/// this does not model multiple simultaneous codes of the same type. Real
+/// gap, not solved generically here.
+model AccessCode {
+  id            String    @id @default(cuid())
+  unitId        String
+  /// LOCKBOX, SMART_LOCK, GATE, MAILBOX, OTHER.
+  type          String
+  /// "Front door", "Side gate" - disambiguates within a type; not part of
+  /// the versioning key.
+  label         String?
+  sealedCode    String
+  version       Int
+  effectiveFrom DateTime  @default(now())
+  effectiveTo   DateTime?
+  createdByStaffId String?
+  createdAt     DateTime  @default(now())
+
+  unit      Unit       @relation(fields: [unitId], references: [id])
+  createdBy StaffUser? @relation(fields: [createdByStaffId], references: [id])
+
+  @@unique([unitId, type, version])
+  @@index([unitId, type, effectiveTo])
+}
+
+model Appliance {
+  id          String    @id @default(cuid())
+  unitId      String
+  /// REFRIGERATOR, RANGE, DISHWASHER, WASHER, DRYER, WATER_HEATER, HVAC,
+  /// MICROWAVE, OTHER.
+  category    String
+  make        String?
+  model       String?
+  serialNumber String?
+  installedOn DateTime? @db.Date
+  /// Only meaningful for category = HVAC; nullable for everything else
+  /// rather than a second table for one field.
+  filterSize  String?
+  notes       String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  unit Unit @relation(fields: [unitId], references: [id])
+
+  @@index([unitId])
+}
+
+model UtilityAccount {
+  id          String   @id @default(cuid())
+  unitId      String
+  /// ELECTRIC, GAS, WATER, SEWER, TRASH, OTHER.
+  type        String
+  provider    String
+  accountNumber String?
+  nameOnAccountDuringTenancy String?
+  /// Who the account reverts to (and whether it does at all) between
+  /// tenancies - the landlord-revert question PROP-03 names explicitly,
+  /// since a vacant unit with no utilities on is how a pipe freezes
+  /// unnoticed.
+  nameOnAccountVacancy String?
+  landlordRevertAgreement Boolean @default(false)
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  unit Unit @relation(fields: [unitId], references: [id])
+
+  @@index([unitId])
+}
+
+/// Where to physically stop the water/power/gas in an emergency (PROP-03,
+/// master PRD's own active-leak walkthrough: "immediately shows the tenant
+/// the water shutoff location with the photo stored in the unit record").
+/// The photo itself is a Document (unitId, type SHUTOFF_PHOTO) - reusing
+/// R-012's attachment/versioning/soft-delete rather than a second photo
+/// column here.
+model ShutoffLocation {
+  id          String   @id @default(cuid())
+  unitId      String
+  /// WATER_MAIN, BREAKER_PANEL, GAS, OTHER.
+  type        String
+  description String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  unit Unit @relation(fields: [unitId], references: [id])
+
+  @@unique([unitId, type])
+  @@index([unitId])
 }
 
 // ---------------------------------------------------------------------------
@@ -408,6 +520,7 @@ model StaffUser {
   messagesSent         Message[]    @relation("MessageSentBy")
   documentsUploaded    Document[]   @relation("DocumentUploadedBy")
   auditLogs            AuditLog[]   @relation("AuditLogActor")
+  accessCodesCreated   AccessCode[]
 
   @@index([active])
 }

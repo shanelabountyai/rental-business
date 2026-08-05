@@ -224,6 +224,17 @@ describe('MFA secret encryption', () => {
     expect(openSecret(sealed)).toBe(secret)
   })
 
+  it('round-trips a second purpose, and keeps it cryptographically separate from the default', () => {
+    const code = '4821'
+    const sealed = sealSecret(code, 'access-code')
+    expect(openSecret(sealed, 'access-code')).toBe(code)
+    // Wrong purpose is treated the same as a wrong key - null, not a crash,
+    // and specifically NOT the plaintext (an MFA-purpose key must not
+    // happen to also open an access-code-purpose ciphertext).
+    expect(openSecret(sealed)).toBeNull()
+    expect(openSecret(sealed, 'something-else')).toBeNull()
+  })
+
   it('produces a different ciphertext each time', () => {
     expect(sealSecret('JBSWY3DPEHPK3PXP')).not.toBe(
       sealSecret('JBSWY3DPEHPK3PXP'),

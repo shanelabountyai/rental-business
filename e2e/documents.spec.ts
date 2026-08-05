@@ -216,9 +216,15 @@ test.describe('uploading and downloading', () => {
     await signIn(page, staff.email)
 
     await page.goto(`/properties/${property.id}/units/${unit.id}`)
-    await page.getByLabel('Type').selectOption('UNIT_PHOTO')
+    // Not getByLabel('Type') - the unit page also carries the operational-
+    // data section's own "Type" fields (access code, shutoff), all sharing
+    // that accessible name by design; #field-doc-type is this form's alone.
+    await page.locator('#field-doc-type').selectOption('UNIT_PHOTO')
+    // exact: true - a substring match on "File" also catches "Landlord-
+    // revert agreement on file" from the operational-data section elsewhere
+    // on this same unit page.
     await page
-      .getByLabel('File')
+      .getByLabel('File', { exact: true })
       .setInputFiles({ name: 'kitchen.jpg', mimeType: 'image/jpeg', buffer: Buffer.from([0xff, 0xd8, 0xff]) })
     await page.getByRole('button', { name: 'Upload' }).click()
     await expect(page.getByText('kitchen.jpg')).toBeVisible()

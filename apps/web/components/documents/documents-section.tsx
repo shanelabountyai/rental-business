@@ -14,6 +14,7 @@ const TYPE_LABELS: Record<string, string> = {
   INSPECTION_REPORT: 'Inspection report',
   UNIT_PHOTO: 'Unit photo',
   PROPERTY_PHOTO: 'Property photo',
+  SHUTOFF_PHOTO: 'Shutoff photo',
   SCREENING_REPORT: 'Screening report',
   APPLICATION: 'Application',
   OTHER: 'Other',
@@ -80,7 +81,12 @@ export async function DocumentsSection({
                     ` · taken ${document.capturedAt.toISOString().slice(0, 10)}`}
                 </span>
               </div>
-              {canDelete && <DeleteForm action={deleteDocument.bind(null, document.id)} />}
+              {canDelete && (
+                <DeleteForm
+                  action={deleteDocument.bind(null, document.id)}
+                  rowId={document.id}
+                />
+              )}
             </li>
           ))}
         </ul>

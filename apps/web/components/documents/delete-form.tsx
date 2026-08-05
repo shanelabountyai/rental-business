@@ -23,22 +23,31 @@ const REASON_LABELS: Record<string, string> = {
 /// A reason is required (REASON_REQUIRED, 'document.delete_marked') - the
 /// select is inline rather than a separate confirmation step, since the
 /// reason itself already forces a moment's thought before submitting.
+///
+/// `rowId` disambiguates the id when more than one DeleteForm renders on the
+/// same page (one per document in the list) - a bare "field-reasonCode"
+/// collided across rows the moment a unit or property had two or more
+/// documents, the same duplicate-id class of bug CheckboxField's `value`
+/// param and TextField/SelectField's `idPrefix` param both exist to avoid.
 export function DeleteForm({
   action,
+  rowId,
 }: {
   action: (state: FormState, formData: FormData) => Promise<FormState>
+  rowId: string
 }) {
   const [state, formAction] = useActionState<FormState, FormData>(action, {})
   const errors = state.fieldErrors ?? {}
+  const selectId = `field-reasonCode-${rowId}`
 
   return (
     <form action={formAction} className="flex items-center gap-2">
       <FormAlerts state={state} />
-      <label className="sr-only" htmlFor="field-reasonCode">
+      <label className="sr-only" htmlFor={selectId}>
         Reason for deleting
       </label>
       <select
-        id="field-reasonCode"
+        id={selectId}
         name="reasonCode"
         required
         aria-invalid={Boolean(errors.reasonCode) || undefined}

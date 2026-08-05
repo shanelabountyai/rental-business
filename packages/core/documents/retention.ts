@@ -35,6 +35,7 @@ export const RETENTION_RULES: Record<DocumentTypeValue, RetentionRule> = {
   INSPECTION_REPORT: { years: null, note: 'PROP-08/deposit-defense evidence - kept indefinitely.' },
   UNIT_PHOTO: { years: null, note: 'PROP-08: persists across turns, permanently.' },
   PROPERTY_PHOTO: { years: null, note: 'Kept indefinitely.' },
+  SHUTOFF_PHOTO: { years: null, note: 'Safety-critical reference photo - kept indefinitely.' },
   SCREENING_REPORT: {
     years: null,
     note: 'DOC-05: purge per FCRA/provider terms, keeping only the decision + adverse-action record - a real automated purge needs the decision workflow (R-060+) to exist first. Flagged, not enforced, until then.',

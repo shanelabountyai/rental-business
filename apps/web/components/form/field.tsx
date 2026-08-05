@@ -34,6 +34,7 @@ export function TextField({
   step,
   autoFocus,
   list,
+  idPrefix,
 }: {
   label: string
   name: string
@@ -48,8 +49,16 @@ export function TextField({
   step?: number | string
   autoFocus?: boolean
   list?: string
+  /// Set when this form shares a field `name` (commonly "type" or "notes")
+  /// with another form that can be present on the same page at once - two
+  /// <details>-collapsed forms both existing in the DOM simultaneously is
+  /// normal on this app's detail pages (documents + operational-data
+  /// subsections all live on one unit page), and two inputs sharing one id
+  /// is invalid HTML that breaks getByLabel() for every one of them but the
+  /// first, the same lesson CheckboxField's `value` param already applies.
+  idPrefix?: string
 }) {
-  const id = `field-${name}`
+  const id = idPrefix ? `field-${idPrefix}-${name}` : `field-${name}`
   const errorId = `${id}-error`
   const hintId = `${id}-hint`
   const describedBy = [error ? errorId : null, hint ? hintId : null]
@@ -141,6 +150,7 @@ export function SelectField({
   error,
   options,
   placeholder = 'Select…',
+  idPrefix,
 }: {
   label: string
   name: string
@@ -149,8 +159,10 @@ export function SelectField({
   error?: string
   options: readonly { value: string; label: string }[]
   placeholder?: string
+  /// See TextField's identical param for why this exists.
+  idPrefix?: string
 }) {
-  const id = `field-${name}`
+  const id = idPrefix ? `field-${idPrefix}-${name}` : `field-${name}`
   const errorId = `${id}-error`
 
   return (

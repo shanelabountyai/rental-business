@@ -190,7 +190,13 @@ test.describe('creating and viewing units', () => {
     }
 
     await page.goto(`/properties/${property.id}`)
-    await expect(page.getByText('ADU')).toBeVisible()
+    // Scoped to the units list row, not a bare getByText('ADU') - the
+    // property switcher's own <option> list can legitimately contain
+    // another property whose name happens to mention "ADU" too (an
+    // ordinary thing for a property with an accessory dwelling to be
+    // called), and unlike a visible list item, an <option> inside a closed
+    // dropdown still counts as a DOM match.
+    await expect(page.getByRole('listitem').filter({ hasText: 'ADU' })).toBeVisible()
     await expect(page.getByText('Vacant')).toBeVisible()
 
     const created = await prisma.unit.findFirst({ where: { propertyId: property.id, name: 'ADU' } })

@@ -1,9 +1,11 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { DocumentsSection } from '@/components/documents/documents-section.tsx'
+import { OperationalDataSection } from '@/components/operational/operational-data-section.tsx'
 import { actorCan, propertyResource, requireScope } from '@/lib/auth/guard.ts'
 import { currentScope as switcherScope } from '@/lib/scope/current-scope.ts'
 import { listDeletedDocuments, listDocuments } from '@/lib/documents/queries.ts'
+import { getOperationalData } from '@/lib/operational/queries.ts'
 import { getUnitDetail } from '@/lib/units/queries.ts'
 
 export const metadata = { title: 'Unit — Rental Operations' }
@@ -49,14 +51,23 @@ export default async function UnitDetailPage({
   const unit = await getUnitDetail(propertyId, unitId, scope)
   if (!unit) notFound()
 
-  const [canWrite, documents, deletedDocuments, canWriteDocuments, canDeleteDocuments] =
-    await Promise.all([
-      actorCan('unit.write', propertyResource(unit.property)),
-      listDocuments(propertyId, scope, unitId),
-      listDeletedDocuments(propertyId, scope, unitId),
-      actorCan('document.write', propertyResource(unit.property)),
-      actorCan('document.delete', propertyResource(unit.property)),
-    ])
+  const [
+    canWrite,
+    documents,
+    deletedDocuments,
+    canWriteDocuments,
+    canDeleteDocuments,
+    operationalData,
+    canReveal,
+  ] = await Promise.all([
+    actorCan('unit.write', propertyResource(unit.property)),
+    listDocuments(propertyId, scope, unitId),
+    listDeletedDocuments(propertyId, scope, unitId),
+    actorCan('document.write', propertyResource(unit.property)),
+    actorCan('document.delete', propertyResource(unit.property)),
+    getOperationalData(propertyId, unitId, scope),
+    actorCan('accesscode.reveal', propertyResource(unit.property)),
+  ])
 
   return (
     <div className="flex max-w-2xl flex-col gap-6">
@@ -128,11 +139,17 @@ export default async function UnitDetailPage({
           canWrite={canWriteDocuments}
           canDelete={canDeleteDocuments}
         />
-        <EmptySection
-          title="Operational data"
-          ownedBy="R-014"
-          description="Lock and lockbox codes, appliance details, filter sizes, utility accounts, shutoff locations."
-        />
+        {operationalData && (
+          <OperationalDataSection
+            unitId={unitId}
+            accessCodes={operationalData.accessCodes}
+            appliances={operationalData.appliances}
+            utilityAccounts={operationalData.utilityAccounts}
+            shutoffs={operationalData.shutoffs}
+            canWrite={canWrite}
+            canReveal={canReveal}
+          />
+        )}
         <EmptySection
           title="Lease"
           ownedBy="R-033"

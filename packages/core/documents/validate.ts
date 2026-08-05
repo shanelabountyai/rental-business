@@ -24,6 +24,10 @@ export const DOCUMENT_TYPES = [
   'INSPECTION_REPORT',
   'UNIT_PHOTO',
   'PROPERTY_PHOTO',
+  /// R-014: the photo attached to a ShutoffLocation - "the water shutoff
+  /// location with the photo stored in the unit record" (master PRD's own
+  /// active-leak walkthrough).
+  'SHUTOFF_PHOTO',
   'SCREENING_REPORT',
   'APPLICATION',
   'OTHER',

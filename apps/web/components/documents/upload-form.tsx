@@ -16,6 +16,7 @@ const TYPE_LABELS: Record<string, string> = {
   INSPECTION_REPORT: 'Inspection report',
   UNIT_PHOTO: 'Unit photo',
   PROPERTY_PHOTO: 'Property photo',
+  SHUTOFF_PHOTO: 'Shutoff photo',
   SCREENING_REPORT: 'Screening report',
   APPLICATION: 'Application',
   OTHER: 'Other',
@@ -36,6 +37,7 @@ export function UploadForm({
         <SelectField
           label="Type"
           name="type"
+          idPrefix="doc"
           required
           error={errors.type}
           options={DOCUMENT_TYPES.map((type) => ({

@@ -67,6 +67,12 @@ export const AUDIT_ACTIONS = [
   /// writes, and this one would miss the event that matters most in a
   /// break-in dispute.
   'accesscode.revealed',
+  /// R-014: a new code recorded for a unit (AccessCode's own version history
+  /// is the change record; this is the evidence-trail entry alongside it,
+  /// matching document.uploaded's "audit the write too, not only removal"
+  /// call for the same reason - a re-key is exactly the kind of fact a
+  /// later dispute asks "who did this and when" about).
+  'accesscode.set',
 
   /// Scheduled work that did not complete (R-006). Recorded rather than only
   /// logged, because a nightly job failing silently is how a month of missing

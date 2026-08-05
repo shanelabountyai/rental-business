@@ -10,6 +10,13 @@
 // below, walking child tables in FK order) and reseeds from scratch - the
 // convenient path while iterating on what the demo data should look like.
 //
+// A caveat that bit R-014 once already: `reset()` finds rows by the CURRENT
+// ENTITY_NAMES, so changing one of those names and running `--reset` in the
+// same breath does not clean up the old-named rows - it leaves them orphaned
+// and creates a second, fresh set under the new name. Renaming an entity
+// here means deleting the stale one by hand once, the same way that first
+// rename was cleaned up.
+//
 // Dates are computed relative to when the script runs, not hardcoded: the
 // whole point of "late", "in-notice" and "moving out" tenants is that they
 // stay late, in-notice and moving out whenever someone actually runs this,
@@ -23,7 +30,12 @@
 
 import { prisma } from '../index.ts'
 
-const ENTITY_NAMES = ['Bluebonnet Properties LLC', 'Sunshine Coast Holdings LLC']
+// Deliberately avoid generic UI words in these names ("Properties", nav
+// section labels, unit-status words) - an unscoped e2e locator elsewhere
+// substring-matching this data is exactly the kind of collision R-014 found
+// and fixed in shell.spec.ts and units.spec.ts; a boring name here is cheap
+// insurance against the next one nobody has written yet.
+const ENTITY_NAMES = ['Bluebonnet Holdings LLC', 'Sunshine Coast Holdings LLC']
 
 function daysFrom(offset: number): Date {
   const date = new Date()
@@ -208,7 +220,10 @@ function buildPlan(): PropertyPlan[] {
     },
     {
       legalEntityIndex: 0,
-      name: 'Magnolia Drive House + ADU',
+      // Still has a real ADU unit below (per this item's own "units incl. an
+      // ADU" requirement) - just not spelled out in the property's own name,
+      // for the same collision reason as the entity names above.
+      name: 'Magnolia Drive House',
       addressLine1: '310 Magnolia Dr',
       city: 'San Antonio',
       state: 'TX',

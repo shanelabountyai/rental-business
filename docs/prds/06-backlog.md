@@ -40,7 +40,7 @@ Tenant reports it → triage → work order → vendor gets a text with photos �
 
 | # | ID | Item | PRD/Feature | Size | Depends on | Phase |
 |---|---|---|---|---|---|---|
-| 14 | R-014 | Unit operational data: lock/lockbox codes with history log and **per-work-order reveal (logged)**, appliance make/model/serial/install date, HVAC filter sizes, utility accounts, **shutoff locations (water main, breaker panel, gas) with photos** | PRD PROP-03 | M | R-009, R-012 | MVP |
+| 14 | ✅ R-014 | Unit operational data: lock/lockbox codes with history log and **per-work-order reveal (logged)**, appliance make/model/serial/install date, HVAC filter sizes, utility accounts, **shutoff locations (water main, breaker panel, gas) with photos** | PRD PROP-03 | M | R-009, R-012 | MVP |
 | 15 | R-015 | Property filing cabinet: deed/mortgage (ARM-adjustment and balloon-maturity alerts), insurance declarations with 45–60 day renewal alert, HOA docs incl. **rental caps**, warranties (roof/HVAC/water heater/appliances/home-warranty contracts) | PRD PROP-06 | M | R-008, R-012 | MVP |
 | 16 | R-016 | Notification engine core: events → recipient → channel (per preference) → template → delivery; Resend email with domain auth, Twilio SMS with **10DLC registration kicked off here** (external lead time), idempotent sends as a hard invariant, append-only message log, kill switch + sandbox redirect, quiet-hours primitive | PRD NOTIF-01, NOTIF-02 | L | R-006 | MVP |
 | 17 | R-017 | Comms threading core: one threaded history per tenancy / property / vendor across portal, SMS and email; inbound SMS to the business number lands in the right thread; **manual call logging** (a timestamped note is contemporaneous evidence); staff attribution on every message | PRD COMM-01 | L | R-016 | MVP |
