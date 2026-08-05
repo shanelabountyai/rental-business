@@ -12,6 +12,7 @@
     "./comms": "./comms/index.ts",
     "./documents": "./documents/index.ts",
     "./money": "./money/index.ts",
+    "./portal": "./portal/index.ts",
     "./notifications": "./notifications/index.ts",
     "./operational": "./operational/index.ts",
     "./rbac": "./rbac/index.ts",

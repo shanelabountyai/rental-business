@@ -34,6 +34,8 @@ const PUBLIC_ROUTES: Record<string, string> = {
   'api/auth/[...nextauth]/route.ts': 'Auth.js owns its own endpoints.',
   'api/cron/route.ts':
     'Authorized by a constant-time CRON_SECRET bearer check rather than a session - no human is signed in.',
+  'manifest.webmanifest/route.ts':
+    'The PWA manifest (D-8). A browser fetches it before any session exists, and it carries no data beyond the app name and icons.',
 }
 
 /// Any of these in a file counts as guarding it.
@@ -48,8 +50,15 @@ const GUARD_CALLS = [
   'requireScope(',
   'requireStaff(',
   'requireTenant(',
-  // The tenant portal placeholder checks the session kind directly, which is
-  // the same assertion by hand.
+  // R-018's portal pages almost all need the tenant AND their scope, so they
+  // call the combined helper. Listed separately rather than shortening the
+  // entry above to `requireTenant`: a bare prefix would also match a comment
+  // mentioning the word, which is exactly how R-009 found this test passing
+  // pages for the wrong reason.
+  'requireTenantWithScope(',
+  // The document download route branches on the session kind directly before
+  // choosing between the staff and tenant rules, which is the same assertion
+  // made by hand.
   'session?.principal.kind',
 ]
 

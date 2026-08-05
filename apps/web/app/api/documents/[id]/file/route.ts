@@ -1,12 +1,24 @@
+import { tenantCanSeeDocument } from '@rental/core/portal'
 import { prisma } from '@rental/db'
+import { auth } from '@/auth.ts'
 import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
+import { tenantScope } from '@/lib/portal/guard.ts'
 import { storage } from '@/lib/storage/index.ts'
 
-// Serves a Document's bytes (DOC-01). `redirect()` (inside requirePermission)
-// works from a Route Handler the same as a Server Component or Action - an
-// unauthenticated request lands on /login, an out-of-scope one on /no-access,
-// same as everywhere else in the admin shell, rather than this route
-// inventing its own response shape for the same two cases.
+// Serves a Document's bytes (DOC-01, DOC-03). `redirect()` (inside
+// requirePermission) works from a Route Handler the same as a Server
+// Component or Action - an unauthenticated request lands on /login, an
+// out-of-scope one on /no-access, same as everywhere else in the admin shell,
+// rather than this route inventing its own response shape for the same cases.
+//
+// TWO PRINCIPALS REACH THIS ROUTE, authorized by completely different rules.
+// R-018 added the tenant half; before it, the only check here was staff RBAC,
+// so a tenant clicking their own lease was bounced to the STAFF sign-in page.
+//
+// The branch is on the session's own `kind`, and the tenant side never falls
+// through to the staff side. A principal that is neither ends at
+// requirePermission, which refuses - the correct default for a route that
+// hands over bytes is that an unrecognised caller gets nothing.
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -21,21 +33,57 @@ export async function GET(
     where: { id },
     include: { property: { select: { id: true, legalEntityId: true } } },
   })
-  if (!document || !document.property) {
+  if (!document) {
     return new Response('Not found', { status: 404 })
   }
 
-  await requirePermission('document.read', propertyResource(document.property))
+  const session = await auth()
 
+  if (session?.principal.kind === 'tenant') {
+    const scope = await tenantScope(session.principal.id)
+    if (!tenantCanSeeDocument(document, scope)) {
+      // 404, not 403. "Not yours" and "does not exist" must be
+      // indistinguishable, or the status code confirms that a guessed id
+      // belongs to somebody at the address this tenant rents.
+      return new Response('Not found', { status: 404 })
+    }
+    return serve(document)
+  }
+
+  // Staff: R-004's property-scoped RBAC, unchanged. A document with no
+  // property has no resource to scope against, so it is refused rather than
+  // waved through.
+  if (!document.property) {
+    return new Response('Not found', { status: 404 })
+  }
+  await requirePermission('document.read', propertyResource(document.property))
+  return serve(document)
+}
+
+async function serve(document: {
+  storageKey: string
+  contentType: string
+  fileName: string
+}) {
   const bytes = await storage.get(document.storageKey)
   return new Response(new Uint8Array(bytes), {
     headers: {
       'Content-Type': document.contentType,
       'Content-Disposition': `inline; filename="${document.fileName.replace(/"/g, '')}"`,
-      'Content-Length': String(document.sizeBytes),
+      // From the bytes actually being sent, NOT from Document.sizeBytes. The
+      // two are the same for every file this product wrote, but the header is
+      // a promise about THIS response: if the stored object and the recorded
+      // size ever disagree - a half-written upload, a storage backend swapped
+      // under D-14 - a length taken from the row makes the response
+      // malformed, and the client aborts mid-download rather than showing
+      // anything. Found by a test whose fixture recorded a size it did not
+      // write.
+      'Content-Length': String(bytes.byteLength),
       // Documents can be re-uploaded under a fresh id (no in-place edits), so
       // caching an old id's bytes forever is safe - but each Document row is
       // itself immutable, so this is never invalidated by a change.
+      // `private` matters more than usual here: a shared cache must never hold
+      // one tenant's lease where another request could be served it.
       'Cache-Control': 'private, max-age=3600',
     },
   })

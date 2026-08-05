@@ -543,8 +543,12 @@ test.describe('tenant magic link', () => {
     await page.goto(await magicLinkFor(tenant.id))
 
     await expect(page).toHaveURL(/\/portal$/)
+    // "Hello, Dana", not "Welcome, Dana Reyes": R-018 replaced the R-003
+    // placeholder with the real portal, which greets people by first name in
+    // the plainer register §6.4 asks for. The assertion here only needs to
+    // prove the magic link landed a real session on a real page.
     await expect(
-      page.getByRole('heading', { name: /Welcome, Dana Reyes/, level: 1 }),
+      page.getByRole('heading', { name: /Hello, Dana/, level: 1 }),
     ).toBeVisible()
   })
 
