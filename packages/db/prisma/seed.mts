@@ -1,9 +1,7 @@
 // Reference data, not demo data - the rows that must exist in every
 // environment for the app to function at all. Idempotent, so it is safe to
-// re-run on every deploy.
-//
-// Still to come:
-//   R-013  demo properties, units and tenants for e2e (separate script)
+// re-run on every deploy. Demo properties, units and tenants (R-013) are a
+// separate script - demo-seed.mts, run with `npm run db:seed:demo`.
 
 import { ROLE_DEFINITIONS } from '../../core/rbac/permissions.ts'
 import { prisma } from '../index.ts'
