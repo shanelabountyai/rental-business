@@ -93,6 +93,10 @@ interface UnitPlan {
     firstName: string
     lastName: string
     email: string
+    /// E.164, because that is the only form inbound SMS routing compares
+    /// against (R-017). A demo tenant with a prettily-formatted number would
+    /// silently never match an inbound text.
+    phone: string
     lifecycle: string
     lease: {
       status: 'ACTIVE' | 'MONTH_TO_MONTH'
@@ -151,6 +155,7 @@ function buildPlan(): PropertyPlan[] {
             firstName: 'Maria',
             lastName: 'Alvarez',
             email: 'maria.alvarez@example.test',
+            phone: '+15125550142',
             lifecycle: 'current',
             lease: {
               status: 'ACTIVE',
@@ -183,6 +188,7 @@ function buildPlan(): PropertyPlan[] {
             firstName: 'Derrick',
             lastName: 'Holt',
             email: 'derrick.holt@example.test',
+            phone: '+15125550178',
             lifecycle: 'late',
             lease: {
               status: 'ACTIVE',
@@ -204,6 +210,7 @@ function buildPlan(): PropertyPlan[] {
             firstName: 'Priya',
             lastName: 'Nair',
             email: 'priya.nair@example.test',
+            phone: '+17135550119',
             lifecycle: 'in-notice',
             lease: {
               status: 'ACTIVE',
@@ -241,6 +248,7 @@ function buildPlan(): PropertyPlan[] {
             firstName: 'Wanda',
             lastName: 'Combs',
             email: 'wanda.combs@example.test',
+            phone: '+19045550163',
             lifecycle: 'moving-out',
             lease: {
               status: 'ACTIVE',
@@ -282,6 +290,7 @@ function buildPlan(): PropertyPlan[] {
             firstName: 'Grant',
             lastName: 'Okafor',
             email: 'grant.okafor@example.test',
+            phone: '+19045550187',
             lifecycle: 'inherited-at-acquisition',
             lease: {
               // Started long before this property's acquiredOn above -
@@ -392,6 +401,7 @@ async function seedDemoData() {
           firstName: tenantPlan.firstName,
           lastName: tenantPlan.lastName,
           email: tenantPlan.email,
+          phone: tenantPlan.phone,
           notes: `Demo tenant - lifecycle state: ${tenantPlan.lifecycle}.`,
         },
       })

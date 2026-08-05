@@ -647,6 +647,7 @@ model StaffUser {
   documentsUploaded    Document[]   @relation("DocumentUploadedBy")
   auditLogs            AuditLog[]   @relation("AuditLogActor")
   accessCodesCreated   AccessCode[]
+  messagesRouted       UnroutedMessage[] @relation("UnroutedMessageRoutedBy")
 
   @@index([active])
 }
@@ -1436,7 +1437,20 @@ model WorkOrder {
 // ---------------------------------------------------------------------------
 
 model Thread {
-  id          String   @id @default(cuid())
+  id String @id @default(cuid())
+
+  /// Deterministic identity, built by packages/core/comms - "tenant:<id>:
+  /// property:<id>", "vendor:<id>:property:<id>", "property:<id>".
+  ///
+  /// A unique column rather than a compound unique across the nullable
+  /// participant columns below, for the same two reasons R-016's
+  /// idempotencyKey is one: Prisma cannot address a compound unique over
+  /// nullable columns (the wall R-010 hit on JurisdictionRule.jurisdiction),
+  /// and get-or-create has to be safe under concurrency. Two inbound texts
+  /// arriving together must not produce two threads for one tenant, and a
+  /// find-then-create without something to conflict on is exactly that race.
+  key String @unique
+
   propertyId  String
   leaseId     String?
   tenantId    String?
@@ -1444,8 +1458,16 @@ model Thread {
   ticketId    String?
   workOrderId String?
   subject     String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+
+  /// Denormalized from the newest Message, because the inbox sorts by it.
+  /// Prisma can order by a relation COUNT but not by a related row's max
+  /// timestamp, so the alternative is a raw query or loading every thread's
+  /// messages to sort in memory. Written in the same transaction as the
+  /// message that moves it, so the two cannot disagree.
+  lastMessageAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   property  Property   @relation(fields: [propertyId], references: [id])
   lease     Lease?     @relation(fields: [leaseId], references: [id])
@@ -1455,10 +1477,64 @@ model Thread {
   workOrder WorkOrder? @relation(fields: [workOrderId], references: [id])
   messages  Message[]
 
-  @@index([propertyId])
+  @@index([propertyId, lastMessageAt])
   @@index([leaseId])
   @@index([tenantId])
   @@index([vendorId])
+}
+
+/// An inbound message that could NOT be routed to a thread automatically
+/// (R-017, COMM-01).
+///
+/// Two cases reach here, and neither may be guessed at:
+///
+///   UNKNOWN_SENDER - the number matches no active tenant or vendor. It could
+///   be a wrong number, a new tenant whose phone was never recorded, or a
+///   contractor texting from a personal phone.
+///
+///   AMBIGUOUS - the number matches more than one party. A couple sharing a
+///   phone is ordinary, and picking one of them would file a conversation
+///   under the wrong person's permanent record.
+///
+/// Filing either into someone's thread on a guess is a cross-tenant data leak
+/// with an audit trail claiming it was theirs, so the engine refuses and a
+/// human routes it. The row is the evidence in the meantime - dropping an
+/// inbound message because it did not match a lookup is the one outcome that
+/// is never acceptable.
+///
+/// Not a second task queue (D-9): this is a landing zone for the CONTENT.
+/// The work item is an ordinary Task, created alongside it - except that a
+/// Task requires a propertyId and an unknown sender has no property, which is
+/// precisely why the content cannot simply live on the Task.
+model UnroutedMessage {
+  id        String           @id @default(cuid())
+  channel   MessageChannel
+  direction MessageDirection @default(INBOUND)
+  /// The sender as the provider reported it, normalized to E.164 where it
+  /// could be. Stored as received when it could not be - an unparseable
+  /// number is still evidence of who tried to make contact.
+  fromAddress String
+  body        String
+  /// UNKNOWN_SENDER or AMBIGUOUS. Closed vocabulary in packages/core/comms.
+  reason      String
+  /// Provider message id (Twilio SID), for reconciliation and de-duplication
+  /// if the provider redelivers the same webhook.
+  externalId  String? @unique
+  receivedAt  DateTime
+  createdAt   DateTime @default(now())
+
+  /// Set when a human files it into a thread. The Message created then
+  /// carries the ORIGINAL receivedAt as its sentAt, so the transcript reads
+  /// in the order things actually happened rather than the order somebody got
+  /// around to sorting them out.
+  routedMessageId String?   @unique
+  routedAt        DateTime?
+  routedByStaffId String?
+
+  routedMessage Message?   @relation(fields: [routedMessageId], references: [id])
+  routedBy      StaffUser? @relation("UnroutedMessageRoutedBy", fields: [routedByStaffId], references: [id])
+
+  @@index([routedAt, receivedAt])
 }
 
 /// Immutable once written (COMM-05), enforced by the same trigger that
@@ -1486,6 +1562,7 @@ model Message {
   tenant    Tenant?            @relation("MessageFromTenant", fields: [tenantId], references: [id])
   vendor    Vendor?            @relation("MessageFromVendor", fields: [vendorId], references: [id])
   delivery  MessageDelivery?
+  unrouted  UnroutedMessage?
 
   @@index([threadId, sentAt])
   @@index([externalId])
@@ -1502,11 +1579,22 @@ model MessageDelivery {
   readAt      DateTime?
   failedAt    DateTime?
   failureCode String?
+  /// Provider message id for an OUTBOUND message (R-017).
+  ///
+  /// Message.externalId already carries it for INBOUND, where the provider
+  /// hands it over with the webhook and it can go on the immutable row at
+  /// creation. Outbound is the other way round: the message is written to the
+  /// log BEFORE it is transmitted - evidence before transmission - so the id
+  /// does not exist yet when the immutable row is built. It belongs on the
+  /// mutable half, which is where the reconciliation webhook looks anyway,
+  /// and mirrors NotificationDelivery.externalId exactly.
+  externalId  String?
   updatedAt   DateTime       @updatedAt
 
   message Message @relation(fields: [messageId], references: [id])
 
   @@index([status])
+  @@index([externalId])
 }
 
 // ---------------------------------------------------------------------------

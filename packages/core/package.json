@@ -9,6 +9,7 @@
     ".": "./index.ts",
     "./audit": "./audit/index.ts",
     "./auth": "./auth/index.ts",
+    "./comms": "./comms/index.ts",
     "./documents": "./documents/index.ts",
     "./money": "./money/index.ts",
     "./notifications": "./notifications/index.ts",

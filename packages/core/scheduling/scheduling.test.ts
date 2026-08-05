@@ -6,6 +6,8 @@ import {
   businessDateToUtc,
   businessDaysBetween,
   isDue,
+  utcToWallClock,
+  wallClockToUtc,
   localParts,
   utcToBusinessDate,
 } from './local-time.ts'
@@ -251,5 +253,61 @@ describe('business-date arithmetic', () => {
     // come out as 6.96 days rounded wrong.
     expect(businessDaysBetween('2026-03-05', '2026-03-12')).toBe(7)
     expect(businessDaysBetween('2026-10-29', '2026-11-05')).toBe(7)
+  })
+})
+
+// R-017 added these for logged call times. A `datetime-local` input submits no
+// timezone at all, so a zone-less string parsed with Date.parse means "the
+// zone this server happens to run in" - which is UTC on Vercel and wrong for
+// every property. Misdating a contemporaneous note is the specific failure
+// COMM-01's evidence value cannot survive.
+describe('wall-clock times in a property timezone', () => {
+  const CHICAGO = 'America/Chicago'
+
+  it('reads a wall clock in the property zone, not the server zone', () => {
+    // 14:30 in Chicago in August (CDT, UTC-5) is 19:30 UTC.
+    expect(wallClockToUtc('2026-08-05T14:30', CHICAGO).toISOString()).toBe(
+      '2026-08-05T19:30:00.000Z',
+    )
+    // The same wall clock in Honolulu (UTC-10) is a different instant.
+    expect(
+      wallClockToUtc('2026-08-05T14:30', 'Pacific/Honolulu').toISOString(),
+    ).toBe('2026-08-06T00:30:00.000Z')
+  })
+
+  it('handles winter and summer offsets for the same zone', () => {
+    // CST (UTC-6) in January.
+    expect(wallClockToUtc('2026-01-15T09:00', CHICAGO).toISOString()).toBe(
+      '2026-01-15T15:00:00.000Z',
+    )
+    // CDT (UTC-5) in July.
+    expect(wallClockToUtc('2026-07-15T09:00', CHICAGO).toISOString()).toBe(
+      '2026-07-15T14:00:00.000Z',
+    )
+  })
+
+  it('resolves an hour that happens twice on the fall-back date', () => {
+    // 2026-11-01: 01:30 local occurs twice. Either instant is defensible;
+    // what matters is that it lands on a real one that reads back as 01:30.
+    const resolved = wallClockToUtc('2026-11-01T01:30', CHICAGO)
+    expect(utcToWallClock(resolved, CHICAGO)).toBe('2026-11-01T01:30')
+  })
+
+  it('does not throw on an hour that never happens', () => {
+    // 2026-03-08: 02:30 local does not exist. Refusing to log a call over a
+    // clock-change technicality would be the worse failure, so it lands on a
+    // nearby real instant instead.
+    const resolved = wallClockToUtc('2026-03-08T02:30', CHICAGO)
+    expect(Number.isNaN(resolved.getTime())).toBe(false)
+  })
+
+  it('round-trips an ordinary time', () => {
+    const wall = '2026-08-05T14:30'
+    expect(utcToWallClock(wallClockToUtc(wall, CHICAGO), CHICAGO)).toBe(wall)
+  })
+
+  it('refuses a malformed wall clock rather than inventing one', () => {
+    expect(() => wallClockToUtc('not a time', CHICAGO)).toThrow(RangeError)
+    expect(() => wallClockToUtc('2026-08-05', CHICAGO)).toThrow(RangeError)
   })
 })

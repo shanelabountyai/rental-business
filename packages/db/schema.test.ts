@@ -146,7 +146,14 @@ describe('append-only tables', () => {
         async (tx) => {
           const { property } = await seedLease(tx)
           const thread = await tx.thread.create({
-            data: { propertyId: property.id, subject: 'Leak' },
+            // `key` is Thread's deterministic identity (R-017). Any unique
+            // string does here - this test is about the append-only trigger
+            // on Message, not about thread resolution.
+            data: {
+              key: `test:leak:${property.id}`,
+              propertyId: property.id,
+              subject: 'Leak',
+            },
           })
           const message = await tx.message.create({
             data: {
@@ -175,7 +182,7 @@ describe('append-only tables', () => {
         async (tx) => {
           const { property } = await seedLease(tx)
           const thread = await tx.thread.create({
-            data: { propertyId: property.id },
+            data: { key: `test:delivery:${property.id}`, propertyId: property.id },
           })
           const message = await tx.message.create({
             data: {

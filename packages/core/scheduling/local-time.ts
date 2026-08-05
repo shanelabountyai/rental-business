@@ -191,6 +191,64 @@ export function utcToBusinessDate(value: Date): BusinessDate {
 }
 
 /**
+ * A property-local wall-clock time ("2026-08-05T14:30", as an
+ * `<input type="datetime-local">` submits it) as the UTC instant it names.
+ *
+ * Added at R-017 for logged call times, and it fixes a real bug rather than
+ * tidying one: a `datetime-local` input submits NO timezone, and
+ * `Date.parse` on a zone-less string uses the runtime's own zone. On Vercel
+ * that is UTC, so a manager in Houston writing up a 14:30 call would have it
+ * stored as 14:30 UTC - 09:30 their time. Misdating a contemporaneous note by
+ * five hours defeats the entire reason COMM-01 asks for one.
+ *
+ * Solved by iterating to a fixed point rather than by offset arithmetic: guess
+ * that the wall clock is UTC, ask the zone what local time that instant
+ * actually is, and correct by the difference. Two passes converge for every
+ * real zone including both DST edges, which is why the loop is bounded at two
+ * rather than looping until stable - an unbounded version would spin on the
+ * one input that has no answer.
+ *
+ * A time in the spring-forward gap (02:30 on a US spring-forward date) does
+ * not exist and cannot be represented; this lands on a nearby real instant
+ * rather than throwing, because refusing to log a call over a clock-change
+ * technicality would be the worse failure.
+ */
+export function wallClockToUtc(wallClock: string, timeZone: string): Date {
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::\d{2})?$/.exec(
+    wallClock,
+  )
+  if (!match) {
+    throw new RangeError(
+      `Expected a YYYY-MM-DDTHH:mm wall-clock time, got "${wallClock}"`,
+    )
+  }
+  const [, year, month, day, hour, minute] = match
+  const target = Date.UTC(+year!, +month! - 1, +day!, +hour!, +minute!)
+
+  let guess = target
+  for (let pass = 0; pass < 2; pass++) {
+    const parts = localParts(new Date(guess), timeZone)
+    const [ly, lm, ld] = parts.businessDate.split('-').map(Number)
+    const localAsUtc = Date.UTC(ly!, lm! - 1, ld!, parts.hour, parts.minute)
+    const drift = localAsUtc - target
+    if (drift === 0) break
+    guess -= drift
+  }
+  return new Date(guess)
+}
+
+/**
+ * The inverse: a UTC instant as the property-local wall-clock string an
+ * `<input type="datetime-local">` expects back.
+ */
+export function utcToWallClock(instant: Date, timeZone: string): string {
+  const parts = localParts(instant, timeZone)
+  const hh = String(parts.hour).padStart(2, '0')
+  const mm = String(parts.minute).padStart(2, '0')
+  return `${parts.businessDate}T${hh}:${mm}`
+}
+
+/**
  * Shifts a business date by whole local days. Calendar arithmetic, not
  * duration arithmetic: adding a day across a DST boundary must land on the
  * next date, not 23 or 25 hours later.

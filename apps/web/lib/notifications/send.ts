@@ -18,6 +18,7 @@ import {
   prisma,
 } from '@rental/db'
 import { notificationConfig } from './config.ts'
+import { deliverOverChannel } from './deliver.ts'
 import { notificationAdapter } from './provider.ts'
 
 // The engine (NOTIF-01). Every module that wants to tell somebody something
@@ -328,44 +329,42 @@ export async function dispatchPendingNotifications(
     if (claimed.count === 0) continue
 
     const { notification } = delivery
-    const to = config.sandboxTo ?? notification.toAddress
-    const body = config.sandboxTo
-      ? `[sandbox: intended for ${notification.toAddress}]\n\n${notification.body}`
-      : notification.body
+    const outcome = await deliverOverChannel({
+      channel: notification.channel as NotificationChannel,
+      to: notification.toAddress,
+      subject: notification.subject ?? undefined,
+      body: notification.body,
+    })
 
-    try {
-      const result = await notificationAdapter.send({
-        channel: notification.channel as NotificationChannel,
-        to,
-        subject: notification.subject ?? undefined,
-        body,
-      })
+    if (outcome.status === 'SENT') {
       await prisma.notificationDelivery.update({
         where: { id: delivery.id },
         data: {
           status: 'SENT',
           sentAt: new Date(),
-          externalId: result.externalId ?? null,
+          externalId: outcome.externalId ?? null,
         },
       })
       sent++
-    } catch (error) {
-      const code =
-        typeof error === 'object' && error !== null && 'code' in error
-          ? String((error as { code: unknown }).code)
-          : 'unknown'
+    } else if (outcome.status === 'SUPPRESSED') {
+      // The switch was flipped between the decision and the send, or the
+      // adapter lost a channel. Recorded rather than retried forever.
+      await prisma.notificationDelivery.update({
+        where: { id: delivery.id },
+        data: {
+          status: 'SUPPRESSED',
+          suppressedReason: outcome.suppressedReason ?? null,
+        },
+      })
+    } else {
       await prisma.notificationDelivery.update({
         where: { id: delivery.id },
         data: {
           status: 'FAILED',
           failedAt: new Date(),
-          failureCode: code,
+          failureCode: outcome.failureCode ?? 'unknown',
         },
       })
-      console.error(
-        `[notifications] send failed for ${notification.id} (${notification.channel})`,
-        error,
-      )
       failed++
     }
   }
