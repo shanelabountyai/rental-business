@@ -735,7 +735,7 @@ The running narrative of what has actually been built. One entry per completed b
 - **The bid e2e polled the wrong thing, the same way R-025's dispatch helper did.** `requestBids()` writes the bid row *before* calling `notify()`, so polling the row count was satisfied while the message the token is read from did not exist yet. Second time this exact race has appeared in two items; the fix is the same both times — poll for the artifact you are about to read, not for a proxy that lands earlier.
 
 ## Follow-up to R-026 — the emergency page no longer flushes the global queue
-**Commit:** `_pending_`  ·  **Date:** 2026-08-06
+**Commit:** `1167f54`  ·  **Date:** 2026-08-06
 
 **What it fixed.** R-026's write-up recorded that R-020's `pageOnCall()` "pages everyone, inline, and does not scale" and left it as R-029's to solve. That deferral was half right. Paging *everyone* is genuinely a design question R-029 owns — on-call rotation, escalation chains. But the part that made an emergency submit exceed 30 seconds was not that: it was `dispatchPendingNotifications()` being **unscoped**, and that is a bug, not a design.
 
