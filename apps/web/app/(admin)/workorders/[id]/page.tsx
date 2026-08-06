@@ -5,7 +5,11 @@ import { AssignForm } from '@/components/workorders/assign-form.tsx'
 import { TaskActionButton } from '@/components/tasks/action-button.tsx'
 import { actorCan, propertyResource, requireScope } from '@/lib/auth/guard.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
-import { assignWorkOrder, setWorkOrderWarrantyHold } from '@/lib/workorders/actions.ts'
+import {
+  assignWorkOrder,
+  dispatchToVendor,
+  setWorkOrderWarrantyHold,
+} from '@/lib/workorders/actions.ts'
 import {
   activeVendors,
   getWorkOrder,
@@ -64,6 +68,11 @@ export default async function WorkOrderDetailPage({
   const unassigned = !workOrder.assignedStaffId && !workOrder.vendorId
   const resolved = workOrder.status === 'CLOSED' || workOrder.status === 'CANCELED'
   const onHold = workOrder.status === 'ON_HOLD_WARRANTY'
+  const VENDOR_RESPONSE_LABELS: Record<string, string> = {
+    ACCEPTED: 'Accepted',
+    DECLINED: 'Declined',
+    PROPOSED_TIME: 'Proposed a time',
+  }
 
   return (
     <div className="flex max-w-2xl flex-col gap-6">
@@ -122,6 +131,25 @@ export default async function WorkOrderDetailPage({
         <dd className="col-span-1 sm:col-span-2">
           {workOrder.assignedTo?.name ?? workOrder.vendor?.name ?? 'Unassigned'}
         </dd>
+        {workOrder.vendorId && (
+          <>
+            <dt className="text-muted-foreground">Vendor link</dt>
+            <dd className="col-span-1 sm:col-span-2">
+              {workOrder.dispatchedAt
+                ? `Sent ${workOrder.dispatchedAt.toISOString().slice(0, 16).replace('T', ' ')}`
+                : 'Not sent yet'}
+            </dd>
+            <dt className="text-muted-foreground">Vendor said</dt>
+            <dd className="col-span-1 sm:col-span-2">
+              {workOrder.vendorResponse
+                ? (VENDOR_RESPONSE_LABELS[workOrder.vendorResponse] ?? workOrder.vendorResponse)
+                : 'No answer yet'}
+              {workOrder.vendorDeclineReason && ` — ${workOrder.vendorDeclineReason}`}
+              {workOrder.proposedStart &&
+                ` — ${workOrder.proposedStart.toISOString().slice(0, 16).replace('T', ' ')} to ${workOrder.proposedEnd?.toISOString().slice(11, 16) ?? ''}`}
+            </dd>
+          </>
+        )}
         {workOrder.ticket && (
           <>
             <dt className="text-muted-foreground">From ticket</dt>
@@ -144,6 +172,16 @@ export default async function WorkOrderDetailPage({
               action={assignWorkOrder.bind(null, workOrder.id)}
               staff={staff}
               vendors={vendors}
+            />
+          )}
+          {workOrder.vendorId && (
+            <TaskActionButton
+              action={dispatchToVendor.bind(null, workOrder.id)}
+              label={
+                workOrder.dispatchedAt
+                  ? 'Resend the vendor link (revokes the old one)'
+                  : 'Send the vendor their link'
+              }
             />
           )}
           {onHold ? (

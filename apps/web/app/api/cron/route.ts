@@ -6,6 +6,7 @@ import { dispatchOutbox } from '@/lib/jobs/outbox.ts'
 import '@/lib/jobs/registrations.ts'
 import { runDueJobs } from '@/lib/jobs/runner.ts'
 import { dispatchPendingNotifications } from '@/lib/notifications/send.ts'
+import { sweepUnansweredDispatches } from '@/lib/vendors/no-response.ts'
 
 // The single scheduled entry point. Vercel Cron hits it hourly (vercel.json),
 // and the runner decides which properties are due in their own local time -
@@ -38,6 +39,11 @@ export async function GET(request: Request) {
   const runs = await runDueJobs()
   const dispatch = await dispatchOutbox()
   const notifications = await dispatchPendingNotifications()
+  // Hourly rather than a SCHEDULED_JOBS entry, because it measures elapsed
+  // hours since a dispatch rather than calendar days - see
+  // lib/vendors/no-response.ts's own header for why that distinction puts it
+  // here beside the other latency-driven sweeps (R-025).
+  const vendorSilence = await sweepUnansweredDispatches()
 
   const ran = runs.filter((r) => r.outcome === 'ran')
   const failures = runs.filter((r) => r.outcome === 'failed')
@@ -66,6 +72,8 @@ export async function GET(request: Request) {
     eventsFailed: dispatch.failed,
     notificationsSent: notifications.sent,
     notificationsFailed: notifications.failed,
+    vendorSilenceChecked: vendorSilence.checked,
+    vendorSilencePrompted: vendorSilence.prompted,
     durationMs: Date.now() - startedAt,
   })
 }

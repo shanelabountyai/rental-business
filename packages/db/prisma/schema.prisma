@@ -1002,9 +1002,14 @@ enum AuthTokenPurpose {
   /// hidden form field waiting to be autofilled or screenshotted. Lives in an
   /// httpOnly cookie, never in a URL.
   STAFF_MFA_CHALLENGE
-  /// D-6: a vendor gets a signed, expiring, single-use work-order link and
-  /// never an account. R-025 builds the dispatch flow on top of this purpose -
-  /// it should NOT invent a parallel VendorLink token table.
+  /// D-6: a vendor gets a signed, expiring, scoped work-order link and never
+  /// an account. R-025 built the dispatch flow on top of this purpose - it
+  /// does NOT invent a parallel VendorLink token table.
+  ///
+  /// UNIQUE AMONG PURPOSES: this one is multi-use until it expires (D-16).
+  /// `consumedAt` stays null for its whole life and `redeemToken()` is
+  /// deliberately NOT the verifier - see lib/vendors/link.ts. Every other
+  /// purpose here is single-use and must stay that way.
   VENDOR_WORK_ORDER
 }
 
@@ -1405,6 +1410,21 @@ model WorkOrder {
   invoiceCents         Int?
   scheduledStart       DateTime?
   scheduledEnd         DateTime?
+  /// When the vendor magic link was last sent (R-025). Drives the
+  /// no-response timer; reissuing the link resets it, because the clock
+  /// measures silence since the most recent ask, not since the first.
+  dispatchedAt         DateTime?
+  /// Null until the vendor answers. ACCEPTED / DECLINED / PROPOSED_TIME.
+  vendorResponse       String?
+  vendorRespondedAt    DateTime?
+  /// Free text from the vendor on a decline ("booked through next week") -
+  /// what the PM reads before picking the fallback.
+  vendorDeclineReason  String?
+  /// A window the vendor proposed instead of accepting outright. Distinct
+  /// from scheduledStart/End, which is what staff CONFIRMED - R-027 owns
+  /// turning one into the other with an entry-notice check in between.
+  proposedStart        DateTime?
+  proposedEnd          DateTime?
   completedAt          DateTime?
   verifiedAt           DateTime?
   /// Drives the mid-lease chargeback flow (MAINT-07) - distinct from a

@@ -45,6 +45,13 @@ export const DOCUMENT_TYPES = [
   /// versioned condition-over-time library (PROP-08), not tenant-submitted
   /// evidence of a single reported problem.
   'MAINTENANCE_PHOTO',
+  /// R-025: a photo a VENDOR uploads through their magic link when the job
+  /// is done (MAINT-03's "upload completion photos"). Distinct from
+  /// MAINTENANCE_PHOTO, which is the tenant's evidence of the problem, and
+  /// from UNIT_PHOTO, which is staff's condition-over-time library - this is
+  /// the vendor's own proof of the fix, and R-030's verify-and-close reads
+  /// it back to the tenant.
+  'COMPLETION_PHOTO',
   'OTHER',
 ] as const
 export type DocumentTypeValue = (typeof DOCUMENT_TYPES)[number]

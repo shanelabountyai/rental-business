@@ -417,7 +417,7 @@ Core principle: **every communication is potential evidence.** One threaded, tim
 
 **ROLE-04 [S]** Property-scoped users (partner sees only her 6 units; second PM handles only Metro B).
 
-**ROLE-05 [M]** Auth: strong passwords + MFA required for staff before first privileged action; magic-link (short-lived, single-use) for tenants and vendors to minimize friction; confidential flags (e.g., DV-related records, RISK-04) visible only to Owner role.
+**ROLE-05 [M]** Auth: strong passwords + MFA required for staff before first privileged action; magic-link (short-lived; single-use for tenants, multi-use-until-expiry for vendors per **D-16**) for tenants and vendors to minimize friction; confidential flags (e.g., DV-related records, RISK-04) visible only to Owner role.
 
 **ROLE-06 [S]** Deactivate any user (departing staff, past tenant) preserving all history, access killed within 1 minute.
 
@@ -464,7 +464,7 @@ The Platform's job in edge cases: (1) case-file everything with timestamps, (2) 
 - SSNs never touch the Platform (provider-hosted screening flows); if ever unavoidable, field-level encryption, never displayed after entry.
 - TLS 1.2+ in transit, encryption at rest, secrets vaulted, least-privilege server-side authorization per role and record scope.
 - SOC 2-ish posture without the audit for v1: access logging, change management, dependency scanning, environment separation, incident-response runbook.
-- Staff MFA mandatory; tenant/vendor magic links short-lived and single-use.
+- Staff MFA mandatory; tenant/vendor magic links short-lived. Single-use for tenants; vendor links are scoped, expiring and revocable but multi-use until expiry (**D-16** — a vendor link IS the credential, so burning it on first click breaks the invoice upload that comes days later).
 
 ### 6.2 Privacy & Retention
 - Retention as per-class configuration (see DOC-05). Data-subject deletion supported for prospects/applicants; tenant ledger/legal records exempt with documented lawful basis.
@@ -487,7 +487,7 @@ The Platform's job in edge cases: (1) case-file everything with timestamps, (2) 
 | App | Next.js (App Router) + TypeScript, React | Monorepo: `apps/web` |
 | Domain logic | `packages/core` | Money math, jurisdiction-rule resolution, metrics definitions, proration — all unit-tested, no UI imports |
 | Data | Postgres + Prisma (`packages/db`) | Migrations checked in; seed + demo scripts |
-| Auth | Auth.js | Staff password + MFA; tenant magic-link; vendor signed single-use links (no accounts, D-6) |
+| Auth | Auth.js | Staff password + MFA; tenant magic-link; vendor signed scoped expiring links (no accounts, D-6; multi-use until expiry, D-16) |
 | Payments | **Stripe Billing** — Subscriptions drive recurring rent; Stripe is the system of record for invoices and payments (D-11) | Hosted fields only; no card or bank data stored. Jurisdiction-dependent amounts are computed in `packages/core` and pushed as invoice items (D-12) |
 | UI | Tailwind CSS + shadcn/radix | WCAG 2.1 AA enforced in CI |
 | Email / SMS | Resend / Twilio | 10DLC registration starts at project setup — external lead time |
@@ -631,7 +631,7 @@ Use these names in Prisma and in conversation. Money fields are integer cents (s
 
 **Money** — `Charge` · `Payment` (channel, incl. `offline_check` / `retail_cash`; `receivedByStaffId` required for offline) · `LedgerEntry` (**append-only; corrections are reversing entries**) · `Deposit` (a liability, never income) · `RecurringCharge` · `PayerAllocation` (the two-payer shape that makes HAP/tenant splits possible — settled at R-002 whether or not Section 8 is in scope).
 
-**Maintenance** — `Ticket` (tenant-facing request; source: `portal` / `sms` / `phone_logged`) · `WorkOrder` (lifecycle: submitted → triaged → approved → assigned → scheduled → in progress → work complete → verified → invoiced → closed, plus `on_hold_warranty` and `waiting_on_tenant`) · `VendorLink` (signed, single-use, expiring — D-6) · `MaintenanceSchedule` (preventive/seasonal templates).
+**Maintenance** — `Ticket` (tenant-facing request; source: `portal` / `sms` / `phone_logged`) · `WorkOrder` (lifecycle: submitted → triaged → approved → assigned → scheduled → in progress → work complete → verified → invoiced → closed, plus `on_hold_warranty` and `waiting_on_tenant`) · `VendorLink` (signed, scoped, expiring — D-6; multi-use until expiry, D-16. Implemented as an `AuthToken` of purpose `VENDOR_WORK_ORDER`, not a separate table) · `MaintenanceSchedule` (preventive/seasonal templates).
 
 **Evidence & communication** — `Thread` + `Message` (portal / SMS / email / logged call; per tenancy, property, vendor, and work order) · `Notice` (type, generated PDF, **service method and delivery proof**, address of record as rendered) · `Inspection` + `InspectionItem` (condition, notes, photos with preserved timestamps; move-in items linked to their move-out counterparts) · `Document` · `AuditLog` (actor, timestamp, entity, before/after, reason code — unmodifiable by any role).
 

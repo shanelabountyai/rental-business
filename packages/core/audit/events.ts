@@ -59,6 +59,18 @@ export const AUDIT_ACTIONS = [
   /// pending" state) - separate from workorder.assigned because it is a
   /// different fact (a claim was filed or resolved, not a person assigned).
   'workorder.warranty_hold_set',
+  /// R-025: a vendor answered their magic link (accepted, declined,
+  /// proposed a window) or marked the work complete. Recorded with
+  /// actorType VENDOR, because the whole point of a zero-login link (D-6)
+  /// is that an outside party acted on our system with no account behind
+  /// them - "who said yes to this job, and when" has to be answerable
+  /// afterwards from the trail alone.
+  'workorder.vendor_responded',
+  /// R-025: a vendor link was sent (or resent). Recorded because it is the
+  /// moment an access code became reachable by an outside party, and
+  /// because resending revokes the previous link - the trail is how anyone
+  /// later reconstructs which link was live when.
+  'workorder.dispatched',
 
   // Maintenance (MAINT-04)
   'workorder.approved',

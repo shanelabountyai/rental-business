@@ -65,6 +65,6 @@ export async function audit(
 /// that do NOT need a request - a job, a webhook - should import it from
 /// './system.ts' directly: this module pulls in Auth.js, which cannot load
 /// outside a request context. See system.ts's own comment.
-export { auditAsSystem } from './system.ts'
+export { auditAsSystem, auditAsVendor } from './system.ts'
 
 export { auditTrailFor } from '@rental/core/audit'

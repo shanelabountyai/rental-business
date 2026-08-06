@@ -149,12 +149,77 @@ export const maintenanceEmergencyTemplate: NotificationTemplate<MaintenanceEmerg
     },
   }
 
+/// Context for `workorder.vendor_dispatch` (R-025).
+export interface VendorDispatchContext {
+  vendorName: string
+  scope: string
+  addressLine1: string
+  unitName: string
+  priority: string
+  /// The magic link itself. THE ENTIRE POINT of this message - a vendor with
+  /// no account has nothing else to act on (D-6).
+  link: string
+}
+
+/**
+ * The dispatch message a vendor actually receives (MAINT-03, D-6, R-025).
+ *
+ * Inverts the usual SMS rule stated at the top of this file. Every other
+ * template treats SMS as "a summary, with a link" because the detail belongs
+ * in the email. Here the LINK IS THE MESSAGE: a vendor has no account, no
+ * inbox we control, and nothing to log into - the whole job (scope, address,
+ * photos, tenant phone, access codes, upload) lives behind that one URL. So
+ * the SMS leads with what and where in one line each, then the link, and
+ * says nothing that would push the link into a second segment.
+ *
+ * No PORTAL channel: a vendor has no portal, by design.
+ */
+export const vendorDispatchTemplate: NotificationTemplate<VendorDispatchContext> =
+  {
+    key: 'workorder.vendor_dispatch',
+    category: 'work_order_assigned',
+    channels: ['SMS', 'EMAIL'],
+    render: (context, channel) => {
+      const where = `${context.addressLine1} (${context.unitName})`
+
+      if (channel === 'SMS') {
+        return {
+          body: [
+            context.priority === 'EMERGENCY' ? 'EMERGENCY JOB' : 'New job',
+            `${context.scope.slice(0, 80)}`,
+            where,
+            context.link,
+          ].join('\n'),
+        }
+      }
+
+      return {
+        subject: `New job: ${context.scope.slice(0, 60)} — ${where}`,
+        body: [
+          `${context.vendorName},`,
+          '',
+          `We would like to send you to ${where}.`,
+          '',
+          `What is needed: ${context.scope}`,
+          `Priority: ${context.priority}`,
+          '',
+          'Everything for this job - photos, the tenant\u2019s phone number, access details, and where to upload your invoice - is here:',
+          context.link,
+          '',
+          'You do not need an account. The link works until you tell us either way, and expires after three days.',
+        ].join('\n'),
+      }
+    },
+  }
+
 /// Every registered template, by key. Later items add theirs here.
 export const TEMPLATES: Readonly<Record<string, NotificationTemplate<never>>> = {
   [unitMakeReadyTemplate.key]:
     unitMakeReadyTemplate as unknown as NotificationTemplate<never>,
   [maintenanceEmergencyTemplate.key]:
     maintenanceEmergencyTemplate as unknown as NotificationTemplate<never>,
+  [vendorDispatchTemplate.key]:
+    vendorDispatchTemplate as unknown as NotificationTemplate<never>,
 }
 
 export class UnknownTemplateError extends Error {

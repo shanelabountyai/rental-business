@@ -29,3 +29,22 @@ export async function auditAsSystem(
 ): Promise<void> {
   await recordAudit(db, { ...input, actor: { type: 'SYSTEM', ref } })
 }
+
+/**
+ * For a vendor acting through a magic link (D-6, R-025), which has no
+ * session because a vendor has no account at all.
+ *
+ * NOT `auditAsSystem` with a vendor id in `ref`: a vendor is a real,
+ * identified external party who accepted a job and opened a gate code, and
+ * the evidence trail has to say so in the column a query filters on. Folding
+ * them into SYSTEM would make "show me everything this vendor touched"
+ * unanswerable without string-matching a free-text field - and that question
+ * is exactly what gets asked after a break-in.
+ */
+export async function auditAsVendor(
+  vendorId: string,
+  input: Omit<AuditInput, 'actor'>,
+  db: AuditDb = prisma,
+): Promise<void> {
+  await recordAudit(db, { ...input, actor: { type: 'VENDOR', ref: vendorId } })
+}
