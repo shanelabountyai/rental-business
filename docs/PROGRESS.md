@@ -708,7 +708,7 @@ The running narrative of what has actually been built. One entry per completed b
 - **Two test-isolation bugs in the same helper**, both real rather than cosmetic: it looked up "the newest `/vendor/` link anywhere", which under parallel workers hands one test another test's token (fixed by scoping to the property), and its cleanup tried to `DELETE` from `Notification`, which is append-only by trigger exactly like `AuditLog` (fixed to delete only the deliveries and leave the notifications, as the trigger intends).
 
 ## R-026 — Approval thresholds
-**Commit:** `_pending_`  ·  **Date:** 2026-08-06
+**Commit:** `5991ae1`  ·  **Date:** 2026-08-06
 
 **What it built.** The financial control this product has been carrying the parts for since R-004: an entity-level cost threshold above which a work order needs an explicit approval, staff ceilings that route over-ceiling requests up automatically, an owner's two-tap approve / deny-with-reason / ask-a-question decision, re-approval when actuals run past what was agreed, and MAINT-04's fourth criterion — bid collection above a bid threshold, with each vendor pricing through their own zero-login link and the answers compared in one table. `checkMonetaryAuthority()` and `requireMonetaryAuthority()` were built in R-004 and left deliberately callerless with a comment saying the caller's job would be to "create that approval" rather than treat over-ceiling as a failure; this is that caller. 38 core tests, 12 e2e.
 
