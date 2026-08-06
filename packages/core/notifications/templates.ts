@@ -254,6 +254,82 @@ export const vendorBidRequestTemplate: NotificationTemplate<VendorBidRequestCont
     },
   }
 
+/// Context for `entry.notice` (R-027). Times arrive as ISO strings and are
+/// rendered in the PROPERTY's timezone - a tenant told 2pm when somebody
+/// arrives at 9am is worse off than one told nothing (D-3).
+export interface EntryNoticeContext {
+  tenantName: string
+  addressLine1: string
+  unitName: string
+  scheduledStart: string
+  scheduledEnd: string
+  timezone: string
+  reason: string
+  /// Set on the T-1-day reminder rather than the original notice, so the
+  /// two read differently even though they carry the same facts.
+  isReminder?: boolean
+}
+
+/**
+ * Entry notice, and its T-1-day reminder (MAINT-05, COMM-02).
+ *
+ * `entry_notice` is a LOCKED category (packages/core/notifications/
+ * categories.ts): a tenant cannot turn this off, because it is the
+ * legally significant message telling them somebody is coming into their
+ * home. That is the whole reason LOCKED_CATEGORIES exists.
+ */
+export const entryNoticeTemplate: NotificationTemplate<EntryNoticeContext> = {
+  key: 'entry.notice',
+  category: 'entry_notice',
+  channels: ['SMS', 'EMAIL', 'PORTAL'],
+  render: (context, channel) => {
+    const window = formatEntryWindow(
+      new Date(context.scheduledStart),
+      new Date(context.scheduledEnd),
+      context.timezone,
+    )
+    const lead = context.isReminder ? 'Reminder' : 'Notice of entry'
+
+    if (channel === 'SMS') {
+      return {
+        body: [
+          `${lead}: we plan to enter your home`,
+          window,
+          context.reason,
+        ].join('\n'),
+      }
+    }
+
+    return {
+      subject: `${lead}: entry at ${context.addressLine1} — ${window}`,
+      body: [
+        `Hello ${context.tenantName},`,
+        '',
+        context.isReminder
+          ? 'This is a reminder about a visit we told you about:'
+          : 'We are writing to let you know we plan to enter your home:',
+        '',
+        window,
+        `Reason: ${context.reason}`,
+        '',
+        'If this time does not work, reply to this message and we will arrange another.',
+      ].join('\n'),
+    }
+  },
+}
+
+function formatEntryWindow(start: Date, end: Date, timeZone: string): string {
+  const date = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+  }).format(start)
+  const time = (value: Date) =>
+    new Intl.DateTimeFormat('en-US', { timeZone, hour: 'numeric', minute: '2-digit' }).format(value)
+  return `${date}, between ${time(start)} and ${time(end)}`
+}
+
 /// Every registered template, by key. Later items add theirs here.
 export const TEMPLATES: Readonly<Record<string, NotificationTemplate<never>>> = {
   [unitMakeReadyTemplate.key]:
@@ -264,6 +340,8 @@ export const TEMPLATES: Readonly<Record<string, NotificationTemplate<never>>> = 
     vendorDispatchTemplate as unknown as NotificationTemplate<never>,
   [vendorBidRequestTemplate.key]:
     vendorBidRequestTemplate as unknown as NotificationTemplate<never>,
+  [entryNoticeTemplate.key]:
+    entryNoticeTemplate as unknown as NotificationTemplate<never>,
 }
 
 export class UnknownTemplateError extends Error {

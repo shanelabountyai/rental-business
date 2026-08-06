@@ -7,6 +7,7 @@ import '@/lib/jobs/registrations.ts'
 import { runDueJobs } from '@/lib/jobs/runner.ts'
 import { dispatchPendingNotifications } from '@/lib/notifications/send.ts'
 import { sweepUnansweredDispatches } from '@/lib/vendors/no-response.ts'
+import { sweepEntryReminders } from '@/lib/workorders/entry-reminders.ts'
 
 // The single scheduled entry point. Vercel Cron hits it hourly (vercel.json),
 // and the runner decides which properties are due in their own local time -
@@ -44,6 +45,10 @@ export async function GET(request: Request) {
   // lib/vendors/no-response.ts's own header for why that distinction puts it
   // here beside the other latency-driven sweeps (R-025).
   const vendorSilence = await sweepUnansweredDispatches()
+  // T-1-day entry reminders (MAINT-05, R-027). Hourly for the same reason -
+  // a fixed distance in hours from a scheduled instant, not a calendar-day
+  // question, and "tomorrow" sent at 3am is not a reminder anybody reads.
+  const entryReminders = await sweepEntryReminders()
 
   const ran = runs.filter((r) => r.outcome === 'ran')
   const failures = runs.filter((r) => r.outcome === 'failed')
@@ -74,6 +79,8 @@ export async function GET(request: Request) {
     notificationsFailed: notifications.failed,
     vendorSilenceChecked: vendorSilence.checked,
     vendorSilencePrompted: vendorSilence.prompted,
+    entryRemindersChecked: entryReminders.checked,
+    entryRemindersSent: entryReminders.reminded,
     durationMs: Date.now() - startedAt,
   })
 }

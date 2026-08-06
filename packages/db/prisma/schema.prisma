@@ -651,6 +651,7 @@ model StaffUser {
   chargesWaived        Charge[]     @relation("ChargeWaivedBy")
   workOrdersApproved   WorkOrder[]  @relation("WorkOrderApprovedBy")
   workOrdersAssigned   WorkOrder[]  @relation("WorkOrderAssignedTo")
+  workOrdersEntryPermissionLogged WorkOrder[] @relation("WorkOrderEntryPermission")
   tasksAssigned        Task[]       @relation("TaskAssignedTo")
   tasksCompleted       Task[]       @relation("TaskCompletedBy")
   inspectionsPerformed Inspection[] @relation("InspectionPerformedBy")
@@ -1459,6 +1460,24 @@ model WorkOrder {
   /// turning one into the other with an entry-notice check in between.
   proposedStart        DateTime?
   proposedEnd          DateTime?
+  /// R-027: the entry notice served for this visit, when one was required.
+  /// Null with a scheduled window means entry was permitted another way -
+  /// the tenant granted permission, or it is an emergency.
+  entryNoticeId        String?
+  /// The tenant told us to come in without formal notice (MAINT-05's
+  /// "tenant grants logged permission-to-enter"). Recorded WITH who logged
+  /// it and when, because "they said it was fine" is worth nothing in a
+  /// dispute unless it was written down before the visit.
+  entryPermissionGrantedAt      DateTime?
+  entryPermissionLoggedByStaffId String?
+  /// Set when staff scheduled inside the statutory notice window anyway.
+  /// The reason is REQUIRED (audit action entry_notice.overridden is in
+  /// REASON_REQUIRED) - this pair is the contemporaneous record an
+  /// unlawful-entry claim is defended with, or lost on.
+  entryOverrideReason  String?
+  entryOverriddenAt    DateTime?
+  /// MAINT-05: "a tenant no-show is logged (trip-charge/billback evidence)".
+  tenantNoShowAt       DateTime?
   completedAt          DateTime?
   verifiedAt           DateTime?
   /// Drives the mid-lease chargeback flow (MAINT-07) - distinct from a
@@ -1474,6 +1493,8 @@ model WorkOrder {
   vendor     Vendor?    @relation(fields: [vendorId], references: [id])
   assignedTo StaffUser? @relation("WorkOrderAssignedTo", fields: [assignedStaffId], references: [id])
   approvedBy StaffUser? @relation("WorkOrderApprovedBy", fields: [approvedByStaffId], references: [id])
+  entryNotice Notice?   @relation("WorkOrderEntryNotice", fields: [entryNoticeId], references: [id])
+  entryPermissionLoggedBy StaffUser? @relation("WorkOrderEntryPermission", fields: [entryPermissionLoggedByStaffId], references: [id])
   threads    Thread[]
   documents  Document[]
   bids       WorkOrderBid[]
@@ -1850,6 +1871,7 @@ model Notice {
   jurisdictionRule JurisdictionRule? @relation(fields: [jurisdictionRuleId], references: [id])
   document         Document?         @relation("NoticeDocument", fields: [documentId], references: [id])
   proofDocument    Document?         @relation("NoticeProofDocument", fields: [proofDocumentId], references: [id])
+  entryForWorkOrders WorkOrder[]     @relation("WorkOrderEntryNotice")
 
   @@index([leaseId])
   @@index([propertyId, servedAt])

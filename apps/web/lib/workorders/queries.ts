@@ -22,7 +22,20 @@ const OPEN_STATUSES = [
 ] as const
 
 const workOrderInclude = {
-  property: { select: { id: true, name: true, timezone: true, legalEntityId: true } },
+  // state/county are here for R-027's entry-notice lookup (rulesFor()),
+  // which every work order detail view now does. Cheap columns on a row
+  // already being fetched, versus a second query per page.
+  property: {
+    select: {
+      id: true,
+      name: true,
+      timezone: true,
+      legalEntityId: true,
+      state: true,
+      county: true,
+      addressLine1: true,
+    },
+  },
   unit: { select: { id: true, name: true } },
   ticket: { select: { id: true, category: true, description: true, tenantId: true } },
   vendor: { select: { id: true, name: true, phone: true, email: true } },

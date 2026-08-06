@@ -1,4 +1,5 @@
 import { actualTotalCents, compareBids } from '@rental/core/approvals'
+import { earliestCompliantStart } from '@rental/core/entry'
 import { activeWarranties, likelyMatchingWarranty } from '@rental/core/workorders'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
@@ -7,6 +8,7 @@ import { ApprovalPanel } from '@/components/workorders/approval-panel.tsx'
 import { BidsPanel } from '@/components/workorders/bids-panel.tsx'
 import { AssignForm } from '@/components/workorders/assign-form.tsx'
 import { RecordActualsForm } from '@/components/workorders/record-actuals-form.tsx'
+import { ScheduleForm } from '@/components/workorders/schedule-form.tsx'
 import { TaskActionButton } from '@/components/tasks/action-button.tsx'
 import { actorCan, actorDecision, propertyResource, requireScope } from '@/lib/auth/guard.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
@@ -21,6 +23,12 @@ import {
   requestBids,
   submitForApproval,
 } from '@/lib/workorders/approvals.ts'
+import { rulesFor } from '@/lib/jurisdiction/queries.ts'
+import {
+  logEntryPermission,
+  logTenantNoShow,
+  scheduleEntry,
+} from '@/lib/workorders/scheduling.ts'
 import {
   activeVendors,
   getWorkOrder,
@@ -110,6 +118,18 @@ export default async function WorkOrderDetailPage({
       : null
   // Read straight from the entity rather than widening the shared
   // workOrderInclude every list query also pays for.
+  // The jurisdiction's own entry-notice period (D-4, R-027). Read through
+  // rulesFor(), never as a literal - see lib/workorders/scheduling.ts.
+  // Tolerated as null when no rule is configured for the state, so an
+  // unconfigured jurisdiction shows the form rather than 500ing the page.
+  const entryRule = await rulesFor(
+    { state: workOrder.property.state, county: workOrder.property.county },
+    new Date(),
+  ).catch(() => null)
+  const isEmergency = workOrder.priority === 'EMERGENCY'
+  const localInput = (value: Date | null) =>
+    value ? value.toISOString().slice(0, 16) : null
+
   const entity = await prisma.legalEntity.findUnique({
     where: { id: workOrder.property.legalEntityId },
     select: { bidThresholdCents: true },
@@ -180,6 +200,24 @@ export default async function WorkOrderDetailPage({
         <dd className="col-span-1 sm:col-span-2">
           {workOrder.assignedTo?.name ?? workOrder.vendor?.name ?? 'Unassigned'}
         </dd>
+        {workOrder.scheduledStart && (
+          <>
+            <dt className="text-muted-foreground">Scheduled</dt>
+            <dd className="col-span-1 sm:col-span-2">
+              {workOrder.scheduledStart.toISOString().slice(0, 16).replace('T', ' ')}
+              {workOrder.entryOverrideReason && (
+                <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900 dark:bg-amber-950 dark:text-amber-200">
+                  Entry override logged
+                </span>
+              )}
+              {workOrder.tenantNoShowAt && (
+                <span className="ml-2 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800 dark:bg-red-950 dark:text-red-200">
+                  Tenant no-show
+                </span>
+              )}
+            </dd>
+          </>
+        )}
         {workOrder.vendorId && (
           <>
             <dt className="text-muted-foreground">Vendor link</dt>
@@ -257,6 +295,34 @@ export default async function WorkOrderDetailPage({
             <TaskActionButton
               action={submitForApproval.bind(null, workOrder.id)}
               label="Check approval / send for approval"
+            />
+          )}
+          <ScheduleForm
+            action={scheduleEntry.bind(null, workOrder.id)}
+            entryNoticeHours={entryRule?.entryNoticeHours ?? null}
+            earliestCompliant={
+              entryRule?.entryNoticeHours != null
+                ? earliestCompliantStart(new Date(), entryRule.entryNoticeHours)
+                    .toISOString()
+                    .slice(0, 16)
+                    .replace('T', ' ')
+                : null
+            }
+            scheduledStart={localInput(workOrder.scheduledStart)}
+            scheduledEnd={localInput(workOrder.scheduledEnd)}
+            hasPermission={workOrder.entryPermissionGrantedAt != null}
+            isEmergency={isEmergency}
+          />
+          {workOrder.entryPermissionGrantedAt == null && !isEmergency && (
+            <TaskActionButton
+              action={logEntryPermission.bind(null, workOrder.id)}
+              label="Tenant gave permission to enter"
+            />
+          )}
+          {workOrder.scheduledStart && workOrder.tenantNoShowAt == null && (
+            <TaskActionButton
+              action={logTenantNoShow.bind(null, workOrder.id)}
+              label="Tenant did not show"
             />
           )}
           <RecordActualsForm
