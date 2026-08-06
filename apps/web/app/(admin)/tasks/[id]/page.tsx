@@ -10,8 +10,9 @@ import { notFound } from 'next/navigation'
 import { TaskActionButton } from '@/components/tasks/action-button.tsx'
 import { CompleteForm } from '@/components/tasks/complete-form.tsx'
 import { TriagePanel } from '@/components/maintenance/triage-panel.tsx'
+import { ApprovalPanel } from '@/components/workorders/approval-panel.tsx'
 import { JobPanel } from '@/components/workorders/job-panel.tsx'
-import { actorCan, propertyResource, requireScope } from '@/lib/auth/guard.ts'
+import { actorCan, actorDecision, propertyResource, requireScope } from '@/lib/auth/guard.ts'
 import {
   mergeTicketDuplicate,
   resolveTicketTriage,
@@ -21,6 +22,8 @@ import { getStaffTicket, listOpenTickets } from '@/lib/maintenance/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 import { cancelTask, claimTask, completeTask } from '@/lib/tasks/actions.ts'
 import { getTask } from '@/lib/tasks/queries.ts'
+import { actualTotalCents } from '@rental/core/approvals'
+import { decideApproval } from '@/lib/workorders/approvals.ts'
 import { getWorkOrder, jobContextForWorkOrder } from '@/lib/workorders/queries.ts'
 
 export const metadata = { title: 'Task — Rental Operations' }
@@ -98,6 +101,12 @@ export default async function TaskDetailPage({
       ? await getWorkOrder(task.subjectId, scope)
       : null
   const jobContext = workOrder ? await jobContextForWorkOrder(workOrder, scope) : null
+  // MAINT-04's "approve from phone in <=2 taps": the approval lands in the
+  // one queue (D-9) as a Task, and this is where a thumb reaches it.
+  const awaitingApproval = workOrder?.status === 'PENDING_APPROVAL'
+  const approveDecision = awaitingApproval
+    ? await actorDecision('workorder.approve', propertyResource(task.property))
+    : null
 
   return (
     <div className="flex max-w-2xl flex-col gap-6">
@@ -179,7 +188,31 @@ export default async function TaskDetailPage({
         />
       )}
 
-      {workOrder && jobContext && <JobPanel workOrder={workOrder} context={jobContext} />}
+      {workOrder && awaitingApproval && (
+        <ApprovalPanel
+          workOrder={{
+            scope: workOrder.scope,
+            estimateCents: workOrder.estimateCents,
+            approvedAmountCents: workOrder.approvedAmountCents,
+            actualTotalCents: actualTotalCents(workOrder),
+            approvalQuestion: workOrder.approvalQuestion,
+            propertyName: workOrder.property.name,
+            unitName: workOrder.unit.name,
+          }}
+          photos={(jobContext?.photos ?? []).map((p) => ({
+            id: p.id,
+            fileName: p.fileName,
+            href: `/api/documents/${p.id}/file`,
+          }))}
+          decideAction={decideApproval.bind(null, workOrder.id)}
+          canDecide={approveDecision?.allowed === true}
+          needsMfa={approveDecision?.allowed === false && approveDecision.reason === 'mfa_required'}
+        />
+      )}
+
+      {workOrder && jobContext && !awaitingApproval && (
+        <JobPanel workOrder={workOrder} context={jobContext} />
+      )}
 
       {canWrite && unresolved && (
         <div className="flex flex-col gap-4 border-t pt-4">

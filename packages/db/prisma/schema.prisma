@@ -292,6 +292,18 @@ model LegalEntity {
   registeredAgent String?
   notes           String?
   active          Boolean         @default(true)
+  /// MAINT-04's "my configured cost threshold": a work order estimated above
+  /// this needs an explicit approval before it can be dispatched. Set on the
+  /// ENTITY rather than the property or a global singleton because the LLC is
+  /// this product's ownership boundary (Entity -> Property -> Unit) - an owner
+  /// with a partner in one LLC and none in another genuinely wants different
+  /// numbers. Null falls back to APPROVAL_DEFAULTS in packages/core/approvals.
+  approvalThresholdCents Int?
+  /// How far actuals may exceed what was approved before it has to go back
+  /// (MAINT-04's "e.g. 10%"). Whole percent.
+  actualsTolerancePercent Int?
+  /// Above this, collect competing bids rather than dispatching one vendor.
+  bidThresholdCents      Int?
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
 
@@ -720,6 +732,7 @@ model Vendor {
   updatedAt     DateTime  @updatedAt
 
   workOrders WorkOrder[]
+  bids       WorkOrderBid[]
   threads    Thread[]
   messages   Message[]   @relation("MessageFromVendor")
   documents  Document[]
@@ -1011,6 +1024,13 @@ enum AuthTokenPurpose {
   /// deliberately NOT the verifier - see lib/vendors/link.ts. Every other
   /// purpose here is single-use and must stay that way.
   VENDOR_WORK_ORDER
+  /// R-026: a request for a PRICE, before anybody is assigned - MAINT-04's
+  /// bid-collection workflow. A SEPARATE purpose from VENDOR_WORK_ORDER on
+  /// purpose: a dispatch link is one-per-work-order and reissuing revokes
+  /// the previous one (D-16), whereas bids need N vendors holding live links
+  /// to the same work order at the same time. Sharing the purpose would have
+  /// meant weakening that invariant for every dispatch link in the product.
+  VENDOR_BID
 }
 
 model StaffCredential {
@@ -1405,6 +1425,20 @@ model WorkOrder {
   estimateCents     Int?
   approvedByStaffId String?
   approvedAt        DateTime?
+  /// The amount that was actually APPROVED, which is not the same as the
+  /// current estimate: an estimate can be revised after approval, and the
+  /// tolerance check in MAINT-04 has to measure actuals against what somebody
+  /// with authority actually agreed to, not against a number that moved
+  /// afterwards. Null means never approved.
+  approvedAmountCents Int?
+  /// Set when an approver declines, and required (MAINT-04/ROLE-03) - a denial
+  /// with no stated reason is indistinguishable from a mistake, and the PM
+  /// needs to know whether to re-scope or drop it.
+  denialReason      String?
+  /// An approver's "ask" - a question back to whoever requested it. Kept as a
+  /// column rather than only an audit entry so the PM sees it on the work
+  /// order without going to the trail.
+  approvalQuestion  String?
   actualLaborCents     Int?
   actualMaterialsCents Int?
   invoiceCents         Int?
@@ -1442,11 +1476,38 @@ model WorkOrder {
   approvedBy StaffUser? @relation("WorkOrderApprovedBy", fields: [approvedByStaffId], references: [id])
   threads    Thread[]
   documents  Document[]
+  bids       WorkOrderBid[]
 
   @@index([propertyId, status])
   @@index([unitId])
   @@index([vendorId])
   @@index([status, priority])
+}
+
+/// One vendor's price for one work order (MAINT-04's bid-collection
+/// workflow, R-026). Its own table rather than columns on WorkOrder because
+/// the whole point is comparing several at once.
+model WorkOrderBid {
+  id          String    @id @default(cuid())
+  workOrderId String
+  vendorId    String
+  /// Null until the vendor answers. A row exists from the moment the bid is
+  /// REQUESTED, so "who was asked and never replied" is answerable - which
+  /// is half of what a comparison view is for.
+  amountCents Int?
+  note        String?
+  /// Set when a vendor answers "not interested" rather than quoting.
+  declinedAt  DateTime?
+  respondedAt DateTime?
+  requestedAt DateTime  @default(now())
+
+  workOrder WorkOrder @relation(fields: [workOrderId], references: [id])
+  vendor    Vendor    @relation(fields: [vendorId], references: [id])
+
+  /// One bid per vendor per work order - asking twice is re-asking the same
+  /// vendor, not collecting a second opinion from them.
+  @@unique([workOrderId, vendorId])
+  @@index([workOrderId])
 }
 
 // ---------------------------------------------------------------------------

@@ -38,6 +38,8 @@ const PUBLIC_ROUTES: Record<string, string> = {
     'The PWA manifest (D-8). A browser fetches it before any session exists, and it carries no data beyond the app name and icons.',
   'vendor/[token]/page.tsx':
     "The zero-login vendor work-order page (D-6, D-16, R-025). A vendor has no account by design, so there is no session for requirePermission() to read - the token in the path IS the credential, and verifyVendorLink() is the authorization. It is scoped to exactly one work order, expires, is revoked by reissuing, dies when the job or the assignment does, and every action through it is audited with the vendor named. See lib/vendors/link.ts's header for the full control set and D-16 for why single-use was the wrong shape here.",
+  'vendor/bid/[token]/page.tsx':
+    "The zero-login BID request page (MAINT-04, D-6, R-026). Same shape as the dispatch page above - the token in the path is the credential and verifyBidLink() is the authorization - but a SEPARATE token purpose (VENDOR_BID), because bids need several vendors holding live links to one work order at once, which is the exact opposite of D-16's one-live-dispatch-link-per-work-order invariant. It refuses once the job has been assigned to somebody.",
   'vendor/[token]/documents/[documentId]/route.ts':
     "Bytes for the vendor page above, authorized by the same token in the same path position. Deliberately NOT a third principal branch inside api/documents/[id]/file: that route authorizes two kinds of SESSION, and a bearer token falling through to either is the shape R-018's own 'the tenant side never falls through to the staff side' lesson warns about. Refuses with 404 for a bad token AND for a valid token pointed at a document outside its own job.",
   'api/sms/inbound/route.ts':

@@ -1,9 +1,14 @@
+import { actualTotalCents, compareBids } from '@rental/core/approvals'
 import { activeWarranties, likelyMatchingWarranty } from '@rental/core/workorders'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { prisma } from '@rental/db'
+import { ApprovalPanel } from '@/components/workorders/approval-panel.tsx'
+import { BidsPanel } from '@/components/workorders/bids-panel.tsx'
 import { AssignForm } from '@/components/workorders/assign-form.tsx'
+import { RecordActualsForm } from '@/components/workorders/record-actuals-form.tsx'
 import { TaskActionButton } from '@/components/tasks/action-button.tsx'
-import { actorCan, propertyResource, requireScope } from '@/lib/auth/guard.ts'
+import { actorCan, actorDecision, propertyResource, requireScope } from '@/lib/auth/guard.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 import {
   assignWorkOrder,
@@ -11,13 +16,25 @@ import {
   setWorkOrderWarrantyHold,
 } from '@/lib/workorders/actions.ts'
 import {
+  decideApproval,
+  recordActuals,
+  requestBids,
+  submitForApproval,
+} from '@/lib/workorders/approvals.ts'
+import {
   activeVendors,
   getWorkOrder,
+  jobContextForWorkOrder,
   staffForWorkOrderAssignment,
   warrantiesForProperty,
 } from '@/lib/workorders/queries.ts'
 
 export const metadata = { title: 'Work order — Rental Operations' }
+
+/// Mirrors APPROVAL_DEFAULTS.bidThresholdCents - imported as a constant
+/// rather than re-deriving the whole policy here, since this page only needs
+/// the one number to decide whether to show the panel.
+const BID_THRESHOLD_FALLBACK = 250_000
 
 const PRIORITY_LABELS: Record<string, string> = {
   EMERGENCY: 'Emergency',
@@ -68,6 +85,38 @@ export default async function WorkOrderDetailPage({
   const unassigned = !workOrder.assignedStaffId && !workOrder.vendorId
   const resolved = workOrder.status === 'CLOSED' || workOrder.status === 'CANCELED'
   const onHold = workOrder.status === 'ON_HOLD_WARRANTY'
+  const awaitingApproval = workOrder.status === 'PENDING_APPROVAL'
+  const approveDecision = await actorDecision('workorder.approve', propertyResource(workOrder.property))
+  const jobContext = awaitingApproval ? await jobContextForWorkOrder(workOrder, scope) : null
+
+  // MAINT-04's bid workflow. Shown once anybody has been asked, or whenever
+  // the job is big enough that asking is the policy - not on every $40 work
+  // order, where a bid table would be noise.
+  const bidRows = await prisma.workOrderBid.findMany({
+    where: { workOrderId: workOrder.id },
+    include: { vendor: { select: { id: true, name: true } } },
+  })
+  const comparison =
+    bidRows.length > 0
+      ? compareBids(
+          bidRows.map((b) => ({
+            vendorId: b.vendorId,
+            vendorName: b.vendor.name,
+            amountCents: b.amountCents,
+            declinedAt: b.declinedAt,
+            respondedAt: b.respondedAt,
+          })),
+        )
+      : null
+  // Read straight from the entity rather than widening the shared
+  // workOrderInclude every list query also pays for.
+  const entity = await prisma.legalEntity.findUnique({
+    where: { id: workOrder.property.legalEntityId },
+    select: { bidThresholdCents: true },
+  })
+  const bidsExpected =
+    workOrder.estimateCents != null &&
+    workOrder.estimateCents > (entity?.bidThresholdCents ?? BID_THRESHOLD_FALLBACK)
   const VENDOR_RESPONSE_LABELS: Record<string, string> = {
     ACCEPTED: 'Accepted',
     DECLINED: 'Declined',
@@ -165,6 +214,36 @@ export default async function WorkOrderDetailPage({
         )}
       </dl>
 
+      {canWrite && !resolved && (comparison != null || bidsExpected) && (
+        <BidsPanel
+          comparison={comparison}
+          vendors={vendors}
+          requestAction={requestBids.bind(null, workOrder.id)}
+        />
+      )}
+
+      {awaitingApproval && (
+        <ApprovalPanel
+          workOrder={{
+            scope: workOrder.scope,
+            estimateCents: workOrder.estimateCents,
+            approvedAmountCents: workOrder.approvedAmountCents,
+            actualTotalCents: actualTotalCents(workOrder),
+            approvalQuestion: workOrder.approvalQuestion,
+            propertyName: workOrder.property.name,
+            unitName: workOrder.unit.name,
+          }}
+          photos={(jobContext?.photos ?? []).map((p) => ({
+            id: p.id,
+            fileName: p.fileName,
+            href: `/api/documents/${p.id}/file`,
+          }))}
+          decideAction={decideApproval.bind(null, workOrder.id)}
+          canDecide={approveDecision?.allowed === true}
+          needsMfa={approveDecision?.allowed === false && approveDecision.reason === 'mfa_required'}
+        />
+      )}
+
       {canWrite && !resolved && (
         <div className="flex flex-col gap-6 border-t pt-4">
           {unassigned && (staff.length > 0 || vendors.length > 0) && !onHold && (
@@ -174,6 +253,17 @@ export default async function WorkOrderDetailPage({
               vendors={vendors}
             />
           )}
+          {!awaitingApproval && workOrder.status !== 'APPROVED' && (
+            <TaskActionButton
+              action={submitForApproval.bind(null, workOrder.id)}
+              label="Check approval / send for approval"
+            />
+          )}
+          <RecordActualsForm
+            action={recordActuals.bind(null, workOrder.id)}
+            actualLaborCents={workOrder.actualLaborCents}
+            actualMaterialsCents={workOrder.actualMaterialsCents}
+          />
           {workOrder.vendorId && (
             <TaskActionButton
               action={dispatchToVendor.bind(null, workOrder.id)}

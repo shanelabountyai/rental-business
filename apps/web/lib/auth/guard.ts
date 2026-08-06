@@ -2,6 +2,7 @@ import 'server-only'
 
 import {
   type Actor,
+  type Decision,
   type MonetaryAction,
   type Permission,
   type PropertyScope,
@@ -110,6 +111,30 @@ export async function actorCan(
 ): Promise<boolean> {
   const actor = await currentActor()
   return actor ? can(actor, permission, resource).allowed : false
+}
+
+/**
+ * The same check, but keeping WHY - for the handful of screens where the
+ * difference changes what to say.
+ *
+ * `actorCan()` collapses every denial into `false`, which is right for
+ * "should this button exist" and WRONG the moment a screen wants to explain
+ * itself: an owner who holds `workorder.approve` but has not verified MFA
+ * (ROLE-05 gates every privileged permission behind it) is not lacking
+ * authority, they are one step away from using it. Telling them "waiting on
+ * somebody with approval authority" is a dead end for the one person who
+ * can actually act. R-026 found this on the approval panel.
+ *
+ * Returns `no_permission` for a signed-out caller, since from a rendering
+ * decision's point of view they are equally unable.
+ */
+export async function actorDecision(
+  permission: Permission,
+  resource: Resource = {},
+): Promise<Decision> {
+  const actor = await currentActor()
+  if (!actor) return { allowed: false, reason: 'no_permission' }
+  return can(actor, permission, resource)
 }
 
 /**

@@ -39,6 +39,12 @@ export const TOKEN_TTL_MINUTES = {
   /// short of the work order's own lifetime - R-025 reissues rather than
   /// stretching this.
   VENDOR_WORK_ORDER: 60 * 24 * 3,
+  /// R-026: a request for a price, before anyone is assigned. Same three
+  /// days as a dispatch link and for the same reason - a vendor pricing a
+  /// job looks at it when they look at it. Multi-use like VENDOR_WORK_ORDER
+  /// (D-16), but issued per (work order, vendor) rather than one per work
+  /// order, because bids are several vendors holding live links at once.
+  VENDOR_BID: 60 * 24 * 3,
 } as const
 
 export type TokenPurpose = keyof typeof TOKEN_TTL_MINUTES

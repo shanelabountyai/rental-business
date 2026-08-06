@@ -66,6 +66,28 @@ export const AUDIT_ACTIONS = [
   /// them - "who said yes to this job, and when" has to be answerable
   /// afterwards from the trail alone.
   'workorder.vendor_responded',
+  /// R-026: a work order went up for approval - either because its estimate
+  /// cleared the entity's threshold and the requester's own ceiling did not
+  /// cover it, or because actuals ran past what was approved. The `after`
+  /// snapshot records WHY, including the requester's ceiling at that moment,
+  /// because ceilings change and the reason would otherwise be
+  /// unreconstructable.
+  'workorder.approval_requested',
+  /// R-026: an approver asked a question back instead of deciding. Recorded
+  /// because "the owner was asked and this is what they wanted to know" is
+  /// part of the same story as approving or denying, and a gap where the
+  /// question was would read as unexplained delay.
+  'workorder.approval_asked',
+  /// R-026: a vendor answered a bid request with a price, or declined to
+  /// bid. Recorded with actorType VENDOR for the same reason
+  /// workorder.vendor_responded is - an outside party with no account acted
+  /// on our system, and "who quoted what, and when" is the whole evidence
+  /// base for choosing one of them.
+  'workorder.bid_submitted',
+  /// R-026: bids were requested from a set of vendors. One entry for the
+  /// request, naming everyone asked, so "who was given the chance" survives
+  /// even for the vendors who never replied.
+  'workorder.bids_requested',
   /// R-025: a vendor link was sent (or resent). Recorded because it is the
   /// moment an access code became reachable by an outside party, and
   /// because resending revokes the previous link - the trail is how anyone

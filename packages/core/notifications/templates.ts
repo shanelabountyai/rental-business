@@ -212,6 +212,48 @@ export const vendorDispatchTemplate: NotificationTemplate<VendorDispatchContext>
     },
   }
 
+/// Context for `workorder.bid_request` (R-026).
+export interface VendorBidRequestContext {
+  vendorName: string
+  scope: string
+  addressLine1: string
+  unitName: string
+  link: string
+}
+
+/// A request for a PRICE, not a dispatch (MAINT-04). Says so plainly in the
+/// first line, because a vendor who reads "new job" and turns up to a job
+/// that was never awarded to them has been wasted, and will remember.
+export const vendorBidRequestTemplate: NotificationTemplate<VendorBidRequestContext> =
+  {
+    key: 'workorder.bid_request',
+    category: 'work_order_assigned',
+    channels: ['SMS', 'EMAIL'],
+    render: (context, channel) => {
+      const where = `${context.addressLine1} (${context.unitName})`
+      if (channel === 'SMS') {
+        return {
+          body: [`Quote request (not yet awarded)`, context.scope.slice(0, 70), where, context.link].join('\n'),
+        }
+      }
+      return {
+        subject: `Quote request: ${context.scope.slice(0, 60)} — ${where}`,
+        body: [
+          `${context.vendorName},`,
+          '',
+          `We are collecting prices for a job at ${where} and would like yours.`,
+          '',
+          `What is needed: ${context.scope}`,
+          '',
+          'This is a request for a quote - the job has not been awarded yet.',
+          context.link,
+          '',
+          'You do not need an account. The link expires after three days.',
+        ].join('\n'),
+      }
+    },
+  }
+
 /// Every registered template, by key. Later items add theirs here.
 export const TEMPLATES: Readonly<Record<string, NotificationTemplate<never>>> = {
   [unitMakeReadyTemplate.key]:
@@ -220,6 +262,8 @@ export const TEMPLATES: Readonly<Record<string, NotificationTemplate<never>>> = 
     maintenanceEmergencyTemplate as unknown as NotificationTemplate<never>,
   [vendorDispatchTemplate.key]:
     vendorDispatchTemplate as unknown as NotificationTemplate<never>,
+  [vendorBidRequestTemplate.key]:
+    vendorBidRequestTemplate as unknown as NotificationTemplate<never>,
 }
 
 export class UnknownTemplateError extends Error {
