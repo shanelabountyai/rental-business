@@ -781,7 +781,7 @@ Three changes:
 - **`workOrderInclude` did not select `state`/`county`**, so the first `rulesFor()` call from the work order page could not resolve a jurisdiction. Added to the shared include rather than issuing a second query per page — cheap columns on a row already being fetched.
 
 ## R-028 — DEFERRED to Phase 3 (not built)
-**Commit:** `_pending_`  ·  **Date:** 2026-08-06
+**Commit:** `e86fb6e`  ·  **Date:** 2026-08-06
 
 **Not a build. An owner decision, recorded.** OQ-3 — "in-house maintenance tech, all external vendors, or both?" — was answered **all external vendors**, so R-028's offline tech PWA moves to Phase 3 as **D-17**. The backlog's own risk note 3 had anticipated exactly this outcome and its consequence ("Milestone 2 shortens by an L"), which is why the item carried "(OQ-3 may defer this)" in its title from the start.
 
