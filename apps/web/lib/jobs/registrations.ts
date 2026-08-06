@@ -13,5 +13,6 @@ import 'server-only'
 //
 // Side-effect imports, so nothing is re-exported - `import` alone is the
 // point.
+import '../maintenance/triage-consumer.ts'
 import '../notifications/consumers.ts'
 import '../units/auto-make-ready.ts'

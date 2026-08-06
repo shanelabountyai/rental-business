@@ -5,7 +5,7 @@ import {
   formatSmsTicketDescription,
   isOpenTicketStatus,
 } from '@rental/core/comms'
-import { detectHabitabilityLanguage } from '@rental/core/maintenance'
+import { detectHabitabilityLanguage, suggestTicketPriority } from '@rental/core/maintenance'
 import { prisma } from '@rental/db'
 // From system.ts, not index.ts: index pulls in Auth.js, and a webhook has no
 // session by definition. See system.ts's own comment.
@@ -102,6 +102,14 @@ export async function handleInboundSms(args: {
   }
 
   const description = formatSmsTicketDescription(args.body)
+  // The same keyword scan R-019 runs, against the tenant's own words. A text
+  // saying "there's mold in the bathroom" has to start the response clock
+  // exactly as the portal version would (MAINT-02, RISK-05).
+  const habitabilityFlag = detectHabitabilityLanguage(args.body)
+  // Category is UNCATEGORIZED, so the priority suggestion is weak evidence
+  // built from habitability alone here - same function, same "PM can always
+  // override" contract as every other intake path (R-023).
+  const priority = suggestTicketPriority({ category: 'UNCATEGORIZED', habitabilityFlag })
 
   const ticket = await prisma.$transaction(async (tx) => {
     const created = await tx.ticket.create({
@@ -117,11 +125,8 @@ export async function handleInboundSms(args: {
         // triage assigns it from a human reading the words.
         category: 'UNCATEGORIZED',
         description,
-        // The same keyword scan R-019 runs, against the tenant's own words.
-        // A text saying "there's mold in the bathroom" has to start the
-        // response clock exactly as the portal version would (MAINT-02,
-        // RISK-05).
-        habitabilityFlag: detectHabitabilityLanguage(args.body),
+        priority,
+        habitabilityFlag,
       },
     })
     // SYSTEM, not a staff actor: nobody was signed in. `ref` names the

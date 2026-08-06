@@ -21,7 +21,9 @@ export function requiresProof(
   return registry.has(type)
 }
 
-export const AUDITED_TASK_TYPES: ReadonlySet<string> = new Set()
+/// A ticket-triage decision (R-023) is exactly RISK-05's "response-time
+/// logging" - completing this task type IS the auditable event.
+export const AUDITED_TASK_TYPES: ReadonlySet<string> = new Set(['ticket_triage'])
 
 export function requiresAuditOnCompletion(
   type: string,

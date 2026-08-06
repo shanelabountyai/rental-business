@@ -2,7 +2,7 @@ import 'server-only'
 
 import type { TaskInput } from '@rental/core/tasks'
 import { businessDateToUtc } from '@rental/core/scheduling'
-import type { Prisma, PrismaClient, Task } from '@rental/db'
+import { prisma, type Prisma, type PrismaClient, type Task } from '@rental/db'
 
 // The one place anything creates a Task (D-9) - the idempotent primitive the
 // backlog names ("idempotent creation on (type, entityId, businessDate)").
@@ -47,7 +47,15 @@ export async function createTask(
     return { task, created: true }
   } catch (error) {
     if (!isUniqueViolation(error)) throw error
-    const existing = await db.task.findUniqueOrThrow({
+    // The plain, top-level client for the fallback read, deliberately NOT
+    // `db`: when `db` is a Prisma.TransactionClient (R-023's outbox
+    // consumer is the first caller that is), the P2002 above already put
+    // THAT transaction into Postgres's aborted state - every further
+    // command on it fails with 25P02 until it rolls back. A fresh
+    // connection has no such problem and sees the row cleanly: the winner
+    // of the race already committed it before our own create() failed
+    // against it.
+    const existing = await prisma.task.findUniqueOrThrow({
       where: {
         type_subjectId_businessDate: {
           type: input.type,

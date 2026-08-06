@@ -7,16 +7,20 @@ import {
   type EmergencyRequestInput,
   type MaintenanceRequestInput,
   type PhoneLoggedRequestInput,
+  canMergeTicket,
+  isTicketTriageResolved,
   formatEmergencyDescription,
   formatMaintenanceDescription,
   formatPhoneLoggedDescription,
   detectHabitabilityLanguage,
   isMaintenanceCategory,
+  suggestTicketPriority,
   validateEmergencyRequest,
   validateMaintenanceRequest,
   validatePhoneLoggedRequest,
 } from '@rental/core/maintenance'
 import { prisma } from '@rental/db'
+import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { audit } from '@/lib/audit/index.ts'
 import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
@@ -24,6 +28,7 @@ import { emitEvent } from '@/lib/jobs/outbox.ts'
 import { dispatchPendingNotifications, notify } from '@/lib/notifications/send.ts'
 import { requireTenantWithScope } from '@/lib/portal/guard.ts'
 import { generateStorageKey, storage } from '@/lib/storage/index.ts'
+import { completeTaskWork } from '@/lib/tasks/complete.ts'
 import { onCallStaffForProperty, unitForEmergency } from './emergency.ts'
 import { getTenantCurrentHome } from './queries.ts'
 
@@ -158,11 +163,11 @@ export type SubmitMaintenanceRequestResult = MaintenanceFormState | { ticketId: 
  * Creates the Ticket (MAINT-01's whole point) and attaches whatever photos
  * are ready.
  *
- * `source: 'PORTAL'` and `priority` stays at its ROUTINE default - R-023's
- * triage queue is what turns category and the habitability flag into a
- * suggested priority with staff override; guessing at priority here would be
- * a second, competing opinion about the same decision. (The emergency path
- * below is the one exception, and for a reason that is not a guess: the
+ * `source: 'PORTAL'`. Priority is `suggestTicketPriority()`'s starting
+ * point, not a guess this function makes itself - category-plus-habitability
+ * is the same weak-evidence signal every intake path feeds it (R-023), and a
+ * PM can always override it during triage. (The emergency path below sets
+ * priority directly instead, and for a reason that is not a guess: the
  * tenant selected an emergency category outright.)
  *
  * Returns `{ ticketId }` rather than calling `redirect()` itself - the
@@ -199,6 +204,7 @@ export async function submitMaintenanceRequest(
 
   const description = formatMaintenanceDescription(args.category, args)
   const habitabilityFlag = detectHabitabilityLanguage(description)
+  const priority = suggestTicketPriority({ category: args.category, habitabilityFlag })
 
   const ticket = await prisma.$transaction(async (tx) => {
     const created = await tx.ticket.create({
@@ -210,6 +216,7 @@ export async function submitMaintenanceRequest(
         source: 'PORTAL',
         category: args.category,
         description,
+        priority,
         entryPermission: args.entryPermission === true,
         petWarning: args.petWarning === true,
         habitabilityFlag,
@@ -225,6 +232,15 @@ export async function submitMaintenanceRequest(
       },
       tx,
     )
+    // R-023: every new ticket becomes a triage Task, reacting to this event
+    // rather than creating one inline here - see triage-consumer.ts.
+    await emitEvent(tx, {
+      type: 'ticket.created',
+      aggregateType: 'Ticket',
+      aggregateId: created.id,
+      propertyId: home.propertyId,
+      payload: { source: 'PORTAL' },
+    })
     return created
   })
 
@@ -477,6 +493,7 @@ export async function logPhoneMaintenanceRequest(
 
   const description = formatPhoneLoggedDescription(input.category, input)
   const habitabilityFlag = detectHabitabilityLanguage(input.notes)
+  const priority = suggestTicketPriority({ category: input.category, habitabilityFlag })
 
   const ticket = await prisma.$transaction(async (tx) => {
     const created = await tx.ticket.create({
@@ -488,6 +505,7 @@ export async function logPhoneMaintenanceRequest(
         source: 'PHONE_LOGGED',
         category: input.category,
         description,
+        priority,
         entryPermission: input.entryPermission === true,
         petWarning: input.petWarning === true,
         habitabilityFlag,
@@ -503,8 +521,226 @@ export async function logPhoneMaintenanceRequest(
       },
       tx,
     )
+    await emitEvent(tx, {
+      type: 'ticket.created',
+      aggregateType: 'Ticket',
+      aggregateId: created.id,
+      propertyId: property.id,
+      payload: { source: 'PHONE_LOGGED' },
+    })
     return created
   })
 
   redirect(`/maintenance/${ticket.id}`)
+}
+
+// ---------------------------------------------------------------------------
+// Triage (MAINT-02, RISK-05, R-023)
+// ---------------------------------------------------------------------------
+
+const TRIAGE_PRIORITY_OPTIONS = ['URGENT', 'ROUTINE'] as const
+
+/// A ticket-triage Task's linked Ticket, with the permission check every
+/// other write in this file opens with. Not `getStaffTicket` (R-022's own
+/// read, scoped by the property SWITCHER's selection) - a write re-derives
+/// the property straight from the row being acted on and checks RBAC against
+/// THAT, the same defense-in-depth `logPhoneMaintenanceRequest` above
+/// applies, so a stale or narrowed switcher selection can never be the only
+/// thing standing between an actor and a ticket outside their scope.
+async function ticketTriageTaskOrThrow(taskId: string) {
+  const task = await prisma.task.findUniqueOrThrow({
+    where: { id: taskId },
+    include: { property: true },
+  })
+  if (task.subjectType !== 'Ticket') {
+    throw new Error(`Task ${taskId} is not a ticket-triage task`)
+  }
+  const ticket = await prisma.ticket.findUniqueOrThrow({ where: { id: task.subjectId } })
+  const actor = await requirePermission('ticket.write', propertyResource(task.property))
+  return { task, ticket, actor }
+}
+
+/// Undefined leaves the column untouched (Prisma's own "omit" convention,
+/// used throughout this file already for `proof ?? undefined`); a `Date`
+/// sets it. Never overwrites an existing timestamp - the clock's job ends
+/// the moment a human first engages, whichever action that turns out to be.
+function firstResponseStamp(ticket: { firstResponseAt: Date | null }): Date | undefined {
+  return ticket.firstResponseAt ? undefined : new Date()
+}
+
+/**
+ * Overrides the suggested priority (MAINT-02: "suggested priority from
+ * category... with override"). Deliberately cannot set EMERGENCY: that
+ * priority pages on-call the moment it is chosen (R-020's own intake), and
+ * this action has no paging behind it - letting a PM set it here would look
+ * like escalating when nothing downstream reacts to it. A ticket that turns
+ * out to be a real emergency after the fact needs a human phone call, not a
+ * status field.
+ *
+ * The first override also moves a NEW ticket to TRIAGED and stamps
+ * firstResponseAt if unset - looking at a ticket and deciding its priority
+ * IS the first response MAINT-02/RISK-05 wants timestamped, whether or not a
+ * PM goes on to resolve it in the same visit.
+ */
+export async function setTicketPriority(
+  taskId: string,
+  _previous: MaintenanceFormState,
+  formData: FormData,
+): Promise<MaintenanceFormState> {
+  const { task, ticket } = await ticketTriageTaskOrThrow(taskId)
+
+  const priority = String(formData.get('priority') ?? '')
+  if (!(TRIAGE_PRIORITY_OPTIONS as readonly string[]).includes(priority)) {
+    return { error: 'Choose a priority.' }
+  }
+  if (isTicketTriageResolved(ticket.status)) {
+    return { error: 'This ticket is already resolved.' }
+  }
+
+  await prisma.$transaction(async (tx) => {
+    const updated = await tx.ticket.update({
+      where: { id: ticket.id },
+      data: {
+        priority: priority as never,
+        status: ticket.status === 'NEW' ? 'TRIAGED' : undefined,
+        firstResponseAt: firstResponseStamp(ticket),
+      },
+    })
+    await audit(
+      {
+        action: 'ticket.triaged',
+        entityType: 'Ticket',
+        entityId: ticket.id,
+        propertyId: task.propertyId,
+        before: { priority: ticket.priority, status: ticket.status },
+        after: { priority: updated.priority, status: updated.status },
+      },
+      tx,
+    )
+  })
+
+  revalidatePath(`/tasks/${taskId}`)
+  revalidatePath('/maintenance')
+  revalidatePath(`/maintenance/${ticket.id}`)
+  return {}
+}
+
+const TRIAGE_RESOLUTIONS = {
+  waiting_on_tenant: 'WAITING_ON_TENANT',
+  converted: 'CONVERTED',
+  closed: 'CLOSED',
+} as const
+type TriageResolution = keyof typeof TRIAGE_RESOLUTIONS
+
+/**
+ * The three terminal triage decisions MAINT-02 names outright: request more
+ * info ("waiting on tenant"), convert to work order, or close - none of
+ * which need a form, so this takes no FormData. Each also completes the
+ * linked Task (a PM does not separately click "complete" after already
+ * deciding what happens to the ticket - the decision IS the completion),
+ * via the same completeTaskWork() the generic Task queue uses, so a
+ * triage-resolved ticket leaves the active queue exactly the way any other
+ * finished task does.
+ *
+ * "Converted" sets `status: CONVERTED` only - it does not create a
+ * WorkOrder. That row and its own creation flow (scope, access details, cost
+ * estimate, vendor assignment) is R-024's build, which depends on this one
+ * existing first; the ticket detail page names R-024 as the reason nothing
+ * further renders yet, the same SectionPlaceholder pattern R-022 used for
+ * this whole section before this item built it out.
+ */
+export async function resolveTicketTriage(
+  taskId: string,
+  resolution: TriageResolution,
+): Promise<MaintenanceFormState> {
+  const { task, ticket, actor } = await ticketTriageTaskOrThrow(taskId)
+
+  if (isTicketTriageResolved(ticket.status)) {
+    return { error: 'This ticket is already resolved.' }
+  }
+  const status = TRIAGE_RESOLUTIONS[resolution]
+
+  await prisma.$transaction(async (tx) => {
+    const updated = await tx.ticket.update({
+      where: { id: ticket.id },
+      data: {
+        status,
+        firstResponseAt: firstResponseStamp(ticket),
+        closedAt: status === 'CLOSED' ? new Date() : undefined,
+      },
+    })
+    await audit(
+      {
+        action: 'ticket.triaged',
+        entityType: 'Ticket',
+        entityId: ticket.id,
+        propertyId: task.propertyId,
+        before: { status: ticket.status },
+        after: { status: updated.status },
+      },
+      tx,
+    )
+    await completeTaskWork(tx, task, actor.id, { resolution })
+  })
+
+  revalidatePath('/tasks')
+  revalidatePath('/maintenance')
+  revalidatePath(`/maintenance/${ticket.id}`)
+  redirect('/tasks')
+}
+
+/**
+ * Merges a duplicate into another open ticket at the same property (MAINT-02:
+ * "merge duplicates") - the same "a conversation does not become five
+ * tickets" idea R-021 already applies to a single thread, extended to two
+ * separately-filed reports of the same problem. Completes the source
+ * ticket's Task exactly as the other resolutions do; the target ticket and
+ * its own Task are untouched; a duplicate merges INTO the survivor, not the
+ * other way around.
+ */
+export async function mergeTicketDuplicate(
+  taskId: string,
+  _previous: MaintenanceFormState,
+  formData: FormData,
+): Promise<MaintenanceFormState> {
+  const { task, ticket, actor } = await ticketTriageTaskOrThrow(taskId)
+
+  const targetTicketId = String(formData.get('targetTicketId') ?? '')
+  if (!targetTicketId) return { error: 'Choose the ticket to merge into.' }
+
+  const target = await prisma.ticket.findUnique({ where: { id: targetTicketId } })
+  if (!target) return { error: 'That ticket could not be found.' }
+
+  const violations = canMergeTicket(ticket, target)
+  if (violations.length > 0) {
+    return { error: violations[0]!.message }
+  }
+
+  await prisma.$transaction(async (tx) => {
+    const updated = await tx.ticket.update({
+      where: { id: ticket.id },
+      data: {
+        status: 'MERGED',
+        mergedIntoTicketId: target.id,
+        firstResponseAt: firstResponseStamp(ticket),
+      },
+    })
+    await audit(
+      {
+        action: 'ticket.triaged',
+        entityType: 'Ticket',
+        entityId: ticket.id,
+        propertyId: task.propertyId,
+        before: { status: ticket.status, mergedIntoTicketId: null },
+        after: { status: updated.status, mergedIntoTicketId: target.id },
+      },
+      tx,
+    )
+    await completeTaskWork(tx, task, actor.id, { resolution: 'merged', into: target.id })
+  })
+
+  revalidatePath('/tasks')
+  revalidatePath('/maintenance')
+  revalidatePath(`/maintenance/${ticket.id}`)
+  redirect('/tasks')
 }

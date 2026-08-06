@@ -43,6 +43,13 @@ afterEach(async () => {
   await prisma.lease.deleteMany({ where: { id: { in: leaseIds } } })
   await prisma.unit.deleteMany({ where: { id: { in: unitIds } } })
   await prisma.jobRun.deleteMany({ where: { propertyId } })
+  // eventConsumption before outboxEvent: the FK is RESTRICT, and this
+  // property's unit.became_make_ready event is real enough for R-016's own
+  // registered consumer to have actually processed it, leaving a row that
+  // references the OutboxEvent this would otherwise try to delete first.
+  // The same order documents.spec.ts, jurisdiction.spec.ts and emergency.spec.ts
+  // already use for exactly this reason.
+  await prisma.eventConsumption.deleteMany({ where: { event: { propertyId } } })
   await prisma.outboxEvent.deleteMany({ where: { propertyId } })
   leaseIds.length = 0
   unitIds.length = 0

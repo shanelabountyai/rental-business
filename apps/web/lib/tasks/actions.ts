@@ -13,6 +13,7 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { audit } from '@/lib/audit/index.ts'
 import { propertyResource, requirePermission, requireStaff } from '@/lib/auth/guard.ts'
+import { completeTaskWork } from './complete.ts'
 import { createTask } from './create.ts'
 
 // Writes for the Task queue (D-9, R-011). Same shape as every other
@@ -131,30 +132,7 @@ export async function completeTask(
   const violations = validateCompletion({ type: task.type, proof })
   if (violations.length > 0) return violationsToState(violations)
 
-  await prisma.$transaction(async (tx) => {
-    const updated = await tx.task.update({
-      where: { id: taskId },
-      data: {
-        status: 'DONE',
-        completedByStaffId: actor.id,
-        completedAt: new Date(),
-        proof: proof ?? undefined,
-      },
-    })
-    if (requiresAuditOnCompletion(task.type)) {
-      await audit(
-        {
-          action: 'task.completed',
-          entityType: 'Task',
-          entityId: taskId,
-          propertyId: task.propertyId,
-          before: { status: task.status },
-          after: { status: updated.status, proof },
-        },
-        tx,
-      )
-    }
-  })
+  await prisma.$transaction(async (tx) => completeTaskWork(tx, task, actor.id, proof))
 
   revalidatePath('/tasks')
   revalidatePath(`/tasks/${taskId}`)

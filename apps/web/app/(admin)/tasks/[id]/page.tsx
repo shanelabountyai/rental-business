@@ -1,10 +1,22 @@
+import {
+  CATEGORY_LABELS,
+  firstResponseSlaState,
+  isTicketTriageResolved,
+} from '@rental/core/maintenance'
 import { businessDate, businessDateToUtc } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { TaskActionButton } from '@/components/tasks/action-button.tsx'
 import { CompleteForm } from '@/components/tasks/complete-form.tsx'
+import { TriagePanel } from '@/components/maintenance/triage-panel.tsx'
 import { actorCan, propertyResource, requireScope } from '@/lib/auth/guard.ts'
+import {
+  mergeTicketDuplicate,
+  resolveTicketTriage,
+  setTicketPriority,
+} from '@/lib/maintenance/actions.ts'
+import { getStaffTicket, listOpenTickets } from '@/lib/maintenance/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 import { cancelTask, claimTask, completeTask } from '@/lib/tasks/actions.ts'
 import { getTask } from '@/lib/tasks/queries.ts'
@@ -37,6 +49,13 @@ export default async function TaskDetailPage({
   if (!task) notFound()
 
   const canWrite = await actorCan('task.write', propertyResource(task.property))
+  const canTriage = await actorCan('ticket.write', propertyResource(task.property))
+  // task.read alone does not imply ticket.read - every role in this build
+  // happens to grant both together today, but that is this role table's
+  // current shape, not a guarantee this page may lean on (ROLE-01's own
+  // "hide, don't just block" - a task-only role added later must not leak a
+  // tenant's ticket description through the one page every task shares).
+  const canReadTicket = await actorCan('ticket.read', propertyResource(task.property))
   const property = await prisma.property.findUniqueOrThrow({
     where: { id: task.property.id },
     select: { timezone: true },
@@ -45,6 +64,22 @@ export default async function TaskDetailPage({
     task.businessDate < businessDateToUtc(businessDate(new Date(), property.timezone))
   const unresolved = task.status !== 'DONE' && task.status !== 'CANCELED'
   const claimable = unresolved && !task.assigneeStaffId
+
+  // R-023: a ticket-triage task's own detail carries the ticket's fields and
+  // actions alongside the generic Task ones above - not instead of them,
+  // since claiming and canceling still mean the same thing they always did.
+  const ticket =
+    task.subjectType === 'Ticket' && canReadTicket
+      ? await getStaffTicket(task.subjectId, scope)
+      : null
+  const mergeCandidates = ticket
+    ? (await listOpenTickets(scope))
+        .filter((t) => t.id !== ticket.id && t.propertyId === ticket.propertyId)
+        .map((t) => ({
+          id: t.id,
+          label: `${CATEGORY_LABELS[t.category as keyof typeof CATEGORY_LABELS] ?? 'Uncategorized'} — ${t.unit.name}`,
+        }))
+    : []
 
   return (
     <div className="flex max-w-2xl flex-col gap-6">
@@ -100,12 +135,36 @@ export default async function TaskDetailPage({
         )}
       </dl>
 
+      {ticket && (
+        <TriagePanel
+          ticket={{
+            category: ticket.category,
+            categoryLabel:
+              CATEGORY_LABELS[ticket.category as keyof typeof CATEGORY_LABELS] ??
+              'Uncategorized',
+            description: ticket.description,
+            source: ticket.source,
+            priority: ticket.priority,
+            status: ticket.status,
+            habitabilityFlag: ticket.habitabilityFlag,
+            mergedIntoTicketId: ticket.mergedIntoTicketId,
+          }}
+          slaState={firstResponseSlaState(ticket, new Date())}
+          mergeCandidates={mergeCandidates}
+          setPriorityAction={setTicketPriority.bind(null, task.id)}
+          mergeAction={mergeTicketDuplicate.bind(null, task.id)}
+          resolveAction={resolveTicketTriage.bind(null, task.id)}
+          resolved={isTicketTriageResolved(ticket.status)}
+          canWrite={canTriage}
+        />
+      )}
+
       {canWrite && unresolved && (
         <div className="flex flex-col gap-4 border-t pt-4">
           {claimable && (
             <TaskActionButton action={claimTask.bind(null, task.id)} label="Claim this task" />
           )}
-          <CompleteForm action={completeTask.bind(null, task.id)} />
+          {!ticket && <CompleteForm action={completeTask.bind(null, task.id)} />}
           <TaskActionButton action={cancelTask.bind(null, task.id)} label="Cancel task" />
         </div>
       )}

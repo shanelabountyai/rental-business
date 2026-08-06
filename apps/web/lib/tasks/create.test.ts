@@ -104,6 +104,43 @@ describe('createTask', () => {
     expect(a.task.id).not.toBe(b.task.id)
   })
 
+  it('survives a collision hit from INSIDE a transaction (R-023 regression)', async () => {
+    // The scenario create-then-catch is supposed to handle, but with the
+    // caller being a Prisma.TransactionClient - R-023's outbox consumer runs
+    // exactly this way (dispatchOutbox wraps every consumer call in its own
+    // transaction). A P2002 inside an active transaction leaves THAT
+    // transaction aborted at the Postgres level; every further statement on
+    // it fails with 25P02 until it rolls back. The fallback read has to use
+    // a fresh connection, not the poisoned one, or this throws instead of
+    // returning the row that already exists.
+    const winner = await createTask(prisma, {
+      propertyId,
+      type: 'test.txCollision',
+      subjectType: 'Lease',
+      subjectId: 'lease_tx',
+      businessDate: '2026-08-03',
+      priority: 'ROUTINE',
+      title: 'Created first, outside any transaction',
+    })
+    taskIds.push(winner.task.id)
+
+    const loser = await prisma.$transaction((tx) =>
+      createTask(tx, {
+        propertyId,
+        type: 'test.txCollision',
+        subjectType: 'Lease',
+        subjectId: 'lease_tx',
+        businessDate: '2026-08-03',
+        priority: 'EMERGENCY',
+        title: 'Collides from inside a transaction',
+      }),
+    )
+
+    expect(loser.created).toBe(false)
+    expect(loser.task.id).toBe(winner.task.id)
+    expect(loser.task.title).toBe('Created first, outside any transaction')
+  })
+
   it('creates a distinct task for the same subject on a different day', async () => {
     const day1 = await createTask(prisma, {
       propertyId,

@@ -104,6 +104,13 @@ export const AUDIT_ACTIONS = [
   /// write too, not only what happens to it later" call R-012 made for
   /// document.uploaded.
   'ticket.submitted',
+
+  /// R-023: a triage decision - priority override, merge, "waiting on
+  /// tenant", converted, or closed. Ticket rows are mutated in place (see
+  /// ticket.submitted's own comment), so this is the before/after record of
+  /// what triage changed and when - RISK-05's "response-time logging" is
+  /// this entry plus Ticket.firstResponseAt, not a separate mechanism.
+  'ticket.triaged',
 ] as const
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number]

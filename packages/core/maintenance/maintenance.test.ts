@@ -1,14 +1,19 @@
 import { describe, expect, it } from 'vitest'
 import {
   CLARIFYING_PROMPTS,
+  FIRST_RESPONSE_SLA_HOURS,
   MAINTENANCE_CATEGORIES,
   type MaintenanceRequestInput,
   type PhoneLoggedRequestInput,
   applicableTroubleshootingSteps,
+  canMergeTicket,
   detectHabitabilityLanguage,
+  firstResponseSlaState,
   formatMaintenanceDescription,
   formatPhoneLoggedDescription,
   isMaintenanceCategory,
+  isTicketTriageResolved,
+  suggestTicketPriority,
   validateMaintenanceRequest,
   validatePhoneLoggedRequest,
 } from './index.ts'
@@ -281,5 +286,151 @@ describe('formatPhoneLoggedDescription', () => {
       petWarning: false,
     })
     expect(withoutPet).not.toContain('pet')
+  })
+})
+
+describe('suggestTicketPriority', () => {
+  it('suggests URGENT for categories where delay carries real cost', () => {
+    for (const category of ['PLUMBING', 'ELECTRICAL', 'HVAC', 'LOCKS']) {
+      expect(
+        suggestTicketPriority({ category, habitabilityFlag: false }),
+        category,
+      ).toBe('URGENT')
+    }
+  })
+
+  it('suggests ROUTINE for the rest', () => {
+    for (const category of ['APPLIANCE', 'PEST', 'EXTERIOR']) {
+      expect(
+        suggestTicketPriority({ category, habitabilityFlag: false }),
+        category,
+      ).toBe('ROUTINE')
+    }
+  })
+
+  it('habitability language overrides the category default outright', () => {
+    // PEST is ROUTINE by default, but an infestation is not routine.
+    expect(
+      suggestTicketPriority({ category: 'PEST', habitabilityFlag: true }),
+    ).toBe('URGENT')
+  })
+
+  it('falls through UNCATEGORIZED (SMS tickets, R-021) to ROUTINE', () => {
+    expect(
+      suggestTicketPriority({ category: 'UNCATEGORIZED', habitabilityFlag: false }),
+    ).toBe('ROUTINE')
+  })
+
+  it('never suggests EMERGENCY - that is earned only through R-020s own intake', () => {
+    for (const category of MAINTENANCE_CATEGORIES) {
+      expect(
+        suggestTicketPriority({ category, habitabilityFlag: true }),
+      ).not.toBe('EMERGENCY')
+    }
+  })
+})
+
+describe('firstResponseSlaState', () => {
+  const createdAt = new Date('2026-08-05T12:00:00Z')
+
+  it('is on_track well within the window', () => {
+    const now = new Date('2026-08-05T12:30:00Z')
+    expect(firstResponseSlaState({ createdAt, firstResponseAt: null }, now)).toBe(
+      'on_track',
+    )
+  })
+
+  it('is approaching once past the warning fraction of the window', () => {
+    const now = new Date(
+      createdAt.getTime() + FIRST_RESPONSE_SLA_HOURS * 0.8 * 3_600_000,
+    )
+    expect(firstResponseSlaState({ createdAt, firstResponseAt: null }, now)).toBe(
+      'approaching',
+    )
+  })
+
+  it('is breached once the window has fully elapsed', () => {
+    const now = new Date(createdAt.getTime() + (FIRST_RESPONSE_SLA_HOURS + 1) * 3_600_000)
+    expect(firstResponseSlaState({ createdAt, firstResponseAt: null }, now)).toBe(
+      'breached',
+    )
+  })
+
+  it('is responded once firstResponseAt is set, even long after the window', () => {
+    const now = new Date(createdAt.getTime() + 100 * 3_600_000)
+    const firstResponseAt = new Date(createdAt.getTime() + 99 * 3_600_000)
+    expect(firstResponseSlaState({ createdAt, firstResponseAt }, now)).toBe('responded')
+  })
+})
+
+describe('canMergeTicket', () => {
+  const base = { propertyId: 'prop_1', status: 'NEW' }
+
+  it('accepts merging one open ticket into another at the same property', () => {
+    expect(
+      canMergeTicket({ id: 't1', ...base }, { id: 't2', ...base, status: 'TRIAGED' }),
+    ).toEqual([])
+  })
+
+  it('refuses merging a ticket into itself', () => {
+    const violations = canMergeTicket({ id: 't1', ...base }, { id: 't1', ...base })
+    expect(violations.map((v) => v.field)).toContain('targetTicketId')
+  })
+
+  it('refuses merging across properties', () => {
+    const violations = canMergeTicket(
+      { id: 't1', propertyId: 'prop_1', status: 'NEW' },
+      { id: 't2', propertyId: 'prop_2', status: 'NEW' },
+    )
+    expect(violations.map((v) => v.field)).toContain('targetTicketId')
+  })
+
+  it('refuses a source ticket whose own triage is already resolved', () => {
+    // Not just MERGED/CLOSED - WAITING_ON_TENANT and CONVERTED are also a
+    // completed triage decision (their own Task is already DONE), so the
+    // source side refuses all four the same way resolveTicketTriage's own
+    // guard does.
+    for (const status of ['WAITING_ON_TENANT', 'CONVERTED', 'MERGED', 'CLOSED']) {
+      const violations = canMergeTicket(
+        { id: 't1', ...base, status },
+        { id: 't2', ...base },
+      )
+      expect(violations.length, status).toBeGreaterThan(0)
+    }
+  })
+
+  it('accepts a target that has moved past initial triage but is not MERGED or CLOSED', () => {
+    // A duplicate discovered after the original already moved to
+    // WAITING_ON_TENANT or CONVERTED is still the same problem.
+    for (const status of ['WAITING_ON_TENANT', 'CONVERTED']) {
+      expect(
+        canMergeTicket({ id: 't1', ...base }, { id: 't2', ...base, status }),
+        status,
+      ).toEqual([])
+    }
+  })
+
+  it('refuses a target ticket that is not open', () => {
+    for (const status of ['MERGED', 'CLOSED']) {
+      const violations = canMergeTicket(
+        { id: 't1', ...base },
+        { id: 't2', ...base, status },
+      )
+      expect(violations.length, status).toBeGreaterThan(0)
+    }
+  })
+})
+
+describe('isTicketTriageResolved', () => {
+  it('is true for every terminal triage outcome', () => {
+    for (const status of ['WAITING_ON_TENANT', 'CONVERTED', 'MERGED', 'CLOSED']) {
+      expect(isTicketTriageResolved(status), status).toBe(true)
+    }
+  })
+
+  it('is false while a triage decision has not yet been made', () => {
+    for (const status of ['NEW', 'TRIAGED']) {
+      expect(isTicketTriageResolved(status), status).toBe(false)
+    }
   })
 })
