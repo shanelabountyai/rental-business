@@ -751,7 +751,7 @@ Three changes:
 **What pins it.** Four tests in `notifications.test.ts`: that `notify()` reports its delivery ids; that a scoped dispatch sends only those and leaves other queued rows alone; that an explicitly empty set sends nothing rather than falling through to a global sweep (a real hazard — "every channel suppressed" must not be indistinguishable from "no filter given"); and that an unfiltered call still sweeps globally.
 
 ## R-027 — Scheduling with entry-notice compliance
-**Commit:** `_pending_`  ·  **Date:** 2026-08-06
+**Commit:** `a99ed6c`  ·  **Date:** 2026-08-06
 
 **What it built.** The legal gate on entering somebody's home. Scheduling a visit now reads the property's own jurisdiction rule, checks whether the window gives enough notice, generates and serves the notice when one is required, warns and demands a stated reason when it does not, tells the tenant, and reminds them at T-1 day. Plus the two recorded facts MAINT-05 asks for either side of the visit: a logged permission-to-enter, and a tenant no-show as trip-charge evidence. 22 core tests, 7 e2e.
 
