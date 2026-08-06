@@ -476,6 +476,7 @@ export async function requestBids(
   })
   if (vendors.length === 0) return { error: 'Those vendors could not be found.' }
 
+  const bidDeliveryIds: string[] = []
   for (const vendor of vendors) {
     // upsert, not create: re-asking a vendor updates their existing row
     // rather than colliding on the (workOrder, vendor) unique index.
@@ -488,7 +489,7 @@ export async function requestBids(
     const link = `${process.env.AUTH_URL ?? ''}/vendor/bid/${token}`
 
     try {
-      await notify({
+      const outcomes = await notify({
         category: 'work_order_assigned',
         templateKey: 'workorder.bid_request',
         recipient: {
@@ -507,11 +508,18 @@ export async function requestBids(
         propertyId: workOrder.propertyId,
         idempotencyKey: `bid-request:${workOrderId}:${vendor.id}:${token.slice(0, 8)}`,
       })
+      for (const outcome of outcomes) {
+        if (outcome.deliveryId) bidDeliveryIds.push(outcome.deliveryId)
+      }
     } catch (error) {
       console.error(`[bids] failed to send bid request to ${vendor.id}`, error)
     }
   }
-  await dispatchPendingNotifications().catch(() => {})
+  // Only the bid requests just recorded - see the emergency page's own
+  // comment for why an unscoped sweep here is a bug rather than a shortcut.
+  await dispatchPendingNotifications(new Date(), 100, { deliveryIds: bidDeliveryIds }).catch(
+    () => {},
+  )
 
   await audit({
     action: 'workorder.bids_requested',

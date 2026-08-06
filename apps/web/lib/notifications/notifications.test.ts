@@ -332,6 +332,92 @@ describe('dispatch', () => {
   })
 })
 
+describe('scoped dispatch', () => {
+  /// Queues one notification and returns the delivery ids `notify()` reported.
+  async function queueOne(label: string) {
+    const key = `test:${label}:${randomUUID()}`
+    const outcomes = await notify({
+      category: 'unit_make_ready',
+      templateKey: 'unit.make_ready',
+      recipient: recipient(),
+      context: { propertyName: 'Test House', unitName: label },
+      propertyId,
+      idempotencyKey: key,
+      now: new Date('2026-08-05T15:00:00Z'),
+    })
+    const rows = await prisma.notification.findMany({
+      where: { idempotencyKey: { startsWith: key } },
+    })
+    notificationIds.push(...rows.map((r) => r.id))
+    return {
+      notificationIds: rows.map((r) => r.id),
+      deliveryIds: outcomes
+        .map((o) => o.deliveryId)
+        .filter((id): id is string => id != null),
+    }
+  }
+
+  it('reports the delivery it just wrote, so a caller can send exactly that', async () => {
+    const queued = await queueOne('reports')
+    expect(queued.deliveryIds.length).toBeGreaterThan(0)
+  })
+
+  it('SENDS ONLY the deliveries it was given, leaving the rest queued', async () => {
+    // The bug this pins: an inline caller (R-020's emergency page, R-025's
+    // vendor dispatch, R-026's bid requests) used to flush the GLOBAL queue,
+    // paying for everyone else's backlog and - because the sweep takes the
+    // oldest rows in id order - potentially not sending its own message at
+    // all. A tenant reporting sewage waited on unrelated notifications.
+    const mine = await queueOne('mine')
+    const theirs = await queueOne('theirs')
+
+    await dispatchPendingNotifications(new Date(), 100, {
+      deliveryIds: mine.deliveryIds,
+    })
+
+    const minePending = await prisma.notificationDelivery.findMany({
+      where: { id: { in: mine.deliveryIds } },
+    })
+    for (const delivery of minePending) {
+      expect(delivery.status, 'my own page should have gone').toBe('SENT')
+    }
+
+    const theirsPending = await prisma.notificationDelivery.findMany({
+      where: { id: { in: theirs.deliveryIds } },
+    })
+    for (const delivery of theirsPending) {
+      expect(delivery.status, "somebody else's queue is not mine to flush").toBe('QUEUED')
+    }
+  })
+
+  it('sends NOTHING for an explicitly empty set rather than falling back to a global sweep', async () => {
+    // Every channel suppressed is a real outcome, and it must not be
+    // indistinguishable from "no filter given".
+    const untouched = await queueOne('untouched')
+
+    const result = await dispatchPendingNotifications(new Date(), 100, { deliveryIds: [] })
+    expect(result).toEqual({ sent: 0, failed: 0 })
+
+    const still = await prisma.notificationDelivery.findMany({
+      where: { id: { in: untouched.deliveryIds } },
+    })
+    for (const delivery of still) {
+      expect(delivery.status).toBe('QUEUED')
+    }
+  })
+
+  it('still sweeps globally when given no filter - which is what the cron is for', async () => {
+    const queued = await queueOne('global')
+    await dispatchPendingNotifications()
+    const deliveries = await prisma.notificationDelivery.findMany({
+      where: { id: { in: queued.deliveryIds } },
+    })
+    for (const delivery of deliveries) {
+      expect(delivery.status).toBe('SENT')
+    }
+  })
+})
+
 describe('the append-only log', () => {
   it('refuses an update to a recorded notification', async () => {
     const key = `test:${randomUUID()}`

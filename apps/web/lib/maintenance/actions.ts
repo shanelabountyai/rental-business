@@ -383,36 +383,64 @@ async function pageOnCall(
       }),
     ])
 
-    for (const staff of recipients) {
-      await notify({
-        category: 'maintenance_emergency',
-        templateKey: 'maintenance.emergency',
-        recipient: {
-          type: 'STAFF',
-          id: staff.id,
-          email: staff.email,
-          phone: staff.phone,
-        },
-        context: {
-          emergencyLabel: EMERGENCY_DEFINITIONS[category].label,
-          propertyName: home.property.name,
-          addressLine1: home.property.addressLine1,
-          unitName: home.unit.name,
-          tenantName: tenant.name,
-          tenantPhone: tenantRecord?.phone ?? null,
-          petWarning: args.petWarning === true,
-          entryPermission: args.entryPermission === true,
-        },
-        propertyId: home.propertyId,
-        // Keyed on the ticket: one page per emergency per recipient, however
-        // many times a jittery tenant taps Send.
-        idempotencyKey: `emergency:${ticketId}:${staff.id}`,
-      })
+    // In PARALLEL, not one recipient after another. Every page is
+    // independent, and a tenant standing in sewage is waiting on this whole
+    // function: paging four people sequentially costs four round trips of
+    // latency for no reason. `allSettled`, so one recipient with a broken
+    // record cannot stop the others being paged - which is the entire
+    // difference between a bad address and nobody being told.
+    const results = await Promise.allSettled(
+      recipients.map((staff) =>
+        notify({
+          category: 'maintenance_emergency',
+          templateKey: 'maintenance.emergency',
+          recipient: {
+            type: 'STAFF',
+            id: staff.id,
+            email: staff.email,
+            phone: staff.phone,
+          },
+          context: {
+            emergencyLabel: EMERGENCY_DEFINITIONS[category].label,
+            propertyName: home.property.name,
+            addressLine1: home.property.addressLine1,
+            unitName: home.unit.name,
+            tenantName: tenant.name,
+            tenantPhone: tenantRecord?.phone ?? null,
+            petWarning: args.petWarning === true,
+            entryPermission: args.entryPermission === true,
+          },
+          propertyId: home.propertyId,
+          // Keyed on the ticket: one page per emergency per recipient, however
+          // many times a jittery tenant taps Send.
+          idempotencyKey: `emergency:${ticketId}:${staff.id}`,
+        }),
+      ),
+    )
+
+    for (const result of results) {
+      if (result.status === 'rejected') {
+        console.error(`[emergency] a page could not be recorded for ${ticketId}`, result.reason)
+      }
     }
 
-    // The "immediately" half. Without this the page waits for the hourly
-    // cron - see this function's own caller comment.
-    await dispatchPendingNotifications()
+    const deliveryIds = results
+      .filter((r): r is PromiseFulfilledResult<Awaited<ReturnType<typeof notify>>> => r.status === 'fulfilled')
+      .flatMap((r) => r.value)
+      .map((outcome) => outcome.deliveryId)
+      .filter((id): id is string => id != null)
+
+    // The "immediately" half, scoped to THIS emergency's own pages.
+    //
+    // An unscoped sweep here was a real bug, not a style point: it sends the
+    // oldest queued deliveries in the whole system, so an emergency page
+    // could sit behind up to a hundred unrelated notifications while the
+    // tenant waited on the response - and the wait grew with a backlog that
+    // has nothing to do with this property. R-020 asked for "paged
+    // immediately"; this is the version that actually delivers that, and it
+    // is bounded by the number of people on call rather than by whatever
+    // else the product happens to owe.
+    await dispatchPendingNotifications(new Date(), 100, { deliveryIds })
   } catch (error) {
     console.error(`[emergency] failed to page on-call for ticket ${ticketId}`, error)
   }

@@ -81,6 +81,12 @@ export interface ChannelOutcome {
   outcome: 'recorded' | 'duplicate'
   status?: 'QUEUED' | 'SUPPRESSED' | 'DEFERRED'
   reason?: SuppressionReason
+  /// The delivery row just written, when one was. Exists so a caller that
+  /// needs its OWN messages sent immediately can hand exactly those ids to
+  /// `dispatchPendingNotifications()` instead of flushing the global queue -
+  /// see that function's `only` parameter, and R-020's emergency page, which
+  /// is the caller this was added for.
+  deliveryId?: string
 }
 
 type Db = Prisma.TransactionClient | typeof prisma
@@ -237,7 +243,7 @@ interface RecordInput {
 async function record(db: Db, args: RecordInput): Promise<ChannelOutcome> {
   const key = `${args.input.idempotencyKey}:${args.channel}`
   try {
-    await db.notification.create({
+    const created = await db.notification.create({
       data: {
         idempotencyKey: key,
         category: args.input.category,
@@ -258,12 +264,14 @@ async function record(db: Db, args: RecordInput): Promise<ChannelOutcome> {
           },
         },
       },
+      include: { delivery: { select: { id: true } } },
     })
     return {
       channel: args.channel,
       outcome: 'recorded',
       status: args.status,
       reason: args.reason,
+      deliveryId: created.delivery?.id,
     }
   } catch (error) {
     if (isUniqueViolation(error)) {
@@ -298,12 +306,33 @@ export interface DispatchResult {
 export async function dispatchPendingNotifications(
   now = new Date(),
   limit = 100,
+  /**
+   * Narrows the sweep to specific deliveries - what a caller that needs its
+   * OWN messages out immediately passes (R-020's emergency page, R-025's
+   * vendor dispatch, R-026's bid requests).
+   *
+   * WITHOUT this, an inline caller pays for the entire global backlog and,
+   * worse, may not send its own message at all: the sweep takes the oldest
+   * `limit` rows in id order, so an emergency page queued a moment ago sits
+   * behind up to 100 unrelated notifications while the tenant waits. R-020
+   * asked for "the page goes now"; flushing everyone else's queue is neither
+   * now nor the page. Found when an emergency submit started exceeding 30s
+   * against a database holding a few hundred stale test notifications.
+   *
+   * The hourly cron passes nothing and still sweeps globally, which is
+   * exactly what a cron is for.
+   */
+  only?: { deliveryIds: readonly string[] },
 ): Promise<DispatchResult> {
   const config = notificationConfig()
   if (!config.enabled) return { sent: 0, failed: 0 }
+  // An explicit empty set means "nothing of mine was queued" - every channel
+  // suppressed, say - and must not fall through to a global sweep.
+  if (only && only.deliveryIds.length === 0) return { sent: 0, failed: 0 }
 
   const due = await prisma.notificationDelivery.findMany({
     where: {
+      ...(only ? { id: { in: [...only.deliveryIds] } } : {}),
       OR: [
         { status: 'QUEUED' },
         { status: 'DEFERRED', sendAfter: { lte: now } },

@@ -373,7 +373,7 @@ export async function dispatchToVendor(
   })
 
   try {
-    await notify({
+    const outcomes = await notify({
       category: 'work_order_assigned',
       templateKey: 'workorder.vendor_dispatch',
       recipient: {
@@ -397,7 +397,13 @@ export async function dispatchToVendor(
       // resend after the first as a duplicate.
       idempotencyKey: `vendor-dispatch:${workOrder.id}:${expiresAt.getTime()}`,
     })
-    await dispatchPendingNotifications()
+    // Scoped to this vendor's own message - an unscoped sweep would make a
+    // PM clicking "send" pay for the entire global queue, and could send
+    // everything EXCEPT the link they just asked for. Same bug R-020's
+    // emergency page had; see dispatchPendingNotifications' `only` parameter.
+    await dispatchPendingNotifications(new Date(), 100, {
+      deliveryIds: outcomes.map((o) => o.deliveryId).filter((id): id is string => id != null),
+    })
   } catch (error) {
     console.error(`[dispatch] failed to send vendor link for ${workOrder.id}`, error)
     return {
