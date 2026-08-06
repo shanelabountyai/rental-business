@@ -276,7 +276,7 @@ test.describe('a ticket-triage Task', () => {
     expect(entry.actorType).toBe('STAFF')
   })
 
-  test('converting names R-024 as where dispatch itself ships', async ({ page }) => {
+  test('converting offers a real "Create work order" link (R-024)', async ({ page }) => {
     const { ticket, task } = await seedTicket()
 
     const staff = await createStaff('owner')
@@ -292,7 +292,9 @@ test.describe('a ticket-triage Task', () => {
       await page.goto(`/tasks/${task.id}`)
       await expect(page.getByText('Converted to a work order')).toBeVisible()
     }).toPass({ timeout: 10_000 })
-    await expect(page.getByText('Work order creation ships in R-024.')).toBeVisible()
+    const createLink = page.getByRole('link', { name: 'Create work order' })
+    await expect(createLink).toBeVisible()
+    await expect(createLink).toHaveAttribute('href', `/workorders/new?ticketId=${ticket.id}`)
 
     const updated = await prisma.ticket.findUniqueOrThrow({ where: { id: ticket.id } })
     expect(updated.status).toBe('CONVERTED')

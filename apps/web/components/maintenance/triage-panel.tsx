@@ -1,6 +1,7 @@
 'use client'
 
 import { useActionState } from 'react'
+import Link from 'next/link'
 import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
 import { SelectField } from '@/components/form/field.tsx'
 import type { MaintenanceFormState } from '@/lib/maintenance/actions.ts'
@@ -44,15 +45,18 @@ export interface TriageMergeCandidate {
  * every other task type already gets.
  */
 export function TriagePanel({
+  ticketId,
   ticket,
   slaState,
   mergeCandidates,
+  existingWorkOrderId,
   setPriorityAction,
   mergeAction,
   resolveAction,
   resolved,
   canWrite,
 }: {
+  ticketId: string
   ticket: {
     category: string
     categoryLabel: string
@@ -63,6 +67,10 @@ export function TriagePanel({
     habitabilityFlag: boolean
     mergedIntoTicketId: string | null
   }
+  /// A work order already created from this ticket, if any - lets the
+  /// resolved view link straight to it instead of offering to create a
+  /// second one for the same CONVERTED decision.
+  existingWorkOrderId?: string | null
   slaState: SlaState
   mergeCandidates: readonly TriageMergeCandidate[]
   setPriorityAction: (
@@ -125,7 +133,16 @@ export function TriagePanel({
         <p className="text-muted-foreground text-sm">
           {RESOLVED_STATUS_LABELS[ticket.status] ?? ticket.status}
           {ticket.status === 'CONVERTED' && (
-            <span className="block">Work order creation ships in R-024.</span>
+            <Link
+              href={
+                existingWorkOrderId
+                  ? `/workorders/${existingWorkOrderId}`
+                  : `/workorders/new?ticketId=${ticketId}`
+              }
+              className="mt-1 block underline underline-offset-4"
+            >
+              {existingWorkOrderId ? 'View work order' : 'Create work order'}
+            </Link>
           )}
         </p>
       ) : !canWrite ? (

@@ -10,6 +10,7 @@ import { notFound } from 'next/navigation'
 import { TaskActionButton } from '@/components/tasks/action-button.tsx'
 import { CompleteForm } from '@/components/tasks/complete-form.tsx'
 import { TriagePanel } from '@/components/maintenance/triage-panel.tsx'
+import { JobPanel } from '@/components/workorders/job-panel.tsx'
 import { actorCan, propertyResource, requireScope } from '@/lib/auth/guard.ts'
 import {
   mergeTicketDuplicate,
@@ -20,6 +21,7 @@ import { getStaffTicket, listOpenTickets } from '@/lib/maintenance/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 import { cancelTask, claimTask, completeTask } from '@/lib/tasks/actions.ts'
 import { getTask } from '@/lib/tasks/queries.ts'
+import { getWorkOrder, jobContextForWorkOrder } from '@/lib/workorders/queries.ts'
 
 export const metadata = { title: 'Task — Rental Operations' }
 
@@ -56,6 +58,7 @@ export default async function TaskDetailPage({
   // "hide, don't just block" - a task-only role added later must not leak a
   // tenant's ticket description through the one page every task shares).
   const canReadTicket = await actorCan('ticket.read', propertyResource(task.property))
+  const canReadWorkOrder = await actorCan('workorder.read', propertyResource(task.property))
   const property = await prisma.property.findUniqueOrThrow({
     where: { id: task.property.id },
     select: { timezone: true },
@@ -80,6 +83,21 @@ export default async function TaskDetailPage({
           label: `${CATEGORY_LABELS[t.category as keyof typeof CATEGORY_LABELS] ?? 'Uncategorized'} — ${t.unit.name}`,
         }))
     : []
+  const existingWorkOrder =
+    ticket && ticket.status === 'CONVERTED'
+      ? await prisma.workOrder.findFirst({ where: { ticketId: ticket.id }, select: { id: true } })
+      : null
+
+  // R-024: an assigned work order's own job Task carries the same "full
+  // context" idea R-023 already built for triage - a read-only panel next
+  // to the same generic claim/complete/cancel controls (unlike triage,
+  // completing a job task does not itself change the work order's own
+  // status - R-030 owns real verification and closeout).
+  const workOrder =
+    task.subjectType === 'WorkOrder' && canReadWorkOrder
+      ? await getWorkOrder(task.subjectId, scope)
+      : null
+  const jobContext = workOrder ? await jobContextForWorkOrder(workOrder, scope) : null
 
   return (
     <div className="flex max-w-2xl flex-col gap-6">
@@ -137,6 +155,7 @@ export default async function TaskDetailPage({
 
       {ticket && (
         <TriagePanel
+          ticketId={ticket.id}
           ticket={{
             category: ticket.category,
             categoryLabel:
@@ -149,6 +168,7 @@ export default async function TaskDetailPage({
             habitabilityFlag: ticket.habitabilityFlag,
             mergedIntoTicketId: ticket.mergedIntoTicketId,
           }}
+          existingWorkOrderId={existingWorkOrder?.id}
           slaState={firstResponseSlaState(ticket, new Date())}
           mergeCandidates={mergeCandidates}
           setPriorityAction={setTicketPriority.bind(null, task.id)}
@@ -158,6 +178,8 @@ export default async function TaskDetailPage({
           canWrite={canTriage}
         />
       )}
+
+      {workOrder && jobContext && <JobPanel workOrder={workOrder} context={jobContext} />}
 
       {canWrite && unresolved && (
         <div className="flex flex-col gap-4 border-t pt-4">

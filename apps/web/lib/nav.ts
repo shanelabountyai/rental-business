@@ -48,6 +48,12 @@ export const NAV_ITEMS: readonly NavItem[] = [
     ownedBy: 'R-022',
   },
   {
+    href: '/workorders',
+    label: 'Work orders',
+    permission: 'workorder.read',
+    ownedBy: 'R-024',
+  },
+  {
     href: '/money',
     label: 'Money',
     permission: 'ledger.read',

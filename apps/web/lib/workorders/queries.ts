@@ -1,0 +1,150 @@
+import 'server-only'
+
+import { prisma } from '@rental/db'
+import type { ResolvedScope } from '@/lib/scope/current-scope.ts'
+import { getOperationalData } from '@/lib/operational/queries.ts'
+
+// Reads for work orders (MAINT-03, PROP-06, R-024). Scoped by ResolvedScope,
+// the same switcher-intersected-with-RBAC pattern R-022's maintenance
+// queries and R-011's task queue already use.
+
+const OPEN_STATUSES = [
+  'SUBMITTED',
+  'TRIAGED',
+  'PENDING_APPROVAL',
+  'APPROVED',
+  'ASSIGNED',
+  'SCHEDULED',
+  'IN_PROGRESS',
+  'WORK_COMPLETE',
+  'ON_HOLD_WARRANTY',
+  'WAITING_ON_TENANT',
+] as const
+
+const workOrderInclude = {
+  property: { select: { id: true, name: true, timezone: true, legalEntityId: true } },
+  unit: { select: { id: true, name: true } },
+  ticket: { select: { id: true, category: true, description: true, tenantId: true } },
+  vendor: { select: { id: true, name: true, phone: true, email: true } },
+  assignedTo: { select: { id: true, name: true } },
+} as const
+
+export async function listOpenWorkOrders(scope: ResolvedScope) {
+  if (scope.propertyIds.length === 0) return []
+  return prisma.workOrder.findMany({
+    where: { propertyId: { in: scope.propertyIds }, status: { in: [...OPEN_STATUSES] } },
+    orderBy: { createdAt: 'desc' },
+    include: workOrderInclude,
+  })
+}
+
+export async function getWorkOrder(id: string, scope: ResolvedScope) {
+  const workOrder = await prisma.workOrder.findUnique({
+    where: { id },
+    include: workOrderInclude,
+  })
+  if (!workOrder || !scope.propertyIds.includes(workOrder.propertyId)) return null
+  return workOrder
+}
+
+/// Every non-expired-by-default warranty on the property (packages/core's
+/// own isWarrantyActive filters, given expiresOn treats null as "unknown,"
+/// not "safe to ignore") - the create-work-order form's own job, not this
+/// query's, to decide what counts as active right now.
+export async function warrantiesForProperty(propertyId: string) {
+  return prisma.warranty.findMany({
+    where: { propertyId },
+    orderBy: { category: 'asc' },
+  })
+}
+
+/// Staff who hold workorder.write over a property, through any live
+/// assignment - the in-house assignment picker. Same shape as
+/// notifications/consumers.ts's own staffForProperty and
+/// maintenance/emergency.ts's onCallStaffForProperty; not shared with
+/// either because each answers a different permission's inverse question.
+export async function staffForWorkOrderAssignment(propertyId: string) {
+  const property = await prisma.property.findUnique({
+    where: { id: propertyId },
+    select: { legalEntityId: true },
+  })
+  if (!property) return []
+
+  const assignments = await prisma.staffAssignment.findMany({
+    where: {
+      revokedAt: null,
+      staffUser: { active: true },
+      role: { permissions: { has: 'workorder.write' } },
+      OR: [
+        { propertyId: null, legalEntityId: null },
+        { legalEntityId: property.legalEntityId },
+        { propertyId },
+      ],
+    },
+    select: { staffUser: { select: { id: true, name: true } } },
+  })
+
+  const byId = new Map<string, { id: string; name: string }>()
+  for (const assignment of assignments) {
+    byId.set(assignment.staffUser.id, assignment.staffUser)
+  }
+  return [...byId.values()]
+}
+
+/// Every unit in scope, for the standalone-creation picker (no ticket, so
+/// no lease/tenant context to derive it from the way R-022's phone-log
+/// picker does).
+export async function unitsInScope(scope: ResolvedScope) {
+  if (scope.propertyIds.length === 0) return []
+  return prisma.unit.findMany({
+    where: { propertyId: { in: scope.propertyIds } },
+    select: { id: true, name: true, property: { select: { id: true, name: true } } },
+    orderBy: [{ property: { name: 'asc' } }, { name: 'asc' }],
+  })
+}
+
+/// Active vendors, for the assignment picker. A 10-50 unit portfolio's own
+/// vendor list is short enough to show whole and let the PM read trades off
+/// each row - not a query built for a row count this scale will never see.
+export async function activeVendors() {
+  return prisma.vendor.findMany({
+    where: { active: true },
+    orderBy: { name: 'asc' },
+  })
+}
+
+/**
+ * "Full context" MAINT-03 asks the in-house job list to carry: photos,
+ * appliance data, filter sizes, codes, tenant phone. Reuses R-014's own
+ * getOperationalData() for the appliance/access-code/utility/shutoff half
+ * rather than re-querying those four tables here.
+ */
+export async function jobContextForWorkOrder(
+  workOrder: { id: string; propertyId: string; unitId: string; ticketId: string | null },
+  scope: ResolvedScope,
+) {
+  const [operational, photos, tenantPhone] = await Promise.all([
+    getOperationalData(workOrder.propertyId, workOrder.unitId, scope),
+    prisma.document.findMany({
+      where: {
+        deletedAt: null,
+        OR: [
+          { workOrderId: workOrder.id },
+          ...(workOrder.ticketId ? [{ ticketId: workOrder.ticketId }] : []),
+        ],
+      },
+      select: { id: true, fileName: true, contentType: true, createdAt: true },
+      orderBy: { createdAt: 'asc' },
+    }),
+    workOrder.ticketId
+      ? prisma.ticket
+          .findUnique({
+            where: { id: workOrder.ticketId },
+            select: { tenant: { select: { phone: true } } },
+          })
+          .then((t) => t?.tenant?.phone ?? null)
+      : Promise.resolve(null),
+  ])
+
+  return { operational, photos, tenantPhone }
+}

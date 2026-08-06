@@ -45,6 +45,21 @@ export const AUDIT_ACTIONS = [
   'payment.recorded',
   'payment.reversed',
 
+  // Maintenance (MAINT-03, R-024)
+  /// The scope, priority and estimate a work order was CREATED with -
+  /// WorkOrder is mutated heavily afterward (status, assignment, actuals),
+  /// so this is the one place the original creation survives verbatim, the
+  /// same "audit the write too" call ticket.submitted already makes.
+  'workorder.created',
+  /// Who it was assigned to (staff or vendor) and when - MAINT-03's
+  /// either/or assignment, recorded before dispatch could put anyone in a
+  /// position to argue about it later.
+  'workorder.assigned',
+  /// Entered or left ON_HOLD_WARRANTY (PROP-06/MAINT-03's "warranty claim
+  /// pending" state) - separate from workorder.assigned because it is a
+  /// different fact (a claim was filed or resolved, not a person assigned).
+  'workorder.warranty_hold_set',
+
   // Maintenance (MAINT-04)
   'workorder.approved',
   'workorder.denied',

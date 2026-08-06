@@ -26,6 +26,14 @@ type Db = PrismaClient | Prisma.TransactionClient
  * Callers pass a validated TaskInput; validation itself is NOT done here so a
  * caller inside a transaction can validate once, before opening it, the same
  * as every other write in this codebase.
+ *
+ * A caller passing its own `Prisma.TransactionClient` and doing MORE work in
+ * that same transaction after this call must check `created`: `false` means
+ * the P2002 above already happened, which leaves THAT transaction aborted at
+ * the Postgres level for the rest of its lifetime - any further command on
+ * it throws 25P02. Any writes after an `!created` result need the plain
+ * top-level client instead (workorders/job-consumer.ts's own reassignment
+ * fix-up is the example to copy).
  */
 export async function createTask(
   db: Db,
