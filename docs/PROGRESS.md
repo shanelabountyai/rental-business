@@ -681,7 +681,7 @@ The running narrative of what has actually been built. One entry per completed b
 - **A stale e2e assertion in R-023's own spec, exposed by this item's UI change.** R-024 replaced the "Work order creation ships in R-024" placeholder text (which R-023's own e2e test asserted verbatim) with a real "Create work order" link. Fixed the test to assert the link and its `href` instead of frozen placeholder copy - the kind of coupling worth naming so a future item that finishes a NEXT placeholder knows to expect the same.
 
 ## R-025 — Vendor magic-link work orders
-**Commit:** `_pending_`  ·  **Date:** 2026-08-06
+**Commit:** `811e3e1`  ·  **Date:** 2026-08-06
 
 **What it built.** The zero-login vendor surface D-6 has been pointing at since project setup: a PM clicks "send the vendor their link", the vendor gets a text or email, and everything they need to do the job lives behind one URL with no account anywhere. Scope, address with a maps link, the tenant's name and tappable phone number, the photos of the problem, the equipment on site (make/model/serial/filter size from R-014). Accept, decline with a reason, or propose a window. Reveal an access code — logged individually, every time. Upload completion photos and an invoice, where a photo of a handwritten total is a first-class invoice (MAINT-03's own "even a napkin photo"). Mark the work finished. Plus the no-response timer: an hourly sweep that raises a re-dispatch Task when a vendor goes quiet past their priority's threshold, and `fallbackVendorsForTrade()` to rank who to try next. 24 core tests, 10 integration tests on the link itself, 8 e2e tests weighted toward what the link refuses.
 
