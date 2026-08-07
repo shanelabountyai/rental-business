@@ -92,10 +92,31 @@ const MAX_ATTEMPTS = 5
  * fine for nightly work and NOT fine for an emergency maintenance page - R-029
  * routes those directly rather than through this. Move to a queue with a
  * push trigger if sub-hour latency is ever needed generally.
+ *
+ * `only` narrows the sweep to specific events. Unfiltered - the cron - means
+ * "everything pending"; filtered means "just these, leave the rest alone".
+ * The same shape `dispatchPendingNotifications()` grew for R-020's emergency
+ * page, and added here for the same class of reason: four test files were
+ * each sweeping the whole bus concurrently, so one worker could claim
+ * another's (event, consumer) pair between its two dispatches and turn a
+ * deterministic assertion into a one-in-three failure.
  */
-export async function dispatchOutbox(batchSize = 100): Promise<DispatchResult> {
+export async function dispatchOutbox(
+  batchSize = 100,
+  only?: { eventIds: readonly string[] },
+): Promise<DispatchResult> {
+  // An explicit empty set means "nothing of mine is pending" and must not
+  // fall through to a global sweep - the same trap dispatchPendingNotifications
+  // guards against, and for the same reason: a filtered call that silently
+  // becomes an unfiltered one touches everybody's work.
+  if (only && only.eventIds.length === 0) return { published: 0, failed: 0 }
+
   const pending = await prisma.outboxEvent.findMany({
-    where: { publishedAt: null, attempts: { lt: MAX_ATTEMPTS } },
+    where: {
+      ...(only ? { id: { in: [...only.eventIds] } } : {}),
+      publishedAt: null,
+      attempts: { lt: MAX_ATTEMPTS },
+    },
     orderBy: { occurredAt: 'asc' },
     take: batchSize,
   })

@@ -84,7 +84,19 @@ async function fireAssigned(workOrderId: string) {
     propertyId,
     payload: {},
   })
-  return dispatchOutbox()
+  // Scoped to the event just emitted, never a global sweep. Four test files
+  // dispatch this bus concurrently, and one worker claiming another's
+  // (event, consumer) pair mid-assertion is how these went flaky.
+  return dispatchOutbox(100, await onlyEventsFor(workOrderId))
+}
+
+/// The ids of the events this file emitted for one aggregate.
+async function onlyEventsFor(aggregateId: string) {
+  const events = await prisma.outboxEvent.findMany({
+    where: { aggregateId },
+    select: { id: true },
+  })
+  return { eventIds: events.map((e) => e.id) }
 }
 
 describe('the workorder.assigned -> job-task consumer', () => {

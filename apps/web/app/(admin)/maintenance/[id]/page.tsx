@@ -1,7 +1,13 @@
-import { CATEGORY_LABELS } from '@rental/core/maintenance'
+import { CATEGORY_LABELS, emergencyDefinition } from '@rental/core/maintenance'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { requirePermission } from '@/lib/auth/guard.ts'
+import { EmergencyResponsePanel } from '@/components/maintenance/emergency-response-panel.tsx'
+import { actorCan, requirePermission } from '@/lib/auth/guard.ts'
+import {
+  acknowledgeEmergency,
+  setVendorEmergencyAvailability,
+} from '@/lib/maintenance/actions.ts'
+import { emergencyVendorsForTrade } from '@/lib/maintenance/emergency.ts'
 import { getStaffTicket } from '@/lib/maintenance/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 
@@ -37,6 +43,15 @@ export default async function StaffTicketDetailPage({
 
   const ticket = await getStaffTicket(id, scope)
   if (!ticket) notFound()
+
+  // Only for emergencies. Acknowledgement exists to stop the escalation
+  // chain, and there is no chain behind a routine ticket - putting the panel
+  // on every one would teach people to ignore it.
+  const trade = emergencyDefinition(ticket.category)?.trade ?? null
+  const isEmergency = ticket.priority === 'EMERGENCY'
+  const [vendors, canEditVendors] = isEmergency
+    ? await Promise.all([emergencyVendorsForTrade(trade), actorCan('vendor.write')])
+    : [[], false]
 
   return (
     <div className="flex max-w-2xl flex-col gap-6">
@@ -81,6 +96,30 @@ export default async function StaffTicketDetailPage({
         <dt className="text-muted-foreground">Pet at home</dt>
         <dd className="col-span-1 sm:col-span-2">{ticket.petWarning ? 'Yes' : 'No'}</dd>
       </dl>
+
+      {isEmergency && (
+        <EmergencyResponsePanel
+          ticketId={ticket.id}
+          acknowledged={
+            ticket.acknowledgedAt
+              ? {
+                  at: ticket.acknowledgedAt.toLocaleString('en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                    hour: 'numeric',
+                    minute: '2-digit',
+                  }),
+                  by: ticket.acknowledgedBy?.name ?? null,
+                }
+              : null
+          }
+          trade={trade}
+          vendors={vendors}
+          canEditVendors={canEditVendors}
+          acknowledge={acknowledgeEmergency}
+          setEmergencyAvailability={setVendorEmergencyAvailability}
+        />
+      )}
 
       <div className="flex flex-col gap-1.5">
         <h2 className="text-sm font-medium">Description</h2>

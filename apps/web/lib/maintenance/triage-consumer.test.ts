@@ -99,7 +99,19 @@ async function fireTicketCreated(ticketId: string) {
     propertyId,
     payload: {},
   })
-  return dispatchOutbox()
+  // Scoped to the event just emitted, never a global sweep. Four test files
+  // dispatch this bus concurrently, and one worker claiming another's
+  // (event, consumer) pair mid-assertion is how these went flaky.
+  return dispatchOutbox(100, await onlyEventsFor(ticketId))
+}
+
+/// The ids of the events this file emitted for one aggregate.
+async function onlyEventsFor(aggregateId: string) {
+  const events = await prisma.outboxEvent.findMany({
+    where: { aggregateId },
+    select: { id: true },
+  })
+  return { eventIds: events.map((e) => e.id) }
 }
 
 describe('the ticket -> triage-task consumer', () => {
@@ -174,7 +186,7 @@ describe('the ticket -> triage-task consumer', () => {
       propertyId,
       payload: {},
     })
-    const result = await dispatchOutbox()
+    const result = await dispatchOutbox(100, await onlyEventsFor('not-a-real-ticket-id'))
     // A vanished ticket (a same-second merge) is not the consumer's problem
     // to raise.
     expect(result.failed).toBe(0)

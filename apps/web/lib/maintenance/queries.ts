@@ -73,6 +73,9 @@ const staffTicketInclude = {
   property: { select: { id: true, name: true } },
   unit: { select: { id: true, name: true } },
   tenant: { select: { id: true, firstName: true, lastName: true, phone: true } },
+  // R-029's emergency panel: who took responsibility, and when. Cheap
+  // columns on a row already being fetched.
+  acknowledgedBy: { select: { name: true } },
 } as const
 
 /// A bare list, sorted newest first - the full triage queue (priority

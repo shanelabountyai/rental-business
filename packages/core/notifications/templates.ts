@@ -331,6 +331,74 @@ function formatEntryWindow(start: Date, end: Date, timeZone: string): string {
 }
 
 /// Every registered template, by key. Later items add theirs here.
+/// Context for `maintenance.emergency_escalation` (NOTIF-05, R-029).
+export interface EmergencyEscalationContext extends MaintenanceEmergencyContext {
+  /// How long the emergency has sat unacknowledged. Stated, not implied - a
+  /// recipient needs to know whether this is 15 minutes old or two hours.
+  minutesUnacknowledged: number
+  /// True when nobody was on call and the first page already went to
+  /// everybody, so this is a second, louder page to the same people rather
+  /// than a genuine escalation past somebody.
+  repage: boolean
+}
+
+/**
+ * Nobody acknowledged an emergency page (NOTIF-05: "emergency ticket
+ * unacknowledged 15 min -> escalate past on-call to owner", R-029).
+ *
+ * Same category as the first page, deliberately - `maintenance_emergency` is
+ * what bypasses quiet hours and cannot be unsubscribed from, and an
+ * escalation that could be silenced or deferred until 8am would be an
+ * escalation in name only.
+ *
+ * Leads with UNACKNOWLEDGED rather than repeating EMERGENCY, so somebody who
+ * has already seen the first page can tell at a glance that this is the
+ * chain firing rather than a second incident.
+ */
+export const emergencyEscalationTemplate: NotificationTemplate<EmergencyEscalationContext> =
+  {
+    key: 'maintenance.emergency_escalation',
+    category: 'maintenance_emergency',
+    channels: ['SMS', 'EMAIL', 'PORTAL'],
+    render: (context, channel) => {
+      const where = `${context.addressLine1}${
+        context.unitName ? ` (${context.unitName})` : ''
+      }`
+      const headline = `UNACKNOWLEDGED ${context.minutesUnacknowledged}m: ${context.emergencyLabel}`
+
+      if (channel === 'SMS') {
+        return {
+          body: [
+            headline,
+            where,
+            context.tenantPhone
+              ? `${context.tenantName} ${context.tenantPhone}`
+              : `${context.tenantName} (no phone on file)`,
+            context.repage ? null : 'Nobody on call has responded.',
+          ]
+            .filter(Boolean)
+            .join('\n'),
+        }
+      }
+
+      return {
+        subject: `${headline} — ${where}`,
+        body: [
+          `An emergency at ${where} has gone ${context.minutesUnacknowledged} minutes without anybody acknowledging it.`,
+          '',
+          `What the tenant reported: ${context.emergencyLabel}`,
+          `Reach them on: ${context.tenantPhone ?? 'no phone on file'}`,
+          '',
+          context.repage
+            ? 'Nobody was on call when this came in, so everybody with authority over the property was paged and is being paged again now.'
+            : 'The on-call staff were paged and have not acknowledged, so this has escalated to you.',
+          '',
+          'Open the ticket and acknowledge it so the chain stops.',
+        ].join('\n'),
+      }
+    },
+  }
+
 export const TEMPLATES: Readonly<Record<string, NotificationTemplate<never>>> = {
   [unitMakeReadyTemplate.key]:
     unitMakeReadyTemplate as unknown as NotificationTemplate<never>,
@@ -342,6 +410,8 @@ export const TEMPLATES: Readonly<Record<string, NotificationTemplate<never>>> = 
     vendorBidRequestTemplate as unknown as NotificationTemplate<never>,
   [entryNoticeTemplate.key]:
     entryNoticeTemplate as unknown as NotificationTemplate<never>,
+  [emergencyEscalationTemplate.key]:
+    emergencyEscalationTemplate as unknown as NotificationTemplate<never>,
 }
 
 export class UnknownTemplateError extends Error {

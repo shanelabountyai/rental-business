@@ -2,6 +2,7 @@ import { formatCents } from '@rental/core/money'
 import { prisma } from '@rental/db'
 import { auth } from '@/auth.ts'
 import { MfaEnrolment } from '@/components/mfa-enrolment.tsx'
+import { OnCallToggle } from '@/components/maintenance/on-call-toggle.tsx'
 import { NotificationPreferencesSection } from '@/components/notifications/preferences-section.tsx'
 import {
   beginMfaEnrolment,
@@ -9,6 +10,7 @@ import {
   signOutEverywhere,
 } from '@/lib/auth/actions.ts'
 import { requireStaff } from '@/lib/auth/guard.ts'
+import { setOnCall } from '@/lib/oncall/actions.ts'
 import { getPreferences } from '@/lib/notifications/queries.ts'
 
 export const metadata = { title: 'Your account — Rental Operations' }
@@ -27,7 +29,7 @@ export default async function AccountPage({
     searchParams,
   ])
 
-  const [credential, assignments, preferences] = await Promise.all([
+  const [credential, assignments, preferences, onCall] = await Promise.all([
     prisma.staffCredential.findUnique({
       where: { staffUserId: actor.id },
       select: { mfaEnrolledAt: true },
@@ -42,7 +44,23 @@ export default async function AccountPage({
       },
     }),
     getPreferences('STAFF', actor.id),
+    prisma.staffUser.findUnique({
+      where: { id: actor.id },
+      select: { onCallUntil: true },
+    }),
   ])
+
+  // Lapsed windows read as "not on call" here, exactly as the rota reads them
+  // (packages/core/oncall) - a stale end date shown as if it were live would
+  // tell somebody they are covered when nothing would page them.
+  const onCallUntil =
+    onCall?.onCallUntil && onCall.onCallUntil > new Date()
+      ? onCall.onCallUntil.toLocaleString('en-US', {
+          weekday: 'short',
+          hour: 'numeric',
+          minute: '2-digit',
+        })
+      : null
 
   const ceiling = (cents: number | null) =>
     cents === null ? 'No limit' : formatCents(cents)
@@ -102,6 +120,13 @@ export default async function AccountPage({
           <dt>Can waive fees up to</dt>
           <dd>{ceiling(actor.ceilings.waiveFeeCents)}</dd>
         </dl>
+      </section>
+
+      <section aria-labelledby="on-call" className="flex flex-col gap-3">
+        <h2 id="on-call" className="text-lg font-semibold">
+          On call
+        </h2>
+        <OnCallToggle onCallUntil={onCallUntil} setOnCall={setOnCall} />
       </section>
 
       <section aria-labelledby="mfa" className="flex flex-col gap-3">

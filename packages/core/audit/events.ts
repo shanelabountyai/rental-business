@@ -160,6 +160,28 @@ export const AUDIT_ACTIONS = [
   /// what triage changed and when - RISK-05's "response-time logging" is
   /// this entry plus Ticket.firstResponseAt, not a separate mechanism.
   'ticket.triaged',
+
+  /// R-029: somebody took responsibility for an emergency page. The clock
+  /// that NOTIF-05's escalation runs on stops here, so "who acknowledged, and
+  /// how long after the tenant reported it" is a question the trail has to be
+  /// able to answer - it is the response-time evidence for the one ticket
+  /// class where response time is a safety matter rather than a service
+  /// level.
+  'ticket.acknowledged',
+
+  /// R-029: nobody acknowledged in time and the chain fired. Recorded even
+  /// though every page is already a Notification row, because this is the
+  /// entry that says WHY a second set of people were woken up, and whether
+  /// the rota was configured at all when it happened.
+  'ticket.escalated',
+
+  /// R-029: somebody changed who is on call, or the order the chain runs in.
+  /// A rota that quietly narrowed to one unreachable person is a paging
+  /// failure waiting to happen, and the trail should say who narrowed it.
+  'staff.on_call_changed',
+
+  /// R-029: a vendor was added to or removed from the after-hours list.
+  'vendor.emergency_availability_changed',
 ] as const
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number]

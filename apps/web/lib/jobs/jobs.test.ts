@@ -311,6 +311,18 @@ describe('the scheduled job runner', () => {
   })
 })
 
+/// The ids of this file's own events, so a dispatch touches nothing another
+/// concurrently-running suite emitted. Without it these assertions depend on
+/// what the rest of the suite happens to be doing at the same moment - which
+/// is how "retries a consumer that failed" became a one-in-three failure.
+async function mine(aggregateId: string): Promise<{ eventIds: string[] }> {
+  const events = await prisma.outboxEvent.findMany({
+    where: { aggregateId },
+    select: { id: true },
+  })
+  return { eventIds: events.map((e) => e.id) }
+}
+
 describe('the event outbox', () => {
   it('delivers an event to a subscribed consumer and marks it published', async () => {
     const seen: string[] = []
@@ -329,7 +341,7 @@ describe('the event outbox', () => {
       propertyId: chicagoPropertyId,
     })
 
-    const result = await dispatchOutbox()
+    const result = await dispatchOutbox(100, await mine('lease_1'))
     expect(result.published).toBeGreaterThanOrEqual(1)
     expect(seen).toEqual(['lease_1'])
 
@@ -358,9 +370,10 @@ describe('the event outbox', () => {
       propertyId: chicagoPropertyId,
     })
 
-    await dispatchOutbox()
-    await dispatchOutbox()
-    await dispatchOutbox()
+    const only = await mine('lease_2')
+    await dispatchOutbox(100, only)
+    await dispatchOutbox(100, only)
+    await dispatchOutbox(100, only)
 
     expect(calls).toBe(1)
   })
@@ -396,13 +409,14 @@ describe('the event outbox', () => {
       propertyId: chicagoPropertyId,
     })
 
-    const first = await dispatchOutbox()
+    const only = await mine('lease_3')
+    const first = await dispatchOutbox(100, only)
     expect(first.failed).toBeGreaterThanOrEqual(1)
     expect(goodCalls).toBe(1)
     expect(badCalls).toBe(1)
 
     failNext = false
-    await dispatchOutbox()
+    await dispatchOutbox(100, only)
 
     // The failing consumer got another turn...
     expect(badCalls).toBe(2)
@@ -425,7 +439,7 @@ describe('the event outbox', () => {
 
     // An empty registry is a working bus, not a broken one: nothing is lost
     // while the consumers that care are still being built.
-    await dispatchOutbox()
+    await dispatchOutbox(100, await mine('ticket_1'))
     const event = await prisma.outboxEvent.findFirstOrThrow({
       where: { aggregateId: 'ticket_1' },
     })

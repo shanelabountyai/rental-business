@@ -19,6 +19,7 @@
     "./maintenance": "./maintenance/index.ts",
     "./money": "./money/index.ts",
     "./notifications": "./notifications/index.ts",
+    "./oncall": "./oncall/index.ts",
     "./operational": "./operational/index.ts",
     "./portal": "./portal/index.ts",
     "./property": "./property/index.ts",

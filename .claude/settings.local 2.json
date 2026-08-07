@@ -1,0 +1,33 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cd \"/Users/shanelabounty/Documents/Claude/Projects/rental business\" && cp packages/core/money/money.ts /tmp/money.bak && printf '\\\\nconst __typecheck_probe: string = 123\\\\n' >> packages/core/money/money.ts && echo \"--- typecheck with deliberate error in core ---\" && npm run typecheck 2>&1 | tail -10; cp /tmp/money.bak packages/core/money/money.ts && echo \"--- restored ---\" && git diff --stat)",
+      "Bash(npx dotenv *)",
+      "Bash(PORT=3100 npm run test:e2e)",
+      "Bash(PORT=3100 npm run test:e2e -- --project=desktop-chrome --grep \"portal/login has no detectable\")",
+      "Bash(lsof -ti:3100)",
+      "Bash(xargs -r kill)",
+      "Bash(PORT=3100 npm run test:e2e -- --project=desktop-chrome --grep \"survives a wrong code\")",
+      "Bash(PORT=3100 npm run test:e2e -- --project=desktop-chrome tmp-debug)",
+      "Bash(python3 -)",
+      "Bash(PORT=3100 npm run test:e2e -- --project=desktop-chrome --grep \"seeded ceilings|second factor and does not\")",
+      "Bash(python3 -c \"import json;print\\(json.dumps\\(json.load\\(open\\('package.json'\\)\\)['scripts'],indent=1\\)\\)\")",
+      "Bash(PORT=3100 npm run test:e2e -- tmp-probe3 --project=desktop-chrome)",
+      "Bash(sed -n '/BODY FULL/,/passed\\\\|failed/p' /tmp/probe3.log)",
+      "Bash(PORT=3100 npm run test:e2e -- properties.spec.ts)",
+      "Bash(PORT=3100 npm run test:e2e -- properties.spec.ts --project=desktop-chrome --grep \"warns on a duplicate address\" --repeat-each=3)",
+      "Bash(PORT=3100 npm run test:e2e -- properties.spec.ts --project=desktop-chrome --grep \"warns on a duplicate address\" --repeat-each=5)",
+      "Bash(PORT=3100 npm run test:e2e -- properties.spec.ts --project=desktop-chrome)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:3000/login --max-time 5)",
+      "Bash(npx eslint *)",
+      "Bash(npm audit *)",
+      "Bash(npm ls *)",
+      "Bash(xargs cat)",
+      "Bash(echo \"started pid $!\")",
+      "Bash(npx playwright *)"
+    ],
+    "additionalDirectories": [
+      "/tmp"
+    ]
+  }
+}

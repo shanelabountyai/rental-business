@@ -20,9 +20,16 @@ const ticketIds: string[] = []
 const tenantIds: string[] = []
 const propertyIds: string[] = []
 
-const TENANT_PHONE = '+15125557001'
-const VENDOR_PHONE = '+15125557002'
-const UNKNOWN_PHONE = '+15125557999'
+// UNIQUE PER RUN, not fixed constants. The routing rule under test refuses
+// when a number matches more than one party - so a run that crashed before
+// its afterAll leaves an active tenant holding the number, and every run
+// afterwards sees two candidates and correctly declines to route. That is
+// the feature working against its own fixture, and it cost a full debugging
+// pass to see. A number nobody else can be holding cannot reproduce it.
+const RUN = String(Date.now()).slice(-6)
+const TENANT_PHONE = `+1512555${RUN}`
+const VENDOR_PHONE = `+1512556${RUN}`
+const UNKNOWN_PHONE = `+1512557${RUN}`
 
 beforeAll(async () => {
   const stamp = `sms-${Date.now()}`

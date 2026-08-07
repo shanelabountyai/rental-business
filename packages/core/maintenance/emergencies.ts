@@ -77,6 +77,18 @@ export interface EmergencyDefinition {
   /// job, and that is a config decision (R-029's on-call rules), not a
   /// property of the tenant's report.
   pagesOnCall: boolean
+  /**
+   * Which trade answers this one (MAINT-12's "emergency vendor list per
+   * trade", R-029), or null where no trade does.
+   *
+   * Matched against `Vendor.trades`, which is free-form operator data by
+   * design (see the schema comment) - so these are the conventional strings
+   * the seed and the dispatch path already use, not an enum. A category
+   * whose real answer is 911 or the gas company has null here, deliberately:
+   * offering a PM a plumber to call for a gas leak would be the product
+   * inserting itself into the one path where it should not.
+   */
+  trade: string | null
 }
 
 export const EMERGENCY_DEFINITIONS: Record<EmergencyCategory, EmergencyDefinition> = {
@@ -91,6 +103,7 @@ export const EMERGENCY_DEFINITIONS: Record<EmergencyCategory, EmergencyDefinitio
     // See EmergencyDefinition.shutoffType. Not an omission.
     shutoffType: null,
     pagesOnCall: true,
+    trade: null,
   },
   CO_ALARM: {
     label: 'My carbon monoxide alarm is going off',
@@ -101,6 +114,7 @@ export const EMERGENCY_DEFINITIONS: Record<EmergencyCategory, EmergencyDefinitio
     ],
     shutoffType: null,
     pagesOnCall: true,
+    trade: null,
   },
   ELECTRICAL_BURNING: {
     label: 'Burning smell or sparking from an outlet or switch',
@@ -111,6 +125,7 @@ export const EMERGENCY_DEFINITIONS: Record<EmergencyCategory, EmergencyDefinitio
     ],
     shutoffType: 'BREAKER_PANEL',
     pagesOnCall: true,
+    trade: 'electrical',
   },
   ACTIVE_FLOODING: {
     label: 'Water is flooding in right now',
@@ -121,6 +136,7 @@ export const EMERGENCY_DEFINITIONS: Record<EmergencyCategory, EmergencyDefinitio
     ],
     shutoffType: 'WATER_MAIN',
     pagesOnCall: true,
+    trade: 'plumbing',
   },
   SEWAGE_BACKUP: {
     label: 'Sewage is backing up',
@@ -130,6 +146,7 @@ export const EMERGENCY_DEFINITIONS: Record<EmergencyCategory, EmergencyDefinitio
     ],
     shutoffType: 'WATER_MAIN',
     pagesOnCall: true,
+    trade: 'plumbing',
   },
   NO_HEAT_FREEZING: {
     label: 'No heat and it is freezing',
@@ -140,6 +157,7 @@ export const EMERGENCY_DEFINITIONS: Record<EmergencyCategory, EmergencyDefinitio
     ],
     shutoffType: null,
     pagesOnCall: true,
+    trade: 'hvac',
   },
   NO_AC_DANGEROUS_HEAT: {
     label: 'No air conditioning and it is dangerously hot',
@@ -149,6 +167,7 @@ export const EMERGENCY_DEFINITIONS: Record<EmergencyCategory, EmergencyDefinitio
     ],
     shutoffType: null,
     pagesOnCall: true,
+    trade: 'hvac',
   },
   BREAK_IN: {
     label: 'A break-in, or a door or window will not secure',
@@ -158,6 +177,7 @@ export const EMERGENCY_DEFINITIONS: Record<EmergencyCategory, EmergencyDefinitio
     ],
     shutoffType: null,
     pagesOnCall: true,
+    trade: 'locksmith',
   },
   ONLY_TOILET_INOPERABLE: {
     label: 'My only toilet does not work',
@@ -166,6 +186,7 @@ export const EMERGENCY_DEFINITIONS: Record<EmergencyCategory, EmergencyDefinitio
     ],
     shutoffType: 'WATER_MAIN',
     pagesOnCall: true,
+    trade: 'plumbing',
   },
 }
 

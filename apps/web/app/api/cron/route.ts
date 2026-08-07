@@ -1,5 +1,5 @@
-import { timingSafeEqual } from 'node:crypto'
 import { auditAsSystem } from '@/lib/audit/index.ts'
+import { isAuthorizedCron } from '@/lib/cron/authorize.ts'
 import { dispatchOutbox } from '@/lib/jobs/outbox.ts'
 // Side-effect import: populates SCHEDULED_JOBS before runDueJobs() reads it.
 // See registrations.ts for why every job module is imported from exactly here.
@@ -24,7 +24,7 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
 export async function GET(request: Request) {
-  if (!isAuthorized(request)) {
+  if (!isAuthorizedCron(request)) {
     // 404, not 401. An unauthenticated caller learns nothing about whether
     // this endpoint exists, and a scanner gets no signal to come back.
     return new Response('Not found', { status: 404 })
@@ -83,26 +83,4 @@ export async function GET(request: Request) {
     entryRemindersSent: entryReminders.reminded,
     durationMs: Date.now() - startedAt,
   })
-}
-
-/**
- * Bearer token comparison, in constant time.
- *
- * Refuses everything when CRON_SECRET is unset - which .env.example already
- * demands. Defaulting to open would make a missing environment variable in a
- * new deployment into an unauthenticated endpoint that runs every scheduled
- * job in the product on request.
- */
-function isAuthorized(request: Request): boolean {
-  const expected = process.env.CRON_SECRET
-  if (!expected) return false
-
-  const header = request.headers.get('authorization')
-  if (!header?.startsWith('Bearer ')) return false
-
-  const provided = Buffer.from(header.slice('Bearer '.length))
-  const secret = Buffer.from(expected)
-  // Length is checked first because timingSafeEqual throws on a mismatch. The
-  // length of a secret is not the secret.
-  return provided.length === secret.length && timingSafeEqual(provided, secret)
 }

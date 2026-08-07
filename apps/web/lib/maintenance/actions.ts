@@ -29,7 +29,7 @@ import { dispatchPendingNotifications, notify } from '@/lib/notifications/send.t
 import { requireTenantWithScope } from '@/lib/portal/guard.ts'
 import { generateStorageKey, storage } from '@/lib/storage/index.ts'
 import { completeTaskWork } from '@/lib/tasks/complete.ts'
-import { onCallStaffForProperty, unitForEmergency } from './emergency.ts'
+import { emergencyPagingPlan, unitForEmergency } from './emergency.ts'
 import { getTenantCurrentHome } from './queries.ts'
 
 // Writes for the tenant maintenance flow (MAINT-01, R-019).
@@ -375,13 +375,18 @@ async function pageOnCall(
   args: EmergencyRequestInput,
 ): Promise<void> {
   try {
-    const [recipients, tenantRecord] = await Promise.all([
-      onCallStaffForProperty(home.propertyId),
+    const [plan, tenantRecord] = await Promise.all([
+      emergencyPagingPlan(home.propertyId),
       prisma.tenant.findUnique({
         where: { id: tenant.id },
         select: { phone: true },
       }),
     ])
+
+    // WHO, decided by the rota (R-029) rather than by paging everybody. When
+    // nobody is on call this is still everybody - see packages/core/oncall
+    // for why that fallback is the safe direction and not an oversight.
+    const recipients = plan.recipients
 
     // In PARALLEL, not one recipient after another. Every page is
     // independent, and a tenant standing in sewage is waiting on this whole
@@ -771,4 +776,119 @@ export async function mergeTicketDuplicate(
   revalidatePath('/maintenance')
   revalidatePath(`/maintenance/${ticket.id}`)
   redirect('/tasks')
+}
+
+/**
+ * Somebody has seen this emergency and is acting on it (NOTIF-05, R-029).
+ *
+ * ONE CLICK, NO FORM, NO REASON. An acknowledgement that takes a dialogue to
+ * record is one nobody makes at 3am from a phone, and the escalation chain
+ * only stops when this row is written - a design that makes stopping it
+ * awkward pages the owner for every emergency somebody was already driving
+ * to.
+ *
+ * Deliberately NOT `firstResponseAt` (R-023's triage stamp). A page
+ * acknowledged at 3am is not a triage decision, and letting ordinary daytime
+ * queue work stop the escalation clock would be exactly the silent failure
+ * this item exists to prevent.
+ *
+ * A REAL FORM SUBMISSION, not an onClick handler - which is why it takes
+ * FormData. A handler does nothing until React has hydrated, and a dead
+ * button on the screen somebody opens at 3am on a bad connection is the
+ * failure this whole item exists to prevent.
+ */
+export async function acknowledgeEmergency(
+  _previous: MaintenanceFormState,
+  formData: FormData,
+): Promise<MaintenanceFormState> {
+  const ticketId = String(formData.get('ticketId') ?? '')
+  const ticket = await prisma.ticket.findUnique({
+    where: { id: ticketId },
+    select: {
+      id: true,
+      propertyId: true,
+      acknowledgedAt: true,
+      property: { select: { id: true, legalEntityId: true } },
+    },
+  })
+  if (!ticket) return { error: 'That ticket could not be found.' }
+
+  const actor = await requirePermission('ticket.write', propertyResource(ticket.property))
+
+  // First acknowledgement wins. A second person clicking it thirty seconds
+  // later has not responded thirty seconds later than the first, and
+  // overwriting the stamp would move the only measurement of how long a
+  // tenant waited.
+  if (ticket.acknowledgedAt) return {}
+
+  const now = new Date()
+  await prisma.$transaction(async (tx) => {
+    await tx.ticket.update({
+      where: { id: ticket.id },
+      data: { acknowledgedAt: now, acknowledgedByStaffId: actor.id },
+    })
+    await audit(
+      {
+        action: 'ticket.acknowledged',
+        entityType: 'Ticket',
+        entityId: ticket.id,
+        propertyId: ticket.propertyId,
+        after: { acknowledgedAt: now.toISOString(), acknowledgedByStaffId: actor.id },
+      },
+      tx,
+    )
+  })
+
+  revalidatePath(`/maintenance/${ticket.id}`)
+  revalidatePath('/maintenance')
+  return {}
+}
+
+/**
+ * Marks a vendor as one who answers after hours, or unmarks them (MAINT-12,
+ * R-029).
+ *
+ * Set from the emergency ticket itself rather than from a vendor admin
+ * screen, because that screen does not exist yet - R-079 owns vendor
+ * management (trades, W-9, COI, preferred and fallback lists) in Phase 2, and
+ * this flag will move into it. Until then the honest place to record "this
+ * plumber picks up on a Sunday" is the moment somebody finds out, standing on
+ * an emergency ticket at 2am, which is also the only moment anybody learns it.
+ */
+export async function setVendorEmergencyAvailability(
+  _previous: MaintenanceFormState,
+  formData: FormData,
+): Promise<MaintenanceFormState> {
+  const vendorId = String(formData.get('vendorId') ?? '')
+  const available = formData.get('available') === 'yes'
+  // `vendor.write` is the permission that owns the vendor record. Nothing
+  // about this being reachable from a ticket makes it a ticket permission.
+  const actor = await requirePermission('vendor.write')
+
+  const vendor = await prisma.vendor.findUnique({
+    where: { id: vendorId },
+    select: { id: true, emergencyAvailable: true },
+  })
+  if (!vendor) return { error: 'That vendor could not be found.' }
+  if (vendor.emergencyAvailable === available) return {}
+
+  await prisma.$transaction(async (tx) => {
+    await tx.vendor.update({
+      where: { id: vendorId },
+      data: { emergencyAvailable: available },
+    })
+    await audit(
+      {
+        action: 'vendor.emergency_availability_changed',
+        entityType: 'Vendor',
+        entityId: vendorId,
+        before: { emergencyAvailable: vendor.emergencyAvailable },
+        after: { emergencyAvailable: available, byStaffId: actor.id },
+      },
+      tx,
+    )
+  })
+
+  revalidatePath('/maintenance')
+  return {}
 }
