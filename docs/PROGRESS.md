@@ -794,7 +794,7 @@ Three changes:
 **What did NOT defer.** MAINT-06's "required completion photo" is already built, in R-025's vendor upload. D-8's PWA groundwork (the manifest, R-018) stands. `assignWorkOrder()` keeps its staff-assignment path, because a manager doing a job themselves is not the same thing as a maintenance employee — and if a tech is ever hired, R-028 returns as a self-contained item with nothing built since R-024 assuming its absence.
 
 ## R-029 — After-hours routing
-**Commit:** `PENDING`  ·  **Date:** 2026-08-07
+**Commit:** `6456bbb`  ·  **Date:** 2026-08-07
 
 **What it built.** The on-call rota, the acknowledgement that stops the escalation clock, and the chain that fires when nobody answers (MAINT-12, NOTIF-05). `packages/core/oncall` decides who to page: on-call people if anybody is, everybody with `ticket.write` on the property if nobody is. `StaffUser` gained an on-call *window* (`onCallFrom`/`onCallUntil`); `Ticket` gained `acknowledgedAt`/`acknowledgedByStaffId`; `Vendor` gained `emergencyAvailable`. A new five-minute cron (`/api/cron/escalations`) sweeps unacknowledged emergencies and pages the rest of the chain 15 minutes in. Staff go on call from `/account` in one tap; the emergency ticket page grew a response panel with an "I have this" button and the trade's after-hours vendors, each phone number a `tel:` link. Quiet-hours bypass for emergencies was already built in R-016 and needed nothing — the escalation reuses the same `maintenance_emergency` category precisely so it inherits it.
 
