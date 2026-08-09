@@ -822,7 +822,7 @@ Three changes:
 - **Deleting a test property started failing** once the sweep wrote `ticket.escalated` audit rows against it: the delete cascades a SET NULL onto `AuditLog`, which the append-only trigger refuses. The evidence trail outliving its fixtures is the product working, so the fixture yields — properties are deactivated, not deleted.
 
 ## R-030 — Verify & close
-**Commit:** `PENDING`  ·  **Date:** 2026-08-09
+**Commit:** `99d59e4`  ·  **Date:** 2026-08-09
 
 **What it built.** The end of the maintenance lifecycle (MAINT-07). When work is marked complete — by staff, or by a vendor through R-025's magic link — the tenant is asked "is it fixed?" through the notification engine, and answers in one tap from their own portal. "Yes" moves the job to VERIFIED. "No" reopens it, clears the completion stamp, and raises a `workorder_reopened` Task. A PM then closes it with the invoice total, a normal-wear / tenant-caused / unknown flag, and a refusal if the tenant has just said it is not fixed. That invoice total is the only place the money is entered: the property page's new **Maintenance spend** section is a projection of the work-order rows, and the work-order page shows the assigned vendor's reopen rate at the point where somebody is deciding whether to send them again.
 
