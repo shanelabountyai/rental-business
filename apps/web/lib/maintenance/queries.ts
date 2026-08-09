@@ -57,6 +57,19 @@ export async function getTenantTicket(id: string, scope: TenantScope) {
         orderBy: { createdAt: 'asc' },
         select: { id: true, fileName: true, contentType: true, createdAt: true },
       },
+      // R-030: the work orders behind this request, so the portal can ask
+      // "is it fixed?" the moment one reaches WORK_COMPLETE. Verifications
+      // ride along because whether we have ALREADY been answered is what
+      // decides between showing the question and showing the thanks.
+      workOrders: {
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          status: true,
+          reopenCount: true,
+          verifications: { orderBy: { round: 'desc' }, take: 1 },
+        },
+      },
     },
   })
 }

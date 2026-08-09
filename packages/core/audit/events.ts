@@ -182,6 +182,27 @@ export const AUDIT_ACTIONS = [
 
   /// R-029: a vendor was added to or removed from the after-hours list.
   'vendor.emergency_availability_changed',
+
+  /// R-030: the work is finished and the tenant is being asked. A distinct
+  /// action from `workorder.closed` because these are different claims by
+  /// different people - "I have finished" from whoever did the work, and "I
+  /// accept it and here is what it cost" from whoever closed it.
+  'workorder.work_completed',
+
+  /// R-030: the tenant answered "was this resolved?". Recorded as an audit
+  /// entry as well as a WorkOrderVerification row because the row is the
+  /// answer and this is the evidence of WHEN it was given and from where -
+  /// which is what a disputed "you never told us it was still broken"
+  /// actually turns on.
+  'workorder.verified',
+
+  /// R-030: a tenant's "no" sent the job back.
+  'workorder.reopened',
+
+  /// R-030: closed, with the cost that closed it. The last entry in the
+  /// work order -> invoice -> books chain, and the one a later reconciliation
+  /// reads to ask why a property's maintenance total is what it is.
+  'workorder.closed',
 ] as const
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number]

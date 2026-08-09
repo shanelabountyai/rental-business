@@ -6,6 +6,7 @@ import {
   isDue,
 } from '@rental/core/scheduling'
 import { type Prisma, prisma } from '@rental/db'
+import { isUniqueViolation } from '@/lib/db/unique-violation.ts'
 
 // The scheduled-job runner.
 //
@@ -177,13 +178,4 @@ async function finish(
     },
     data: { ...data, finishedAt: new Date() },
   })
-}
-
-function isUniqueViolation(error: unknown): boolean {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    (error as { code: unknown }).code === 'P2002'
-  )
 }

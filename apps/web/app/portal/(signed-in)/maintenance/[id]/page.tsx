@@ -2,6 +2,8 @@ import { CATEGORY_LABELS, emergencyDefinition } from '@rental/core/maintenance'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { AddPhotoForm } from '@/components/portal/maintenance/add-photo-form.tsx'
+import { VerifyPanel } from '@/components/portal/maintenance/verify-panel.tsx'
+import { verifyWorkOrder } from '@/lib/portal/verify-actions.ts'
 import { requireTenantWithScope } from '@/lib/portal/guard.ts'
 import { getTenantTicket } from '@/lib/maintenance/queries.ts'
 
@@ -31,6 +33,29 @@ export default async function MaintenanceTicketPage({
   // identical reasoning in lib/portal/queries.ts.
   if (!ticket) notFound()
 
+  // The job this tenant is being asked about, or has just answered.
+  //
+  // Both states render the same component. Asking about a job they have
+  // already answered for THIS round would be nagging - but dropping the
+  // panel the instant they answer is worse: the page re-renders on
+  // `revalidatePath` before any client-side confirmation could appear, so
+  // the tenant would tap, watch the question vanish, and have no idea
+  // whether it worked. The answer stays on screen until the job comes back
+  // finished and there is a genuinely new question to ask.
+  const verifiable = ticket.workOrders.find(
+    (workOrder) =>
+      workOrder.status !== 'CLOSED' &&
+      workOrder.status !== 'CANCELED' &&
+      (workOrder.status === 'WORK_COMPLETE' || workOrder.verifications.length > 0),
+  )
+  const latest = verifiable?.verifications[0]
+  // A fresh ask exists only when the job is back at WORK_COMPLETE for a
+  // round nobody has answered.
+  const askingAgain =
+    verifiable?.status === 'WORK_COMPLETE' &&
+    latest?.round !== verifiable.reopenCount + 1
+  const answered = !askingAgain && latest ? { resolved: latest.resolved } : null
+
   return (
     <div className="flex flex-col gap-6">
       <Link
@@ -39,6 +64,14 @@ export default async function MaintenanceTicketPage({
       >
         ← All requests
       </Link>
+
+      {verifiable && (
+        <VerifyPanel
+          workOrderId={verifiable.id}
+          answered={answered}
+          verify={verifyWorkOrder}
+        />
+      )}
 
       {/*
         Shown once, on arrival from the emergency flow. The reassurance a

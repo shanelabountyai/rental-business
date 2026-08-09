@@ -14,6 +14,7 @@ import { revalidatePath } from 'next/cache'
 import { auditAsVendor } from '@/lib/audit/system.ts'
 import { generateStorageKey, storage } from '@/lib/storage/index.ts'
 import { verifyVendorLink } from './link.ts'
+import { requestVerification } from '@/lib/workorders/verify.ts'
 import { vendorRejectionMessage } from './messages.ts'
 
 // Everything a vendor can do, all of it through a magic link and none of it
@@ -312,6 +313,11 @@ export async function markWorkComplete(token: string): Promise<VendorFormState> 
       tx,
     )
   })
+
+  // The tenant gets asked whether it actually is (MAINT-07, R-030). After
+  // the commit and never allowed to fail this action: the vendor has done
+  // their part, and an outage on our side must not tell them otherwise.
+  await requestVerification(workOrder.id)
 
   revalidatePath(`/workorders/${workOrder.id}`)
   return { notice: 'Marked complete - thank you.' }

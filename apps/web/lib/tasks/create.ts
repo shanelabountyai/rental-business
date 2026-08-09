@@ -3,6 +3,7 @@ import 'server-only'
 import type { TaskInput } from '@rental/core/tasks'
 import { businessDateToUtc } from '@rental/core/scheduling'
 import { prisma, type Prisma, type PrismaClient, type Task } from '@rental/db'
+import { isUniqueViolation } from '@/lib/db/unique-violation.ts'
 
 // The one place anything creates a Task (D-9) - the idempotent primitive the
 // backlog names ("idempotent creation on (type, entityId, businessDate)").
@@ -74,13 +75,4 @@ export async function createTask(
     })
     return { task: existing, created: false }
   }
-}
-
-function isUniqueViolation(error: unknown): boolean {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    (error as { code: unknown }).code === 'P2002'
-  )
 }

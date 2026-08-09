@@ -399,6 +399,62 @@ export const emergencyEscalationTemplate: NotificationTemplate<EmergencyEscalati
     },
   }
 
+/// Context for `workorder.verify_request` (MAINT-07, R-030).
+export interface VerifyRequestContext {
+  tenantName: string
+  /// What the tenant asked for, in their words - not the internal scope.
+  requestSummary: string
+  addressLine1: string
+  /// Deep link to the tenant's own request, where the two buttons are.
+  url: string
+}
+
+/**
+ * "Was this resolved?" (MAINT-07, R-030).
+ *
+ * ONE QUESTION, TWO BUTTONS BEHIND ONE LINK. The whole value of this message
+ * is the reply rate: a tenant who does not answer leaves the PM closing jobs
+ * on faith, and every extra sentence between them and the tap costs answers.
+ * So it names the job, asks the question, and stops.
+ *
+ * `maintenance_update`, not a locked category - a tenant who does not want
+ * to be asked to rate work is entitled to turn this off, and one who has
+ * turned it off is telling the PM something worth knowing.
+ */
+export const verifyRequestTemplate: NotificationTemplate<VerifyRequestContext> = {
+  key: 'workorder.verify_request',
+  category: 'maintenance_update',
+  channels: ['SMS', 'EMAIL', 'PORTAL'],
+  render: (context, channel) => {
+    if (channel === 'SMS') {
+      return {
+        body: [
+          `The work at ${context.addressLine1} is done: ${context.requestSummary}`,
+          'Is it actually fixed? Tell us here:',
+          context.url,
+        ].join('\n'),
+      }
+    }
+
+    return {
+      subject: `Is it fixed? — ${context.requestSummary}`,
+      body: [
+        `Hi ${context.tenantName},`,
+        '',
+        `Someone has finished the work you reported at ${context.addressLine1}:`,
+        '',
+        context.requestSummary,
+        '',
+        'Before we close it off, we want to hear from you rather than assume. One tap:',
+        '',
+        context.url,
+        '',
+        'If it is not fixed, saying so reopens it — you do not need to report it again.',
+      ].join('\n'),
+    }
+  },
+}
+
 export const TEMPLATES: Readonly<Record<string, NotificationTemplate<never>>> = {
   [unitMakeReadyTemplate.key]:
     unitMakeReadyTemplate as unknown as NotificationTemplate<never>,
@@ -412,6 +468,8 @@ export const TEMPLATES: Readonly<Record<string, NotificationTemplate<never>>> = 
     entryNoticeTemplate as unknown as NotificationTemplate<never>,
   [emergencyEscalationTemplate.key]:
     emergencyEscalationTemplate as unknown as NotificationTemplate<never>,
+  [verifyRequestTemplate.key]:
+    verifyRequestTemplate as unknown as NotificationTemplate<never>,
 }
 
 export class UnknownTemplateError extends Error {

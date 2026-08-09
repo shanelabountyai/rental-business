@@ -17,6 +17,7 @@ import {
   type Prisma,
   prisma,
 } from '@rental/db'
+import { isUniqueViolation } from '@/lib/db/unique-violation.ts'
 import { notificationConfig } from './config.ts'
 import { deliverOverChannel } from './deliver.ts'
 import { notificationAdapter } from './provider.ts'
@@ -412,13 +413,4 @@ function addressFor(
   if (channel === 'EMAIL') return recipient.email?.trim() || null
   if (channel === 'SMS') return recipient.phone?.trim() || null
   return recipient.id
-}
-
-function isUniqueViolation(error: unknown): boolean {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    (error as { code: unknown }).code === 'P2002'
-  )
 }

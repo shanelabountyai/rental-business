@@ -6,6 +6,7 @@ import {
   threadKey,
 } from '@rental/core/comms'
 import { type Prisma, prisma } from '@rental/db'
+import { isUniqueViolation } from '@/lib/db/unique-violation.ts'
 
 // Thread resolution (COMM-01, R-017). One conversation per participant, got
 // or created idempotently.
@@ -151,13 +152,4 @@ export async function candidatesForPhone(e164: string, db: Db = prisma) {
   }
 
   return candidates
-}
-
-function isUniqueViolation(error: unknown): boolean {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    (error as { code: unknown }).code === 'P2002'
-  )
 }

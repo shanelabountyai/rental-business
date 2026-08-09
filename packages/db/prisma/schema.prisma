@@ -659,6 +659,7 @@ model StaffUser {
   workOrdersApproved   WorkOrder[]  @relation("WorkOrderApprovedBy")
   workOrdersAssigned   WorkOrder[]  @relation("WorkOrderAssignedTo")
   workOrdersEntryPermissionLogged WorkOrder[] @relation("WorkOrderEntryPermission")
+  workOrdersClosed     WorkOrder[]  @relation("WorkOrderClosedBy")
   ticketsAcknowledged  Ticket[]     @relation("TicketAcknowledgedBy")
   tasksAssigned        Task[]       @relation("TaskAssignedTo")
   tasksCompleted       Task[]       @relation("TaskCompletedBy")
@@ -689,6 +690,7 @@ model Tenant {
 
   credential   TenantCredential?
   leaseTenants LeaseTenant[]
+  workOrderVerifications WorkOrderVerification[]
   leasePayers  LeasePayer[]
   tickets      Ticket[]
   threads      Thread[]
@@ -748,6 +750,7 @@ model Vendor {
 
   workOrders WorkOrder[]
   bids       WorkOrderBid[]
+  verifications WorkOrderVerification[]
   threads    Thread[]
   messages   Message[]   @relation("MessageFromVendor")
   documents  Document[]
@@ -1502,6 +1505,17 @@ model WorkOrder {
   tenantNoShowAt       DateTime?
   completedAt          DateTime?
   verifiedAt           DateTime?
+  /// R-030 (MAINT-07): the tenant said it was NOT resolved and the job went
+  /// back to work. A timestamp rather than a boolean, because "when did this
+  /// come back" is the question a repeat-issue report asks.
+  reopenedAt           DateTime?
+  /// How many times this job has been sent back. Denormalized from the
+  /// verification rows below because a work order list has to show it
+  /// without loading each job's history, and it is what `round` on the next
+  /// verification counts from.
+  reopenCount          Int           @default(0)
+  closedAt             DateTime?
+  closedByStaffId      String?
   /// Drives the mid-lease chargeback flow (MAINT-07) - distinct from a
   /// move-out deposit deduction.
   tenantCaused         Boolean       @default(false)
@@ -1517,6 +1531,8 @@ model WorkOrder {
   approvedBy StaffUser? @relation("WorkOrderApprovedBy", fields: [approvedByStaffId], references: [id])
   entryNotice Notice?   @relation("WorkOrderEntryNotice", fields: [entryNoticeId], references: [id])
   entryPermissionLoggedBy StaffUser? @relation("WorkOrderEntryPermission", fields: [entryPermissionLoggedByStaffId], references: [id])
+  closedBy   StaffUser? @relation("WorkOrderClosedBy", fields: [closedByStaffId], references: [id])
+  verifications WorkOrderVerification[]
   threads    Thread[]
   documents  Document[]
   bids       WorkOrderBid[]
@@ -1530,6 +1546,53 @@ model WorkOrder {
 /// One vendor's price for one work order (MAINT-04's bid-collection
 /// workflow, R-026). Its own table rather than columns on WorkOrder because
 /// the whole point is comparing several at once.
+/// A tenant's answer to "was this resolved?" (MAINT-07, R-030).
+///
+/// ITS OWN TABLE, NOT COLUMNS ON THE WORK ORDER, because a reopened job is
+/// verified again: the same work order can carry "no, still leaking" in
+/// March and "yes, fixed" in April, and columns would let the second answer
+/// erase the first. The first answer is the evidence that the reopen was
+/// justified, and this product's whole premise is that such evidence does
+/// not get overwritten.
+model WorkOrderVerification {
+  id          String   @id @default(cuid())
+  workOrderId String
+  tenantId    String
+
+  /// WHO DID THE WORK BEING VERIFIED - captured here, at the moment of the
+  /// answer, and never read off the work order later.
+  ///
+  /// This column is the whole reason MAINT-07 says reopen rate is captured
+  /// "from day one". A reopened job is usually reassigned, so by the time
+  /// anybody runs a vendor report the work order names whoever fixed it -
+  /// not whoever's work came back. Reading the vendor off the work order
+  /// would silently credit the second vendor with the first one's failure,
+  /// and no amount of later analysis can recover the attribution once the
+  /// column has moved. Null when the work was done in-house.
+  vendorId    String?
+
+  /// Which round of work this verifies: 1 for the first completion, 2 after
+  /// the first reopen. Makes "asked twice, answered once" answerable.
+  round       Int      @default(1)
+
+  /// The one-tap answer. False sends the job back.
+  resolved    Boolean
+  /// 1-5, optional and deliberately secondary - see the validator's comment.
+  /// A required rating would put a second decision between a tenant and
+  /// "yes, it is fixed", which is the tap that actually matters.
+  rating      Int?
+  comment     String?
+  respondedAt DateTime @default(now())
+
+  workOrder WorkOrder @relation(fields: [workOrderId], references: [id])
+  tenant    Tenant    @relation(fields: [tenantId], references: [id])
+  vendor    Vendor?   @relation(fields: [vendorId], references: [id])
+
+  /// One answer per round. A tenant tapping twice is one answer, not two.
+  @@unique([workOrderId, round])
+  @@index([vendorId, resolved])
+}
+
 model WorkOrderBid {
   id          String    @id @default(cuid())
   workOrderId String

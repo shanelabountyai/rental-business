@@ -1,12 +1,19 @@
 import { actualTotalCents, compareBids } from '@rental/core/approvals'
 import { earliestCompliantStart } from '@rental/core/entry'
-import { activeWarranties, likelyMatchingWarranty } from '@rental/core/workorders'
+import { formatCents } from '@rental/core/money'
+import {
+  activeWarranties,
+  jobCostCents,
+  likelyMatchingWarranty,
+  vendorReopenRates,
+} from '@rental/core/workorders'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { prisma } from '@rental/db'
 import { ApprovalPanel } from '@/components/workorders/approval-panel.tsx'
 import { BidsPanel } from '@/components/workorders/bids-panel.tsx'
 import { AssignForm } from '@/components/workorders/assign-form.tsx'
+import { ClosePanel } from '@/components/workorders/close-panel.tsx'
 import { RecordActualsForm } from '@/components/workorders/record-actuals-form.tsx'
 import { ScheduleForm } from '@/components/workorders/schedule-form.tsx'
 import { TaskActionButton } from '@/components/tasks/action-button.tsx'
@@ -14,7 +21,9 @@ import { actorCan, actorDecision, propertyResource, requireScope } from '@/lib/a
 import { currentScope } from '@/lib/scope/current-scope.ts'
 import {
   assignWorkOrder,
+  closeWorkOrder,
   dispatchToVendor,
+  markWorkComplete,
   setWorkOrderWarrantyHold,
 } from '@/lib/workorders/actions.ts'
 import {
@@ -24,6 +33,7 @@ import {
   submitForApproval,
 } from '@/lib/workorders/approvals.ts'
 import { rulesFor } from '@/lib/jurisdiction/queries.ts'
+import { verificationsFor, vendorVerificationRows } from '@/lib/workorders/verify.ts'
 import {
   logEntryPermission,
   logTenantNoShow,
@@ -92,6 +102,30 @@ export default async function WorkOrderDetailPage({
 
   const unassigned = !workOrder.assignedStaffId && !workOrder.vendorId
   const resolved = workOrder.status === 'CLOSED' || workOrder.status === 'CANCELED'
+
+  // R-030. Every answer ever given about this job, newest first - a single
+  // `verifiedAt` column could not hold them once a job has come back twice,
+  // and the earlier "no" is the evidence that the reopen was justified.
+  const answers = (await verificationsFor(workOrder.id)).map((row) => ({
+    resolved: row.resolved,
+    rating: row.rating,
+    comment: row.comment,
+    respondedAt: row.respondedAt.toISOString(),
+    vendorName: row.vendor?.name ?? null,
+    round: row.round,
+  }))
+  const currentRound = workOrder.reopenCount + 1
+  const closable =
+    workOrder.status === 'WORK_COMPLETE' || workOrder.status === 'VERIFIED'
+
+  // How often this vendor's work comes back (MAINT-07, MAINT-10), shown at
+  // the point of decision rather than buried in a report nobody opens. Read
+  // from the verification rows' own captured vendor, never from whoever the
+  // work order names now - see the schema comment on that column.
+  const vendorRecord =
+    workOrder.vendorId && canSeeVendors
+      ? vendorReopenRates(await vendorVerificationRows(workOrder.vendorId), 3)[0]
+      : undefined
   const onHold = workOrder.status === 'ON_HOLD_WARRANTY'
   const awaitingApproval = workOrder.status === 'PENDING_APPROVAL'
   const approveDecision = await actorDecision('workorder.approve', propertyResource(workOrder.property))
@@ -226,6 +260,16 @@ export default async function WorkOrderDetailPage({
                 ? `Sent ${workOrder.dispatchedAt.toISOString().slice(0, 16).replace('T', ' ')}`
                 : 'Not sent yet'}
             </dd>
+            {vendorRecord && (
+              <>
+                <dt className="text-muted-foreground">Vendor record</dt>
+                <dd className="col-span-1 sm:col-span-2">
+                  {`${vendorRecord.reopened} of ${vendorRecord.verified} jobs came back (${Math.round(vendorRecord.reopenRate * 100)}%)`}
+                  {vendorRecord.averageRating != null &&
+                    ` · rated ${vendorRecord.averageRating.toFixed(1)}/5`}
+                </dd>
+              </>
+            )}
             <dt className="text-muted-foreground">Vendor said</dt>
             <dd className="col-span-1 sm:col-span-2">
               {workOrder.vendorResponse
@@ -330,6 +374,20 @@ export default async function WorkOrderDetailPage({
             actualLaborCents={workOrder.actualLaborCents}
             actualMaterialsCents={workOrder.actualMaterialsCents}
           />
+          {/*
+            Marking complete is what asks the tenant (MAINT-07). Offered
+            only once there is work to have finished - a job nobody has
+            started cannot be complete, and the button existing beforehand
+            invites exactly that click.
+          */}
+          {!closable &&
+            workOrder.status !== 'SUBMITTED' &&
+            workOrder.status !== 'PENDING_APPROVAL' && (
+              <TaskActionButton
+                action={markWorkComplete.bind(null, workOrder.id)}
+                label="Mark the work complete (asks the tenant to confirm)"
+              />
+            )}
           {workOrder.vendorId && (
             <TaskActionButton
               action={dispatchToVendor.bind(null, workOrder.id)}
@@ -352,6 +410,46 @@ export default async function WorkOrderDetailPage({
             />
           )}
         </div>
+      )}
+
+      {/*
+        The closed record, rendered from the row rather than from a toast.
+        A success message living in the close panel's own state would vanish
+        with the panel the instant `revalidatePath` re-rendered this page -
+        and "closed without the tenant ever confirming it" is precisely the
+        caveat somebody needs to see months later, not for two seconds.
+      */}
+      {workOrder.status === 'CLOSED' && (
+        <section aria-labelledby="closed" className="flex flex-col gap-2 border-t pt-4">
+          <h2 id="closed" className="text-lg font-semibold">
+            Closed
+          </h2>
+          <p className="text-sm">
+            {workOrder.closedAt
+              ? `Closed ${workOrder.closedAt.toISOString().slice(0, 10)}`
+              : 'Closed'}
+            {` · ${formatCents(jobCostCents(workOrder))}`}
+            {workOrder.tenantCaused && ' · tenant-caused'}
+          </p>
+          {answers.some((a) => a.resolved) ? (
+            <p className="text-muted-foreground text-sm">
+              The tenant confirmed this was fixed.
+            </p>
+          ) : (
+            <p className="text-sm text-amber-800 dark:text-amber-200">
+              The tenant never confirmed this one.
+            </p>
+          )}
+        </section>
+      )}
+
+      {canWrite && closable && (
+        <ClosePanel
+          invoiceCents={workOrder.invoiceCents}
+          currentAnswer={answers.find((a) => a.round === currentRound) ?? null}
+          history={answers}
+          closeAction={closeWorkOrder.bind(null, workOrder.id)}
+        />
       )}
     </div>
   )

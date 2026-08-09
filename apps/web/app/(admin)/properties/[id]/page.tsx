@@ -1,4 +1,7 @@
 import Link from 'next/link'
+import { jobCostCents } from '@rental/core/workorders'
+import { MaintenanceSpendSection } from '@/components/workorders/maintenance-spend.tsx'
+import { closedJobCostsForProperty } from '@/lib/workorders/verify.ts'
 import { notFound } from 'next/navigation'
 import { DocumentsSection } from '@/components/documents/documents-section.tsx'
 import { FilingCabinetSection } from '@/components/filing-cabinet/filing-cabinet-section.tsx'
@@ -83,6 +86,19 @@ export default async function PropertyDetailPage({
       actorCan('document.delete', propertyResource(property)),
       getFilingCabinet(id, scope),
     ])
+  // R-030's "attach to the property and flow to reporting". Costed here
+  // rather than in the query so `jobCostCents()` stays the one rule for what
+  // a job cost - the same function the close screen and R-026's re-approval
+  // check use, so the number cannot mean two things on two screens.
+  const maintenanceSpend = (await closedJobCostsForProperty(id)).map((job) => ({
+    id: job.id,
+    scope: job.scope,
+    closedAt: job.closedAt,
+    totalCents: jobCostCents(job),
+    tenantCaused: job.tenantCaused,
+    vendorName: job.vendor?.name ?? null,
+    unitName: job.unit.name,
+  }))
   // Never null once getPropertyDetail above already confirmed this property
   // is in scope - getFilingCabinet does the identical scope check.
   if (!filingCabinet) notFound()
@@ -196,6 +212,7 @@ export default async function PropertyDetailPage({
           ownedBy="R-022"
           description="Tickets and work orders for this property."
         />
+        <MaintenanceSpendSection jobs={maintenanceSpend} />
         <DocumentsSection
           propertyId={id}
           documents={documents}

@@ -275,7 +275,11 @@ test.describe('creating a property', () => {
       'Documents',
       'Financials',
     ]) {
-      await expect(page.getByRole('heading', { name: section })).toBeVisible()
+      // `exact` matters: R-030 added a "Maintenance spend" section, and a
+      // substring match on "Maintenance" now resolves to two headings.
+      await expect(
+        page.getByRole('heading', { name: section, exact: true }),
+      ).toBeVisible()
     }
 
     const created = await prisma.property.findFirst({ where: { name: address } })

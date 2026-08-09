@@ -1,6 +1,12 @@
 'use server'
 
-import { type WorkOrderInput, validateAssignment, validateWorkOrder } from '@rental/core/workorders'
+import {
+  type WorkOrderInput,
+  closeDecision,
+  jobCostCents,
+  validateAssignment,
+  validateWorkOrder,
+} from '@rental/core/workorders'
 import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
@@ -10,6 +16,7 @@ import { emitEvent } from '@/lib/jobs/outbox.ts'
 import { dispatchPendingNotifications, notify } from '@/lib/notifications/send.ts'
 import { completeTaskWork } from '@/lib/tasks/complete.ts'
 import { issueVendorLink, revokeVendorLinks } from '@/lib/vendors/link.ts'
+import { requestVerification } from './verify.ts'
 
 // Writes for work orders (MAINT-03, PROP-06, R-024). Same shape as every
 // other lib/*/actions.ts write in this repo: a resource-carrying permission
@@ -413,4 +420,180 @@ export async function dispatchToVendor(
 
   revalidatePath(`/workorders/${workOrder.id}`)
   return { notice: `Link sent to ${workOrder.vendor.name}.` }
+}
+
+/**
+ * Marks the work finished and asks the tenant (MAINT-07, R-030).
+ *
+ * The staff-side counterpart to R-025's vendor completion, which already
+ * does the same thing through a magic link. Both end in the same place: the
+ * job sits at WORK_COMPLETE while the tenant is asked whether it actually
+ * is, rather than being closed on the word of whoever did the work.
+ */
+export async function markWorkComplete(
+  workOrderId: string,
+): Promise<WorkOrderFormState> {
+  const workOrder = await prisma.workOrder.findUniqueOrThrow({
+    where: { id: workOrderId },
+    include: { property: true },
+  })
+  await requirePermission('workorder.write', propertyResource(workOrder.property))
+
+  if (workOrder.status === 'WORK_COMPLETE') {
+    return { notice: 'Already marked complete.' }
+  }
+  if (workOrder.status === 'CLOSED') {
+    return { error: 'This job is already closed.' }
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.workOrder.update({
+      where: { id: workOrderId },
+      data: { status: 'WORK_COMPLETE', completedAt: new Date() },
+    })
+    await audit(
+      {
+        action: 'workorder.work_completed',
+        entityType: 'WorkOrder',
+        entityId: workOrderId,
+        propertyId: workOrder.propertyId,
+        before: { status: workOrder.status },
+        after: { status: 'WORK_COMPLETE' },
+      },
+      tx,
+    )
+  })
+
+  // After the commit, never inside it. The work IS complete whether or not
+  // the message goes out, and `requestVerification` swallows its own
+  // failures for the same reason.
+  await requestVerification(workOrderId)
+
+  revalidatePath(`/workorders/${workOrderId}`)
+  revalidatePath('/workorders')
+  return { notice: 'Marked complete — the tenant has been asked to confirm.' }
+}
+
+/**
+ * Closes the job, with what it cost (MAINT-07, R-030).
+ *
+ * THE LAST LINK IN THE CHAIN THE BACKLOG CALLS "the specific place owners
+ * abandon software". Work order → invoice → property books, and the reason
+ * it breaks in other systems is that somebody has to type the invoice total
+ * a second time into the accounts, after which the two numbers drift and
+ * neither can be trusted. So this action writes the money onto the work
+ * order and nowhere else; every downstream reader - the property cost
+ * roll-up here, R-042's QuickBooks mapping later - reads that row.
+ *
+ * The refusals come from `closeDecision()` in packages/core, which puts the
+ * tenant's "no" ahead of every bookkeeping concern: a missing invoice is a
+ * data-entry problem, and a live complaint recorded as resolved is a legal
+ * one.
+ */
+export async function closeWorkOrder(
+  workOrderId: string,
+  _previous: WorkOrderFormState,
+  formData: FormData,
+): Promise<WorkOrderFormState> {
+  const workOrder = await prisma.workOrder.findUniqueOrThrow({
+    where: { id: workOrderId },
+    include: {
+      property: true,
+      verifications: { orderBy: { round: 'desc' }, take: 1 },
+    },
+  })
+  const actor = await requirePermission(
+    'workorder.write',
+    propertyResource(workOrder.property),
+  )
+
+  const invoiceDollars = str(formData, 'invoiceDollars')
+  const invoiceCents = invoiceDollars ? Math.round(Number(invoiceDollars) * 100) : null
+  if (invoiceCents != null && (!Number.isInteger(invoiceCents) || invoiceCents < 0)) {
+    return {
+      error: 'Check the invoice amount.',
+      fieldErrors: { invoiceDollars: 'Enter a whole-dollar amount of $0 or more.' },
+    }
+  }
+
+  const cause = str(formData, 'cause')
+  const zeroCostAcknowledged = formData.get('zeroCost') === 'yes'
+
+  const facts = {
+    status: workOrder.status,
+    tenantId: null,
+    // Only the CURRENT round's answer decides. An old "no" from before the
+    // job was redone is history, not a live objection - it stays on the
+    // record, and blocking on it forever would make a reopened job
+    // impossible to close.
+    verifiedResolved:
+      workOrder.verifications[0]?.round === workOrder.reopenCount + 1
+        ? workOrder.verifications[0].resolved
+        : null,
+    actualLaborCents: workOrder.actualLaborCents,
+    actualMaterialsCents: workOrder.actualMaterialsCents,
+    invoiceCents: invoiceCents ?? workOrder.invoiceCents,
+  }
+
+  const decision = closeDecision(facts, zeroCostAcknowledged)
+  if (!decision.allowed) {
+    return { error: CLOSE_REFUSALS[decision.refusal!] }
+  }
+
+  const totalCents = jobCostCents(facts)
+
+  await prisma.$transaction(async (tx) => {
+    await tx.workOrder.update({
+      where: { id: workOrderId },
+      data: {
+        status: 'CLOSED',
+        closedAt: new Date(),
+        closedByStaffId: actor.id,
+        ...(invoiceCents != null ? { invoiceCents } : {}),
+        // MAINT-07's three-way flag. `unknown` leaves it false, which is
+        // the honest default: a chargeback (R-031) must be a decision
+        // somebody made, never one this action inferred from silence.
+        tenantCaused: cause === 'tenant_caused',
+      },
+    })
+    await audit(
+      {
+        action: 'workorder.closed',
+        entityType: 'WorkOrder',
+        entityId: workOrderId,
+        propertyId: workOrder.propertyId,
+        before: { status: workOrder.status },
+        after: {
+          totalCents,
+          invoiceCents: facts.invoiceCents,
+          actualLaborCents: facts.actualLaborCents,
+          actualMaterialsCents: facts.actualMaterialsCents,
+          cause: cause || 'unknown',
+          // Recorded because it is the thing somebody will ask about later:
+          // this job was closed without the tenant ever confirming it.
+          unverified: decision.unverified === true,
+        },
+      },
+      tx,
+    )
+  })
+
+  revalidatePath(`/workorders/${workOrderId}`)
+  revalidatePath('/workorders')
+  return {
+    notice: decision.unverified
+      ? 'Closed. Note that the tenant never confirmed this one.'
+      : 'Closed.',
+  }
+}
+
+/// Written as sentences a PM can act on, not refusal codes. Each says what
+/// is wrong AND what to do, because a form that only says no is a form
+/// somebody works around.
+const CLOSE_REFUSALS: Record<string, string> = {
+  tenant_says_unresolved:
+    'The tenant says this is not fixed. Sort that out first — closing it now would record a live complaint as resolved.',
+  not_complete: 'Mark the work complete before closing it.',
+  no_cost_recorded:
+    'Record what this cost, or tick “this job cost nothing” if it genuinely did not.',
 }
