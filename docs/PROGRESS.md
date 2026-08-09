@@ -850,7 +850,7 @@ New `WorkOrderVerification` table; `reopenedAt`/`reopenCount`/`closedAt`/`closed
 - **An existing properties e2e broke on a substring match.** Adding a "Maintenance spend" heading made `getByRole('heading', { name: 'Maintenance' })` resolve to two elements. Pinned to `exact: true` rather than renaming the section — a locator that silently matches more as the page grows is the defect.
 
 ## R-032 — Work-order comms threading
-**Commit:** `PENDING`  ·  **Date:** 2026-08-09
+**Commit:** `caee425`  ·  **Date:** 2026-08-09
 
 **What it built.** The single merged, exportable timeline COMM-06 asks for: tenant thread, vendor thread and staff notes hanging off one work order. A staff member can now reply to the tenant or the vendor directly from a work order's own page (tagged to that job at send time), add an internal note nobody outside the office ever sees, and attach an inbound text that arrived before anyone knew which job it was about. A vendor gets a real, work-order-scoped conversation from their magic-link page — the first time vendors have had any free-text messaging at all, R-025 having shipped only structured actions (accept/decline/propose/upload). The work order page renders every entry (the original report, tenant/vendor/staff messages, notes) in one chronological list, and `/workorders/[id]/timeline` downloads it as a plain-text transcript.
 
