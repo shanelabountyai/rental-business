@@ -14,6 +14,9 @@ export interface ThreadIdentity {
   tenantId?: string | null
   /// Required for VENDOR, ignored otherwise.
   vendorId?: string | null
+  /// VENDOR only, and OPTIONAL - see threadKey's own comment on why a vendor
+  /// has two distinct kinds of thread rather than one.
+  workOrderId?: string | null
 }
 
 /**
@@ -42,7 +45,25 @@ export function threadKey(identity: ThreadIdentity): string {
       if (!identity.vendorId) {
         throw new Error('A VENDOR thread needs a vendorId.')
       }
-      return `vendor:${identity.vendorId}:property:${identity.propertyId}`
+      // TWO KINDS OF VENDOR THREAD, deliberately keyed differently (R-032,
+      // COMM-06).
+      //
+      // With no work order: the property-level relationship inbound SMS
+      // routes into (R-021's candidatesForPhone has no way to know which of
+      // a vendor's several concurrent jobs a text is about, so it has always
+      // resolved to "their most recent work order's property" - unchanged
+      // here).
+      //
+      // With a work order: the per-job conversation D-16 already treats as
+      // the natural unit for a vendor - the magic link itself is scoped to
+      // exactly one work order, so the thread reachable through it is too.
+      // PORTAL-only in practice (see the app layer), which is what keeps
+      // this from fragmenting: a vendor's SMS reply would land in the OTHER
+      // thread, and offering SMS here would silently split one conversation
+      // into two nobody reads together.
+      return identity.workOrderId
+        ? `vendor:${identity.vendorId}:workorder:${identity.workOrderId}`
+        : `vendor:${identity.vendorId}:property:${identity.propertyId}`
     case 'PROPERTY':
       return `property:${identity.propertyId}`
   }

@@ -118,7 +118,10 @@ function loadWorkOrder(id: string) {
   return prisma.workOrder.findUnique({
     where: { id },
     include: {
-      property: { select: { id: true, name: true, addressLine1: true, city: true, state: true, postalCode: true } },
+      // timezone: R-032's vendor message thread renders timestamps
+      // property-local (D-3) - a cheap column on a row already being
+      // fetched.
+      property: { select: { id: true, name: true, addressLine1: true, city: true, state: true, postalCode: true, timezone: true } },
       unit: { select: { id: true, name: true } },
       vendor: { select: { id: true, name: true } },
       ticket: { select: { id: true, category: true, description: true, tenant: { select: { firstName: true, phone: true } } } },

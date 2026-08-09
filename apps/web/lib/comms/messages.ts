@@ -55,6 +55,14 @@ export async function sendThreadMessage(args: {
   /// off this same log.
   toAddress: string | null
   sentAt?: Date
+  /// R-032: which incident this reply is ABOUT, when it is known - a staff
+  /// member replying from a work order's own page knows exactly which job,
+  /// and stamping it here is what lets that reply appear on the work
+  /// order's merged timeline without a second lookup. Absent for an
+  /// ordinary reply from the plain messages inbox, which is not about any
+  /// one job.
+  ticketId?: string | null
+  workOrderId?: string | null
 }) {
   const sentAt = args.sentAt ?? new Date()
 
@@ -67,6 +75,8 @@ export async function sendThreadMessage(args: {
         body: args.body,
         sentAt,
         staffUserId: args.staffUserId,
+        ticketId: args.ticketId ?? null,
+        workOrderId: args.workOrderId ?? null,
         delivery: { create: { status: 'QUEUED' } },
       },
     })
@@ -153,6 +163,46 @@ export async function logCall(args: {
       await touchThread(tx, args.threadId, args.occurredAt)
     }
     return message
+  })
+}
+
+/**
+ * A vendor's own message, posted from their magic-link page (COMM-06,
+ * R-032).
+ *
+ * PORTAL ONLY, and no `toAddress` - unlike `sendThreadMessage`, there is
+ * nothing to transmit. The vendor is already looking at the page; this is a
+ * write to the log that IS the delivery, the same reasoning
+ * `sendThreadMessage` uses for a staff member's own PORTAL replies.
+ *
+ * The caller already knows exactly which vendor and which work order -
+ * `verifyVendorLink()` established that before this is ever called - so
+ * both are stamped directly rather than inferred.
+ */
+export async function postVendorPortalMessage(args: {
+  threadId: string
+  vendorId: string
+  workOrderId: string
+  body: string
+  sentAt?: Date
+}) {
+  const sentAt = args.sentAt ?? new Date()
+  return prisma.$transaction(async (tx) => {
+    const created = await tx.message.create({
+      data: {
+        threadId: args.threadId,
+        channel: 'PORTAL',
+        direction: 'INBOUND',
+        body: args.body,
+        sentAt,
+        vendorId: args.vendorId,
+        workOrderId: args.workOrderId,
+        // Inbound is delivered by definition - it arrived.
+        delivery: { create: { status: 'DELIVERED', deliveredAt: sentAt } },
+      },
+    })
+    await touchThread(tx, args.threadId, sentAt)
+    return created
   })
 }
 

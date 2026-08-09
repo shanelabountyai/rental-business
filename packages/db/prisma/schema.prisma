@@ -660,6 +660,8 @@ model StaffUser {
   workOrdersAssigned   WorkOrder[]  @relation("WorkOrderAssignedTo")
   workOrdersEntryPermissionLogged WorkOrder[] @relation("WorkOrderEntryPermission")
   workOrdersClosed     WorkOrder[]  @relation("WorkOrderClosedBy")
+  workOrderNotesWritten WorkOrderNote[]
+  workOrderMessagesLinked WorkOrderMessageLink[]
   ticketsAcknowledged  Ticket[]     @relation("TicketAcknowledgedBy")
   tasksAssigned        Task[]       @relation("TaskAssignedTo")
   tasksCompleted       Task[]       @relation("TaskCompletedBy")
@@ -1432,6 +1434,7 @@ model Ticket {
   workOrders    WorkOrder[]
   threads       Thread[]
   documents     Document[]
+  messages      Message[]
 
   @@index([propertyId, status])
   @@index([unitId])
@@ -1536,6 +1539,9 @@ model WorkOrder {
   threads    Thread[]
   documents  Document[]
   bids       WorkOrderBid[]
+  messages   Message[]
+  notes      WorkOrderNote[]
+  messageLinks WorkOrderMessageLink[]
 
   @@index([propertyId, status])
   @@index([unitId])
@@ -1546,6 +1552,62 @@ model WorkOrder {
 /// One vendor's price for one work order (MAINT-04's bid-collection
 /// workflow, R-026). Its own table rather than columns on WorkOrder because
 /// the whole point is comparing several at once.
+/**
+ * A message tagged onto a work order AFTER it was sent (COMM-06, R-032).
+ *
+ * A SEPARATE TABLE, NOT AN UPDATE TO Message.workOrderId, because Message is
+ * append-only at the database level (Message_append_only rejects every
+ * UPDATE, not only DELETE) - the trigger exists precisely so nobody can
+ * quietly rewrite what a tenant or vendor actually said, and "attach this
+ * to a job" is a rewrite in exactly that sense if it touches the row. The
+ * inline `Message.ticketId`/`workOrderId` columns stay the fast path for
+ * the common case (a reply sent FROM a work order's own page, tagged at
+ * INSERT time and never touched again); this table is only for a message
+ * that already existed and was tagged afterward. Insert-only itself - there
+ * is no correction path here either, only a new link.
+ */
+model WorkOrderMessageLink {
+  id              String   @id @default(cuid())
+  workOrderId     String
+  /// Unique: a message belongs to at most one job. Attaching it twice, or
+  /// to two different jobs, is a mistake this constraint refuses outright
+  /// rather than silently double-counting it on two timelines.
+  messageId       String   @unique
+  linkedByStaffId String
+  linkedAt        DateTime @default(now())
+
+  workOrder WorkOrder @relation(fields: [workOrderId], references: [id])
+  message   Message   @relation(fields: [messageId], references: [id])
+  linkedBy  StaffUser @relation(fields: [linkedByStaffId], references: [id])
+
+  @@index([workOrderId])
+}
+
+/**
+ * A staff-only internal note on a work order (COMM-06, R-032).
+ *
+ * NOT a Message. It is never sent to a tenant or a vendor, belongs to no
+ * Thread, and has no delivery status - inventing a fake channel and a fake
+ * recipient to fit it into Message's shape would let a bug someday actually
+ * transmit an internal note to the person it is about. A dedicated model
+ * with none of that machinery cannot make that mistake.
+ *
+ * Append-only in practice, like every other evidence row in this product: a
+ * correction is a new note, not an edit to this one.
+ */
+model WorkOrderNote {
+  id          String   @id @default(cuid())
+  workOrderId String
+  staffUserId String
+  body        String
+  createdAt   DateTime @default(now())
+
+  workOrder WorkOrder @relation(fields: [workOrderId], references: [id])
+  staffUser StaffUser @relation(fields: [staffUserId], references: [id])
+
+  @@index([workOrderId, createdAt])
+}
+
 /// A tenant's answer to "was this resolved?" (MAINT-07, R-030).
 ///
 /// ITS OWN TABLE, NOT COLUMNS ON THE WORK ORDER, because a reopened job is
@@ -1742,17 +1804,36 @@ model Message {
   vendorId    String?
   /// Provider message id (Twilio SID, Resend id) for delivery reconciliation.
   externalId  String?
+  /// R-032 (COMM-06): which incident this message is EVIDENCE OF, distinct
+  /// from which Thread it lives in. A tenant's thread is deliberately
+  /// continuous across every ticket they ever raise (COMM-01) - it cannot
+  /// itself say which message was about which leak. These are set at send
+  /// time when the context is known (a reply sent from a work order's own
+  /// page) or attached afterwards by a staff member curating the record
+  /// (attachMessageToWorkOrder) - never inferred from a date range, which
+  /// would file a message on a guess. Null is the ordinary case: most of a
+  /// tenant's conversation is not about any one job.
+  ticketId    String?
+  workOrderId String?
   createdAt   DateTime         @default(now())
 
   thread    Thread             @relation(fields: [threadId], references: [id])
   staffUser StaffUser?         @relation("MessageSentBy", fields: [staffUserId], references: [id])
   tenant    Tenant?            @relation("MessageFromTenant", fields: [tenantId], references: [id])
   vendor    Vendor?            @relation("MessageFromVendor", fields: [vendorId], references: [id])
+  // RESTRICT, not the default SET NULL - see the migration's own comment:
+  // Message's append-only trigger rejects the UPDATE a SET NULL cascade
+  // would require, so RESTRICT is the only truthful option.
+  ticket    Ticket?            @relation(fields: [ticketId], references: [id], onDelete: Restrict)
+  workOrder WorkOrder?         @relation(fields: [workOrderId], references: [id], onDelete: Restrict)
   delivery  MessageDelivery?
   unrouted  UnroutedMessage?
+  workOrderLink WorkOrderMessageLink?
 
   @@index([threadId, sentAt])
   @@index([externalId])
+  @@index([ticketId])
+  @@index([workOrderId])
 }
 
 /// The mutable half of a Message: what the provider told us afterwards.

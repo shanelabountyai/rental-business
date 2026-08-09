@@ -37,7 +37,18 @@ const workOrderInclude = {
     },
   },
   unit: { select: { id: true, name: true } },
-  ticket: { select: { id: true, category: true, description: true, tenantId: true } },
+  // tenant email/phone: R-032's reply-to-tenant form needs to know which
+  // channels are actually reachable, cheap columns on a row already being
+  // fetched rather than a second query per page.
+  ticket: {
+    select: {
+      id: true,
+      category: true,
+      description: true,
+      tenantId: true,
+      tenant: { select: { email: true, phone: true, firstName: true, lastName: true } },
+    },
+  },
   vendor: { select: { id: true, name: true, phone: true, email: true } },
   assignedTo: { select: { id: true, name: true } },
 } as const

@@ -98,6 +98,46 @@ describe('threadKey', () => {
       /needs a vendorId/,
     )
   })
+
+  describe('the vendor work-order thread (R-032, COMM-06)', () => {
+    it('keys the property-level thread exactly as before with no workOrderId', () => {
+      // Unchanged - inbound SMS routing (candidatesForPhone) never supplies
+      // one, and that must keep landing in the same thread it always has.
+      expect(
+        threadKey({ scope: 'VENDOR', propertyId: 'p', vendorId: 'v' }),
+      ).toBe('vendor:v:property:p')
+    })
+
+    it('keys a DIFFERENT thread once a work order is given', () => {
+      const property = threadKey({ scope: 'VENDOR', propertyId: 'p', vendorId: 'v' })
+      const job = threadKey({
+        scope: 'VENDOR',
+        propertyId: 'p',
+        vendorId: 'v',
+        workOrderId: 'wo_1',
+      })
+      expect(job).toBe('vendor:v:workorder:wo_1')
+      expect(job).not.toBe(property)
+    })
+
+    it('separates two concurrent jobs for the same vendor', () => {
+      // The whole reason this exists: a vendor with two open jobs at once
+      // must not have their conversations about each one mixed together.
+      const jobA = threadKey({
+        scope: 'VENDOR',
+        propertyId: 'p',
+        vendorId: 'v',
+        workOrderId: 'wo_a',
+      })
+      const jobB = threadKey({
+        scope: 'VENDOR',
+        propertyId: 'p',
+        vendorId: 'v',
+        workOrderId: 'wo_b',
+      })
+      expect(jobA).not.toBe(jobB)
+    })
+  })
 })
 
 describe('decideRoute', () => {

@@ -1,5 +1,6 @@
 import { actualTotalCents, compareBids } from '@rental/core/approvals'
 import { earliestCompliantStart } from '@rental/core/entry'
+import { utcToWallClock } from '@rental/core/scheduling'
 import { formatCents } from '@rental/core/money'
 import {
   activeWarranties,
@@ -17,13 +18,18 @@ import { ClosePanel } from '@/components/workorders/close-panel.tsx'
 import { RecordActualsForm } from '@/components/workorders/record-actuals-form.tsx'
 import { ScheduleForm } from '@/components/workorders/schedule-form.tsx'
 import { TaskActionButton } from '@/components/tasks/action-button.tsx'
+import { TimelineSection } from '@/components/workorders/timeline-section.tsx'
 import { actorCan, actorDecision, propertyResource, requireScope } from '@/lib/auth/guard.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 import {
+  addWorkOrderNote,
   assignWorkOrder,
+  attachMessageToWorkOrder,
   closeWorkOrder,
   dispatchToVendor,
   markWorkComplete,
+  replyToTenantFromWorkOrder,
+  replyToVendorFromWorkOrder,
   setWorkOrderWarrantyHold,
 } from '@/lib/workorders/actions.ts'
 import {
@@ -33,6 +39,7 @@ import {
   submitForApproval,
 } from '@/lib/workorders/approvals.ts'
 import { rulesFor } from '@/lib/jurisdiction/queries.ts'
+import { unattachedTenantMessages, workOrderTimeline } from '@/lib/workorders/timeline.ts'
 import { verificationsFor, vendorVerificationRows } from '@/lib/workorders/verify.ts'
 import {
   logEntryPermission,
@@ -126,6 +133,31 @@ export default async function WorkOrderDetailPage({
     workOrder.vendorId && canSeeVendors
       ? vendorReopenRates(await vendorVerificationRows(workOrder.vendorId), 3)[0]
       : undefined
+  // COMM-06, R-032: the merged timeline - tenant thread, vendor thread and
+  // staff notes, one chronological view.
+  const rawEntries = await workOrderTimeline(workOrder.id)
+  const timelineEntries = rawEntries.map((entry) => ({
+    ...entry,
+    atLocal: utcToWallClock(entry.at, workOrder.property.timezone).replace('T', ' '),
+  }))
+  const unattached = canWrite
+    ? (await unattachedTenantMessages(workOrder.id)).map((message) => ({
+        id: message.id,
+        body: message.body,
+        sentAt: utcToWallClock(message.sentAt, workOrder.property.timezone).replace(
+          'T',
+          ' ',
+        ),
+      }))
+    : []
+  const tenantChannels = workOrder.ticket?.tenant
+    ? [
+        'PORTAL',
+        ...(workOrder.ticket.tenant.email ? ['EMAIL'] : []),
+        ...(workOrder.ticket.tenant.phone ? ['SMS'] : []),
+      ]
+    : []
+
   const onHold = workOrder.status === 'ON_HOLD_WARRANTY'
   const awaitingApproval = workOrder.status === 'PENDING_APPROVAL'
   const approveDecision = await actorDecision('workorder.approve', propertyResource(workOrder.property))
@@ -451,6 +483,19 @@ export default async function WorkOrderDetailPage({
           closeAction={closeWorkOrder.bind(null, workOrder.id)}
         />
       )}
+
+      <TimelineSection
+        workOrderId={workOrder.id}
+        entries={timelineEntries}
+        canWrite={canWrite}
+        tenantChannels={tenantChannels}
+        hasVendor={workOrder.vendorId != null}
+        unattached={unattached}
+        addNote={addWorkOrderNote.bind(null, workOrder.id)}
+        replyToTenant={replyToTenantFromWorkOrder.bind(null, workOrder.id)}
+        replyToVendor={replyToVendorFromWorkOrder.bind(null, workOrder.id)}
+        attachMessage={attachMessageToWorkOrder.bind(null, workOrder.id)}
+      />
     </div>
   )
 }

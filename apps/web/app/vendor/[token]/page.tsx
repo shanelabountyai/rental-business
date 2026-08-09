@@ -1,13 +1,17 @@
+import { utcToWallClock } from '@rental/core/scheduling'
+import { prisma } from '@rental/db'
 import { VendorJob } from '@/components/vendors/vendor-job.tsx'
 import {
   markWorkComplete,
   respondToWorkOrder,
   revealCodeForVendor,
+  sendVendorMessage,
   uploadVendorDocument,
 } from '@/lib/vendors/actions.ts'
 import { vendorRejectionMessage } from '@/lib/vendors/messages.ts'
 import { verifyVendorLink } from '@/lib/vendors/link.ts'
 import { vendorJobContext } from '@/lib/vendors/queries.ts'
+import { vendorWorkOrderThread } from '@/lib/workorders/timeline.ts'
 
 export const metadata = {
   title: 'Your job',
@@ -52,6 +56,20 @@ export default async function VendorLinkPage({
   const { workOrder } = link
   const context = await vendorJobContext(workOrder)
 
+  // COMM-06's vendor thread, gets-or-creates on first read the same as
+  // every other thread in the product - reading it must not require
+  // somebody to have sent the first message.
+  const thread = await vendorWorkOrderThread({
+    id: workOrder.id,
+    propertyId: workOrder.propertyId,
+    vendorId: link.vendorId,
+  })
+  const threadMessages = await prisma.message.findMany({
+    where: { threadId: thread.id },
+    orderBy: { sentAt: 'asc' },
+    select: { id: true, body: true, sentAt: true, direction: true },
+  })
+
   const address = [
     workOrder.property.addressLine1,
     workOrder.property.city,
@@ -92,6 +110,16 @@ export default async function VendorLinkPage({
       uploadAction={uploadVendorDocument.bind(null, token)}
       completeAction={markWorkComplete.bind(null, token)}
       revealAction={revealCodeForVendor.bind(null, token)}
+      messages={threadMessages.map((message) => ({
+        id: message.id,
+        body: message.body,
+        sentAt: utcToWallClock(message.sentAt, workOrder.property.timezone).replace(
+          'T',
+          ' ',
+        ),
+        fromStaff: message.direction === 'OUTBOUND',
+      }))}
+      messageAction={sendVendorMessage.bind(null, token)}
     />
   )
 }

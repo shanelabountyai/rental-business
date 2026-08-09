@@ -40,6 +40,10 @@ export async function resolveThread(
         propertyId: identity.propertyId,
         tenantId: identity.scope === 'TENANT' ? identity.tenantId : null,
         vendorId: identity.scope === 'VENDOR' ? identity.vendorId : null,
+        // R-032: only ever set for the work-order-scoped vendor thread (see
+        // threadKey's own comment) - the property-level vendor thread and
+        // every tenant thread leave this null.
+        workOrderId: identity.workOrderId ?? null,
         subject: subject ?? null,
       },
     })

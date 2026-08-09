@@ -13,8 +13,10 @@ import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { auditAsVendor } from '@/lib/audit/system.ts'
 import { generateStorageKey, storage } from '@/lib/storage/index.ts'
+import { postVendorPortalMessage } from '@/lib/comms/messages.ts'
 import { verifyVendorLink } from './link.ts'
 import { requestVerification } from '@/lib/workorders/verify.ts'
+import { vendorWorkOrderThread } from '@/lib/workorders/timeline.ts'
 import { vendorRejectionMessage } from './messages.ts'
 
 // Everything a vendor can do, all of it through a magic link and none of it
@@ -321,4 +323,45 @@ export async function markWorkComplete(token: string): Promise<VendorFormState> 
 
   revalidatePath(`/workorders/${workOrder.id}`)
   return { notice: 'Marked complete - thank you.' }
+}
+
+/**
+ * A message from the vendor to staff, posted from the magic-link page
+ * (COMM-06, R-032).
+ *
+ * The vendor's own half of the work order's timeline. Same PORTAL-only
+ * shape as the staff side (`replyToVendorFromWorkOrder`) - no channel to
+ * choose, because there is only ever one thread this can land in.
+ */
+export async function sendVendorMessage(
+  token: string,
+  _previous: VendorFormState,
+  formData: FormData,
+): Promise<VendorFormState> {
+  const link = await verifyVendorLink(token)
+  if (!link.ok) return { error: vendorRejectionMessage(link.reason) }
+
+  const { workOrder, vendorId } = link
+  const body = String(formData.get('body') ?? '').trim()
+  if (!body) {
+    return {
+      error: 'Fix the highlighted fields.',
+      fieldErrors: { body: 'Write a message.' },
+    }
+  }
+
+  const thread = await vendorWorkOrderThread({
+    id: workOrder.id,
+    propertyId: workOrder.propertyId,
+    vendorId,
+  })
+  await postVendorPortalMessage({
+    threadId: thread.id,
+    vendorId,
+    workOrderId: workOrder.id,
+    body,
+  })
+
+  revalidatePath(`/workorders/${workOrder.id}`)
+  return { notice: 'Sent.' }
 }

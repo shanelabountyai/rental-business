@@ -203,6 +203,19 @@ export const AUDIT_ACTIONS = [
   /// work order -> invoice -> books chain, and the one a later reconciliation
   /// reads to ask why a property's maintenance total is what it is.
   'workorder.closed',
+
+  /// R-032 (COMM-06): a staff-only internal note on a work order. The note
+  /// itself already lives in its own table; this is what lets "who added
+  /// what, and when" show up in the SAME trail as every other privileged
+  /// action, rather than requiring a second table to be checked.
+  'workorder.note_added',
+
+  /// R-032: an existing message - most often an inbound tenant text that
+  /// arrived before anyone knew which job it was about - was tagged as
+  /// evidence for this work order after the fact. Recorded because linking
+  /// evidence to an incident is itself a decision worth a trail: it is a
+  /// human saying "this is about that", not something the system inferred.
+  'message.attached_to_workorder',
 ] as const
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number]

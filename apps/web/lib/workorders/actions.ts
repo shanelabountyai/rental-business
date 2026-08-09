@@ -1,5 +1,6 @@
 'use server'
 
+import { type OutboundChannel, validateOutboundMessage } from '@rental/core/comms'
 import {
   type WorkOrderInput,
   closeDecision,
@@ -11,11 +12,15 @@ import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { audit } from '@/lib/audit/index.ts'
+import { isUniqueViolation } from '@/lib/db/unique-violation.ts'
 import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
+import { resolveThread } from '@/lib/comms/threads.ts'
+import { sendThreadMessage } from '@/lib/comms/messages.ts'
 import { emitEvent } from '@/lib/jobs/outbox.ts'
 import { dispatchPendingNotifications, notify } from '@/lib/notifications/send.ts'
 import { completeTaskWork } from '@/lib/tasks/complete.ts'
 import { issueVendorLink, revokeVendorLinks } from '@/lib/vendors/link.ts'
+import { vendorWorkOrderThread } from './timeline.ts'
 import { requestVerification } from './verify.ts'
 
 // Writes for work orders (MAINT-03, PROP-06, R-024). Same shape as every
@@ -596,4 +601,235 @@ const CLOSE_REFUSALS: Record<string, string> = {
   not_complete: 'Mark the work complete before closing it.',
   no_cost_recorded:
     'Record what this cost, or tick “this job cost nothing” if it genuinely did not.',
+}
+
+// Comms threading (COMM-06, R-032): staff notes, replying to the tenant or
+// vendor from the work order's own page, and attaching a stray message to
+// it after the fact. The vendor's own half of this - posting from the
+// magic-link page - lives in lib/vendors/actions.ts, which has no session
+// to check a permission against.
+
+/**
+ * The work order, plus the permission check for writing on its timeline.
+ *
+ * Same shape as lib/comms/actions.ts's own `threadForWrite`: loaded by id,
+ * checked against ITS OWN property. `workorder.write` (not `message.send`)
+ * is the gate - this is the work order's own page, and the ability to touch
+ * its timeline is the same ability that already lets somebody edit the rest
+ * of it.
+ */
+async function workOrderForCommsWrite(workOrderId: string) {
+  const workOrder = await prisma.workOrder.findUniqueOrThrow({
+    where: { id: workOrderId },
+    include: {
+      property: { select: { id: true, legalEntityId: true } },
+      ticket: {
+        select: {
+          id: true,
+          tenantId: true,
+          tenant: { select: { email: true, phone: true } },
+        },
+      },
+    },
+  })
+  const actor = await requirePermission('workorder.write', propertyResource(workOrder.property))
+  return { workOrder, actor }
+}
+
+/**
+ * A staff-only internal note (COMM-06, R-032). Never sent to anyone - see
+ * `WorkOrderNote`'s own schema comment for why this is not a Message.
+ */
+export async function addWorkOrderNote(
+  workOrderId: string,
+  _previous: WorkOrderFormState,
+  formData: FormData,
+): Promise<WorkOrderFormState> {
+  const { workOrder, actor } = await workOrderForCommsWrite(workOrderId)
+
+  const body = str(formData, 'body')
+  if (!body) {
+    return {
+      error: 'Fix the highlighted fields.',
+      fieldErrors: { body: 'Write the note.' },
+    }
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.workOrderNote.create({
+      data: { workOrderId, staffUserId: actor.id, body },
+    })
+    await audit(
+      {
+        action: 'workorder.note_added',
+        entityType: 'WorkOrder',
+        entityId: workOrderId,
+        propertyId: workOrder.propertyId,
+        after: { body },
+      },
+      tx,
+    )
+  })
+
+  revalidatePath(`/workorders/${workOrderId}`)
+  return {}
+}
+
+/**
+ * A staff reply to the TENANT, sent from the work order's own page.
+ *
+ * Writes into the tenant's ordinary continuous thread (COMM-01 is not
+ * changed by this item) but stamps `ticketId`/`workOrderId` on the Message
+ * itself, which is what makes it show up on THIS job's timeline without
+ * fragmenting the tenant's conversation into a separate per-ticket thread.
+ */
+export async function replyToTenantFromWorkOrder(
+  workOrderId: string,
+  _previous: WorkOrderFormState,
+  formData: FormData,
+): Promise<WorkOrderFormState> {
+  const { workOrder, actor } = await workOrderForCommsWrite(workOrderId)
+  if (!workOrder.ticket?.tenantId) {
+    return { error: 'There is no tenant on this job to message.' }
+  }
+
+  const channel = str(formData, 'channel')
+  const body = str(formData, 'body')
+  const violations = validateOutboundMessage({ threadId: 'n/a', channel, body })
+    .filter((v) => v.field !== 'threadId')
+  if (violations.length > 0) return violationsToState(violations)
+
+  const tenant = workOrder.ticket.tenant
+  const toAddress =
+    channel === 'SMS' ? (tenant?.phone ?? null) : channel === 'EMAIL' ? (tenant?.email ?? null) : null
+  if (channel !== 'PORTAL' && !toAddress) {
+    return {
+      error: `No ${channel === 'SMS' ? 'phone number' : 'email address'} on file for this tenant.`,
+    }
+  }
+
+  const thread = await resolveThread({
+    scope: 'TENANT',
+    propertyId: workOrder.propertyId,
+    tenantId: workOrder.ticket.tenantId,
+  })
+  await sendThreadMessage({
+    threadId: thread.id,
+    channel: channel as OutboundChannel,
+    body,
+    staffUserId: actor.id,
+    toAddress,
+    ticketId: workOrder.ticket.id,
+    workOrderId,
+  })
+
+  revalidatePath(`/workorders/${workOrderId}`)
+  return {}
+}
+
+/**
+ * A staff reply to the VENDOR, sent from the work order's own page.
+ *
+ * PORTAL only - see `vendorWorkOrderThread`'s own comment for why offering
+ * SMS/EMAIL here would silently fragment the conversation the vendor
+ * actually reads from their magic-link page.
+ */
+export async function replyToVendorFromWorkOrder(
+  workOrderId: string,
+  _previous: WorkOrderFormState,
+  formData: FormData,
+): Promise<WorkOrderFormState> {
+  const { workOrder, actor } = await workOrderForCommsWrite(workOrderId)
+  if (!workOrder.vendorId) {
+    return { error: 'There is no vendor assigned to this job to message.' }
+  }
+
+  const body = str(formData, 'body')
+  const violations = validateOutboundMessage({ threadId: 'n/a', channel: 'PORTAL', body })
+    .filter((v) => v.field !== 'threadId')
+  if (violations.length > 0) return violationsToState(violations)
+
+  const thread = await vendorWorkOrderThread({
+    id: workOrder.id,
+    propertyId: workOrder.propertyId,
+    vendorId: workOrder.vendorId,
+  })
+  await sendThreadMessage({
+    threadId: thread.id,
+    channel: 'PORTAL',
+    body,
+    staffUserId: actor.id,
+    toAddress: null,
+    workOrderId,
+  })
+
+  revalidatePath(`/workorders/${workOrderId}`)
+  return {}
+}
+
+/**
+ * Tags an existing, untagged tenant message as evidence for this job
+ * (COMM-06's "reconstructing an incident from three separate histories").
+ *
+ * The human judgement call `unattachedTenantMessages` exists to support -
+ * staff reading their recent conversation with the tenant and deciding
+ * which lines were actually about this job. Refuses a message that is not
+ * this tenant's, or already tagged elsewhere, the same as any other write
+ * that must not let an id from somewhere else be trusted at face value.
+ */
+export async function attachMessageToWorkOrder(
+  workOrderId: string,
+  _previous: WorkOrderFormState,
+  formData: FormData,
+): Promise<WorkOrderFormState> {
+  const { workOrder, actor } = await workOrderForCommsWrite(workOrderId)
+  if (!workOrder.ticket?.tenantId) {
+    return { error: 'There is no tenant on this job to attach a message to.' }
+  }
+  const messageId = str(formData, 'messageId')
+
+  const message = await prisma.message.findUnique({
+    where: { id: messageId },
+    select: { id: true, tenantId: true, ticketId: true, workOrderId: true, workOrderLink: true },
+  })
+  if (
+    !message ||
+    message.tenantId !== workOrder.ticket.tenantId ||
+    message.ticketId != null ||
+    message.workOrderId != null ||
+    message.workOrderLink != null
+  ) {
+    return { error: 'That message could not be attached.' }
+  }
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      // A LINK ROW, not an update to the message - Message is append-only
+      // (Message_append_only rejects every UPDATE), so "attach this" cannot
+      // touch the original row. See WorkOrderMessageLink's own schema
+      // comment.
+      await tx.workOrderMessageLink.create({
+        data: { workOrderId, messageId, linkedByStaffId: actor.id },
+      })
+      await audit(
+        {
+          action: 'message.attached_to_workorder',
+          entityType: 'WorkOrder',
+          entityId: workOrderId,
+          propertyId: workOrder.propertyId,
+          after: { messageId },
+        },
+        tx,
+      )
+    })
+  } catch (error) {
+    // The unique index on messageId is the guard against a double-click or
+    // two staff attaching the same stray text to two different jobs at
+    // once.
+    if (isUniqueViolation(error)) return { error: 'That message was already attached.' }
+    throw error
+  }
+
+  revalidatePath(`/workorders/${workOrderId}`)
+  return {}
 }

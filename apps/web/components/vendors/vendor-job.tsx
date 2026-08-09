@@ -40,10 +40,14 @@ export interface VendorJobProps {
   }[]
   accessCodes: readonly { id: string; type: string; label: string | null }[]
   shutoffs: readonly { id: string; type: string; description: string | null }[]
+  /// The work order's own thread with staff (COMM-06, R-032) - already
+  /// resolved and property-local-timestamped, oldest first.
+  messages: readonly { id: string; body: string; sentAt: string; fromStaff: boolean }[]
   respondAction: (state: VendorFormState, formData: FormData) => Promise<VendorFormState>
   uploadAction: (state: VendorFormState, formData: FormData) => Promise<VendorFormState>
   completeAction: () => Promise<VendorFormState>
   revealAction: (accessCodeId: string) => Promise<{ code?: string; error?: string }>
+  messageAction: (state: VendorFormState, formData: FormData) => Promise<VendorFormState>
 }
 
 const PRIORITY_LABELS: Record<string, string> = {
@@ -58,10 +62,12 @@ export function VendorJob({
   appliances,
   accessCodes,
   shutoffs,
+  messages,
   respondAction,
   uploadAction,
   completeAction,
   revealAction,
+  messageAction,
 }: VendorJobProps) {
   const [respondState, respondFormAction] = useActionState<VendorFormState, FormData>(
     respondAction,
@@ -73,6 +79,10 @@ export function VendorJob({
   )
   const [completeState, completeFormAction] = useActionState<VendorFormState, FormData>(
     () => completeAction(),
+    {},
+  )
+  const [messageState, messageFormAction] = useActionState<VendorFormState, FormData>(
+    messageAction,
     {},
   )
   const [proposing, setProposing] = useState(false)
@@ -371,6 +381,52 @@ export function VendorJob({
           </section>
         </>
       )}
+
+      {/*
+        OUTSIDE the `working` branch, deliberately - a vendor deciding
+        whether to take the job is exactly when they might have a
+        clarifying question, and gating messaging behind "accept the job
+        first" would shut off the one channel that could help them decide.
+      */}
+      <section aria-labelledby="vendor-messages" className="flex flex-col gap-3 border-t pt-4">
+        <h2 id="vendor-messages" className="text-lg font-semibold">
+          Messages
+        </h2>
+        {messages.length === 0 ? (
+          <p className="text-muted-foreground text-sm">Nothing yet.</p>
+        ) : (
+          <ol className="flex flex-col gap-2">
+            {messages.map((message) => (
+              <li
+                key={message.id}
+                className={`flex flex-col gap-1 rounded-md border p-3 text-sm ${
+                  message.fromStaff ? 'bg-muted/40' : ''
+                }`}
+              >
+                <div className="text-muted-foreground flex flex-wrap items-center justify-between gap-2 text-xs">
+                  <span>{message.fromStaff ? 'Office' : 'You'}</span>
+                  <span>{message.sentAt}</span>
+                </div>
+                <p className="whitespace-pre-wrap">{message.body}</p>
+              </li>
+            ))}
+          </ol>
+        )}
+        <form action={messageFormAction} className="flex flex-col gap-3">
+          <FormAlerts state={messageState} />
+          <label htmlFor="field-vendor-message-body" className="sr-only">
+            Message the office
+          </label>
+          <textarea
+            id="field-vendor-message-body"
+            name="body"
+            rows={3}
+            required
+            className="border-input bg-background focus-visible:ring-ring min-h-11 rounded-md border px-3 py-2 text-base focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+          />
+          <SubmitButton label="Send" />
+        </form>
+      </section>
     </main>
   )
 }
