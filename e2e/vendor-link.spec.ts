@@ -3,6 +3,7 @@ import AxeBuilder from '@axe-core/playwright'
 import { hashPassword, sealSecret } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
+import { uniquePhone } from './fixtures.ts'
 
 // The zero-login vendor journey, end to end (D-6, D-16, MAINT-03, R-025).
 //
@@ -60,10 +61,12 @@ async function seedJob(options: { withAccessCode?: boolean; withTenant?: boolean
   })
 
   let ticketId: string | null = null
+  let tenantPhone: string | null = null
   if (options.withTenant !== false) {
     const tenant = await prisma.tenant.create({
-      data: { firstName: 'Vera', lastName: `Tenant-${unique}`, phone: '+15125558888' },
+      data: { firstName: 'Vera', lastName: `Tenant-${unique}`, phone: uniquePhone() },
     })
+    tenantPhone = tenant.phone
     tenantIds.push(tenant.id)
     const lease = await prisma.lease.create({
       data: {
@@ -92,7 +95,7 @@ async function seedJob(options: { withAccessCode?: boolean; withTenant?: boolean
   }
 
   const vendor = await prisma.vendor.create({
-    data: { name: `Vendor-${unique}`, trades: ['plumbing'], phone: '+15125551111' },
+    data: { name: `Vendor-${unique}`, trades: ['plumbing'], phone: uniquePhone() },
   })
   vendorIds.push(vendor.id)
 
@@ -122,7 +125,7 @@ async function seedJob(options: { withAccessCode?: boolean; withTenant?: boolean
     accessCodeIds.push(code.id)
   }
 
-  return { property, unit, vendor, workOrder, ticketId }
+  return { property, unit, vendor, workOrder, ticketId, tenantPhone }
 }
 
 /// Signs in as staff and dispatches, returning the vendor's live token.
@@ -233,7 +236,7 @@ test.describe('the vendor journey', () => {
   test('opens the job with no account at all, accepts, and uploads an invoice', async ({
     page,
   }) => {
-    const { workOrder, vendor } = await seedJob()
+    const { workOrder, vendor, tenantPhone } = await seedJob()
     const token = await dispatchAndCaptureToken(page, workOrder.id, workOrder.propertyId)
 
     // A BRAND NEW browser context with no cookies - the vendor is not the
@@ -244,7 +247,7 @@ test.describe('the vendor journey', () => {
     await vendorPage.goto(`/vendor/${token}`)
     await expect(vendorPage.getByRole('heading', { name: /Replace the kitchen tap/ })).toBeVisible()
     await expect(vendorPage.getByText('11 Vendor Way', { exact: false })).toBeVisible()
-    await expect(vendorPage.getByText('+15125558888')).toBeVisible()
+    await expect(vendorPage.getByText(tenantPhone!)).toBeVisible()
     await expect(vendorPage.getByText('Kitchen tap drips constantly.')).toBeVisible()
 
     await vendorPage.getByRole('button', { name: 'Accept this job' }).click()

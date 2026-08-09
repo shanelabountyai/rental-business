@@ -3,6 +3,7 @@ import AxeBuilder from '@axe-core/playwright'
 import { hashPassword, mintToken } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
+import { uniquePhone } from './fixtures.ts'
 
 // Verify & close through the browser (MAINT-07, R-030).
 //
@@ -48,7 +49,7 @@ async function seed(options: { status?: string } = {}) {
   unitIds.push(unit.id)
 
   const tenant = await prisma.tenant.create({
-    data: { firstName: 'Nel', lastName: `Verify-${stamp}`, phone: '+15125550166' },
+    data: { firstName: 'Nel', lastName: `Verify-${stamp}`, phone: uniquePhone() },
   })
   tenantIds.push(tenant.id)
   const lease = await prisma.lease.create({
@@ -77,7 +78,7 @@ async function seed(options: { status?: string } = {}) {
   ticketIds.push(ticket.id)
 
   const vendor = await prisma.vendor.create({
-    data: { name: `Vfy Plumbing-${stamp}`, trades: ['plumbing'], phone: '+15125550155' },
+    data: { name: `Vfy Plumbing-${stamp}`, trades: ['plumbing'], phone: uniquePhone() },
   })
   vendorIds.push(vendor.id)
 

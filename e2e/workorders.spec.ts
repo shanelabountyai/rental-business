@@ -3,6 +3,7 @@ import AxeBuilder from '@axe-core/playwright'
 import { hashPassword } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
+import { uniquePhone } from './fixtures.ts'
 
 // Work order creation & assignment (MAINT-03, PROP-06, R-024): from a
 // ticket or standalone, scope/priority/estimate, assign to staff or vendor,
@@ -77,7 +78,7 @@ async function seedPropertyAndUnit(propertyName = 'WO House') {
 
 async function seedConvertedTicket(propertyId: string, unitId: string, category = 'HVAC') {
   const tenant = await prisma.tenant.create({
-    data: { firstName: 'Wo', lastName: `Tenant-${randomUUID().slice(0, 6)}`, phone: '+15125557777' },
+    data: { firstName: 'Wo', lastName: `Tenant-${randomUUID().slice(0, 6)}`, phone: uniquePhone() },
   })
   tenantIds.push(tenant.id)
   const lease = await prisma.lease.create({
@@ -202,7 +203,7 @@ test.describe('creating a work order', () => {
 
   test('from a ticket converts it and closes its still-open triage task', async ({ page }) => {
     const { property, unit } = await seedPropertyAndUnit()
-    const { ticket } = await seedConvertedTicket(property.id, unit.id, 'HVAC')
+    const { ticket, tenant } = await seedConvertedTicket(property.id, unit.id, 'HVAC')
     await prisma.warranty.create({
       data: { propertyId: property.id, category: 'HVAC', provider: 'CoolCo', expiresOn: null },
     })
@@ -296,7 +297,7 @@ test.describe('assigning a work order', () => {
 
   test('a job Task carries full context to the assigned tech', async ({ page }) => {
     const { property, unit } = await seedPropertyAndUnit()
-    const { ticket } = await seedConvertedTicket(property.id, unit.id, 'HVAC')
+    const { ticket, tenant } = await seedConvertedTicket(property.id, unit.id, 'HVAC')
     const appliance = await prisma.appliance.create({
       data: { unitId: unit.id, category: 'HVAC', make: 'Carrier', model: 'X200', filterSize: '16x25x1' },
     })
@@ -333,7 +334,7 @@ test.describe('assigning a work order', () => {
     await page.goto(`/tasks/${jobTask.id}`)
     await expect(page.getByText('Carrier', { exact: false })).toBeVisible()
     await expect(page.getByText('16x25x1', { exact: false })).toBeVisible()
-    await expect(page.getByText('+15125557777')).toBeVisible()
+    await expect(page.getByText(tenant.phone!)).toBeVisible()
   })
 
   test('to a vendor does not create a job Task - a vendor has no queue to claim from', async ({

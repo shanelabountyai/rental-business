@@ -3,6 +3,7 @@ import AxeBuilder from '@axe-core/playwright'
 import { hashPassword } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
+import { uniquePhone } from './fixtures.ts'
 
 // Scheduling with entry-notice compliance (MAINT-05, COMM-02, D-4, R-027).
 //
@@ -60,7 +61,7 @@ async function seedWorkOrder(options: { priority?: string } = {}) {
     data: { propertyId: property.id, name: `U-${unique}`, status: 'OCCUPIED' },
   })
   const tenant = await prisma.tenant.create({
-    data: { firstName: 'Nadia', lastName: `Entry-${unique}`, phone: '+15125556000', email: `t-${unique}@example.test` },
+    data: { firstName: 'Nadia', lastName: `Entry-${unique}`, phone: uniquePhone(), email: `t-${unique}@example.test` },
   })
   tenantIds.push(tenant.id)
   const lease = await prisma.lease.create({

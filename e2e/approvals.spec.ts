@@ -4,6 +4,7 @@ import { Secret, TOTP } from 'otpauth'
 import { createTotpEnrolment, hashPassword, sealSecret } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
+import { uniquePhone } from './fixtures.ts'
 
 // Approval thresholds end to end (MAINT-04, ROLE-02, R-026).
 //
@@ -442,10 +443,10 @@ test.describe('bid collection (MAINT-04)', () => {
     const { workOrder } = await seedWorkOrder({ estimateCents: 400_000 })
     const unique = randomUUID().slice(0, 6)
     const cheap = await prisma.vendor.create({
-      data: { name: `Cheap-${unique}`, trades: ['plumbing'], phone: '+15125550001' },
+      data: { name: `Cheap-${unique}`, trades: ['plumbing'], phone: uniquePhone() },
     })
     const dear = await prisma.vendor.create({
-      data: { name: `Dear-${unique}`, trades: ['plumbing'], phone: '+15125550002' },
+      data: { name: `Dear-${unique}`, trades: ['plumbing'], phone: uniquePhone() },
     })
     vendorIds.push(cheap.id, dear.id)
 
@@ -530,7 +531,7 @@ test.describe('bid collection (MAINT-04)', () => {
       // no addressable channel, so R-016 records the notification as
       // suppressed and there is no message to read a token out of. That is
       // correct behaviour, and not what this test is about.
-      data: { name: `Late-${unique}`, trades: ['plumbing'], phone: '+15125550003' },
+      data: { name: `Late-${unique}`, trades: ['plumbing'], phone: uniquePhone() },
     })
     vendorIds.push(vendor.id)
 

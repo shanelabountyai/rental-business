@@ -3,6 +3,7 @@ import AxeBuilder from '@axe-core/playwright'
 import { hashPassword } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
+import { uniquePhone } from './fixtures.ts'
 
 // Comms threading through the UI (COMM-01, R-017): the inbox, a thread
 // transcript with staff attribution, replying, logging a call, and the
@@ -316,7 +317,7 @@ test.describe('unsorted messages', () => {
     const { property } = await seedProperty()
     const { tenant } = await seedTenantWithThread(property.id, {
       lastName: 'Okonkwo',
-      phone: '+15125550999',
+      phone: uniquePhone(),
     })
     // Unique per run: the triage list is global by design, so a fixed string
     // would collide with anything an earlier run left behind.
@@ -324,7 +325,14 @@ test.describe('unsorted messages', () => {
     const unrouted = await prisma.unroutedMessage.create({
       data: {
         channel: 'SMS',
-        fromAddress: '+15125557777',
+        // Unique, and that matters more than it looks: this literal used to
+        // be the exact number workorders.spec.ts seeds its tenant with, so a
+        // fixture whose whole premise is "nobody owns this number" was
+        // sharing one with a live tenant in a concurrently-running spec.
+        // Harmless only because the row is written pre-routed; the moment
+        // anything re-routes it, a stranger's text lands in that tenant's
+        // permanent record.
+        fromAddress: uniquePhone(),
         body,
         reason: 'UNKNOWN_SENDER',
         receivedAt: new Date('2026-08-05T09:00:00Z'),

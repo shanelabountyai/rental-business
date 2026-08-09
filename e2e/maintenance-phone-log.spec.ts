@@ -3,6 +3,7 @@ import AxeBuilder from '@axe-core/playwright'
 import { hashPassword } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
+import { uniquePhone } from './fixtures.ts'
 
 // Staff-logged (phone-reported) maintenance requests (MAINT-01, D-10, R-022):
 // a tenant who calls instead of using the portal must land in the same
@@ -64,7 +65,7 @@ async function seedCaller(propertyName = 'Phonelog House') {
     data: { propertyId: property.id, name: `U-${randomUUID().slice(0, 6)}`, status: 'OCCUPIED' },
   })
   const tenant = await prisma.tenant.create({
-    data: { firstName: 'Cara', lastName: `Caller-${randomUUID().slice(0, 6)}`, phone: '+15125559000' },
+    data: { firstName: 'Cara', lastName: `Caller-${randomUUID().slice(0, 6)}`, phone: uniquePhone() },
   })
   tenantIds.push(tenant.id)
   const lease = await prisma.lease.create({

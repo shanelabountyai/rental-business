@@ -3,6 +3,7 @@ import AxeBuilder from '@axe-core/playwright'
 import { hashPassword, mintToken } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
+import { uniquePhone } from './fixtures.ts'
 
 // The emergency intake path (MAINT-01's emergency criterion, PROP-03, R-020).
 //
@@ -41,7 +42,7 @@ async function seedEmergencyTenancy() {
     data: {
       firstName: 'Rae',
       lastName: `Emergency-${randomUUID().slice(0, 6)}`,
-      phone: '+15125550188',
+      phone: uniquePhone(),
     },
   })
   tenantIds.push(tenant.id)
@@ -83,7 +84,7 @@ async function seedEmergencyTenancy() {
     data: {
       email: `emg-oncall-${randomUUID()}@example.test`,
       name: 'On Call',
-      phone: '+15125550199',
+      phone: uniquePhone(),
       credential: {
         create: { passwordHash: await hashPassword('correct-horse-battery-staple') },
       },
@@ -306,7 +307,7 @@ test.describe('submitting an emergency', () => {
     const sms = paged.find((n) => n.channel === 'SMS')
     expect(sms?.body.startsWith('EMERGENCY:')).toBe(true)
     expect(sms?.body).toContain('31 Cedar Court')
-    expect(sms?.body).toContain('+15125550188')
+    expect(sms?.body).toContain(tenant.phone)
   })
 
   test('records the submission in the audit trail', async ({ page }) => {

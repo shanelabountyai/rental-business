@@ -34,7 +34,13 @@
     // error in packages/db - which nothing in apps/web imports yet - passed
     // `npm run typecheck` silently. R-002 puts the whole Prisma layer there.
     "../../packages/**/*.ts",
-    "../../packages/**/*.mts"
+    "../../packages/**/*.mts",
+    // The e2e suite, for the same reason the packages are here: tsc only
+    // follows the import graph, and nothing in apps/web imports a Playwright
+    // spec - so this whole directory had no typechecking at all. R-032's
+    // fixture tidy-up shipped two references to an undefined variable that
+    // lint and typecheck both passed and only a test run caught.
+    "../../e2e/**/*.ts"
   ],
   "exclude": [
     "node_modules",

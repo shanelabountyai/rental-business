@@ -397,14 +397,20 @@ test.describe('creating a property', () => {
     // there - even though the app's own redirect, proven above, already saw
     // it instantly on the same request. This is a connection-visibility gap
     // in the TEST's out-of-band verification, not a product bug.
-    let second: Awaited<ReturnType<typeof prisma.property.findFirst>> = null
+    // Poll for existence, then read it once. Assigning to an outer `let`
+    // from inside the poll callback looked tidier and was not: TypeScript
+    // narrows the variable to `null` and cannot see the closure's write, so
+    // the follow-up read was typed `never` - which nothing noticed until the
+    // e2e suite was brought under `tsc` at all.
     await expect
-      .poll(async () => {
-        second = await prisma.property.findFirst({ where: { name: secondName } })
-        return second
-      })
-      .not.toBeNull()
-    if (second) propertyIds.push(second.id)
+      .poll(async () =>
+        (await prisma.property.count({ where: { name: secondName } })) > 0,
+      )
+      .toBe(true)
+    const second = await prisma.property.findFirstOrThrow({
+      where: { name: secondName },
+    })
+    propertyIds.push(second.id)
     propertyIds.push(existing.id)
   })
 

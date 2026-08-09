@@ -3,6 +3,7 @@ import AxeBuilder from '@axe-core/playwright'
 import { hashPassword } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
+import { uniquePhone } from './fixtures.ts'
 
 // After-hours routing through the browser (MAINT-12, NOTIF-05, R-029).
 //
@@ -45,7 +46,7 @@ async function seed() {
   })
   unitIds.push(unit.id)
   const tenant = await prisma.tenant.create({
-    data: { firstName: 'Rae', lastName: `Night-${stamp}`, phone: '+15125550177' },
+    data: { firstName: 'Rae', lastName: `Night-${stamp}`, phone: uniquePhone() },
   })
   tenantIds.push(tenant.id)
 
@@ -53,7 +54,7 @@ async function seed() {
     data: {
       email: `oncall-${randomUUID()}@example.test`,
       name: 'Night Manager',
-      phone: '+15125550199',
+      phone: uniquePhone(),
       credential: { create: { passwordHash: await hashPassword(PASSWORD) } },
     },
   })
