@@ -156,6 +156,12 @@ test.afterAll(async () => {
   await prisma.task.deleteMany({ where: { subjectId: { in: allLeaseIds } } })
   await prisma.guarantor.deleteMany({ where: { leaseId: { in: allLeaseIds } } })
   await prisma.leaseTenant.deleteMany({ where: { leaseId: { in: allLeaseIds } } })
+  // Activating a lease opens billing (R-034), so a LeasePayer now pins the
+  // lease. Deletable here because nothing in this spec projects a payment -
+  // a LedgerEntry pointing at a payer is RESTRICT and would (correctly)
+  // refuse, which is what e2e/stripe-webhook.spec.ts's own cleanup lives
+  // with.
+  await prisma.leasePayer.deleteMany({ where: { leaseId: { in: allLeaseIds } } })
   await prisma.lease.deleteMany({ where: { id: { in: allLeaseIds } } })
   await prisma.unit.deleteMany({ where: { id: { in: unitIds } } })
   await prisma.staffAssignment.deleteMany({ where: { staffUserId: { in: staffIds } } })
@@ -225,6 +231,22 @@ test.describe('creating a tenancy', () => {
     // for a lease nobody touches, not the only path.
     const unit = await prisma.unit.findUniqueOrThrow({ where: { id: seed.unit.id } })
     expect(unit.status).toBe('OCCUPIED')
+
+    // And it opens billing (D-11, R-034). Polled: provisioning runs after
+    // the transaction commits, deliberately, so activation is never undone
+    // by a billing provider being unreachable.
+    await expect
+      .poll(() => prisma.leasePayer.count({ where: { leaseId: lease.id } }))
+      .toBe(1)
+    const payer = await prisma.leasePayer.findFirstOrThrow({
+      where: { leaseId: lease.id },
+    })
+    expect(payer.stripeCustomerId).toMatch(/^cus_/)
+    expect(payer.stripeSubscriptionId).toMatch(/^sub_/)
+    await expect(page.getByRole('heading', { name: 'Billing' })).toBeVisible()
+    // Labelled honestly - the ids are Stripe-shaped on purpose, so the
+    // label is the only thing telling a simulator apart from the real thing.
+    await expect(page.getByText(/not real Stripe/)).toBeVisible()
   })
 
   test('refuses a month-to-month lease carrying an end date', async ({ page }) => {

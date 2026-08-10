@@ -1394,6 +1394,43 @@ model Payment {
   @@index([status])
 }
 
+/**
+ * Every Stripe webhook event this deployment has already handled (R-034).
+ *
+ * THE IDEMPOTENCY GUARANTEE FOR MONEY. Stripe retries a webhook until it
+ * gets a 2xx, and explicitly does not promise to deliver each event exactly
+ * once - so without this table a single retried `invoice.payment_succeeded`
+ * would credit a tenant twice, in an append-only ledger nobody can correct
+ * by editing.
+ *
+ * `stripeEventId` is the primary key rather than a surrogate with a unique
+ * index on it. The insert IS the lock: two concurrent deliveries of the same
+ * event both try to claim the row, one loses on the primary key, and the
+ * loser stops. A check-then-write would let both pass the check.
+ *
+ * Kept for events we IGNORE as well as ones we project, because "we saw it
+ * and deliberately did nothing" is the answer to a support question that
+ * silence cannot give.
+ */
+model ProcessedStripeEvent {
+  stripeEventId String   @id
+  type          String
+  /// What happened: `projected` or `ignored`. Free text rather than an enum -
+  /// this is an operational log, and a new outcome should not need a
+  /// migration.
+  outcome       String
+  /// Why, when ignored. "unhandled event type customer.discount.created" is
+  /// the whole answer somebody needs six months later.
+  detail        String?
+  /// Stripe's own timestamp for the event, so the log can be read in the
+  /// order things happened rather than the order they arrived.
+  occurredAt    DateTime
+  processedAt   DateTime @default(now())
+
+  @@index([occurredAt])
+  @@index([type])
+}
+
 /// Append-only projection of Stripe (D-11). Rows are INSERTed by the webhook
 /// pipeline (R-034) and never updated or deleted - a database trigger in the
 /// migration enforces that, because "append-only by convention" is a property
@@ -1425,12 +1462,16 @@ model LedgerEntry {
   stripeObjectId String?
   createdAt      DateTime      @default(now())
 
+  // RESTRICT, not the Prisma default SET NULL - see the R-034 migration's
+  // own comment. This table's append-only trigger rejects every UPDATE, so a
+  // SET NULL cascade could never actually run; RESTRICT says the true thing,
+  // which is that a row the ledger points at cannot be deleted.
   property   Property     @relation(fields: [propertyId], references: [id])
   lease      Lease        @relation(fields: [leaseId], references: [id])
-  leasePayer LeasePayer?  @relation(fields: [leasePayerId], references: [id])
-  charge     Charge?      @relation(fields: [chargeId], references: [id])
-  payment    Payment?     @relation(fields: [paymentId], references: [id])
-  reverses   LedgerEntry? @relation("LedgerReversal", fields: [reversesId], references: [id])
+  leasePayer LeasePayer?  @relation(fields: [leasePayerId], references: [id], onDelete: Restrict)
+  charge     Charge?      @relation(fields: [chargeId], references: [id], onDelete: Restrict)
+  payment    Payment?     @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  reverses   LedgerEntry? @relation("LedgerReversal", fields: [reversesId], references: [id], onDelete: Restrict)
   reversedBy LedgerEntry? @relation("LedgerReversal")
 
   @@index([leaseId, occurredAt])

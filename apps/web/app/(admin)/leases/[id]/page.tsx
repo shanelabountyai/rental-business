@@ -9,6 +9,7 @@ import {
 import { formatCents } from '@rental/core/money'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { BillingPanel } from '@/components/leases/billing-panel.tsx'
 import { IntakePanel } from '@/components/leases/intake-panel.tsx'
 import { LeaseForm } from '@/components/leases/lease-form.tsx'
 import { LifecyclePanel } from '@/components/leases/lifecycle-panel.tsx'
@@ -23,6 +24,8 @@ import {
   resolveIntakeItem,
   updateLeaseTerms,
 } from '@/lib/leases/actions.ts'
+import { billingIsLive, billingProvider } from '@/lib/billing/provider.ts'
+import { leaseBillingState } from '@/lib/billing/provision.ts'
 import { outstandingIntakeGaps } from '@/lib/leases/intake.ts'
 import { getLease, selectableTenants } from '@/lib/leases/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
@@ -97,9 +100,10 @@ export default async function LeaseDetailPage({
       action: changeLeaseStatus.bind(null, lease.id, to),
     }))
 
-  const [gaps, tenants] = await Promise.all([
+  const [gaps, tenants, payers] = await Promise.all([
     outstandingIntakeGaps(lease),
     canWrite ? selectableTenants() : Promise.resolve([]),
+    leaseBillingState(lease.id),
   ])
 
   const alreadyOn = new Set(lease.leaseTenants.map((lt) => lt.tenantId))
@@ -213,6 +217,21 @@ export default async function LeaseDetailPage({
           </ul>
         </section>
       )}
+
+      <BillingPanel
+        live={billingIsLive()}
+        providerName={billingProvider.name}
+        payers={payers.map((payer) => ({
+          id: payer.id,
+          name: payer.tenant
+            ? `${payer.tenant.firstName} ${payer.tenant.lastName}`
+            : (payer.externalPayerName ?? 'Payer'),
+          payerType: payer.payerType,
+          portionCents: payer.portionCents,
+          stripeCustomerId: payer.stripeCustomerId,
+          stripeSubscriptionId: payer.stripeSubscriptionId,
+        }))}
+      />
 
       <PartiesPanel
         canWrite={canWrite}

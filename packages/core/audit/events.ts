@@ -252,6 +252,17 @@ export const AUDIT_ACTIONS = [
   /// adding a guarantor changes who can be pursued and nothing else.
   'lease.party_changed',
 
+  /// R-034 (D-11): a lease's Stripe Customer and Subscription were opened.
+  /// Carries the provider name, because a record that does not say whether
+  /// it was Stripe or the simulator is a record somebody will misread the
+  /// first time a staging database is mistaken for production.
+  'billing.provisioned',
+
+  /// R-034: a Stripe webhook was projected into the ledger. The event id is
+  /// on the entry itself; this is the trail of what the PIPELINE did,
+  /// including the events it deliberately ignored.
+  'billing.event_projected',
+
   /// R-033 (RISK-08): an inherited tenancy's outstanding items moved - the
   /// tenant confirmed the terms, or the deposit position was established.
   /// Recorded because each is a fact somebody asserted on a date, and at

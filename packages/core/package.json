@@ -10,6 +10,7 @@
     "./approvals": "./approvals/index.ts",
     "./audit": "./audit/index.ts",
     "./auth": "./auth/index.ts",
+    "./billing": "./billing/index.ts",
     "./comms": "./comms/index.ts",
     "./documents": "./documents/index.ts",
     "./entry": "./entry/index.ts",

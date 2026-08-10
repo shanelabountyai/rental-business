@@ -22,6 +22,22 @@ const baseURL = `http://localhost:${port}`
 const TEST_TWILIO_AUTH_TOKEN = 'test-only-not-a-real-twilio-token'
 process.env.TWILIO_AUTH_TOKEN ??= TEST_TWILIO_AUTH_TOKEN
 
+/**
+ * The same arrangement for Stripe's webhook endpoint (R-034, D-11).
+ *
+ * Set for BOTH the dev server and this process so e2e/stripe-webhook.spec.ts
+ * can sign requests the route will accept. Without it the route correctly
+ * refuses everything with a 400 - `no_secret` - and the refusal tests would
+ * all "pass" having proved nothing, while the projection tests would fail
+ * for a reason unrelated to what they check.
+ *
+ * Not a secret, and deliberately does not look like one: it authenticates
+ * nothing real, and the only thing it can sign is a request to a local test
+ * server.
+ */
+const TEST_STRIPE_WEBHOOK_SECRET = 'whsec_test-only-not-a-real-stripe-secret'
+process.env.STRIPE_WEBHOOK_SECRET ??= TEST_STRIPE_WEBHOOK_SECRET
+
 export default defineConfig({
   testDir: './e2e',
   fullyParallel: true,
@@ -82,6 +98,8 @@ export default defineConfig({
       PORT: port,
       AUTH_URL: baseURL,
       TWILIO_AUTH_TOKEN: process.env.TWILIO_AUTH_TOKEN ?? TEST_TWILIO_AUTH_TOKEN,
+      STRIPE_WEBHOOK_SECRET:
+        process.env.STRIPE_WEBHOOK_SECRET ?? TEST_STRIPE_WEBHOOK_SECRET,
     },
     url: baseURL,
     reuseExistingServer: !process.env.CI,

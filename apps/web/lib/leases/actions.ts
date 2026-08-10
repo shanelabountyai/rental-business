@@ -15,6 +15,7 @@ import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { audit } from '@/lib/audit/index.ts'
+import { provisionLeaseBilling } from '@/lib/billing/provision.ts'
 import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
 import { raiseIntakeTasks } from './intake.ts'
 
@@ -327,6 +328,17 @@ export async function changeLeaseStatus(
       tx,
     )
   })
+
+  // Billing opens when the tenancy goes live (D-11, R-034). AFTER the
+  // commit and never allowed to fail this action: activation is a tenancy
+  // fact, and a billing provider being unreachable must not undo it. The
+  // provisioner is idempotent and records its own failures, so re-running
+  // the transition - or a later item's retry - is how billing catches up.
+  if (!wasInForce && willBeInForce) {
+    await provisionLeaseBilling(leaseId).catch((error) => {
+      console.error(`[lease] billing provisioning failed for ${leaseId}`, error)
+    })
+  }
 
   revalidatePath(`/leases/${leaseId}`)
   revalidatePath('/leases')

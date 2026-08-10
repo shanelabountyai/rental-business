@@ -281,11 +281,24 @@ describe('dispatch', () => {
 
     const rows = await prisma.notification.findMany({
       where: { idempotencyKey: { startsWith: key } },
+      include: { delivery: { select: { id: true } } },
     })
     notificationIds.push(...rows.map((r) => r.id))
 
-    await dispatchPendingNotifications()
-    await dispatchPendingNotifications()
+    // SCOPED to this test's own deliveries. What is being proved is that
+    // dispatching twice sends once - the once-only guarantee - and that
+    // holds identically whether the sweep is filtered or not. An unfiltered
+    // sweep here would additionally send whatever the rest of the suite has
+    // queued in parallel, which is unbounded work inside a test timeout and
+    // is how this test started failing for a reason unrelated to what it
+    // checks. The global sweep has its own test below.
+    const only = {
+      deliveryIds: rows
+        .map((r) => r.delivery?.id)
+        .filter((id): id is string => id != null),
+    }
+    await dispatchPendingNotifications(new Date(), 100, only)
+    await dispatchPendingNotifications(new Date(), 100, only)
 
     const deliveries = await prisma.notificationDelivery.findMany({
       where: { notificationId: { in: rows.map((r) => r.id) } },
@@ -408,14 +421,19 @@ describe('scoped dispatch', () => {
 
   it('still sweeps globally when given no filter - which is what the cron is for', async () => {
     const queued = await queueOne('global')
-    await dispatchPendingNotifications()
+    // Unfiltered IS the point here - this is the one test that proves the
+    // cron's own path. The batch has to be large enough that a parallel
+    // suite's backlog cannot crowd this test's rows out of it (the sweep
+    // orders by id, and a fresh cuid sorts last), and the timeout has to
+    // allow for actually sending that backlog.
+    await dispatchPendingNotifications(new Date(), 5_000)
     const deliveries = await prisma.notificationDelivery.findMany({
       where: { id: { in: queued.deliveryIds } },
     })
     for (const delivery of deliveries) {
       expect(delivery.status).toBe('SENT')
     }
-  })
+  }, 60_000)
 })
 
 describe('the append-only log', () => {
