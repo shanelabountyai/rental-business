@@ -928,7 +928,7 @@ New enums (`LeaseOrigin`, `DepositTransferStatus`, `NoticeParty`) and columns (`
 - **The lease e2e's cleanup broke the moment activation started provisioning billing** — a `LeasePayer` now pins the lease it belongs to. Fixed in the spec; noted there that it is deletable only because nothing in that file projects a payment, since a `LedgerEntry` pointing at a payer is `RESTRICT` and would correctly refuse.
 
 ## R-035 — Ledger projection + money rules in core
-**Commit:** `PENDING`  ·  **Date:** 2026-08-10
+**Commit:** `6d31f61`  ·  **Date:** 2026-08-10
 
 **What it built.** D-12's centre of gravity, all of it pure and exhaustively tested. `packages/core/ledger` holds four modules: the late-fee decision (grace period, all four fee types, and **both** statutory ceilings), payment allocation across outstanding charges in the jurisdiction's own order, the balance and running-balance statement over the projection, and drift detection. The app layer adds scoped ledger reads, a reconciliation sweep wired into the hourly cron that alarms into the append-only trail, and a Ledger panel on the lease page written to be read by a judge — plain language, running balance on every line, nothing editable.
 
