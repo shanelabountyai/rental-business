@@ -901,7 +901,7 @@ New enums (`LeaseOrigin`, `DepositTransferStatus`, `NoticeParty`) and columns (`
 - **Two leaked browser contexts in R-032's spec, and the flake they were causing.** `comms-threading.spec.ts` opened vendor contexts and never closed them, unlike every other spec that opens one. They survived their tests and held live pages against the shared browser for the rest of the run. This is what had been producing the intermittent full-suite failure chased across three sessions: the failing test's own page snapshot showed *the vendor magic-link page from another spec entirely*. Closing them took the suite from "1 flaky" to clean.
 
 ## R-034 — Stripe Billing foundation
-**Commit:** `PENDING`  ·  **Date:** 2026-08-10
+**Commit:** `c4889ab`  ·  **Date:** 2026-08-10
 
 **What it built.** The D-11 keystone. `packages/core/billing` holds three pure modules: real Stripe webhook signature verification (HMAC-SHA256 over `${timestamp}.${rawBody}`, several `v1` candidates for secret rotation, a replay window), the billing-cycle anchor computed in **property-local** time, and the event → projection-intent mapping. `apps/web/lib/billing` holds the `BillingProvider` seam with a simulated adapter, provisioning that opens a Customer and Subscription when a lease goes live, and the webhook pipeline: verify → claim → project → acknowledge. A new public `POST /api/webhooks/stripe` reads the raw body before anything parses it. New `ProcessedStripeEvent` table, keyed on the Stripe event id. The lease page grew a Billing section that says out loud when the provider is not real Stripe.
 
