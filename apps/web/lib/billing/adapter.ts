@@ -1,5 +1,7 @@
 import 'server-only'
 
+import type { CollectionMethod, PaymentRail } from '@rental/core/payments'
+
 // The billing provider seam (D-11, D-15's pattern, R-034).
 //
 // WHY A SEAM RATHER THAN A STRIPE CLIENT. D-11 makes Stripe the source of
@@ -43,6 +45,10 @@ export interface SubscriptionInput {
   billingCycleAnchor: Date
   leaseId: string
   leasePayerId: string
+  /// How Stripe should collect (D-29). Set at creation rather than patched
+  /// afterwards, because a subscription that bills once on the wrong mode
+  /// has already asked somebody for money the wrong way.
+  collectionMethod: CollectionMethod
 }
 
 export interface ProvisionedCustomer {
@@ -139,4 +145,48 @@ export interface BillingProvider {
   getSubscription(
     input: SubscriptionRef,
   ): Promise<{ status: string; amountCents: number | null; cancelAt: Date | null } | null>
+
+  // ---- Tenant payments (R-037, D-29) ----
+
+  /**
+   * Moves a subscription between autopay and invoice collection.
+   *
+   * Guarded by `switchDecision()` in packages/core BEFORE it is called - this
+   * is the execution half, and it deliberately does not re-litigate the
+   * decision. D-12's split: core decides, Stripe executes.
+   */
+  setCollectionMethod(
+    input: SubscriptionRef & { collectionMethod: CollectionMethod },
+  ): Promise<void>
+
+  /**
+   * What Stripe says is still owed on this subscription's issued invoices.
+   *
+   * The fact `switchDecision()` refuses without. Returns null when we could
+   * not establish it, which the decision treats as "do not act" rather than
+   * as "nothing owed" - guessing here bills a tenant twice.
+   */
+  getOpenInvoiceAmountCents(input: SubscriptionRef): Promise<number | null>
+
+  /**
+   * A one-time tenant-initiated payment (PAY-01).
+   *
+   * Returns a client secret for Stripe-hosted fields. NO CARD OR BANK NUMBER
+   * EVER REACHES THIS PRODUCT (master PRD §6.6) - this product never sees
+   * more than an id and an amount.
+   *
+   * `amountCents` is the total to charge INCLUDING any card fee, which core
+   * computed (D-12). The provider does not add anything to it.
+   */
+  createPaymentIntent(input: {
+    stripeCustomerId: string
+    amountCents: number
+    currency: string
+    rail: PaymentRail
+    leasePayerId: string
+    leaseId: string
+    /// Ours, and stable for the attempt: the retry of a timed-out request
+    /// must not become a second charge.
+    idempotencyKey: string
+  }): Promise<{ stripePaymentIntentId: string; clientSecret: string }>
 }

@@ -171,6 +171,16 @@ enum PaymentChannel {
   OTHER
 }
 
+/// Stripe's own collection-method values, spelled exactly as Stripe spells
+/// them (D-29). Lowercase rather than this schema's usual SCREAMING_CASE on
+/// purpose: these strings go straight onto the Stripe API and come straight
+/// back off it, and a mapping layer between two spellings of the same closed
+/// set is a translation nobody needs and one more place to drift.
+enum CollectionMethod {
+  charge_automatically
+  send_invoice
+}
+
 enum PaymentStatus {
   PENDING
   SETTLED
@@ -1264,6 +1274,15 @@ model LeasePayer {
   /// that in many states accepting a payment after serving notice voids the
   /// notice. R-047 owns the per-tenant switches that set this; R-036 only
   /// makes Stripe agree with it.
+  /// How this payer is collected from (D-29, answering OQ-11).
+  ///
+  /// PER PAYER, and it switches: Stripe cannot do autopay and partial
+  /// payments on one subscription, so a payer on autopay sits on
+  /// `charge_automatically` and one who needs to pay in parts sits on
+  /// `send_invoice`. The switch is guarded - see packages/core/payments -
+  /// because moving a payer while an invoice is still open lets the new
+  /// mode bill the same period twice.
+  collectionMethod     CollectionMethod @default(charge_automatically)
   collectionPaused     Boolean @default(false)
   /// The rent we last successfully pushed to Stripe, in cents.
   ///
@@ -2386,6 +2405,15 @@ model JurisdictionRule {
   // Payments and applications (PAY-03, LEASE-03).
   /// Ordered ChargeType names - "rent before fees" where the state says so.
   paymentAllocationOrder String[]
+  /// PAY-01's card pass-through, as configuration rather than a literal
+  /// (D-4). Several states restrict surcharging outright and some regulate
+  /// rent convenience fees specifically, so whether the tenant may be
+  /// charged the processing cost is a jurisdiction fact. Where it is not
+  /// permitted the owner absorbs it and the tenant sees no fee at all.
+  cardSurchargePermitted Boolean @default(true)
+  /// A statutory ceiling on the surcharge, in basis points of the amount
+  /// being paid. Null where the state sets none. Core clamps to it (D-12).
+  cardSurchargeMaxBps    Int?
   applicationFeeCapCents Int?
   rubsPermitted          Boolean @default(true)
 

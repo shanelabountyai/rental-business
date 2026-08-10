@@ -44,6 +44,17 @@ export const AUDIT_ACTIONS = [
   'fee.waived',
   'payment.recorded',
   'payment.reversed',
+  /// R-037: a tenant asked to pay, and what they were charged for the
+  /// privilege. Recorded at the INTENT, not the outcome - whether the money
+  /// arrives is Stripe's to tell us by webhook (D-11) - because the card fee
+  /// is the part somebody disputes, and "what were we told it would cost"
+  /// has to be answerable from the trail rather than recomputed later
+  /// against a jurisdiction rule that may since have been re-versioned.
+  'payment.intent_created',
+  /// R-037: somebody moved a payer between autopay and invoiced collection
+  /// (D-29). A privileged change to how money is taken from a tenant, and
+  /// the reason is recorded with it.
+  'payment.collection_method_changed',
 
   // Maintenance (MAINT-03, R-024)
   /// The scope, priority and estimate a work order was CREATED with -

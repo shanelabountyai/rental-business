@@ -2,6 +2,8 @@ import 'server-only'
 
 import { randomBytes } from 'node:crypto'
 import { prisma } from '@rental/db'
+import { leaseBalanceCents } from '@/lib/ledger/queries.ts'
+import type { CollectionMethod, PaymentRail } from '@rental/core/payments'
 import type {
   BillingProvider,
   CustomerInput,
@@ -138,6 +140,60 @@ export class SimulatedBillingProvider implements BillingProvider {
       status: over && payer.stripeAmountCents === null ? 'canceled' : 'active',
       amountCents: payer.stripeAmountCents,
       cancelAt: null,
+    }
+  }
+
+  // ---- Tenant payments (R-037, D-29) ----
+
+  async setCollectionMethod(
+    input: SubscriptionRef & { collectionMethod: CollectionMethod },
+  ): Promise<void> {
+    console.info(
+      `[billing:simulated] ${input.stripeSubscriptionId} collection -> ${input.collectionMethod}`,
+    )
+  }
+
+  /**
+   * What a simulated Stripe would say is still owed.
+   *
+   * Answers from the LEDGER rather than from the payer row the switch is
+   * about (D-27): the decision must be able to see a balance that our own
+   * intent knows nothing about, or the `open_invoice` refusal is dead code
+   * no test can reach.
+   *
+   * Deliberately MORE conservative than real Stripe. A Stripe invoice is
+   * open only once issued, while this counts every unpaid charge on the
+   * lease - so the simulator refuses a switch in cases the real driver would
+   * allow. That direction is the safe one for a decision whose failure mode
+   * is billing a tenant twice, and it is stated here rather than discovered
+   * later by somebody wondering why test and production disagree.
+   */
+  async getOpenInvoiceAmountCents(input: SubscriptionRef): Promise<number | null> {
+    const payer = await prisma.leasePayer.findFirst({
+      where: { stripeSubscriptionId: input.stripeSubscriptionId },
+      select: { leaseId: true },
+    })
+    if (!payer) return null
+    return leaseBalanceCents(payer.leaseId)
+  }
+
+  async createPaymentIntent(input: {
+    stripeCustomerId: string
+    amountCents: number
+    currency: string
+    rail: PaymentRail
+    leasePayerId: string
+    leaseId: string
+    idempotencyKey: string
+  }): Promise<{ stripePaymentIntentId: string; clientSecret: string }> {
+    const stripePaymentIntentId = stripeId('pi')
+    console.info(
+      `[billing:simulated] payment intent ${stripePaymentIntentId} for ${input.amountCents}c ` +
+        `by ${input.rail} on payer ${input.leasePayerId} (key ${input.idempotencyKey})`,
+    )
+    return {
+      stripePaymentIntentId,
+      clientSecret: `${stripePaymentIntentId}_secret_${randomBytes(8).toString('hex')}`,
     }
   }
 }

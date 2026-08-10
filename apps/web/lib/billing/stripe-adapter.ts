@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { randomUUID } from 'node:crypto'
+import type { CollectionMethod, PaymentRail } from '@rental/core/payments'
 import type {
   BillingProvider,
   CustomerInput,
@@ -51,6 +52,19 @@ import type {
 
 const STRIPE_API = 'https://api.stripe.com/v1'
 const STRIPE_VERSION = '2024-06-20'
+
+/**
+ * How long an invoiced payer has before the invoice is past due.
+ *
+ * Stripe REQUIRES this on any `send_invoice` subscription and rejects the
+ * request without it. Zero would mark rent past due the instant it is issued,
+ * which is wrong for a reason that is ours and not Stripe's: whether rent is
+ * late is a jurisdiction question with a grace period behind it (D-4), and
+ * `lateFeeFor()` in packages/core is what answers it. This number exists only
+ * to satisfy Stripe's own validation, so it is set generously and deliberately
+ * plays no part in any late-fee decision.
+ */
+const DAYS_UNTIL_DUE = 30
 
 export class LiveModeRefusedError extends Error {
   constructor() {
@@ -189,6 +203,12 @@ export class StripeBillingProvider implements BillingProvider {
         // Stripe would otherwise bill a partial period immediately. Ours to
         // compute and push (D-12, R-042), never Stripe's to invent.
         proration_behavior: 'none',
+        // D-29. Set at creation, not patched afterwards: a subscription that
+        // bills once on the wrong mode has already asked somebody for money
+        // the wrong way. `send_invoice` requires days_until_due, which Stripe
+        // rejects the request without.
+        collection_method: input.collectionMethod,
+        ...(input.collectionMethod === 'send_invoice' ? { days_until_due: DAYS_UNTIL_DUE } : {}),
         'metadata[leaseId]': input.leaseId,
         'metadata[leasePayerId]': input.leasePayerId,
       },
@@ -318,6 +338,77 @@ export class StripeBillingProvider implements BillingProvider {
       cancelAt: cancelAt ? new Date(cancelAt * 1000) : null,
     }
   }
+
+  // ---- Tenant payments (R-037, D-29) ----
+
+  async setCollectionMethod(
+    input: SubscriptionRef & { collectionMethod: CollectionMethod },
+  ): Promise<void> {
+    // No idempotency key, for the reason #post documents: this is an update,
+    // idempotent by nature, and a stale key would make a legitimate switch
+    // back silently return the first switch's result.
+    await this.#post(`/subscriptions/${input.stripeSubscriptionId}`, {
+      collection_method: input.collectionMethod,
+      ...(input.collectionMethod === 'send_invoice' ? { days_until_due: DAYS_UNTIL_DUE } : {}),
+    })
+  }
+
+  async getOpenInvoiceAmountCents(input: SubscriptionRef): Promise<number | null> {
+    // `status=open` is issued-and-unpaid. Deliberately NOT `draft`: a draft
+    // invoice has not been presented to anybody and blocking a switch on one
+    // would refuse for a bill that does not yet exist.
+    const list = await this.#get(
+      `/invoices?subscription=${encodeURIComponent(input.stripeSubscriptionId)}&status=open&limit=100`,
+    )
+    if (!list) return null
+
+    const data = list.data as { amount_remaining?: number }[] | undefined
+    // An empty list is a real answer - nothing open - and must be
+    // distinguishable from "we could not ask", which is null. `switchDecision`
+    // treats the two completely differently and a tenant billed twice is what
+    // conflating them costs.
+    if (!Array.isArray(data)) return null
+    return data.reduce((total, invoice) => total + (invoice.amount_remaining ?? 0), 0)
+  }
+
+  async createPaymentIntent(input: {
+    stripeCustomerId: string
+    amountCents: number
+    currency: string
+    rail: PaymentRail
+    leasePayerId: string
+    leaseId: string
+    idempotencyKey: string
+  }): Promise<{ stripePaymentIntentId: string; clientSecret: string }> {
+    const intent = await this.#post(
+      '/payment_intents',
+      {
+        customer: input.stripeCustomerId,
+        // The TOTAL, card fee included, computed by core (D-12). Stripe is
+        // never asked to work out what a tenant owes.
+        amount: input.amountCents,
+        currency: input.currency,
+        'payment_method_types[0]': STRIPE_PAYMENT_METHOD[input.rail],
+        'metadata[leaseId]': input.leaseId,
+        'metadata[leasePayerId]': input.leasePayerId,
+      },
+      input.idempotencyKey,
+    )
+    return {
+      stripePaymentIntentId: intent.id as string,
+      clientSecret: intent.client_secret as string,
+    }
+  }
+}
+
+/// Our rail names to Stripe's payment method types. RETAIL_CASH has no Stripe
+/// equivalent - it is a third-party network (PAY-01) with no driver yet - and
+/// is refused here rather than silently falling back to a card, which would
+/// charge a fee to a tenant who chose cash specifically to avoid one.
+const STRIPE_PAYMENT_METHOD: Record<PaymentRail, string> = {
+  ACH: 'us_bank_account',
+  CARD: 'card',
+  RETAIL_CASH: 'unsupported',
 }
 
 /// A stable idempotency key for a caller that has its own notion of the fact

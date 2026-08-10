@@ -422,4 +422,111 @@ describe('interpretStripeEvent', () => {
       }).outcome,
     ).toBe('ignore')
   })
+
+  // ---- Tenant-initiated payments (R-037) ----
+
+  it('REFUSES to project a payment_intent that belongs to an invoice', () => {
+    // THE DOUBLE-COUNT GUARD, and the single most important assertion added
+    // by R-037. `invoice.payment_succeeded` already reports this money; if
+    // its PaymentIntent were projected too, every subscription payment would
+    // credit the tenant twice - in an APPEND-ONLY ledger, where the fix is a
+    // reversing entry somebody first has to notice is needed.
+    for (const type of ['payment_intent.succeeded', 'payment_intent.payment_failed']) {
+      const result = interpretStripeEvent(
+        event(type, {
+          id: 'pi_123',
+          customer: 'cus_123',
+          invoice: 'in_123',
+          amount: 150_000,
+        }),
+      )
+      expect(result.outcome, type).toBe('ignore')
+      if (result.outcome !== 'ignore') return
+      expect(result.reason).toContain('in_123')
+    }
+  })
+
+  it('projects an UNINVOICED payment_intent — the tenant-initiated payment', () => {
+    // The one this item adds: a tenant paying from the portal, outside the
+    // subscription's own invoice cycle. Nothing else reports this money.
+    const result = interpretStripeEvent(
+      event('payment_intent.succeeded', {
+        id: 'pi_456',
+        customer: 'cus_123',
+        invoice: null,
+        amount: 154_512,
+        payment_method_types: ['card'],
+      }),
+    )
+    expect(result.outcome).toBe('project')
+    if (result.outcome !== 'project') return
+    expect(result.intent).toMatchObject({
+      kind: 'payment_succeeded',
+      stripePaymentIntentId: 'pi_456',
+      rail: 'CARD',
+      amountCents: 154_512,
+    })
+  })
+
+  it('projects `processing` EVEN on an invoiced payment, because nothing else reports it', () => {
+    // The deliberate exception to the guard above. `processing` is the only
+    // event that says money is in flight, and an invoiced ACH debit needs
+    // that pending state as much as a portal payment does. It is safe to let
+    // through precisely because it moves no balance.
+    const result = interpretStripeEvent(
+      event('payment_intent.processing', {
+        id: 'pi_789',
+        customer: 'cus_123',
+        invoice: 'in_123',
+        amount: 150_000,
+        payment_method_types: ['us_bank_account'],
+      }),
+    )
+    expect(result.outcome).toBe('project')
+    if (result.outcome !== 'project') return
+    expect(result.intent.kind).toBe('payment_pending')
+    expect(result.intent.rail).toBe('ACH')
+  })
+
+  it('MONEY IN FLIGHT MOVES NO BALANCE', () => {
+    // An ACH debit takes three to five days and can still be returned.
+    // Crediting it now would tell a tenant they are square, suppress a late
+    // fee, and possibly cancel a notice - on a payment that may never
+    // arrive. PAY-02 names that failure explicitly.
+    const result = interpretStripeEvent(
+      event('payment_intent.processing', {
+        id: 'pi_1',
+        customer: 'cus_1',
+        amount: 150_000,
+        payment_method_types: ['us_bank_account'],
+      }),
+    )
+    if (result.outcome !== 'project') throw new Error('expected a projection')
+    expect(ledgerAmountCents(result.intent)).toBe(0)
+    expect(movesLedger(result.intent)).toBe(false)
+  })
+
+  it('settles to a NEGATIVE ledger amount once the money actually arrives', () => {
+    const result = interpretStripeEvent(
+      event('payment_intent.succeeded', {
+        id: 'pi_1',
+        customer: 'cus_1',
+        amount: 150_000,
+        payment_method_types: ['us_bank_account'],
+      }),
+    )
+    if (result.outcome !== 'project') throw new Error('expected a projection')
+    expect(ledgerAmountCents(result.intent)).toBe(-150_000)
+    expect(movesLedger(result.intent)).toBe(true)
+  })
+
+  it('leaves the rail null when Stripe does not say', () => {
+    // Better an honest `OTHER` on the Payment row than a rail nobody can
+    // confirm was used.
+    const result = interpretStripeEvent(
+      event('payment_intent.succeeded', { id: 'pi_1', customer: 'cus_1', amount: 1_000 }),
+    )
+    if (result.outcome !== 'project') throw new Error('expected a projection')
+    expect(result.intent.rail).toBeNull()
+  })
 })

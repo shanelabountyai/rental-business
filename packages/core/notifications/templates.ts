@@ -455,6 +455,69 @@ export const verifyRequestTemplate: NotificationTemplate<VerifyRequestContext> =
   },
 }
 
+/// Context for `payment.receipt` (PAY-01, R-037).
+export interface PaymentReceiptContext {
+  tenantName: string
+  /// What actually arrived, formatted. The rent and the card fee are shown
+  /// SEPARATELY where a fee applied - a receipt that reports only the total
+  /// is a receipt somebody rings up about.
+  amount: string
+  feeAmount: string | null
+  total: string
+  addressLine1: string
+  /// What is left owing after this payment, formatted. "$0.00" is the
+  /// sentence tenants actually want, so it is said in words rather than
+  /// left to be inferred from its absence.
+  remaining: string
+  paidOn: string
+}
+
+/**
+ * "We got your rent" (PAY-01, R-037).
+ *
+ * SENT ON SETTLEMENT, NEVER ON SUBMISSION. An ACH debit sits in flight for
+ * three to five days and can still be returned; a receipt at submission is a
+ * receipt for money that may never arrive, and it is the document a tenant
+ * will later hold up to prove they paid. The ledger and this message move at
+ * the same moment for the same reason.
+ *
+ * `payment_receipt` is not a locked category - a tenant who does not want a
+ * text every month is entitled to turn it off - but email carries it
+ * regardless, because a receipt is the kind of record people go looking for
+ * months later.
+ */
+export const paymentReceiptTemplate: NotificationTemplate<PaymentReceiptContext> = {
+  key: 'payment.receipt',
+  category: 'payment_receipt',
+  channels: ['SMS', 'EMAIL', 'PORTAL'],
+  render: (context, channel) => {
+    if (channel === 'SMS') {
+      return {
+        body: [
+          `We received ${context.total} for ${context.addressLine1} on ${context.paidOn}.`,
+          `Balance now: ${context.remaining}.`,
+        ].join(' '),
+      }
+    }
+    return {
+      subject: `Payment received — ${context.total}`,
+      body: [
+        `Hello ${context.tenantName},`,
+        '',
+        `We received your payment for ${context.addressLine1} on ${context.paidOn}.`,
+        '',
+        context.feeAmount
+          ? `Payment: ${context.amount}\nCard processing fee: ${context.feeAmount}\nTotal charged: ${context.total}`
+          : `Amount: ${context.total}`,
+        '',
+        `Balance remaining: ${context.remaining}`,
+        '',
+        'Keep this email — it is your receipt.',
+      ].join('\n'),
+    }
+  },
+}
+
 export const TEMPLATES: Readonly<Record<string, NotificationTemplate<never>>> = {
   [unitMakeReadyTemplate.key]:
     unitMakeReadyTemplate as unknown as NotificationTemplate<never>,
@@ -470,6 +533,8 @@ export const TEMPLATES: Readonly<Record<string, NotificationTemplate<never>>> = 
     emergencyEscalationTemplate as unknown as NotificationTemplate<never>,
   [verifyRequestTemplate.key]:
     verifyRequestTemplate as unknown as NotificationTemplate<never>,
+  [paymentReceiptTemplate.key]:
+    paymentReceiptTemplate as unknown as NotificationTemplate<never>,
 }
 
 export class UnknownTemplateError extends Error {

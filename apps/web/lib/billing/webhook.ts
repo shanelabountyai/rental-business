@@ -7,8 +7,12 @@ import {
   ledgerAmountCents,
   movesLedger,
 } from '@rental/core/billing'
+import { formatCents } from '@rental/core/money'
+import { businessDate } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { isUniqueViolation } from '@/lib/db/unique-violation.ts'
+import { leaseBalanceCents } from '@/lib/ledger/queries.ts'
+import { dispatchPendingNotifications, notify } from '@/lib/notifications/send.ts'
 
 // The webhook → projection pipeline (D-11, R-034).
 //
@@ -121,6 +125,23 @@ export async function processStripeEvent(
   })
 
   await recordOutcome(event.id, 'projected', intent.kind)
+
+  // The receipt (PAY-01), OUTSIDE the transaction and only on settlement.
+  //
+  // Outside, because a notification provider being unreachable must not roll
+  // back money that has already arrived - the ledger row is the fact, and the
+  // message is a courtesy on top of it.
+  //
+  // ONLY ON SETTLEMENT, which is the whole reason `payment_pending` exists as
+  // a separate kind. A receipt issued when an ACH debit is submitted is a
+  // receipt for money that may never arrive, and it is the document a tenant
+  // will later hold up to prove they paid.
+  if (intent.kind === 'payment_succeeded') {
+    await sendPaymentReceipt(payer, intent).catch((error) => {
+      console.error(`[stripe] receipt failed for payer ${payer.id}`, error)
+    })
+  }
+
   return { outcome: 'projected', detail: intent.kind }
 }
 
@@ -146,16 +167,31 @@ async function writePayment(
   const status =
     intent.kind === 'payment_succeeded'
       ? 'SETTLED'
-      : intent.kind === 'payment_failed'
-        ? 'FAILED'
-        : 'REFUNDED'
+      : intent.kind === 'payment_pending'
+        ? 'PENDING'
+        : intent.kind === 'payment_failed'
+          ? 'FAILED'
+          : 'REFUNDED'
 
   if (intent.stripePaymentIntentId) {
     const existing = await tx.payment.findUnique({
       where: { stripePaymentIntentId: intent.stripePaymentIntentId },
-      select: { id: true },
+      select: { id: true, status: true },
     })
     if (existing) {
+      // PENDING -> SETTLED is the whole point of PAY-01's "pending -> settled
+      // states tracked", and the unique key on the PaymentIntent is what makes
+      // it one row rather than two. `Payment` is not append-only - only
+      // LedgerEntry, AuditLog, Message and Notification are - so advancing it
+      // in place is legitimate, and it is what keeps a single ACH debit from
+      // appearing twice on a tenant's history.
+      //
+      // NEVER BACKWARDS, though. Stripe does not promise webhook order, and a
+      // `processing` arriving after its own `succeeded` would otherwise
+      // un-settle a payment that has already moved the ledger.
+      if (intent.kind === 'payment_pending' && existing.status !== 'PENDING') {
+        return existing
+      }
       await tx.payment.update({
         where: { id: existing.id },
         data: {
@@ -172,10 +208,10 @@ async function writePayment(
       propertyId: payer.propertyId,
       leaseId: payer.leaseId,
       leasePayerId: payer.id,
-      // Stripe does not tell us ACH vs card on the invoice event itself.
-      // OTHER is honest; R-037 owns the tenant-facing payment flow that
-      // knows which rail was used and will narrow it.
-      channel: 'OTHER',
+      // Narrowed where Stripe says so (R-037), `OTHER` where it does not -
+      // the invoice events carry no payment method, and inventing one would
+      // put a rail on a payment nobody can confirm used it.
+      channel: intent.rail ?? 'OTHER',
       status,
       amountCents: intent.amountCents,
       receivedAt: intent.occurredAt,
@@ -200,4 +236,93 @@ export async function recentStripeEvents(limit = 25) {
     orderBy: { occurredAt: 'desc' },
     take: limit,
   })
+}
+
+/**
+ * "We got your rent" (PAY-01).
+ *
+ * Reads the balance AFTER the projection, which is the number a tenant
+ * actually wants: "we received $1,500, you now owe $0" answers the question
+ * that "we received $1,500" leaves open.
+ *
+ * Never throws into its caller. The money has already landed and the ledger
+ * already says so; failing a webhook because Resend was down would have
+ * Stripe redeliver an event we have correctly processed, and the claim row
+ * would refuse it as a duplicate - so the retry would not even resend the
+ * receipt it was retrying for.
+ */
+async function sendPaymentReceipt(
+  payer: { id: string; leaseId: string; propertyId: string },
+  intent: ProjectionIntent,
+): Promise<void> {
+  const lease = await prisma.lease.findUnique({
+    where: { id: payer.leaseId },
+    select: {
+      property: { select: { addressLine1: true, timezone: true } },
+      leaseTenants: {
+        select: { tenant: { select: { id: true, firstName: true, email: true, phone: true } } },
+      },
+    },
+  })
+  // The payer's own tenant, not every tenant on the lease: a receipt is
+  // addressed to whoever's money it was.
+  const payerRow = await prisma.leasePayer.findUnique({
+    where: { id: payer.id },
+    select: { tenantId: true },
+  })
+  const tenant = lease?.leaseTenants
+    .map((row) => row.tenant)
+    .find((row) => row.id === payerRow?.tenantId)
+  if (!lease || !tenant) return
+
+  const remaining = await leaseBalanceCents(payer.leaseId)
+
+  // What the tenant was charged, split back out. The fee is on the audit
+  // entry from the intent, which is the only place that knows it - Stripe
+  // reports one total.
+  const feeEntry = await prisma.auditLog.findFirst({
+    where: {
+      action: 'payment.intent_created',
+      entityId: payer.id,
+      // Matched on the intent id, so a tenant who paid twice in a day gets
+      // the right fee on the right receipt.
+      ...(intent.stripePaymentIntentId
+        ? { after: { path: ['stripePaymentIntentId'], equals: intent.stripePaymentIntentId } }
+        : {}),
+    },
+    select: { after: true },
+    orderBy: { occurredAt: 'desc' },
+  })
+  const detail = (feeEntry?.after ?? null) as { feeCents?: number; amountCents?: number } | null
+  const feeCents = detail?.feeCents ?? 0
+
+  const outcomes = await notify({
+    category: 'payment_receipt',
+    templateKey: 'payment.receipt',
+    recipient: {
+      type: 'TENANT',
+      id: tenant.id,
+      email: tenant.email,
+      phone: tenant.phone,
+    },
+    context: {
+      tenantName: tenant.firstName,
+      amount: formatCents(detail?.amountCents ?? intent.amountCents),
+      feeAmount: feeCents > 0 ? formatCents(feeCents) : null,
+      total: formatCents(intent.amountCents),
+      addressLine1: lease.property.addressLine1,
+      remaining: formatCents(Math.max(0, remaining)),
+      paidOn: businessDate(intent.occurredAt, lease.property.timezone),
+    },
+    propertyId: payer.propertyId,
+    // One receipt per payment, however many times Stripe tells us about it.
+    idempotencyKey: `payment-receipt:${intent.stripePaymentIntentId ?? intent.stripeObjectId}`,
+  })
+
+  const deliveryIds = outcomes
+    .map((outcome) => outcome.deliveryId)
+    .filter((id): id is string => id != null)
+  if (deliveryIds.length > 0) {
+    await dispatchPendingNotifications(new Date(), 50, { deliveryIds })
+  }
 }

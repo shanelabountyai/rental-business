@@ -167,6 +167,13 @@ export async function provisionLeaseBilling(
       billingCycleAnchor: anchor,
       leaseId: lease.id,
       leasePayerId: payer.id,
+      // Whatever the payer row already says (D-29). A payer provisioned for
+      // the first time carries the schema default of autopay; one being
+      // RE-provisioned after a cancelled subscription keeps the mode
+      // somebody deliberately put them on, rather than being silently
+      // returned to autopay - which for a tenant on a payment plan would
+      // start debiting an account they had asked us to stop debiting.
+      collectionMethod: payer.collectionMethod,
     })
 
     await prisma.leasePayer.update({

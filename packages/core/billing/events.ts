@@ -42,6 +42,25 @@ export const HANDLED_EVENTS = [
   /// A dispute. Recorded so it is visible; the money movement itself
   /// arrives as its own balance transaction later.
   'charge.dispute.created',
+
+  // ---- Tenant-initiated payments (R-037, PAY-01) ----
+  //
+  // PAY-01 requires "pending -> settled states tracked", which the invoice
+  // events alone cannot give: an ACH debit sits in flight for three to five
+  // days and `invoice.payment_succeeded` fires only at the end of it. These
+  // three carry the front half of that story.
+  //
+  // THE DOUBLE-COUNT TRAP, and it is the same one that keeps `charge.*` off
+  // this list. A PaymentIntent belonging to an invoice is the SAME MONEY as
+  // `invoice.payment_succeeded`, so projecting both would credit every
+  // subscription payment twice. The rule below is therefore: a terminal
+  // payment_intent event is projected ONLY when it has no invoice behind it -
+  // which is exactly the tenant-initiated one-time payment this item adds.
+  // `processing` is projected either way, because it is the only event that
+  // reports in-flight money and it never moves the ledger.
+  'payment_intent.processing',
+  'payment_intent.succeeded',
+  'payment_intent.payment_failed',
 ] as const
 export type HandledEvent = (typeof HANDLED_EVENTS)[number]
 
@@ -66,6 +85,11 @@ export interface StripeEventEnvelope {
 export type ProjectionKind =
   /// Money in. Writes a Payment and a negative LedgerEntry.
   | 'payment_succeeded'
+  /// Money on its way. Writes a Payment in PENDING and NO ledger entry -
+  /// an ACH debit that has not cleared has not reduced what is owed, and
+  /// crediting it early is how a tenant gets told they are square days
+  /// before the return comes back.
+  | 'payment_pending'
   /// An attempt failed. Writes a Payment row in FAILED, and no ledger
   /// movement - nothing has changed about what is owed.
   | 'payment_failed'
@@ -85,6 +109,10 @@ export interface ProjectionIntent {
   stripeCustomerId: string | null
   stripeInvoiceId: string | null
   stripePaymentIntentId: string | null
+  /// Which rail the money came down, where Stripe told us. Null on the
+  /// invoice events, which do not say. R-034 wrote `OTHER` on every
+  /// projected payment and noted that R-037 would narrow it; this is that.
+  rail: 'ACH' | 'CARD' | null
   /// ALWAYS POSITIVE. The sign is a ledger concern and is applied by the
   /// projector, so an event that reports a negative amount for its own
   /// reasons cannot flip a credit into a charge.
@@ -157,6 +185,7 @@ export function interpretStripeEvent(event: StripeEventEnvelope): InterpretResul
           stripeCustomerId,
           stripeInvoiceId: stripeObjectId,
           stripePaymentIntentId: str(object, 'payment_intent'),
+          rail: null,
           amountCents: amount,
           occurredAt,
           description: str(object, 'description') ?? 'Rent payment',
@@ -179,6 +208,7 @@ export function interpretStripeEvent(event: StripeEventEnvelope): InterpretResul
           stripeCustomerId,
           stripeInvoiceId: stripeObjectId,
           stripePaymentIntentId: str(object, 'payment_intent'),
+          rail: null,
           amountCents: amount,
           occurredAt,
           description: 'Payment attempt failed',
@@ -199,6 +229,7 @@ export function interpretStripeEvent(event: StripeEventEnvelope): InterpretResul
           stripeCustomerId,
           stripeInvoiceId: str(object, 'invoice'),
           stripePaymentIntentId: str(object, 'payment_intent'),
+          rail: null,
           amountCents: amount,
           occurredAt,
           description: 'Refund',
@@ -219,13 +250,77 @@ export function interpretStripeEvent(event: StripeEventEnvelope): InterpretResul
           stripeCustomerId,
           stripeInvoiceId: null,
           stripePaymentIntentId: str(object, 'payment_intent'),
+          rail: null,
           amountCents: amount,
           occurredAt,
           description: 'Payment disputed',
         },
       }
     }
+
+    case 'payment_intent.processing':
+    case 'payment_intent.succeeded':
+    case 'payment_intent.payment_failed': {
+      // THE DOUBLE-COUNT GUARD. A PaymentIntent raised BY an invoice is the
+      // same money the invoice events already report, so its terminal states
+      // are ignored here and the invoice owns them. `processing` is kept
+      // either way: it is the only event that says money is in flight, it
+      // moves no balance, and an invoiced ACH debit needs that pending state
+      // as much as a tenant-initiated one does.
+      const invoiceId = str(object, 'invoice')
+      if (invoiceId && event.type !== 'payment_intent.processing') {
+        return {
+          outcome: 'ignore',
+          reason: `${event.type} belongs to invoice ${invoiceId}, which reports this money itself`,
+        }
+      }
+
+      const amount = int(object, 'amount')
+      if (amount == null || amount <= 0) {
+        return { outcome: 'ignore', reason: 'payment intent reported no amount' }
+      }
+
+      const kind =
+        event.type === 'payment_intent.processing'
+          ? ('payment_pending' as const)
+          : event.type === 'payment_intent.succeeded'
+            ? ('payment_succeeded' as const)
+            : ('payment_failed' as const)
+
+      return {
+        outcome: 'project',
+        intent: {
+          kind,
+          stripeObjectId,
+          stripeCustomerId,
+          stripeInvoiceId: invoiceId,
+          stripePaymentIntentId: stripeObjectId,
+          rail: railOf(object),
+          amountCents: amount,
+          occurredAt,
+          description:
+            kind === 'payment_pending'
+              ? 'Payment on its way'
+              : kind === 'payment_succeeded'
+                ? 'Payment'
+                : 'Payment attempt failed',
+        },
+      }
+    }
   }
+}
+
+/// Which rail Stripe says this intent used. Reads the METHOD ACTUALLY USED
+/// where Stripe reports it, falling back to the single offered type - a
+/// PaymentIntent we created offers exactly one (see the Stripe driver), so
+/// the fallback is exact rather than a guess. Null when neither is legible,
+/// which leaves the Payment row on `OTHER` rather than inventing a rail.
+function railOf(object: Record<string, unknown>): 'ACH' | 'CARD' | null {
+  const types = object.payment_method_types
+  const first = Array.isArray(types) && typeof types[0] === 'string' ? types[0] : null
+  if (first === 'us_bank_account') return 'ACH'
+  if (first === 'card') return 'CARD'
+  return null
 }
 
 /**
@@ -243,6 +338,14 @@ export function ledgerAmountCents(intent: ProjectionIntent): number {
     case 'refund':
       // Money going back out re-opens the balance it had closed.
       return intent.amountCents
+    case 'payment_pending':
+      // MONEY IN FLIGHT IS NOT MONEY RECEIVED. An ACH debit takes three to
+      // five days and can still be returned; crediting the ledger now would
+      // tell a tenant they are square, suppress a late fee, and possibly
+      // cancel a notice - all on a payment that may never arrive. PAY-02
+      // names that failure explicitly. The Payment row records it; the
+      // balance does not move until it settles.
+      return 0
     case 'payment_failed':
     case 'dispute':
       // Neither moves the balance. A failed attempt leaves the charge

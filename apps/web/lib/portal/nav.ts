@@ -1,6 +1,6 @@
 // The tenant portal's navigation, as data (R-018).
 //
-// Three items and no permissions: a tenant has one role and sees the same
+// Five items and no permissions: a tenant has one role and sees the same
 // portal as every other tenant. Unlike the staff nav, nothing here is
 // filtered - the scoping happens inside each page's queries, on the tenant's
 // own records.
@@ -20,6 +20,10 @@ export interface PortalNavItem {
 
 export const PORTAL_NAV_ITEMS: readonly PortalNavItem[] = [
   { href: '/portal', label: 'Home', description: 'Your home and recent updates' },
+  // Second, not last. D-10's plainest word for the thing, and the item a
+  // tenant opens the portal for most months - a payment screen buried behind
+  // "Papers" is a payment screen people phone the office about instead.
+  { href: '/portal/pay', label: 'Pay rent', description: 'See what you owe and pay it' },
   {
     href: '/portal/maintenance',
     label: 'Report a problem',

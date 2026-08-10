@@ -126,6 +126,7 @@ describe('what the driver actually sends', () => {
       billingCycleAnchor: anchor,
       leaseId: 'lease_1',
       leasePayerId: 'payer_1',
+      collectionMethod: 'charge_automatically',
     })
     const create = calls.find((c) => c.url.endsWith('/subscriptions'))
     expect(String(create!.init.body)).toContain(
@@ -151,6 +152,129 @@ describe('what the driver actually sends', () => {
     const calls = captureFetch()
     await provider().resumeSubscription({ stripeSubscriptionId: 'sub_1' })
     expect(String(calls[0]!.init.body)).toContain('pause_collection=')
+  })
+
+  it('sends days_until_due with send_invoice, which Stripe REQUIRES', async () => {
+    // Stripe rejects a `send_invoice` subscription without it. Exactly the
+    // kind of thing that passes every local test and fails the first time it
+    // meets the real API, so it is asserted on the request body.
+    const calls = captureFetch()
+    await provider().createSubscription({
+      stripeCustomerId: 'cus_1',
+      amountCents: 150_000,
+      currency: 'usd',
+      billingCycleAnchor: new Date('2026-09-01T14:00:00Z'),
+      leaseId: 'lease_1',
+      leasePayerId: 'payer_1',
+      collectionMethod: 'send_invoice',
+    })
+    const create = calls.find((c) => c.url.endsWith('/subscriptions'))!
+    const body = String(create.init.body)
+    expect(body).toContain('collection_method=send_invoice')
+    expect(body).toContain('days_until_due=')
+  })
+
+  it('does NOT send days_until_due on autopay', async () => {
+    // Stripe rejects it on a `charge_automatically` subscription - the
+    // mirror of the rule above, and just as invisible without a real call.
+    const calls = captureFetch()
+    await provider().createSubscription({
+      stripeCustomerId: 'cus_1',
+      amountCents: 150_000,
+      currency: 'usd',
+      billingCycleAnchor: new Date('2026-09-01T14:00:00Z'),
+      leaseId: 'lease_1',
+      leasePayerId: 'payer_1',
+      collectionMethod: 'charge_automatically',
+    })
+    const create = calls.find((c) => c.url.endsWith('/subscriptions'))!
+    const body = String(create.init.body)
+    expect(body).toContain('collection_method=charge_automatically')
+    expect(body).not.toContain('days_until_due')
+  })
+
+  it('switches collection method WITHOUT an idempotency key', async () => {
+    // An update is idempotent by nature, and a stale key would make a
+    // legitimate switch back silently return the first switch's result -
+    // leaving Stripe on one mode while we believed the other.
+    const calls = captureFetch()
+    await provider().setCollectionMethod({
+      stripeSubscriptionId: 'sub_1',
+      collectionMethod: 'send_invoice',
+    })
+    const headers = calls[0]!.init.headers as Record<string, string>
+    expect(headers['Idempotency-Key']).toBeUndefined()
+    expect(String(calls[0]!.init.body)).toContain('collection_method=send_invoice')
+  })
+
+  it('asks only for OPEN invoices when reading what is still owed', async () => {
+    // Not drafts: a draft invoice has not been presented to anybody, and
+    // blocking a collection-method switch on one would refuse for a bill
+    // that does not yet exist.
+    const calls = captureFetch()
+    await provider().getOpenInvoiceAmountCents({ stripeSubscriptionId: 'sub_1' })
+    expect(calls[0]!.url).toContain('status=open')
+    expect(calls[0]!.url).toContain('subscription=sub_1')
+  })
+
+  it('returns null - not zero - when the invoice list cannot be read', async () => {
+    // `switchDecision` treats null as "we have not asked" and refuses. Zero
+    // would mean "nothing owed" and ALLOW the switch, which is how a tenant
+    // gets billed twice for one month.
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify({ object: 'list' }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })) as typeof fetch
+    expect(
+      await provider().getOpenInvoiceAmountCents({ stripeSubscriptionId: 'sub_1' }),
+    ).toBeNull()
+  })
+
+  it('sums what is remaining across every open invoice', async () => {
+    globalThis.fetch = (async () =>
+      new Response(
+        JSON.stringify({ data: [{ amount_remaining: 150_000 }, { amount_remaining: 4_500 }] }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      )) as typeof fetch
+    expect(await provider().getOpenInvoiceAmountCents({ stripeSubscriptionId: 'sub_1' })).toBe(
+      154_500,
+    )
+  })
+
+  it('charges the TOTAL core computed, and carries the caller’s idempotency key', async () => {
+    // D-12: the card fee is core's arithmetic, and Stripe is handed a
+    // finished number. The key is the caller's because a retried request
+    // that timed out AFTER Stripe charged it must not become a second debit.
+    const calls = captureFetch()
+    await provider().createPaymentIntent({
+      stripeCustomerId: 'cus_1',
+      amountCents: 154_512,
+      currency: 'usd',
+      rail: 'CARD',
+      leasePayerId: 'payer_1',
+      leaseId: 'lease_1',
+      idempotencyKey: 'pay:payer_1:154512:2026-09',
+    })
+    const headers = calls[0]!.init.headers as Record<string, string>
+    expect(headers['Idempotency-Key']).toBe('pay:payer_1:154512:2026-09')
+    const body = String(calls[0]!.init.body)
+    expect(body).toContain('amount=154512')
+    expect(body).toContain('payment_method_types%5B0%5D=card')
+  })
+
+  it('sends ACH as us_bank_account, the free rail', async () => {
+    const calls = captureFetch()
+    await provider().createPaymentIntent({
+      stripeCustomerId: 'cus_1',
+      amountCents: 150_000,
+      currency: 'usd',
+      rail: 'ACH',
+      leasePayerId: 'payer_1',
+      leaseId: 'lease_1',
+      idempotencyKey: 'pay:payer_1:150000:2026-09',
+    })
+    expect(String(calls[0]!.init.body)).toContain('payment_method_types%5B0%5D=us_bank_account')
   })
 
   it('authenticates every call and pins the API version', async () => {

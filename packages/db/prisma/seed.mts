@@ -117,14 +117,29 @@ async function seedJurisdictionRules() {
       // default so a partial payment does not silently starve rent to pay
       // down fees first.
       paymentAllocationOrder: ['RENT', 'LATE_FEE', 'NSF_FEE', 'UTILITY', 'OTHER'],
+      // PAY-01's card pass-through (R-037, D-4).
+      //
+      // Texas permits a credit-card surcharge; Tex. Bus. & Com. Code §604A.003
+      // bars one on a DEBIT or stored-value card specifically. Stripe reports
+      // `us_bank_account` and `card` without distinguishing debit from credit
+      // at the point this product decides the fee, so a state whose rule turns
+      // on that distinction cannot be honoured by this column alone. Left
+      // permitted here because that is the law for the card type most tenants
+      // pay with, and flagged in `notes` because it is the kind of nuance an
+      // attorney review has to land on before this ships anywhere real.
+      cardSurchargePermitted: true,
+      // No statutory basis-point cap in Texas. The card-network rules cap a
+      // surcharge at the merchant's cost of acceptance, which `cardFeeFor`
+      // already satisfies by grossing up rather than marking up.
+      cardSurchargeMaxBps: null,
       // No statutory cap on application fees in Texas.
       applicationFeeCapCents: null,
       rubsPermitted: true,
 
-      citation: 'Tex. Prop. Code §§92.019, 92.103-.104, 24.005, 91.001',
+      citation: 'Tex. Prop. Code §§92.019, 92.103-.104, 24.005, 91.001; Tex. Bus. & Com. Code §604A.003',
       reviewedBy: null,
       notes:
-        'Seeded defaults, not yet reviewed by an attorney - see decisions doc item 6. Entry-notice hours and rent-increase notice days reflect common practice, not a specific citation.',
+        'Seeded defaults, not yet reviewed by an attorney - see decisions doc item 6. Entry-notice hours and rent-increase notice days reflect common practice, not a specific citation. cardSurchargePermitted does not distinguish debit from credit, which Tex. Bus. \u0026 Com. Code \u00a7604A.003 does - see the comment on that field.',
     },
   })
 
