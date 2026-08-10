@@ -870,7 +870,7 @@ New `WorkOrderVerification` table; `reopenedAt`/`reopenCount`/`closedAt`/`closed
 - **A read-after-write race in the "attach" e2e test itself**, not the product: the test's Prisma connection is separate from the one the server action committed through, and against Neon's pooled connections a read immediately afterward can land a beat early — the same gap `properties.spec.ts` already documented for its own create-property test. Fixed by polling instead of a single read.
 
 ## R-033 — Lease records
-**Commit:** `PENDING`  ·  **Date:** 2026-08-10
+**Commit:** `7825322`  ·  **Date:** 2026-08-10
 
 **What it built.** The `Lease` entity finally has a product around it: a scoped list (running tenancies first), a create form that forks on where the tenancy came from, and a detail page carrying the parties, the term, the deposit, the utility matrix and the lifecycle. Occupants and guarantors are two separate lists, not one list with a role column. A guarded status machine in `packages/core/leases` owns every transition; activating a lease occupies its unit immediately and ending one frees it. Notice to end the tenancy is recorded with **who gave it**, without changing the status. And the whole RISK-08 inherited-acquisition path exists: an inherited lease starts with its deposit position UNKNOWN, its three outstanding items are raised as `Task` rows in the one queue, and each is shown on screen with the consequence of leaving it open rather than as a bare checklist.
 
