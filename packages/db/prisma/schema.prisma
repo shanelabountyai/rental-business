@@ -1257,6 +1257,30 @@ model LeasePayer {
   /// R-034 provisions them.
   stripeCustomerId     String?
   stripeSubscriptionId String?
+  /// R-036: collection is on hold for this payer - a legal-action hold
+  /// (PAY-12), or an owner pausing deliberately. Distinct from `active`,
+  /// which means the payer is no longer a payer at all: a paused payer still
+  /// owes the money, we are simply not collecting it, and PAY-12 is explicit
+  /// that in many states accepting a payment after serving notice voids the
+  /// notice. R-047 owns the per-tenant switches that set this; R-036 only
+  /// makes Stripe agree with it.
+  collectionPaused     Boolean @default(false)
+  /// The rent we last successfully pushed to Stripe, in cents.
+  ///
+  /// NOT a copy of Stripe's truth - it is a record of our last INSTRUCTION,
+  /// which is a different fact and a useful one: comparing it to the lease's
+  /// current rent says "we have not told Stripe about this change yet"
+  /// without an API call. Stripe remains the authority (D-11), and the
+  /// lifecycle sweep still asks it; this is what makes a rent change
+  /// detectable at all against a provider that has no memory of its own.
+  stripeAmountCents    Int?
+  /// When the lifecycle sweep last made Stripe agree with this lease, and
+  /// what it did. Operational breadcrumbs for the Billing Runs screen -
+  /// deliberately NOT a second source of truth about the subscription, which
+  /// is Stripe's.
+  lastSyncedAt         DateTime?
+  lastSyncAction       String?
+  lastSyncError        String?
   active            Boolean   @default(true)
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt

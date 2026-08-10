@@ -1,23 +1,55 @@
+import { BillingRuns } from '@/components/billing/billing-runs.tsx'
 import { requirePermission } from '@/lib/auth/guard.ts'
+import { resyncPayer } from '@/lib/billing/actions.ts'
+import { billingRunRows } from '@/lib/billing/lifecycle.ts'
+import { billingIsLive, billingProviderName } from '@/lib/billing/provider.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
-import { SectionPlaceholder } from '@/components/shell/section-placeholder.tsx'
 
 export const metadata = { title: 'Money — Rental Operations' }
 
 // Guards itself rather than relying on the layout. The layout proves the
 // visitor is staff; this proves they may see THIS section (ROLE-01).
+//
+// R-036 fills in the Billing Runs half. The rent roll and delinquency aging
+// named in PAY-06 are R-044's; this is the operational screen for the
+// subscription layer underneath them - what Stripe is actually billing, and
+// where it has stopped agreeing with the lease.
+
 export default async function MoneyPage() {
   const actor = await requirePermission('ledger.read')
   const scope = await currentScope(actor)
+  const rows = await billingRunRows(scope.propertyIds)
 
   return (
-    <SectionPlaceholder
-      title="Money"
-      ownedBy="R-035"
-      description="The rent roll, the per-lease ledger projection and delinquency aging (PAY-03, PAY-06)."
-      scopeSummary={`In scope right now: ${scope.propertyIds.length} propert${
-        scope.propertyIds.length === 1 ? 'y' : 'ies'
-      }.`}
-    />
+    <div className="flex max-w-3xl flex-col gap-6">
+      <header className="flex flex-col gap-1">
+        <h1 className="text-2xl font-semibold tracking-tight">Money</h1>
+        <p className="text-muted-foreground text-sm">
+          What Stripe is billing, and where it has stopped agreeing with the
+          lease. The rent roll and delinquency aging are <code className="font-mono">R-044</code>.
+        </p>
+      </header>
+
+      <BillingRuns
+        live={billingIsLive()}
+        providerName={billingProviderName()}
+        resync={resyncPayer}
+        rows={rows.map((row) => ({
+          id: row.id,
+          leaseId: row.leaseId,
+          payerName: row.tenant
+            ? `${row.tenant.firstName} ${row.tenant.lastName}`
+            : (row.externalPayerName ?? 'Payer'),
+          where: `${row.lease.property.name} — ${row.lease.unit.name}`,
+          leaseStatus: row.lease.status,
+          rentCents: row.lease.rentCents,
+          hasSubscription: row.stripeSubscriptionId != null,
+          collectionPaused: row.collectionPaused,
+          lastSyncedAt: row.lastSyncedAt?.toISOString().slice(0, 16).replace('T', ' ') ?? null,
+          lastSyncAction: row.lastSyncAction,
+          lastSyncError: row.lastSyncError,
+        }))}
+      />
+    </div>
   )
 }

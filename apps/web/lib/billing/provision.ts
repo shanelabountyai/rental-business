@@ -3,7 +3,7 @@ import 'server-only'
 import { billingCycleAnchor, firstPeriodIsPartial } from '@rental/core/billing'
 import { prisma } from '@rental/db'
 import { auditAsSystem } from '@/lib/audit/system.ts'
-import { billingProvider } from './provider.ts'
+import { getBillingProvider } from './provider.ts'
 
 // Provisioning a lease's billing (D-11, R-034).
 //
@@ -131,7 +131,7 @@ export async function provisionLeaseBilling(
   try {
     let stripeCustomerId = payer.stripeCustomerId
     if (!stripeCustomerId) {
-      const customer = await billingProvider.createCustomer({
+      const customer = await getBillingProvider().createCustomer({
         leasePayerId: payer.id,
         leaseId: lease.id,
         propertyId: lease.propertyId,
@@ -159,7 +159,7 @@ export async function provisionLeaseBilling(
       notBefore: lease.activatedAt ?? now,
     })
 
-    const subscription = await billingProvider.createSubscription({
+    const subscription = await getBillingProvider().createSubscription({
       stripeCustomerId,
       // D-12: core decides the amount, Stripe executes it.
       amountCents: lease.rentCents,
@@ -171,7 +171,12 @@ export async function provisionLeaseBilling(
 
     await prisma.leasePayer.update({
       where: { id: payer.id },
-      data: { stripeSubscriptionId: subscription.stripeSubscriptionId },
+      data: {
+        stripeSubscriptionId: subscription.stripeSubscriptionId,
+        // What we told Stripe. See the column's own comment for why this is
+        // a record of the instruction rather than a copy of Stripe's truth.
+        stripeAmountCents: lease.rentCents,
+      },
     })
 
     const partial = firstPeriodIsPartial({
@@ -186,7 +191,7 @@ export async function provisionLeaseBilling(
       entityId: lease.id,
       propertyId: lease.propertyId,
       after: {
-        provider: billingProvider.name,
+        provider: getBillingProvider().name,
         leasePayerId: payer.id,
         stripeCustomerId,
         stripeSubscriptionId: subscription.stripeSubscriptionId,
@@ -224,7 +229,7 @@ export async function createPaymentMethodSetup(leasePayerId: string) {
     select: { stripeCustomerId: true },
   })
   if (!payer.stripeCustomerId) return null
-  return billingProvider.createSetupIntent(payer.stripeCustomerId)
+  return getBillingProvider().createSetupIntent(payer.stripeCustomerId)
 }
 
 /// The billing state of a lease, for display. Reads our own rows rather than

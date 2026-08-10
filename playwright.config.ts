@@ -60,6 +60,22 @@ export default defineConfig({
    * Worth revisiting the day this runs in CI, where the build happens anyway.
    */
   timeout: 60_000,
+  /**
+   * 15s per assertion, not Playwright's 5s default.
+   *
+   * The 5s default was the odd one out: a test allowed 60 seconds whose
+   * individual assertions gave up at five. Every locator that waits on the
+   * result of a `<form action>` is waiting on a server-action round trip, a
+   * `revalidatePath`, and a full RSC re-render - and under two projects at
+   * five workers that legitimately exceeds 5s without anything being wrong.
+   * It surfaced as two flaky comms-threading tests that both passed on
+   * retry, which is precisely the useless kind of failure: nothing to debug,
+   * because nothing was broken.
+   *
+   * Deliberately not 60s. An assertion that will genuinely never pass should
+   * still fail while somebody is watching.
+   */
+  expect: { timeout: 15_000 },
   forbidOnly: !!process.env.CI,
   /**
    * One local retry, and a trace when it happens.

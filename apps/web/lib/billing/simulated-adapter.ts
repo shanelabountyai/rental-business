@@ -1,13 +1,16 @@
 import 'server-only'
 
 import { randomBytes } from 'node:crypto'
+import { prisma } from '@rental/db'
 import type {
   BillingProvider,
   CustomerInput,
+  PauseBehaviour,
   ProvisionedCustomer,
   ProvisionedSetupIntent,
   ProvisionedSubscription,
   SubscriptionInput,
+  SubscriptionRef,
 } from './adapter.ts'
 
 // The simulated billing provider (D-7's simulated-adapter convention, R-034).
@@ -23,10 +26,14 @@ import type {
 // tell apart from the real thing is how a staging environment gets mistaken
 // for production.
 //
-// It does NOT hold state. Whether a customer "exists" is a question about
-// our own database, which records the id it was given - and a simulator with
-// its own in-memory registry would answer a different question than
-// production would, which is the exact way a simulator starts lying.
+// IT HOLDS NO STATE OF ITS OWN, and R-036's lifecycle methods are where that
+// rule earns its keep. A simulator with an in-memory registry of "paused"
+// subscriptions would answer a different question than production does, and
+// would forget everything on restart - so `getSubscription` reads OUR OWN
+// row instead, which is the same row the re-sync screen compares against.
+// The honest consequence is that against the simulator a re-sync can never
+// find drift, because both sides are the same record; that is stated on the
+// screen rather than left to look like a clean bill of health.
 
 function stripeId(prefix: string): string {
   // 24 base36-ish characters, matching the shape of a real Stripe id closely
@@ -61,6 +68,76 @@ export class SimulatedBillingProvider implements BillingProvider {
     return {
       setupIntentId,
       clientSecret: `${setupIntentId}_secret_${randomBytes(8).toString('hex')}`,
+    }
+  }
+
+  async updateSubscriptionPrice(input: {
+    stripeSubscriptionId: string
+    amountCents: number
+    currency: string
+    leaseId: string
+  }): Promise<{ stripePriceId: string }> {
+    const stripePriceId = stripeId('price')
+    console.info(
+      `[billing:simulated] ${input.stripeSubscriptionId} -> ${input.amountCents}c ` +
+        `(price ${stripePriceId}, no proration)`,
+    )
+    return { stripePriceId }
+  }
+
+  async pauseSubscription(input: {
+    stripeSubscriptionId: string
+    behaviour: PauseBehaviour
+  }): Promise<void> {
+    console.info(
+      `[billing:simulated] paused ${input.stripeSubscriptionId} (${input.behaviour})`,
+    )
+  }
+
+  async resumeSubscription(input: SubscriptionRef): Promise<void> {
+    console.info(`[billing:simulated] resumed ${input.stripeSubscriptionId}`)
+  }
+
+  async cancelSubscription(input: SubscriptionRef & { at?: Date }): Promise<void> {
+    console.info(
+      `[billing:simulated] cancelled ${input.stripeSubscriptionId}` +
+        (input.at ? ` at ${input.at.toISOString()}` : ' immediately'),
+    )
+  }
+
+  /**
+   * Reports what this simulator was last TOLD, not what the lease now says.
+   *
+   * The distinction is the difference between a useful simulator and a
+   * useless one. Reading `lease.rentCents` here would make the simulator
+   * agree with the lease by construction - so a rent change could never be
+   * detected, and the entire `update_price` path would be dead code that
+   * only ever ran against real Stripe. Reading `stripeAmountCents` - our
+   * record of the last instruction we successfully pushed - reproduces the
+   * one behaviour that matters: Stripe remembers what it was told, and
+   * disagrees when we have not told it something.
+   *
+   * Still no in-memory state, for the reason in this file's header: it
+   * reads a durable column, so it answers the same after a restart.
+   */
+  async getSubscription(input: SubscriptionRef) {
+    const payer = await prisma.leasePayer.findFirst({
+      where: { stripeSubscriptionId: input.stripeSubscriptionId },
+      select: {
+        stripeAmountCents: true,
+        collectionPaused: true,
+        lease: { select: { status: true } },
+      },
+    })
+    if (!payer) return null
+    const over = payer.lease.status === 'ENDED' || payer.lease.status === 'TERMINATED'
+    return {
+      // Deliberately reports what a real cancelled subscription would only
+      // report AFTER we cancelled it - so a sweep that has not run yet still
+      // sees `active` and decides to cancel.
+      status: over && payer.stripeAmountCents === null ? 'canceled' : 'active',
+      amountCents: payer.stripeAmountCents,
+      cancelAt: null,
     }
   }
 }

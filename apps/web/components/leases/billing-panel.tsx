@@ -1,9 +1,14 @@
+'use client'
+
 import { formatCents } from '@rental/core/money'
+import { useActionState } from 'react'
+import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
+import type { BillingFormState } from '@/lib/billing/actions.ts'
 
 // A lease's billing state (D-11, R-034).
 //
-// A server component: it renders text and has no state, so shipping a client
-// bundle for it would be pure weight.
+// A client component since R-036 gave it a re-sync button - the drift action
+// the backlog asks for, on the screen where somebody notices the drift.
 //
 // SAYS WHICH PROVIDER IT IS, LOUDLY, when that is not real Stripe. A screen
 // showing plausible `cus_`/`sub_` ids with no indication they came from a
@@ -22,14 +27,20 @@ export interface PayerBillingView {
 }
 
 export function BillingPanel({
+  leaseId,
   payers,
   live,
   providerName,
+  resync,
 }: {
+  leaseId: string
   payers: readonly PayerBillingView[]
   live: boolean
   providerName: string
+  resync: (state: BillingFormState, formData: FormData) => Promise<BillingFormState>
 }) {
+  const [state, action] = useActionState<BillingFormState, FormData>(resync, {})
+
   return (
     <section aria-labelledby="billing" className="flex flex-col gap-3 border-t pt-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -75,6 +86,15 @@ export function BillingPanel({
             </li>
           ))}
         </ul>
+      )}
+
+      <FormAlerts state={state} />
+
+      {payers.length > 0 && (
+        <form action={action}>
+          <input type="hidden" name="leaseId" value={leaseId} />
+          <SubmitButton label="Re-sync with Stripe" />
+        </form>
       )}
 
       <p className="text-muted-foreground text-xs">

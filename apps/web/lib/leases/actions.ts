@@ -15,6 +15,7 @@ import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { audit } from '@/lib/audit/index.ts'
+import { syncLease } from '@/lib/billing/lifecycle.ts'
 import { provisionLeaseBilling } from '@/lib/billing/provision.ts'
 import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
 import { raiseIntakeTasks } from './intake.ts'
@@ -240,6 +241,15 @@ export async function updateLeaseTerms(
     )
   })
 
+  // A rent change has to reach Stripe, or the tenant keeps being billed the
+  // old amount indefinitely (D-11, R-036). Only when it actually moved -
+  // an edit that did not touch the rent should not burn an API round trip.
+  if (after.rentCents !== before.rentCents) {
+    await syncLease(leaseId).catch((error) => {
+      console.error(`[lease] billing sync failed after a rent change on ${leaseId}`, error)
+    })
+  }
+
   revalidatePath(`/leases/${leaseId}`)
   return { notice: 'Saved.' }
 }
@@ -329,14 +339,22 @@ export async function changeLeaseStatus(
     )
   })
 
-  // Billing opens when the tenancy goes live (D-11, R-034). AFTER the
-  // commit and never allowed to fail this action: activation is a tenancy
-  // fact, and a billing provider being unreachable must not undo it. The
-  // provisioner is idempotent and records its own failures, so re-running
-  // the transition - or a later item's retry - is how billing catches up.
+  // Billing follows the tenancy (D-11, R-034 provisions, R-036 syncs).
+  // AFTER the commit and never allowed to fail this action: a status change
+  // is a tenancy fact, and a billing provider being unreachable must not
+  // undo it. Both calls are idempotent and record their own failures, so
+  // re-running the transition - or the nightly sweep - is how billing
+  // catches up.
   if (!wasInForce && willBeInForce) {
     await provisionLeaseBilling(leaseId).catch((error) => {
       console.error(`[lease] billing provisioning failed for ${leaseId}`, error)
+    })
+  } else if (wasInForce && !willBeInForce) {
+    // The tenancy ended. `syncLease` reads what Stripe currently believes
+    // and cancels - effective at the move-out date where there is one, so a
+    // tenancy ending on the last day of a month still bills that month.
+    await syncLease(leaseId).catch((error) => {
+      console.error(`[lease] billing sync failed for ${leaseId}`, error)
     })
   }
 

@@ -24,3 +24,42 @@ Multi-property single-family rental management platform (10–50 units, owner-op
 - Record the SHA in a small follow-up commit, not by amending. Amending changes the SHA you just wrote down, leaving `PROGRESS.md` pointing at a commit that no longer exists.
 - Also update the same-day PRD when an item settles something the PRD left open, and append owner decisions to `07-decisions.md` with a new D-number rather than resolving them silently.
 - Commit after every completed item with a message like `R-012: work order lifecycle`.
+
+## The gate
+
+Nothing is done until all four pass:
+
+```
+npm run lint && npm run typecheck && npm test && PORT=3100 npm run test:e2e
+```
+
+- **`PORT=3100` is not optional.** Another project's dev server owns `:3000`; a default-port e2e run kills it and then fails confusingly.
+- **`npm run build` is a distinct check.** `typecheck` and `vitest` both miss the Next.js boundary rules below. Run it whenever a `'use server'` module or a Server→Client prop changed.
+- A stalled run leaves a dev server behind: `pkill -f playwright; lsof -ti :3100 | xargs -r kill -9`.
+- Every `packages/core/<domain>` needs a hand-added `"exports"` entry in `packages/core/package.json`, or the import resolves nowhere.
+
+## Invariants the database enforces
+
+`LedgerEntry`, `AuditLog`, `Message` and `Notification` are append-only by trigger — UPDATE, DELETE and TRUNCATE are all refused at the database, not in application code. Three consequences that have each cost a debugging session:
+
+- **A foreign key pointing at one of those tables must be `onDelete: Restrict`.** `SetNull` looks safe on a nullable column but can never fire: the cascade's UPDATE hits the trigger and the whole delete fails at runtime. This has been fixed twice (`Message.ticketId`/`workOrderId` in R-032, the `LedgerEntry` keys in R-034) — do not reintroduce it.
+- **You cannot amend an append-only row after the fact.** Late association needs a join table (`WorkOrderMessageLink`), not an UPDATE. Corrections to the ledger are reversing entries.
+- **Test and seed cleanup cannot delete a row an append-only table references.** Retire or deactivate instead. The demo seed's `--reset` does exactly this, and R-035's reconciliation check exists partly because a cleanup that deleted `ProcessedStripeEvent` rows left real ledger orphans behind.
+
+Migrations are hand-written SQL — triggers, partial indexes and backfills do not survive a generated diff.
+
+## Traps that only fail at runtime
+
+- **A `'use server'` module may export only async functions.** A sync export passes typecheck and vitest and fails in `npm run build`.
+- **A plain function cannot cross the Server→Client boundary.** Only a `'use server'` export has an identity the client can call back to. `npm run build` does *not* catch this — the page 500s in the browser. Bind the action server-side and pass the bound action down.
+- **`onClick` is inert until hydration.** Anything that must work on first paint is a real `<form action>` + `useActionState`, not a button with a handler.
+- **Prisma `@db.Date` comes back as UTC midnight.** Reading it with local `getDate()`/`getMonth()` is off by one for any server west of UTC — that is exactly how `daysPastDue` once reported a day late *on* the due date. Date-only values are `BusinessDate` (a `YYYY-MM-DD` string, `packages/core/scheduling/local-time.ts`); timestamps are real `Date`s. Do not mix them.
+- **A simulated adapter must not agree with us by construction** (D-27). If the simulator answers from the same column the decision compares against, every "they differ" branch is dead code that no test can reach. Give the simulator its own state for what it was *told*.
+
+## Test suite rules
+
+- **Never call a global sweep in a test.** `dispatchPendingNotifications()` takes `only: { deliveryIds }` and `dispatchOutbox()` takes `only: { eventIds }` — use them. An unfiltered sweep passes today and becomes the slowest, flakiest thing in the suite three items later; that has now happened three times. One test may exercise the genuine global sweep; it gets an explicit long timeout and says why.
+- Anything that writes a phone number takes it from `uniquePhone()` in [e2e/fixtures.ts](e2e/fixtures.ts) — never a literal. A crashed run left an active tenant holding the hard-coded number, and SMS routing correctly refused to guess between two candidates for an unknown number of runs afterwards.
+- `waitForURL(/\/leases\/[a-z0-9]+$/)` also matches `/leases/new` and resolves instantly. Exclude it: `(?!new$)`.
+- Close every `browser.newContext()`. A leaked context surfaces as an unrelated spec failing on someone else's page.
+- `e2e/**` is inside the `apps/web` tsconfig — e2e specs are typechecked, so treat a type error there as a real failure.

@@ -59,6 +59,25 @@ export interface ProvisionedSetupIntent {
   setupIntentId: string
 }
 
+/// Why a subscription is being paused. Stripe's own `pause_collection`
+/// behaviours, named here so a caller picks one deliberately rather than
+/// passing a magic string.
+export const PAUSE_BEHAVIOURS = [
+  /// Invoices still generate but are marked uncollectible. The right choice
+  /// for a tenancy in a legal-action hold (PAY-12): the debt is still real
+  /// and still on the record, we are simply not collecting on it.
+  'mark_uncollectible',
+  /// Invoices generate as drafts. For a pause somebody intends to unwind.
+  'keep_as_draft',
+  /// No invoice at all. For a period where nothing is genuinely owed.
+  'void',
+] as const
+export type PauseBehaviour = (typeof PAUSE_BEHAVIOURS)[number]
+
+export interface SubscriptionRef {
+  stripeSubscriptionId: string
+}
+
 /**
  * Everything this product asks Stripe to DO.
  *
@@ -76,4 +95,48 @@ export interface BillingProvider {
   /// a client secret for their Elements to use, and no card or bank number
   /// ever reaches this product (master PRD §6.6).
   createSetupIntent(stripeCustomerId: string): Promise<ProvisionedSetupIntent>
+
+  // ---- Lifecycle (R-036) ----
+
+  /**
+   * Moves a subscription to a new rent amount.
+   *
+   * NEVER PRORATES. Stripe's proration is built for mid-cycle plan changes,
+   * not for a calendar rent that changes at a renewal boundary - and D-12 is
+   * explicit that any amount a statute could touch is computed in core and
+   * pushed as an invoice item. So every implementation passes
+   * `proration_behavior=none`, and R-042 owns computing and pushing the
+   * partial period when one is genuinely owed.
+   */
+  updateSubscriptionPrice(input: {
+    stripeSubscriptionId: string
+    amountCents: number
+    currency: string
+    leaseId: string
+  }): Promise<{ stripePriceId: string }>
+
+  /// PAY-12's collection hold, and the pause half of the lifecycle.
+  pauseSubscription(input: {
+    stripeSubscriptionId: string
+    behaviour: PauseBehaviour
+  }): Promise<void>
+
+  resumeSubscription(input: SubscriptionRef): Promise<void>
+
+  /**
+   * Ends a subscription.
+   *
+   * `at` is when it should stop billing - a move-out date, normally. Absent
+   * means immediately. Given a date, Stripe stops at that instant rather
+   * than mid-period, which is what a tenancy ending on the last day of a
+   * month actually means.
+   */
+  cancelSubscription(input: SubscriptionRef & { at?: Date }): Promise<void>
+
+  /// What Stripe currently thinks the subscription is. The read half of the
+  /// re-sync action - a screen that offered to fix drift without first
+  /// asking Stripe what it believes would be guessing.
+  getSubscription(
+    input: SubscriptionRef,
+  ): Promise<{ status: string; amountCents: number | null; cancelAt: Date | null } | null>
 }

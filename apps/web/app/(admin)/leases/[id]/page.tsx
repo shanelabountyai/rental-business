@@ -25,7 +25,8 @@ import {
   resolveIntakeItem,
   updateLeaseTerms,
 } from '@/lib/leases/actions.ts'
-import { billingIsLive, billingProvider } from '@/lib/billing/provider.ts'
+import { resyncLease } from '@/lib/billing/actions.ts'
+import { billingIsLive, billingProviderName } from '@/lib/billing/provider.ts'
 import { leaseBillingState } from '@/lib/billing/provision.ts'
 import { leaseStatement } from '@/lib/ledger/queries.ts'
 import { outstandingIntakeGaps } from '@/lib/leases/intake.ts'
@@ -239,7 +240,9 @@ export default async function LeaseDetailPage({
 
       <BillingPanel
         live={billingIsLive()}
-        providerName={billingProvider.name}
+        providerName={billingProviderName()}
+        leaseId={lease.id}
+        resync={resyncLease}
         payers={payers.map((payer) => ({
           id: payer.id,
           name: payer.tenant

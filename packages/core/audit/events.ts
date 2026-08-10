@@ -258,6 +258,11 @@ export const AUDIT_ACTIONS = [
   /// first time a staging database is mistaken for production.
   'billing.provisioned',
 
+  /// R-036 (D-11): the lifecycle sweep made Stripe agree with a lease -
+  /// provisioned, re-priced, paused, resumed or cancelled. Carries the
+  /// provider name for the same reason `billing.provisioned` does.
+  'billing.subscription_synced',
+
   /// R-035 (D-11): the nightly reconciliation found the ledger projection
   /// and the processed-event log disagreeing. Recorded rather than only
   /// logged, and recorded in the append-only trail specifically: a

@@ -326,18 +326,30 @@ describe('dispatch', () => {
     })
     const rows = await prisma.notification.findMany({
       where: { idempotencyKey: { startsWith: key } },
+      include: { delivery: { select: { id: true } } },
     })
     notificationIds.push(...rows.map((r) => r.id))
 
+    // SCOPED to this test's own deliveries. What is under test is
+    // quiet-hours deferral, which holds identically filtered or not - and an
+    // unfiltered sweep here would additionally send whatever the rest of the
+    // suite has queued in parallel, which is unbounded work inside a test
+    // timeout. The global path has its own test below.
+    const only = {
+      deliveryIds: rows
+        .map((r) => r.delivery?.id)
+        .filter((id): id is string => id != null),
+    }
+
     // Still 04:00 UTC (23:00 local) - inside quiet hours.
-    await dispatchPendingNotifications(new Date('2026-08-05T04:00:00Z'))
+    await dispatchPendingNotifications(new Date('2026-08-05T04:00:00Z'), 100, only)
     let deliveries = await prisma.notificationDelivery.findMany({
       where: { notificationId: { in: rows.map((r) => r.id) } },
     })
     expect(deliveries.every((d) => d.status === 'DEFERRED')).toBe(true)
 
     // 14:00 UTC is 09:00 local, past the 08:00 resume.
-    await dispatchPendingNotifications(new Date('2026-08-05T14:00:00Z'))
+    await dispatchPendingNotifications(new Date('2026-08-05T14:00:00Z'), 100, only)
     deliveries = await prisma.notificationDelivery.findMany({
       where: { notificationId: { in: rows.map((r) => r.id) } },
     })

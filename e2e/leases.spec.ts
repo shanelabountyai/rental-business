@@ -574,6 +574,94 @@ test.describe('the ledger (PAY-03, PAY-09, D-11)', () => {
   })
 })
 
+test.describe('the subscription lifecycle (R-036, D-11)', () => {
+  test('ending a tenancy CANCELS its subscription', async ({ page }) => {
+    // The branch that matters most: a tenancy that ended must stop billing.
+    const seed = await seedUnit()
+    const lease = await seedLease(seed, { status: 'ACTIVE' })
+    await prisma.unit.update({ where: { id: seed.unit.id }, data: { status: 'OCCUPIED' } })
+    const payer = await prisma.leasePayer.create({
+      data: {
+        leaseId: lease.id,
+        propertyId: seed.property.id,
+        payerType: 'TENANT',
+        tenantId: seed.tenant.id,
+        stripeCustomerId: `cus_${randomUUID().replace(/-/g, '').slice(0, 24)}`,
+        stripeSubscriptionId: `sub_${randomUUID().replace(/-/g, '').slice(0, 24)}`,
+        stripeAmountCents: 150_000,
+      },
+    })
+
+    const staff = await createStaff()
+    await signIn(page, staff.email)
+    await page.goto(`/leases/${lease.id}`)
+    await page.getByRole('button', { name: 'Record that the tenancy ended' }).click()
+
+    await expect
+      .poll(async () => {
+        const after = await prisma.leasePayer.findUniqueOrThrow({ where: { id: payer.id } })
+        return after.lastSyncAction
+      })
+      .toBe('cancelled')
+  })
+
+  test('a rent change reaches Stripe', async ({ page }) => {
+    // Otherwise the tenant keeps being billed the old amount indefinitely.
+    const seed = await seedUnit()
+    const lease = await seedLease(seed, { status: 'ACTIVE' })
+    const payer = await prisma.leasePayer.create({
+      data: {
+        leaseId: lease.id,
+        propertyId: seed.property.id,
+        payerType: 'TENANT',
+        tenantId: seed.tenant.id,
+        stripeCustomerId: `cus_${randomUUID().replace(/-/g, '').slice(0, 24)}`,
+        stripeSubscriptionId: `sub_${randomUUID().replace(/-/g, '').slice(0, 24)}`,
+        stripeAmountCents: 150_000,
+      },
+    })
+
+    const staff = await createStaff()
+    await signIn(page, staff.email)
+    await page.goto(`/leases/${lease.id}`)
+
+    await page.getByRole('spinbutton', { name: 'Monthly rent (dollars)' }).fill('1725')
+    await page.getByRole('button', { name: 'Save terms' }).click()
+
+    await expect
+      .poll(async () => {
+        const after = await prisma.leasePayer.findUniqueOrThrow({ where: { id: payer.id } })
+        return after.stripeAmountCents
+      })
+      .toBe(172_500)
+  })
+
+  test('the lease page offers a re-sync and says which provider it used', async ({
+    page,
+  }) => {
+    const seed = await seedUnit()
+    const lease = await seedLease(seed, { status: 'ACTIVE' })
+    await prisma.leasePayer.create({
+      data: {
+        leaseId: lease.id,
+        propertyId: seed.property.id,
+        payerType: 'TENANT',
+        tenantId: seed.tenant.id,
+        stripeCustomerId: `cus_${randomUUID().replace(/-/g, '').slice(0, 24)}`,
+        stripeSubscriptionId: `sub_${randomUUID().replace(/-/g, '').slice(0, 24)}`,
+        stripeAmountCents: 150_000,
+      },
+    })
+
+    const staff = await createStaff()
+    await signIn(page, staff.email)
+    await page.goto(`/leases/${lease.id}`)
+
+    await page.getByRole('button', { name: 'Re-sync with Stripe' }).click()
+    await expect(page.getByText(/Already in step/)).toBeVisible()
+  })
+})
+
 test.describe('accessibility (§6.4, WCAG 2.1 AA)', () => {
   test('the list, the new-lease form and the detail page have no violations', async ({
     page,
