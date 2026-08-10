@@ -76,10 +76,68 @@ async function reset() {
   await prisma.lease.deleteMany({ where: { id: { in: leaseIds } } })
   await prisma.tenant.deleteMany({ where: { id: { in: tenantIds } } })
   await prisma.unit.deleteMany({ where: { propertyId: { in: propertyIds } } })
-  await prisma.property.deleteMany({ where: { id: { in: propertyIds } } })
-  await prisma.legalEntity.deleteMany({ where: { id: { in: entityIds } } })
 
-  console.info('Reset: removed previous demo data.')
+  // A DEMO PROPERTY SOMEBODY HAS ACTUALLY USED CANNOT BE DELETED, and that
+  // is the product working rather than a problem to route around: AuditLog
+  // is append-only (trigger-enforced), so deleting the property would have
+  // to cascade a SET NULL onto its audit rows, which the trigger refuses.
+  // The evidence trail deliberately outlives the entity it describes.
+  //
+  // So the reset RETIRES those rows instead - deactivated and renamed out of
+  // the way, so the fresh seed below neither collides with them nor makes
+  // the demo look like it has twelve properties. Untouched demo data, which
+  // is the ordinary case, is still deleted outright.
+  const audited = new Set(
+    (
+      await prisma.auditLog.findMany({
+        where: { propertyId: { in: propertyIds } },
+        select: { propertyId: true },
+        distinct: ['propertyId'],
+      })
+    ).map((row) => row.propertyId!),
+  )
+
+  const deletable = propertyIds.filter((id) => !audited.has(id))
+  // JobRun first. It is machine bookkeeping, not evidence (D-9's own split),
+  // so it CAN be deleted - and it has to be: its unique key is
+  // (jobType, COALESCE(propertyId,''), businessDate), so the SET NULL a
+  // property delete would cascade collides with whatever portfolio-wide run
+  // already holds that slot.
+  await prisma.jobRun.deleteMany({ where: { propertyId: { in: deletable } } })
+  await prisma.property.deleteMany({ where: { id: { in: deletable } } })
+
+  const stamp = new Date().toISOString().slice(0, 16)
+  for (const id of propertyIds.filter((propertyId) => audited.has(propertyId))) {
+    const property = await prisma.property.findUniqueOrThrow({ where: { id } })
+    await prisma.property.update({
+      where: { id },
+      data: { active: false, name: `${property.name} (retired ${stamp})` },
+    })
+  }
+
+  // Entities go only if every one of their properties did. An entity still
+  // holding a retired property has to stay, or the retired rows would be
+  // orphaned - and it is renamed for the same reason the properties are:
+  // ENTITY_NAMES is what the next run looks for.
+  for (const entityId of entityIds) {
+    const remaining = await prisma.property.count({ where: { legalEntityId: entityId } })
+    if (remaining === 0) {
+      await prisma.legalEntity.delete({ where: { id: entityId } })
+      continue
+    }
+    const entity = await prisma.legalEntity.findUniqueOrThrow({ where: { id: entityId } })
+    await prisma.legalEntity.update({
+      where: { id: entityId },
+      data: { name: `${entity.name} (retired ${stamp})` },
+    })
+  }
+
+  const retired = propertyIds.length - deletable.length
+  console.info(
+    retired > 0
+      ? `Reset: removed ${deletable.length} demo propert${deletable.length === 1 ? 'y' : 'ies'} and retired ${retired} that already carry an audit trail.`
+      : 'Reset: removed previous demo data.',
+  )
 }
 
 interface UnitPlan {
@@ -419,6 +477,21 @@ async function seedDemoData() {
           isMonthToMonth: tenantPlan.lease.isMonthToMonth ?? false,
           moveOutAt: tenantPlan.lease.moveOutAt,
           noticeGivenAt: tenantPlan.lease.noticeGivenAt,
+          // R-033/RISK-08. The inherited tenancy in this seed is the whole
+          // reason the lifecycle list includes one - it must actually carry
+          // the origin, or the demo shows a tenancy that looks like every
+          // other one and the outstanding-items path never appears.
+          // UNKNOWN, not the NOT_APPLICABLE default: nobody has established
+          // where that deposit went, which is exactly the point.
+          ...(tenantPlan.lifecycle === 'inherited-at-acquisition'
+            ? { origin: 'INHERITED' as const, depositTransferStatus: 'UNKNOWN' as const }
+            : {}),
+          // Who gave notice, where the plan says notice was given - a bare
+          // timestamp cannot tell a tenant's notice from a landlord's, and
+          // they have completely different consequences downstream.
+          ...(tenantPlan.lease.noticeGivenAt
+            ? { noticeGivenBy: 'TENANT' as const }
+            : {}),
         },
       })
 

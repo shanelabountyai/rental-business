@@ -16,6 +16,7 @@
     "./events": "./events/index.ts",
     "./filing-cabinet": "./filing-cabinet/index.ts",
     "./jurisdiction": "./jurisdiction/index.ts",
+    "./leases": "./leases/index.ts",
     "./maintenance": "./maintenance/index.ts",
     "./money": "./money/index.ts",
     "./notifications": "./notifications/index.ts",

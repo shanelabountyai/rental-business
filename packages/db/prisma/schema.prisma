@@ -74,13 +74,65 @@ enum UnitStatus {
   DOWN
 }
 
+/// The lease lifecycle (LEASE-06, R-033).
+///
+/// NOTE WHAT IS ABSENT: there is no NOTICE_GIVEN state. A tenancy under
+/// notice is still a live tenancy - rent is still due, repairs are still
+/// owed, entry notice still applies - and modelling it as a separate status
+/// would mean every "is this lease in force?" check in the product had to
+/// remember to include it. Notice is a FACT about an active lease
+/// (`Lease.noticeGivenAt`), not a state of it. The backlog's
+/// "pending / active / notice-given / ended" describes what a PM sees on
+/// screen, which is exactly how it is rendered.
 enum LeaseStatus {
   DRAFT
   PENDING_SIGNATURE
   ACTIVE
   MONTH_TO_MONTH
+  /// Ran its course: the term expired or the tenant moved out as agreed.
   ENDED
+  /// Cut short - eviction, early termination, mutual release. The reason is
+  /// required (`terminationReason`), because "ended" and "we had to end it"
+  /// are different facts to anybody reading the record later.
   TERMINATED
+}
+
+/// Who gave notice to end a tenancy (R-033).
+enum NoticeParty {
+  TENANT
+  LANDLORD
+}
+
+/// Where a tenancy came from (RISK-08, R-033).
+enum LeaseOrigin {
+  /// The ordinary path: an inquiry, an application, screening, a signature.
+  APPLICATION
+  /// Inherited with the building at acquisition. There is no application and
+  /// there never will be one - the paperwork that exists is whatever the
+  /// seller handed over, which is frequently a photocopy and sometimes
+  /// nothing. Every gap this creates is tracked rather than papered over.
+  INHERITED
+}
+
+/// Whether the security deposit money actually reached us (RISK-08).
+///
+/// The distinction is not bookkeeping trivia. In most states the CURRENT
+/// owner owes the deposit back at move-out regardless of whether the seller
+/// ever handed it over - so a tenancy where this is UNKNOWN is an
+/// unquantified liability sitting on the balance sheet, and the only moment
+/// it is cheap to establish is at acquisition while the seller is still
+/// answering the phone.
+enum DepositTransferStatus {
+  /// We collected it ourselves. The ordinary case.
+  NOT_APPLICABLE
+  /// Inherited and not yet established. The state that costs money.
+  UNKNOWN
+  /// The seller handed it over - as cash, or as a credit at closing. Both
+  /// mean the same thing for the question that matters: we hold it.
+  TRANSFERRED
+  /// The seller kept it. We are very likely still liable for it, so this is
+  /// recorded rather than treated as "no deposit".
+  NOT_TRANSFERRED
 }
 
 /// Who owes a portion of a lease's rent. A voucher lease has a
@@ -780,8 +832,38 @@ model Lease {
   utilityResponsibility Json?
   moveInAt          DateTime?
   moveOutAt         DateTime?
+  /// Notice to end the tenancy has been given - by either side. A FACT
+  /// about an active lease, not a status of it; see LeaseStatus's own
+  /// comment for why.
   noticeGivenAt     DateTime?
+  /// Who gave it. A tenant giving notice and a landlord giving notice have
+  /// completely different downstream consequences (LEASE-09's renewal
+  /// flags, R-062's notice periods), and a bare timestamp cannot tell them
+  /// apart.
+  noticeGivenBy     NoticeParty?
   terminationReason String?
+
+  /// R-033. Where this tenancy came from - see LeaseOrigin.
+  origin            LeaseOrigin @default(APPLICATION)
+  /// RISK-08. Defaults to NOT_APPLICABLE, which is correct for the ordinary
+  /// path and is exactly why the inherited intake refuses to accept it: an
+  /// inherited tenancy whose deposit status was never stated would sit here
+  /// looking settled.
+  depositTransferStatus DepositTransferStatus @default(NOT_APPLICABLE)
+  /// What the seller actually said, in whoever's words. Free text on
+  /// purpose - "Jim says it was credited at closing, chasing the settlement
+  /// statement" is the real shape of this information.
+  depositTransferNote   String?
+  /// RISK-08's estoppel-style confirmation: the tenant has agreed that the
+  /// terms recorded here are the terms they actually have. Until this is
+  /// set, an inherited lease's rent and dates are our best reading of
+  /// somebody else's paperwork, not an agreed fact.
+  estoppelConfirmedAt   DateTime?
+
+  /// When the lease actually became ACTIVE. Deliberately separate from
+  /// `startsOn`: a lease activated three days late still started on the
+  /// first, and an audit that conflated the two would misdate the tenancy.
+  activatedAt       DateTime?
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 

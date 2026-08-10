@@ -216,6 +216,47 @@ export const AUDIT_ACTIONS = [
   /// evidence to an incident is itself a decision worth a trail: it is a
   /// human saying "this is about that", not something the system inferred.
   'message.attached_to_workorder',
+
+  /// R-033: a tenancy record was created. Carries `origin`, because an
+  /// INHERITED lease and an APPLICATION one are different claims about what
+  /// evidence exists behind the terms.
+  'lease.created',
+
+  /// R-033: the terms changed - rent, dates, deposit, utilities. The
+  /// before/after pair is the whole point: "the rent was always $1,600" is
+  /// a claim this entry either supports or refutes.
+  'lease.updated',
+
+  /// R-033: the lease moved through its lifecycle. A separate action from
+  /// `lease.updated` because a status change has consequences an edit does
+  /// not - a unit becomes occupied, rent starts being owed, a deposit clock
+  /// eventually starts.
+  'lease.status_changed',
+
+  /// R-033: the tenancy was cut short - eviction, early termination,
+  /// mutual release. Its OWN action rather than a `lease.status_changed`
+  /// with a particular payload, so it can sit in REASON_REQUIRED: the
+  /// writer itself then refuses to record a termination with no stated
+  /// reason, which is the same call R-024 made splitting `workorder.denied`
+  /// out from `workorder.approved`. A conditional "required only when the
+  /// target is TERMINATED" is not something that set can express.
+  'lease.terminated',
+
+  /// R-033: notice to end the tenancy was recorded, by either side. The
+  /// date this writes drives statutory clocks (R-062), so who gave it and
+  /// exactly when are both on the entry.
+  'lease.notice_given',
+
+  /// R-033: somebody was added to or removed from the lease. Adding an
+  /// occupant changes who is jointly liable and who can reach the portal;
+  /// adding a guarantor changes who can be pursued and nothing else.
+  'lease.party_changed',
+
+  /// R-033 (RISK-08): an inherited tenancy's outstanding items moved - the
+  /// tenant confirmed the terms, or the deposit position was established.
+  /// Recorded because each is a fact somebody asserted on a date, and at
+  /// move-out the date is what a dispute turns on.
+  'lease.intake_resolved',
 ] as const
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number]
@@ -275,6 +316,7 @@ export const REASON_REQUIRED: ReadonlySet<AuditAction> = new Set([
   'document.delete_marked',
   'entry_notice.overridden',
   'application_order.deviated',
+  'lease.terminated',
 ])
 
 export function requiresReason(action: AuditAction): boolean {

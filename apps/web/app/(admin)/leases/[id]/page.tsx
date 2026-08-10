@@ -1,0 +1,285 @@
+import { formatPhone } from '@rental/core/comms'
+import {
+  CONDITION_BASELINE_DOCUMENT_TYPE,
+  type LeaseStatusValue,
+  depositTransferLabel,
+  leaseStatusLabel,
+  leaseTransition,
+} from '@rental/core/leases'
+import { formatCents } from '@rental/core/money'
+import Link from 'next/link'
+import { notFound } from 'next/navigation'
+import { IntakePanel } from '@/components/leases/intake-panel.tsx'
+import { LeaseForm } from '@/components/leases/lease-form.tsx'
+import { LifecyclePanel } from '@/components/leases/lifecycle-panel.tsx'
+import { PartiesPanel } from '@/components/leases/parties-panel.tsx'
+import { actorCan, propertyResource, requireScope } from '@/lib/auth/guard.ts'
+import {
+  addGuarantor,
+  addLeaseTenant,
+  changeLeaseStatus,
+  recordLeaseNotice,
+  removeLeaseTenant,
+  resolveIntakeItem,
+  updateLeaseTerms,
+} from '@/lib/leases/actions.ts'
+import { outstandingIntakeGaps } from '@/lib/leases/intake.ts'
+import { getLease, selectableTenants } from '@/lib/leases/queries.ts'
+import { currentScope } from '@/lib/scope/current-scope.ts'
+
+export const metadata = { title: 'Lease — Rental Operations' }
+
+// One tenancy in full (LEASE-06, RISK-08, R-033).
+
+/// Every transition the machine would currently allow, asked once here so
+/// the UI never re-implements the rules. `leaseTransition` is consulted
+/// with the real facts, which is why an incomplete lease shows no "make it
+/// active" button rather than one that refuses when pressed.
+const OFFER_LABELS: Record<string, string> = {
+  PENDING_SIGNATURE: 'Send for signature',
+  ACTIVE: 'Make this lease active',
+  MONTH_TO_MONTH: 'Roll over to month-to-month',
+  ENDED: 'Record that the tenancy ended',
+  TERMINATED: 'Terminate this tenancy',
+}
+
+const UTILITY_LABELS: Record<string, string> = {
+  electricity: 'Electricity',
+  gas: 'Gas',
+  water: 'Water',
+  sewer: 'Sewer',
+  trash: 'Trash',
+  internet: 'Internet',
+  lawn: 'Lawn care',
+  pest: 'Pest control',
+}
+
+export default async function LeaseDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string }>
+}) {
+  const { id } = await params
+  const { actor } = await requireScope('lease.read')
+  const scope = await currentScope(actor)
+
+  const lease = await getLease(id, scope)
+  // Out of scope and does not exist are indistinguishable - the same call
+  // every other detail page in this product makes.
+  if (!lease) notFound()
+
+  const canWrite = await actorCan('lease.write', propertyResource(lease.property))
+
+  const facts = {
+    status: lease.status,
+    tenantCount: lease.leaseTenants.length,
+    rentCents: lease.rentCents,
+    startsOn: lease.startsOn,
+    endsOn: lease.endsOn,
+    isMonthToMonth: lease.isMonthToMonth,
+  }
+  const offers = (
+    ['PENDING_SIGNATURE', 'ACTIVE', 'MONTH_TO_MONTH', 'ENDED', 'TERMINATED'] as const
+  )
+    .filter((to) => {
+      // TERMINATED always needs a reason, which the form collects - so it is
+      // asked WITH one, or it would never be offered.
+      const decision = leaseTransition(facts, to, to === 'TERMINATED' ? 'x' : undefined)
+      return decision.allowed
+    })
+    .map((to: LeaseStatusValue) => ({
+      to,
+      label: OFFER_LABELS[to] ?? to,
+      needsReason: to === 'TERMINATED',
+      // Bound HERE, on the server. A `(to) => action.bind(...)` factory
+      // handed to the client component instead is refused at runtime -
+      // only a 'use server' export has an identity the client can call.
+      action: changeLeaseStatus.bind(null, lease.id, to),
+    }))
+
+  const [gaps, tenants] = await Promise.all([
+    outstandingIntakeGaps(lease),
+    canWrite ? selectableTenants() : Promise.resolve([]),
+  ])
+
+  const alreadyOn = new Set(lease.leaseTenants.map((lt) => lt.tenantId))
+  const utilities = (lease.utilityResponsibility ?? {}) as Record<string, string>
+  const baselinePhotos = lease.documents.filter(
+    (doc) => doc.type === CONDITION_BASELINE_DOCUMENT_TYPE,
+  )
+
+  return (
+    <div className="flex max-w-2xl flex-col gap-6">
+      <header className="flex flex-col gap-1">
+        <Link
+          href="/leases"
+          className="text-muted-foreground hover:text-foreground focus-visible:ring-ring w-fit text-sm underline underline-offset-2 focus-visible:ring-2 focus-visible:outline-none"
+        >
+          ← All leases
+        </Link>
+        <h1 className="text-2xl font-semibold tracking-tight">
+          {lease.property.name} — {lease.unit.name}
+        </h1>
+        <p className="text-muted-foreground text-sm">
+          {leaseStatusLabel(lease.status)}
+          {lease.noticeGivenAt && ' · under notice'}
+          {lease.origin === 'INHERITED' && ' · inherited at acquisition'}
+        </p>
+      </header>
+
+      <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm sm:grid-cols-3">
+        <dt className="text-muted-foreground">Term</dt>
+        <dd className="col-span-1 sm:col-span-2">
+          {lease.startsOn.toISOString().slice(0, 10)}
+          {lease.endsOn
+            ? ` to ${lease.endsOn.toISOString().slice(0, 10)}`
+            : ' — month-to-month, no end date'}
+        </dd>
+        <dt className="text-muted-foreground">Rent</dt>
+        <dd className="col-span-1 sm:col-span-2">
+          {formatCents(lease.rentCents)} due on day {lease.rentDueDay}
+          {lease.mtmRentCents != null &&
+            ` · ${formatCents(lease.mtmRentCents)} on rollover`}
+        </dd>
+        <dt className="text-muted-foreground">Deposit</dt>
+        <dd className="col-span-1 sm:col-span-2">
+          {formatCents(lease.depositCents)}
+          {lease.origin === 'INHERITED' && (
+            <>
+              {' · '}
+              {depositTransferLabel(lease.depositTransferStatus)}
+              {lease.depositTransferNote && ` (${lease.depositTransferNote})`}
+            </>
+          )}
+        </dd>
+        {Object.keys(utilities).length > 0 && (
+          <>
+            <dt className="text-muted-foreground">Utilities</dt>
+            <dd className="col-span-1 sm:col-span-2">
+              {Object.entries(utilities)
+                .filter(([, payer]) => payer !== 'NOT_APPLICABLE')
+                .map(
+                  ([utility, payer]) =>
+                    `${UTILITY_LABELS[utility] ?? utility}: ${payer === 'TENANT' ? 'tenant' : 'landlord'}`,
+                )
+                .join(' · ')}
+            </dd>
+          </>
+        )}
+        {lease.noticeGivenAt && (
+          <>
+            <dt className="text-muted-foreground">Notice</dt>
+            <dd className="col-span-1 sm:col-span-2">
+              Given by {lease.noticeGivenBy === 'TENANT' ? 'the tenant' : 'us'} on{' '}
+              {lease.noticeGivenAt.toISOString().slice(0, 10)}
+            </dd>
+          </>
+        )}
+        {lease.terminationReason && (
+          <>
+            <dt className="text-muted-foreground">Terminated because</dt>
+            <dd className="col-span-1 sm:col-span-2">{lease.terminationReason}</dd>
+          </>
+        )}
+      </dl>
+
+      {lease.origin === 'INHERITED' && (
+        <IntakePanel
+          gaps={gaps}
+          canWrite={canWrite}
+          resolveAction={resolveIntakeItem.bind(null, lease.id)}
+        />
+      )}
+
+      {baselinePhotos.length > 0 && (
+        <section className="flex flex-col gap-2 rounded-md border p-4">
+          <h2 className="text-sm font-semibold">Condition as found</h2>
+          <ul className="flex flex-col gap-1 text-sm">
+            {baselinePhotos.map((photo) => (
+              <li key={photo.id}>
+                <a
+                  href={`/api/documents/${photo.id}/file`}
+                  className="underline underline-offset-4"
+                >
+                  {photo.fileName}
+                </a>
+                <span className="text-muted-foreground text-xs">
+                  {' · taken '}
+                  {(photo.capturedAt ?? photo.createdAt).toISOString().slice(0, 10)}
+                  {!photo.capturedAt && ' (upload date — no EXIF timestamp)'}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      <PartiesPanel
+        canWrite={canWrite}
+        tenants={lease.leaseTenants.map((lt) => ({
+          id: lt.id,
+          name: `${lt.tenant.firstName} ${lt.tenant.lastName}`,
+          contact:
+            [lt.tenant.email, lt.tenant.phone ? formatPhone(lt.tenant.phone) : null]
+              .filter(Boolean)
+              .join(' · ') || 'No contact details on file',
+          isPrimary: lt.isPrimary,
+        }))}
+        guarantors={lease.guarantors.map((g) => ({
+          id: g.id,
+          name: `${g.firstName} ${g.lastName}`,
+          contact:
+            [g.email, g.phone ? formatPhone(g.phone) : null].filter(Boolean).join(' · ') ||
+            'No contact details on file',
+        }))}
+        selectableTenants={tenants
+          .filter((t) => !alreadyOn.has(t.id))
+          .map((t) => ({
+            id: t.id,
+            label: `${t.firstName} ${t.lastName}${t.email ? ` (${t.email})` : ''}`,
+          }))}
+        addTenant={addLeaseTenant.bind(null, lease.id)}
+        removeTenant={removeLeaseTenant.bind(null, lease.id)}
+        addGuarantor={addGuarantor.bind(null, lease.id)}
+      />
+
+      {canWrite && (
+        <LifecyclePanel
+          offers={offers}
+          underNotice={lease.noticeGivenAt != null}
+          noticeSummary={
+            lease.noticeGivenAt
+              ? `Notice was given by ${
+                  lease.noticeGivenBy === 'TENANT' ? 'the tenant' : 'us'
+                } on ${lease.noticeGivenAt.toISOString().slice(0, 10)}. The tenancy is still running until it ends.`
+              : null
+          }
+          recordNotice={recordLeaseNotice.bind(null, lease.id)}
+        />
+      )}
+
+      {canWrite && (
+        <section aria-labelledby="terms" className="flex flex-col gap-4 border-t pt-4">
+          <h2 id="terms" className="text-lg font-semibold">
+            Terms
+          </h2>
+          <LeaseForm
+            action={updateLeaseTerms.bind(null, lease.id)}
+            submitLabel="Save terms"
+            defaults={{
+              startsOn: lease.startsOn.toISOString().slice(0, 10),
+              endsOn: lease.endsOn?.toISOString().slice(0, 10),
+              rentDollars: String(lease.rentCents / 100),
+              depositDollars: String(lease.depositCents / 100),
+              rentDueDay: String(lease.rentDueDay),
+              isMonthToMonth: lease.isMonthToMonth,
+              mtmRentDollars:
+                lease.mtmRentCents != null ? String(lease.mtmRentCents / 100) : undefined,
+              utilities,
+            }}
+          />
+        </section>
+      )}
+    </div>
+  )
+}

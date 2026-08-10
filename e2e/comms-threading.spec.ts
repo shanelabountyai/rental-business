@@ -267,6 +267,13 @@ test.describe('the work order timeline', () => {
     })
     expect(message.direction).toBe('INBOUND')
     expect(message.channel).toBe('PORTAL')
+
+    // Closed, like every other spec that opens one. A context left open
+    // survives the test and holds a live page against the shared browser
+    // for the rest of the run - which is both a resource leak across ~500
+    // tests and, seen once in a full run, a snapshot of somebody else's
+    // page attributed to an unrelated failing test.
+    await vendorContext.close()
   })
 
   test('staff can attach a stray tenant text that arrived before anyone tagged it', async ({
@@ -378,5 +385,7 @@ test.describe('accessibility (§6.4, WCAG 2.1 AA)', () => {
       .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
       .analyze()
     expect(results.violations, 'vendor message thread').toEqual([])
+
+    await vendorContext.close()
   })
 })
