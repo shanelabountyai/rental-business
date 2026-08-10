@@ -985,7 +985,7 @@ Not one statutory literal was added. Every grace day, rate and ceiling is read f
 - **Two flaky e2e tests, both waiting on a server action.** `expect` still carried Playwright's 5-second default while the tests themselves were allowed 60 — so any assertion waiting on a `<form action>` round trip plus `revalidatePath` plus an RSC re-render could time out under two projects at five workers with nothing actually wrong. Raised to 15s, which is the whole class rather than the two tests that happened to show it.
 
 ## R-036b — Golden Path 1 repair
-**Commit:** `PENDING`  ·  **Date:** 2026-08-10
+**Commit:** `52c88e2`  ·  **Date:** 2026-08-10
 
 **What it built.** Nothing new. This item is the repair of four defects found by walking **Demo checkpoint 1** end to end for the first time — the checkpoint the backlog defines after R-032 and that nothing had ever run. All four sat in items already marked ✅, and the checkpoint as written did not complete.
 
