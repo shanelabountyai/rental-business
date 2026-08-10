@@ -958,7 +958,7 @@ Not one statutory literal was added. Every grace day, rate and ceiling is read f
 
 
 ## R-036 — Subscription lifecycle
-**Commit:** `PENDING`  ·  **Date:** 2026-08-10
+**Commit:** `b0534ca`  ·  **Date:** 2026-08-10
 
 **What it built.** The half of D-11 that pays off. `packages/core/billing/lifecycle.ts` decides what a lease's state means for its subscription — provision, re-price, pause, resume, cancel, or nothing — and the app layer performs it. A **real Stripe driver** now exists alongside the simulator, selected by whether `STRIPE_SECRET_KEY` is set. Lease activation provisions; a lease ending cancels, effective at the move-out date; a rent change re-prices. A nightly billing sweep in the cron makes Stripe agree with every live lease, and the **Money screen** became the Billing Runs screen the backlog asks for: per-payer outcomes, failures first, with a re-sync action on both it and the lease page.
 
