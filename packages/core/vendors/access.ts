@@ -13,15 +13,35 @@
 // orders, not any other unit. Every field below is here because a plumber
 // standing at the door cannot do the work without it.
 
-/// Statuses where a dispatched link is still live. A vendor whose work order
-/// has been closed, canceled, or handed to somebody else should find a dead
-/// link, not a live one they can still upload against - the link outliving
-/// its own job is how a fired vendor keeps a gate code.
+/**
+ * Statuses where a dispatched link is still live. A vendor whose work order
+ * has been closed, canceled, or handed to somebody else should find a dead
+ * link, not a live one they can still upload against - the link outliving
+ * its own job is how a fired vendor keeps a gate code.
+ *
+ * `VERIFIED` IS ACTIONABLE, and its absence here was a real bug. The tenant
+ * answering "yes, it's fixed" is not the vendor's business and must not end
+ * their access: `vendorMayUpload()` below says in its own comment that a
+ * vendor keeps uploading through completion "because the invoice usually
+ * lands after the work is marked done", and the tenant typically taps the
+ * same evening the vendor finishes. Killing the link there means the invoice
+ * gets phoned in and re-keyed by hand - the two outcomes D-6 and D-19 exist
+ * to prevent. `CLOSED` is where the link dies, because by then the money has
+ * been recorded.
+ */
 const ACTIONABLE_STATUSES: ReadonlySet<string> = new Set([
+  // A job the office is still deciding about. Reachable by a dispatched
+  // vendor only in one way - their own invoice beat the approved amount and
+  // sent it back (R-037) - and locking them out at exactly that moment would
+  // mean the act of billing us destroyed their ability to bill us. Not
+  // reachable before dispatch, because there is no vendor on the work order
+  // to mint a token for.
+  'PENDING_APPROVAL',
   'ASSIGNED',
   'SCHEDULED',
   'IN_PROGRESS',
   'WORK_COMPLETE',
+  'VERIFIED',
   'ON_HOLD_WARRANTY',
   'WAITING_ON_TENANT',
 ])
@@ -88,4 +108,30 @@ export function vendorMayRespond(vendorResponse: string | null): boolean {
 /// lands after the work is marked done.
 export function vendorMayUpload(vendorResponse: string | null): boolean {
   return vendorResponse === 'ACCEPTED' || vendorResponse === 'PROPOSED_TIME'
+}
+
+/**
+ * Whether "mark the work finished" still means anything on this job.
+ *
+ * A STATUS question, not a permission one - `vendorMayUpload` already
+ * decided the vendor is entitled to act. This is about whether the claim is
+ * still live: the work order moves FORWARD through the vendor's completion,
+ * and there is no status past it that marking complete again should return
+ * it to.
+ *
+ * Written the moment `VERIFIED` and `PENDING_APPROVAL` became actionable
+ * (R-036b), because the action's own guard only checked `WORK_COMPLETE`.
+ * On a VERIFIED job it would have thrown away the tenant's confirmation and
+ * re-asked them; on a PENDING_APPROVAL one it would have wiped the approval
+ * gate their own over-ceiling invoice had just raised. A vendor cannot undo
+ * an answer somebody else gave.
+ */
+export function vendorMayMarkComplete(status: string): boolean {
+  return (
+    status === 'ASSIGNED' ||
+    status === 'SCHEDULED' ||
+    status === 'IN_PROGRESS' ||
+    status === 'ON_HOLD_WARRANTY' ||
+    status === 'WAITING_ON_TENANT'
+  )
 }

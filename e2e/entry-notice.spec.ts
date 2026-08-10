@@ -102,12 +102,30 @@ async function seedWorkOrder(options: { priority?: string } = {}) {
   return { property, unit, tenant, workOrder }
 }
 
-/// `datetime-local` value N hours from now, in the browser's own local time
-/// (the input is naive, and the server parses it the same way).
+/// `datetime-local` value N hours from now. The input is naive wall-clock,
+/// and the server reads it as the PROPERTY's wall clock - see the timezone
+/// test below for why that is not the same as the server's.
 function localDateTime(hoursFromNow: number): string {
   const at = new Date(Date.now() + hoursFromNow * 3_600_000)
   const pad = (n: number) => String(n).padStart(2, '0')
   return `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())}T${pad(at.getHours())}:${pad(at.getMinutes())}`
+}
+
+/// What a stored instant reads as on a given wall clock. Computed with Intl
+/// directly rather than with the app's own `utcToWallClock`, so a bug in
+/// that helper cannot make this assertion agree with it (D-27's principle).
+function wallClockIn(instant: Date, timeZone: string): string {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(instant)
+  const get = (type: string) => parts.find((p) => p.type === type)!.value
+  return `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}`
 }
 
 async function signIn(page: import('@playwright/test').Page, email: string) {
@@ -208,6 +226,51 @@ test.describe('entry-notice compliance', () => {
       where: { action: 'notice.served', entityId: notice.id },
     })
     expect(entry.actorType).toBe('STAFF')
+  })
+
+  test('stores the window on the PROPERTY’s clock, not the server’s', async ({ page }) => {
+    // The bug this pins: `scheduledStart` arrives from a `datetime-local`
+    // input with no offset, and was parsed with a bare `new Date(...)` - so
+    // the server's own timezone decided the instant. The notice body then
+    // renders it property-local, so a PM booking 9:00 AM on a Texas property
+    // served a legal entry notice reading "between 4:00 AM and 6:00 AM" on a
+    // UTC host. A wrong-hours notice on a document whose only purpose is to
+    // be defensible later.
+    const { workOrder, property } = await seedWorkOrder()
+    const staff = await createStaff()
+    await signIn(page, staff.email)
+
+    // A fixed hour, well clear of the notice period, and NOT midnight - so a
+    // date-only comparison could not pass by accident.
+    const day = new Date(Date.now() + 5 * 86_400_000).toISOString().slice(0, 10)
+    const start = `${day}T09:00`
+    const end = `${day}T11:00`
+
+    await page.goto(`/workorders/${workOrder.id}`)
+    await page.getByLabel('Window starts').fill(start)
+    await page.getByLabel('Window ends').fill(end)
+    await page.getByLabel('What the visit is for').fill('Replace the water heater')
+    await page.getByRole('button', { name: 'Schedule and notify' }).click()
+
+    await expect
+      .poll(
+        async () => (await prisma.workOrder.findUnique({ where: { id: workOrder.id } }))?.status,
+        { timeout: 15_000 },
+      )
+      .toBe('SCHEDULED')
+
+    const updated = await prisma.workOrder.findUniqueOrThrow({ where: { id: workOrder.id } })
+    expect(wallClockIn(updated.scheduledStart!, property.timezone)).toBe(start)
+    expect(wallClockIn(updated.scheduledEnd!, property.timezone)).toBe(end)
+
+    // And the served notice agrees, because it renders from that instant in
+    // the same zone. This is the half a tenant actually reads.
+    const notice = await prisma.notice.findFirstOrThrow({
+      where: { propertyId: property.id, type: 'ENTRY_NOTICE' },
+      orderBy: { createdAt: 'desc' },
+    })
+    noticeIds.push(notice.id)
+    expect(notice.bodyText).toContain('9:00')
   })
 
   test('REFUSES a same-day window and writes nothing until a reason is given', async ({

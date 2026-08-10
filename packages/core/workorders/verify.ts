@@ -85,6 +85,11 @@ export interface CloseFacts {
   actualLaborCents: number | null
   actualMaterialsCents: number | null
   invoiceCents: number | null
+  /// True when what the job cost has run past what was approved, by more
+  /// than the entity's tolerance. Computed by the caller with
+  /// `reapprovalCheck()` from packages/core/approvals, because the tolerance
+  /// is entity policy and this module has no business reading it.
+  overApproved?: boolean
 }
 
 export type CloseRefusal =
@@ -96,6 +101,11 @@ export type CloseRefusal =
   | 'tenant_says_unresolved'
   /// No money recorded, and nobody said it was free. See the comment.
   | 'no_cost_recorded'
+  /// The bill beat the approval and nobody has signed off on the difference.
+  /// MAINT-04's third criterion, which until now only fired on the rare path
+  /// where a PM hand-typed actuals - so the ordinary path (a vendor uploads
+  /// an invoice, the PM closes) let any amount through against any approval.
+  | 'over_approved'
 
 export interface CloseDecision {
   allowed: boolean
@@ -137,6 +147,13 @@ export function closeDecision(
     (facts.invoiceCents ?? 0)
   if (recorded === 0 && !zeroCostAcknowledged) {
     return { allowed: false, refusal: 'no_cost_recorded' }
+  }
+  // Last, and a hard refusal rather than a warning. Everything above is
+  // about whether the job is finished; this is about whether anybody agreed
+  // to pay for it. Closing here would book an amount the owner never
+  // approved and leave no trace that the difference was ever noticed.
+  if (facts.overApproved === true) {
+    return { allowed: false, refusal: 'over_approved' }
   }
 
   return {

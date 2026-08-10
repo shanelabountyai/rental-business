@@ -1,13 +1,44 @@
 import 'server-only'
 
+import { resolvePolicy } from '@rental/core/approvals'
 import { prisma } from '@rental/db'
 import type { ResolvedScope } from '@/lib/scope/current-scope.ts'
 import { getOperationalData } from '@/lib/operational/queries.ts'
+
+/**
+ * The entity's policy for a work order, resolved through its property.
+ *
+ * Read fresh on every decision rather than captured when the work order was
+ * created: an owner who tightens their threshold means it from now on, and a
+ * stale copy would let already-open work orders through under the old number.
+ *
+ * Lives here rather than in approvals.ts because closeWorkOrder needs it too
+ * and approvals.ts is `'use server'` - exporting it from there would publish
+ * a policy lookup as a client-callable endpoint.
+ */
+export async function policyFor(propertyId: string) {
+  const property = await prisma.property.findUniqueOrThrow({
+    where: { id: propertyId },
+    select: { legalEntity: true },
+  })
+  return resolvePolicy(property.legalEntity)
+}
 
 // Reads for work orders (MAINT-03, PROP-06, R-024). Scoped by ResolvedScope,
 // the same switcher-intersected-with-RBAC pattern R-022's maintenance
 // queries and R-011's task queue already use.
 
+/**
+ * Everything that is still somebody's problem.
+ *
+ * `VERIFIED` IS OPEN. The tenant confirming the repair is not the end of the
+ * job - the invoice usually has not arrived, nothing has been booked, and
+ * `CLOSED` is a decision a PM makes with a number in front of them. Leaving
+ * it out (as this list originally did) made the tenant's one tap delete the
+ * work order from every screen: off this list, absent from
+ * `closedJobCostsForProperty` which filters `CLOSED`, and reachable only by
+ * typing its URL. The money still to be recorded went with it.
+ */
 const OPEN_STATUSES = [
   'SUBMITTED',
   'TRIAGED',
@@ -17,6 +48,7 @@ const OPEN_STATUSES = [
   'SCHEDULED',
   'IN_PROGRESS',
   'WORK_COMPLETE',
+  'VERIFIED',
   'ON_HOLD_WARRANTY',
   'WAITING_ON_TENANT',
 ] as const

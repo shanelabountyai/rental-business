@@ -77,10 +77,14 @@ export function MaintenanceSpendSection({ jobs }: { jobs: ClosedJob[] }) {
             ))}
           </ul>
 
+          {/* No backlog id in the copy. An owner reading "R-050" learns
+              nothing and is being shown our issue tracker; what they need to
+              know is that this list is partial and that no date range has been
+              applied to it. */}
           {jobs.length > 10 && (
             <p className="text-muted-foreground text-xs">
-              Showing the 10 most recent of {jobs.length}. The full per-property
-              spend report is <code className="font-mono">R-050</code>.
+              Showing the 10 most recent of {jobs.length} closed jobs, all time.
+              Filtering by period is not built yet.
             </p>
           )}
         </>

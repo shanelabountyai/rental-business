@@ -55,6 +55,7 @@ Migrations are hand-written SQL — triggers, partial indexes and backfills do n
 - **`onClick` is inert until hydration.** Anything that must work on first paint is a real `<form action>` + `useActionState`, not a button with a handler.
 - **Prisma `@db.Date` comes back as UTC midnight.** Reading it with local `getDate()`/`getMonth()` is off by one for any server west of UTC — that is exactly how `daysPastDue` once reported a day late *on* the due date. Date-only values are `BusinessDate` (a `YYYY-MM-DD` string, `packages/core/scheduling/local-time.ts`); timestamps are real `Date`s. Do not mix them.
 - **A simulated adapter must not agree with us by construction** (D-27). If the simulator answers from the same column the decision compares against, every "they differ" branch is dead code that no test can reach. Give the simulator its own state for what it was *told*.
+- **Adding a value to a status enum is never one edit.** Grep every list and literal that reads it before moving on. `VERIFIED` existed in the enum and in the write that set it, and in neither of the two lists that read it — the tenant's confirmation deleted the job from every screen and killed the vendor's link (R-036b). Fixing that made two more statuses reachable on the vendor page, where a `=== 'WORK_COMPLETE'` guard was then wrong in two files. Each of these is invisible from inside the item that introduces it. **Walk the demo checkpoint when a milestone closes** (D-28) — that is how all of them were found.
 
 ## Test suite rules
 

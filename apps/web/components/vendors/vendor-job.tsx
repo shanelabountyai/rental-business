@@ -1,5 +1,6 @@
 'use client'
 
+import { vendorMayMarkComplete } from '@rental/core/vendors'
 import { useActionState, useState } from 'react'
 import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
 import { TextField } from '@/components/form/field.tsx'
@@ -367,13 +368,18 @@ export function VendorJob({
               <SubmitButton label="Upload" />
             </form>
 
-            {job.status !== 'WORK_COMPLETE' && (
+            {/* The same rule the action enforces, not a second `!==
+                'WORK_COMPLETE'` guess. A VERIFIED job is one the tenant has
+                already confirmed and a PENDING_APPROVAL one is with the
+                office - both are now reachable here (R-036b), and offering
+                "mark the work finished" on either would invite the vendor to
+                undo somebody else's answer. */}
+            {vendorMayMarkComplete(job.status) ? (
               <form action={completeFormAction} className="border-t pt-4">
                 <FormAlerts state={completeState} />
                 <SubmitButton label="Mark the work finished" />
               </form>
-            )}
-            {job.status === 'WORK_COMPLETE' && (
+            ) : (
               <p className="text-muted-foreground border-t pt-4 text-sm">
                 Marked finished. Thanks{job.invoiceUploaded ? '' : ' - send the invoice when you have it'}.
               </p>

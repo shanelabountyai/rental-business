@@ -8,6 +8,7 @@ import {
   validateVendorResponse,
   vendorHasNotResponded,
   vendorLinkAccess,
+  vendorMayMarkComplete,
   vendorMayRespond,
   vendorMayUpload,
 } from './index.ts'
@@ -50,7 +51,7 @@ describe('vendorLinkAccess', () => {
   })
 
   it('REFUSES on a closed or canceled work order - the link must not outlive the job', () => {
-    for (const status of ['CLOSED', 'CANCELED', 'VERIFIED', 'INVOICED']) {
+    for (const status of ['CLOSED', 'CANCELED', 'INVOICED']) {
       expect(vendorLinkAccess({ ...base, status }), status).toEqual({
         ok: false,
         reason: 'not_actionable',
@@ -58,12 +59,32 @@ describe('vendorLinkAccess', () => {
     }
   })
 
+  it('STAYS LIVE once the tenant has confirmed the repair', () => {
+    // This assertion used to say the opposite, and the opposite was a bug.
+    // VERIFIED means the TENANT answered "yes, it's fixed" - typically the
+    // same evening the vendor finished, and days before the invoice arrives.
+    // Killing the link there meant the vendor opened it on Monday, found
+    // "this link isn't working", and phoned the invoice in for somebody to
+    // re-key: the exact failure D-6 and D-19 exist to prevent. CLOSED is
+    // where the link dies, because by then the money has been recorded.
+    expect(vendorLinkAccess({ ...base, status: 'VERIFIED' })).toEqual({ ok: true })
+  })
+
+  it('STAYS LIVE when the vendor’s own invoice sent the job back for approval', () => {
+    // Found by the test for that path failing: pushing an over-ceiling job
+    // to PENDING_APPROVAL dropped it out of this set, so the act of
+    // submitting an invoice destroyed the link the invoice arrived on.
+    expect(vendorLinkAccess({ ...base, status: 'PENDING_APPROVAL' })).toEqual({ ok: true })
+  })
+
   it('stays live across every status where the vendor still has something to do', () => {
     for (const status of [
+      'PENDING_APPROVAL',
       'ASSIGNED',
       'SCHEDULED',
       'IN_PROGRESS',
       'WORK_COMPLETE',
+      'VERIFIED',
       'ON_HOLD_WARRANTY',
       'WAITING_ON_TENANT',
     ]) {
@@ -87,6 +108,39 @@ describe('vendorMayRespond / vendorMayUpload', () => {
     expect(vendorMayUpload('PROPOSED_TIME')).toBe(true)
     expect(vendorMayUpload('DECLINED')).toBe(false)
     expect(vendorMayUpload(null)).toBe(false)
+  })
+
+  it('REFUSES to re-mark a job the tenant already confirmed', () => {
+    // The bug that widening ACTIONABLE_STATUSES would otherwise have
+    // created: the action's guard only checked WORK_COMPLETE, so a vendor
+    // on a now-reachable VERIFIED job could flip it back and throw away the
+    // tenant's answer - re-asking a tenant who had already replied.
+    expect(vendorMayMarkComplete('VERIFIED')).toBe(false)
+    expect(vendorMayMarkComplete('WORK_COMPLETE')).toBe(false)
+  })
+
+  it('REFUSES while the office is reviewing an over-ceiling invoice', () => {
+    // Same shape: marking complete from PENDING_APPROVAL would wipe the
+    // approval gate the vendor's own invoice had just raised.
+    expect(vendorMayMarkComplete('PENDING_APPROVAL')).toBe(false)
+  })
+
+  it('allows it from every status where the work is genuinely still open', () => {
+    for (const status of [
+      'ASSIGNED',
+      'SCHEDULED',
+      'IN_PROGRESS',
+      'ON_HOLD_WARRANTY',
+      'WAITING_ON_TENANT',
+    ]) {
+      expect(vendorMayMarkComplete(status), status).toBe(true)
+    }
+  })
+
+  it('refuses on a finished job, so the two lists cannot drift apart', () => {
+    for (const status of ['CLOSED', 'CANCELED', 'INVOICED']) {
+      expect(vendorMayMarkComplete(status), status).toBe(false)
+    }
   })
 })
 

@@ -6,6 +6,7 @@ import {
   validateOverride,
   validateSchedule,
 } from '@rental/core/entry'
+import { wallClockToUtc } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { audit } from '@/lib/audit/index.ts'
@@ -126,8 +127,17 @@ export async function scheduleEntry(
     }
   }
 
-  const scheduledStart = new Date(input.scheduledStart)
-  const scheduledEnd = new Date(input.scheduledEnd)
+  // THE PROPERTY'S CLOCK, NOT THE SERVER'S. `scheduledStart` arrives from a
+  // `datetime-local` input with no offset, so `new Date(...)` would read it
+  // in whatever timezone the Node process runs in - UTC on Vercel. That
+  // instant is then rendered PROPERTY-LOCAL in the notice body
+  // (packages/core/entry/notice.ts), so a PM booking Tuesday 9:00 AM on a
+  // Texas property served a legal entry notice saying "between 4:00 AM and
+  // 6:00 AM". A wrong-hours notice on a document whose entire purpose is to
+  // be defensible later is the worst kind of quiet bug.
+  const timezone = workOrder.property.timezone
+  const scheduledStart = wallClockToUtc(input.scheduledStart, timezone)
+  const scheduledEnd = wallClockToUtc(input.scheduledEnd, timezone)
   const now = new Date()
 
   const decision = entryDecision({

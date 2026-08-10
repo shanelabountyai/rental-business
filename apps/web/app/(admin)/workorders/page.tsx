@@ -19,8 +19,16 @@ const STATUS_LABELS: Record<string, string> = {
   SCHEDULED: 'Scheduled',
   IN_PROGRESS: 'In progress',
   WORK_COMPLETE: 'Work complete',
+  // Says what is WAITING, not what happened. A PM scanning this list needs to
+  // know which rows are theirs to act on, and "Verified" reads as done.
+  VERIFIED: 'Tenant confirmed — ready to close',
   ON_HOLD_WARRANTY: 'On hold — warranty claim',
   WAITING_ON_TENANT: 'Waiting on tenant',
+  // Not in OPEN_STATUSES, so unreachable from this list today. Here so that a
+  // status leak renders as a sentence rather than a raw enum.
+  INVOICED: 'Invoiced',
+  CLOSED: 'Closed',
+  CANCELED: 'Canceled',
 }
 
 function friendlyDate(value: Date): string {

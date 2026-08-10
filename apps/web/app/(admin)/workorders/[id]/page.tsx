@@ -193,8 +193,18 @@ export default async function WorkOrderDetailPage({
     new Date(),
   ).catch(() => null)
   const isEmergency = workOrder.priority === 'EMERGENCY'
+  // Every time on this page is the PROPERTY's wall clock, not the server's.
+  // `toISOString()` here rendered raw UTC beside a legal entry notice that
+  // renders property-local, so the PM's screen and the tenant's notice
+  // disagreed by the offset unless the server happened to sit in the
+  // property's timezone. `localInput` also feeds `datetime-local` inputs,
+  // which is the same value the scheduling action now parses back with
+  // `wallClockToUtc` - the round trip only holds if both ends use the
+  // property's zone.
+  const zone = workOrder.property.timezone
   const localInput = (value: Date | null) =>
-    value ? value.toISOString().slice(0, 16) : null
+    value ? utcToWallClock(value, zone) : null
+  const localTime = (value: Date) => utcToWallClock(value, zone).replace('T', ' ')
 
   const entity = await prisma.legalEntity.findUnique({
     where: { id: workOrder.property.legalEntityId },
@@ -270,7 +280,8 @@ export default async function WorkOrderDetailPage({
           <>
             <dt className="text-muted-foreground">Scheduled</dt>
             <dd className="col-span-1 sm:col-span-2">
-              {workOrder.scheduledStart.toISOString().slice(0, 16).replace('T', ' ')}
+              {localTime(workOrder.scheduledStart)}
+              {workOrder.scheduledEnd && ` to ${localTime(workOrder.scheduledEnd).slice(11)}`}
               {workOrder.entryOverrideReason && (
                 <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900 dark:bg-amber-950 dark:text-amber-200">
                   Entry override logged
@@ -289,7 +300,7 @@ export default async function WorkOrderDetailPage({
             <dt className="text-muted-foreground">Vendor link</dt>
             <dd className="col-span-1 sm:col-span-2">
               {workOrder.dispatchedAt
-                ? `Sent ${workOrder.dispatchedAt.toISOString().slice(0, 16).replace('T', ' ')}`
+                ? `Sent ${localTime(workOrder.dispatchedAt)}`
                 : 'Not sent yet'}
             </dd>
             {vendorRecord && (
@@ -309,7 +320,7 @@ export default async function WorkOrderDetailPage({
                 : 'No answer yet'}
               {workOrder.vendorDeclineReason && ` — ${workOrder.vendorDeclineReason}`}
               {workOrder.proposedStart &&
-                ` — ${workOrder.proposedStart.toISOString().slice(0, 16).replace('T', ' ')} to ${workOrder.proposedEnd?.toISOString().slice(11, 16) ?? ''}`}
+                ` — ${localTime(workOrder.proposedStart)} to ${workOrder.proposedEnd ? localTime(workOrder.proposedEnd).slice(11) : ''}`}
             </dd>
           </>
         )}
@@ -378,10 +389,9 @@ export default async function WorkOrderDetailPage({
             entryNoticeHours={entryRule?.entryNoticeHours ?? null}
             earliestCompliant={
               entryRule?.entryNoticeHours != null
-                ? earliestCompliantStart(new Date(), entryRule.entryNoticeHours)
-                    .toISOString()
-                    .slice(0, 16)
-                    .replace('T', ' ')
+                ? localTime(
+                    earliestCompliantStart(new Date(), entryRule.entryNoticeHours),
+                  )
                 : null
             }
             scheduledStart={localInput(workOrder.scheduledStart)}

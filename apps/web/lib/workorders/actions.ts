@@ -1,6 +1,8 @@
 'use server'
 
-import { type OutboundChannel, validateOutboundMessage } from '@rental/core/comms'
+import { actualTotalCents, reapprovalCheck } from '@rental/core/approvals'
+import { type OutboundChannel, isOpenTicketStatus, validateOutboundMessage } from '@rental/core/comms'
+import { formatCents } from '@rental/core/money'
 import {
   type WorkOrderInput,
   closeDecision,
@@ -8,7 +10,7 @@ import {
   validateAssignment,
   validateWorkOrder,
 } from '@rental/core/workorders'
-import { prisma } from '@rental/db'
+import { type Prisma, prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { audit } from '@/lib/audit/index.ts'
@@ -20,6 +22,7 @@ import { emitEvent } from '@/lib/jobs/outbox.ts'
 import { dispatchPendingNotifications, notify } from '@/lib/notifications/send.ts'
 import { completeTaskWork } from '@/lib/tasks/complete.ts'
 import { issueVendorLink, revokeVendorLinks } from '@/lib/vendors/link.ts'
+import { policyFor } from './queries.ts'
 import { vendorWorkOrderThread } from './timeline.ts'
 import { requestVerification } from './verify.ts'
 
@@ -504,6 +507,7 @@ export async function closeWorkOrder(
     where: { id: workOrderId },
     include: {
       property: true,
+      ticket: { select: { id: true, status: true } },
       verifications: { orderBy: { round: 'desc' }, take: 1 },
     },
   })
@@ -540,9 +544,28 @@ export async function closeWorkOrder(
     invoiceCents: invoiceCents ?? workOrder.invoiceCents,
   }
 
-  const decision = closeDecision(facts, zeroCostAcknowledged)
+  // MAINT-04's ceiling, on the path that money actually takes. `recordActuals`
+  // has always checked this, but it is the rare path - under D-17 the normal
+  // one is a vendor uploading their own invoice and a PM closing behind it,
+  // and that path wrote any amount against any approval without a word.
+  const policy = await policyFor(workOrder.propertyId)
+  const overrun = reapprovalCheck(
+    workOrder.approvedAmountCents,
+    actualTotalCents(facts),
+    policy,
+  )
+
+  const decision = closeDecision(
+    { ...facts, overApproved: overrun.outcome === 'reapproval_required' },
+    zeroCostAcknowledged,
+  )
   if (!decision.allowed) {
-    return { error: CLOSE_REFUSALS[decision.refusal!] }
+    return {
+      error:
+        decision.refusal === 'over_approved' && overrun.outcome === 'reapproval_required'
+          ? `This came to ${formatCents(overrun.actualCents)} against an approved ${formatCents(overrun.approvedCents)}. Send it back for approval before closing it.`
+          : CLOSE_REFUSALS[decision.refusal!],
+    }
   }
 
   const totalCents = jobCostCents(facts)
@@ -581,15 +604,76 @@ export async function closeWorkOrder(
       },
       tx,
     )
+
+    await closeTicketIfSettled(tx, workOrder, actor.id)
   })
 
   revalidatePath(`/workorders/${workOrderId}`)
   revalidatePath('/workorders')
+  revalidatePath('/maintenance')
+  if (workOrder.ticket) revalidatePath(`/maintenance/${workOrder.ticket.id}`)
   return {
     notice: decision.unverified
       ? 'Closed. Note that the tenant never confirmed this one.'
       : 'Closed.',
   }
+}
+
+/**
+ * Closes the originating ticket once nothing is still being worked on it.
+ *
+ * WITHOUT THIS THE TENANT'S TEXT CHANNEL DIES AFTER THEIR FIRST REPAIR.
+ * `createWorkOrder` moves a ticket to CONVERTED, which is correctly an OPEN
+ * status - R-021's SMS intake threads an inbound text onto an open ticket
+ * rather than raising a duplicate, and a tenant texting while the plumber is
+ * still coming means "about that". But nothing ever moved it off CONVERTED,
+ * so the ticket stayed open forever and EVERY later text from that tenant
+ * threaded onto the fixed job: no new ticket, no `ticket.created`, no triage
+ * Task, no SLA clock, no habitability scan. Their November "no heat" arrived
+ * as a reply on August's water heater with nobody assigned to read it. It
+ * also left the tenant's portal reading "Work scheduled" on a job that was
+ * closed and paid.
+ *
+ * Conditional on the LAST one, not this one. A ticket can spawn several work
+ * orders (the leak and the cabinet it ruined), and closing the ticket while
+ * its sibling job is live would be the same bug pointed the other way.
+ */
+async function closeTicketIfSettled(
+  tx: Prisma.TransactionClient,
+  workOrder: { id: string; propertyId: string; ticket: { id: string; status: string } | null },
+  actorStaffId: string,
+) {
+  const ticket = workOrder.ticket
+  if (!ticket || !isOpenTicketStatus(ticket.status)) return
+
+  const stillWorking = await tx.workOrder.count({
+    where: {
+      ticketId: ticket.id,
+      id: { not: workOrder.id },
+      status: { notIn: ['CLOSED', 'CANCELED'] },
+    },
+  })
+  if (stillWorking > 0) return
+
+  await tx.ticket.update({
+    where: { id: ticket.id },
+    data: { status: 'CLOSED', closedAt: new Date() },
+  })
+  await audit(
+    {
+      action: 'ticket.triaged',
+      entityType: 'Ticket',
+      entityId: ticket.id,
+      propertyId: workOrder.propertyId,
+      before: { status: ticket.status },
+      // `reason` distinguishes this from a PM closing a ticket by hand on the
+      // triage screen. Same event, because it is the same fact about the
+      // ticket - but "who decided" is a question the trail should answer, and
+      // here the answer is "nobody: its last job closed".
+      after: { status: 'CLOSED', reason: 'work_order_closed', workOrderId: workOrder.id, actorStaffId },
+    },
+    tx,
+  )
 }
 
 /// Written as sentences a PM can act on, not refusal codes. Each says what

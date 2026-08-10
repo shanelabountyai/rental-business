@@ -4,6 +4,7 @@ import { prisma } from '@rental/db'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   closedJobCostsForProperty,
+  readyToCloseTask,
   requestVerification,
   vendorVerificationRows,
   verificationsFor,
@@ -265,5 +266,49 @@ describe('closedJobCostsForProperty', () => {
     const open = await seedJob({ vendorId: vendorAId })
     const rows = await closedJobCostsForProperty(propertyId)
     expect(rows.map((row) => row.id)).not.toContain(open.id)
+  })
+})
+
+describe('readyToCloseTask', () => {
+  const job = (workOrder: { id: string; propertyId: string; scope: string }) => ({
+    ...workOrder,
+    property: { timezone: 'America/Chicago' },
+    unit: { name: 'Main' },
+  })
+
+  it('puts a verified job in the queue so the invoice gets booked', async () => {
+    // The gap this closes: a "no" raised a Task and a "yes" raised nothing,
+    // so a confirmed repair sat in VERIFIED with money still to record and
+    // nothing anywhere saying so.
+    const workOrder = await seedJob({ vendorId: vendorAId })
+    await readyToCloseTask(job(workOrder))
+
+    const task = await prisma.task.findFirstOrThrow({
+      where: { subjectId: workOrder.id, type: 'workorder_ready_to_close' },
+    })
+    expect(task.status).toBe('OPEN')
+    expect(task.title).toContain('Close out')
+    expect(task.subjectType).toBe('WorkOrder')
+  })
+
+  it('is ROUTINE even for an emergency job', async () => {
+    // An emergency that has been fixed and confirmed is bookkeeping. Paging
+    // it as urgent teaches people to ignore the urgent queue.
+    const workOrder = await prisma.workOrder.create({
+      data: {
+        propertyId,
+        unitId,
+        scope: 'Burst pipe, confirmed fixed',
+        status: 'VERIFIED',
+        priority: 'EMERGENCY',
+      },
+    })
+    workOrderIds.push(workOrder.id)
+
+    await readyToCloseTask(job(workOrder))
+    const task = await prisma.task.findFirstOrThrow({
+      where: { subjectId: workOrder.id, type: 'workorder_ready_to_close' },
+    })
+    expect(task.priority).toBe('ROUTINE')
   })
 })

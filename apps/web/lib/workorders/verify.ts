@@ -136,6 +136,44 @@ export async function reopenWorkOrder(
   })
 }
 
+/**
+ * A tenant's "yes": the job is ready to be closed, and somebody has to do it.
+ *
+ * THE COUNTERPART TO `reopenWorkOrder`, and it was missing. A "no" raised a
+ * Task and a "yes" raised nothing, which sounds right - one is a problem and
+ * one is not - but "yes" is the point at which the job stops being
+ * maintenance and starts being money: the invoice arrives, the cost has to be
+ * recorded against the property, and nothing else in the system will ever
+ * mention this work order again. Without a Task it sat in VERIFIED silently
+ * until somebody happened to open it.
+ *
+ * Deliberately ROUTINE whatever the job's own priority was, and unlike
+ * `reopenWorkOrder` which carries the job's priority through. An emergency
+ * that has been FIXED and confirmed is no longer an emergency; it is
+ * bookkeeping, and paging it as urgent trains people to ignore the urgent
+ * queue. A reopen is the opposite case - the emergency is still live.
+ */
+export async function readyToCloseTask(
+  workOrder: {
+    id: string
+    propertyId: string
+    scope: string
+    property: { timezone: string }
+    unit: { name: string }
+  },
+  now = new Date(),
+): Promise<void> {
+  await createTask(prisma, {
+    propertyId: workOrder.propertyId,
+    type: 'workorder_ready_to_close',
+    subjectType: 'WorkOrder',
+    subjectId: workOrder.id,
+    businessDate: businessDate(now, workOrder.property.timezone),
+    priority: 'ROUTINE',
+    title: `Close out: ${workOrder.scope.slice(0, 50)} (${workOrder.unit.name})`,
+  })
+}
+
 /// Every answer that has ever been given about this job, newest first. The
 /// PM's own view of "what did the tenant actually say", which a single
 /// `verifiedAt` column could never hold once a job has come back twice.

@@ -297,6 +297,74 @@ test.describe('the vendor journey', () => {
     await vendorContext.close()
   })
 
+  test('an invoice over the approval is BANKED, and sends the job back for approval', async ({
+    page,
+  }) => {
+    // MAINT-04's ceiling where the bill actually arrives. Deliberately not a
+    // refusal: turning the vendor away means the invoice gets phoned in and
+    // re-keyed, which is what D-6 and D-19 both exist to prevent. Take the
+    // document, take the number, and put the JOB in front of somebody who
+    // can say yes.
+    const { workOrder, vendor } = await seedJob()
+    await prisma.workOrder.update({
+      where: { id: workOrder.id },
+      data: { approvedAmountCents: 60_000 },
+    })
+    const token = await dispatchAndCaptureToken(page, workOrder.id, workOrder.propertyId)
+
+    const vendorContext = await page.context().browser()!.newContext()
+    const vendorPage = await vendorContext.newPage()
+    await vendorPage.goto(`/vendor/${token}`)
+    await vendorPage.getByRole('button', { name: 'Accept this job' }).click()
+    await expect
+      .poll(
+        async () =>
+          (await prisma.workOrder.findUnique({ where: { id: workOrder.id } }))?.vendorResponse,
+        { timeout: 10_000 },
+      )
+      .toBe('ACCEPTED')
+
+    await vendorPage.goto(`/vendor/${token}`)
+    await vendorPage.getByLabel('What is this?').selectOption('INVOICE')
+    await vendorPage.getByLabel('Photo or file').setInputFiles({
+      name: 'big-invoice.jpg',
+      mimeType: 'image/jpeg',
+      buffer: Buffer.from('a photo of an expensive invoice'),
+    })
+    await vendorPage.getByLabel('Invoice total (only if this is the invoice)').fill('2400')
+    await vendorPage.getByRole('button', { name: 'Upload' }).click()
+
+    await expect
+      .poll(
+        async () =>
+          (await prisma.workOrder.findUnique({ where: { id: workOrder.id } }))?.status,
+        { timeout: 10_000 },
+      )
+      .toBe('PENDING_APPROVAL')
+
+    // The money landed, and so did the evidence.
+    const after = await prisma.workOrder.findUniqueOrThrow({ where: { id: workOrder.id } })
+    expect(after.invoiceCents).toBe(240_000)
+    const document = await prisma.document.findFirstOrThrow({
+      where: { workOrderId: workOrder.id, type: 'INVOICE' },
+    })
+    documentIds.push(document.id)
+    expect(document.vendorId).toBe(vendor.id)
+
+    // And it is in the one queue (D-9), not only in a status column.
+    const task = await prisma.task.findFirstOrThrow({
+      where: { subjectId: workOrder.id, type: 'workorder_approval' },
+    })
+    expect(task.title).toContain('Invoice over approval')
+
+    // The vendor is told nothing about the ceiling - not their business, and
+    // "needs approval" invites the chasing phone call this path avoids.
+    await expect(vendorPage.getByText('Invoice received')).toBeVisible()
+    await expect(vendorPage.getByText(/approval/i)).toHaveCount(0)
+
+    await vendorContext.close()
+  })
+
   test('reveals an access code only after accepting, and logs every reveal', async ({ page }) => {
     const { workOrder, vendor } = await seedJob({ withAccessCode: true })
     const token = await dispatchAndCaptureToken(page, workOrder.id, workOrder.propertyId)

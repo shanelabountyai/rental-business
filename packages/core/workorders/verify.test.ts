@@ -123,6 +123,39 @@ describe('closeDecision', () => {
   it('accepts a job already moved to VERIFIED', () => {
     expect(closeDecision({ ...complete, status: 'VERIFIED' }).allowed).toBe(true)
   })
+
+  it('REFUSES to close a job whose bill beat its approval', () => {
+    // MAINT-04's third criterion, as a hard refusal. The caller decides
+    // whether the overrun happened (it needs the entity's tolerance); this
+    // decides what closing means when it did.
+    const decision = closeDecision({ ...complete, overApproved: true })
+    expect(decision).toEqual({ allowed: false, refusal: 'over_approved' })
+  })
+
+  it('puts the tenant "not fixed" answer ahead of the overrun', () => {
+    // Both are true; the message can only name one. It must name the one a
+    // tenant later shows a judge.
+    const decision = closeDecision({
+      ...complete,
+      verifiedResolved: false,
+      overApproved: true,
+    })
+    expect(decision.refusal).toBe('tenant_says_unresolved')
+  })
+
+  it('lets an acknowledged $0 job close even though nothing was approved', () => {
+    // The overrun flag is the caller's; a job that cost nothing cannot have
+    // exceeded anything, and this is the case that would break a naive
+    // "approvedAmountCents == null means refuse" rule.
+    const free = {
+      ...complete,
+      actualLaborCents: null,
+      actualMaterialsCents: null,
+      invoiceCents: null,
+      overApproved: false,
+    }
+    expect(closeDecision(free, true).allowed).toBe(true)
+  })
 })
 
 describe('jobCostCents', () => {

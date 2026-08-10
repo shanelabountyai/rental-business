@@ -329,10 +329,66 @@ test.describe('the PM closes', () => {
     expect(after.invoiceCents).toBe(21_500)
     expect(after.closedByStaffId).toBe(staff.id)
 
+    // AND THE TICKET CLOSES WITH IT. Without this the ticket stayed on
+    // CONVERTED forever, and R-021's SMS intake threaded every later text
+    // from this tenant onto the fixed job - no new ticket, no triage task,
+    // no SLA clock. Their next problem arrived as a reply nobody read.
+    const closedTicket = await prisma.ticket.findUniqueOrThrow({ where: { id: ticket.id } })
+    expect(closedTicket.status).toBe('CLOSED')
+    expect(closedTicket.closedAt).not.toBeNull()
+
     // The same number, on the property, with nobody having typed it twice.
     await page.goto(`/properties/${property.id}`)
     await expect(page.getByRole('heading', { name: 'Maintenance spend' })).toBeVisible()
     await expect(page.getByText('$215.00').first()).toBeVisible()
+  })
+
+  test('leaves the ticket open while a sibling job is still live', async ({ page }) => {
+    // A leak and the cabinet it ruined are two work orders on one ticket.
+    // Closing the ticket on the first would be the same bug pointed the
+    // other way: the tenant's channel dies while work is still happening.
+    const { ticket, workOrder, property, staff } = await seed()
+    const sibling = await prisma.workOrder.create({
+      data: {
+        propertyId: property.id,
+        unitId: workOrder.unitId,
+        ticketId: ticket.id,
+        scope: 'Replace the ruined cabinet base',
+        status: 'IN_PROGRESS',
+      },
+    })
+
+    await signIn(page, staff.email)
+    await page.goto(`/workorders/${workOrder.id}`)
+    await page.getByLabel(/Invoice total/).fill('180')
+    await page.getByRole('button', { name: 'Close this work order' }).click()
+    await expect(page.getByRole('heading', { name: 'Closed' })).toBeVisible()
+
+    const stillOpen = await prisma.ticket.findUniqueOrThrow({ where: { id: ticket.id } })
+    expect(stillOpen.status).toBe('CONVERTED')
+
+    await prisma.workOrder.delete({ where: { id: sibling.id } })
+  })
+
+  test('REFUSES to close an invoice that beat its approval', async ({ page }) => {
+    // MAINT-04's third criterion on the path money actually takes. Until
+    // this, `reapprovalCheck` ran only when a PM hand-typed actuals - so an
+    // owner approving $600 and a vendor invoicing $2,400 closed at $2,400
+    // with nothing anywhere noticing.
+    const { workOrder, staff } = await seed()
+    await prisma.workOrder.update({
+      where: { id: workOrder.id },
+      data: { approvedAmountCents: 60_000, actualLaborCents: null, actualMaterialsCents: null },
+    })
+
+    await signIn(page, staff.email)
+    await page.goto(`/workorders/${workOrder.id}`)
+    await page.getByLabel(/Invoice total/).fill('2400')
+    await page.getByRole('button', { name: 'Close this work order' }).click()
+
+    await expect(page.getByText(/against an approved/)).toBeVisible()
+    const after = await prisma.workOrder.findUniqueOrThrow({ where: { id: workOrder.id } })
+    expect(after.status).not.toBe('CLOSED')
   })
 
   test('refuses a $0 close unless somebody says it was free', async ({ page }) => {

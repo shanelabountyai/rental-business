@@ -1,11 +1,15 @@
 'use server'
 
 import { createHash } from 'node:crypto'
+import { actualTotalCents, reapprovalCheck } from '@rental/core/approvals'
 import { openSecret } from '@rental/core/auth'
+import { formatCents } from '@rental/core/money'
+import { businessDate } from '@rental/core/scheduling'
 import {
   type VendorResponseValue,
   validateVendorInvoice,
   validateVendorResponse,
+  vendorMayMarkComplete,
   vendorMayRespond,
   vendorMayUpload,
 } from '@rental/core/vendors'
@@ -13,8 +17,10 @@ import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { auditAsVendor } from '@/lib/audit/system.ts'
 import { generateStorageKey, storage } from '@/lib/storage/index.ts'
+import { createTask } from '@/lib/tasks/create.ts'
 import { postVendorPortalMessage } from '@/lib/comms/messages.ts'
 import { verifyVendorLink } from './link.ts'
+import { policyFor } from '@/lib/workorders/queries.ts'
 import { requestVerification } from '@/lib/workorders/verify.ts'
 import { vendorWorkOrderThread } from '@/lib/workorders/timeline.ts'
 import { vendorRejectionMessage } from './messages.ts'
@@ -229,6 +235,19 @@ export async function uploadVendorDocument(
     }
   }
 
+  // Whether this invoice beats what the owner approved. Computed before the
+  // write so the status change happens in the same transaction as the amount
+  // that caused it - a work order left showing an over-ceiling invoice at
+  // APPROVED, even briefly, is a window in which somebody closes it.
+  const overrun =
+    kind === 'INVOICE' && invoiceCents != null && workOrder.invoiceCents == null
+      ? reapprovalCheck(
+          workOrder.approvedAmountCents,
+          actualTotalCents({ ...workOrder, invoiceCents }),
+          await policyFor(workOrder.propertyId),
+        )
+      : null
+
   const buffer = Buffer.from(await file.arrayBuffer())
   const sha256 = createHash('sha256').update(buffer).digest('hex')
   const storageKey = generateStorageKey(workOrder.propertyId, file.name)
@@ -255,7 +274,17 @@ export async function uploadVendorDocument(
     if (kind === 'INVOICE' && invoiceCents != null && workOrder.invoiceCents == null) {
       await tx.workOrder.update({
         where: { id: workOrder.id },
-        data: { invoiceCents },
+        data: {
+          invoiceCents,
+          // MAINT-04's ceiling, checked where the bill actually arrives.
+          // NEVER a refusal: turning the vendor away here means the invoice
+          // is phoned in and re-keyed by hand, which is the outcome D-6 and
+          // D-19 both exist to prevent. Take the document, take the number,
+          // and put the JOB back in front of somebody who can say yes.
+          ...(overrun?.outcome === 'reapproval_required'
+            ? { status: 'PENDING_APPROVAL' as const, approvalQuestion: null }
+            : {}),
+        },
       })
     }
     await auditAsVendor(
@@ -274,10 +303,69 @@ export async function uploadVendorDocument(
       },
       tx,
     )
+    if (overrun?.outcome === 'reapproval_required') {
+      await auditAsVendor(
+        vendorId,
+        {
+          action: 'workorder.approval_requested',
+          entityType: 'WorkOrder',
+          entityId: workOrder.id,
+          propertyId: workOrder.propertyId,
+          before: { status: workOrder.status },
+          after: {
+            status: 'PENDING_APPROVAL',
+            reason: 'invoice_over_tolerance',
+            approvedCents: overrun.approvedCents,
+            actualCents: overrun.actualCents,
+            allowedCents: overrun.allowedCents,
+          },
+        },
+        tx,
+      )
+    }
   })
 
+  // Outside the transaction, and after it: the invoice is banked either way.
+  // A queue write failing must not roll back a document the vendor has
+  // already been told we received.
+  if (overrun?.outcome === 'reapproval_required') {
+    await raiseInvoiceApprovalTask(workOrder, overrun.actualCents).catch((error) => {
+      console.error(`[vendor] approval task failed for ${workOrder.id}`, error)
+    })
+    revalidatePath('/tasks')
+  }
+
   revalidatePath(`/workorders/${workOrder.id}`)
+  // The vendor is told nothing about the ceiling. It is not their business
+  // what the owner authorised, and "your invoice needs approval" invites a
+  // phone call to chase it - which is the re-keying this whole path avoids.
   return { notice: kind === 'INVOICE' ? 'Invoice received - thank you.' : 'Photo received.' }
+}
+
+/// The over-ceiling invoice, in the one staff queue (D-9). Separate from
+/// approvals.ts's `raiseApprovalTask` because that one is about an ESTIMATE
+/// somebody is deciding whether to authorise; this is a bill that already
+/// exists, and the queue title has to say so or a PM triages it as the same
+/// thing twice.
+async function raiseInvoiceApprovalTask(
+  workOrder: {
+    id: string
+    propertyId: string
+    scope: string
+    priority: string
+    property: { timezone: string }
+  },
+  actualCents: number,
+) {
+  await createTask(prisma, {
+    propertyId: workOrder.propertyId,
+    type: 'workorder_approval',
+    subjectType: 'WorkOrder',
+    subjectId: workOrder.id,
+    businessDate: businessDate(new Date(), workOrder.property.timezone),
+    priority: workOrder.priority,
+    title: `Invoice over approval — ${formatCents(actualCents)}: ${workOrder.scope.slice(0, 40)}`,
+  })
 }
 
 /**
@@ -295,7 +383,13 @@ export async function markWorkComplete(token: string): Promise<VendorFormState> 
   if (!vendorMayUpload(workOrder.vendorResponse)) {
     return { error: 'Accept the job first.' }
   }
-  if (workOrder.status === 'WORK_COMPLETE') return { notice: 'Already marked complete.' }
+  if (!vendorMayMarkComplete(workOrder.status)) {
+    // Says nothing about WHY. "The tenant already confirmed it" and "the
+    // office is reviewing your invoice" are both true at times, and neither
+    // is the vendor's business - the honest, useful message is that there is
+    // nothing left for them to do here.
+    return { notice: 'Already marked complete.' }
+  }
 
   await prisma.$transaction(async (tx) => {
     await tx.workOrder.update({

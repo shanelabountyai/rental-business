@@ -5,7 +5,6 @@ import {
   approvalRequirement,
   approvalRoute,
   reapprovalCheck,
-  resolvePolicy,
   validateApprovalDecision,
 } from '@rental/core/approvals'
 import { prisma } from '@rental/db'
@@ -21,6 +20,7 @@ import { createTask } from '@/lib/tasks/create.ts'
 import { dispatchPendingNotifications, notify } from '@/lib/notifications/send.ts'
 import { issueBidLink } from '@/lib/vendors/bids.ts'
 import { businessDate } from '@rental/core/scheduling'
+import { policyFor } from './queries.ts'
 import type { WorkOrderFormState } from './actions.ts'
 
 // Approval thresholds (MAINT-04, ROLE-02, R-026).
@@ -36,19 +36,6 @@ import type { WorkOrderFormState } from './actions.ts'
 function str(formData: FormData, name: string): string {
   const value = formData.get(name)
   return typeof value === 'string' ? value.trim() : ''
-}
-
-/// The entity's policy for a work order, resolved through its property.
-/// Read fresh on every decision rather than captured when the work order was
-/// created: an owner who tightens their threshold means it from now on, and
-/// a stale copy would let already-open work orders through under the old
-/// number.
-async function policyFor(propertyId: string) {
-  const property = await prisma.property.findUniqueOrThrow({
-    where: { id: propertyId },
-    select: { legalEntity: true },
-  })
-  return resolvePolicy(property.legalEntity)
 }
 
 /// Raises the approval into the ONE staff queue (D-9). A pending approval is

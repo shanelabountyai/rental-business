@@ -6,7 +6,7 @@ import { revalidatePath } from 'next/cache'
 import { audit } from '@/lib/audit/index.ts'
 import { isUniqueViolation } from '@/lib/db/unique-violation.ts'
 import { requireTenantWithScope } from '@/lib/portal/guard.ts'
-import { reopenWorkOrder } from '@/lib/workorders/verify.ts'
+import { readyToCloseTask, reopenWorkOrder } from '@/lib/workorders/verify.ts'
 
 // The tenant's one tap (MAINT-07, R-030).
 //
@@ -135,14 +135,19 @@ export async function verifyWorkOrder(
   // Outside the transaction on purpose: the answer is recorded and must not
   // be rolled back because a task write failed. A missing task is a queue
   // gap somebody notices; a lost "it is still broken" is not.
-  if (!resolved) {
-    await reopenWorkOrder(
-      { ...workOrder, property: workOrder.property, unit: workOrder.unit },
-      comment,
-    ).catch((error) => {
-      console.error(`[verify] reopen task failed for ${workOrder.id}`, error)
-    })
-  }
+  //
+  // BOTH answers raise one. A "no" is a repair to redo; a "yes" is an invoice
+  // to book and a cost to record against the property, and until R-037 that
+  // second one was nobody's job because nothing said it existed.
+  const task = resolved
+    ? readyToCloseTask({ ...workOrder, property: workOrder.property, unit: workOrder.unit })
+    : reopenWorkOrder(
+        { ...workOrder, property: workOrder.property, unit: workOrder.unit },
+        comment,
+      )
+  await task.catch((error) => {
+    console.error(`[verify] task failed for ${workOrder.id}`, error)
+  })
 
   revalidatePath(`/portal/maintenance/${workOrder.ticket?.id}`)
   revalidatePath('/portal/maintenance')
