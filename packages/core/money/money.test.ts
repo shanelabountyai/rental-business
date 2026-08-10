@@ -109,17 +109,33 @@ describe('allocate', () => {
 
 describe('daysPastDue', () => {
   it('counts from the due date', () => {
-    expect(daysPastDue(new Date(2026, 7, 1), new Date(2026, 7, 6))).toBe(5)
+    expect(daysPastDue('2026-08-01', '2026-08-06')).toBe(5)
+  })
+
+  it('is ZERO on the due date, whatever time of day it is anywhere', () => {
+    // The regression this signature exists to prevent. The original took two
+    // Date objects and read them with the local getters, so a `@db.Date`
+    // (UTC midnight) compared against a real timestamp reported 1 on the due
+    // date itself for any server west of UTC - a late fee a day early, on
+    // every property, every month.
+    expect(daysPastDue('2026-08-01', '2026-08-01')).toBe(0)
   })
 
   it('is zero on the due date and before it', () => {
-    expect(daysPastDue(new Date(2026, 7, 1), new Date(2026, 7, 1))).toBe(0)
-    expect(daysPastDue(new Date(2026, 7, 1), new Date(2026, 6, 28))).toBe(0)
+    expect(daysPastDue('2026-08-01', '2026-08-01')).toBe(0)
+    expect(daysPastDue('2026-08-01', '2026-07-28')).toBe(0)
   })
 
-  it('ignores time of day so a late-evening check is not a day early', () => {
-    expect(
-      daysPastDue(new Date(2026, 7, 1, 0, 5), new Date(2026, 7, 6, 23, 55)),
-    ).toBe(5)
+  it('cannot be handed a time of day at all - that is the point', () => {
+    // A BusinessDate is a calendar day, so "late evening" is not a thing
+    // that can be expressed here, which is what makes the off-by-one
+    // unrepresentable rather than merely tested against.
+    expect(daysPastDue('2026-08-01', '2026-08-06')).toBe(5)
+  })
+
+  it('counts calendar days across a daylight-saving change', () => {
+    // 8 March 2026 is a US spring-forward. Counting in elapsed hours would
+    // lose one and report 30 where 31 days have passed.
+    expect(daysPastDue('2026-03-01', '2026-04-01')).toBe(31)
   })
 })

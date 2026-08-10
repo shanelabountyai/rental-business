@@ -18,6 +18,7 @@
     "./filing-cabinet": "./filing-cabinet/index.ts",
     "./jurisdiction": "./jurisdiction/index.ts",
     "./leases": "./leases/index.ts",
+    "./ledger": "./ledger/index.ts",
     "./maintenance": "./maintenance/index.ts",
     "./money": "./money/index.ts",
     "./notifications": "./notifications/index.ts",

@@ -18,7 +18,6 @@ let propertyId: string
 let unitId: string
 let tenantId: string
 const leaseIds: string[] = []
-const eventIds: string[] = []
 
 beforeAll(async () => {
   const stamp = `billing-${Date.now()}`
@@ -59,9 +58,12 @@ afterAll(async () => {
   // Only the roots that carry no ledger reference are cleaned up, and those
   // are deactivated rather than deleted, the same pattern every suite that
   // touches an append-only table has had to adopt.
-  await prisma.processedStripeEvent.deleteMany({
-    where: { stripeEventId: { in: eventIds } },
-  })
+  // ProcessedStripeEvent rows are deliberately NOT deleted. LedgerEntry is
+  // append-only and cannot be, so deleting the event log while the entries
+  // survive manufactures exactly the `orphan_entry` drift R-035's
+  // reconciliation exists to detect - permanently, in whatever database the
+  // suite ran against. Keeping them also mirrors the production invariant:
+  // the log outlives, like the ledger it describes.
   await prisma.tenant.updateMany({ where: { id: tenantId }, data: { active: false } })
   await prisma.property.updateMany({ where: { id: propertyId }, data: { active: false } })
   await prisma.$disconnect()
@@ -101,7 +103,6 @@ function invoiceEvent(overrides: {
 }) {
   const type = overrides.type ?? 'invoice.payment_succeeded'
   const id = overrides.id ?? `evt_${randomUUID().replace(/-/g, '')}`
-  eventIds.push(id)
   return {
     id,
     type,
@@ -267,7 +268,6 @@ describe('processStripeEvent', () => {
     )
 
     const refundId = `evt_${randomUUID().replace(/-/g, '')}`
-    eventIds.push(refundId)
     await processStripeEvent({
       id: refundId,
       type: 'charge.refunded',
@@ -308,7 +308,6 @@ describe('processStripeEvent', () => {
 
   it('ignores an event type nobody has thought about, and says so', async () => {
     const id = `evt_${randomUUID().replace(/-/g, '')}`
-    eventIds.push(id)
     const result = await processStripeEvent({
       id,
       type: 'customer.discount.created',

@@ -258,6 +258,14 @@ export const AUDIT_ACTIONS = [
   /// first time a staging database is mistaken for production.
   'billing.provisioned',
 
+  /// R-035 (D-11): the nightly reconciliation found the ledger projection
+  /// and the processed-event log disagreeing. Recorded rather than only
+  /// logged, and recorded in the append-only trail specifically: a
+  /// projection that has drifted cannot be quietly corrected - the fix is a
+  /// reversing entry somebody has to decide on - so the discrepancy needs
+  /// the same permanence as the rows it is about.
+  'ledger.drift_detected',
+
   /// R-034: a Stripe webhook was projected into the ledger. The event id is
   /// on the entry itself; this is the trail of what the PIPELINE did,
   /// including the events it deliberately ignored.

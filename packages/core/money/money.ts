@@ -13,6 +13,8 @@
  *        fee we cannot defend.
  */
 
+import { type BusinessDate, businessDaysBetween } from '../scheduling/local-time.ts'
+
 /** An amount in integer cents. Negative means a credit. */
 export type Cents = number
 
@@ -124,13 +126,20 @@ export function allocate(total: Cents, weights: readonly number[]): Cents[] {
  * Days a charge is past due, counted from the original due date - not from
  * the last payment, and not from when anyone happened to look.
  *
- * Both dates arrive as property-local business dates (D-3). Passing a UTC
- * timestamp here produces an off-by-one every day for properties west of
- * London, which is the entire reason this takes plain dates.
+ * TAKES BUSINESS DATES (`YYYY-MM-DD`), NOT `Date` OBJECTS, and that signature
+ * is the whole fix. The original version took two `Date`s and read them with
+ * the LOCAL getters, which is ambiguous in the one way that matters here: a
+ * `@db.Date` column comes back from Prisma as UTC midnight, while `asOf` is
+ * usually a real timestamp - so on a server west of UTC, a charge due today
+ * reported ONE DAY PAST DUE on its own due date. That is a late fee charged
+ * a day early, on every property, every month, and it is exactly the class of
+ * error D-12 keeps this calculation in core to avoid. R-035 was its first
+ * caller and found it before it had one.
+ *
+ * A `BusinessDate` is a property-local calendar day and cannot be misread -
+ * see `packages/core/scheduling`, which has carried the same type since D-3
+ * for the same reason.
  */
-export function daysPastDue(dueDate: Date, asOf: Date): number {
-  const toUtcDay = (d: Date) =>
-    Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())
-  const diffMs = toUtcDay(asOf) - toUtcDay(dueDate)
-  return Math.max(0, Math.floor(diffMs / 86_400_000))
+export function daysPastDue(dueOn: BusinessDate, asOf: BusinessDate): number {
+  return Math.max(0, businessDaysBetween(dueOn, asOf))
 }

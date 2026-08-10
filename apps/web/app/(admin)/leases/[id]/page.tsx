@@ -11,6 +11,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { BillingPanel } from '@/components/leases/billing-panel.tsx'
 import { IntakePanel } from '@/components/leases/intake-panel.tsx'
+import { LedgerPanel } from '@/components/leases/ledger-panel.tsx'
 import { LeaseForm } from '@/components/leases/lease-form.tsx'
 import { LifecyclePanel } from '@/components/leases/lifecycle-panel.tsx'
 import { PartiesPanel } from '@/components/leases/parties-panel.tsx'
@@ -26,6 +27,7 @@ import {
 } from '@/lib/leases/actions.ts'
 import { billingIsLive, billingProvider } from '@/lib/billing/provider.ts'
 import { leaseBillingState } from '@/lib/billing/provision.ts'
+import { leaseStatement } from '@/lib/ledger/queries.ts'
 import { outstandingIntakeGaps } from '@/lib/leases/intake.ts'
 import { getLease, selectableTenants } from '@/lib/leases/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
@@ -100,11 +102,15 @@ export default async function LeaseDetailPage({
       action: changeLeaseStatus.bind(null, lease.id, to),
     }))
 
-  const [gaps, tenants, payers] = await Promise.all([
+  const [gaps, tenants, payers, ledger] = await Promise.all([
     outstandingIntakeGaps(lease),
     canWrite ? selectableTenants() : Promise.resolve([]),
     leaseBillingState(lease.id),
+    leaseStatement(lease.id, scope),
   ])
+  const reversed = new Set(
+    (ledger?.lines ?? []).map((line) => line.reversesId).filter(Boolean) as string[],
+  )
 
   const alreadyOn = new Set(lease.leaseTenants.map((lt) => lt.tenantId))
   const utilities = (lease.utilityResponsibility ?? {}) as Record<string, string>
@@ -217,6 +223,19 @@ export default async function LeaseDetailPage({
           </ul>
         </section>
       )}
+
+      <LedgerPanel
+        balanceCents={ledger?.balanceCents ?? 0}
+        lines={(ledger?.lines ?? []).map((line) => ({
+          id: line.id,
+          type: line.type,
+          amountCents: line.amountCents,
+          occurredAt: line.occurredAt.toISOString().slice(0, 10),
+          description: line.description,
+          runningBalanceCents: line.runningBalanceCents,
+          reversed: reversed.has(line.id),
+        }))}
+      />
 
       <BillingPanel
         live={billingIsLive()}

@@ -17,7 +17,6 @@ import { expect, test } from '@playwright/test'
 
 const propertyIds: string[] = []
 const tenantIds: string[] = []
-const eventIds: string[] = []
 
 /// The secret the running server is using. Set by playwright.config.ts for
 /// both processes, exactly as it does for TWILIO_AUTH_TOKEN - see that
@@ -106,7 +105,6 @@ async function seedProvisionedLease() {
 
 function paymentEvent(stripeCustomerId: string, amountPaid = 175_000) {
   const id = `evt_${randomUUID().replace(/-/g, '')}`
-  eventIds.push(id)
   return {
     id,
     type: 'invoice.payment_succeeded',
@@ -123,10 +121,13 @@ function paymentEvent(stripeCustomerId: string, amountPaid = 175_000) {
 }
 
 test.afterAll(async () => {
-  await prisma.processedStripeEvent.deleteMany({ where: { stripeEventId: { in: eventIds } } })
   // LedgerEntry is append-only and its foreign keys are RESTRICT, so
   // everything a projected row points at stays. Only the roots that carry no
   // ledger reference are cleaned up, deactivated rather than deleted.
+  //
+  // ProcessedStripeEvent rows stay too, deliberately: deleting the event log
+  // while its append-only entries survive manufactures exactly the
+  // `orphan_entry` drift R-035's reconciliation exists to detect.
   await prisma.tenant.updateMany({
     where: { id: { in: tenantIds } },
     data: { active: false },
@@ -230,7 +231,6 @@ test.describe('the projection pipeline', () => {
     // Anything we have decided about must return 2xx, or Stripe retries
     // forever and the dashboard fills with failures that are not failures.
     const id = `evt_${randomUUID().replace(/-/g, '')}`
-    eventIds.push(id)
     const { rawBody, header } = signedRequest({
       id,
       type: 'customer.discount.created',

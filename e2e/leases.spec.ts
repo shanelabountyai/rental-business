@@ -156,14 +156,35 @@ test.afterAll(async () => {
   await prisma.task.deleteMany({ where: { subjectId: { in: allLeaseIds } } })
   await prisma.guarantor.deleteMany({ where: { leaseId: { in: allLeaseIds } } })
   await prisma.leaseTenant.deleteMany({ where: { leaseId: { in: allLeaseIds } } })
-  // Activating a lease opens billing (R-034), so a LeasePayer now pins the
-  // lease. Deletable here because nothing in this spec projects a payment -
-  // a LedgerEntry pointing at a payer is RESTRICT and would (correctly)
-  // refuse, which is what e2e/stripe-webhook.spec.ts's own cleanup lives
-  // with.
-  await prisma.leasePayer.deleteMany({ where: { leaseId: { in: allLeaseIds } } })
-  await prisma.lease.deleteMany({ where: { id: { in: allLeaseIds } } })
-  await prisma.unit.deleteMany({ where: { id: { in: unitIds } } })
+  // Activating a lease opens billing (R-034), so a LeasePayer pins the lease
+  // - and a LedgerEntry pins the payer, with a RESTRICT that correctly
+  // refuses. So only the leases carrying NO ledger rows can go; the ones
+  // this spec's ledger tests wrote against stay, deactivated by their
+  // property below like every other append-only remnant.
+  const pinned = new Set(
+    (
+      await prisma.ledgerEntry.findMany({
+        where: { leaseId: { in: allLeaseIds } },
+        select: { leaseId: true },
+        distinct: ['leaseId'],
+      })
+    ).map((row) => row.leaseId),
+  )
+  const removable = allLeaseIds.filter((id) => !pinned.has(id))
+  await prisma.leasePayer.deleteMany({ where: { leaseId: { in: removable } } })
+  await prisma.lease.deleteMany({ where: { id: { in: removable } } })
+  const stillLeased = new Set(
+    (
+      await prisma.lease.findMany({
+        where: { unitId: { in: unitIds } },
+        select: { unitId: true },
+        distinct: ['unitId'],
+      })
+    ).map((row) => row.unitId),
+  )
+  await prisma.unit.deleteMany({
+    where: { id: { in: unitIds.filter((id) => !stillLeased.has(id)) } },
+  })
   await prisma.staffAssignment.deleteMany({ where: { staffUserId: { in: staffIds } } })
   // Deactivated, not deleted - lease writes leave append-only audit rows
   // carrying these ids.
@@ -456,6 +477,100 @@ test.describe('parties', () => {
 
     await expect(page.getByText(/needs at least one person on it/)).toBeVisible()
     expect(await prisma.leaseTenant.count({ where: { leaseId: lease.id } })).toBe(1)
+  })
+})
+
+test.describe('the ledger (PAY-03, PAY-09, D-11)', () => {
+  test('renders the statement with a running balance a judge could read', async ({
+    page,
+  }) => {
+    const seed = await seedUnit()
+    const lease = await seedLease(seed, { status: 'ACTIVE' })
+    const payer = await prisma.leasePayer.create({
+      data: {
+        leaseId: lease.id,
+        propertyId: seed.property.id,
+        payerType: 'TENANT',
+        tenantId: seed.tenant.id,
+      },
+    })
+    // Projected rows, as R-034's pipeline would have written them.
+    await prisma.ledgerEntry.create({
+      data: {
+        propertyId: seed.property.id,
+        leaseId: lease.id,
+        leasePayerId: payer.id,
+        type: 'CHARGE',
+        amountCents: 150_000,
+        description: 'February rent',
+        occurredAt: new Date('2026-02-01T12:00:00Z'),
+      },
+    })
+    await prisma.ledgerEntry.create({
+      data: {
+        propertyId: seed.property.id,
+        leaseId: lease.id,
+        leasePayerId: payer.id,
+        type: 'PAYMENT',
+        amountCents: -120_000,
+        description: 'Part payment',
+        occurredAt: new Date('2026-02-05T12:00:00Z'),
+      },
+    })
+
+    const staff = await createStaff()
+    await signIn(page, staff.email)
+    await page.goto(`/leases/${lease.id}`)
+
+    const ledger = page.getByLabel('Ledger')
+    await expect(ledger.getByText('February rent')).toBeVisible()
+    // Plain language, not enum codes - PAY-09 wants this readable.
+    await expect(ledger.getByText(/^Charged/)).toBeVisible()
+    await expect(ledger.getByText(/^Paid/)).toBeVisible()
+    // $1,500 charged less $1,200 paid leaves $300 - and the running balance
+    // is what makes the statement a story rather than a list.
+    await expect(page.getByText('$300.00 owed')).toBeVisible()
+    await expect(ledger.getByRole('cell', { name: '$300.00' })).toBeVisible()
+  })
+
+  test('shows a CREDIT balance as the tenant’s money, not a debt', async ({ page }) => {
+    // "−$50 owed" would read as a debt. An overpayment is a real state.
+    const seed = await seedUnit()
+    const lease = await seedLease(seed, { status: 'ACTIVE' })
+    const payer = await prisma.leasePayer.create({
+      data: {
+        leaseId: lease.id,
+        propertyId: seed.property.id,
+        payerType: 'TENANT',
+        tenantId: seed.tenant.id,
+      },
+    })
+    await prisma.ledgerEntry.create({
+      data: {
+        propertyId: seed.property.id,
+        leaseId: lease.id,
+        leasePayerId: payer.id,
+        type: 'PAYMENT',
+        amountCents: -5_000,
+        description: 'Overpayment',
+        occurredAt: new Date('2026-02-05T12:00:00Z'),
+      },
+    })
+
+    const staff = await createStaff()
+    await signIn(page, staff.email)
+    await page.goto(`/leases/${lease.id}`)
+    await expect(page.getByText('$50.00 in credit')).toBeVisible()
+  })
+
+  test('says nothing is posted rather than showing an empty table', async ({ page }) => {
+    const seed = await seedUnit()
+    const lease = await seedLease(seed, { status: 'DRAFT' })
+    const staff = await createStaff()
+    await signIn(page, staff.email)
+    await page.goto(`/leases/${lease.id}`)
+    await expect(page.getByText(/Nothing posted yet/)).toBeVisible()
+    await expect(page.getByText('Nothing owed')).toBeVisible()
   })
 })
 
