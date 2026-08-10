@@ -1023,7 +1023,7 @@ Also amended: **Demo checkpoint 1's own text.** It said the tenant "texts a phot
 - **Two flaky e2e tests in the R-036 run**, both waiting on a server action. `expect` still carried Playwright's 5-second default while tests were allowed 60, so any assertion waiting on a `<form action>` round trip plus `revalidatePath` plus an RSC re-render could time out with nothing wrong. Raised to 15s in `playwright.config.ts` — the class, not the two tests that happened to show it.
 
 ## R-037 — Tenant payments
-**Commit:** `PENDING`  ·  **Date:** 2026-08-10
+**Commit:** `b0c7ad7`  ·  **Date:** 2026-08-10
 
 **What it built.** PAY-01, and the resolution of the question that had been blocking Milestone 3 since D-11 was taken. A tenant can now open the portal, see what they owe and what it is made of, choose how to pay, and pay it — with the card fee disclosed in money before the choice, and Stripe-hosted fields throughout so no card or bank number ever reaches this product.
 
