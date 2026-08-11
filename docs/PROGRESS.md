@@ -1196,7 +1196,7 @@ R-034 excluded `invoice.finalized` from `HANDLED_EVENTS` deliberately, with a st
 **What it left behind.** ~~Nothing new.~~ **That line was wrong, and a code review caught it the next day** — see R-040c below. Posting a charge without its retraction left a voided invoice stranding a permanent debt on an append-only table, and the new entry named no `Charge` row, so a paid late fee showed as outstanding forever. Both are now fixed. The claim is left struck through rather than edited away because "I declared this closed and it was not" is the useful record.
 
 ## R-040c — Acting on the code review
-**Commit:** `PENDING`  ·  **Date:** 2026-08-11
+**Commit:** `cba1b5c`  ·  **Date:** 2026-08-11
 
 **What it built.** Four fixes, all from a `/code-review` pass over R-040b. Every finding was real; two were worse than reported, and three were defects I had introduced the day before and declared closed.
 
