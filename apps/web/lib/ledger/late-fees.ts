@@ -184,7 +184,11 @@ export async function assessLateFees(
             entityType: 'Charge',
             entityId: fee.id,
             propertyId,
-            reasonCode: 'late_fee_assessed',
+            // No `reasonCode`: that enum is waiver-flavoured (goodwill,
+            // hardship, first_occurrence...) and none of its values describes
+            // a rule firing on a schedule. Better an honest free-text reason
+            // than a code that means something else.
+            //
             // REQUIRED on ledger.adjusted, and rightly - "why" is the point
             // of the record. Written as the sentence that defends the charge
             // rather than a code, because this is what somebody reads in a

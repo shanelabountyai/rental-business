@@ -1172,3 +1172,25 @@ An ACH debit gives what Stripe calls "instant provisional access" and takes **up
 **Bugs found along the way.**
 - **The audit layer caught me.** I put the reason inside `after` instead of the top-level field, and `ledger.adjusted` is on `REASON_REQUIRED` — it threw with "why is the point of the record", which is exactly the guard doing its job. Four tests failed and told me immediately.
 - **I exported a query from a `'use server'` module.** `waiverPatternByTenant` started life in `waivers.ts`, which publishes it as a client-callable endpoint taking arbitrary property ids with no permission check. Moved to `waiver-report.ts` behind `server-only`. This is the second time this exact mistake has happened (the first was `policyFor` in R-037), which makes it worth naming as a pattern: **a read that takes a scope argument does not belong in a `'use server'` file.**
+
+## R-040b — The charge half of the ledger
+**Commit:** `PENDING`  ·  **Date:** 2026-08-10
+
+**What it built.** One handled event, and it closed a bug that made **every balance in the product wrong**.
+
+**The bug.** Nothing in the application ever wrote a `CHARGE` ledger entry. The only two writers were the payment projection and the return reversal — both of them negative or reversing. Balances everywhere are computed from `LedgerEntry` alone, so the ledger was **single-entry**: payments and no charges. A tenant who paid rent went progressively further into credit every month, and `/portal/pay` told them *"You are $1,500 ahead. Nothing is due right now."*
+
+R-034 excluded `invoice.finalized` from `HANDLED_EVENTS` deliberately, with a stated reason: an unpaid invoice "changes nothing about what is owed that `invoice.payment_succeeded` will not say more precisely later." That is wrong in one word. **`payment_succeeded` reports money ARRIVING; it never reports rent becoming OWED**, and nothing else in the pipeline said the second thing.
+
+**How it was found, and why that matters.** Not by a failing test — by asking what actually writes a ledger row in application code, as opposed to in a fixture. **Every test in the suite creates `CHARGE` entries by hand**, so the tests construct a state the application itself cannot produce, and all of them passed against a ledger that could never balance in production. That is a class of blind spot worth naming: a fixture that builds what the app cannot build will hide the fact that it cannot.
+
+**What it decided.** Recorded as **D-35**, which amends D-11's event list:
+- **`invoice.finalized`, not `invoice.created`.** A draft invoice has not been presented to anybody and can still change; finalization is the moment it becomes a bill.
+- **`amount_due`, not `total`.** `amount_due` is what the invoice actually asks the tenant for after any credit balance Stripe has applied. Projecting `total` would put a charge on the ledger the tenant was never asked to pay. A finalized invoice with nothing due is ignored for the same reason.
+- **No `Payment` row.** A bill is not a payment. Nobody has paid anything.
+
+**Bugs found along the way** — two more, both mine, both in the same twenty lines:
+- **The charge was typed `PAYMENT`.** The projector mapped `refund → REVERSAL` and everything else to `PAYMENT`, so the new kind balanced correctly and read as a lie on the statement. Caught by asserting on the row's type rather than only on the balance, which is the assertion that was worth writing.
+- **`writePayment` created a `Payment` row in the `REFUNDED` state** for a charge, because `charge_posted` fell through its ternary chain. It would have shown up on the tenant's payment history as a refund that never happened.
+
+**What it left behind.** Nothing new. The invoice-item mechanism from R-040 and this projection now close the loop: core computes a jurisdiction-dependent amount, pushes it to Stripe as an invoice item, Stripe finalizes an invoice, and the charge lands on the ledger through the same pipeline as everything else.

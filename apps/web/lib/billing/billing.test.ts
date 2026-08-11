@@ -112,7 +112,7 @@ function invoiceEvent(overrides: {
       object: {
         id: overrides.invoiceId ?? `in_${randomUUID().slice(0, 12)}`,
         customer: overrides.customer,
-        ...(type === 'invoice.payment_failed'
+        ...(type === 'invoice.payment_failed' || type === 'invoice.finalized'
           ? { amount_due: overrides.amountDue ?? 150_000 }
           : { amount_paid: overrides.amountPaid ?? 150_000 }),
         payment_intent: overrides.paymentIntentId ?? `pi_${randomUUID().slice(0, 12)}`,
@@ -207,6 +207,57 @@ describe('processStripeEvent', () => {
     expect(entries[0]!.type).toBe('PAYMENT')
     expect(entries[0]!.stripeEventId).toBe(event.id)
   })
+
+  it('POSTS A CHARGE when an invoice is finalized — the missing half of the ledger', async () => {
+    // THE BUG THIS FIXES. Nothing in the product ever wrote a CHARGE entry:
+    // the ledger carried payments and no charges, so a tenant who paid rent
+    // went further into credit every month and the pay screen told them they
+    // were ahead and owed nothing. Balances are computed from LedgerEntry
+    // alone, so a single-entry ledger is a wrong balance everywhere.
+    const { lease, customerId } = await provisionedLease()
+
+    await processStripeEvent(
+      invoiceEvent({ customer: customerId, type: 'invoice.finalized', amountDue: 150_000 }),
+    )
+
+    expect(await leaseBalanceCents(lease.id)).toBe(150_000)
+    const entry = await prisma.ledgerEntry.findFirstOrThrow({
+      where: { leaseId: lease.id, type: 'CHARGE' },
+    })
+    // POSITIVE increases what is owed.
+    expect(entry.amountCents).toBe(150_000)
+    // A charge is not a payment - nobody has paid anything.
+    expect(await prisma.payment.count({ where: { leaseId: lease.id } })).toBe(0)
+  }, 20_000)
+
+  it('completes the cycle: billed, then paid, lands at zero', async () => {
+    // Double-entry end to end. Before the charge half existed this finished
+    // at MINUS the rent, every month, forever.
+    const { lease, customerId } = await provisionedLease()
+    const invoiceId = `in_${randomUUID().slice(0, 12)}`
+
+    await processStripeEvent(
+      invoiceEvent({ customer: customerId, type: 'invoice.finalized', amountDue: 150_000, invoiceId }),
+    )
+    expect(await leaseBalanceCents(lease.id)).toBe(150_000)
+
+    await processStripeEvent(
+      invoiceEvent({ customer: customerId, amountPaid: 150_000, invoiceId }),
+    )
+    expect(await leaseBalanceCents(lease.id)).toBe(0)
+  }, 20_000)
+
+  it('ignores a finalized invoice with nothing due', async () => {
+    // Fully covered by a credit balance. Nothing became owed, so nothing
+    // goes on the ledger - projecting `total` instead of `amount_due` would
+    // charge the tenant for something they were never asked to pay.
+    const { lease, customerId } = await provisionedLease()
+    const result = await processStripeEvent(
+      invoiceEvent({ customer: customerId, type: 'invoice.finalized', amountDue: 0 }),
+    )
+    expect(result.outcome).toBe('ignored')
+    expect(await leaseBalanceCents(lease.id)).toBe(0)
+  }, 20_000)
 
   it('REVERSES a settled payment that the bank later returned (PAY-02)', async () => {
     // THE BUG THIS ITEM EXISTS TO FIX. An ACH debit gives "instant

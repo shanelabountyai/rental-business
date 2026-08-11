@@ -23,14 +23,30 @@
  * and the log still shows what arrived.
  *
  * What is NOT here is as deliberate as what is:
- *   - `invoice.created` / `invoice.finalized` - an invoice that exists but
- *     has not been paid or failed changes nothing about what is owed that
- *     `invoice.payment_succeeded` will not say more precisely later.
+ *   - `invoice.created` - a DRAFT invoice has not been presented to anybody
+ *     and may still change. `invoice.finalized` is the moment it becomes a
+ *     bill, and that one IS handled - see below.
  *   - `charge.*` - the same money as the invoice events, one layer down.
  *     Projecting both would double-count every payment.
  *   - `customer.subscription.*` - R-036 owns the subscription lifecycle.
  */
 export const HANDLED_EVENTS = [
+  /**
+   * RENT BECAME OWED. The charge half of double-entry, and its absence was a
+   * real bug: the ledger carried payments and no charges, so a tenant who
+   * paid went further into credit every month and the pay screen told them
+   * they were ahead and owed nothing.
+   *
+   * R-034 excluded this on the reasoning that an unpaid invoice "changes
+   * nothing about what is owed that `invoice.payment_succeeded` will not say
+   * more precisely later". That was wrong in one word: `payment_succeeded`
+   * reports money ARRIVING, never rent becoming OWED. Nothing else in the
+   * pipeline says the second thing.
+   *
+   * `finalized` rather than `created`, because a draft invoice has not been
+   * presented to anybody and can still change.
+   */
+  'invoice.finalized',
   /// Money arrived and the invoice is settled. The single most important
   /// event in the product.
   'invoice.payment_succeeded',
@@ -83,6 +99,9 @@ export interface StripeEventEnvelope {
 }
 
 export type ProjectionKind =
+  /// Money owed. Writes a POSITIVE LedgerEntry and no Payment - nobody has
+  /// paid anything; a bill has been issued.
+  | 'charge_posted'
   /// Money in. Writes a Payment and a negative LedgerEntry.
   | 'payment_succeeded'
   /// Money on its way. Writes a Payment in PENDING and NO ledger entry -
@@ -169,6 +188,34 @@ export function interpretStripeEvent(event: StripeEventEnvelope): InterpretResul
   const occurredAt = new Date(event.created * 1000)
 
   switch (event.type) {
+    case 'invoice.finalized': {
+      // `amount_due`, not `total`: what this invoice actually asks the tenant
+      // for, after any credit balance Stripe has already applied. A waiver
+      // posted as a negative invoice item (R-040) is inside `total` too, but
+      // a customer-balance credit is not - and projecting `total` would put a
+      // charge on the ledger the tenant was never asked to pay.
+      const amount = int(object, 'amount_due')
+      if (amount == null || amount <= 0) {
+        // A zero-due invoice is fully covered by credit. Nothing became owed,
+        // so nothing goes on the ledger.
+        return { outcome: 'ignore', reason: 'invoice finalized with nothing due' }
+      }
+      return {
+        outcome: 'project',
+        intent: {
+          kind: 'charge_posted',
+          stripeObjectId,
+          stripeCustomerId,
+          stripeInvoiceId: stripeObjectId,
+          stripePaymentIntentId: null,
+          rail: null,
+          amountCents: amount,
+          occurredAt,
+          description: str(object, 'description') ?? 'Rent',
+        },
+      }
+    }
+
     case 'invoice.payment_succeeded': {
       // `amount_paid`, not `total`: a partially-paid invoice reports what
       // actually arrived, and projecting the total would credit money
@@ -333,6 +380,10 @@ function railOf(object: Record<string, unknown>): 'ACH' | 'CARD' | null {
  */
 export function ledgerAmountCents(intent: ProjectionIntent): number {
   switch (intent.kind) {
+    case 'charge_posted':
+      // POSITIVE increases what is owed. The other half of double-entry, and
+      // the half that was missing.
+      return intent.amountCents
     case 'payment_succeeded':
       return -intent.amountCents
     case 'refund':

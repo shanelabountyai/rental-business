@@ -141,7 +141,15 @@ export async function processStripeEvent(
           propertyId: payer.propertyId,
           leaseId: payer.leaseId,
           leasePayerId: payer.id,
-          type: intent.kind === 'refund' ? 'REVERSAL' : 'PAYMENT',
+          // Three kinds reach here and each is a different row. A charge
+          // typed as a payment balances correctly and reads as a lie on the
+          // statement, which is worse than being wrong loudly.
+          type:
+            intent.kind === 'charge_posted'
+              ? 'CHARGE'
+              : intent.kind === 'refund'
+                ? 'REVERSAL'
+                : 'PAYMENT',
           amountCents: ledgerAmountCents(intent),
           description: intent.description,
           occurredAt: intent.occurredAt,
@@ -209,6 +217,11 @@ async function writePayment(
   payer: { id: string; leaseId: string; propertyId: string },
 ) {
   if (intent.kind === 'dispute') return null
+  // A CHARGE is not a payment. Nobody has paid anything - a bill was issued -
+  // so there is no Payment row to write, and falling through would have
+  // created one in the `REFUNDED` state, which is nonsense that would then
+  // show up on the tenant's payment history.
+  if (intent.kind === 'charge_posted') return null
 
   const status =
     intent.kind === 'payment_succeeded'
