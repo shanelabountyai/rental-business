@@ -1292,7 +1292,7 @@ The owner put a test-mode key in `.env.local`, which closed the caveat standing 
 - **A whole class of test flake, fixed at the root.** Several unrelated tests kept timing out at 5s under full-suite parallel load while passing alone — that is Vitest's *unit-test* default applied to a suite that is mostly integration against a remote Neon Postgres, where a 400ms test can take eight seconds under load. Raised to 20s globally, which also replaces a growing pile of per-test timeout arguments I had been adding one failure at a time. Two consecutive clean runs at 1,237 tests.
 
 ## R-098 — UX and accessibility remediation: the safety tier
-**Commit:** `TBD`  ·  **Date:** 2026-08-11
+**Commit:** `15e4417`  ·  **Date:** 2026-08-11
 
 **What it built.** Two review passes over every screen and component in the product — one on UX, one on accessibility — produced ~40 findings, recorded in full with per-finding verdicts in `docs/UX-ACCESSIBILITY-LOG.md`. This item fixes the tier where a defect has a consequence outside the screen. The rest is R-099.
 
