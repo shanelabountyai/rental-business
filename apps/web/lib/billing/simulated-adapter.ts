@@ -182,6 +182,7 @@ export class SimulatedBillingProvider implements BillingProvider {
     amountCents: number
     currency: string
     description: string
+    chargeId?: string
     idempotencyKey: string
   }): Promise<{ stripeInvoiceItemId: string }> {
     const stripeInvoiceItemId = stripeId('ii')

@@ -1193,4 +1193,27 @@ R-034 excluded `invoice.finalized` from `HANDLED_EVENTS` deliberately, with a st
 - **The charge was typed `PAYMENT`.** The projector mapped `refund → REVERSAL` and everything else to `PAYMENT`, so the new kind balanced correctly and read as a lie on the statement. Caught by asserting on the row's type rather than only on the balance, which is the assertion that was worth writing.
 - **`writePayment` created a `Payment` row in the `REFUNDED` state** for a charge, because `charge_posted` fell through its ternary chain. It would have shown up on the tenant's payment history as a refund that never happened.
 
-**What it left behind.** Nothing new. The invoice-item mechanism from R-040 and this projection now close the loop: core computes a jurisdiction-dependent amount, pushes it to Stripe as an invoice item, Stripe finalizes an invoice, and the charge lands on the ledger through the same pipeline as everything else.
+**What it left behind.** ~~Nothing new.~~ **That line was wrong, and a code review caught it the next day** — see R-040c below. Posting a charge without its retraction left a voided invoice stranding a permanent debt on an append-only table, and the new entry named no `Charge` row, so a paid late fee showed as outstanding forever. Both are now fixed. The claim is left struck through rather than edited away because "I declared this closed and it was not" is the useful record.
+
+## R-040c — Acting on the code review
+**Commit:** `PENDING`  ·  **Date:** 2026-08-11
+
+**What it built.** Four fixes, all from a `/code-review` pass over R-040b. Every finding was real; two were worse than reported, and three were defects I had introduced the day before and declared closed.
+
+**1. A voided invoice stranded a permanent debt.** `invoice.finalized` posts a positive CHARGE to an append-only table, and nothing handled `invoice.voided` — so once a bill was withdrawn, the debt could never come off. Not a dashboard-only edge case: `pauseSubscription({ behaviour: 'void' })` is one of our own three pause behaviours, described in our own adapter as "for a period where nothing is genuinely owed". Pausing a tenancy that way would have left every paused month as a phantom balance. Fixed with a `charge_voided` kind writing a negative REVERSAL — D-11's rule as written, corrections are reversing entries.
+
+**This is the lesson worth keeping**: I added a way to CREATE a debt without the way to RETRACT it, in the same session I spent quoting D-11 at every other decision. A new positive entry needs its negative counterpart designed at the same time, not later.
+
+**2. The charge entry named no `Charge` row.** Three readers ask "what is still outstanding on this charge" from its own ledger entries — `outstandingCharges()`, the tenant pay screen, and the late-fee delta arithmetic. With `chargeId` null they all answered "all of it", permanently: a tenant who paid a late fee would see the balance drop to zero and the same fee still itemised underneath as outstanding, forever. Fixed with a round trip — `addInvoiceItem` stamps our charge id into Stripe's invoice-item metadata, Stripe copies it onto the invoice line, and the finalization projection reads it back and writes one linked entry per charge. Subscription rent has no `Charge` row and lands unlinked, which is correct rather than a gap.
+
+The late-fee job now creates its `Charge` row **before** pushing to Stripe, so the id exists to stamp. A failed push leaves a charge with a null `stripeInvoiceItemId` — recoverable and visible — whereas pushing first would put an invoice item in Stripe naming a charge id that does not exist.
+
+**3. The reconciliation was keyed on the wrong thing, and worse than reported.** `MONEY_MOVING_EVENTS` matched Stripe event *types*, but the same type produces different outcomes depending on history: `invoice.payment_failed` writes a REVERSAL when it is an ACH return against a settled payment (R-039) and nothing when it is a first decline. Keyed on the type it said "no row expected" in both cases — so **a lost reversal, the most serious drift there is, was invisible to the check built to catch exactly that.** It also missed R-037's uninvoiced `payment_intent.succeeded`. Now keyed on the projection kind the pipeline actually recorded, with the old type set kept as a fallback for legacy rows that carry no detail, because under-reporting drift is the failure that matters.
+
+**4. The decisions log had not been a table since D-15.** A blank line before each new row split every decision from D-15 to D-35 into its own one-row table. The review caught D-35 because that was all it could see; twenty rows were affected, across several earlier sessions. Fixed, and worth noting as a docs defect that silently accumulated because nobody rendered the file.
+
+**What it decided.** Nothing new — these are corrections, not decisions. D-35 stands as written, with `invoice.voided` now its stated counterpart.
+
+**What it left behind.**
+- **The review only saw 40 lines.** With everything committed and pushed to `main`, `origin/main...HEAD` was empty and the tool fell back to the last commit. It found four real defects in that sliver, which is an argument for reviewing the rest rather than a clean bill of health. The projection pipeline has now been changed five times and has never been reviewed as a whole.
+- **The linked-entry loop writes one row per charge inside a transaction.** Fine for an invoice with a handful of lines; an invoice with hundreds would want a `createMany`. Not built, because no path produces one yet.

@@ -136,6 +136,55 @@ export async function processStripeEvent(
     const payment = await writePayment(tx, event, intent, payer)
 
     if (movesLedger(intent)) {
+      // ONE ENTRY PER CHARGE WE RAISED, so each is linked to the row that
+      // caused it. Everything that asks "what is still outstanding on this
+      // fee" reads a charge's own ledger entries - `outstandingCharges()`,
+      // the tenant pay screen, the late-fee delta arithmetic - and an
+      // unlinked entry leaves all three answering "all of it" forever, which
+      // showed up as a paid late fee sitting on the pay screen permanently.
+      //
+      // Rent from the subscription itself has no `Charge` row and so no id
+      // to link: that lands as a single unlinked entry, which is correct
+      // rather than a gap.
+      const chargeIds = intent.chargeIds ?? []
+      const linked = chargeIds.length > 0
+        ? await tx.charge.findMany({
+            where: { id: { in: chargeIds }, leaseId: payer.leaseId },
+            select: { id: true, amountCents: true },
+          })
+        : []
+      const linkedTotal = linked.reduce((total, row) => total + row.amountCents, 0)
+      const sign = ledgerAmountCents(intent) < 0 ? -1 : 1
+
+      for (const row of linked) {
+        await tx.ledgerEntry.create({
+          data: {
+            propertyId: payer.propertyId,
+            leaseId: payer.leaseId,
+            leasePayerId: payer.id,
+            chargeId: row.id,
+            type:
+              intent.kind === 'charge_posted'
+                ? 'CHARGE'
+                : intent.kind === 'refund' || intent.kind === 'charge_voided'
+                  ? 'REVERSAL'
+                  : 'PAYMENT',
+            amountCents: sign * row.amountCents,
+            description: intent.description,
+            occurredAt: intent.occurredAt,
+            stripeEventId: event.id,
+            stripeObjectId: intent.stripeObjectId,
+          },
+        })
+      }
+
+      // Whatever the invoice covered beyond charges we raised - the
+      // subscription's own rent line, normally. Skipped when the linked rows
+      // account for the whole amount, so an invoice made entirely of our own
+      // charges does not also get an empty remainder row.
+      const remainder = Math.abs(ledgerAmountCents(intent)) - linkedTotal
+      if (remainder <= 0) return
+
       await tx.ledgerEntry.create({
         data: {
           propertyId: payer.propertyId,
@@ -147,10 +196,10 @@ export async function processStripeEvent(
           type:
             intent.kind === 'charge_posted'
               ? 'CHARGE'
-              : intent.kind === 'refund'
+              : intent.kind === 'refund' || intent.kind === 'charge_voided'
                 ? 'REVERSAL'
                 : 'PAYMENT',
-          amountCents: ledgerAmountCents(intent),
+          amountCents: sign * remainder,
           description: intent.description,
           occurredAt: intent.occurredAt,
           paymentId: payment?.id ?? null,
@@ -221,7 +270,7 @@ async function writePayment(
   // so there is no Payment row to write, and falling through would have
   // created one in the `REFUNDED` state, which is nonsense that would then
   // show up on the tenant's payment history.
-  if (intent.kind === 'charge_posted') return null
+  if (intent.kind === 'charge_posted' || intent.kind === 'charge_voided') return null
 
   const status =
     intent.kind === 'payment_succeeded'

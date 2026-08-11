@@ -149,33 +149,44 @@ export async function assessLateFees(
         : `Late fee — ${decision.daysLate} days past due (${decision.ruleSummary})`
 
     try {
+      // THE CHARGE ROW FIRST, so its id can ride into Stripe's metadata and
+      // come back on the invoice line - which is what links the projected
+      // ledger entry to this fee. Created before the push and left with a
+      // null `stripeInvoiceItemId` if the push fails, which is recoverable
+      // and visible; pushing first would mean an invoice item in Stripe that
+      // names a charge id that does not exist.
+      const fee = await prisma.charge.create({
+        data: {
+          propertyId,
+          leaseId: charge.leaseId,
+          type: 'LATE_FEE',
+          amountCents: deltaCents,
+          description,
+          dueOn: new Date(`${today}T00:00:00.000Z`),
+          assessedOnChargeId: charge.id,
+          // WHICH VERSION of the rule produced this number. A rule is
+          // versioned and effective-dated (D-4), and "what did the law say on
+          // the day we charged it" is the first question in any dispute - it
+          // cannot be reconstructed from today's row.
+          jurisdictionRuleId: rule.id,
+        },
+      })
+
       const item = await getBillingProvider().addInvoiceItem({
         stripeCustomerId: payer.stripeCustomerId,
         amountCents: deltaCents,
         currency: 'usd',
         description,
+        chargeId: fee.id,
         // Keyed on the fact: this rent charge, this business date. A retried
         // run adds the fee once.
         idempotencyKey: `latefee:${charge.id}:${today}`,
       })
 
       await prisma.$transaction(async (tx) => {
-        const fee = await tx.charge.create({
-          data: {
-            propertyId,
-            leaseId: charge.leaseId,
-            type: 'LATE_FEE',
-            amountCents: deltaCents,
-            description,
-            dueOn: new Date(`${today}T00:00:00.000Z`),
-            assessedOnChargeId: charge.id,
-            // WHICH VERSION of the rule produced this number. A rule is
-            // versioned and effective-dated (D-4), and "what did the law say
-            // on the day we charged it" is the first question in any
-            // dispute - it cannot be reconstructed from today's row.
-            jurisdictionRuleId: rule.id,
-            stripeInvoiceItemId: item.stripeInvoiceItemId,
-          },
+        await tx.charge.update({
+          where: { id: fee.id },
+          data: { stripeInvoiceItemId: item.stripeInvoiceItemId },
         })
         await auditAsSystem(
           'ledger.late_fee',

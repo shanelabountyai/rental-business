@@ -112,7 +112,9 @@ function invoiceEvent(overrides: {
       object: {
         id: overrides.invoiceId ?? `in_${randomUUID().slice(0, 12)}`,
         customer: overrides.customer,
-        ...(type === 'invoice.payment_failed' || type === 'invoice.finalized'
+        ...(type === 'invoice.payment_failed' ||
+        type === 'invoice.finalized' ||
+        type === 'invoice.voided'
           ? { amount_due: overrides.amountDue ?? 150_000 }
           : { amount_paid: overrides.amountPaid ?? 150_000 }),
         payment_intent: overrides.paymentIntentId ?? `pi_${randomUUID().slice(0, 12)}`,
@@ -245,6 +247,85 @@ describe('processStripeEvent', () => {
       invoiceEvent({ customer: customerId, amountPaid: 150_000, invoiceId }),
     )
     expect(await leaseBalanceCents(lease.id)).toBe(0)
+  }, 20_000)
+
+  it('VOIDING an invoice takes the charge back off the ledger', async () => {
+    // The retraction half of finalization, and not optional: finalization
+    // posts to an APPEND-ONLY table, so without this a voided invoice leaves
+    // a debt nothing can ever remove. Reachable from inside this product -
+    // `pauseSubscription({ behaviour: 'void' })` is one of our own pause
+    // behaviours - so it is not a dashboard-only edge case.
+    const { lease, customerId } = await provisionedLease()
+    const invoiceId = `in_${randomUUID().slice(0, 12)}`
+
+    await processStripeEvent(
+      invoiceEvent({ customer: customerId, type: 'invoice.finalized', amountDue: 150_000, invoiceId }),
+    )
+    expect(await leaseBalanceCents(lease.id)).toBe(150_000)
+
+    const voided = await processStripeEvent(
+      invoiceEvent({ customer: customerId, type: 'invoice.voided', amountDue: 150_000, invoiceId }),
+    )
+    expect(voided).toEqual({ outcome: 'projected', detail: 'charge_voided' })
+
+    // Back to nothing owed, by a REVERSING ENTRY rather than an edit (D-11).
+    expect(await leaseBalanceCents(lease.id)).toBe(0)
+    const reversal = await prisma.ledgerEntry.findFirstOrThrow({
+      where: { leaseId: lease.id, type: 'REVERSAL' },
+    })
+    expect(reversal.amountCents).toBe(-150_000)
+    // A void is not a payment - nobody paid anything.
+    expect(await prisma.payment.count({ where: { leaseId: lease.id } })).toBe(0)
+  }, 20_000)
+
+  it('LINKS the charge entry to our own Charge row when the invoice line names one', async () => {
+    // The round trip R-040 pushes and R-040b reads back: our charge id goes
+    // out in the invoice item's metadata and comes back on the invoice line.
+    // Without the link, everything that asks "what is still outstanding on
+    // this fee" - outstandingCharges(), the tenant pay screen, the late-fee
+    // delta - answers "all of it" forever, so a fee the tenant had paid sat
+    // on the pay screen permanently.
+    const { lease, customerId } = await provisionedLease()
+    const fee = await prisma.charge.create({
+      data: {
+        propertyId: lease.propertyId,
+        leaseId: lease.id,
+        type: 'LATE_FEE',
+        amountCents: 5_000,
+        description: 'Late fee',
+        dueOn: new Date('2026-03-05T00:00:00.000Z'),
+      },
+    })
+
+    const event = invoiceEvent({
+      customer: customerId,
+      type: 'invoice.finalized',
+      amountDue: 5_000,
+    })
+    ;(event.data.object as Record<string, unknown>).lines = {
+      data: [{ metadata: { chargeId: fee.id } }],
+    }
+    await processStripeEvent(event)
+
+    const entry = await prisma.ledgerEntry.findFirstOrThrow({
+      where: { leaseId: lease.id, type: 'CHARGE' },
+    })
+    expect(entry.chargeId).toBe(fee.id)
+    expect(entry.amountCents).toBe(5_000)
+  }, 20_000)
+
+  it('still posts an unlinked charge for subscription rent, which has no Charge row', async () => {
+    // Rent comes from the subscription itself and has no `Charge` row of its
+    // own, so an unlinked entry is the correct answer rather than a gap.
+    const { lease, customerId } = await provisionedLease()
+    await processStripeEvent(
+      invoiceEvent({ customer: customerId, type: 'invoice.finalized', amountDue: 150_000 }),
+    )
+    const entry = await prisma.ledgerEntry.findFirstOrThrow({
+      where: { leaseId: lease.id, type: 'CHARGE' },
+    })
+    expect(entry.chargeId).toBeNull()
+    expect(entry.amountCents).toBe(150_000)
   }, 20_000)
 
   it('ignores a finalized invoice with nothing due', async () => {

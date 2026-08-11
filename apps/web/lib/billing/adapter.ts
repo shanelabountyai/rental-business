@@ -218,6 +218,12 @@ export interface BillingProvider {
     /// can say WHY - "late fee, 5 days past due, capped at the Texas
     /// maximum" defends itself in a way that "Late fee" does not.
     description: string
+    /// OUR charge id, carried into Stripe's metadata so the invoice event
+    /// that bills it can be linked back to the row that caused it. Without
+    /// this round trip a projected CHARGE entry names no charge, and every
+    /// reader that asks "what is still outstanding on this fee" gets the
+    /// answer "all of it" forever.
+    chargeId?: string
     idempotencyKey: string
   }): Promise<{ stripeInvoiceItemId: string }>
 

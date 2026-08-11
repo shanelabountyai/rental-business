@@ -68,7 +68,7 @@ export async function reconcileLedger(
   const [events, entries] = await Promise.all([
     prisma.processedStripeEvent.findMany({
       where: { occurredAt: { gte: since } },
-      select: { stripeEventId: true, outcome: true, type: true },
+      select: { stripeEventId: true, outcome: true, type: true, detail: true },
     }),
     prisma.ledgerEntry.findMany({
       where: { occurredAt: { gte: since }, stripeEventId: { not: null } },
@@ -85,7 +85,14 @@ export async function reconcileLedger(
       // A projected money event is still expected to have produced a row,
       // which is what `expectsLedgerRow` below tells detectDrift.
       amountCents: null,
-      expectsLedgerRow: MONEY_MOVING_EVENTS.has(event.type),
+      // Falls back to the event type when `detail` is absent. A row written
+      // before the pipeline recorded a detail - or by any future path that
+      // forgets to - must not silently escape the check by having nothing to
+      // key on. Belt and braces, deliberately: under-reporting drift is the
+      // failure mode that matters here.
+      expectsLedgerRow: event.detail
+        ? LEDGER_MOVING_KINDS.has(event.detail)
+        : LEGACY_MONEY_MOVING_EVENTS.has(event.type),
     })),
     entries.map((entry) => ({
       id: entry.id,
@@ -138,7 +145,42 @@ export async function reconcileLedger(
 /// answer different questions: that list is "what do we interpret", this is
 /// "what must have moved money". A failed payment is handled and projects a
 /// Payment row, but moves no balance and is correctly rowless here.
-const MONEY_MOVING_EVENTS: ReadonlySet<string> = new Set([
+/**
+ * The projection kinds that write a `LedgerEntry`.
+ *
+ * KEYED ON WHAT THE PROJECTOR RECORDED, not on the Stripe event type, and
+ * that distinction is the whole point. The same event type produces
+ * different outcomes depending on history and content, so a set of type
+ * names cannot answer "was a row expected here":
+ *
+ *   - `invoice.payment_failed` writes a REVERSAL when it is an ACH return
+ *     against a settled payment (R-039), and nothing when it is a first
+ *     decline. Keyed on the type, this said "no row expected" in both
+ *     cases - so **a lost reversal, the most serious drift there is, was
+ *     invisible to the check built to catch exactly that.**
+ *   - `payment_intent.succeeded` projects only when it carries no invoice;
+ *     the invoiced ones are ignored to avoid double-counting.
+ *   - `invoice.finalized` writes the CHARGE half (R-040b) and was simply
+ *     missing.
+ *
+ * `detail` carries the projection kind the pipeline actually chose, so this
+ * stays correct as kinds are added rather than needing a second list kept in
+ * step by hand.
+ */
+const LEDGER_MOVING_KINDS: ReadonlySet<string> = new Set([
+  'charge_posted',
+  'charge_voided',
+  'payment_succeeded',
+  'refund',
+  'payment_returned',
+])
+
+/// The old type-keyed answer, kept ONLY for rows with no recorded detail.
+/// Incomplete by construction - that is why it was replaced - but a partial
+/// check on a legacy row beats none.
+const LEGACY_MONEY_MOVING_EVENTS: ReadonlySet<string> = new Set([
+  'invoice.finalized',
+  'invoice.voided',
   'invoice.payment_succeeded',
   'charge.refunded',
 ])

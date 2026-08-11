@@ -47,6 +47,22 @@ export const HANDLED_EVENTS = [
    * presented to anybody and can still change.
    */
   'invoice.finalized',
+  /**
+   * THE BILL WAS WITHDRAWN. The retraction half of `invoice.finalized`, and
+   * it is not optional: finalization posts a positive CHARGE to an
+   * APPEND-ONLY table, so without this a voided invoice leaves a debt on the
+   * ledger that nothing can ever take off.
+   *
+   * Reachable from inside this product, not just from the Stripe dashboard -
+   * `pauseSubscription({ behaviour: 'void' })` is one of our own three pause
+   * behaviours (see lib/billing/adapter.ts), for "a period where nothing is
+   * genuinely owed". Pausing a tenancy that way would have stranded every
+   * paused month as a permanent phantom balance.
+   *
+   * D-11's rule applies exactly as written: corrections are reversing
+   * entries, never edits or deletes.
+   */
+  'invoice.voided',
   /// Money arrived and the invoice is settled. The single most important
   /// event in the product.
   'invoice.payment_succeeded',
@@ -102,6 +118,9 @@ export type ProjectionKind =
   /// Money owed. Writes a POSITIVE LedgerEntry and no Payment - nobody has
   /// paid anything; a bill has been issued.
   | 'charge_posted'
+  /// The bill was withdrawn. Writes a NEGATIVE reversing entry against the
+  /// charge it retracts.
+  | 'charge_voided'
   /// Money in. Writes a Payment and a negative LedgerEntry.
   | 'payment_succeeded'
   /// Money on its way. Writes a Payment in PENDING and NO ledger entry -
@@ -128,6 +147,11 @@ export interface ProjectionIntent {
   stripeCustomerId: string | null
   stripeInvoiceId: string | null
   stripePaymentIntentId: string | null
+  /// OUR `Charge` ids carried on the invoice's line items, read back off
+  /// the metadata we stamped when the item was pushed (R-040). Empty for an
+  /// invoice whose lines came from the subscription itself rather than from
+  /// a charge we raised.
+  chargeIds?: string[]
   /// Which rail the money came down, where Stripe told us. Null on the
   /// invoice events, which do not say. R-034 wrote `OTHER` on every
   /// projected payment and noted that R-037 would narrow it; this is that.
@@ -212,6 +236,32 @@ export function interpretStripeEvent(event: StripeEventEnvelope): InterpretResul
           amountCents: amount,
           occurredAt,
           description: str(object, 'description') ?? 'Rent',
+          chargeIds: chargeIdsOf(object),
+        },
+      }
+    }
+
+    case 'invoice.voided': {
+      // `amount_due` again, matching what finalization posted - so the
+      // retraction is exactly the size of the charge it undoes rather than
+      // some other number Stripe happens to report on the voided invoice.
+      const amount = int(object, 'amount_due')
+      if (amount == null || amount <= 0) {
+        return { outcome: 'ignore', reason: 'voided invoice had nothing outstanding' }
+      }
+      return {
+        outcome: 'project',
+        intent: {
+          kind: 'charge_voided',
+          stripeObjectId,
+          stripeCustomerId,
+          stripeInvoiceId: stripeObjectId,
+          stripePaymentIntentId: null,
+          rail: null,
+          amountCents: amount,
+          occurredAt,
+          description: 'Invoice voided',
+          chargeIds: chargeIdsOf(object),
         },
       }
     }
@@ -362,6 +412,27 @@ export function interpretStripeEvent(event: StripeEventEnvelope): InterpretResul
 /// PaymentIntent we created offers exactly one (see the Stripe driver), so
 /// the fallback is exact rather than a guess. Null when neither is legible,
 /// which leaves the Payment row on `OTHER` rather than inventing a rail.
+/**
+ * Our own `Charge` ids, read back off the invoice's line metadata.
+ *
+ * Stripe copies an invoice item's metadata onto the invoice LINE, which is
+ * what makes this round trip work: `addInvoiceItem` stamps the id going out
+ * and this reads it coming back. Lines with no `chargeId` are subscription
+ * rent, which has no `Charge` row of its own - so an empty result is a
+ * normal answer, not a failure.
+ */
+function chargeIdsOf(object: Record<string, unknown>): string[] {
+  const lines = (object.lines as { data?: unknown[] } | undefined)?.data
+  if (!Array.isArray(lines)) return []
+  const ids: string[] = []
+  for (const line of lines) {
+    const metadata = (line as { metadata?: Record<string, unknown> } | null)?.metadata
+    const id = metadata && typeof metadata.chargeId === 'string' ? metadata.chargeId : null
+    if (id) ids.push(id)
+  }
+  return ids
+}
+
 function railOf(object: Record<string, unknown>): 'ACH' | 'CARD' | null {
   const types = object.payment_method_types
   const first = Array.isArray(types) && typeof types[0] === 'string' ? types[0] : null
@@ -384,6 +455,10 @@ export function ledgerAmountCents(intent: ProjectionIntent): number {
       // POSITIVE increases what is owed. The other half of double-entry, and
       // the half that was missing.
       return intent.amountCents
+    case 'charge_voided':
+      // NEGATIVE takes it back off. Same magnitude as the charge it
+      // retracts, so the pair nets to nothing on the statement.
+      return -intent.amountCents
     case 'payment_succeeded':
       return -intent.amountCents
     case 'refund':

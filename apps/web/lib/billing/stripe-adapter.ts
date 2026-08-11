@@ -395,6 +395,7 @@ export class StripeBillingProvider implements BillingProvider {
     amountCents: number
     currency: string
     description: string
+    chargeId?: string
     idempotencyKey: string
   }): Promise<{ stripeInvoiceItemId: string }> {
     const item = await this.#post(
@@ -405,6 +406,9 @@ export class StripeBillingProvider implements BillingProvider {
         amount: input.amountCents,
         currency: input.currency,
         description: input.description,
+        // Rides through to the invoice LINE, which is how the finalization
+        // event gets back to the row that caused it.
+        ...(input.chargeId ? { 'metadata[chargeId]': input.chargeId } : {}),
       },
       // Keyed on the FACT by the caller - this lease, this charge, this day -
       // so a retried assessment adds the fee once rather than twice.

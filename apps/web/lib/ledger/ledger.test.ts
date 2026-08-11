@@ -233,6 +233,67 @@ describe('reconcileLedger', () => {
     expect(found?.kind).toBe('projected_but_missing')
   })
 
+  it('CATCHES a lost REVERSAL, which the old type-keyed check could not', async () => {
+    // The drift that was invisible. `invoice.payment_failed` writes a
+    // REVERSAL when it is an ACH return against a settled payment (R-039)
+    // and nothing when it is a first decline - so keying on the event type
+    // said "no row expected" in both cases, and a lost reversal (money
+    // credited back that should not have been) went unnoticed by the check
+    // built to catch exactly that.
+    const eventId = `evt_${randomUUID().replace(/-/g, '')}`
+    await prisma.processedStripeEvent.create({
+      data: {
+        stripeEventId: eventId,
+        type: 'invoice.payment_failed',
+        outcome: 'projected',
+        detail: 'payment_returned',
+        occurredAt: new Date(),
+      },
+    })
+
+    const report = await reconcileLedger()
+    expect(report.drift.find((d) => d.stripeEventId === eventId)?.kind).toBe(
+      'projected_but_missing',
+    )
+  })
+
+  it('CATCHES a lost CHARGE, the half added by R-040b', async () => {
+    const eventId = `evt_${randomUUID().replace(/-/g, '')}`
+    await prisma.processedStripeEvent.create({
+      data: {
+        stripeEventId: eventId,
+        type: 'invoice.finalized',
+        outcome: 'projected',
+        detail: 'charge_posted',
+        occurredAt: new Date(),
+      },
+    })
+
+    const report = await reconcileLedger()
+    expect(report.drift.find((d) => d.stripeEventId === eventId)?.kind).toBe(
+      'projected_but_missing',
+    )
+  })
+
+  it('does NOT expect a row for a failure that recorded no money movement', async () => {
+    // The other half of keying on the detail: a first decline projects a
+    // FAILED payment and no ledger row, and flagging that as drift would
+    // make the report noisy enough to stop being read.
+    const eventId = `evt_${randomUUID().replace(/-/g, '')}`
+    await prisma.processedStripeEvent.create({
+      data: {
+        stripeEventId: eventId,
+        type: 'invoice.payment_failed',
+        outcome: 'projected',
+        detail: 'payment_failed',
+        occurredAt: new Date(),
+      },
+    })
+
+    const report = await reconcileLedger()
+    expect(report.drift.filter((d) => d.stripeEventId === eventId)).toEqual([])
+  })
+
   it('catches a claim the pipeline died in the middle of', async () => {
     const eventId = `evt_${randomUUID().replace(/-/g, '')}`
     await prisma.processedStripeEvent.create({
