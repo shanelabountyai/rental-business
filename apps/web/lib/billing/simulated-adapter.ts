@@ -177,6 +177,21 @@ export class SimulatedBillingProvider implements BillingProvider {
     return leaseBalanceCents(payer.leaseId)
   }
 
+  async addInvoiceItem(input: {
+    stripeCustomerId: string
+    amountCents: number
+    currency: string
+    description: string
+    idempotencyKey: string
+  }): Promise<{ stripeInvoiceItemId: string }> {
+    const stripeInvoiceItemId = stripeId('ii')
+    console.info(
+      `[billing:simulated] invoice item ${stripeInvoiceItemId} for ${input.amountCents}c ` +
+        `on ${input.stripeCustomerId} - ${input.description} (key ${input.idempotencyKey})`,
+    )
+    return { stripeInvoiceItemId }
+  }
+
   async markInvoicePaidOutOfBand(input: {
     stripeInvoiceId: string
     reference: string

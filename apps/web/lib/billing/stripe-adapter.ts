@@ -390,6 +390,29 @@ export class StripeBillingProvider implements BillingProvider {
     })
   }
 
+  async addInvoiceItem(input: {
+    stripeCustomerId: string
+    amountCents: number
+    currency: string
+    description: string
+    idempotencyKey: string
+  }): Promise<{ stripeInvoiceItemId: string }> {
+    const item = await this.#post(
+      '/invoiceitems',
+      {
+        customer: input.stripeCustomerId,
+        // A finished number, computed and clamped in core (D-12).
+        amount: input.amountCents,
+        currency: input.currency,
+        description: input.description,
+      },
+      // Keyed on the FACT by the caller - this lease, this charge, this day -
+      // so a retried assessment adds the fee once rather than twice.
+      input.idempotencyKey,
+    )
+    return { stripeInvoiceItemId: item.id as string }
+  }
+
   async getOpenInvoice(
     input: SubscriptionRef,
   ): Promise<{ stripeInvoiceId: string; amountRemainingCents: number } | null> {

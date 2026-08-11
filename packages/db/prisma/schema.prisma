@@ -1338,6 +1338,13 @@ model Charge {
   recurringChargeId   String?
   stripeInvoiceId     String?
   stripeInvoiceItemId String?
+  /// The charge this one was assessed ON - a late fee pointing at the
+  /// overdue rent that produced it (R-040). `lateFeeFor()` returns the
+  /// CUMULATIVE fee as of a date, so a scheduled assessment has to charge
+  /// the delta against what this rent charge has already attracted; without
+  /// this link that question cannot be asked. Also the spine of PAY-04's
+  /// waiver-pattern report.
+  assessedOnChargeId  String?
   waivedAt            DateTime?
   waivedByStaffId     String?
   waiveReason         String?
@@ -1349,6 +1356,8 @@ model Charge {
   jurisdictionRule JurisdictionRule? @relation(fields: [jurisdictionRuleId], references: [id])
   recurringCharge  RecurringCharge?  @relation(fields: [recurringChargeId], references: [id])
   waivedBy         StaffUser?        @relation("ChargeWaivedBy", fields: [waivedByStaffId], references: [id])
+  assessedOn       Charge?           @relation("ChargeAssessedOn", fields: [assessedOnChargeId], references: [id], onDelete: Restrict)
+  assessedFees     Charge[]          @relation("ChargeAssessedOn")
   allocations      PayerAllocation[]
   ledgerEntries    LedgerEntry[]
 

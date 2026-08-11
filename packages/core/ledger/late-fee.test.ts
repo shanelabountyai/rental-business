@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { type LateFeeRule, lateFeeFor, statutoryCeiling } from './index.ts'
+import { type LateFeeRule, lateFeeFor,
+  lateFeeDeltaCents, statutoryCeiling } from './index.ts'
 
 // The single most legally-sensitive calculation in the product (PAY-04,
 // D-4, D-12). Every number below comes from a rule object; there is not one
@@ -239,5 +240,69 @@ describe('rounding', () => {
       )
       expect(Number.isInteger(decision.amountCents), `bps ${bps}`).toBe(true)
     }
+  })
+})
+
+describe('lateFeeDeltaCents', () => {
+  const rule = {
+    graceDays: 3,
+    lateFeeType: 'DAILY',
+    lateFeeFlatCents: null,
+    lateFeePercentBps: null,
+    lateFeeDailyCents: 1_000,
+    lateFeeMaxCents: null,
+    lateFeeMaxPercentBps: null,
+  }
+  const facts = {
+    outstandingCents: 150_000,
+    monthlyRentCents: 150_000,
+    dueOn: '2026-08-01',
+    asOf: '2026-08-06',
+  }
+
+  it('charges only the increment, never the cumulative figure', () => {
+    // The trap this exists for: lateFeeFor() answers "what is owed in total
+    // as of today". Charging that every night compounds a $10/day fee into
+    // $60 by day three instead of $30.
+    const today = lateFeeFor(rule, facts)
+    expect(today.amountCents).toBeGreaterThan(0)
+    expect(lateFeeDeltaCents(today, 0)).toBe(today.amountCents)
+    // Yesterday's assessment already took most of it.
+    expect(lateFeeDeltaCents(today, today.amountCents - 1_000)).toBe(1_000)
+  })
+
+  it('produces ZERO once a flat fee has been charged', () => {
+    const flat = { ...rule, lateFeeType: 'FLAT', lateFeeFlatCents: 5_000, lateFeeDailyCents: null }
+    const decision = lateFeeFor(flat, facts)
+    expect(decision.amountCents).toBe(5_000)
+    expect(lateFeeDeltaCents(decision, 5_000)).toBe(0)
+    // And every night after that, forever.
+    expect(lateFeeDeltaCents(lateFeeFor(flat, { ...facts, asOf: '2026-09-01' }), 5_000)).toBe(0)
+  })
+
+  it('stops charging once the statutory ceiling has been reached', () => {
+    // The cumulative figure stops moving at the cap, so the delta goes to
+    // zero on its own - no separate "have we capped out" state to maintain.
+    const capped = { ...rule, lateFeeMaxCents: 3_000 }
+    const decision = lateFeeFor(capped, { ...facts, asOf: '2026-09-01' })
+    expect(decision.amountCents).toBe(3_000)
+    expect(lateFeeDeltaCents(decision, 3_000)).toBe(0)
+  })
+
+  it('charges nothing at all where no fee is assessed', () => {
+    for (const asOf of ['2026-08-02', '2026-08-03']) {
+      const decision = lateFeeFor(rule, { ...facts, asOf })
+      expect(decision.basis, asOf).not.toBe('assessed')
+      expect(lateFeeDeltaCents(decision, 0), asOf).toBe(0)
+    }
+  })
+
+  it('NEVER returns a negative amount', () => {
+    // A waiver, or a rule that got more generous, leaves more already
+    // charged than the cumulative figure allows. The answer is to charge
+    // nothing further - not to invent a credit, which is a deliberate act
+    // with a reason on it rather than an arithmetic side effect.
+    const decision = lateFeeFor(rule, facts)
+    expect(lateFeeDeltaCents(decision, decision.amountCents + 99_999)).toBe(0)
   })
 })

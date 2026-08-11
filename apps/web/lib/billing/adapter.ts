@@ -197,6 +197,30 @@ export interface BillingProvider {
     reference: string
   }): Promise<void>
 
+  /**
+   * Adds a one-off amount to the payer's next invoice (D-12, R-040).
+   *
+   * THE MECHANISM FOR EVERY JURISDICTION-DEPENDENT CHARGE. A late fee, an
+   * NSF fee, a proration - core computes the number and clamps it to the
+   * statute, and Stripe is handed a finished amount to bill. Stripe is never
+   * asked to work out what a tenant owes, because Stripe does not know what
+   * state the property is in.
+   *
+   * Stripe attaches a pending invoice item to the customer's NEXT invoice
+   * automatically, which is what makes this the right shape: the fee rides
+   * along with the rent rather than arriving as its own demand.
+   */
+  addInvoiceItem(input: {
+    stripeCustomerId: string
+    amountCents: number
+    currency: string
+    /// What the tenant will see on the invoice line. Written by core, so it
+    /// can say WHY - "late fee, 5 days past due, capped at the Texas
+    /// maximum" defends itself in a way that "Late fee" does not.
+    description: string
+    idempotencyKey: string
+  }): Promise<{ stripeInvoiceItemId: string }>
+
   /// The open invoice to apply an offline payment to, with its id - the
   /// amount alone is not enough here, because the caller has to name the
   /// invoice it is marking paid.

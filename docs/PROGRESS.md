@@ -1140,3 +1140,35 @@ An ACH debit gives what Stripe calls "instant provisional access" and takes **up
 - **The one this item exists for**, above — found by reading Stripe's ACH documentation rather than by a failing test, which is worth noting: no test could have caught it, because the tests asserted the behaviour that was wrong.
 - **I updated the recorded outcome and not the returned one.** The projector logged `payment_returned` while returning `payment_failed` to its caller — two spellings of one fact, caught immediately by the new test. Now a single `outcomeDetail` feeds both.
 - **Three new tests exceeded the 5s default** because the return path walks the real pipeline twice and sends a notice on the way through. Given explicit 20–30s timeouts with the reason stated, per the convention in CLAUDE.md — the dispatch is scoped to its own delivery ids, so this is genuinely the test's own work rather than a global sweep.
+
+## R-040 — Late fees
+**Commit:** `PENDING`  ·  **Date:** 2026-08-10
+
+**What it built.** PAY-04. A nightly, per-property, property-local job assesses late fees on overdue rent from versioned jurisdiction configuration, clamps them to the statutory ceiling, and pushes each one to Stripe as an invoice item. Staff can waive a fee as a credit with a reason and a named approver, and the waiver-pattern report ships alongside the waiver rather than after it.
+
+- **`lateFeeDeltaCents()`** in core — the arithmetic that makes a scheduled assessment safe.
+- **`addInvoiceItem()`** on the provider, both implementations. This is the mechanism **every** jurisdiction-dependent charge now uses, and it is also what R-039a needs to post the NSF fee it currently only computes.
+- **`assessLateFees()`** plus a `SCHEDULED_JOBS` entry at 6am local, after the 4am billing sweep.
+- **`Charge.assessedOnChargeId`**, linking a fee to the rent that produced it.
+- **`waiveCharge()`** and **`waiverPatternByTenant()`**.
+
+**What it decided.** Recorded as **D-33** and **D-34**:
+
+- **A scheduled fee charges the DELTA, never the cumulative figure.** `lateFeeFor()` answers "what is the total owed as of this date" — correct for a daily-accruing rule, and a trap for anything on a schedule. Charging it nightly turns a $10/day fee into **$60 owed by day three instead of $30**. Three behaviours fall out of the delta for free: a flat fee charges once and then zero forever, a daily fee charges one day's worth, and a fee at its statutory cap produces zero because the cumulative figure stops moving — no separate "have we capped out" state to maintain.
+- **A waived fee still counts as assessed.** Waiving forgives a fee that was correctly charged; it does not say the fee was never owed. Excluding it would re-charge it the next night and quietly undo the waiver.
+- **The delta is never negative.** A waiver leaves more assessed than the cumulative figure allows, and the answer is to charge nothing further — not to invent a credit. Reversing an over-charge is a deliberate act with a reason on it, not an arithmetic side effect.
+- **The waiver-pattern report ships WITH the waiver** (D-34), and reports tenants who were never forgiven anything. Fair housing is the reason: waiving fees for some tenants and not others, along lines correlating with a protected class, is a discrimination pattern regardless of intent. An operator cannot avoid a pattern they cannot see, and building the waiver first with the report "later" is exactly how a year of uneven waivers accumulates before anybody looks. A report of waivers alone would show only generosity and hide its distribution — the tenants at zero are half the pattern. It reports a pattern, never a verdict.
+- **A waiver is a credit, not a deletion**, and it is pushed to Stripe as a negative invoice item. Waiving only in our own tables would leave Stripe still collecting it.
+- **No configured rule means no fee** — not a default fee, and not an error. D-4's whole point is that a statutory number comes from configuration; inventing one for an unconfigured state is how a product charges an unlawful fee in a market nobody has set up yet.
+- **Late fees are assessed on RENT only.** A late fee on a late fee is compounding by another name.
+- **The rule version is stamped onto every fee.** "What did the law say on the day we charged it" is the first question in a dispute and cannot be reconstructed from today's row.
+- **The description defends the charge.** "Late fee — 12 days past due (flat $50; capped at $30.00)" survives a dispute in a way that "Late fee" does not, and it is the audit reason too.
+
+**What it left behind.**
+- **No screen for either.** The assessment is a scheduled job and the waiver is a server action with its guard, its Stripe credit and its audit entry — neither has a UI yet. The waiver belongs on the lease ledger panel and the pattern report belongs with the money reporting (R-044/R-050), and putting them there is a small amount of work that wants those screens to exist first.
+- **The report attributes a fee to the first tenant on the lease.** A joint tenancy shares one ledger, so a per-tenant split would invent an attribution the money does not have. For spotting a pattern, what matters is that the household appears once — but this is a stated simplification, not an accident.
+- **Nothing notifies the tenant that a late fee was assessed.** PAY-04's "the tenant is notified" is unbuilt; the engine and the pattern from R-039's return notice are both right there, and the reason it is not done is that the fee posts to Stripe and arrives on the ledger through the webhook, so the honest moment to notify is when it lands rather than when we push it.
+
+**Bugs found along the way.**
+- **The audit layer caught me.** I put the reason inside `after` instead of the top-level field, and `ledger.adjusted` is on `REASON_REQUIRED` — it threw with "why is the point of the record", which is exactly the guard doing its job. Four tests failed and told me immediately.
+- **I exported a query from a `'use server'` module.** `waiverPatternByTenant` started life in `waivers.ts`, which publishes it as a client-callable endpoint taking arbitrary property ids with no permission check. Moved to `waiver-report.ts` behind `server-only`. This is the second time this exact mistake has happened (the first was `policyFor` in R-037), which makes it worth naming as a pattern: **a read that takes a scope argument does not belong in a `'use server'` file.**

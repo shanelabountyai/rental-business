@@ -218,3 +218,34 @@ export function statutoryCeiling(
 function bpsOf(amountCents: Cents, bps: number): Cents {
   return Math.round((amountCents * bps) / 10_000)
 }
+
+/**
+ * What to charge TODAY, given what this overdue charge has already attracted.
+ *
+ * THE FUNCTION ABOVE RETURNS A CUMULATIVE FIGURE, and that is the single
+ * easiest thing to get wrong about late fees on a schedule. `lateFeeFor()`
+ * answers "what is the total fee owed as of this date" - correct, and exactly
+ * what a DAILY or FLAT_PLUS_DAILY rule needs. Charging that number every
+ * night would compound a $10/day fee into $10 on day one, $20 on day two and
+ * $30 on day three: $60 owed by day three instead of $30.
+ *
+ * So an assessment charges the DELTA. Three consequences fall out of that,
+ * and all three are the behaviour you want:
+ *   - a FLAT fee charges once and then produces zero forever;
+ *   - a DAILY fee charges one day's worth each day;
+ *   - a fee that has hit its statutory ceiling produces zero from then on,
+ *     because the cumulative figure stops moving.
+ *
+ * Never negative. A waiver, or a rule that got more generous between
+ * assessments, leaves more already charged than the cumulative figure allows
+ * - and the answer to that is to charge nothing further, not to invent a
+ * credit. Reversing an over-charge is a deliberate act with a reason on it
+ * (PAY-04's waiver), not an arithmetic side effect.
+ */
+export function lateFeeDeltaCents(
+  decision: LateFeeDecision,
+  alreadyAssessedCents: Cents,
+): Cents {
+  if (decision.basis !== 'assessed') return 0
+  return Math.max(0, decision.amountCents - alreadyAssessedCents)
+}
