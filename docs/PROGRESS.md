@@ -1142,7 +1142,7 @@ An ACH debit gives what Stripe calls "instant provisional access" and takes **up
 - **Three new tests exceeded the 5s default** because the return path walks the real pipeline twice and sends a notice on the way through. Given explicit 20–30s timeouts with the reason stated, per the convention in CLAUDE.md — the dispatch is scoped to its own delivery ids, so this is genuinely the test's own work rather than a global sweep.
 
 ## R-040 — Late fees
-**Commit:** `PENDING`  ·  **Date:** 2026-08-10
+**Commit:** `1fc241a`  ·  **Date:** 2026-08-10
 
 **What it built.** PAY-04. A nightly, per-property, property-local job assesses late fees on overdue rent from versioned jurisdiction configuration, clamps them to the statutory ceiling, and pushes each one to Stripe as an invoice item. Staff can waive a fee as a credit with a reason and a named approver, and the waiver-pattern report ships alongside the waiver rather than after it.
 
