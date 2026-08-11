@@ -1063,7 +1063,7 @@ Also amended: **Demo checkpoint 1's own text.** It said the tenant "texts a phot
 - The first e2e run failed on a `getByText('Rent')` that also matched the new "Pay rent" nav link and page heading — the same over-loose-selector trap as the `waitForURL` one already in CLAUDE.md, and fixed the same way, by scoping to the region.
 
 ## R-037c — Test isolation: portfolio-wide staff bleed
-**Commit:** `PENDING`  ·  **Date:** 2026-08-10
+**Commit:** `595789b`  ·  **Date:** 2026-08-10
 
 **What it built.** Nothing. A one-line fixture change that took the unit suite from failing roughly one full run in two to three consecutive clean runs of all 1,187 tests.
 
