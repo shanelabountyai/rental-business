@@ -1270,7 +1270,7 @@ The owner put a test-mode key in `.env.local`, which closed the caveat standing 
 **Housekeeping.** Removed 103 `"… 2.ts"` duplicate files — iCloud conflict copies, because this repository lives under `~/Documents`, which is iCloud-synced. 57 were byte-identical and 2 were stale pre-edit snapshots of files changed today. None were tracked. Worth knowing: a sync service writing into a live git working tree can produce a conflict copy mid-write, and this is the second kind of environment hazard this project has hit after the shared `:3000` dev port.
 
 ## R-042 — Acting on the cloud review of the projection pipeline
-**Commit:** `PENDING`  ·  **Date:** 2026-08-11
+**Commit:** `e15c88a`  ·  **Date:** 2026-08-11
 
 **What it built.** Three fixes to the Stripe→ledger projection, two from an ultrareview of PR #2 and one found by writing the test for the first.
 
