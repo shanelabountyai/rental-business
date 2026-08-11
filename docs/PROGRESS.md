@@ -1081,7 +1081,7 @@ Three alternatives were rejected, and the reasons matter more than the choice:
 **What it left behind.** The class of problem, not this instance. Any future fixture that creates a portfolio-wide grant reintroduces it, and nothing enforces the rule — there is no test asserting that test fixtures stay scoped. This is the **fourth** distinct cross-file interference this suite has produced (after the global outbox sweep, the hard-coded phone number and the leaked browser contexts), which is a pattern worth naming: the suite shares one database, and every fixture that reaches beyond its own property is a fixture that can reach into somebody else's assertions. Per-file schemas are what actually ends it.
 
 ## R-038 — Offline payment recording
-**Commit:** `PENDING`  ·  **Date:** 2026-08-10
+**Commit:** `062f309`  ·  **Date:** 2026-08-10
 
 **What it built.** PAY-05: a check, money order or cash handed over in person, recorded by staff in a few seconds from the lease page, applied against what the tenant owes, and — the part that is not obvious — **pushed to Stripe so it stops collecting**.
 
