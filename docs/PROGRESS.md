@@ -1217,3 +1217,29 @@ The late-fee job now creates its `Charge` row **before** pushing to Stripe, so t
 **What it left behind.**
 - **The review only saw 40 lines.** With everything committed and pushed to `main`, `origin/main...HEAD` was empty and the tool fell back to the last commit. It found four real defects in that sliver, which is an argument for reviewing the rest rather than a clean bill of health. The projection pipeline has now been changed five times and has never been reviewed as a whole.
 - **The linked-entry loop writes one row per charge inside a transaction.** Fine for an invoice with a handful of lines; an invoice with hundreds would want a `createMany`. Not built, because no path produces one yet.
+
+## R-040d — First real execution of the Stripe driver
+**Commit:** `PENDING`  ·  **Date:** 2026-08-11
+
+**What it built.** A smoke test that calls Stripe for real, and the fix for the bug it immediately found.
+
+The owner put a test-mode key in `.env.local`, which closed the caveat standing since R-036: the outbound driver had **never once been executed**. Everything up to the HTTP call was tested; the call itself was not. `apps/web/lib/billing/smoke.stripe.test.ts` now walks the whole surface against test mode — create customer, create subscription with the anchor in seconds, read it back, switch collection method both ways, read the open invoice, change the price, cancel. It reads its key from `STRIPE_SMOKE_KEY` (which nothing pins) and **skips itself when that is absent**, so it is inert for everybody who has not deliberately opted in and the 1,235-test suite stays offline and deterministic.
+
+**The bug it found on the first run.** `setCollectionMethod` to `send_invoice` returned a 400:
+
+> *Missing email. In order to create invoices that are sent to the customer, the customer must have a valid email.*
+
+**Stripe refuses invoiced collection for a customer with no email**, and D-29's switch guard did not know. Every unit test asserted we sent the right request; only Stripe could say the customer was not ready to receive it. Everything else in the lifecycle passed first time — the anchor in seconds, `days_until_due` present on `send_invoice` and absent on `charge_automatically`, `proration_behavior=none`, the price change, the cancel.
+
+**What it decided.** Recorded as **D-36**, amending D-29:
+- **`switchDecision` refuses `send_invoice` for a payer with no email**, with a message telling staff what to do about it. Moving *back* to autopay needs no email — autopay pulls from a saved method and sends nothing, so the constraint is one-directional, and a payer who moved onto invoicing must not be trapped there.
+- **The collision is stated, not solved.** D-10 and R-021 exist for the tenant who has no email and pays by check. D-29 puts partial payments on `send_invoice`. A tenant who needs to pay in parts is disproportionately a tenant with no email. So **the person most likely to need a payment plan is the one Stripe will not invoice** — and R-038 refuses offline part-payments too, which means today there is no path at all for them. The refusal says what a staff member can do; it does not pretend the gap is closed.
+
+**What it left behind.**
+- **The collision above.** It wants an owner decision: collect emails as a condition of a payment plan, or make R-038a's offline part-payments the path for emailless tenants. The second is more faithful to D-10.
+- **The smoke test creates objects in the Stripe test account** and only cleans up the subscription it made. Test-mode customers are disposable, and deleting them needs an API method the driver has no other reason to carry.
+- **Nothing exercises the INBOUND half against real Stripe.** Webhooks need a tunnel or a deploy for Stripe to reach, and `STRIPE_WEBHOOK_SECRET` is deliberately still unset. The inbound pipeline is exhaustively tested against synthetic signed payloads, which R-021 established as the right line.
+
+**Bugs found along the way.** I reintroduced the decisions-table blank line **immediately after fixing twenty instances of it** in R-040c, in the very next edit to the same file. Caught by re-running the same check. Worth naming: a defect class is not fixed until the thing that produces it changes, and here that thing is me appending rows with a leading newline.
+
+**Postscript (2026-08-11).** Preparing the Twilio 10DLC registration surfaced a defect unrelated to Stripe: **nothing in this product handles `STOP`**. Carrier-level opt-out overrides our notification engine entirely, including the locked categories a tenant is not allowed to switch off — so a tenant who texts STOP stops receiving entry notices while our log continues to record them as sent. A delivery record that can be silently false is the sharpest possible defect for a product whose premise is that the evidence trail is the product. Filed as **R-040e**; it is not a blocker for 10DLC registration, since Twilio satisfies the carrier requirement at the platform level.

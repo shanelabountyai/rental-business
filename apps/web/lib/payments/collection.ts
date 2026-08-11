@@ -57,6 +57,8 @@ export async function switchCollectionMethod(
       collectionMethod: true,
       collectionPaused: true,
       stripeSubscriptionId: true,
+      externalPayerName: true,
+      tenant: { select: { email: true } },
       property: { select: { id: true, legalEntityId: true } },
     },
   })
@@ -85,6 +87,11 @@ export async function switchCollectionMethod(
     target,
     hasSubscription: payer.stripeSubscriptionId != null,
     collectionPaused: payer.collectionPaused,
+    // Stripe refuses `send_invoice` for a customer with no email. Read from
+    // the tenant rather than from Stripe: this is a precondition we can check
+    // before making a call that would fail, and a refusal a staff member can
+    // act on beats a 400 they cannot.
+    payerHasEmail: Boolean(payer.tenant?.email?.trim()),
     paymentsInFlight: inFlight,
     openInvoiceAmountCents,
   })

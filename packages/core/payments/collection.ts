@@ -67,6 +67,17 @@ export type SwitchRefusal =
   | 'collection_paused'
   /// There is no subscription to change.
   | 'not_provisioned'
+  /**
+   * The payer has no email address, and Stripe REFUSES `send_invoice`
+   * without one: "Missing email. In order to create invoices that are sent
+   * to the customer, the customer must have a valid email."
+   *
+   * Found by actually calling Stripe rather than by reading its docs, which
+   * is the whole argument for the smoke test that found it. Every unit test
+   * asserted we sent the right request; only Stripe could say the customer
+   * was not ready to receive it.
+   */
+  | 'no_email_for_invoicing'
 
 export interface SwitchFacts {
   current: CollectionMethod
@@ -76,6 +87,10 @@ export interface SwitchFacts {
   /// A payment against this payer that Stripe has accepted but not settled -
   /// an ACH debit in its 3-5 day window, typically. Counted from OUR payment
   /// rows, which are themselves a projection of Stripe's events (D-11).
+  /// Whether the payer has an email address on file. Only consulted when
+  /// moving TO `send_invoice` - autopay pulls from a saved method and needs
+  /// no address to send anything to.
+  payerHasEmail: boolean
   paymentsInFlight: number
   /// What STRIPE says is still owed on an issued invoice, in cents. Null
   /// means we have not asked - which is treated as "do not act", never as
@@ -113,6 +128,11 @@ export function switchDecision(facts: SwitchFacts): SwitchDecision {
   if (facts.current === facts.target) return { allowed: false, alreadySet: true }
   if (!facts.hasSubscription) return { allowed: false, refusal: 'not_provisioned' }
   if (facts.collectionPaused) return { allowed: false, refusal: 'collection_paused' }
+  // Before the money checks: this one is about whether the target mode can
+  // work at all, not about whether now is a safe moment to move.
+  if (facts.target === 'send_invoice' && !facts.payerHasEmail) {
+    return { allowed: false, refusal: 'no_email_for_invoicing' }
+  }
   if (facts.paymentsInFlight > 0) return { allowed: false, refusal: 'payment_in_flight' }
   if (facts.openInvoiceAmountCents == null || facts.openInvoiceAmountCents > 0) {
     return { allowed: false, refusal: 'open_invoice' }
@@ -132,6 +152,8 @@ export const SWITCH_REFUSALS: Record<SwitchRefusal, string> = {
     'Collection is paused for this payer. Resume it first if you mean to start collecting again.',
   not_provisioned:
     'This payer has no subscription yet. It picks up the collection method when billing is set up.',
+  no_email_for_invoicing:
+    'Invoiced billing needs an email address for this payer — the billing provider will not send an invoice without one. Add an email to their record first, or keep them on automatic payments and take part-payments in person.',
 }
 
 // ---- What a payer may actually pay with ----

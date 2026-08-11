@@ -47,6 +47,7 @@ describe('switchDecision', () => {
     target: 'send_invoice' as const,
     hasSubscription: true,
     collectionPaused: false,
+    payerHasEmail: true,
     paymentsInFlight: 0,
     openInvoiceAmountCents: 0,
   }
@@ -88,6 +89,29 @@ describe('switchDecision', () => {
       openInvoiceAmountCents: 150_000,
     })
     expect(decision.refusal).toBe('payment_in_flight')
+  })
+
+  it('REFUSES send_invoice for a payer with no email — Stripe will not invoice them', () => {
+    // FOUND BY CALLING STRIPE, not by reading its documentation: "Missing
+    // email. In order to create invoices that are sent to the customer, the
+    // customer must have a valid email." Every unit test asserted we sent
+    // the right request; only Stripe could say the customer was not ready to
+    // receive it.
+    const decision = switchDecision({ ...clean, payerHasEmail: false })
+    expect(decision).toEqual({ allowed: false, refusal: 'no_email_for_invoicing' })
+  })
+
+  it('does NOT require an email to move back to autopay', () => {
+    // Autopay pulls from a saved method and sends nothing, so the constraint
+    // is one-directional. A payer moved onto invoicing and then back must
+    // not be trapped by a rule that only governs the other direction.
+    const back = {
+      ...clean,
+      current: 'send_invoice' as const,
+      target: 'charge_automatically' as const,
+      payerHasEmail: false,
+    }
+    expect(switchDecision(back)).toEqual({ allowed: true })
   })
 
   it('REFUSES while collection is paused', () => {

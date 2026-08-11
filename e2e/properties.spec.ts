@@ -561,9 +561,23 @@ test.describe('scoped visibility', () => {
 
 test.describe('accessibility', () => {
   for (const path of ['/properties', '/properties/new', '/properties/entities/new']) {
+    // 120s, not the suite's 60s default. `/properties/new` renders a
+    // fifty-option state select and a timezone datalist, and axe runs its
+    // whole rule set over every option - the scan alone takes about 37
+    // seconds on an idle machine and comfortably exceeds 60 under five
+    // parallel workers. It failed a full-suite run twice in a row while
+    // passing alone, which is the signature of a slow check rather than a
+    // broken one.
+    //
+    // Raising the budget rather than narrowing the scan: scoping axe with
+    // `.include()` would make it fast by not looking at the thing most likely
+    // to have a problem. A slow accessibility check that runs is worth more
+    // than a quick one that skips the hard part.
     test(`${path} has no detectable accessibility violations`, async ({
       page,
     }) => {
+      // See the note above: this scan needs more than the suite's 60s.
+      test.setTimeout(120_000)
       const staff = await createStaff('owner')
       await signIn(page, staff.email)
       await page.goto(path)
