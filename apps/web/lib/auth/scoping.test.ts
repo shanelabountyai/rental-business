@@ -271,8 +271,26 @@ describe('assignment integrity', () => {
 
   it('refuses a duplicate live grant of the same role and scope', async () => {
     const role = await prisma.role.findUniqueOrThrow({ where: { key: 'owner' } })
+    // INACTIVE, and that is load-bearing rather than incidental.
+    //
+    // The grants below are PORTFOLIO-WIDE - both scope columns NULL - which is
+    // exactly what this test is about. But a portfolio-wide grant reaches
+    // every property in the database, including the ones other test files
+    // seed, and `onCallStaffForProperty()` matches it deliberately. So while
+    // this test runs, its staff member is a paging candidate for every
+    // concurrently-running suite; and when the test deletes them, it does so
+    // between the two queries Prisma issues to resolve that relation, leaving
+    // the other suite holding an assignment whose required `staffUser` came
+    // back null. That surfaced as `escalation.test.ts` failing roughly one
+    // unit run in two, in a file with no connection to this one.
+    //
+    // `active: false` removes them from `onCallStaffForProperty`'s own filter
+    // and closes the bleed at the source. It changes nothing this test
+    // asserts: the duplicate-grant protection is a database unique index over
+    // the scope columns, which has no opinion about whether the person is
+    // still employed.
     const staff = await prisma.staffUser.create({
-      data: { email: `dupe-${Date.now()}@example.test`, name: 'Dupe Test' },
+      data: { email: `dupe-${Date.now()}@example.test`, name: 'Dupe Test', active: false },
     })
 
     // Portfolio-wide grants have two NULL scope columns, and NULL never equals

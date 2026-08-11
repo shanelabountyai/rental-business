@@ -1061,3 +1061,21 @@ Also amended: **Demo checkpoint 1's own text.** It said the tenant "texts a phot
 **Bugs found along the way.** None in shipped behaviour. Two things the type system and the tests caught while building:
 - Adding `collectionMethod` to `SubscriptionInput` failed typecheck at both call sites, which is exactly what that field being required is for — a payer re-provisioned after a cancelled subscription now keeps the mode somebody deliberately put them on, rather than being silently returned to autopay and debiting an account a tenant had asked us to stop debiting.
 - The first e2e run failed on a `getByText('Rent')` that also matched the new "Pay rent" nav link and page heading — the same over-loose-selector trap as the `waitForURL` one already in CLAUDE.md, and fixed the same way, by scoping to the region.
+
+## R-037c — Test isolation: portfolio-wide staff bleed
+**Commit:** `PENDING`  ·  **Date:** 2026-08-10
+
+**What it built.** Nothing. A one-line fixture change that took the unit suite from failing roughly one full run in two to three consecutive clean runs of all 1,187 tests.
+
+**The bug.** `escalation.test.ts` failed intermittently with `Inconsistent query result: Field staffUser is required to return data, got null` from `onCallStaffForProperty()` — in a file with no connection to the one causing it. Ruled out first: there were no orphaned `StaffAssignment` rows (checked directly), the `staffUserId` foreign key is `RESTRICT`, and R-004 deactivates staff rather than deleting them, so **production cannot reach this state**.
+
+The cause was two correct behaviours meeting concurrency. `auth/scoping.test.ts`'s duplicate-grant test creates a **portfolio-wide** assignment — both scope columns NULL — because that is precisely what it exists to test. `onCallStaffForProperty()` matches portfolio-wide grants for every property, also correctly: somebody granted the whole portfolio really is a paging candidate everywhere. So while that test runs, its staff member is a candidate for every concurrently-running suite; and when it deletes them, it does so in the window between the two queries Prisma issues to resolve the required `staffUser` relation.
+
+**What it decided.** `active: false` on that one fixture. `onCallStaffForProperty` already filters `staffUser: { active: true }`, so an inactive user is invisible to paging and the bleed closes at its source. It changes nothing the test asserts — duplicate-grant protection is a database unique index over the scope columns, which has no opinion about whether the person is still employed.
+
+Three alternatives were rejected, and the reasons matter more than the choice:
+- **A role without `ticket.write`** would work by coupling one spec's fixture to another spec's query — a fix that breaks silently the day the permission list changes.
+- **Serialising the two files** hides the cause rather than removing it, and the next portfolio-wide fixture reintroduces it somewhere else.
+- **A database schema per test file** is the genuinely correct answer and remains the right thing to build if this recurs. It was not worth real infrastructure for a one-line problem, and saying so is a deliberate deferral rather than an oversight.
+
+**What it left behind.** The class of problem, not this instance. Any future fixture that creates a portfolio-wide grant reintroduces it, and nothing enforces the rule — there is no test asserting that test fixtures stay scoped. This is the **fourth** distinct cross-file interference this suite has produced (after the global outbox sweep, the hard-coded phone number and the leaked browser contexts), which is a pattern worth naming: the suite shares one database, and every fixture that reaches beyond its own property is a fixture that can reach into somebody else's assertions. Per-file schemas are what actually ends it.
