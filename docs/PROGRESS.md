@@ -1109,7 +1109,7 @@ Three alternatives were rejected, and the reasons matter more than the choice:
 **Bugs found along the way.** None in shipped behaviour. One in a test I wrote and caught immediately: a dynamic `import()` nested inside a ternary, which is nonsense that happened to typecheck. Rewritten as a plain top-level import.
 
 ## R-039 (part) — Returned payments
-**Commit:** `PENDING`  ·  **Date:** 2026-08-10
+**Commit:** `0a02ef9`  ·  **Date:** 2026-08-10
 
 **What it built.** The half of PAY-02 with teeth: what happens when a payment comes back. **This fixed a real bug in shipped code.**
 
