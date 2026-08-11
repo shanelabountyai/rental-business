@@ -2,3 +2,4 @@
 
 export * from './collection.ts'
 export * from './fees.ts'
+export * from './offline.ts'

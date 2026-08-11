@@ -177,6 +177,47 @@ export class SimulatedBillingProvider implements BillingProvider {
     return leaseBalanceCents(payer.leaseId)
   }
 
+  async markInvoicePaidOutOfBand(input: {
+    stripeInvoiceId: string
+    reference: string
+  }): Promise<void> {
+    console.info(
+      `[billing:simulated] invoice ${input.stripeInvoiceId} marked paid out of band (${input.reference})`,
+    )
+  }
+
+  /**
+   * A stand-in for the open invoice.
+   *
+   * Reports the lease's outstanding balance as a single invoice, with a
+   * SYNTHETIC id - deliberately Stripe-shaped so everything downstream is
+   * exercised against a realistic value, and deliberately derived from the
+   * balance rather than from anything the caller passes, so the caller
+   * cannot make it agree with itself (D-27).
+   *
+   * Coarser than real Stripe, which issues an invoice per period. Stated
+   * rather than hidden: against the simulator, "the open invoice" and "the
+   * whole balance" are the same number, so a part-payment refusal here fires
+   * on the balance where production would fire on the period.
+   */
+  async getOpenInvoice(
+    input: SubscriptionRef,
+  ): Promise<{ stripeInvoiceId: string; amountRemainingCents: number } | null> {
+    const payer = await prisma.leasePayer.findFirst({
+      where: { stripeSubscriptionId: input.stripeSubscriptionId },
+      select: { id: true, leaseId: true },
+    })
+    if (!payer) return null
+    const amountRemainingCents = await leaseBalanceCents(payer.leaseId)
+    if (amountRemainingCents <= 0) return null
+    return {
+      // Stable per payer, so a retry finds the same invoice rather than
+      // inventing a second one.
+      stripeInvoiceId: `in_sim${payer.id.slice(0, 16)}`,
+      amountRemainingCents,
+    }
+  }
+
   async createPaymentIntent(input: {
     stripeCustomerId: string
     amountCents: number

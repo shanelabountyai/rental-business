@@ -178,6 +178,32 @@ export interface BillingProvider {
    * `amountCents` is the total to charge INCLUDING any card fee, which core
    * computed (D-12). The provider does not add anything to it.
    */
+  /**
+   * Marks an issued invoice paid OUTSIDE Stripe (PAY-05, R-038).
+   *
+   * For a check, a money order or notes handed over at the office. Stripe
+   * records the amount as paid out of band and stops collecting - which is
+   * the point: a payment Stripe does not know about is a payer it goes on
+   * debiting, and a tenant who paid by check being charged again is the
+   * failure this call exists to prevent.
+   *
+   * Settles the WHOLE invoice. Applying a part-payment this way would
+   * forgive the remainder silently, which is why the caller refuses one.
+   */
+  markInvoicePaidOutOfBand(input: {
+    stripeInvoiceId: string
+    /// Ours, for the audit trail on Stripe's side - the check number or
+    /// "cash, received by <staff>". Stripe never validates it.
+    reference: string
+  }): Promise<void>
+
+  /// The open invoice to apply an offline payment to, with its id - the
+  /// amount alone is not enough here, because the caller has to name the
+  /// invoice it is marking paid.
+  getOpenInvoice(
+    input: SubscriptionRef,
+  ): Promise<{ stripeInvoiceId: string; amountRemainingCents: number } | null>
+
   createPaymentIntent(input: {
     stripeCustomerId: string
     amountCents: number

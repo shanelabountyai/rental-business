@@ -7,6 +7,7 @@ import {
   leaseTransition,
 } from '@rental/core/leases'
 import { formatCents } from '@rental/core/money'
+import { businessDate } from '@rental/core/scheduling'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { BillingPanel } from '@/components/leases/billing-panel.tsx'
@@ -15,6 +16,7 @@ import { LedgerPanel } from '@/components/leases/ledger-panel.tsx'
 import { LeaseForm } from '@/components/leases/lease-form.tsx'
 import { LifecyclePanel } from '@/components/leases/lifecycle-panel.tsx'
 import { PartiesPanel } from '@/components/leases/parties-panel.tsx'
+import { OfflinePaymentForm } from '@/components/payments/offline-payment-form.tsx'
 import { actorCan, propertyResource, requireScope } from '@/lib/auth/guard.ts'
 import {
   addGuarantor,
@@ -30,6 +32,7 @@ import { billingIsLive, billingProviderName } from '@/lib/billing/provider.ts'
 import { leaseBillingState } from '@/lib/billing/provision.ts'
 import { leaseStatement } from '@/lib/ledger/queries.ts'
 import { outstandingIntakeGaps } from '@/lib/leases/intake.ts'
+import { recordOfflinePayment } from '@/lib/payments/offline.ts'
 import { getLease, selectableTenants } from '@/lib/leases/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 
@@ -75,6 +78,10 @@ export default async function LeaseDetailPage({
   if (!lease) notFound()
 
   const canWrite = await actorCan('lease.write', propertyResource(lease.property))
+  // Recording money that arrived off the rails is the most forgeable action
+  // in the product - there is no processor on the other side to disagree -
+  // so it sits behind the privileged permission, not behind lease.write.
+  const canRecordPayment = await actorCan('ledger.adjust', propertyResource(lease.property))
 
   const facts = {
     status: lease.status,
@@ -254,6 +261,32 @@ export default async function LeaseDetailPage({
           stripeSubscriptionId: payer.stripeSubscriptionId,
         }))}
       />
+
+      {canRecordPayment && payers.length > 0 && (ledger?.balanceCents ?? 0) > 0 && (
+        <section
+          aria-labelledby="offline-payment"
+          className="flex flex-col gap-3 border-t pt-4"
+        >
+          <h2 id="offline-payment" className="text-lg font-semibold">
+            Record a payment
+          </h2>
+          <p className="text-muted-foreground text-sm">
+            A check, money order or cash handed over in person.
+          </p>
+          <OfflinePaymentForm
+            // Bound server-side: a plain function cannot cross this boundary,
+            // and `npm run build` does not catch the difference.
+            action={recordOfflinePayment.bind(null, payers[0]!.id)}
+            today={businessDate(new Date(), lease.property.timezone)}
+            defaultAmountDollars={((ledger?.balanceCents ?? 0) / 100).toFixed(2)}
+            payerName={
+              payers[0]!.tenant
+                ? `${payers[0]!.tenant.firstName} ${payers[0]!.tenant.lastName}`
+                : (payers[0]!.externalPayerName ?? 'this payer')
+            }
+          />
+        </section>
+      )}
 
       <PartiesPanel
         canWrite={canWrite}

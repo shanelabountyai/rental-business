@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto'
 import { prisma } from '@rental/db'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { SimulatedBillingProvider } from '@/lib/billing/simulated-adapter.ts'
+import { leaseBalanceCents } from '@/lib/ledger/queries.ts'
 import { paymentView } from './queries.ts'
 
 // The tenant pay screen against a real database (PAY-01, R-037).
@@ -172,5 +174,60 @@ describe('paymentView', () => {
     // A tenant mid-onboarding is a real state, not an error - the screen
     // says so in words rather than 500ing.
     expect(await paymentView({ tenantId, leaseIds: [], unitIds: [] })).toBeNull()
+  })
+})
+
+describe('the open-invoice read the offline path depends on', () => {
+  it('reports the outstanding balance under a stable, Stripe-shaped id', async () => {
+    // R-038 marks an INVOICE paid out of band, so it needs an invoice id -
+    // not just an amount. The simulator derives both from the ledger, so a
+    // retry finds the same invoice rather than inventing a second one.
+    await prisma.leasePayer.update({
+      where: { id: leasePayerId },
+      data: { stripeSubscriptionId: `sub_${randomUUID().replace(/-/g, '').slice(0, 14)}` },
+    })
+    const payer = await prisma.leasePayer.findUniqueOrThrow({
+      where: { id: leasePayerId },
+      select: { stripeSubscriptionId: true },
+    })
+
+    const provider = new SimulatedBillingProvider()
+    const first = await provider.getOpenInvoice({
+      stripeSubscriptionId: payer.stripeSubscriptionId!,
+    })
+    expect(first).not.toBeNull()
+    expect(first!.stripeInvoiceId).toMatch(/^in_/)
+    expect(first!.amountRemainingCents).toBeGreaterThan(0)
+
+    const second = await provider.getOpenInvoice({
+      stripeSubscriptionId: payer.stripeSubscriptionId!,
+    })
+    expect(second!.stripeInvoiceId).toBe(first!.stripeInvoiceId)
+  })
+
+  it('reports nothing open when the balance is clear', async () => {
+    // The `no_open_invoice` refusal has to be reachable, or the branch is
+    // dead code no test can exercise.
+    const payer = await prisma.leasePayer.findUniqueOrThrow({
+      where: { id: leasePayerId },
+      select: { leaseId: true, stripeSubscriptionId: true },
+    })
+    const outstanding = await leaseBalanceCents(payer.leaseId)
+    await prisma.ledgerEntry.create({
+      data: {
+        propertyId,
+        leaseId: payer.leaseId,
+        leasePayerId,
+        type: 'PAYMENT',
+        amountCents: -outstanding,
+        description: 'Settled in full',
+        occurredAt: new Date(),
+      },
+    })
+
+    const provider = new SimulatedBillingProvider()
+    expect(
+      await provider.getOpenInvoice({ stripeSubscriptionId: payer.stripeSubscriptionId! }),
+    ).toBeNull()
   })
 })

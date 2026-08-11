@@ -371,6 +371,40 @@ export class StripeBillingProvider implements BillingProvider {
     return data.reduce((total, invoice) => total + (invoice.amount_remaining ?? 0), 0)
   }
 
+  async markInvoicePaidOutOfBand(input: {
+    stripeInvoiceId: string
+    reference: string
+  }): Promise<void> {
+    // `paid_out_of_band` tells Stripe the money arrived elsewhere. It marks
+    // the invoice paid and records the amount under the invoice's own
+    // `amount_paid_out_of_band`, distinct from `amount_paid` - so Stripe's
+    // books stay honest about what actually moved through Stripe.
+    //
+    // No idempotency key: this is an invoice state transition, and Stripe
+    // refuses to pay an already-paid invoice on its own. A stale key would
+    // silently return the first call's result for what might be a second,
+    // different instrument.
+    await this.#post(`/invoices/${input.stripeInvoiceId}/pay`, {
+      paid_out_of_band: 'true',
+      'metadata[offline_reference]': input.reference,
+    })
+  }
+
+  async getOpenInvoice(
+    input: SubscriptionRef,
+  ): Promise<{ stripeInvoiceId: string; amountRemainingCents: number } | null> {
+    const list = await this.#get(
+      `/invoices?subscription=${encodeURIComponent(input.stripeSubscriptionId)}&status=open&limit=1`,
+    )
+    const data = list?.data as { id?: string; amount_remaining?: number }[] | undefined
+    const invoice = Array.isArray(data) ? data[0] : undefined
+    if (!invoice?.id) return null
+    return {
+      stripeInvoiceId: invoice.id,
+      amountRemainingCents: invoice.amount_remaining ?? 0,
+    }
+  }
+
   async createPaymentIntent(input: {
     stripeCustomerId: string
     amountCents: number

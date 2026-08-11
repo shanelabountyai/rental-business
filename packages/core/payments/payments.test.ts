@@ -8,9 +8,11 @@ import {
   cardFeeFor,
   debitsAutomatically,
   isCollectionMethod,
+  offlinePaymentDecision,
   payable,
   railsFor,
   switchDecision,
+  validateOfflinePayment,
   validatePaymentAmount,
 } from './index.ts'
 
@@ -298,5 +300,106 @@ describe('payable / validatePaymentAmount', () => {
       inFlightCents: 100_000,
     }
     expect(validatePaymentAmount(autopay, 50_000)).toEqual({ ok: true })
+  })
+})
+
+describe('offline payments (PAY-05)', () => {
+  const good = {
+    channel: 'OFFLINE_CHECK',
+    amountCents: 150_000,
+    receivedOn: '2026-08-10',
+    checkNumber: '1041',
+    receivedByStaffId: 'staff_1',
+  }
+  const today = '2026-08-10'
+
+  it('accepts a well-formed check', () => {
+    expect(validateOfflinePayment(good, today)).toEqual([])
+  })
+
+  it('REQUIRES a check number on a check', () => {
+    // The number is how a returned check is matched back to the record
+    // months later.
+    const violations = validateOfflinePayment({ ...good, checkNumber: null }, today)
+    expect(violations.map((v) => v.field)).toContain('checkNumber')
+    // Cash needs none.
+    expect(
+      validateOfflinePayment({ ...good, channel: 'OFFLINE_CASH', checkNumber: null }, today),
+    ).toEqual([])
+  })
+
+  it('REFUSES an unattributed payment', () => {
+    // PAY-05: a cash payment with no named recipient is an unauditable cash
+    // payment. It comes from the session, so a violation means a caller
+    // forgot - which must fail loudly rather than write the row.
+    const violations = validateOfflinePayment({ ...good, receivedByStaffId: null }, today)
+    expect(violations.map((v) => v.field)).toContain('receivedByStaffId')
+  })
+
+  it('refuses a future date, because a post-dated check is not money yet', () => {
+    const violations = validateOfflinePayment({ ...good, receivedOn: '2026-08-11' }, today)
+    expect(violations.map((v) => v.field)).toContain('receivedOn')
+    // Backdating IS allowed: a check handed over Friday and typed in Monday
+    // was paid on Friday, and late-fee arithmetic runs off the real date.
+    expect(validateOfflinePayment({ ...good, receivedOn: '2026-08-07' }, today)).toEqual([])
+  })
+
+  it('refuses a rail that is not somebody at a counter', () => {
+    // RETAIL_CASH is a third-party network posting electronically (R-037a),
+    // not a person handing over notes.
+    for (const channel of ['RETAIL_CASH', 'ACH', 'CARD']) {
+      const violations = validateOfflinePayment({ ...good, channel, checkNumber: null }, today)
+      expect(violations.map((v) => v.field), channel).toContain('channel')
+    }
+  })
+
+  it('refuses zero, negative and fractional amounts', () => {
+    for (const amountCents of [0, -1, 12.5]) {
+      const violations = validateOfflinePayment({ ...good, amountCents }, today)
+      expect(violations.map((v) => v.field), String(amountCents)).toContain('amountDollars')
+    }
+  })
+})
+
+describe('offlinePaymentDecision', () => {
+  const owing = { balanceCents: 150_000, openInvoiceAmountCents: 150_000 }
+
+  it('applies a payment that settles the open invoice', () => {
+    expect(offlinePaymentDecision(owing, 150_000)).toEqual({ allowed: true })
+  })
+
+  it('names "nothing owed" before "too much", for the wrong-tenant case', () => {
+    // A staff member typing into the wrong lease needs to hear the first
+    // one, not be told their arithmetic is off.
+    expect(offlinePaymentDecision({ ...owing, balanceCents: 0 }, 150_000)).toEqual({
+      allowed: false,
+      refusal: 'nothing_owed',
+    })
+  })
+
+  it('refuses more than is owed', () => {
+    expect(offlinePaymentDecision(owing, 200_000).refusal).toBe('more_than_owed')
+  })
+
+  it('REFUSES a part-payment rather than forgiving the remainder', () => {
+    // Stripe's out-of-band payment settles the WHOLE invoice. Applying half
+    // of one this way would mark the rest paid and write it off silently -
+    // the tenant would owe nothing and nobody would notice.
+    expect(offlinePaymentDecision(owing, 50_000).refusal).toBe('partial_not_supported')
+  })
+
+  it('refuses when there is no issued invoice to mark', () => {
+    expect(
+      offlinePaymentDecision({ balanceCents: 150_000, openInvoiceAmountCents: 0 }, 150_000).refusal,
+    ).toBe('no_open_invoice')
+  })
+
+  it('refuses when we could not ask what is open', () => {
+    // Null means "we have not asked", never "nothing owed" - the same rule
+    // the collection-method switch follows.
+    expect(
+      offlinePaymentDecision({ balanceCents: 150_000, openInvoiceAmountCents: null }, 150_000)
+        .refusal,
+    ).toBe('no_open_invoice')
   })
 })
