@@ -1174,7 +1174,7 @@ An ACH debit gives what Stripe calls "instant provisional access" and takes **up
 - **I exported a query from a `'use server'` module.** `waiverPatternByTenant` started life in `waivers.ts`, which publishes it as a client-callable endpoint taking arbitrary property ids with no permission check. Moved to `waiver-report.ts` behind `server-only`. This is the second time this exact mistake has happened (the first was `policyFor` in R-037), which makes it worth naming as a pattern: **a read that takes a scope argument does not belong in a `'use server'` file.**
 
 ## R-040b — The charge half of the ledger
-**Commit:** `PENDING`  ·  **Date:** 2026-08-10
+**Commit:** `db07d97`  ·  **Date:** 2026-08-10
 
 **What it built.** One handled event, and it closed a bug that made **every balance in the product wrong**.
 
