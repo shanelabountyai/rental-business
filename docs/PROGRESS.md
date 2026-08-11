@@ -1245,7 +1245,7 @@ The owner put a test-mode key in `.env.local`, which closed the caveat standing 
 **Postscript (2026-08-11).** Preparing the Twilio 10DLC registration surfaced a defect unrelated to Stripe: **nothing in this product handles `STOP`**. Carrier-level opt-out overrides our notification engine entirely, including the locked categories a tenant is not allowed to switch off — so a tenant who texts STOP stops receiving entry notices while our log continues to record them as sent. A delivery record that can be silently false is the sharpest possible defect for a product whose premise is that the evidence trail is the product. Filed as **R-040e**; it is not a blocker for 10DLC registration, since Twilio satisfies the carrier requirement at the platform level.
 
 ## R-041 — The waiver screen and the fair-housing report
-**Commit:** `PENDING`  ·  **Date:** 2026-08-11
+**Commit:** `f4e4f20`  ·  **Date:** 2026-08-11
 
 **What it built.** The two screens R-040 left behind, and the reason it mattered: **the nightly job had been assessing late fees with no way to waive one.** `waiveCharge()` was written, tested, and callable by nothing — so a fee could be raised automatically and not forgiven. A waive control now sits on the lease page, and PAY-04's waiver-pattern report sits on `/money`.
 
