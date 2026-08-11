@@ -208,7 +208,10 @@ describe('processStripeEvent', () => {
     expect(entries[0]!.amountCents).toBe(-150_000)
     expect(entries[0]!.type).toBe('PAYMENT')
     expect(entries[0]!.stripeEventId).toBe(event.id)
-  })
+    // 20s like its neighbours: the payment path now also resolves any
+    // charges named on the invoice line metadata, and the whole thing walks
+    // provisioning plus a full projection.
+  }, 20_000)
 
   it('POSTS A CHARGE when an invoice is finalized — the missing half of the ledger', async () => {
     // THE BUG THIS FIXES. Nothing in the product ever wrote a CHARGE entry:
@@ -388,6 +391,110 @@ describe('processStripeEvent', () => {
     // delivery ids, so it is genuinely this test's own work rather than a
     // global sweep; it is simply more work than five seconds buys.
   }, 20_000)
+
+  it('reverses EVERY row a payment wrote, not just the remainder', async () => {
+    // The under-reversal. An invoice covering a $500 late fee plus $700 of
+    // subscription rent writes two ledger rows; the return used to undo only
+    // the remainder, giving back $700 and stranding $500 of phantom credit
+    // against the fee. The tenant appeared to have paid a fee they had not -
+    // the exact PAY-02 failure this pipeline exists to prevent.
+    const { lease, customerId } = await provisionedLease()
+    const invoiceId = `in_${randomUUID().slice(0, 12)}`
+    const paymentIntentId = `pi_${randomUUID().slice(0, 12)}`
+
+    const fee = await prisma.charge.create({
+      data: {
+        propertyId: lease.propertyId,
+        leaseId: lease.id,
+        type: 'LATE_FEE',
+        amountCents: 50_000,
+        description: 'Late fee',
+        dueOn: new Date('2026-03-05T00:00:00.000Z'),
+      },
+    })
+
+    const paid = invoiceEvent({
+      customer: customerId,
+      amountPaid: 120_000,
+      invoiceId,
+      paymentIntentId,
+    })
+    ;(paid.data.object as Record<string, unknown>).lines = {
+      data: [{ metadata: { chargeId: fee.id } }],
+    }
+    await processStripeEvent(paid)
+
+    // Two rows: one linked to the fee, one remainder for the rent.
+    expect(
+      await prisma.ledgerEntry.count({ where: { leaseId: lease.id, type: 'PAYMENT' } }),
+    ).toBe(2)
+    expect(await leaseBalanceCents(lease.id)).toBe(-120_000)
+
+    await processStripeEvent(
+      invoiceEvent({
+        customer: customerId,
+        type: 'invoice.payment_failed',
+        amountDue: 120_000,
+        invoiceId,
+        paymentIntentId,
+      }),
+    )
+
+    // ALL of it comes back, not just the remainder.
+    expect(await leaseBalanceCents(lease.id)).toBe(0)
+    const reversals = await prisma.ledgerEntry.findMany({
+      where: { leaseId: lease.id, type: 'REVERSAL' },
+      select: { amountCents: true, chargeId: true, reversesId: true },
+    })
+    expect(reversals).toHaveLength(2)
+    expect(reversals.reduce((t, r) => t + r.amountCents, 0)).toBe(120_000)
+    // The fee's reversal stays linked to the fee, so it shows as outstanding
+    // again rather than silently staying settled.
+    expect(reversals.some((r) => r.chargeId === fee.id)).toBe(true)
+    expect(reversals.every((r) => r.reversesId !== null)).toBe(true)
+  }, 30_000)
+
+  it('IGNORES a decline that predates the settlement it would have reversed', async () => {
+    // Stripe promises neither ordering nor exactly-once delivery, and one
+    // PaymentIntent can carry a decline then a successful retry. Delivered
+    // out of order, reading only the status would reverse money that
+    // actually cleared and text the tenant that their payment came back.
+    const { lease, customerId } = await provisionedLease()
+    const invoiceId = `in_${randomUUID().slice(0, 12)}`
+    const paymentIntentId = `pi_${randomUUID().slice(0, 12)}`
+
+    // The retry succeeds and is processed first.
+    await processStripeEvent(
+      invoiceEvent({
+        customer: customerId,
+        amountPaid: 150_000,
+        invoiceId,
+        paymentIntentId,
+        created: 1_800_000_600,
+      }),
+    )
+    expect(await leaseBalanceCents(lease.id)).toBe(-150_000)
+
+    // The earlier decline arrives late.
+    const stale = await processStripeEvent(
+      invoiceEvent({
+        customer: customerId,
+        type: 'invoice.payment_failed',
+        amountDue: 150_000,
+        invoiceId,
+        paymentIntentId,
+        created: 1_800_000_000,
+      }),
+    )
+
+    expect(stale.outcome).toBe('ignored')
+    // Money that cleared stays cleared.
+    expect(await leaseBalanceCents(lease.id)).toBe(-150_000)
+    const payment = await prisma.payment.findFirstOrThrow({
+      where: { stripePaymentIntentId: paymentIntentId },
+    })
+    expect(payment.status).toBe('SETTLED')
+  }, 30_000)
 
   it('does NOT reverse a first attempt that never settled', async () => {
     // The same event means two different things depending on history.

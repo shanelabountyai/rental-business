@@ -117,12 +117,36 @@ export async function processStripeEvent(
     intent.kind === 'payment_failed'
       ? await findSettledPayment(intent)
       : null
-  const action = intent.kind === 'payment_failed' ? returnAction(settled?.status ?? null) : null
+
+  // STALE FAILURES DO NOT REVERSE. Stripe promises neither ordering nor
+  // exactly-once delivery, and one PaymentIntent can carry a decline followed
+  // by a successful retry. Delivered out of order, the decline arrives after
+  // we have already settled - and reading only the status would reverse money
+  // that actually cleared, then fire the locked-category "your payment came
+  // back" text at a tenant who paid.
+  //
+  // A genuine ACH return happens AFTER settlement; a stale decline before it.
+  // `writePayment` stamps `receivedAt` from the succeeded event, so the two
+  // timestamps are directly comparable. The symmetric guard already exists in
+  // `writePayment` for a `payment_pending` arriving late; this is the half
+  // that was missing.
+  const staleFailure =
+    intent.kind === 'payment_failed' &&
+    settled?.status === 'SETTLED' &&
+    intent.occurredAt < settled.receivedAt
+
+  const action = staleFailure
+    ? 'ignore'
+    : intent.kind === 'payment_failed'
+      ? returnAction(settled?.status ?? null)
+      : null
 
   if (action === 'ignore') {
-    // Stripe promises neither ordering nor exactly-once delivery, and
-    // reversing twice would double what the tenant owes.
-    const detail = 'already reversed'
+    // Either already reversed, or a stale decline that predates the
+    // settlement. Both are acknowledged so Stripe stops retrying.
+    const detail = staleFailure
+      ? 'failure predates the settlement it would have reversed'
+      : 'already reversed'
     await recordOutcome(event.id, 'ignored', detail)
     return { outcome: 'ignored', detail }
   }
@@ -155,8 +179,19 @@ export async function processStripeEvent(
         : []
       const linkedTotal = linked.reduce((total, row) => total + row.amountCents, 0)
       const sign = ledgerAmountCents(intent) < 0 ? -1 : 1
+      const movedCents = Math.abs(ledgerAmountCents(intent))
 
-      for (const row of linked) {
+      // LINKED ROWS MUST NOT EXCEED WHAT MOVED. A partial payment reports
+      // only what arrived, while the charges named on the invoice carry their
+      // full amounts - crediting each in full would forgive money nobody
+      // sent. When they do not fit, fall back to a single unlinked row for
+      // the actual amount: the balance stays right, and which charge it paid
+      // down is a question for R-035's allocation policy rather than
+      // something to guess at here.
+      const fits = linkedTotal <= movedCents
+      const rows = fits ? linked : []
+
+      for (const row of rows) {
         await tx.ledgerEntry.create({
           data: {
             propertyId: payer.propertyId,
@@ -172,6 +207,15 @@ export async function processStripeEvent(
             amountCents: sign * row.amountCents,
             description: intent.description,
             occurredAt: intent.occurredAt,
+            // CARRIES THE PAYMENT, like the remainder row below.
+            //
+            // Omitting it here was a real bug: `reverseSettledPayment` finds
+            // the entries to undo BY `paymentId`, so a return reversed only
+            // the remainder and left the linked charges credited forever. On
+            // an invoice of a $500 late fee plus $700 rent, a returned $1,200
+            // gave back $700 and left $500 of phantom credit - exactly the
+            // PAY-02 failure this pipeline exists to prevent.
+            paymentId: payment?.id ?? null,
             stripeEventId: event.id,
             stripeObjectId: intent.stripeObjectId,
           },
@@ -182,7 +226,7 @@ export async function processStripeEvent(
       // subscription's own rent line, normally. Skipped when the linked rows
       // account for the whole amount, so an invoice made entirely of our own
       // charges does not also get an empty remainder row.
-      const remainder = Math.abs(ledgerAmountCents(intent)) - linkedTotal
+      const remainder = movedCents - (fits ? linkedTotal : 0)
       if (remainder <= 0) return
 
       await tx.ledgerEntry.create({
@@ -453,7 +497,7 @@ async function findSettledPayment(intent: ProjectionIntent) {
 
   return prisma.payment.findFirst({
     where,
-    select: { id: true, status: true, amountCents: true },
+    select: { id: true, status: true, amountCents: true, receivedAt: true },
     orderBy: { receivedAt: 'desc' },
   })
 }
@@ -495,28 +539,64 @@ async function reverseSettledPayment(
     },
   })
 
-  // The ledger row the original payment wrote. Reversing points AT it, which
-  // is what makes the pair legible to a human reading the statement.
-  const original = await tx.ledgerEntry.findFirst({
+  // EVERY row the payment wrote, not the first one found.
+  //
+  // A single invoice produces one entry per charge it named plus a remainder
+  // row for subscription rent, so `findFirst` undid one of them and left the
+  // rest credited - a $1,200 return giving back $700 and stranding $500
+  // against a late fee. One reversal per original also keeps the charge
+  // linkage intact, so a fee that was paid and then returned goes back to
+  // showing as outstanding on the pay screen rather than silently staying
+  // settled.
+  const originals = await tx.ledgerEntry.findMany({
     where: { paymentId: settled.id, type: 'PAYMENT' },
-    select: { id: true, amountCents: true },
+    select: { id: true, amountCents: true, chargeId: true },
   })
 
-  await tx.ledgerEntry.create({
-    data: {
-      propertyId: payer.propertyId,
-      leaseId: payer.leaseId,
-      leasePayerId: payer.id,
-      type: 'REVERSAL',
-      amountCents: reversalAmountCents(original?.amountCents ?? settled.amountCents),
-      description: 'Payment returned by the bank',
-      occurredAt: intent.occurredAt,
-      paymentId: settled.id,
-      reversesId: original?.id ?? null,
-      stripeEventId: event.id,
-      stripeObjectId: intent.stripeObjectId,
-    },
-  })
+  if (originals.length === 0) {
+    // Nothing linked to this payment - a projection written before the
+    // linkage existed, or a payment recorded by another path. Fall back to
+    // the payment's own amount so the balance is still restored; there is
+    // simply nothing to point the reversal at.
+    await tx.ledgerEntry.create({
+      data: {
+        propertyId: payer.propertyId,
+        leaseId: payer.leaseId,
+        leasePayerId: payer.id,
+        type: 'REVERSAL',
+        amountCents: reversalAmountCents(settled.amountCents),
+        description: 'Payment returned by the bank',
+        occurredAt: intent.occurredAt,
+        paymentId: settled.id,
+        stripeEventId: event.id,
+        stripeObjectId: intent.stripeObjectId,
+      },
+    })
+    return
+  }
+
+  for (const original of originals) {
+    await tx.ledgerEntry.create({
+      data: {
+        propertyId: payer.propertyId,
+        leaseId: payer.leaseId,
+        leasePayerId: payer.id,
+        type: 'REVERSAL',
+        // From the ORIGINAL row, so a partial payment gives back exactly what
+        // it gave - an invoice total is a different number.
+        amountCents: reversalAmountCents(original.amountCents),
+        description: 'Payment returned by the bank',
+        occurredAt: intent.occurredAt,
+        paymentId: settled.id,
+        chargeId: original.chargeId,
+        // Points AT what it undoes, which is what makes the pair legible to
+        // somebody reading the statement.
+        reversesId: original.id,
+        stripeEventId: event.id,
+        stripeObjectId: intent.stripeObjectId,
+      },
+    })
+  }
 }
 
 /// "Your payment came back" (PAY-02). Reads the balance AFTER the reversal,

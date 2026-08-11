@@ -283,6 +283,12 @@ export function interpretStripeEvent(event: StripeEventEnvelope): InterpretResul
           stripeInvoiceId: stripeObjectId,
           stripePaymentIntentId: str(object, 'payment_intent'),
           rail: null,
+          // The SAME linkage the finalized event carries. Without it a
+          // payment wrote one unlinked row, so a late fee that had been paid
+          // went on showing as outstanding on the tenant's pay screen for
+          // ever - `outstandingCharges()` derives what is left from a
+          // charge's own ledger entries, and there were none.
+          chargeIds: chargeIdsOf(object),
           amountCents: amount,
           occurredAt,
           description: str(object, 'description') ?? 'Rent payment',

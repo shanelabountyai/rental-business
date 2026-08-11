@@ -1268,3 +1268,25 @@ The owner put a test-mode key in `.env.local`, which closed the caveat standing 
 **Also in this commit.** `docs/UX-ACCESSIBILITY-LOG.md` — a full UX and accessibility review of every screen across all three audiences, with a verdict on every finding, the fixes to come, and an explicit list of what is already correct and must not be undone. Two systemic findings stand out: **there is no focus management anywhere in the product** (`grep -rn "\.focus()"` returns nothing), and `role="status"` is used eleven times in places where it announces nothing. Both are invisible to the axe gate by construction.
 
 **Housekeeping.** Removed 103 `"… 2.ts"` duplicate files — iCloud conflict copies, because this repository lives under `~/Documents`, which is iCloud-synced. 57 were byte-identical and 2 were stale pre-edit snapshots of files changed today. None were tracked. Worth knowing: a sync service writing into a live git working tree can produce a conflict copy mid-write, and this is the second kind of environment hazard this project has hit after the shared `:3000` dev port.
+
+## R-042 — Acting on the cloud review of the projection pipeline
+**Commit:** `PENDING`  ·  **Date:** 2026-08-11
+
+**What it built.** Three fixes to the Stripe→ledger projection, two from an ultrareview of PR #2 and one found by writing the test for the first.
+
+**1. A returned payment reversed only part of itself.** The linked-charge ledger rows did not carry `paymentId`, and `reverseSettledPayment` found the rows to undo *by* `paymentId` — so it reversed the remainder and left every linked charge credited. Now every row a payment wrote is reversed, each pointing at what it undoes and keeping its charge linkage, so a fee that was paid and then returned goes back to showing as outstanding rather than silently staying settled.
+
+**2. A stale decline reversed money that had cleared.** `returnAction` read only the current status and discarded the event's own timestamp. One PaymentIntent can carry a decline followed by a successful retry, and Stripe promises neither ordering nor exactly-once delivery — so the decline arriving late would flip a settled payment to REVERSED and fire the locked-category "your payment came back" text at a tenant who had paid. A genuine return happens *after* settlement; the comparison is now made. The symmetric guard already existed in `writePayment` for a late `payment_pending`; this was the half that was missing.
+
+**3. Payments never linked to charges at all** — found because the test for (1) failed at "expected 2 ledger rows, got 1". R-040c added the charge-id round trip to `invoice.finalized` and not to `invoice.payment_succeeded`, so a **paid late fee showed as outstanding on the tenant's pay screen for ever**: `outstandingCharges()` derives what is left from a charge's own ledger entries, and there were none. This also meant (1)'s described mechanism could not yet occur — with no linked payment rows there was only ever one row to reverse. The review was right about the defect and slightly ahead of the code.
+
+**What it decided.**
+- **Linked rows are only written if they fit inside what actually moved.** A partial payment reports only what arrived while the charges named on the invoice carry their full amounts; crediting each in full would forgive money nobody sent. When they do not fit, one unlinked row for the real amount — the balance stays right, and which charge it paid down is R-035's allocation policy rather than something to guess at in the projector.
+- **The reversal amount comes from the original row, never the invoice.** A partial payment that returns must give back exactly what it gave.
+- **A stale failure is ignored, not reversed.** Acknowledged so Stripe stops retrying, with the reason recorded.
+
+**What it left behind.**
+- The `fits` guard falls back to an unlinked row rather than allocating a partial payment across the charges it covers. That allocation exists in core (`allocatePayment`, R-035) and is not wired to the projector; doing so is a real piece of work and wants the review's opinion first.
+
+**Bugs found along the way.**
+- **A whole class of test flake, fixed at the root.** Several unrelated tests kept timing out at 5s under full-suite parallel load while passing alone — that is Vitest's *unit-test* default applied to a suite that is mostly integration against a remote Neon Postgres, where a 400ms test can take eight seconds under load. Raised to 20s globally, which also replaces a growing pile of per-test timeout arguments I had been adding one failure at a time. Two consecutive clean runs at 1,237 tests.

@@ -43,5 +43,24 @@ export default defineConfig({
      * key, which is exactly what stripe-adapter.test.ts already does.
      */
     env: { STRIPE_SECRET_KEY: '' },
+    /**
+     * 20s, not Vitest's 5s default.
+     *
+     * That default is sized for pure unit tests. Most of this suite is
+     * INTEGRATION against a real Neon Postgres over the network, and the full
+     * run puts several files through it in parallel - so a test that takes
+     * 400ms alone can take eight seconds under load. The symptom is the worst
+     * kind: a handful of unrelated tests time out on a different file each
+     * run, all of them passing when re-run alone, and the suite looks flaky
+     * when nothing is wrong.
+     *
+     * This replaces a growing pile of per-test timeout arguments, several of
+     * which were added one failure at a time. The genuinely long-running
+     * tests keep their explicit values and their stated reasons.
+     *
+     * Deliberately not higher. A test that will never pass should still fail
+     * while somebody is watching.
+     */
+    testTimeout: 20_000,
   },
 })
