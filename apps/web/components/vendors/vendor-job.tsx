@@ -28,6 +28,11 @@ export interface VendorJobProps {
     status: string
     proposedStart: string | null
     proposedEnd: string | null
+    /// The CONFIRMED window, once the office has booked and noticed it.
+    /// Outranks the proposal: a vendor who proposed a time and had a
+    /// different one confirmed needs to read the confirmed one.
+    scheduledStart: string | null
+    scheduledEnd: string | null
     invoiceUploaded: boolean
   }
   photos: readonly { id: string; fileName: string; href: string }[]
@@ -86,8 +91,6 @@ export function VendorJob({
     messageAction,
     {},
   )
-  const [proposing, setProposing] = useState(false)
-  const [declining, setDeclining] = useState(false)
   const [revealed, setRevealed] = useState<Record<string, string>>({})
   const [revealError, setRevealError] = useState<string | null>(null)
 
@@ -183,90 +186,71 @@ export function VendorJob({
         <section className="flex flex-col gap-4 rounded-md border-2 p-4">
           <h2 className="text-base font-medium">Can you take this job?</h2>
           <FormAlerts state={respondState} />
+
+          {/* THREE FORMS, NOT ONE FORM AND A STATE MACHINE (H7/U9, R-098).
+              This was `useState` with each trigger unmounting itself: tapping
+              "Propose a different time" destroyed the button holding focus,
+              so a keyboard or screen-reader user was returned to the top of
+              the document with nothing announced. Worse, before hydration
+              only Accept existed - the two answers a landlord would rather
+              not hear were the ones that needed JavaScript to reach.
+
+              Native `<details>` fixes both at once: focus stays on the
+              `<summary>`, and disclosure works with no JavaScript at all.
+              All three post to the same action; each carries its own
+              `response`. */}
           <form action={respondFormAction} className="flex flex-col gap-3">
-            {!declining && !proposing && (
-              <>
-                <input type="hidden" name="response" value="ACCEPTED" />
-                <SubmitButton label="Accept this job" />
-              </>
-            )}
-
-            {proposing && (
-              <>
-                <input type="hidden" name="response" value="PROPOSED_TIME" />
-                <TextField
-                  label="I can start"
-                  name="proposedStart"
-                  idPrefix="vendor"
-                  type="datetime-local"
-                  required
-                  error={errors.proposedStart}
-                />
-                <TextField
-                  label="I expect to finish"
-                  name="proposedEnd"
-                  idPrefix="vendor"
-                  type="datetime-local"
-                  required
-                  error={errors.proposedEnd}
-                />
-                <SubmitButton label="Send this time" />
-              </>
-            )}
-
-            {declining && (
-              <>
-                <input type="hidden" name="response" value="DECLINED" />
-                <TextField
-                  label="Why not? (so we send the right person next)"
-                  name="declineReason"
-                  idPrefix="vendor"
-                  required
-                  error={errors.declineReason}
-                />
-                <SubmitButton label="Decline this job" />
-              </>
-            )}
+            <input type="hidden" name="response" value="ACCEPTED" />
+            <SubmitButton label="Accept this job" />
           </form>
 
-          <div className="flex flex-wrap gap-3 text-sm">
-            {!proposing && (
-              <button
-                type="button"
-                onClick={() => {
-                  setProposing(true)
-                  setDeclining(false)
-                }}
-                className="min-h-11 underline underline-offset-4"
-              >
-                Propose a different time
-              </button>
-            )}
-            {!declining && (
-              <button
-                type="button"
-                onClick={() => {
-                  setDeclining(true)
-                  setProposing(false)
-                }}
-                className="min-h-11 underline underline-offset-4"
-              >
-                I can&rsquo;t take this
-              </button>
-            )}
-            {(proposing || declining) && (
-              <button
-                type="button"
-                onClick={() => {
-                  setProposing(false)
-                  setDeclining(false)
-                }}
-                className="min-h-11 underline underline-offset-4"
-              >
-                Back
-              </button>
-            )}
-          </div>
+          <details
+            className="rounded-md border p-3"
+            // Stays open when the server rejected what was typed into it.
+            // A closed panel would hide the error's own field.
+            open={Boolean(errors.proposedStart || errors.proposedEnd)}
+          >
+            <summary className="min-h-11 cursor-pointer text-sm underline underline-offset-4">
+              Propose a different time
+            </summary>
+            <form action={respondFormAction} className="flex flex-col gap-3 pt-3">
+              <input type="hidden" name="response" value="PROPOSED_TIME" />
+              <TextField
+                label="I can start"
+                name="proposedStart"
+                idPrefix="vendor"
+                type="datetime-local"
+                required
+                error={errors.proposedStart}
+              />
+              <TextField
+                label="I expect to finish"
+                name="proposedEnd"
+                idPrefix="vendor"
+                type="datetime-local"
+                required
+                error={errors.proposedEnd}
+              />
+              <SubmitButton label="Send this time" />
+            </form>
+          </details>
+
+          <details className="rounded-md border p-3" open={Boolean(errors.declineReason)}>
+            <summary className="min-h-11 cursor-pointer text-sm underline underline-offset-4">
+              I can&rsquo;t take this
+            </summary>
+            <form action={respondFormAction} className="flex flex-col gap-3 pt-3">
+              <input type="hidden" name="response" value="DECLINED" />
+              <TextField
+                label="Why not? (so we send the right person next)"
+                name="declineReason"
+                idPrefix="vendor"
+                required
+                error={errors.declineReason}
+              />
+              <SubmitButton label="Decline this job" />
+            </form>
+          </details>
         </section>
       )}
 
@@ -278,13 +262,28 @@ export function VendorJob({
 
       {working && (
         <>
-          {job.proposedStart && (
-            <section className="rounded-md border p-4 text-sm">
-              <p>
+          {/* THE CONFIRMED WINDOW WINS. A vendor whose visit had been
+              booked - and legally noticed to the tenant - still read "we'll
+              confirm" and phoned the office to ask, because only the proposal
+              was ever passed to this component. */}
+          {job.scheduledStart ? (
+            <section className="rounded-md border-2 border-foreground p-4">
+              <h2 className="text-base font-semibold">When to come</h2>
+              <p className="text-base">
+                {job.scheduledStart}
+                {job.scheduledEnd ? ` to ${job.scheduledEnd.slice(11)}` : ''}
+              </p>
+              <p className="text-muted-foreground text-sm">
+                Confirmed with the tenant. Times are local to the property.
+              </p>
+            </section>
+          ) : job.proposedStart ? (
+            <section className="rounded-md border p-4">
+              <p className="text-base">
                 You proposed {job.proposedStart} to {job.proposedEnd}. We&rsquo;ll confirm.
               </p>
             </section>
-          )}
+          ) : null}
 
           {(accessCodes.length > 0 || shutoffs.length > 0) && (
             <section className="flex flex-col gap-3 rounded-md border p-4">
@@ -294,22 +293,48 @@ export function VendorJob({
                   {revealError}
                 </p>
               )}
-              {accessCodes.map((code) => (
-                <div key={code.id} className="flex flex-wrap items-center gap-3 text-sm">
-                  <span>{code.label ?? code.type}</span>
-                  {revealed[code.id] ? (
-                    <code className="rounded bg-muted px-2 py-1 font-mono">{revealed[code.id]}</code>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => reveal(code.id)}
-                      className="border-input focus-visible:ring-ring min-h-11 rounded-md border px-3 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
-                    >
-                      Show code
-                    </button>
-                  )}
-                </div>
-              ))}
+              {/* THE ONE ACTION THIS SURFACE EXISTS TO PERFORM, and until
+                  R-098 it did three things wrong at once: every trigger was
+                  named "Show code" with nothing to tell them apart, the
+                  button unmounted itself so focus fell to `<body>`, and the
+                  code arrived with the region that held it, so nothing was
+                  ever announced.
+
+                  `<output>` is a live region natively, and it is rendered
+                  empty from the first paint - a region inserted alongside its
+                  own content announces nothing, which is the mistake S2
+                  catalogued in eleven places. `autoFocus` on the revealed
+                  code moves focus onto the thing the vendor asked for; it
+                  fires on mount only, so it cannot re-steal focus later. */}
+              {accessCodes.map((code) => {
+                const name = code.label ?? code.type
+                return (
+                  <div key={code.id} className="flex flex-wrap items-center gap-3 text-sm">
+                    <span id={`code-label-${code.id}`}>{name}</span>
+                    <output aria-labelledby={`code-label-${code.id}`}>
+                      {revealed[code.id] ? (
+                        <code
+                          tabIndex={-1}
+                          autoFocus
+                          className="bg-muted focus-visible:ring-ring rounded px-2 py-1 font-mono focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+                        >
+                          {revealed[code.id]}
+                        </code>
+                      ) : null}
+                    </output>
+                    {!revealed[code.id] && (
+                      <button
+                        type="button"
+                        onClick={() => reveal(code.id)}
+                        aria-label={`Show the ${name} code`}
+                        className="border-input focus-visible:ring-ring min-h-11 rounded-md border px-3 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+                      >
+                        Show code
+                      </button>
+                    )}
+                  </div>
+                )
+              })}
               {shutoffs.map((s) => (
                 <p key={s.id} className="text-muted-foreground text-sm">
                   {s.type} shutoff: {s.description ?? 'see the office'}

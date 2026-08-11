@@ -233,19 +233,23 @@ export function validateEmergencyRequest(
   if (!isEmergencyCategory(input.category)) {
     violations.push({ field: 'category', message: 'Choose what is happening.' })
   }
-  if (input.entryPermission === undefined) {
-    violations.push({
-      field: 'entryPermission',
-      message: 'Let us know if we can enter if you are not home.',
-    })
-  }
-  if (input.petWarning === undefined) {
-    violations.push({
-      field: 'petWarning',
-      message: 'Let us know if you have a pet at home.',
-    })
-  }
-
+  // ENTRY PERMISSION AND PETS ARE NOT REQUIRED, and that is a deliberate
+  // reversal (R-098).
+  //
+  // Both used to be mandatory, which meant that at 2am with sewage rising,
+  // two questions stood between a tenant and paging somebody. That trade is
+  // the wrong way round: the answers help whoever responds, and the paging
+  // is the thing that cannot wait. An unanswered question is recorded as
+  // unknown - the same way R-030 records an unanswered verification rather
+  // than blocking on it, and the same way `closeDecision` records a job
+  // closed without a tenant answer rather than refusing to close it.
+  //
+  // The form still ASKS, offers "I am not sure" as an explicit third answer,
+  // and pre-selects nothing - so an unknown is a tenant's own answer rather
+  // than a default nobody chose. Whoever responds sees the difference.
+  //
+  // Only the category is genuinely required: without it there is nothing to
+  // route and no safety instructions to have shown.
   return violations
 }
 

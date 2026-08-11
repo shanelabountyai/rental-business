@@ -144,15 +144,34 @@ describe('validateEmergencyRequest', () => {
     ).toContainEqual(expect.objectContaining({ field: 'category' }))
   })
 
-  it('still requires explicit entry and pet answers', () => {
-    // Both are one tap and both matter to somebody opening a door at 2am -
-    // and as everywhere else in this build, `undefined` is not `false`.
+  it('does NOT block the send on an unanswered entry or pet question', () => {
+    // This asserted the opposite until R-098, and the old rule was wrong in
+    // a way that only shows up at the worst moment: both answers were
+    // required, so at 2am with sewage rising two questions stood between a
+    // tenant and paging somebody. The answers help whoever responds; the
+    // paging is the part that cannot wait.
+    //
+    // `undefined` is still not `false` anywhere - it is recorded as unknown
+    // and whoever opens the door sees the difference between "no pet" and
+    // "we do not know". The form still asks, and offers "I am not sure" as
+    // an explicit third answer rather than something you reach by giving up.
+    expect(validateEmergencyRequest({ ...valid, entryPermission: undefined })).toEqual([])
+    expect(validateEmergencyRequest({ ...valid, petWarning: undefined })).toEqual([])
     expect(
-      validateEmergencyRequest({ ...valid, entryPermission: undefined }),
-    ).toContainEqual(expect.objectContaining({ field: 'entryPermission' }))
+      validateEmergencyRequest({
+        ...valid,
+        entryPermission: undefined,
+        petWarning: undefined,
+      }),
+    ).toEqual([])
+  })
+
+  it('still refuses a request with no category', () => {
+    // The one genuinely required answer: without it there is nothing to
+    // route, and no safety instructions could have been shown.
     expect(
-      validateEmergencyRequest({ ...valid, petWarning: undefined }),
-    ).toContainEqual(expect.objectContaining({ field: 'petWarning' }))
+      validateEmergencyRequest({ ...valid, category: '' }),
+    ).toContainEqual(expect.objectContaining({ field: 'category' }))
   })
 
   it('accepts an explicit no for both', () => {

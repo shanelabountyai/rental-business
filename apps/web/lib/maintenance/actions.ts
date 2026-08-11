@@ -284,6 +284,46 @@ export type SubmitEmergencyResult = MaintenanceFormState | { ticketId: string }
  * makes "regardless of hour" true rather than merely intended - and it is
  * also why nothing here re-implements a quiet-hours check.
  */
+export interface EmergencyFormState {
+  error?: string
+  fieldErrors?: Record<string, string>
+}
+
+/**
+ * The form-shaped wrapper (R-098).
+ *
+ * The emergency flow is now a real `<form action>` so the safety screen
+ * before it can be server-rendered and work without JavaScript. On success
+ * this REDIRECTS rather than returning — the tenant should land on their
+ * request, and a redirect from a server action is what carries them there
+ * without a client-side router.
+ *
+ * "I am not sure" is a real answer to both questions, recorded as unknown
+ * rather than blocking the send. At 2am with sewage rising, two mandatory
+ * questions between a tenant and paging somebody is the wrong trade.
+ */
+export async function submitEmergencyForm(
+  _previous: EmergencyFormState,
+  formData: FormData,
+): Promise<EmergencyFormState> {
+  const tri = (name: string): boolean | undefined => {
+    const value = String(formData.get(name) ?? 'unknown')
+    return value === 'yes' ? true : value === 'no' ? false : undefined
+  }
+
+  const result = await submitEmergencyRequest({
+    category: String(formData.get('category') ?? ''),
+    detail: String(formData.get('detail') ?? ''),
+    entryPermission: tri('entryPermission'),
+    petWarning: tri('petWarning'),
+  })
+
+  if ('ticketId' in result) {
+    redirect(`/portal/maintenance/${result.ticketId}?emergency=1`)
+  }
+  return { error: result.error, fieldErrors: result.fieldErrors }
+}
+
 export async function submitEmergencyRequest(
   args: EmergencyRequestInput,
 ): Promise<SubmitEmergencyResult> {

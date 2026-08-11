@@ -165,7 +165,7 @@ test.describe('safety-first instructions', () => {
     await page.goto('/portal/maintenance/emergency')
 
     await expect(page.getByText(/call 911 first/i)).toBeVisible()
-    await page.getByRole('button', { name: 'I smell gas' }).click()
+    await page.getByRole('link', { name: 'I smell gas' }).click()
 
     await expect(page.getByRole('heading', { name: 'Do this now' })).toBeVisible()
     await expect(page.getByText(/Leave the home now/i)).toBeVisible()
@@ -186,7 +186,7 @@ test.describe('safety-first instructions', () => {
     await page.goto(await magicLinkFor(tenant.id))
     await page.goto('/portal/maintenance/emergency')
 
-    await page.getByRole('button', { name: 'Water is flooding in right now' }).click()
+    await page.getByRole('link', { name: 'Water is flooding in right now' }).click()
     await expect(page.getByRole('heading', { name: 'Your water shutoff' })).toBeVisible()
     await expect(page.getByText('Left side of the house, under the hose bib.')).toBeVisible()
   })
@@ -197,7 +197,7 @@ test.describe('safety-first instructions', () => {
 
     await page.goto(await magicLinkFor(tenant.id))
     await page.goto('/portal/maintenance/emergency')
-    await page.getByRole('button', { name: 'Water is flooding in right now' }).click()
+    await page.getByRole('link', { name: 'Water is flooding in right now' }).click()
 
     await expect(page.getByText(/do not have this recorded/i)).toBeVisible()
   })
@@ -221,7 +221,7 @@ test.describe('safety-first instructions', () => {
 
     await page.goto(await magicLinkFor(tenant.id))
     await page.goto('/portal/maintenance/emergency')
-    await page.getByRole('button', { name: 'Water is flooding in right now' }).click()
+    await page.getByRole('link', { name: 'Water is flooding in right now' }).click()
 
     const link = page.getByRole('link', { name: 'See the photo' })
     await expect(link).toBeVisible()
@@ -244,18 +244,18 @@ test.describe('submitting an emergency', () => {
     await page.goto(await magicLinkFor(tenant.id))
     await page.goto('/portal/maintenance/emergency')
 
-    await page.getByRole('button', { name: 'Sewage is backing up' }).click()
+    await page.getByRole('link', { name: 'Sewage is backing up' }).click()
     await expect(page.getByText(/Stop running water/i)).toBeVisible()
-    await page.getByRole('button', { name: 'Continue' }).click()
+    await page.getByRole('link', { name: 'Continue' }).click()
 
     await page
       .getByRole('group', { name: /Can we come in/i })
-      .getByRole('button', { name: 'Yes' })
-      .click()
+      .getByRole('radio', { name: 'Yes', exact: true })
+      .check()
     await page
       .getByRole('group', { name: /pet at home/i })
-      .getByRole('button', { name: 'No' })
-      .click()
+      .getByRole('radio', { name: 'No', exact: true })
+      .check()
     await page.getByRole('button', { name: 'Send now' }).click()
 
     await page.waitForURL(/\/portal\/maintenance\/[a-z0-9]+\?emergency=1$/)
@@ -315,18 +315,18 @@ test.describe('submitting an emergency', () => {
     await page.goto(await magicLinkFor(tenant.id))
     await page.goto('/portal/maintenance/emergency')
 
-    await page.getByRole('button', { name: /carbon monoxide/i }).click()
-    await page.getByRole('button', { name: 'Continue' }).click()
+    await page.getByRole('link', { name: /carbon monoxide/i }).click()
+    await page.getByRole('link', { name: 'Continue' }).click()
     await page
       .getByRole('group', { name: /Can we come in/i })
-      .getByRole('button', { name: 'No' })
-      .click()
+      .getByRole('radio', { name: 'No', exact: true })
+      .check()
     await page
       .getByRole('group', { name: /pet at home/i })
-      .getByRole('button', { name: 'Yes' })
-      .click()
+      .getByRole('radio', { name: 'Yes', exact: true })
+      .check()
     await page.getByRole('button', { name: 'Send now' }).click()
-    await page.waitForURL(/\/portal\/maintenance\//)
+    await page.waitForURL(/\/portal\/maintenance\/(?!emergency|new)[a-z0-9]+(\?|$)/)
 
     await expect
       .poll(() => prisma.ticket.count({ where: { tenantId: tenant.id } }), {
@@ -348,28 +348,79 @@ test.describe('submitting an emergency', () => {
     expect(entry).not.toBeNull()
   })
 
-  test('will not submit without an entry and pet answer', async ({ page }) => {
+  test('SENDS even when the two questions go unanswered', async ({ page }) => {
+    // This test asserted the opposite until R-098, and the old behaviour was
+    // wrong: "Send now" was disabled until entry permission and pets were
+    // both answered, so at 2am with sewage rising two questions stood
+    // between a tenant and paging somebody. An unanswered question is now
+    // recorded as unknown - the same way R-030 records an unanswered
+    // verification rather than blocking on it - and "I am not sure" is an
+    // explicit third answer rather than a thing you discover by giving up.
     const { tenant } = await seedEmergencyTenancy()
     await page.goto(await magicLinkFor(tenant.id))
     await page.goto('/portal/maintenance/emergency')
 
-    await page.getByRole('button', { name: 'A break-in, or a door or window will not secure' }).click()
-    await page.getByRole('button', { name: 'Continue' }).click()
+    await page
+      .getByRole('link', { name: 'A break-in, or a door or window will not secure' })
+      .click()
+    await page.getByRole('link', { name: 'Continue' }).click()
 
-    const send = page.getByRole('button', { name: 'Send now' })
-    await expect(send).toBeDisabled()
+    // Nothing pre-selected: the form must not put an answer in the tenant's
+    // mouth that whoever responds would then rely on.
+    await expect(page.getByRole('radio', { checked: true })).toHaveCount(0)
+
+    await page.getByRole('button', { name: 'Send now' }).click()
+    // Excludes `emergency` and `new`: the trap CLAUDE.md already documents
+    // for `/leases/[id]` - a bare id pattern matches the very page we are
+    // standing on and resolves instantly without anything being submitted.
+    await page.waitForURL(/\/portal\/maintenance\/(?!emergency|new)[a-z0-9]+(\?|$)/)
+
+    const ticket = await prisma.ticket.findFirstOrThrow({
+      where: { tenantId: tenant.id },
+      orderBy: { createdAt: 'desc' },
+    })
+    expect(ticket.priority).toBe('EMERGENCY')
+  })
+
+  test('offers "I am not sure" as a real answer to both questions', async ({ page }) => {
+    const { tenant } = await seedEmergencyTenancy()
+    await page.goto(await magicLinkFor(tenant.id))
+    await page.goto('/portal/maintenance/emergency')
+    await page
+      .getByRole('link', { name: 'A break-in, or a door or window will not secure' })
+      .click()
+    await page.getByRole('link', { name: 'Continue' }).click()
+
+    await expect(page.getByRole('radio', { name: 'I am not sure' })).toHaveCount(2)
+  })
+
+  test('the safety instructions survive with NO JavaScript', async ({ browser }) => {
+    // The reason this flow was rebuilt. It was entirely `useState`, so a
+    // tenant who could smell gas on a weak connection tapped a category and
+    // got nothing at all - the highest-stakes text in the product did not
+    // exist until React hydrated.
+    const context = await browser.newContext({ javaScriptEnabled: false })
+    const page = await context.newPage()
+    const { tenant } = await seedEmergencyTenancy()
+    await page.goto(await magicLinkFor(tenant.id))
+    await page.goto('/portal/maintenance/emergency?c=GAS_SMELL')
+
+    await expect(page.getByRole('heading', { name: 'Do this now' })).toBeVisible()
+    await expect(page.getByText(/call 911/i).first()).toBeVisible()
+    await context.close()
+  })
+
+  test('the OLD disabled-send behaviour is gone', async ({ page }) => {
+    const { tenant } = await seedEmergencyTenancy()
+    await page.goto(await magicLinkFor(tenant.id))
+    await page.goto('/portal/maintenance/emergency')
 
     await page
-      .getByRole('group', { name: /Can we come in/i })
-      .getByRole('button', { name: 'Yes' })
+      .getByRole('link', { name: 'A break-in, or a door or window will not secure' })
       .click()
-    await expect(send).toBeDisabled()
+    await page.getByRole('link', { name: 'Continue' }).click()
 
-    await page
-      .getByRole('group', { name: /pet at home/i })
-      .getByRole('button', { name: 'No' })
-      .click()
-    await expect(send).toBeEnabled()
+    await expect(page.getByRole('button', { name: 'Send now' })).toBeEnabled()
   })
 })
 
@@ -408,13 +459,13 @@ test.describe('accessibility (§6.4, WCAG 2.1 AA)', () => {
 
     // The safety screen uses red heavily - exactly where a contrast failure
     // would be most costly, on the screen somebody reads under stress.
-    await page.getByRole('button', { name: 'Water is flooding in right now' }).click()
+    await page.getByRole('link', { name: 'Water is flooding in right now' }).click()
     results = await new AxeBuilder({ page })
       .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
       .analyze()
     expect(results.violations, 'safety screen').toEqual([])
 
-    await page.getByRole('button', { name: 'Continue' }).click()
+    await page.getByRole('link', { name: 'Continue' }).click()
     results = await new AxeBuilder({ page })
       .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
       .analyze()

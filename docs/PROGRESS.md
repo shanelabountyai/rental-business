@@ -1290,3 +1290,35 @@ The owner put a test-mode key in `.env.local`, which closed the caveat standing 
 
 **Bugs found along the way.**
 - **A whole class of test flake, fixed at the root.** Several unrelated tests kept timing out at 5s under full-suite parallel load while passing alone — that is Vitest's *unit-test* default applied to a suite that is mostly integration against a remote Neon Postgres, where a 400ms test can take eight seconds under load. Raised to 20s globally, which also replaces a growing pile of per-test timeout arguments I had been adding one failure at a time. Two consecutive clean runs at 1,237 tests.
+
+## R-098 — UX and accessibility remediation: the safety tier
+**Commit:** `TBD`  ·  **Date:** 2026-08-11
+
+**What it built.** Two review passes over every screen and component in the product — one on UX, one on accessibility — produced ~40 findings, recorded in full with per-finding verdicts in `docs/UX-ACCESSIBILITY-LOG.md`. This item fixes the tier where a defect has a consequence outside the screen. The rest is R-099.
+
+**The emergency maintenance flow, rebuilt.** It was one client component and nine `onClick` handlers, which meant the safety instructions — *turn off the gas, leave the building, call 911* — **did not exist in the page until React hydrated**. A tenant who could smell gas on a weak connection tapped a category and got nothing at all. That directly violates the rule this repo's own CLAUDE.md states. Now: the category list is server-rendered `<Link>`s, the chosen category lives in the URL, and the safety screen is a server-rendered page at its own address. Only the final details form is a client component, and it is a real `<form action>` + `useActionState`. An e2e spec walks the whole path with **JavaScript disabled** and asserts the instructions are on the page.
+
+**The two questions no longer block the page-out.** `validateEmergencyRequest` required an explicit entry-permission and pet answer, and "Send now" was disabled until both were given — so at 2am with sewage rising, two questions stood between a tenant and paging somebody. Both are now optional, with **"I am not sure" offered as an explicit third answer** rather than something you reach by giving up, and nothing pre-selected. This reverses a rule an earlier item deliberately set, so it is written down in both the core test and the code.
+
+**The vendor surface.** Four fixes, all on the one screen a plumber sees in a driveway:
+- **Proposed times rendered in UTC** while messages twenty lines away used `utcToWallClock`. A vendor proposing 9am CT read back 14:00. Same defect class as R-036b's entry-window bug — I fixed the admin page then and missed this one.
+- **The confirmed window was never passed to the component at all.** A vendor whose visit had been booked *and legally noticed to the tenant* still read "we'll confirm" and phoned the office to ask. Now the confirmed window outranks the proposal.
+- **"Show code"** — the single action this surface exists to perform — destroyed focus, announced nothing, and gave every code the same accessible name. Now an `<output>` rendered empty from first paint (so the reveal is a mutation and therefore announces), `autoFocus` on the revealed code, and a per-code name.
+- **Accept / propose / decline were a `useState` machine whose triggers unmounted themselves.** Native `<details>` instead: focus stays on the `<summary>`, and — the part that matters more — before hydration only *Accept* used to exist, so the two answers a landlord would rather not hear were the ones that needed JavaScript.
+- A `tel:` link on the vendor rejection screen, from `OPERATIONS_PHONE`. Every vendor dead end said "call the office" and gave no number.
+
+**What it decided.**
+- **An unanswered safety question is recorded as unknown and never blocks a page-out.** `undefined` is still not `false` — whoever opens the door sees the difference between "no pet" and "we don't know" — but the paging is the part that cannot wait. This mirrors how R-030 records an unanswered verification rather than blocking on it.
+- **The safety screen is a URL, not a state.** That makes it deep-linkable, survivable without JavaScript, and removes the focus and announcement problem rather than solving it: a real navigation needs neither.
+- **`<details>` over a state machine** wherever a disclosure gates a form. It retains focus and works with no JavaScript, and the admin side already uses it.
+- **"Show code" stays an `onClick`.** Flagged as a hydration dependency; declined. Revealing an access code is a privileged read that writes an audit row, and it *should* require a live session rather than working from a cached page.
+- The report is split R-098 (safety) / R-099 (the rest) rather than worked as one item, and the split is by consequence, not by severity label.
+
+**What it left behind.**
+- **R-099 owns everything else**, including the two systemic findings: there is no focus management anywhere in the product (`.focus()` appears zero times, and it is the root of seven separate findings), and eleven `role="status"` regions that announce nothing because the region is inserted alongside its own content.
+- **The gate cannot catch any of this.** Nothing asserts where focus lands after a server action, and axe's `scrollable-region-focusable` only fires when a table actually overflows at the test viewport. A shared e2e focus assertion is part of R-099 and would have caught most of the High tier.
+- `OPERATIONS_PHONE` is unset in `.env.example` by design (names only). Unset renders no number rather than a dead "call us" — honest, but not good. Set it before any vendor sees the screen.
+
+**Bugs found along the way.**
+- **The item numbering had started to collide.** This work was being stamped `R-043` in code comments while backlog R-043 is *tenant-visible ledger + portal payment* — an unbuilt item that will touch some of the same files. Renumbered to R-098/R-099 before it set. The backlog already carries a dozen duplicate ids from earlier sessions; those are not worth rewriting, but a fresh one was.
+- Two vitest files failed once under full-suite parallel load and passed on an immediate clean re-run. Noted rather than chased; the 20s global timeout from R-042 already addressed the known cause.

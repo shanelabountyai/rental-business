@@ -374,7 +374,7 @@ test.describe('the vendor journey', () => {
 
     // Before accepting there is no code on the page at all.
     await vendorPage.goto(`/vendor/${token}`)
-    await expect(vendorPage.getByRole('button', { name: 'Show code' })).toHaveCount(0)
+    await expect(vendorPage.getByRole('button', { name: /^Show the .* code$/ })).toHaveCount(0)
 
     await vendorPage.getByRole('button', { name: 'Accept this job' }).click()
     await expect
@@ -386,7 +386,7 @@ test.describe('the vendor journey', () => {
       .toBe('ACCEPTED')
 
     await vendorPage.goto(`/vendor/${token}`)
-    await vendorPage.getByRole('button', { name: 'Show code' }).click()
+    await vendorPage.getByRole('button', { name: /^Show the .* code$/ }).click()
     await expect(vendorPage.getByText('4821')).toBeVisible()
 
     const reveals = await prisma.auditLog.findMany({
@@ -407,9 +407,11 @@ test.describe('the vendor journey', () => {
     const vendorPage = await vendorContext.newPage()
 
     await vendorPage.goto(`/vendor/${token}`)
-    // Regex, not a literal: the button renders a typographic apostrophe
-    // (&rsquo;), which does not match a straight one typed in a test.
-    await vendorPage.getByRole('button', { name: /take this/ }).click()
+    // `getByText`, not a role: since R-098 the three answers are native
+    // `<details>` disclosures, and `<summary>` has no portable role mapping -
+    // the other specs in this suite select the app's other summaries the same
+    // way. Regex, not a literal: it renders a typographic apostrophe.
+    await vendorPage.getByText(/^I can.t take this$/).click()
     await vendorPage
       .getByLabel('Why not? (so we send the right person next)')
       .fill('Booked through next week')
@@ -458,7 +460,7 @@ test.describe('the link refuses', () => {
     const vendorPage = await vendorContext.newPage()
     await vendorPage.goto(`/vendor/${token}`)
     await expect(vendorPage.getByText(/reassigned/i)).toBeVisible()
-    await expect(vendorPage.getByRole('button', { name: 'Show code' })).toHaveCount(0)
+    await expect(vendorPage.getByRole('button', { name: /^Show the .* code$/ })).toHaveCount(0)
     await vendorContext.close()
   })
 

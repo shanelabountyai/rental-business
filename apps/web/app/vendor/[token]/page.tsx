@@ -8,6 +8,7 @@ import {
   sendVendorMessage,
   uploadVendorDocument,
 } from '@/lib/vendors/actions.ts'
+import { VendorHelpLine } from '@/components/vendors/vendor-help-line.tsx'
 import { vendorRejectionMessage } from '@/lib/vendors/messages.ts'
 import { verifyVendorLink } from '@/lib/vendors/link.ts'
 import { vendorJobContext } from '@/lib/vendors/queries.ts'
@@ -47,8 +48,14 @@ export default async function VendorLinkPage({
     // exists to avoid.
     return (
       <main className="mx-auto flex max-w-xl flex-col gap-4 p-6">
-        <h1 className="text-xl font-semibold">This link isn&rsquo;t working</h1>
-        <p className="text-sm">{vendorRejectionMessage(link.reason)}</p>
+        <h1 className="text-2xl font-semibold">This link isn&rsquo;t working</h1>
+        <p className="text-base">{vendorRejectionMessage(link.reason)}</p>
+        {/* EVERY dead end here said "call the office" and gave no number.
+            The token is invalid so there is no property to look up - this is
+            one operations number, and a `tel:` link so it dials on the phone
+            the vendor is already holding. A link expiring three days after
+            dispatch is the NORMAL case (D-16), not an edge one. */}
+        <VendorHelpLine />
       </main>
     )
   }
@@ -92,8 +99,27 @@ export default async function VendorLinkPage({
         ticketDescription: workOrder.ticket?.description ?? null,
         vendorResponse: workOrder.vendorResponse,
         status: workOrder.status,
-        proposedStart: workOrder.proposedStart?.toISOString().slice(0, 16).replace('T', ' ') ?? null,
-        proposedEnd: workOrder.proposedEnd?.toISOString().slice(0, 16).replace('T', ' ') ?? null,
+        // THE PROPERTY'S CLOCK, like the messages twenty lines below.
+        //
+        // These two read UTC while `utcToWallClock` was already in use in the
+        // same file - so a vendor who proposed 9am Central read back "14:00".
+        // Same defect class as R-036b's entry-window bug: I fixed the admin
+        // work order page and missed this one.
+        proposedStart: workOrder.proposedStart
+          ? utcToWallClock(workOrder.proposedStart, workOrder.property.timezone).replace('T', ' ')
+          : null,
+        proposedEnd: workOrder.proposedEnd
+          ? utcToWallClock(workOrder.proposedEnd, workOrder.property.timezone).replace('T', ' ')
+          : null,
+        // The CONFIRMED window, which the vendor could not see at all - so
+        // somebody whose visit had been booked and legally noticed still read
+        // "we'll confirm" and phoned the office to ask.
+        scheduledStart: workOrder.scheduledStart
+          ? utcToWallClock(workOrder.scheduledStart, workOrder.property.timezone).replace('T', ' ')
+          : null,
+        scheduledEnd: workOrder.scheduledEnd
+          ? utcToWallClock(workOrder.scheduledEnd, workOrder.property.timezone).replace('T', ' ')
+          : null,
         invoiceUploaded: context.photos.some((p) => p.type === 'INVOICE'),
       }}
       photos={context.photos.map((p) => ({

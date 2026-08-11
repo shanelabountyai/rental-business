@@ -4,6 +4,18 @@
 
 Two independent review passes were run over the whole product — one on UX against modern standards, one on accessibility beyond what the automated gate can see. This file records **every** finding, whether I could verify it, what I did about it, and — where I declined — why.
 
+## How this is being worked
+
+The report is split across two backlog items, because "fix the whole report"
+is not a session and the tiers have genuinely different stakes:
+
+- **R-098 — the safety tier. ✅ Landed.** The emergency maintenance flow and
+  the vendor surface: the two places where a defect has a consequence outside
+  the screen. Everything marked `FIXED (R-098)` below.
+- **R-099 — the rest.** Focus management, the missing route boundaries, the
+  inert live regions, the wizard, the timezone display sites, and the gate's
+  own gap. Everything marked `R-099` below.
+
 ## How to read this
 
 - Each finding has a **verdict**: `CONFIRMED` (I reproduced it), `PARTLY` (real but overstated), `REJECTED` (checked, not true), or `DEFERRED` (real, filed, not done here).
@@ -36,13 +48,13 @@ The codebase already states the rule correctly in `components/auth-form.tsx:86` 
 
 | # | Finding | Verdict | Decision |
 |---|---|---|---|
-| H1 | Emergency flow: safety screen never announced, focus destroyed reaching it (`emergency-flow.tsx:109-196`) | `CONFIRMED` | **Fixing.** Highest stakes in the product — a blind tenant taps "Gas leak" and hears silence. |
-| H2 | Maintenance wizard: same defect across seven steps, no progress indication | `CONFIRMED` | **Fixing** — same three-line pattern as H1. |
-| H3 | Wizard/emergency option selection is colour + font-weight only; no `aria-pressed` or radio semantics | `CONFIRMED` | **Fixing** as real radios, which also makes them work before hydration. |
-| H4 | Disabled "Next" buttons leave the tab order and give no reason | `CONFIRMED` | **Fixing** — `aria-disabled` + a `role="alert"` naming the missing answer. |
-| H5 | `sr-only` inputs with `focus-visible:ring` on a label that never receives focus — no visible focus indicator at all | `CONFIRMED` | **Fixing.** One of the three sites is `offline-payment-form.tsx`, which I wrote in R-038. |
-| H6 | Vendor "Show code": focus destroyed, code never announced, N identical button names | `CONFIRMED` | **Fixing.** This is the single action the vendor surface exists to perform. |
-| H7 | Vendor accept/propose/decline triggers unmount themselves | `CONFIRMED` | **Fixing** with `<details>`, the pattern the admin side already uses. |
+| H1 | Emergency flow: safety screen never announced, focus destroyed reaching it (`emergency-flow.tsx:109-196`) | `CONFIRMED` | **FIXED (R-098).** Solved by deletion rather than by announcing: the safety screen is now its own server-rendered URL, so it is a real navigation and there is no focus to preserve or announce. |
+| H2 | Maintenance wizard: same defect across seven steps, no progress indication | `CONFIRMED` | **R-099.** Same defect, no safety consequence — a tenant reporting a dripping tap is not a tenant smelling gas. |
+| H3 | Wizard/emergency option selection is colour + font-weight only; no `aria-pressed` or radio semantics | `CONFIRMED` | **FIXED (R-098) in the emergency flow** — real radios, plus an explicit third "I am not sure". The wizard half is **R-099**. |
+| H4 | Disabled "Next" buttons leave the tab order and give no reason | `CONFIRMED` | **FIXED (R-098) in the emergency flow**, by removing the disabling rather than explaining it — see the note below. Wizard half is **R-099**. |
+| H5 | `sr-only` inputs with `focus-visible:ring` on a label that never receives focus — no visible focus indicator at all | `CONFIRMED` | **R-099.** The emergency flow's own instance is gone (its radios use `focus-within:ring` on the label, which does fire); the other two sites remain, including `offline-payment-form.tsx`, which I wrote in R-038. |
+| H6 | Vendor "Show code": focus destroyed, code never announced, N identical button names | `CONFIRMED` | **FIXED (R-098).** All three: `<output>` rendered empty from first paint so the reveal is a mutation and announces, `autoFocus` on the revealed code, and a per-code accessible name. |
+| H7 | Vendor accept/propose/decline triggers unmount themselves | `CONFIRMED` | **FIXED (R-098)** with `<details>`, the pattern the admin side already uses. Three forms, one action — which also fixed the U9 instance on this screen for free. |
 
 ## Accessibility — Medium severity
 
@@ -54,10 +66,10 @@ The codebase already states the rule correctly in `components/auth-form.tsx:86` 
 | M4 | Successful actions swap whole sections silently (three sites) | `CONFIRMED` | **Fixing** alongside S1. |
 | M5 | Property switcher navigates on `change` and disables the focused control | `CONFIRMED` | **Fixing** — `aria-busy` instead of `disabled`. |
 | M6 | Horizontally scrolling tables not keyboard-reachable (3 sites) | `CONFIRMED` | **Fixing** — copy the four attributes from `tasks/page.tsx`. Note axe only catches this when the table actually overflows at the test viewport, so it is **not reliably gated today**. |
-| M7 | Fees panel: N identical triggers, error without `role="alert"`, focus loss | `CONFIRMED` | **Fixing.** Mine, from R-041, written hours earlier. |
+| M7 | Fees panel: N identical triggers, error without `role="alert"`, focus loss | `CONFIRMED` | **R-099.** Mine, from R-041, written hours earlier. |
 | M8 | Two offline-payment errors have no `id` and no `aria-describedby` | `CONFIRMED` | **Fixing** — use `TextField`, which does this correctly. Also mine, from R-038. |
 | M9 | `<legend>` nested two `<div>`s deep contributes no accessible name | `CONFIRMED` | **Fixing.** Each troubleshooting step is an unnamed group with identically-named buttons. |
-| M10 | Emergency reassurance banner: inert `role="status"`, sits above the `<h1>` so heading navigation skips it | `CONFIRMED` | **Fixing.** |
+| M10 | Emergency reassurance banner: inert `role="status"`, sits above the `<h1>` so heading navigation skips it | `CONFIRMED` | **FIXED (R-098).** Gone with the rewrite: the reassurance is ordinary server-rendered prose under the `<h1>`, which is what it always was — a live region announcing text that never changes was the wrong tool for it. |
 | M11 | Photo upload status not announced; disables the focused control | `CONFIRMED` | **Fixing.** |
 
 ## UX — High severity
@@ -65,11 +77,11 @@ The codebase already states the rule correctly in `components/auth-form.tsx:86` 
 | # | Finding | Verdict | Decision |
 |---|---|---|---|
 | U1 | No `error.tsx`, `not-found.tsx` or `loading.tsx` anywhere | `CONFIRMED` — zero files | **Fixing.** A tenant hitting `notFound()` gets Next's bare 404 with no chrome and no way back; an unhandled throw shows "Application error" to a plumber in a driveway. |
-| U2 | Emergency flow is entirely `onClick` — safety instructions do not exist until hydration | `CONFIRMED` — 9 handlers | **Fixing.** Directly violates our own CLAUDE.md rule. Highest-stakes text in the product. |
-| U3 | Vendor "Show code" is `onClick` | `CONFIRMED` | **Fixing** with H6. |
-| U4 | Vendor proposed time rendered in UTC while messages twenty lines away use `utcToWallClock` | `CONFIRMED` | **Fixing.** This is the *same defect class* as R-036b's entry-window bug — I fixed the admin page and missed the vendor page. A vendor proposing 9am CT reads back 14:00. |
+| U2 | Emergency flow is entirely `onClick` — safety instructions do not exist until hydration | `CONFIRMED` — 9 handlers | **FIXED (R-098).** Category choice and safety screen are server-rendered and URL-driven; only the final details form is a client component, and it is a real `<form action>`. An e2e spec runs the whole path with JavaScript disabled. |
+| U3 | Vendor "Show code" is `onClick` | `PARTLY` | **Not changed, deliberately.** Revealing a code is a privileged read that writes an audit row; it *should* require a live session rather than working from a cached page. H6's three real defects are fixed. |
+| U4 | Vendor proposed time rendered in UTC while messages twenty lines away use `utcToWallClock` | `CONFIRMED` | **FIXED (R-098).** Same defect class as R-036b's entry-window bug — I fixed the admin page and missed the vendor page. Also surfaced the *confirmed* window, which the component was never passed at all: a vendor whose visit had been booked and legally noticed still read "we'll confirm". |
 | U5 | Pay screen never states a due date | `PARTLY` — per-charge dates render in the itemisation; the balance block has none | **Fixing** the balance-level due date. PAY-01 names it explicitly. |
-| U6 | Every vendor dead end says "call the office" and gives no number | `CONFIRMED` | **Fixing** — a `tel:` link from one env value. Cheapest high-value fix in the report. |
+| U6 | Every vendor dead end says "call the office" and gives no number | `CONFIRMED` | **FIXED (R-098)** — a `tel:` link from `OPERATIONS_PHONE`, rendering nothing when unset rather than a dead "call us". Cheapest high-value fix in the report. |
 | U7 | Tenant home page never says whether they owe anything | `CONFIRMED` | **Fixing.** `lib/portal/nav.ts` argues rent is what tenants open the portal for; the home screen does not honour it. |
 
 ## UX — Medium and Low
