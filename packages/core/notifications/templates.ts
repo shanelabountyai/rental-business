@@ -518,6 +518,63 @@ export const paymentReceiptTemplate: NotificationTemplate<PaymentReceiptContext>
   },
 }
 
+/// Context for `payment.returned` (PAY-02, R-039).
+export interface PaymentReturnedContext {
+  tenantName: string
+  amount: string
+  addressLine1: string
+  /// What is owed again now the credit has come back off.
+  balance: string
+  /// Absent where the state bars the fee or the lease is silent - the
+  /// template says nothing about a fee rather than saying "$0.00".
+  feeAmount: string | null
+}
+
+/**
+ * "Your payment came back" (PAY-02, R-039).
+ *
+ * SAYS WHAT HAPPENED AND WHAT TO DO, in that order, and does not speculate
+ * about why. A bank returns a debit for reasons the tenant may find
+ * embarrassing and we do not actually know - Stripe reports a failure code,
+ * not a life situation - so this states the fact, restores the number, and
+ * asks them to sort it out.
+ *
+ * `payment_failed` is a LOCKED category on SMS (see categories.ts): a tenant
+ * cannot turn this one off, because believing rent is paid when it is not is
+ * how somebody ends up in eviction proceedings over a bank error.
+ */
+export const paymentReturnedTemplate: NotificationTemplate<PaymentReturnedContext> = {
+  key: 'payment.returned',
+  category: 'payment_failed',
+  channels: ['SMS', 'EMAIL', 'PORTAL'],
+  render: (context, channel) => {
+    if (channel === 'SMS') {
+      return {
+        body: [
+          `Your ${context.amount} payment for ${context.addressLine1} was returned by the bank.`,
+          `You now owe ${context.balance}.`,
+          'Please get in touch so we can sort it out.',
+        ].join(' '),
+      }
+    }
+    return {
+      subject: 'Your payment was returned',
+      body: [
+        `Hello ${context.tenantName},`,
+        '',
+        `Your payment of ${context.amount} for ${context.addressLine1} was returned by your bank, so it has been taken back off your balance.`,
+        '',
+        `You now owe ${context.balance}.`,
+        context.feeAmount ? `A returned-payment fee of ${context.feeAmount} also applies.` : '',
+        '',
+        'If you think this is a mistake, or you need to arrange something, please contact the office — we would much rather hear from you than not.',
+      ]
+        .filter((line, index, all) => line !== '' || all[index - 1] !== '')
+        .join('\n'),
+    }
+  },
+}
+
 export const TEMPLATES: Readonly<Record<string, NotificationTemplate<never>>> = {
   [unitMakeReadyTemplate.key]:
     unitMakeReadyTemplate as unknown as NotificationTemplate<never>,
@@ -535,6 +592,8 @@ export const TEMPLATES: Readonly<Record<string, NotificationTemplate<never>>> = 
     verifyRequestTemplate as unknown as NotificationTemplate<never>,
   [paymentReceiptTemplate.key]:
     paymentReceiptTemplate as unknown as NotificationTemplate<never>,
+  [paymentReturnedTemplate.key]:
+    paymentReturnedTemplate as unknown as NotificationTemplate<never>,
 }
 
 export class UnknownTemplateError extends Error {

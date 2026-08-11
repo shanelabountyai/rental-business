@@ -117,6 +117,13 @@ async function seedJurisdictionRules() {
       // default so a partial payment does not silently starve rent to pay
       // down fees first.
       paymentAllocationOrder: ['RENT', 'LATE_FEE', 'NSF_FEE', 'UTILITY', 'OTHER'],
+      // PAY-02's returned-payment fee (R-039, D-4). Tex. Bus. & Com. Code
+      // §3.506 caps a returned-check fee at the greater of 30 USD or the
+      // amount the check was written for - the flat 30 is the operative
+      // number for a rent-sized check, and core clamps to it. The fee is
+      // still a lease term first: a lease that is silent charges nothing.
+      nsfFeePermitted: true,
+      nsfFeeMaxCents: 3_000,
       // PAY-01's card pass-through (R-037, D-4).
       //
       // Texas permits a credit-card surcharge; Tex. Bus. & Com. Code §604A.003
@@ -136,7 +143,7 @@ async function seedJurisdictionRules() {
       applicationFeeCapCents: null,
       rubsPermitted: true,
 
-      citation: 'Tex. Prop. Code §§92.019, 92.103-.104, 24.005, 91.001; Tex. Bus. & Com. Code §604A.003',
+      citation: 'Tex. Prop. Code §§92.019, 92.103-.104, 24.005, 91.001; Tex. Bus. & Com. Code §§604A.003, 3.506',
       reviewedBy: null,
       notes:
         'Seeded defaults, not yet reviewed by an attorney - see decisions doc item 6. Entry-notice hours and rent-increase notice days reflect common practice, not a specific citation. cardSurchargePermitted does not distinguish debit from credit, which Tex. Bus. \u0026 Com. Code \u00a7604A.003 does - see the comment on that field.',

@@ -2410,6 +2410,12 @@ model JurisdictionRule {
   /// rent convenience fees specifically, so whether the tenant may be
   /// charged the processing cost is a jurisdiction fact. Where it is not
   /// permitted the owner absorbs it and the tenant sees no fee at all.
+  /// PAY-02's returned-payment fee, as configuration rather than a literal
+  /// (D-4). Texas caps a returned-check fee at 30 USD (Tex. Bus. & Com. Code
+  /// §3.506); other states differ and several bar one entirely. Core
+  /// computes and clamps it (D-12).
+  nsfFeePermitted        Boolean @default(true)
+  nsfFeeMaxCents         Int?
   cardSurchargePermitted Boolean @default(true)
   /// A statutory ceiling on the surcharge, in basis points of the amount
   /// being paid. Null where the state sets none. Core clamps to it (D-12).

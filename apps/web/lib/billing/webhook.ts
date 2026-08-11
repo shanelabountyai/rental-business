@@ -8,6 +8,7 @@ import {
   movesLedger,
 } from '@rental/core/billing'
 import { formatCents } from '@rental/core/money'
+import { returnAction, reversalAmountCents } from '@rental/core/payments'
 import { businessDate } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { isUniqueViolation } from '@/lib/db/unique-violation.ts'
@@ -103,7 +104,35 @@ export async function processStripeEvent(
     return { outcome: 'ignored', detail }
   }
 
+  // A FAILURE THAT MIGHT BE A RETURN (PAY-02, R-039).
+  //
+  // `invoice.payment_failed` arrives both when a first attempt is declined
+  // and when an ACH debit is RETURNED days after it settled - Stripe gives
+  // "instant provisional access" and takes up to four business days to
+  // confirm. Reading only the event the two are indistinguishable; reading
+  // our own Payment row they are obvious. Getting this wrong leaves the
+  // credit in place and the tenant appearing to have paid, which is exactly
+  // the failure PAY-02 names.
+  const settled =
+    intent.kind === 'payment_failed'
+      ? await findSettledPayment(intent)
+      : null
+  const action = intent.kind === 'payment_failed' ? returnAction(settled?.status ?? null) : null
+
+  if (action === 'ignore') {
+    // Stripe promises neither ordering nor exactly-once delivery, and
+    // reversing twice would double what the tenant owes.
+    const detail = 'already reversed'
+    await recordOutcome(event.id, 'ignored', detail)
+    return { outcome: 'ignored', detail }
+  }
+
   await prisma.$transaction(async (tx) => {
+    if (action === 'reverse' && settled) {
+      await reverseSettledPayment(tx, event, intent, payer, settled)
+      return
+    }
+
     const payment = await writePayment(tx, event, intent, payer)
 
     if (movesLedger(intent)) {
@@ -124,7 +153,11 @@ export async function processStripeEvent(
     }
   })
 
-  await recordOutcome(event.id, 'projected', intent.kind)
+  // One name for the outcome, used for the recorded row and the returned
+  // value alike. Two spellings of the same fact is how a caller and a log
+  // end up disagreeing about what happened.
+  const outcomeDetail = action === 'reverse' ? 'payment_returned' : intent.kind
+  await recordOutcome(event.id, 'projected', outcomeDetail)
 
   // The receipt (PAY-01), OUTSIDE the transaction and only on settlement.
   //
@@ -142,7 +175,20 @@ export async function processStripeEvent(
     })
   }
 
-  return { outcome: 'projected', detail: intent.kind }
+  // The tenant is told their payment came back (PAY-02). Outside the
+  // transaction and never throwing, for the same reason as the receipt: the
+  // reversal is the fact, and a provider being down must not undo it.
+  //
+  // On a LOCKED SMS category, so a tenant cannot turn it off. Believing rent
+  // is paid when it is not is how somebody ends up in eviction proceedings
+  // over a bank error.
+  if (action === 'reverse' && settled) {
+    await sendReturnNotice(payer, intent, settled.amountCents).catch((error) => {
+      console.error(`[stripe] return notice failed for payer ${payer.id}`, error)
+    })
+  }
+
+  return { outcome: 'projected', detail: outcomeDetail }
 }
 
 type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
@@ -317,6 +363,150 @@ async function sendPaymentReceipt(
     propertyId: payer.propertyId,
     // One receipt per payment, however many times Stripe tells us about it.
     idempotencyKey: `payment-receipt:${intent.stripePaymentIntentId ?? intent.stripeObjectId}`,
+  })
+
+  const deliveryIds = outcomes
+    .map((outcome) => outcome.deliveryId)
+    .filter((id): id is string => id != null)
+  if (deliveryIds.length > 0) {
+    await dispatchPendingNotifications(new Date(), 50, { deliveryIds })
+  }
+}
+
+/**
+ * The settled payment this failure is about, if there is one.
+ *
+ * Matched on the PaymentIntent first and the invoice second. Stripe's
+ * invoice-level failure events carry the intent where one exists, and the
+ * invoice is the fallback for an out-of-band payment (R-038) that has no
+ * intent at all - a check can bounce too, and it arrives here the same way.
+ */
+async function findSettledPayment(intent: ProjectionIntent) {
+  const where = intent.stripePaymentIntentId
+    ? { stripePaymentIntentId: intent.stripePaymentIntentId }
+    : intent.stripeInvoiceId
+      ? { stripeInvoiceId: intent.stripeInvoiceId }
+      : null
+  if (!where) return null
+
+  return prisma.payment.findFirst({
+    where,
+    select: { id: true, status: true, amountCents: true },
+    orderBy: { receivedAt: 'desc' },
+  })
+}
+
+/**
+ * Takes back a credit that turned out not to be money (PAY-02).
+ *
+ * A REVERSING ENTRY, never an edit or a delete - `LedgerEntry` is append-only
+ * by database trigger and D-11 is explicit that corrections take this shape.
+ * The new row points at the entry it reverses, so "why did this balance go
+ * back up" is answerable from the row itself.
+ *
+ * The amount comes from THE SETTLED PAYMENT, not from the invoice. A partial
+ * payment that returns must give back exactly what it gave, and an invoice
+ * total is a different number.
+ *
+ * WHAT PAY-02 ASKS FOR BEYOND THIS, and where it currently stands: "no
+ * downstream action that was triggered by the provisional payment remains
+ * incorrectly in effect." Today the only such state is the balance itself -
+ * late fees are computed from the ledger on demand (R-035), so restoring the
+ * balance restores the correct fee position automatically, and nothing else
+ * yet keys off a payment. When something does - a notice cancelled on
+ * payment, most obviously (R-062) - it has to unwind here, and this comment
+ * is the reminder.
+ */
+async function reverseSettledPayment(
+  tx: Tx,
+  event: StripeEventEnvelope,
+  intent: ProjectionIntent,
+  payer: { id: string; leaseId: string; propertyId: string },
+  settled: { id: string; amountCents: number },
+) {
+  await tx.payment.update({
+    where: { id: settled.id },
+    data: {
+      status: 'REVERSED',
+      reversedAt: intent.occurredAt,
+      reversalReason: 'Returned by the bank',
+    },
+  })
+
+  // The ledger row the original payment wrote. Reversing points AT it, which
+  // is what makes the pair legible to a human reading the statement.
+  const original = await tx.ledgerEntry.findFirst({
+    where: { paymentId: settled.id, type: 'PAYMENT' },
+    select: { id: true, amountCents: true },
+  })
+
+  await tx.ledgerEntry.create({
+    data: {
+      propertyId: payer.propertyId,
+      leaseId: payer.leaseId,
+      leasePayerId: payer.id,
+      type: 'REVERSAL',
+      amountCents: reversalAmountCents(original?.amountCents ?? settled.amountCents),
+      description: 'Payment returned by the bank',
+      occurredAt: intent.occurredAt,
+      paymentId: settled.id,
+      reversesId: original?.id ?? null,
+      stripeEventId: event.id,
+      stripeObjectId: intent.stripeObjectId,
+    },
+  })
+}
+
+/// "Your payment came back" (PAY-02). Reads the balance AFTER the reversal,
+/// because what the tenant needs is the number they now owe rather than the
+/// one that just disappeared.
+async function sendReturnNotice(
+  payer: { id: string; leaseId: string; propertyId: string },
+  intent: ProjectionIntent,
+  amountCents: number,
+): Promise<void> {
+  const [lease, payerRow] = await Promise.all([
+    prisma.lease.findUnique({
+      where: { id: payer.leaseId },
+      select: {
+        property: { select: { addressLine1: true } },
+        leaseTenants: {
+          select: { tenant: { select: { id: true, firstName: true, email: true, phone: true } } },
+        },
+      },
+    }),
+    prisma.leasePayer.findUnique({
+      where: { id: payer.id },
+      select: { tenantId: true },
+    }),
+  ])
+  const tenant = lease?.leaseTenants
+    .map((row) => row.tenant)
+    .find((row) => row.id === payerRow?.tenantId)
+  if (!lease || !tenant) return
+
+  const balance = await leaseBalanceCents(payer.leaseId)
+
+  const outcomes = await notify({
+    category: 'payment_failed',
+    templateKey: 'payment.returned',
+    recipient: { type: 'TENANT', id: tenant.id, email: tenant.email, phone: tenant.phone },
+    context: {
+      tenantName: tenant.firstName,
+      amount: formatCents(Math.abs(amountCents)),
+      addressLine1: lease.property.addressLine1,
+      balance: formatCents(Math.max(0, balance)),
+      // The NSF fee is not posted here. Under D-12 a jurisdiction-dependent
+      // amount is computed in core and pushed to Stripe as an invoice item,
+      // which then arrives through this same pipeline as its own charge -
+      // so announcing it now would promise a number nothing has raised yet.
+      // R-039a owns the push; until then the message stays silent about it
+      // rather than quoting a fee that does not exist.
+      feeAmount: null,
+    },
+    propertyId: payer.propertyId,
+    // One notice per returned payment, however many times Stripe tells us.
+    idempotencyKey: `payment-returned:${intent.stripePaymentIntentId ?? intent.stripeObjectId}`,
   })
 
   const deliveryIds = outcomes

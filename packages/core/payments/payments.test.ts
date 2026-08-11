@@ -8,8 +8,11 @@ import {
   cardFeeFor,
   debitsAutomatically,
   isCollectionMethod,
+  nsfFeeFor,
   offlinePaymentDecision,
   payable,
+  returnAction,
+  reversalAmountCents,
   railsFor,
   switchDecision,
   validateOfflinePayment,
@@ -401,5 +404,75 @@ describe('offlinePaymentDecision', () => {
       offlinePaymentDecision({ balanceCents: 150_000, openInvoiceAmountCents: null }, 150_000)
         .refusal,
     ).toBe('no_open_invoice')
+  })
+})
+
+describe('returnAction (PAY-02)', () => {
+  it('REVERSES a payment that had already settled', () => {
+    // The bug this exists to fix: an ACH debit that settled, moved the
+    // ledger, and came back four days later. Without a reversal the credit
+    // stays and the tenant appears to have paid.
+    expect(returnAction('SETTLED')).toBe('reverse')
+  })
+
+  it('merely records a first attempt that never succeeded', () => {
+    // Nothing was credited, so there is nothing to take back. The same
+    // Stripe event means two different things depending on history, which is
+    // the whole subtlety.
+    expect(returnAction(null)).toBe('record_failure')
+    expect(returnAction('PENDING')).toBe('record_failure')
+    expect(returnAction('FAILED')).toBe('record_failure')
+  })
+
+  it('IGNORES a second delivery of the same return', () => {
+    // Stripe promises neither ordering nor exactly-once delivery, and
+    // reversing twice would double the balance owed.
+    expect(returnAction('REVERSED')).toBe('ignore')
+    expect(returnAction('REFUNDED')).toBe('ignore')
+  })
+})
+
+describe('nsfFeeFor (PAY-02, D-4, D-12)', () => {
+  const texas = { nsfFeePermitted: true, nsfFeeMaxCents: 3_000 }
+
+  it('charges what the lease provides for, under the cap', () => {
+    expect(nsfFeeFor(texas, 2_500)).toMatchObject({ amountCents: 2_500, permitted: true })
+  })
+
+  it('CLAMPS to the statutory ceiling and says it clamped', () => {
+    const decision = nsfFeeFor(texas, 5_000)
+    expect(decision.amountCents).toBe(3_000)
+    expect(decision.cappedAtCents).toBe(3_000)
+    expect(decision.computedCents).toBe(5_000)
+  })
+
+  it('charges nothing where the state bars the fee', () => {
+    const decision = nsfFeeFor({ nsfFeePermitted: false, nsfFeeMaxCents: null }, 3_000)
+    expect(decision.amountCents).toBe(0)
+    expect(decision.permitted).toBe(false)
+    // Still reports what it would have been - what absorbing it costs.
+    expect(decision.computedCents).toBe(3_000)
+  })
+
+  it('charges nothing when the LEASE is silent, even where the state allows it', () => {
+    // The fee is a contractual term first and a statutory ceiling second.
+    // Inventing one the tenant never agreed to is how a fee becomes
+    // unenforceable at the moment somebody needs to enforce it.
+    expect(nsfFeeFor(texas, null).amountCents).toBe(0)
+    expect(nsfFeeFor(texas, 0).amountCents).toBe(0)
+  })
+
+  it('never returns a negative fee', () => {
+    expect(nsfFeeFor(texas, -5_000).amountCents).toBe(0)
+  })
+})
+
+describe('reversalAmountCents', () => {
+  it('gives back exactly what was given, whichever sign it is handed', () => {
+    // A partial payment that returns must give back what it gave - an
+    // invoice total is not that number. The direction is this function's
+    // decision, not its caller's.
+    expect(reversalAmountCents(-50_000)).toBe(50_000)
+    expect(reversalAmountCents(50_000)).toBe(50_000)
   })
 })

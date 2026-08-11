@@ -1107,3 +1107,36 @@ Three alternatives were rejected, and the reasons matter more than the choice:
 - **The whole path is untested against real Stripe**, like everything else outbound (R-036's stated gap). `paid_out_of_band` is verified against Stripe's documentation — the Invoice object carries `amount_paid_out_of_band` as a distinct field from `amount_paid` — but no call has been executed. The simulator's `getOpenInvoice` reports the lease balance as a single synthetic invoice, which is **coarser than production**, where Stripe issues one invoice per period. That difference is stated in the code: against the simulator the part-payment refusal fires on the whole balance, where production would fire on the period.
 
 **Bugs found along the way.** None in shipped behaviour. One in a test I wrote and caught immediately: a dynamic `import()` nested inside a ternary, which is nonsense that happened to typecheck. Rewritten as a plain top-level import.
+
+## R-039 (part) — Returned payments
+**Commit:** `PENDING`  ·  **Date:** 2026-08-10
+
+**What it built.** The half of PAY-02 with teeth: what happens when a payment comes back. **This fixed a real bug in shipped code.**
+
+An ACH debit gives what Stripe calls "instant provisional access" and takes **up to four business days** to confirm — so everything downstream of a payment runs, for days, on money that may not arrive. Stripe emits the *same* `invoice.payment_failed` event for a first decline and for a return days later. The shipped projector treated both as "nothing has changed about what is owed" and moved no ledger, which is correct for a decline and wrong for a return: the credit stayed in place, and **a tenant appeared to have paid rent they had not**. PAY-02 names exactly this failure — "no downstream action that was triggered by the provisional payment remains incorrectly in effect."
+
+- **`packages/core/payments/returns.ts`** — `returnAction()` reads the event against our own `Payment` row, `nsfFeeFor()` computes the fee under its statutory cap, `reversalAmountCents()` decides direction. 13 tests.
+- **The projector** now reverses a settled payment that came back: `Payment` → `REVERSED`, and a positive `REVERSAL` entry pointing at the entry it undoes.
+- **`JurisdictionRule.nsfFeePermitted` / `nsfFeeMaxCents`**, seeded for Texas at 30 USD (Tex. Bus. & Com. Code §3.506).
+- **A `payment.returned` notice** on the locked SMS category.
+
+**What it decided.** Recorded as **D-32**:
+
+- **The same Stripe event means two different things depending on history**, and the row we already hold is what distinguishes them. Reading only the event, a decline and a return are indistinguishable.
+- **The reversal amount comes from the settled payment, not the invoice.** A partial payment that returns must give back exactly what it gave; an invoice total is a different number.
+- **A second delivery is ignored, not reversed again.** Stripe promises neither ordering nor exactly-once delivery, and in an append-only ledger a double reversal is money nobody can correct by editing.
+- **The return notice is on a LOCKED SMS category** — a tenant cannot turn it off. Believing rent is paid when it is not is how somebody ends up in eviction proceedings over a bank error.
+- **The notice deliberately says nothing about a fee.** Under D-12 a jurisdiction-dependent amount is computed in core and pushed to Stripe as an invoice item; nothing raises that charge yet, so quoting a fee here would promise a number that does not exist.
+- **The NSF fee is a lease term first and a statutory ceiling second.** A lease that is silent charges nothing, even where the state permits a fee — inventing one the tenant never agreed to is how a fee becomes unenforceable at the moment somebody needs to enforce it.
+- **What "no stale downstream state" means today, stated honestly**: the balance is currently the only such state, because late fees are computed from the ledger on demand (R-035), so restoring the balance restores the correct fee position automatically. Nothing else keys off a payment yet. When something does — a notice cancelled on payment (R-062) — it has to unwind in the same place, and the code carries that reminder rather than pretending machinery exists.
+
+**What it left behind — the item is 🟡, not ✅.** The enrolment half of PAY-02 is **R-039a**, and it is genuinely blocked rather than skipped:
+- **No tenant-facing saved-payment-method flow.** `createSetupIntent` has existed since R-034 and still has no caller, so **a tenant cannot switch autopay on today**. It is Stripe Elements against a live key and cannot be meaningfully tested without one (D-15) — guessing at it would produce exactly the code-that-looks-finished D-15 was written about.
+- **No tenant-chosen debit day, and no owner "require full balance" switch.**
+- **No T-2 pre-debit notice.** PAY-02 requires it; `debitsAutomatically()` exists for it to key off.
+- **The NSF fee is computed but never posted.** `nsfFeeFor` is tested; nothing pushes the invoice item.
+
+**Bugs found along the way.**
+- **The one this item exists for**, above — found by reading Stripe's ACH documentation rather than by a failing test, which is worth noting: no test could have caught it, because the tests asserted the behaviour that was wrong.
+- **I updated the recorded outcome and not the returned one.** The projector logged `payment_returned` while returning `payment_failed` to its caller — two spellings of one fact, caught immediately by the new test. Now a single `outcomeDetail` feeds both.
+- **Three new tests exceeded the 5s default** because the return path walks the real pipeline twice and sends a notice on the way through. Given explicit 20–30s timeouts with the reason stated, per the convention in CLAUDE.md — the dispatch is scoped to its own delivery ids, so this is genuinely the test's own work rather than a global sweep.

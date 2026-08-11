@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { prisma } from '@rental/db'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { leaseBillingState, provisionLeaseBilling } from './provision.ts'
+import { leaseBalanceCents } from '@/lib/ledger/queries.ts'
 import { processStripeEvent } from './webhook.ts'
 
 // Provisioning and the projection pipeline against a real database
@@ -206,6 +207,107 @@ describe('processStripeEvent', () => {
     expect(entries[0]!.type).toBe('PAYMENT')
     expect(entries[0]!.stripeEventId).toBe(event.id)
   })
+
+  it('REVERSES a settled payment that the bank later returned (PAY-02)', async () => {
+    // THE BUG THIS ITEM EXISTS TO FIX. An ACH debit gives "instant
+    // provisional access" and takes up to four business days to confirm. The
+    // return arrives as the same `invoice.payment_failed` event a first
+    // decline produces - and treating it as a mere failed attempt leaves the
+    // credit in place, so the tenant appears to have paid rent they have not.
+    const { lease, customerId } = await provisionedLease()
+    const paymentIntentId = `pi_${randomUUID().slice(0, 12)}`
+    const invoiceId = `in_${randomUUID().slice(0, 12)}`
+
+    await processStripeEvent(
+      invoiceEvent({ customer: customerId, amountPaid: 150_000, paymentIntentId, invoiceId }),
+    )
+    expect(await leaseBalanceCents(lease.id)).toBe(-150_000)
+
+    const returned = await processStripeEvent(
+      invoiceEvent({
+        customer: customerId,
+        type: 'invoice.payment_failed',
+        amountDue: 150_000,
+        paymentIntentId,
+        invoiceId,
+      }),
+    )
+    expect(returned).toEqual({ outcome: 'projected', detail: 'payment_returned' })
+
+    // The credit came back off, and the balance is what it was before.
+    expect(await leaseBalanceCents(lease.id)).toBe(0)
+
+    const payment = await prisma.payment.findFirstOrThrow({
+      where: { stripePaymentIntentId: paymentIntentId },
+    })
+    expect(payment.status).toBe('REVERSED')
+    expect(payment.reversedAt).not.toBeNull()
+
+    // A REVERSING ENTRY that points at what it reverses - never an edit or a
+    // delete, because LedgerEntry is append-only by trigger (D-11).
+    const reversal = await prisma.ledgerEntry.findFirstOrThrow({
+      where: { leaseId: lease.id, type: 'REVERSAL' },
+    })
+    expect(reversal.amountCents).toBe(150_000)
+    expect(reversal.reversesId).not.toBeNull()
+    // 20s, not the 5s default: this walks the REAL path twice - provision,
+    // project a payment, then project its return - and the return sends the
+    // tenant a locked-category notice on the way through. Scoped to its own
+    // delivery ids, so it is genuinely this test's own work rather than a
+    // global sweep; it is simply more work than five seconds buys.
+  }, 20_000)
+
+  it('does NOT reverse a first attempt that never settled', async () => {
+    // The same event means two different things depending on history.
+    // Nothing was credited here, so there is nothing to take back - and
+    // writing a reversal would invent money the tenant never owed.
+    const { lease, customerId } = await provisionedLease()
+    await processStripeEvent(
+      invoiceEvent({ customer: customerId, type: 'invoice.payment_failed', amountDue: 150_000 }),
+    )
+
+    expect(await leaseBalanceCents(lease.id)).toBe(0)
+    expect(
+      await prisma.ledgerEntry.count({ where: { leaseId: lease.id, type: 'REVERSAL' } }),
+    ).toBe(0)
+    const payment = await prisma.payment.findFirstOrThrow({ where: { leaseId: lease.id } })
+    expect(payment.status).toBe('FAILED')
+  }, 20_000)
+
+  it('IGNORES a second delivery of the same return', async () => {
+    // Stripe promises neither ordering nor exactly-once delivery, and
+    // reversing twice would double what the tenant owes - in an append-only
+    // ledger, where the only fix is another reversing entry.
+    const { lease, customerId } = await provisionedLease()
+    const paymentIntentId = `pi_${randomUUID().slice(0, 12)}`
+    const invoiceId = `in_${randomUUID().slice(0, 12)}`
+
+    await processStripeEvent(
+      invoiceEvent({ customer: customerId, amountPaid: 150_000, paymentIntentId, invoiceId }),
+    )
+    await processStripeEvent(
+      invoiceEvent({
+        customer: customerId,
+        type: 'invoice.payment_failed',
+        paymentIntentId,
+        invoiceId,
+      }),
+    )
+    const second = await processStripeEvent(
+      invoiceEvent({
+        customer: customerId,
+        type: 'invoice.payment_failed',
+        paymentIntentId,
+        invoiceId,
+      }),
+    )
+
+    expect(second.outcome).toBe('ignored')
+    expect(await leaseBalanceCents(lease.id)).toBe(0)
+    expect(
+      await prisma.ledgerEntry.count({ where: { leaseId: lease.id, type: 'REVERSAL' } }),
+    ).toBe(1)
+  }, 30_000)
 
   it('REFUSES to project the same event twice', async () => {
     // The single most important assertion in this file. Stripe retries until
