@@ -1,8 +1,10 @@
 import { BillingRuns } from '@/components/billing/billing-runs.tsx'
+import { WaiverPattern } from '@/components/money/waiver-pattern.tsx'
 import { requirePermission } from '@/lib/auth/guard.ts'
 import { resyncPayer } from '@/lib/billing/actions.ts'
 import { billingRunRows } from '@/lib/billing/lifecycle.ts'
 import { billingIsLive, billingProviderName } from '@/lib/billing/provider.ts'
+import { waiverPatternByTenant } from '@/lib/ledger/waiver-report.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 
 export const metadata = { title: 'Money — Rental Operations' }
@@ -18,7 +20,10 @@ export const metadata = { title: 'Money — Rental Operations' }
 export default async function MoneyPage() {
   const actor = await requirePermission('ledger.read')
   const scope = await currentScope(actor)
-  const rows = await billingRunRows(scope.propertyIds)
+  const [rows, waiverRows] = await Promise.all([
+    billingRunRows(scope.propertyIds),
+    waiverPatternByTenant(scope.propertyIds),
+  ])
 
   return (
     <div className="flex max-w-3xl flex-col gap-6">
@@ -50,6 +55,8 @@ export default async function MoneyPage() {
           lastSyncError: row.lastSyncError,
         }))}
       />
+
+      <WaiverPattern rows={waiverRows} />
     </div>
   )
 }

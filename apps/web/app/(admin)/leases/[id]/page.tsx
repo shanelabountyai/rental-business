@@ -15,9 +15,10 @@ import { IntakePanel } from '@/components/leases/intake-panel.tsx'
 import { LedgerPanel } from '@/components/leases/ledger-panel.tsx'
 import { LeaseForm } from '@/components/leases/lease-form.tsx'
 import { LifecyclePanel } from '@/components/leases/lifecycle-panel.tsx'
+import { FeesPanel } from '@/components/leases/fees-panel.tsx'
 import { PartiesPanel } from '@/components/leases/parties-panel.tsx'
 import { OfflinePaymentForm } from '@/components/payments/offline-payment-form.tsx'
-import { actorCan, propertyResource, requireScope } from '@/lib/auth/guard.ts'
+import { actorCan, actorDecision, propertyResource, requireScope } from '@/lib/auth/guard.ts'
 import {
   addGuarantor,
   addLeaseTenant,
@@ -30,7 +31,8 @@ import {
 import { resyncLease } from '@/lib/billing/actions.ts'
 import { billingIsLive, billingProviderName } from '@/lib/billing/provider.ts'
 import { leaseBillingState } from '@/lib/billing/provision.ts'
-import { leaseStatement } from '@/lib/ledger/queries.ts'
+import { leaseStatement, waivableFees } from '@/lib/ledger/queries.ts'
+import { waiveCharge } from '@/lib/ledger/waivers.ts'
 import { outstandingIntakeGaps } from '@/lib/leases/intake.ts'
 import { recordOfflinePayment } from '@/lib/payments/offline.ts'
 import { getLease, selectableTenants } from '@/lib/leases/queries.ts'
@@ -82,6 +84,16 @@ export default async function LeaseDetailPage({
   // in the product - there is no processor on the other side to disagree -
   // so it sits behind the privileged permission, not behind lease.write.
   const canRecordPayment = await actorCan('ledger.adjust', propertyResource(lease.property))
+  // Waiving is DIFFERENT and deliberately lower: R-004 gave managers
+  // `fee.waive` because forgiving a late fee is day-to-day work, and their
+  // role explicitly cannot adjust the ledger. The amount is then checked
+  // against their own ceiling inside the action.
+  // `actorDecision`, not `actorCan`: forgiving money is a PRIVILEGED
+  // permission and R-004 requires a verified second factor for it, so
+  // "cannot waive" has two very different meanings here. Collapsing both to
+  // false renders an empty space to somebody who holds the permission and
+  // only needs to verify.
+  const waiveDecision = await actorDecision('fee.waive', propertyResource(lease.property))
 
   const facts = {
     status: lease.status,
@@ -110,11 +122,12 @@ export default async function LeaseDetailPage({
       action: changeLeaseStatus.bind(null, lease.id, to),
     }))
 
-  const [gaps, tenants, payers, ledger] = await Promise.all([
+  const [gaps, tenants, payers, ledger, fees] = await Promise.all([
     outstandingIntakeGaps(lease),
     canWrite ? selectableTenants() : Promise.resolve([]),
     leaseBillingState(lease.id),
     leaseStatement(lease.id, scope),
+    waivableFees(lease.id),
   ])
   const reversed = new Set(
     (ledger?.lines ?? []).map((line) => line.reversesId).filter(Boolean) as string[],
@@ -260,6 +273,22 @@ export default async function LeaseDetailPage({
           stripeCustomerId: payer.stripeCustomerId,
           stripeSubscriptionId: payer.stripeSubscriptionId,
         }))}
+      />
+
+      <FeesPanel
+        canWaive={waiveDecision.allowed}
+        mfaRequired={!waiveDecision.allowed && waiveDecision.reason === 'mfa_required'}
+        fees={fees.map((fee) => ({
+          id: fee.id,
+          type: fee.type,
+          amountCents: fee.amountCents,
+          description: fee.description,
+          dueOn: fee.dueOn.toISOString().slice(0, 10),
+          waivedAt: fee.waivedAt ? fee.waivedAt.toISOString().slice(0, 10) : null,
+          waiveReason: fee.waiveReason,
+          waivedByName: fee.waivedBy?.name ?? null,
+        }))}
+        waive={waiveCharge}
       />
 
       {canRecordPayment && payers.length > 0 && (ledger?.balanceCents ?? 0) > 0 && (

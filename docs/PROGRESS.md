@@ -1243,3 +1243,28 @@ The owner put a test-mode key in `.env.local`, which closed the caveat standing 
 **Bugs found along the way.** I reintroduced the decisions-table blank line **immediately after fixing twenty instances of it** in R-040c, in the very next edit to the same file. Caught by re-running the same check. Worth naming: a defect class is not fixed until the thing that produces it changes, and here that thing is me appending rows with a leading newline.
 
 **Postscript (2026-08-11).** Preparing the Twilio 10DLC registration surfaced a defect unrelated to Stripe: **nothing in this product handles `STOP`**. Carrier-level opt-out overrides our notification engine entirely, including the locked categories a tenant is not allowed to switch off — so a tenant who texts STOP stops receiving entry notices while our log continues to record them as sent. A delivery record that can be silently false is the sharpest possible defect for a product whose premise is that the evidence trail is the product. Filed as **R-040e**; it is not a blocker for 10DLC registration, since Twilio satisfies the carrier requirement at the platform level.
+
+## R-041 — The waiver screen and the fair-housing report
+**Commit:** `PENDING`  ·  **Date:** 2026-08-11
+
+**What it built.** The two screens R-040 left behind, and the reason it mattered: **the nightly job had been assessing late fees with no way to waive one.** `waiveCharge()` was written, tested, and callable by nothing — so a fee could be raised automatically and not forgiven. A waive control now sits on the lease page, and PAY-04's waiver-pattern report sits on `/money`.
+
+**What it decided.**
+- **`fee.waive`, not `ledger.adjust`.** The first version gated waiving on `ledger.adjust` — wrong in a way worth recording, because the manager role's own description says it "cannot adjust the ledger", and R-004 created a separate `fee.waive` permission and granted it to managers precisely because forgiving a late fee is day-to-day work. Gating it on the wrong permission locked the people whose job this is out of doing it.
+- **And a monetary ceiling, which R-004 built and nothing had ever called.** `waive_fee` is one of two `MonetaryAction`s and every role carries a `defaultWaiveFeeCents` (a manager's is $100). A permission says whether you may waive at all; the ceiling says how much — without it a manager could forgive a $2,000 fee that the same role could not approve as a work order. The refusal names both numbers, because "above your limit" leaves somebody guessing whether they are $5 or $500 over.
+- **The waiver record stays on screen.** An operator deciding the next waiver should see the last one; that history is what fair housing turns on.
+- **One action with a hidden `chargeId`, not a bound action per fee.** The first attempt handed a client component a `Record` of per-fee server actions and the identities did not survive the boundary — the control rendered with no accessible name and no handler, and `npm run build` did not catch it. No less safe: the id is untrusted either way and every check runs against the charge actually named.
+- **The report screen distinguishes "needs two-factor" from "not permitted".** Discovered by the control refusing to render at all: `fee.waive` is a PRIVILEGED permission and R-004 requires verified MFA for it. That is the product working correctly — but rendering nothing to somebody who holds the permission and only needs to verify is a screen that looks broken, so it now says so.
+
+**What it left behind.**
+- The waive control lives on the lease page only. A portfolio-level "fees awaiting a decision" queue would be the natural home for bulk work and does not exist.
+- The pattern report attributes a fee to the first tenant on the lease (a joint tenancy shares one ledger). Stated in R-040 and unchanged.
+
+**Bugs found along the way** — three, all mine, all found by the e2e suite refusing to go green:
+- **The wrong permission** (above), which rendered no control at all for the role that needs it most.
+- **A `Record` of server actions across the Server→Client boundary**, which silently produced a button with no name.
+- **The e2e fixture had no MFA enrolment**, so the control correctly refused to render. The product was right and the test was wrong — but chasing it is what surfaced the missing "verify to waive" message, which is a real improvement.
+
+**Also in this commit.** `docs/UX-ACCESSIBILITY-LOG.md` — a full UX and accessibility review of every screen across all three audiences, with a verdict on every finding, the fixes to come, and an explicit list of what is already correct and must not be undone. Two systemic findings stand out: **there is no focus management anywhere in the product** (`grep -rn "\.focus()"` returns nothing), and `role="status"` is used eleven times in places where it announces nothing. Both are invisible to the axe gate by construction.
+
+**Housekeeping.** Removed 103 `"… 2.ts"` duplicate files — iCloud conflict copies, because this repository lives under `~/Documents`, which is iCloud-synced. 57 were byte-identical and 2 were stale pre-edit snapshots of files changed today. None were tracked. Worth knowing: a sync service writing into a live git working tree can produce a conflict copy mid-write, and this is the second kind of environment hazard this project has hit after the shared `:3000` dev port.

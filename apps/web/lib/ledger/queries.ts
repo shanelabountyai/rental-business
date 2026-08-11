@@ -92,3 +92,33 @@ export async function outstandingCharges(leaseId: string) {
     })
     .filter((charge) => charge.outstandingCents > 0)
 }
+
+/**
+ * Fees on this lease that somebody could still waive (PAY-04, R-041).
+ *
+ * LATE_FEE and NSF_FEE only. Rent is not waivable — forgiving rent is a
+ * concession, which is a different decision with different paperwork, and
+ * offering it on the same control would blur the two.
+ *
+ * Returns waived fees as well as open ones, because the waiver record is
+ * half the point: PAY-04's pattern report exists precisely so that who was
+ * forgiven is visible, and a screen that hid past waivers would make an
+ * operator's own history invisible to them at the moment they decide the
+ * next one.
+ */
+export async function waivableFees(leaseId: string) {
+  return prisma.charge.findMany({
+    where: { leaseId, type: { in: ['LATE_FEE', 'NSF_FEE'] } },
+    select: {
+      id: true,
+      type: true,
+      amountCents: true,
+      description: true,
+      dueOn: true,
+      waivedAt: true,
+      waiveReason: true,
+      waivedBy: { select: { name: true } },
+    },
+    orderBy: { dueOn: 'desc' },
+  })
+}

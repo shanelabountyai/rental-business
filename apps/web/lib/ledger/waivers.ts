@@ -4,6 +4,7 @@ import { formatCents } from '@rental/core/money'
 import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { audit } from '@/lib/audit/index.ts'
+import { checkMonetaryAuthority } from '@rental/core/rbac'
 import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
 import { getBillingProvider } from '@/lib/billing/provider.ts'
 
@@ -30,11 +31,20 @@ export interface WaiverFormState {
 }
 
 export async function waiveCharge(
-  chargeId: string,
   _previous: WaiverFormState,
   formData: FormData,
 ): Promise<WaiverFormState> {
+  // The charge id comes from the FORM, not from a bound argument.
+  //
+  // Binding one action per fee meant handing a client component a Record of
+  // server actions, and the identities did not survive the boundary - the
+  // control rendered with no accessible name and no handler. One action plus
+  // a hidden field is the shape that works, and it is no less safe: the id is
+  // untrusted either way, and every check below runs against the charge that
+  // was actually named, including the permission check on ITS property.
+  const chargeId = String(formData.get('chargeId') ?? '')
   const reason = String(formData.get('reason') ?? '').trim()
+  if (!chargeId) return { error: 'Nothing was selected to waive.' }
 
   const charge = await prisma.charge.findUniqueOrThrow({
     where: { id: chargeId },
@@ -59,9 +69,35 @@ export async function waiveCharge(
     },
   })
 
-  // `ledger.adjust` - R-004 already treats it as privileged. Forgiving money
-  // owed is exactly the kind of thing that needs a named actor on it.
-  const actor = await requirePermission('ledger.adjust', propertyResource(charge.property))
+  // `fee.waive`, NOT `ledger.adjust`.
+  //
+  // The first version of this used `ledger.adjust`, which was wrong in a way
+  // worth recording: the manager role's own description says it "cannot
+  // adjust the ledger", and R-004 created a SEPARATE `fee.waive` permission
+  // and granted it to managers precisely because forgiving a late fee is
+  // day-to-day work. Gating it on `ledger.adjust` locked the people whose
+  // job this is out of doing it, which an e2e test found immediately by
+  // failing to locate the button.
+  const actor = await requirePermission('fee.waive', propertyResource(charge.property))
+
+  // AND a monetary ceiling, which R-004 also built and nothing had ever
+  // called: `waive_fee` is one of two MonetaryActions, and every role carries
+  // a `defaultWaiveFeeCents` (a manager's is $100). A permission says whether
+  // you may waive at all; the ceiling says how much - and without this a
+  // manager could forgive a $2,000 fee that the same role could not approve
+  // as a work order.
+  const authority = checkMonetaryAuthority(actor, 'waive_fee', charge.amountCents)
+  if (authority.outcome === 'escalate') {
+    // Says the actual numbers. "Above your limit" leaves somebody guessing
+    // whether they are $5 or $500 over, and the answer changes what they do
+    // next.
+    return {
+      error: `That fee is ${formatCents(charge.amountCents)} and you can waive up to ${formatCents(authority.ceilingCents)} on your own. Ask an owner to waive this one.`,
+    }
+  }
+  if (authority.outcome === 'denied') {
+    return { error: 'You cannot waive fees. Ask a manager or the owner.' }
+  }
 
   if (!reason) {
     // REQUIRED, and not bureaucracy. "Why was this waived" is the first
@@ -114,6 +150,13 @@ export async function waiveCharge(
           type: charge.type,
           amountCents: charge.amountCents,
           waivedByStaffId: actor.id,
+          // What their ceiling was ON THE DAY. Ceilings change, and "was
+          // this person allowed to do that" cannot be reconstructed later
+          // from a role that has since been edited.
+          // `allowed` carries no ceiling - it is the owner's unlimited case
+          // or a figure at or under the limit. Recorded as null rather than
+          // invented, because a number nobody stated is worse than none.
+          ceilingCents: null,
         },
         reason,
       },
