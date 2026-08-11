@@ -113,6 +113,11 @@ export default defineConfig({
     env: {
       PORT: port,
       AUTH_URL: baseURL,
+      // Same rule as vitest.config.ts: the e2e suite runs against the
+      // SIMULATOR whatever is in .env.local. `npm run dev` would otherwise
+      // pick up a real test key and every billing assertion would depend on
+      // network and on somebody else's Stripe data.
+      STRIPE_SECRET_KEY: '',
       TWILIO_AUTH_TOKEN: process.env.TWILIO_AUTH_TOKEN ?? TEST_TWILIO_AUTH_TOKEN,
       STRIPE_WEBHOOK_SECRET:
         process.env.STRIPE_WEBHOOK_SECRET ?? TEST_STRIPE_WEBHOOK_SECRET,

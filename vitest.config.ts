@@ -25,5 +25,23 @@ export default defineConfig({
     environment: 'node',
     include: ['tests/**/*.test.ts', 'apps/**/*.test.ts', 'packages/**/*.test.ts'],
     exclude: ['**/node_modules/**', '**/.next/**', 'e2e/**'],
+    /**
+     * THE SUITE ALWAYS RUNS AGAINST THE SIMULATOR, whatever is in .env.local.
+     *
+     * `getBillingProvider()` selects the real Stripe driver whenever
+     * `STRIPE_SECRET_KEY` is set, and `npm test` loads `.env.local` through
+     * dotenv-cli - so the day somebody adds a test key, every billing test
+     * would silently start making real HTTP calls to Stripe. Slow, flaky,
+     * dependent on network and on somebody else's test-mode data, and
+     * different on one laptop than another.
+     *
+     * Emptied here rather than by adding an override flag to the selector,
+     * because provider.ts argues correctly that "a code path that only runs
+     * in one environment is a code path nothing has tested" - the fix belongs
+     * in the test runner, not in the production decision. A test that wants
+     * the real driver constructs `StripeBillingProvider` directly with a fake
+     * key, which is exactly what stripe-adapter.test.ts already does.
+     */
+    env: { STRIPE_SECRET_KEY: '' },
   },
 })
