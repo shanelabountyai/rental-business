@@ -1219,7 +1219,7 @@ The late-fee job now creates its `Charge` row **before** pushing to Stripe, so t
 - **The linked-entry loop writes one row per charge inside a transaction.** Fine for an invoice with a handful of lines; an invoice with hundreds would want a `createMany`. Not built, because no path produces one yet.
 
 ## R-040d — First real execution of the Stripe driver
-**Commit:** `PENDING`  ·  **Date:** 2026-08-11
+**Commit:** `a66d2cf`  ·  **Date:** 2026-08-11
 
 **What it built.** A smoke test that calls Stripe for real, and the fix for the bug it immediately found.
 
