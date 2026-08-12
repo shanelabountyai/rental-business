@@ -14,10 +14,10 @@ the repo alone — a dashboard setting is invisible to `git log`.
 | Root Directory | **`apps/web`** |
 | Framework | Next.js (detected once Root Directory was right) |
 | Build | `vercel-build` in `apps/web/package.json` |
-| Neon (dev) | `ep-cool-rain-aygtz3n8` / `neondb`, us-east-2 |
-| Neon (prod) | **not created yet** |
-| Production URL | `https://rental-business-shanelabountyai-8212s-projects.vercel.app` |
-| Access | Vercel Authentication on all deployments — team members only |
+| Neon `production` | `ep-cool-rain-aygtz3n8` — **Vercel reads this** |
+| Neon `dev` | `ep-gentle-cell-ayd8m0qg` — **`.env.local` reads this** |
+| Production URL | `https://rental-business-red.vercel.app` — **public** |
+| Deployment URLs | `rental-business-*-projects.vercel.app` — behind Vercel Authentication |
 
 ## Three things that are not obvious and each break the build
 
@@ -70,25 +70,87 @@ will fail until the two below are set.
 
 | Variable | Consequence of leaving it unset |
 |---|---|
-| `DATABASE_URL` / `DIRECT_URL` | The build *succeeds* without them — Prisma connects lazily, so nothing fails until a request arrives. Then every page that reads the database 500s. Waiting on a Neon `prod` branch; see below. |
 | `STRIPE_WEBHOOK_SECRET` | **No money can enter the ledger.** The webhook route refuses outright without it, and under D-11 `LedgerEntry` is built *only* from webhooks. Create the endpoint after the first deploy, then set the signing secret here and locally (`stripe listen` gives a separate local one). |
 | `NEXT_PUBLIC_OPERATIONS_PHONE` | The vendor rejection screen shows no number — a dead end with no way out (R-098 built the link; it renders nothing when unset). |
 
-## Do not point production at the dev database
+## The two branches, and why they are this way round
 
 Every script in `package.json` — `dev`, `build`, `test`, `test:e2e`, `db:seed`,
-`db:seed --reset` — loads the same `.env.local`. That is fine while there is one
-environment. It stops being fine the moment a production deploy exists and the
-obvious shortcut is taken: paste the same `DATABASE_URL` into Vercel.
+`db:seed --reset` — loads the same `.env.local`. So whichever branch that file
+names is the branch the **test suite writes to**, and `db:seed --reset` retires
+leases on it.
 
-Do that and a local `PORT=3100 npm run test:e2e` writes to production, and
-`db:seed --reset` retires production leases. **Create the Neon `prod` branch
-first, so the production URL exists before anything can be pointed at the dev
-one.**
+Until 2026-08-12 that file named the branch called `production` — the only one
+there was. Weeks of fixtures, demo seeds and 27,392 notification-delivery rows
+accumulated in it.
 
-Migrations are hand-written SQL and are **not** run by the build. Run
-`prisma migrate deploy` against the prod branch deliberately, from a laptop,
-before the first deploy that expects a schema.
+The fix was to branch, not to rename. `dev` was created **from** `production`,
+so it inherited that state and local work carried on untouched; `production`
+was then reset to an empty schema and handed to Vercel. Ordering mattered: the
+test data only survives because `dev` copied it first.
+
+**`.env.local` must never name `production` again.** A local `PORT=3100 npm run
+test:e2e` against it would write to the live database.
+
+Migrations are hand-written SQL and are **not** run by the build — deliberately.
+Run them from a laptop, against `/tmp/prod.env` or equivalent, and look at what
+they did:
+
+```
+npx dotenv -e <prod env file> -- npx prisma migrate deploy \
+  --schema packages/db/prisma/schema.prisma
+```
+
+`prisma migrate reset` is destructive and now refuses to run under an AI agent
+without explicit recorded consent. That guardrail is correct; do not paper over
+it.
+
+## What is actually deployed, and what was verified
+
+Reset, migrated and seeded on 2026-08-12:
+
+- 24 migrations applied to an empty `production` branch.
+- `db:seed` — 6 roles and the TX statewide jurisdiction rule v1. **Reference
+  data, not demo data**: `create-owner` refuses to run without the `owner` role,
+  because D-5 makes roles data rather than code.
+- Two owner accounts, both ordinary `StaffUser` + `StaffAssignment` rows with a
+  null scope — there is no superuser in this system, by D-5.
+- **No demo data.** `db:seed:demo` was deliberately not run.
+
+Verified against the live site rather than assumed:
+
+| Check | Result |
+|---|---|
+| `/reset-password?token=<real>` | 200, renders "Choose a new password" — proves Vercel env → Prisma → `production` branch → page |
+| `/reset-password?token=<bogus>` | Renders the same form on purpose; `redeemToken` rejects it on submit. No oracle for whether a token is real |
+| `/api/cron` with no or wrong bearer | 404 — deliberate, so a scanner learns nothing. `CRON_SECRET` is set and failing closed |
+| An unknown path | 404 |
+
+## The production alias is public
+
+`rental-business-red.vercel.app` serves the real login page with **no** Vercel
+Authentication. That is how Vercel works — protection covers preview and
+deployment URLs, not the production alias — and it is what you would want for a
+real product, which is auth-gated at the application layer.
+
+It is worth a deliberate decision rather than a default, because the app is not
+finished. The database is empty, login is rate-limited per IP (R-003) and
+privileged actions need a second factor (ROLE-05), so the exposure today is a
+public sign-in form. To close it:
+
+```
+# ssoProtection.deploymentType: 'all'  (covers the production alias too)
+```
+
+Note the cost: with that on, **every** URL including the owner setup links
+requires a Vercel session in the browser opening them.
+
+## Rotate the Neon password
+
+The `dev` branch credentials were pasted into a chat transcript during setup.
+Nothing was exposed beyond that, but they should be rotated in the Neon console
+(Branches → `dev` → Reset password) and `.env.local` updated. `production` uses
+a different endpoint and was never pasted anywhere.
 
 ## AUTH_SECRET is not only a session secret
 
