@@ -1366,7 +1366,7 @@ A `loading.tsx` wraps its segment in a Suspense boundary, so the response starts
 - The report split R-098 / R-099 / R-101 by consequence and by what a single session can actually verify, not by severity label.
 
 ## R-102 — The global-sweep tests, and a backlog nothing would have reported
-**Commit:** `TBD`  ·  **Date:** 2026-08-12
+**Commit:** `99d3908`  ·  **Date:** 2026-08-12
 
 **What it built.** Two small things and one correction.
 
