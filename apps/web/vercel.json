@@ -1,0 +1,16 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+
+  "//": "LIVES IN apps/web, NOT THE REPO ROOT. Vercel reads vercel.json from the project's Root Directory, and this is an npm-workspaces monorepo whose Next app is apps/web - a vercel.json at the repo root is read by nothing and its crons never run. Moved here when the Vercel project was created; see docs/DEPLOYMENT.md.",
+
+  "crons": [
+    {
+      "path": "/api/cron",
+      "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/escalations",
+      "schedule": "*/5 * * * *"
+    }
+  ]
+}

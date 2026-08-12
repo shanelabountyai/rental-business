@@ -46,3 +46,8 @@ yarn-debug.log*
 yarn-error.log*
 .idea/
 _to_delete/
+# Appended by `vercel link`, which writes VERCEL_OIDC_TOKEN into .env.local.
+# Kept, but with the exception restored: .env* on its own also swallows
+# .env.example, which is tracked on purpose and documents the variable NAMES.
+.env*
+!.env.example
