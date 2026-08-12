@@ -288,6 +288,23 @@ async function record(db: Db, args: RecordInput): Promise<ChannelOutcome> {
 export interface DispatchResult {
   sent: number
   failed: number
+  /**
+   * How many were still due AFTER this sweep finished (R-102).
+   *
+   * The sweep takes at most `limit` rows, so a portfolio queueing more than
+   * that between ticks falls permanently behind - and until this existed the
+   * cron recorded only `sent` and `failed`, which look identical whether the
+   * queue is empty or ten thousand deep. A notification engine whose premise
+   * is that a delivery record must never be silently false should not be able
+   * to hide a backlog either.
+   *
+   * Reported, not acted on. The drain is still one batch per tick: a loop
+   * that keeps going until the queue is empty is the right answer only once
+   * this number is persistently non-zero, and building it before then is
+   * guessing at a shape the real backlog has not shown yet. This is the
+   * instrument that says when.
+   */
+  remaining: number
 }
 
 /**
@@ -326,19 +343,21 @@ export async function dispatchPendingNotifications(
   only?: { deliveryIds: readonly string[] },
 ): Promise<DispatchResult> {
   const config = notificationConfig()
-  if (!config.enabled) return { sent: 0, failed: 0 }
+  if (!config.enabled) return { sent: 0, failed: 0, remaining: 0 }
   // An explicit empty set means "nothing of mine was queued" - every channel
   // suppressed, say - and must not fall through to a global sweep.
-  if (only && only.deliveryIds.length === 0) return { sent: 0, failed: 0 }
+  if (only && only.deliveryIds.length === 0) return { sent: 0, failed: 0, remaining: 0 }
+
+  const dueWhere = {
+    ...(only ? { id: { in: [...only.deliveryIds] } } : {}),
+    OR: [
+      { status: 'QUEUED' as const },
+      { status: 'DEFERRED' as const, sendAfter: { lte: now } },
+    ],
+  }
 
   const due = await prisma.notificationDelivery.findMany({
-    where: {
-      ...(only ? { id: { in: [...only.deliveryIds] } } : {}),
-      OR: [
-        { status: 'QUEUED' },
-        { status: 'DEFERRED', sendAfter: { lte: now } },
-      ],
-    },
+    where: dueWhere,
     orderBy: { id: 'asc' },
     take: limit,
     include: { notification: true },
@@ -399,7 +418,12 @@ export async function dispatchPendingNotifications(
     }
   }
 
-  return { sent, failed }
+  // Counted after the sweep, not before, so it answers the question a reader
+  // of the audit row actually has: is there still a queue? A count taken up
+  // front would include everything this call just sent.
+  const remaining = await prisma.notificationDelivery.count({ where: dueWhere })
+
+  return { sent, failed, remaining }
 }
 
 /// PORTAL has no external address: the "address" is the account itself, and

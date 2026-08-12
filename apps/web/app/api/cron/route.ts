@@ -84,6 +84,10 @@ export async function GET(request: Request) {
     eventsFailed: dispatch.failed,
     notificationsSent: notifications.sent,
     notificationsFailed: notifications.failed,
+    // R-102: what the tick could NOT get to. Non-zero here on consecutive
+    // ticks means the hourly batch is smaller than the arrival rate, which
+    // no other number on this response would show.
+    notificationsRemaining: notifications.remaining,
     vendorSilenceChecked: vendorSilence.checked,
     vendorSilencePrompted: vendorSilence.prompted,
     entryRemindersChecked: entryReminders.checked,

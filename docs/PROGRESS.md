@@ -1364,3 +1364,29 @@ A `loading.tsx` wraps its segment in a Suspense boundary, so the response starts
 - **R-101 owns the remainder**: the maintenance wizard, the eleven inert live regions, the timezone display sites, the medium/low UX batch — and rolling `expectFocusSurvived()` across the rest of the suite, which will turn up real failures. That is the point of it, and the reason it is not a one-line change.
 - **Focus after a *successful* waive is still lost.** `<details>` fixes the open; when the server confirms, the form is replaced by the waived record and focus falls to `<body>`. That is the general S1 pattern (M4) and belongs with the rest of it rather than as a one-off here.
 - The report split R-098 / R-099 / R-101 by consequence and by what a single session can actually verify, not by severity label.
+
+## R-102 — The global-sweep tests, and a backlog nothing would have reported
+**Commit:** `TBD`  ·  **Date:** 2026-08-12
+
+**What it built.** Two small things and one correction.
+
+**The correction comes first, because the item was filed on a wrong premise.** R-102 was written as *"the sweeps take no batch limit, and a Vercel cron has a duration cap"* — a tidy story that fit the evidence. Reading the code disproved it: `dispatchPendingNotifications` has taken `limit = 100` since R-016, and `unacknowledgedEmergencies` is bounded to 100 rows inside a 24-hour window with a comment explaining both. The backlog row now says what is actually wrong. The diagnosis was asserted from a stack trace and a row count without opening either function.
+
+**The real cause is test debris, and it is a direct consequence of obeying our own rule.** CLAUDE.md requires every spec to dispatch only its own rows via `only:`. That is right, and it means everything else stays QUEUED for ever — nothing in the test environment plays the part the hourly cron plays in production. The shared database reached **27,392 delivery rows**.
+
+That stays invisible until a test sweeps globally, and one does, deliberately — it is the only proof the cron's own path works. It has to pass a large batch to guarantee its own rows are reached, because the sweep orders by id and a fresh cuid sorts last. So it sends the entire accumulated backlog, two round trips per row, sequentially, and it outgrew its 60s timeout. `sweepEmergencyEscalations` pays the same way: in production somebody acknowledges an emergency within minutes, in the suite nobody ever does, so every emergency any spec or e2e run ever created is still open and still due.
+
+Both specs now retire rows **older than an hour** in `beforeAll` — old enough that no concurrently-running fixture can be touched, since every fixture in this suite is created inside its own test. Self-healing: the cost no longer grows with the age of the database.
+
+**`DispatchResult` gained `remaining`**, and the cron response reports it. The sweep takes at most `limit` rows and recorded only `sent` and `failed` — which look identical whether the queue is empty or ten thousand deep. An engine whose premise is that a delivery record must never be silently false should not be able to hide a backlog either.
+
+**What it decided.**
+- **`remaining` reports; it does not act.** The drain is still one batch per tick. A loop that keeps going until the queue is empty is the right answer only once this number is persistently non-zero on a real portfolio, and building it first is guessing at a shape the backlog has not shown. This is the instrument that says when.
+- **An hour is the debris threshold**, not a marker column or a dedicated schema. The oldest fixture any spec builds is twenty minutes back, so an hour cannot reach a live one, and it needs no coordination between files. Per-file schemas remain the genuinely correct answer to this whole family (R-037c said so and still stands); this is not it, and is not pretending to be.
+- **`NotificationDelivery` and `Ticket` are ordinary tables** — the append-only set is `LedgerEntry`, `AuditLog`, `Message`, `Notification`. The retirement touches the delivery row and the ticket's `acknowledgedAt`, never the notification itself.
+
+**What it left behind.**
+- **The drain rate is still 100 an hour** for notifications. Fine for a 10–50 unit portfolio until R-045 starts sending payment-lifecycle notices to everybody on the same morning; `notificationsRemaining` on the cron response is what will say so.
+- **The debris keeps accumulating** — this retires it rather than stopping it. Every spec still leaves its unsent rows behind. Per-file schemas end that; nothing else does.
+
+**Bugs found along the way.** None new. This item exists because of one I had dismissed three times as "flake under parallel load" — twice in writing, in R-098's PROGRESS entry. It was reproducible, diagnosable, and had a growing row count behind it the whole time.

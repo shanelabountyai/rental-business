@@ -15,7 +15,40 @@ let entityId: string
 let propertyId: string
 const notificationIds: string[] = []
 
+/**
+ * Retire delivery rows left QUEUED by earlier runs (R-102).
+ *
+ * In production the hourly cron is what drains this table. In the test
+ * environment nothing plays that role: every spec that queues a notification
+ * and then dispatches only its own rows - which is the isolation rule
+ * CLAUDE.md requires - leaves the rest QUEUED for ever. The shared database
+ * reached 27,392 delivery rows this way.
+ *
+ * That is invisible until one test sweeps globally. The spec below has to
+ * pass a large batch to guarantee its own rows are reached (the sweep orders
+ * by id and a fresh cuid sorts last), so it then SENDS the entire backlog -
+ * two round trips per row, sequentially - and it outgrew its 60s timeout.
+ *
+ * An hour old, so nothing a concurrently-running spec is asserting on can be
+ * touched: every fixture in this suite is created within its own test.
+ * `NotificationDelivery` is not one of the append-only tables, so this is an
+ * ordinary UPDATE - `Notification` is, and is deliberately left alone.
+ */
+async function retireStaleDeliveries() {
+  const anHourAgo = new Date(Date.now() - 3_600_000)
+  await prisma.notificationDelivery.updateMany({
+    where: {
+      // `NotificationDelivery` carries no createdAt of its own; the age that
+      // matters is the notification's, which is one-to-one with it anyway.
+      notification: { createdAt: { lt: anHourAgo } },
+      OR: [{ status: 'QUEUED' }, { status: 'DEFERRED' }],
+    },
+    data: { status: 'SUPPRESSED', suppressedReason: 'stale_test_fixture' },
+  })
+}
+
 beforeAll(async () => {
+  await retireStaleDeliveries()
   const stamp = `notif-${Date.now()}`
   const entity = await prisma.legalEntity.create({
     data: { name: stamp, type: 'LLC' },
@@ -421,7 +454,7 @@ describe('scoped dispatch', () => {
     const untouched = await queueOne('untouched')
 
     const result = await dispatchPendingNotifications(new Date(), 100, { deliveryIds: [] })
-    expect(result).toEqual({ sent: 0, failed: 0 })
+    expect(result).toEqual({ sent: 0, failed: 0, remaining: 0 })
 
     const still = await prisma.notificationDelivery.findMany({
       where: { id: { in: untouched.deliveryIds } },
@@ -527,7 +560,7 @@ describe('the kill switch', () => {
 
       // And the dispatcher refuses to run at all while it is off.
       const result = await dispatchPendingNotifications()
-      expect(result).toEqual({ sent: 0, failed: 0 })
+      expect(result).toEqual({ sent: 0, failed: 0, remaining: 0 })
     } finally {
       if (previous === undefined) delete process.env.NOTIFICATIONS_ENABLED
       else process.env.NOTIFICATIONS_ENABLED = previous

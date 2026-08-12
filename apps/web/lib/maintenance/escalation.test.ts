@@ -24,7 +24,34 @@ const staffIds: string[] = []
 
 const HOUR = 3_600_000
 
+/**
+ * Acknowledge emergencies left open by earlier runs (R-102).
+ *
+ * `sweepEmergencyEscalations` is a genuine global sweep: it takes every
+ * unacknowledged EMERGENCY of the last 24 hours and, for each one past the
+ * threshold, resolves a paging plan and sends. In production somebody
+ * acknowledges an emergency within minutes. In the test environment nobody
+ * ever does, so every emergency any spec or e2e run created is still open and
+ * still due - and this file pays to escalate all of them before it can assert
+ * anything about its own ticket. That is what took the 30s timeout.
+ *
+ * An hour old, so no fixture a concurrently-running spec created can be
+ * touched: the oldest this suite builds is twenty minutes back. `Ticket` is
+ * not append-only, so this is an ordinary UPDATE.
+ */
+async function acknowledgeStaleEmergencies() {
+  await prisma.ticket.updateMany({
+    where: {
+      priority: 'EMERGENCY',
+      acknowledgedAt: null,
+      createdAt: { lt: new Date(Date.now() - 3_600_000) },
+    },
+    data: { acknowledgedAt: new Date() },
+  })
+}
+
 beforeAll(async () => {
+  await acknowledgeStaleEmergencies()
   const stamp = `escalation-${Date.now()}`
   const entity = await prisma.legalEntity.create({ data: { name: stamp, type: 'LLC' } })
   entityId = entity.id
