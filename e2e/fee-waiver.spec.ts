@@ -3,7 +3,7 @@ import { createTotpEnrolment, hashPassword, sealSecret } from '@rental/core/auth
 import { Secret, TOTP } from 'otpauth'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
-import { uniquePhone } from './fixtures.ts'
+import { expectFocusSurvived, uniquePhone } from './fixtures.ts'
 
 // Waiving a fee, and seeing who has been forgiven (PAY-04, D-34, R-041).
 //
@@ -160,7 +160,7 @@ test.describe('waiving a fee', () => {
     await signIn(page, staff)
     await page.goto(`/leases/${lease.id}`)
 
-    await page.getByRole('button', { name: 'Waive this fee' }).click()
+    await page.getByText(/^Waive this late fee of /).click()
     await page.getByRole('button', { name: /^Waive \$/ }).click()
 
     await expect(page.getByText('Say why this is being waived')).toBeVisible()
@@ -174,7 +174,21 @@ test.describe('waiving a fee', () => {
     await page.goto(`/leases/${lease.id}`)
 
     await expect(page.getByRole('heading', { name: 'Fees' })).toBeVisible()
-    await page.getByRole('button', { name: 'Waive this fee' }).click()
+
+    // `getByText`, not a role: since R-099 the trigger is a native
+    // `<summary>`, which has no portable role mapping - the app's other
+    // disclosures are selected the same way. The NAME is the point of the
+    // change: every fee on the lease rendered the identical string "Waive
+    // this fee", so a screen-reader user listing the page's controls heard it
+    // N times with nothing to tell them apart.
+    await page.getByText(/^Waive this late fee of /).click()
+
+    // THE ASSERTION THAT WAS MISSING FROM THE WHOLE GATE. The `useState`
+    // toggle this replaced had the trigger unmount itself on activation, so
+    // focus fell to `<body>` - invisible to axe, which scans a static
+    // snapshot and cannot see where focus went.
+    await expectFocusSurvived(page, 'opening the waive-a-fee disclosure')
+
     await page.getByLabel('Why is this being waived?').fill('First late payment in two years')
     await page.getByRole('button', { name: /^Waive \$/ }).click()
 
@@ -200,7 +214,7 @@ test.describe('waiving a fee', () => {
     // The screen now shows the waiver rather than offering it again.
     await page.reload()
     await expect(page.getByText('First late payment in two years')).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Waive this fee' })).toHaveCount(0)
+    await expect(page.getByText(/^Waive this late fee of /)).toHaveCount(0)
   })
 
   test('REFUSES a fee above the waiver ceiling, and says by how much', async ({ page }) => {
@@ -213,7 +227,7 @@ test.describe('waiving a fee', () => {
 
     await signIn(page, staff)
     await page.goto(`/leases/${lease.id}`)
-    await page.getByRole('button', { name: 'Waive this fee' }).click()
+    await page.getByText(/^Waive this late fee of /).click()
     await page.getByLabel('Why is this being waived?').fill('Trying it on')
     await page.getByRole('button', { name: /^Waive \$/ }).click()
 
@@ -240,7 +254,7 @@ test.describe('waiving a fee', () => {
     const { lease, staff } = await seed()
     await signIn(page, staff)
     await page.goto(`/leases/${lease.id}`)
-    await page.getByRole('button', { name: 'Waive this fee' }).click()
+    await page.getByText(/^Waive this late fee of /).click()
     await expect(page.getByLabel('Why is this being waived?')).toBeVisible()
 
     const { default: AxeBuilder } = await import('@axe-core/playwright')

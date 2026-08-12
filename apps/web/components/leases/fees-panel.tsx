@@ -1,8 +1,9 @@
 'use client'
 
 import { formatCents } from '@rental/core/money'
-import { useActionState, useState } from 'react'
+import { useActionState } from 'react'
 import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
+import { FieldError } from '@/components/form/field.tsx'
 import type { WaiverFormState } from '@/lib/ledger/waivers.ts'
 
 // Fees, and forgiving one (PAY-04, R-041).
@@ -37,61 +38,60 @@ const TYPE_WORDS: Record<string, string> = {
 
 function WaiveForm({
   fee,
+  label,
   action,
 }: {
   fee: FeeView
+  /// What this fee IS, in words, for the trigger's accessible name.
+  label: string
   action: (state: WaiverFormState, formData: FormData) => Promise<WaiverFormState>
 }) {
   const [state, formAction] = useActionState<WaiverFormState, FormData>(action, {})
-  const [open, setOpen] = useState(false)
-
-  if (!open) {
-    return (
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="self-start text-sm underline underline-offset-2"
-      >
-        Waive this fee
-      </button>
-    )
-  }
 
   return (
-    <form action={formAction} className="flex flex-col gap-2">
-      <input type="hidden" name="chargeId" value={fee.id} />
-      <FormAlerts state={state} />
-      <label htmlFor={`reason-${fee.id}`} className="text-sm font-medium">
-        Why is this being waived?
-      </label>
-      {/* REQUIRED, and the action refuses without it. "Why" is the first
-          question in a fair-housing review, and a hundred waivers with an
-          empty reason column are indistinguishable from an arbitrary
-          pattern. */}
-      <input
-        id={`reason-${fee.id}`}
-        name="reason"
-        type="text"
-        placeholder="First late payment in two years"
-        className="rounded-md border px-2 py-1.5 text-sm"
-        aria-describedby={state.fieldErrors?.reason ? `reason-error-${fee.id}` : undefined}
-      />
-      {state.fieldErrors?.reason && (
-        <p id={`reason-error-${fee.id}`} className="text-sm text-red-700 dark:text-red-400">
-          {state.fieldErrors.reason}
-        </p>
-      )}
-      <div className="flex items-center gap-3">
+    // M7 (R-099), all three of them mine from R-041. `<details>` rather than
+    // a `useState` toggle because the toggle had each trigger unmount
+    // ITSELF - opening the form destroyed the button holding focus, so a
+    // keyboard user landed back at the top of the document and a screen
+    // reader announced nothing. A `<summary>` survives its own activation.
+    //
+    // It also works before hydration, and it removes the Cancel button
+    // entirely: closing a disclosure is what the summary already does.
+    //
+    // Stays open when the server rejected the reason, or the error would be
+    // hidden behind a collapsed panel the moment it arrived.
+    <details open={Boolean(state.fieldErrors?.reason || state.error)}>
+      {/* NOT "Waive this fee". Every fee on the lease rendered that same
+          string, so a screen-reader user listing the controls on the page
+          heard "Waive this fee" N times with nothing to tell them apart. */}
+      <summary className="min-h-11 cursor-pointer text-sm underline underline-offset-2">
+        Waive this {label} of {formatCents(fee.amountCents)}
+      </summary>
+
+      <form action={formAction} className="flex flex-col gap-2 pt-2">
+        <input type="hidden" name="chargeId" value={fee.id} />
+        <FormAlerts state={state} />
+        <label htmlFor={`reason-${fee.id}`} className="text-sm font-medium">
+          Why is this being waived?
+        </label>
+        {/* REQUIRED, and the action refuses without it. "Why" is the first
+            question in a fair-housing review, and a hundred waivers with an
+            empty reason column are indistinguishable from an arbitrary
+            pattern. */}
+        <input
+          id={`reason-${fee.id}`}
+          name="reason"
+          type="text"
+          placeholder="First late payment in two years"
+          className="border-input focus-visible:ring-ring rounded-md border px-2 py-1.5 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+          aria-describedby={state.fieldErrors?.reason ? `reason-error-${fee.id}` : undefined}
+        />
+        {/* `FieldError` carries role="alert"; the bare <p> this replaces
+            announced nothing when the server rejected the reason. */}
+        <FieldError id={`reason-error-${fee.id}`} message={state.fieldErrors?.reason} />
         <SubmitButton label={`Waive ${formatCents(fee.amountCents)}`} />
-        <button
-          type="button"
-          onClick={() => setOpen(false)}
-          className="text-muted-foreground text-sm underline underline-offset-2"
-        >
-          Cancel
-        </button>
-      </div>
-    </form>
+      </form>
+    </details>
   )
 }
 
@@ -154,7 +154,11 @@ export function FeesPanel({
                 {fee.waiveReason ? ` — “${fee.waiveReason}”` : ''}
               </p>
             ) : canWaive ? (
-              <WaiveForm fee={fee} action={waive} />
+              <WaiveForm
+                fee={fee}
+                label={(TYPE_WORDS[fee.type] ?? fee.type).toLowerCase()}
+                action={waive}
+              />
             ) : mfaRequired ? (
               <p className="text-sm">
                 Waiving a fee needs two-factor verification. Sign in again with

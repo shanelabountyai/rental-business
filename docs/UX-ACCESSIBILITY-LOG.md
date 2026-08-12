@@ -12,9 +12,17 @@ is not a session and the tiers have genuinely different stakes:
 - **R-098 — the safety tier. ✅ Landed.** The emergency maintenance flow and
   the vendor surface: the two places where a defect has a consequence outside
   the screen. Everything marked `FIXED (R-098)` below.
-- **R-099 — the rest.** Focus management, the missing route boundaries, the
-  inert live regions, the wizard, the timezone display sites, and the gate's
-  own gap. Everything marked `R-099` below.
+- **R-099 — the missing boundaries and the gate's own gap. ✅ Landed.** The
+  `error.tsx` / `not-found.tsx` / `loading.tsx` files (there were none), the
+  shared e2e focus assertion that would have caught most of the High tier, and
+  the four findings that were mine. Everything marked `FIXED (R-099)` below.
+- **R-101 — the remainder.** The maintenance wizard, the inert live regions,
+  the timezone display sites, and the medium/low UX batch. Everything marked
+  `R-101` below.
+
+Split this way on purpose. R-099 leads with the assertion, because a fix
+landed without one is a fix that comes back — and every finding below survived
+precisely because nothing in the gate could see it.
 
 ## How to read this
 
@@ -49,10 +57,10 @@ The codebase already states the rule correctly in `components/auth-form.tsx:86` 
 | # | Finding | Verdict | Decision |
 |---|---|---|---|
 | H1 | Emergency flow: safety screen never announced, focus destroyed reaching it (`emergency-flow.tsx:109-196`) | `CONFIRMED` | **FIXED (R-098).** Solved by deletion rather than by announcing: the safety screen is now its own server-rendered URL, so it is a real navigation and there is no focus to preserve or announce. |
-| H2 | Maintenance wizard: same defect across seven steps, no progress indication | `CONFIRMED` | **R-099.** Same defect, no safety consequence — a tenant reporting a dripping tap is not a tenant smelling gas. |
-| H3 | Wizard/emergency option selection is colour + font-weight only; no `aria-pressed` or radio semantics | `CONFIRMED` | **FIXED (R-098) in the emergency flow** — real radios, plus an explicit third "I am not sure". The wizard half is **R-099**. |
-| H4 | Disabled "Next" buttons leave the tab order and give no reason | `CONFIRMED` | **FIXED (R-098) in the emergency flow**, by removing the disabling rather than explaining it — see the note below. Wizard half is **R-099**. |
-| H5 | `sr-only` inputs with `focus-visible:ring` on a label that never receives focus — no visible focus indicator at all | `CONFIRMED` | **R-099.** The emergency flow's own instance is gone (its radios use `focus-within:ring` on the label, which does fire); the other two sites remain, including `offline-payment-form.tsx`, which I wrote in R-038. |
+| H2 | Maintenance wizard: same defect across seven steps, no progress indication | `CONFIRMED` | **R-101.** Same defect, no safety consequence — a tenant reporting a dripping tap is not a tenant smelling gas. |
+| H3 | Wizard/emergency option selection is colour + font-weight only; no `aria-pressed` or radio semantics | `CONFIRMED` | **FIXED (R-098) in the emergency flow** — real radios, plus an explicit third "I am not sure". The wizard half is **R-101**. |
+| H4 | Disabled "Next" buttons leave the tab order and give no reason | `CONFIRMED` | **FIXED (R-098) in the emergency flow**, by removing the disabling rather than explaining it — see the note below. Wizard half is **R-101**. |
+| H5 | `sr-only` inputs with `focus-visible:ring` on a label that never receives focus — no visible focus indicator at all | `CONFIRMED` | **FIXED (R-099)** in `offline-payment-form.tsx` — mine, from R-038, and the worst of the three: the label carried no focus styling of any kind, so the control looked identical focused and unfocused. `focus-within` on the label is the fix, the same one the emergency radios use. Remaining site is **R-101**. |
 | H6 | Vendor "Show code": focus destroyed, code never announced, N identical button names | `CONFIRMED` | **FIXED (R-098).** All three: `<output>` rendered empty from first paint so the reveal is a mutation and announces, `autoFocus` on the revealed code, and a per-code accessible name. |
 | H7 | Vendor accept/propose/decline triggers unmount themselves | `CONFIRMED` | **FIXED (R-098)** with `<details>`, the pattern the admin side already uses. Three forms, one action — which also fixed the U9 instance on this screen for free. |
 
@@ -66,8 +74,8 @@ The codebase already states the rule correctly in `components/auth-form.tsx:86` 
 | M4 | Successful actions swap whole sections silently (three sites) | `CONFIRMED` | **Fixing** alongside S1. |
 | M5 | Property switcher navigates on `change` and disables the focused control | `CONFIRMED` | **Fixing** — `aria-busy` instead of `disabled`. |
 | M6 | Horizontally scrolling tables not keyboard-reachable (3 sites) | `CONFIRMED` | **Fixing** — copy the four attributes from `tasks/page.tsx`. Note axe only catches this when the table actually overflows at the test viewport, so it is **not reliably gated today**. |
-| M7 | Fees panel: N identical triggers, error without `role="alert"`, focus loss | `CONFIRMED` | **R-099.** Mine, from R-041, written hours earlier. |
-| M8 | Two offline-payment errors have no `id` and no `aria-describedby` | `CONFIRMED` | **Fixing** — use `TextField`, which does this correctly. Also mine, from R-038. |
+| M7 | Fees panel: N identical triggers, error without `role="alert"`, focus loss | `CONFIRMED` | **FIXED (R-099).** Mine, from R-041. All three: `<details>` so the trigger survives its own activation, the name now carries the fee and its amount, and `FieldError` supplies the `role="alert"`. |
+| M8 | Two offline-payment errors have no `id` and no `aria-describedby` | `CONFIRMED` | **FIXED (R-099)** — both fields now use `TextField`, which had solved exactly this since R-008 and which I did not use. Also mine, from R-038. |
 | M9 | `<legend>` nested two `<div>`s deep contributes no accessible name | `CONFIRMED` | **Fixing.** Each troubleshooting step is an unnamed group with identically-named buttons. |
 | M10 | Emergency reassurance banner: inert `role="status"`, sits above the `<h1>` so heading navigation skips it | `CONFIRMED` | **FIXED (R-098).** Gone with the rewrite: the reassurance is ordinary server-rendered prose under the `<h1>`, which is what it always was — a live region announcing text that never changes was the wrong tool for it. |
 | M11 | Photo upload status not announced; disables the focused control | `CONFIRMED` | **Fixing.** |
@@ -76,7 +84,7 @@ The codebase already states the rule correctly in `components/auth-form.tsx:86` 
 
 | # | Finding | Verdict | Decision |
 |---|---|---|---|
-| U1 | No `error.tsx`, `not-found.tsx` or `loading.tsx` anywhere | `CONFIRMED` — zero files | **Fixing.** A tenant hitting `notFound()` gets Next's bare 404 with no chrome and no way back; an unhandled throw shows "Application error" to a plumber in a driveway. |
+| U1 | No `error.tsx`, `not-found.tsx` or `loading.tsx` anywhere | `CONFIRMED` — zero files | **PARTLY FIXED (R-099).** `error.tsx` and `not-found.tsx` shipped — five files, one set per audience, because the three need different things: the tenant gets the phone number and the 911 line, staff get the error digest to quote, the vendor gets retry and a `tel:` link. Asserted in `e2e/route-boundaries.spec.ts`. **`loading.tsx` is deliberately NOT shipped** — see below. |
 | U2 | Emergency flow is entirely `onClick` — safety instructions do not exist until hydration | `CONFIRMED` — 9 handlers | **FIXED (R-098).** Category choice and safety screen are server-rendered and URL-driven; only the final details form is a client component, and it is a real `<form action>`. An e2e spec runs the whole path with JavaScript disabled. |
 | U3 | Vendor "Show code" is `onClick` | `PARTLY` | **Not changed, deliberately.** Revealing a code is a privileged read that writes an audit row; it *should* require a live session rather than working from a cached page. H6's three real defects are fixed. |
 | U4 | Vendor proposed time rendered in UTC while messages twenty lines away use `utcToWallClock` | `CONFIRMED` | **FIXED (R-098).** Same defect class as R-036b's entry-window bug — I fixed the admin page and missed the vendor page. Also surfaced the *confirmed* window, which the component was never passed at all: a vendor whose visit had been booked and legally noticed still read "we'll confirm". |
@@ -100,6 +108,31 @@ Recorded in full, worked in batches after the High tier. Highlights:
 
 ---
 
+## The finding inside the fix: `loading.tsx` breaks `notFound()`
+
+Worth its own section because it cost a red gate to find and would have shipped
+silently.
+
+`loading.tsx` was written for all three audiences, as U1 asked. It took **eight
+scoping specs across seven files** red, all with the same failure:
+`expect(response.status()).toBe(404)` receiving **200**.
+
+The file wraps its segment in a Suspense boundary, so the response begins
+streaming with a 200 header before the page body runs — and a status already on
+the wire cannot be retracted. The not-found *page* still renders perfectly, so
+in a browser it looks entirely correct. Only the status line is wrong.
+
+That is not cosmetic here. **ROLE-01 answers 404 rather than 403 for a record
+outside your scope, on purpose**, because "forbidden" confirms the record
+exists. Those eight assertions are the tests that keep that true, and a
+loading spinner two directories up silently turned them all into 200s.
+
+**Decision: no `loading.tsx`.** A correct status code on a scope refusal
+outranks a loading indicator. If loading states are wanted later they belong on
+leaf segments that never call `notFound()`, with the reason written beside them.
+Recorded in CLAUDE.md under the runtime traps, since nothing about it fails at
+build or typecheck.
+
 ## What I am deliberately NOT doing
 
 - **`capture="environment"` on photo inputs.** Flagged as forcing the camera and removing "choose an existing photo". Real, but it is a **product decision, not an accessibility defect** — the wizard deliberately wants a photo of the thing in front of the tenant. Filed for the owner rather than changed unilaterally.
@@ -108,7 +141,17 @@ Recorded in full, worked in batches after the High tier. Highlights:
 
 ## A gap in the gate itself
 
-Both reviews independently noted that **nothing asserts where focus lands after a server action**, and that axe's `scrollable-region-focusable` rule only fires when a table actually overflows at the test viewport — so M6 is not reliably caught. A single shared e2e assertion (focus is not `body` after an action completes) would have caught most of the High tier and would stop it returning. Added as part of this work.
+Both reviews independently noted that **nothing asserts where focus lands after a server action**, and that axe's `scrollable-region-focusable` rule only fires when a table actually overflows at the test viewport — so M6 is not reliably caught. A single shared e2e assertion (focus is not `body` after an action completes) would have caught most of the High tier and would stop it returning.
+
+**Closed in R-099**: `expectFocusSurvived(page, context)` in `e2e/fixtures.ts`. It
+was checked the only way an assertion can be trusted — by making it fail. A
+`blur()` inserted before the call produced the expected red, and was removed; a
+green assertion nobody has seen go red is not evidence of anything (the same
+reasoning D-27 applies to simulated adapters).
+
+It is currently applied at the sites R-099 fixed, not everywhere. Rolling it
+across the rest of the suite is R-101's job and will turn up real failures —
+that is the point of it, and the reason it is not a one-line change.
 
 ---
 

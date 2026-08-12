@@ -16,7 +16,7 @@
 // wrong.
 
 export function VendorHelpLine() {
-  const phone = process.env.OPERATIONS_PHONE?.trim()
+  const phone = process.env.NEXT_PUBLIC_OPERATIONS_PHONE?.trim()
   if (!phone) return null
 
   return (

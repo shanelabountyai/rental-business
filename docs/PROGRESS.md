@@ -1322,3 +1322,45 @@ The owner put a test-mode key in `.env.local`, which closed the caveat standing 
 **Bugs found along the way.**
 - **The item numbering had started to collide.** This work was being stamped `R-043` in code comments while backlog R-043 is *tenant-visible ledger + portal payment* — an unbuilt item that will touch some of the same files. Renumbered to R-098/R-099 before it set. The backlog already carries a dozen duplicate ids from earlier sessions; those are not worth rewriting, but a fresh one was.
 - Two vitest files failed once under full-suite parallel load and passed on an immediate clean re-run. Noted rather than chased; the 20s global timeout from R-042 already addressed the known cause.
+
+## R-099 — The missing route boundaries, and the gate gap that hid them
+**Commit:** `TBD`  ·  **Date:** 2026-08-12
+
+**What it built.** The second tier of the UX and accessibility report (`docs/UX-ACCESSIBILITY-LOG.md`). Two things: the screens people land on when something goes wrong, and the assertion whose absence let the whole R-098 tier ship in the first place.
+
+**There was no `error.tsx`, `not-found.tsx` or `loading.tsx` anywhere in the product** — zero files — while **fourteen pages call `notFound()`**. So a tenant following a stale link out of a six-month-old text message got Next's bare 404: black on white, no navigation, no way back, no hint that their account was fine. An unhandled throw showed *"Application error: a client-side exception has occurred"* — a sentence written for a developer — to whoever was standing there.
+
+Seven files, one set per audience, because the three audiences need genuinely different things:
+
+- **Tenant** — the portal's own chrome (so it is a bad moment, not a dead end), the phone number, and the 911 line, because emergencies do not wait for a working web page. D-10's premise is that the portal is a convenience and never the only way to reach a landlord; the screen that just failed is where that has to be most true.
+- **Staff** — the error digest, said out loud. It is the only handle on the server-side stack trace, Next redacts the message and leaves the digest precisely so it can be quoted, and an operator who can read it to somebody has turned "it broke" into a searchable log line.
+- **Vendor** — retry and a `tel:` link, and nothing else. The magic link *is* the whole surface (D-6): no account, no navigation, no history to fall back on.
+
+**The gate gap is closed.** `expectFocusSurvived(page, context)` asserts that a completed interaction did not drop focus to `<body>`. Both accessibility reviews independently identified the same root cause — `.focus()` appeared **zero** times in `apps/web` — and both noted the same reason it survived every gate we have: axe scans a static snapshot and cannot see where focus *went*, so a page could fail this on every interaction and still pass the accessibility spec.
+
+**It was verified by making it fail.** A `blur()` inserted before the call produced the expected red with the intended message, and was then removed. A green assertion nobody has watched go red is not evidence of anything — the same reasoning D-27 applies to simulated adapters, turned on a test.
+
+**Three findings that were mine, from the two items before this one.**
+- **H5** (`offline-payment-form.tsx`, R-038): the channel radios are `sr-only` with the label standing in for them visually, and the label carried **no focus styling of any kind** — so a keyboard user tabbing into the group got no indication whatever of where they were. The control looked identical focused and unfocused.
+- **M8** (same file): two field errors rendered as bare `<p>` with no `id`, no `aria-describedby` and no `role="alert"`. `TextField` had solved exactly this since R-008 and I did not use it. Now it does.
+- **M7** (`fees-panel.tsx`, R-041): every fee on a lease rendered a trigger reading the identical string *"Waive this fee"*, so a screen-reader user listing the page's controls heard it N times with nothing to tell them apart. The trigger also unmounted itself on activation, and the reason error had no `role="alert"`.
+
+**What it decided.**
+- **`<details>` is this codebase's disclosure**, now in three places (admin panels, the vendor answers in R-098, the waive form here). A `<summary>` survives its own activation, so focus is retained by construction rather than restored by hand — and it works before hydration, which a `useState` toggle never does.
+- **`NEXT_PUBLIC_OPERATIONS_PHONE`, one variable, read from both sides.** `error.tsx` is a client component that takes no props, so it cannot be handed a server-read value. A second variable holding the same number is the kind of thing that gets set in one place and not the other; a phone number printed on a screen we hand to strangers has nothing to protect by being server-only.
+- **The staff 404 names both possibilities and picks neither.** Most staff `notFound()` calls are ROLE-01 scope refusals, which answer 404 rather than 403 on purpose — "forbidden" confirms the record exists. A well-meaning edit to "this record does not exist" would turn the screen into an oracle for whether an id is real, so the wording is asserted in the spec with that reason written next to it.
+- **`loading.tsx` gets no skeleton.** A skeleton that does not match what arrives is a small lie told on every slow load, and these pages differ too much for one shape to fit.
+- **`role="status"` is correct in `loading.tsx`** — and the comment says why, because it is wrong in eleven other places: the region genuinely arrives after the page it replaces, so the mount *is* the event.
+
+**The bug this item found in itself.** `loading.tsx` shipped for all three audiences and took **eight scoping specs across seven files** red — every one of them `expect(response.status()).toBe(404)` receiving **200**.
+
+A `loading.tsx` wraps its segment in a Suspense boundary, so the response starts streaming with a 200 header before the page body runs, and a status already on the wire cannot be retracted. The not-found page still renders correctly, so in a browser nothing looks wrong at all; only the status line is. And it matters precisely here, because **ROLE-01 answers 404 rather than 403 for a record outside your scope on purpose** — "forbidden" confirms the record exists. Those eight assertions are what keep that true, and a loading spinner two directories above them turned all of them into 200s.
+
+`loading.tsx` was dropped. A correct status on a scope refusal outranks a spinner, and if loading states are wanted later they belong on leaf segments that never call `notFound()`. Recorded in CLAUDE.md's runtime traps: it fails at neither build, typecheck nor vitest.
+
+**How it was found, which is the more useful half.** It was not found by the gate — it was found by *reading the gate properly for the first time*. Every e2e result reported this session came through `npm run test:e2e 2>&1 | tail -12`, which shows the failure list and cuts off the `N failed` line above it. Two runs earlier in the session were reported as green on that basis. The `N passed` figure also never reconciled against the suite size (582), and three different totals — 342, 566, 574 — went unquestioned. CLAUDE.md now says the gate is `passed + skipped + flaky` reconciled against `playwright test --list`, never `0 failed` read off a tail.
+
+**What it left behind.**
+- **R-101 owns the remainder**: the maintenance wizard, the eleven inert live regions, the timezone display sites, the medium/low UX batch — and rolling `expectFocusSurvived()` across the rest of the suite, which will turn up real failures. That is the point of it, and the reason it is not a one-line change.
+- **Focus after a *successful* waive is still lost.** `<details>` fixes the open; when the server confirms, the form is replaced by the waived record and focus falls to `<body>`. That is the general S1 pattern (M4) and belongs with the rest of it rather than as a one-off here.
+- The report split R-098 / R-099 / R-101 by consequence and by what a single session can actually verify, not by severity label.

@@ -1,6 +1,7 @@
 'use client'
 
 import { useActionState, useState } from 'react'
+import { FieldError, TextField } from '@/components/form/field.tsx'
 import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
 import type { OfflineFormState } from '@/lib/payments/offline.ts'
 
@@ -44,9 +45,15 @@ export function OfflinePaymentForm({
       <fieldset className="flex flex-wrap gap-2">
         <legend className="mb-2 text-sm font-medium">What arrived from {payerName}?</legend>
         {CHANNELS.map((option) => (
+          // H5 (R-099): the input is `sr-only`, so it never draws a focus
+          // ring of its own and the ring has to live on the label that
+          // visually replaces it. Without `focus-within` a keyboard user
+          // tabbing into this group gets NO visible indication of where they
+          // are - the control looks identical focused and unfocused. Mine,
+          // from R-038.
           <label
             key={option.value}
-            className={`cursor-pointer rounded-md border px-3 py-2 text-sm ${
+            className={`focus-within:ring-ring cursor-pointer rounded-md border px-3 py-2 text-sm focus-within:ring-2 focus-within:ring-offset-2 ${
               channel === option.value ? 'border-foreground font-medium' : ''
             }`}
           >
@@ -80,51 +87,32 @@ export function OfflinePaymentForm({
               aria-describedby={state.fieldErrors?.amountDollars ? 'amount-error' : undefined}
             />
           </div>
-          {state.fieldErrors?.amountDollars && (
-            <p id="amount-error" className="text-sm text-red-700 dark:text-red-400">
-              {state.fieldErrors.amountDollars}
-            </p>
-          )}
+          <FieldError id="amount-error" message={state.fieldErrors?.amountDollars} />
         </div>
 
-        <div className="flex flex-col gap-1">
-          <label htmlFor="receivedOn" className="text-sm font-medium">
-            Received on
-          </label>
-          {/* Native date input, not a picker component: it works on first
-              paint, it is what phones already know how to render, and D-8
-              says use the platform before reaching for a library. */}
-          <input
-            id="receivedOn"
-            name="receivedOn"
-            type="date"
-            defaultValue={today}
-            max={today}
-            className="rounded-md border px-2 py-1.5"
-          />
-          {state.fieldErrors?.receivedOn && (
-            <p className="text-sm text-red-700 dark:text-red-400">{state.fieldErrors.receivedOn}</p>
-          )}
-        </div>
+        {/* M8 (R-099): both of these rendered their error as a bare <p> with
+            no id, no `aria-describedby` and no `role="alert"` - so a screen
+            reader never associated the message with the field and never
+            announced it arriving. `TextField` had solved exactly this since
+            R-008 and I did not use it. Native date input either way: it works
+            on first paint, phones already know how to render it, and D-8 says
+            use the platform before reaching for a library. */}
+        <TextField
+          label="Received on"
+          name="receivedOn"
+          type="date"
+          defaultValue={today}
+          max={today}
+          error={state.fieldErrors?.receivedOn}
+        />
 
         {channel === 'OFFLINE_CHECK' && (
-          <div className="flex flex-col gap-1">
-            <label htmlFor="checkNumber" className="text-sm font-medium">
-              Check number
-            </label>
-            <input
-              id="checkNumber"
-              name="checkNumber"
-              type="text"
-              inputMode="numeric"
-              className="w-28 rounded-md border px-2 py-1.5"
-            />
-            {state.fieldErrors?.checkNumber && (
-              <p className="text-sm text-red-700 dark:text-red-400">
-                {state.fieldErrors.checkNumber}
-              </p>
-            )}
-          </div>
+          <TextField
+            label="Check number"
+            name="checkNumber"
+            inputMode="numeric"
+            error={state.fieldErrors?.checkNumber}
+          />
         )}
       </div>
 
