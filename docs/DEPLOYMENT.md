@@ -16,6 +16,8 @@ the repo alone — a dashboard setting is invisible to `git log`.
 | Build | `vercel-build` in `apps/web/package.json` |
 | Neon (dev) | `ep-cool-rain-aygtz3n8` / `neondb`, us-east-2 |
 | Neon (prod) | **not created yet** |
+| Production URL | `https://rental-business-shanelabountyai-8212s-projects.vercel.app` |
+| Access | Vercel Authentication on all deployments — team members only |
 
 ## Three things that are not obvious and each break the build
 
@@ -55,15 +57,20 @@ production build command is the bare one above and not `npm run build`.
 - `CRON_SECRET` — freshly generated.
 - `NOTIFICATIONS_SANDBOX_TO` — every send is redirected here regardless of
   recipient. See "the two safety controls" below.
+- `AUTH_URL` — the stable production alias above.
 - `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY` — the **test-mode** keys, same
   as dev. D-26 says test mode only; there is no live key anywhere by design.
+
+The build itself is verified: a fresh checkout installs, generates the Prisma
+client and completes `next build` in under a minute. What is missing is
+runtime, not build — the site deploys and every page that touches the database
+will fail until the two below are set.
 
 ### Still missing, and what each one costs
 
 | Variable | Consequence of leaving it unset |
 |---|---|
 | `DATABASE_URL` / `DIRECT_URL` | **Build fails.** Waiting on a Neon `prod` branch — see below. |
-| `AUTH_URL` | Auth callbacks resolve to the wrong origin. Set to the production domain once it exists. |
 | `STRIPE_WEBHOOK_SECRET` | **No money can enter the ledger.** The webhook route refuses outright without it, and under D-11 `LedgerEntry` is built *only* from webhooks. Create the endpoint after the first deploy, then set the signing secret here and locally (`stripe listen` gives a separate local one). |
 | `OPERATIONS_PHONE` | The vendor rejection screen shows no number — a dead end with no way out (R-098 built the link; it renders nothing when unset). |
 
