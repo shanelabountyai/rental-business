@@ -1391,8 +1391,8 @@ Both specs now retire rows **older than an hour** in `beforeAll` — old enough 
 
 **Bugs found along the way.** None new. This item exists because of one I had dismissed three times as "flake under parallel load" — twice in writing, in R-098's PROGRESS entry. It was reproducible, diagnosable, and had a growing row count behind it the whole time.
 
-## R-100 — Durable object storage
-**Commit:** `TBD`  ·  **Date:** 2026-08-12
+## R-100 — Durable object storage (with R-102b)
+**Commit:** `c5d70ab`  ·  **Date:** 2026-08-12
 
 **What it built.** D-14's swap, taken on the day its stated trigger arrived. `lib/storage/index.ts` now wires `VercelBlobStorageAdapter` when a Blob token is present and `LocalDiskStorageAdapter` when it is not.
 
@@ -1419,3 +1419,12 @@ Both specs now retire rows **older than an hour** in `beforeAll` — old enough 
 
 **Bugs found along the way.**
 - **Creating the Blob store put the token into `.env.local` without anyone choosing it.** The Vercel CLI writes it there on `create-store`, and the storage seam selects durable storage on its presence alone — so the next `npm test` would have written real objects into the production Blob store, on the account's quota, from whichever laptop last ran `vercel env pull`. Caught in the CLI's own output. `BLOB_READ_WRITE_TOKEN: ''` is now pinned in **both** `vitest.config.ts` and `playwright.config.ts`, beside the identical guard `STRIPE_SECRET_KEY` already needed for exactly the same reason.
+
+**R-102b, landed in the same commit — finishing what R-102 only half-fixed.** R-102 solved the notifications sweep properly and applied a weaker remedy to the escalation one without checking that it held. The very next full run proved it had not.
+
+`sweepEmergencyEscalations` gained the `only: { ticketIds }` filter that `dispatchPendingNotifications` and `dispatchOutbox` have carried since R-016 — the convention CLAUDE.md already mandates, and which this sweep had simply never been given. The originally-failing test went from a 30s timeout to **0.8s**.
+
+A different test then failed, so the rest was **measured rather than guessed at a second time**. Four of these tests genuinely take **25–28 seconds each in isolation**, filtered, against a pooled Neon connection: a page is a rota lookup, then per recipient per channel a preference read, an idempotency check, two inserts and an audit row, then two more round trips to claim and send each delivery. The budget was 30s.
+
+That is not flake. It is a deadline set below the measured cost, and a 28s test with two seconds of headroom tips over the moment anything runs beside it. Raised to 90s with the measurement written next to it — the same reasoning R-042 used raising the global default from Vitest's 5s unit-test default for a suite that is integration against a remote database.
+
