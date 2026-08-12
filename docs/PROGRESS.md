@@ -1390,3 +1390,32 @@ Both specs now retire rows **older than an hour** in `beforeAll` — old enough 
 - **The debris keeps accumulating** — this retires it rather than stopping it. Every spec still leaves its unsent rows behind. Per-file schemas end that; nothing else does.
 
 **Bugs found along the way.** None new. This item exists because of one I had dismissed three times as "flake under parallel load" — twice in writing, in R-098's PROGRESS entry. It was reproducible, diagnosable, and had a growing row count behind it the whole time.
+
+## R-100 — Durable object storage
+**Commit:** `TBD`  ·  **Date:** 2026-08-12
+
+**What it built.** D-14's swap, taken on the day its stated trigger arrived. `lib/storage/index.ts` now wires `VercelBlobStorageAdapter` when a Blob token is present and `LocalDiskStorageAdapter` when it is not.
+
+**What was actually broken.** Deploying to Vercel means a fresh, per-invocation filesystem. Every uploaded lease, vendor invoice and maintenance photo written by the local-disk adapter was gone by the next request — while the `Document` row claiming it exists survived. The evidence trail is the product; an evidence trail that loses its photos is not one. D-14 named this exact trigger in advance — *"whenever this deploys somewhere the filesystem isn't durable across instances"* — and left the seam for it, so this was one assignment plus an adapter, as promised.
+
+**Two decisions, recorded as D-37 because a later session must not quietly reverse either.**
+
+**Private, not public.** Vercel Blob's better-known mode is `access: 'public'`, which mints a permanent unauthenticated URL guarded only by an unguessable suffix — a capability URL. This product stores signed leases, identity documents and photographs of the inside of somebody's home. One leaked URL — a support ticket, a browser history, a screenshot — is public for ever, with no revocation and nothing in the audit log to say it was read. `access: 'private'` keeps every read authenticated against the store's own token, so the two routes that serve files carry on doing exactly what they did: authorise the caller, then stream the bytes. **Nothing about who may see a document changed**, which is the property a storage swap has to have.
+
+**Selected by token presence, never by `NODE_ENV`.** The tempting version is `NODE_ENV === 'production'`, and it is wrong in both directions: a production build on a laptop would reach the real store, and — the failure this item exists to end — a deployed environment whose Blob store was detached would silently resume writing to a vanishing filesystem and look entirely healthy until somebody opened a photo months later. The environment is asked what it actually has. A test asserts the `NODE_ENV` version stays out.
+
+**`storageDurable` is reported on the cron response**, so a silent reversion is visible rather than inferred.
+
+**Verified against the real service, not just the types.** A smoke run put, read back and deleted an object in the production store: pathname preserved (`addRandomSuffix: false`), bytes identical, content type intact, delete confirmed. The same discipline R-040d applied to the Stripe driver, and for the same reason — unit tests cannot prove an SDK behaves the way its type definitions claim.
+
+**What it decided.**
+- **Local disk stays dev and test**, unchanged from D-14. The suite must not depend on a network round trip or on anybody's Blob quota to assert that an upload worked.
+- **`allowOverwrite: true`.** The key is unique by construction, so an overwrite means a retry of the same upload rather than a collision; refusing it would turn a duplicate submit into a 500 on a tenant's photo.
+- **A missing object throws**, matching the local adapter's ENOENT. Both callers already treat a throw as "the file is gone", so the seam keeps one behaviour rather than two.
+
+**What it left behind.**
+- **Nothing needed migrating, by luck of timing rather than design.** The production database was empty when this landed, so no `Document` row points at bytes on a vanished filesystem. A week later this would have needed a backfill and there would have been nothing to back-fill *from*.
+- The documents written during development stay on the dev machine's disk, which is where the dev environment still reads them.
+
+**Bugs found along the way.**
+- **Creating the Blob store put the token into `.env.local` without anyone choosing it.** The Vercel CLI writes it there on `create-store`, and the storage seam selects durable storage on its presence alone — so the next `npm test` would have written real objects into the production Blob store, on the account's quota, from whichever laptop last ran `vercel env pull`. Caught in the CLI's own output. `BLOB_READ_WRITE_TOKEN: ''` is now pinned in **both** `vitest.config.ts` and `playwright.config.ts`, beside the identical guard `STRIPE_SECRET_KEY` already needed for exactly the same reason.

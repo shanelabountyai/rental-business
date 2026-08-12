@@ -6,6 +6,7 @@ import { dispatchOutbox } from '@/lib/jobs/outbox.ts'
 import '@/lib/jobs/registrations.ts'
 import { runDueJobs } from '@/lib/jobs/runner.ts'
 import { reconcileLedger } from '@/lib/ledger/reconcile.ts'
+import { storageIsDurable } from '@/lib/storage/index.ts'
 import { dispatchPendingNotifications } from '@/lib/notifications/send.ts'
 import { sweepUnansweredDispatches } from '@/lib/vendors/no-response.ts'
 import { sweepEntryReminders } from '@/lib/workorders/entry-reminders.ts'
@@ -95,6 +96,12 @@ export async function GET(request: Request) {
     ledgerEventsChecked: reconciliation.checkedEvents,
     ledgerEntriesChecked: reconciliation.checkedEntries,
     ledgerDrift: reconciliation.drift.length,
+    // R-100: false in a deployed environment means uploads are being written
+    // to a filesystem that does not survive the request. Reported here
+    // because a silent reversion to local disk - a detached Blob store, a
+    // dropped env var - looks exactly like everything working until somebody
+    // opens a photo months later and it is gone.
+    storageDurable: storageIsDurable,
     durationMs: Date.now() - startedAt,
   })
 }

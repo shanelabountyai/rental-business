@@ -176,15 +176,29 @@ the process, because `lib/notifications/provider.ts` still wires
 `NOTIFICATIONS_SANDBOX_TO` in any non-production environment means real texts to
 whoever is in the database. Set it before that line changes, not with it.
 
-## Uploads do not survive on Vercel
+## Uploads need a Blob store attached
 
-`lib/storage/index.ts` wires `LocalDiskStorageAdapter` under
-`DOCUMENT_STORAGE_PATH`, defaulting to `.data/documents/`. On Vercel the
-filesystem is ephemeral and per-invocation: every uploaded document, vendor
-invoice and maintenance photo would be written to a disk that is gone on the
-next request, while the database row claiming it exists survives.
+R-100 swapped `lib/storage/index.ts` onto Vercel Blob, but **the store still has
+to exist**. Until one is attached to the project, `BLOB_READ_WRITE_TOKEN` is
+absent, the seam falls back to `LocalDiskStorageAdapter`, and every uploaded
+document, vendor invoice and maintenance photo is written to a filesystem that
+is gone by the next request — while the `Document` row claiming it exists
+survives.
 
-D-14 anticipated exactly this and named the trigger — *"whenever this deploys
-somewhere the filesystem isn't durable across instances"*. That condition is now
-met. **R-100** owns the swap. Until it lands, treat uploads on the deployed
-instance as non-functional rather than merely untested.
+Attach one:
+
+```
+vercel blob create-store rental-business
+```
+
+Vercel injects `BLOB_READ_WRITE_TOKEN` into the project automatically once the
+store is linked; nothing needs setting by hand. Redeploy afterwards.
+
+**Check which one is live** on the authenticated cron response:
+`storageDurable: true` means Blob, `false` means the per-invocation filesystem.
+That field exists because a silent reversion — a detached store, a dropped env
+var — otherwise looks exactly like everything working.
+
+Blobs are written with `access: 'private'` (D-37). Reads stay authenticated
+against the store token and go through the same routes as before, so nothing
+about who may see a document changed.

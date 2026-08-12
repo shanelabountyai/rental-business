@@ -118,6 +118,12 @@ export default defineConfig({
       // pick up a real test key and every billing assertion would depend on
       // network and on somebody else's Stripe data.
       STRIPE_SECRET_KEY: '',
+      // And the same for storage (R-100): the Blob token lands in .env.local
+      // the moment anyone creates the store or runs `vercel env pull`, and
+      // the seam selects durable storage on its presence alone. Without this
+      // the e2e upload specs would write real objects into the production
+      // Blob store. Dev and test are local disk by D-14.
+      BLOB_READ_WRITE_TOKEN: '',
       TWILIO_AUTH_TOKEN: process.env.TWILIO_AUTH_TOKEN ?? TEST_TWILIO_AUTH_TOKEN,
       STRIPE_WEBHOOK_SECRET:
         process.env.STRIPE_WEBHOOK_SECRET ?? TEST_STRIPE_WEBHOOK_SECRET,

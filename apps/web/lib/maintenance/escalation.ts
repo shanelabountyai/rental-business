@@ -37,8 +37,11 @@ export interface EscalationSweep {
 
 export async function sweepEmergencyEscalations(
   now = new Date(),
+  /// Narrows the sweep to specific tickets (R-102b). See
+  /// `unacknowledgedEmergencies` for why this exists; the cron passes nothing.
+  only?: { ticketIds: readonly string[] },
 ): Promise<EscalationSweep> {
-  const open = await unacknowledgedEmergencies(now)
+  const open = await unacknowledgedEmergencies(now, only)
   const due = open.filter((ticket) => shouldEscalate(ticket, now))
   // One query, not one per tick per ticket forever - see
   // alreadyEscalatedTicketIds() for why this is not a `lastEscalatedAt`

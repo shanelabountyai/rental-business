@@ -41,8 +41,18 @@ export default defineConfig({
      * in the test runner, not in the production decision. A test that wants
      * the real driver constructs `StripeBillingProvider` directly with a fake
      * key, which is exactly what stripe-adapter.test.ts already does.
+     *
+     * `BLOB_READ_WRITE_TOKEN` is the same hazard arriving by a different
+     * route, and it arrived on its own (R-100). Creating the Blob store makes
+     * the Vercel CLI write the token straight into `.env.local` - nobody
+     * chooses it - and the storage seam selects durable storage purely on its
+     * presence. Every upload assertion in this suite would then write real
+     * objects into the production Blob store, on somebody's quota, from
+     * whichever laptop last ran `vercel env pull`. Emptied for the same reason
+     * and by the same mechanism: D-14 chose local disk for dev and test
+     * deliberately, and the test runner is where that gets enforced.
      */
-    env: { STRIPE_SECRET_KEY: '' },
+    env: { STRIPE_SECRET_KEY: '', BLOB_READ_WRITE_TOKEN: '' },
     /**
      * 20s, not Vitest's 5s default.
      *

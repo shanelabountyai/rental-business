@@ -126,9 +126,31 @@ export async function emergencyPagingPlan(propertyId: string, now = new Date()) 
  * fired at everybody it can reach - and leaving it in the sweep forever means
  * every tick re-evaluates rows whose answer cannot change.
  */
-export async function unacknowledgedEmergencies(now: Date) {
+export async function unacknowledgedEmergencies(
+  now: Date,
+  /**
+   * Narrows the sweep to specific tickets - the same `only:` shape
+   * `dispatchPendingNotifications` has carried since R-016, and for the same
+   * reason (R-102b).
+   *
+   * A test asserting "my emergency was left alone" does not need to evaluate,
+   * page for, and pay for every other emergency in a shared database. Without
+   * this the cost of every such test grows with the number of unacknowledged
+   * emergencies any spec or e2e run has ever created, which is exactly how
+   * this one came to blow a 30s timeout.
+   *
+   * The five-minute cron passes nothing and sweeps globally, which is what a
+   * cron is for.
+   */
+  only?: { ticketIds: readonly string[] },
+) {
+  // An explicit empty set means "none of mine are open" and must not fall
+  // through to a global sweep.
+  if (only && only.ticketIds.length === 0) return []
+
   return prisma.ticket.findMany({
     where: {
+      ...(only ? { id: { in: [...only.ticketIds] } } : {}),
       priority: 'EMERGENCY',
       acknowledgedAt: null,
       createdAt: { gte: new Date(now.getTime() - 24 * 3_600_000), lte: now },

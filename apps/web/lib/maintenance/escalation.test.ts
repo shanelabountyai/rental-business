@@ -201,12 +201,25 @@ describe('the rota decides who is paged', () => {
   })
 })
 
-describe('sweepEmergencyEscalations', { timeout: 30_000 }, () => {
+// 90s, and the number is measured rather than guessed (R-102b). Four of these
+// tests actually page somebody, and a page is not one write: resolve the rota,
+// then per recipient per channel run a preference lookup, an idempotency
+// check, a Notification insert, a delivery insert and an audit row - then
+// claim and send each delivery, two more round trips apiece. Timed in
+// isolation on a quiet machine they take 25-28 SECONDS each against a pooled
+// Neon connection.
+//
+// The old budget was 30s, so a 28s test had two seconds of headroom and tipped
+// over the moment the rest of the suite ran alongside it. That is not flake;
+// it is a deadline set below the measured cost. R-042 raised the global
+// default from 5s for the same reason - this suite is integration against a
+// remote database, not unit tests.
+describe('sweepEmergencyEscalations', { timeout: 90_000 }, () => {
   it('leaves an emergency alone before 15 minutes are up', async () => {
     const now = new Date()
     const ticket = await makeEmergency(new Date(now.getTime() - 5 * 60_000))
 
-    await sweepEmergencyEscalations(now)
+    await sweepEmergencyEscalations(now, { ticketIds: [ticket.id] })
     expect(await escalationsSentFor(ticket.id)).toHaveLength(0)
   })
 
@@ -219,7 +232,7 @@ describe('sweepEmergencyEscalations', { timeout: 30_000 }, () => {
     })
     const ticket = await makeEmergency(new Date(now.getTime() - 20 * 60_000))
 
-    const result = await sweepEmergencyEscalations(now)
+    const result = await sweepEmergencyEscalations(now, { ticketIds: [ticket.id] })
     expect(result.escalated).toBeGreaterThanOrEqual(1)
 
     const recipients = (await escalationsSentFor(ticket.id)).map((n) => n.recipientId)
@@ -234,7 +247,7 @@ describe('sweepEmergencyEscalations', { timeout: 30_000 }, () => {
     await clearRota()
     const ticket = await makeEmergency(new Date(now.getTime() - 20 * 60_000))
 
-    await sweepEmergencyEscalations(now)
+    await sweepEmergencyEscalations(now, { ticketIds: [ticket.id] })
     const recipients = (await escalationsSentFor(ticket.id)).map((n) => n.recipientId)
     expect(recipients).toContain(onCallId)
     expect(recipients).toContain(backupId)
@@ -248,9 +261,11 @@ describe('sweepEmergencyEscalations', { timeout: 30_000 }, () => {
     await clearRota()
     const ticket = await makeEmergency(new Date(now.getTime() - 20 * 60_000))
 
-    await sweepEmergencyEscalations(now)
+    await sweepEmergencyEscalations(now, { ticketIds: [ticket.id] })
     const first = await escalationsSentFor(ticket.id)
-    const second = await sweepEmergencyEscalations(new Date(now.getTime() + 60_000))
+    const second = await sweepEmergencyEscalations(new Date(now.getTime() + 60_000), {
+      ticketIds: [ticket.id],
+    })
 
     expect(await escalationsSentFor(ticket.id)).toHaveLength(first.length)
     // And it does not report having escalated something it did not send.
@@ -265,7 +280,7 @@ describe('sweepEmergencyEscalations', { timeout: 30_000 }, () => {
       data: { acknowledgedAt: new Date(now.getTime() - 10 * 60_000) },
     })
 
-    await sweepEmergencyEscalations(now)
+    await sweepEmergencyEscalations(now, { ticketIds: [ticket.id] })
     expect(await escalationsSentFor(ticket.id)).toHaveLength(0)
   })
 
@@ -273,7 +288,7 @@ describe('sweepEmergencyEscalations', { timeout: 30_000 }, () => {
     const now = new Date()
     const ticket = await makeEmergency(new Date(now.getTime() - 30 * HOUR))
 
-    await sweepEmergencyEscalations(now)
+    await sweepEmergencyEscalations(now, { ticketIds: [ticket.id] })
     expect(await escalationsSentFor(ticket.id)).toHaveLength(0)
   })
 
@@ -294,6 +309,12 @@ describe('sweepEmergencyEscalations', { timeout: 30_000 }, () => {
     })
     ticketIds.push(routine.id)
 
+    // THE ONE GENUINELY GLOBAL SWEEP in this file - no `only:` - because a
+    // routine ticket being ignored is a claim about what the cron's own
+    // unfiltered query selects, and filtering to the ticket would assert
+    // nothing. It is the counterpart of the notification suite's single
+    // unfiltered dispatch, and it carries the same cost, which is why
+    // `acknowledgeStaleEmergencies()` runs in beforeAll.
     await sweepEmergencyEscalations(now)
     expect(await escalationsSentFor(routine.id)).toHaveLength(0)
   })
