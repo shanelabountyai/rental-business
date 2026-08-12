@@ -29,6 +29,11 @@ and read no cron schedule.
 by nothing, and the two crons declared in it never run. Nothing warns you: an
 unscheduled cron looks exactly like a cron that has not fired yet.
 
+`vercel.json` also **cannot carry a comment.** The schema is closed, so the
+usual JSON `"//"` key fails the deployment during validation — before the build
+starts, with a 0ms build and no build log to read. That is why the reason the
+file lives here is written down in this document and not in the file itself.
+
 **3. Nothing in `next build` generates the Prisma client.** `packages/db/generated/`
 is gitignored, and the local build only works because `npm run db:generate` was
 run by hand once and the output persisted in `node_modules`. A fresh CI checkout
