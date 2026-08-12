@@ -70,7 +70,7 @@ will fail until the two below are set.
 
 | Variable | Consequence of leaving it unset |
 |---|---|
-| `DATABASE_URL` / `DIRECT_URL` | **Build fails.** Waiting on a Neon `prod` branch — see below. |
+| `DATABASE_URL` / `DIRECT_URL` | The build *succeeds* without them — Prisma connects lazily, so nothing fails until a request arrives. Then every page that reads the database 500s. Waiting on a Neon `prod` branch; see below. |
 | `STRIPE_WEBHOOK_SECRET` | **No money can enter the ledger.** The webhook route refuses outright without it, and under D-11 `LedgerEntry` is built *only* from webhooks. Create the endpoint after the first deploy, then set the signing secret here and locally (`stripe listen` gives a separate local one). |
 | `OPERATIONS_PHONE` | The vendor rejection screen shows no number — a dead end with no way out (R-098 built the link; it renders nothing when unset). |
 
