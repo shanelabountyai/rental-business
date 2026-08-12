@@ -1324,7 +1324,7 @@ The owner put a test-mode key in `.env.local`, which closed the caveat standing 
 - Two vitest files failed once under full-suite parallel load and passed on an immediate clean re-run. Noted rather than chased; the 20s global timeout from R-042 already addressed the known cause.
 
 ## R-099 — The missing route boundaries, and the gate gap that hid them
-**Commit:** `TBD`  ·  **Date:** 2026-08-12
+**Commit:** `a60aeda`  ·  **Date:** 2026-08-12
 
 **What it built.** The second tier of the UX and accessibility report (`docs/UX-ACCESSIBILITY-LOG.md`). Two things: the screens people land on when something goes wrong, and the assertion whose absence let the whole R-098 tier ship in the first place.
 
