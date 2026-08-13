@@ -3,6 +3,7 @@ import 'server-only'
 import { billingCycleAnchor, firstPeriodIsPartial } from '@rental/core/billing'
 import { prisma } from '@rental/db'
 import { auditAsSystem } from '@/lib/audit/system.ts'
+import { chargeMoveInProration } from './proration.ts'
 import { getBillingProvider } from './provider.ts'
 
 // Provisioning a lease's billing (D-11, R-034).
@@ -208,6 +209,17 @@ export async function provisionLeaseBilling(
         firstPeriodPartial: partial,
       },
     })
+
+    // The part month, now that there is a customer to bill it to (R-042).
+    // AFTER the audit above, so provisioning is on the record even if the
+    // proration push fails - and never throwing, for the same reason nothing
+    // else in this function does: activation is a tenancy fact and must not
+    // be undone because a billing provider was unreachable.
+    if (partial) {
+      await chargeMoveInProration(lease.id).catch((error: unknown) => {
+        console.error(`[billing] proration failed for lease ${lease.id}`, error)
+      })
+    }
 
     return {
       outcome: 'provisioned',

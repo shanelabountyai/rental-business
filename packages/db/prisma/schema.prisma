@@ -833,6 +833,11 @@ model Lease {
   /// Day of month rent is due, property-local. The Stripe subscription anchor
   /// is computed from this in local time, then expressed to Stripe (D-11).
   rentDueDay     Int         @default(1)
+  /// How a PART month is prorated (R-042, PAY-08). A term of the contract,
+  /// so it lives on the contract: leases genuinely disagree, and the two
+  /// methods differ by real money - a 9-day February move-in on $1,500 is
+  /// $482.14 on actual days and $450.00 on a flat 30-day month.
+  prorationMethod ProrationMethod @default(ACTUAL)
   depositCents   Int         @default(0)
   /// HOW the deposit is held, which `depositCents` alone cannot say (R-041).
   ///
@@ -2562,4 +2567,13 @@ enum DepositArrangement {
   SURETY_BOND
   /// No deposit of any kind.
   NONE
+}
+
+enum ProrationMethod {
+  /// Divide by the days the month actually has. What a tenant checking
+  /// against a calendar expects, and the default.
+  ACTUAL
+  /// Divide by a flat 30, whatever the month. A convention that has to be
+  /// chosen deliberately.
+  BANKER30
 }

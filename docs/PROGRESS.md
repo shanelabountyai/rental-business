@@ -1534,3 +1534,29 @@ Recording a surety bond as "a cash deposit of $0" would be true and useless. The
 - **No deposit movements are recorded yet.** `depositHeldCents` takes movements and nothing produces them, because a deposit is collected through Stripe like any other charge and the projection does not yet distinguish a `DEPOSIT` charge from rent. That wiring belongs with R-035's allocation work; until it lands, the held figure is derivable only from the lease's stated amount.
 - **Escrow and interest are surfaced, not enforced.** The lease page names what the state demands of money being held. Nothing checks that a separate account exists or that interest was paid — neither is knowable from inside this product.
 - **R-071 still owns move-out disposition**, which is where `APPLIED` gets its first real caller.
+
+## R-042 (part) — Prorations: our arithmetic, not Stripe's
+**Commit:** `TBD`  ·  **Date:** 2026-08-13
+
+**What it built.** The move-in proration, computed in core and pushed to Stripe as an invoice item. R-036 provisioned the subscription, recorded `firstPeriodPartial`, and stopped — leaving a comment that R-042 owned the amount "so a later item cannot silently skip it". That comment is why this was findable, and it is now discharged.
+
+**Why the arithmetic is ours (D-12).** Stripe can prorate, and its proration is built for mid-cycle **plan changes**: it divides by the seconds in a billing period and answers *how much of this subscription did they consume*. A move-in on a calendar rent asks a different question — *how many days of this month did they live here* — and a lease answers it with a daily rate the tenant can check against their own calendar. The two agree by coincidence and disagree whenever a month is not 30 days, which is nine months in twelve.
+
+**`prorationMethod` is per lease**, because leases genuinely disagree — `prorateRent` has said so in a comment since R-035. A 9-day February move-in on $1,500 rent is **$482.14** on actual days and **$450.00** on a flat 30-day month. Which applies is a term of the contract, so it lives on the contract. Defaulted to `ACTUAL`, because dividing by the days a month really has is what a tenant checking a calendar expects, and the 30-day convention is the one that should have to be chosen.
+
+**The charge carries its own arithmetic.** PAY-08 requires the method to be visible on the tenant's ledger, so the description reads *"Part month — $1,500.00 × 12/31 days = $580.65"*. A tenant can verify that; "Proration $580.65" has to be taken on trust, and how the number was reached is the first question in every move-in dispute.
+
+**What it decided.**
+- **The divisor is the move-in month's own length**, never the length of the period covered nor the following month's. A tenant moving in on 20 February for a 1 March anchor owes 9/28 — not 9/9, which would charge a whole month, and not 9/31, which would undercharge. There is a test for each wrong divisor.
+- **The range is half-open.** The anchor day belongs to the full month that follows and is separately charged; counting it in both is the classic proration bug.
+- **Null, not zero, when there is nothing to prorate.** A lease starting on the due day owes a whole month, and a zero-amount line on a tenant's very first invoice is noise somebody has to explain.
+- **Null rather than truncating when the first period exceeds a month.** That is not a proration; it is a lease whose first period is longer than a month, and this function has no opinion about that.
+- **Typed `RENT`, not a bespoke charge type.** It *is* rent, for fewer days. A separate type would drop it out of every rent-versus-fees split the product already makes.
+- **The boundary comes from `billingCycleAnchor`** — the same function that told Stripe when to bill — so the two cannot disagree about where the part month ends.
+
+**Bugs found along the way.**
+- **An extra day of rent on every move-in west of UTC.** `Lease.startsOn` is `@db.Date`, which Prisma returns as UTC midnight; I read it with `businessDate(value, propertyZone)`, which converts an instant into a local calendar day and therefore moved it to the *previous* day for every property west of UTC. A 12-day March proration billed as 13. **All ten core unit tests passed while this was true**, because the defect was entirely in how the date was read out of the database — the arithmetic it was fed was correct, just for the wrong dates. CLAUDE.md already warned that `@db.Date` comes back as UTC midnight; it now also says that converting one *through* a zone is the same bug wearing a different hat, and names the two readers: `utcToBusinessDate` for a calendar day, `businessDate(instant, zone)` for a real timestamp.
+
+**What it left behind.**
+- **R-042 is not finished.** This is the proration half. Still outstanding: **pet rent and flat utility fees as additional subscription items**, and **RUBS-style allocation with the underlying bill attached and the math documented per bill** (config-gated where a jurisdiction restricts it). `allocate()` already exists in core, tested, and distributes remainder cents to the largest fractional shares so the parts sum exactly — it has no caller yet.
+- **Move-out proration is not built.** `moveInProration` is named for what it does. A move-out mid-month is the mirror image and belongs with R-071's disposition work, where the final balance is settled.

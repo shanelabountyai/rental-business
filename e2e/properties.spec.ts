@@ -561,13 +561,19 @@ test.describe('scoped visibility', () => {
 
 test.describe('accessibility', () => {
   for (const path of ['/properties', '/properties/new', '/properties/entities/new']) {
-    // 120s, not the suite's 60s default. `/properties/new` renders a
+    // 240s, not the suite's 60s default. `/properties/new` renders a
     // fifty-option state select and a timezone datalist, and axe runs its
-    // whole rule set over every option - the scan alone takes about 37
-    // seconds on an idle machine and comfortably exceeds 60 under five
-    // parallel workers. It failed a full-suite run twice in a row while
-    // passing alone, which is the signature of a slow check rather than a
-    // broken one.
+    // whole rule set over every option.
+    //
+    // THE NUMBER HAS BEEN MEASURED TWICE AND GREW BETWEEN THEM. It was 120s
+    // on a scan timed at ~37 seconds; the scan now measures 84 seconds in
+    // near-isolation, and the budget also has to cover creating a staff user,
+    // signing in and navigating - so under five parallel workers the whole
+    // test blew 120s and failed a full-suite run. Raised to 240 rather than
+    // to the next number that would have passed today, because a ceiling
+    // sized to the current measurement is the mistake this repo has now made
+    // four times (R-102b, the R-040e follow-up, the soft-delete poll, the CI
+    // job).
     //
     // Raising the budget rather than narrowing the scan: scoping axe with
     // `.include()` would make it fast by not looking at the thing most likely
@@ -576,8 +582,8 @@ test.describe('accessibility', () => {
     test(`${path} has no detectable accessibility violations`, async ({
       page,
     }) => {
-      // See the note above: this scan needs more than the suite's 60s.
-      test.setTimeout(120_000)
+      // See the note above: this scan needs far more than the suite's 60s.
+      test.setTimeout(240_000)
       const staff = await createStaff('owner')
       await signIn(page, staff.email)
       await page.goto(path)
