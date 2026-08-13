@@ -13,6 +13,20 @@ jobs:
   verify:
     runs-on: ubuntu-latest
 
+    # 45 minutes, and the number is measured: successful runs of this job have
+    # taken 28-31 minutes, which is most of a 20-minute e2e sweep plus install,
+    # migrations, build and Lighthouse.
+    #
+    # IT EXISTS BECAUSE A JOB WITHOUT ONE INHERITS GITHUB'S 6-HOUR MAXIMUM, and
+    # one run did exactly that - 6h00m24s before being cancelled. On a private
+    # repo those minutes come out of the account's allowance, so a single hung
+    # run costs more than a dozen healthy ones and can exhaust the plan; every
+    # push after it then refuses to start with a billing error that looks
+    # nothing like the cause. Capping the damage is worth more than the small
+    # chance of cutting off a legitimately slow run, which fails loudly and can
+    # be re-run.
+    timeout-minutes: 45
+
     # Throwaway Postgres so migrations are proven to apply from scratch and any
     # raw-SQL constraints in them are exercised for real.
     services:
