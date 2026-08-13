@@ -834,6 +834,17 @@ model Lease {
   /// is computed from this in local time, then expressed to Stripe (D-11).
   rentDueDay     Int         @default(1)
   depositCents   Int         @default(0)
+  /// HOW the deposit is held, which `depositCents` alone cannot say (R-041).
+  ///
+  /// CASH is a liability - the tenant's money, held on trust, returnable
+  /// minus what can lawfully be proved, and in several states escrowed and
+  /// interest-bearing (D-4). SURETY_BOND means the tenant paid a premium to a
+  /// third party and this landlord holds NOTHING. NONE means no deposit.
+  ///
+  /// A database CHECK enforces that anything other than CASH holds zero: the
+  /// contradiction is what sends somebody hunting at move-out for money that
+  /// was never collected.
+  depositArrangement DepositArrangement @default(CASH)
   /// What THIS LEASE provides for if a payment is returned (R-039a, PAY-02).
   ///
   /// Null means the lease is silent, which means no fee - not zero, and
@@ -2541,4 +2552,14 @@ enum SmsOptOutSource {
   /// relatives. This is the one that catches an opt-out sent to a carrier
   /// that never forwarded the keyword to us, which is the common case.
   CARRIER_CALLBACK
+}
+
+enum DepositArrangement {
+  /// Cash held on trust. The liability case.
+  CASH
+  /// A surety bond or deposit-replacement product: the tenant pays a premium
+  /// to a third party and the landlord holds nothing.
+  SURETY_BOND
+  /// No deposit of any kind.
+  NONE
 }

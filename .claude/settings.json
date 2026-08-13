@@ -17,7 +17,9 @@
       "Bash(sed -n '/^model Task /,/^}/p' packages/db/prisma/schema.prisma)",
       "Bash(awk '/SENDS even when the two questions go unanswered/,/Error Context/' /tmp/e2eB.log)",
       "Bash(sort -t'\\(' -k2 -rn)",
-      "Bash(gh workflow *)"
+      "Bash(gh workflow *)",
+      "Bash(sed -n '/^enum ChargeType/,/^}/p' packages/db/prisma/schema.prisma)",
+      "Bash(sed -n '/^enum LedgerEntryType/,/^}/p' packages/db/prisma/schema.prisma)"
     ],
     "additionalDirectories": [
       "/Users/shanelabounty/Documents/Claude/Projects/rental business/packages/core/tasks"

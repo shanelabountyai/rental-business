@@ -9,7 +9,7 @@ import type { ResolvedScope } from '@/lib/scope/current-scope.ts'
 // staff read in this repo.
 
 const leaseInclude = {
-  property: { select: { id: true, name: true, legalEntityId: true, timezone: true } },
+  property: { select: { id: true, name: true, legalEntityId: true, timezone: true, state: true, county: true } },
   unit: { select: { id: true, name: true } },
   leaseTenants: {
     orderBy: { isPrimary: 'desc' },

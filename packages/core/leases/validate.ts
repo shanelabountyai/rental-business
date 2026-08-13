@@ -20,6 +20,9 @@ export interface LeaseInput {
   /// is a meaningful answer - the lease is silent, so there is no fee - and
   /// is NOT the same as "0", which is a lease that expressly charges nothing.
   nsfFeeDollars?: string | null
+  /// How the deposit is held (R-041). Absent is read as CASH, which is what
+  /// every lease created before the field existed is.
+  depositArrangement?: string | null
   rentDueDay: string
   isMonthToMonth: boolean
   mtmRentDollars?: string | null
@@ -81,6 +84,26 @@ export function validateLease(input: LeaseInput): Violation[] {
   const depositCents = dollarsToCents(input.depositDollars)
   if (input.depositDollars?.trim() && (depositCents == null || depositCents < 0)) {
     violations.push({ field: 'depositDollars', message: 'Enter a deposit of $0 or more.' })
+  }
+
+  // The arrangement and the amount have to agree (R-041). The statutory cap
+  // itself is checked where the jurisdiction rule is available - this
+  // function is pure and has no property to look one up for - but the
+  // contradiction between "a surety bond" and "and also $1,500 of the
+  // tenant's cash" needs no rule to spot, and it is the one that sends
+  // somebody hunting at move-out for money nobody ever collected.
+  const arrangement = input.depositArrangement ?? 'CASH'
+  if (arrangement !== 'CASH' && (depositCents ?? 0) > 0) {
+    violations.push({
+      field: 'depositDollars',
+      message:
+        arrangement === 'SURETY_BOND'
+          ? 'This lease uses a surety bond, so no cash deposit is held. Set the amount to zero.'
+          : 'This lease holds no deposit. Set the amount to zero.',
+    })
+  }
+  if (!['CASH', 'SURETY_BOND', 'NONE'].includes(arrangement)) {
+    violations.push({ field: 'depositArrangement', message: 'Choose how the deposit is held.' })
   }
 
   const nsfFeeCents = dollarsToCents(input.nsfFeeDollars)

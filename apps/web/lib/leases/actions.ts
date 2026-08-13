@@ -11,6 +11,7 @@ import {
   validateGuarantor,
   validateLease,
 } from '@rental/core/leases'
+import { validateDepositAmount } from '@rental/core/ledger'
 import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
@@ -18,6 +19,7 @@ import { audit } from '@/lib/audit/index.ts'
 import { syncLease } from '@/lib/billing/lifecycle.ts'
 import { provisionLeaseBilling } from '@/lib/billing/provision.ts'
 import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
+import { rulesFor } from '@/lib/jurisdiction/queries.ts'
 import { raiseIntakeTasks } from './intake.ts'
 
 // Writes for lease records (LEASE-06, RISK-08, R-033). Same shape as every
@@ -102,11 +104,15 @@ export async function createLease(
     rentDollars: str(formData, 'rentDollars'),
     depositDollars: str(formData, 'depositDollars') || null,
     nsfFeeDollars: str(formData, 'nsfFeeDollars') || null,
+    depositArrangement: str(formData, 'depositArrangement') || 'CASH',
     rentDueDay: str(formData, 'rentDueDay') || '1',
     isMonthToMonth,
     mtmRentDollars: str(formData, 'mtmRentDollars') || null,
   }
-  const violations = validateLease(input)
+  const violations = [
+    ...validateLease(input),
+    ...(await depositCapViolations(unit.propertyId, input)),
+  ]
   if (violations.length > 0) return violationsToState(violations)
 
   // An inherited tenancy's deposit position starts as UNKNOWN, never as the
@@ -132,6 +138,7 @@ export async function createLease(
         // expressly charges nothing, which is a different sentence and one
         // no landlord has written here. See Lease.nsfFeeCents (R-039a).
         nsfFeeCents: leaseCents(input.nsfFeeDollars),
+        depositArrangement: input.depositArrangement as 'CASH' | 'SURETY_BOND' | 'NONE',
         rentDueDay: Number(input.rentDueDay),
         isMonthToMonth,
         mtmRentCents: leaseCents(input.mtmRentDollars),
@@ -185,6 +192,46 @@ function readUtilities(formData: FormData): Record<string, string> {
   return matrix
 }
 
+/**
+ * The statutory deposit cap, checked where the jurisdiction rule can be read
+ * (R-041, PAY-07; D-4).
+ *
+ * Separate from `validateLease`, which is pure and has no property to look a
+ * rule up for. Checked at the point somebody TYPES the amount, not at
+ * move-out: an over-collected deposit is a violation on the day it is taken,
+ * and in several states the remedy runs to multiples of the excess, so
+ * finding out two years later - when the tenant's lawyer does - is the
+ * expensive way round.
+ *
+ * An unconfigured state yields no cap and therefore no violation, exactly as
+ * late fees and NSF fees treat it: D-4's point is that a statutory number
+ * comes from configuration, and inventing one for a market nobody has set up
+ * is how a product enforces a rule that does not exist.
+ */
+async function depositCapViolations(
+  propertyId: string,
+  input: { depositDollars?: string | null; rentDollars: string; depositArrangement?: string | null },
+): Promise<{ field: string; message: string }[]> {
+  const property = await prisma.property.findUnique({
+    where: { id: propertyId },
+    select: { state: true, county: true },
+  })
+  if (!property) return []
+
+  const rule = await rulesFor(
+    { state: property.state, county: property.county },
+    new Date(),
+  ).catch(() => null)
+  if (!rule) return []
+
+  return validateDepositAmount({
+    depositCents: leaseCents(input.depositDollars) ?? 0,
+    rentCents: leaseCents(input.rentDollars) ?? 0,
+    arrangement: (input.depositArrangement ?? 'CASH') as 'CASH' | 'SURETY_BOND' | 'NONE',
+    rule,
+  })
+}
+
 export async function updateLeaseTerms(
   leaseId: string,
   _previous: LeaseFormState,
@@ -200,11 +247,15 @@ export async function updateLeaseTerms(
     rentDollars: str(formData, 'rentDollars'),
     depositDollars: str(formData, 'depositDollars') || null,
     nsfFeeDollars: str(formData, 'nsfFeeDollars') || null,
+    depositArrangement: str(formData, 'depositArrangement') || 'CASH',
     rentDueDay: str(formData, 'rentDueDay') || '1',
     isMonthToMonth,
     mtmRentDollars: str(formData, 'mtmRentDollars') || null,
   }
-  const violations = validateLease(input)
+  const violations = [
+    ...validateLease(input),
+    ...(await depositCapViolations(lease.propertyId, input)),
+  ]
   if (violations.length > 0) return violationsToState(violations)
 
   const before = {
@@ -213,6 +264,7 @@ export async function updateLeaseTerms(
     rentCents: lease.rentCents,
     depositCents: lease.depositCents,
     nsfFeeCents: lease.nsfFeeCents,
+    depositArrangement: lease.depositArrangement,
     rentDueDay: lease.rentDueDay,
     isMonthToMonth: lease.isMonthToMonth,
     mtmRentCents: lease.mtmRentCents,
@@ -223,6 +275,7 @@ export async function updateLeaseTerms(
     rentCents: leaseCents(input.rentDollars)!,
     depositCents: leaseCents(input.depositDollars) ?? 0,
     nsfFeeCents: leaseCents(input.nsfFeeDollars),
+    depositArrangement: input.depositArrangement as 'CASH' | 'SURETY_BOND' | 'NONE',
     rentDueDay: Number(input.rentDueDay),
     isMonthToMonth,
     mtmRentCents: leaseCents(input.mtmRentDollars),

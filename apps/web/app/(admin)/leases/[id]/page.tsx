@@ -6,6 +6,7 @@ import {
   leaseStatusLabel,
   leaseTransition,
 } from '@rental/core/leases'
+import { depositObligations } from '@rental/core/ledger'
 import { formatCents } from '@rental/core/money'
 import { businessDate } from '@rental/core/scheduling'
 import Link from 'next/link'
@@ -19,6 +20,7 @@ import { FeesPanel } from '@/components/leases/fees-panel.tsx'
 import { PartiesPanel } from '@/components/leases/parties-panel.tsx'
 import { OfflinePaymentForm } from '@/components/payments/offline-payment-form.tsx'
 import { actorCan, actorDecision, propertyResource, requireScope } from '@/lib/auth/guard.ts'
+import { rulesFor } from '@/lib/jurisdiction/queries.ts'
 import {
   addGuarantor,
   addLeaseTenant,
@@ -78,6 +80,18 @@ export default async function LeaseDetailPage({
   // Out of scope and does not exist are indistinguishable - the same call
   // every other detail page in this product makes.
   if (!lease) notFound()
+
+  // What this state demands of money held on trust (D-4, R-041). Read from
+  // the versioned rule rather than hardcoded, and empty for a state nobody
+  // has configured - the same posture late fees, NSF fees and the deposit cap
+  // all take.
+  const depositRule = await rulesFor(
+    { state: lease.property.state, county: lease.property.county },
+    new Date(),
+  ).catch(() => null)
+  const depositRules = depositRule
+    ? depositObligations(depositRule, lease.depositArrangement)
+    : []
 
   const canWrite = await actorCan('lease.write', propertyResource(lease.property))
   // Recording money that arrived off the rails is the most forgeable action
@@ -174,13 +188,37 @@ export default async function LeaseDetailPage({
         </dd>
         <dt className="text-muted-foreground">Deposit</dt>
         <dd className="col-span-1 sm:col-span-2">
-          {formatCents(lease.depositCents)}
+          {/* SAYS WHOSE MONEY IT IS, not just how much (R-041, PAY-07). A
+              security deposit is the tenant's, held on trust and owed back
+              minus what can lawfully be proved - so a screen that shows it
+              beside the rent as a bare number invites treating it as
+              revenue, which is the mistake several states wrote escrow laws
+              to prevent. */}
+          {lease.depositArrangement === 'CASH' ? (
+            <>
+              {formatCents(lease.depositCents)}
+              {lease.depositCents > 0 && (
+                <span className="text-muted-foreground"> held on trust — not income</span>
+              )}
+            </>
+          ) : lease.depositArrangement === 'SURETY_BOND' ? (
+            'Surety bond — no cash held'
+          ) : (
+            'None'
+          )}
           {lease.origin === 'INHERITED' && (
             <>
               {' · '}
               {depositTransferLabel(lease.depositTransferStatus)}
               {lease.depositTransferNote && ` (${lease.depositTransferNote})`}
             </>
+          )}
+          {depositRules.length > 0 && (
+            <ul className="text-muted-foreground mt-1 list-disc pl-5 text-sm">
+              {depositRules.map((obligation) => (
+                <li key={obligation}>{obligation}</li>
+              ))}
+            </ul>
           )}
         </dd>
         {Object.keys(utilities).length > 0 && (
@@ -374,6 +412,7 @@ export default async function LeaseDetailPage({
               endsOn: lease.endsOn?.toISOString().slice(0, 10),
               rentDollars: String(lease.rentCents / 100),
               depositDollars: String(lease.depositCents / 100),
+              depositArrangement: lease.depositArrangement,
               // Undefined, not "0", when the lease is silent - re-rendering a
               // null as 0 would turn "no fee" into "expressly charges
               // nothing" on the next save (R-039a).

@@ -52,6 +52,7 @@ export interface LeaseDefaults {
   rentDollars?: string
   depositDollars?: string
   nsfFeeDollars?: string
+  depositArrangement?: string
   rentDueDay?: string
   isMonthToMonth?: boolean
   mtmRentDollars?: string
@@ -198,6 +199,24 @@ export function LeaseForm({
           idPrefix="lease"
           defaultValue={defaults?.rentDollars}
           error={errors.rentDollars}
+        />
+        {/* THE ARRANGEMENT SITS BESIDE THE AMOUNT, not in some other section,
+            because the two contradict each other in a way that only shows up
+            at move-out: a surety bond recorded with a cash amount sends
+            somebody hunting for money nobody ever collected, and a cash
+            deposit recorded as a bond loses a liability the owner is holding.
+            Both the form and a database CHECK refuse the combination. */}
+        <SelectField
+          label="Deposit type"
+          name="depositArrangement"
+          idPrefix="lease"
+          defaultValue={defaults?.depositArrangement ?? 'CASH'}
+          error={errors.depositArrangement}
+          options={[
+            { value: 'CASH', label: 'Cash deposit held' },
+            { value: 'SURETY_BOND', label: 'Surety bond — no cash held' },
+            { value: 'NONE', label: 'No deposit' },
+          ]}
         />
         <TextField
           label="Deposit held (dollars)"

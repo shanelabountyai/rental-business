@@ -1504,3 +1504,33 @@ Dropped rather than annotated, because it bought nothing either way: `phone` is 
 
 **The wider lesson, now in CLAUDE.md.** I ran the four-part gate before every commit this session and never once looked at CI. It does two things the local gate structurally cannot: it applies every migration to a **throwaway Postgres from scratch**, and it runs the drift check. Locally, migrations are only ever applied incrementally to a branch that already has data — so a migration that is out of order, that fails on an empty database, or that creates something Prisma cannot model is invisible here. Three hand-written migrations landed today; one of them had already needed splitting after being edited post-application. The drift command is now written into CLAUDE.md to be run before pushing a schema change.
 
+
+## R-041 — Deposits as liabilities
+**Commit:** `TBD`  ·  **Date:** 2026-08-13
+
+**What it built.** The one idea the whole item exists to enforce: **a security deposit is not income.** It is the tenant's money, held on trust, owed back minus whatever can lawfully be proved at move-out. A product that folds it into revenue reports a number the owner has not earned and — worse — invites spending money that has to be returned. Several states wrote escrow laws for exactly that reason.
+
+**What was there before.** `Lease.depositCents` was a bare integer stating an intention. `ChargeType.DEPOSIT` existed in the enum and nothing created one. Nothing recorded whether a deposit was ever actually collected, nothing distinguished it from rent, and nothing checked it against a statutory ceiling.
+
+**`DepositArrangement`, because the amount cannot say how it is held.** Three cases that behave completely differently at move-out:
+- **CASH** — a liability, returnable, and in several states escrowed and interest-bearing.
+- **SURETY_BOND** — the tenant paid a premium to a third party and this landlord holds **nothing**. Nothing to escrow, no interest, nothing to return.
+- **NONE** — no deposit at all.
+
+Recording a surety bond as "a cash deposit of $0" would be true and useless. The failure it prevents runs in both directions: a tenant chased to collect a refund nobody owes them, or an owner believing they hold money that was never taken. A **database CHECK** enforces that anything other than CASH holds zero, because the same contradiction reached by an import or a fixture causes the same confusion as one typed into the form.
+
+**The statutory cap is checked when somebody types the amount, not at move-out.** Over-collecting is a violation on the day it is taken and in several states the remedy runs to multiples of the excess, so discovering it two years later — when the tenant's lawyer does — is the expensive way round. `depositCapCents` reads `depositMaxBps` from the versioned rule (D-4) and **rounds down, because a cap rounded up is a cap exceeded**.
+
+**Null is not zero, and the distinction is load-bearing.** A state with no configured ceiling yields `null`, which means "no statutory cap" — Texas, for one. Reading that as `0` would block every lease in Texas; reading `0` as `null` would permit an unlawful deposit wherever a state genuinely bans one. There is a test for each direction.
+
+**What it decided.**
+- **The held amount is modelled as a liability now, before there is any income reporting to keep it out of.** There is no revenue total or CSV export in the product yet, so "separate from income everywhere" currently has nothing to be separate *from*. `depositHeldCents` exists anyway, so R-050's dashboard and any future export get a function that already answers "how much of this is not ours" rather than a column they must remember about.
+- **Held is what was received, never `Lease.depositCents`.** That column is what the lease says *should* be collected — an intention. The two differ for every lease where the tenant paid late, partially, or moved out.
+- **`RETURNED` and `APPLIED` are distinct movements** even though both reduce the liability, because only one of them becomes income. R-071 owns the disposition that decides which.
+- **Obligations are returned as a list, not two booleans**, so a screen can render them without knowing which rules exist and a state that adds a third does not need every caller edited.
+- **Defaulted to CASH** on the existing table: the column did not exist, so nobody could have chosen otherwise, and every lease carrying a non-zero deposit today is a cash deposit by construction.
+
+**What it left behind.**
+- **No deposit movements are recorded yet.** `depositHeldCents` takes movements and nothing produces them, because a deposit is collected through Stripe like any other charge and the projection does not yet distinguish a `DEPOSIT` charge from rent. That wiring belongs with R-035's allocation work; until it lands, the held figure is derivable only from the lease's stated amount.
+- **Escrow and interest are surfaced, not enforced.** The lease page names what the state demands of money being held. Nothing checks that a separate account exists or that interest was paid — neither is knowable from inside this product.
+- **R-071 still owns move-out disposition**, which is where `APPLIED` gets its first real caller.

@@ -234,6 +234,10 @@ test.describe('creating a tenancy', () => {
     // creeping into the action would start charging a fee on every lease
     // signed before the field existed.
     expect(lease.nsfFeeCents).toBeNull()
+    // Every lease created before the deposit type existed is a cash deposit
+    // by construction - nobody could have chosen otherwise - so that is what
+    // the column defaults to (R-041).
+    expect(lease.depositArrangement).toBe('CASH')
 
     // Nobody is on it yet, so activation is not even offered - the machine
     // decides what the UI shows, rather than a button appearing and then
@@ -667,6 +671,85 @@ test.describe('the subscription lifecycle (R-036, D-11)', () => {
 
     await page.getByRole('button', { name: 'Re-sync with Stripe' }).click()
     await expect(page.getByText(/Already in step/)).toBeVisible()
+  })
+})
+
+test.describe('deposits as liabilities (PAY-07, R-041)', () => {
+  test('REFUSES a surety bond that also holds cash', async ({ page }) => {
+    // The failure this prevents happens at move-out, in both directions: a
+    // tenant chased to collect a refund nobody owes them, or an owner
+    // believing they hold money that was never taken. Refused by the form AND
+    // by a database CHECK, because the same contradiction reached by an
+    // import or a fixture causes the same confusion.
+    const seed = await seedUnit()
+    const staff = await createStaff()
+    await signIn(page, staff.email)
+
+    await page.goto('/leases/new')
+    await page
+      .getByLabel('Unit')
+      .selectOption({ label: `${seed.property.name} — ${seed.unit.name}` })
+    await page.getByLabel('Starts on').fill('2026-03-01')
+    await page.getByRole('textbox', { name: 'Ends on' }).fill('2027-02-28')
+    await page.getByLabel('Monthly rent (dollars)').fill('1650')
+    await page.getByLabel('Deposit type').selectOption('SURETY_BOND')
+    await page.getByLabel('Deposit held (dollars)').fill('1650')
+    await page.getByRole('button', { name: 'Create draft lease' }).click()
+
+    await expect(page.getByText(/surety bond, so no cash deposit is held/i)).toBeVisible()
+    // And nothing was written.
+    expect(await prisma.lease.count({ where: { unitId: seed.unit.id } })).toBe(0)
+  })
+
+  test('records a surety bond as no cash held, and says so on the lease', async ({ page }) => {
+    const seed = await seedUnit()
+    const staff = await createStaff()
+    await signIn(page, staff.email)
+
+    await page.goto('/leases/new')
+    await page
+      .getByLabel('Unit')
+      .selectOption({ label: `${seed.property.name} — ${seed.unit.name}` })
+    await page.getByLabel('Starts on').fill('2026-03-01')
+    await page.getByRole('textbox', { name: 'Ends on' }).fill('2027-02-28')
+    await page.getByLabel('Monthly rent (dollars)').fill('1650')
+    await page.getByLabel('Deposit type').selectOption('SURETY_BOND')
+    await page.getByLabel('Deposit held (dollars)').fill('0')
+    await page.getByRole('button', { name: 'Create draft lease' }).click()
+
+    const leaseId = await capturedLeaseId(page)
+    const lease = await leaseRow(leaseId)
+    expect(lease.depositArrangement).toBe('SURETY_BOND')
+    expect(lease.depositCents).toBe(0)
+
+    // Scoped to the description list, not the page: the same words are the
+    // label of the <option> in the edit form further down, and a bare
+    // getByText matches both. The claim being made is about what the lease
+    // SUMMARY says, so say that.
+    await expect(
+      page.locator('dd').filter({ hasText: 'Surety bond — no cash held' }),
+    ).toBeVisible()
+  })
+
+  test('a cash deposit is labelled as held on trust, NOT as income', async ({ page }) => {
+    // A deposit shown beside the rent as a bare number invites treating it as
+    // revenue, which is the mistake several states wrote escrow laws about.
+    const seed = await seedUnit()
+    const staff = await createStaff()
+    await signIn(page, staff.email)
+
+    await page.goto('/leases/new')
+    await page
+      .getByLabel('Unit')
+      .selectOption({ label: `${seed.property.name} — ${seed.unit.name}` })
+    await page.getByLabel('Starts on').fill('2026-03-01')
+    await page.getByRole('textbox', { name: 'Ends on' }).fill('2027-02-28')
+    await page.getByLabel('Monthly rent (dollars)').fill('1650')
+    await page.getByLabel('Deposit held (dollars)').fill('1650')
+    await page.getByRole('button', { name: 'Create draft lease' }).click()
+
+    await capturedLeaseId(page)
+    await expect(page.getByText(/held on trust — not income/)).toBeVisible()
   })
 })
 
