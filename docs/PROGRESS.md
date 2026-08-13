@@ -1506,7 +1506,7 @@ Dropped rather than annotated, because it bought nothing either way: `phone` is 
 
 
 ## R-041 — Deposits as liabilities
-**Commit:** `TBD`  ·  **Date:** 2026-08-13
+**Commit:** `fec1143`  ·  **Date:** 2026-08-13
 
 **What it built.** The one idea the whole item exists to enforce: **a security deposit is not income.** It is the tenant's money, held on trust, owed back minus whatever can lawfully be proved at move-out. A product that folds it into revenue reports a number the owner has not earned and — worse — invites spending money that has to be returned. Several states wrote escrow laws for exactly that reason.
 
