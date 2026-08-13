@@ -51,6 +51,7 @@ export interface LeaseDefaults {
   endsOn?: string
   rentDollars?: string
   depositDollars?: string
+  nsfFeeDollars?: string
   rentDueDay?: string
   isMonthToMonth?: boolean
   mtmRentDollars?: string
@@ -208,6 +209,27 @@ export function LeaseForm({
           idPrefix="lease"
           defaultValue={defaults?.depositDollars}
           error={errors.depositDollars}
+        />
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        {/* BLANK IS THE DEFAULT AND BLANK MEANS NO FEE (R-039a). The hint
+            says so out loud because the alternative reading - "they left it
+            empty so charge the usual" - is how a product charges a fee the
+            tenant never agreed to, which is exactly when it stops being
+            enforceable. A state that forbids or caps the fee overrides
+            whatever is typed here (D-4), without anybody editing a lease. */}
+        <TextField
+          label="Returned-payment fee (dollars)"
+          name="nsfFeeDollars"
+          type="number"
+          min="0"
+          step="0.01"
+          inputMode="decimal"
+          idPrefix="lease"
+          hint="Only if the lease says so. Leave blank for no fee — the state's own cap still applies."
+          defaultValue={defaults?.nsfFeeDollars}
+          error={errors.nsfFeeDollars}
         />
       </div>
 

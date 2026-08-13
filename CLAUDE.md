@@ -34,6 +34,13 @@ npm run lint && npm run typecheck && npm test && PORT=3100 npm run test:e2e
 ```
 
 - **`PORT=3100` is not optional.** Another project's dev server owns `:3000`; a default-port e2e run kills it and then fails confusingly.
+- **CI runs checks the local gate cannot, and it is not optional to look at it.** `.github/workflows/ci.yml` applies every migration to a **throwaway Postgres from scratch** and then runs `prisma migrate diff --exit-code` for schema drift. Locally, migrations are only ever applied incrementally to a branch that already has data, so neither check can happen here. A hand-written migration that is out of order, that does not apply to an empty database, or that creates something Prisma cannot express is invisible until CI says so — which is exactly how a partial index sat in `SmsOptOut` reporting drift on every run. Run the drift check before pushing a schema change:
+  ```
+  npx dotenv -e .env.local -- npx prisma migrate diff \
+    --from-schema-datasource packages/db/prisma/schema.prisma \
+    --to-schema-datamodel packages/db/prisma/schema.prisma --exit-code
+  ```
+- **Never edit a migration that has already been applied.** Prisma records applied migrations by checksum, so editing the file leaves the new SQL unrun while `migrate deploy` reports nothing pending — the column exists in `schema.prisma` and not in the database. Add a new migration instead (R-039a hit this).
 - **`npm run build` is a distinct check.** `typecheck` and `vitest` both miss the Next.js boundary rules below. Run it whenever a `'use server'` module or a Server→Client prop changed.
 - A stalled run leaves a dev server behind: `pkill -f playwright; lsof -ti :3100 | xargs -r kill -9`.
 - **Read the e2e summary, not the tail of it.** `0 failed` and exit 0 are not the gate — the gate is `passed + skipped + flaky` reconciling against `npx playwright test --list` (`Total: N tests`). Piping the run through `tail` shows you the failures and hides how much actually ran, so a partial sweep and a full one look identical. `retries: 1` means a test that fails once and passes is reported as **flaky** and counted separately; a run with flaky tests still exits 0.

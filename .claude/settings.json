@@ -16,7 +16,8 @@
       "Bash(sed -n '/^enum Priority/,/^}/p' packages/db/prisma/schema.prisma)",
       "Bash(sed -n '/^model Task /,/^}/p' packages/db/prisma/schema.prisma)",
       "Bash(awk '/SENDS even when the two questions go unanswered/,/Error Context/' /tmp/e2eB.log)",
-      "Bash(sort -t'\\(' -k2 -rn)"
+      "Bash(sort -t'\\(' -k2 -rn)",
+      "Bash(gh workflow *)"
     ],
     "additionalDirectories": [
       "/Users/shanelabounty/Documents/Claude/Projects/rental business/packages/core/tasks"

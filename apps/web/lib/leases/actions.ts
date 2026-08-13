@@ -101,6 +101,7 @@ export async function createLease(
     endsOn: str(formData, 'endsOn') || null,
     rentDollars: str(formData, 'rentDollars'),
     depositDollars: str(formData, 'depositDollars') || null,
+    nsfFeeDollars: str(formData, 'nsfFeeDollars') || null,
     rentDueDay: str(formData, 'rentDueDay') || '1',
     isMonthToMonth,
     mtmRentDollars: str(formData, 'mtmRentDollars') || null,
@@ -126,6 +127,11 @@ export async function createLease(
         endsOn: input.endsOn ? parseLeaseDate(input.endsOn) : null,
         rentCents: leaseCents(input.rentDollars)!,
         depositCents: leaseCents(input.depositDollars) ?? 0,
+        // NOT `?? 0`, unlike the deposit. Blank means the lease is silent,
+        // which means no fee at all - and `0` would mean a lease that
+        // expressly charges nothing, which is a different sentence and one
+        // no landlord has written here. See Lease.nsfFeeCents (R-039a).
+        nsfFeeCents: leaseCents(input.nsfFeeDollars),
         rentDueDay: Number(input.rentDueDay),
         isMonthToMonth,
         mtmRentCents: leaseCents(input.mtmRentDollars),
@@ -193,6 +199,7 @@ export async function updateLeaseTerms(
     endsOn: str(formData, 'endsOn') || null,
     rentDollars: str(formData, 'rentDollars'),
     depositDollars: str(formData, 'depositDollars') || null,
+    nsfFeeDollars: str(formData, 'nsfFeeDollars') || null,
     rentDueDay: str(formData, 'rentDueDay') || '1',
     isMonthToMonth,
     mtmRentDollars: str(formData, 'mtmRentDollars') || null,
@@ -205,6 +212,7 @@ export async function updateLeaseTerms(
     endsOn: lease.endsOn?.toISOString() ?? null,
     rentCents: lease.rentCents,
     depositCents: lease.depositCents,
+    nsfFeeCents: lease.nsfFeeCents,
     rentDueDay: lease.rentDueDay,
     isMonthToMonth: lease.isMonthToMonth,
     mtmRentCents: lease.mtmRentCents,
@@ -214,6 +222,7 @@ export async function updateLeaseTerms(
     endsOn: input.endsOn ? parseLeaseDate(input.endsOn) : null,
     rentCents: leaseCents(input.rentDollars)!,
     depositCents: leaseCents(input.depositDollars) ?? 0,
+    nsfFeeCents: leaseCents(input.nsfFeeDollars),
     rentDueDay: Number(input.rentDueDay),
     isMonthToMonth,
     mtmRentCents: leaseCents(input.mtmRentDollars),

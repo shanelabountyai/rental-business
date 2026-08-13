@@ -1,0 +1,20 @@
+-- R-040e follow-up: drop a partial index that was both redundant and invisible
+-- to Prisma.
+--
+-- TWO THINGS WRONG WITH IT, and either alone would justify this.
+--
+-- It caused permanent schema drift. The model declared `@@index([phone])`
+-- while the migration created `... ON "SmsOptOut"("phone") WHERE "revokedAt"
+-- IS NULL`. Prisma cannot express a partial index, so `migrate diff` saw a
+-- declared index the database did not have and reported drift on every run
+-- for ever. CLAUDE.md says this in as many words - "triggers, partial indexes
+-- and backfills do not survive a generated diff" - and the way to honour that
+-- is to keep such an index OUT of the Prisma model, not to declare it and
+-- hope.
+--
+-- And it bought nothing. `SmsOptOut_phone_key` is already a UNIQUE index on
+-- the same column, and there is exactly one row per phone number, so a lookup
+-- by phone was never going to touch this. `WHERE revokedAt IS NULL` filters a
+-- single already-located row. It was speculative optimisation on a table with
+-- one row per number.
+DROP INDEX IF EXISTS "SmsOptOut_active";

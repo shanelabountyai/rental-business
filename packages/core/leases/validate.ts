@@ -16,6 +16,10 @@ export interface LeaseInput {
   endsOn?: string | null
   rentDollars: string
   depositDollars?: string | null
+  /// What this lease provides for if a payment is returned (R-039a). Blank
+  /// is a meaningful answer - the lease is silent, so there is no fee - and
+  /// is NOT the same as "0", which is a lease that expressly charges nothing.
+  nsfFeeDollars?: string | null
   rentDueDay: string
   isMonthToMonth: boolean
   mtmRentDollars?: string | null
@@ -77,6 +81,14 @@ export function validateLease(input: LeaseInput): Violation[] {
   const depositCents = dollarsToCents(input.depositDollars)
   if (input.depositDollars?.trim() && (depositCents == null || depositCents < 0)) {
     violations.push({ field: 'depositDollars', message: 'Enter a deposit of $0 or more.' })
+  }
+
+  const nsfFeeCents = dollarsToCents(input.nsfFeeDollars)
+  if (input.nsfFeeDollars?.trim() && (nsfFeeCents == null || nsfFeeCents < 0)) {
+    violations.push({
+      field: 'nsfFeeDollars',
+      message: 'Enter a returned-payment fee of $0 or more, or leave it blank.',
+    })
   }
 
   const dueDay = Number(input.rentDueDay)

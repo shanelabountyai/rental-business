@@ -219,6 +219,7 @@ test.describe('creating a tenancy', () => {
     await page.getByRole('textbox', { name: 'Ends on' }).fill('2027-02-28')
     await page.getByLabel('Monthly rent (dollars)').fill('1650')
     await page.getByLabel('Deposit held (dollars)').fill('1650')
+    // Deliberately left blank - see the assertion below.
     await page.getByRole('button', { name: 'Create draft lease' }).click()
 
     const leaseId = await capturedLeaseId(page)
@@ -226,6 +227,13 @@ test.describe('creating a tenancy', () => {
     expect(lease.status).toBe('DRAFT')
     expect(lease.rentCents).toBe(165_000)
     expect(lease.origin).toBe('APPLICATION')
+    // BLANK STAYS NULL, and null means the lease is silent about returned
+    // payments, which means no fee (R-039a). Not 0, which would be a lease
+    // that expressly charges nothing - a different sentence, and one nobody
+    // wrote here. `assessNsfFee` reads this exact distinction, so a `?? 0`
+    // creeping into the action would start charging a fee on every lease
+    // signed before the field existed.
+    expect(lease.nsfFeeCents).toBeNull()
 
     // Nobody is on it yet, so activation is not even offered - the machine
     // decides what the UI shows, rather than a button appearing and then

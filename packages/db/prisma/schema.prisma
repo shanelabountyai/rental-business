@@ -2527,7 +2527,11 @@ model SmsOptOut {
   createdAt  DateTime        @default(now())
   updatedAt  DateTime        @updatedAt
 
-  @@index([phone], name: "SmsOptOut_active")
+  // NO @@index HERE. `phone` is already `@unique`, which is the index every
+  // query on this table uses, and there is one row per number. An earlier
+  // version declared a second index and created it in SQL as a PARTIAL one
+  // (`WHERE revokedAt IS NULL`) - a shape Prisma cannot express, so the drift
+  // check reported a missing index on every CI run for ever (R-040e).
 }
 
 enum SmsOptOutSource {

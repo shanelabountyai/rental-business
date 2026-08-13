@@ -374,6 +374,11 @@ export default async function LeaseDetailPage({
               endsOn: lease.endsOn?.toISOString().slice(0, 10),
               rentDollars: String(lease.rentCents / 100),
               depositDollars: String(lease.depositCents / 100),
+              // Undefined, not "0", when the lease is silent - re-rendering a
+              // null as 0 would turn "no fee" into "expressly charges
+              // nothing" on the next save (R-039a).
+              nsfFeeDollars:
+                lease.nsfFeeCents != null ? String(lease.nsfFeeCents / 100) : undefined,
               rentDueDay: String(lease.rentDueDay),
               isMonthToMonth: lease.isMonthToMonth,
               mtmRentDollars:
