@@ -1536,7 +1536,7 @@ Recording a surety bond as "a cash deposit of $0" would be true and useless. The
 - **R-071 still owns move-out disposition**, which is where `APPLIED` gets its first real caller.
 
 ## R-042 (part) — Prorations: our arithmetic, not Stripe's
-**Commit:** `TBD`  ·  **Date:** 2026-08-13
+**Commit:** `e92d920`  ·  **Date:** 2026-08-13
 
 **What it built.** The move-in proration, computed in core and pushed to Stripe as an invoice item. R-036 provisioned the subscription, recorded `firstPeriodPartial`, and stopped — leaving a comment that R-042 owned the amount "so a later item cannot silently skip it". That comment is why this was findable, and it is now discharged.
 
