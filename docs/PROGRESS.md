@@ -1466,7 +1466,7 @@ That is not flake. It is a deadline set below the measured cost, and a 28s test 
 - **Imported `@/lib/audit/index.ts` in a webhook path**, which pulls in Auth.js and breaks the test loader. `sms-intake.ts` carries a comment warning about exactly this; the fix is `audit/system.ts`. Caught by the suite refusing to load `next/server`.
 
 ## R-039a (part) — The returned-payment fee, end to end
-**Commit:** `TBD`  ·  **Date:** 2026-08-13
+**Commit:** `b65161c`  ·  **Date:** 2026-08-13
 
 **What it built.** The NSF fee push. `nsfFeeFor` was written in R-039, unit-tested in core, and **callable by nothing** — there was not even a column to hold what the lease provides for. So the tenant's returned-payment notice carried a comment explaining that it stays silent about a fee "rather than quoting a fee that does not exist". That comment is now gone, because the fee exists.
 
