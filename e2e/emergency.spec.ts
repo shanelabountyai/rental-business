@@ -236,6 +236,26 @@ test.describe('safety-first instructions', () => {
   })
 })
 
+// 120s for THIS WHOLE FILE - `test.describe.configure` at the top level is
+// file-scoped, not scoped to the describe it happens to sit above - and the
+// number is measured (R-040e follow-up). The fast tests in this file are
+// unaffected by a larger ceiling; only the ones that need it use it.
+//
+// Submitting an emergency PAGES SOMEBODY, and a page is not one write: it
+// resolves the on-call rota, then per recipient per channel runs a preference
+// lookup, an idempotency check, a Notification insert, a delivery insert and
+// an audit row, then claims and sends each delivery - two more round trips
+// apiece - and flushes them inline, because R-020 requires the page to go NOW
+// rather than on the next hourly tick.
+//
+// Timed in this suite the four paging tests run at 54.8s, 56.7s, 57.7s and
+// 59.4s against the config's 60s default. One of them went flaky on exactly
+// that margin: it failed at 1.0m and passed on retry at 59.7s. That is not
+// randomness, it is a deadline set at the measured cost with no headroom -
+// the same diagnosis, and the same fix, as R-102b applied to the escalation
+// sweep's own paging tests.
+test.describe.configure({ timeout: 120_000 })
+
 test.describe('submitting an emergency', () => {
   test('creates an EMERGENCY ticket and pages on-call immediately', async ({
     page,

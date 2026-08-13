@@ -15,7 +15,8 @@
       "Bash(cd \"/Users/shanelabounty/Documents/Claude/Projects/rental business\" && grep -rn \"TaskInput\" packages/core/tasks/*.ts | grep -v test | head -3; sed -n '/export interface TaskInput/,/^}/p' packages/core/tasks/*.ts | head -25; echo \"=== TASK_TYPES ===\"; grep -rn \"TASK_TYPES\\\\s*=\" -A 20 packages/core/tasks/*.ts | grep \"'\" | head -14)",
       "Bash(sed -n '/^enum Priority/,/^}/p' packages/db/prisma/schema.prisma)",
       "Bash(sed -n '/^model Task /,/^}/p' packages/db/prisma/schema.prisma)",
-      "Bash(awk '/SENDS even when the two questions go unanswered/,/Error Context/' /tmp/e2eB.log)"
+      "Bash(awk '/SENDS even when the two questions go unanswered/,/Error Context/' /tmp/e2eB.log)",
+      "Bash(sort -t'\\(' -k2 -rn)"
     ],
     "additionalDirectories": [
       "/Users/shanelabounty/Documents/Claude/Projects/rental business/packages/core/tasks"
