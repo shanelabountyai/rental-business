@@ -834,6 +834,16 @@ model Lease {
   /// is computed from this in local time, then expressed to Stripe (D-11).
   rentDueDay     Int         @default(1)
   depositCents   Int         @default(0)
+  /// What THIS LEASE provides for if a payment is returned (R-039a, PAY-02).
+  ///
+  /// Null means the lease is silent, which means no fee - not zero, and
+  /// deliberately not a default. A fee the tenant never agreed to is
+  /// unenforceable at exactly the moment somebody needs to enforce it.
+  ///
+  /// The statutory ceiling is NOT here: `JurisdictionRule.nsfFeePermitted`
+  /// and `nsfFeeMaxCents` clamp this (D-4), so a state that forbids or caps
+  /// the fee overrides the lease without anybody editing a lease.
+  nsfFeeCents    Int?
   isMonthToMonth Boolean     @default(false)
   /// Rate applied on MTM rollover (LEASE-09). Null = keep the current rent.
   mtmRentCents   Int?
@@ -1345,6 +1355,12 @@ model Charge {
   /// this link that question cannot be asked. Also the spine of PAY-04's
   /// waiver-pattern report.
   assessedOnChargeId  String?
+  /// What a returned-payment fee was assessed on (R-039a). The counterpart of
+  /// `assessedOnChargeId`, which answers for a late fee. Carries a PARTIAL
+  /// UNIQUE INDEX - one NSF fee per returned payment, enforced by the
+  /// database, because Stripe redelivers and two concurrent deliveries would
+  /// both pass a read-then-write check.
+  assessedOnPaymentId String?
   waivedAt            DateTime?
   waivedByStaffId     String?
   waiveReason         String?
@@ -1357,6 +1373,9 @@ model Charge {
   recurringCharge  RecurringCharge?  @relation(fields: [recurringChargeId], references: [id])
   waivedBy         StaffUser?        @relation("ChargeWaivedBy", fields: [waivedByStaffId], references: [id])
   assessedOn       Charge?           @relation("ChargeAssessedOn", fields: [assessedOnChargeId], references: [id], onDelete: Restrict)
+  /// Restrict for the same reason as every other evidence-trail key: a
+  /// payment a fee was assessed on cannot be deleted out from under the fee.
+  assessedOnPayment Payment?         @relation("ChargeAssessedOnPayment", fields: [assessedOnPaymentId], references: [id], onDelete: Restrict)
   assessedFees     Charge[]          @relation("ChargeAssessedOn")
   allocations      PayerAllocation[]
   ledgerEntries    LedgerEntry[]
@@ -1444,6 +1463,8 @@ model Payment {
   @@index([leaseId, receivedAt])
   @@index([propertyId, receivedAt])
   @@index([status])
+  /// Fees assessed because this payment came back (R-039a).
+  assessedCharges Charge[] @relation("ChargeAssessedOnPayment")
 }
 
 /**

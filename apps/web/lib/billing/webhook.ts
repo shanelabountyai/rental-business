@@ -12,6 +12,7 @@ import { returnAction, reversalAmountCents } from '@rental/core/payments'
 import { businessDate } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { isUniqueViolation } from '@/lib/db/unique-violation.ts'
+import { assessNsfFee } from '@/lib/ledger/nsf-fees.ts'
 import { leaseBalanceCents } from '@/lib/ledger/queries.ts'
 import { dispatchPendingNotifications, notify } from '@/lib/notifications/send.ts'
 
@@ -284,7 +285,32 @@ export async function processStripeEvent(
   // is paid when it is not is how somebody ends up in eviction proceedings
   // over a bank error.
   if (action === 'reverse' && settled) {
-    await sendReturnNotice(payer, intent, settled.amountCents).catch((error) => {
+    // THE FEE BEFORE THE NOTICE (R-039a). Ordering, not sequencing: the
+    // notice quotes the fee, so raising it afterwards would mean telling the
+    // tenant about a charge they will only see later - or telling them
+    // nothing, which is what happened until now. Outside the transaction and
+    // never throwing, like the notice itself: the reversal is the fact, and
+    // neither a fee nor a message may undo it.
+    const fee = await assessNsfFee({
+      leaseId: payer.leaseId,
+      propertyId: payer.propertyId,
+      leasePayerId: payer.id,
+      paymentId: settled.id,
+    }).catch((error: unknown) => {
+      console.error(`[stripe] NSF fee failed for payer ${payer.id}`, error)
+      return null
+    })
+
+    await sendReturnNotice(
+      payer,
+      intent,
+      settled.amountCents,
+      // Only a fee that actually exists is quoted. `assessNsfFee` returns a
+      // null chargeId for every legitimate no-fee case - the lease is silent,
+      // the state forbids it, no rule is configured - and in all of them the
+      // message must stay silent rather than invent a number.
+      fee?.chargeId ? fee.amountCents : null,
+    ).catch((error) => {
       console.error(`[stripe] return notice failed for payer ${payer.id}`, error)
     })
   }
@@ -606,6 +632,9 @@ async function sendReturnNotice(
   payer: { id: string; leaseId: string; propertyId: string },
   intent: ProjectionIntent,
   amountCents: number,
+  /// The fee that was actually raised, or null when none was. Never a
+  /// computed-but-unraised number (R-039a).
+  feeCents: number | null,
 ): Promise<void> {
   const [lease, payerRow] = await Promise.all([
     prisma.lease.findUnique({
@@ -638,13 +667,11 @@ async function sendReturnNotice(
       amount: formatCents(Math.abs(amountCents)),
       addressLine1: lease.property.addressLine1,
       balance: formatCents(Math.max(0, balance)),
-      // The NSF fee is not posted here. Under D-12 a jurisdiction-dependent
-      // amount is computed in core and pushed to Stripe as an invoice item,
-      // which then arrives through this same pipeline as its own charge -
-      // so announcing it now would promise a number nothing has raised yet.
-      // R-039a owns the push; until then the message stays silent about it
-      // rather than quoting a fee that does not exist.
-      feeAmount: null,
+      // R-039a raised it just above, so this can finally be a number. Still
+      // null whenever no fee was raised - the lease is silent, the state
+      // forbids it, no rule is configured - because the rule that made this
+      // null for two items stands: never quote a fee nothing has charged.
+      feeAmount: feeCents == null ? null : formatCents(feeCents),
     },
     propertyId: payer.propertyId,
     // One notice per returned payment, however many times Stripe tells us.

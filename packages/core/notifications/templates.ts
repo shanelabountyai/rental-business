@@ -527,6 +527,12 @@ export interface PaymentReturnedContext {
   balance: string
   /// Absent where the state bars the fee or the lease is silent - the
   /// template says nothing about a fee rather than saying "$0.00".
+  ///
+  /// NOT included in `balance`. The fee is pushed to Stripe as an invoice
+  /// item and reaches the ledger only when the next invoice finalizes (D-11),
+  /// so at the moment this message is written the tenant owes `balance` and
+  /// will owe the fee on top. Saying both, separately, is the honest reading
+  /// of the two numbers.
   feeAmount: string | null
 }
 
@@ -553,8 +559,16 @@ export const paymentReturnedTemplate: NotificationTemplate<PaymentReturnedContex
         body: [
           `Your ${context.amount} payment for ${context.addressLine1} was returned by the bank.`,
           `You now owe ${context.balance}.`,
+          // The fee belongs on SMS too, not only in the email (R-039a). This
+          // is the LOCKED channel - the one a tenant cannot switch off and
+          // therefore the one they actually see - and learning about a
+          // charge from a later invoice, having been texted about the same
+          // event, is how a tenant decides the landlord is hiding things.
+          context.feeAmount ? `A returned-payment fee of ${context.feeAmount} applies.` : '',
           'Please get in touch so we can sort it out.',
-        ].join(' '),
+        ]
+          .filter((part) => part !== '')
+          .join(' '),
       }
     }
     return {

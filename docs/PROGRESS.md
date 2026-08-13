@@ -1464,3 +1464,32 @@ That is not flake. It is a deadline set below the measured cost, and a 28s test 
 **Bugs found along the way.**
 - **`Task.priority` is the `Priority` enum, and this is the second item to get it wrong** — `HIGH` does not exist here. It failed at runtime rather than compile time because `TaskInput.priority` was typed `string` and the persistence layer cast it away with `as never`. Fixed at the root: the field is now `TaskPriorityValue`, the cast is gone, and the compiler found four other call sites that had widened the enum back to `string` in their own helper signatures. The one genuine string boundary — a priority arriving from a form — casts explicitly, with `validateTask` still doing the checking.
 - **Imported `@/lib/audit/index.ts` in a webhook path**, which pulls in Auth.js and breaks the test loader. `sms-intake.ts` carries a comment warning about exactly this; the fix is `audit/system.ts`. Caught by the suite refusing to load `next/server`.
+
+## R-039a (part) — The returned-payment fee, end to end
+**Commit:** `TBD`  ·  **Date:** 2026-08-13
+
+**What it built.** The NSF fee push. `nsfFeeFor` was written in R-039, unit-tested in core, and **callable by nothing** — there was not even a column to hold what the lease provides for. So the tenant's returned-payment notice carried a comment explaining that it stays silent about a fee "rather than quoting a fee that does not exist". That comment is now gone, because the fee exists.
+
+**Two columns, each with a reason.**
+
+`Lease.nsfFeeCents` is **nullable, and null means no fee** — not zero, and deliberately not a default. `nsfFeeFor`'s own comment says why: the fee is a contractual term first and a statutory ceiling second, and inventing one the tenant never agreed to is how a fee becomes unenforceable at exactly the moment somebody needs to enforce it. Defaulting a value in would have charged every tenant on every lease signed before the column existed.
+
+`Charge.assessedOnPaymentId` is the counterpart of `assessedOnChargeId`: a late fee answers to a rent charge, a returned-payment fee answers to a Payment. It carries a **partial unique index**, so one NSF fee per returned payment is enforced by the database rather than by a read-then-write check that two concurrent webhook deliveries would both pass. There is a test that bypasses the code path entirely and asserts the database refuses the second row.
+
+**Raised inline, before the notice, and the ordering is the design.** The architecturally tidier option is an outbox event with a consumer — how ticket triage and make-ready work — but consumers run on the hourly cron, so the fee would land up to an hour after the notice that should have quoted it. The tenant would get "your payment came back" now and "you have been charged $25" later: two shocks where one honest sentence would do.
+
+**The fee reaches SMS, not just email.** The template already had a `feeAmount` slot and used it only in the email body. `payment_failed` is a LOCKED SMS category — the one a tenant cannot switch off and therefore the one they actually read — and learning about a charge from a later invoice, having been texted about the same event, is how a tenant decides the landlord is hiding things.
+
+**What it decided.**
+- **Only a fee that was actually raised is quoted.** `assessNsfFee` returns a null `chargeId` for every legitimate no-fee case — the lease is silent, the state forbids it, no rule is configured — and in all of them the message stays silent. The rule that kept `feeAmount: null` for two items still stands; it just no longer applies to every case.
+- **The fee is not in `balance`.** It is pushed to Stripe as an invoice item and reaches the ledger only when the next invoice finalizes (D-11), so at the moment the notice is written the tenant owes `balance` and will owe the fee on top. The message says both, separately, because that is what is true.
+- **No configured rule means no fee**, exactly as late fees treat it. D-4's point is that a statutory number comes from configuration; inventing one for an unconfigured state is how a product charges an unlawful fee in a market nobody has set up yet.
+- **A failed push leaves the Charge standing** with a null `stripeInvoiceItemId` — recoverable and visible — rather than leaving an invoice item in Stripe naming a charge that does not exist. Same trade `assessLateFees` made.
+
+**What it left behind.**
+- **R-039a is not finished.** This is the correctness half. Still outstanding: the tenant-facing saved-payment-method flow (`createSetupIntent` has existed since R-034 and still nothing calls it, so autopay cannot actually be switched on by a tenant), the tenant-chosen debit day, the owner's "require full balance" switch, and the T-2 pre-debit notice. The payment-method UI is Stripe Elements against a live key and cannot be meaningfully tested without one (D-15), which is why it is still not guessed at.
+- **Nothing sets `nsfFeeCents`.** The column exists and the fee works when it is populated; no lease form writes it yet. That belongs with the lease-terms editing work, and until then every lease is silent — which is the safe direction to be wrong in.
+
+**Bugs found along the way.**
+- **A migration edited after it had been applied.** The Charge columns were appended to `20260813090000_lease_nsf_fee`, which had already run. Prisma records an applied migration by checksum, so `migrate deploy` reported nothing pending while the new SQL never executed — the column existed in `schema.prisma` and not in the database. Split into its own migration, with the reason written into its header.
+- **A test that asserted nothing and reported as covered.** The clamp test read the shipped Texas rule, found `nsfFeeMaxCents` null, and returned early — 133ms, green, vacuous. It now creates its own capped rule in its own state and asserts both numbers appear in the charge description. **A test that silently does nothing is worse than no test**, because it reports as coverage.
