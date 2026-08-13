@@ -327,7 +327,15 @@ test.describe('soft delete and restore', () => {
       .poll(
         async () =>
           (await prisma.document.findUniqueOrThrow({ where: { id: created.id } })).deletedAt,
-        { timeout: 10_000 },
+        // 20s, raised from 10s on evidence rather than on suspicion: this
+        // poll timed out once in a full sweep while the test as a whole ran
+        // 22.1s against 17.5s on the other project. The wait is on Neon's
+        // pooler propagating a just-committed write to a different pooled
+        // connection, and how long that takes scales with what else the
+        // suite is doing - so a budget sized from a quiet run is a budget
+        // that fails under a busy one. Same reasoning as R-102b and the
+        // R-040e follow-up, applied to a poll rather than a test timeout.
+        { timeout: 20_000 },
       )
       .toBeNull()
   })
