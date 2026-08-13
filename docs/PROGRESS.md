@@ -1430,7 +1430,7 @@ That is not flake. It is a deadline set below the measured cost, and a 28s test 
 
 
 ## R-040e — `STOP` is handled, and the delivery record stops being able to lie
-**Commit:** `TBD`  ·  **Date:** 2026-08-13
+**Commit:** `cca6a40`  ·  **Date:** 2026-08-13
 
 **What it built.** Six pieces, closing a defect whose visible half was cosmetic and whose invisible half was the worst kind this product can have.
 
