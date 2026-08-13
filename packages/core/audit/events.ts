@@ -292,6 +292,18 @@ export const AUDIT_ACTIONS = [
   /// Recorded because each is a fact somebody asserted on a date, and at
   /// move-out the date is what a dispute turns on.
   'lease.intake_resolved',
+
+  /// R-040e: a phone number stopped accepting our SMS, or started again.
+  ///
+  /// SYSTEM-actor events by construction - nobody on our side decides these.
+  /// The recipient texted STOP, or the carrier told us a send was blocked on
+  /// their behalf. They are audited rather than merely stored because an
+  /// opt-out silently overrides `LOCKED_CATEGORIES`: the product refuses to
+  /// let a tenant switch off `entry_notice`, and a carrier STOP switches it
+  /// off anyway. When somebody later asks why a legally significant notice
+  /// was not delivered on a given date, this is the row that answers it.
+  'notification.opted_out',
+  'notification.opted_in',
 ] as const
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number]

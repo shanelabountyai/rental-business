@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { businessDate } from '@rental/core/scheduling'
-import { prisma } from '@rental/db'
+import { type Priority, prisma } from '@rental/db'
 import { authUrl } from '@/lib/auth/delivery.ts'
 import { dispatchPendingNotifications, notify } from '@/lib/notifications/send.ts'
 import { createTask } from '@/lib/tasks/create.ts'
@@ -108,7 +108,7 @@ export async function reopenWorkOrder(
     id: string
     propertyId: string
     scope: string
-    priority: string
+    priority: Priority
     reopenCount: number
     property: { timezone: string }
     unit: { name: string }

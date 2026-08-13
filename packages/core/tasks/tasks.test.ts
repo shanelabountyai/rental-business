@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   type TaskInput,
+  type TaskPriorityValue,
   priorityRank,
   requiresAuditOnCompletion,
   requiresProof,
@@ -37,7 +38,10 @@ describe('validateTask', () => {
   })
 
   it('rejects an unknown priority', () => {
-    const violations = validateTask(baseInput({ priority: 'ASAP' }))
+    // Cast deliberately: the whole point of this test is that a value the
+    // TYPE forbids still has to be rejected at runtime, because a priority
+    // arriving from a form is not typed by anything (R-040e).
+    const violations = validateTask(baseInput({ priority: 'ASAP' as TaskPriorityValue }))
     expect(violations).toContainEqual(expect.objectContaining({ field: 'priority' }))
   })
 

@@ -1,5 +1,6 @@
 'use server'
 
+import type { TaskPriorityValue } from '@rental/core/tasks'
 import { randomUUID } from 'node:crypto'
 import { businessDate } from '@rental/core/scheduling'
 import {
@@ -77,7 +78,11 @@ export async function addTask(
     subjectType: 'AdHoc',
     subjectId: randomUUID(),
     businessDate: businessDate(new Date(), property.timezone),
-    priority: str(formData, 'priority'),
+    // Cast at the FORM boundary, which is the one place a priority genuinely
+    // arrives untyped - `validateTask` below is what actually rejects a value
+    // that is not in TASK_PRIORITIES, and it runs before anything is written.
+    // Everywhere else the enum is now carried as the enum (R-040e).
+    priority: str(formData, 'priority') as TaskPriorityValue,
     title: str(formData, 'title'),
   }
   const violations = validateTask(input)

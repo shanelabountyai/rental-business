@@ -6,6 +6,8 @@
 // epic: "every communication is potential evidence. One threaded,
 // timestamped, immutable history per tenancy, per property, per vendor -
 // regardless of channel."
+export * from './delivery-status.ts'
+export * from './opt-out.ts'
 export * from './phone.ts'
 export * from './sms-intake.ts'
 export * from './threads.ts'

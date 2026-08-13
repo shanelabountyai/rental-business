@@ -13,7 +13,7 @@ import {
   vendorMayRespond,
   vendorMayUpload,
 } from '@rental/core/vendors'
-import { prisma } from '@rental/db'
+import { type Priority, prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { auditAsVendor } from '@/lib/audit/system.ts'
 import { generateStorageKey, storage } from '@/lib/storage/index.ts'
@@ -352,7 +352,7 @@ async function raiseInvoiceApprovalTask(
     id: string
     propertyId: string
     scope: string
-    priority: string
+    priority: Priority
     property: { timezone: string }
   },
   actualCents: number,

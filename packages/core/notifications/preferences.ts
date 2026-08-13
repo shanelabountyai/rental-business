@@ -21,6 +21,13 @@ export const SUPPRESSION_REASONS = [
   'no_address',
   'kill_switch',
   'unsupported_channel',
+  /// R-040e: the carrier is blocking this number. NOT a preference - a
+  /// tenant's preferences cannot reach `entry_notice` at all, and this
+  /// suppresses it anyway. Distinguished from `preference_off` because the
+  /// two need completely different responses: one is a choice we honour, the
+  /// other is a delivery we owe and could not make, and D-38 says the second
+  /// raises a Task for a human to serve the notice another way.
+  'sms_opt_out',
 ] as const
 
 export type SuppressionReason = (typeof SUPPRESSION_REASONS)[number]

@@ -5,6 +5,7 @@ import {
   type NotificationChannel,
   type SuppressionReason,
   bypassesQuietHours,
+  isLockedCategory,
   isNotificationCategory,
   quietHoursEndAfter,
   renderTemplate,
@@ -17,7 +18,10 @@ import {
   type Prisma,
   prisma,
 } from '@rental/db'
+import { businessDate } from '@rental/core/scheduling'
+import { isOptedOut } from '@/lib/comms/opt-out-store.ts'
 import { isUniqueViolation } from '@/lib/db/unique-violation.ts'
+import { createTask } from '@/lib/tasks/create.ts'
 import { notificationConfig } from './config.ts'
 import { deliverOverChannel } from './deliver.ts'
 import { notificationAdapter } from './provider.ts'
@@ -175,6 +179,15 @@ export async function notify(
       ? quietHoursEndAfter(now, timezone)
       : null
 
+  // Asked ONCE for the whole fan-out rather than per channel, and only when
+  // an SMS is actually on the table (R-040e). A carrier block is a fact about
+  // the number, so it outranks every preference - including the ones
+  // LOCKED_CATEGORIES refuses to let a tenant set.
+  const smsBlocked =
+    template.channels.includes('SMS') && addressFor('SMS', input.recipient) !== null
+      ? await isOptedOut(addressFor('SMS', input.recipient))
+      : false
+
   const outcomes: ChannelOutcome[] = []
 
   for (const channel of template.channels) {
@@ -189,6 +202,14 @@ export async function notify(
     if (address === null) {
       status = 'SUPPRESSED'
       reason = 'no_address'
+    } else if (channel === 'SMS' && smsBlocked) {
+      // BEFORE the preference check, deliberately. A blocked number is not a
+      // preference and must not be recorded as one: `preference_off` on an
+      // entry notice would read as a tenant choice the product does not even
+      // allow, and would hide the fact that we owe them a notice we could not
+      // deliver (D-38).
+      status = 'SUPPRESSED'
+      reason = 'sms_opt_out'
     } else if (!decision?.send) {
       status = 'SUPPRESSED'
       reason = decision?.reason ?? 'preference_off'
@@ -219,7 +240,84 @@ export async function notify(
     )
   }
 
+  // D-38: A LEGALLY REQUIRED NOTICE WE COULD NOT TEXT RAISES A TASK.
+  //
+  // The owner's decision was "both" - fall back to another channel AND put a
+  // human on it. The fallback half was already true: `entry.notice` declares
+  // SMS, EMAIL and PORTAL, so a blocked SMS still leaves two live channels.
+  // This is the half that was missing, and it is the half that matters,
+  // because email and portal prove receipt no better than SMS did.
+  //
+  // Only for LOCKED categories. A blocked marketing text is a tenant getting
+  // what they asked for; a blocked entry notice is a legal obligation we owe
+  // and could not meet on the channel most tenants actually read. Texas
+  // permits written notice, so posting on the door is a real answer - which
+  // is why this raises work for a person rather than logging a warning.
+  if (smsBlocked && isLockedCategory(input.category) && input.propertyId) {
+    await raiseBlockedNoticeTask({
+      db,
+      propertyId: input.propertyId,
+      category: input.category,
+      recipient: input.recipient,
+      timezone,
+      now,
+      idempotencyKey: input.idempotencyKey,
+    }).catch((error) => {
+      // The notice went out on the other channels and those rows are already
+      // written. A failure to raise the task must not lose them.
+      console.error('[notifications] failed to raise a blocked-notice task', error)
+    })
+  }
+
   return outcomes
+}
+
+/**
+ * The human half of D-38.
+ *
+ * Idempotent on (type, subjectId, businessDate) like every other task, so the
+ * T-1 reminder for the same entry notice on the same day does not raise a
+ * second one - `createTask` already owns that guarantee (R-011).
+ */
+async function raiseBlockedNoticeTask(args: {
+  db: Db
+  propertyId: string
+  category: NotificationCategory
+  recipient: NotificationRecipient
+  timezone: string | undefined
+  now: Date
+  idempotencyKey: string
+}): Promise<void> {
+  // The property's own calendar day (D-3). Falling back to UTC rather than
+  // failing: a task raised on the wrong side of midnight is still a task
+  // somebody sees, and refusing to raise it because a timezone lookup was
+  // skipped would be the worse trade.
+  const zone =
+    args.timezone ??
+    (
+      await args.db.property.findUnique({
+        where: { id: args.propertyId },
+        select: { timezone: true },
+      })
+    )?.timezone ??
+    'UTC'
+
+  await createTask(args.db, {
+    propertyId: args.propertyId,
+    type: 'serve_notice_offline',
+    subjectType: 'Notification',
+    // The idempotency key, not a fresh id: it is derived from the FACT being
+    // announced, so two attempts to serve the same notice collapse onto one
+    // task exactly as they collapse onto one notification.
+    subjectId: args.idempotencyKey,
+    businessDate: businessDate(args.now, zone),
+    // URGENT, not EMERGENCY: EMERGENCY is reserved for life-safety in this
+    // product's vocabulary, and a notice that needs serving today is not that.
+    // It is also not ROUTINE - the alternative to somebody acting on it is
+    // entering a home without having served notice.
+    priority: 'URGENT',
+    title: `Serve ${args.category.replace(/_/g, ' ')} another way - this tenant's phone is blocking our texts`,
+  })
 }
 
 interface RecordInput {

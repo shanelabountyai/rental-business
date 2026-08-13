@@ -48,7 +48,7 @@ export async function createTask(
         subjectType: input.subjectType,
         subjectId: input.subjectId,
         businessDate: businessDateToUtc(input.businessDate),
-        priority: input.priority as never,
+        priority: input.priority,
         assigneeStaffId: input.assigneeStaffId,
         title: input.title,
       },

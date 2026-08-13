@@ -54,7 +54,13 @@ export interface TaskInput {
   subjectId: string
   /// A property-local calendar day, `YYYY-MM-DD` (D-3).
   businessDate: string
-  priority: string
+  /// The enum, not a string (R-040e). It was `string` with the persistence
+  /// layer casting it away as `never`, so an invalid priority typechecked
+  /// cleanly and failed at runtime inside Prisma - twice, on two different
+  /// items, both times spelling a value this product does not have. The
+  /// validator below still checks it, because a value arriving from a form is
+  /// not typed; the type stops the ones written in code.
+  priority: TaskPriorityValue
   assigneeStaffId?: string | null
   title: string
 }

@@ -7,7 +7,7 @@ import {
   reapprovalCheck,
   validateApprovalDecision,
 } from '@rental/core/approvals'
-import { prisma } from '@rental/db'
+import { type Priority, prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { audit } from '@/lib/audit/index.ts'
 import {
@@ -46,7 +46,7 @@ async function raiseApprovalTask(workOrder: {
   id: string
   propertyId: string
   scope: string
-  priority: string
+  priority: Priority
   estimateCents: number | null
   property: { timezone: string }
 }) {

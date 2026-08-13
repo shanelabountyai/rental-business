@@ -1428,3 +1428,39 @@ A different test then failed, so the rest was **measured rather than guessed at 
 
 That is not flake. It is a deadline set below the measured cost, and a 28s test with two seconds of headroom tips over the moment anything runs beside it. Raised to 90s with the measurement written next to it — the same reasoning R-042 used raising the global default from Vitest's 5s unit-test default for a suite that is integration against a remote database.
 
+
+## R-040e — `STOP` is handled, and the delivery record stops being able to lie
+**Commit:** `TBD`  ·  **Date:** 2026-08-13
+
+**What it built.** Six pieces, closing a defect whose visible half was cosmetic and whose invisible half was the worst kind this product can have.
+
+**The visible half:** a tenant texting `STOP` opened a maintenance ticket titled *STOP*.
+
+**The half that mattered:** `entry_notice` is in `LOCKED_CATEGORIES` *because it is legally significant* — the product refuses to let a tenant switch it off. A carrier-level STOP switches it off anyway, and our notification log went on recording those notices as `SENT`. In a Texas entry dispute that log is the evidence. **A delivery record that can be silently false is the worst defect an evidence trail can have**, in a build whose stated premise is that the evidence trail *is* the product.
+
+**1. `classifyOptOutKeyword`, and the reason it is a whole-message match.** The CTIA keyword set, matched against the entire trimmed message or not at all. The asymmetry is the design: treating a real STOP as ordinary text is embarrassing, while treating *"please stop the leak under the sink"* as a STOP silently unsubscribes somebody from the one category they are not allowed to leave — and our record would look normal afterwards. Tested with the sentences a tenant actually sends.
+
+**2. `SmsOptOut`, keyed by phone number rather than tenant.** A carrier block is a fact about a *number*: it survives the tenant moving out, it applies to whoever holds the number next, and nothing in `NotificationPreference` can override it. Preferences are a tenant's choice about a category; this is a carrier's fact about a number, so it is a separate table and it outranks `LOCKED_CATEGORIES`.
+
+**3. Intake interception**, before routing. The message is still recorded — the tenant sent it, and an evidence trail that drops the one message which changed what we may send them is not an evidence trail. It just does not open a ticket.
+
+**4. Suppression at decision time**, `SUPPRESSED / sms_opt_out`, checked *before* the preference check. Recording it as `preference_off` would describe a choice the product does not offer and would hide that we owe the tenant a notice we could not deliver.
+
+**5. D-38's Task.** The owner chose "both". Reading the code first showed the fallback half was **already true** — `entry.notice` has declared `SMS`, `EMAIL` and `PORTAL` since R-021 — so building a fallback mechanism would have been redundant machinery invented from the decision's text. What was missing is the human: `serve_notice_offline`, `URGENT`, idempotent on the notification's own key. Raised only for locked categories, because a blocked marketing text is a tenant getting exactly what they asked for.
+
+**6. The status callback.** `SENT` has meant *the provider accepted it*. `mapDeliveryStatus` and `shouldApplyStatus` turn that into `DELIVERED`/`FAILED`, and the route records the provider's error code. Twilio's `21610` — "they replied STOP" — records the opt-out, which is how we learn about the blocks the carrier absorbed and never forwarded: **the common case, not the edge one.** `30003`/`21211` are failures and deliberately *not* opt-outs, because unsubscribing somebody whose phone was merely off would be the same false-record defect wearing a different hat.
+
+**What it decided.**
+- **Statuses only ever move forwards.** Callbacks are retried and unordered; a late `sent` landing after a `delivered` must not walk the record backwards, and `FAILED` is terminal because a human may already have acted on it. The same out-of-order hazard R-042 fixed in the Stripe projection, met again in a different provider.
+- **A callback never overwrites `SUPPRESSED` or `DEFERRED`** — those describe decisions made before sending, and a callback is about a message that row is not describing.
+- **An opt-out is recorded even when the delivery row cannot be matched.** The block is a fact about the number and outranks our bookkeeping; dropping it because of a join failure would reintroduce the exact defect.
+- The route is written and tested with signed payloads although **nothing posts to it yet** (D-15 still wires the logging adapter). The alternative is discovering the mapping is wrong on the day real messages start moving — and `CARRIER_CALLBACK` would otherwise be an enum value nothing could produce.
+
+**What it left behind.**
+- **No end-to-end proof.** Every part is tested, but no real Twilio message has traversed it; that waits on the campaign clearing. The signature check, the mapping and the ordering rules are the parts that could be got wrong on paper, and those are covered.
+- **HELP gets no reply from us.** The carrier answers it; `optOutReply` returns the text but nothing sends it, because sending requires the adapter D-15 defers.
+- **Staff cannot see or clear an opt-out in the app.** It is visible in the audit log and the task. A screen belongs with R-049's messaging work.
+
+**Bugs found along the way.**
+- **`Task.priority` is the `Priority` enum, and this is the second item to get it wrong** — `HIGH` does not exist here. It failed at runtime rather than compile time because `TaskInput.priority` was typed `string` and the persistence layer cast it away with `as never`. Fixed at the root: the field is now `TaskPriorityValue`, the cast is gone, and the compiler found four other call sites that had widened the enum back to `string` in their own helper signatures. The one genuine string boundary — a priority arriving from a form — casts explicitly, with `validateTask` still doing the checking.
+- **Imported `@/lib/audit/index.ts` in a webhook path**, which pulls in Auth.js and breaks the test loader. `sms-intake.ts` carries a comment warning about exactly this; the fix is `audit/system.ts`. Caught by the suite refusing to load `next/server`.

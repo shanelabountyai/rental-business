@@ -1,6 +1,7 @@
 import 'server-only'
 
 import {
+  classifyOptOutKeyword,
   decideSmsIntake,
   formatSmsTicketDescription,
   isOpenTicketStatus,
@@ -11,6 +12,7 @@ import { prisma } from '@rental/db'
 // session by definition. See system.ts's own comment.
 import { auditAsSystem } from '@/lib/audit/system.ts'
 import { emitEvent } from '@/lib/jobs/outbox.ts'
+import { recordOptIn, recordOptOut } from './opt-out-store.ts'
 import { receiveInboundMessage } from './messages.ts'
 
 // SMS-to-ticket (MAINT-01, COMM-01, R-021).
@@ -23,6 +25,7 @@ import { receiveInboundMessage } from './messages.ts'
 
 export type SmsIntakeResult =
   | { outcome: 'duplicate' }
+  | { outcome: 'opt_out'; keyword: 'STOP' | 'START' | 'HELP'; threadId?: string }
   | { outcome: 'unrouted'; reason: string }
   | { outcome: 'threaded'; threadId: string; existingTicketId?: string }
   | { outcome: 'ticket_opened'; threadId: string; ticketId: string }
@@ -43,6 +46,28 @@ export async function handleInboundSms(args: {
   receivedAt: Date
   externalId?: string | null
 }): Promise<SmsIntakeResult> {
+  // A CARRIER KEYWORD IS NOT A MAINTENANCE REQUEST, and this is checked
+  // before anything else (R-040e). Until it was, `STOP` threaded like any
+  // other message and opened a ticket titled *STOP* - which is the visible
+  // half of the problem. The invisible half is that we then went on believing
+  // we could reach that number, and `entry_notice` is in LOCKED_CATEGORIES
+  // precisely because it is legally significant.
+  //
+  // The message is still RECORDED below. The tenant did send it, it is part
+  // of their conversation, and an evidence trail that quietly drops the one
+  // message that changed what we may send them is not an evidence trail. What
+  // it must not do is open a ticket.
+  const keyword = classifyOptOutKeyword(args.body)
+  if (keyword === 'STOP') {
+    await recordOptOut({
+      phone: args.from,
+      source: 'INBOUND_KEYWORD',
+      reason: args.body.trim().slice(0, 40),
+    })
+  } else if (keyword === 'START') {
+    await recordOptIn({ phone: args.from, reason: args.body.trim().slice(0, 40) })
+  }
+
   const routed = await receiveInboundMessage({
     channel: 'SMS',
     from: args.from,
@@ -52,6 +77,17 @@ export async function handleInboundSms(args: {
   })
 
   if (routed.outcome === 'duplicate') return { outcome: 'duplicate' }
+
+  // Recorded, not ticketed. An unrouted keyword still counts: we know the
+  // number even when we cannot say whose it is, and the block is a fact about
+  // the number (R-040e).
+  if (keyword !== null) {
+    return {
+      outcome: 'opt_out',
+      keyword,
+      threadId: routed.outcome === 'routed' ? routed.threadId : undefined,
+    }
+  }
   if (routed.outcome === 'unrouted') {
     return { outcome: 'unrouted', reason: routed.reason }
   }
