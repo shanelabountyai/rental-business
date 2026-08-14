@@ -51,6 +51,11 @@ export interface PaymentView {
   maxCents: number
   allowsPartial: boolean
   collectionMethod: CollectionMethod
+  /// True when a payment method is on file AND the payer bills automatically.
+  /// Both halves matter: a saved card on a `send_invoice` payer is not
+  /// autopay, and an automatic payer with no method is an invoice that will
+  /// fail (R-039a).
+  autopayOn: boolean
   charges: PayableCharge[]
   rails: { rail: PaymentRail; available: boolean; unavailableReason?: string }[]
   /// What a card would add to the FULL payable amount. Recomputed for the
@@ -82,6 +87,7 @@ export async function paymentView(scope: TenantScope): Promise<PaymentView | nul
       leaseId: true,
       collectionMethod: true,
       stripeCustomerId: true,
+      defaultPaymentMethodId: true,
       lease: {
         select: {
           id: true,
@@ -150,6 +156,11 @@ export async function paymentView(scope: TenantScope): Promise<PaymentView | nul
     maxCents: limits.maxCents,
     allowsPartial: limits.allowsPartial,
     collectionMethod: method,
+    // BOTH halves, deliberately. A saved card on a `send_invoice` payer is
+    // not autopay, and an automatic payer with no method on file is an
+    // invoice that finalizes and then fails - which is exactly the state
+    // every payer provisioned before R-039a was in.
+    autopayOn: method === 'charge_automatically' && payer.defaultPaymentMethodId != null,
     charges: charges
       .map((charge) => {
         // Outstanding is derived from the charge's own applications rather

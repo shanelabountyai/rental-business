@@ -1,7 +1,9 @@
 import { formatCents } from '@rental/core/money'
 import { CARD_FIXED_CENTS, CARD_RATE_BPS } from '@rental/core/payments'
+import { AutopayPanel } from '@/components/payments/autopay-panel.tsx'
 import { PayForm } from '@/components/payments/pay-form.tsx'
 import { startPayment } from '@/lib/payments/actions.ts'
+import { startAutopaySetup } from '@/lib/payments/autopay-actions.ts'
 import { paymentView } from '@/lib/payments/queries.ts'
 import { requireTenantWithScope } from '@/lib/portal/guard.ts'
 
@@ -57,6 +59,17 @@ export default async function PayPage() {
           {view.unitName ? ` · ${view.unitName}` : ''}
         </p>
       </header>
+
+      {/* ABOVE the balance and the pay form, because a tenant who sets this
+          up once never has to read either again - and PAY-02 calls autopay a
+          Must for exactly that reason. The publishable key is read on the
+          server and passed down: it is safe to expose, but the component
+          should not have to know where it lives. */}
+      <AutopayPanel
+        publishableKey={process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? null}
+        alreadyOn={view.autopayOn}
+        start={startAutopaySetup}
+      />
 
       <section aria-labelledby="balance" className="flex flex-col gap-2 rounded-lg border p-4">
         <h2 id="balance" className="text-muted-foreground text-sm font-medium">

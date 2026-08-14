@@ -1584,3 +1584,28 @@ Recording a surety bond as "a cash deposit of $0" would be true and useless. The
 - **The tenant-facing Stripe Elements screen is still not built**, so a tenant still cannot start enrolment — only complete one. That is the last piece of PAY-02's Must story, and it is the piece D-15 says cannot be meaningfully e2e tested (Elements is a cross-origin iframe). It will need hand-verification against the test key, and PROGRESS should say so plainly when it lands rather than implying coverage.
 - Tenant-chosen debit day, the owner's require-full-balance switch, and the T-2 pre-debit notice are all still outstanding.
 - **The webhook subscription had to be widened by hand** to include `setup_intent.succeeded`. Adding a type to `HANDLED_EVENTS` does not subscribe to it; a handler nothing is subscribed to is dead code that looks live. Recorded in DEPLOYMENT.md.
+
+## R-039a (part 3) — The autopay enrolment screen
+**Commit:** `TBD`  ·  **Date:** 2026-08-14
+
+**What it built.** The screen a tenant actually touches. `createSetupIntent` has existed since R-034 and part 2 built what happens when Stripe confirms one; this is the half that lets a tenant *start* enrolment rather than only complete one. PAY-02's Must story is now reachable end to end.
+
+**NOT COVERED BY THE E2E SUITE, and this is stated plainly rather than left to be inferred.** Stripe Elements is a cross-origin iframe that Playwright cannot drive without brittle same-origin assumptions — D-15 said so before the item was scheduled, which is why it was never guessed at earlier. What *is* tested: the server action's scoping, the `setup_intent.succeeded` webhook, the collection-method switch, and the three-way `autopayOn` state. What is not: the browser confirming a card with Stripe. **That needs hand-verification against the test key, and this entry is where that gap is recorded.**
+
+**`autopayOn` requires both halves.** A saved card on a `send_invoice` payer collects nothing, and an automatic payer with no method on file is an invoice that finalizes and then fails — the state every payer provisioned before R-039a was in. A single flag would have told a tenant their rent was handled when it was not. Three tests, one per combination.
+
+**What it decided.**
+- **The panel sits above the balance and the pay form.** A tenant who sets this up once never has to read either again, which is why PAY-02 calls autopay a Must rather than a convenience.
+- **`loadStripe` is called lazily**, on first use rather than at module scope, so a tenant who never touches autopay never fetches Stripe's script. The portal is mobile-first and read on whatever connection people have (§6.5).
+- **The client passes no payer id.** The action re-derives who is asking from the session and scopes by tenant *and* their own leases — either alone is a hole. An id supplied by the caller is an id the caller can change, and this returns a Stripe client secret.
+- **Stripe's error message is shown verbatim.** It knows why a card was declined and we do not; a friendlier sentence of our own would tell the tenant something less true.
+- **`NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` is a second name for one value**, and that is a smell accepted for the same reason `NEXT_PUBLIC_OPERATIONS_PHONE` was: a client component cannot read a server-only variable. `.env.example` says the two must match.
+- **No panel at all when the key is unset**, rather than a button that cannot work — the same call the vendor help line makes.
+
+**Bugs found along the way.**
+- **My own test-isolation failure, caught immediately.** The new `autopayOn` tests mutate the shared payer, and a later spec asserts on its original collection method; it went red on the first run. The original is now captured in `beforeAll` and restored in `afterAll`. Third corner of this suite to teach the same lesson after R-037c and R-102 — the suite shares one database, and a fixture that reaches beyond its own test reaches into somebody else's assertions.
+
+**What it left behind.**
+- **Nobody has clicked it.** The gap above is the honest state of this item until somebody confirms a card against the test key.
+- **A tenant cannot turn autopay OFF from the portal.** The copy says to contact the office, which is true and deliberate for now — switching a payer back to `send_invoice` has its own refusal rules (D-29, `switchDecision`) and belongs with the rest of R-039a rather than being half-built here.
+- Tenant-chosen debit day, the owner's require-full-balance switch, and **the T-2 pre-debit notice** are still outstanding. The last of those is now the most consequential thing missing in the product: autopay works, so money will start leaving accounts automatically, and PAY-02 requires two days' warning that nothing currently sends.

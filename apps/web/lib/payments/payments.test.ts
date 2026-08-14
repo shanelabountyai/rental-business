@@ -95,6 +95,67 @@ async function charge(amountCents: number, type = 'RENT', description = 'Februar
   return row
 }
 
+describe('paymentView autopay state (R-039a)', () => {
+  // BOTH HALVES OR IT IS NOT AUTOPAY. A saved card on a `send_invoice` payer
+  // does not collect anything, and an automatic payer with no method on file
+  // is an invoice that finalizes and then fails - which is the state every
+  // payer provisioned before R-039a was in, and the reason a single flag
+  // would have been a lie.
+  // These tests MUTATE the shared payer, and a later spec asserts on its
+  // original collection method - so the original is captured and put back.
+  // Found by that spec failing, which is the isolation lesson R-037c and
+  // R-102 both taught in other corners of this suite.
+  let original: { collectionMethod: string; defaultPaymentMethodId: string | null }
+
+  beforeAll(async () => {
+    const payer = await prisma.leasePayer.findFirstOrThrow({ where: { leaseId } })
+    original = {
+      collectionMethod: payer.collectionMethod,
+      defaultPaymentMethodId: payer.defaultPaymentMethodId,
+    }
+  })
+
+  afterAll(async () => {
+    await prisma.leasePayer.updateMany({
+      where: { leaseId },
+      data: {
+        collectionMethod: original.collectionMethod as never,
+        defaultPaymentMethodId: original.defaultPaymentMethodId,
+      },
+    })
+  })
+
+  async function setPayer(collectionMethod: string, methodId: string | null) {
+    await prisma.leasePayer.updateMany({
+      where: { leaseId },
+      data: {
+        collectionMethod: collectionMethod as never,
+        defaultPaymentMethodId: methodId,
+      },
+    })
+  }
+
+  it('is ON only when a method is on file AND collection is automatic', async () => {
+    await setPayer('charge_automatically', 'pm_test_on_file')
+    expect((await paymentView(scope()))!.autopayOn).toBe(true)
+  })
+
+  it('is OFF when the payer bills automatically but has no method on file', async () => {
+    // The dangerous state: Stripe will finalize an invoice and fail to
+    // charge it, and a screen claiming autopay is on would tell the tenant
+    // their rent is handled when it is not.
+    await setPayer('charge_automatically', null)
+    expect((await paymentView(scope()))!.autopayOn).toBe(false)
+  })
+
+  it('is OFF when a method is on file but the payer is invoiced', async () => {
+    // A saved card collects nothing on `send_invoice`. D-29 makes the
+    // collection method a per-payer choice, so the card alone proves nothing.
+    await setPayer('send_invoice', 'pm_test_on_file')
+    expect((await paymentView(scope()))!.autopayOn).toBe(false)
+  })
+})
+
 describe('paymentView', () => {
   it('shows the balance and what it is made up of, before paying', async () => {
     await charge(150_000)
