@@ -1825,7 +1825,7 @@ The gap recorded above is closed: choosing a debit day now moves the Stripe subs
 - **The backlog rows are written at filing time and rot.** Two of four claims here were fixed by an item that shipped afterwards, and nothing updated the row. Worth a habit rather than a fix: verify each claim before building, and record which were already true.
 
 ## R-032c — One tap, and no login wall
-**Commit:** *(recorded below)*  ·  **Date:** 2026-08-14
+**Commit:** `c32c5bc`  ·  **Date:** 2026-08-14
 
 **What it built.** The verification message now carries a single-purpose link a tenant can answer without signing in. `TENANT_VERIFY` is a new token purpose scoped to one work order, one tenant and one **round**; the page it opens shows what they reported and two buttons.
 
