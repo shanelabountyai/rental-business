@@ -70,7 +70,6 @@ will fail until the two below are set.
 
 | Variable | Consequence of leaving it unset |
 |---|---|
-| `STRIPE_WEBHOOK_SECRET` | **No money can enter the ledger.** The webhook route refuses outright without it, and under D-11 `LedgerEntry` is built *only* from webhooks. Create the endpoint after the first deploy, then set the signing secret here and locally (`stripe listen` gives a separate local one). |
 | `NEXT_PUBLIC_OPERATIONS_PHONE` | The vendor rejection screen shows no number — a dead end with no way out (R-098 built the link; it renders nothing when unset). |
 
 ## The two branches, and why they are this way round
@@ -125,6 +124,36 @@ Verified against the live site rather than assumed:
 | `/reset-password?token=<bogus>` | Renders the same form on purpose; `redeemToken` rejects it on submit. No oracle for whether a token is real |
 | `/api/cron` with no or wrong bearer | 404 — deliberate, so a scanner learns nothing. `CRON_SECRET` is set and failing closed |
 | An unknown path | 404 |
+
+## Stripe webhooks
+
+**Set up and verified 2026-08-13.** Endpoint `we_1U47bfJ7dm36XvZPk4ekxGak`,
+test mode, pointing at `/api/webhooks/stripe`, subscribed to exactly the nine
+event types `packages/core/billing/events.ts` handles:
+
+```
+invoice.finalized          payment_intent.succeeded
+invoice.payment_succeeded  payment_intent.processing
+invoice.payment_failed     payment_intent.payment_failed
+invoice.voided             charge.refunded
+                           charge.dispute.created
+```
+
+Nine rather than "all events": the route acknowledges unknown types
+deliberately, so nothing breaks either way, but subscribing to everything
+means paying delivery attempts on hundreds of types the product ignores and
+makes a genuinely failing delivery harder to spot.
+
+**Verified by signing a request, not by assuming.** The route returns 400 for
+both a missing secret and a bad signature — on purpose, so a caller probing it
+cannot tell which check failed — which means a 400 proves nothing about
+whether the secret is right. The proof is a correctly-signed request: same
+body, valid signature → **200**; same body, tampered signature → **400**.
+
+**The local secret is a different one.** `stripe listen --forward-to
+localhost:3000/api/webhooks/stripe` prints its own `whsec_`, valid only for
+that session. Putting the dashboard secret in `.env.local` will not make local
+forwarding work.
 
 ## The production alias is public
 
