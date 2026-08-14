@@ -17,6 +17,7 @@ import { LedgerPanel } from '@/components/leases/ledger-panel.tsx'
 import { LeaseForm } from '@/components/leases/lease-form.tsx'
 import { LifecyclePanel } from '@/components/leases/lifecycle-panel.tsx'
 import { FeesPanel } from '@/components/leases/fees-panel.tsx'
+import { RecurringChargesPanel } from '@/components/leases/recurring-panel.tsx'
 import { PartiesPanel } from '@/components/leases/parties-panel.tsx'
 import { OfflinePaymentForm } from '@/components/payments/offline-payment-form.tsx'
 import { actorCan, actorDecision, propertyResource, requireScope } from '@/lib/auth/guard.ts'
@@ -33,6 +34,8 @@ import {
 import { resyncLease } from '@/lib/billing/actions.ts'
 import { billingIsLive, billingProviderName } from '@/lib/billing/provider.ts'
 import { leaseBillingState } from '@/lib/billing/provision.ts'
+import { recurringChargesForLease } from '@/lib/billing/recurring.ts'
+import { addRecurringCharge, endRecurringCharge } from '@/lib/billing/recurring-actions.ts'
 import { leaseStatement, waivableFees } from '@/lib/ledger/queries.ts'
 import { waiveCharge } from '@/lib/ledger/waivers.ts'
 import { outstandingIntakeGaps } from '@/lib/leases/intake.ts'
@@ -136,12 +139,13 @@ export default async function LeaseDetailPage({
       action: changeLeaseStatus.bind(null, lease.id, to),
     }))
 
-  const [gaps, tenants, payers, ledger, fees] = await Promise.all([
+  const [gaps, tenants, payers, ledger, fees, recurring] = await Promise.all([
     outstandingIntakeGaps(lease),
     canWrite ? selectableTenants() : Promise.resolve([]),
     leaseBillingState(lease.id),
     leaseStatement(lease.id, scope),
     waivableFees(lease.id),
+    recurringChargesForLease(lease.id),
   ])
   const reversed = new Set(
     (ledger?.lines ?? []).map((line) => line.reversesId).filter(Boolean) as string[],
@@ -327,6 +331,26 @@ export default async function LeaseDetailPage({
           waivedByName: fee.waivedBy?.name ?? null,
         }))}
         waive={waiveCharge}
+      />
+
+      <RecurringChargesPanel
+        canWrite={canWrite}
+        // `@db.Date` values, sliced off the ISO string rather than converted
+        // through a timezone: they are calendar days and no zone may touch
+        // them (the R-042 off-by-one, written down in CLAUDE.md).
+        defaultStartsOn={lease.startsOn.toISOString().slice(0, 10)}
+        charges={recurring.map((charge) => ({
+          id: charge.id,
+          type: charge.type,
+          amountCents: charge.amountCents,
+          description: charge.description,
+          startsOn: charge.startsOn.toISOString().slice(0, 10),
+          endsOn: charge.endsOn ? charge.endsOn.toISOString().slice(0, 10) : null,
+          active: charge.active,
+          live: charge.stripeSubscriptionItemId != null,
+        }))}
+        add={addRecurringCharge.bind(null, lease.id)}
+        end={endRecurringCharge}
       />
 
       {canRecordPayment && payers.length > 0 && (ledger?.balanceCents ?? 0) > 0 && (

@@ -282,6 +282,21 @@ export const AUDIT_ACTIONS = [
   /// the same permanence as the rows it is about.
   'ledger.drift_detected',
 
+  /// R-042 (PAY-08): a recurring charge beside the rent - pet rent, a flat
+  /// utility fee - started or stopped billing on the subscription. Both
+  /// halves are recorded because both are money: the start is a term somebody
+  /// agreed, and the stop is the answer to "you kept charging me for a dog
+  /// that moved out in March".
+  'billing.recurring_started',
+  'billing.recurring_ended',
+
+  /// R-042 (PAY-08): a utility bill was split across units and charged on
+  /// (RUBS). Carries the bill total, the method, the weights and the split,
+  /// because the whole defence of a RUBS charge is being able to show the
+  /// arithmetic against the bill it came from - and several states regulate
+  /// it, which is why `JurisdictionRule.rubsPermitted` gates it at all.
+  'billing.rubs_allocated',
+
   /// R-034: a Stripe webhook was projected into the ledger. The event id is
   /// on the entry itself; this is the trail of what the PIPELINE did,
   /// including the events it deliberately ignored.

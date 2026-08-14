@@ -214,6 +214,28 @@ export class SimulatedBillingProvider implements BillingProvider {
     return { stripeInvoiceItemId }
   }
 
+  async addSubscriptionItem(input: {
+    stripeSubscriptionId: string
+    amountCents: number
+    currency: string
+    description: string
+    recurringChargeId: string
+    leaseId: string
+    idempotencyKey: string
+  }): Promise<{ stripePriceId: string; stripeSubscriptionItemId: string }> {
+    const stripePriceId = stripeId('price')
+    const stripeSubscriptionItemId = stripeId('si')
+    console.info(
+      `[billing:simulated] subscription item ${stripeSubscriptionItemId} at ${input.amountCents}c/month ` +
+        `on ${input.stripeSubscriptionId} - ${input.description} (key ${input.idempotencyKey})`,
+    )
+    return { stripePriceId, stripeSubscriptionItemId }
+  }
+
+  async endSubscriptionItem(input: { stripeSubscriptionItemId: string }): Promise<void> {
+    console.info(`[billing:simulated] subscription item ${input.stripeSubscriptionItemId} ended`)
+  }
+
   async markInvoicePaidOutOfBand(input: {
     stripeInvoiceId: string
     reference: string

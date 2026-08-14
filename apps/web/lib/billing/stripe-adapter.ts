@@ -148,6 +148,27 @@ export class StripeBillingProvider implements BillingProvider {
     return payload
   }
 
+  async #delete(path: string): Promise<void> {
+    const response = await fetch(`${STRIPE_API}${path}`, {
+      method: 'DELETE',
+      headers: {
+        Authorization: `Bearer ${this.#secretKey}`,
+        'Stripe-Version': STRIPE_VERSION,
+      },
+    })
+    // Already gone is the outcome the caller wanted. Stripe answers 404 for a
+    // subscription item deleted by a retry of this same call, and treating
+    // that as a failure would leave our row marked live for ever.
+    if (response.ok || response.status === 404) return
+    const payload = (await response.json()) as Record<string, unknown>
+    const error = payload.error as { message?: string; code?: string } | undefined
+    throw new StripeRequestError(
+      response.status,
+      error?.message ?? 'unknown error',
+      error?.code ?? null,
+    )
+  }
+
   async #get(path: string): Promise<Record<string, unknown> | null> {
     const response = await fetch(`${STRIPE_API}${path}`, {
       headers: {
@@ -224,19 +245,31 @@ export class StripeBillingProvider implements BillingProvider {
   /// A Price per rent amount. Stripe Prices are immutable, so a rent change
   /// is a new Price rather than an edit - which is also why the subscription
   /// update below takes one.
-  async #createPrice(amountCents: number, currency: string, leaseId: string): Promise<string> {
+  ///
+  /// `name` and `key` are for R-042's recurring charges, which need their own
+  /// product name (the tenant reads it on every invoice line) and their own
+  /// idempotency fact (two leases can carry pet rent at the same amount, and
+  /// keying on lease-and-amount alone would hand the second one the first
+  /// one's price).
+  async #createPrice(
+    amountCents: number,
+    currency: string,
+    leaseId: string,
+    name?: string,
+    key?: string,
+  ): Promise<string> {
     const price = await this.#post(
       '/prices',
       {
         unit_amount: amountCents,
         currency,
         'recurring[interval]': 'month',
-        'product_data[name]': `Rent — lease ${leaseId}`,
+        'product_data[name]': name ?? `Rent — lease ${leaseId}`,
         'metadata[leaseId]': leaseId,
       },
       // Keyed on the FACT: this lease at this amount. Re-running a failed
       // provisioning reuses the price rather than littering the account.
-      `price:${leaseId}:${amountCents}:${currency}`,
+      key ?? `price:${leaseId}:${amountCents}:${currency}`,
     )
     return price.id as string
   }
@@ -457,6 +490,56 @@ export class StripeBillingProvider implements BillingProvider {
       input.idempotencyKey,
     )
     return { stripeInvoiceItemId: item.id as string }
+  }
+
+  async addSubscriptionItem(input: {
+    stripeSubscriptionId: string
+    amountCents: number
+    currency: string
+    description: string
+    recurringChargeId: string
+    leaseId: string
+    idempotencyKey: string
+  }): Promise<{ stripePriceId: string; stripeSubscriptionItemId: string }> {
+    const price = await this.#createPrice(
+      input.amountCents,
+      input.currency,
+      input.leaseId,
+      // The product name is what shows on the invoice line, so it carries the
+      // sentence core wrote - "Pet rent — Two cats — $35.00/month".
+      input.description,
+      `price:recurring:${input.recurringChargeId}:${input.amountCents}:${input.currency}`,
+    )
+
+    const item = await this.#post(
+      '/subscription_items',
+      {
+        subscription: input.stripeSubscriptionId,
+        price,
+        quantity: 1,
+        // THE D-12 LINE AGAIN. Adding a pet mid-month does not bill a part
+        // month automatically; if one is owed it is ours to compute and push.
+        proration_behavior: 'none',
+        'metadata[recurringChargeId]': input.recurringChargeId,
+        'metadata[leaseId]': input.leaseId,
+      },
+      input.idempotencyKey,
+    )
+
+    return {
+      stripePriceId: price,
+      stripeSubscriptionItemId: item.id as string,
+    }
+  }
+
+  async endSubscriptionItem(input: { stripeSubscriptionItemId: string }): Promise<void> {
+    // Stripe refuses to delete the LAST item on a subscription, which is the
+    // rent - and that refusal is correct rather than an obstacle: a
+    // subscription with no items is a lease billing nothing, and ending a
+    // tenancy is `cancelSubscription`, not this.
+    await this.#delete(
+      `/subscription_items/${encodeURIComponent(input.stripeSubscriptionItemId)}?proration_behavior=none`,
+    )
   }
 
   async getOpenInvoice(

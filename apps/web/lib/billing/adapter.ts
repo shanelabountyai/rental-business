@@ -266,6 +266,47 @@ export interface BillingProvider {
     idempotencyKey: string
   }): Promise<{ stripeInvoiceItemId: string }>
 
+  /**
+   * Adds a monthly line beside the rent (PAY-08, R-042).
+   *
+   * PET RENT AND A FLAT UTILITY FEE, and nothing whose amount a statute could
+   * touch. D-12's rule is about statutes: a late fee, an NSF fee and a
+   * proration are all clamped by jurisdiction config and so are computed in
+   * core and pushed as ONE-OFF invoice items. Agreed pet rent is a term of
+   * the contract, exactly like the rent itself - which has been a Stripe
+   * subscription since R-034 - so Stripe may hold the repetition.
+   *
+   * A variable monthly amount is NOT this. RUBS differs every month with the
+   * underlying bill, so it stays an invoice item computed per bill.
+   *
+   * Returns the price as well as the item because Stripe Prices are
+   * immutable: changing the amount later means a new Price, exactly as a rent
+   * change does.
+   */
+  addSubscriptionItem(input: {
+    stripeSubscriptionId: string
+    amountCents: number
+    currency: string
+    /// What the tenant reads on every invoice from here on, written by core.
+    description: string
+    /// Ours, carried into Stripe's metadata so a line on an invoice can be
+    /// traced back to the row that agreed it.
+    recurringChargeId: string
+    leaseId: string
+    idempotencyKey: string
+  }): Promise<{ stripePriceId: string; stripeSubscriptionItemId: string }>
+
+  /**
+   * Stops a monthly line.
+   *
+   * NEVER PRORATES, for the same reason nothing else here does (D-12). Rent
+   * bills monthly in advance, so the period already invoiced stands and the
+   * line simply stops appearing on the next one. A credit for the unused part
+   * of a month is a decision somebody makes deliberately, as a waiver, with a
+   * reason recorded - not a side effect of a pet moving out.
+   */
+  endSubscriptionItem(input: { stripeSubscriptionItemId: string }): Promise<void>
+
   /// The open invoice to apply an offline payment to, with its id - the
   /// amount alone is not enough here, because the caller has to name the
   /// invoice it is marking paid.

@@ -5,6 +5,7 @@ import { prisma } from '@rental/db'
 import { auditAsSystem } from '@/lib/audit/system.ts'
 import { chargeMoveInProration } from './proration.ts'
 import { getBillingProvider } from './provider.ts'
+import { syncRecurringCharges } from './recurring.ts'
 
 // Provisioning a lease's billing (D-11, R-034).
 //
@@ -220,6 +221,14 @@ export async function provisionLeaseBilling(
         console.error(`[billing] proration failed for lease ${lease.id}`, error)
       })
     }
+
+    // Pet rent and flat utility fees agreed before billing existed (R-042).
+    // A charge added to a DRAFT lease has nowhere to go until there is a
+    // subscription; this is where it lands. Same posture as the proration
+    // above - never thrown, because activation is a tenancy fact.
+    await syncRecurringCharges(lease.id).catch((error: unknown) => {
+      console.error(`[billing] recurring charges failed for lease ${lease.id}`, error)
+    })
 
     return {
       outcome: 'provisioned',

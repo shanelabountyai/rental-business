@@ -5,6 +5,7 @@ import { prisma } from '@rental/db'
 import { auditAsSystem } from '@/lib/audit/system.ts'
 import { getBillingProvider } from './provider.ts'
 import { provisionLeaseBilling } from './provision.ts'
+import { syncRecurringCharges } from './recurring.ts'
 
 // Making Stripe agree with the lease (D-11, R-036).
 //
@@ -250,7 +251,7 @@ export async function runBillingSweep(
         },
       ],
     },
-    select: { id: true },
+    select: { id: true, leaseId: true },
     take: limit,
     orderBy: { createdAt: 'asc' },
   })
@@ -258,6 +259,20 @@ export async function runBillingSweep(
   const results: SyncResult[] = []
   for (const payer of payers) {
     results.push(await syncLeasePayer(payer.id))
+  }
+
+  // R-042's recurring charges, on the same safety net and for the same
+  // reason. `endsOn` is what makes this necessary rather than tidy: a
+  // landlord who says the pet rent stops in March has said something nothing
+  // else in the product would ever act on, and a fee that outlives the pet is
+  // money taken from a tenant who agreed to no such thing.
+  //
+  // Per LEASE, not per payer - the charges hang off the tenancy, and a
+  // voucher lease's two payers would otherwise run this twice.
+  for (const leaseId of new Set(payers.map((payer) => payer.leaseId))) {
+    await syncRecurringCharges(leaseId).catch((error: unknown) => {
+      console.error(`[billing] recurring sync failed for lease ${leaseId}`, error)
+    })
   }
 
   return {
