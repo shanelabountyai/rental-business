@@ -2,7 +2,7 @@
 
 import { Elements, PaymentElement, useElements, useStripe } from '@stripe/react-stripe-js'
 import { type Stripe, loadStripe } from '@stripe/stripe-js'
-import { useState } from 'react'
+import { useActionState, useState } from 'react'
 import type { AutopaySetupState } from '@/lib/payments/autopay-actions.ts'
 
 // Turning autopay on (PAY-02, R-039a).
@@ -91,16 +91,96 @@ function ConfirmForm({ onDone }: { onDone: () => void }) {
   )
 }
 
+function DebitDayForm({
+  debitDay,
+  rentDueDay,
+  latestSafeDay,
+  save,
+}: {
+  debitDay: number | null
+  rentDueDay: number
+  latestSafeDay: number
+  save: (
+    state: { error?: string; saved?: boolean },
+    formData: FormData,
+  ) => Promise<{ error?: string; saved?: boolean }>
+}) {
+  const [state, formAction] = useActionState(save, {})
+  const current = debitDay ?? rentDueDay
+
+  // Nothing to choose between when grace is zero: the due day is the only
+  // safe day, and a one-option control is a control that should not exist.
+  if (latestSafeDay <= rentDueDay) return null
+
+  const days: number[] = []
+  for (let day = rentDueDay; day <= latestSafeDay; day += 1) days.push(day)
+
+  return (
+    <form action={formAction} className="flex flex-col gap-2 border-t pt-3">
+      <label htmlFor="debitDay" className="text-base font-medium">
+        Which day should we collect?
+      </label>
+      <p className="text-muted-foreground text-base">
+        Rent is due on day {rentDueDay}. You can pick any day up to
+        {` ${latestSafeDay}`} without a late fee — useful if you are paid after
+        the due date.
+      </p>
+      <div className="flex flex-wrap items-center gap-3">
+        <select
+          id="debitDay"
+          name="debitDay"
+          defaultValue={String(current)}
+          className="border-input bg-background focus-visible:ring-ring min-h-11 rounded-md border px-3 py-2 text-base focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+        >
+          {days.map((day) => (
+            <option key={day} value={day}>
+              Day {day}
+              {day === rentDueDay ? ' (the day rent is due)' : ''}
+            </option>
+          ))}
+        </select>
+        <button
+          type="submit"
+          className="border-input hover:bg-accent focus-visible:ring-ring flex min-h-11 items-center rounded-md border px-4 py-2 text-base font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+        >
+          Save
+        </button>
+      </div>
+      {state.error && (
+        <p role="alert" className="text-base text-red-700 dark:text-red-400">
+          {state.error}
+        </p>
+      )}
+      {state.saved && (
+        <p role="status" className="text-base">
+          Saved. We will collect on day {current} from now on.
+        </p>
+      )}
+    </form>
+  )
+}
+
 export function AutopayPanel({
   publishableKey,
   alreadyOn,
+  debitDay,
+  rentDueDay,
+  latestSafeDebitDay,
   start,
+  saveDebitDay,
 }: {
   publishableKey: string | null
   /// True when a payment method is already on file and the payer is on
   /// automatic collection.
   alreadyOn: boolean
+  debitDay: number | null
+  rentDueDay: number
+  latestSafeDebitDay: number
   start: () => Promise<AutopaySetupState>
+  saveDebitDay: (
+    state: { error?: string; saved?: boolean },
+    formData: FormData,
+  ) => Promise<{ error?: string; saved?: boolean }>
 }) {
   const [clientSecret, setClientSecret] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -123,10 +203,19 @@ export function AutopayPanel({
             copied. Rendered plain when the page loads with autopay already
             on, because nothing changed and there is nothing to announce. */}
         <p className="text-base" {...(saved ? { role: 'status' as const } : {})}>
-          Rent will be collected automatically on the day it is due. You will
-          still get a message before every payment, and you can turn this off
-          by contacting the office.
+          Rent will be collected automatically. You will still get a message
+          two days before every payment, and you can turn this off by
+          contacting the office.
         </p>
+        {/* Only once autopay is actually on. Asking somebody to pick a
+            collection day before there is anything to collect with is a
+            setting that does nothing. */}
+        <DebitDayForm
+          debitDay={debitDay}
+          rentDueDay={rentDueDay}
+          latestSafeDay={latestSafeDebitDay}
+          save={saveDebitDay}
+        />
       </section>
     )
   }

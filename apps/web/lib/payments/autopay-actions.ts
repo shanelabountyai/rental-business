@@ -1,6 +1,8 @@
 'use server'
 
+import { debitDayDecision, debitDayRefusalMessage } from '@rental/core/payments'
 import { createPaymentMethodSetup } from '@/lib/billing/provision.ts'
+import { rulesFor } from '@/lib/jurisdiction/queries.ts'
 import { prisma } from '@rental/db'
 import { requireTenantWithScope } from '@/lib/portal/guard.ts'
 
@@ -53,4 +55,62 @@ export async function startAutopaySetup(): Promise<AutopaySetupState> {
   if (!setup) return { error: 'Automatic payments are not available on this account yet.' }
 
   return { clientSecret: setup.clientSecret }
+}
+
+/**
+ * Move the day autopay pulls (PAY-02, R-039a; D-4).
+ *
+ * The tenant's own choice, inside the grace period the property's versioned
+ * jurisdiction rule allows. Rent due on the 1st and paid on the 3rd is the
+ * ordinary case; autopay firing on the 1st against an empty account produces
+ * a failed debit, a returned-payment fee and a phone call, every month.
+ *
+ * The ceiling is enforced in core (`debitDayDecision`) and again here rather
+ * than only on the screen: a day past grace guarantees a late fee, and
+ * offering a choice that silently charges for itself is worse than offering
+ * none.
+ */
+export async function setDebitDay(
+  _previous: { error?: string; saved?: boolean },
+  formData: FormData,
+): Promise<{ error?: string; saved?: boolean }> {
+  const { scope } = await requireTenantWithScope()
+  const debitDay = Number(formData.get('debitDay'))
+
+  const payer = await prisma.leasePayer.findFirst({
+    where: { leaseId: { in: [...scope.leaseIds] }, tenantId: scope.tenantId, active: true },
+    select: {
+      id: true,
+      lease: {
+        select: {
+          rentDueDay: true,
+          property: { select: { state: true, county: true } },
+        },
+      },
+    },
+  })
+  if (!payer) return { error: 'There is no account set up to pay against yet.' }
+
+  const rule = await rulesFor(
+    { state: payer.lease.property.state, county: payer.lease.property.county },
+    new Date(),
+  ).catch(() => null)
+
+  const decision = debitDayDecision({
+    debitDay,
+    rentDueDay: payer.lease.rentDueDay,
+    // No configured rule means no grace to spend, so the only safe day is the
+    // due day itself. Refusing to guess a grace period is the same posture
+    // late fees and deposits take (D-4).
+    graceDays: rule?.graceDays ?? 0,
+  })
+  if (!decision.allowed) {
+    return { error: debitDayRefusalMessage(decision.refusal!, decision.latestSafeDay) }
+  }
+
+  await prisma.leasePayer.update({
+    where: { id: payer.id },
+    data: { debitDay },
+  })
+  return { saved: true }
 }

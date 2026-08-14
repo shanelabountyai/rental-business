@@ -456,6 +456,45 @@ describe('returnAction (PAY-02)', () => {
   })
 })
 
+describe("the owner's require-full-balance switch (R-039a, D-29)", () => {
+  const invoiced = { method: 'send_invoice' as const, balanceCents: 150_000, inFlightCents: 0 }
+
+  it('normally lets an invoiced payer pay part of it (D-29)', () => {
+    expect(payable(invoiced).allowsPartial).toBe(true)
+    expect(validatePaymentAmount(invoiced, 50_000)).toEqual({ ok: true })
+  })
+
+  it('REFUSES a part payment when the owner requires the full balance', () => {
+    // The case it exists for: a tenant on invoicing because they have no
+    // card, whose payment plan already failed once.
+    const strict = { ...invoiced, requireFullBalance: true }
+    expect(payable(strict).allowsPartial).toBe(false)
+    expect(validatePaymentAmount(strict, 50_000)).toEqual({
+      ok: false,
+      refusal: 'partial_not_allowed',
+    })
+  })
+
+  it('still takes the FULL amount from that payer', () => {
+    // The switch refuses partials, not payment.
+    const strict = { ...invoiced, requireFullBalance: true }
+    expect(validatePaymentAmount(strict, 150_000)).toEqual({ ok: true })
+  })
+
+  it('changes nothing for a payer who could not pay partially anyway', () => {
+    // `charge_automatically` cannot take a partial payment at all - Stripe
+    // will not reconcile one - so the owner switch is a no-op there rather
+    // than a second rule that could disagree with the first.
+    const auto = { method: 'charge_automatically' as const, balanceCents: 150_000, inFlightCents: 0 }
+    expect(payable(auto).allowsPartial).toBe(false)
+    expect(payable({ ...auto, requireFullBalance: true }).allowsPartial).toBe(false)
+  })
+
+  it('is OFF when nobody set it, so every existing payer behaves as before', () => {
+    expect(payable(invoiced).allowsPartial).toBe(true)
+  })
+})
+
 describe('nsfFeeFor (PAY-02, D-4, D-12)', () => {
   const texas = { nsfFeePermitted: true, nsfFeeMaxCents: 3_000 }
 

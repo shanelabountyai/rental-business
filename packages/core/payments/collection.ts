@@ -228,6 +228,13 @@ export type AmountRefusal =
 
 export interface PayableFacts {
   method: CollectionMethod
+  /// An OWNER policy that overrides the mode (R-039a). D-29 makes partial
+  /// payments a property of the collection method, but an owner may have a
+  /// tenant on invoicing - because they have no card - whom they still will
+  /// not take part payments from, typically after a payment plan has already
+  /// failed once. Absent is false: the mode decides unless somebody says
+  /// otherwise, which keeps every existing payer behaving as it did.
+  requireFullBalance?: boolean
   /// What the ledger says is owed. May be zero or negative - a credit
   /// balance is a real state.
   balanceCents: number
@@ -255,7 +262,10 @@ export interface Payable {
 export function payable(facts: PayableFacts): Payable {
   return {
     maxCents: Math.max(0, facts.balanceCents - facts.inFlightCents),
-    allowsPartial: allowsPartialPayment(facts.method),
+    // The owner's switch wins. Enforced HERE rather than at the screen for
+    // the same reason `allowsPartialPayment` is: a hand-crafted request must
+    // not be able to get around it.
+    allowsPartial: allowsPartialPayment(facts.method) && !facts.requireFullBalance,
     inFlightCents: facts.inFlightCents,
   }
 }

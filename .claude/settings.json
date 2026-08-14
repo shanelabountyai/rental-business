@@ -27,7 +27,9 @@
       "Bash(docker --version)",
       "Bash(awk '{print \"brew log:\", $5, \"bytes\"}')",
       "Bash(node -e \"const s=require\\('./package.json'\\).scripts; for \\(const k of ['test','test:e2e','db:migrate:test','db:seed:test']\\) console.log\\(k+':', s[k]\\)\")",
-      "Bash(pkill -f \"playwright test\")"
+      "Bash(pkill -f \"playwright test\")",
+      "Bash(node -e \"const s=require\\('./package.json'\\).scripts; for\\(const k of Object.keys\\(s\\)\\) if\\(/^\\(test|dev|db:\\)/.test\\(k\\)\\) console.log\\(k+':', s[k]\\)\")",
+      "Bash(node -e \"const s=require\\('./package.json'\\).scripts; for\\(const k of ['test','test:e2e','dev:test','db:migrate:test']\\) console.log\\(k+':', s[k]\\)\")"
     ],
     "additionalDirectories": [
       "/Users/shanelabounty/Documents/Claude/Projects/rental business/packages/core/tasks"

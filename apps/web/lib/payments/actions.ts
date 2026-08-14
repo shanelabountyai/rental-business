@@ -59,7 +59,12 @@ export async function startPayment(
       collectionMethod: true,
       collectionPaused: true,
       stripeCustomerId: true,
-      lease: { select: { property: { select: { state: true, county: true } } } },
+      lease: {
+        select: {
+          requireFullBalance: true,
+          property: { select: { state: true, county: true } },
+        },
+      },
     },
   })
   if (!payer) return { error: 'There is no account set up to pay against yet.' }
@@ -113,6 +118,11 @@ export async function startPayment(
       entries.map((row) => ({ ...row, type: '', occurredAt: new Date(0), description: '' })),
     ),
     inFlightCents: inFlight._sum.amountCents ?? 0,
+    // THE WRITE PATH, not just the screen (R-039a). The pay form already
+    // hides a partial amount when the owner requires the full balance, but a
+    // hand-crafted request does not go through the form - and this is the
+    // only place that actually refuses one.
+    requireFullBalance: payer.lease.requireFullBalance,
   }
 
   const verdict = validatePaymentAmount(facts, amountCents)

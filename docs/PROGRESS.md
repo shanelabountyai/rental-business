@@ -1644,3 +1644,28 @@ Recording a surety bond as "a cash deposit of $0" would be true and useless. The
 - **The timeout ceilings raised earlier this session are now wildly oversized** — 90s on escalation, 120s on emergency, 240s on the axe scan, 20s on the soft-delete poll. Harmless, since a ceiling only matters on failure, but their comments cite measurements taken against a remote database and are now historical rather than current.
 - Tenant-chosen debit day and the owner's require-full-balance switch are still outstanding on R-039a.
 - **Nobody has clicked the Elements enrolment screen yet.** Unchanged from part 3, and still the honest state.
+
+## R-039a (part 5) — The debit day and the full-balance switch: PAY-02 closed
+**Commit:** `TBD`  ·  **Date:** 2026-08-14
+
+**What it built.** The last two pieces of autopay, and with them PAY-02's Must story is complete: a tenant can enrol, choose when they are debited, gets warned two days ahead, and an owner can refuse part payments.
+
+**The tenant's debit day.** Rent is due on the 1st; plenty of people are paid on the 3rd. Autopay firing on the 1st against an empty account produces a failed debit, a returned-payment fee and a phone call — every month. Letting the payer name the day is the difference between autopay that helps and autopay that manufactures arrears.
+
+**It cannot be any day, and the ceiling is the point.** A debit after the grace period *guarantees* a late fee: the nightly assessment (R-040) reads the same jurisdiction config and does not care that money was already on its way. Offering a tenant a choice that silently charges them for taking it would be worse than offering no choice. `debitDayDecision` reads `graceDays` from the versioned rule (D-4), so the ceiling moves when a statute does rather than when somebody edits a constant.
+
+**No configured rule means no grace to spend** — the only safe day is the due day itself, and the control renders nothing rather than offering a single option. Same refusal-to-guess that late fees, NSF fees and deposit caps all make.
+
+**The owner's full-balance switch.** D-29 makes partial payments a property of the collection method: `send_invoice` allows them, `charge_automatically` cannot. This overrides it for the narrow case it exists for — a tenant on invoicing because they have no card, whose payment plan has already failed once. Off by default, with a hint saying most leases should leave it off, because refusing a part payment from somebody trying to pay something is usually the wrong move.
+
+**Both flags bite on the WRITE path, not the screen.** `requireFullBalance` flows into `validatePaymentAmount`, and the debit day is re-validated in the action. The pay form hides what it should, but a hand-crafted request does not go through the form — and enforcing it in core is the only thing that actually refuses one. The same reasoning `allowsPartialPayment` already carried.
+
+**What it decided.**
+- **The refusal message is written for a tenant.** *"Rent would be late by then, and a late fee would apply. Choose day 4 or earlier."* — what happens to them, not which rule fired. No mention of grace periods or jurisdictions.
+- **The debit-day control appears only once autopay is on.** Asking somebody to pick a collection day before there is anything to collect with is a setting that does nothing.
+- **A day earlier than the due day is refused too** — not unlawful, just money taken before it is owed, which is refused for the tenant's benefit rather than ours.
+- **`requireFullBalance` lives on the Lease, not the payer.** It is a decision about a tenancy; a two-payer lease where one may pay partially and the other may not is a distinction nobody asked for and would have to be explained on every screen.
+
+**What it left behind.**
+- **Changing the debit day does not yet move the Stripe billing anchor.** The column is recorded and enforced, and the pre-debit notice reads the lease's due day rather than the payer's chosen one — so a tenant who moves their day is warned on the old schedule. Moving the anchor means `updateSubscription` with a new `billing_cycle_anchor` and a proration decision (D-12 says ours, not Stripe's), which is a real piece of work and wants its own item.
+- **Nobody has clicked the Elements enrolment screen.** Unchanged since part 3 and still the honest state.

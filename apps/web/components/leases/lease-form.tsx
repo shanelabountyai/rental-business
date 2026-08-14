@@ -3,7 +3,7 @@
 import { UTILITIES, UTILITY_PAYERS } from '@rental/core/leases'
 import { useActionState, useState } from 'react'
 import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
-import { SelectField, TextField } from '@/components/form/field.tsx'
+import { CheckboxField, SelectField, TextField } from '@/components/form/field.tsx'
 import type { LeaseFormState } from '@/lib/leases/actions.ts'
 
 // The lease terms form (LEASE-06, R-033), shared by create and edit.
@@ -52,6 +52,7 @@ export interface LeaseDefaults {
   rentDollars?: string
   depositDollars?: string
   nsfFeeDollars?: string
+  requireFullBalance?: boolean
   depositArrangement?: string
   rentDueDay?: string
   isMonthToMonth?: boolean
@@ -251,6 +252,19 @@ export function LeaseForm({
           error={errors.nsfFeeDollars}
         />
       </div>
+
+      {/* OFF by default, and it should stay that way for most tenancies. D-29
+          makes partial payments a property of the collection method; this
+          overrides it, and the case it exists for is narrow - a tenant on
+          invoicing because they have no card, whose payment plan has already
+          failed once. Refusing a part payment from somebody trying to pay
+          something is usually the wrong move. */}
+      <CheckboxField
+        label="Refuse part payments on this lease"
+        name="requireFullBalance"
+        defaultChecked={defaults?.requireFullBalance}
+        hint="Only the full outstanding balance will be accepted. Most leases should leave this off — a tenant paying something is better than a tenant paying nothing."
+      />
 
       <div className="grid gap-4 sm:grid-cols-2">
         <TextField

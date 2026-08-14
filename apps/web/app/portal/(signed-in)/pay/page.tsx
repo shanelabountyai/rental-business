@@ -3,7 +3,7 @@ import { CARD_FIXED_CENTS, CARD_RATE_BPS } from '@rental/core/payments'
 import { AutopayPanel } from '@/components/payments/autopay-panel.tsx'
 import { PayForm } from '@/components/payments/pay-form.tsx'
 import { startPayment } from '@/lib/payments/actions.ts'
-import { startAutopaySetup } from '@/lib/payments/autopay-actions.ts'
+import { setDebitDay, startAutopaySetup } from '@/lib/payments/autopay-actions.ts'
 import { paymentView } from '@/lib/payments/queries.ts'
 import { requireTenantWithScope } from '@/lib/portal/guard.ts'
 
@@ -68,7 +68,11 @@ export default async function PayPage() {
       <AutopayPanel
         publishableKey={process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? null}
         alreadyOn={view.autopayOn}
+        debitDay={view.debitDay}
+        rentDueDay={view.rentDueDay}
+        latestSafeDebitDay={view.latestSafeDebitDay}
         start={startAutopaySetup}
+        saveDebitDay={setDebitDay}
       />
 
       <section aria-labelledby="balance" className="flex flex-col gap-2 rounded-lg border p-4">

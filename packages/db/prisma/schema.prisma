@@ -860,6 +860,11 @@ model Lease {
   /// and `nsfFeeMaxCents` clamp this (D-4), so a state that forbids or caps
   /// the fee overrides the lease without anybody editing a lease.
   nsfFeeCents    Int?
+  /// An owner policy that overrides the collection method (R-039a, D-29).
+  /// `send_invoice` allows partial payments; this refuses them anyway, which
+  /// is what an owner wants for a tenant whose payment plan has already
+  /// failed once. On the lease because it is a decision about a tenancy.
+  requireFullBalance Boolean @default(false)
   isMonthToMonth Boolean     @default(false)
   /// Rate applied on MTM rollover (LEASE-09). Null = keep the current rent.
   mtmRentCents   Int?
@@ -1317,6 +1322,13 @@ model LeasePayer {
   /// those inside Stripe-hosted fields, and storing a last-four starts down a
   /// road this product has no reason to be on.
   defaultPaymentMethodId String?
+  /// The day of the month autopay pulls (R-039a, PAY-02). Null means the day
+  /// rent is due. A later day inside the grace period is what stops autopay
+  /// firing on the 1st against an account that is paid on the 3rd.
+  ///
+  /// The 1-28 range is a CHECK; whether a given day is SAFE depends on the
+  /// property's versioned grace period and lives in `debitDayDecision` (D-4).
+  debitDay               Int?
   collectionPaused     Boolean @default(false)
   /// The rent we last successfully pushed to Stripe, in cents.
   ///

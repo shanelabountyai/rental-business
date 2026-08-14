@@ -56,6 +56,11 @@ export interface PaymentView {
   /// autopay, and an automatic payer with no method is an invoice that will
   /// fail (R-039a).
   autopayOn: boolean
+  /// The day autopay pulls, and the latest day it safely could. Null debitDay
+  /// means the rent due day (R-039a).
+  debitDay: number | null
+  rentDueDay: number
+  latestSafeDebitDay: number
   charges: PayableCharge[]
   rails: { rail: PaymentRail; available: boolean; unavailableReason?: string }[]
   /// What a card would add to the FULL payable amount. Recomputed for the
@@ -88,9 +93,12 @@ export async function paymentView(scope: TenantScope): Promise<PaymentView | nul
       collectionMethod: true,
       stripeCustomerId: true,
       defaultPaymentMethodId: true,
+      debitDay: true,
       lease: {
         select: {
           id: true,
+          rentDueDay: true,
+          requireFullBalance: true,
           property: { select: { name: true, state: true, county: true } },
           unit: { select: { name: true } },
         },
@@ -134,7 +142,15 @@ export async function paymentView(scope: TenantScope): Promise<PaymentView | nul
   )
   const inFlightCents = inFlight._sum.amountCents ?? 0
   const method = payer.collectionMethod as CollectionMethod
-  const limits = payable({ method, balanceCents: balance, inFlightCents })
+  // The owner's switch travels with the facts (R-039a). Without this the
+  // flag would be a column nothing reads - and `validatePaymentAmount` is
+  // where it has to bite, so a hand-crafted request cannot get around it.
+  const limits = payable({
+    method,
+    balanceCents: balance,
+    inFlightCents,
+    requireFullBalance: payer.lease.requireFullBalance,
+  })
 
   // D-4: whether the tenant may be charged the card cost is a jurisdiction
   // fact. A property with no rule configured is treated as NOT permitted -
@@ -161,6 +177,12 @@ export async function paymentView(scope: TenantScope): Promise<PaymentView | nul
     // invoice that finalizes and then fails - which is exactly the state
     // every payer provisioned before R-039a was in.
     autopayOn: method === 'charge_automatically' && payer.defaultPaymentMethodId != null,
+    debitDay: payer.debitDay,
+    rentDueDay: payer.lease.rentDueDay,
+    // The ceiling the tenant may choose up to, from the versioned rule (D-4).
+    // No configured rule means no grace to spend, so the only safe day is the
+    // due day itself - the same refusal-to-guess late fees and deposits make.
+    latestSafeDebitDay: Math.min(28, payer.lease.rentDueDay + (rule?.graceDays ?? 0)),
     charges: charges
       .map((charge) => {
         // Outstanding is derived from the charge's own applications rather
