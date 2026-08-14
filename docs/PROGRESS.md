@@ -1611,7 +1611,7 @@ Recording a surety bond as "a cash deposit of $0" would be true and useless. The
 - Tenant-chosen debit day, the owner's require-full-balance switch, and **the T-2 pre-debit notice** are still outstanding. The last of those is now the most consequential thing missing in the product: autopay works, so money will start leaving accounts automatically, and PAY-02 requires two days' warning that nothing currently sends.
 
 ## R-039a (part 4) — The T-2 pre-debit notice, and tests off the cloud database
-**Commit:** `TBD`  ·  **Date:** 2026-08-14
+**Commit:** `916bd66`  ·  **Date:** 2026-08-14
 
 **The T-2 notice.** Autopay started working three commits ago, which means rent now leaves a bank account without the tenant doing anything — and nothing warned them. PAY-02 asks for two days' notice; two days is enough to move money in, or to ring the office before an overdraft rather than after one.
 
