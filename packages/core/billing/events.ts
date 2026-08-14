@@ -93,6 +93,17 @@ export const HANDLED_EVENTS = [
   'payment_intent.processing',
   'payment_intent.succeeded',
   'payment_intent.payment_failed',
+
+  // ---- Autopay enrolment (R-039a, PAY-02) ----
+  //
+  // The tenant saved a payment method through Stripe-hosted fields and Stripe
+  // confirmed it. NOT a money movement and never projected into the ledger -
+  // it moves no cents - but it is the moment autopay becomes possible, and it
+  // has to arrive as an event rather than as a browser callback: the browser
+  // can be closed the instant after the tenant taps confirm, and a tenant who
+  // did everything asked of them must not end up without autopay because
+  // their phone slept.
+  'setup_intent.succeeded',
 ] as const
 export type HandledEvent = (typeof HANDLED_EVENTS)[number]
 
@@ -165,8 +176,24 @@ export interface ProjectionIntent {
   description: string
 }
 
+/// A saved payment method, confirmed by Stripe (R-039a, PAY-02).
+///
+/// Its own outcome rather than a ProjectionIntent, because it moves NO
+/// money. Forcing it through the ledger path would need an amount, and the
+/// only honest amount is zero - a zero-cent entry that looks authoritative
+/// and says nothing. What it changes is whether autopay can work at all.
+export interface AutopayEnrolment {
+  stripeCustomerId: string
+  stripePaymentMethodId: string
+  stripeSetupIntentId: string
+}
+
 export type InterpretResult =
   | { outcome: 'project'; intent: ProjectionIntent }
+  /// Recognised, moves no money, and still means something: the tenant now
+  /// has a payment method on file and the subscription can be switched to
+  /// charge automatically.
+  | { outcome: 'autopay_enrolled'; enrolment: AutopayEnrolment }
   /// Recognised, but nothing to project - or unrecognised entirely. Either
   /// way the event is acknowledged so Stripe stops retrying it.
   | { outcome: 'ignore'; reason: string }
@@ -212,6 +239,24 @@ export function interpretStripeEvent(event: StripeEventEnvelope): InterpretResul
   const occurredAt = new Date(event.created * 1000)
 
   switch (event.type) {
+    case 'setup_intent.succeeded': {
+      // The payment method is the whole point of the event; without it there
+      // is nothing to make default and enrolment did not happen. Refused with
+      // a reason rather than acknowledged as a success that changed nothing.
+      const paymentMethod = str(object, 'payment_method')
+      if (!paymentMethod) {
+        return { outcome: 'ignore', reason: 'setup intent named no payment method' }
+      }
+      return {
+        outcome: 'autopay_enrolled',
+        enrolment: {
+          stripeCustomerId,
+          stripePaymentMethodId: paymentMethod,
+          stripeSetupIntentId: stripeObjectId,
+        },
+      }
+    }
+
     case 'invoice.finalized': {
       // `amount_due`, not `total`: what this invoice actually asks the tenant
       // for, after any credit balance Stripe has already applied. A waiver

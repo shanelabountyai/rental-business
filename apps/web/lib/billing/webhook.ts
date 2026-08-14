@@ -7,11 +7,14 @@ import {
   ledgerAmountCents,
   movesLedger,
 } from '@rental/core/billing'
+import type { AutopayEnrolment } from '@rental/core/billing'
 import { formatCents } from '@rental/core/money'
 import { returnAction, reversalAmountCents } from '@rental/core/payments'
 import { businessDate } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { isUniqueViolation } from '@/lib/db/unique-violation.ts'
+import { auditAsSystem } from '@/lib/audit/system.ts'
+import { getBillingProvider } from '@/lib/billing/provider.ts'
 import { assessNsfFee } from '@/lib/ledger/nsf-fees.ts'
 import { leaseBalanceCents } from '@/lib/ledger/queries.ts'
 import { dispatchPendingNotifications, notify } from '@/lib/notifications/send.ts'
@@ -88,6 +91,15 @@ export async function processStripeEvent(
   if (interpretation.outcome === 'ignore') {
     await recordOutcome(event.id, 'ignored', interpretation.reason)
     return { outcome: 'ignored', detail: interpretation.reason }
+  }
+
+  // Autopay enrolment moves no money and therefore never touches the ledger
+  // (R-039a). Handled before the projection path rather than inside it,
+  // because everything below this line is about cents.
+  if (interpretation.outcome === 'autopay_enrolled') {
+    const detail = await enrolAutopay(interpretation.enrolment)
+    await recordOutcome(event.id, 'ignored', detail)
+    return { outcome: 'ignored', detail }
   }
 
   const intent = interpretation.intent
@@ -623,6 +635,77 @@ async function reverseSettledPayment(
       },
     })
   }
+}
+
+/**
+ * Turn a saved payment method into working autopay (PAY-02, R-039a).
+ *
+ * THE ENROLMENT IS NOT COMPLETE WHEN THE CARD IS SAVED. Stripe holds a
+ * payment method; the subscription still bills however it was created, which
+ * for every payer provisioned before this existed is `charge_automatically`
+ * with no method attached - an invoice that finalizes and then fails. So this
+ * does both halves: makes the method the default, and moves the payer onto
+ * automatic collection.
+ *
+ * Never throws. A webhook that 500s is retried, and Stripe's retries are the
+ * right answer for a transient database failure but the wrong one for a
+ * customer we do not recognise - which is a permanent condition no number of
+ * attempts will fix.
+ */
+async function enrolAutopay(enrolment: AutopayEnrolment): Promise<string> {
+  const payer = await prisma.leasePayer.findFirst({
+    where: { stripeCustomerId: enrolment.stripeCustomerId },
+    select: { id: true, leaseId: true, propertyId: true, stripeSubscriptionId: true },
+  })
+  if (!payer) {
+    return `autopay: no payer for customer ${enrolment.stripeCustomerId}`
+  }
+
+  try {
+    await getBillingProvider().setDefaultPaymentMethod({
+      stripeCustomerId: enrolment.stripeCustomerId,
+      stripePaymentMethodId: enrolment.stripePaymentMethodId,
+      stripeSubscriptionId: payer.stripeSubscriptionId,
+    })
+
+    if (payer.stripeSubscriptionId) {
+      await getBillingProvider().setCollectionMethod({
+        stripeSubscriptionId: payer.stripeSubscriptionId,
+        collectionMethod: 'charge_automatically',
+      })
+    }
+
+    await prisma.leasePayer.update({
+      where: { id: payer.id },
+      data: {
+        collectionMethod: 'charge_automatically',
+        // What we know Stripe is holding. Recorded so a screen can say "a
+        // card is on file" without a network call per lease - the same
+        // reasoning `stripeAmountCents` carries.
+        defaultPaymentMethodId: enrolment.stripePaymentMethodId,
+      },
+    })
+  } catch (error) {
+    console.error(`[stripe] autopay enrolment failed for payer ${payer.id}`, error)
+    return `autopay: enrolment failed for payer ${payer.id}`
+  }
+
+  await auditAsSystem('billing.autopay', {
+    action: 'billing.provisioned',
+    entityType: 'LeasePayer',
+    entityId: payer.id,
+    propertyId: payer.propertyId,
+    after: {
+      autopayEnrolled: true,
+      collectionMethod: 'charge_automatically',
+      stripeSetupIntentId: enrolment.stripeSetupIntentId,
+      stripePaymentMethodId: enrolment.stripePaymentMethodId,
+    },
+  }).catch((error: unknown) => {
+    console.error(`[stripe] failed to audit autopay enrolment for ${payer.id}`, error)
+  })
+
+  return `autopay: enrolled payer ${payer.id}`
 }
 
 /// "Your payment came back" (PAY-02). Reads the balance AFTER the reversal,

@@ -1309,6 +1309,14 @@ model LeasePayer {
   /// because moving a payer while an invoice is still open lets the new
   /// mode bill the same period twice.
   collectionMethod     CollectionMethod @default(charge_automatically)
+  /// The saved payment method autopay charges (R-039a, PAY-02).
+  ///
+  /// A record of what we told Stripe to use, not a second source of truth
+  /// (D-11) - it lets a screen say "a card is on file" without a network call
+  /// per lease. NEVER a card number, a last-four or an expiry: §6.6 keeps
+  /// those inside Stripe-hosted fields, and storing a last-four starts down a
+  /// road this product has no reason to be on.
+  defaultPaymentMethodId String?
   collectionPaused     Boolean @default(false)
   /// The rent we last successfully pushed to Stripe, in cents.
   ///

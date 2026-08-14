@@ -128,7 +128,7 @@ Verified against the live site rather than assumed:
 ## Stripe webhooks
 
 **Set up and verified 2026-08-13.** Endpoint `we_1U47bfJ7dm36XvZPk4ekxGak`,
-test mode, pointing at `/api/webhooks/stripe`, subscribed to exactly the nine
+test mode, pointing at `/api/webhooks/stripe`, subscribed to exactly the ten
 event types `packages/core/billing/events.ts` handles:
 
 ```
@@ -136,10 +136,16 @@ invoice.finalized          payment_intent.succeeded
 invoice.payment_succeeded  payment_intent.processing
 invoice.payment_failed     payment_intent.payment_failed
 invoice.voided             charge.refunded
-                           charge.dispute.created
+setup_intent.succeeded     charge.dispute.created
 ```
 
-Nine rather than "all events": the route acknowledges unknown types
+`setup_intent.succeeded` was added with R-039a and is the only one that moves
+no money — it is how a tenant's saved card becomes working autopay.
+
+**When the handled list grows, this subscription has to grow with it.** A
+handler nothing is subscribed to is dead code that looks live.
+
+Ten rather than "all events": the route acknowledges unknown types
 deliberately, so nothing breaks either way, but subscribing to everything
 means paying delivery attempts on hundreds of types the product ignores and
 makes a genuinely failing delivery harder to spot.

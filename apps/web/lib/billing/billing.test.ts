@@ -188,6 +188,84 @@ describe('processStripeEvent', () => {
     return { lease, customerId: result.stripeCustomerId! }
   }
 
+  it('ENROLS AUTOPAY when a setup intent succeeds, and switches collection', async () => {
+    // The half that was missing: Stripe holding a card is not autopay. The
+    // subscription still bills however it was created, so a tenant who did
+    // everything asked of them would watch the next invoice fail (R-039a).
+    const { lease, customerId } = await provisionedLease()
+    const payerBefore = await prisma.leasePayer.findFirstOrThrow({
+      where: { leaseId: lease.id },
+    })
+    await prisma.leasePayer.update({
+      where: { id: payerBefore.id },
+      data: { collectionMethod: 'send_invoice', defaultPaymentMethodId: null },
+    })
+
+    const result = await processStripeEvent({
+      id: `evt_${randomUUID().replace(/-/g, '')}`,
+      type: 'setup_intent.succeeded',
+      created: Math.floor(Date.now() / 1000),
+      data: {
+        object: {
+          id: `seti_${randomUUID().replace(/-/g, '').slice(0, 16)}`,
+          object: 'setup_intent',
+          customer: customerId,
+          payment_method: 'pm_test_autopay_enrolment',
+        },
+      },
+    })
+    expect(result.outcome).toBe('ignored')
+    expect(result.detail).toMatch(/autopay: enrolled/)
+
+    const payer = await prisma.leasePayer.findFirstOrThrow({ where: { leaseId: lease.id } })
+    expect(payer.collectionMethod).toBe('charge_automatically')
+    expect(payer.defaultPaymentMethodId).toBe('pm_test_autopay_enrolment')
+  }, 20_000)
+
+  it('writes NOTHING to the ledger for an enrolment - it moves no money', async () => {
+    // The reason this is its own outcome rather than a ProjectionIntent: the
+    // only honest amount would be zero, and a zero-cent entry looks
+    // authoritative while saying nothing.
+    const { lease, customerId } = await provisionedLease()
+    const before = await prisma.ledgerEntry.count({ where: { leaseId: lease.id } })
+
+    await processStripeEvent({
+      id: `evt_${randomUUID().replace(/-/g, '')}`,
+      type: 'setup_intent.succeeded',
+      created: Math.floor(Date.now() / 1000),
+      data: {
+        object: {
+          id: `seti_${randomUUID().replace(/-/g, '').slice(0, 16)}`,
+          object: 'setup_intent',
+          customer: customerId,
+          payment_method: 'pm_test_no_ledger',
+        },
+      },
+    })
+
+    expect(await prisma.ledgerEntry.count({ where: { leaseId: lease.id } })).toBe(before)
+  }, 20_000)
+
+  it('refuses a setup intent that names no payment method', async () => {
+    // There would be nothing to make default, so "succeeded" would be a
+    // success that changed nothing.
+    const { customerId } = await provisionedLease()
+    const result = await processStripeEvent({
+      id: `evt_${randomUUID().replace(/-/g, '')}`,
+      type: 'setup_intent.succeeded',
+      created: Math.floor(Date.now() / 1000),
+      data: {
+        object: {
+          id: `seti_${randomUUID().replace(/-/g, '').slice(0, 16)}`,
+          object: 'setup_intent',
+          customer: customerId,
+        },
+      },
+    })
+    expect(result.outcome).toBe('ignored')
+    expect(result.detail).toMatch(/named no payment method/)
+  }, 20_000)
+
   it('projects a successful payment into a Payment and a NEGATIVE ledger entry', async () => {
     const { lease, customerId } = await provisionedLease()
     const event = invoiceEvent({ customer: customerId, amountPaid: 150_000 })

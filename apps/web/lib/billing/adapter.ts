@@ -102,6 +102,23 @@ export interface BillingProvider {
   /// ever reaches this product (master PRD §6.6).
   createSetupIntent(stripeCustomerId: string): Promise<ProvisionedSetupIntent>
 
+  /**
+   * Makes a saved payment method the one future invoices are charged to
+   * (PAY-02, R-039a).
+   *
+   * Set on BOTH the customer and the subscription, deliberately. Stripe falls
+   * back to the customer default when a subscription names none, but "falls
+   * back" is not a guarantee to build autopay on: a subscription created
+   * before the method existed would otherwise keep whatever it was born with,
+   * and the tenant who just enrolled would watch the next invoice go unpaid
+   * having done everything asked of them.
+   */
+  setDefaultPaymentMethod(input: {
+    stripeCustomerId: string
+    stripePaymentMethodId: string
+    stripeSubscriptionId?: string | null
+  }): Promise<void>
+
   // ---- Lifecycle (R-036) ----
 
   /**

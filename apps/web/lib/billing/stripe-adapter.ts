@@ -353,6 +353,30 @@ export class StripeBillingProvider implements BillingProvider {
     })
   }
 
+  async setDefaultPaymentMethod(input: {
+    stripeCustomerId: string
+    stripePaymentMethodId: string
+    stripeSubscriptionId?: string | null
+  }): Promise<void> {
+    // BOTH, and in this order. Stripe falls back to the customer default when
+    // a subscription names none, but a subscription created before the method
+    // existed keeps whatever it was born with - so relying on the fallback
+    // leaves the tenant who just enrolled watching the next invoice go unpaid
+    // having done everything asked of them.
+    //
+    // No idempotency key, for the reason #post documents: these are updates,
+    // idempotent by nature, and a stale key would make a legitimate change of
+    // card silently return the first one's result.
+    await this.#post(`/customers/${input.stripeCustomerId}`, {
+      'invoice_settings[default_payment_method]': input.stripePaymentMethodId,
+    })
+    if (input.stripeSubscriptionId) {
+      await this.#post(`/subscriptions/${input.stripeSubscriptionId}`, {
+        default_payment_method: input.stripePaymentMethodId,
+      })
+    }
+  }
+
   async getOpenInvoiceAmountCents(input: SubscriptionRef): Promise<number | null> {
     // `status=open` is issued-and-unpaid. Deliberately NOT `draft`: a draft
     // invoice has not been presented to anybody and blocking a switch on one

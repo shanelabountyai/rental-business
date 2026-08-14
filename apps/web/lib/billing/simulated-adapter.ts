@@ -73,6 +73,18 @@ export class SimulatedBillingProvider implements BillingProvider {
     }
   }
 
+  async setDefaultPaymentMethod(input: {
+    stripeCustomerId: string
+    stripePaymentMethodId: string
+    stripeSubscriptionId?: string | null
+  }): Promise<void> {
+    console.info(
+      `[billing:simulated] default payment method ${input.stripePaymentMethodId} ` +
+        `for ${input.stripeCustomerId}` +
+        (input.stripeSubscriptionId ? ` and ${input.stripeSubscriptionId}` : ''),
+    )
+  }
+
   async updateSubscriptionPrice(input: {
     stripeSubscriptionId: string
     amountCents: number

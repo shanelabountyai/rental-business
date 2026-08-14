@@ -1,0 +1,13 @@
+-- R-039a: the saved payment method autopay bills (PAY-02; D-11).
+--
+-- Stripe is the system of record and this column is not it - the same
+-- relationship `stripeAmountCents` has. What it records is WHAT WE TOLD
+-- STRIPE TO USE, so a screen can say "a card is on file" without a network
+-- call per lease, and so "did this tenant ever enrol" is answerable from the
+-- database when Stripe is unreachable.
+--
+-- Never a card number, never a last-four, never an expiry. A Stripe payment
+-- method id and nothing else: master PRD §6.6 keeps card and bank details
+-- inside Stripe-hosted fields, and a product that stores a last-four has
+-- started down a road it has no reason to be on.
+ALTER TABLE "LeasePayer" ADD COLUMN "defaultPaymentMethodId" TEXT;

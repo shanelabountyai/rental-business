@@ -1560,3 +1560,27 @@ Recording a surety bond as "a cash deposit of $0" would be true and useless. The
 **What it left behind.**
 - **R-042 is not finished.** This is the proration half. Still outstanding: **pet rent and flat utility fees as additional subscription items**, and **RUBS-style allocation with the underlying bill attached and the math documented per bill** (config-gated where a jurisdiction restricts it). `allocate()` already exists in core, tested, and distributes remainder cents to the largest fractional shares so the parts sum exactly — it has no caller yet.
 - **Move-out proration is not built.** `moveInProration` is named for what it does. A move-out mid-month is the mirror image and belongs with R-071's disposition work, where the final balance is settled.
+
+## R-039a (part 2) — Autopay enrolment, the server half
+**Commit:** `TBD`  ·  **Date:** 2026-08-13
+
+**What it built.** The path from "the tenant saved a card" to "autopay actually works". `createSetupIntent` has existed since R-034 with no caller; this is the other end of it — what happens when Stripe confirms one.
+
+**Saving a card is not enrolling in autopay, and that gap is the whole item.** Stripe ends up holding a payment method, but the subscription still bills however it was created — and every payer provisioned before this existed sits on `charge_automatically` with no method attached, which finalizes an invoice and then fails it. A tenant who did everything asked of them would watch their rent go unpaid. So enrolment does both halves: makes the method the default, and moves the payer onto automatic collection.
+
+**Set on the customer AND the subscription.** Stripe falls back to the customer default when a subscription names none, but "falls back" is not a guarantee to build autopay on — a subscription created before the method existed keeps whatever it was born with.
+
+**It arrives as a webhook, not a browser callback.** The browser can be closed the instant after the tenant taps confirm. A tenant who completed the flow must not end up without autopay because their phone slept.
+
+**A third interpretation outcome, because it moves no money.** `interpretStripeEvent` returned project-or-ignore; a setup intent is neither. Forcing it through the projection path would demand an amount, and the only honest amount is zero — a zero-cent ledger entry that looks authoritative and says nothing. It is now `autopay_enrolled`, handled before the projection path, with a test asserting the ledger is untouched. **The compiler found every place that needed updating** the moment the union gained a member.
+
+**What it decided.**
+- **`defaultPaymentMethodId` records what we told Stripe, not a second source of truth** (D-11) — the same relationship `stripeAmountCents` has. It lets a screen say "a card is on file" without a network call per lease.
+- **Never a card number, a last-four or an expiry.** A Stripe payment-method id and nothing else. §6.6 keeps those details inside Stripe-hosted fields, and storing a last-four starts down a road this product has no reason to be on.
+- **Enrolment never throws.** A 500 makes Stripe retry, which is right for a transient database failure and wrong for a customer we do not recognise — a permanent condition no number of attempts fixes.
+- **A setup intent naming no payment method is refused with a reason**, not acknowledged as a success that changed nothing.
+
+**What it left behind.**
+- **The tenant-facing Stripe Elements screen is still not built**, so a tenant still cannot start enrolment — only complete one. That is the last piece of PAY-02's Must story, and it is the piece D-15 says cannot be meaningfully e2e tested (Elements is a cross-origin iframe). It will need hand-verification against the test key, and PROGRESS should say so plainly when it lands rather than implying coverage.
+- Tenant-chosen debit day, the owner's require-full-balance switch, and the T-2 pre-debit notice are all still outstanding.
+- **The webhook subscription had to be widened by hand** to include `setup_intent.succeeded`. Adding a type to `HANDLED_EVENTS` does not subscribe to it; a handler nothing is subscribed to is dead code that looks live. Recorded in DEPLOYMENT.md.
