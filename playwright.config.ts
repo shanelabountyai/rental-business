@@ -1,10 +1,16 @@
 import { defineConfig, devices } from '@playwright/test'
 
+// 3100, NOT 3000, and the default is the whole point.
+//
 // `reuseExistingServer` below means a server already listening on this port is
-// used as-is. That is the right default for local iteration, but the sibling
-// self-storage repo also runs on 3000, and pointing this suite at that app
-// wastes a debugging session. Overridable so both can run at once.
-const port = process.env.PORT ?? '3000'
+// used as-is. The sibling self-storage repo hardcodes `localhost:3000` and
+// cannot be moved without editing its config, so a default of 3000 here meant
+// that forgetting `PORT=3100` silently pointed THIS SUITE AT THAT APP - which
+// fails in ways that make no sense, because the tests and the server disagree
+// about what product they are. Documenting "PORT=3100 is not optional" made
+// the footgun explainable rather than absent; owning a different port removes
+// it. Still overridable, for the case where 3100 is itself taken.
+const port = process.env.PORT ?? '3100'
 const baseURL = `http://localhost:${port}`
 
 /**

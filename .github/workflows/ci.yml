@@ -65,7 +65,12 @@ jobs:
             echo 'DATABASE_URL=postgresql://ci:ci@localhost:5432/ci'
             echo 'DIRECT_URL=postgresql://ci:ci@localhost:5432/ci'
             echo "AUTH_SECRET=$(openssl rand -base64 32)"
-            echo 'AUTH_URL=http://localhost:3000'
+            # Must agree with playwright.config.ts's port, which is 3100 -
+            # this repo owns 3100 so it can never adopt the sibling
+            # self-storage app on 3000. Playwright also passes AUTH_URL to the
+            # web server it starts, but anything reading .env.local directly
+            # gets it from here.
+            echo 'AUTH_URL=http://localhost:3100'
           } > .env.local
 
       - run: npm run db:generate
