@@ -1793,7 +1793,7 @@ The gap recorded above is closed: choosing a debit day now moves the Stripe subs
 **Bookkeeping corrected in the same commit.** Row 39 still carried 🟡 R-039 with "Blocked on OQ-11", but OQ-11 was answered by D-29 and R-039a shipped the whole remainder in five parts. Flipped to ✅ with a pointer, since a stale partial marker is how a finished item gets rebuilt.
 
 ## R-032b — What the vendor is not told, and a photo that was never actually required
-**Commit:** *(recorded below)*  ·  **Date:** 2026-08-14
+**Commit:** `0440949`  ·  **Date:** 2026-08-14
 
 **Two of this row's four claims were already fixed, and a third was wrong.** Verified each before writing anything, which is the only reason the item is small. Recording what was stale matters as much as what was built — a row that sends the next session hunting for bugs that do not exist costs more than it saves.
 
