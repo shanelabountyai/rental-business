@@ -1865,7 +1865,7 @@ The gap recorded above is closed: choosing a debit day now moves the Stripe subs
 **Checked the rest of the same class while I was there.** The three task types R-032a introduced (`workorder_schedule`, `workorder_vendor_message`, `workorder_invoice_review`) need no label map: the task list and detail pages render `task.title`, which every `createTask` call writes as a sentence. Nothing else keys off the task type.
 
 ## R-032d — A link that outlives the job it was sent for, and one that revives itself
-**Commit:** *(recorded below)*  ·  **Date:** 2026-08-14
+**Commit:** `8a46a5d`  ·  **Date:** 2026-08-14
 
 **What it built.** Two changes that look like one item and fix different failure modes.
 
