@@ -20,6 +20,7 @@ import { generateStorageKey, storage } from '@/lib/storage/index.ts'
 import { createTask } from '@/lib/tasks/create.ts'
 import { postVendorPortalMessage } from '@/lib/comms/messages.ts'
 import { verifyVendorLink } from './link.ts'
+import { FOLLOW_UP_SELECT, vendorFollowUp } from './follow-up.ts'
 import { policyFor } from '@/lib/workorders/queries.ts'
 import { requestVerification } from '@/lib/workorders/verify.ts'
 import { vendorWorkOrderThread } from '@/lib/workorders/timeline.ts'
@@ -122,6 +123,30 @@ export async function respondToWorkOrder(
       tx,
     )
   })
+
+  // AND THE OFFICE IS ACTUALLY TOLD (R-032a). Until this, the sentence above
+  // was not true: a response wrote an audit row and nothing else, so a
+  // decline returned the job to the unassigned queue with nobody informed
+  // and no work in anybody's queue. After the commit, and never allowed to
+  // fail this action - the vendor has answered, and an outage on our side
+  // must not tell them otherwise.
+  const followUp = await prisma.workOrder.findUnique({
+    where: { id: workOrder.id },
+    select: FOLLOW_UP_SELECT,
+  })
+  if (followUp) {
+    await vendorFollowUp(
+      // The vendor is CLEARED by a decline, so the re-read row no longer
+      // names who said no. Taken from the link, which was resolved before
+      // the transaction - "who declined this" is the whole question.
+      { ...followUp, vendor: followUp.vendor ?? workOrder.vendor },
+      response === 'DECLINED'
+        ? { kind: 'declined', declineReason: input.declineReason }
+        : response === 'PROPOSED_TIME'
+          ? { kind: 'proposed_time' }
+          : { kind: 'accepted' },
+    )
+  }
 
   revalidatePath(`/workorders/${workOrder.id}`)
   return { notice: 'Thanks - the office has been told.' }
@@ -335,6 +360,24 @@ export async function uploadVendorDocument(
     revalidatePath('/tasks')
   }
 
+  // An invoice that did NOT trip the ceiling still has to be paid, and until
+  // now produced no work anywhere (R-032a). The over-ceiling case already has
+  // its own approval task above, so this deliberately does not add a second
+  // queue row for one decision.
+  if (kind === 'INVOICE' && invoiceCents != null) {
+    const followUp = await prisma.workOrder.findUnique({
+      where: { id: workOrder.id },
+      select: FOLLOW_UP_SELECT,
+    })
+    if (followUp) {
+      await vendorFollowUp(followUp, {
+        kind: 'invoice',
+        overCeiling: overrun?.outcome === 'reapproval_required',
+      })
+    }
+    revalidatePath('/tasks')
+  }
+
   revalidatePath(`/workorders/${workOrder.id}`)
   // The vendor is told nothing about the ceiling. It is not their business
   // what the owner authorised, and "your invoice needs approval" invites a
@@ -455,6 +498,17 @@ export async function sendVendorMessage(
     workOrderId: workOrder.id,
     body,
   })
+
+  // SOMEBODY IS TOLD IT ARRIVED (R-032a, COMM-06). R-032 built this channel
+  // and left it unread - the message landed on the timeline and nothing
+  // surfaced it, so a vendor asking "is the water off?" got silence while
+  // believing they had asked. A channel nobody reads is worse than none,
+  // because the vendor stops using the one that works.
+  const followUp = await prisma.workOrder.findUnique({
+    where: { id: workOrder.id },
+    select: FOLLOW_UP_SELECT,
+  })
+  if (followUp) await vendorFollowUp(followUp, { kind: 'message', body })
 
   revalidatePath(`/workorders/${workOrder.id}`)
   return { notice: 'Sent.' }

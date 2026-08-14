@@ -81,7 +81,20 @@ CONSUMERS.push({
  * same one the UI uses to decide whether to show unit controls, so the two
  * stay in step.
  */
-async function staffForProperty(propertyId: string) {
+/**
+ * Staff who hold a permission over a property, through any live assignment.
+ *
+ * `permission` is a parameter because "who should hear about this" differs by
+ * subject: a unit going make-ready is for whoever maintains units, and a
+ * vendor declining a job is for whoever dispatches them (R-032a). Exported
+ * for the same reason - a second copy of this query would drift from this one
+ * the first time the assignment shape changes.
+ *
+ * Returns `phone` as well as `email`: a template with an SMS channel gets a
+ * SUPPRESSED row rather than a send when the address is missing, so omitting
+ * the column silently downgrades every SMS-carrying notification to email.
+ */
+export async function staffForProperty(propertyId: string, permission = 'unit.write') {
   const property = await prisma.property.findUnique({
     where: { id: propertyId },
     select: { legalEntityId: true },
@@ -92,19 +105,19 @@ async function staffForProperty(propertyId: string) {
     where: {
       revokedAt: null,
       staffUser: { active: true },
-      role: { permissions: { has: 'unit.write' } },
+      role: { permissions: { has: permission } },
       OR: [
         { propertyId: null, legalEntityId: null },
         { legalEntityId: property.legalEntityId },
         { propertyId },
       ],
     },
-    select: { staffUser: { select: { id: true, email: true } } },
+    select: { staffUser: { select: { id: true, email: true, phone: true } } },
   })
 
   // One assignment each, however many grants reach them - two roles over the
   // same property must not mean two emails.
-  const byId = new Map<string, { id: string; email: string }>()
+  const byId = new Map<string, { id: string; email: string; phone: string | null }>()
   for (const assignment of assignments) {
     byId.set(assignment.staffUser.id, assignment.staffUser)
   }

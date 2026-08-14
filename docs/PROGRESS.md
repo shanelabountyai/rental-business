@@ -1760,3 +1760,34 @@ The gap recorded above is closed: choosing a debit day now moves the Stripe subs
 **What it left behind.**
 - **The full sweep should move to CI.** `.github/workflows/ci.yml` has run `npm run test:e2e` on a throwaway Postgres since R-001, so the laptop sweep has been duplicating it. Nothing was changed there this session; the recommendation is now written into CLAUDE.md.
 - **The worker count is still Playwright's default** (cores/2 = 5 here). It fits comfortably now that the server is small, but it is the next thing to cap if this machine gets tighter.
+
+## R-032a — Somebody is subscribed to the vendor
+**Commit:** *(recorded below)*  ·  **Date:** 2026-08-14
+
+**What it built.** Every vendor outcome now raises work in the one queue (D-9), and the two that will not keep until morning also notify. R-025 gave vendors a way to answer and R-032 gave them a way to talk; **nothing was listening to either**. A vendor could accept, decline, propose a different time, message or upload an invoice, and the only trace was an audit row nobody reads.
+
+**A decline is worse than silence, and that is the whole item.** `sweepUnansweredDispatches` finds jobs where `vendorRespondedAt` is null. A vendor who declines **has responded**, so they step straight over that filter: a vendor who ignores us raises a re-dispatch prompt, and a vendor who says *no* raised nothing at all. The job quietly returned to the unassigned queue with its vendor cleared, and an urgent leak sat there overnight with no notification and no task.
+
+**Fixed at the event, not by widening the query.** The sweep exists to notice an *absence* and needs a timer to do it. A decline is a present, timestamped event already in hand, and making an hourly cron responsible for reacting to it would add up to an hour of latency to the one case that cannot afford any. The sweep's query is untouched and still correct for what it is for.
+
+**A second silent hole, found while building the first.** `PROPOSED_TIME` also sets `vendorRespondedAt`, so the sweep steps over it too — and nothing else acted on a proposal either. A vendor offering a Tuesday window was answered by nobody, indefinitely. It now raises the same scheduling task an acceptance does, with a different sentence.
+
+**What it decided.**
+- **One helper, five call sites.** `vendorFollowUp()` is the only thing that decides what a vendor event produces. Five inline blocks would drift the first time somebody adds an outcome.
+- **Reuses `workorder_redispatch` for a decline** rather than inventing `workorder_declined_redispatch`. The work is identical — pick somebody else off the fallback list — and two types for one job makes a PM decide which list to read. The title says which happened.
+- **A declined job keeps its own priority**, unlike R-036b's ready-to-close task which is deliberately ROUTINE. A declined emergency is still an emergency; nothing has been fixed.
+- **Only two of the five notify.** A decline (somebody must call another vendor tonight) and an inbound message (a channel nobody reads is worse than none). An acceptance and an invoice are tomorrow's work and live in the queue where tomorrow's work lives — notifying on all five is how a queue trains people to ignore it.
+- **SMS on the decline, not on the message.** An email at 6pm about a burst pipe arrives too late to be a notification. A vendor's question can wait until somebody sits down.
+- **A new `vendor_response` category**, not folded into `work_order_assigned`. That one is about a job going *out*; these are the replies coming *back*, and an operator who wants the declines without the chatter has to be able to say so.
+- **`workorder.write`, not `unit.write`**, for who hears about it — the people told should be the people who can send the job elsewhere. `staffForProperty` gained a permission parameter rather than being copied.
+- **An invoice inside the ceiling raises a review task; one over it does not.** The over-ceiling path already moves the job to PENDING_APPROVAL with its own approval task, and two queue rows for one decision is worse than none.
+- **The follow-up never throws into its caller.** Every call site is a vendor in a driveway on a magic link who has just done what was asked. Their acceptance happened; an outage on our side must not show them an error. It logs loudly instead, and a test asserts it resolves.
+
+**Bugs found along the way.**
+- **`staffForProperty` returned no phone number**, so any template carrying an SMS channel would have recorded a SUPPRESSED row rather than sending — silently downgrading the one notification in this item that most needed to interrupt somebody. Caught by writing the decline test to assert the SMS channel specifically rather than "a notification exists".
+
+**What it left behind.**
+- **`markWorkComplete` still raises no task of its own**, deliberately. It already calls `requestVerification`, and R-036b's `workorder_ready_to_close` fires on the tenant's "yes" — the chain exists. What it does *not* cover is a tenant who never answers, which leaves a job in WORK_COMPLETE indefinitely. That is R-032c's territory (the verification link is a dead end for an SMS-only tenant) and is stated here rather than half-fixed.
+- **The four other Milestone 2 repair rows are still open** — R-032b, R-032c, R-032d, R-032e.
+
+**Bookkeeping corrected in the same commit.** Row 39 still carried 🟡 R-039 with "Blocked on OQ-11", but OQ-11 was answered by D-29 and R-039a shipped the whole remainder in five parts. Flipped to ✅ with a pointer, since a stale partial marker is how a finished item gets rebuilt.

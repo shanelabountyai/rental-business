@@ -53,6 +53,11 @@ export const NOTIFICATION_CATEGORIES = [
   'task_assigned',
   'unit_make_ready',
   'compliance_due',
+  /// R-032a. A vendor answered, or said something, on a job we sent them.
+  /// Its own category rather than folded into `work_order_assigned`, which
+  /// is about a job going OUT: these are the replies coming back, and an
+  /// operator who wants one without the other has to be able to say so.
+  'vendor_response',
 ] as const
 
 export type NotificationCategory = (typeof NOTIFICATION_CATEGORIES)[number]

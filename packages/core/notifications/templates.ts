@@ -650,7 +650,114 @@ export const autopayPredebitTemplate: NotificationTemplate<AutopayPredebitContex
   },
 }
 
+/// Context for `vendor.declined` (R-032a).
+export interface VendorDeclinedContext {
+  vendorName: string
+  /// The job in the scope's own words, so somebody deciding who to send next
+  /// does not have to open the work order to know what it is.
+  scope: string
+  unitName: string
+  propertyName: string
+  priority: string
+  /// What they said, when they said anything. Often the most useful part -
+  /// "no van until Tuesday" and "not my trade" lead to different next calls.
+  declineReason: string | null
+}
+
+/**
+ * A vendor said no (MAINT-03, R-032a).
+ *
+ * THE ONE THAT MATTERS MOST IN THIS ITEM. A vendor who never answers is
+ * caught by the no-response sweep; a vendor who declines answered, so the
+ * sweep's `vendorRespondedAt: null` filter steps over them entirely. Before
+ * this, a decline produced an audit row and nothing else - the job quietly
+ * returned to the unassigned queue and an urgent leak sat there overnight.
+ * A decline is worse than silence, so it is the one that reaches a person.
+ */
+const vendorDeclinedTemplate: NotificationTemplate<VendorDeclinedContext> = {
+  key: 'vendor.declined',
+  category: 'vendor_response',
+  // SMS included, unlike the other staff-facing templates. This is the case
+  // where somebody has to pick up a phone and call the next vendor, and an
+  // email at 6pm on a burst pipe is a notification that arrives too late to
+  // be one.
+  channels: ['SMS', 'EMAIL', 'PORTAL'],
+  render: (context, channel) => {
+    const headline = `${context.vendorName} declined ${context.unitName} — ${context.scope}`
+    if (channel === 'SMS') {
+      return {
+        body:
+          `${headline}${context.declineReason ? ` ("${context.declineReason}")` : ''}. ` +
+          `${context.priority} — it is back in the queue and needs another vendor.`,
+      }
+    }
+    return {
+      subject: `Declined: ${context.scope} (${context.unitName})`,
+      body: [
+        `${context.vendorName} has declined this job.`,
+        '',
+        `Property: ${context.propertyName}`,
+        `Unit: ${context.unitName}`,
+        `Job: ${context.scope}`,
+        `Priority: ${context.priority}`,
+        context.declineReason
+          ? `They said: "${context.declineReason}"`
+          : 'They gave no reason.',
+        '',
+        // Says what already happened, so nobody re-does it. The decline
+        // clears the vendor and returns the job to the queue.
+        'The job is back in the unassigned queue and the vendor has been cleared, so the trade’s fallback list will not offer them again. A task has been raised to re-dispatch it.',
+      ].join('\n'),
+    }
+  },
+}
+
+/// Context for `vendor.message` (R-032a, COMM-06).
+export interface VendorMessageContext {
+  vendorName: string
+  scope: string
+  unitName: string
+  /// Trimmed at the call site, because a vendor pasting three paragraphs into
+  /// an SMS should not send three paragraphs back out.
+  preview: string
+}
+
+/**
+ * A vendor said something (COMM-06, R-032a).
+ *
+ * R-032 built the vendor's only free-text channel and left it unread: the
+ * message landed in the work order's thread and nothing told anybody it was
+ * there. A channel nobody reads is worse than no channel, because the vendor
+ * believes they have told us.
+ */
+const vendorMessageTemplate: NotificationTemplate<VendorMessageContext> = {
+  key: 'vendor.message',
+  category: 'vendor_response',
+  // No SMS. A vendor asking a question is not an emergency, and the whole
+  // point of a separate category is that this one can be read when somebody
+  // sits down. The decline above is the one that interrupts.
+  channels: ['EMAIL', 'PORTAL'],
+  render: (context, channel) => {
+    const headline = `${context.vendorName} sent a message about ${context.unitName}`
+    if (channel === 'SMS') return { body: `${headline}: ${context.preview}` }
+    return {
+      subject: headline,
+      body: [
+        `${context.vendorName} wrote about ${context.scope} (${context.unitName}):`,
+        '',
+        context.preview,
+        '',
+        'It is on the work order’s timeline, and a task has been raised to answer it.',
+      ].join('\n'),
+    }
+  },
+}
+
 export const TEMPLATES: Readonly<Record<string, NotificationTemplate<never>>> = {
+  [vendorDeclinedTemplate.key]:
+    vendorDeclinedTemplate as unknown as NotificationTemplate<never>,
+  [vendorMessageTemplate.key]:
+    vendorMessageTemplate as unknown as NotificationTemplate<never>,
   [unitMakeReadyTemplate.key]:
     unitMakeReadyTemplate as unknown as NotificationTemplate<never>,
   [maintenanceEmergencyTemplate.key]:
