@@ -1762,7 +1762,7 @@ The gap recorded above is closed: choosing a debit day now moves the Stripe subs
 - **The worker count is still Playwright's default** (cores/2 = 5 here). It fits comfortably now that the server is small, but it is the next thing to cap if this machine gets tighter.
 
 ## R-032a — Somebody is subscribed to the vendor
-**Commit:** *(recorded below)*  ·  **Date:** 2026-08-14
+**Commit:** `5ae623d`  ·  **Date:** 2026-08-14
 
 **What it built.** Every vendor outcome now raises work in the one queue (D-9), and the two that will not keep until morning also notify. R-025 gave vendors a way to answer and R-032 gave them a way to talk; **nothing was listening to either**. A vendor could accept, decline, propose a different time, message or upload an invoice, and the only trace was an audit row nobody reads.
 
