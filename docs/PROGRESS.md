@@ -1892,7 +1892,7 @@ The gap recorded above is closed: choosing a debit day now moves the Stripe subs
 - **R-032e is the last Milestone 2 repair row** — `jobCostCents` and `actualTotalCents` disagreeing while a comment claims they are the same rule.
 
 ## R-032e — Two cost numbers, and the comment that lied about it
-**Commit:** *(recorded below)*  ·  **Date:** 2026-08-14
+**Commit:** `8c7c332`  ·  **Date:** 2026-08-14
 
 **No behaviour changed, and that is the finding.** Both functions were already correct and already used correctly. `jobCostCents()` drives the property spend tile, the close screen and the work-order display; `actualTotalCents()` drives every approval and re-approval check. Nothing was calling the wrong one.
 
@@ -1912,6 +1912,8 @@ The books must take the invoice: recording $1,000 of expense against a $600 bill
 **Why the false claim survived this long.** The two agree on every job where the invoice is the largest figure — which is most of them — so nothing ever disagreed on a screen. There is now a test asserting the divergence explicitly, plus one asserting they agree on the ordinary job, so a later unification fails loudly instead of quietly overstating a return or weakening a control.
 
 **The spend tile now says what it covers.** `closedJobCostsForProperty()` takes no period and no entity filter, so the total is every job closed since the property was added. An unlabelled figure on a property page reads like an annual number somebody re-keys into a spreadsheet — the re-keying D-19 exists to prevent. It now says so in one line, and points at R-081 for the real report.
+
+**GATE INCOMPLETE AT THE TIME OF WRITING.** lint, typecheck, build and 1,416 unit tests all passed; the full e2e sweep was interrupted by a planned machine restart at 18/608. The change is comments, one tile label and a test, so the risk is low — but it is not gated until the sweep runs green, and this entry says so rather than implying coverage it does not have. **Re-run `npm run test:e2e` and expect 600 passed / 8 skipped / 0 failed against `Total: 608`.**
 
 **What it left behind.**
 - **Per-period and per-entity maintenance reporting is still R-081's.** Deliberately not started here: building it inside a property-page tile is where the duplication D-19 warns about begins.
