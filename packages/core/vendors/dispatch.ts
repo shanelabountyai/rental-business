@@ -37,6 +37,32 @@ export function noResponseHoursFor(priority: string): number {
   )
 }
 
+/**
+ * How long a vendor's magic link lives, by the job's priority (R-032d, D-16).
+ *
+ * D-16 fixed one number — three days — and it was tuned for a same-week job.
+ * Routine work is booked out a week and the link was dead before the vendor
+ * arrived; the fallback was "call the office and we will send a new one",
+ * which is the phoned-in re-keying D-6 exists to prevent.
+ *
+ * EMERGENCY AND URGENT STAY SHORT DELIBERATELY. They are attended within
+ * hours, so a long-lived credential buys nothing and lingers — and the link
+ * can reveal an access code. The lifetime tracks how long the job is
+ * plausibly live, which is the honest basis for expiring a credential.
+ *
+ * Fourteen days for routine covers "booked next Tuesday" with slack. It does
+ * NOT cover a month-end invoice, and it deliberately is not stretched to:
+ * that tail is what `reissueOnExpiry` handles, without weakening the control
+ * for every link in the product.
+ */
+export const LINK_TTL_DAYS = { EMERGENCY: 3, URGENT: 3, ROUTINE: 14 } as const
+
+export function linkTtlMinutesFor(priority: string): number {
+  const days =
+    LINK_TTL_DAYS[priority as keyof typeof LINK_TTL_DAYS] ?? LINK_TTL_DAYS.ROUTINE
+  return days * 24 * 60
+}
+
 export interface DispatchState {
   priority: string
   dispatchedAt: Date | null

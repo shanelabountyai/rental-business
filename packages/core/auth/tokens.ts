@@ -66,12 +66,26 @@ export function hashToken(token: string): string {
   return createHash('sha256').update(token).digest('base64url')
 }
 
-export function mintToken(purpose: TokenPurpose, now = new Date()): MintedToken {
+/**
+ * `ttlMinutes` overrides the purpose's default lifetime.
+ *
+ * Added for R-032d, where the right lifetime depends on the JOB rather than
+ * on the token: an emergency link is used within hours and should not linger,
+ * while routine work is booked a week out and a three-day link is dead before
+ * the vendor arrives. The default stays in the table so a caller that does not
+ * care cannot get it wrong, and the override is explicit so a caller that does
+ * has to say what it is doing.
+ */
+export function mintToken(
+  purpose: TokenPurpose,
+  now = new Date(),
+  ttlMinutes = TOKEN_TTL_MINUTES[purpose],
+): MintedToken {
   const token = randomBytes(TOKEN_BYTES).toString('base64url')
   return {
     token,
     tokenHash: hashToken(token),
-    expiresAt: new Date(now.getTime() + TOKEN_TTL_MINUTES[purpose] * 60_000),
+    expiresAt: new Date(now.getTime() + ttlMinutes * 60_000),
   }
 }
 

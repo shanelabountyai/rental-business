@@ -11,6 +11,7 @@ import {
 import { VendorHelpLine } from '@/components/vendors/vendor-help-line.tsx'
 import { vendorRejectionMessage } from '@/lib/vendors/messages.ts'
 import { verifyVendorLink } from '@/lib/vendors/link.ts'
+import { reissueOnExpiry } from '@/lib/vendors/reissue.ts'
 import { vendorJobContext } from '@/lib/vendors/queries.ts'
 import { vendorWorkOrderThread } from '@/lib/workorders/timeline.ts'
 
@@ -42,14 +43,27 @@ export default async function VendorLinkPage({
   const link = await verifyVendorLink(token)
 
   if (!link.ok) {
+    // AN EXPIRED LINK SENDS ITSELF A REPLACEMENT (R-032d). The old dead end
+    // said "call the office", which is a phone call, somebody to answer it,
+    // and an invoice retyped by hand — the re-keying D-6 exists to prevent.
+    // The new link is texted to the vendor's own number, never handed to
+    // whoever opened this URL, so a stale link is not a way in.
+    const reissued =
+      link.reason === 'expired' ? await reissueOnExpiry(token) : { reissued: false as const }
     // A plain, unstyled dead end that says which problem this is. NOT a
     // redirect to a sign-in page: there is no account to sign into, and
     // sending a plumber to a login screen is exactly the experience D-6
     // exists to avoid.
     return (
       <main className="mx-auto flex max-w-xl flex-col gap-4 p-6">
-        <h1 className="text-2xl font-semibold">This link isn&rsquo;t working</h1>
-        <p className="text-base">{vendorRejectionMessage(link.reason)}</p>
+        <h1 className="text-2xl font-semibold">
+          {reissued.reissued ? 'We\u2019ve sent you a new link' : 'This link isn\u2019t working'}
+        </h1>
+        <p className="text-base">
+          {reissued.reissued
+            ? 'That link had expired, so we have just texted you a fresh one for the same job. Open that and carry on \u2014 you do not need to call us.'
+            : vendorRejectionMessage(link.reason)}
+        </p>
         {/* EVERY dead end here said "call the office" and gave no number.
             The token is invalid so there is no property to look up - this is
             one operations number, and a `tel:` link so it dials on the phone

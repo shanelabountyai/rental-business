@@ -1863,3 +1863,30 @@ The gap recorded above is closed: choosing a debit day now moves the Stripe subs
 **Fixed at the type, not just the instance.** `CATEGORY_LABELS` is now `Record<NotificationCategory, string>` and the `?? category` fallback is gone, so the compiler refuses the next category that arrives without a label. The local `Map<string, PreferenceRow[]>` was widening an already-typed field back to `string` and had to be narrowed too — that widening was the reason the exhaustive type did not bite on its own.
 
 **Checked the rest of the same class while I was there.** The three task types R-032a introduced (`workorder_schedule`, `workorder_vendor_message`, `workorder_invoice_review`) need no label map: the task list and detail pages render `task.title`, which every `createTask` call writes as a sentence. Nothing else keys off the task type.
+
+## R-032d — A link that outlives the job it was sent for, and one that revives itself
+**Commit:** *(recorded below)*  ·  **Date:** 2026-08-14
+
+**What it built.** Two changes that look like one item and fix different failure modes.
+
+**The lifetime now tracks the job, not the token.** D-16 fixed a single three-day TTL for every vendor link, and it was tuned for same-week work. Routine jobs are booked out a week, so the link was dead before the vendor arrived. It is now three days for EMERGENCY and URGENT — attended within hours, and a long-lived credential that can reveal a gate code buys nothing by lingering — and a fortnight for ROUTINE. The priority is read from the work order inside `issueVendorLink`, not passed in, so no caller can dispatch a routine job on an emergency's fuse by forgetting an argument.
+
+**And an expired link now reissues itself.** The old dead end said *"call or text the office and we will send a new one"* — a phone call, somebody to answer it, and an invoice retyped by hand, which is the re-keying D-6 exists to prevent. It lands on the two moments a vendor most needs the link: arriving at a job booked a week ago, and sending the invoice at the end of the month.
+
+**Why both, rather than just a longer TTL.** No reasonable lifetime covers "the invoice arrives whenever the vendor gets round to it", and stretching every link to a month would weaken D-16's control set for every job in the product to serve a tail case. Reissue covers the tail; the priority-based TTL covers the common case without a round trip.
+
+**Why reissue is safe.** The new link is texted to the phone number on the vendor record — never handed to whoever opened the dead URL. Somebody holding a stale link therefore gains nothing they did not already have; they cause a text to be sent to the legitimate vendor. That is the ordinary expired-link-and-we-emailed-you pattern, and it is the whole security argument.
+
+**What it decided.**
+- **The same gate a live link passes.** `vendorLinkAccess()` is called with the same facts, so a reassigned vendor, a cancelled job and a closed one all refuse exactly as they would have with a valid token. Expiry must not become a way around the access rules.
+- **A revoked link is never reissued.** `consumedAt` is how D-16 says to kill a link texted to the wrong number; reviving it would undo that deliberately.
+- **Only genuinely expired tokens**, never a live one and never a forged one. Minting a link for a guessed work-order id is the one thing this must not do, and there is a test asserting nothing is minted.
+- **One dead link, one text.** Keyed on the expiry instant of the token that was tapped, so a vendor refreshing the page does not send themselves five messages, while a genuinely later expiry gets its own.
+- **The same template as a first dispatch.** A vendor should not be able to tell a reissue from an ordinary send — same job, same link — and a second template would drift from the first.
+- **`not_actionable` and `unknown` read identically to the vendor**, so a stale URL cannot be used to probe whether a job exists or what state it is in.
+
+**A test that went red for the right reason.** `link.test.ts` asserted expiry by jumping "four days out — past the three-day TTL". That stopped being true for routine work, and the test correctly failed rather than quietly asserting nothing. Rederived from the expiry the mint actually returns, so it cannot rot the next time a lifetime moves.
+
+**What it left behind.**
+- **`TOKEN_TTL_MINUTES.VENDOR_WORK_ORDER` is now only the default** that `mintToken` falls back to; the real lifetime comes from `linkTtlMinutesFor`. Left in place because the table is where somebody looks first, and it is still correct for a caller that does not override.
+- **R-032e is the last Milestone 2 repair row** — `jobCostCents` and `actualTotalCents` disagreeing while a comment claims they are the same rule.

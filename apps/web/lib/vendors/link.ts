@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { checkToken, hashToken, mintToken } from '@rental/core/auth'
-import { vendorLinkAccess } from '@rental/core/vendors'
+import { vendorLinkAccess, linkTtlMinutesFor } from '@rental/core/vendors'
 import { prisma } from '@rental/db'
 
 // The vendor magic link (D-6, D-16, MAINT-03, R-025).
@@ -25,7 +25,12 @@ import { prisma } from '@rental/db'
 //   1. SCOPED. The token names exactly one work order and grants nothing
 //      else anywhere in the product. `vendorLinkAccess()` re-checks the
 //      binding on every single request (packages/core/vendors/access.ts).
-//   2. EXPIRING. TOKEN_TTL_MINUTES.VENDOR_WORK_ORDER, three days.
+//   2. EXPIRING. By the JOB's priority (R-032d): three days for emergency
+//      and urgent work, a fortnight for routine. D-16 fixed one number tuned
+//      for a same-week job, and routine work booked out a week outlived it.
+//      An expired link now REISSUES itself rather than dead-ending (see
+//      reissue.ts), which is what let the lifetime stay short instead of
+//      being stretched to cover a month-end invoice.
 //   3. REVOCABLE. `issueVendorLink()` burns every prior token for the same
 //      work order, so resending is how a leaked link is killed.
 //   4. AUDITED. Every privileged action through it names the vendor as
@@ -56,7 +61,16 @@ export async function issueVendorLink(
   vendorId: string,
   now = new Date(),
 ): Promise<{ token: string; expiresAt: Date }> {
-  const minted = mintToken(PURPOSE, now)
+  // THE LIFETIME TRACKS THE JOB, not the token (R-032d). D-16 fixed one
+  // number for every link and it was tuned for same-week work; routine jobs
+  // are booked out a week and the link died before the vendor arrived. Read
+  // from the work order rather than passed in, so no caller can dispatch a
+  // routine job on an emergency's fuse by forgetting an argument.
+  const job = await prisma.workOrder.findUnique({
+    where: { id: workOrderId },
+    select: { priority: true },
+  })
+  const minted = mintToken(PURPOSE, now, linkTtlMinutesFor(job?.priority ?? 'ROUTINE'))
 
   await prisma.$transaction(async (tx) => {
     await tx.authToken.updateMany({

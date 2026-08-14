@@ -128,10 +128,14 @@ describe('verifyVendorLink refuses', () => {
 
   it('an expired token', async () => {
     const workOrder = await seedWorkOrder()
-    const { token } = await issueVendorLink(workOrder.id, vendorAId)
+    const { token, expiresAt } = await issueVendorLink(workOrder.id, vendorAId)
 
-    // Four days out - past the three-day TTL.
-    const later = new Date(Date.now() + 4 * 24 * 60 * 60_000)
+    // Past the lifetime for THIS job's priority, whatever that is. Four days
+    // was right when every link lived three; R-032d made routine work live a
+    // fortnight, and this test correctly went red rather than quietly
+    // asserting nothing. Derived from the returned expiry so it cannot rot
+    // again the next time a lifetime moves.
+    const later = new Date(expiresAt.getTime() + 60_000)
     const verdict = await verifyVendorLink(token, later)
     expect(verdict).toEqual({ ok: false, reason: 'expired' })
   })
