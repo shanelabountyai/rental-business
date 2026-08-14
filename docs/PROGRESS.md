@@ -1706,7 +1706,7 @@ The gap recorded above is closed: choosing a debit day now moves the Stripe subs
 - **`RecurringCharge.dayOfMonth` is still unused.** Stripe bills subscription items on the subscription's own anchor, which is the lease's rent due day; a second day-of-month here would be a schedule nothing reads. Left rather than dropped, because dropping a column is a migration for no gain.
 
 ## R-042 (part 3) — RUBS: splitting a utility bill, and who absorbs the vacancy
-**Commit:** *(recorded below)*  ·  **Date:** 2026-08-14
+**Commit:** `b82709d`  ·  **Date:** 2026-08-14
 
 **What it built.** The last of R-042. A `UtilityBill` for a property on one meter — amount, period, method, and **the scanned bill attached as a `Document`** — split across the units and charged on as invoice items. `allocate()` has been in `packages/core/money` since R-002, tested, with a comment naming RUBS as its purpose and no caller. It has one now. So does `JurisdictionRule.rubsPermitted`, which R-010 shipped with a column, a form field and a seed value that **nothing had ever read**.
 
@@ -1733,7 +1733,7 @@ The gap recorded above is closed: choosing a debit day now moves the Stripe subs
 - **Move-out proration is still not built** (carried from part 1). `moveInProration` is named for what it does; the mirror image belongs with R-071, where the final balance is settled.
 
 ## R-042 (part 3, alongside) — The e2e harness stopped depending on a 2 GB dev server
-**Commit:** *(recorded below, with part 3)*  ·  **Date:** 2026-08-14
+**Commit:** `b82709d`  ·  **Date:** 2026-08-14
 
 **What it built.** `build:test`, `start:test` and `e2e:server` scripts, and a `playwright.config.ts` that starts a **production build** instead of `next dev`. `E2E_DEV=1` restores the old behaviour.
 
