@@ -1854,7 +1854,7 @@ The gap recorded above is closed: choosing a debit day now moves the Stripe subs
 - **The portal's own verify control is unchanged** and still session-authenticated. Two doorways, one recorder.
 
 ## R-032a follow-up — the label R-032a forgot, and the type that will not forget again
-**Commit:** *(recorded below)*  ·  **Date:** 2026-08-14
+**Commit:** `f2ba183`  ·  **Date:** 2026-08-14
 
 **A bug found by auditing my own change rather than by a failing test.** R-032a added `vendor_response` to `NOTIFICATION_CATEGORIES`. `getPreferences()` walks every category in that list, so the staff account screen rendered a row for it — labelled with the raw enum name, **`vendor_response`**, because `CATEGORY_LABELS` had no entry.
 
