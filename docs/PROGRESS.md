@@ -1682,3 +1682,81 @@ The gap recorded above is closed: choosing a debit day now moves the Stripe subs
 
 **Two tests, both halves of a moved day:** the new day warns, and the old day goes quiet. Without the second, a tenant who moved their debit gets two warnings a month and learns to ignore both.
 
+
+## R-042 (part 2) — Pet rent and flat utility fees, as subscription items
+**Commit:** `243f4a4`  ·  **Date:** 2026-08-14
+
+**What it built.** The second of R-042's three parts. `RecurringCharge` has been in the schema since R-002 with `stripePriceId` and `stripeSubscriptionItemId` columns and **no code anywhere** — this fills them. Pet rent and a flat utility fee are now real Stripe subscription items on the lease's subscription, added and stopped from the lease page.
+
+**Stripe may own the repetition here even though D-12 says it may not own the amount.** D-12's line is about statutes: if a rule could change a number, core computes it. No statute touches $35 of agreed pet rent — it is a term of the contract, exactly like the rent, and the rent has been a Stripe subscription since R-034. The line worth holding is that the moment an amount stops being flat it stops being a subscription item, which is exactly why RUBS in the same item is an invoice item instead.
+
+**One reconciler, not three writers.** Adding a charge, ending one, and the nightly billing sweep all call `syncRecurringCharges`, which asks a single question per row — *should Stripe be billing this today?* — and makes Stripe agree. That shape is what makes `endsOn` real rather than decoration: a landlord who says the pet rent stops in March has said something nothing else in the product would ever act on, and a fee that outlives the pet is money taken from a tenant who agreed to no such thing. Three writers each pushing their own change gives three places our row and Stripe can disagree, and the disagreement is money.
+
+**What it decided.** (Recorded as **D-40**.)
+- **No monthly `Charge` row.** The projection already handles a subscription line with nothing behind it — it lands in the remainder entry beside the rent, which is R-040b's shape — and minting rows to mirror what Stripe is already billing would be a second schedule to keep in sync with the first.
+- **A closed list of two types**, `PET_RENT` and `UTILITY`. A list that admitted `LATE_FEE` would let somebody bill a late fee every month with the jurisdiction cap never once consulted.
+- **Ending never prorates.** Rent bills monthly in advance, so the period already invoiced stands and the line simply stops appearing on the next one. A credit for part of a month is a waiver somebody decides on with a reason recorded, not a side effect of a pet moving out.
+- **Deactivate, never delete.** "Why was I charged $35 a month for two years" is a question a deleted row cannot answer.
+- **The label is required and goes on the invoice.** `Pet rent — Two cats — $35.00/month`, written once in core and repeated verbatim by every surface. "Pet rent $35" for three years with nothing saying which pet was agreed to is the dispute the field exists to prevent.
+- **`lease.write`, not `ledger.adjust`.** These are terms of the tenancy, the same kind of fact as the rent amount. `ledger.adjust` is for money that arrived with no processor on the other side — a different risk, and gating this on it would repeat R-040's waiver mistake of locking out the people whose job it is.
+- **The first active payer's subscription.** The rule `chargeMoveInProration` already uses. Deciding that a housing authority should be billed for a cat is R-048's to make deliberately.
+
+**What it left behind.**
+- **Changing the amount is stop-and-add-a-new-one**, not an edit. Deliberate — the old row records what was agreed and when it changed — but it means two rows on screen where an operator may expect one.
+- **`RecurringCharge.dayOfMonth` is still unused.** Stripe bills subscription items on the subscription's own anchor, which is the lease's rent due day; a second day-of-month here would be a schedule nothing reads. Left rather than dropped, because dropping a column is a migration for no gain.
+
+## R-042 (part 3) — RUBS: splitting a utility bill, and who absorbs the vacancy
+**Commit:** *(recorded below)*  ·  **Date:** 2026-08-14
+
+**What it built.** The last of R-042. A `UtilityBill` for a property on one meter — amount, period, method, and **the scanned bill attached as a `Document`** — split across the units and charged on as invoice items. `allocate()` has been in `packages/core/money` since R-002, tested, with a comment naming RUBS as its purpose and no caller. It has one now. So does `JurisdictionRule.rubsPermitted`, which R-010 shipped with a column, a form field and a seed value that **nothing had ever read**.
+
+**The vacant unit's share stays with the owner, and that is the decision that matters most.** The weights are computed over every unit at the property and only the occupied ones are charged. Spreading a vacant unit's share across the tenants makes somebody's water bill go up because their neighbour moved out — an amount they can neither predict nor do anything about — and it is what several states' RUBS restrictions are aimed at. The remainder is named on the bill as `landlordCents` rather than silently dropped, so the split still adds up to the bill and a reader can see where the rest went. There is a test asserting the same three tenants pay the same amount whether or not the fourth unit is occupied.
+
+**Occupant count is the basis landlords reach for first, and this product will not offer it.** `LeaseTenant` is adults-only by design (LEASE-06), so a family of four reads as two. The honest options were a maintained `occupantCount` column that nobody updates when a baby arrives, or nothing — and billing on a stale count is worse than not offering the basis. Equal, bedrooms and floor area are what remain, chosen per bill because the right basis differs by utility.
+
+**Recording and charging are two presses.** The bill is entered, the split is shown against it, and somebody says yes. One press that did both would put every tenant's invoice at the mercy of a typo in an amount field, and a RUBS charge is the one a tenant is most likely to query.
+
+**What it decided.** (Recorded as **D-39**.)
+- **Refusal over estimation.** A unit with no square footage cannot be split on square footage; an invented average puts a number on a tenant's invoice nobody can defend. The refusal names the unit and the fix. A recorded **zero** is different from missing and is honoured — a studio has no bedrooms and owes nothing on a bedroom split.
+- **An invoice item, not a subscription item.** A RUBS share is a different number every month because the bill is, so D-12 applies in full: core computes it per bill and Stripe is handed a finished figure.
+- **The arithmetic is on the charge.** `Water 2026-07-01 to 2026-07-31 — $412.00 × 1,150/4,600 sq ft = $103.00` can be checked against the bill attached to it. "Utility allocation $103.00" has to be taken on trust.
+- **The whole split goes to the audit trail**, not just the total — every weight and every share. An entry saying "allocated $412" cannot defend the charge it recorded.
+- **Due on the day the period ended**, not the day somebody entered the bill. A late entry must not make the charge look late.
+- **Two permissions.** Recording is `property.write`; charging it on is `ledger.adjust`, because one press bills every tenant at the property.
+- **`Charge.utilityBillId` is `Restrict`**, like every other evidence key here — the bill *is* the defence of the charge.
+
+**A UX judgement worth recording.** Charging a bill on replaces the button with the split itself, which unmounts the `useActionState` success notice before anyone reads it. Left that way on purpose: the durable record — every share, the owner's portion, who pressed it and when — is a better confirmation than a message that scrolls away, for the one action in this product that bills every tenant at a property at once. The failure path keeps the form mounted, so a refusal still shows its reason. The e2e spec asserts the record rather than the notice, and says why.
+
+**What it left behind.**
+- **The bill is attached by picking an already-uploaded document**, not by uploading one here. R-012 owns compression, versioning, EXIF and soft-delete, and a second upload pipeline on this screen would be a copy of all four. The cost is two steps for the operator, and the screen says which.
+- **No re-split after a refusal is fixed beyond pressing again.** A refused bill is left unallocated deliberately, so correcting the missing square footage and pressing again works — but nothing tells anybody the bill is sitting there. A `Task` would be the right answer if these start piling up.
+- **Move-out proration is still not built** (carried from part 1). `moveInProration` is named for what it does; the mirror image belongs with R-071, where the final balance is settled.
+
+## R-042 (part 3, alongside) — The e2e harness stopped depending on a 2 GB dev server
+**Commit:** *(recorded below, with part 3)*  ·  **Date:** 2026-08-14
+
+**What it built.** `build:test`, `start:test` and `e2e:server` scripts, and a `playwright.config.ts` that starts a **production build** instead of `next dev`. `E2E_DEV=1` restores the old behaviour.
+
+**Why it is here rather than in its own item.** It was found by the gate refusing to go green for R-042, three sweeps running, and the diagnosis was wrong twice before it was right. Recording it where it was found is worth more than filing it tidily somewhere else.
+
+**The symptom looked exactly like fifty-five broken tests.** A sweep reported `55 failed`, then `197 ✘`, at a different point each run. Every one was `net::ERR_CONNECTION_REFUSED` — the dev server had died and everything after it failed in **under two seconds**, where a real failure takes fifteen to time out. That timing is the tell, and it is the thing to look for first.
+
+**The cause was memory, and the machine said so plainly once asked.** `next dev` keeps the Turbopack compiler, module graph, source maps and HMR state resident: **1.9 GB measured**. Five parallel Chrome workers are ~490 MB each. With three other projects' dev servers also running, swap was **11,697 MB of 12,288 MB used — 95% full**, and macOS killed the largest process. The proof was unambiguous: `npm run build:test` itself came back `Killed: 9`, exit 137. Not a code path in this product at all.
+
+**Two wrong diagnoses worth remembering.**
+- **"My concurrent `npm run build` did it."** It genuinely would — `next build` rewrites the `.next` directory the dev server is serving from — and it was true of the first run. It was not the cause, because run two died with nothing else touching the machine. A plausible cause that explains one instance is the most expensive kind of wrong.
+- **"The server is on the wrong port."** `ps` showed a `next dev -p 3177`, which looked like a split brain against `baseURL` on 3100. It was another project's server entirely. Reading a process list on a machine running four projects needs the project established before the conclusion.
+
+**A method failure, not just a diagnosis failure.** The first sweep was piped through `grep -E "passed|failed|..."`, so the `[WebServer]` lines matched the filter and the actual failure list was discarded. CLAUDE.md already warned *"read the e2e summary, not the tail of it"*; this is the same mistake wearing a different hat, and the rule now says to write the full log to a file and filter the file.
+
+**What it decided.**
+- **Build-then-serve in one script.** `e2e:server` runs `build:test && start:test`, so a stale or missing build cannot silently test yesterday's code. Next's own cache makes the repeat build cheap, and the webServer `timeout` went from 120s to 300s to cover a cold one.
+- **`:test` variants, never the bare scripts.** `start:test` carries the same `dotenv -e .env.test -e .env.local` chain as `dev:test`, for the same reason: the server under test must read the same database as the specs, or a spec seeds a tenant the app cannot see.
+- **CI-safe without a change there.** `dotenv-cli` skips a missing `.env.test`, and CI's existing `npm run build` step warms the cache the e2e build then reuses.
+- **`E2E_DEV=1` kept as an escape hatch**, because the production server has no error overlay and no source maps, and that is genuinely worse for debugging one failing spec.
+
+**Measured result.** 596 tests: **588 passed, 8 skipped, 0 failed, 0 flaky, 4.1 minutes** — against 16+ minutes and a dead server before. The counts reconcile exactly against `npx playwright test --list`, which is the gate.
+
+**What it left behind.**
+- **The full sweep should move to CI.** `.github/workflows/ci.yml` has run `npm run test:e2e` on a throwaway Postgres since R-001, so the laptop sweep has been duplicating it. Nothing was changed there this session; the recommendation is now written into CLAUDE.md.
+- **The worker count is still Playwright's default** (cores/2 = 5 here). It fits comfortably now that the server is small, but it is the next thing to cap if this machine gets tighter.

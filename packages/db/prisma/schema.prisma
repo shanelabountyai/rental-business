@@ -416,6 +416,7 @@ model Property {
   ledgerEntries    LedgerEntry[]
   deposits         Deposit[]
   recurringCharges RecurringCharge[]
+  utilityBills     UtilityBill[]
   tickets          Ticket[]
   workOrders       WorkOrder[]
   inspections      Inspection[]
@@ -718,6 +719,7 @@ model StaffUser {
 
   paymentsReceived     Payment[]    @relation("PaymentReceivedBy")
   chargesWaived        Charge[]     @relation("ChargeWaivedBy")
+  utilityBillsAllocated UtilityBill[] @relation("UtilityBillAllocatedBy")
   workOrdersApproved   WorkOrder[]  @relation("WorkOrderApprovedBy")
   workOrdersAssigned   WorkOrder[]  @relation("WorkOrderAssignedTo")
   workOrdersEntryPermissionLogged WorkOrder[] @relation("WorkOrderEntryPermission")
@@ -1382,6 +1384,10 @@ model Charge {
   /// touches, like agreed pet rent.
   jurisdictionRuleId  String?
   recurringChargeId   String?
+  /// The utility bill this charge is a share of (R-042, PAY-08). What makes a
+  /// RUBS charge defensible: the tenant's invoice line carries the
+  /// arithmetic, and this carries the bill it was worked out from.
+  utilityBillId       String?
   stripeInvoiceId     String?
   stripeInvoiceItemId String?
   /// The charge this one was assessed ON - a late fee pointing at the
@@ -1407,6 +1413,10 @@ model Charge {
   lease            Lease             @relation(fields: [leaseId], references: [id])
   jurisdictionRule JurisdictionRule? @relation(fields: [jurisdictionRuleId], references: [id])
   recurringCharge  RecurringCharge?  @relation(fields: [recurringChargeId], references: [id])
+  /// The bill this share came out of (R-042, PAY-08). Restrict, like every
+  /// other evidence key: the bill IS the defence of the charge, and deleting
+  /// it would leave a tenant billed for a share of nothing.
+  utilityBill      UtilityBill?      @relation(fields: [utilityBillId], references: [id], onDelete: Restrict)
   waivedBy         StaffUser?        @relation("ChargeWaivedBy", fields: [waivedByStaffId], references: [id])
   assessedOn       Charge?           @relation("ChargeAssessedOn", fields: [assessedOnChargeId], references: [id], onDelete: Restrict)
   /// Restrict for the same reason as every other evidence-trail key: a
@@ -1463,6 +1473,69 @@ model RecurringCharge {
 
   @@index([leaseId])
   @@index([propertyId])
+}
+
+/// How a single-meter utility bill is split across the units it covers
+/// (R-042, PAY-08). Chosen per bill because the right basis differs by
+/// utility: water tracks occupancy, heat tracks floor area.
+///
+/// OCCUPANT COUNT IS DELIBERATELY ABSENT. `LeaseTenant` is adults-only by
+/// design (LEASE-06), so a family of four reads as two - and a maintained
+/// occupant column would be a number nobody updates when a baby arrives.
+/// Billing on a stale count is worse than not offering the basis, and
+/// occupant-based RUBS is the basis most likely to be challenged.
+enum RubsMethod {
+  EQUAL
+  BEDROOMS
+  SQUARE_FEET
+}
+
+/// One utility bill for a property with one meter and several units, and the
+/// record of how it was split (R-042, PAY-08).
+///
+/// THE BILL ITSELF IS ATTACHED, as a `Document` (R-012's store, so it is
+/// versioned, soft-deletable and retained like every other piece of
+/// evidence). That is the whole defence of a RUBS charge: the tenant's
+/// invoice line carries the arithmetic, and this carries the paper it was
+/// worked out from. A share of a bill nobody can produce is a number a tenant
+/// is asked to take on trust.
+///
+/// Several states restrict or forbid RUBS, which is why allocation is gated
+/// on `JurisdictionRule.rubsPermitted` (D-4) rather than on anything here.
+model UtilityBill {
+  id          String     @id @default(cuid())
+  propertyId  String
+  /// ELECTRIC, GAS, WATER, SEWER, TRASH, OTHER - the same vocabulary
+  /// `UtilityAccount.type` uses.
+  utilityType String
+  provider    String?
+  /// What the bill covers, property-local calendar days (D-3).
+  periodStart DateTime   @db.Date
+  periodEnd   DateTime   @db.Date
+  amountCents Int
+  method      RubsMethod
+  /// The scanned bill. Nullable because recording the bill and finding the
+  /// PDF are two moments, and refusing the first until the second happens
+  /// means the bill gets recorded nowhere.
+  documentId  String?
+  /// Set once the split has been charged. The idempotency guard: a bill
+  /// allocated twice bills every tenant twice.
+  allocatedAt        DateTime?
+  allocatedByStaffId String?
+  /// What the owner absorbed - the vacant units' share, which is never spread
+  /// across the tenants. Recorded because a split that adds up to less than
+  /// the bill is one somebody will eventually be asked to explain.
+  landlordCents      Int?
+  notes       String?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  property      Property   @relation(fields: [propertyId], references: [id])
+  document      Document?  @relation("UtilityBillDocument", fields: [documentId], references: [id])
+  allocatedBy   StaffUser? @relation("UtilityBillAllocatedBy", fields: [allocatedByStaffId], references: [id])
+  charges       Charge[]
+
+  @@index([propertyId, periodEnd])
 }
 
 model Payment {
@@ -2371,6 +2444,7 @@ model Document {
   uploadedBy        StaffUser? @relation("DocumentUploadedBy", fields: [uploadedByStaffId], references: [id])
   noticesAsDocument Notice[]   @relation("NoticeDocument")
   noticesAsProof    Notice[]   @relation("NoticeProofDocument")
+  utilityBills      UtilityBill[] @relation("UtilityBillDocument")
 
   @@index([propertyId, type])
   @@index([unitId])

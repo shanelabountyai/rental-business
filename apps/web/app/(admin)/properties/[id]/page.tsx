@@ -213,6 +213,19 @@ export default async function PropertyDetailPage({
           description="Tickets and work orders for this property."
         />
         <MaintenanceSpendSection jobs={maintenanceSpend} />
+        <section className="flex flex-col gap-1 rounded-md border p-4">
+          <h2 className="text-sm font-semibold">Utility bills</h2>
+          <p className="text-muted-foreground text-sm">
+            For a property on one meter: record the bill, check the split
+            across the units, then charge it on (R-042).
+          </p>
+          <Link
+            href={`/properties/${id}/utilities`}
+            className="focus-visible:ring-ring w-fit text-sm underline underline-offset-4 focus-visible:ring-2 focus-visible:outline-none"
+          >
+            Utility bills and how they were split
+          </Link>
+        </section>
         <DocumentsSection
           propertyId={id}
           documents={documents}

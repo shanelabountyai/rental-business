@@ -105,12 +105,32 @@ export default defineConfig({
     { name: 'desktop-chrome', use: { ...devices['Desktop Chrome'] } },
   ],
   webServer: {
-    // `dev:test`, NOT `dev`. The server under test has to read the SAME
-    // database as the specs do, and `npm run dev` loads only .env.local -
-    // which points at the deployed dev branch. Running the two against
-    // different databases is a split brain that produces failures nobody can
-    // reproduce: a spec seeds a tenant the app cannot see.
-    command: 'npm run dev:test',
+    // A PRODUCTION BUILD, not `next dev`, and the reason is memory.
+    //
+    // `next dev` keeps the Turbopack compiler, the module graph, source maps
+    // and HMR state resident for the whole run - measured at **1.9 GB** on
+    // this machine. Five parallel Chrome workers are another ~490 MB each. On
+    // a laptop already running other projects' dev servers that total pushes
+    // the machine into swap, and macOS kills the largest process: the server.
+    // Every test after that moment fails with ERR_CONNECTION_REFUSED in about
+    // a second, which does not look like an environment problem - it looks
+    // like fifty-five broken tests. That cost most of a session to diagnose.
+    // `next start` on a prebuilt app holds a fraction of the memory and
+    // serves faster, and it is also closer to what actually ships.
+    //
+    // `e2e:server` BUILDS THEN STARTS, so a stale or missing build cannot
+    // silently test yesterday's code. Next's own cache makes the repeat build
+    // cheap; `timeout` below covers a cold one.
+    //
+    // Set `E2E_DEV=1` to go back to `next dev` when you need a stack trace
+    // against real sources or want the error overlay.
+    //
+    // `:test`, NEVER the bare script. The server under test has to read the
+    // SAME database as the specs do, and `npm run dev`/`npm run start` load
+    // only .env.local - which points at the deployed dev branch. Running the
+    // two against different databases is a split brain that produces failures
+    // nobody can reproduce: a spec seeds a tenant the app cannot see.
+    command: process.env.E2E_DEV ? 'npm run dev:test' : 'npm run e2e:server',
     // AUTH_URL has to agree with the port, or Auth.js builds its post-sign-in
     // redirect against whatever .env.local says and the browser is sent to a
     // different origin than the one under test. dotenv-cli does not override
@@ -135,6 +155,9 @@ export default defineConfig({
     },
     url: baseURL,
     reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
+    // Covers a COLD `next build` plus start. 120s was sized for `next dev`,
+    // which is ready in under a second and compiles lazily; a build from an
+    // empty `.next` cache takes longer than that on its own.
+    timeout: 300_000,
   },
 })
