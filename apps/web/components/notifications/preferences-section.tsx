@@ -1,5 +1,6 @@
 import {
   NOTIFICATION_CHANNELS,
+  type NotificationCategory,
   type NotificationChannel,
 } from '@rental/core/notifications'
 import { PreferenceToggle } from '@/components/notifications/preference-toggle.tsx'
@@ -17,7 +18,17 @@ import type { PreferenceRow } from '@/lib/notifications/queries.ts'
 // packages/core/notifications so it is the same wherever the question is
 // asked.
 
-const CATEGORY_LABELS: Record<string, string> = {
+// EXHAUSTIVE BY TYPE, not by hope. This was `Record<string, string>`, so
+// adding `vendor_response` to the vocabulary in R-032a compiled cleanly and
+// rendered the raw enum name on the staff account screen — `getPreferences`
+// walks every NOTIFICATION_CATEGORIES value, so a category with no label here
+// always reaches a human. The `?? category` fallback below is what let it
+// look fine.
+//
+// Typed against the union, the compiler now refuses the next one. This is
+// CLAUDE.md's "adding a value to a status enum is never one edit", caught by
+// the type system instead of by somebody reading a screen.
+const CATEGORY_LABELS: Record<NotificationCategory, string> = {
   rent_reminder: 'Rent reminders',
   payment_receipt: 'Payment receipts',
   payment_failed: 'Failed payments',
@@ -33,6 +44,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   task_assigned: 'Tasks assigned to you',
   unit_make_ready: 'Units ready to turn',
   compliance_due: 'Compliance dates coming up',
+  vendor_response: 'Vendor replies on your jobs',
 }
 
 const CHANNEL_LABELS: Record<NotificationChannel, string> = {
@@ -46,7 +58,10 @@ export function NotificationPreferencesSection({
 }: {
   preferences: PreferenceRow[]
 }) {
-  const byCategory = new Map<string, PreferenceRow[]>()
+  // Keyed by the UNION, not by `string`. `PreferenceRow.category` is already
+  // typed; a `Map<string, …>` widened it back and was what made the missing
+  // label above invisible to the compiler.
+  const byCategory = new Map<NotificationCategory, PreferenceRow[]>()
   for (const row of preferences) {
     const rows = byCategory.get(row.category) ?? []
     rows.push(row)
@@ -72,7 +87,7 @@ export function NotificationPreferencesSection({
             <li key={category} className="flex flex-col gap-2 px-4 py-3">
               <div className="flex flex-col gap-0.5">
                 <span className="text-sm font-medium">
-                  {CATEGORY_LABELS[category] ?? category}
+                  {CATEGORY_LABELS[category]}
                 </span>
                 {locked && rows[0]?.lockedExplanation && (
                   <p className="text-muted-foreground text-xs">

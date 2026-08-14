@@ -1852,3 +1852,14 @@ The gap recorded above is closed: choosing a debit day now moves the Stripe subs
 **What it left behind.**
 - **A "yes"/"no" texted straight back still reaches nobody.** Deliberate. Inbound SMS threads by phone number and a tenant may have two open jobs, so "yes" is ambiguous exactly when it matters; resolving it needs either a reply-token in the message or a disambiguating question, and both are their own item. The link now makes the answer reachable in one tap, which was the actual barrier — the row's own framing was that the SMS-only tenant had *no* path, and they now have one.
 - **The portal's own verify control is unchanged** and still session-authenticated. Two doorways, one recorder.
+
+## R-032a follow-up — the label R-032a forgot, and the type that will not forget again
+**Commit:** *(recorded below)*  ·  **Date:** 2026-08-14
+
+**A bug found by auditing my own change rather than by a failing test.** R-032a added `vendor_response` to `NOTIFICATION_CATEGORIES`. `getPreferences()` walks every category in that list, so the staff account screen rendered a row for it — labelled with the raw enum name, **`vendor_response`**, because `CATEGORY_LABELS` had no entry.
+
+**Why nothing caught it.** The map was typed `Record<string, string>` and read as `CATEGORY_LABELS[category] ?? category`. Between them, the loose type and the fallback made a missing label compile cleanly and render something that looks deliberate. This is exactly CLAUDE.md's "adding a value to a status enum is never one edit" — the same shape as R-036b's `VERIFIED`, which was in the enum and in neither of the two lists that read it.
+
+**Fixed at the type, not just the instance.** `CATEGORY_LABELS` is now `Record<NotificationCategory, string>` and the `?? category` fallback is gone, so the compiler refuses the next category that arrives without a label. The local `Map<string, PreferenceRow[]>` was widening an already-typed field back to `string` and had to be narrowed too — that widening was the reason the exhaustive type did not bite on its own.
+
+**Checked the rest of the same class while I was there.** The three task types R-032a introduced (`workorder_schedule`, `workorder_vendor_message`, `workorder_invoice_review`) need no label map: the task list and detail pages render `task.title`, which every `createTask` call writes as a sentence. Nothing else keys off the task type.
