@@ -1562,7 +1562,7 @@ Recording a surety bond as "a cash deposit of $0" would be true and useless. The
 - **Move-out proration is not built.** `moveInProration` is named for what it does. A move-out mid-month is the mirror image and belongs with R-071's disposition work, where the final balance is settled.
 
 ## R-039a (part 2) — Autopay enrolment, the server half
-**Commit:** `TBD`  ·  **Date:** 2026-08-13
+**Commit:** `bdebcf4`  ·  **Date:** 2026-08-13
 
 **What it built.** The path from "the tenant saved a card" to "autopay actually works". `createSetupIntent` has existed since R-034 with no caller; this is the other end of it — what happens when Stripe confirms one.
 
