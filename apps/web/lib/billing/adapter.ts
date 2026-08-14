@@ -131,6 +131,28 @@ export interface BillingProvider {
    * `proration_behavior=none`, and R-042 owns computing and pushing the
    * partial period when one is genuinely owed.
    */
+  /**
+   * Moves the day a subscription bills (PAY-02, R-039a).
+   *
+   * VIA `trial_end`, WHICH LOOKS WRONG AND IS NOT. Stripe does not accept an
+   * arbitrary `billing_cycle_anchor` on an update - only `now` or
+   * `unchanged` - so the documented way to shift an existing cycle is to set
+   * `trial_end` to the instant the next period should begin. Nothing about
+   * this grants a free trial: `proration_behavior: 'none'` means no credit
+   * and no charge for the gap, and the tenant simply gets billed on the new
+   * day from then on.
+   *
+   * D-12 still holds. Stripe is being told WHEN to bill, never asked to work
+   * out what the move is worth - any amount owed for the shifted days is
+   * ours to compute and push as an invoice item.
+   */
+  setBillingAnchor(input: {
+    stripeSubscriptionId: string
+    /// The instant the next full period should begin, computed
+    /// property-local (D-3) before it reaches here.
+    anchor: Date
+  }): Promise<void>
+
   updateSubscriptionPrice(input: {
     stripeSubscriptionId: string
     amountCents: number

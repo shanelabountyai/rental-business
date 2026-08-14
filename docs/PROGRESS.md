@@ -1669,3 +1669,16 @@ Recording a surety bond as "a cash deposit of $0" would be true and useless. The
 **What it left behind.**
 - **Changing the debit day does not yet move the Stripe billing anchor.** The column is recorded and enforced, and the pre-debit notice reads the lease's due day rather than the payer's chosen one — so a tenant who moves their day is warned on the old schedule. Moving the anchor means `updateSubscription` with a new `billing_cycle_anchor` and a proration decision (D-12 says ours, not Stripe's), which is a real piece of work and wants its own item.
 - **Nobody has clicked the Elements enrolment screen.** Unchanged since part 3 and still the honest state.
+
+**Follow-up, same day — the anchor actually moves.**
+
+The gap recorded above is closed: choosing a debit day now moves the Stripe subscription, and the pre-debit notice reads the payer's chosen day rather than the lease's. A preference the product records and does not act on is worse than not offering the choice.
+
+**`setBillingAnchor` uses `trial_end`, which looks wrong and is not.** Stripe accepts only `now` or `unchanged` for `billing_cycle_anchor` on an update, so the documented way to shift an existing cycle is to set `trial_end` to the instant the next period should begin. No trial is granted — `proration_behavior: 'none'` means no credit and no charge for the gap. Both the interface and the implementation say so, because the next reader will assume it is a bug.
+
+**D-12 still holds.** Stripe is told WHEN to bill, never asked what the move is worth. Any amount owed for shifted days remains ours to compute and push as an invoice item.
+
+**It never throws into the tenant's response.** The choice is saved and the notice already honours it; a provider being unreachable must not make a saved setting look rejected. R-036's resync reconciles the anchor afterwards.
+
+**Two tests, both halves of a moved day:** the new day warns, and the old day goes quiet. Without the second, a tenant who moved their debit gets two warnings a month and learns to ignore both.
+

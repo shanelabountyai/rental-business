@@ -85,6 +85,15 @@ export class SimulatedBillingProvider implements BillingProvider {
     )
   }
 
+  async setBillingAnchor(input: {
+    stripeSubscriptionId: string
+    anchor: Date
+  }): Promise<void> {
+    console.info(
+      `[billing:simulated] anchor for ${input.stripeSubscriptionId} -> ${input.anchor.toISOString()}`,
+    )
+  }
+
   async updateSubscriptionPrice(input: {
     stripeSubscriptionId: string
     amountCents: number

@@ -169,6 +169,50 @@ describe('sendPredebitNotices', () => {
     ).toBe(0)
   }, 30_000)
 
+  it('warns on the payer CHOSEN day, not the lease due day', async () => {
+    // A tenant who moved their debit to day 3 must be warned two days before
+    // DAY 3. Reading only the lease's due day would warn them about a debit
+    // that is not happening that day (R-039a).
+    const { tenant } = await seedPayer({
+      // Due on a day that is NOT the target, so only the chosen day can match.
+      rentDueDay: dueDay === 28 ? 1 : dueDay + 1,
+      collectionMethod: 'charge_automatically',
+      hasMethod: true,
+    })
+    await prisma.leasePayer.updateMany({
+      where: { tenantId: tenant.id },
+      data: { debitDay: dueDay },
+    })
+
+    await sendPredebitNotices(propertyId, now)
+    expect(
+      await prisma.notification.count({
+        where: { recipientId: tenant.id, category: 'autopay_predebit' },
+      }),
+    ).toBeGreaterThan(0)
+  }, 30_000)
+
+  it('does NOT warn on the lease day once the payer has chosen another', async () => {
+    // The other half: their old day must go quiet, or they get two warnings a
+    // month and learn to ignore both.
+    const { tenant } = await seedPayer({
+      rentDueDay: dueDay,
+      collectionMethod: 'charge_automatically',
+      hasMethod: true,
+    })
+    await prisma.leasePayer.updateMany({
+      where: { tenantId: tenant.id },
+      data: { debitDay: dueDay === 28 ? 1 : dueDay + 1 },
+    })
+
+    await sendPredebitNotices(propertyId, now)
+    expect(
+      await prisma.notification.count({
+        where: { recipientId: tenant.id, category: 'autopay_predebit' },
+      }),
+    ).toBe(0)
+  }, 30_000)
+
   it('warns ONCE however many times the job runs that day', async () => {
     // The job is daily and nothing stops it running twice. The idempotency
     // key is the fact being announced - this payer, this due date - not the

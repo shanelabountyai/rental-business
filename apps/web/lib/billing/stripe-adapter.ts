@@ -353,6 +353,24 @@ export class StripeBillingProvider implements BillingProvider {
     })
   }
 
+  async setBillingAnchor(input: {
+    stripeSubscriptionId: string
+    anchor: Date
+  }): Promise<void> {
+    // `trial_end`, not `billing_cycle_anchor`: Stripe accepts only `now` or
+    // `unchanged` for the latter on an update, so shifting an existing cycle
+    // is done by ending a (zero-length) trial at the new anchor. See the
+    // interface comment - this grants no trial, because proration is off.
+    //
+    // Seconds, not milliseconds, and computed property-local before it got
+    // here (D-3).
+    await this.#post(`/subscriptions/${input.stripeSubscriptionId}`, {
+      trial_end: String(Math.floor(input.anchor.getTime() / 1000)),
+      // Ours to compute, never Stripe's to invent (D-12, R-042).
+      proration_behavior: 'none',
+    })
+  }
+
   async setDefaultPaymentMethod(input: {
     stripeCustomerId: string
     stripePaymentMethodId: string

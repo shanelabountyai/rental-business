@@ -1,6 +1,8 @@
 'use server'
 
+import { billingCycleAnchor } from '@rental/core/billing'
 import { debitDayDecision, debitDayRefusalMessage } from '@rental/core/payments'
+import { getBillingProvider } from '@/lib/billing/provider.ts'
 import { createPaymentMethodSetup } from '@/lib/billing/provision.ts'
 import { rulesFor } from '@/lib/jurisdiction/queries.ts'
 import { prisma } from '@rental/db'
@@ -81,10 +83,11 @@ export async function setDebitDay(
     where: { leaseId: { in: [...scope.leaseIds] }, tenantId: scope.tenantId, active: true },
     select: {
       id: true,
+      stripeSubscriptionId: true,
       lease: {
         select: {
           rentDueDay: true,
-          property: { select: { state: true, county: true } },
+          property: { select: { state: true, county: true, timezone: true } },
         },
       },
     },
@@ -112,5 +115,28 @@ export async function setDebitDay(
     where: { id: payer.id },
     data: { debitDay },
   })
+
+  // MOVE THE SUBSCRIPTION TOO, or this is a preference the product records
+  // and does not act on - which is worse than not offering the choice.
+  //
+  // Never throws into the tenant's response: the choice IS saved, the
+  // pre-debit notice already reads it, and a provider being unreachable must
+  // not make a saved setting look rejected. A resync (R-036) reconciles the
+  // anchor afterwards.
+  if (payer.stripeSubscriptionId) {
+    const anchor = billingCycleAnchor({
+      rentDueDay: debitDay,
+      timezone: payer.lease.property.timezone,
+      // From now: the next occurrence of the chosen day. Never backdated -
+      // an anchor in the past is a subscription that bills immediately.
+      notBefore: new Date(),
+    })
+    await getBillingProvider()
+      .setBillingAnchor({ stripeSubscriptionId: payer.stripeSubscriptionId, anchor })
+      .catch((error: unknown) => {
+        console.error(`[autopay] failed to move the anchor for payer ${payer.id}`, error)
+      })
+  }
+
   return { saved: true }
 }

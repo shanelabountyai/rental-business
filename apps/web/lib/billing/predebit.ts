@@ -59,7 +59,15 @@ export async function sendPredebitNotices(
       // BOTH halves, as above.
       collectionMethod: 'charge_automatically',
       defaultPaymentMethodId: { not: null },
-      lease: { status: { in: ['ACTIVE', 'MONTH_TO_MONTH'] }, rentDueDay: dueDay },
+      // The payer's CHOSEN day when they have one, the lease's due day when
+      // they do not (R-039a). Reading only the lease's day would warn a
+      // tenant who moved their debit on the old schedule - a notice about a
+      // debit that is not happening that day.
+      OR: [
+        { debitDay: dueDay },
+        { debitDay: null, lease: { rentDueDay: dueDay } },
+      ],
+      lease: { status: { in: ['ACTIVE', 'MONTH_TO_MONTH'] } },
     },
     select: {
       id: true,
