@@ -426,6 +426,31 @@ export async function markWorkComplete(token: string): Promise<VendorFormState> 
   if (!vendorMayUpload(workOrder.vendorResponse)) {
     return { error: 'Accept the job first.' }
   }
+  // MAINT-06'S REQUIRED COMPLETION PHOTO, ENFORCED WHERE IT COUNTS (R-032b).
+  //
+  // D-17 asserted this was "already built into R-025's vendor upload" while
+  // justifying deferring R-028 — and it was not. The upload existed; nothing
+  // required it. A job could reach WORK_COMPLETE with no evidence it had been
+  // done at all, which is the state R-030 then asks the tenant to confirm
+  // against and R-031 later charges a tenant from. For a product whose
+  // premise is that the evidence trail is the product, "we marked it done and
+  // photographed nothing" is the wrong record to be able to create.
+  //
+  // Checked on the SERVER, not only in the page: the client gate is an
+  // affordance and this is the rule. A vendor posting the form directly, or a
+  // stale page rendered before the photo was deleted, both land here.
+  const completionPhotos = await prisma.document.count({
+    where: { workOrderId: workOrder.id, type: 'COMPLETION_PHOTO', deletedAt: null },
+  })
+  if (completionPhotos === 0) {
+    // NOT a refusal that sends them away. D-6's whole point is that turning a
+    // vendor away here means the job gets phoned in - so this names the one
+    // thing missing and the upload is on the same screen, directly above.
+    return {
+      error: 'Upload a photo of the finished work first — then you can mark it complete.',
+    }
+  }
+
   if (!vendorMayMarkComplete(workOrder.status)) {
     // Says nothing about WHY. "The tenant already confirmed it" and "the
     // office is reviewing your invoice" are both true at times, and neither

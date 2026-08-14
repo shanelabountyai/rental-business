@@ -124,7 +124,22 @@ function loadWorkOrder(id: string) {
       property: { select: { id: true, name: true, addressLine1: true, city: true, state: true, postalCode: true, timezone: true } },
       unit: { select: { id: true, name: true } },
       vendor: { select: { id: true, name: true } },
-      ticket: { select: { id: true, category: true, description: true, tenant: { select: { firstName: true, phone: true } } } },
+      // `petWarning` and `entryPermission` are the tenant's own answers from
+      // R-019's intake wizard, and until R-032b they were stored, shown to
+      // the PM, and never reached the person who actually opens the door.
+      // A vendor letting themselves into a house with a dog in it needs to
+      // know that before they turn the handle - this is the one field on
+      // this page with a physical-safety consequence.
+      ticket: {
+        select: {
+          id: true,
+          category: true,
+          description: true,
+          petWarning: true,
+          entryPermission: true,
+          tenant: { select: { firstName: true, phone: true } },
+        },
+      },
     },
   })
 }

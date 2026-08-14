@@ -1791,3 +1791,35 @@ The gap recorded above is closed: choosing a debit day now moves the Stripe subs
 - **The four other Milestone 2 repair rows are still open** — R-032b, R-032c, R-032d, R-032e.
 
 **Bookkeeping corrected in the same commit.** Row 39 still carried 🟡 R-039 with "Blocked on OQ-11", but OQ-11 was answered by D-29 and R-039a shipped the whole remainder in five parts. Flipped to ✅ with a pointer, since a stale partial marker is how a finished item gets rebuilt.
+
+## R-032b — What the vendor is not told, and a photo that was never actually required
+**Commit:** *(recorded below)*  ·  **Date:** 2026-08-14
+
+**Two of this row's four claims were already fixed, and a third was wrong.** Verified each before writing anything, which is the only reason the item is small. Recording what was stale matters as much as what was built — a row that sends the next session hunting for bugs that do not exist costs more than it saves.
+
+- **"The confirmed `scheduledStart`/`scheduledEnd` is never passed to the component"** — it is. The page passes both, converted with `utcToWallClock`, and carries a comment explaining the fix.
+- **"The page mixes `toISOString()` with `utcToWallClock` on one screen"** — it does not. Every timestamp on that page is property-local. R-098's vendor-surface pass did both of these; the row was written before it landed and never updated.
+- **"The pet warning and entry permission are collected, validated, and then written nowhere"** — **wrong.** All three ticket-creation paths persist them (`ticket.create` in the portal wizard, the emergency path and the phone-logged path), and the PM's screen has rendered both since R-022.
+
+**The real gap was narrower and worse: the vendor never saw them.** The tenant answered, the Ticket stored it, the PM could read it — and the person who actually opens the door was told neither, on every job since R-025. That is the one fact on the vendor page with a physical-safety consequence.
+
+**What it built.**
+- **The pet warning renders above the address**, as a bordered note with its own heading. Deliberately *not* a `<details>` like the access codes: a warning you have to expand is a warning that gets missed, and unlike a gate code there is no reason to withhold it until the job is accepted. It reads before somebody sets off, not after they arrive.
+- **The entry answer is stated explicitly**, including when it is "no". "The tenant has not agreed to entry when out" and "nobody was asked" are different facts, and a vendor who assumes the first when it is the second drives to a locked door. Null — a staff-raised work order with no ticket behind it — renders nothing rather than guessing.
+- **The completion photo is now genuinely required** (MAINT-06), gated on the server.
+
+**D-17 claimed the photo requirement already existed, and it did not.** Its words, used to justify deferring R-028 to Phase 3: *"MAINT-06's 'required completion photo' is already built into R-025's vendor upload."* R-025 built the *ability* to upload; nothing required it. `vendorMayMarkComplete()` only ever inspected status, so a vendor could take a job to WORK_COMPLETE having photographed nothing — the state R-030 then asks the tenant to confirm against, R-031 charges a tenant from, and a deposit dispute is defended with.
+
+**Gated rather than amending D-17 down to match the code.** The reason D-17 gave for deferring R-028 was sound *only if* the claim were true; weakening the requirement to fit reality would retroactively hollow out a decision that is otherwise still correct. Recorded as **D-41**.
+
+**What it decided.**
+- **Server-side, not only the button.** The client gate is an affordance; a stale page rendered before a photo was soft-deleted would walk straight past it.
+- **A refusal with the fix on the same screen**, never a dead end. D-6's rule still governs: a vendor turned away phones the invoice in, which is the outcome the whole magic-link path exists to prevent. The message names the one missing thing and the upload is directly above it.
+- **The staff-side `markWorkComplete` is deliberately NOT gated.** A PM recording what a vendor phoned in is the override, and gating it would strand the job with no way to close it.
+- **Four near-misses, each with a test**: an INVOICE is not a completion photo (half of vendors upload the bill first); a soft-deleted photo does not count, since R-012's 30-day undelete leaves the row in place; a photo on another work order does not count; and the photo check runs *before* the status guard so the message names the right missing thing.
+
+**A test-harness note worth keeping.** `revalidatePath` throws outside a request context, so the *success* path of any server action is untestable without stubbing it. Mocked locally in the one file that needed it rather than aliased repo-wide like `server-only` — a global stub would silence cache invalidation everywhere for the benefit of one test. Promote it if a third test wants the same thing.
+
+**What it left behind.**
+- **R-032c, R-032d and R-032e** remain — the tenant verification dead end, the vendor link TTL, and the two disagreeing cost functions.
+- **The backlog rows are written at filing time and rot.** Two of four claims here were fixed by an item that shipped afterwards, and nothing updated the row. Worth a habit rather than a fix: verify each claim before building, and record which were already true.

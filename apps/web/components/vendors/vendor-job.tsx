@@ -33,7 +33,20 @@ export interface VendorJobProps {
     /// different one confirmed needs to read the confirmed one.
     scheduledStart: string | null
     scheduledEnd: string | null
+    /// The tenant said there is a pet at home (R-019's intake, R-032b).
+    /// Shown prominently and near the top, because it is the only fact on
+    /// this page that can hurt somebody: a vendor letting themselves in with
+    /// a key needs it before they turn the handle, not buried under the
+    /// equipment list.
+    petWarning: boolean
+    /// Whether the tenant agreed we may enter when they are not home. Null
+    /// when there is no ticket behind the job — a staff-raised work order has
+    /// nobody to have answered.
+    entryPermission: boolean | null
     invoiceUploaded: boolean
+    /// MAINT-06's required completion photo. Gates "mark complete", so the
+    /// button can say what is missing instead of failing on press.
+    completionPhotoUploaded: boolean
   }
   photos: readonly { id: string; fileName: string; href: string }[]
   appliances: readonly {
@@ -113,6 +126,50 @@ export function VendorJob({
         </p>
         <h1 className="text-2xl font-semibold tracking-tight">{job.scope}</h1>
       </header>
+
+      {/* ABOVE "Where", because it is read before somebody sets off and it
+          is the only thing on this page that can hurt them. R-019 asked the
+          tenant, the Ticket stored the answer, the PM could see it, and the
+          person opening the door could not — for every job since R-025.
+
+          Not a `<details>` like the access codes: a warning you have to
+          expand is a warning that gets missed, and unlike a gate code there
+          is no reason to withhold it until the job is accepted. */}
+      {job.petWarning && (
+        <section
+          // `role="note"` rather than `alert`: alert interrupts, and this is
+          // rendered on load rather than in response to anything the vendor
+          // did. It still reads as a warning because the heading says so.
+          role="note"
+          aria-labelledby="pet-warning"
+          className="flex flex-col gap-1 rounded-md border-2 border-amber-500 bg-amber-50 p-4 dark:border-amber-500 dark:bg-amber-950"
+        >
+          <h2 id="pet-warning" className="text-sm font-semibold text-amber-900 dark:text-amber-100">
+            There is a pet at this home
+          </h2>
+          <p className="text-sm text-amber-900 dark:text-amber-100">
+            The tenant told us to expect an animal.
+            {job.entryPermission === true
+              ? ' They have agreed we can come in when they are not home, so knock first and let them secure it if they are there.'
+              : ' Arrange the visit with them so the animal is secured before you arrive.'}
+          </p>
+        </section>
+      )}
+
+      {/* Said explicitly rather than left to be inferred from silence. "The
+          tenant has NOT agreed to entry when out" and "nobody asked" are
+          different facts, and a vendor who assumes the first when it is the
+          second turns up to a locked door. */}
+      {job.entryPermission !== null && !job.petWarning && (
+        <section className="flex flex-col gap-1 rounded-md border p-4">
+          <h2 className="text-sm font-medium">Entry</h2>
+          <p className="text-sm">
+            {job.entryPermission
+              ? 'The tenant has agreed we can come in when they are not home.'
+              : 'The tenant asked that somebody be home — arrange a time with them before you go.'}
+          </p>
+        </section>
+      )}
 
       <section className="flex flex-col gap-2 rounded-md border p-4">
         <h2 className="text-sm font-medium">Where</h2>
@@ -400,10 +457,28 @@ export function VendorJob({
                 "mark the work finished" on either would invite the vendor to
                 undo somebody else's answer. */}
             {vendorMayMarkComplete(job.status) ? (
-              <form action={completeFormAction} className="border-t pt-4">
-                <FormAlerts state={completeState} />
-                <SubmitButton label="Mark the work finished" />
-              </form>
+              job.completionPhotoUploaded ? (
+                <form action={completeFormAction} className="border-t pt-4">
+                  <FormAlerts state={completeState} />
+                  <SubmitButton label="Mark the work finished" />
+                </form>
+              ) : (
+                // MAINT-06's required completion photo, enforced (R-032b).
+                // D-17 already asserted this was "built into R-025's vendor
+                // upload" while justifying deferring R-028 — it was not: the
+                // upload existed and nothing required it, so a job could
+                // reach WORK_COMPLETE with no evidence it was ever done.
+                //
+                // SAYS WHAT IS MISSING INSTEAD OF DISABLING A BUTTON. A
+                // disabled control leaves the tab order and explains
+                // nothing; the sentence is the affordance, and the upload it
+                // asks for is directly above.
+                <p className="border-t pt-4 text-sm">
+                  Upload a photo of the finished work above, then you can mark
+                  it complete. The photo is what shows the job was done — it is
+                  what the tenant is asked to confirm against.
+                </p>
+              )
             ) : (
               <p className="text-muted-foreground border-t pt-4 text-sm">
                 Marked finished. Thanks{job.invoiceUploaded ? '' : ' - send the invoice when you have it'}.

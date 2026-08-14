@@ -120,7 +120,16 @@ export default async function VendorLinkPage({
         scheduledEnd: workOrder.scheduledEnd
           ? utcToWallClock(workOrder.scheduledEnd, workOrder.property.timezone).replace('T', ' ')
           : null,
+        // THE TENANT'S OWN ANSWERS, finally reaching the person who opens
+        // the door (R-032b). R-019 collected both, validated both, and wrote
+        // both to the Ticket — where the PM could see them and the vendor
+        // could not. The pet warning is the one field on this page with a
+        // physical-safety consequence; the entry permission stops the office
+        // being asked a question the tenant already answered.
+        petWarning: workOrder.ticket?.petWarning ?? false,
+        entryPermission: workOrder.ticket?.entryPermission ?? null,
         invoiceUploaded: context.photos.some((p) => p.type === 'INVOICE'),
+        completionPhotoUploaded: context.photos.some((p) => p.type === 'COMPLETION_PHOTO'),
       }}
       photos={context.photos.map((p) => ({
         id: p.id,
