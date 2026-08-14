@@ -1586,7 +1586,7 @@ Recording a surety bond as "a cash deposit of $0" would be true and useless. The
 - **The webhook subscription had to be widened by hand** to include `setup_intent.succeeded`. Adding a type to `HANDLED_EVENTS` does not subscribe to it; a handler nothing is subscribed to is dead code that looks live. Recorded in DEPLOYMENT.md.
 
 ## R-039a (part 3) — The autopay enrolment screen
-**Commit:** `TBD`  ·  **Date:** 2026-08-14
+**Commit:** `09b6f1c`  ·  **Date:** 2026-08-14
 
 **What it built.** The screen a tenant actually touches. `createSetupIntent` has existed since R-034 and part 2 built what happens when Stripe confirms one; this is the half that lets a tenant *start* enrolment rather than only complete one. PAY-02's Must story is now reachable end to end.
 
