@@ -23,11 +23,7 @@
       "mcp__claude_ai_Stripe__list_available_accounts_or_orgs",
       "Bash(node -e \"process.stdout.write\\(JSON.parse\\(require\\('fs'\\).readFileSync\\('/tmp/whep.json','utf8'\\)\\).secret\\)\")",
       "Bash(awk '{print \"e2e log size:\", $5}')",
-      "Bash(cp apps/web/lib/notifications/notifications.test.ts /tmp/nt.bak)",
-      "Bash(docker --version)",
-      "Bash(awk '{print \"brew log:\", $5, \"bytes\"}')",
-      "Bash(node -e \"const s=require\\('./package.json'\\).scripts; for \\(const k of ['test','test:e2e','db:migrate:test','db:seed:test']\\) console.log\\(k+':', s[k]\\)\")",
-      "Bash(pkill -f \"playwright test\")"
+      "Bash(cp apps/web/lib/notifications/notifications.test.ts /tmp/nt.bak)"
     ],
     "additionalDirectories": [
       "/Users/shanelabounty/Documents/Claude/Projects/rental business/packages/core/tasks"

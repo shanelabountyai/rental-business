@@ -13,6 +13,7 @@ import 'server-only'
 //
 // Side-effect imports, so nothing is re-exported - `import` alone is the
 // point.
+import '../billing/predebit-job.ts'
 import '../billing/sweep-job.ts'
 import '../ledger/late-fee-job.ts'
 import '../maintenance/triage-consumer.ts'

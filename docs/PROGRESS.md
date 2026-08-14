@@ -1609,3 +1609,38 @@ Recording a surety bond as "a cash deposit of $0" would be true and useless. The
 - **Nobody has clicked it.** The gap above is the honest state of this item until somebody confirms a card against the test key.
 - **A tenant cannot turn autopay OFF from the portal.** The copy says to contact the office, which is true and deliberate for now — switching a payer back to `send_invoice` has its own refusal rules (D-29, `switchDecision`) and belongs with the rest of R-039a rather than being half-built here.
 - Tenant-chosen debit day, the owner's require-full-balance switch, and **the T-2 pre-debit notice** are still outstanding. The last of those is now the most consequential thing missing in the product: autopay works, so money will start leaving accounts automatically, and PAY-02 requires two days' warning that nothing currently sends.
+
+## R-039a (part 4) — The T-2 pre-debit notice, and tests off the cloud database
+**Commit:** `TBD`  ·  **Date:** 2026-08-14
+
+**The T-2 notice.** Autopay started working three commits ago, which means rent now leaves a bank account without the tenant doing anything — and nothing warned them. PAY-02 asks for two days' notice; two days is enough to move money in, or to ring the office before an overdraft rather than after one.
+
+**Only payers genuinely on autopay are warned** — `charge_automatically` **and** a method on file, the same two-part test the pay screen makes. A payer on automatic collection with no method will not be debited; the invoice will fail. Warning them of a debit that cannot happen is worse than silence, because the next message they get says it failed. One test per way that can be wrong.
+
+**It quotes the recurring amount, not a predicted total.** What we know is what we told Stripe to collect. The final invoice can carry a late fee added since, and a pre-debit notice whose number is wrong teaches a tenant to ignore the next one. The email says plainly that anything else outstanding may come at the same time and the receipt will show the exact figure.
+
+**`autopay_predebit` was left unlocked, deliberately.** It sits under "Money" in the category list rather than with the legally significant set — placed there by an earlier item, and the reasoning holds: unlike an entry notice, nothing about it is a statutory service. Turning it off stops the warning, not the debit, which is the tenant's call. Runs 7am property-local, an hour after the late-fee assessment.
+
+**Tests moved off Neon onto a local Postgres.** Same suite, same machine, only the database moved:
+
+| | Neon (us-east-2) | Local |
+|---|---|---|
+| `escalation.test.ts` | 113s | **0.75s** |
+| full vitest (1,321) | ~120s | **39.8s** |
+| full e2e | ~20 min | **8.8 min** |
+
+**Integration tests here are latency-bound, not compute-bound.** One page-out is a rota lookup, five writes per recipient per channel, then two more round trips to send — every one a hop to us-east-2 through a pooler. Localhost turns ~50ms into ~0.5ms. This is why a bigger Neon plan was the wrong answer: distance is distance.
+
+**The stronger reason is diagnostic.** A shared remote test database made infrastructure strain indistinguishable from flaky tests. It reached 48,442 delivery rows of test debris, went unreachable mid-sweep once (239 failures, one signature), and starved a 2.4-second test past a 60-second ceiling. Several hours across this session went into chasing "flaky tests" that were never code — including four separate timeout raises that were treating a symptom.
+
+**What it decided.**
+- **`.env.test` overrides only the database** and inherits everything else from `.env.local`, because `dotenv -e A -e B` lets the first file win — verified empirically rather than assumed. No secrets duplicated into a second file.
+- **Playwright's `webServer` runs `dev:test`, not `dev`.** Otherwise the app under test reads the cloud while the specs read localhost — a split brain where a spec seeds a tenant the app cannot see.
+- **`db:migrate:all` and `db:status` exist because a side effect disappeared.** Running the tests used to apply migrations to the Neon dev branch, because that is where they pointed. Now they do not, so a migration could pass locally and leave dev behind unnoticed.
+- **Production is not in `db:migrate:all`.** Applying migrations to a database holding real leases is a decision, not a side effect of a convenience script.
+- **Schema syncs; data deliberately does not.** Migrations in git are the only thing shared. Test fixtures must never reach production, and production data must never reach a laptop — that is what `NOTIFICATIONS_SANDBOX_TO` exists to prevent.
+
+**What it left behind.**
+- **The timeout ceilings raised earlier this session are now wildly oversized** — 90s on escalation, 120s on emergency, 240s on the axe scan, 20s on the soft-delete poll. Harmless, since a ceiling only matters on failure, but their comments cite measurements taken against a remote database and are now historical rather than current.
+- Tenant-chosen debit day and the owner's require-full-balance switch are still outstanding on R-039a.
+- **Nobody has clicked the Elements enrolment screen yet.** Unchanged from part 3, and still the honest state.

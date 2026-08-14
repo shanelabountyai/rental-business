@@ -589,6 +589,67 @@ export const paymentReturnedTemplate: NotificationTemplate<PaymentReturnedContex
   },
 }
 
+export interface AutopayPredebitContext {
+  tenantName: string
+  addressLine1: string
+  /// The recurring amount the subscription bills - what we told Stripe to
+  /// collect, not a guess at the final invoice.
+  amount: string
+  /// Property-local calendar date the debit is expected.
+  debitOn: string
+}
+
+/**
+ * "We are about to take rent" (PAY-02, R-039a).
+ *
+ * TWO DAYS AHEAD, WHICH IS THE WHOLE POINT. Autopay moves money out of
+ * somebody's bank account without them doing anything, and the difference
+ * between a working system and an angry phone call is whether they saw it
+ * coming. Two days is enough to move money in, or to ring the office before
+ * an overdraft rather than after one.
+ *
+ * SAYS THE RECURRING AMOUNT, NOT A PREDICTED TOTAL. What we know is what the
+ * subscription bills - `stripeAmountCents`, the instruction we gave Stripe.
+ * The final invoice can carry a late fee or a part-month charge added since,
+ * and quoting a precise total we cannot guarantee would be worse than
+ * quoting none: a pre-debit notice whose number is wrong teaches a tenant to
+ * ignore the next one.
+ *
+ * NOT a locked category. `autopay_predebit` sits under Money rather than
+ * under the legally significant set, deliberately - a tenant who has read a
+ * hundred of these may reasonably want fewer, and unlike an entry notice
+ * nothing about it is a statutory service. Turning it off does not stop the
+ * debit; it stops the warning, which is their call to make.
+ */
+export const autopayPredebitTemplate: NotificationTemplate<AutopayPredebitContext> = {
+  key: 'autopay.predebit',
+  category: 'autopay_predebit',
+  channels: ['SMS', 'EMAIL', 'PORTAL'],
+  render: (context, channel) => {
+    if (channel === 'SMS') {
+      return {
+        body: [
+          `Heads up: we will collect ${context.amount} rent for ${context.addressLine1} on ${context.debitOn}.`,
+          'Nothing to do if that works for you.',
+        ].join(' '),
+      }
+    }
+    return {
+      subject: `Rent of ${context.amount} will be collected on ${context.debitOn}`,
+      body: [
+        `Hello ${context.tenantName},`,
+        '',
+        `This is a heads up that we will collect ${context.amount} for ${context.addressLine1} on ${context.debitOn}, using the payment method you saved.`,
+        '',
+        // Honest about what it does not know. See the note above.
+        'If anything else is outstanding it may be collected at the same time, and the receipt will show the exact amount.',
+        '',
+        'Nothing to do if that works for you. If it does not, please contact the office before that date rather than letting it fail.',
+      ].join('\n'),
+    }
+  },
+}
+
 export const TEMPLATES: Readonly<Record<string, NotificationTemplate<never>>> = {
   [unitMakeReadyTemplate.key]:
     unitMakeReadyTemplate as unknown as NotificationTemplate<never>,
@@ -598,6 +659,8 @@ export const TEMPLATES: Readonly<Record<string, NotificationTemplate<never>>> = 
     vendorDispatchTemplate as unknown as NotificationTemplate<never>,
   [vendorBidRequestTemplate.key]:
     vendorBidRequestTemplate as unknown as NotificationTemplate<never>,
+  [autopayPredebitTemplate.key]:
+    autopayPredebitTemplate as unknown as NotificationTemplate<never>,
   [entryNoticeTemplate.key]:
     entryNoticeTemplate as unknown as NotificationTemplate<never>,
   [emergencyEscalationTemplate.key]:

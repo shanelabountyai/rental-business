@@ -105,7 +105,12 @@ export default defineConfig({
     { name: 'desktop-chrome', use: { ...devices['Desktop Chrome'] } },
   ],
   webServer: {
-    command: 'npm run dev',
+    // `dev:test`, NOT `dev`. The server under test has to read the SAME
+    // database as the specs do, and `npm run dev` loads only .env.local -
+    // which points at the deployed dev branch. Running the two against
+    // different databases is a split brain that produces failures nobody can
+    // reproduce: a spec seeds a tenant the app cannot see.
+    command: 'npm run dev:test',
     // AUTH_URL has to agree with the port, or Auth.js builds its post-sign-in
     // redirect against whatever .env.local says and the browser is sent to a
     // different origin than the one under test. dotenv-cli does not override
