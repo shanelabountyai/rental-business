@@ -88,8 +88,13 @@ export default async function PropertyDetailPage({
     ])
   // R-030's "attach to the property and flow to reporting". Costed here
   // rather than in the query so `jobCostCents()` stays the one rule for what
-  // a job cost - the same function the close screen and R-026's re-approval
-  // check use, so the number cannot mean two things on two screens.
+  // the business is asked to PAY - the same function the close screen and
+  // R-042's export use.
+  //
+  // NOT the same function as R-026's re-approval check, which this comment
+  // used to claim (D-42). That one takes the higher of the invoice and the
+  // recorded parts because it is a control; this one takes the invoice
+  // because it is the books.
   const maintenanceSpend = (await closedJobCostsForProperty(id)).map((job) => ({
     id: job.id,
     scope: job.scope,

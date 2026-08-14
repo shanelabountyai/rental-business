@@ -1890,3 +1890,29 @@ The gap recorded above is closed: choosing a debit day now moves the Stripe subs
 **What it left behind.**
 - **`TOKEN_TTL_MINUTES.VENDOR_WORK_ORDER` is now only the default** that `mintToken` falls back to; the real lifetime comes from `linkTtlMinutesFor`. Left in place because the table is where somebody looks first, and it is still correct for a caller that does not override.
 - **R-032e is the last Milestone 2 repair row** — `jobCostCents` and `actualTotalCents` disagreeing while a comment claims they are the same rule.
+
+## R-032e — Two cost numbers, and the comment that lied about it
+**Commit:** *(recorded below)*  ·  **Date:** 2026-08-14
+
+**No behaviour changed, and that is the finding.** Both functions were already correct and already used correctly. `jobCostCents()` drives the property spend tile, the close screen and the work-order display; `actualTotalCents()` drives every approval and re-approval check. Nothing was calling the wrong one.
+
+**The defect was a doc-comment about money.** `jobCostCents()` asserted it was *"deliberately the same rule as R-026's `actualTotalCents()`... so 'what did this cost' cannot mean two different numbers on two screens."* That is false, and a false comment about money is worse than no comment: it is what a later session reads before deciding which function to call, and R-042's accounting export was the first thing that had to pick.
+
+**They answer different questions and diverge in one case.**
+
+| | recorded parts $1,000, invoice $600 |
+|---|---|
+| `jobCostCents()` — the books | **$600** |
+| `actualTotalCents()` — the control | **$1,000** |
+
+The books must take the invoice: recording $1,000 of expense against a $600 bill overstates a Schedule E return. The ceiling check must take the maximum: either figure exceeding what the owner approved is money they did not agree to, and a vendor whose invoice beats our own recorded actuals is exactly what R-026 exists to catch.
+
+**Unifying either way breaks the other**, which is why "keep both" is the answer rather than a failure to tidy up. On the invoice, a $1,000 job billed at $600 stops tripping a $700 approval ceiling. On the maximum, the tax return claims money that was never billed. Recorded as **D-42**, which also corrects D-19's assumption that one number existed.
+
+**Why the false claim survived this long.** The two agree on every job where the invoice is the largest figure — which is most of them — so nothing ever disagreed on a screen. There is now a test asserting the divergence explicitly, plus one asserting they agree on the ordinary job, so a later unification fails loudly instead of quietly overstating a return or weakening a control.
+
+**The spend tile now says what it covers.** `closedJobCostsForProperty()` takes no period and no entity filter, so the total is every job closed since the property was added. An unlabelled figure on a property page reads like an annual number somebody re-keys into a spreadsheet — the re-keying D-19 exists to prevent. It now says so in one line, and points at R-081 for the real report.
+
+**What it left behind.**
+- **Per-period and per-entity maintenance reporting is still R-081's.** Deliberately not started here: building it inside a property-page tile is where the duplication D-19 warns about begins.
+- **Milestone 2's repair rows are now all closed** — R-032a through R-032e. The next unticked row is R-101, the remainder of the UX and accessibility report.

@@ -1,9 +1,11 @@
+import { actualTotalCents } from '../approvals/thresholds.ts'
 import { describe, expect, it } from 'vitest'
 import {
   type AssignmentInput,
   type WorkOrderInput,
   activeWarranties,
   isWarrantyActive,
+  jobCostCents,
   likelyMatchingWarranty,
   validateAssignment,
   validateWorkOrder,
@@ -118,5 +120,58 @@ describe('warranty surfacing', () => {
     expect(likelyMatchingWarranty('PLUMBING', warranties)).toBeNull()
     expect(likelyMatchingWarranty(null, warranties)).toBeNull()
     expect(likelyMatchingWarranty(undefined, warranties)).toBeNull()
+  })
+})
+
+// The two cost rules, and the fact that they are two (R-032e, D-42).
+//
+// `jobCostCents` answers what the business is asked to PAY; `actualTotalCents`
+// answers whether anything exceeded the approval. They agree on every job
+// where the invoice is the largest figure — which is most of them, and is
+// exactly why a comment claiming they were "deliberately the same rule"
+// survived until R-042's export had to pick one.
+//
+// This test exists to make a later unification fail loudly rather than
+// silently overstate a Schedule E return or silently weaken a ceiling check.
+describe('jobCostCents vs actualTotalCents', () => {
+  const recordedOverInvoice = {
+    actualLaborCents: 80_000,
+    actualMaterialsCents: 20_000,
+    invoiceCents: 60_000,
+  }
+
+  it('DIVERGE when the recorded parts exceed the invoice', () => {
+    // The books take what the vendor actually billed.
+    expect(jobCostCents(recordedOverInvoice)).toBe(60_000)
+    // The control takes the higher figure, because either one over the
+    // approval is money the owner did not agree to.
+    expect(actualTotalCents(recordedOverInvoice)).toBe(100_000)
+  })
+
+  it('agree on the ordinary job, which is why the difference hid', () => {
+    const ordinary = {
+      actualLaborCents: 40_000,
+      actualMaterialsCents: 10_000,
+      invoiceCents: 75_000,
+    }
+    expect(jobCostCents(ordinary)).toBe(75_000)
+    expect(actualTotalCents(ordinary)).toBe(75_000)
+  })
+
+  it('falls back to the recorded parts before an invoice arrives', () => {
+    const noInvoice = {
+      actualLaborCents: 30_000,
+      actualMaterialsCents: 5_000,
+      invoiceCents: null,
+    }
+    expect(jobCostCents(noInvoice)).toBe(35_000)
+    expect(actualTotalCents(noInvoice)).toBe(35_000)
+  })
+
+  it('never sums the invoice AND the parts', () => {
+    // Double-counting every job whose vendor itemised their own invoice —
+    // which is most of them — is the failure both rules are shaped to avoid.
+    expect(jobCostCents(recordedOverInvoice)).not.toBe(160_000)
+    expect(actualTotalCents(recordedOverInvoice)).not.toBe(160_000)
   })
 })

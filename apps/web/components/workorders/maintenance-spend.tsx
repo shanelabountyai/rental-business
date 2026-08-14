@@ -33,7 +33,19 @@ export function MaintenanceSpendSection({ jobs }: { jobs: ClosedJob[] }) {
 
   return (
     <section className="flex flex-col gap-3 rounded-md border p-4">
-      <h2 className="text-sm font-semibold">Maintenance spend</h2>
+      <div className="flex flex-col gap-0.5">
+        <h2 className="text-sm font-semibold">Maintenance spend</h2>
+        {/* SAYS WHAT IT COVERS (R-032e, D-42). `closedJobCostsForProperty`
+            takes no period and no entity filter, so this is every closed job
+            since the property was added — and an unlabelled total on a
+            property page reads like an annual figure somebody re-keys into a
+            spreadsheet, which is the re-keying D-19 exists to prevent.
+            Per-period and per-entity reporting is R-081's; this is a tile. */}
+        <p className="text-muted-foreground text-xs">
+          Every job closed since this property was added — not a period or
+          entity report.
+        </p>
+      </div>
 
       {jobs.length === 0 ? (
         <p className="text-muted-foreground text-sm">

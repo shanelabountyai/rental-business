@@ -163,18 +163,36 @@ export function closeDecision(
 }
 
 /**
- * What the job actually cost, in integer cents.
+ * What the business is asked to PAY for this job, in integer cents.
+ *
+ * THE BOOKS' NUMBER. This is what lands on the property's spend, on the close
+ * screen, and in R-042's accounting export.
  *
  * THE INVOICE WINS WHERE THERE IS ONE. Labour and materials are what the PM
- * or the vendor estimated as they worked; the invoice is what the business
- * is actually being asked to pay, and it is the number that has to match the
+ * or the vendor recorded as they worked; the invoice is what the business is
+ * actually being asked to pay, and it is the number that has to match the
  * books. Where there is no invoice yet, the parts are the best available
  * truth. Summing all three would double-count every job whose vendor itemised
  * their own invoice, which is most of them.
  *
- * Deliberately the same rule as R-026's `actualTotalCents()` uses for the
- * re-approval check, so "what did this cost" cannot mean two different
- * numbers on two screens.
+ * ==========================================================================
+ * IT IS *NOT* THE SAME RULE AS `actualTotalCents()`, AND THIS COMMENT USED TO
+ * CLAIM IT WAS (fixed in R-032e, recorded as D-42).
+ *
+ * They agree on every job where the invoice is the largest figure, which is
+ * most of them — which is exactly why the false claim survived. They diverge
+ * when the recorded parts exceed the invoice:
+ *
+ *     $800 labour + $200 materials recorded, vendor invoices $600
+ *       jobCostCents()     -> 60000   what we owe, what the books record
+ *       actualTotalCents() -> 100000  what the ceiling check measures
+ *
+ * Both are right for their own question, and neither may be used for the
+ * other's. Recording $1,000 of expense against a $600 invoice overstates a
+ * Schedule E return; checking a $700 approval ceiling against $600 lets
+ * through work nobody authorised. See `actualTotalCents()` in
+ * packages/core/approvals for the other half of this pair.
+ * ==========================================================================
  */
 export function jobCostCents(facts: {
   actualLaborCents: number | null

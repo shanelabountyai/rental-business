@@ -96,11 +96,28 @@ export function approvalRequirement(
   return { outcome: 'required', thresholdCents: policy.thresholdCents }
 }
 
-/// The total a tolerance check measures. Actuals are labour plus materials;
-/// the invoice is what the vendor billed. The HIGHER of the two governs,
-/// because either one exceeding what was approved is money the owner did not
-/// agree to - and a vendor whose invoice beats our own recorded actuals is
-/// exactly the case worth catching.
+/**
+ * The total a tolerance check measures. THE CONTROL'S NUMBER, never the
+ * books'.
+ *
+ * Actuals are labour plus materials; the invoice is what the vendor billed.
+ * The HIGHER of the two governs, because either one exceeding what was
+ * approved is money the owner did not agree to - and a vendor whose invoice
+ * beats our own recorded actuals is exactly the case worth catching.
+ *
+ * NOT INTERCHANGEABLE WITH `jobCostCents()` (D-42). That one answers what the
+ * business is asked to pay and takes the invoice; this one answers whether
+ * anything exceeded the approval and takes the maximum. They agree whenever
+ * the invoice is the largest figure, which is most jobs - so the difference
+ * only shows up on the ones where it matters:
+ *
+ *     $800 labour + $200 materials recorded, vendor invoices $600
+ *       jobCostCents()     -> 60000   the books
+ *       actualTotalCents() -> 100000  this check
+ *
+ * Using this figure for the books would overstate a Schedule E return
+ * against the invoice actually received.
+ */
 export function actualTotalCents(workOrder: {
   actualLaborCents: number | null
   actualMaterialsCents: number | null
