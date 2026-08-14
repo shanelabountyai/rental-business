@@ -1646,7 +1646,7 @@ Recording a surety bond as "a cash deposit of $0" would be true and useless. The
 - **Nobody has clicked the Elements enrolment screen yet.** Unchanged from part 3, and still the honest state.
 
 ## R-039a (part 5) — The debit day and the full-balance switch: PAY-02 closed
-**Commit:** `TBD`  ·  **Date:** 2026-08-14
+**Commit:** `3a083ce`  ·  **Date:** 2026-08-14
 
 **What it built.** The last two pieces of autopay, and with them PAY-02's Must story is complete: a tenant can enrol, choose when they are debited, gets warned two days ahead, and an owner can refuse part payments.
 
