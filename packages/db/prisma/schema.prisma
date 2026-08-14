@@ -1176,6 +1176,16 @@ enum AuthTokenPurpose {
   /// to the same work order at the same time. Sharing the purpose would have
   /// meant weakening that invariant for every dispatch link in the product.
   VENDOR_BID
+  /// R-032c: the tenant's "was this fixed?" (MAINT-07), answerable without a
+  /// login. Scoped to one work order, one tenant and one ROUND — it opens no
+  /// portal session, reads no document and moves no money, which is what
+  /// makes a seven-day lifetime defensible where a session would not be.
+  ///
+  /// MULTI-USE until it expires, like VENDOR_WORK_ORDER and for the same
+  /// reason: a tenant who taps, gets distracted and comes back must not find
+  /// it dead. The ANSWER is still once-only — the unique index on
+  /// (workOrderId, round) enforces that, not the token.
+  TENANT_VERIFY
 }
 
 model StaffCredential {

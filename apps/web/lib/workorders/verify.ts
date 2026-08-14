@@ -5,6 +5,7 @@ import { type Priority, prisma } from '@rental/db'
 import { authUrl } from '@/lib/auth/delivery.ts'
 import { dispatchPendingNotifications, notify } from '@/lib/notifications/send.ts'
 import { createTask } from '@/lib/tasks/create.ts'
+import { issueVerifyLink } from '@/lib/portal/verify-link.ts'
 
 // The verification ask, and what a "no" does (MAINT-07, R-030).
 //
@@ -53,6 +54,15 @@ export async function requestVerification(workOrderId: string): Promise<void> {
     const tenant = workOrder?.ticket?.tenant
     if (!workOrder || !tenant) return
 
+    // Minted BEFORE the send, and the send is skipped if it fails: a
+    // verification message carrying a broken link is worse than none, because
+    // the tenant taps it, gets a dead end, and stops trusting the next one.
+    const { token: verifyToken } = await issueVerifyLink({
+      workOrderId: workOrder.id,
+      tenantId: tenant.id,
+      round: workOrder.reopenCount + 1,
+    })
+
     const outcomes = await notify({
       category: 'maintenance_update',
       templateKey: 'workorder.verify_request',
@@ -73,7 +83,14 @@ export async function requestVerification(workOrderId: string): Promise<void> {
         // entire value is the tap. Built the same way every other outbound
         // link in the product is (auth/delivery.ts), and deliberately not
         // from the request Host header for the reason stated there.
-        url: authUrl(`/portal/maintenance/${workOrder.ticket?.id}`),
+        //
+        // A SINGLE-PURPOSE VERIFY LINK, not the portal (R-032c). The portal
+        // URL this replaces sat behind `requireTenant`, which redirects to
+        // an EMAIL-ONLY login with no return-to - so for a tenant with a
+        // phone and no email, the exact persona R-021 exists for, this
+        // message was a dead end, and for everyone else it was six steps.
+        // The reply rate IS the feature.
+        url: authUrl(`/verify/${verifyToken}`),
       },
       propertyId: workOrder.propertyId,
       // Keyed on the ROUND, so a reopened job asks again and a job marked

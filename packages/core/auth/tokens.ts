@@ -45,6 +45,19 @@ export const TOKEN_TTL_MINUTES = {
   /// (D-16), but issued per (work order, vendor) rather than one per work
   /// order, because bids are several vendors holding live links at once.
   VENDOR_BID: 60 * 24 * 3,
+  /// R-032c: the tenant's "was this actually fixed?" (MAINT-07).
+  ///
+  /// SEVEN DAYS, the longest in this table, and the reason is that the reply
+  /// rate IS the feature. A tenant is asked once, on a day chosen by whenever
+  /// the vendor happened to finish; they may be at work, asleep, or away for
+  /// the weekend. Every hour this is shorter is a job closed on silence
+  /// instead of on an answer.
+  ///
+  /// Safe to be this long because of what the token can DO: record one
+  /// yes-or-no about one work order. It opens no portal, reads no document,
+  /// and moves no money — the blast radius of a leaked one is a wrong answer
+  /// to a maintenance question, which a PM can see and reopen.
+  TENANT_VERIFY: 60 * 24 * 7,
 } as const
 
 export type TokenPurpose = keyof typeof TOKEN_TTL_MINUTES

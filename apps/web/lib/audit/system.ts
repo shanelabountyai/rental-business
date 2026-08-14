@@ -31,6 +31,28 @@ export async function auditAsSystem(
 }
 
 /**
+ * For a TENANT acting through a magic link (R-032c), which has no session
+ * because the whole point of the link is that they did not have to sign in.
+ *
+ * NOT `audit()`. That resolves the actor from the session and, finding none,
+ * records `SYSTEM / anonymous` — so "who said this repair was fixed" would
+ * answer *nobody*, on the one record whose entire value is that a named
+ * tenant said it. For a product whose premise is that the evidence trail is
+ * the product, an attributable action recorded as anonymous is the defect
+ * that matters.
+ *
+ * The tenant is passed in because the caller proved it — the token names
+ * them — rather than inferred here from a request that carries nothing.
+ */
+export async function auditAsTenant(
+  tenantId: string,
+  input: Omit<AuditInput, 'actor'>,
+  db: AuditDb = prisma,
+): Promise<void> {
+  await recordAudit(db, { ...input, actor: { type: 'TENANT', ref: tenantId } })
+}
+
+/**
  * For a vendor acting through a magic link (D-6, R-025), which has no
  * session because a vendor has no account at all.
  *
