@@ -2133,7 +2133,7 @@ A visually-hidden `<input type="radio">` inside the styled label buys all four b
 - **No template is seeded.** The library starts empty on purpose, exactly as `SCHEDULED_JOBS` and the notification registry do — the first template is the rent reminder somebody retypes every month, and guessing their wording is worse than an empty list.
 
 ## R-044 — Rent roll and aged delinquency
-**Commit:** `pending`  ·  **Date:** 2026-08-15
+**Commit:** `3fb13da`  ·  **Date:** 2026-08-15
 
 **What it built.** The Monday-morning report: every live tenancy with rent, balance, how late it is, autopay, deposit held and subsidy portion; delinquency aged into PAY-06's buckets; a CSV export; and the one press that chases everybody past grace.
 
