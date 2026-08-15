@@ -1194,6 +1194,17 @@ enum AuthTokenPurpose {
   /// it dead. The ANSWER is still once-only — the unique index on
   /// (workOrderId, round) enforces that, not the token.
   TENANT_VERIFY
+  /// R-046: pay rent straight from a reminder, with no login (PAY-01).
+  ///
+  /// Grants ONE standalone page and ONE action, and deliberately NO portal
+  /// session (D-45) - a leaked one can see that lease's balance and pay that
+  /// lease's rent, and can reach nothing else in the portal.
+  ///
+  /// MULTI-USE until it expires, like VENDOR_WORK_ORDER and TENANT_VERIFY: a
+  /// tenant who taps, checks their bank and comes back must not find it
+  /// dead. Paying twice is prevented by the balance itself going to zero,
+  /// not by burning the token.
+  TENANT_PAY_LINK
 }
 
 model StaffCredential {

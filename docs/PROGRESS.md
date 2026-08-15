@@ -2221,3 +2221,40 @@ Building the due-soon notice required reading how "when is rent due" is computed
 - Stripe decline-code translation for `payment.failed_fix`'s `reason` field.
 - A dedicated "update payment method" portal flow — the fix path currently reuses the pay screen.
 - Itemizing more than one unpaid rent period (R-044's own follow-up, above).
+
+## R-046 — Pay-now magic links
+**Commit:** `pending`  ·  **Date:** 2026-08-15
+
+**What it built.** `/pay/<token>` — a standalone page that shows a tenant their balance and takes a payment, with no login at all. R-045's rent reminder now carries the link.
+
+### The decision the whole item turns on
+
+The backlog asked for **"a portal session scoped to paying only"**, and that was deliberately not built (D-45). A real session carrying a `scope: 'pay_only'` marker only works if every portal route refuses it — twenty-four `requireTenant` call sites across ten pages — and **any one missed hands a leaked pay link the tenant's messages, papers, maintenance history and lease documents**. That is fail-open, and it is exactly the shape `lib/portal/guard.ts`'s own header warns about.
+
+A token-scoped page is fail-**closed** by construction: there is no session for any other route to trust, so reaching anything else would require deliberately adding a route that reads the token. It is also the third use of a pattern this codebase already runs twice — the vendor link (D-6, D-16) and the verify link (R-032c) — so it inherits their control set rather than inventing one. An e2e test asserts the negative directly: holding a live pay token and navigating to `/portal`, `/portal/messages`, `/portal/papers` and `/portal/pay/history` lands on the login wall every time. **A session-based implementation would pass every other test in that file and fail that one.**
+
+### Tighter than the verify link, in three specific ways, because this one moves money
+
+- **Three days, not seven.** The verify link's blast radius is a wrong answer to a maintenance question; this one shows a balance and takes a payment, so it gets the vendor links' lifetime rather than the verify link's.
+- **Scoped to one `LeasePayer`, not one tenant.** A tenant on two tenancies gets a link per payer, and August's link for unit A can neither pay nor display unit B.
+- **Refused for a paused tenancy** (PAY-12), a deactivated payer or tenant, and a payer whose `tenantId` changed between issue and use.
+
+### What it decided
+
+- **Revoked and expired are different answers**, because they tell a tenant different things: one says "ask for a new one", the other says "call us". Both are `consumedAt` in the database, so the distinction is drawn from whether the clock actually ran out.
+- **Revocation is real, not nominal.** Reissuing kills the previous link (one live link per payer), and `revokePayLinks()` withdraws payment outright — what a legal-action hold (R-047) will need.
+- **The write path is SHARED with the signed-in pay screen.** `startPayment` and `startPaymentFromLink` differ only in how they prove the payer; both go through `chargeResolvedPayer`, which is where every number is recomputed from the ledger and the jurisdiction rule. A second copy would be a second place for a stale amount, a missed hold or an unapplied fee cap to live.
+- **The token is re-verified inside the action**, not trusted from the page that rendered the form. A page is rendered once and submitted later; a link revoked in between must not still pay.
+- **Attribution is to the LOGICAL send key, not a row id.** `notify()` fans one logical notification out to a row per channel, so there is no single `Notification` a link "was sent in" — picking one would be a lie by arbitrary choice. The engine suffixes the channel onto the idempotency key, so storing the base finds every channel's row and answers "did the reminder work" across whichever one the tenant tapped.
+- **No pay link when Stripe does not know the payer.** The reminder still goes out — "rent is due" is worth saying on its own — but a link landing on "your payment account is still being set up" is worse than no link.
+
+### Found along the way
+
+- **`verify-link 2.ts` was tracked in git.** A stale duplicate of `verify-link.ts` accidentally committed during R-032c — an older copy predating the `answer` field, imported by nothing. Removed.
+- **The route-guard test did its job.** Adding an unguarded public route failed `route-guards.test.ts` immediately and refused to let it ship without a written justification in `PUBLIC_ROUTES`. The exemption now records the full control set and why a session was the wrong instrument.
+- **My first cleanup hook deleted rows an append-only table references.** `LedgerEntry`'s `RESTRICT` foreign keys pin the `LeasePayer`, so every test in the new spec reported as failing on an error none of them had anything to do with — the exact trap CLAUDE.md documents. Retire, never delete.
+
+### What it left behind
+
+- **The link is only minted by the due-soon/due-date reminder.** The late-notice ladder and the bulk rent-roll reminder (R-044) still send portal URLs; giving them pay links is a small follow-on wherever those messages are next touched.
+- **No "resend my payment link" self-service.** A tenant with a dead link signs in or calls; the office can reissue by re-running the reminder.

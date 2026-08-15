@@ -13,6 +13,7 @@ import { audit } from '@/lib/audit/index.ts'
 import { getBillingProvider } from '@/lib/billing/provider.ts'
 import { rulesFor } from '@/lib/jurisdiction/queries.ts'
 import { requireTenantWithScope } from '@/lib/portal/guard.ts'
+import { payLinkRejection, verifyPayLink } from '@/lib/portal/pay-link.ts'
 
 // The tenant pays (PAY-01, R-037).
 //
@@ -52,21 +53,88 @@ export async function startPayment(
   // id at all - one that did would be an id somebody could change.
   const payer = await prisma.leasePayer.findFirst({
     where: { leaseId: { in: [...scope.leaseIds] }, tenantId: scope.tenantId, active: true },
-    select: {
-      id: true,
-      leaseId: true,
-      propertyId: true,
-      collectionMethod: true,
-      collectionPaused: true,
-      stripeCustomerId: true,
-      lease: {
-        select: {
-          requireFullBalance: true,
-          property: { select: { state: true, county: true } },
-        },
-      },
-    },
+    select: PAYER_SELECT,
   })
+  return chargeResolvedPayer(payer, formData, null)
+}
+
+/**
+ * The same payment, started from a pay-now link instead of a session
+ * (PAY-01, R-046).
+ *
+ * SHARES `chargeResolvedPayer` WITH THE SESSION PATH, deliberately. That
+ * function is where every number is recomputed from the ledger and the
+ * jurisdiction rule, and a second copy of it here would be a second place
+ * for a stale amount, a missed hold or an unapplied card-fee cap to live -
+ * drifting silently until the day the two disagree about what somebody owes.
+ * What differs between the two entry points is only HOW the payer is proved,
+ * which is the part that genuinely differs.
+ *
+ * The token is re-verified HERE, not trusted from the page that rendered the
+ * form. A page is rendered once and submitted later; a link revoked in
+ * between must not still pay.
+ */
+export async function startPaymentFromLink(
+  token: string,
+  _previous: PayFormState,
+  formData: FormData,
+): Promise<PayFormState> {
+  const link = await verifyPayLink(token)
+  if (!link.ok) return { error: payLinkRejection(link.reason) }
+
+  const payer = await prisma.leasePayer.findFirst({
+    // Scoped to the ONE payer the token names - not to everything its tenant
+    // is party to. A tenant on two tenancies has a link per payer, and the
+    // one in August's reminder for unit A cannot pay unit B.
+    where: { id: link.leasePayerId, active: true },
+    select: PAYER_SELECT,
+  })
+  return chargeResolvedPayer(payer, formData, link.notificationKey)
+}
+
+/// Everything both entry points need off the payer row. One constant so the
+/// two cannot select different columns and diverge in what they can check.
+const PAYER_SELECT = {
+  id: true,
+  leaseId: true,
+  propertyId: true,
+  collectionMethod: true,
+  collectionPaused: true,
+  stripeCustomerId: true,
+  lease: {
+    select: {
+      requireFullBalance: true,
+      property: { select: { state: true, county: true } },
+    },
+  },
+} as const
+
+/**
+ * Starts a payment against an already-proved payer.
+ *
+ * EVERY NUMBER IS RECOMPUTED HERE - see this file's header. Whichever way the
+ * caller proved who they are, the balance, the fee and the hold are all
+ * derived again at this moment.
+ */
+async function chargeResolvedPayer(
+  payer: {
+    id: string
+    leaseId: string
+    propertyId: string
+    collectionMethod: string
+    collectionPaused: boolean
+    stripeCustomerId: string | null
+    lease: {
+      requireFullBalance: boolean
+      property: { state: string; county: string | null }
+    }
+  } | null,
+  formData: FormData,
+  /// The LOGICAL send a pay-now link went out in, when this payment came
+  /// from one (R-046) — see `PayLinkSubject.notificationKey`. Recorded on
+  /// the audit entry so "did the reminder work" is answerable.
+  notificationKey: string | null,
+): Promise<PayFormState> {
   if (!payer) return { error: 'There is no account set up to pay against yet.' }
   if (!payer.stripeCustomerId) {
     return { error: 'Your payment account is not ready yet. Please contact the office.' }
@@ -177,6 +245,11 @@ export async function startPayment(
         totalCents,
         feeCapped: fee?.cappedAtCents != null,
         stripePaymentIntentId: intent.stripePaymentIntentId,
+        // WHICH MESSAGE THIS PAYMENT CAME FROM (PAY-01, R-046). Null for a
+        // payment started from a signed-in session, which is the honest
+        // answer rather than a guess - "did the reminder work" must not
+        // count a payment nobody was reminded about.
+        fromNotificationKey: notificationKey,
       },
     })
 

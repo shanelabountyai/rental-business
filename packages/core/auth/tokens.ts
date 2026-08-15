@@ -58,6 +58,20 @@ export const TOKEN_TTL_MINUTES = {
   /// and moves no money — the blast radius of a leaked one is a wrong answer
   /// to a maintenance question, which a PM can see and reopen.
   TENANT_VERIFY: 60 * 24 * 7,
+  /// R-046: pay rent from the link in the reminder, without a login (PAY-01).
+  ///
+  /// THREE DAYS, and the number is a compromise between two real failures.
+  /// Too short and the link is dead when somebody opens the text on payday
+  /// rather than the evening it arrived - which is the whole point of
+  /// sending it. Too long and a forwarded message, a shared phone or a
+  /// backed-up SMS thread keeps a live payment surface open for weeks.
+  ///
+  /// SHORTER THAN TENANT_VERIFY's seven days on purpose, because this one
+  /// can MOVE MONEY. The verify link's blast radius is a wrong answer to a
+  /// maintenance question; this one shows a balance and takes a payment, so
+  /// it gets the vendor links' three days rather than the verify link's
+  /// seven.
+  TENANT_PAY_LINK: 60 * 24 * 3,
 } as const
 
 export type TokenPurpose = keyof typeof TOKEN_TTL_MINUTES

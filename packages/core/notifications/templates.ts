@@ -879,6 +879,11 @@ export interface DueContext {
   dueOn: string
   /// True on the due date itself; false three days out.
   isDueToday: boolean
+  /// A pay-now link (R-046), when one could be minted. Null when the payer
+  /// has no Stripe customer yet — the message still goes, because "rent is
+  /// due" is worth saying on its own, and a link that lands on a broken
+  /// payment screen is worse than none.
+  url?: string | null
 }
 
 /**
@@ -908,7 +913,11 @@ export const rentDueTemplate: NotificationTemplate<DueContext> = {
       : `Rent of ${context.amount} for ${context.addressLine1} is due ${context.dueOn}.`
 
     if (channel === 'SMS') {
-      return { body: lead }
+      // THE LINK IS THE WHOLE POINT OF THE SMS (R-046). A text saying "rent
+      // is due" with no way to act on it sends somebody hunting for an email
+      // login they may not have — which is the dead end R-046 exists to
+      // remove.
+      return { body: context.url ? `${lead} Pay here: ${context.url}` : lead }
     }
     return {
       subject: context.isDueToday
@@ -919,7 +928,9 @@ export const rentDueTemplate: NotificationTemplate<DueContext> = {
         '',
         lead,
         '',
-        'You can pay from your portal any time before then.',
+        ...(context.url
+          ? ['You can pay straight from here — no sign-in needed:', '', context.url]
+          : ['You can pay from your portal any time before then.']),
       ].join('\n'),
     }
   },

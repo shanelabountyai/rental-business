@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { prisma } from '@rental/db'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { verifyPayLink } from '@/lib/portal/pay-link.ts'
 import { sendDueNotices } from './due-notices.ts'
 
 // Due-soon (T-3) and due-date reminders (PAY-02, R-045).
@@ -48,6 +49,9 @@ async function seedPayer(args: {
   rentDueDay: number
   collectionMethod: 'charge_automatically' | 'send_invoice'
   hasMethod: boolean
+  /// Whether Stripe knows this payer. Without a customer there is nothing to
+  /// pay against, so no pay-now link is minted (R-046).
+  hasStripeCustomer?: boolean
 }) {
   const tenant = await prisma.tenant.create({
     data: {
@@ -77,7 +81,10 @@ async function seedPayer(args: {
       tenantId: tenant.id,
       collectionMethod: args.collectionMethod,
       defaultPaymentMethodId: args.hasMethod ? `pm_${randomUUID().slice(0, 10)}` : null,
-      stripeCustomerId: `cus_${randomUUID().replace(/-/g, '').slice(0, 14)}`,
+      stripeCustomerId:
+        args.hasStripeCustomer === false
+          ? null
+          : `cus_${randomUUID().replace(/-/g, '').slice(0, 14)}`,
       stripeAmountCents: 150_000,
     },
   })
@@ -179,6 +186,54 @@ describe('sendDueNotices', () => {
       }),
     ).toBe(0)
   }, 30_000)
+
+  describe('the pay-now link it carries (R-046)', () => {
+    it('CARRIES A WORKING PAY LINK, so the text is actionable on its own', async () => {
+      // The whole reason R-046 exists: a reminder that only says "rent is
+      // due" sends a phone-only tenant to an email login they cannot pass.
+      const { tenant } = await seedPayer({
+        rentDueDay: todayDay,
+        collectionMethod: 'send_invoice',
+        hasMethod: false,
+      })
+
+      await sendDueNotices(propertyId, now)
+      const notice = await prisma.notification.findFirstOrThrow({
+        where: { recipientId: tenant.id, templateKey: 'payment.due_soon' },
+      })
+
+      const match = notice.body.match(/\/pay\/([A-Za-z0-9_-]+)/)
+      expect(match, 'the reminder should contain a /pay/<token> link').not.toBeNull()
+
+      // AND THE TOKEN IN IT ACTUALLY WORKS. Asserting the URL shape alone
+      // would pass for a link that authorizes nothing.
+      const result = await verifyPayLink(match![1])
+      expect(result.ok).toBe(true)
+      if (result.ok) {
+        expect(result.tenantId).toBe(tenant.id)
+        // Attributed back to the send record (PAY-01).
+        expect(result.notificationKey).toContain('rent-due:today:')
+      }
+    }, 30_000)
+
+    it('still sends the reminder when there is no Stripe customer to pay against', async () => {
+      // A link landing on "your payment account is still being set up" is
+      // worse than no link — but "rent is due" is worth saying regardless.
+      const { tenant } = await seedPayer({
+        rentDueDay: todayDay,
+        collectionMethod: 'send_invoice',
+        hasMethod: false,
+        hasStripeCustomer: false,
+      })
+
+      await sendDueNotices(propertyId, now)
+      const notice = await prisma.notification.findFirstOrThrow({
+        where: { recipientId: tenant.id, templateKey: 'payment.due_soon' },
+      })
+      expect(notice.body).toContain('due today')
+      expect(notice.body).not.toMatch(/\/pay\//)
+    }, 30_000)
+  })
 
   it('warns ONCE however many times the job runs that day', async () => {
     const { tenant } = await seedPayer({

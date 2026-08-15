@@ -3,7 +3,9 @@ import 'server-only'
 import { formatCents } from '@rental/core/money'
 import { businessDate } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
+import { authUrl } from '@/lib/auth/delivery.ts'
 import { dispatchPendingNotifications, notify } from '@/lib/notifications/send.ts'
+import { issuePayLink } from '@/lib/portal/pay-link.ts'
 
 // Due-soon (T-3) and due-date reminders (PAY-02, R-045).
 //
@@ -74,6 +76,7 @@ export async function sendDueNotices(
       debitDay: true,
       collectionMethod: true,
       defaultPaymentMethodId: true,
+      stripeCustomerId: true,
       tenant: { select: { id: true, firstName: true, email: true, phone: true } },
       lease: { select: { rentCents: true, rentDueDay: true } },
     },
@@ -97,6 +100,39 @@ export async function sendDueNotices(
     const isDueSoon = dueDay === soonDay
     if (!isDueToday && !isDueSoon) continue
 
+    const idempotencyKey = `rent-due:${isDueToday ? 'today' : 'soon'}:${payer.id}:${
+      isDueToday ? today : soonDate
+    }`
+
+    // A PAY-NOW LINK (R-046), minted per message so the reminder is
+    // actionable from the text itself rather than sending somebody to an
+    // email-only login they may not be able to pass.
+    //
+    // Only for a payer Stripe already knows: without a customer there is
+    // nothing to pay against, and a link landing on "your payment account is
+    // still being set up" is worse than no link. The message still goes —
+    // "rent is due" is worth saying on its own.
+    //
+    // ISSUED BEFORE `notify`, and keyed to the LOGICAL send rather than a
+    // row id, because `notify` fans out one row per channel and there is no
+    // single Notification to point at. See `PayLinkSubject.notificationKey`.
+    let url: string | null = null
+    if (payer.stripeCustomerId) {
+      try {
+        const link = await issuePayLink({
+          leasePayerId: payer.id,
+          tenantId: payer.tenant.id,
+          leaseId: payer.leaseId,
+          notificationKey: idempotencyKey,
+        })
+        url = authUrl(`/pay/${link.token}`)
+      } catch (error) {
+        // Never fails the reminder. A tenant who does not get a link still
+        // needs to know rent is due.
+        console.error(`[due-notices] could not mint a pay link for ${payer.id}`, error)
+      }
+    }
+
     const outcomes = await notify({
       category: 'rent_reminder',
       templateKey: 'payment.due_soon',
@@ -112,14 +148,13 @@ export async function sendDueNotices(
         amount: formatCents(payer.lease.rentCents),
         dueOn: isDueToday ? today : soonDate,
         isDueToday,
+        url,
       },
       propertyId,
       // Keyed on WHICH notice, so a tenant due in three days who is still
       // due today three days later gets both, not one swallowed by the
       // other's key.
-      idempotencyKey: `rent-due:${isDueToday ? 'today' : 'soon'}:${payer.id}:${
-        isDueToday ? today : soonDate
-      }`,
+      idempotencyKey,
     })
 
     const deliveryIds = outcomes
