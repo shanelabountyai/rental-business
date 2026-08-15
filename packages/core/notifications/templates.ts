@@ -867,6 +867,188 @@ export const managedTemplate: NotificationTemplate<ManagedTemplateContext> = {
       : { subject: context.subject ?? undefined, body: context.body },
 }
 
+/// Context for `payment.due_soon` and `payment.due` (PAY-02, R-045). One
+/// template, two lead times - the wording differs by a handful of words and
+/// having two functions drift apart is a worse failure mode than one
+/// function branching on a boolean.
+export interface DueContext {
+  tenantName: string
+  addressLine1: string
+  amount: string
+  /// Property-local calendar date (D-3).
+  dueOn: string
+  /// True on the due date itself; false three days out.
+  isDueToday: boolean
+}
+
+/**
+ * "Rent is due soon" / "rent is due today" (PAY-02, R-045).
+ *
+ * ==========================================================================
+ * NOT FOR AN AUTOPAY TENANT. This is the reminder for somebody who has to
+ * DO something - go to the portal, mail a check - and a tenant on
+ * `charge_automatically` already gets `autopay.predebit`, which says the
+ * money is being taken care of. Sending both would tell an autopay tenant to
+ * pay rent they are about to have collected automatically, which reads as
+ * the product not knowing its own state. The caller is responsible for this
+ * split; see `sendDueNotices`.
+ *
+ * `rent_reminder`, not locked. A tenant who has never once been late is
+ * entitled to turn this off, the same call `autopay.predebit` makes for the
+ * same reason.
+ * ==========================================================================
+ */
+export const rentDueTemplate: NotificationTemplate<DueContext> = {
+  key: 'payment.due_soon',
+  category: 'rent_reminder',
+  channels: ['SMS', 'EMAIL', 'PORTAL'],
+  render: (context, channel) => {
+    const lead = context.isDueToday
+      ? `Rent of ${context.amount} for ${context.addressLine1} is due today.`
+      : `Rent of ${context.amount} for ${context.addressLine1} is due ${context.dueOn}.`
+
+    if (channel === 'SMS') {
+      return { body: lead }
+    }
+    return {
+      subject: context.isDueToday
+        ? `Rent is due today — ${context.amount}`
+        : `Rent is due ${context.dueOn} — ${context.amount}`,
+      body: [
+        `Hello ${context.tenantName},`,
+        '',
+        lead,
+        '',
+        'You can pay from your portal any time before then.',
+      ].join('\n'),
+    }
+  },
+}
+
+/// Context for `payment.failed_fix` (PAY-02, R-045).
+export interface PaymentFailedContext {
+  tenantName: string
+  addressLine1: string
+  amount: string
+  /// Stripe's own decline reason where one exists - "insufficient_funds",
+  /// "expired_card" - rendered in plain words rather than passed through
+  /// verbatim, because a tenant has never seen a Stripe error code before.
+  reason: string | null
+  /// Deep link to fix the payment method, so the message is an action rather
+  /// than only bad news.
+  url: string
+}
+
+/**
+ * "Your payment failed — here is how to fix it" (PAY-02, R-045).
+ *
+ * ==========================================================================
+ * DIFFERENT FROM `payment.returned`, DELIBERATELY. That template covers a
+ * payment that succeeded and then bounced back days later - a bank returning
+ * an ACH debit. This covers a charge attempt that never went through in the
+ * first place - a declined card, an expired one - and the tenant has not
+ * been told their balance changed because it never did. What they need is
+ * not "your balance is back" but "try again, here is the button."
+ *
+ * `payment_failed`, the same LOCKED category `payment.returned` uses:
+ * believing rent went through when it did not is how somebody ends up in
+ * eviction proceedings over a card that expired quietly.
+ * ==========================================================================
+ */
+export const paymentFailedFixTemplate: NotificationTemplate<PaymentFailedContext> = {
+  key: 'payment.failed_fix',
+  category: 'payment_failed',
+  channels: ['SMS', 'EMAIL', 'PORTAL'],
+  render: (context, channel) => {
+    if (channel === 'SMS') {
+      return {
+        body: [
+          `Your ${context.amount} rent payment for ${context.addressLine1} did not go through${
+            context.reason ? ` (${context.reason})` : ''
+          }.`,
+          `Fix it here: ${context.url}`,
+        ].join(' '),
+      }
+    }
+    return {
+      subject: 'Your rent payment did not go through',
+      body: [
+        `Hello ${context.tenantName},`,
+        '',
+        `Your payment of ${context.amount} for ${context.addressLine1} did not go through${
+          context.reason ? ` — ${context.reason}` : ''
+        }.`,
+        '',
+        'Update your payment method or try again here:',
+        '',
+        context.url,
+        '',
+        'If this was not you, or you need help, please contact the office.',
+      ].join('\n'),
+    }
+  },
+}
+
+/// Context for `payment.card_expiring` (PAY-02, R-045).
+export interface CardExpiringContext {
+  tenantName: string
+  addressLine1: string
+  /// "12/2026" - month/year only, never a full card number. This is the one
+  /// piece of card metadata this product ever surfaces, read live from the
+  /// provider and never stored.
+  expiresOn: string
+  url: string
+}
+
+/**
+ * "Your card on file is expiring — update it before rent is due" (PAY-02,
+ * R-045).
+ *
+ * ==========================================================================
+ * THE WHOLE REASON FOR THIS TEMPLATE: A LONG-TENURED, ALWAYS-ON-TIME TENANT
+ * SHOULD NEVER SEE `payment.failed_fix`.
+ *
+ * Without a warning, a card silently expiring is indistinguishable from a
+ * tenant who stopped paying - the autopay charge fails, the returned-payment
+ * flow fires, and somebody who has paid on time for three years gets the
+ * same dunning message as somebody who has not. This is the message that
+ * keeps that person out of that ladder, sent while there is still a month to
+ * act rather than after the first failed charge.
+ *
+ * NOT locked. Unlike `payment_failed` - which reports something that already
+ * went wrong and a tenant should never be able to silence - this warns about
+ * something that has not happened yet, and a tenant who reads their bank
+ * statement and knows their card is fine is entitled to turn the warning off.
+ * ==========================================================================
+ */
+export const cardExpiringTemplate: NotificationTemplate<CardExpiringContext> = {
+  key: 'payment.card_expiring',
+  category: 'rent_reminder',
+  channels: ['SMS', 'EMAIL', 'PORTAL'],
+  render: (context, channel) => {
+    if (channel === 'SMS') {
+      return {
+        body: [
+          `The card on file for ${context.addressLine1} expires ${context.expiresOn}.`,
+          `Update it before your next rent is due: ${context.url}`,
+        ].join(' '),
+      }
+    }
+    return {
+      subject: `Your card on file expires ${context.expiresOn}`,
+      body: [
+        `Hello ${context.tenantName},`,
+        '',
+        `The card we have on file for ${context.addressLine1} expires ${context.expiresOn}.`,
+        '',
+        "If it is still valid there is nothing to do, but if it has been replaced, please update it before rent is next due so your payment does not fail:",
+        '',
+        context.url,
+      ].join('\n'),
+    }
+  },
+}
+
 export const TEMPLATES: Readonly<Record<string, NotificationTemplate<never>>> = {
   [vendorDeclinedTemplate.key]:
     vendorDeclinedTemplate as unknown as NotificationTemplate<never>,
@@ -896,6 +1078,11 @@ export const TEMPLATES: Readonly<Record<string, NotificationTemplate<never>>> = 
     chargebackPostedTemplate as unknown as NotificationTemplate<never>,
   [managedTemplate.key]:
     managedTemplate as unknown as NotificationTemplate<never>,
+  [rentDueTemplate.key]: rentDueTemplate as unknown as NotificationTemplate<never>,
+  [paymentFailedFixTemplate.key]:
+    paymentFailedFixTemplate as unknown as NotificationTemplate<never>,
+  [cardExpiringTemplate.key]:
+    cardExpiringTemplate as unknown as NotificationTemplate<never>,
 }
 
 export class UnknownTemplateError extends Error {

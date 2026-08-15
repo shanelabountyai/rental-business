@@ -591,6 +591,25 @@ describe('processStripeEvent', () => {
     expect(payment.status).toBe('FAILED')
   }, 20_000)
 
+  it('TELLS THE TENANT, with a fix path — the gap R-045 closes', async () => {
+    // Before R-045, a first-attempt decline (`record_failure`) sent nothing
+    // at all. `sendReturnNotice` only fires on a genuine reversal, so a
+    // tenant whose autopay card was simply declined learned about it, if at
+    // all, from a phone call.
+    const { customerId } = await provisionedLease()
+    await processStripeEvent(
+      invoiceEvent({ customer: customerId, type: 'invoice.payment_failed', amountDue: 150_000 }),
+    )
+
+    const notification = await prisma.notification.findFirstOrThrow({
+      where: { recipientId: tenantId, templateKey: 'payment.failed_fix' },
+    })
+    expect(notification.category).toBe('payment_failed')
+    expect(notification.body).toContain('$1,500.00')
+    // A real, tappable link to fix it — not just "your payment failed".
+    expect(notification.body).toMatch(/https?:\/\//)
+  }, 20_000)
+
   it('IGNORES a second delivery of the same return', async () => {
     // Stripe promises neither ordering nor exactly-once delivery, and
     // reversing twice would double what the tenant owes - in an append-only

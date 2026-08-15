@@ -12,6 +12,7 @@ import { formatCents } from '@rental/core/money'
 import { returnAction, reversalAmountCents } from '@rental/core/payments'
 import { businessDate } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
+import { authUrl } from '@/lib/auth/delivery.ts'
 import { isUniqueViolation } from '@/lib/db/unique-violation.ts'
 import { auditAsSystem } from '@/lib/audit/system.ts'
 import { getBillingProvider } from '@/lib/billing/provider.ts'
@@ -327,6 +328,21 @@ export async function processStripeEvent(
     })
   }
 
+  // THE GAP `payment.failed_fix` CLOSES (R-045). `record_failure` is a charge
+  // attempt that never went through at all - a declined card, an expired
+  // one - as opposed to `reverse`, where money settled and then bounced back
+  // days later. Before this, that first case sent nothing: `sendReturnNotice`
+  // only fires on `reverse`, so a tenant whose autopay card was simply
+  // declined learned about it, if at all, from a phone call. Outside the
+  // transaction and never throwing, for the same reason the receipt and the
+  // return notice are: the failure is already the fact, and a notification
+  // provider being down must not become a reason to retry the whole webhook.
+  if (action === 'record_failure') {
+    await sendPaymentFailedFix(payer, intent).catch((error) => {
+      console.error(`[stripe] failed-payment notice failed for payer ${payer.id}`, error)
+    })
+  }
+
   return { outcome: 'projected', detail: outcomeDetail }
 }
 
@@ -507,6 +523,76 @@ async function sendPaymentReceipt(
     propertyId: payer.propertyId,
     // One receipt per payment, however many times Stripe tells us about it.
     idempotencyKey: `payment-receipt:${intent.stripePaymentIntentId ?? intent.stripeObjectId}`,
+  })
+
+  const deliveryIds = outcomes
+    .map((outcome) => outcome.deliveryId)
+    .filter((id): id is string => id != null)
+  if (deliveryIds.length > 0) {
+    await dispatchPendingNotifications(new Date(), 50, { deliveryIds })
+  }
+}
+
+/**
+ * "Your payment did not go through — here is how to fix it" (PAY-02, R-045).
+ *
+ * DIFFERENT FROM `sendReturnNotice`, which reports money that settled and
+ * then came back. This is a charge that never settled in the first place -
+ * nothing changed on the ledger, because nothing was ever credited - so
+ * there is no balance to report back, only an action to point at.
+ *
+ * `reason` IS ALWAYS NULL FOR NOW. Stripe's decline codes
+ * (`insufficient_funds`, `expired_card`, ...) are not yet parsed out of the
+ * webhook payload; inventing a translation before the pipeline actually
+ * captures the code would be guessing at words a tenant would read as
+ * authoritative. The template already handles a null reason by omitting the
+ * clause rather than printing "undefined" - see `paymentFailedFixTemplate`.
+ */
+async function sendPaymentFailedFix(
+  payer: { id: string; leaseId: string; propertyId: string },
+  intent: ProjectionIntent,
+): Promise<void> {
+  const [lease, payerRow] = await Promise.all([
+    prisma.lease.findUnique({
+      where: { id: payer.leaseId },
+      select: {
+        property: { select: { addressLine1: true } },
+        leaseTenants: {
+          select: { tenant: { select: { id: true, firstName: true, email: true, phone: true } } },
+        },
+      },
+    }),
+    prisma.leasePayer.findUnique({ where: { id: payer.id }, select: { tenantId: true } }),
+  ])
+  const tenant = lease?.leaseTenants
+    .map((row) => row.tenant)
+    .find((row) => row.id === payerRow?.tenantId)
+  if (!lease || !tenant) return
+
+  const outcomes = await notify({
+    category: 'payment_failed',
+    templateKey: 'payment.failed_fix',
+    recipient: { type: 'TENANT', id: tenant.id, email: tenant.email, phone: tenant.phone },
+    context: {
+      tenantName: tenant.firstName,
+      addressLine1: lease.property.addressLine1,
+      // `intent.amountCents`, NOT `ledgerAmountCents(intent)` - the latter
+      // is the signed LEDGER MOVEMENT, which is zero for a failed attempt by
+      // definition (nothing was credited). What the tenant needs is the
+      // amount that was ATTEMPTED, which `amountCents` always carries,
+      // always positive, regardless of kind.
+      amount: formatCents(intent.amountCents),
+      reason: null,
+      // ABSOLUTE, from AUTH_URL - the same reason every other outbound link
+      // in this product is built this way (R-032c). `/portal/pay` is the
+      // fix: a tenant with a balance sees the pay form there and can retry
+      // immediately. A dedicated "update your card on file" flow is not
+      // built yet; paying again is the fix that exists today.
+      url: authUrl('/portal/pay'),
+    },
+    propertyId: payer.propertyId,
+    // One notice per failed attempt, however many times Stripe redelivers.
+    idempotencyKey: `payment-failed-fix:${intent.stripePaymentIntentId ?? intent.stripeObjectId}`,
   })
 
   const deliveryIds = outcomes

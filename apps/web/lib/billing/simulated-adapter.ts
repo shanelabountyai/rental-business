@@ -296,4 +296,48 @@ export class SimulatedBillingProvider implements BillingProvider {
       clientSecret: `${stripePaymentIntentId}_secret_${randomBytes(8).toString('hex')}`,
     }
   }
+
+  async paymentMethodExpiry(
+    stripePaymentMethodId: string,
+  ): Promise<{ expMonth: number; expYear: number } | null> {
+    return simulatedCardExpiry(stripePaymentMethodId)
+  }
+}
+
+/**
+ * A deterministic-but-INDEPENDENT card expiry for a simulated payment method
+ * (D-27, R-045).
+ *
+ * HASHED FROM THE ID, not read from anything the decision code sets. R-045's
+ * card-expiring-soon scan compares this against "today"; if the simulator
+ * answered from the same place the decision reads from - say, a fixed offset
+ * from `createdAt` - the "it is expiring" branch could never fail to fire and
+ * no test could tell a real check from a tautology. Hashing the id gives an
+ * oracle nothing in this codebase chose, the same move `getOpenInvoice` above
+ * makes by answering from the ledger rather than from the payer row the
+ * switch is about.
+ *
+ * EXPORTED so a test can compute what the simulator will say for a given id
+ * directly, rather than searching for one that lands in a target month.
+ *
+ * Spread across eight years from a FIXED epoch - not "now" - so the answer
+ * for a given id never changes between two runs of the same test, and so
+ * cards realistically sit on both sides of expired as the calendar moves.
+ * All payment methods are simulated as cards; the id carries no rail, and
+ * distinguishing a bank-debit method here would need information nothing
+ * upstream currently records.
+ */
+export function simulatedCardExpiry(
+  stripePaymentMethodId: string,
+): { expMonth: number; expYear: number } {
+  let hash = 0
+  for (let i = 0; i < stripePaymentMethodId.length; i += 1) {
+    hash = (hash * 31 + stripePaymentMethodId.charCodeAt(i)) | 0
+  }
+  const monthsFromEpoch = Math.abs(hash) % 96 // eight years
+  const EPOCH_YEAR = 2024
+  return {
+    expMonth: (monthsFromEpoch % 12) + 1,
+    expYear: EPOCH_YEAR + Math.floor(monthsFromEpoch / 12),
+  }
 }

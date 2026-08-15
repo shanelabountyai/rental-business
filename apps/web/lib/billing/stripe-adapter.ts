@@ -585,6 +585,17 @@ export class StripeBillingProvider implements BillingProvider {
       clientSecret: intent.client_secret as string,
     }
   }
+
+  async paymentMethodExpiry(
+    stripePaymentMethodId: string,
+  ): Promise<{ expMonth: number; expYear: number } | null> {
+    const method = await this.#get(`/payment_methods/${encodeURIComponent(stripePaymentMethodId)}`)
+    const card = method?.card as { exp_month?: number; exp_year?: number } | undefined
+    // Absent for a bank-debit method, and for a payment method Stripe no
+    // longer has - both are "nothing to warn about", not an error.
+    if (!card?.exp_month || !card?.exp_year) return null
+    return { expMonth: card.exp_month, expYear: card.exp_year }
+  }
 }
 
 /// Our rail names to Stripe's payment method types. RETAIL_CASH has no Stripe

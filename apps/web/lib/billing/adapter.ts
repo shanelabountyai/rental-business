@@ -325,4 +325,22 @@ export interface BillingProvider {
     /// must not become a second charge.
     idempotencyKey: string
   }): Promise<{ stripePaymentIntentId: string; clientSecret: string }>
+
+  /**
+   * Card expiry for a saved payment method, when Stripe has one on record
+   * (R-045).
+   *
+   * READ FROM THE PROVIDER, ALWAYS - never mirrored into our own schema.
+   * D-11 makes Stripe the source of truth for money, and "never store card,
+   * bank, or SSN data" is the harder rule underneath it: month/year is the
+   * part of a card that is safe to display, but this product's answer to
+   * "where does that number live" is the same for every fact Stripe knows -
+   * ask Stripe, do not keep a second copy that can go stale or leak.
+   *
+   * Null for a bank-debit method (ACH `us_bank_account`), which has no
+   * expiry, and for a payment method Stripe no longer has on file.
+   */
+  paymentMethodExpiry(
+    stripePaymentMethodId: string,
+  ): Promise<{ expMonth: number; expYear: number } | null>
 }

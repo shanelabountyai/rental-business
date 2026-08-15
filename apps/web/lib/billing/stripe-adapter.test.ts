@@ -286,4 +286,38 @@ describe('what the driver actually sends', () => {
     // silently.
     expect(headers['Stripe-Version']).toBeTruthy()
   })
+
+  describe('paymentMethodExpiry (R-045)', () => {
+    it('reads a card’s expiry off the payment method', async () => {
+      globalThis.fetch = (async () =>
+        new Response(JSON.stringify({ id: 'pm_1', card: { exp_month: 12, exp_year: 2027 } }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        })) as typeof fetch
+      expect(await provider().paymentMethodExpiry('pm_1')).toEqual({
+        expMonth: 12,
+        expYear: 2027,
+      })
+    })
+
+    it('returns NULL for a bank-debit method, which has no expiry', async () => {
+      // us_bank_account carries no `card` object at all - not an error, and
+      // nothing to warn about.
+      globalThis.fetch = (async () =>
+        new Response(JSON.stringify({ id: 'pm_1', us_bank_account: { last4: '6789' } }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        })) as typeof fetch
+      expect(await provider().paymentMethodExpiry('pm_1')).toBeNull()
+    })
+
+    it('returns null rather than throwing for a payment method Stripe no longer has', async () => {
+      globalThis.fetch = (async () =>
+        new Response(JSON.stringify({ error: { message: 'No such payment_method' } }), {
+          status: 404,
+          headers: { 'content-type': 'application/json' },
+        })) as typeof fetch
+      expect(await provider().paymentMethodExpiry('pm_gone')).toBeNull()
+    })
+  })
 })

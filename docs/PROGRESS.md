@@ -2184,3 +2184,40 @@ Texas grants **one** day. So a tenant one day late is in the first late bucket *
 - **Proven with a realistic fixture.** Every existing R-044 e2e case seeded rent with a manually linked `Charge` row — unrealistic, and it never exercised the actual production shape. A new case seeds an unlinked ledger entry with no `Charge` at all and asserts it ages and becomes chaseable correctly.
 
 **What it left behind.** Itemizing more than one unpaid month by period remains future work, gated on the billing provider exposing every open invoice.
+
+## R-045 — Payment lifecycle notices
+**Commit:** `pending`  ·  **Date:** 2026-08-15
+
+**What it built.** Three of the five notices PAY-02/NOTIF-03 asks for already existed (`autopay.predebit`, `payment.receipt`, `payment.returned`). This built the other three: due-soon (T-3) / due-date for tenants who have to act themselves, payment-failed with a fix path, and card-expiring-soon from a nightly scan.
+
+### The split between "the product is paying" and "you have to pay"
+
+`payment.due_soon` never fires for a tenant genuinely on `charge_automatically` with a saved method — they already get `autopay.predebit` two days out. Sending both tells an autopay tenant to go pay rent the product is about to collect for them, which reads as the product not knowing its own state. A tenant marked autopay with *no* method on file still gets the due-soon notice, because nothing will actually be collected for them — the same both-halves test `predebit.ts` already makes, applied in the opposite direction.
+
+### A real gap found reading the webhook, not invented
+
+`payment.returned` — R-039's own template — only fires when a payment genuinely *settled and then bounced back*. A first-attempt decline (Stripe's `record_failure`: nothing was ever credited) sent **nothing at all**. A tenant whose autopay card was simply declined learned about it, if at all, from a phone call. `sendPaymentFailedFix` closes it, hooked into the same "outside the transaction, never throwing" branch the receipt and the return notice already use — the failure is the fact; a notification provider being down must not become a reason to retry the whole webhook.
+
+**Caught by its own test before it shipped:** the first draft quoted `$0.00` in the message, because `ledgerAmountCents(intent)` is the *signed ledger movement* — zero by definition for a failed attempt, since nothing was credited — not the amount attempted. `intent.amountCents` (always positive, regardless of kind) is what the tenant actually needed to see.
+
+### Card expiry, read live, never stored
+
+The literal rule is "never store card, bank, or SSN data." `paymentMethodExpiry` is a new `BillingProvider` seam method — read from Stripe (or the simulator) at scan time, never mirrored into this schema, the same architectural instinct D-11 already applies to every other Stripe-sourced fact. Real Stripe: `GET /payment_methods/:id`, `card.exp_month`/`exp_year`, null for a bank-debit method. Simulated: a hash of the payment-method id (D-27 — the simulator must not agree with the decision by construction, so nothing our own code chooses can double as the oracle), spread across eight years from a fixed epoch and exported as `simulatedCardExpiry` so a test can compute the exact expected answer for a given id rather than searching for one.
+
+**This is the row the backlog names separately, and the reason is stated in its own words:** without it, a card silently expiring is indistinguishable from a tenant who stopped paying — the autopay charge fails, `payment.failed_fix` fires, and somebody who has paid on time for three years gets the same message as somebody who has not.
+
+### A real correctness gap found in R-044, already shipped — recorded in its own entry above
+
+Building the due-soon notice required reading how "when is rent due" is computed, which surfaced that R-044's aging silently mis-reported ordinary rent (no `Charge` row at all) as `current`. Fixed and committed separately (`4e8497a`), with its own PROGRESS entry above this one. The fix produced two shared functions, `dueDateOnOrBefore`/`dueDateOnOrAfter` in `packages/core/scheduling`, that `due-notices.ts` uses for the T-3/T-0 matching here.
+
+### What it decided
+
+- **`paymentMethodExpiry` on the provider interface, not a stored column.** Consistent with D-11 and the harder rule underneath it.
+- **`payment.failed_fix`'s decline reason is `null` for now**, deliberately not guessed. Stripe's decline codes are not yet parsed out of the webhook payload, and inventing a plain-English translation before the pipeline actually captures the code would be putting words in front of a tenant that nobody verified.
+- **The fix-path link points at `/portal/pay`.** A tenant with a balance can retry there today; a dedicated "update your card on file" flow is not built and is left as a named gap rather than implied.
+- **No e2e coverage**, matching the precedent both `predebit.ts` (R-039a) and `assessLateFees` (R-040) already set: nightly-job and webhook-only logic with no new UI surface is proven at the vitest level against a real database, not through the browser.
+
+**What it left behind.**
+- Stripe decline-code translation for `payment.failed_fix`'s `reason` field.
+- A dedicated "update payment method" portal flow — the fix path currently reuses the pay screen.
+- Itemizing more than one unpaid rent period (R-044's own follow-up, above).
