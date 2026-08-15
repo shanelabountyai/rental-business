@@ -1,5 +1,6 @@
 'use client'
 
+import type { ReactNode } from 'react'
 import { useActionState } from 'react'
 import { useFormStatus } from 'react-dom'
 
@@ -83,27 +84,77 @@ export function SubmitButton({ label }: { label: string }) {
   )
 }
 
-/// Announced on arrival: role="alert" for failures (assertive, because the
-/// user cannot proceed), role="status" for confirmations (polite).
+/**
+ * A live region that is always in the accessibility tree, whatever it holds.
+ *
+ * For the announcements that are NOT a form's error/notice pair — a card fee
+ * appearing, an autopay day confirmed, a panel swapping to "thank you". Those
+ * were each written as `{condition && <p role="status">…}`, which is the same
+ * defect `FormAlerts` above documents: the region arrives already-populated,
+ * so there is no change to announce and assistive technology says nothing.
+ *
+ * `assertive` only where the user cannot proceed without reading it. A fee
+ * that changes what somebody is about to be charged is polite-but-important,
+ * not an interruption.
+ */
+export function LiveRegion({
+  children,
+  assertive = false,
+}: {
+  children?: ReactNode
+  assertive?: boolean
+}) {
+  return (
+    // `display: contents` for the same reason as FormAlerts: these sit inside
+    // flex columns with a gap, and an always-present empty box would push
+    // every screen it appears on.
+    <div role={assertive ? 'alert' : 'status'} className="contents">
+      {children}
+    </div>
+  )
+}
+
+/**
+ * The form's two live regions: `alert` for failures (assertive, because the
+ * user cannot proceed) and `status` for confirmations (polite).
+ *
+ * ==========================================================================
+ * THE REGIONS ARE ALWAYS RENDERED, AND THAT IS THE WHOLE FIX (R-101).
+ *
+ * This used to insert the region and its text together — `{state.error && <p
+ * role="alert">…}` — and its own comment said the message was "announced on
+ * arrival". It generally was not. A live region announces CHANGES TO ITSELF,
+ * so it has to be in the accessibility tree BEFORE the text lands in it. A
+ * region that appears already-populated is a new node, not a change, and
+ * assistive technology routinely says nothing at all.
+ *
+ * That is one bug in one file reaching 49 components — every form in the
+ * product, including the ones a tenant uses to report a leak and pay rent.
+ * It is invisible to axe, which scans a static snapshot and cannot know
+ * whether anything was ever spoken.
+ *
+ * `display: contents` on the wrappers, so the always-present regions
+ * contribute no box: their parents are `flex flex-col gap-*`, and an empty
+ * div would otherwise add a phantom gap above every form on every screen.
+ * ==========================================================================
+ */
 export function FormAlerts({ state }: { state: FormState }) {
   return (
     <>
-      {state.error && (
-        <p
-          role="alert"
-          className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-900 dark:border-red-900 dark:bg-red-950 dark:text-red-100"
-        >
-          {state.error}
-        </p>
-      )}
-      {state.notice && (
-        <p
-          role="status"
-          className="rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-100"
-        >
-          {state.notice}
-        </p>
-      )}
+      <div role="alert" className="contents">
+        {state.error && (
+          <p className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-900 dark:border-red-900 dark:bg-red-950 dark:text-red-100">
+            {state.error}
+          </p>
+        )}
+      </div>
+      <div role="status" className="contents">
+        {state.notice && (
+          <p className="rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-100">
+            {state.notice}
+          </p>
+        )}
+      </div>
     </>
   )
 }

@@ -2,7 +2,7 @@
 
 import { formatCents } from '@rental/core/money'
 import { useActionState, useState } from 'react'
-import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
+import { FormAlerts, SubmitButton, LiveRegion } from '@/components/auth-form.tsx'
 import type { PayFormState } from '@/lib/payments/actions.ts'
 import type { PaymentView } from '@/lib/payments/queries.ts'
 
@@ -115,18 +115,21 @@ export function PayForm({
       {/* The disclosure, in money and before the choice is committed. Absent
           entirely when there is no fee, rather than rendering "$0.00" - a
           line that always shows is a line tenants learn to skip. */}
+      {/* The region is always present so the fee is genuinely ANNOUNCED when
+          it appears (R-101). It used to arrive already-populated, which is a
+          new node rather than a change — so the one disclosure that alters
+          what a tenant is about to be charged was silent. */}
+      <LiveRegion>
       {feeCents > 0 && (
         <p
           className="rounded-md bg-amber-50 p-3 text-sm dark:bg-amber-950"
-          // Announced when it appears, because it changes what they will be
-          // charged and they may have already decided.
-          role="status"
         >
           Paying by card adds a <strong>{formatCents(feeCents)}</strong> processing fee, so you
           will be charged <strong>{formatCents(amountCents + feeCents)}</strong> in total. Bank
           transfer is free.
         </p>
       )}
+      </LiveRegion>
 
       <SubmitButton label={`Pay ${formatCents(valid ? amountCents + feeCents : 0)}`} />
 

@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { mintToken } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
-import { uniquePhone } from './fixtures.ts'
+import { uniquePhone, expectAnnouncedInPlace } from './fixtures.ts'
 
 // The tenant pays (PAY-01, R-037, D-29).
 //
@@ -146,7 +146,17 @@ test.describe('the tenant pay screen', () => {
     await expect(rails.first()).toHaveValue('ACH')
     await expect(page.getByText('Free.', { exact: false })).toBeVisible()
 
-    await page.getByRole('radio', { name: /Card/ }).check()
+    // THE REGION MUST ALREADY EXIST, checked BEFORE the fee appears (R-101).
+    // It used to be rendered together with the fee text, which is a new node
+    // rather than a change to a live region — so the one disclosure that
+    // alters what a tenant is about to be charged was announced to nobody.
+    // axe cannot catch this: it scans a snapshot and cannot know whether
+    // anything was ever spoken.
+    await expectAnnouncedInPlace(
+      page,
+      () => page.getByRole('radio', { name: /Card/ }).check(),
+      'selecting the card rail on the pay screen',
+    )
     // A real number, not a percentage - and grossed up above the nominal
     // 2.9% + 30c, which on $1,500 is $43.80.
     const disclosure = page.getByText(/processing fee/)

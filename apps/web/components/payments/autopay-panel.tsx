@@ -1,5 +1,6 @@
 'use client'
 
+import { LiveRegion } from '@/components/auth-form.tsx'
 import { Elements, PaymentElement, useElements, useStripe } from '@stripe/react-stripe-js'
 import { type Stripe, loadStripe } from '@stripe/stripe-js'
 import { useActionState, useState } from 'react'
@@ -151,11 +152,14 @@ function DebitDayForm({
           {state.error}
         </p>
       )}
-      {state.saved && (
-        <p role="status" className="text-base">
-          Saved. We will collect on day {current} from now on.
-        </p>
-      )}
+      {/* The region persists; only the sentence inside it comes and goes
+          (R-101). Rendered together, a tenant using a screen reader got no
+          confirmation that their debit day had changed at all. */}
+      <LiveRegion>
+        {state.saved && (
+          <p className="text-base">Saved. We will collect on day {current} from now on.</p>
+        )}
+      </LiveRegion>
     </form>
   )
 }

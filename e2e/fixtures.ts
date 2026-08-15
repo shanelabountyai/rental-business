@@ -71,3 +71,46 @@ export async function expectFocusSurvived(
     )
   }
 }
+
+/**
+ * Asserts that an action announces through an EXISTING live region rather
+ * than by creating one.
+ *
+ * The companion to `expectFocusSurvived`, and it exists for the same reason:
+ * axe scans a static snapshot and cannot tell you whether anything was ever
+ * spoken. A `role="status"` or `role="alert"` inserted together with its own
+ * text is a NEW NODE rather than a change to an existing region, and
+ * assistive technology routinely announces nothing at all — so the product
+ * passes an audit and is silent in use.
+ *
+ * COUNTS BEFORE AND AFTER, deliberately. Merely asserting "a live region
+ * exists" is far too weak on any screen that also renders `FormAlerts`: its
+ * regions are always present, so the assertion passes while the region under
+ * test is still being created at announce time. What must not change is the
+ * NUMBER of regions.
+ *
+ * R-101 found this in `FormAlerts` itself, which reaches 49 components —
+ * every form in the product, including the ones a tenant uses to report a
+ * leak and pay rent.
+ */
+export async function expectAnnouncedInPlace(
+  page: import('@playwright/test').Page,
+  action: () => Promise<void>,
+  context: string,
+): Promise<void> {
+  const selector = '[role="status"], [role="alert"]'
+  const before = await page.locator(selector).count()
+  await action()
+  const after = await page.locator(selector).count()
+
+  if (after > before) {
+    throw new Error(
+      `A live region was CREATED to announce: ${context} (${before} → ${after}).\n` +
+        'A role="status" / role="alert" region must be in the accessibility ' +
+        'tree BEFORE its text arrives — one rendered together with its own ' +
+        'content is a new node, not a change, and is commonly not announced ' +
+        'at all. Render the region unconditionally and put only the message ' +
+        'inside it (see LiveRegion / FormAlerts in components/auth-form.tsx).',
+    )
+  }
+}

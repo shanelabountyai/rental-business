@@ -1922,3 +1922,38 @@ The books must take the invoice: recording $1,000 of expense against a $600 bill
 **What it left behind.**
 - **Per-period and per-entity maintenance reporting is still R-081's.** Deliberately not started here: building it inside a property-page tile is where the duplication D-19 warns about begins.
 - **Milestone 2's repair rows are now all closed** — R-032a through R-032e. The next unticked row is R-101, the remainder of the UX and accessibility report.
+
+## R-101 — The live region that was never announcing anything
+**Commit:** *(recorded below)*  ·  **Date:** 2026-08-14
+
+**What it built.** The accessibility fix with the widest blast radius in the product, and it is four lines of structure.
+
+**`FormAlerts` inserted the live region together with its text**, and its own doc-comment asserted the messages were *"announced on arrival"*. They generally were not. A live region announces **changes to itself**, so it has to be in the accessibility tree *before* the text lands in it; a region that appears already-populated is a new node rather than a change, and assistive technology routinely says nothing at all. That is one defect in one file reaching **49 components** — every form in the product, including the ones a tenant uses to report a leak and to pay rent.
+
+**Invisible to axe**, which is why it survived R-098's whole review pass and eleven prior sightings. axe scans a static snapshot; it cannot know whether anything was ever spoken.
+
+**Two bespoke sites had the same defect** — the card-fee disclosure on the pay screen and the autopay-day confirmation — and now share a `LiveRegion` primitive rather than being patched five different ways.
+
+**`display: contents` on the wrappers**, because the regions are now always rendered and their parents are `flex flex-col gap-*`. An always-present empty box would otherwise add a phantom gap above every form on every screen.
+
+**Proven by making it fail**, which is the standard R-099 set for exactly this kind of assertion. Reverting `pay-form` to the old shape produced `A live region was CREATED to announce: selecting the card rail on the pay screen (3 → 4)`.
+
+**A weak assertion caught before it shipped.** The first version of the helper asserted only that *a* live region existed. That is worthless on any screen that also renders `FormAlerts` — whose regions are now always present — so it would have passed while the region under test was still being created at announce time. `expectAnnouncedInPlace()` counts regions **before and after** the action instead: what must not change is the *number*.
+
+**What it decided.**
+- **One primitive, not five patches.** `LiveRegion` is exported beside `FormAlerts` so the next announcement has an obvious right way to be written.
+- **`assertive` only where the user cannot proceed.** A fee that changes what somebody is about to be charged is polite-but-important, not an interruption.
+- **The assertion lives beside `expectFocusSurvived`** in `e2e/fixtures.ts`, because they are the same class of check: things an audit tool cannot see, which only fail in use.
+
+**Verifying the row found every claim understated**, which is the reason it was split rather than finished:
+
+| The row said | Actually |
+|---|---|
+| seven `onClick` steps in the wizard | **22 handlers**, 518 lines |
+| eleven `role="status"` regions | **15** |
+| ~35 raw `toISOString()` | **40** |
+| roll out `expectFocusSurvived` | present in **3 of 33** spec files |
+
+**What it left behind.**
+- **R-101b — the maintenance wizard.** 22 `onClick` handlers across seven steps on the tenant's primary reporting path, plus toggle buttons where radios belong and disabled Next buttons that leave the tab order. Deliberately not attempted at the end of a long session: it is a rewrite of the surface a tenant reports a leak on, and half-doing that is worse than scheduling it.
+- **R-101c — the display and coverage sweep.** 40 raw `toISOString()` sites, four `friendlyDate` copies, two staff screens rendering UTC in as many words, and rolling both e2e assertions from 3 spec files to 33. The row that filed this said rolling them out *will* turn up real failures; that is the point, and it deserves room to act on what it finds.
