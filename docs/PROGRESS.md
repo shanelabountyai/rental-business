@@ -1924,7 +1924,7 @@ The books must take the invoice: recording $1,000 of expense against a $600 bill
 - **Milestone 2's repair rows are now all closed** — R-032a through R-032e. The next unticked row is R-101, the remainder of the UX and accessibility report.
 
 ## R-101 — The live region that was never announcing anything
-**Commit:** *(recorded below)*  ·  **Date:** 2026-08-14
+**Commit:** `b75bb4d`  ·  **Date:** 2026-08-14
 
 **What it built.** The accessibility fix with the widest blast radius in the product, and it is four lines of structure.
 
