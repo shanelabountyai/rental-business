@@ -2013,7 +2013,7 @@ A visually-hidden `<input type="radio">` inside the styled label buys all four b
 - **`expectAnnouncedInPlace` is still only in `pay.spec.ts`.** Rolling it wider belongs with R-101d, where the components it would catch actually live.
 
 ## R-101d — Focus on a panel that replaces itself
-**Commit:** *(recorded below)*  ·  **Date:** 2026-08-15
+**Commit:** `c0eddb6`  ·  **Date:** 2026-08-15
 
 **What it built.** `useFocusWhen`, and its three consumers: the tenant's "was this fixed?" panel, the inherited-lease intake panel, and MFA enrolment.
 
