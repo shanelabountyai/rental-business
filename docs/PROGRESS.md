@@ -2260,7 +2260,7 @@ A token-scoped page is fail-**closed** by construction: there is no session for 
 - **No "resend my payment link" self-service.** A tenant with a dead link signs in or calls; the office can reissue by re-running the reminder.
 
 ## R-047 — Legal-action payment controls
-**Commit:** `pending`  ·  **Date:** 2026-08-15
+**Commit:** `046f025`  ·  **Date:** 2026-08-15
 
 **What it built.** PAY-12's three per-tenant switches — block online / block partial / certified funds only — the staff panel that sets them, enforcement on both the read and write paths, and the test the backlog demanded by name.
 
