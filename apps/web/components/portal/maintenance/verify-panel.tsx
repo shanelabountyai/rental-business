@@ -2,6 +2,7 @@
 
 import { RATING_MAX, RATING_MIN } from '@rental/core/workorders'
 import { useActionState, useState } from 'react'
+import { useFocusWhen } from '@/components/auth-form.tsx'
 import type { VerifyFormState } from '@/lib/portal/verify-actions.ts'
 
 // "Was this resolved?" (MAINT-07, R-030).
@@ -31,6 +32,10 @@ export function VerifyPanel({
   verify: (previous: VerifyFormState, formData: FormData) => Promise<VerifyFormState>
 }) {
   const [state, action, pending] = useActionState<VerifyFormState, FormData>(verify, {})
+  // `state.notice`, NOT `notice` — the latter is also true for a job answered
+  // on a previous visit, and focusing then would yank focus from somebody who
+  // had merely navigated here (R-101d).
+  const thanksRef = useFocusWhen<HTMLHeadingElement>(Boolean(state.notice))
   const [rating, setRating] = useState<number | null>(null)
 
   const notice =
@@ -47,12 +52,15 @@ export function VerifyPanel({
         aria-labelledby="verify"
         className="flex flex-col gap-2 rounded-md border p-4"
       >
-        <h2 id="verify" className="text-lg font-semibold">
+        {/* Focused after answering, so the whole new context is announced —
+            heading, section and text — rather than a live region inside a
+            container that was itself just replaced, which announces nothing.
+            `tabIndex={-1}` makes it focusable programmatically without adding
+            a tab stop for everybody else. */}
+        <h2 id="verify" ref={thanksRef} tabIndex={-1} className="text-lg font-semibold">
           Thank you
         </h2>
-        <p role="status" className="text-sm">
-          {notice}
-        </p>
+        <p className="text-sm">{notice}</p>
       </section>
     )
   }

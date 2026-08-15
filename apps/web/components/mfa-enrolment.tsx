@@ -1,6 +1,7 @@
 'use client'
 
 import { useActionState, useState } from 'react'
+import { useFocusWhen } from '@/components/auth-form.tsx'
 import { Field, FormAlerts, SubmitButton } from './auth-form.tsx'
 import type { FormState } from './auth-form.tsx'
 
@@ -27,6 +28,12 @@ export function MfaEnrolment({
     {},
   )
 
+  // `confirmState` only ever holds codes after the action ran in THIS
+  // session - they are shown exactly once and never re-fetched - so unlike
+  // the other two panels there is no page-load case to guard against
+  // (R-101d).
+  const codesRef = useFocusWhen<HTMLParagraphElement>(Boolean(confirmState.recoveryCodes))
+
   if (enrolled && !confirmState.recoveryCodes) {
     return (
       <p className="text-sm">
@@ -38,7 +45,15 @@ export function MfaEnrolment({
   if (confirmState.recoveryCodes) {
     return (
       <div className="flex flex-col gap-3">
-        <p role="status" className="text-sm font-medium">
+        {/* Focused rather than announced through a live region: this whole
+            branch REPLACES the enrolment form, so the region would be a new
+            node with no change to report, and the button that had focus has
+            just been unmounted. Focus here announces the confirmation and
+            leaves the reader at the top of the codes they must save now
+            (R-101d). No heading is added - this sentence already is one in
+            everything but markup, and restructuring the UI for a screen that
+            is shown exactly once is more change than the fix needs. */}
+        <p ref={codesRef} tabIndex={-1} className="text-sm font-medium">
           {confirmState.notice}
         </p>
         {/*

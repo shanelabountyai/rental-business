@@ -2011,3 +2011,26 @@ A visually-hidden `<input type="radio">` inside the styled label buys all four b
 **What it left behind.**
 - **R-101d, and it is a different defect than this row described.** Three components swap their whole section on success — the tenant's verify panel, the inherited-lease intake panel, MFA enrolment — and each puts `role="status"` on the content that replaces its own container. A live region inside a replaced container is a new node either way, so R-101's fix does not apply; and the control that had focus has just been unmounted, so focus falls to `<body>` and nothing is announced at all. The right instrument is focus management — move focus to the new heading with `tabIndex={-1}` — which announces the whole new context rather than one sentence of it. Named rather than half-fixed.
 - **`expectAnnouncedInPlace` is still only in `pay.spec.ts`.** Rolling it wider belongs with R-101d, where the components it would catch actually live.
+
+## R-101d — Focus on a panel that replaces itself
+**Commit:** *(recorded below)*  ·  **Date:** 2026-08-15
+
+**What it built.** `useFocusWhen`, and its three consumers: the tenant's "was this fixed?" panel, the inherited-lease intake panel, and MFA enrolment.
+
+**Each of these swaps its whole section on success, and each had `role="status"` on the content that replaced its own container.** That announces nothing. A live region inside a replaced container is a new node either way, so there is no change to report — R-101's fix does not reach this case. And it is worse than silence: the control that had focus was just unmounted, so focus falls to `<body>`. A keyboard user is returned to the top of the document, and a screen reader says nothing at all about whether the thing they just did worked.
+
+**Focusing the new heading announces the whole new context** — the heading, the section it labels, and the text beneath — rather than one sentence of it. `tabIndex={-1}` makes it focusable programmatically without adding a tab stop for everybody else.
+
+**The hazard this had to be designed around.** All three panels also render their done-state on an ordinary page load: a lease whose gaps were settled last week, a job answered yesterday. Focusing then would yank focus away from somebody who had simply navigated to the page. So the trigger is **client action state**, never a server prop — `state.notice` rather than `gaps.length === 0`. The distinction is *"something just happened"* versus *"something happened once"*, and only the first is worth interrupting for. The hook also fires **once**: re-focusing on a later re-render would fight the user for control of their own cursor.
+
+**MFA is the exception, and it is the easy one.** Its recovery codes only ever exist in client action state — they are shown exactly once and never re-fetched — so there is no page-load case to guard against. It also has no heading in that branch, and none was added: the bold notice already is one in everything but markup, and restructuring a screen shown once is more change than the fix needs.
+
+**Proven by making it fail.** Removing the ref from the verify panel produced `Expected: focused / Received: inactive`. Invisible to axe, which scans a snapshot and cannot know where focus went — the same blind spot `expectFocusSurvived` exists for, met from the other direction: that one catches focus being *lost*, this asserts where it *landed*.
+
+**What it decided.**
+- **`useFocusWhen` lives beside `FormAlerts` and `LiveRegion`** in `auth-form.tsx`. That file's header still calls it "shared chrome for every auth screen"; it is now the accessibility-primitives module, and the three primitives belong together where the next person looks.
+- **The `role="status"` attributes were removed rather than left alongside the focus fix.** Leaving them would imply an announcement mechanism that does not work in this case, which is the kind of comment-that-lies R-032e was about.
+
+**What it left behind.**
+- **The accessibility tier is now closed** — R-098, R-099, R-101, R-101b, R-101c, R-101d.
+- **`expectAnnouncedInPlace` is still only in `pay.spec.ts`.** The components it would catch are fixed; rolling it wider is cheap whenever somebody is in those files anyway.

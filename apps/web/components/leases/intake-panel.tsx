@@ -1,7 +1,7 @@
 'use client'
 
 import { useActionState } from 'react'
-import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
+import { FormAlerts, SubmitButton, useFocusWhen } from '@/components/auth-form.tsx'
 import { SelectField, TextField } from '@/components/form/field.tsx'
 import type { LeaseFormState } from '@/lib/leases/actions.ts'
 
@@ -32,6 +32,10 @@ export function IntakePanel({
 }) {
   const [state, formAction] = useActionState<LeaseFormState, FormData>(resolveAction, {})
   const errors = state.fieldErrors ?? {}
+  // Driven by the ACTION's notice, not by `gaps.length === 0` — an inherited
+  // lease settled last week renders this section on an ordinary page load,
+  // and focusing then would steal focus from somebody just reading (R-101d).
+  const settledRef = useFocusWhen<HTMLHeadingElement>(Boolean(state.notice))
 
   if (gaps.length === 0) {
     return (
@@ -39,10 +43,10 @@ export function IntakePanel({
         aria-labelledby="intake"
         className="flex flex-col gap-2 rounded-md border p-4"
       >
-        <h2 id="intake" className="text-lg font-semibold">
+        <h2 id="intake" ref={settledRef} tabIndex={-1} className="text-lg font-semibold">
           Inherited at acquisition
         </h2>
-        <p role="status" className="text-sm">
+        <p className="text-sm">
           Everything outstanding on this tenancy has been settled — the terms are
           confirmed, the deposit position is established, and a condition
           baseline is on file.
@@ -57,7 +61,7 @@ export function IntakePanel({
       className="flex flex-col gap-4 rounded-md border border-amber-300 p-4 dark:border-amber-900"
     >
       <div className="flex flex-col gap-1">
-        <h2 id="intake" className="text-lg font-semibold">
+        <h2 id="intake" ref={settledRef} tabIndex={-1} className="text-lg font-semibold">
           Inherited at acquisition — {gaps.length} thing
           {gaps.length === 1 ? '' : 's'} outstanding
         </h2>

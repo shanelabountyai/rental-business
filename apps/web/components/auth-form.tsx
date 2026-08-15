@@ -1,7 +1,7 @@
 'use client'
 
 import type { ReactNode } from 'react'
-import { useActionState } from 'react'
+import { useActionState, useEffect, useRef } from 'react'
 import { useFormStatus } from 'react-dom'
 
 // Shared chrome for every auth screen. Not a component library - R-007 brings
@@ -97,6 +97,46 @@ export function SubmitButton({ label }: { label: string }) {
  * that changes what somebody is about to be charged is polite-but-important,
  * not an interruption.
  */
+/**
+ * Moves focus to an element the first time `when` becomes true (R-101d).
+ *
+ * ==========================================================================
+ * FOR A PANEL THAT REPLACES ITSELF, which a live region cannot help with.
+ *
+ * Three panels in this product swap their whole section on success — the
+ * tenant's "was this fixed?", the inherited-lease intake, MFA enrolment — and
+ * each put `role="status"` on the content that replaced its own container.
+ * That announces nothing: a live region inside a replaced container is a new
+ * node either way, so there is no change to report. Worse, the control that
+ * had focus was just unmounted, so focus falls to `<body>` — a keyboard user
+ * is returned to the top of the document and a screen reader says nothing at
+ * all about what happened.
+ *
+ * Focusing the new heading announces the WHOLE new context — the heading, the
+ * section it labels, and the text under it — rather than one sentence of it.
+ *
+ * `when` MUST be driven by client action state, never by a server prop.
+ * All three panels also render their done-state on an ordinary page load (a
+ * lease whose gaps were settled last week, a job answered yesterday), and
+ * focusing then would yank focus away from somebody who had simply navigated
+ * to the page. The distinction is "something just happened" versus "something
+ * happened once" - only the first is worth interrupting for.
+ *
+ * Fires ONCE. Re-focusing on a later re-render would fight the user for
+ * control of their own cursor.
+ * ==========================================================================
+ */
+export function useFocusWhen<T extends HTMLElement>(when: boolean) {
+  const ref = useRef<T>(null)
+  const fired = useRef(false)
+  useEffect(() => {
+    if (!when || fired.current) return
+    fired.current = true
+    ref.current?.focus()
+  }, [when])
+  return ref
+}
+
 export function LiveRegion({
   children,
   assertive = false,

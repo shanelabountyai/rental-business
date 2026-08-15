@@ -184,6 +184,15 @@ test.describe('the tenant answers', () => {
 
     await expect(page.getByRole('heading', { name: 'Is it fixed?' })).toBeVisible()
     await page.getByRole('button', { name: 'Yes, it is fixed' }).click()
+
+    // FOCUS LANDS ON THE CONFIRMATION (R-101d). Answering replaces this whole
+    // panel, so the button that had focus is unmounted — without moving focus
+    // deliberately it falls to <body>, the tenant is returned to the top of
+    // the document, and a screen reader announces nothing about whether their
+    // answer registered. A live region cannot fix that: it would be inside
+    // the container that was itself just replaced. Invisible to axe, which is
+    // why it is asserted here.
+    await expect(page.getByRole('heading', { name: 'Thank you' })).toBeFocused()
     await expect(page.getByRole('heading', { name: 'Thank you' })).toBeVisible()
 
     const after = await prisma.workOrder.findUniqueOrThrow({ where: { id: workOrder.id } })
