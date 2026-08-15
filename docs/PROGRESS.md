@@ -2060,7 +2060,7 @@ A visually-hidden `<input type="radio">` inside the styled label buys all four b
 - **A machine-wide trap, found the hard way and worth writing down.** The first full sweep was SIGKILLed at 100/616 with no failures. It was not the OS: the only `JetsamEvent` file that day was over an hour earlier, memory pressure was `0` at 51% available, and — the tell — **the server survived and the runner died**, the opposite shape of a memory kill. A Playwright runner belonging to a *different project* was alive at the same moment and died with it. The likely mechanism is that both CLAUDE.md files prescribe `pkill -f playwright` before a sweep, and that pattern matches **every project on the machine**. Recorded as the leading hypothesis rather than the established cause, per the rule that a tool which guesses a cause is worse than one that stays quiet. The re-run from a verified-clean machine was **608 passed + 8 skipped = 616**, reconciling exactly, in 3.2m.
 
 ## R-031 — Tenant-caused chargebacks
-**Commit:** `pending`  ·  **Date:** 2026-08-15
+**Commit:** `8736264`  ·  **Date:** 2026-08-15
 
 **What it built.** The path from "this repair was the tenant's fault" to a charge on their account, with a notice and the evidence behind it.
 
