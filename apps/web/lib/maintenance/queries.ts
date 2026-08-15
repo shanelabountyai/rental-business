@@ -41,6 +41,10 @@ export async function listTenantTickets(scope: TenantScope) {
       status: true,
       priority: true,
       createdAt: true,
+      // The tenant reads "reported on the 14th" in the timezone of the house
+      // they live in, not the server's (R-101c). Without this column the date
+      // was formatted in UTC, so an evening report showed as the next day.
+      property: { select: { timezone: true } },
     },
   })
 }
@@ -83,7 +87,9 @@ export async function getTenantTicket(id: string, scope: TenantScope) {
 const OPEN_STATUSES = [...OPEN_TICKET_STATUSES]
 
 const staffTicketInclude = {
-  property: { select: { id: true, name: true } },
+  // timezone: a ticket's date is rendered in the PROPERTY's zone, not the
+  // server's (R-101c). Cheap column on a row already being fetched.
+  property: { select: { id: true, name: true, timezone: true } },
   unit: { select: { id: true, name: true } },
   tenant: { select: { id: true, firstName: true, lastName: true, phone: true } },
   // R-029's emergency panel: who took responsibility, and when. Cheap
@@ -134,7 +140,7 @@ export async function listLoggableLeaseTenants(scope: ResolvedScope) {
         select: {
           id: true,
           unitId: true,
-          property: { select: { id: true, name: true } },
+          property: { select: { id: true, name: true, timezone: true } },
           unit: { select: { name: true } },
         },
       },

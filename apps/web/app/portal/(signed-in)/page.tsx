@@ -1,3 +1,4 @@
+import { friendlyDate } from '@rental/core/scheduling'
 import { formatCents } from '@rental/core/money'
 import Link from 'next/link'
 import { requireTenantWithScope } from '@/lib/portal/guard.ts'
@@ -26,15 +27,6 @@ const STATUS_WORDS: Record<string, string> = {
 /// as a serial number, and not a numeric locale format, where 05/08/2026
 /// means two different days either side of the Atlantic. Rendered in the
 /// property's timezone (D-3).
-function friendlyDate(value: Date, timeZone: string): string {
-  return new Intl.DateTimeFormat('en-GB', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-    timeZone,
-  }).format(value)
-}
-
 export default async function PortalHomePage() {
   const { tenant, scope } = await requireTenantWithScope()
   const [home, updates] = await Promise.all([

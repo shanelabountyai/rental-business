@@ -1,3 +1,4 @@
+import { expectFocusSurvived } from './fixtures.ts'
 import { randomUUID } from 'node:crypto'
 import AxeBuilder from '@axe-core/playwright'
 import {
@@ -181,6 +182,7 @@ test.describe('access codes', () => {
 
     await page.goto(`/properties/${property.id}/units/${unit.id}`)
     await page.getByText('Add or replace a code').click()
+    await expectFocusSurvived(page, 'opening “Add or replace a code” — an operational-data disclosure')
     // Not getByLabel('Type') - three subsections on this page share that
     // accessible name by design (access code, shutoff, and documents'
     // upload form); #field-code-type is the access-code form's alone.

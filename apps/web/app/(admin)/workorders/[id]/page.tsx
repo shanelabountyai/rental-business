@@ -1,6 +1,6 @@
 import { actualTotalCents, compareBids } from '@rental/core/approvals'
 import { earliestCompliantStart } from '@rental/core/entry'
-import { utcToWallClock } from '@rental/core/scheduling'
+import { utcToWallClock, businessDate } from '@rental/core/scheduling'
 import { formatCents } from '@rental/core/money'
 import {
   activeWarranties,
@@ -468,7 +468,7 @@ export default async function WorkOrderDetailPage({
           </h2>
           <p className="text-sm">
             {workOrder.closedAt
-              ? `Closed ${workOrder.closedAt.toISOString().slice(0, 10)}`
+              ? `Closed ${businessDate(workOrder.closedAt, workOrder.property.timezone)}`
               : 'Closed'}
             {` · ${formatCents(jobCostCents(workOrder))}`}
             {workOrder.tenantCaused && ' · tenant-caused'}

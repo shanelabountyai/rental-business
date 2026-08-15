@@ -270,3 +270,40 @@ export function businessDaysBetween(
   const ms = businessDateToUtc(to).getTime() - businessDateToUtc(from).getTime()
   return Math.round(ms / 86_400_000)
 }
+
+/**
+ * A date a person reads, in the timezone it actually happened in.
+ *
+ * ==========================================================================
+ * `timeZone` IS REQUIRED, AND THAT IS THE ENTIRE POINT.
+ *
+ * R-101c found four copies of this function across the app. ONE took a
+ * timezone; three did not — and `Intl.DateTimeFormat` with no `timeZone`
+ * formats in the RUNTIME's zone, which on Vercel is UTC. So a work order
+ * closed at 7pm Central on the 14th was shown to staff as the 15th, on the
+ * screens where "when did this happen" is the question being asked.
+ *
+ * Making the parameter required means the broken version cannot be written
+ * again: there is no overload that guesses, and no default that silently
+ * means UTC. Same discipline as `businessDate` and `utcToBusinessDate`,
+ * which exist because a date read through the wrong reader is wrong by a day
+ * (R-036b's entry window, R-042's proration).
+ *
+ * TAKES AN INSTANT, NOT A CALENDAR DAY. A `@db.Date` column comes back as
+ * UTC midnight and must NOT come through here — passing one through a
+ * timezone moves it a day west of UTC, which is R-042's bug exactly. Use
+ * `utcToBusinessDate` for those.
+ * ==========================================================================
+ */
+export function friendlyDate(
+  instant: Date,
+  timeZone: string,
+  options: { month?: 'long' | 'short' } = {},
+): string {
+  return new Intl.DateTimeFormat('en-GB', {
+    day: 'numeric',
+    month: options.month ?? 'short',
+    year: 'numeric',
+    timeZone,
+  }).format(instant)
+}

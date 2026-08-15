@@ -3,7 +3,7 @@ import AxeBuilder from '@axe-core/playwright'
 import { hashPassword } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
-import { uniquePhone } from './fixtures.ts'
+import { uniquePhone, expectFocusSurvived } from './fixtures.ts'
 
 // Comms threading through the UI (COMM-01, R-017): the inbox, a thread
 // transcript with staff attribution, replying, logging a call, and the
@@ -282,6 +282,7 @@ test.describe('a thread', () => {
 
     await page.goto(`/messages/${thread.id}`)
     await page.getByText('Log a phone call').click()
+    await expectFocusSurvived(page, 'opening “Log a phone call” — a messages disclosure')
     await page.waitForTimeout(500)
     await page
       .getByLabel('What was said')

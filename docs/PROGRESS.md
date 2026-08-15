@@ -1983,3 +1983,31 @@ A visually-hidden `<input type="radio">` inside the styled label buys all four b
 
 **What it left behind.**
 - **R-101c** — 40 raw `toISOString()` sites, four `friendlyDate` copies, two staff screens rendering UTC in as many words, and rolling `expectFocusSurvived()` / `expectAnnouncedInPlace()` from 3 spec files to 33.
+
+## R-101c — One date formatter, and the timezone is not optional
+**Commit:** *(recorded below)*  ·  **Date:** 2026-08-15
+
+**What it built.** The structural half of the timezone work: one `friendlyDate` in `packages/core/scheduling`, whose `timeZone` parameter is **required**.
+
+**There were four copies, and the defect was visible the moment they were side by side.** One took a timezone. Three did not — and `Intl.DateTimeFormat` with no `timeZone` formats in the *runtime's* zone, which on Vercel is UTC. So a work order closed at 7pm Central on the 14th was shown to staff as the 15th, on the screens where "when did this happen" is the question being asked. Three of the four were wrong, and each looked correct in isolation.
+
+**Making the parameter required is the fix**, not correcting three call sites: there is no overload that guesses and no default that silently means UTC, so the broken version cannot be written again. Same discipline as `businessDate` and `utcToBusinessDate`, which exist because a date read through the wrong reader is wrong by a day (R-036b's entry window, R-042's proration).
+
+**Three list queries now select `timezone`.** A date cannot be rendered in the right zone if the zone was never fetched, and none of the admin ticket, work-order or tenant-ticket queries carried it.
+
+**The row said "40 raw `toISOString()`", and most of them are correct.** Roughly 24 are `@db.Date` calendar days — `lease.startsOn`, `charge.dueOn`, the RUBS period, a warranty's `expiresOn` — where slicing the ISO string is the *right* reader and putting a timezone anywhere near them is R-042's bug. Counting them as defects would have produced 24 changes that each introduced one. Six genuine ones were fixed, chosen by consequence:
+
+| Field | Why it mattered |
+|---|---|
+| ledger `occurredAt` | a financial record's own date |
+| `noticeGivenAt` (×2) | legally significant |
+| `waivedAt` | who forgave money, and when |
+| photo `capturedAt` | the evidence timestamp PROP-08 says must never be lost |
+| RUBS `allocatedAt` | when every tenant at a property was billed |
+| work order `closedAt` | the date the cost lands on the books |
+
+**A negative result, recorded rather than dressed up.** `expectFocusSurvived` went from 3 spec files to 7, and **found nothing**. The row that filed this predicted it would turn up real failures; on those four surfaces it did not, because they use `<details>`/`<summary>`, which survives its own activation — R-099's pattern was already holding. Worth saying plainly: a rollout that finds nothing is evidence the earlier fix generalised, not a wasted change, and reporting it as a win would be the wrong record.
+
+**What it left behind.**
+- **R-101d, and it is a different defect than this row described.** Three components swap their whole section on success — the tenant's verify panel, the inherited-lease intake panel, MFA enrolment — and each puts `role="status"` on the content that replaces its own container. A live region inside a replaced container is a new node either way, so R-101's fix does not apply; and the control that had focus has just been unmounted, so focus falls to `<body>` and nothing is announced at all. The right instrument is focus management — move focus to the new heading with `tabIndex={-1}` — which announces the whole new context rather than one sentence of it. Named rather than half-fixed.
+- **`expectAnnouncedInPlace` is still only in `pay.spec.ts`.** Rolling it wider belongs with R-101d, where the components it would catch actually live.

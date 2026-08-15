@@ -1,3 +1,4 @@
+import { expectFocusSurvived } from './fixtures.ts'
 import { randomUUID } from 'node:crypto'
 import AxeBuilder from '@axe-core/playwright'
 import { hashPassword } from '@rental/core/auth'
@@ -168,6 +169,7 @@ test.describe('mortgages', () => {
 
     await page.goto(`/properties/${property.id}`)
     await page.getByText('Add a mortgage').click()
+    await expectFocusSurvived(page, 'opening “Add a mortgage” — the filing-cabinet disclosure')
     await page.getByLabel('Lender').fill('First National')
     await page.getByLabel('Rate type').selectOption('FIXED')
     await page.getByLabel('Current balance ($)').fill('180000')

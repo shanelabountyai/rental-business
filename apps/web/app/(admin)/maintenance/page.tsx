@@ -1,3 +1,4 @@
+import { friendlyDate } from '@rental/core/scheduling'
 import { CATEGORY_LABELS } from '@rental/core/maintenance'
 import Link from 'next/link'
 import { requirePermission } from '@/lib/auth/guard.ts'
@@ -16,14 +17,6 @@ const SOURCE_LABELS: Record<string, string> = {
 
 function categoryLabel(category: string): string {
   return CATEGORY_LABELS[category as keyof typeof CATEGORY_LABELS] ?? category
-}
-
-function friendlyDate(value: Date): string {
-  return new Intl.DateTimeFormat('en-GB', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  }).format(value)
 }
 
 /**
@@ -81,7 +74,7 @@ export default async function MaintenancePage() {
                     ? `${ticket.tenant.firstName} ${ticket.tenant.lastName}`
                     : 'No tenant on file'}{' '}
                   · {SOURCE_LABELS[ticket.source] ?? ticket.source} ·{' '}
-                  {friendlyDate(ticket.createdAt)}
+                  {friendlyDate(ticket.createdAt, ticket.property.timezone)}
                 </span>
               </Link>
             </li>

@@ -154,7 +154,7 @@ export async function unitsInScope(scope: ResolvedScope) {
   if (scope.propertyIds.length === 0) return []
   return prisma.unit.findMany({
     where: { propertyId: { in: scope.propertyIds } },
-    select: { id: true, name: true, property: { select: { id: true, name: true } } },
+    select: { id: true, name: true, property: { select: { id: true, name: true, timezone: true } } },
     orderBy: [{ property: { name: 'asc' } }, { name: 'asc' }],
   })
 }

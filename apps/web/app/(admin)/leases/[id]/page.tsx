@@ -244,7 +244,7 @@ export default async function LeaseDetailPage({
             <dt className="text-muted-foreground">Notice</dt>
             <dd className="col-span-1 sm:col-span-2">
               Given by {lease.noticeGivenBy === 'TENANT' ? 'the tenant' : 'us'} on{' '}
-              {lease.noticeGivenAt.toISOString().slice(0, 10)}
+              {businessDate(lease.noticeGivenAt, lease.property.timezone)}
             </dd>
           </>
         )}
@@ -278,7 +278,7 @@ export default async function LeaseDetailPage({
                 </a>
                 <span className="text-muted-foreground text-xs">
                   {' · taken '}
-                  {(photo.capturedAt ?? photo.createdAt).toISOString().slice(0, 10)}
+                  {businessDate(photo.capturedAt ?? photo.createdAt, lease.property.timezone)}
                   {!photo.capturedAt && ' (upload date — no EXIF timestamp)'}
                 </span>
               </li>
@@ -293,7 +293,7 @@ export default async function LeaseDetailPage({
           id: line.id,
           type: line.type,
           amountCents: line.amountCents,
-          occurredAt: line.occurredAt.toISOString().slice(0, 10),
+          occurredAt: businessDate(line.occurredAt, lease.property.timezone),
           description: line.description,
           runningBalanceCents: line.runningBalanceCents,
           reversed: reversed.has(line.id),
@@ -326,7 +326,7 @@ export default async function LeaseDetailPage({
           amountCents: fee.amountCents,
           description: fee.description,
           dueOn: fee.dueOn.toISOString().slice(0, 10),
-          waivedAt: fee.waivedAt ? fee.waivedAt.toISOString().slice(0, 10) : null,
+          waivedAt: fee.waivedAt ? businessDate(fee.waivedAt, lease.property.timezone) : null,
           waiveReason: fee.waiveReason,
           waivedByName: fee.waivedBy?.name ?? null,
         }))}
@@ -416,7 +416,7 @@ export default async function LeaseDetailPage({
             lease.noticeGivenAt
               ? `Notice was given by ${
                   lease.noticeGivenBy === 'TENANT' ? 'the tenant' : 'us'
-                } on ${lease.noticeGivenAt.toISOString().slice(0, 10)}. The tenancy is still running until it ends.`
+                } on ${businessDate(lease.noticeGivenAt, lease.property.timezone)}. The tenancy is still running until it ends.`
               : null
           }
           recordNotice={recordLeaseNotice.bind(null, lease.id)}

@@ -3,7 +3,7 @@ import AxeBuilder from '@axe-core/playwright'
 import { hashPassword } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
-import { uniquePhone } from './fixtures.ts'
+import { uniquePhone, expectFocusSurvived } from './fixtures.ts'
 
 // Lease records through the browser (LEASE-06, RISK-08, R-033).
 //
@@ -319,6 +319,7 @@ test.describe('the lifecycle', () => {
 
     await page.goto(`/leases/${lease.id}`)
     await page.getByText('Record notice to end the tenancy').click()
+    await expectFocusSurvived(page, 'opening “Record notice to end the tenancy” — a lease disclosure')
     await page.getByLabel('Who gave notice').selectOption('TENANT')
     await page.getByLabel('Date notice was given').fill('2026-06-01')
     await page.getByRole('button', { name: 'Record notice' }).click()

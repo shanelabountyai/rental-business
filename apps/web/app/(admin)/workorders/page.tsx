@@ -1,3 +1,4 @@
+import { friendlyDate } from '@rental/core/scheduling'
 import Link from 'next/link'
 import { requirePermission } from '@/lib/auth/guard.ts'
 import { listOpenWorkOrders } from '@/lib/workorders/queries.ts'
@@ -29,14 +30,6 @@ const STATUS_LABELS: Record<string, string> = {
   INVOICED: 'Invoiced',
   CLOSED: 'Closed',
   CANCELED: 'Canceled',
-}
-
-function friendlyDate(value: Date): string {
-  return new Intl.DateTimeFormat('en-GB', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  }).format(value)
 }
 
 /**
@@ -90,7 +83,7 @@ export default async function WorkOrdersPage() {
                   {PRIORITY_LABELS[wo.priority] ?? wo.priority} ·{' '}
                   {STATUS_LABELS[wo.status] ?? wo.status} ·{' '}
                   {wo.assignedTo?.name ?? wo.vendor?.name ?? 'Unassigned'} ·{' '}
-                  {friendlyDate(wo.createdAt)}
+                  {friendlyDate(wo.createdAt, wo.property.timezone)}
                 </span>
               </Link>
             </li>

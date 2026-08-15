@@ -1,3 +1,4 @@
+import { friendlyDate } from '@rental/core/scheduling'
 import { CATEGORY_LABELS, emergencyDefinition } from '@rental/core/maintenance'
 import Link from 'next/link'
 import { requireTenantWithScope } from '@/lib/portal/guard.ts'
@@ -18,14 +19,6 @@ const STATUS_WORDS: Record<string, string> = {
   CONVERTED: 'Work scheduled',
   MERGED: 'Combined with another request',
   CLOSED: 'Resolved',
-}
-
-function friendlyDate(value: Date): string {
-  return new Intl.DateTimeFormat('en-GB', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  }).format(value)
 }
 
 export default async function PortalMaintenancePage() {
@@ -81,7 +74,7 @@ export default async function PortalMaintenancePage() {
                   </span>
                   <span className="text-muted-foreground">
                     {STATUS_WORDS[ticket.status] ?? ticket.status} ·{' '}
-                    {friendlyDate(ticket.createdAt)}
+                    {friendlyDate(ticket.createdAt, ticket.property.timezone)}
                   </span>
                 </Link>
               </li>
