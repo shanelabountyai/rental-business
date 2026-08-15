@@ -29,10 +29,33 @@
       "Bash(node -e \"const s=require\\('./package.json'\\).scripts; for \\(const k of ['test','test:e2e','db:migrate:test','db:seed:test']\\) console.log\\(k+':', s[k]\\)\")",
       "Bash(pkill -f \"playwright test\")",
       "Bash(node -e \"const s=require\\('./package.json'\\).scripts; for\\(const k of Object.keys\\(s\\)\\) if\\(/^\\(test|dev|db:\\)/.test\\(k\\)\\) console.log\\(k+':', s[k]\\)\")",
-      "Bash(node -e \"const s=require\\('./package.json'\\).scripts; for\\(const k of ['test','test:e2e','dev:test','db:migrate:test']\\) console.log\\(k+':', s[k]\\)\")"
+      "Bash(node -e \"const s=require\\('./package.json'\\).scripts; for\\(const k of ['test','test:e2e','dev:test','db:migrate:test']\\) console.log\\(k+':', s[k]\\)\")",
+      "Bash(PORT=3100 npx playwright test e2e/recurring-and-rubs.spec.ts)",
+      "Bash(PORT=3100 npm run test:e2e -- e2e/recurring-and-rubs.spec.ts)",
+      "Bash(PORT=3100 npm run test:e2e -- e2e/recurring-and-rubs.spec.ts --project=desktop-chrome -g \"adds pet rent\")",
+      "Bash(PORT=3100 npm run test:e2e -- e2e/recurring-and-rubs.spec.ts --project=desktop-chrome -g \"second press\")",
+      "Bash(curl -s -o /dev/null --max-time 2 http://localhost:3000/login)",
+      "Bash(curl -s -o /dev/null --max-time 2 http://localhost:3100/login)",
+      "Bash(sysctl -n hw.memsize)",
+      "Bash(awk '{printf \"%.0f GB\\\\n\", $1/1073741824}')",
+      "Bash(sysctl -n vm.swapusage)",
+      "Bash(awk '{printf \"%s  rss=%.0fMB  %s\\\\n\", $2, $6/1024, $NF}')",
+      "Bash(sort -k6 -rn)",
+      "Bash(awk '{printf \"%.0fMB  %s\\\\n\", $6/1024, $11\" \"$12\" \"$13}')",
+      "Bash(sysctl -n hw.ncpu)",
+      "Bash(memory_pressure)",
+      "Bash(lsof -nP -iTCP -sTCP:LISTEN)",
+      "Bash(awk '{print $2, $9}')",
+      "Bash(awk '$6/1024 > 200 && /node|next/ {printf \"%6.0fMB  pid=%s  %s\\\\n\", $6/1024, $2, substr\\($0, index\\($0,$11\\), 110\\)}')",
+      "Bash(npm run *)",
+      "Bash(echo \"REAL exit=$?\")",
+      "Bash(PORT=3100 npm run test:e2e -- e2e/recurring-and-rubs.spec.ts e2e/route-boundaries.spec.ts)",
+      "Bash(awk '$1==\"node\"{print $2, $9}')",
+      "Bash(sort -u -k2)"
     ],
     "additionalDirectories": [
-      "/Users/shanelabounty/Documents/Claude/Projects/rental business/packages/core/tasks"
+      "/Users/shanelabounty/Documents/Claude/Projects/rental business/packages/core/tasks",
+      "/Users/shanelabounty/.claude"
     ]
   }
 }

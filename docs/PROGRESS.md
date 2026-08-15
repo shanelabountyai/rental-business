@@ -2036,7 +2036,7 @@ A visually-hidden `<input type="radio">` inside the styled label buys all four b
 - **`expectAnnouncedInPlace` is still only in `pay.spec.ts`.** The components it would catch are fixed; rolling it wider is cheap whenever somebody is in those files anyway.
 
 ## R-043 — The tenant's own statement
-**Commit:** `pending`  ·  **Date:** 2026-08-15
+**Commit:** `18d306f`  ·  **Date:** 2026-08-15
 
 **What it built.** `/portal/pay/history` — every charge and payment on the tenancy, newest first, with what was owed after each one — and `tenantStatement()` behind it.
 
