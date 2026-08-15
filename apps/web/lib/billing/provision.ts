@@ -276,6 +276,14 @@ export async function leaseBillingState(leaseId: string) {
       active: true,
       tenant: { select: { firstName: true, lastName: true } },
       externalPayerName: true,
+      // PAY-12's legal-action controls (R-047), read here so the lease page
+      // can show a held tenancy without a second query.
+      collectionPaused: true,
+      blockPartialPayments: true,
+      certifiedFundsOnly: true,
+      paymentHoldReason: true,
+      paymentHoldSetAt: true,
+      paymentHoldSetBy: { select: { name: true } },
     },
   })
 }

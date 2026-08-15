@@ -2258,3 +2258,42 @@ A token-scoped page is fail-**closed** by construction: there is no session for 
 
 - **The link is only minted by the due-soon/due-date reminder.** The late-notice ladder and the bulk rent-roll reminder (R-044) still send portal URLs; giving them pay links is a small follow-on wherever those messages are next touched.
 - **No "resend my payment link" self-service.** A tenant with a dead link signs in or calls; the office can reissue by re-running the reminder.
+
+## R-047 — Legal-action payment controls
+**Commit:** `pending`  ·  **Date:** 2026-08-15
+
+**What it built.** PAY-12's three per-tenant switches — block online / block partial / certified funds only — the staff panel that sets them, enforcement on both the read and write paths, and the test the backlog demanded by name.
+
+### The test this row asked for, and why it is the one that matters
+
+The row is explicit: *"an autopay charge that fires the morning after a notice is served is a defect with legal consequences — this item must prove, with a test, that pausing actually stops Stripe."*
+
+So the hold is pushed to Stripe **synchronously**, and the test asserts the subscription reports `paused` immediately afterwards **with no sweep having run**. The nightly reconciliation would have got there eventually; eventually is the next morning, and the next morning is when the charge fires.
+
+**It fails loudly.** If the provider does not confirm, `applyPaymentHold` returns an error saying the hold is *not* fully in force. This is the only place in the product that treats a billing-provider outage as a refusal rather than an operational condition to swallow — every other write logs and continues. The difference is that the operator's next action is serving a notice, and they must not take it believing collection is stopped when it is not.
+
+### What each switch actually is
+
+- **Block online** is `collectionPaused`, which already existed and already did both halves — pauses the Stripe subscription *and* is refused by the payment UI. R-047 gave it a reason, a UI, immediacy, and link revocation.
+- **Block partial** is the switch the voided-notice problem is really about: in many states accepting $50 against $1,500 after notice restarts the whole process. Deliberately **not** `Lease.requireFullBalance`, which looks like the same thing and is an owner's ordinary commercial preference — lifting a legal hold must not silently clear a setting somebody made for unrelated reasons, and one column could not tell the two apart.
+- **Certified funds only** closes every online rail **including ACH**, which is the counter-intuitive one: a bank debit can be *returned days later*, by which point a notice may have been abandoned on the strength of money that never cleared.
+
+### What it decided
+
+- **Three things close together or the hold leaks:** Stripe stops collecting, the payment UI refuses, and live pay-now links are revoked (R-046's seam). The third is the one that was easy to miss — a token minted before the notice is a payment surface sitting in a text message, and **no screen in the product displays it**.
+- **Gated on `ledger.adjust`, not `ledger.read`.** Billing re-sync runs on `ledger.read` because whoever can see a lease's money should be able to fix its billing. That reasoning does not reach an action that stops taking somebody's rent in support of an eviction; that is the same class of judgement as a ledger adjustment, and carries the same MFA requirement.
+- **A reason is required to lift a hold, not just to place one.** "Why did we start taking their money again" is as much a part of the record as why we stopped.
+- **The audit row records what Stripe actually did**, not just what we intended. "We believed this tenancy was held" and "Stripe was told" are different facts and a dispute needs both.
+- **The tenant-facing message never names the reason.** An e2e test asserts it contains none of *evict / eviction / notice to vacate / legal action / court / attorney / proceeding*. Two reasons: a payment screen is not lawful service of a notice and must not pre-empt the instrument that is, and the device may be read by somebody who is not party to the case.
+
+### Found along the way
+
+- **The autopay panel still offered to TURN ON automatic payments to a held tenancy** — the exact defect this row is about, reached from the tenant's own pay screen. Found because a locator matched a button that should not have been on the page at all.
+- **The simulator reported every subscription as `active`, ignoring a column it selected.** The consequence was asymmetric and invisible: `pause` fired every sweep (harmless), but `resume` could *never* fire, so **lifting a hold silently left Stripe paused**. Fixed per D-27 by answering from `lastSyncAction` — what the simulator was *told* — rather than from `collectionPaused`, the intent column the decision compares against, which would have made both branches unreachable.
+- **`applyPaymentHold` takes an injected `AuditWriter`**, following R-032c's precedent: `lib/audit/index.ts` resolves the actor from the Auth.js session and cannot load under Vitest — which would have made the one test this row demands by name impossible to write.
+
+### What it left behind
+
+- **"The case file" is the audit trail for now.** R-083 owns real eviction case files; when it lands, these entries are what it should absorb.
+- **No automatic hold.** Serving a notice does not place one — a human decides, deliberately. Wiring R-062's notice generation to prompt for it is the natural follow-on.
+- **Certified funds arrive through R-036's offline recording.** Nothing here records the cashier's cheque itself; the switch only closes the online rails.

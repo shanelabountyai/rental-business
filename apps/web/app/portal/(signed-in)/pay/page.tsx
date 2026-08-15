@@ -66,6 +66,13 @@ export default async function PayPage() {
           Must for exactly that reason. The publishable key is read on the
           server and passed down: it is safe to expose, but the component
           should not have to know where it lives. */}
+      {/* NOT OFFERED UNDER A HOLD (PAY-12, R-047). Enrolling a held tenancy
+          in autopay is the exact defect this control exists to prevent: a
+          charge that fires the morning after a notice is served. The hold
+          pauses the subscription, so an enrolment here would either fail
+          confusingly or start collecting the moment the hold lifted —
+          neither is something to offer somebody mid-case. */}
+      {!view.hold.blockOnline && !view.hold.certifiedFundsOnly && (
       <AutopayPanel
         publishableKey={process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? null}
         alreadyOn={view.autopayOn}
@@ -75,6 +82,7 @@ export default async function PayPage() {
         start={startAutopaySetup}
         saveDebitDay={setDebitDay}
       />
+      )}
 
       {/* The way to "did you get my payment?" (R-043). Above the pay form so
           a tenant checking rather than paying does not have to scroll past a
@@ -128,7 +136,16 @@ export default async function PayPage() {
         </section>
       )}
 
-      {owesNothing ? (
+      {view.hold.blockOnline || view.hold.certifiedFundsOnly ? (
+        // PAY-12 (R-047). Neutral, and it never says why: a payment screen
+        // is not lawful service of a notice, and the device may be handed
+        // around a household that is not party to the case.
+        <p className="rounded-md border p-4">
+          {view.hold.certifiedFundsOnly
+            ? 'This account can only be paid by cashier’s cheque or money order. Please contact the office to arrange it.'
+            : 'Online payments are not available on this account. Please contact the office.'}
+        </p>
+      ) : owesNothing ? (
         <p className="rounded-md border p-4">
           {view.inFlightCents > 0
             ? 'Everything you owe is already on its way. We will email you when it clears.'

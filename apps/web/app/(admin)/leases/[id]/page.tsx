@@ -12,6 +12,7 @@ import { businessDate } from '@rental/core/scheduling'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { BillingPanel } from '@/components/leases/billing-panel.tsx'
+import { PaymentHoldPanel } from '@/components/leases/payment-hold-panel.tsx'
 import { IntakePanel } from '@/components/leases/intake-panel.tsx'
 import { LedgerPanel } from '@/components/leases/ledger-panel.tsx'
 import { LeaseForm } from '@/components/leases/lease-form.tsx'
@@ -31,7 +32,7 @@ import {
   resolveIntakeItem,
   updateLeaseTerms,
 } from '@/lib/leases/actions.ts'
-import { resyncLease } from '@/lib/billing/actions.ts'
+import { resyncLease, setPaymentHold } from '@/lib/billing/actions.ts'
 import { billingIsLive, billingProviderName } from '@/lib/billing/provider.ts'
 import { leaseBillingState } from '@/lib/billing/provision.ts'
 import { recurringChargesForLease } from '@/lib/billing/recurring.ts'
@@ -111,6 +112,10 @@ export default async function LeaseDetailPage({
   // false renders an empty space to somebody who holds the permission and
   // only needs to verify.
   const waiveDecision = await actorDecision('fee.waive', propertyResource(lease.property))
+  // PAY-12's controls stop a tenancy's collection in support of an eviction,
+  // so they run on `ledger.adjust` — the same privileged permission a ledger
+  // adjustment needs, with a proved second factor (R-047).
+  const holdDecision = await actorDecision('ledger.adjust', propertyResource(lease.property))
 
   const facts = {
     status: lease.status,
@@ -315,6 +320,28 @@ export default async function LeaseDetailPage({
           stripeCustomerId: payer.stripeCustomerId,
           stripeSubscriptionId: payer.stripeSubscriptionId,
         }))}
+      />
+
+      <PaymentHoldPanel
+        canSet={holdDecision.allowed}
+        payers={payers
+          .filter((payer) => payer.active)
+          .map((payer) => ({
+            id: payer.id,
+            name: payer.tenant
+              ? `${payer.tenant.firstName} ${payer.tenant.lastName}`
+              : (payer.externalPayerName ?? 'Payer'),
+            blockOnline: payer.collectionPaused,
+            blockPartial: payer.blockPartialPayments,
+            certifiedFundsOnly: payer.certifiedFundsOnly,
+            reason: payer.paymentHoldReason,
+            // A real timestamp, so it is read in the PROPERTY's zone (R-101c).
+            setAt: payer.paymentHoldSetAt
+              ? businessDate(payer.paymentHoldSetAt, lease.property.timezone)
+              : null,
+            setByName: payer.paymentHoldSetBy?.name ?? null,
+          }))}
+        setHold={setPaymentHold}
       />
 
       <FeesPanel

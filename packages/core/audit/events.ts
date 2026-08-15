@@ -55,6 +55,17 @@ export const AUDIT_ACTIONS = [
   /// (D-29). A privileged change to how money is taken from a tenant, and
   /// the reason is recorded with it.
   'payment.collection_method_changed',
+  /// R-047 (PAY-12): a legal-action payment hold was placed or lifted. On
+  /// REASON_REQUIRED, because "we stopped taking this tenant's money" is
+  /// the fact an eviction is later argued from - and because a hold placed
+  /// for no recorded reason is indistinguishable from one placed for a
+  /// retaliatory one, which is the claim it will be defended against.
+  'payment.hold_changed',
+  /// R-047: a tenant tried to pay and the hold refused them. PAY-12 asks
+  /// for exactly this - "the attempt is logged to the case file" - because
+  /// an eviction turning on "they never tried to pay" must be arguable
+  /// against a record of every time they did.
+  'payment.hold_refused',
 
   // Maintenance (MAINT-03, R-024)
   /// The scope, priority and estimate a work order was CREATED with -
@@ -407,6 +418,7 @@ export const REASON_REQUIRED: ReadonlySet<AuditAction> = new Set([
   'entry_notice.overridden',
   'application_order.deviated',
   'lease.terminated',
+  'payment.hold_changed',
 ])
 
 export function requiresReason(action: AuditAction): boolean {

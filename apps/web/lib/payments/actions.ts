@@ -4,6 +4,9 @@ import { balanceCents } from '@rental/core/ledger'
 import {
   AMOUNT_REFUSALS,
   cardFeeFor,
+  holdMessage,
+  holdRefusal,
+  payable,
   validatePaymentAmount,
 } from '@rental/core/payments'
 import type { CollectionMethod, PaymentRail } from '@rental/core/payments'
@@ -14,6 +17,7 @@ import { getBillingProvider } from '@/lib/billing/provider.ts'
 import { rulesFor } from '@/lib/jurisdiction/queries.ts'
 import { requireTenantWithScope } from '@/lib/portal/guard.ts'
 import { payLinkRejection, verifyPayLink } from '@/lib/portal/pay-link.ts'
+import { holdFrom, recordHoldRefusal } from './legal-hold.ts'
 
 // The tenant pays (PAY-01, R-037).
 //
@@ -100,6 +104,8 @@ const PAYER_SELECT = {
   propertyId: true,
   collectionMethod: true,
   collectionPaused: true,
+  blockPartialPayments: true,
+  certifiedFundsOnly: true,
   stripeCustomerId: true,
   lease: {
     select: {
@@ -123,6 +129,8 @@ async function chargeResolvedPayer(
     propertyId: string
     collectionMethod: string
     collectionPaused: boolean
+    blockPartialPayments: boolean
+    certifiedFundsOnly: boolean
     stripeCustomerId: string | null
     lease: {
       requireFullBalance: boolean
@@ -138,11 +146,6 @@ async function chargeResolvedPayer(
   if (!payer) return { error: 'There is no account set up to pay against yet.' }
   if (!payer.stripeCustomerId) {
     return { error: 'Your payment account is not ready yet. Please contact the office.' }
-  }
-  if (payer.collectionPaused) {
-    // PAY-12. Says nothing about why - a legal-action hold is not something
-    // a payment screen explains, and R-047 owns the message that does.
-    return { error: 'Online payments are not available on this account. Please contact the office.' }
   }
 
   const railInput = str(formData, 'rail')
@@ -196,6 +199,34 @@ async function chargeResolvedPayer(
   const verdict = validatePaymentAmount(facts, amountCents)
   if (!verdict.ok) {
     return { error: AMOUNT_REFUSALS[verdict.refusal] }
+  }
+
+  // PAY-12's legal-action hold, checked on the WRITE PATH (R-047).
+  //
+  // After the amount is known, because `blockPartial` is a question about
+  // the amount - and against the balance recomputed a few lines above, not
+  // one a screen carried, so a page rendered before a late fee posted cannot
+  // let a now-partial payment through as "full".
+  //
+  // EVERY REFUSAL IS LOGGED. PAY-12 asks for it, and the reason runs the
+  // opposite way from how it reads: an eviction turning on "they never tried
+  // to pay" has to be arguable against a record of every time they did.
+  const refusal = holdRefusal(holdFrom(payer), amountCents, payable(facts).maxCents)
+  if (refusal) {
+    await recordHoldRefusal(
+      {
+        leasePayerId: payer.id,
+        propertyId: payer.propertyId,
+        refusal,
+        attemptedCents: amountCents,
+        owedCents: payable(facts).maxCents,
+      },
+      audit,
+    )
+    // Neutral, and it never says why - see `holdMessage`. A payment screen
+    // is not lawful service of a notice, and the device may not be the
+    // tenant's.
+    return { error: holdMessage(refusal) }
   }
 
   // D-4: whether the card cost may be passed on is a jurisdiction fact, and

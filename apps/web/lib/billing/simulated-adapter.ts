@@ -148,17 +148,35 @@ export class SimulatedBillingProvider implements BillingProvider {
       where: { stripeSubscriptionId: input.stripeSubscriptionId },
       select: {
         stripeAmountCents: true,
-        collectionPaused: true,
+        lastSyncAction: true,
         lease: { select: { status: true } },
       },
     })
     if (!payer) return null
     const over = payer.lease.status === 'ENDED' || payer.lease.status === 'TERMINATED'
+
+    // PAUSED IS ANSWERED FROM WHAT THE SIMULATOR WAS TOLD, NOT FROM THE
+    // INTENT THAT WOULD TELL IT (D-27, R-047).
+    //
+    // `lastSyncAction` records what was actually pushed and is written only
+    // after the provider accepted the call. Reading `collectionPaused` here
+    // instead - which this used to select and then ignore - would answer
+    // from the same column `lifecycleDecision` compares against, making
+    // BOTH the pause and the resume branches unreachable: the two sides
+    // would agree by construction and no test could ever reach a mismatch.
+    //
+    // Ignoring it entirely, which is what it did before, was worse in one
+    // specific direction: `stripePaused` was permanently false, so `pause`
+    // fired every sweep (harmless) and `resume` could never fire at all -
+    // LIFTING a hold silently left the subscription paused against the
+    // simulator, and nothing failed to say so.
+    const paused = payer.lastSyncAction === 'paused'
+
     return {
       // Deliberately reports what a real cancelled subscription would only
       // report AFTER we cancelled it - so a sweep that has not run yet still
       // sees `active` and decides to cancel.
-      status: over && payer.stripeAmountCents === null ? 'canceled' : 'active',
+      status: over && payer.stripeAmountCents === null ? 'canceled' : paused ? 'paused' : 'active',
       amountCents: payer.stripeAmountCents,
       cancelAt: null,
     }

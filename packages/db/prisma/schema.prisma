@@ -739,6 +739,7 @@ model StaffUser {
   templatesCreated                MessageTemplate[]            @relation("TemplateCreatedBy")
   templatesUpdated                MessageTemplate[]            @relation("TemplateUpdatedBy")
   translationsApproved            MessageTemplateTranslation[] @relation("TranslationApprovedBy")
+  paymentHoldsSet                 LeasePayer[]                 @relation("PaymentHoldSetBy")
 
   @@index([active])
 }
@@ -1311,24 +1312,24 @@ model RateLimitCounter {
 // ---------------------------------------------------------------------------
 
 model LeasePayer {
-  id                     String           @id @default(cuid())
-  leaseId                String
-  propertyId             String
-  payerType              PayerType
+  id                      String           @id @default(cuid())
+  leaseId                 String
+  propertyId              String
+  payerType               PayerType
   /// Set when payerType = TENANT. Null for a housing authority or any other
   /// external payer, which is named by `externalPayerName` instead.
-  tenantId               String?
-  externalPayerName      String?
+  tenantId                String?
+  externalPayerName       String?
   /// The payer's default share of monthly rent, in cents. Null means "the
   /// remainder" - which is how a single-payer lease works without anyone
   /// having to keep a number in sync with the rent. Historical shares live on
   /// PayerAllocation, so a mid-stream recertification change never rewrites
   /// what was already billed.
-  portionCents           Int?
+  portionCents            Int?
   /// One Stripe Customer and one Subscription per payer (OQ-12). Null until
   /// R-034 provisions them.
-  stripeCustomerId       String?
-  stripeSubscriptionId   String?
+  stripeCustomerId        String?
+  stripeSubscriptionId    String?
   /// R-036: collection is on hold for this payer - a legal-action hold
   /// (PAY-12), or an owner pausing deliberately. Distinct from `active`,
   /// which means the payer is no longer a payer at all: a paused payer still
@@ -1344,7 +1345,7 @@ model LeasePayer {
   /// `send_invoice`. The switch is guarded - see packages/core/payments -
   /// because moving a payer while an invoice is still open lets the new
   /// mode bill the same period twice.
-  collectionMethod       CollectionMethod @default(charge_automatically)
+  collectionMethod        CollectionMethod @default(charge_automatically)
   /// The saved payment method autopay charges (R-039a, PAY-02).
   ///
   /// A record of what we told Stripe to use, not a second source of truth
@@ -1352,15 +1353,36 @@ model LeasePayer {
   /// per lease. NEVER a card number, a last-four or an expiry: §6.6 keeps
   /// those inside Stripe-hosted fields, and storing a last-four starts down a
   /// road this product has no reason to be on.
-  defaultPaymentMethodId String?
+  defaultPaymentMethodId  String?
   /// The day of the month autopay pulls (R-039a, PAY-02). Null means the day
   /// rent is due. A later day inside the grace period is what stops autopay
   /// firing on the 1st against an account that is paid on the 3rd.
   ///
   /// The 1-28 range is a CHECK; whether a given day is SAFE depends on the
   /// property's versioned grace period and lives in `debitDayDecision` (D-4).
-  debitDay               Int?
-  collectionPaused       Boolean          @default(false)
+  debitDay                Int?
+  collectionPaused        Boolean          @default(false)
+  /// PAY-12's legal-action controls (R-047). Three switches because they are
+  /// genuinely different postures - see packages/core/payments/legal-hold.ts.
+  ///
+  /// `collectionPaused` above IS the block-online switch: it already pauses
+  /// the Stripe subscription AND is already refused by the payment UI, which
+  /// is the "both halves" the backlog insists on. These two are the ones it
+  /// did not cover.
+  ///
+  /// DELIBERATELY NOT `Lease.requireFullBalance`, which looks like the same
+  /// thing and is not: that is an owner's ordinary preference about a payer
+  /// they will not take part payments from, set for commercial reasons and
+  /// left on indefinitely. Lifting a legal hold must not silently clear it.
+  blockPartialPayments    Boolean          @default(false)
+  certifiedFundsOnly      Boolean          @default(false)
+  /// Why the hold was placed, who placed it and when. Required whenever any
+  /// switch is on: "we stopped taking this tenant's money" is the fact an
+  /// eviction is later argued from, and a hold nobody can explain is worse
+  /// than no hold.
+  paymentHoldReason       String?
+  paymentHoldSetAt        DateTime?
+  paymentHoldSetByStaffId String?
   /// The rent we last successfully pushed to Stripe, in cents.
   ///
   /// NOT a copy of Stripe's truth - it is a record of our last INSTRUCTION,
@@ -1369,24 +1391,27 @@ model LeasePayer {
   /// without an API call. Stripe remains the authority (D-11), and the
   /// lifecycle sweep still asks it; this is what makes a rent change
   /// detectable at all against a provider that has no memory of its own.
-  stripeAmountCents      Int?
+  stripeAmountCents       Int?
   /// When the lifecycle sweep last made Stripe agree with this lease, and
   /// what it did. Operational breadcrumbs for the Billing Runs screen -
   /// deliberately NOT a second source of truth about the subscription, which
   /// is Stripe's.
-  lastSyncedAt           DateTime?
-  lastSyncAction         String?
-  lastSyncError          String?
-  active                 Boolean          @default(true)
-  createdAt              DateTime         @default(now())
-  updatedAt              DateTime         @updatedAt
+  lastSyncedAt            DateTime?
+  lastSyncAction          String?
+  lastSyncError           String?
+  active                  Boolean          @default(true)
+  createdAt               DateTime         @default(now())
+  updatedAt               DateTime         @updatedAt
 
-  lease         Lease             @relation(fields: [leaseId], references: [id])
-  property      Property          @relation(fields: [propertyId], references: [id])
-  tenant        Tenant?           @relation(fields: [tenantId], references: [id])
-  allocations   PayerAllocation[]
-  payments      Payment[]
-  ledgerEntries LedgerEntry[]
+  lease            Lease             @relation(fields: [leaseId], references: [id])
+  property         Property          @relation(fields: [propertyId], references: [id])
+  tenant           Tenant?           @relation(fields: [tenantId], references: [id])
+  /// Restrict, like every other evidence key here: who placed a payment hold
+  /// is part of explaining an eviction it contributed to.
+  paymentHoldSetBy StaffUser?        @relation("PaymentHoldSetBy", fields: [paymentHoldSetByStaffId], references: [id], onDelete: Restrict)
+  allocations      PayerAllocation[]
+  payments         Payment[]
+  ledgerEntries    LedgerEntry[]
 
   @@unique([stripeCustomerId])
   @@unique([stripeSubscriptionId])

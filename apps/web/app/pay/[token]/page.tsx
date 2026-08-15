@@ -102,7 +102,17 @@ export default async function PayLinkPage({
         )}
       </section>
 
-      {owesNothing ? (
+      {view.hold.blockOnline || view.hold.certifiedFundsOnly ? (
+        // PAY-12 (R-047). `verifyPayLink` already refuses a paused tenancy
+        // outright, so `blockOnline` is unreachable here — this branch is
+        // what catches certified-funds-only, which leaves the link valid
+        // while closing every rail behind it.
+        <p className="rounded-md border p-4">
+          {view.hold.certifiedFundsOnly
+            ? 'This account can only be paid by cashier’s cheque or money order. Please contact the office to arrange it.'
+            : 'Online payments are not available on this account. Please contact the office.'}
+        </p>
+      ) : owesNothing ? (
         <p className="rounded-md border p-4">
           {view.inFlightCents > 0
             ? 'Everything you owe is already on its way. We will email you when it clears.'

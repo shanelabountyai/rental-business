@@ -3,6 +3,8 @@
 import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
+import { audit } from '@/lib/audit/index.ts'
+import { applyPaymentHold } from '@/lib/payments/legal-hold.ts'
 import { syncLease, syncLeasePayer } from './lifecycle.ts'
 
 // Writes for the billing lifecycle (D-11, R-036).
@@ -85,4 +87,65 @@ function describe(outcome: string): string {
     failed: 'Failed',
   }
   return labels[outcome] ?? outcome
+}
+
+/**
+ * PAY-12's legal-action payment controls (R-047).
+ *
+ * ==========================================================================
+ * GATED ON `ledger.adjust`, NOT `ledger.read`.
+ *
+ * `resyncPayer` above runs on `ledger.read` on the reasoning that whoever can
+ * see a lease's money should be able to fix its billing. That reasoning does
+ * not reach here. This does not correct a discrepancy; it STOPS TAKING
+ * SOMEBODY'S RENT, in support of an eviction, and getting it wrong in either
+ * direction has legal consequences — a hold not applied lets a charge void a
+ * notice, and a hold applied wrongly withholds a tenant's ability to cure.
+ * That is the same class of judgement as a ledger adjustment, which R-004
+ * reserves for `ledger.adjust` and ROLE-05 requires a proved second factor
+ * for.
+ * ==========================================================================
+ */
+export async function setPaymentHold(
+  _previous: BillingFormState,
+  formData: FormData,
+): Promise<BillingFormState> {
+  const leasePayerId = String(formData.get('leasePayerId') ?? '')
+  if (!leasePayerId) return { error: 'No payer named.' }
+
+  const payer = await prisma.leasePayer.findUnique({
+    where: { id: leasePayerId },
+    select: { id: true, leaseId: true, property: { select: { id: true, legalEntityId: true } } },
+  })
+  if (!payer) return { error: 'That payer no longer exists.' }
+
+  const actor = await requirePermission('ledger.adjust', propertyResource(payer.property))
+
+  const result = await applyPaymentHold(
+    payer.id,
+    {
+      blockOnline: formData.get('blockOnline') === 'on',
+      blockPartial: formData.get('blockPartial') === 'on',
+      certifiedFundsOnly: formData.get('certifiedFundsOnly') === 'on',
+      reason: String(formData.get('reason') ?? ''),
+    },
+    actor.id,
+    // The request-aware writer, which resolves the actor and their IP from
+    // the session. Injected so the module itself stays loadable outside a
+    // request — see `AuditWriter`.
+    audit,
+  )
+
+  revalidatePath(`/leases/${payer.leaseId}`)
+  revalidatePath('/money')
+
+  if (!result.ok) return { error: result.error }
+  return {
+    notice:
+      result.linksRevoked > 0
+        ? `Saved, and confirmed with the payment provider. ${result.linksRevoked} live pay-now ${
+            result.linksRevoked === 1 ? 'link was' : 'links were'
+          } revoked.`
+        : 'Saved, and confirmed with the payment provider.',
+  }
 }

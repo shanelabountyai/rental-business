@@ -69,6 +69,10 @@ export interface PaymentView {
   cardFeeCents: number
   cardFeePermitted: boolean
   hasPaymentMethod: boolean
+  /// PAY-12's legal-action controls (R-047). `blockPartial` is already
+  /// folded into `allowsPartial`; these are carried so a screen can explain
+  /// itself rather than silently offering nothing.
+  hold: { blockOnline: boolean; blockPartial: boolean; certifiedFundsOnly: boolean }
 }
 
 /**
@@ -91,6 +95,9 @@ export async function paymentView(scope: TenantScope): Promise<PaymentView | nul
       id: true,
       leaseId: true,
       collectionMethod: true,
+      collectionPaused: true,
+      blockPartialPayments: true,
+      certifiedFundsOnly: true,
       stripeCustomerId: true,
       defaultPaymentMethodId: true,
       debitDay: true,
@@ -145,11 +152,21 @@ export async function paymentView(scope: TenantScope): Promise<PaymentView | nul
   // The owner's switch travels with the facts (R-039a). Without this the
   // flag would be a column nothing reads - and `validatePaymentAmount` is
   // where it has to bite, so a hand-crafted request cannot get around it.
+  // PAY-12's hold travels with the facts too (R-047). `blockPartial` reaches
+  // `payable` as `requireFullBalance` because they mean the same thing to
+  // the arithmetic - take it all or none - even though they are deliberately
+  // separate columns: one is an owner's commercial preference, the other is
+  // a legal control, and lifting the hold must not clear the preference.
+  const hold = {
+    blockOnline: payer.collectionPaused,
+    blockPartial: payer.blockPartialPayments,
+    certifiedFundsOnly: payer.certifiedFundsOnly,
+  }
   const limits = payable({
     method,
     balanceCents: balance,
     inFlightCents,
-    requireFullBalance: payer.lease.requireFullBalance,
+    requireFullBalance: payer.lease.requireFullBalance || hold.blockPartial,
   })
 
   // D-4: whether the tenant may be charged the card cost is a jurisdiction
@@ -200,11 +217,28 @@ export async function paymentView(scope: TenantScope): Promise<PaymentView | nul
         }
       })
       .filter((charge) => charge.outstandingCents > 0),
+    // EVERY RAIL CLOSES UNDER A BLOCKING HOLD (R-047). The screen must not
+    // offer what the write path will refuse - a form that submits and then
+    // says "not available" teaches a tenant the product is broken rather
+    // than that something has changed about their account.
     rails: railsFor({
       method,
       cardPermitted: cardRule.cardSurchargePermitted,
       retailCashConfigured: RETAIL_CASH_CONFIGURED,
-    }),
+    }).map((rail) =>
+      hold.blockOnline || hold.certifiedFundsOnly
+        ? {
+            ...rail,
+            available: false,
+            unavailableReason: hold.certifiedFundsOnly
+              ? 'This account can only be paid by cashier’s cheque or money order.'
+              : 'Online payments are not available on this account.',
+          }
+        : rail,
+    ),
+    /// PAY-12's switches, so a screen can say plainly that nothing can be
+    /// paid here rather than rendering a form with every rail greyed out.
+    hold,
     cardFeeCents: fee.feeCents,
     cardFeePermitted: fee.permitted,
     hasPaymentMethod: payer.stripeCustomerId != null,
