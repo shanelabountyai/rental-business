@@ -343,8 +343,19 @@ test.describe('creating a property', () => {
     // failure mode the afterAll fix above exists to prevent, and this test
     // hit it directly while this fix was being developed.
     const streetNumber = Math.floor(Math.random() * 9000) + 100
-    const originalName = `Original House ${streetNumber}`
-    const secondName = `Second House ${streetNumber}`
+    // THE NAMES GET A UUID, NOT THE STREET NUMBER, and that is a real fix
+    // rather than belt-and-braces. One run in nine thousand drew a number a
+    // previous run had already used, and `findFirst({ where: { name } })`
+    // then found THAT run's leftover row - deactivated, months old - and the
+    // "it was not created yet" assertion failed against somebody else's
+    // debris. It surfaced once as a flaky test during R-044's sweep, which is
+    // exactly how a one-in-nine-thousand collision announces itself in a
+    // shared database that never gets emptied. The street number stays random
+    // because the duplicate-ADDRESS warning is what is under test; the name
+    // only has to be unique.
+    const stamp = randomUUID().slice(0, 8)
+    const originalName = `Original House ${stamp}`
+    const secondName = `Second House ${stamp}`
     const existing = await seedProperty(entity.id, {
       name: originalName,
       addressLine1: `${streetNumber} Elm Street`,

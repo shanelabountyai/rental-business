@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { BillingRuns } from '@/components/billing/billing-runs.tsx'
 import { WaiverPattern } from '@/components/money/waiver-pattern.tsx'
 import { requirePermission } from '@/lib/auth/guard.ts'
@@ -13,9 +14,9 @@ export const metadata = { title: 'Money — Rental Operations' }
 // visitor is staff; this proves they may see THIS section (ROLE-01).
 //
 // R-036 fills in the Billing Runs half. The rent roll and delinquency aging
-// named in PAY-06 are R-044's; this is the operational screen for the
-// subscription layer underneath them - what Stripe is actually billing, and
-// where it has stopped agreeing with the lease.
+// named in PAY-06 live at /money/rent-roll (R-044); this is the operational
+// screen for the subscription layer underneath them - what Stripe is actually
+// billing, and where it has stopped agreeing with the lease.
 
 export default async function MoneyPage() {
   const actor = await requirePermission('ledger.read')
@@ -31,8 +32,14 @@ export default async function MoneyPage() {
         <h1 className="text-2xl font-semibold tracking-tight">Money</h1>
         <p className="text-muted-foreground text-sm">
           What Stripe is billing, and where it has stopped agreeing with the
-          lease. The rent roll and delinquency aging are <code className="font-mono">R-044</code>.
+          lease.
         </p>
+        <Link
+          href="/money/rent-roll"
+          className="focus-visible:ring-ring w-fit text-sm underline underline-offset-4 focus-visible:ring-2 focus-visible:outline-none"
+        >
+          Rent roll and delinquency aging
+        </Link>
       </header>
 
       <BillingRuns

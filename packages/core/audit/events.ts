@@ -232,6 +232,12 @@ export const AUDIT_ACTIONS = [
   /// not evidence themselves, but a message sent from one is - and "what did
   /// this template say on the day it went out" is unanswerable from a row
   /// that has since been edited.
+  /// R-044: one press sent a templated reminder to a selection of tenancies.
+  /// Records what was REQUESTED, what was sent, and every skip with its
+  /// reason - "why did this tenant not get the reminder we sent everybody"
+  /// is the question asked three weeks later, and a bare count cannot
+  /// answer it.
+  'message.bulk_sent',
   'template.saved',
   /// R-049: a translation was marked approved for a LEGAL notice. THE most
   /// consequential row in this area. The product cannot verify an attorney

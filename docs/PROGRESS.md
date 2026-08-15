@@ -2131,3 +2131,41 @@ A visually-hidden `<input type="radio">` inside the styled label buys all four b
 - **Sending from the library is R-044's**, which this was pulled ahead of. The templates render and preview; nothing yet dispatches one to a selection of tenants.
 - **`company.phone` is the one merge field with nothing behind it.** `Property` has no contact number; it resolves to null, so the preview shows the token and the send path would refuse. R-081's property contact details is where it gets a value.
 - **No template is seeded.** The library starts empty on purpose, exactly as `SCHEDULED_JOBS` and the notification registry do — the first template is the rent reminder somebody retypes every month, and guessing their wording is worse than an empty list.
+
+## R-044 — Rent roll and aged delinquency
+**Commit:** `pending`  ·  **Date:** 2026-08-15
+
+**What it built.** The Monday-morning report: every live tenancy with rent, balance, how late it is, autopay, deposit held and subsidy portion; delinquency aged into PAY-06's buckets; a CSV export; and the one press that chases everybody past grace.
+
+### The distinction the whole item is shaped around
+
+**"Which bucket" and "past grace" are different questions.** The 0–5 / 6–15 / 16–30 / 30+ buckets are counted flat from the due date — an operational view of how long money has been outstanding, with no statute involved. *Past grace* is a legal line that moves by jurisdiction, read from the versioned `JurisdictionRule.graceDays` (D-4).
+
+Texas grants **one** day. So a tenant one day late is in the first late bucket **and must not be chased** — and a screen that treats bucket membership as chaseable is chasing tenants who are not late by the only definition that matters. `bucket` and `pastGrace` are computed separately and never derived from one another; `graceDays: null` (a state nobody configured) never resolves to "chase them", the same call `assessNsfFee` and `assessLateFees` already make; and grace is strictly-greater-than, so the last day of the period is still inside it.
+
+**Aged from the OLDEST unpaid charge.** A tenant who has paid this month while March remains outstanding is months late, not current — taking the newest charge reports the exact opposite, which is the shape of error that makes a delinquency report worse than no report. A credit balance is checked first and reports as current, so an overpaying tenant is never listed late because an old charge row is still on the books.
+
+### What it decided
+
+- **Four bulk reads, not a query per lease.** Jurisdiction rules are read once for every state involved and resolved per property in memory. The loop version is 200 round trips at 50 units for a screen somebody opens at 6am every Monday, and it degrades exactly as the portfolio grows.
+- **The bulk chase sends to an explicit selection, never to a filter.** A filter re-evaluated at send time can have changed since the page rendered — somebody pays at 6:02am — and the sender would have chased a tenant who is not on the list they were looking at.
+- **Past grace is re-checked server-side immediately before sending**, from the same core function the screen used. The checkbox is an affordance; a stale page or a crafted post must not be able to cause a chase.
+- **Each lease is authorised against its own property.** "You hold `message.send` somewhere" is not permission to message *here*, and a bulk action taking ids from a form is exactly where that distinction gets lost.
+- **A recipient with an unfillable merge field is skipped, not sent.** R-049's renderer reports what it could not fill precisely so this caller can refuse; one tenant receiving "You owe {{balance.total}}" undoes more trust than the whole batch builds.
+- **Skips are recorded with reasons, not counted.** "Why did this tenant not get the reminder we sent everybody" is asked three weeks later, and a bare count cannot answer it.
+- **Rows that cannot be chased have no checkbox at all**, not a disabled one — nothing the user could do would make them selectable, so a control that looks available and refuses is worse than none. The reason is written into the row instead.
+- **CSV is injection-guarded.** Excel, Numbers and Sheets execute a cell beginning `=`, `+`, `-` or `@`; this file leaves the building and is opened by a lender with no reason to distrust it. The realistic vector is not a malicious tenant name but a property called "-Cedar Row".
+
+### Found along the way
+
+- **Three resource-less permission checks, all mine, all the same class.** The page, the export route and the send action each used `requirePermission`/`actorCan` with no resource. A property-scoped manager — the exact person whose job this screen is — was redirected to `/no-access` by two of them and shown a report with no chase controls by the third. The messages inbox documents this trap in its own header; the rent roll is the same shape (a list filtered to what you may see) and repeated it three times. Fixing the action went further than the test required: per-lease authorisation now refuses a lease outside the caller's scope outright.
+- **A negative number is not a formula.** The CSV injection guard and `csvCents` were each correct alone and wrong together: a credit balance is negative, `-` is a formula marker, and guarding it made the one column a lender most wants to sum import as text. Caught by a test that renders a credit balance through both functions at once.
+- **The first draft of the spec guessed Texas's grace period at five days.** It is one. Every assertion inverted, and the fix was to read the seeded value rather than assume it.
+- **A tenant named "Within" collided with the screen's own words.** `getByRole('row', { name: /Within/ })` matched every row, because each renders "still within grace" into its accessible name. Fixture names are stamped now.
+- **A pre-existing flake in `properties.spec.ts`, surfaced by this sweep and fixed.** The duplicate-address test drew a random street number out of 9,000 and built its property NAMES from it, then asserted `findFirst({ where: { name } })` was null. One run in nine thousand draws a number a previous run used, finds that run's deactivated leftover row, and fails against somebody else's debris. Its own comment already anticipated address collisions; the names needed the same treatment, and now carry a UUID. This is why a flaky test is read rather than re-run: the sweep still exits 0.
+
+### What it left behind
+
+- **A courtesy reminder before grace has no path here.** This action is the delinquency chase and enforces past-grace; a friendly nudge on day one is a per-tenant message from the thread, which already exists.
+- **RPT-02's remainder:** an arbitrary date range and a PDF. This is the live report; "as of last month end" and the printable version are not built.
+- **`company.phone` still has nothing behind it** (R-049's gap), so a template using it is skipped by the bulk send rather than sent with a hole.

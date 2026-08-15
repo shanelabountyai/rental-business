@@ -829,6 +829,44 @@ export const chargebackPostedTemplate: NotificationTemplate<ChargebackPostedCont
   },
 }
 
+/// Context for `comms.managed_template` (COMM-03, R-044). Already rendered -
+/// see the template below.
+export interface ManagedTemplateContext {
+  subject: string | null
+  body: string
+}
+
+/**
+ * The carrier for a MANAGED template (R-044).
+ *
+ * ==========================================================================
+ * IT RENDERS NOTHING, AND THAT IS THE POINT.
+ *
+ * Managed templates are database rows a property manager wrote, with their
+ * own merge-field catalogue, their own validation and their own translation
+ * rules (D-44). All of that runs in `renderForRecipient` BEFORE the engine is
+ * called, because it needs a database and this file is pure.
+ *
+ * So this template exists purely to give the notification engine - which
+ * requires a registered `templateKey` and refuses an unknown one - something
+ * to dispatch. Re-rendering here would be a second implementation of merge
+ * fields living where nothing can test it against real data.
+ *
+ * The SMS branch drops the subject rather than prefixing it: a subject line
+ * is an email concept, and repeating it as the first line of a text is how a
+ * 160-character segment becomes three.
+ * ==========================================================================
+ */
+export const managedTemplate: NotificationTemplate<ManagedTemplateContext> = {
+  key: 'comms.managed_template',
+  category: 'rent_reminder',
+  channels: ['SMS', 'EMAIL', 'PORTAL'],
+  render: (context, channel) =>
+    channel === 'SMS'
+      ? { body: context.body }
+      : { subject: context.subject ?? undefined, body: context.body },
+}
+
 export const TEMPLATES: Readonly<Record<string, NotificationTemplate<never>>> = {
   [vendorDeclinedTemplate.key]:
     vendorDeclinedTemplate as unknown as NotificationTemplate<never>,
@@ -856,6 +894,8 @@ export const TEMPLATES: Readonly<Record<string, NotificationTemplate<never>>> = 
     paymentReturnedTemplate as unknown as NotificationTemplate<never>,
   [chargebackPostedTemplate.key]:
     chargebackPostedTemplate as unknown as NotificationTemplate<never>,
+  [managedTemplate.key]:
+    managedTemplate as unknown as NotificationTemplate<never>,
 }
 
 export class UnknownTemplateError extends Error {
