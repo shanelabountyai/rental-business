@@ -3,32 +3,58 @@ name: CI
 on:
   push:
     branches: [main]
+    # A docs-only push runs nothing. This repo's own convention produces those
+    # deliberately and often: every completed item records its commit SHA in a
+    # small follow-up commit touching only docs/PROGRESS.md, and paying ~30
+    # minutes of Actions time to prove a markdown edit did not break Postgres
+    # is the clearest waste in the whole pipeline.
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
   pull_request:
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
 
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# TWO JOBS, SPLIT BY WHAT THEY COST.
+#
+# `verify` is the one that has to be fast, because it runs on every push and
+# it is what actually catches mistakes: a migration that will not apply to an
+# empty database, schema drift, a type error, a failing unit test, a broken
+# Server→Client boundary. None of that needs a browser.
+#
+# `e2e` is the 25-minute half — Playwright, axe and Lighthouse — and it only
+# runs where the wait is worth it: merges to main, and pull requests that
+# somebody has marked ready for review. A draft PR is a work in progress, and
+# charging half an hour of Actions time per push to a draft is how people stop
+# pushing drafts.
+#
+# THEY DO NOT SHARE A FILESYSTEM. Each job gets a fresh runner, so the second
+# repeats checkout, install, env and database setup. That duplication is
+# unavoidable rather than an oversight, and it is why `verify` gating `e2e`
+# (`needs:`) is worth it: a type error should never cost a Playwright run.
+
 jobs:
   verify:
+    name: Lint, types, unit tests, build
     runs-on: ubuntu-latest
 
-    # 60 minutes, and the number is measured - twice. It was set to 45 from
-    # runs of 28-31 minutes, and the very next green run took 35m39s, which is
-    # only 21% of headroom. The suite grows every item; a ceiling sized to
-    # today's slowest run is the same mistake as a test timeout sized to a
-    # quiet machine, which this repo has now made three times (R-102b, the
-    # R-040e follow-up, the soft-delete poll).
+    # 20 minutes against runs of roughly 6-8. Sized well above the observed
+    # cost on purpose - a ceiling set at today's slowest run is the same
+    # mistake as a test timeout sized to a quiet machine, which this repo has
+    # made three times (R-102b, the R-040e follow-up, the soft-delete poll).
     #
     # IT EXISTS BECAUSE A JOB WITHOUT ONE INHERITS GITHUB'S 6-HOUR MAXIMUM, and
     # one run did exactly that - 6h00m24s before being cancelled. On a private
     # repo those minutes come out of the account's allowance, so a single hung
     # run costs more than a dozen healthy ones and can exhaust the plan; every
     # push after it then refuses to start with a billing error that looks
-    # nothing like the cause. Capping the damage is worth more than the small
-    # chance of cutting off a legitimately slow run, which fails loudly and can
-    # be re-run. 60 still caps a hang at an hour instead of six.
-    timeout-minutes: 60
+    # nothing like the cause.
+    timeout-minutes: 20
 
     # Throwaway Postgres so migrations are proven to apply from scratch and any
     # raw-SQL constraints in them are exercised for real.
@@ -76,15 +102,22 @@ jobs:
       - run: npm run db:generate
 
       # Fails if a migration is missing, out of order, or does not apply cleanly
-      # to an empty database. No-op until R-002 creates the first one.
+      # to an empty database.
       - name: Apply migrations
         run: npx dotenv -e .env.local -- npx prisma migrate deploy --schema packages/db/prisma/schema.prisma
 
+      # Roles are DATA (D-5): a permission added to the PERMISSIONS constant
+      # does nothing until the Role rows carry it. R-049 learned this the hard
+      # way - `template.write` existed in code and the page it guarded simply
+      # never rendered.
       - name: Seed reference data
         run: npm run db:seed
 
       # Catches a schema.prisma edit that was never turned into a migration:
       # exit code 2 means the migrated database and the datamodel disagree.
+      # This check CANNOT run locally in any meaningful way - migrations are
+      # only ever applied incrementally to a branch that already has data - so
+      # losing it would make a whole class of defect invisible until deploy.
       - name: Check for schema drift
         run: |
           npx dotenv -e .env.local -- npx prisma migrate diff \
@@ -95,12 +128,88 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm run test
+
+      # A DISTINCT CHECK, not a formality. `typecheck` and vitest both miss the
+      # Next.js boundary rules: a `'use server'` module exporting a sync
+      # function, and a plain function passed across the Server→Client
+      # boundary, each pass both and fail here.
       - run: npm run build
+
+      # No database and no browser needed, so it belongs on the fast job where
+      # the answer arrives on every push rather than only on ready PRs.
+      - name: Dependency audit (report only)
+        continue-on-error: true
+        run: npm audit --audit-level=moderate
+
+  e2e:
+    name: End-to-end, axe, Lighthouse
+    runs-on: ubuntu-latest
+    needs: verify
+
+    # Merges to main always. Pull requests only once somebody marks them ready
+    # for review - `draft == false`. Note the check has to tolerate a null:
+    # on a `push` event there is no pull_request object at all, which is why
+    # the ref test comes first and short-circuits.
+    if: github.ref == 'refs/heads/main' || github.event.pull_request.draft == false
+
+    # 60 minutes, and the number is measured - twice. It was set to 45 from
+    # runs of 28-31 minutes, and the very next green run took 35m39s, which is
+    # only 21% of headroom. The suite grows every item.
+    timeout-minutes: 60
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      # Repeated in full because jobs get separate runners and share no
+      # filesystem. Any change here must be made in `verify` too - the two
+      # env blocks disagreeing would mean the suite tests a different database
+      # than the one the migrations were applied to.
+      - name: Provision CI env
+        run: |
+          {
+            echo 'DATABASE_URL=postgresql://ci:ci@localhost:5432/ci'
+            echo 'DIRECT_URL=postgresql://ci:ci@localhost:5432/ci'
+            echo "AUTH_SECRET=$(openssl rand -base64 32)"
+            echo 'AUTH_URL=http://localhost:3100'
+          } > .env.local
+
+      - run: npm run db:generate
+
+      - name: Apply migrations
+        run: npx dotenv -e .env.local -- npx prisma migrate deploy --schema packages/db/prisma/schema.prisma
+
+      - name: Seed reference data
+        run: npm run db:seed
 
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 
-      # Covers the axe accessibility scan and the smoke suite.
+      # No `npm run build` step before this, deliberately. `playwright.config
+      # .ts` starts `npm run e2e:server`, which builds AND serves - a
+      # production build, never `next dev` (R-042) - so a separate build here
+      # would compile the app twice for nothing.
       - name: End-to-end + axe
         run: npm run test:e2e
 
@@ -114,7 +223,3 @@ jobs:
           name: playwright-report
           path: playwright-report/
           retention-days: 7
-
-      - name: Dependency audit (report only)
-        continue-on-error: true
-        run: npm audit --audit-level=moderate
