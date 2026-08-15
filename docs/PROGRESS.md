@@ -2096,7 +2096,7 @@ A visually-hidden `<input type="radio">` inside the styled label buys all four b
 - **Reversing a chargeback is not built.** D-11 says corrections are reversing entries; a disputed repair charge currently needs the general ledger-adjustment path.
 
 ## R-049 — Message templates with merge fields and preview
-**Commit:** `pending`  ·  **Date:** 2026-08-15
+**Commit:** `d1483e3`  ·  **Date:** 2026-08-15
 
 **What it built.** A managed template library a property manager writes in: `MessageTemplate` and its translations, a closed merge-field catalogue, validation, live preview against a real tenancy, and the approval control that COMM-03's language rule rests on.
 
