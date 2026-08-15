@@ -63,10 +63,120 @@ const NEXT_BUTTON =
   'bg-primary text-primary-foreground focus-visible:ring-ring flex min-h-12 items-center justify-center rounded-md px-6 py-2 text-base font-medium disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none'
 const BACK_BUTTON =
   'border-input hover:bg-accent focus-visible:ring-ring flex min-h-12 items-center justify-center rounded-md border px-6 py-2 text-base font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none'
+/// The visual shape of a choice. Applied to a `<label>` now rather than a
+/// `<button>` - see `Choice` below for why - so the focus ring has to come
+/// from `focus-within`, because the thing actually receiving focus is the
+/// radio inside it.
 const OPTION_BUTTON = (selected: boolean) =>
-  `focus-visible:ring-ring flex min-h-12 w-full items-center rounded-md border px-4 py-2 text-left text-base focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none ${
+  `focus-within:ring-ring relative flex min-h-12 w-full cursor-pointer items-center rounded-md border px-4 py-2 text-left text-base focus-within:ring-2 focus-within:ring-offset-2 ${
     selected ? 'border-foreground bg-accent font-medium' : 'hover:bg-accent'
   }`
+
+/**
+ * One option in a group, as a REAL radio (R-101b).
+ *
+ * ==========================================================================
+ * These were `<button type="button">` with an onClick, styled to look
+ * selected. Visually identical, and wrong in four ways that only a keyboard
+ * or screen-reader user ever meets:
+ *
+ *   - announced as "button", never as "radio, 3 of 7", so there is no way to
+ *     know how many choices exist or which is current;
+ *   - the selected one announced nothing at all - the styling carried the
+ *     entire meaning, and styling is not exposed to assistive technology;
+ *   - no arrow-key navigation, which is how radio groups are operated;
+ *   - every option a separate tab stop, so reaching the Next button on the
+ *     category step took seven presses.
+ *
+ * A visually-hidden `<input type="radio">` inside the styled label buys all
+ * four back from the platform, with no roving-tabindex code to maintain. The
+ * `<fieldset>`/`<legend>` around each group was already correct and is what
+ * makes the radio's group name announced.
+ * ==========================================================================
+ */
+function Choice({
+  name,
+  value,
+  checked,
+  onSelect,
+  children,
+}: {
+  name: string
+  value: string
+  checked: boolean
+  onSelect: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <label className={OPTION_BUTTON(checked)}>
+      <input
+        type="radio"
+        name={name}
+        value={value}
+        checked={checked}
+        onChange={onSelect}
+        // Invisible but COVERING THE WHOLE LABEL, rather than `sr-only`.
+        //
+        // Hidden from sight, never from the accessibility tree - `hidden` or
+        // `display:none` would remove the radio entirely and give back the
+        // problem this exists to fix. But `sr-only` clips it to one pixel, so
+        // every real click lands on the label instead of the control: the
+        // browser forwards that, and automation reports the label
+        // "intercepts pointer events". Stretching the transparent input over
+        // the label means the thing being clicked IS the radio.
+        className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+      />
+      {children}
+    </label>
+  )
+}
+
+/**
+ * A Next button that stays reachable when it cannot yet be used (R-101b).
+ *
+ * `disabled` removes a control from the tab order, so a keyboard user tabs
+ * straight past the only thing standing between them and submitting, with
+ * nothing said about why. `aria-disabled` keeps it focusable and announced as
+ * unavailable, and the reason is tied to it with `aria-describedby` so it is
+ * read out rather than merely displayed.
+ *
+ * The reason sits in a live region (R-101), so it is also announced the
+ * moment it changes.
+ */
+function NextButton({
+  onClick,
+  blockedBy,
+  label = 'Next',
+}: {
+  onClick: () => void
+  /// Why it cannot be pressed yet, or null when it can.
+  blockedBy: string | null
+  label?: string
+}) {
+  const id = `next-blocked-${label.replace(/\W+/g, '-').toLowerCase()}`
+  return (
+    <div className="flex flex-col gap-2">
+      <button
+        type="button"
+        className={`${NEXT_BUTTON} ${blockedBy ? 'opacity-50' : ''}`}
+        aria-disabled={blockedBy ? true : undefined}
+        aria-describedby={blockedBy ? id : undefined}
+        onClick={() => {
+          if (!blockedBy) onClick()
+        }}
+      >
+        {label}
+      </button>
+      <div role="status" className="contents">
+        {blockedBy && (
+          <p id={id} className="text-muted-foreground text-sm">
+            {blockedBy}
+          </p>
+        )}
+      </div>
+    </div>
+  )
+}
 
 export function MaintenanceWizard() {
   const router = useRouter()
@@ -189,28 +299,25 @@ export function MaintenanceWizard() {
           <legend className="text-lg font-semibold">What&rsquo;s the problem with?</legend>
           <div className="flex flex-col gap-2">
             {MAINTENANCE_CATEGORIES.map((value) => (
-              <button
+              <Choice
                 key={value}
-                type="button"
-                className={OPTION_BUTTON(category === value)}
-                onClick={() => {
+                name="category"
+                value={value}
+                checked={category === value}
+                onSelect={() => {
                   setCategory(value)
                   setPromptAnswers({})
                   setTroubleshooting({})
                 }}
               >
                 {CATEGORY_LABELS[value]}
-              </button>
+              </Choice>
             ))}
           </div>
-          <button
-            type="button"
-            className={NEXT_BUTTON}
-            disabled={!category}
+          <NextButton
             onClick={goToPromptsOrLater}
-          >
-            Next
-          </button>
+            blockedBy={category ? null : 'Choose what the problem is to continue.'}
+          />
         </fieldset>
       )}
 
@@ -222,16 +329,17 @@ export function MaintenanceWizard() {
               {prompt.type === 'select' ? (
                 <div className="flex flex-col gap-2">
                   {prompt.options?.map((option) => (
-                    <button
+                    <Choice
                       key={option}
-                      type="button"
-                      className={OPTION_BUTTON(promptAnswers[prompt.id] === option)}
-                      onClick={() =>
+                      name={`prompt-${prompt.id}`}
+                      value={option}
+                      checked={promptAnswers[prompt.id] === option}
+                      onSelect={() =>
                         setPromptAnswers((prev) => ({ ...prev, [prompt.id]: option }))
                       }
                     >
                       {option}
-                    </button>
+                    </Choice>
                   ))}
                 </div>
               ) : (
@@ -251,14 +359,14 @@ export function MaintenanceWizard() {
             <button type="button" className={BACK_BUTTON} onClick={() => setStep('category')}>
               Back
             </button>
-            <button
-              type="button"
-              className={NEXT_BUTTON}
-              disabled={CLARIFYING_PROMPTS[category].some((p) => !promptAnswers[p.id]?.trim())}
+            <NextButton
               onClick={afterPrompts}
-            >
-              Next
-            </button>
+              blockedBy={
+                CLARIFYING_PROMPTS[category].some((p) => !promptAnswers[p.id]?.trim())
+                  ? 'Answer every question above to continue.'
+                  : null
+              }
+            />
           </div>
         </div>
       )}
@@ -282,21 +390,21 @@ export function MaintenanceWizard() {
                 </div>
               </div>
               <div className="flex gap-3">
-                <button
-                  type="button"
-                  className={OPTION_BUTTON(troubleshooting[troubleshootingStep.id] === 'TRIED')}
-                  onClick={() =>
+                <Choice
+                  name={`troubleshooting-${troubleshootingStep.id}`}
+                  value="TRIED"
+                  checked={troubleshooting[troubleshootingStep.id] === 'TRIED'}
+                  onSelect={() =>
                     setTroubleshooting((prev) => ({ ...prev, [troubleshootingStep.id]: 'TRIED' }))
                   }
                 >
                   I tried this
-                </button>
-                <button
-                  type="button"
-                  className={OPTION_BUTTON(
-                    troubleshooting[troubleshootingStep.id] === 'DECLINED',
-                  )}
-                  onClick={() =>
+                </Choice>
+                <Choice
+                  name={`troubleshooting-${troubleshootingStep.id}`}
+                  value="DECLINED"
+                  checked={troubleshooting[troubleshootingStep.id] === 'DECLINED'}
+                  onSelect={() =>
                     setTroubleshooting((prev) => ({
                       ...prev,
                       [troubleshootingStep.id]: 'DECLINED',
@@ -304,7 +412,7 @@ export function MaintenanceWizard() {
                   }
                 >
                   Skip this
-                </button>
+                </Choice>
               </div>
             </fieldset>
           ))}
@@ -312,14 +420,14 @@ export function MaintenanceWizard() {
             <button type="button" className={BACK_BUTTON} onClick={() => setStep('prompts')}>
               Back
             </button>
-            <button
-              type="button"
-              className={NEXT_BUTTON}
-              disabled={steps.some((s) => !troubleshooting[s.id])}
+            <NextButton
               onClick={() => setStep('photos')}
-            >
-              Next
-            </button>
+              blockedBy={
+                steps.some((s) => !troubleshooting[s.id])
+                  ? 'Tell us whether you tried each step, or skip it, to continue.'
+                  : null
+              }
+            />
           </div>
         </div>
       )}
@@ -395,33 +503,33 @@ export function MaintenanceWizard() {
           </legend>
           <p>If not, we will need to schedule a time that works for you.</p>
           <div className="flex flex-col gap-2">
-            <button
-              type="button"
-              className={OPTION_BUTTON(entryPermission === true)}
-              onClick={() => setEntryPermission(true)}
+            <Choice
+              name="entry-permission"
+              value="yes"
+              checked={entryPermission === true}
+              onSelect={() => setEntryPermission(true)}
             >
               Yes, you can enter if I am not home
-            </button>
-            <button
-              type="button"
-              className={OPTION_BUTTON(entryPermission === false)}
-              onClick={() => setEntryPermission(false)}
+            </Choice>
+            <Choice
+              name="entry-permission"
+              value="no"
+              checked={entryPermission === false}
+              onSelect={() => setEntryPermission(false)}
             >
               No, please schedule a time with me
-            </button>
+            </Choice>
           </div>
           <div className="flex gap-3">
             <button type="button" className={BACK_BUTTON} onClick={() => setStep('photos')}>
               Back
             </button>
-            <button
-              type="button"
-              className={NEXT_BUTTON}
-              disabled={entryPermission === undefined}
+            <NextButton
               onClick={() => setStep('pets')}
-            >
-              Next
-            </button>
+              blockedBy={
+                entryPermission === undefined ? 'Choose yes or no to continue.' : null
+              }
+            />
           </div>
         </fieldset>
       )}
@@ -431,23 +539,25 @@ export function MaintenanceWizard() {
           <legend className="text-lg font-semibold">Do you have a pet at home?</legend>
           <p>Whoever comes by needs to know before they open a door.</p>
           <div className="flex flex-col gap-2">
-            <button
-              type="button"
-              className={OPTION_BUTTON(petWarning === true)}
-              onClick={() => setPetWarning(true)}
+            <Choice
+              name="pet-warning"
+              value="yes"
+              checked={petWarning === true}
+              onSelect={() => setPetWarning(true)}
             >
               Yes
-            </button>
-            <button
-              type="button"
-              className={OPTION_BUTTON(petWarning === false)}
-              onClick={() => {
+            </Choice>
+            <Choice
+              name="pet-warning"
+              value="no"
+              checked={petWarning === false}
+              onSelect={() => {
                 setPetWarning(false)
                 setPetNote('')
               }}
             >
               No
-            </button>
+            </Choice>
           </div>
           {petWarning === true && (
             <div className="flex flex-col gap-1.5">
@@ -467,14 +577,11 @@ export function MaintenanceWizard() {
             <button type="button" className={BACK_BUTTON} onClick={() => setStep('entry')}>
               Back
             </button>
-            <button
-              type="button"
-              className={NEXT_BUTTON}
-              disabled={petWarning === undefined}
+            <NextButton
+              label="Review"
               onClick={() => setStep('review')}
-            >
-              Review
-            </button>
+              blockedBy={petWarning === undefined ? 'Choose yes or no to continue.' : null}
+            />
           </div>
         </fieldset>
       )}

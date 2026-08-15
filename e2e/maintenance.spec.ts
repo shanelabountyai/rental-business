@@ -112,11 +112,11 @@ test.describe('submitting a request', () => {
     await page.goto('/portal/maintenance/new')
     await page.waitForTimeout(500)
 
-    await page.getByRole('button', { name: 'Locks & doors' }).click()
+    await page.getByRole('radio', { name: 'Locks & doors' }).check()
     await page.getByRole('button', { name: 'Next', exact: true }).click()
 
-    await page.getByRole('button', { name: "Won't lock" }).click()
-    await page.getByRole('button', { name: 'Front door' }).click()
+    await page.getByRole('radio', { name: "Won't lock" }).check()
+    await page.getByRole('radio', { name: 'Front door' }).check()
     await page.getByRole('button', { name: 'Next', exact: true }).click()
 
     // LOCKS has no troubleshooting script, so the wizard skips straight to
@@ -124,10 +124,10 @@ test.describe('submitting a request', () => {
     await expect(page.getByText('Add a photo (optional)')).toBeVisible()
     await page.getByRole('button', { name: 'Next', exact: true }).click()
 
-    await page.getByRole('button', { name: 'Yes, you can enter if I am not home' }).click()
+    await page.getByRole('radio', { name: 'Yes, you can enter if I am not home' }).check()
     await page.getByRole('button', { name: 'Next', exact: true }).click()
 
-    await page.getByRole('button', { name: 'No', exact: true }).click()
+    await page.getByRole('radio', { name: 'No', exact: true }).check()
     await page.getByRole('button', { name: 'Review' }).click()
 
     await expect(page.getByText('Locks & doors')).toBeVisible()
@@ -163,27 +163,32 @@ test.describe('submitting a request', () => {
     await page.goto('/portal/maintenance/new')
     await page.waitForTimeout(500)
 
-    await page.getByRole('button', { name: 'Electrical' }).click()
+    await page.getByRole('radio', { name: 'Electrical' }).check()
     await page.getByRole('button', { name: 'Next', exact: true }).click()
-    await page.getByRole('button', { name: 'One outlet' }).click()
-    await page.getByRole('button', { name: 'One room' }).click()
+    await page.getByRole('radio', { name: 'One outlet' }).check()
+    await page.getByRole('radio', { name: 'One room' }).check()
     await page.getByRole('button', { name: 'Next', exact: true }).click()
 
     // Electrical always shows breaker + GFCI. Answer only the first.
     await expect(page.getByText('Check the breaker panel')).toBeVisible()
     await page
       .locator('fieldset', { hasText: 'Check the breaker panel' })
-      .getByRole('button', { name: 'I tried this' })
-      .click()
+      .getByRole('radio', { name: 'I tried this' })
+      .check()
 
     const next = page.getByRole('button', { name: 'Next', exact: true })
-    await expect(next).toBeDisabled()
+    // `aria-disabled`, NOT `disabled` (R-101b). A disabled button leaves the
+    // tab order entirely, so a keyboard user tabs straight past the only
+    // thing between them and submitting, with nothing said about why. It
+    // stays focusable and announces the reason instead.
+    await expect(next).toHaveAttribute('aria-disabled', 'true')
+    await expect(page.getByText('Tell us whether you tried each step')).toBeVisible()
 
     await page
       .locator('fieldset', { hasText: 'Check for a GFCI reset button' })
-      .getByRole('button', { name: 'Skip this' })
-      .click()
-    await expect(next).toBeEnabled()
+      .getByRole('radio', { name: 'Skip this' })
+      .check()
+    await expect(next).not.toHaveAttribute('aria-disabled', 'true')
   })
 
   test('flags habitability language for triage, without showing it to the tenant', async ({
@@ -194,9 +199,9 @@ test.describe('submitting a request', () => {
     await page.goto('/portal/maintenance/new')
     await page.waitForTimeout(500)
 
-    await page.getByRole('button', { name: 'Appliance' }).click()
+    await page.getByRole('radio', { name: 'Appliance' }).check()
     await page.getByRole('button', { name: 'Next', exact: true }).click()
-    await page.getByRole('button', { name: 'Refrigerator' }).click()
+    await page.getByRole('radio', { name: 'Refrigerator' }).check()
     await page
       .getByLabel("What's happening? A sentence or two is fine.")
       .fill('There is mold growing inside near the seal.')
@@ -204,9 +209,9 @@ test.describe('submitting a request', () => {
 
     // Refrigerator has no troubleshooting script - straight to photos.
     await page.getByRole('button', { name: 'Next', exact: true }).click()
-    await page.getByRole('button', { name: 'No, please schedule a time with me' }).click()
+    await page.getByRole('radio', { name: 'No, please schedule a time with me' }).check()
     await page.getByRole('button', { name: 'Next', exact: true }).click()
-    await page.getByRole('button', { name: 'No', exact: true }).click()
+    await page.getByRole('radio', { name: 'No', exact: true }).check()
     await page.getByRole('button', { name: 'Review' }).click()
     await page.getByRole('button', { name: 'Send request' }).click()
     await page.waitForURL(/\/portal\/maintenance\/[a-z0-9]+$/)
@@ -232,9 +237,9 @@ test.describe('submitting a request', () => {
     await page.goto('/portal/maintenance/new')
     await page.waitForTimeout(500)
 
-    await page.getByRole('button', { name: 'Pests or bugs' }).click()
+    await page.getByRole('radio', { name: 'Pests or bugs' }).check()
     await page.getByRole('button', { name: 'Next', exact: true }).click()
-    await page.getByRole('button', { name: 'Ants' }).click()
+    await page.getByRole('radio', { name: 'Ants' }).check()
     await page.getByLabel('Where have you seen them?').fill('Kitchen counter')
     await page.getByRole('button', { name: 'Next', exact: true }).click()
 
@@ -248,9 +253,9 @@ test.describe('submitting a request', () => {
     await expect(page.getByText('ants.jpg')).toBeVisible()
 
     await page.getByRole('button', { name: 'Next', exact: true }).click()
-    await page.getByRole('button', { name: 'Yes, you can enter if I am not home' }).click()
+    await page.getByRole('radio', { name: 'Yes, you can enter if I am not home' }).check()
     await page.getByRole('button', { name: 'Next', exact: true }).click()
-    await page.getByRole('button', { name: 'No', exact: true }).click()
+    await page.getByRole('radio', { name: 'No', exact: true }).check()
     await page.getByRole('button', { name: 'Review' }).click()
     await expect(page.getByText('1 attached')).toBeVisible()
     await page.getByRole('button', { name: 'Send request' }).click()

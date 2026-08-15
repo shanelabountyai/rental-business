@@ -1957,3 +1957,29 @@ The books must take the invoice: recording $1,000 of expense against a $600 bill
 **What it left behind.**
 - **R-101b — the maintenance wizard.** 22 `onClick` handlers across seven steps on the tenant's primary reporting path, plus toggle buttons where radios belong and disabled Next buttons that leave the tab order. Deliberately not attempted at the end of a long session: it is a rewrite of the surface a tenant reports a leak on, and half-doing that is worse than scheduling it.
 - **R-101c — the display and coverage sweep.** 40 raw `toISOString()` sites, four `friendlyDate` copies, two staff screens rendering UTC in as many words, and rolling both e2e assertions from 3 spec files to 33. The row that filed this said rolling them out *will* turn up real failures; that is the point, and it deserves room to act on what it finds.
+
+## R-101b — The wizard's choices become real radios
+**Commit:** *(recorded below)*  ·  **Date:** 2026-08-14
+
+**What it built.** Two accessibility fixes on the flow every non-emergency repair goes through, and both are the platform doing work the code was doing badly by hand.
+
+**Every option was a `<button>` styled to look selected.** Visually identical to a radio group, and wrong in four ways that only a keyboard or screen-reader user meets:
+
+- announced as *"button"*, never as *"radio, 3 of 7"* — no way to know how many choices exist or which is current;
+- the selected one announced **nothing**: the styling carried the entire meaning, and styling is not exposed to assistive technology;
+- no arrow-key navigation, which is how radio groups are operated;
+- every option its own tab stop, so reaching Next on the category step took **seven** presses.
+
+A visually-hidden `<input type="radio">` inside the styled label buys all four back from the platform, with no roving-tabindex code to maintain. The `<fieldset>`/`<legend>` around each group was already right and is what makes the group name announced.
+
+**`disabled` became `aria-disabled`.** A disabled button leaves the tab order entirely, so a keyboard user tabs straight past the only thing standing between them and submitting, and hears nothing about why. It now stays focusable, is announced as unavailable, and names the missing thing through `aria-describedby` — into a live region, so the reason is announced the moment it changes rather than merely appearing. That is R-101's primitive being used by the next thing to need it, which is what it was for.
+
+**A near-miss worth recording.** The radios were first hidden with `sr-only`, which is the reflex. `sr-only` clips an element to one pixel, so every real click landed on the *label* rather than the control — browsers forward that, so it looked fine by hand, and automation reported the label "intercepts pointer events". Stretching the transparent input across the label means the thing being clicked **is** the radio. The maintenance spec went from **4.3 minutes of timeouts to 16 seconds**.
+
+**What it decided.**
+- **The pre-hydration rewrite was deliberately not attempted.** The row's headline was "seven `onClick` steps", and converting a client-side multi-step wizard into server-rendered forms means URL-driven steps and server-side draft state across them — a feature, not a refactor. R-098 already fixed the case where pre-hydration genuinely carries risk: the emergency path, whose safety instructions had to exist as text immediately. On the ordinary flow the cost is a few seconds of inert UI on a slow phone, against a rewrite of the surface a tenant reports a leak on. Stated here rather than quietly dropped — if it is wanted, it is its own row with its own reasoning.
+- **The in-flight Submit stays `disabled`.** That one is correct: it prevents a double-submit, and its label changes to "Sending…" so the state is announced through the accessible name.
+- **`Choice` and `NextButton` are local to the wizard**, not promoted to shared components. One consumer each; promote them when a second flow needs the same shape rather than guessing at an API now.
+
+**What it left behind.**
+- **R-101c** — 40 raw `toISOString()` sites, four `friendlyDate` copies, two staff screens rendering UTC in as many words, and rolling `expectFocusSurvived()` / `expectAnnouncedInPlace()` from 3 spec files to 33.
