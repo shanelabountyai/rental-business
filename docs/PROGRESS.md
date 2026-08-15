@@ -2169,3 +2169,18 @@ Texas grants **one** day. So a tenant one day late is in the first late bucket *
 - **A courtesy reminder before grace has no path here.** This action is the delinquency chase and enforces past-grace; a friendly nudge on day one is a per-tenant message from the thread, which already exists.
 - **RPT-02's remainder:** an arbitrary date range and a PDF. This is the live report; "as of last month end" and the printable version are not built.
 - **`company.phone` still has nothing behind it** (R-049's gap), so a template using it is skipped by the bulk send rather than sent with a hole.
+
+## R-044 fix — ordinary rent has no Charge row
+**Commit:** `4e8497a`  ·  **Date:** 2026-08-15
+
+**What it found.** Building R-045's due-soon notice surfaced that R-044's delinquency aging was silently wrong for the single most common form of debt. D-11/D-40 mint no monthly `Charge` row for the subscription's own rent line — only the exceptions (a late fee, a proration, a chargeback) get one. `delinquencyFor` read only dated `Charge` rows, so a lease with a positive balance and no dated charge reported `current`, 0 days late, regardless of how overdue rent actually was.
+
+**Worse than silence.** A late fee's own `Charge.dueOn` is the day it was *assessed*, not the rent's due date. A tenancy overdue for a month, with a fee posted this morning, had one dated charge (the fee, dated today) — and aged from it, reporting zero days late on the exact day it was accruing fees for being late.
+
+**What it built.** `dueDateOnOrBefore`/`dueDateOnOrAfter` in `packages/core/scheduling` — the same day-of-month clamp `predebit.ts` and R-049's `template-values.ts` each already computed privately, now one tested pair. `delinquencyFor` takes the **earlier** of any dated charge and the nearest rent due date (from `Lease.rentDueDay`/`LeasePayer.debitDay`), never one or the other — so an existing late-fee charge can no longer mask older unlinked rent.
+
+**What it decided.**
+- **Documented limitation, not hidden.** The anchor can only reach the *most recent* due date — two unpaid months still under-report as one, because unlinked rent balance is a single number in this schema, not one row per missed period. Stated in `DelinquencyFacts`'s own comment. Closing it fully needs the billing provider to list every open invoice, not the one `getOpenInvoice` returns today.
+- **Proven with a realistic fixture.** Every existing R-044 e2e case seeded rent with a manually linked `Charge` row — unrealistic, and it never exercised the actual production shape. A new case seeds an unlinked ledger entry with no `Charge` at all and asserts it ages and becomes chaseable correctly.
+
+**What it left behind.** Itemizing more than one unpaid month by period remains future work, gated on the billing provider exposing every open invoice.
