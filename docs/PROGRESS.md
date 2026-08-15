@@ -2223,7 +2223,7 @@ Building the due-soon notice required reading how "when is rent due" is computed
 - Itemizing more than one unpaid rent period (R-044's own follow-up, above).
 
 ## R-046 — Pay-now magic links
-**Commit:** `pending`  ·  **Date:** 2026-08-15
+**Commit:** `e5a73fa`  ·  **Date:** 2026-08-15
 
 **What it built.** `/pay/<token>` — a standalone page that shows a tenant their balance and takes a payment, with no login at all. R-045's rent reminder now carries the link.
 
