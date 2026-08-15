@@ -1985,7 +1985,7 @@ A visually-hidden `<input type="radio">` inside the styled label buys all four b
 - **R-101c** — 40 raw `toISOString()` sites, four `friendlyDate` copies, two staff screens rendering UTC in as many words, and rolling `expectFocusSurvived()` / `expectAnnouncedInPlace()` from 3 spec files to 33.
 
 ## R-101c — One date formatter, and the timezone is not optional
-**Commit:** *(recorded below)*  ·  **Date:** 2026-08-15
+**Commit:** `38a5d54`  ·  **Date:** 2026-08-15
 
 **What it built.** The structural half of the timezone work: one `friendlyDate` in `packages/core/scheduling`, whose `timeZone` parameter is **required**.
 
