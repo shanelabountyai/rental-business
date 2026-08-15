@@ -7,6 +7,7 @@
 // timestamped, immutable history per tenancy, per property, per vendor -
 // regardless of channel."
 export * from './delivery-status.ts'
+export * from './merge-fields.ts'
 export * from './opt-out.ts'
 export * from './phone.ts'
 export * from './sms-intake.ts'

@@ -51,6 +51,19 @@ export const PERMISSIONS = [
   /// failure mode a resource-less check usually is.
   'jurisdiction.read',
   'jurisdiction.write',
+  /// Managed message templates (COMM-03, R-049). Authoring one is portfolio-
+  /// wide work, like a jurisdiction rule: a template is not owned by a
+  /// property, and the same violation notice is sent from all of them.
+  'template.write',
+  /// APPROVING A TRANSLATION IS ITS OWN PERMISSION, and privileged.
+  ///
+  /// COMM-03's rule - attorney-approved translations for legal notices,
+  /// machine translation for routine chat only - is enforced by a single
+  /// `approvedAt` timestamp. If everybody who can write a template can also
+  /// set that timestamp, the rule is decorative: the person who pasted a
+  /// machine translation in marks their own work approved and a defective
+  /// notice to vacate goes out in a language nobody with authority read.
+  'template.approve',
 ] as const
 
 export type Permission = (typeof PERMISSIONS)[number]
@@ -74,6 +87,11 @@ export function isPermission(value: string): value is Permission {
  */
 export const PRIVILEGED_PERMISSIONS: ReadonlySet<Permission> = new Set([
   'ledger.adjust',
+  // R-049. Signing off a legal translation is a claim that somebody with
+  // authority read it, and the product cannot verify that - it can only
+  // record who said so. A stolen session making that claim is the same class
+  // of harm as one moving money.
+  'template.approve',
   'fee.waive',
   'workorder.approve',
   'staff.manage',
@@ -162,6 +180,10 @@ export const ROLE_DEFINITIONS: Record<
       'notice.send',
       'message.read',
       'message.send',
+      /// Authors templates, does NOT approve legal translations - the same
+      /// split as jurisdiction read/write one line down, and for the same
+      /// reason: signing off legal wording is not day-to-day portfolio work.
+      'template.write',
       'task.read',
       'task.write',
       'staff.read',

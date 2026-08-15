@@ -194,6 +194,10 @@ describe('can — MFA gate (ROLE-05)', () => {
       'fee.waive',
       'ledger.adjust',
       'staff.manage',
+      // R-049. Signing off a legal translation is a claim that somebody with
+      // authority read it; the product can only record who said so, so the
+      // claim itself is protected like moving money is.
+      'template.approve',
       'workorder.approve',
     ])
   })

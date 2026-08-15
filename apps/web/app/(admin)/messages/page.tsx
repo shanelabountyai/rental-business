@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { requireScope } from '@/lib/auth/guard.ts'
+import { actorCan, requireScope } from '@/lib/auth/guard.ts'
 import { listThreads, unroutedCount } from '@/lib/comms/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 
@@ -32,9 +32,12 @@ function participantName(thread: {
 export default async function MessagesPage() {
   const { actor } = await requireScope('message.read')
   const scope = await currentScope(actor)
-  const [threads, unrouted] = await Promise.all([
+  const [threads, unrouted, canWriteTemplates] = await Promise.all([
     listThreads(scope),
     unroutedCount(),
+    // Portfolio-wide and resource-less, like the templates page itself: a
+    // template belongs to no property (R-049).
+    actorCan('template.write'),
   ])
 
   return (
@@ -45,6 +48,14 @@ export default async function MessagesPage() {
           Every conversation, whatever channel it came in on. Logged calls sit
           in the same history.
         </p>
+        {canWriteTemplates && (
+          <Link
+            href="/messages/templates"
+            className="focus-visible:ring-ring w-fit text-sm underline underline-offset-4 focus-visible:ring-2 focus-visible:outline-none"
+          >
+            Message templates
+          </Link>
+        )}
       </header>
 
       {unrouted > 0 && (

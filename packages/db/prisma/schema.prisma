@@ -347,27 +347,27 @@ enum ActorType {
 // ---------------------------------------------------------------------------
 
 model LegalEntity {
-  id              String          @id @default(cuid())
-  name            String
-  type            LegalEntityType
-  formationState  String? // two-letter, e.g. "TX"
-  registeredAgent String?
-  notes           String?
-  active          Boolean         @default(true)
+  id                      String          @id @default(cuid())
+  name                    String
+  type                    LegalEntityType
+  formationState          String? // two-letter, e.g. "TX"
+  registeredAgent         String?
+  notes                   String?
+  active                  Boolean         @default(true)
   /// MAINT-04's "my configured cost threshold": a work order estimated above
   /// this needs an explicit approval before it can be dispatched. Set on the
   /// ENTITY rather than the property or a global singleton because the LLC is
   /// this product's ownership boundary (Entity -> Property -> Unit) - an owner
   /// with a partner in one LLC and none in another genuinely wants different
   /// numbers. Null falls back to APPROVAL_DEFAULTS in packages/core/approvals.
-  approvalThresholdCents Int?
+  approvalThresholdCents  Int?
   /// How far actuals may exceed what was approved before it has to go back
   /// (MAINT-04's "e.g. 10%"). Whole percent.
   actualsTolerancePercent Int?
   /// Above this, collect competing bids rather than dispatching one vendor.
-  bidThresholdCents      Int?
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
+  bidThresholdCents       Int?
+  createdAt               DateTime        @default(now())
+  updatedAt               DateTime        @updatedAt
 
   properties  Property[]
   assignments StaffAssignment[]
@@ -376,63 +376,63 @@ model LegalEntity {
 }
 
 model Property {
-  id            String  @id @default(cuid())
-  legalEntityId String
-  name          String
-  addressLine1  String
-  addressLine2  String?
-  city          String
+  id             String       @id @default(cuid())
+  legalEntityId  String
+  name           String
+  addressLine1   String
+  addressLine2   String?
+  city           String
   /// Two-letter state code. Drives EVERY jurisdiction lookup (D-4) - a
   /// property with the wrong state silently gets another state's grace
   /// period, deposit deadline and notice periods.
-  state         String
-  postalCode    String
-  county        String?
-  country       String  @default("US")
-  latitude      Decimal? @db.Decimal(9, 6)
-  longitude     Decimal? @db.Decimal(9, 6)
+  state          String
+  postalCode     String
+  county         String?
+  country        String       @default("US")
+  latitude       Decimal?     @db.Decimal(9, 6)
+  longitude      Decimal?     @db.Decimal(9, 6)
   /// IANA zone, e.g. "America/Chicago". Every nightly job runs in this zone,
   /// not UTC (D-3). Not nullable: a property without one cannot be billed.
-  timezone      String
-  propertyType  PropertyType
-  bedrooms      Int?
-  bathrooms     Decimal?  @db.Decimal(3, 1)
-  yearBuilt     Int?
-  acquiredOn    DateTime? @db.Date
+  timezone       String
+  propertyType   PropertyType
+  bedrooms       Int?
+  bathrooms      Decimal?     @db.Decimal(3, 1)
+  yearBuilt      Int?
+  acquiredOn     DateTime?    @db.Date
   /// From the deed/closing disclosure (PROP-06). A single fact, not its own
   /// model, unlike Mortgage/InsurancePolicy/Warranty below - there is only
   /// ever one basis, not a repeating or versioned record.
   costBasisCents Int?
-  active        Boolean   @default(true)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  active         Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
-  legalEntity      LegalEntity       @relation(fields: [legalEntityId], references: [id])
-  units            Unit[]
-  leases           Lease[]
-  leasePayers      LeasePayer[]
-  charges          Charge[]
-  payments         Payment[]
-  ledgerEntries    LedgerEntry[]
-  deposits         Deposit[]
-  recurringCharges RecurringCharge[]
-  utilityBills     UtilityBill[]
-  tickets          Ticket[]
-  workOrders       WorkOrder[]
-  inspections      Inspection[]
-  threads          Thread[]
-  notices          Notice[]
-  tasks            Task[]
-  documents        Document[]
-  auditLogs        AuditLog[]
-  assignments      StaffAssignment[]
-  outboxEvents     OutboxEvent[]
-  jobRuns          JobRun[]
-  mortgages        Mortgage[]
+  legalEntity       LegalEntity       @relation(fields: [legalEntityId], references: [id])
+  units             Unit[]
+  leases            Lease[]
+  leasePayers       LeasePayer[]
+  charges           Charge[]
+  payments          Payment[]
+  ledgerEntries     LedgerEntry[]
+  deposits          Deposit[]
+  recurringCharges  RecurringCharge[]
+  utilityBills      UtilityBill[]
+  tickets           Ticket[]
+  workOrders        WorkOrder[]
+  inspections       Inspection[]
+  threads           Thread[]
+  notices           Notice[]
+  tasks             Task[]
+  documents         Document[]
+  auditLogs         AuditLog[]
+  assignments       StaffAssignment[]
+  outboxEvents      OutboxEvent[]
+  jobRuns           JobRun[]
+  mortgages         Mortgage[]
   insurancePolicies InsurancePolicy[]
-  hoaInfo          HoaInfo?
-  warranties       Warranty[]
-  notifications    Notification[]
+  hoaInfo           HoaInfo?
+  warranties        Warranty[]
+  notifications     Notification[]
 
   @@index([legalEntityId])
   @@index([state])
@@ -555,7 +555,7 @@ model Unit {
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
 
-  property        Property         @relation(fields: [propertyId], references: [id])
+  property        Property          @relation(fields: [propertyId], references: [id])
   leases          Lease[]
   tickets         Ticket[]
   workOrders      WorkOrder[]
@@ -587,19 +587,19 @@ model Unit {
 /// this does not model multiple simultaneous codes of the same type. Real
 /// gap, not solved generically here.
 model AccessCode {
-  id            String    @id @default(cuid())
-  unitId        String
+  id               String    @id @default(cuid())
+  unitId           String
   /// LOCKBOX, SMART_LOCK, GATE, MAILBOX, OTHER.
-  type          String
+  type             String
   /// "Front door", "Side gate" - disambiguates within a type; not part of
   /// the versioning key.
-  label         String?
-  sealedCode    String
-  version       Int
-  effectiveFrom DateTime  @default(now())
-  effectiveTo   DateTime?
+  label            String?
+  sealedCode       String
+  version          Int
+  effectiveFrom    DateTime  @default(now())
+  effectiveTo      DateTime?
   createdByStaffId String?
-  createdAt     DateTime  @default(now())
+  createdAt        DateTime  @default(now())
 
   unit      Unit       @relation(fields: [unitId], references: [id])
   createdBy StaffUser? @relation(fields: [createdByStaffId], references: [id])
@@ -609,21 +609,21 @@ model AccessCode {
 }
 
 model Appliance {
-  id          String    @id @default(cuid())
-  unitId      String
+  id           String    @id @default(cuid())
+  unitId       String
   /// REFRIGERATOR, RANGE, DISHWASHER, WASHER, DRYER, WATER_HEATER, HVAC,
   /// MICROWAVE, OTHER.
-  category    String
-  make        String?
-  model       String?
+  category     String
+  make         String?
+  model        String?
   serialNumber String?
-  installedOn DateTime? @db.Date
+  installedOn  DateTime? @db.Date
   /// Only meaningful for category = HVAC; nullable for everything else
   /// rather than a second table for one field.
-  filterSize  String?
-  notes       String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  filterSize   String?
+  notes        String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   unit Unit @relation(fields: [unitId], references: [id])
 
@@ -631,22 +631,22 @@ model Appliance {
 }
 
 model UtilityAccount {
-  id          String   @id @default(cuid())
-  unitId      String
+  id                         String   @id @default(cuid())
+  unitId                     String
   /// ELECTRIC, GAS, WATER, SEWER, TRASH, OTHER.
-  type        String
-  provider    String
-  accountNumber String?
+  type                       String
+  provider                   String
+  accountNumber              String?
   nameOnAccountDuringTenancy String?
   /// Who the account reverts to (and whether it does at all) between
   /// tenancies - the landlord-revert question PROP-03 names explicitly,
   /// since a vacant unit with no utilities on is how a pipe freezes
   /// unnoticed.
-  nameOnAccountVacancy String?
-  landlordRevertAgreement Boolean @default(false)
-  notes       String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  nameOnAccountVacancy       String?
+  landlordRevertAgreement    Boolean  @default(false)
+  notes                      String?
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
 
   unit Unit @relation(fields: [unitId], references: [id])
 
@@ -684,18 +684,18 @@ model ShutoffLocation {
 /// assignment rows that scope them. There is no `isSuperuser` and there never
 /// will be (D-5).
 model StaffUser {
-  id            String    @id @default(cuid())
-  email         String    @unique
-  name          String
-  phone         String?
-  active        Boolean   @default(true)
-  deactivatedAt DateTime?
+  id                    String    @id @default(cuid())
+  email                 String    @unique
+  name                  String
+  phone                 String?
+  active                Boolean   @default(true)
+  deactivatedAt         DateTime?
   /// Sessions issued before this instant are rejected (R-003). Bumping it is
   /// how a password reset, a deactivation, or a "sign out everywhere" takes
   /// effect immediately - Auth.js Credentials sessions are JWTs and cannot be
   /// deleted server-side, so revocation is a watermark comparison instead.
   /// ROLE-06's "access killed within 1 minute" depends on this column.
-  sessionsValidFrom DateTime @default(now())
+  sessionsValidFrom     DateTime  @default(now())
   /// Per-user monetary ceilings (ROLE-02). Null falls back to the role's
   /// default; these exist so one manager can approve more than another
   /// without inventing a second manager role. Zero is a meaningful value -
@@ -708,60 +708,68 @@ model StaffUser {
   /// boolean is somebody forgetting to turn it off and being paged at 3am
   /// for a month - and because "who was on call last Tuesday" is a real
   /// question after an incident that a boolean cannot answer.
-  onCallFrom  DateTime?
-  onCallUntil DateTime?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  onCallFrom            DateTime?
+  onCallUntil           DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 
-  credential  StaffCredential?
-  assignments StaffAssignment[]
+  credential         StaffCredential?
+  assignments        StaffAssignment[]
   assignmentsGranted StaffAssignment[] @relation("AssignmentGrantedBy")
 
-  paymentsReceived     Payment[]    @relation("PaymentReceivedBy")
-  chargesWaived        Charge[]     @relation("ChargeWaivedBy")
-  utilityBillsAllocated UtilityBill[] @relation("UtilityBillAllocatedBy")
-  workOrdersApproved   WorkOrder[]  @relation("WorkOrderApprovedBy")
-  workOrdersAssigned   WorkOrder[]  @relation("WorkOrderAssignedTo")
-  workOrdersEntryPermissionLogged WorkOrder[] @relation("WorkOrderEntryPermission")
-  workOrdersClosed     WorkOrder[]  @relation("WorkOrderClosedBy")
-  workOrderNotesWritten WorkOrderNote[]
-  workOrderMessagesLinked WorkOrderMessageLink[]
-  ticketsAcknowledged  Ticket[]     @relation("TicketAcknowledgedBy")
-  tasksAssigned        Task[]       @relation("TaskAssignedTo")
-  tasksCompleted       Task[]       @relation("TaskCompletedBy")
-  inspectionsPerformed Inspection[] @relation("InspectionPerformedBy")
-  noticesServed        Notice[]     @relation("NoticeServedBy")
-  messagesSent         Message[]    @relation("MessageSentBy")
-  documentsUploaded    Document[]   @relation("DocumentUploadedBy")
-  auditLogs            AuditLog[]   @relation("AuditLogActor")
-  accessCodesCreated   AccessCode[]
-  messagesRouted       UnroutedMessage[] @relation("UnroutedMessageRoutedBy")
+  paymentsReceived                Payment[]                    @relation("PaymentReceivedBy")
+  chargesWaived                   Charge[]                     @relation("ChargeWaivedBy")
+  utilityBillsAllocated           UtilityBill[]                @relation("UtilityBillAllocatedBy")
+  workOrdersApproved              WorkOrder[]                  @relation("WorkOrderApprovedBy")
+  workOrdersAssigned              WorkOrder[]                  @relation("WorkOrderAssignedTo")
+  workOrdersEntryPermissionLogged WorkOrder[]                  @relation("WorkOrderEntryPermission")
+  workOrdersClosed                WorkOrder[]                  @relation("WorkOrderClosedBy")
+  workOrderNotesWritten           WorkOrderNote[]
+  workOrderMessagesLinked         WorkOrderMessageLink[]
+  ticketsAcknowledged             Ticket[]                     @relation("TicketAcknowledgedBy")
+  tasksAssigned                   Task[]                       @relation("TaskAssignedTo")
+  tasksCompleted                  Task[]                       @relation("TaskCompletedBy")
+  inspectionsPerformed            Inspection[]                 @relation("InspectionPerformedBy")
+  noticesServed                   Notice[]                     @relation("NoticeServedBy")
+  messagesSent                    Message[]                    @relation("MessageSentBy")
+  documentsUploaded               Document[]                   @relation("DocumentUploadedBy")
+  auditLogs                       AuditLog[]                   @relation("AuditLogActor")
+  accessCodesCreated              AccessCode[]
+  messagesRouted                  UnroutedMessage[]            @relation("UnroutedMessageRoutedBy")
+  templatesCreated                MessageTemplate[]            @relation("TemplateCreatedBy")
+  templatesUpdated                MessageTemplate[]            @relation("TemplateUpdatedBy")
+  translationsApproved            MessageTemplateTranslation[] @relation("TranslationApprovedBy")
 
   @@index([active])
 }
 
 model Tenant {
-  id        String   @id @default(cuid())
-  firstName String
-  lastName  String
-  email     String?
-  phone     String?
-  active    Boolean  @default(true)
-  notes     String?
+  id                String   @id @default(cuid())
+  firstName         String
+  lastName          String
+  email             String?
+  phone             String?
+  active            Boolean  @default(true)
+  notes             String?
+  /// BCP-47, or null for "never said". Null is NOT the same as English: it
+  /// means nobody asked, which is the honest state for every tenant onboarded
+  /// before R-049 and the reason `languageFor` treats it as the default
+  /// rather than recording a preference the tenant never expressed.
+  preferredLocale   String?
   /// Same revocation watermark as StaffUser. A tenant who moves out or whose
   /// magic link leaked has every issued session invalidated by bumping this.
   sessionsValidFrom DateTime @default(now())
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
-  credential   TenantCredential?
-  leaseTenants LeaseTenant[]
+  credential             TenantCredential?
+  leaseTenants           LeaseTenant[]
   workOrderVerifications WorkOrderVerification[]
-  leasePayers  LeasePayer[]
-  tickets      Ticket[]
-  threads      Thread[]
-  messages     Message[]     @relation("MessageFromTenant")
-  documents    Document[]
+  leasePayers            LeasePayer[]
+  tickets                Ticket[]
+  threads                Thread[]
+  messages               Message[]               @relation("MessageFromTenant")
+  documents              Document[]
 
   @@index([lastName, firstName])
   @@index([email])
@@ -787,60 +795,60 @@ model Guarantor {
 }
 
 model Vendor {
-  id            String    @id @default(cuid())
-  name          String
+  id                 String    @id @default(cuid())
+  name               String
   /// Free-form trade tags ("plumbing", "hvac"). Not an enum - the trade list
   /// is operator data, and a new trade should not need a migration.
-  trades        String[]
-  contactName   String?
-  email         String?
-  phone         String?
-  serviceAreas  String[]
-  licenseNumber String?
+  trades             String[]
+  contactName        String?
+  email              String?
+  phone              String?
+  serviceAreas       String[]
+  licenseNumber      String?
   /// Payment is blocked or flagged without a W-9 on file (MAINT-11). The W-9
   /// itself is a Document; this is the flag the dispatch check reads.
-  w9OnFile      Boolean   @default(false)
-  coiExpiresOn  DateTime? @db.Date
+  w9OnFile           Boolean   @default(false)
+  coiExpiresOn       DateTime? @db.Date
   /// Lower sorts first within a trade. Null = no stated preference.
-  preferredRank Int?
+  preferredRank      Int?
   /// R-029 (MAINT-12's "emergency vendor list per trade"): this vendor
   /// answers at 3am. A separate flag from `active` because the plumber you
   /// use for a scheduled cartridge swap is often not the one who picks up
   /// on a Sunday, and dispatching an emergency to somebody who will not
   /// answer costs the hours that matter most.
-  emergencyAvailable Boolean @default(false)
-  active        Boolean   @default(true)
-  notes         String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  emergencyAvailable Boolean   @default(false)
+  active             Boolean   @default(true)
+  notes              String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
-  workOrders WorkOrder[]
-  bids       WorkOrderBid[]
+  workOrders    WorkOrder[]
+  bids          WorkOrderBid[]
   verifications WorkOrderVerification[]
-  threads    Thread[]
-  messages   Message[]   @relation("MessageFromVendor")
-  documents  Document[]
+  threads       Thread[]
+  messages      Message[]               @relation("MessageFromVendor")
+  documents     Document[]
 
   @@index([active])
 }
 
 model Lease {
-  id             String      @id @default(cuid())
-  propertyId     String
-  unitId         String
-  status         LeaseStatus @default(DRAFT)
-  startsOn       DateTime    @db.Date
-  endsOn         DateTime?   @db.Date
-  rentCents      Int
+  id                    String             @id @default(cuid())
+  propertyId            String
+  unitId                String
+  status                LeaseStatus        @default(DRAFT)
+  startsOn              DateTime           @db.Date
+  endsOn                DateTime?          @db.Date
+  rentCents             Int
   /// Day of month rent is due, property-local. The Stripe subscription anchor
   /// is computed from this in local time, then expressed to Stripe (D-11).
-  rentDueDay     Int         @default(1)
+  rentDueDay            Int                @default(1)
   /// How a PART month is prorated (R-042, PAY-08). A term of the contract,
   /// so it lives on the contract: leases genuinely disagree, and the two
   /// methods differ by real money - a 9-day February move-in on $1,500 is
   /// $482.14 on actual days and $450.00 on a flat 30-day month.
-  prorationMethod ProrationMethod @default(ACTUAL)
-  depositCents   Int         @default(0)
+  prorationMethod       ProrationMethod    @default(ACTUAL)
+  depositCents          Int                @default(0)
   /// HOW the deposit is held, which `depositCents` alone cannot say (R-041).
   ///
   /// CASH is a liability - the tenant's money, held on trust, returnable
@@ -851,7 +859,7 @@ model Lease {
   /// A database CHECK enforces that anything other than CASH holds zero: the
   /// contradiction is what sends somebody hunting at move-out for money that
   /// was never collected.
-  depositArrangement DepositArrangement @default(CASH)
+  depositArrangement    DepositArrangement @default(CASH)
   /// What THIS LEASE provides for if a payment is returned (R-039a, PAY-02).
   ///
   /// Null means the lease is silent, which means no fee - not zero, and
@@ -861,33 +869,33 @@ model Lease {
   /// The statutory ceiling is NOT here: `JurisdictionRule.nsfFeePermitted`
   /// and `nsfFeeMaxCents` clamp this (D-4), so a state that forbids or caps
   /// the fee overrides the lease without anybody editing a lease.
-  nsfFeeCents    Int?
+  nsfFeeCents           Int?
   /// An owner policy that overrides the collection method (R-039a, D-29).
   /// `send_invoice` allows partial payments; this refuses them anyway, which
   /// is what an owner wants for a tenant whose payment plan has already
   /// failed once. On the lease because it is a decision about a tenancy.
-  requireFullBalance Boolean @default(false)
-  isMonthToMonth Boolean     @default(false)
+  requireFullBalance    Boolean            @default(false)
+  isMonthToMonth        Boolean            @default(false)
   /// Rate applied on MTM rollover (LEASE-09). Null = keep the current rent.
-  mtmRentCents   Int?
+  mtmRentCents          Int?
   /// Who pays which utility. Shape is a lease-template concern (R-063), not
   /// something to normalize before there is a template to normalize against.
   utilityResponsibility Json?
-  moveInAt          DateTime?
-  moveOutAt         DateTime?
+  moveInAt              DateTime?
+  moveOutAt             DateTime?
   /// Notice to end the tenancy has been given - by either side. A FACT
   /// about an active lease, not a status of it; see LeaseStatus's own
   /// comment for why.
-  noticeGivenAt     DateTime?
+  noticeGivenAt         DateTime?
   /// Who gave it. A tenant giving notice and a landlord giving notice have
   /// completely different downstream consequences (LEASE-09's renewal
   /// flags, R-062's notice periods), and a bare timestamp cannot tell them
   /// apart.
-  noticeGivenBy     NoticeParty?
-  terminationReason String?
+  noticeGivenBy         NoticeParty?
+  terminationReason     String?
 
   /// R-033. Where this tenancy came from - see LeaseOrigin.
-  origin            LeaseOrigin @default(APPLICATION)
+  origin                LeaseOrigin           @default(APPLICATION)
   /// RISK-08. Defaults to NOT_APPLICABLE, which is correct for the ordinary
   /// path and is exactly why the inherited intake refuses to accept it: an
   /// inherited tenancy whose deposit status was never stated would sit here
@@ -906,9 +914,9 @@ model Lease {
   /// When the lease actually became ACTIVE. Deliberately separate from
   /// `startsOn`: a lease activated three days late still started on the
   /// first, and an audit that conflated the two would misdate the tenancy.
-  activatedAt       DateTime?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  activatedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   property         Property          @relation(fields: [propertyId], references: [id])
   unit             Unit              @relation(fields: [unitId], references: [id])
@@ -980,10 +988,10 @@ enum JobRunStatus {
 /// The alternative - emitting after commit - drops events whenever the process
 /// dies in the gap, and drops them silently.
 model OutboxEvent {
-  id   String @id @default(cuid())
+  id            String    @id @default(cuid())
   /// Event name from packages/core/events. A closed vocabulary, for the same
   /// reason audit actions are.
-  type String
+  type          String
   /// What the event is about, so a consumer can load it without the payload
   /// having to carry the whole record.
   aggregateType String
@@ -994,11 +1002,11 @@ model OutboxEvent {
   payload       Json
   /// When the thing happened, which is not when the row was written and not
   /// when it was published.
-  occurredAt    DateTime @default(now())
+  occurredAt    DateTime  @default(now())
   publishedAt   DateTime?
-  attempts      Int      @default(0)
+  attempts      Int       @default(0)
   lastError     String?
-  createdAt     DateTime @default(now())
+  createdAt     DateTime  @default(now())
 
   property      Property?          @relation(fields: [propertyId], references: [id])
   consumptions  EventConsumption[]
@@ -1017,11 +1025,11 @@ model OutboxEvent {
 /// Recorded in the same transaction as the consumer's own effects, so a
 /// consumer that half-succeeded is retried rather than skipped.
 model EventConsumption {
-  id         String   @id @default(cuid())
-  eventId    String
+  id          String   @id @default(cuid())
+  eventId     String
   /// Stable consumer name. Renaming one makes it re-consume every event it
   /// has already handled, which is why the name belongs in code review.
-  consumer   String
+  consumer    String
   processedAt DateTime @default(now())
 
   event OutboxEvent @relation(fields: [eventId], references: [id])
@@ -1072,17 +1080,17 @@ model JobRun {
 // ---------------------------------------------------------------------------
 
 model Role {
-  id   String @id @default(cuid())
+  id                           String   @id @default(cuid())
   /// Stable machine key: owner, manager, maintenance_tech, read_only,
   /// tenant, guarantor. Code refers to roles by this, never by name or id.
-  key  String @unique
-  name String
-  description String
+  key                          String   @unique
+  name                         String
+  description                  String
   /// Permission keys from packages/core/rbac. Data rather than a join table:
   /// the vocabulary is fixed in code, so a Permission table would only ever
   /// mirror a TypeScript union with extra joins. ROLE-07 puts a custom role
   /// builder out of scope for v1, so nothing needs to browse the catalogue.
-  permissions String[]
+  permissions                  String[]
   /// Default ceilings for staff holding this role, overridable per user
   /// (ROLE-02). Null means "no authority at all" rather than "unlimited" -
   /// the safe reading when a value is missing.
@@ -1090,9 +1098,9 @@ model Role {
   defaultWaiveFeeCents         Int?
   /// Seeded roles the product depends on. Guards against deleting `owner`
   /// and locking everyone out.
-  system      Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  system                       Boolean  @default(true)
+  createdAt                    DateTime @default(now())
+  updatedAt                    DateTime @updatedAt
 
   assignments StaffAssignment[]
 }
@@ -1108,21 +1116,21 @@ model Role {
 /// migration, because a half-understood scope is how a "property-scoped" user
 /// quietly sees everything.
 model StaffAssignment {
-  id            String  @id @default(cuid())
-  staffUserId   String
-  roleId        String
-  legalEntityId String?
-  propertyId    String?
+  id               String    @id @default(cuid())
+  staffUserId      String
+  roleId           String
+  legalEntityId    String?
+  propertyId       String?
   /// Who granted it and why - a permission change is a privileged action
   /// (ROLE-03) and the audit trail starts with the row itself.
   grantedByStaffId String?
-  grantedAt     DateTime @default(now())
+  grantedAt        DateTime  @default(now())
   /// Revocation is a timestamp, never a delete: ROLE-06 requires that
   /// deactivation preserve all history. A revoked assignment stops granting
   /// anything on the next request, because permissions are read per request.
-  revokedAt     DateTime?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  revokedAt        DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   staffUser   StaffUser    @relation(fields: [staffUserId], references: [id])
   role        Role         @relation(fields: [roleId], references: [id])
@@ -1189,11 +1197,11 @@ enum AuthTokenPurpose {
 }
 
 model StaffCredential {
-  id           String @id @default(cuid())
-  staffUserId  String @unique
+  id                String    @id @default(cuid())
+  staffUserId       String    @unique
   /// scrypt, encoded as `scrypt$N$r$p$salt$hash`. Never a bare digest.
-  passwordHash String
-  passwordUpdatedAt DateTime @default(now())
+  passwordHash      String
+  passwordUpdatedAt DateTime  @default(now())
   /// AES-256-GCM ciphertext of the TOTP secret. Null until enrolment starts.
   mfaSecret         String?
   /// Set only once a correct code has been entered - possessing a secret is
@@ -1216,9 +1224,9 @@ model StaffCredential {
 /// primary path because friction is what keeps tenants off the portal, and a
 /// tenant who never sets a password must still be able to get in.
 model TenantCredential {
-  id           String @id @default(cuid())
-  tenantId     String @unique
-  passwordHash String?
+  id                String    @id @default(cuid())
+  tenantId          String    @unique
+  passwordHash      String?
   passwordUpdatedAt DateTime?
   failedLoginCount  Int       @default(0)
   lockedUntil       DateTime?
@@ -1292,24 +1300,24 @@ model RateLimitCounter {
 // ---------------------------------------------------------------------------
 
 model LeasePayer {
-  id                String    @id @default(cuid())
-  leaseId           String
-  propertyId        String
-  payerType         PayerType
+  id                     String           @id @default(cuid())
+  leaseId                String
+  propertyId             String
+  payerType              PayerType
   /// Set when payerType = TENANT. Null for a housing authority or any other
   /// external payer, which is named by `externalPayerName` instead.
-  tenantId          String?
-  externalPayerName String?
+  tenantId               String?
+  externalPayerName      String?
   /// The payer's default share of monthly rent, in cents. Null means "the
   /// remainder" - which is how a single-payer lease works without anyone
   /// having to keep a number in sync with the rent. Historical shares live on
   /// PayerAllocation, so a mid-stream recertification change never rewrites
   /// what was already billed.
-  portionCents      Int?
+  portionCents           Int?
   /// One Stripe Customer and one Subscription per payer (OQ-12). Null until
   /// R-034 provisions them.
-  stripeCustomerId     String?
-  stripeSubscriptionId String?
+  stripeCustomerId       String?
+  stripeSubscriptionId   String?
   /// R-036: collection is on hold for this payer - a legal-action hold
   /// (PAY-12), or an owner pausing deliberately. Distinct from `active`,
   /// which means the payer is no longer a payer at all: a paused payer still
@@ -1325,7 +1333,7 @@ model LeasePayer {
   /// `send_invoice`. The switch is guarded - see packages/core/payments -
   /// because moving a payer while an invoice is still open lets the new
   /// mode bill the same period twice.
-  collectionMethod     CollectionMethod @default(charge_automatically)
+  collectionMethod       CollectionMethod @default(charge_automatically)
   /// The saved payment method autopay charges (R-039a, PAY-02).
   ///
   /// A record of what we told Stripe to use, not a second source of truth
@@ -1341,7 +1349,7 @@ model LeasePayer {
   /// The 1-28 range is a CHECK; whether a given day is SAFE depends on the
   /// property's versioned grace period and lives in `debitDayDecision` (D-4).
   debitDay               Int?
-  collectionPaused     Boolean @default(false)
+  collectionPaused       Boolean          @default(false)
   /// The rent we last successfully pushed to Stripe, in cents.
   ///
   /// NOT a copy of Stripe's truth - it is a record of our last INSTRUCTION,
@@ -1350,17 +1358,17 @@ model LeasePayer {
   /// without an API call. Stripe remains the authority (D-11), and the
   /// lifecycle sweep still asks it; this is what makes a rent change
   /// detectable at all against a provider that has no memory of its own.
-  stripeAmountCents    Int?
+  stripeAmountCents      Int?
   /// When the lifecycle sweep last made Stripe agree with this lease, and
   /// what it did. Operational breadcrumbs for the Billing Runs screen -
   /// deliberately NOT a second source of truth about the subscription, which
   /// is Stripe's.
-  lastSyncedAt         DateTime?
-  lastSyncAction       String?
-  lastSyncError        String?
-  active            Boolean   @default(true)
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  lastSyncedAt           DateTime?
+  lastSyncAction         String?
+  lastSyncError          String?
+  active                 Boolean          @default(true)
+  createdAt              DateTime         @default(now())
+  updatedAt              DateTime         @updatedAt
 
   lease         Lease             @relation(fields: [leaseId], references: [id])
   property      Property          @relation(fields: [propertyId], references: [id])
@@ -1379,16 +1387,16 @@ model LeasePayer {
 /// not in Stripe: if a statute could change the number, core computes it and
 /// pushes it to Stripe as an invoice item (D-12).
 model Charge {
-  id          String     @id @default(cuid())
-  propertyId  String
-  leaseId     String
-  type        ChargeType
-  amountCents Int
-  description String
+  id                  String     @id @default(cuid())
+  propertyId          String
+  leaseId             String
+  type                ChargeType
+  amountCents         Int
+  description         String
   /// Property-local calendar day the charge is due (D-3).
-  dueOn       DateTime   @db.Date
-  periodStart DateTime?  @db.Date
-  periodEnd   DateTime?  @db.Date
+  dueOn               DateTime   @db.Date
+  periodStart         DateTime?  @db.Date
+  periodEnd           DateTime?  @db.Date
   /// The rule version that produced a statutory amount - the late fee cap in
   /// force on the day it was assessed (D-12). Null for amounts no statute
   /// touches, like agreed pet rent.
@@ -1426,29 +1434,29 @@ model Charge {
   waivedAt            DateTime?
   waivedByStaffId     String?
   waiveReason         String?
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
 
-  property         Property          @relation(fields: [propertyId], references: [id])
-  lease            Lease             @relation(fields: [leaseId], references: [id])
-  jurisdictionRule JurisdictionRule? @relation(fields: [jurisdictionRuleId], references: [id])
-  recurringCharge  RecurringCharge?  @relation(fields: [recurringChargeId], references: [id])
+  property          Property          @relation(fields: [propertyId], references: [id])
+  lease             Lease             @relation(fields: [leaseId], references: [id])
+  jurisdictionRule  JurisdictionRule? @relation(fields: [jurisdictionRuleId], references: [id])
+  recurringCharge   RecurringCharge?  @relation(fields: [recurringChargeId], references: [id])
   /// The bill this share came out of (R-042, PAY-08). Restrict, like every
   /// other evidence key: the bill IS the defence of the charge, and deleting
   /// it would leave a tenant billed for a share of nothing.
-  utilityBill      UtilityBill?      @relation(fields: [utilityBillId], references: [id], onDelete: Restrict)
+  utilityBill       UtilityBill?      @relation(fields: [utilityBillId], references: [id], onDelete: Restrict)
   /// Restrict, like every other evidence key here: the job IS the defence of
   /// the chargeback, and deleting it would leave a tenant billed for a repair
   /// the record can no longer describe.
-  workOrder        WorkOrder?        @relation(fields: [workOrderId], references: [id], onDelete: Restrict)
-  waivedBy         StaffUser?        @relation("ChargeWaivedBy", fields: [waivedByStaffId], references: [id])
-  assessedOn       Charge?           @relation("ChargeAssessedOn", fields: [assessedOnChargeId], references: [id], onDelete: Restrict)
+  workOrder         WorkOrder?        @relation(fields: [workOrderId], references: [id], onDelete: Restrict)
+  waivedBy          StaffUser?        @relation("ChargeWaivedBy", fields: [waivedByStaffId], references: [id])
+  assessedOn        Charge?           @relation("ChargeAssessedOn", fields: [assessedOnChargeId], references: [id], onDelete: Restrict)
   /// Restrict for the same reason as every other evidence-trail key: a
   /// payment a fee was assessed on cannot be deleted out from under the fee.
-  assessedOnPayment Payment?         @relation("ChargeAssessedOnPayment", fields: [assessedOnPaymentId], references: [id], onDelete: Restrict)
-  assessedFees     Charge[]          @relation("ChargeAssessedOn")
-  allocations      PayerAllocation[]
-  ledgerEntries    LedgerEntry[]
+  assessedOnPayment Payment?          @relation("ChargeAssessedOnPayment", fields: [assessedOnPaymentId], references: [id], onDelete: Restrict)
+  assessedFees      Charge[]          @relation("ChargeAssessedOn")
+  allocations       PayerAllocation[]
+  ledgerEntries     LedgerEntry[]
 
   @@index([leaseId, dueOn])
   @@index([propertyId, dueOn])
@@ -1480,21 +1488,21 @@ model PayerAllocation {
 }
 
 model RecurringCharge {
-  id          String     @id @default(cuid())
-  propertyId  String
-  leaseId     String
-  type        ChargeType
-  amountCents Int
-  description String
+  id                       String     @id @default(cuid())
+  propertyId               String
+  leaseId                  String
+  type                     ChargeType
+  amountCents              Int
+  description              String
   /// Property-local day of month to post.
-  dayOfMonth  Int        @default(1)
-  startsOn    DateTime   @db.Date
-  endsOn      DateTime?  @db.Date
+  dayOfMonth               Int        @default(1)
+  startsOn                 DateTime   @db.Date
+  endsOn                   DateTime?  @db.Date
   stripePriceId            String?
   stripeSubscriptionItemId String?
-  active      Boolean    @default(true)
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+  active                   Boolean    @default(true)
+  createdAt                DateTime   @default(now())
+  updatedAt                DateTime   @updatedAt
 
   property Property @relation(fields: [propertyId], references: [id])
   lease    Lease    @relation(fields: [leaseId], references: [id])
@@ -1532,21 +1540,21 @@ enum RubsMethod {
 /// Several states restrict or forbid RUBS, which is why allocation is gated
 /// on `JurisdictionRule.rubsPermitted` (D-4) rather than on anything here.
 model UtilityBill {
-  id          String     @id @default(cuid())
-  propertyId  String
+  id                 String     @id @default(cuid())
+  propertyId         String
   /// ELECTRIC, GAS, WATER, SEWER, TRASH, OTHER - the same vocabulary
   /// `UtilityAccount.type` uses.
-  utilityType String
-  provider    String?
+  utilityType        String
+  provider           String?
   /// What the bill covers, property-local calendar days (D-3).
-  periodStart DateTime   @db.Date
-  periodEnd   DateTime   @db.Date
-  amountCents Int
-  method      RubsMethod
+  periodStart        DateTime   @db.Date
+  periodEnd          DateTime   @db.Date
+  amountCents        Int
+  method             RubsMethod
   /// The scanned bill. Nullable because recording the bill and finding the
   /// PDF are two moments, and refusing the first until the second happens
   /// means the bill gets recorded nowhere.
-  documentId  String?
+  documentId         String?
   /// Set once the split has been charged. The idempotency guard: a bill
   /// allocated twice bills every tenant twice.
   allocatedAt        DateTime?
@@ -1555,29 +1563,29 @@ model UtilityBill {
   /// across the tenants. Recorded because a split that adds up to less than
   /// the bill is one somebody will eventually be asked to explain.
   landlordCents      Int?
-  notes       String?
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+  notes              String?
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
 
-  property      Property   @relation(fields: [propertyId], references: [id])
-  document      Document?  @relation("UtilityBillDocument", fields: [documentId], references: [id])
-  allocatedBy   StaffUser? @relation("UtilityBillAllocatedBy", fields: [allocatedByStaffId], references: [id])
-  charges       Charge[]
+  property    Property   @relation(fields: [propertyId], references: [id])
+  document    Document?  @relation("UtilityBillDocument", fields: [documentId], references: [id])
+  allocatedBy StaffUser? @relation("UtilityBillAllocatedBy", fields: [allocatedByStaffId], references: [id])
+  charges     Charge[]
 
   @@index([propertyId, periodEnd])
 }
 
 model Payment {
-  id           String         @id @default(cuid())
-  propertyId   String
-  leaseId      String
+  id                    String         @id @default(cuid())
+  propertyId            String
+  leaseId               String
   /// Which payer's money this is. A voucher lease's HAP deposit and its
   /// tenant's portion are separate Payments against separate LeasePayers.
-  leasePayerId String
-  channel      PaymentChannel
-  status       PaymentStatus  @default(PENDING)
-  amountCents  Int
-  receivedAt   DateTime
+  leasePayerId          String
+  channel               PaymentChannel
+  status                PaymentStatus  @default(PENDING)
+  amountCents           Int
+  receivedAt            DateTime
   /// Required for every offline channel (PAY-05) - a cash payment with no
   /// named recipient is an unauditable cash payment. Nullable in the schema
   /// because Stripe-originated payments have no receiving staff member;
@@ -1588,37 +1596,34 @@ model Payment {
   stripeInvoiceId       String?
   reversedAt            DateTime?
   reversalReason        String?
-  createdAt             DateTime  @default(now())
-  updatedAt             DateTime  @updatedAt
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
 
-  property      Property      @relation(fields: [propertyId], references: [id])
-  lease         Lease         @relation(fields: [leaseId], references: [id])
-  leasePayer    LeasePayer    @relation(fields: [leasePayerId], references: [id])
-  receivedBy    StaffUser?    @relation("PaymentReceivedBy", fields: [receivedByStaffId], references: [id])
-  ledgerEntries LedgerEntry[]
+  property        Property      @relation(fields: [propertyId], references: [id])
+  lease           Lease         @relation(fields: [leaseId], references: [id])
+  leasePayer      LeasePayer    @relation(fields: [leasePayerId], references: [id])
+  receivedBy      StaffUser?    @relation("PaymentReceivedBy", fields: [receivedByStaffId], references: [id])
+  ledgerEntries   LedgerEntry[]
+  /// Fees assessed because this payment came back (R-039a).
+  assessedCharges Charge[]      @relation("ChargeAssessedOnPayment")
 
   @@unique([stripePaymentIntentId])
   @@index([leaseId, receivedAt])
   @@index([propertyId, receivedAt])
   @@index([status])
-  /// Fees assessed because this payment came back (R-039a).
-  assessedCharges Charge[] @relation("ChargeAssessedOnPayment")
 }
 
 /**
  * Every Stripe webhook event this deployment has already handled (R-034).
- *
  * THE IDEMPOTENCY GUARANTEE FOR MONEY. Stripe retries a webhook until it
  * gets a 2xx, and explicitly does not promise to deliver each event exactly
  * once - so without this table a single retried `invoice.payment_succeeded`
  * would credit a tenant twice, in an append-only ledger nobody can correct
  * by editing.
- *
  * `stripeEventId` is the primary key rather than a surrogate with a unique
  * index on it. The insert IS the lock: two concurrent deliveries of the same
  * event both try to claim the row, one loses on the primary key, and the
  * loser stops. A check-then-write would let both pass the check.
- *
  * Kept for events we IGNORE as well as ones we project, because "we saw it
  * and deliberately did nothing" is the answer to a support question that
  * silence cannot give.
@@ -1651,27 +1656,27 @@ model ProcessedStripeEvent {
 /// A row here that Stripe does not know about is a reconciliation bug, not a
 /// shortcut.
 model LedgerEntry {
-  id           String          @id @default(cuid())
-  propertyId   String
-  leaseId      String
+  id             String          @id @default(cuid())
+  propertyId     String
+  leaseId        String
   /// Null only for lease-level entries that belong to no single payer.
-  leasePayerId String?
-  type         LedgerEntryType
+  leasePayerId   String?
+  type           LedgerEntryType
   /// Signed. Positive increases the balance owed, negative reduces it.
-  amountCents  Int
-  description  String
+  amountCents    Int
+  description    String
   /// When the money event happened, per Stripe - not when we projected it.
-  occurredAt   DateTime
-  chargeId     String?
-  paymentId    String?
+  occurredAt     DateTime
+  chargeId       String?
+  paymentId      String?
   /// Set on a REVERSAL, pointing at the entry being reversed.
-  reversesId   String?         @unique
+  reversesId     String?         @unique
   /// The Stripe event that produced this row. Indexed, not unique: one event
   /// can legitimately project to several entries. R-034 owns the
   /// processed-event log that makes webhook handling idempotent.
   stripeEventId  String?
   stripeObjectId String?
-  createdAt      DateTime      @default(now())
+  createdAt      DateTime        @default(now())
 
   // RESTRICT, not the Prisma default SET NULL - see the R-034 migration's
   // own comment. This table's append-only trigger rejects every UPDATE, so a
@@ -1729,23 +1734,23 @@ model Deposit {
 /// "ticket" and "work order" are staff words and must not reach a tenant
 /// route).
 model Ticket {
-  id              String       @id @default(cuid())
-  propertyId      String
-  unitId          String
-  leaseId         String?
-  tenantId        String?
-  source          TicketSource
-  category        String
-  description     String
-  priority        Priority     @default(ROUTINE)
-  status          TicketStatus @default(NEW)
-  entryPermission Boolean      @default(false)
-  petWarning      Boolean      @default(false)
+  id                    String       @id @default(cuid())
+  propertyId            String
+  unitId                String
+  leaseId               String?
+  tenantId              String?
+  source                TicketSource
+  category              String
+  description           String
+  priority              Priority     @default(ROUTINE)
+  status                TicketStatus @default(NEW)
+  entryPermission       Boolean      @default(false)
+  petWarning            Boolean      @default(false)
   /// Set when intake detects habitability language - mold, leak, no heat,
   /// sewage, infestation (MAINT-02, RISK-05). The response clock that hangs
   /// off this is the whole point of recording it.
-  habitabilityFlag   Boolean   @default(false)
-  firstResponseAt    DateTime?
+  habitabilityFlag      Boolean      @default(false)
+  firstResponseAt       DateTime?
   /// R-029 (NOTIF-05): somebody has SEEN this emergency and is acting on
   /// it. Deliberately distinct from firstResponseAt, which R-023 sets when
   /// triage makes a decision: a page acknowledged at 3am is not a triage
@@ -1753,22 +1758,22 @@ model Ticket {
   /// stopped by ordinary daytime queue work.
   acknowledgedAt        DateTime?
   acknowledgedByStaffId String?
-  mergedIntoTicketId String?
-  closedAt           DateTime?
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
+  mergedIntoTicketId    String?
+  closedAt              DateTime?
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
 
-  property      Property    @relation(fields: [propertyId], references: [id])
-  unit          Unit        @relation(fields: [unitId], references: [id])
-  lease         Lease?      @relation(fields: [leaseId], references: [id])
-  tenant        Tenant?     @relation(fields: [tenantId], references: [id])
-  acknowledgedBy StaffUser? @relation("TicketAcknowledgedBy", fields: [acknowledgedByStaffId], references: [id])
-  mergedInto    Ticket?     @relation("TicketMerge", fields: [mergedIntoTicketId], references: [id])
-  mergedTickets Ticket[]    @relation("TicketMerge")
-  workOrders    WorkOrder[]
-  threads       Thread[]
-  documents     Document[]
-  messages      Message[]
+  property       Property    @relation(fields: [propertyId], references: [id])
+  unit           Unit        @relation(fields: [unitId], references: [id])
+  lease          Lease?      @relation(fields: [leaseId], references: [id])
+  tenant         Tenant?     @relation(fields: [tenantId], references: [id])
+  acknowledgedBy StaffUser?  @relation("TicketAcknowledgedBy", fields: [acknowledgedByStaffId], references: [id])
+  mergedInto     Ticket?     @relation("TicketMerge", fields: [mergedIntoTicketId], references: [id])
+  mergedTickets  Ticket[]    @relation("TicketMerge")
+  workOrders     WorkOrder[]
+  threads        Thread[]
+  documents      Document[]
+  messages       Message[]
 
   @@index([propertyId, status])
   @@index([unitId])
@@ -1776,108 +1781,108 @@ model Ticket {
 }
 
 model WorkOrder {
-  id                String          @id @default(cuid())
-  propertyId        String
-  unitId            String
-  ticketId          String?
-  vendorId          String?
-  assignedStaffId   String?
-  status            WorkOrderStatus @default(SUBMITTED)
-  priority          Priority        @default(ROUTINE)
-  scope             String
-  estimateCents     Int?
-  approvedByStaffId String?
-  approvedAt        DateTime?
+  id                             String          @id @default(cuid())
+  propertyId                     String
+  unitId                         String
+  ticketId                       String?
+  vendorId                       String?
+  assignedStaffId                String?
+  status                         WorkOrderStatus @default(SUBMITTED)
+  priority                       Priority        @default(ROUTINE)
+  scope                          String
+  estimateCents                  Int?
+  approvedByStaffId              String?
+  approvedAt                     DateTime?
   /// The amount that was actually APPROVED, which is not the same as the
   /// current estimate: an estimate can be revised after approval, and the
   /// tolerance check in MAINT-04 has to measure actuals against what somebody
   /// with authority actually agreed to, not against a number that moved
   /// afterwards. Null means never approved.
-  approvedAmountCents Int?
+  approvedAmountCents            Int?
   /// Set when an approver declines, and required (MAINT-04/ROLE-03) - a denial
   /// with no stated reason is indistinguishable from a mistake, and the PM
   /// needs to know whether to re-scope or drop it.
-  denialReason      String?
+  denialReason                   String?
   /// An approver's "ask" - a question back to whoever requested it. Kept as a
   /// column rather than only an audit entry so the PM sees it on the work
   /// order without going to the trail.
-  approvalQuestion  String?
-  actualLaborCents     Int?
-  actualMaterialsCents Int?
-  invoiceCents         Int?
-  scheduledStart       DateTime?
-  scheduledEnd         DateTime?
+  approvalQuestion               String?
+  actualLaborCents               Int?
+  actualMaterialsCents           Int?
+  invoiceCents                   Int?
+  scheduledStart                 DateTime?
+  scheduledEnd                   DateTime?
   /// When the vendor magic link was last sent (R-025). Drives the
   /// no-response timer; reissuing the link resets it, because the clock
   /// measures silence since the most recent ask, not since the first.
-  dispatchedAt         DateTime?
+  dispatchedAt                   DateTime?
   /// Null until the vendor answers. ACCEPTED / DECLINED / PROPOSED_TIME.
-  vendorResponse       String?
-  vendorRespondedAt    DateTime?
+  vendorResponse                 String?
+  vendorRespondedAt              DateTime?
   /// Free text from the vendor on a decline ("booked through next week") -
   /// what the PM reads before picking the fallback.
-  vendorDeclineReason  String?
+  vendorDeclineReason            String?
   /// A window the vendor proposed instead of accepting outright. Distinct
   /// from scheduledStart/End, which is what staff CONFIRMED - R-027 owns
   /// turning one into the other with an entry-notice check in between.
-  proposedStart        DateTime?
-  proposedEnd          DateTime?
+  proposedStart                  DateTime?
+  proposedEnd                    DateTime?
   /// R-027: the entry notice served for this visit, when one was required.
   /// Null with a scheduled window means entry was permitted another way -
   /// the tenant granted permission, or it is an emergency.
-  entryNoticeId        String?
+  entryNoticeId                  String?
   /// The tenant told us to come in without formal notice (MAINT-05's
   /// "tenant grants logged permission-to-enter"). Recorded WITH who logged
   /// it and when, because "they said it was fine" is worth nothing in a
   /// dispute unless it was written down before the visit.
-  entryPermissionGrantedAt      DateTime?
+  entryPermissionGrantedAt       DateTime?
   entryPermissionLoggedByStaffId String?
   /// Set when staff scheduled inside the statutory notice window anyway.
   /// The reason is REQUIRED (audit action entry_notice.overridden is in
   /// REASON_REQUIRED) - this pair is the contemporaneous record an
   /// unlawful-entry claim is defended with, or lost on.
-  entryOverrideReason  String?
-  entryOverriddenAt    DateTime?
+  entryOverrideReason            String?
+  entryOverriddenAt              DateTime?
   /// MAINT-05: "a tenant no-show is logged (trip-charge/billback evidence)".
-  tenantNoShowAt       DateTime?
-  completedAt          DateTime?
-  verifiedAt           DateTime?
+  tenantNoShowAt                 DateTime?
+  completedAt                    DateTime?
+  verifiedAt                     DateTime?
   /// R-030 (MAINT-07): the tenant said it was NOT resolved and the job went
   /// back to work. A timestamp rather than a boolean, because "when did this
   /// come back" is the question a repeat-issue report asks.
-  reopenedAt           DateTime?
+  reopenedAt                     DateTime?
   /// How many times this job has been sent back. Denormalized from the
   /// verification rows below because a work order list has to show it
   /// without loading each job's history, and it is what `round` on the next
   /// verification counts from.
-  reopenCount          Int           @default(0)
-  closedAt             DateTime?
-  closedByStaffId      String?
+  reopenCount                    Int             @default(0)
+  closedAt                       DateTime?
+  closedByStaffId                String?
   /// Drives the mid-lease chargeback flow (MAINT-07) - distinct from a
   /// move-out deposit deduction.
-  tenantCaused         Boolean       @default(false)
-  warrantyClaim        Boolean       @default(false)
-  createdAt            DateTime      @default(now())
-  updatedAt            DateTime      @updatedAt
+  tenantCaused                   Boolean         @default(false)
+  warrantyClaim                  Boolean         @default(false)
+  createdAt                      DateTime        @default(now())
+  updatedAt                      DateTime        @updatedAt
 
-  property   Property   @relation(fields: [propertyId], references: [id])
-  unit       Unit       @relation(fields: [unitId], references: [id])
-  ticket     Ticket?    @relation(fields: [ticketId], references: [id])
-  vendor     Vendor?    @relation(fields: [vendorId], references: [id])
-  assignedTo StaffUser? @relation("WorkOrderAssignedTo", fields: [assignedStaffId], references: [id])
-  approvedBy StaffUser? @relation("WorkOrderApprovedBy", fields: [approvedByStaffId], references: [id])
-  entryNotice Notice?   @relation("WorkOrderEntryNotice", fields: [entryNoticeId], references: [id])
-  entryPermissionLoggedBy StaffUser? @relation("WorkOrderEntryPermission", fields: [entryPermissionLoggedByStaffId], references: [id])
-  closedBy   StaffUser? @relation("WorkOrderClosedBy", fields: [closedByStaffId], references: [id])
-  verifications WorkOrderVerification[]
-  threads    Thread[]
-  documents  Document[]
-  bids       WorkOrderBid[]
-  messages   Message[]
-  notes      WorkOrderNote[]
-  messageLinks WorkOrderMessageLink[]
+  property                Property                @relation(fields: [propertyId], references: [id])
+  unit                    Unit                    @relation(fields: [unitId], references: [id])
+  ticket                  Ticket?                 @relation(fields: [ticketId], references: [id])
+  vendor                  Vendor?                 @relation(fields: [vendorId], references: [id])
+  assignedTo              StaffUser?              @relation("WorkOrderAssignedTo", fields: [assignedStaffId], references: [id])
+  approvedBy              StaffUser?              @relation("WorkOrderApprovedBy", fields: [approvedByStaffId], references: [id])
+  entryNotice             Notice?                 @relation("WorkOrderEntryNotice", fields: [entryNoticeId], references: [id])
+  entryPermissionLoggedBy StaffUser?              @relation("WorkOrderEntryPermission", fields: [entryPermissionLoggedByStaffId], references: [id])
+  closedBy                StaffUser?              @relation("WorkOrderClosedBy", fields: [closedByStaffId], references: [id])
+  verifications           WorkOrderVerification[]
+  threads                 Thread[]
+  documents               Document[]
+  bids                    WorkOrderBid[]
+  messages                Message[]
+  notes                   WorkOrderNote[]
+  messageLinks            WorkOrderMessageLink[]
   /// At most one, by partial unique index - see `Charge.workOrderId`.
-  chargebacks Charge[]
+  chargebacks             Charge[]
 
   @@index([propertyId, status])
   @@index([unitId])
@@ -1890,7 +1895,6 @@ model WorkOrder {
 /// the whole point is comparing several at once.
 /**
  * A message tagged onto a work order AFTER it was sent (COMM-06, R-032).
- *
  * A SEPARATE TABLE, NOT AN UPDATE TO Message.workOrderId, because Message is
  * append-only at the database level (Message_append_only rejects every
  * UPDATE, not only DELETE) - the trigger exists precisely so nobody can
@@ -1921,13 +1925,11 @@ model WorkOrderMessageLink {
 
 /**
  * A staff-only internal note on a work order (COMM-06, R-032).
- *
  * NOT a Message. It is never sent to a tenant or a vendor, belongs to no
  * Thread, and has no delivery status - inventing a fake channel and a fake
  * recipient to fit it into Message's shape would let a bug someday actually
  * transmit an internal note to the person it is about. A dedicated model
  * with none of that machinery cannot make that mistake.
- *
  * Append-only in practice, like every other evidence row in this product: a
  * correction is a new note, not an edit to this one.
  */
@@ -1953,7 +1955,7 @@ model WorkOrderNote {
 /// justified, and this product's whole premise is that such evidence does
 /// not get overwritten.
 model WorkOrderVerification {
-  id          String   @id @default(cuid())
+  id          String @id @default(cuid())
   workOrderId String
   tenantId    String
 
@@ -1967,11 +1969,11 @@ model WorkOrderVerification {
   /// would silently credit the second vendor with the first one's failure,
   /// and no amount of later analysis can recover the attribution once the
   /// column has moved. Null when the work was done in-house.
-  vendorId    String?
+  vendorId String?
 
   /// Which round of work this verifies: 1 for the first completion, 2 after
   /// the first reopen. Makes "asked twice, answered once" answerable.
-  round       Int      @default(1)
+  round Int @default(1)
 
   /// The one-tap answer. False sends the job back.
   resolved    Boolean
@@ -2092,9 +2094,9 @@ model Thread {
 /// Task requires a propertyId and an unknown sender has no property, which is
 /// precisely why the content cannot simply live on the Task.
 model UnroutedMessage {
-  id        String           @id @default(cuid())
-  channel   MessageChannel
-  direction MessageDirection @default(INBOUND)
+  id          String           @id @default(cuid())
+  channel     MessageChannel
+  direction   MessageDirection @default(INBOUND)
   /// The sender as the provider reported it, normalized to E.164 where it
   /// could be. Stored as received when it could not be - an unparseable
   /// number is still evidence of who tried to make contact.
@@ -2104,9 +2106,9 @@ model UnroutedMessage {
   reason      String
   /// Provider message id (Twilio SID), for reconciliation and de-duplication
   /// if the provider redelivers the same webhook.
-  externalId  String? @unique
+  externalId  String?          @unique
   receivedAt  DateTime
-  createdAt   DateTime @default(now())
+  createdAt   DateTime         @default(now())
 
   /// Set when a human files it into a thread. The Message created then
   /// carries the ORIGINAL receivedAt as its sentAt, so the transcript reads
@@ -2153,17 +2155,17 @@ model Message {
   workOrderId String?
   createdAt   DateTime         @default(now())
 
-  thread    Thread             @relation(fields: [threadId], references: [id])
-  staffUser StaffUser?         @relation("MessageSentBy", fields: [staffUserId], references: [id])
-  tenant    Tenant?            @relation("MessageFromTenant", fields: [tenantId], references: [id])
-  vendor    Vendor?            @relation("MessageFromVendor", fields: [vendorId], references: [id])
+  thread        Thread                @relation(fields: [threadId], references: [id])
+  staffUser     StaffUser?            @relation("MessageSentBy", fields: [staffUserId], references: [id])
+  tenant        Tenant?               @relation("MessageFromTenant", fields: [tenantId], references: [id])
+  vendor        Vendor?               @relation("MessageFromVendor", fields: [vendorId], references: [id])
   // RESTRICT, not the default SET NULL - see the migration's own comment:
   // Message's append-only trigger rejects the UPDATE a SET NULL cascade
   // would require, so RESTRICT is the only truthful option.
-  ticket    Ticket?            @relation(fields: [ticketId], references: [id], onDelete: Restrict)
-  workOrder WorkOrder?         @relation(fields: [workOrderId], references: [id], onDelete: Restrict)
-  delivery  MessageDelivery?
-  unrouted  UnroutedMessage?
+  ticket        Ticket?               @relation(fields: [ticketId], references: [id], onDelete: Restrict)
+  workOrder     WorkOrder?            @relation(fields: [workOrderId], references: [id], onDelete: Restrict)
+  delivery      MessageDelivery?
+  unrouted      UnroutedMessage?
   workOrderLink WorkOrderMessageLink?
 
   @@index([threadId, sentAt])
@@ -2279,8 +2281,8 @@ model Notification {
 
   createdAt DateTime @default(now())
 
-  property Property?    @relation(fields: [propertyId], references: [id])
-  event    OutboxEvent? @relation(fields: [eventId], references: [id])
+  property Property?             @relation(fields: [propertyId], references: [id])
+  event    OutboxEvent?          @relation(fields: [eventId], references: [id])
   delivery NotificationDelivery?
 
   @@index([recipientType, recipientId, createdAt])
@@ -2292,9 +2294,9 @@ model Notification {
 /// above can be trigger-protected as evidence while a provider webhook stays
 /// free to move QUEUED -> SENT -> DELIVERED.
 model NotificationDelivery {
-  id             String         @id @default(cuid())
-  notificationId String         @unique
-  status         DeliveryStatus @default(QUEUED)
+  id               String         @id @default(cuid())
+  notificationId   String         @unique
+  status           DeliveryStatus @default(QUEUED)
   /// Why it was never sent, when status is SUPPRESSED. Closed vocabulary in
   /// packages/core/notifications (preference off, kill switch, quiet hours,
   /// no address on file).
@@ -2341,39 +2343,113 @@ model NotificationPreference {
   @@index([recipientType, recipientId])
 }
 
+/// A managed message template (COMM-03, R-049).
+///
+/// NOT THE SAME THING as the typed templates in
+/// packages/core/notifications/templates.ts, and the two do not overlap
+/// (D-44). Those render the product's own automated messages and are checked
+/// by the compiler; these are written by a property manager for the things a
+/// person sends - violation notices, renewal offers, welcome packets - and
+/// are strings with `{{merge_fields}}` that no compiler will ever see. The
+/// closed catalogue in packages/core/comms/merge-fields.ts, validation on
+/// save, and preview-before-send are what replace the type checking.
+model MessageTemplate {
+  id               String   @id @default(cuid())
+  /// Free text, shown in the picker. Named by the person who will look for it.
+  name             String
+  /// ROUTINE or LEGAL. Decides whether an unapproved translation may be used
+  /// (COMM-03) - see `languageFor`. Not an enum: notice types are
+  /// jurisdiction configuration (D-4) and this is the same argument one level
+  /// up, but the VALUES are a closed pair in core.
+  kind             String
+  /// Null for an SMS-only template. An email with no subject is a template
+  /// that will be delivered looking like spam.
+  subject          String?
+  body             String
+  /// Retired rather than deleted, like every other referenceable row here: a
+  /// message sent from a template is evidence, and the template it was sent
+  /// from is part of explaining it.
+  active           Boolean  @default(true)
+  createdByStaffId String
+  updatedByStaffId String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  createdBy    StaffUser                    @relation("TemplateCreatedBy", fields: [createdByStaffId], references: [id])
+  /// Restrict, not the SetNull Prisma defaults to for an optional relation.
+  /// Who last edited a template is part of explaining a message sent from it.
+  updatedBy    StaffUser?                   @relation("TemplateUpdatedBy", fields: [updatedByStaffId], references: [id], onDelete: Restrict)
+  translations MessageTemplateTranslation[]
+
+  @@index([active, name])
+}
+
+/// One template in one language (COMM-03).
+///
+/// `approvedAt` IS THE WHOLE POINT OF THIS TABLE. COMM-03 permits machine
+/// translation for routine chat and forbids it for legal notices, and once
+/// both are rows the only thing telling them apart is whether somebody with
+/// authority signed this one off. A LEGAL template with an unapproved
+/// translation falls back to the default language and reports why, rather
+/// than serving a notice whose words nobody read.
+model MessageTemplateTranslation {
+  id                String    @id @default(cuid())
+  templateId        String
+  /// BCP-47, matching `Tenant.preferredLocale`.
+  locale            String
+  subject           String?
+  body              String
+  /// Null until reviewed. For a LEGAL template this is an attorney sign-off;
+  /// the product cannot verify that, so it records WHO and WHEN and makes the
+  /// claim auditable rather than pretending to check it.
+  approvedAt        DateTime?
+  approvedByStaffId String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  template   MessageTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  /// Restrict. WHO approved a legal translation is the auditable claim this
+  /// column exists to make; SetNull would erase it on a staff delete.
+  approvedBy StaffUser?      @relation("TranslationApprovedBy", fields: [approvedByStaffId], references: [id], onDelete: Restrict)
+
+  /// One translation per language per template. Two Spanish versions is a
+  /// question nobody can answer at send time.
+  @@unique([templateId, locale])
+}
+
 /// A legally significant notice and the proof it was served. `addressOfRecord`
 /// is stored as rendered rather than joined at read time: what matters in a
 /// dispute is the address the notice actually carried on the day it went out,
 /// not the tenant's address today.
 model Notice {
-  id              String @id @default(cuid())
-  propertyId      String
-  leaseId         String
+  id                 String               @id @default(cuid())
+  propertyId         String
+  leaseId            String
   /// Notice types are jurisdiction config (D-4), not an enum here - a state
   /// that invents a new notice must not require a migration.
-  type            String
-  addressOfRecord String
-  bodyText        String?
+  type               String
+  addressOfRecord    String
+  bodyText           String?
   /// The generated PDF.
-  documentId      String?
-  serviceMethod   NoticeServiceMethod?
-  servedAt        DateTime?
-  servedByStaffId String?
+  documentId         String?
+  serviceMethod      NoticeServiceMethod?
+  servedAt           DateTime?
+  servedByStaffId    String?
   /// Photo of the posted notice, certified-mail receipt, delivery scan.
-  proofDocumentId String?
-  trackingNumber  String?
+  proofDocumentId    String?
+  trackingNumber     String?
   /// The rule version whose notice period produced this notice's deadlines.
   jurisdictionRuleId String?
-  generatedAt        DateTime @default(now())
-  createdAt          DateTime @default(now())
+  generatedAt        DateTime             @default(now())
+  createdAt          DateTime             @default(now())
 
-  property         Property          @relation(fields: [propertyId], references: [id])
-  lease            Lease             @relation(fields: [leaseId], references: [id])
-  servedBy         StaffUser?        @relation("NoticeServedBy", fields: [servedByStaffId], references: [id])
-  jurisdictionRule JurisdictionRule? @relation(fields: [jurisdictionRuleId], references: [id])
-  document         Document?         @relation("NoticeDocument", fields: [documentId], references: [id])
-  proofDocument    Document?         @relation("NoticeProofDocument", fields: [proofDocumentId], references: [id])
-  entryForWorkOrders WorkOrder[]     @relation("WorkOrderEntryNotice")
+  property           Property          @relation(fields: [propertyId], references: [id])
+  lease              Lease             @relation(fields: [leaseId], references: [id])
+  servedBy           StaffUser?        @relation("NoticeServedBy", fields: [servedByStaffId], references: [id])
+  jurisdictionRule   JurisdictionRule? @relation(fields: [jurisdictionRuleId], references: [id])
+  document           Document?         @relation("NoticeDocument", fields: [documentId], references: [id])
+  proofDocument      Document?         @relation("NoticeProofDocument", fields: [proofDocumentId], references: [id])
+  entryForWorkOrders WorkOrder[]       @relation("WorkOrderEntryNotice")
 
   @@index([leaseId])
   @@index([propertyId, servedAt])
@@ -2436,24 +2512,24 @@ model InspectionItem {
 /// `capturedAt` is the EXIF timestamp and must never be stripped: a photo's
 /// timestamp IS the evidence.
 model Document {
-  id          String  @id @default(cuid())
-  propertyId  String?
-  unitId      String?
-  leaseId     String?
-  tenantId    String?
-  vendorId    String?
-  ticketId    String?
-  workOrderId String?
+  id                String    @id @default(cuid())
+  propertyId        String?
+  unitId            String?
+  leaseId           String?
+  tenantId          String?
+  vendorId          String?
+  ticketId          String?
+  workOrderId       String?
   /// Document class - lease, notice, invoice, w9, coi, inspection_photo, etc.
   /// Drives the retention rules R-012 configures (DOC-05).
-  type        String
-  fileName    String
-  contentType String
-  sizeBytes   Int
+  type              String
+  fileName          String
+  contentType       String
+  sizeBytes         Int
   /// Object-store key. Files never live in Postgres.
-  storageKey  String
-  sha256      String?
-  version     Int     @default(1)
+  storageKey        String
+  sha256            String?
+  version           Int       @default(1)
   /// Original capture time from EXIF, preserved. Distinct from createdAt,
   /// which is only when it was uploaded.
   capturedAt        DateTime?
@@ -2465,16 +2541,16 @@ model Document {
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
-  property          Property?  @relation(fields: [propertyId], references: [id])
-  unit              Unit?      @relation(fields: [unitId], references: [id])
-  lease             Lease?     @relation(fields: [leaseId], references: [id])
-  tenant            Tenant?    @relation(fields: [tenantId], references: [id])
-  vendor            Vendor?    @relation(fields: [vendorId], references: [id])
-  ticket            Ticket?    @relation(fields: [ticketId], references: [id])
-  workOrder         WorkOrder? @relation(fields: [workOrderId], references: [id])
-  uploadedBy        StaffUser? @relation("DocumentUploadedBy", fields: [uploadedByStaffId], references: [id])
-  noticesAsDocument Notice[]   @relation("NoticeDocument")
-  noticesAsProof    Notice[]   @relation("NoticeProofDocument")
+  property          Property?     @relation(fields: [propertyId], references: [id])
+  unit              Unit?         @relation(fields: [unitId], references: [id])
+  lease             Lease?        @relation(fields: [leaseId], references: [id])
+  tenant            Tenant?       @relation(fields: [tenantId], references: [id])
+  vendor            Vendor?       @relation(fields: [vendorId], references: [id])
+  ticket            Ticket?       @relation(fields: [ticketId], references: [id])
+  workOrder         WorkOrder?    @relation(fields: [workOrderId], references: [id])
+  uploadedBy        StaffUser?    @relation("DocumentUploadedBy", fields: [uploadedByStaffId], references: [id])
+  noticesAsDocument Notice[]      @relation("NoticeDocument")
+  noticesAsProof    Notice[]      @relation("NoticeProofDocument")
   utilityBills      UtilityBill[] @relation("UtilityBillDocument")
 
   @@index([propertyId, type])
@@ -2493,21 +2569,21 @@ model Document {
 /// queue table - the storage build had to consolidate seven of them after the
 /// fact, which is why this one exists before its first consumer.
 model Task {
-  id           String   @id @default(cuid())
-  propertyId   String
+  id                 String     @id @default(cuid())
+  propertyId         String
   /// Free-form so a later item can add a task type without a migration.
-  type         String
+  type               String
   /// What the task is about: "Lease", "WorkOrder", "Deposit", plus its id.
-  subjectType  String
-  subjectId    String
+  subjectType        String
+  subjectId          String
   /// The property-local calendar day this task belongs to (D-3). Part of the
   /// idempotency key, so a nightly job that runs twice creates one task.
-  businessDate DateTime @db.Date
-  priority     Priority @default(ROUTINE)
+  businessDate       DateTime   @db.Date
+  priority           Priority   @default(ROUTINE)
   /// Null means anyone on the team can pick it up.
-  assigneeStaffId String?
-  status          TaskStatus @default(OPEN)
-  title           String
+  assigneeStaffId    String?
+  status             TaskStatus @default(OPEN)
+  title              String
   /// Typed completion proof - the photo, the reading, the confirmation the
   /// task type demands. Shape is per task type and belongs to R-011.
   proof              Json?
@@ -2516,8 +2592,8 @@ model Task {
   /// The domain event that created this task, for tracing back through the
   /// outbox (R-006).
   sourceEventId      String?
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
 
   property    Property   @relation(fields: [propertyId], references: [id])
   assignee    StaffUser? @relation("TaskAssignedTo", fields: [assigneeStaffId], references: [id])
@@ -2585,14 +2661,14 @@ model JurisdictionRule {
   /// (D-4). Texas caps a returned-check fee at 30 USD (Tex. Bus. & Com. Code
   /// §3.506); other states differ and several bar one entirely. Core
   /// computes and clamps it (D-12).
-  nsfFeePermitted        Boolean @default(true)
+  nsfFeePermitted        Boolean  @default(true)
   nsfFeeMaxCents         Int?
-  cardSurchargePermitted Boolean @default(true)
+  cardSurchargePermitted Boolean  @default(true)
   /// A statutory ceiling on the surcharge, in basis points of the amount
   /// being paid. Null where the state sets none. Core clamps to it (D-12).
   cardSurchargeMaxBps    Int?
   applicationFeeCapCents Int?
-  rubsPermitted          Boolean @default(true)
+  rubsPermitted          Boolean  @default(true)
 
   /// Statute citation and who reviewed it. Every one of these numbers needs
   /// an attorney's eyes before it governs a real tenancy; this is where that

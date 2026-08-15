@@ -228,6 +228,18 @@ export const AUDIT_ACTIONS = [
   /// human saying "this is about that", not something the system inferred.
   'message.attached_to_workorder',
 
+  /// R-049: a managed message template was created or edited. Templates are
+  /// not evidence themselves, but a message sent from one is - and "what did
+  /// this template say on the day it went out" is unanswerable from a row
+  /// that has since been edited.
+  'template.saved',
+  /// R-049: a translation was marked approved for a LEGAL notice. THE most
+  /// consequential row in this area. The product cannot verify an attorney
+  /// read it; it can only record who claimed so, and this is that record.
+  /// On REASON_REQUIRED, because "approved by whom, on what basis" is the
+  /// entire question in a dispute over a mistranslated notice.
+  'template.translation_approved',
+
   /// R-033: a tenancy record was created. Carries `origin`, because an
   /// INHERITED lease and an APPLICATION one are different claims about what
   /// evidence exists behind the terms.
@@ -381,6 +393,10 @@ export const REASON_REQUIRED: ReadonlySet<AuditAction> = new Set([
   'fee.waived',
   'payment.reversed',
   'workorder.denied',
+  // R-049. "Approved by whom, on what basis" is the entire question in a
+  // dispute over a mistranslated notice, and the product cannot verify an
+  // attorney read it — only record who claimed so, and why.
+  'template.translation_approved',
   'document.delete_marked',
   'entry_notice.overridden',
   'application_order.deviated',

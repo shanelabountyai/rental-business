@@ -2094,3 +2094,40 @@ A visually-hidden `<input type="radio">` inside the styled label buys all four b
 - **The charge reaches the tenant's portal when Stripe invoices it, not when it is posted.** D-11 keeps `LedgerEntry` a projection of Stripe and nothing writes it directly, so a chargeback behaves exactly like rent, late fees, NSF fees and RUBS shares. The notice and the message go out immediately, so nobody is billed silently — but the e2e spec asserts the *notification*, not portal visibility, because asserting the latter would be asserting R-035's item.
 - **No PDF.** `Notice.documentId` is still never populated anywhere in the product; the entry notice has the same gap.
 - **Reversing a chargeback is not built.** D-11 says corrections are reversing entries; a disputed repair charge currently needs the general ledger-adjustment path.
+
+## R-049 — Message templates with merge fields and preview
+**Commit:** `pending`  ·  **Date:** 2026-08-15
+
+**What it built.** A managed template library a property manager writes in: `MessageTemplate` and its translations, a closed merge-field catalogue, validation, live preview against a real tenancy, and the approval control that COMM-03's language rule rests on.
+
+### The thing this item is actually about
+
+`packages/core/notifications/templates.ts` has said since R-016 why the product's automated templates are typed **functions** rather than strings with `{{placeholders}}`: *"a template referencing a field the caller does not pass is a build error rather than a rent reminder that says 'Hi undefined'."* That reasoning is correct and unchanged.
+
+**A managed template is a string somebody typed into a textarea. No compiler will ever see it.** So every guarantee the typed version got for free had to be re-earned at runtime, and that — not the CRUD — is the item:
+
+- **A closed catalogue.** `{{tenant.frist_name}}` is refused when it is saved, and the error names the field. It carries **no internal identifiers** (D-10 forbids them in tenant-facing text, and a catalogue that offers one is an invitation) and **nothing requiring a jurisdiction decision** — `balance.late_fee` is deliberately absent, because what a late fee should be is a per-lease, per-day question core answers from versioned rules (D-4/D-12), and a template quoting one would quote a number nobody computed for this tenancy.
+- **Validation on save**, because that is the last moment a human is in the room. Preview is optional and send is automated; a typo'd field reaching the send path goes out wrong to everybody at once.
+- **A renderer that never prints `undefined` and never prints a blank.** An unresolved field is left standing as its own token and named in `missing`, so the send path can refuse. `"Your lease ends on ."` reads as a broken system; the alternative reads as worse.
+- **Preview against a REAL tenancy.** The catalogue's example values would make every preview look perfect, which is the opposite of what a preview is for. A PM needs to see `{{lease.ends_on}}` come out empty on their month-to-month leases *before* sending to four hundred of them.
+
+**Preview and send share one resolver** (`templateValues`). A preview built from different code than the send is not a preview — it is a second implementation that agrees with the first until the day it does not, and that day is the day a message nobody saw goes out.
+
+### What it decided
+
+- **D-44: the managed library does not touch the 13 automated templates.** Letting a database row override an automated key would put the weaker runtime guarantee onto the paths that run unattended. COMM-03 does list rent reminders, and a PM genuinely cannot reword the automated one — recorded as a named gap rather than papered over.
+- **`template.approve` is its own privileged permission**, separate from `template.write`. COMM-03's rule comes down to a single `approvedAt` timestamp; if whoever pasted in a machine translation can also set it, the rule is decorative. Managers author templates and cannot sign off legal wording. The product **cannot** verify an attorney read it — it records who claimed so and why, which is why the action is on `REASON_REQUIRED`.
+- **An unapproved translation falls back rather than blocking.** Sending it would serve a legal notice whose words nobody with authority read — a mistranslated cure period is not a typo, it is a defective notice the tenant relied on. Refusing to send at all would mean a tenant who chose Spanish silently receives nothing, which is worse than receiving English. So it falls back and reports `unapproved_translation_for_legal`, which is the only way anybody learns the gap exists.
+- **Editing a translation clears its approval**, or the stamp keeps vouching for words that have since been rewritten.
+- **Merge fields are validated in translations too.** A translator who renders `{{tenant.first_name}}` as `{{nombre}}` ships a message with a visible token in it, and the translation is exactly where nobody would look. The editor says so on screen: *leave the merge fields exactly as they are.*
+
+### Found along the way
+
+- **`argsIgnorePattern` was never configured.** The codebase has written `_previous` since R-008 to mean "this parameter exists because the signature demands it" — every `useActionState` action has one — but the lint rule was left at its default `args: "after-used"`, which only reports *trailing* unused parameters. Since `formData` was almost always used, the `_previous` before it was silently exempt, and the convention looked enforced when it was not. The first action to ignore both parameters produced two warnings for following the same convention as everything around it.
+- **Adding a permission requires re-seeding roles.** Roles are data (D-5), so `template.write` existing in `PERMISSIONS` did nothing until `db:seed` ran — the e2e suite failed with a page that simply never rendered its form. Obvious in hindsight and not obvious at 60 seconds of timeout.
+
+### What it left behind
+
+- **Sending from the library is R-044's**, which this was pulled ahead of. The templates render and preview; nothing yet dispatches one to a selection of tenants.
+- **`company.phone` is the one merge field with nothing behind it.** `Property` has no contact number; it resolves to null, so the preview shows the token and the send path would refuse. R-081's property contact details is where it gets a value.
+- **No template is seeded.** The library starts empty on purpose, exactly as `SCHEDULED_JOBS` and the notification registry do — the first template is the rent reminder somebody retypes every month, and guessing their wording is worse than an empty list.

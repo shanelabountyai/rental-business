@@ -68,6 +68,7 @@ export function TextField({
   autoFocus,
   list,
   idPrefix,
+  onChange,
 }: {
   label: string
   name: string
@@ -90,6 +91,11 @@ export function TextField({
   /// is invalid HTML that breaks getByLabel() for every one of them but the
   /// first, the same lesson CheckboxField's `value` param already applies.
   idPrefix?: string
+  /// Set only when something outside the form has to react as the user types
+  /// - R-049's live template preview is the first. The field stays
+  /// UNCONTROLLED either way (`defaultValue`, not `value`), so adding this
+  /// changes nothing for the twenty-odd existing callers.
+  onChange?: (value: string) => void
 }) {
   const id = idPrefix ? `field-${idPrefix}-${name}` : `field-${name}`
   const errorId = `${id}-error`
@@ -115,6 +121,7 @@ export function TextField({
         type={type}
         required={required}
         defaultValue={defaultValue}
+        onChange={onChange ? (event) => onChange(event.target.value) : undefined}
         inputMode={inputMode}
         min={min}
         max={max}
