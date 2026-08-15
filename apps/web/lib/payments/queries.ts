@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { balanceCents } from '@rental/core/ledger'
+import { balanceCents, statement, reversedEntryIds } from '@rental/core/ledger'
 import { cardFeeFor, payable, railsFor } from '@rental/core/payments'
 import type { CollectionMethod, PaymentRail } from '@rental/core/payments'
 import { prisma } from '@rental/db'
@@ -208,5 +208,73 @@ export async function paymentView(scope: TenantScope): Promise<PaymentView | nul
     cardFeeCents: fee.feeCents,
     cardFeePermitted: fee.permitted,
     hasPaymentMethod: payer.stripeCustomerId != null,
+  }
+}
+
+/**
+ * The tenant's own statement: every charge and payment, oldest first, with a
+ * running balance (PAY-03, R-043).
+ *
+ * ==========================================================================
+ * WHY THIS EXISTS. The pay screen shows what a tenant OWES. It has never
+ * shown what they have PAID — so the one question that generates the calls,
+ * "did you get my payment?", was unanswerable from the portal. The backlog's
+ * claim is that half of those calls disappear when a tenant can see their own
+ * ledger, and this is the screen that tests it.
+ *
+ * THE SAME ARITHMETIC AS THE STAFF VIEW, deliberately. `statement()` and
+ * `balanceCents()` are the same functions `leaseStatement()` calls, over the
+ * same rows. A tenant and a property manager looking at the same tenancy must
+ * never see two different balances: that is the argument in every disputed
+ * payment, and losing it costs more than the feature saves. What differs
+ * between the two screens is the WORDING (D-10), never the numbers.
+ *
+ * AUTHORIZED BY THE PAYER ROW, not by a scope list. `leaseStatement()` takes
+ * a staff `ResolvedScope`; this resolves the tenant's own active payer, which
+ * is the same check `paymentView()` makes and the only one that means
+ * anything on the portal side (R-018: the tenant side never falls through to
+ * the staff side).
+ * ==========================================================================
+ */
+export async function tenantStatement(scope: TenantScope) {
+  if (scope.leaseIds.length === 0) return null
+
+  const payer = await prisma.leasePayer.findFirst({
+    where: { leaseId: { in: [...scope.leaseIds] }, tenantId: scope.tenantId, active: true },
+    select: {
+      leaseId: true,
+      lease: {
+        select: {
+          property: { select: { name: true, timezone: true } },
+          unit: { select: { name: true } },
+        },
+      },
+    },
+  })
+  if (!payer) return null
+
+  const rows = await prisma.ledgerEntry.findMany({
+    where: { leaseId: payer.leaseId },
+    orderBy: { occurredAt: 'asc' },
+    select: {
+      id: true,
+      type: true,
+      amountCents: true,
+      occurredAt: true,
+      description: true,
+      reversesId: true,
+    },
+  })
+
+  return {
+    propertyName: payer.lease.property.name,
+    unitName: payer.lease.unit.name,
+    timezone: payer.lease.property.timezone,
+    lines: statement(rows),
+    // Both sides, because D-11 makes a correction a new REVERSAL row rather
+    // than an edit - the original stays visible and the tenant sees what
+    // actually happened instead of a tidied history.
+    reversed: reversedEntryIds(rows),
+    balanceCents: balanceCents(rows),
   }
 }

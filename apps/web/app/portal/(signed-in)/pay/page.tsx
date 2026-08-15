@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { formatCents } from '@rental/core/money'
 import { CARD_FIXED_CENTS, CARD_RATE_BPS } from '@rental/core/payments'
 import { AutopayPanel } from '@/components/payments/autopay-panel.tsx'
@@ -74,6 +75,17 @@ export default async function PayPage() {
         start={startAutopaySetup}
         saveDebitDay={setDebitDay}
       />
+
+      {/* The way to "did you get my payment?" (R-043). Above the pay form so
+          a tenant checking rather than paying does not have to scroll past a
+          payment button to find it, and a link rather than an inline list so
+          paying stays three taps. */}
+      <Link
+        href="/portal/pay/history"
+        className="focus-visible:ring-ring w-fit text-sm underline underline-offset-4 focus-visible:ring-2 focus-visible:outline-none"
+      >
+        See everything you have paid
+      </Link>
 
       <section aria-labelledby="balance" className="flex flex-col gap-2 rounded-lg border p-4">
         <h2 id="balance" className="text-muted-foreground text-sm font-medium">

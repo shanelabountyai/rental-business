@@ -2034,3 +2034,27 @@ A visually-hidden `<input type="radio">` inside the styled label buys all four b
 **What it left behind.**
 - **The accessibility tier is now closed** — R-098, R-099, R-101, R-101b, R-101c, R-101d.
 - **`expectAnnouncedInPlace` is still only in `pay.spec.ts`.** The components it would catch are fixed; rolling it wider is cheap whenever somebody is in those files anyway.
+
+## R-043 — The tenant's own statement
+**Commit:** `pending`  ·  **Date:** 2026-08-15
+
+**What it built.** `/portal/pay/history` — every charge and payment on the tenancy, newest first, with what was owed after each one — and `tenantStatement()` behind it.
+
+**Most of this row already existed, and saying so is the honest version.** The backlog costed R-043 as "tenant-visible ledger + portal payment: current balance, itemized history, one-time payment in ≤3 taps, saved or new method, instant receipt". Reading the pay screen, four of those five were already built by R-035, R-037 and R-040. The one that was not is **history** — and it is the one the row's business claim actually rests on. A tenant could see what they *owe* and never what they have *paid*, so *"did you get my payment?"* — the call this item is justified by — was the single question the portal could not answer.
+
+**The numbers come from the same functions as the staff view, and that is the design.** `tenantStatement()` calls `statement()`, `balanceCents()` and `reversedEntryIds()` — the same three `leaseStatement()` calls, over the same rows. A tenant and a property manager looking at one tenancy must never be shown two different balances: that is the argument in every disputed payment, and losing it costs more than the feature saves. What differs between the two screens is the **wording** (D-10) — "what you paid" rather than "credits", no column headed "running balance" — never the arithmetic.
+
+**A reversed payment stays on the statement and says so.** D-11 makes a correction a new REVERSAL row rather than an edit, so the original is still there; hiding it would make the statement look like it double-counted, and tidying a tenant's payment history is exactly the behaviour the evidence trail exists to prevent.
+
+**Its own page, not another section on `/portal/pay`.** PAY-01 wants paying to be three taps, and a history list above or below the pay button is the thing that pushes the button off a phone screen. The link sits *above* the pay form so a tenant who came to check does not scroll past a payment button to find it.
+
+**A real bug, caught by the test rather than by review.** The description and the "this was later reversed" note shared one `<td>`, so the two facts ran together into a single string — `getByText('Card payment', { exact: true })` could not match, and a screen reader would have read them as one phrase. The description now has its own element.
+
+**What it decided.**
+- **Authorization is the payer row, not a scope list.** `leaseStatement()` takes a staff `ResolvedScope`; this resolves the tenant's own active `LeasePayer`, the same check `paymentView()` makes. R-018's rule that the tenant side never falls through to the staff side holds here.
+- **Newest-first for reading, oldest-first for arithmetic.** The running balance is computed in core in occurrence order and displayed reversed. The number beside a line is the balance *after* that line whichever way the list is sorted, and a tenant opens this to check the most recent thing.
+- **Timestamps are read in the PROPERTY's zone** via `friendlyDate(line.occurredAt, view.timezone)` (R-101c). `occurredAt` is a real timestamp, not a `@db.Date` calendar day.
+
+**What it left behind.**
+- **The receipt is still per-payment, not a downloadable statement.** R-046's pay-now magic links are the natural home for that, since they already build a tenant-addressable view of one tenancy.
+- **A machine-wide trap, found the hard way and worth writing down.** The first full sweep was SIGKILLed at 100/616 with no failures. It was not the OS: the only `JetsamEvent` file that day was over an hour earlier, memory pressure was `0` at 51% available, and — the tell — **the server survived and the runner died**, the opposite shape of a memory kill. A Playwright runner belonging to a *different project* was alive at the same moment and died with it. The likely mechanism is that both CLAUDE.md files prescribe `pkill -f playwright` before a sweep, and that pattern matches **every project on the machine**. Recorded as the leading hypothesis rather than the established cause, per the rule that a tool which guesses a cause is worse than one that stays quiet. The re-run from a verified-clean machine was **608 passed + 8 skipped = 616**, reconciling exactly, in 3.2m.

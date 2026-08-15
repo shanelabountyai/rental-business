@@ -279,3 +279,95 @@ test.describe('the tenant pay screen', () => {
     expect(results.violations).toEqual([])
   })
 })
+
+test.describe('the tenant\'s own statement (R-043)', () => {
+  /// A charge, a payment against it, and a reversal — the three shapes a
+  /// tenant ever sees, including the one D-11 makes unavoidable.
+  async function seedWithHistory() {
+    const { tenant, lease, property, payer } = await seed()
+    const paid = await prisma.ledgerEntry.create({
+      data: {
+        propertyId: property.id,
+        leaseId: lease.id,
+        leasePayerId: payer.id,
+        type: 'PAYMENT',
+        amountCents: -50_000,
+        description: 'Card payment',
+        occurredAt: new Date('2026-02-05T12:00:00Z'),
+      },
+    })
+    await prisma.ledgerEntry.create({
+      data: {
+        propertyId: property.id,
+        leaseId: lease.id,
+        leasePayerId: payer.id,
+        type: 'REVERSAL',
+        amountCents: 50_000,
+        description: 'Card payment returned',
+        occurredAt: new Date('2026-02-09T12:00:00Z'),
+        reversesId: paid.id,
+      },
+    })
+    return { tenant, lease }
+  }
+
+  test('shows what was charged AND what was paid — the question the pay screen cannot answer', async ({
+    page,
+  }) => {
+    const { tenant } = await seedWithHistory()
+    await page.goto(await magicLinkFor(tenant.id))
+    await page.goto('/portal/pay')
+
+    // Reachable from the pay screen without hunting.
+    await page.getByRole('link', { name: /See everything you have paid/ }).click()
+    await expect(page).toHaveURL(/\/portal\/pay\/history$/)
+
+    await expect(page.getByRole('heading', { name: 'Your payments' })).toBeVisible()
+    await expect(page.getByText('February rent')).toBeVisible()
+    // The payment itself — the thing "did you get my payment?" is about, and
+    // the thing the pay screen never showed.
+    await expect(page.getByText('Card payment', { exact: true })).toBeVisible()
+  })
+
+  test('shows a reversal as a reversal, rather than quietly dropping it', async ({ page }) => {
+    // D-11 keeps the original row and adds a reversal beside it. A tenant who
+    // sees a payment listed and then reversed has to be told which, or the
+    // statement reads as though it double-counted.
+    const { tenant } = await seedWithHistory()
+    await page.goto(await magicLinkFor(tenant.id))
+    await page.goto('/portal/pay/history')
+
+    await expect(page.getByText('Card payment returned')).toBeVisible()
+    await expect(page.getByText('This was later reversed')).toBeVisible()
+  })
+
+  test('THE INVARIANT: the tenant and the office see the same balance', async ({ page }) => {
+    // $1,500 charged, $500 paid, that payment returned — so $1,500 owed. If
+    // the portal and the admin ledger ever disagree, the disagreement IS the
+    // dispute this feature exists to prevent, and it would be a worse bug
+    // than showing nothing.
+    const { tenant, lease } = await seedWithHistory()
+    await page.goto(await magicLinkFor(tenant.id))
+    await page.goto('/portal/pay/history')
+
+    await expect(page.getByText('$1,500.00').first()).toBeVisible()
+
+    const rows = await prisma.ledgerEntry.findMany({
+      where: { leaseId: lease.id },
+      select: { amountCents: true },
+    })
+    expect(rows.reduce((sum, r) => sum + r.amountCents, 0)).toBe(150_000)
+  })
+
+  test('accessibility', async ({ page }) => {
+    const { tenant } = await seedWithHistory()
+    await page.goto(await magicLinkFor(tenant.id))
+    await page.goto('/portal/pay/history')
+
+    const { default: AxeBuilder } = await import('@axe-core/playwright')
+    const results = await new AxeBuilder({ page })
+      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+      .analyze()
+    expect(results.violations).toEqual([])
+  })
+})
