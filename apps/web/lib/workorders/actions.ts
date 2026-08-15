@@ -3,6 +3,7 @@
 import { actualTotalCents, reapprovalCheck } from '@rental/core/approvals'
 import { type OutboundChannel, isOpenTicketStatus, validateOutboundMessage } from '@rental/core/comms'
 import { formatCents } from '@rental/core/money'
+import { businessDate } from '@rental/core/scheduling'
 import {
   type WorkOrderInput,
   closeDecision,
@@ -21,6 +22,7 @@ import { sendThreadMessage } from '@/lib/comms/messages.ts'
 import { emitEvent } from '@/lib/jobs/outbox.ts'
 import { dispatchPendingNotifications, notify } from '@/lib/notifications/send.ts'
 import { completeTaskWork } from '@/lib/tasks/complete.ts'
+import { createTask } from '@/lib/tasks/create.ts'
 import { issueVendorLink, revokeVendorLinks } from '@/lib/vendors/link.ts'
 import { policyFor } from './queries.ts'
 import { vendorWorkOrderThread } from './timeline.ts'
@@ -608,9 +610,44 @@ export async function closeWorkOrder(
     await closeTicketIfSettled(tx, workOrder, actor.id)
   })
 
+  // A TENANT-CAUSED JOB GOES INTO A QUEUE, NOT INTO SOMEBODY'S MEMORY (D-43).
+  //
+  // Posting the charge is a separate action behind `ledger.adjust`, which
+  // buys the permission boundary and the ability to bill part of a repair -
+  // and costs the guarantee that a flagged job is ever billed at all. This
+  // is what pays that back: one Task entity for every staff work queue (D-9),
+  // so "closed as tenant-caused, never billed" is a row somebody sees rather
+  // than revenue that quietly leaks.
+  //
+  // OUTSIDE THE TRANSACTION ABOVE, DELIBERATELY. `createTask` catches its own
+  // unique violation, and a P2002 inside a transaction leaves that
+  // transaction aborted at the Postgres level - the COMMIT would then act as
+  // a ROLLBACK and silently undo the close. See createTask's own note. The
+  // close is the fact that must survive; the task is idempotent and can be
+  // retried, and `tenantCaused` on the row is a second way to find it.
+  if (cause === 'tenant_caused') {
+    await createTask(prisma, {
+      propertyId: workOrder.propertyId,
+      type: 'workorder_chargeback_decision',
+      subjectType: 'WorkOrder',
+      subjectId: workOrderId,
+      businessDate: businessDate(new Date(), workOrder.property.timezone),
+      // ROUTINE whatever the job's own priority was. A burst pipe is an
+      // emergency; deciding who pays for it the next morning is not, and
+      // priority inflation is how a queue stops meaning anything.
+      priority: 'ROUTINE',
+      title: `Decide chargeback: ${workOrder.scope.slice(0, 80)}`,
+    }).catch((error) => {
+      // Never fails the close. The job IS closed, and losing that to a task
+      // insert would be the tail wagging the dog.
+      console.error(`[close] failed to raise chargeback task for ${workOrderId}`, error)
+    })
+  }
+
   revalidatePath(`/workorders/${workOrderId}`)
   revalidatePath('/workorders')
   revalidatePath('/maintenance')
+  revalidatePath('/tasks')
   if (workOrder.ticket) revalidatePath(`/maintenance/${workOrder.ticket.id}`)
   return {
     notice: decision.unverified

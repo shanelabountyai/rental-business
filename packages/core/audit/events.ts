@@ -372,6 +372,12 @@ export function isReasonCode(value: string): value is ReasonCode {
  */
 export const REASON_REQUIRED: ReadonlySet<AuditAction> = new Set([
   'ledger.adjusted',
+  // R-031. Billing a tenant for a repair is a judgement — that this damage
+  // was theirs, and that this share of the cost is fair. A chargeback with no
+  // stated reason is indistinguishable from retaliation, which is the exact
+  // claim it will be defended against, and the tenant's own notice reproduces
+  // this reason verbatim.
+  'workorder.chargeback_posted',
   'fee.waived',
   'payment.reversed',
   'workorder.denied',

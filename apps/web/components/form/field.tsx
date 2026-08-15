@@ -8,12 +8,45 @@
 // accessibility baseline: a real <label>, min-h-11 targets, visible focus
 // rings.
 
+/**
+ * The admin side's error region.
+ *
+ * ==========================================================================
+ * THE REGION IS ALWAYS RENDERED — the same fix R-101 made to `FormAlerts`,
+ * applied to the component it missed (R-031).
+ *
+ * This used to `return null` when there was no message and insert the
+ * `role="alert"` element together with its text. A live region announces
+ * CHANGES TO ITSELF, so it has to be in the accessibility tree BEFORE the
+ * text lands in it; one that appears already-populated is a new node, not a
+ * change, and assistive technology routinely says nothing at all.
+ *
+ * R-101 fixed the tenant-facing twin in `auth-form.tsx` and recorded the
+ * reasoning there. This is the primitive every ADMIN form uses for the same
+ * job, and it still had the defect — so a PM submitting a form with a
+ * keyboard and a screen reader got silence on every validation failure in
+ * the back office. Found while adding one more caller (the chargeback panel),
+ * which is the only reason it surfaced at all: it is invisible to axe, which
+ * scans a static snapshot and cannot know whether anything was spoken.
+ *
+ * `display: contents` so the always-present wrapper contributes no box — its
+ * parents are `flex flex-col gap-*`, and an empty div would add a phantom gap
+ * under every field in the product.
+ *
+ * The `id` stays on the `<p>`, not the wrapper: an `aria-describedby`
+ * pointing at an id that does not exist is ignored, which is the correct
+ * behaviour when there is no error to describe.
+ * ==========================================================================
+ */
 export function FieldError({ id, message }: { id: string; message?: string }) {
-  if (!message) return null
   return (
-    <p id={id} role="alert" className="text-sm text-red-700 dark:text-red-400">
-      {message}
-    </p>
+    <div role="alert" className="contents">
+      {message && (
+        <p id={id} className="text-sm text-red-700 dark:text-red-400">
+          {message}
+        </p>
+      )}
+    </div>
   )
 }
 

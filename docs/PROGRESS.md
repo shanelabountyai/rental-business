@@ -2058,3 +2058,39 @@ A visually-hidden `<input type="radio">` inside the styled label buys all four b
 **What it left behind.**
 - **The receipt is still per-payment, not a downloadable statement.** R-046's pay-now magic links are the natural home for that, since they already build a tenant-addressable view of one tenancy.
 - **A machine-wide trap, found the hard way and worth writing down.** The first full sweep was SIGKILLed at 100/616 with no failures. It was not the OS: the only `JetsamEvent` file that day was over an hour earlier, memory pressure was `0` at 51% available, and — the tell — **the server survived and the runner died**, the opposite shape of a memory kill. A Playwright runner belonging to a *different project* was alive at the same moment and died with it. The likely mechanism is that both CLAUDE.md files prescribe `pkill -f playwright` before a sweep, and that pattern matches **every project on the machine**. Recorded as the leading hypothesis rather than the established cause, per the rule that a tool which guesses a cause is worse than one that stays quiet. The re-run from a verified-clean machine was **608 passed + 8 skipped = 616**, reconciling exactly, in 3.2m.
+
+## R-031 — Tenant-caused chargebacks
+**Commit:** `pending`  ·  **Date:** 2026-08-15
+
+**What it built.** The path from "this repair was the tenant's fault" to a charge on their account, with a notice and the evidence behind it.
+
+**Almost every part of this already existed and nothing joined them** — the same shape as R-042's `allocate()`. `WorkOrder.tenantCaused` has been written at close since R-002, and its schema comment says it "drives the mid-lease chargeback flow (MAINT-07)". `ChargeType.CHARGEBACK` was in the enum, already labelled *"Repair you were charged for"* in the tenant portal, and already ordered in `DEFAULT_ALLOCATION_ORDER`. `workorder.chargeback_posted` was in the audit vocabulary **and asserted in a test** — with no writer anywhere in the product. A PM could mark a job tenant-caused and the tenant was never billed.
+
+**What was actually missing:** `Charge.workOrderId`, the notice, and any way to get from a work order to a payer.
+
+### The two rules that do the work
+
+**You may bill less than the repair cost. You may never bill more.** Partial fault, betterment — a 12-year-old carpet replaced with a new one is not a 100% tenant cost — and goodwill splits all reduce the number. Nothing raises it above what was spent, because at that point it is a penalty, and a penalty needs a basis in the lease and the statute that this flow does not establish. The amount field is pre-filled with the full cost and editable; the ceiling is enforced in `chargebackDecision`, on the server.
+
+**Nothing is inferred.** The job must be CLOSED, somebody must have chosen `tenant_caused`, and somebody must have typed both an amount and a reason. `unknown` never becomes `tenant_caused`.
+
+### What it decided
+
+- **D-43: its own action behind `ledger.adjust`, not a checkbox on the close form.** `closeWorkOrder` runs on `workorder.write` — the permission a maintenance coordinator holds — and RBAC deliberately keeps `ledger.adjust` away from managers. Posting the charge inside the close would have quietly redefined "can close a job" as "can bill a tenant". The e2e suite proves it: the manager who closes the job never sees the panel.
+- **The split costs a guarantee, and the Task pays for it.** A job could now be flagged and never billed. Closing as tenant-caused raises a `workorder_chargeback_decision` Task (D-9), ROUTINE whatever the job's priority was — deciding who pays the morning after a burst pipe is not an emergency, and priority inflation is how a queue stops meaning anything.
+- **The Task is raised OUTSIDE the close transaction, deliberately.** `createTask` catches its own unique violation, and a P2002 inside a transaction leaves it aborted at the Postgres level — the COMMIT would then act as a ROLLBACK and silently undo the close. Its own doc-comment warns about this; the close is the fact that must survive.
+- **A reason is required** — `workorder.chargeback_posted` joined `REASON_REQUIRED`. The tenant's notice quotes it back verbatim, and a chargeback with no stated reason is indistinguishable from retaliation, which is the claim it will be defended against.
+- **One chargeback per job, enforced by a partial unique index** on `Charge.workOrderId`, not by a read-then-write check two concurrent submits would both pass. Same reasoning and same shape as `Charge_one_nsf_fee_per_payment`.
+- **The arithmetic is on the charge and on the notice.** `"$60.00 of a $115.00 repair"`. A tenant shown only "$150" reads it as a number we invented; one who can see they were billed $150 of a $412 repair reads it as a decision made in their favour.
+- **The notice says disputing is not a failure to pay rent.** Without that line the only way left to disagree is to withhold rent, which is the outcome the notice exists to prevent.
+
+### Two real bugs found along the way
+
+- **`FieldError` had R-101's live-region defect** — it returned `null` with no message and inserted `role="alert"` together with its text, so the region arrived already-populated and announced nothing. R-101 fixed the tenant-facing twin in `auth-form.tsx` and missed this one, which is the error primitive **every admin form** uses: a PM using a screen reader got silence on every validation failure in the back office. Invisible to axe, which scans a static snapshot. Found only because this item added one more caller.
+- **A `WorkOrder` has no lease at all.** `ticketId` is nullable, and it points at a `Ticket` whose `leaseId` is also nullable — so for a PM-raised job there is no path to a tenant. Resolved as ticket-lease first (whoever reported it lived there then, and billing the *new* tenant for the old one's damage is the worst outcome available), then the live lease on the unit, then refusal. It never falls back to the most recent ended lease: that would be a query guessing who broke something from a date range.
+
+### What it left behind
+
+- **The charge reaches the tenant's portal when Stripe invoices it, not when it is posted.** D-11 keeps `LedgerEntry` a projection of Stripe and nothing writes it directly, so a chargeback behaves exactly like rent, late fees, NSF fees and RUBS shares. The notice and the message go out immediately, so nobody is billed silently — but the e2e spec asserts the *notification*, not portal visibility, because asserting the latter would be asserting R-035's item.
+- **No PDF.** `Notice.documentId` is still never populated anywhere in the product; the entry notice has the same gap.
+- **Reversing a chargeback is not built.** D-11 says corrections are reversing entries; a disputed repair charge currently needs the general ledger-adjustment path.

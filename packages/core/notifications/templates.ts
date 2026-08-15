@@ -753,6 +753,82 @@ const vendorMessageTemplate: NotificationTemplate<VendorMessageContext> = {
   },
 }
 
+/// Context for `workorder.chargeback_posted` (MAINT-07, R-031). Amounts are
+/// pre-formatted strings, not cents: the template renders, core computes, and
+/// a message that did its own money maths would be a second place for the
+/// number to be wrong.
+export interface ChargebackPostedContext {
+  tenantName: string
+  addressLine1: string
+  jobSummary: string
+  /// Formatted. What is being added to their account.
+  amount: string
+  /// Formatted. What the repair actually cost — present only when the tenant
+  /// is being billed less than that, because saying "the repair cost $412 and
+  /// you owe $412" twice is noise.
+  jobCost?: string
+  /// Deep link to the tenant's own payment history, where the charge and its
+  /// evidence are.
+  url: string
+}
+
+/**
+ * "You have been charged for a repair" (MAINT-07, R-031).
+ *
+ * ==========================================================================
+ * `legal_notice`, WHICH IS LOCKED — a tenant cannot turn this off.
+ *
+ * Deliberately not `maintenance_update`. A tenant who has switched off
+ * updates about work orders is saying they do not need to know a plumber is
+ * coming; they are not waiving notice that money is being taken from them.
+ * A charge that appears on an account with no message preceding it is how a
+ * routine chargeback becomes a dispute, and on a locked category it cannot
+ * happen through a preference nobody remembered setting.
+ *
+ * IT LEADS WITH THE NUMBER, then the reason, then where to look. A tenant
+ * reading this on a phone lock screen should learn the amount from the first
+ * line — burying it under an explanation reads as an attempt to soften it,
+ * and the served Notice carries the full reasoning anyway.
+ * ==========================================================================
+ */
+export const chargebackPostedTemplate: NotificationTemplate<ChargebackPostedContext> = {
+  key: 'workorder.chargeback_posted',
+  category: 'legal_notice',
+  channels: ['SMS', 'EMAIL', 'PORTAL'],
+  render: (context, channel) => {
+    if (channel === 'SMS') {
+      return {
+        body: [
+          `A repair charge of ${context.amount} has been added to your account at ${context.addressLine1}.`,
+          context.jobSummary,
+          `Details, the reason, and the invoice: ${context.url}`,
+        ].join('\n'),
+      }
+    }
+
+    return {
+      subject: `Repair charge of ${context.amount} — ${context.addressLine1}`,
+      body: [
+        `Hello ${context.tenantName},`,
+        '',
+        `A charge of ${context.amount} has been added to your account for this repair:`,
+        '',
+        context.jobSummary,
+        '',
+        context.jobCost
+          ? `The repair cost ${context.jobCost}. You are being charged ${context.amount} of that — not the full cost.`
+          : 'This was recorded as tenant-caused rather than normal wear.',
+        '',
+        'The full notice explains why, and the contractor invoice and any photos are attached to the repair:',
+        '',
+        context.url,
+        '',
+        'If you disagree with this charge, tell us before it becomes due and we will review it with you.',
+      ].join('\n'),
+    }
+  },
+}
+
 export const TEMPLATES: Readonly<Record<string, NotificationTemplate<never>>> = {
   [vendorDeclinedTemplate.key]:
     vendorDeclinedTemplate as unknown as NotificationTemplate<never>,
@@ -778,6 +854,8 @@ export const TEMPLATES: Readonly<Record<string, NotificationTemplate<never>>> = 
     paymentReceiptTemplate as unknown as NotificationTemplate<never>,
   [paymentReturnedTemplate.key]:
     paymentReturnedTemplate as unknown as NotificationTemplate<never>,
+  [chargebackPostedTemplate.key]:
+    chargebackPostedTemplate as unknown as NotificationTemplate<never>,
 }
 
 export class UnknownTemplateError extends Error {

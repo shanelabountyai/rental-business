@@ -14,12 +14,15 @@ import { prisma } from '@rental/db'
 import { ApprovalPanel } from '@/components/workorders/approval-panel.tsx'
 import { BidsPanel } from '@/components/workorders/bids-panel.tsx'
 import { AssignForm } from '@/components/workorders/assign-form.tsx'
+import { ChargebackPanel } from '@/components/workorders/chargeback-panel.tsx'
 import { ClosePanel } from '@/components/workorders/close-panel.tsx'
 import { RecordActualsForm } from '@/components/workorders/record-actuals-form.tsx'
 import { ScheduleForm } from '@/components/workorders/schedule-form.tsx'
 import { TaskActionButton } from '@/components/tasks/action-button.tsx'
 import { TimelineSection } from '@/components/workorders/timeline-section.tsx'
 import { actorCan, actorDecision, propertyResource, requireScope } from '@/lib/auth/guard.ts'
+import { chargebackContext } from '@/lib/workorders/chargeback.ts'
+import { postChargeback } from '@/lib/workorders/chargeback-actions.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 import {
   addWorkOrderNote,
@@ -97,6 +100,16 @@ export default async function WorkOrderDetailPage({
 
   const canWrite = await actorCan('workorder.write', propertyResource(workOrder.property))
   const canSeeVendors = await actorCan('vendor.read', propertyResource(workOrder.property))
+  // Billing a tenant is a MONEY permission, not a maintenance one (D-43).
+  // `workorder.write` closes jobs; `ledger.adjust` moves money, and every
+  // other money-moving surface in this product sits behind it.
+  const canBillTenant = await actorCan('ledger.adjust', propertyResource(workOrder.property))
+  // Only asked for once the flag is actually set, so a normal job pays
+  // nothing for a query it will never render.
+  const chargeback =
+    canBillTenant && workOrder.status === 'CLOSED' && workOrder.tenantCaused
+      ? await chargebackContext(workOrder.id)
+      : null
 
   const [warranties, staff, vendors] = await Promise.all([
     warrantiesForProperty(workOrder.propertyId).then((w) => activeWarranties(w, new Date())),
@@ -483,6 +496,33 @@ export default async function WorkOrderDetailPage({
             </p>
           )}
         </section>
+      )}
+
+      {chargeback && (
+        <ChargebackPanel
+          jobCostCents={chargeback.jobCostCents}
+          amountLabel={formatCents(chargeback.jobCostCents)}
+          evidenceCount={chargeback.evidenceCount}
+          blockedReason={
+            chargeback.existingChargeId
+              ? null
+              : !chargeback.leaseId
+                ? 'There is no tenancy on this job to bill — no ticket, and no live lease on the unit.'
+                : chargeback.jobCostCents <= 0
+                  ? 'This job has no recorded cost, so there is nothing to apportion.'
+                  : null
+          }
+          // What was CHARGED, not what the job cost. They differ whenever
+          // part of a repair was billed, which is the normal outcome.
+          postedAmount={
+            chargeback.existingAmountCents != null
+              ? formatCents(chargeback.existingAmountCents)
+              : null
+          }
+          // Bound server-side. A plain function cannot cross this boundary,
+          // and `npm run build` does not catch the difference.
+          postAction={postChargeback.bind(null, workOrder.id)}
+        />
       )}
 
       {canWrite && closable && (

@@ -235,6 +235,11 @@ describe('reading the trail', () => {
           action,
           entityType: 'WorkOrder',
           entityId: 'wo_trail',
+          // `workorder.chargeback_posted` joined REASON_REQUIRED in R-031 -
+          // billing a tenant for damage with no stated reason is
+          // indistinguishable from retaliation. This test is about ordering,
+          // so it satisfies the requirement rather than working around it.
+          reason: 'Ordering fixture.',
         })
       }
 

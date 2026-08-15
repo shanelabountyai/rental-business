@@ -1398,6 +1398,16 @@ model Charge {
   /// RUBS charge defensible: the tenant's invoice line carries the
   /// arithmetic, and this carries the bill it was worked out from.
   utilityBillId       String?
+  /// The job a tenant is being billed for (R-031, MAINT-07). The same idea as
+  /// `utilityBillId` one line up: the charge's description carries the
+  /// arithmetic, and this carries the evidence it was worked out from - the
+  /// vendor's invoice and the completion photos already hanging off that work
+  /// order. A chargeback whose job cannot be named is not defensible.
+  ///
+  /// Also the idempotency key. It carries a PARTIAL UNIQUE INDEX so one job
+  /// can be billed exactly once, enforced by the database rather than by a
+  /// read-then-write check two concurrent submits would both pass.
+  workOrderId         String?
   stripeInvoiceId     String?
   stripeInvoiceItemId String?
   /// The charge this one was assessed ON - a late fee pointing at the
@@ -1427,6 +1437,10 @@ model Charge {
   /// other evidence key: the bill IS the defence of the charge, and deleting
   /// it would leave a tenant billed for a share of nothing.
   utilityBill      UtilityBill?      @relation(fields: [utilityBillId], references: [id], onDelete: Restrict)
+  /// Restrict, like every other evidence key here: the job IS the defence of
+  /// the chargeback, and deleting it would leave a tenant billed for a repair
+  /// the record can no longer describe.
+  workOrder        WorkOrder?        @relation(fields: [workOrderId], references: [id], onDelete: Restrict)
   waivedBy         StaffUser?        @relation("ChargeWaivedBy", fields: [waivedByStaffId], references: [id])
   assessedOn       Charge?           @relation("ChargeAssessedOn", fields: [assessedOnChargeId], references: [id], onDelete: Restrict)
   /// Restrict for the same reason as every other evidence-trail key: a
@@ -1439,6 +1453,11 @@ model Charge {
   @@index([leaseId, dueOn])
   @@index([propertyId, dueOn])
   @@index([type])
+  /// "What has this job cost the tenant", asked every time a work order page
+  /// renders. The PARTIAL UNIQUE index that makes a chargeback idempotent
+  /// lives in SQL only - Prisma cannot express a WHERE clause on an index, so
+  /// it is invisible here and visible in the migration.
+  @@index([workOrderId])
 }
 
 /// Splits one Charge across the lease's payers. The allocation rows for a
@@ -1857,6 +1876,8 @@ model WorkOrder {
   messages   Message[]
   notes      WorkOrderNote[]
   messageLinks WorkOrderMessageLink[]
+  /// At most one, by partial unique index - see `Charge.workOrderId`.
+  chargebacks Charge[]
 
   @@index([propertyId, status])
   @@index([unitId])
