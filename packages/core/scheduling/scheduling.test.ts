@@ -5,6 +5,9 @@ import {
   businessDate,
   businessDateToUtc,
   businessDaysBetween,
+  dueDateInMonth,
+  dueDateOnOrAfter,
+  dueDateOnOrBefore,
   isDue,
   utcToWallClock,
   wallClockToUtc,
@@ -253,6 +256,81 @@ describe('business-date arithmetic', () => {
     // come out as 6.96 days rounded wrong.
     expect(businessDaysBetween('2026-03-05', '2026-03-12')).toBe(7)
     expect(businessDaysBetween('2026-10-29', '2026-11-05')).toBe(7)
+  })
+})
+
+describe('dueDateInMonth — clamped to the length of the month', () => {
+  it('is exact when the day exists', () => {
+    expect(dueDateInMonth(2026, 8, 15)).toBe('2026-08-15')
+  })
+
+  it('CLAMPS THE 31ST in a 30-day month', () => {
+    // "Due on the 31st" is what everyone who signed a lease means by it, and
+    // September has none.
+    expect(dueDateInMonth(2026, 9, 31)).toBe('2026-09-30')
+  })
+
+  it('clamps into February, leap and common year alike', () => {
+    expect(dueDateInMonth(2026, 2, 31)).toBe('2026-02-28')
+    expect(dueDateInMonth(2028, 2, 31)).toBe('2028-02-29') // leap year
+  })
+})
+
+describe('dueDateOnOrBefore — how R-044 ages rent that has no Charge row', () => {
+  it('returns the same month when the due day has already passed', () => {
+    expect(dueDateOnOrBefore('2026-08-20', 1)).toBe('2026-08-01')
+  })
+
+  it('is today ON the due date itself', () => {
+    expect(dueDateOnOrBefore('2026-08-01', 1)).toBe('2026-08-01')
+  })
+
+  it('FALLS BACK A MONTH when the due day has not happened yet this month', () => {
+    // The 3rd, rent due on the 28th: this month's due date is still ahead,
+    // so the most recent occurrence was last month's.
+    expect(dueDateOnOrBefore('2026-08-03', 28)).toBe('2026-07-28')
+  })
+
+  it('crosses a year boundary going backward', () => {
+    expect(dueDateOnOrBefore('2027-01-03', 28)).toBe('2026-12-28')
+  })
+
+  it('clamps the fallback month too — the 31st looking back into February', () => {
+    expect(dueDateOnOrBefore('2026-03-05', 31)).toBe('2026-02-28')
+  })
+})
+
+describe('dueDateOnOrAfter — when R-045 warns rent is coming due', () => {
+  it('returns the same month when the due day is still ahead', () => {
+    expect(dueDateOnOrAfter('2026-08-03', 28)).toBe('2026-08-28')
+  })
+
+  it('is today ON the due date itself', () => {
+    expect(dueDateOnOrAfter('2026-08-01', 1)).toBe('2026-08-01')
+  })
+
+  it('ROLLS FORWARD A MONTH once the due day has passed', () => {
+    expect(dueDateOnOrAfter('2026-08-20', 1)).toBe('2026-09-01')
+  })
+
+  it('crosses a year boundary going forward', () => {
+    expect(dueDateOnOrAfter('2026-12-20', 1)).toBe('2027-01-01')
+  })
+
+  it('IS THE EXACT MIRROR OF dueDateOnOrBefore on the same inputs', () => {
+    // Not a coincidence to leave unstated: the two are the same clamp walked
+    // in opposite directions, and a test that only checked one direction
+    // could pass while the other silently drifted.
+    for (const [reference, dueDay] of [
+      ['2026-08-03', 28],
+      ['2026-08-20', 1],
+      ['2027-01-03', 28],
+    ] as const) {
+      const before = dueDateOnOrBefore(reference, dueDay)
+      const after = dueDateOnOrAfter(reference, dueDay)
+      expect(before <= reference).toBe(true)
+      expect(after >= reference).toBe(true)
+    }
   })
 })
 

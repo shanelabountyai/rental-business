@@ -61,6 +61,14 @@ export interface OpenCharge {
 export interface DelinquencyFacts {
   /// Every charge still contributing to the balance, oldest first or not —
   /// order does not matter, the oldest is found here.
+  ///
+  /// DOES NOT INCLUDE ORDINARY RENT. D-11/D-40 mint no monthly `Charge` for
+  /// the subscription's own rent line - only for the exceptions (a late fee,
+  /// a proration, a chargeback). A late fee's own `dueOn` is the day it was
+  /// ASSESSED, not the rent due date it was assessed on - so taking "the
+  /// oldest of these alone" would find a fee dated today and report a
+  /// tenant who has been delinquent for a month as current the moment the
+  /// fee posts. `nearestRentDueOn` below is what corrects this.
   openCharges: readonly OpenCharge[]
   /// What the lease owes right now, from `balanceCents`. Negative is a
   /// credit and is a real state.
@@ -70,6 +78,20 @@ export interface DelinquencyFacts {
   /// From the versioned JurisdictionRule for this property's state (D-4).
   /// Null when no rule is configured, which is NOT zero — see below.
   graceDays: number | null
+  /// The most recent date ordinary rent was due, from `dueDateOnOrBefore`
+  /// (`Lease.rentDueDay` / `LeasePayer.debitDay`) — the day-of-month pair
+  /// `predebit.ts` already reads, in the direction that answers "how long
+  /// ago". Null only when the caller has no lease to read it from.
+  ///
+  /// UNDERSTATES LATENESS WHEN MORE THAN ONE MONTH IS UNPAID: it can only
+  /// anchor to the MOST RECENT due date, because unlinked rent balance is a
+  /// single number in this schema, not one row per missed period (D-11's
+  /// "no monthly Charge" decision, see `openCharges` above). Reporting the
+  /// nearer date is still a real improvement on reporting a delinquent
+  /// tenancy as current - which is what this function did before R-045
+  /// found the gap - and the limitation is stated rather than left to look
+  /// more precise than it is.
+  nearestRentDueOn: BusinessDate | null
 }
 
 export interface Delinquency {
@@ -88,11 +110,21 @@ export interface Delinquency {
 /**
  * How late a tenancy is, and whether it is past grace.
  *
- * AGED FROM THE OLDEST UNPAID CHARGE, not from the balance and not from the
- * most recent one. A tenant who has paid this month's rent while March's
- * remains outstanding is five months late, not current — and taking the
- * newest charge would report exactly the opposite. The allocation order
- * (D-11) settles oldest-first for the same reason.
+ * AGED FROM THE OLDEST DATED CHARGE, OR THE NEAREST RENT DUE DATE, WHICHEVER
+ * IS EARLIER. A tenant who has paid this month's rent while March's charges
+ * remain outstanding is months late, not current — and taking the newest
+ * charge would report exactly the opposite. The allocation order (D-11)
+ * settles oldest-first for the same reason.
+ *
+ * `nearestRentDueOn` MUST BE COMPARED ALONGSIDE `openCharges`, NEVER USED
+ * ONLY AS A FALLBACK. A late fee's own `Charge.dueOn` is the day it was
+ * assessed - always today or later than the rent it was assessed on - so a
+ * tenancy with rent overdue for a month AND a fee posted this morning has an
+ * open charge (the fee, dated today) and would report zero days late if the
+ * fee alone decided it. Taking the EARLIER of the two is what R-045 found
+ * missing here: this function used to fall back to `nearestRentDueOn` only
+ * when `openCharges` was empty, which reported exactly that tenancy as
+ * current the moment its fee posted.
  *
  * NO CONFIGURED RULE MEANS NOT PAST GRACE. `graceDays: null` is a state
  * nobody has set up (D-4), and the honest reading is "we do not know what the
@@ -113,14 +145,19 @@ export function delinquencyFor(facts: DelinquencyFacts): Delinquency {
     }
   }
 
-  const oldest = facts.openCharges.reduce<OpenCharge | null>(
-    (found, charge) => (found == null || charge.dueOn < found.dueOn ? charge : found),
+  const candidates: BusinessDate[] = [
+    ...facts.openCharges.map((charge) => charge.dueOn),
+    ...(facts.nearestRentDueOn ? [facts.nearestRentDueOn] : []),
+  ]
+  const oldestDueOn = candidates.reduce<BusinessDate | null>(
+    (found, dueOn) => (found == null || dueOn < found ? dueOn : found),
     null,
   )
-  if (!oldest) {
-    // Owes money with no dated charge behind it. Real — a manual adjustment,
-    // an unlinked Stripe remainder — and it cannot be aged, so it is reported
-    // as a balance with no age rather than as zero days late.
+  if (!oldestDueOn) {
+    // Owes money with nothing dated at all - no open charge, no lease to
+    // read a rent due day from. Real (a manual adjustment with no charge
+    // behind it) and it cannot be aged, so it is reported as a balance with
+    // no age rather than as zero days late.
     return {
       balanceCents: facts.balanceCents,
       daysLate: 0,
@@ -130,7 +167,7 @@ export function delinquencyFor(facts: DelinquencyFacts): Delinquency {
     }
   }
 
-  const daysLate = daysPastDue(oldest.dueOn, facts.asOf)
+  const daysLate = daysPastDue(oldestDueOn, facts.asOf)
 
   return {
     balanceCents: facts.balanceCents,
@@ -141,7 +178,7 @@ export function delinquencyFor(facts: DelinquencyFacts): Delinquency {
     // on that day is a day early. This is the same off-by-one `daysPastDue`
     // was written to kill, one level up.
     pastGrace: facts.graceDays != null && daysLate > facts.graceDays,
-    oldestDueOn: oldest.dueOn,
+    oldestDueOn,
   }
 }
 

@@ -42,7 +42,9 @@ function daysAgo(n: number): Date {
   return new Date(d.toISOString().slice(0, 10) + 'T00:00:00.000Z')
 }
 
-async function seedPropertyWithTenancies() {
+async function seedPropertyWithTenancies(
+  options: { includeUnlinkedRent?: boolean } = {},
+) {
   const stamp = randomUUID().slice(0, 8)
   const entity = await prisma.legalEntity.create({
     data: { name: `Roll LLC-${stamp}`, type: 'LLC' },
@@ -84,6 +86,15 @@ async function seedPropertyWithTenancies() {
       },
     })
     tenantIds.push(tenant.id)
+    const dueDate = daysAgo(dueDaysAgo)
+    // MATCHES THE FABRICATED CHARGE BELOW, deliberately. Production never
+    // creates both a dated 'RENT' Charge AND an independent rentDueDay for
+    // the SAME debt - only the exceptions (a late fee, a proration) get a
+    // Charge row, and this test fabricates one to stand in for them. Leaving
+    // rentDueDay at its unrelated schema default let `nearestRentDueOn`
+    // disagree with the fabricated Charge's own due date once R-045 started
+    // computing it, aging this fixture from a date nothing else in the test
+    // referred to.
     const lease = await prisma.lease.create({
       data: {
         propertyId: property.id,
@@ -91,6 +102,7 @@ async function seedPropertyWithTenancies() {
         status: 'ACTIVE',
         startsOn: new Date('2026-01-01'),
         rentCents: 150_000,
+        rentDueDay: dueDate.getUTCDate(),
       },
     })
     leaseIds.push(lease.id)
@@ -105,9 +117,9 @@ async function seedPropertyWithTenancies() {
       },
     })
 
-    // The charge is what the aging is counted FROM; the ledger entry is what
-    // the balance is counted from. Both are needed — a charge with no entry
-    // is billed-but-not-projected, and would report a zero balance.
+    // A DATED CHARGE, like a late fee or a proration carries. Realistic for
+    // those, NOT for ordinary rent — see `unlinkedRentTenancy` below for the
+    // shape production rent actually takes.
     const charge = await prisma.charge.create({
       data: {
         propertyId: property.id,
@@ -115,7 +127,7 @@ async function seedPropertyWithTenancies() {
         type: 'RENT',
         amountCents: 150_000,
         description: 'Rent',
-        dueOn: daysAgo(dueDaysAgo),
+        dueOn: dueDate,
       },
     })
     await prisma.ledgerEntry.create({
@@ -125,7 +137,78 @@ async function seedPropertyWithTenancies() {
         chargeId: charge.id,
         type: 'CHARGE',
         amountCents: 150_000,
-        occurredAt: daysAgo(dueDaysAgo),
+        occurredAt: dueDate,
+        description: 'Rent',
+      },
+    })
+    return { tenant, lease, unit }
+  }
+
+  /**
+   * ORDINARY RENT, THE WAY PRODUCTION ACTUALLY WRITES IT.
+   *
+   * D-11/D-40 mint no `Charge` row for the subscription's own rent line -
+   * only the exceptions (a late fee, a proration, a chargeback) get one. So
+   * the webhook posts an UNLINKED ledger entry, and the only record of when
+   * that rent was due at all is `Lease.rentDueDay` - nothing dated on the
+   * entry itself. This is the case R-045 found `delinquencyFor` silently
+   * mis-reporting as `current`, and it is the one every OTHER tenancy in
+   * this file, seeded with a Charge row above, does not exercise.
+   */
+  async function unlinkedRentTenancy(label: string, dueDaysAgo: number) {
+    const unit = await prisma.unit.create({
+      data: { propertyId: property.id, name: `${label}-${stamp}`, status: 'OCCUPIED' },
+    })
+    unitIds.push(unit.id)
+    const tenant = await prisma.tenant.create({
+      data: { firstName: `${label}${stamp}`, lastName: `Roll-${stamp}`, phone: uniquePhone() },
+    })
+    tenantIds.push(tenant.id)
+    const dueDate = daysAgo(dueDaysAgo)
+    const lease = await prisma.lease.create({
+      data: {
+        propertyId: property.id,
+        unitId: unit.id,
+        status: 'ACTIVE',
+        startsOn: new Date('2026-01-01'),
+        rentCents: 150_000,
+        // `dueDaysAgo`'s day-of-month, so `dueDateOnOrBefore` reproduces this
+        // exact date - the same fixture-consistency fix `tenancy()` needed
+        // above. KEEP `dueDaysAgo` UNDER ~28: `dueDateOnOrBefore` can only
+        // anchor to the MOST RECENT occurrence of a day-of-month, so it is
+        // never more than about a month in the past by construction. That
+        // is the documented limitation on `nearestRentDueOn` itself
+        // (understating a tenancy owing more than one month) - it is not
+        // something this fixture can exceed to prove a "30+" bucket, and
+        // asserting one here would be asserting a day-of-month coincidence
+        // rather than the fix.
+        rentDueDay: dueDate.getUTCDate(),
+      },
+    })
+    leaseIds.push(lease.id)
+    await prisma.leaseTenant.create({ data: { leaseId: lease.id, tenantId: tenant.id } })
+    await prisma.leasePayer.create({
+      data: {
+        leaseId: lease.id,
+        propertyId: property.id,
+        payerType: 'TENANT',
+        tenantId: tenant.id,
+        stripeCustomerId: `cus_${randomUUID().replace(/-/g, '').slice(0, 14)}`,
+      },
+    })
+    // NO CHARGE ROW. The projection's own remainder shape (webhook.ts's
+    // "rent from the subscription itself has no Charge row" comment) -
+    // `chargeId: null`. `occurredAt` only feeds the LEDGER balance here; the
+    // AGING comes entirely from `rentDueDay` above, which is the point of
+    // the test - `delinquencyFor` never reads a LedgerEntry's own timestamp.
+    await prisma.ledgerEntry.create({
+      data: {
+        propertyId: property.id,
+        leaseId: lease.id,
+        chargeId: null,
+        type: 'CHARGE',
+        amountCents: 150_000,
+        occurredAt: dueDate,
         description: 'Rent',
       },
     })
@@ -140,8 +223,15 @@ async function seedPropertyWithTenancies() {
   const within = await tenancy('Within', 1)
   // Twenty days late: past grace by any reading.
   const past = await tenancy('Past', 20)
+  // OPT-IN. Also past grace, so a test that does not ask for it and does
+  // not destructure it would otherwise gain a SECOND chaseable tenancy it
+  // never intended - exactly what happened to the send-related tests the
+  // first time this was unconditional.
+  const unlinkedRent = options.includeUnlinkedRent
+    ? await unlinkedRentTenancy('Unlinked', 25)
+    : null
 
-  return { property, within, past }
+  return { property, within, past, unlinkedRent }
 }
 
 /// A manager SCOPED TO ONE PROPERTY.
@@ -231,6 +321,36 @@ test.describe('rent roll and delinquency aging (PAY-06)', () => {
         name: new RegExp(`Chase ${within.tenant.firstName}`),
       }),
     ).toHaveCount(0)
+  })
+
+  test('ORDINARY RENT WITH NO CHARGE ROW IS AGED CORRECTLY — the gap this fix closes', async ({
+    page,
+  }) => {
+    // Every other tenancy in this file is seeded with a Charge row, which is
+    // realistic for a late fee or a proration but NOT for ordinary rent -
+    // D-11/D-40 mint no monthly Charge for the subscription's own line, so
+    // production posts an unlinked ledger entry with nothing dated on it at
+    // all. Before this fix, `delinquencyFor` found no open charge and
+    // reported the tenancy as current regardless of balance - silently
+    // hiding the single most common form of delinquency in the product.
+    const { property, unlinkedRent } = await seedPropertyWithTenancies({
+      includeUnlinkedRent: true,
+    })
+    if (!unlinkedRent) throw new Error('seeded with includeUnlinkedRent: true')
+    const staff = await seedScopedManager(property.id)
+    await signIn(page, staff)
+    await page.goto('/money/rent-roll')
+
+    const row = page.getByRole('row', { name: new RegExp(unlinkedRent.tenant.firstName) })
+    await expect(row.getByText('past grace')).toBeVisible()
+    await expect(row.getByText('16–30 days')).toBeVisible()
+    // AND IT IS CHASEABLE — the whole point of ageing it correctly in the
+    // first place is that the bulk reminder can actually reach it.
+    await expect(
+      row.getByRole('checkbox', {
+        name: new RegExp(`Chase ${unlinkedRent.tenant.firstName}`),
+      }),
+    ).toBeVisible()
   })
 
   test('"select all" selects everyone PAST GRACE, not every row', async ({ page }) => {

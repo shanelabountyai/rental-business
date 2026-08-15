@@ -2,7 +2,7 @@ import 'server-only'
 
 import { agingTotals, balanceCents, delinquencyFor } from '@rental/core/ledger'
 import type { AgingBucket } from '@rental/core/ledger'
-import { businessDate, utcToBusinessDate } from '@rental/core/scheduling'
+import { businessDate, dueDateOnOrBefore, utcToBusinessDate } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { selectApplicableRule } from '@rental/core/jurisdiction'
 import type { ResolvedScope } from '@/lib/scope/types.ts'
@@ -77,6 +77,7 @@ export async function rentRoll(scope: ResolvedScope, asOfDate?: Date): Promise<R
       id: true,
       propertyId: true,
       rentCents: true,
+      rentDueDay: true,
       property: { select: { name: true, state: true, county: true, timezone: true } },
       unit: { select: { name: true } },
       leaseTenants: {
@@ -84,7 +85,7 @@ export async function rentRoll(scope: ResolvedScope, asOfDate?: Date): Promise<R
       },
       leasePayers: {
         where: { active: true },
-        select: { payerType: true, collectionMethod: true, portionCents: true },
+        select: { payerType: true, collectionMethod: true, portionCents: true, debitDay: true },
       },
       deposits: { select: { heldCents: true, appliedCents: true, refundedCents: true } },
     },
@@ -153,6 +154,12 @@ export async function rentRoll(scope: ResolvedScope, asOfDate?: Date): Promise<R
 
     const ledger = entriesByLease.get(lease.id) ?? []
     const balance = balanceCents(ledger)
+    const today = businessDate(asOf, zone)
+    // The payer's CHOSEN day when they have one, the lease's day when they
+    // do not - the same precedence `predebit.ts` reads (R-039a). Ordinary
+    // rent mints no Charge row (D-11/D-40), so this is the only record of
+    // when it was due at all.
+    const rentDueDay = lease.leasePayers[0]?.debitDay ?? lease.rentDueDay
 
     const delinquency = delinquencyFor({
       openCharges: (chargesByLease.get(lease.id) ?? []).map((charge) => ({
@@ -165,8 +172,9 @@ export async function rentRoll(scope: ResolvedScope, asOfDate?: Date): Promise<R
       // The PROPERTY's today, not the server's (D-3). A portfolio spanning
       // timezones has more than one "today", and using the server's would
       // report a Texas tenancy late from a machine in Europe.
-      asOf: businessDate(asOf, zone),
+      asOf: today,
       graceDays: rule?.graceDays ?? null,
+      nearestRentDueOn: dueDateOnOrBefore(today, rentDueDay),
     })
 
     const tenant = lease.leaseTenants[0]?.tenant ?? null
@@ -259,7 +267,9 @@ export async function pastGraceLeaseIds(
     where: { id: { in: [...leaseIds] } },
     select: {
       id: true,
+      rentDueDay: true,
       property: { select: { state: true, county: true, timezone: true } },
+      leasePayers: { where: { active: true }, select: { debitDay: true } },
     },
   })
 
@@ -295,14 +305,17 @@ export async function pastGraceLeaseIds(
       lease.property.county,
       asOf,
     )
+    const today = businessDate(asOf, lease.property.timezone)
+    const rentDueDay = lease.leasePayers[0]?.debitDay ?? lease.rentDueDay
     const delinquency = delinquencyFor({
       openCharges: (chargesByLease.get(lease.id) ?? []).map((charge) => ({
         dueOn: utcToBusinessDate(charge.dueOn),
         amountCents: charge.amountCents,
       })),
       balanceCents: balanceCents(entriesByLease.get(lease.id) ?? []),
-      asOf: businessDate(asOf, lease.property.timezone),
+      asOf: today,
       graceDays: rule?.graceDays ?? null,
+      nearestRentDueOn: dueDateOnOrBefore(today, rentDueDay),
     })
     if (delinquency.pastGrace) allowed.add(lease.id)
   }

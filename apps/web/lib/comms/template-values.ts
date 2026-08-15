@@ -2,7 +2,7 @@ import 'server-only'
 
 import { balanceCents } from '@rental/core/ledger'
 import { formatCents } from '@rental/core/money'
-import { businessDate, utcToBusinessDate } from '@rental/core/scheduling'
+import { businessDate, dueDateOnOrAfter, utcToBusinessDate } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 
 // Turning a real tenancy into merge-field values (COMM-03, R-049).
@@ -94,7 +94,7 @@ export async function templateValues(
     // that they owe a negative amount. Null instead, so the send path refuses
     // rather than sending nonsense — see `renderTemplate`'s `missing`.
     'balance.total': owed > 0 ? formatCents(owed) : null,
-    'balance.due_on': nextDueDate(today, lease.rentDueDay),
+    'balance.due_on': dueDateOnOrAfter(today, lease.rentDueDay),
     today,
     'company.name': COMPANY_NAME,
     // No per-property contact number exists on Property yet, so this is the
@@ -104,26 +104,6 @@ export async function templateValues(
     // property contact details is where it gets a value.
     'company.phone': null,
   }
-}
-
-/**
- * The next date rent is due, as a calendar day.
- *
- * String arithmetic on `YYYY-MM-DD` rather than `Date` maths, because this is
- * a BusinessDate and no timezone may touch it. Clamped to the length of the
- * month: a lease due on the 31st is due on the 30th in September, and on the
- * 28th in February, which is what every lease in the world means by it.
- */
-function nextDueDate(today: string, dueDay: number): string {
-  const [year, month, day] = today.split('-').map(Number)
-  const clamp = (y: number, m: number) => Math.min(dueDay, new Date(Date.UTC(y, m, 0)).getUTCDate())
-
-  if (day <= clamp(year, month)) {
-    return `${year}-${String(month).padStart(2, '0')}-${String(clamp(year, month)).padStart(2, '0')}`
-  }
-  const nextMonth = month === 12 ? 1 : month + 1
-  const nextYear = month === 12 ? year + 1 : year
-  return `${nextYear}-${String(nextMonth).padStart(2, '0')}-${String(clamp(nextYear, nextMonth)).padStart(2, '0')}`
 }
 
 /**

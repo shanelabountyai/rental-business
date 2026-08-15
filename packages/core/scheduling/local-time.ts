@@ -271,6 +271,76 @@ export function businessDaysBetween(
   return Math.round(ms / 86_400_000)
 }
 
+/// The last day of `year`-`month` (1-indexed), for clamping a day-of-month
+/// that does not exist that month - the 31st in a 30-day month, the 29th to
+/// 31st in February.
+function daysInMonth(year: number, month: number): number {
+  return new Date(Date.UTC(year, month, 0)).getUTCDate()
+}
+
+/**
+ * Which calendar day `dueDay` falls on, in `year`-`month`, clamped to the
+ * length of that month.
+ *
+ * A lease due on the 31st is due on the 30th in September and the 28th (or
+ * 29th) in February - what "due on the 31st" means to everyone who has ever
+ * signed a lease, and the same clamp R-042's proration and R-039a's pre-debit
+ * matching already apply, now in one place instead of three.
+ */
+export function dueDateInMonth(year: number, month: number, dueDay: number): BusinessDate {
+  const day = Math.min(dueDay, daysInMonth(year, month))
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+}
+
+/**
+ * The most recent occurrence of `dueDay` on or before `reference`.
+ *
+ * ==========================================================================
+ * WHAT ANCHORS "HOW LATE IS THIS RENT" WHEN THE RENT HAS NO CHARGE ROW.
+ *
+ * D-11/D-40 mint no monthly `Charge` for the subscription's own rent line -
+ * only for the exceptions (a late fee, a proration, a chargeback). So the
+ * ONLY record of when ordinary rent was due is `Lease.rentDueDay` /
+ * `LeasePayer.debitDay`, the same pair `predebit.ts` reads to warn an autopay
+ * tenant two days ahead. This is the other direction of that same fact:
+ * given a day of the month, find the most recent date it fell on.
+ *
+ * UNDERSTATES LATENESS WHEN MORE THAN ONE PERIOD IS UNPAID. It can only
+ * anchor to the MOST RECENT due date - if two months of rent are owed, this
+ * returns last month's date, not the one before it, because our schema
+ * itemizes no more than "the balance" for unlinked rent (D-11: Stripe holds
+ * the per-invoice detail, we hold the projected total). Reporting the nearer
+ * date is still a real improvement on reporting "current", and it is stated
+ * here rather than left to look more precise than it is. Itemizing every
+ * unpaid period would need the billing provider to list every open invoice,
+ * not the one `getOpenInvoice` returns today.
+ * ==========================================================================
+ */
+export function dueDateOnOrBefore(reference: BusinessDate, dueDay: number): BusinessDate {
+  const [year, month, day] = reference.split('-').map(Number)
+  const thisMonth = dueDateInMonth(year, month, dueDay)
+  if (day >= Number(thisMonth.slice(8, 10))) return thisMonth
+  const prevMonth = month === 1 ? 12 : month - 1
+  const prevYear = month === 1 ? year - 1 : year
+  return dueDateInMonth(prevYear, prevMonth, dueDay)
+}
+
+/**
+ * The next occurrence of `dueDay` on or after `reference` - the mirror of
+ * `dueDateOnOrBefore`, for "when is rent next due" rather than "how late is
+ * it". R-045's due-soon/due-date reminders read this; R-049's `{{balance
+ * .due_on}}` merge field is the same computation and now calls this instead
+ * of carrying its own copy.
+ */
+export function dueDateOnOrAfter(reference: BusinessDate, dueDay: number): BusinessDate {
+  const [year, month, day] = reference.split('-').map(Number)
+  const thisMonth = dueDateInMonth(year, month, dueDay)
+  if (day <= Number(thisMonth.slice(8, 10))) return thisMonth
+  const nextMonth = month === 12 ? 1 : month + 1
+  const nextYear = month === 12 ? year + 1 : year
+  return dueDateInMonth(nextYear, nextMonth, dueDay)
+}
+
 /**
  * A date a person reads, in the timezone it actually happened in.
  *

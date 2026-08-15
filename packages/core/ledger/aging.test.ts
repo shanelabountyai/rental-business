@@ -7,6 +7,10 @@ const owing: DelinquencyFacts = {
   balanceCents: 150_000,
   asOf: '2026-08-10',
   graceDays: 5,
+  // Set to the SAME date the one open charge already carries, so these
+  // fixtures exercise ordinary aging without also exercising the
+  // two-candidates comparison — that gets its own describe block below.
+  nearestRentDueOn: '2026-08-01',
 }
 
 describe('bucketFor', () => {
@@ -113,13 +117,79 @@ describe('delinquencyFor', () => {
       expect(result.daysLate).toBe(0)
     })
 
-    it('reports a balance with no dated charge as unaged, not as zero days late', () => {
-      // Real: a manual adjustment, an unlinked Stripe remainder. It cannot be
-      // aged, and pretending it is current-by-age would hide money owed.
-      const result = delinquencyFor({ ...owing, openCharges: [] })
+    it('reports a balance with NOTHING dated at all as unaged, not as zero days late', () => {
+      // Real: a manual adjustment with no charge and no lease behind it. It
+      // cannot be aged, and pretending it is current-by-age would hide money
+      // owed.
+      const result = delinquencyFor({ ...owing, openCharges: [], nearestRentDueOn: null })
       expect(result.balanceCents).toBe(150_000)
       expect(result.oldestDueOn).toBeNull()
       expect(result.pastGrace).toBe(false)
+    })
+  })
+
+  describe('ordinary rent has no Charge row — the gap R-045 found', () => {
+    it('AGES FROM `nearestRentDueOn` WHEN THERE IS NO OPEN CHARGE AT ALL', () => {
+      // D-11/D-40 mint no monthly Charge for the subscription's own rent
+      // line. Before this fix, a lease with a positive balance and no dated
+      // charge reported `current` — silently hiding the single most common
+      // form of delinquency in the product.
+      const result = delinquencyFor({
+        ...owing,
+        openCharges: [],
+        nearestRentDueOn: '2026-07-15',
+        asOf: '2026-08-10',
+      })
+      expect(result.oldestDueOn).toBe('2026-07-15')
+      expect(result.daysLate).toBe(26)
+      expect(result.bucket).toBe('16-30')
+    })
+
+    it('TAKES THE EARLIER OF A LATE FEE AND THE RENT IT WAS ASSESSED ON', () => {
+      // The exact tenancy this fix exists for: rent has been overdue for a
+      // month, a late fee posted THIS MORNING (Charge.dueOn = assessment
+      // date, always today or later than the rent it followed). Reading
+      // openCharges alone would find only the fee and report zero days
+      // late, on the very day the tenancy is accruing fees for being late.
+      const result = delinquencyFor({
+        ...owing,
+        openCharges: [{ dueOn: '2026-08-10', amountCents: 5_000 }], // the fee, dated today
+        nearestRentDueOn: '2026-07-01', // the rent it was assessed on
+        asOf: '2026-08-10',
+      })
+      expect(result.oldestDueOn).toBe('2026-07-01')
+      expect(result.daysLate).toBe(40)
+      expect(result.bucket).toBe('30+')
+    })
+
+    it('still prefers a dated charge that is OLDER than the nearest rent date', () => {
+      // An old, unwaived late fee predating this month's rent cycle - the
+      // charge is the true anchor here, and nearestRentDueOn must not
+      // override a candidate that is already earlier.
+      const result = delinquencyFor({
+        ...owing,
+        openCharges: [{ dueOn: '2026-06-01', amountCents: 5_000 }],
+        nearestRentDueOn: '2026-08-01',
+        asOf: '2026-08-10',
+      })
+      expect(result.oldestDueOn).toBe('2026-06-01')
+    })
+
+    it('UNDERSTATES rather than fabricates when more than one month is owed', () => {
+      // A documented limitation, not a silent one: `nearestRentDueOn` can
+      // only anchor to the MOST RECENT due date, because unlinked rent
+      // balance is one number in this schema, not one row per missed
+      // period. Two months owed still reports as one month late — better
+      // than "current", and the ceiling is stated in the type's own comment
+      // rather than left to look more precise than it is.
+      const result = delinquencyFor({
+        ...owing,
+        openCharges: [],
+        nearestRentDueOn: '2026-07-01', // the MOST RECENT due date only
+        asOf: '2026-08-10',
+        balanceCents: 300_000, // two months owed
+      })
+      expect(result.daysLate).toBe(40) // dated from July, not June
     })
   })
 })
