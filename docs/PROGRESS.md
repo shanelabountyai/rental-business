@@ -1959,7 +1959,7 @@ The books must take the invoice: recording $1,000 of expense against a $600 bill
 - **R-101c — the display and coverage sweep.** 40 raw `toISOString()` sites, four `friendlyDate` copies, two staff screens rendering UTC in as many words, and rolling both e2e assertions from 3 spec files to 33. The row that filed this said rolling them out *will* turn up real failures; that is the point, and it deserves room to act on what it finds.
 
 ## R-101b — The wizard's choices become real radios
-**Commit:** *(recorded below)*  ·  **Date:** 2026-08-14
+**Commit:** `1f673c7`  ·  **Date:** 2026-08-14
 
 **What it built.** Two accessibility fixes on the flow every non-emergency repair goes through, and both are the platform doing work the code was doing badly by hand.
 
