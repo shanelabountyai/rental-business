@@ -2186,7 +2186,7 @@ Texas grants **one** day. So a tenant one day late is in the first late bucket *
 **What it left behind.** Itemizing more than one unpaid month by period remains future work, gated on the billing provider exposing every open invoice.
 
 ## R-045 — Payment lifecycle notices
-**Commit:** `pending`  ·  **Date:** 2026-08-15
+**Commit:** `3aca030`  ·  **Date:** 2026-08-15
 
 **What it built.** Three of the five notices PAY-02/NOTIF-03 asks for already existed (`autopay.predebit`, `payment.receipt`, `payment.returned`). This built the other three: due-soon (T-3) / due-date for tenants who have to act themselves, payment-failed with a fix path, and card-expiring-soon from a nightly scan.
 
