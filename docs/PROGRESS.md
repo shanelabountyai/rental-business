@@ -1913,7 +1913,11 @@ The books must take the invoice: recording $1,000 of expense against a $600 bill
 
 **The spend tile now says what it covers.** `closedJobCostsForProperty()` takes no period and no entity filter, so the total is every job closed since the property was added. An unlabelled figure on a property page reads like an annual number somebody re-keys into a spreadsheet — the re-keying D-19 exists to prevent. It now says so in one line, and points at R-081 for the real report.
 
-**GATE INCOMPLETE AT THE TIME OF WRITING.** lint, typecheck, build and 1,416 unit tests all passed; the full e2e sweep was interrupted by a planned machine restart at 18/608. The change is comments, one tile label and a test, so the risk is low — but it is not gated until the sweep runs green, and this entry says so rather than implying coverage it does not have. **Re-run `npm run test:e2e` and expect 600 passed / 8 skipped / 0 failed against `Total: 608`.**
+**GATE NOW COMPLETE.** lint, typecheck, build, 1,416 unit tests, and **600 e2e passed / 8 skipped / 0 failed / 0 flaky** reconciling against `Total: 608`. The entry above originally recorded the sweep as outstanding, because it was — it is corrected here rather than rewritten to look as though it always passed.
+
+**Three sweeps died before that one, and the cause was process hygiene, not the code or the machine.** Overlapping background sweeps: `reuseExistingServer: !process.env.CI` means a second run ADOPTS the first run's server on :3100 instead of starting its own, so when the FIRST run finishes, its teardown SIGKILLs the server the SECOND run is still using. Every symptom fitted — SIGKILL, no kernel record, healthy memory, and a different failure point each time depending on when the older run happened to end.
+
+**It was twice blamed on the OS before being established.** What settled it was evidence rather than reasoning: macOS writes memory kills to disk as `JetsamEvent-*.ips`, and this machine has **exactly one, from 09:28 that morning** — the original incident, not any of the evening's. No kernel memorystatus record, no V8 OOM, no stray shells, no cron, `devslot` idle. `Killed: 9` is SIGKILL and names no culprit: a human, a `pkill` and jetsam all produce it identically. Written into the global conventions as its own trap.
 
 **What it left behind.**
 - **Per-period and per-entity maintenance reporting is still R-081's.** Deliberately not started here: building it inside a property-page tile is where the duplication D-19 warns about begins.
