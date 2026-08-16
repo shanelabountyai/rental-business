@@ -10,7 +10,7 @@ import type { ResolvedScope } from '@/lib/scope/current-scope.ts'
 // which is already the RBAC scope intersected with whatever the property
 // switcher currently has selected.
 
-const OPEN_STATUSES = ['OPEN', 'IN_PROGRESS', 'BLOCKED'] as const
+export const OPEN_STATUSES = ['OPEN', 'IN_PROGRESS', 'BLOCKED'] as const
 
 export type TaskWithProperty = Task & { property: { id: string; name: string } }
 export type TaskDetail = Task & {
@@ -105,6 +105,34 @@ export async function rollupByProperty(
       emergency: mine.filter((t) => t.priority === 'EMERGENCY').length,
     }
   })
+}
+
+/**
+ * Every open work-order approval, in scope, regardless of assignee or
+ * businessDate (R-050). `myDayTasks()` deliberately excludes both a
+ * future-dated task and anything assigned to someone else - right for "what
+ * should I do today", wrong for an approval, which is urgent to the owner
+ * no matter who it is assigned to or when it was queued. Same where-clause
+ * `pendingApprovalsSummary()` counts in lib/dashboard/queries.ts - this is
+ * its list-returning sibling, for the dashboard tile's drill-down.
+ */
+export async function pendingApprovals(scope: ResolvedScope): Promise<TaskWithProperty[]> {
+  if (scope.propertyIds.length === 0) return []
+
+  const tasks = await prisma.task.findMany({
+    where: {
+      propertyId: { in: scope.propertyIds },
+      type: 'workorder_approval',
+      status: { in: [...OPEN_STATUSES] },
+    },
+    include: { property: { select: { id: true, name: true } } },
+  })
+
+  return tasks.sort(
+    (a, b) =>
+      priorityRank(a.priority) - priorityRank(b.priority) ||
+      a.businessDate.getTime() - b.businessDate.getTime(),
+  )
 }
 
 export async function getTask(

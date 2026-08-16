@@ -1,5 +1,6 @@
 import { formatCents } from '@rental/core/money'
-import { leaseStatusLabel } from '@rental/core/leases'
+import { daysUntilExpiry, expiryWindow, leaseStatusLabel } from '@rental/core/leases'
+import { businessDate, utcToBusinessDate } from '@rental/core/scheduling'
 import Link from 'next/link'
 import { actorCan, requireScope } from '@/lib/auth/guard.ts'
 import { listLeases } from '@/lib/leases/queries.ts'
@@ -42,13 +43,33 @@ function StatusPill({ status, underNotice }: { status: string; underNotice: bool
   )
 }
 
-export default async function LeasesPage() {
+export default async function LeasesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ expiresWithin?: string }>
+}) {
   const { actor } = await requireScope('lease.read')
   const scope = await currentScope(actor)
-  const [leases, canWrite] = await Promise.all([
+  const [{ expiresWithin }, allLeases, canWrite] = await Promise.all([
+    searchParams,
     listLeases(scope),
     actorCan('lease.write'),
   ])
+
+  // R-050's dashboard drills in with `?expiresWithin=90|120` - the same
+  // `daysUntilExpiry`/`expiryWindow` the tile itself buckets by (a
+  // month-to-month lease has no term and is never included).
+  const now = new Date()
+  const window = expiresWithin === '90' ? 90 : expiresWithin === '120' ? 120 : null
+  const leases = window
+    ? allLeases.filter((lease) => {
+        const days = daysUntilExpiry(
+          lease.endsOn ? utcToBusinessDate(lease.endsOn) : null,
+          businessDate(now, lease.property.timezone),
+        )
+        return expiryWindow(days) !== null && expiryWindow(days)! <= window
+      })
+    : allLeases
 
   return (
     <div className="flex max-w-3xl flex-col gap-6">
@@ -68,6 +89,15 @@ export default async function LeasesPage() {
           </Link>
         )}
       </header>
+
+      {window && (
+        <p className="text-muted-foreground text-sm">
+          Showing {leases.length} of {allLeases.length} leases expiring within {window} days.{' '}
+          <Link href="/leases" className="underline underline-offset-2">
+            Clear filter
+          </Link>
+        </p>
+      )}
 
       {leases.length === 0 ? (
         <p className="text-muted-foreground text-sm">

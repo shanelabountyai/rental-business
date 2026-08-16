@@ -53,3 +53,37 @@ export function firstResponseSlaState(
   if (elapsedHours >= FIRST_RESPONSE_SLA_HOURS * WARNING_FRACTION) return 'approaching'
   return 'on_track'
 }
+
+/// R-050's dashboard glow threshold: "emergency/urgent tickets open >48h". A
+/// DIFFERENT CLOCK from the first-response SLA above, not a second reading
+/// of the same one - that clock measures "did anybody engage yet" and stops
+/// the moment they do, while this measures "how long has this been sitting
+/// open at all", which keeps ticking through triage, dispatch and the wait
+/// for a vendor. A ticket answered within four hours and still open eleven
+/// days later is on_track by one measure and glowing by this one, and both
+/// readings are correct at once.
+export const OPEN_TICKET_GLOW_HOURS = 48
+
+/// Priorities the glow applies to. ROUTINE work sitting open for two days is
+/// normal; the dashboard's whole "exception-first" premise is that only the
+/// two priorities where two days is itself the exception get flagged.
+const GLOWS_WHEN_OPEN: readonly string[] = ['EMERGENCY', 'URGENT']
+
+/**
+ * Whether an open ticket should glow red on the dashboard (RPT-01).
+ *
+ * Wall-clock hours, the same simplification this file's own header already
+ * names and justifies for the first-response clock above - a real
+ * business-hours measure needs calendar machinery this package does not
+ * have yet, and the direction this is wrong in (a Friday-evening emergency
+ * reads as older than a business-hours clock would say over the weekend) is
+ * the safe direction for something exception-first.
+ */
+export function ticketGlows(
+  ticket: { priority: string; createdAt: Date },
+  now: Date,
+): boolean {
+  if (!GLOWS_WHEN_OPEN.includes(ticket.priority)) return false
+  const elapsedHours = (now.getTime() - ticket.createdAt.getTime()) / 3_600_000
+  return elapsedHours >= OPEN_TICKET_GLOW_HOURS
+}

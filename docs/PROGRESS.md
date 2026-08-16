@@ -2297,3 +2297,33 @@ So the hold is pushed to Stripe **synchronously**, and the test asserts the subs
 - **"The case file" is the audit trail for now.** R-083 owns real eviction case files; when it lands, these entries are what it should absorb.
 - **No automatic hold.** Serving a notice does not place one — a human decides, deliberately. Wiring R-062's notice generation to prompt for it is the natural follow-on.
 - **Certified funds arrive through R-036's offline recording.** Nothing here records the cashier's cheque itself; the switch only closes the online rails.
+
+## R-050 — Owner dashboard
+**Commit:** `<pending>`  ·  **Date:** 2026-08-16
+
+**What it built.** All seven exception-first tiles (RPT-01, RPT-04): collected vs billed, aged delinquency, open tickets by priority/age with the emergency-urgent >48h glow, vacancies with days-on-market and daily cost, leases expiring ≤90/≤120 days, pending approvals, and renewals & alerts. Every tile is a real link into a real filtered list — no dead-end numbers, the row's own requirement.
+
+### What "no dead-end numbers" actually cost
+
+Of the seven tiles, two had a real query behind them already (aged delinquency via R-044's `rentRoll()`; the Task queue D-9/R-011 built for everything else). The other five needed real work:
+- `packages/core/units/vacancy.ts` (new) — `daysOnMarket`/`dailyCostOfVacancyCents`. No new schema field: `Lease.moveOutAt` is already written at the exact moment a unit stops earning rent (`leases/actions.ts`, `auto-make-ready.ts`), so it's the honest "vacant since" rather than a second driftable timestamp.
+- `packages/core/leases/expiry.ts` (new) — `daysUntilExpiry`/`expiryWindow`, null for month-to-month by construction.
+- `packages/core/maintenance/sla.ts` — `OPEN_TICKET_GLOW_HOURS`/`ticketGlows`, a DIFFERENT CLOCK from R-023's first-response SLA: one measures "did anybody engage", this measures "how long has it been open at all," and a ticket can be on-track by one and glowing by the other at once.
+- Four destination pages gained `searchParams` filtering (`/money/rent-roll?bucket=`/`?pastGrace=1`, `/maintenance?glowing=1`, `/leases?expiresWithin=90|120`, `/tasks?type=workorder_approval`).
+- Two destination pages are new: `/vacancies` and `/renewals` — neither had a cross-property list view before this item.
+
+### What it decided
+
+- **D-46: "Renewals & alerts" is deliberately narrower than "compliance."** The tile reads `filingCabinetAlertsDue()` (mortgage ARM/balloon dates, insurance renewals) — written and tested at R-015, never called by anything until now. A statutory compliance calendar (permits, certificates, inspections) doesn't exist yet and is R-077's. The tile and its page both say "Renewals & alerts," never "compliance," so the dashboard never claims coverage it doesn't have.
+
+### Found along the way
+
+- **A real, pre-existing access bug: the dashboard's own placeholder page (and, it turned out, the maintenance list page) used a bare `requirePermission('property.read'|'ticket.read')`.** That's a resource-less RBAC check — `can(actor, permission, {})` — which only an unrestricted (`owner`-role) actor can pass; `assignmentCovers` compares `resource.propertyId === assignment.propertyId`, and an empty resource never equals a real property id. Every property-scoped manager — i.e. every manager in a multi-entity portfolio — landed on "You don't have access to that" the moment they signed in, since login redirects to `/dashboard`. This has apparently been true since the placeholder was built (R-007) and since the maintenance list page was built (MAINT-01/02); nothing before this item ever loaded either page as a scoped actor in a test. Fixed both to `requireScope`, the same pattern R-008 already established on every other list page. **Not fixed, flagged instead:** a grep turned up the same bare-`requirePermission` pattern on `/money`, `/workorders`, `/search`, `/jurisdiction`, and the message-template pages, all of which a `manager` role plausibly holds the permission for. Out of this item's scope; worth a dedicated audit item rather than a silent fix bundled into R-050.
+- **An accessibility regression in this item's own first draft:** the dashboard's tile grid was a `<dl>` wrapping `<Link>` elements directly, with no `<dt>`/`<dd>` — invalid structure, caught by the shell's own axe sweep (`e2e/shell.spec.ts`, WCAG 1.3.1). Fixed to a `<ul>` of `<li><Link>...</Link></li>`, matching the card-list convention every other admin page already uses.
+- **A pre-existing flaky test, unrelated to this item, found only because the sweep happened to run across a UTC/property-timezone boundary:** `e2e/rent-roll.spec.ts`'s `daysAgo()` fixture helper anchors "N days ago" to the machine's UTC calendar date rather than the property's own business date. For several hours a day (whenever UTC has already rolled to the next calendar day but a UTC-negative property hasn't), its "one day late" fixture lands on the SAME business date as "today," collapsing to zero days late and misbucketing as `current`. Root-caused by reading `delinquencyFor`/`bucketFor` — they correctly operate on `BusinessDate` strings throughout, so **this is a test-fixture defect, not a production one.** The exact same fencepost was caught and fixed in this item's own new e2e fixture (`daysAgoAtNoonUtc`, anchored to the property's business date) before it shipped. Recommend the same fix for `rent-roll.spec.ts`'s `daysAgo()` as a fast follow-up — it will keep failing for a few hours a day until then.
+
+### What it left behind
+
+- The four cross-project bare-`requirePermission` sites named above (`/money`, `/workorders`, `/search`, `/jurisdiction`, message templates) are unaudited.
+- `rent-roll.spec.ts`'s UTC-anchored `daysAgo()` helper is unfixed — see above.
+- No date-range filtering on any drill-down beyond what the tile itself passes; that's RPT-02's/R-076's remainder, not this row's.

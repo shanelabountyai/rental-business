@@ -1,7 +1,7 @@
 import { friendlyDate } from '@rental/core/scheduling'
-import { CATEGORY_LABELS } from '@rental/core/maintenance'
+import { CATEGORY_LABELS, ticketGlows } from '@rental/core/maintenance'
 import Link from 'next/link'
-import { requirePermission } from '@/lib/auth/guard.ts'
+import { requireScope } from '@/lib/auth/guard.ts'
 import { listOpenTickets } from '@/lib/maintenance/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 
@@ -28,11 +28,28 @@ function categoryLabel(category: string): string {
  * timer, no habitability auto-elevation. It exists so a ticket, however it
  * arrived, is visible and reachable by id before that item builds the real
  * workflow on top; R-023 owns turning this list into that queue.
+ *
+ * `requireScope`, NOT a bare `requirePermission('ticket.read')` (R-050 found
+ * this the same way R-008 found it elsewhere): a resource-less check asks
+ * "may you see EVERY ticket, everywhere", which a property-scoped manager -
+ * i.e. every manager in a multi-entity portfolio - cannot answer yes to, and
+ * the bare check denied them this screen outright. Found because the
+ * dashboard's own e2e coverage drills a scoped manager into this exact page.
  */
-export default async function MaintenancePage() {
-  const actor = await requirePermission('ticket.read')
-  const scope = await currentScope(actor)
-  const tickets = await listOpenTickets(scope)
+export default async function MaintenancePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ glowing?: string }>
+}) {
+  const { actor } = await requireScope('ticket.read')
+  const [scope, { glowing }] = await Promise.all([currentScope(actor), searchParams])
+  const allTickets = await listOpenTickets(scope)
+
+  // R-050's dashboard drills in with `?glowing=1` for "emergency/urgent open
+  // >48h" - the same `ticketGlows` clock the tile itself counts by, so the
+  // number on the tile and the rows shown here can never disagree.
+  const now = new Date()
+  const tickets = glowing === '1' ? allTickets.filter((t) => ticketGlows(t, now)) : allTickets
 
   return (
     <div className="flex flex-col gap-6">
@@ -46,12 +63,23 @@ export default async function MaintenancePage() {
         </Link>
       </div>
       <p className="text-muted-foreground text-sm">
-        {tickets.length} open request{tickets.length === 1 ? '' : 's'} across{' '}
-        {scope.propertyIds.length} propert{scope.propertyIds.length === 1 ? 'y' : 'ies'}.
+        {glowing === '1'
+          ? `${tickets.length} of ${allTickets.length} open requests are emergency/urgent and open past 48h.`
+          : `${tickets.length} open request${tickets.length === 1 ? '' : 's'} across ${scope.propertyIds.length} propert${scope.propertyIds.length === 1 ? 'y' : 'ies'}.`}
+        {glowing === '1' && (
+          <>
+            {' '}
+            <Link href="/maintenance" className="underline underline-offset-2">
+              Clear filter
+            </Link>
+          </>
+        )}
       </p>
 
       {tickets.length === 0 ? (
-        <p className="text-muted-foreground text-sm">Nothing open right now.</p>
+        <p className="text-muted-foreground text-sm">
+          {glowing === '1' ? 'Nothing glowing right now.' : 'Nothing open right now.'}
+        </p>
       ) : (
         <ul className="flex flex-col gap-2">
           {tickets.map((ticket) => (

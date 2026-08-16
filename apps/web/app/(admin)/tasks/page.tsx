@@ -2,7 +2,7 @@ import { scopeIsEmpty } from '@rental/core/rbac'
 import Link from 'next/link'
 import { currentScope as writeScope, requireScope } from '@/lib/auth/guard.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
-import { myDayTasks, rollupByProperty } from '@/lib/tasks/queries.ts'
+import { myDayTasks, pendingApprovals, rollupByProperty } from '@/lib/tasks/queries.ts'
 
 export const metadata = { title: 'Tasks — Rental Operations' }
 
@@ -17,14 +17,24 @@ const PRIORITY_LABELS: Record<string, string> = {
 // dormant scoping bug R-008 found on other list pages would otherwise deny
 // an entity- or property-scoped tech a "my day" list that should show them
 // their own real, non-empty queue (see requireScope's own comment).
-export default async function TasksPage() {
+export default async function TasksPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ type?: string }>
+}) {
   const { actor } = await requireScope('task.read')
   const scope = await currentScope(actor)
   const now = new Date()
+  const { type } = await searchParams
+  // R-050's dashboard drills the "pending approvals" tile in here rather
+  // than to `myDayTasks` - an approval is urgent to the owner regardless of
+  // assignee or businessDate, which is exactly what that query excludes.
+  // See `pendingApprovals`'s own comment.
+  const approvalsOnly = type === 'workorder_approval'
 
   const [tasks, rollup, taskWriteScope] = await Promise.all([
-    myDayTasks(scope, actor.id, now),
-    rollupByProperty(scope, now),
+    approvalsOnly ? pendingApprovals(scope) : myDayTasks(scope, actor.id, now),
+    approvalsOnly ? Promise.resolve([]) : rollupByProperty(scope, now),
     writeScope('task.write'),
   ])
   const canWrite = !scopeIsEmpty(taskWriteScope)
@@ -33,14 +43,28 @@ export default async function TasksPage() {
     <div className="flex flex-col gap-8">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">My day</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">
+            {approvalsOnly ? 'Pending approvals' : 'My day'}
+          </h1>
           <p className="text-muted-foreground text-sm">
-            {tasks.length} task{tasks.length === 1 ? '' : 's'} due today or
-            overdue, in {scope.propertyIds.length} propert
-            {scope.propertyIds.length === 1 ? 'y' : 'ies'}.
+            {approvalsOnly ? (
+              <>
+                {tasks.length} work order{tasks.length === 1 ? '' : 's'} waiting on
+                a decision.{' '}
+                <Link href="/tasks" className="underline underline-offset-2">
+                  Back to my day
+                </Link>
+              </>
+            ) : (
+              <>
+                {tasks.length} task{tasks.length === 1 ? '' : 's'} due today or
+                overdue, in {scope.propertyIds.length} propert
+                {scope.propertyIds.length === 1 ? 'y' : 'ies'}.
+              </>
+            )}
           </p>
         </div>
-        {canWrite && (
+        {canWrite && !approvalsOnly && (
           <Link
             href="/tasks/new"
             className="bg-primary text-primary-foreground focus-visible:ring-ring flex min-h-11 items-center rounded-md px-4 py-2 text-sm font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
@@ -52,7 +76,7 @@ export default async function TasksPage() {
 
       {tasks.length === 0 ? (
         <p className="text-muted-foreground text-sm">
-          Nothing due today or overdue. Nice.
+          {approvalsOnly ? 'Nothing waiting on approval.' : 'Nothing due today or overdue. Nice.'}
         </p>
       ) : (
         <ul className="flex flex-col divide-y rounded-md border">

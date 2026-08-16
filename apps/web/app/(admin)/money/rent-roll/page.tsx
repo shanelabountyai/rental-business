@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { AGING_BUCKETS, BUCKET_LABELS } from '@rental/core/ledger'
+import { AGING_BUCKETS, BUCKET_LABELS, type AgingBucket } from '@rental/core/ledger'
 import { formatCents } from '@rental/core/money'
 import { RentRollTable } from '@/components/money/rent-roll-table.tsx'
 import { propertyScope, scopeIsEmpty } from '@rental/core/rbac'
@@ -17,14 +17,18 @@ export const metadata = { title: 'Rent roll — Rental Operations' }
 // notFound() for records outside scope and a Suspense boundary above would
 // stream a 200 before they ran.
 
-export default async function RentRollPage() {
+export default async function RentRollPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ bucket?: string; pastGrace?: string }>
+}) {
   // `requireScope`, NOT a bare `requirePermission('ledger.read')`. A
   // property-scoped manager holds ledger.read over their own properties and
   // nowhere else, and a resource-less check denies them outright — the same
   // trap the messages inbox documents, and the rent roll is exactly the same
   // shape: a list filtered to what you may see, not a single record.
   const { actor } = await requireScope('ledger.read')
-  const scope = await currentScope(actor)
+  const [scope, { bucket, pastGrace }] = await Promise.all([currentScope(actor), searchParams])
 
   // SCOPED, for the same reason the guard above is. `actorCan('message.send')`
   // with no resource asks "may you message everywhere", which a
@@ -32,9 +36,24 @@ export default async function RentRollPage() {
   // then silently vanish for exactly the person whose job this screen is.
   const canSend = !scopeIsEmpty(propertyScope(actor, 'message.send'))
 
-  const [roll, templates] = await Promise.all([rentRoll(scope), listTemplates()])
+  const [fullRoll, templates] = await Promise.all([rentRoll(scope), listTemplates()])
 
-  const unknownGrace = roll.rows.filter((row) => row.graceUnknown).length
+  // R-050's dashboard drills in with `?bucket=` or `?pastGrace=1` - filtered
+  // in-page rather than in `rentRoll()` itself, because the aging summary
+  // above (`roll.totals`, the unknown-grace banner) must still reflect every
+  // row regardless of which subset the table below is showing.
+  const validBucket: AgingBucket | null =
+    bucket && (AGING_BUCKETS as readonly string[]).includes(bucket) ? (bucket as AgingBucket) : null
+  const roll = {
+    ...fullRoll,
+    rows: fullRoll.rows.filter((row) => {
+      if (validBucket && row.bucket !== validBucket) return false
+      if (pastGrace === '1' && !row.pastGrace) return false
+      return true
+    }),
+  }
+
+  const unknownGrace = fullRoll.rows.filter((row) => row.graceUnknown).length
 
   return (
     <div className="flex flex-col gap-6">
@@ -58,7 +77,7 @@ export default async function RentRollPage() {
         </h2>
         <dl className="grid grid-cols-2 gap-3 sm:grid-cols-5">
           {AGING_BUCKETS.map((bucket) => {
-            const total = roll.totals[bucket]
+            const total = fullRoll.totals[bucket]
             return (
               <div key={bucket} className="flex flex-col gap-1 rounded-lg border p-3">
                 <dt className="text-muted-foreground text-xs font-medium">
@@ -77,9 +96,19 @@ export default async function RentRollPage() {
           })}
         </dl>
         <p className="text-muted-foreground text-sm">
-          {formatCents(roll.outstandingCents)} outstanding against{' '}
-          {formatCents(roll.billedCents)} of monthly rent.
+          {formatCents(fullRoll.outstandingCents)} outstanding against{' '}
+          {formatCents(fullRoll.billedCents)} of monthly rent.
         </p>
+        {(validBucket || pastGrace === '1') && (
+          <p className="text-muted-foreground text-sm">
+            Showing {roll.rows.length} of {fullRoll.rows.length} tenancies
+            {validBucket ? ` in ${BUCKET_LABELS[validBucket]}` : ''}
+            {pastGrace === '1' ? ' past grace' : ''}.{' '}
+            <Link href="/money/rent-roll" className="underline underline-offset-2">
+              Clear filter
+            </Link>
+          </p>
+        )}
         {unknownGrace > 0 && (
           // NOT SILENTLY TREATED AS ZERO GRACE (D-4). A state nobody has
           // configured is a real gap, and these tenancies can never be
