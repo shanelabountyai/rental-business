@@ -2329,7 +2329,7 @@ Of the seven tiles, two had a real query behind them already (aged delinquency v
 - No date-range filtering on any drill-down beyond what the tile itself passes; that's RPT-02's/R-076's remainder, not this row's.
 
 ## R-050b — Golden Path 2 repair
-**Commit:** `<pending>`  ·  **Date:** 2026-08-16
+**Commit:** `7a4905b`  ·  **Date:** 2026-08-16
 
 **What it built.** Nothing new-feature. This is the repair of a real defect found by walking **Demo checkpoint 2** end to end for the first time (D-28) — the checkpoint R-050 defines and that nothing had ever run.
 
