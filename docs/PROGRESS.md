@@ -2365,7 +2365,7 @@ No new D-number. The schema shape (a second, lease-level anchor alongside the ex
 - No UI surfaces this fix — an owner would see it only as "a late fee that used to never post now posts." No new copy or panel was needed.
 
 ## R-051 — Notice delivery proof
-**Commit:** `<pending>`  ·  **Date:** 2026-08-16
+**Commit:** `04aa77d`  ·  **Date:** 2026-08-16
 
 **What it built.** COMM-02's proof of service: which methods a state actually permits per notice type, a service record that can hold more than one delivery, the three kinds of proof (photograph, certified-mail tracking, portal read receipt), the first PDF path in the repo, and the notice screens — staff and tenant — that had never existed.
 
