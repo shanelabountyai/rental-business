@@ -2299,7 +2299,7 @@ So the hold is pushed to Stripe **synchronously**, and the test asserts the subs
 - **Certified funds arrive through R-036's offline recording.** Nothing here records the cashier's cheque itself; the switch only closes the online rails.
 
 ## R-050 — Owner dashboard
-**Commit:** `<pending>`  ·  **Date:** 2026-08-16
+**Commit:** `7f8dd44`  ·  **Date:** 2026-08-16
 
 **What it built.** All seven exception-first tiles (RPT-01, RPT-04): collected vs billed, aged delinquency, open tickets by priority/age with the emergency-urgent >48h glow, vacancies with days-on-market and daily cost, leases expiring ≤90/≤120 days, pending approvals, and renewals & alerts. Every tile is a real link into a real filtered list — no dead-end numbers, the row's own requirement.
 
