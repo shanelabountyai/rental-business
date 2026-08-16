@@ -62,6 +62,27 @@ export const NOTIFICATION_CATEGORIES = [
 
 export type NotificationCategory = (typeof NOTIFICATION_CATEGORIES)[number]
 
+/**
+ * Categories that SOLICIT rather than inform (R-051b, COMM-02).
+ *
+ * EMPTY TODAY, AND THAT IS THE POINT. Every category above concerns a tenancy
+ * the recipient is already in - rent that is due, a repair, a notice, a job
+ * assignment. None of it is marketing, so under the TCPA every one of them is
+ * transactional and an existing-relationship basis covers it.
+ *
+ * This set exists so that the first category which ISN'T has to be declared
+ * here to work, rather than quietly inheriting a consent basis that does not
+ * cover it. A renewal *offer* pitched to a tenant who has not consented in
+ * writing is the exact message this list is waiting for.
+ */
+export const PROMOTIONAL_CATEGORIES: ReadonlySet<NotificationCategory> = new Set([])
+
+export function categoryPurpose(
+  category: NotificationCategory,
+): 'TRANSACTIONAL' | 'PROMOTIONAL' {
+  return PROMOTIONAL_CATEGORIES.has(category) ? 'PROMOTIONAL' : 'TRANSACTIONAL'
+}
+
 const CATEGORY_SET: ReadonlySet<string> = new Set(NOTIFICATION_CATEGORIES)
 
 export function isNotificationCategory(

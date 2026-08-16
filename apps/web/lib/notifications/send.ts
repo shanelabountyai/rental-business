@@ -20,6 +20,8 @@ import {
 } from '@rental/db'
 import { businessDate } from '@rental/core/scheduling'
 import { isOptedOut } from '@/lib/comms/opt-out-store.ts'
+import { consentVerdict } from '@rental/core/consent'
+import { categoryPurpose } from '@rental/core/notifications'
 import { isUniqueViolation } from '@/lib/db/unique-violation.ts'
 import { createTask } from '@/lib/tasks/create.ts'
 import { notificationConfig } from './config.ts'
@@ -188,6 +190,28 @@ export async function notify(
       ? await isOptedOut(addressFor('SMS', input.recipient))
       : false
 
+  // TCPA CONSENT (R-051b). Asked once, alongside the carrier block above and
+  // for the same reason - it is a fact about the recipient, not a per-channel
+  // preference.
+  //
+  // TENANTS ONLY. A staff member is an employee and a vendor is a
+  // counterparty we are transacting with; neither is a residential consumer
+  // the TCPA's consent regime is written about, and gating them would stop
+  // the on-call pager for no benefit anybody can name.
+  const smsConsent =
+    template.channels.includes('SMS') &&
+    input.recipient.type === 'TENANT' &&
+    addressFor('SMS', input.recipient) !== null
+      ? consentVerdict(
+          await db.tenantConsent.findMany({
+            where: { tenantId: input.recipient.id },
+            select: { channel: true, basis: true, revokedAt: true },
+          }),
+          'SMS',
+          categoryPurpose(input.category),
+        )
+      : { allowed: true, reason: null }
+
   const outcomes: ChannelOutcome[] = []
 
   for (const channel of template.channels) {
@@ -210,6 +234,15 @@ export async function notify(
       // deliver (D-38).
       status = 'SUPPRESSED'
       reason = 'sms_opt_out'
+    } else if (channel === 'SMS' && !smsConsent.allowed) {
+      // AFTER the carrier block, before preferences. A STOP outranks this
+      // because it is the carrier refusing to carry the message at all;
+      // missing consent is our own gap, and it must not be recorded as a
+      // preference the tenant set - the same distinction D-38 draws, and for
+      // a legally-significant category it means the same thing: a delivery we
+      // owe and could not make.
+      status = 'SUPPRESSED'
+      reason = 'no_consent'
     } else if (!decision?.send) {
       status = 'SUPPRESSED'
       reason = decision?.reason ?? 'preference_off'

@@ -2414,3 +2414,55 @@ Pure JS, no native binary and no headless browser, so it runs in a Vercel functi
 - **No admin UI for the service-method map yet.** Texas is seeded and `validateJurisdictionRule` enforces the shape on write, but configuring a *new* state's service rules means a seed or a direct write — the rule form has no matrix control. The next state added is when that becomes worth building.
 - **`Notice` itself is still mutable.** The service record is append-only; the notice body is not. Nothing edits it today, and locking it wants the same "correction is a new row" story the ledger has.
 - **No certified-mail API.** The tracking number is typed in and stored; nothing queries USPS for a delivery scan. R-081 owns the physical-mail integration, as the row says.
+
+## R-051b — TCPA consent capture
+**Commit:** `<pending>`  ·  **Date:** 2026-08-16
+
+**What it built.** The permission half of a permission/revocation pair that has only ever had the revocation. `TenantConsent`, the basis vocabulary behind it, a send-path gate with its own suppression reason, and the backfill that keeps the existing roster reachable.
+
+### The product had revocation and never had permission
+
+`SmsOptOut` has honoured STOP since R-030 — inbound keyword, carrier callback, send-path check, all of it. Nothing had ever recorded that a tenant *agreed* to be texted in the first place. So the only gate on outbound SMS was withdrawal of a permission the product never established, which is backwards under a statute whose damages are statutory and per-message.
+
+### Consent is a basis, not a boolean (D-49)
+
+"They consented" is unfalsifiable six months later. What answers a claim is *how* it was obtained, so the basis is the row's whole point:
+
+- `EXPRESS_WRITTEN` — shown a disclosure and agreed to it. **The only basis that reaches promotional sending**, and the only one carrying a CHECK constraint that requires the disclosure text. The basis that unlocks marketing is the one that must be able to show what was agreed to.
+- `EXISTING_RELATIONSHIP` / `VERBAL` / `IMPORTED` — cover messages about the tenancy and nothing else. `IMPORTED` is deliberately the weakest: it records that somebody *else* claims consent exists.
+
+**Keyed on the tenant, not the phone number** — deliberately different from its sibling `SmsOptOut`, which is a carrier fact about a *number*. A number reassigned to somebody else must not carry the old tenant's consent, and a tenant who changes number must not lose it. One table keyed on either alone cannot express both.
+
+**Append-only by trigger except withdrawal** — `revokedAt` null → timestamp, once, with a required reason, and nothing else on the row may move alongside it. Same shape R-051 gave `NoticeDelivery`, same reasoning: a consent record that can be edited afterwards is not evidence of anything. Re-consenting is a new row, so a permission given, taken back and given again survives intact.
+
+### The grandfathering call, and why it was a judgement rather than a shortcut
+
+Gating without a backfill would have silently switched off rent reminders, maintenance updates and notice delivery for the entire existing roster the moment it shipped, until somebody worked through them by hand. That is a worse outcome than the risk it removes, for messages that are transactional by definition and rest on a relationship the tenant is already in.
+
+So every active tenant with a phone was backfilled as `EXISTING_RELATIONSHIP` / source `BACKFILL`, with a note recording plainly that no disclosure was shown and nobody clicked anything. **The row claims nothing false** — that is the entire benefit of storing a basis instead of a boolean. Promotional sending stays barred to all of them.
+
+### Three suppression reasons that are not each other
+
+`no_consent` is deliberately distinct from `sms_opt_out` and from `preference_off`, because the three have different fixes:
+
+- `sms_opt_out` — the carrier is refusing. The tenant's to reverse.
+- `no_consent` — our own gap. Ours to go and close by asking.
+- `preference_off` — a choice the tenant made.
+
+Recording either of the first two as the third would hide a real gap behind a preference nobody expressed. Ordering matters too: STOP outranks consent, because a carrier block is a fact about whether the message can be carried at all.
+
+**Staff and vendor SMS is ungated.** An employee is not a residential consumer and a vendor is a counterparty we are transacting with; neither is who the consent regime is written about, and gating them would stop the on-call pager for no benefit anybody can name.
+
+**`PROMOTIONAL_CATEGORIES` ships empty, on purpose.** Every category the product has is about a tenancy the recipient is already in, so all of them are transactional today. The set exists so the first category that *isn't* has to be declared there to work, rather than quietly inheriting a basis that does not cover it. A renewal *offer* is the message it is waiting for.
+
+### Found along the way
+
+- **Four bugs in this item's own tests, each caught by the tests.** `notify()` returns `ChannelOutcome[]` directly, not `{ outcomes }`; `NotificationDelivery` has no `createdAt` and is 1:1 with a notification, so "the newest row for this tenant" is not a query it supports (read it by the returned `deliveryId` instead); the engine takes addresses *on* the recipient rather than looking them up, so a fixture that omits the phone gets `no_address` and never reaches the consent gate at all; and `dispatchPendingNotifications` takes `(now, limit, only)` positionally.
+- **One assertion that was testing the wrong thing.** "Consent lets the message through" was written as `status === 'QUEUED'` and failed on `preference_off` — the fixture tenant has no notification preferences and `rent_reminder` is not a locked category, so the preference resolver suppresses it for reasons that predate this item entirely. Rewritten to assert on the *reason* (`not 'no_consent'`), which is the narrow thing this item actually guarantees and does not break the day somebody changes a preference default.
+
+### What it left behind
+
+- **`SmsOptOut` still has no append-only guard.** It carries the same evidentiary weight as `TenantConsent` and can be edited freely. Named here rather than widened silently as a drive-by.
+- **There is still no tenant-onboarding form anywhere in the product**, so the row's "captured at onboarding" has nothing to hang off. Capture is a staff action gated on `tenant.write`; a real onboarding flow is whichever item builds tenant creation.
+- **No portal-side consent screen.** A tenant cannot see or withdraw their own consent from `/portal` — they can still text STOP, which is honoured, but the two are separate records and only one is self-service.
+- **Email consent is modelled and not enforced.** `ConsentChannel` carries `EMAIL` and `VOICE`; the send path gates SMS only, because that is what the TCPA governs and what this row asked for. CAN-SPAM is a different regime with different rules.

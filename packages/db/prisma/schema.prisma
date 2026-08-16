@@ -281,6 +281,31 @@ enum MessageChannel {
   CALL_LOG
 }
 
+/// TCPA consent (R-051b, COMM-02). VOICE is listed because the statute
+/// governs calls as well as texts; nothing places calls today, and the send
+/// path gates SMS only.
+enum ConsentChannel {
+  SMS
+  EMAIL
+  VOICE
+}
+
+/// HOW consent was obtained - the point of the record. "Consented" alone is
+/// unfalsifiable six months later; what defends a claim is the basis.
+/// Only EXPRESS_WRITTEN covers promotional sending.
+enum ConsentBasis {
+  EXPRESS_WRITTEN
+  EXISTING_RELATIONSHIP
+  VERBAL
+  IMPORTED
+}
+
+enum ConsentSource {
+  STAFF_RECORDED
+  PORTAL
+  BACKFILL
+}
+
 enum MessageDirection {
   INBOUND
   OUTBOUND
@@ -732,6 +757,7 @@ model StaffUser {
   inspectionsPerformed            Inspection[]                 @relation("InspectionPerformedBy")
   noticesServed                   Notice[]                     @relation("NoticeServedBy")
   noticeDeliveriesServed          NoticeDelivery[]             @relation("NoticeDeliveryServedBy")
+  tenantConsentsRecorded          TenantConsent[]              @relation("TenantConsentRecordedBy")
   messagesSent                    Message[]                    @relation("MessageSentBy")
   documentsUploaded               Document[]                   @relation("DocumentUploadedBy")
   auditLogs                       AuditLog[]                   @relation("AuditLogActor")
@@ -772,6 +798,7 @@ model Tenant {
   threads                Thread[]
   messages               Message[]               @relation("MessageFromTenant")
   documents              Document[]
+  consents               TenantConsent[]
 
   @@index([lastName, firstName])
   @@index([email])
@@ -2865,6 +2892,42 @@ model AuditLog {
 /// off `entry_notice` because that notice is legally significant; a carrier
 /// STOP turns it off anyway. Recording that here is what stops the
 /// notification log claiming we served a notice we did not deliver.
+/// That a tenant AGREED to be contacted, and on what basis (R-051b, COMM-02).
+///
+/// The counterpart of `SmsOptOut`, and deliberately a different key.
+/// `SmsOptOut` is a fact about a PHONE NUMBER, reported by a carrier; this is
+/// a fact about a PERSON and the permission they gave. A number reassigned to
+/// somebody else must not carry the old tenant's consent, and a tenant who
+/// changes number must not lose it - which one table keyed on either alone
+/// cannot express.
+///
+/// APPEND-ONLY BY TRIGGER except for withdrawal (`revokedAt` null -> a
+/// timestamp, once, with an optional reason). Re-consenting after a
+/// withdrawal is a new row, so the history of a permission given, taken back
+/// and given again survives intact.
+model TenantConsent {
+  id                String         @id @default(cuid())
+  tenantId          String
+  channel           ConsentChannel
+  basis             ConsentBasis
+  source            ConsentSource
+  /// The words the tenant was actually shown. Required for EXPRESS_WRITTEN by
+  /// a CHECK constraint - the basis that unlocks promotional sending is the
+  /// one that has to be able to show what was consented to.
+  disclosureText    String?
+  recordedAt        DateTime       @default(now())
+  recordedByStaffId String?
+  note              String?
+  revokedAt         DateTime?
+  revokeReason      String?
+  createdAt         DateTime       @default(now())
+
+  tenant     Tenant     @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  recordedBy StaffUser? @relation("TenantConsentRecordedBy", fields: [recordedByStaffId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, channel])
+}
+
 model SmsOptOut {
   id         String          @id @default(cuid())
   /// E.164.

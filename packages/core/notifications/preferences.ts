@@ -28,6 +28,12 @@ export const SUPPRESSION_REASONS = [
   /// other is a delivery we owe and could not make, and D-38 says the second
   /// raises a Task for a human to serve the notice another way.
   'sms_opt_out',
+  /// R-051b: the tenant never agreed to be texted, took it back, or the basis
+  /// on file does not cover this kind of message. NOT `sms_opt_out`, which is
+  /// a carrier fact about a NUMBER - this is about the PERSON and the
+  /// permission they gave, and the two have different fixes: an opt-out is
+  /// theirs to reverse, a missing consent is ours to go and ask for.
+  'no_consent',
 ] as const
 
 export type SuppressionReason = (typeof SUPPRESSION_REASONS)[number]

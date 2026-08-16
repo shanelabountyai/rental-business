@@ -140,6 +140,15 @@ export const AUDIT_ACTIONS = [
   /// PORTAL service this event IS the proof of delivery, and it is the only
   /// evidence that the notice reached anybody at all.
   'notice.read',
+  /// R-051b: a tenant's agreement to be contacted was recorded, with the
+  /// basis it rests on. The evidence a TCPA claim is defended with - damages
+  /// there are statutory and per-message, so "who asserted this consent
+  /// existed, and when" is the whole question.
+  'consent.recorded',
+  /// R-051b: consent withdrawn. On REASON_REQUIRED below, because "why did we
+  /// stop being allowed to text them" is what a dispute turns on, and a
+  /// withdrawal with no stated reason is indistinguishable from a misclick.
+  'consent.withdrawn',
   'inspection.locked',
 
   /// PROP-03: "Given access codes, when an external vendor views a work
@@ -430,6 +439,7 @@ export const REASON_REQUIRED: ReadonlySet<AuditAction> = new Set([
   'application_order.deviated',
   'lease.terminated',
   'payment.hold_changed',
+  'consent.withdrawn',
 ])
 
 export function requiresReason(action: AuditAction): boolean {
