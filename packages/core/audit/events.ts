@@ -129,6 +129,17 @@ export const AUDIT_ACTIONS = [
   'document.delete_marked',
   'document.restored',
   'notice.served',
+  /// R-051: the notice PDF was rendered and archived as a Document. Separate
+  /// from `notice.served` because generating the artifact and serving it are
+  /// different acts that can happen minutes or days apart - and because the
+  /// question "is what we posted on the door the same file we still hold" is
+  /// answered by this row plus the Document's sha256, not by the serving.
+  'notice.generated',
+  /// R-051: a tenant opened a notice served through the portal. A privileged
+  /// READ recorded deliberately, like `accesscode.revealed` above - for
+  /// PORTAL service this event IS the proof of delivery, and it is the only
+  /// evidence that the notice reached anybody at all.
+  'notice.read',
   'inspection.locked',
 
   /// PROP-03: "Given access codes, when an external vendor views a work

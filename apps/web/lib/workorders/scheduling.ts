@@ -209,6 +209,22 @@ export async function scheduleEntry(
           },
         })
         noticeId = notice.id
+        // The SAME service event, as a NoticeDelivery row (R-051). The
+        // Notice columns above stay as the first service for every reader
+        // written before that item; this is the record that can hold a
+        // second service method, and the one the notice screens read.
+        // `permittedByJurisdiction` is left null rather than computed: an
+        // entry notice is delivered to the portal by the product itself, so
+        // there is no operator choice to check against the state's list.
+        await tx.noticeDelivery.create({
+          data: {
+            noticeId: notice.id,
+            method: 'PORTAL',
+            servedAt: now,
+            servedByStaffId: actor.id,
+            jurisdictionRuleId: rule.id,
+          },
+        })
         await audit(
           {
             action: 'notice.served',

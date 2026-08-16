@@ -151,12 +151,24 @@ test.afterAll(async () => {
     where: { id: { in: workOrderIds } },
     data: { entryNoticeId: null },
   })
-  await prisma.notice.deleteMany({ where: { propertyId: { in: propertyIds } } })
+  // NOTICES ARE NO LONGER DELETED (R-051). Every served notice now carries a
+  // `NoticeDelivery` row, which is append-only and RESTRICTs the notice it
+  // points at - so proof of service outlives the fixture that produced it,
+  // exactly as it does in production. That is the product working, not a
+  // cleanup bug: CLAUDE.md's own rule is that test cleanup cannot delete a
+  // row an append-only table references, and must retire rather than remove.
+  // The property is deactivated below, which is what keeps these out of
+  // every other spec's way.
+  //
+  // The lease and unit stay for the same reason - the notice references them,
+  // and the notice is now undeletable.
   await prisma.workOrder.deleteMany({ where: { id: { in: workOrderIds } } })
   await prisma.ticket.deleteMany({ where: { id: { in: ticketIds } } })
   await prisma.leaseTenant.deleteMany({ where: { tenantId: { in: tenantIds } } })
-  await prisma.lease.deleteMany({ where: { propertyId: { in: propertyIds } } })
-  await prisma.unit.deleteMany({ where: { propertyId: { in: propertyIds } } })
+  await prisma.lease.updateMany({
+    where: { propertyId: { in: propertyIds } },
+    data: { status: 'ENDED' },
+  })
   await prisma.tenant.updateMany({ where: { id: { in: tenantIds } }, data: { active: false } })
   await prisma.property.updateMany({
     where: { id: { in: propertyIds } },

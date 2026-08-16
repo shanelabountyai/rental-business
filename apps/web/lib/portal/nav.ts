@@ -30,5 +30,9 @@ export const PORTAL_NAV_ITEMS: readonly PortalNavItem[] = [
     description: 'Report a maintenance problem and see past requests',
   },
   { href: '/portal/papers', label: 'Papers', description: 'Your lease and other papers' },
+  // Separate from Papers deliberately: a notice is something that needs
+  // reading NOW, and burying it in the filing drawer alongside the lease is
+  // how it goes unread. D-10's lexicon - "notices", never "service".
+  { href: '/portal/notices', label: 'Notices', description: 'Letters about your home' },
   { href: '/portal/messages', label: 'Messages', description: 'Messages with your landlord' },
 ]

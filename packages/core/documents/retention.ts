@@ -29,6 +29,7 @@ export const RETENTION_RULES: Record<DocumentTypeValue, RetentionRule> = {
   LEASE: { years: 7, note: 'DOC-05: leases retained >= 7 years.' },
   ADDENDUM: { years: 7, note: 'DOC-05: travels with its lease.' },
   NOTICE: { years: null, note: 'Evidence trail - kept indefinitely.' },
+  NOTICE_PROOF: { years: null, note: 'Proof of service - kept indefinitely, for the same reason as the notice itself.' },
   INVOICE: { years: null, note: 'No DOC-05 number given; kept indefinitely pending counsel input.' },
   INSURANCE_COI: { years: null, note: 'Kept indefinitely; superseded by a newer COI, not purged.' },
   W9: { years: null, note: 'Kept indefinitely; a tax record.' },

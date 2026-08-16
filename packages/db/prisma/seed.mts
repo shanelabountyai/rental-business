@@ -67,11 +67,34 @@ async function seedRoles() {
  * rewrites history"), so this only ever creates; once v1 exists, correcting
  * it means adding v2 through the app, the same as any other change.
  */
+const TX_NOTICE_SERVICE_METHODS = {
+  ENTRY_NOTICE: ['PERSONAL', 'POSTED_WITH_PHOTO', 'EMAIL', 'PORTAL'],
+  NOTICE_TO_VACATE: ['PERSONAL', 'POSTED_WITH_PHOTO', 'CERTIFIED_MAIL', 'FIRST_CLASS_MAIL'],
+  PAY_OR_QUIT: ['PERSONAL', 'POSTED_WITH_PHOTO', 'CERTIFIED_MAIL', 'FIRST_CLASS_MAIL'],
+  LEASE_VIOLATION: ['PERSONAL', 'POSTED_WITH_PHOTO', 'CERTIFIED_MAIL', 'FIRST_CLASS_MAIL'],
+  RENT_INCREASE: ['PERSONAL', 'CERTIFIED_MAIL', 'FIRST_CLASS_MAIL', 'EMAIL', 'PORTAL'],
+  REPAIR_CHARGE: ['PERSONAL', 'CERTIFIED_MAIL', 'FIRST_CLASS_MAIL', 'EMAIL', 'PORTAL'],
+} as const
+
 async function seedJurisdictionRules() {
   const existing = await prisma.jurisdictionRule.findFirst({
     where: { state: 'TX', jurisdiction: null, version: 1 },
   })
   if (existing) {
+    // ONE NARROW EXCEPTION to "only ever creates" (R-051): a column added
+    // after this rule was seeded is null on it, and a null there does not
+    // mean "Texas permits nothing" - it means the column did not exist yet.
+    // Filling a genuinely absent value is not rewriting a rule that governs
+    // real fees, which is what the rule above forbids. Guarded on null, so
+    // it never touches a value somebody has since set.
+    if (existing.noticeServiceMethods == null) {
+      await prisma.jurisdictionRule.update({
+        where: { id: existing.id },
+        data: { noticeServiceMethods: TX_NOTICE_SERVICE_METHODS },
+      })
+      console.info('Backfilled TX notice service methods (added at R-051).')
+      return
+    }
     console.info('Jurisdiction rule already seeded (TX, statewide, v1).')
     return
   }
@@ -113,6 +136,26 @@ async function seedJurisdictionRules() {
       // Texas is not a just-cause state.
       justCauseRequired: false,
 
+      // WHICH METHODS SERVE WHICH NOTICE (R-051, COMM-02, D-4).
+      //
+      // Tex. Prop. Code §24.005(f) is unusually specific about a notice to
+      // vacate: in person, or by mail, to the premises - and it permits
+      // affixing to the INSIDE of the main entry door. Posting on the
+      // OUTSIDE is allowed only under §24.005(f-1)'s narrower conditions,
+      // which this product cannot verify, so POSTED_WITH_PHOTO is listed
+      // because the lawful inside-the-door case is the common one and the
+      // photograph is what makes either arguable.
+      //
+      // EMAIL IS DELIBERATELY ABSENT from the eviction-track notices.
+      // §24.005 does not name it, and a notice that cannot be proved served
+      // is worth less than no notice at all - it starts a clock the landlord
+      // cannot defend. It is fine for an entry notice, which starts no
+      // statutory clock in Texas.
+      //
+      // Same standing as every other number here: seeded, not attorney
+      // reviewed, and `reviewedBy` is still null.
+      noticeServiceMethods: TX_NOTICE_SERVICE_METHODS,
+
       // No statute mandates an order; rent-first is the product's own
       // default so a partial payment does not silently starve rent to pay
       // down fees first.
@@ -143,7 +186,7 @@ async function seedJurisdictionRules() {
       applicationFeeCapCents: null,
       rubsPermitted: true,
 
-      citation: 'Tex. Prop. Code §§92.019, 92.103-.104, 24.005, 91.001; Tex. Bus. & Com. Code §§604A.003, 3.506',
+      citation: 'Tex. Prop. Code §§92.019, 92.103-.104, 24.005, 24.005(f), 91.001; Tex. Bus. & Com. Code §§604A.003, 3.506',
       reviewedBy: null,
       notes:
         'Seeded defaults, not yet reviewed by an attorney - see decisions doc item 6. Entry-notice hours and rent-increase notice days reflect common practice, not a specific citation. cardSurchargePermitted does not distinguish debit from credit, which Tex. Bus. \u0026 Com. Code \u00a7604A.003 does - see the comment on that field.',

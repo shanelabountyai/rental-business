@@ -731,6 +731,7 @@ model StaffUser {
   tasksCompleted                  Task[]                       @relation("TaskCompletedBy")
   inspectionsPerformed            Inspection[]                 @relation("InspectionPerformedBy")
   noticesServed                   Notice[]                     @relation("NoticeServedBy")
+  noticeDeliveriesServed          NoticeDelivery[]             @relation("NoticeDeliveryServedBy")
   messagesSent                    Message[]                    @relation("MessageSentBy")
   documentsUploaded               Document[]                   @relation("DocumentUploadedBy")
   auditLogs                       AuditLog[]                   @relation("AuditLogActor")
@@ -2485,12 +2486,27 @@ model Notice {
   type               String
   addressOfRecord    String
   bodyText           String?
-  /// The generated PDF.
+  /// The generated PDF (R-051). This is the artifact that was actually
+  /// served - archived so that what the tenant received can be reproduced
+  /// years later, rather than re-rendered from a template that has since
+  /// changed.
   documentId         String?
+  /// THE FIRST SERVICE, denormalized from `deliveries` (R-051).
+  ///
+  /// Service is frequently more than one event - several states require a
+  /// notice be both posted and mailed - so the real record is the
+  /// `NoticeDelivery` rows. These three columns are kept as the first of
+  /// them so list screens can sort and filter without a join, and so every
+  /// reader written before R-051 keeps working unchanged. Never write them
+  /// without writing the matching delivery row; `recordService()` owns both.
   serviceMethod      NoticeServiceMethod?
   servedAt           DateTime?
   servedByStaffId    String?
-  /// Photo of the posted notice, certified-mail receipt, delivery scan.
+  /// Superseded by `NoticeDelivery.proofDocumentId` / `.trackingNumber`
+  /// (R-051), which carry one proof per service event rather than one per
+  /// notice. Kept and still populated from the first service, because the
+  /// backfill reads them and because dropping a column that holds evidence
+  /// is not a tidy-up.
   proofDocumentId    String?
   trackingNumber     String?
   /// The rule version whose notice period produced this notice's deadlines.
@@ -2505,9 +2521,53 @@ model Notice {
   document           Document?         @relation("NoticeDocument", fields: [documentId], references: [id])
   proofDocument      Document?         @relation("NoticeProofDocument", fields: [proofDocumentId], references: [id])
   entryForWorkOrders WorkOrder[]       @relation("WorkOrderEntryNotice")
+  deliveries         NoticeDelivery[]
 
   @@index([leaseId])
   @@index([propertyId, servedAt])
+}
+
+/// One service event, with its own proof (R-051, COMM-02).
+///
+/// APPEND-ONLY BY TRIGGER, with exactly one exception: `readAt` may go from
+/// null to a timestamp once, because the tenant opens a portal notice after
+/// it was served and that opening is itself the proof service reached them.
+/// Nothing else on a service record may ever move. See the migration.
+///
+/// Three CHECK constraints hold the shape the enum names promise:
+/// POSTED_WITH_PHOTO requires a photograph, CERTIFIED_MAIL requires a
+/// tracking number, and a read receipt only exists for PORTAL service.
+model NoticeDelivery {
+  id                      String              @id @default(cuid())
+  noticeId                String
+  method                  NoticeServiceMethod
+  servedAt                DateTime
+  servedByStaffId         String?
+  /// The photograph of the posted notice, or the certified-mail receipt.
+  /// `Document.capturedAt` carries the EXIF timestamp, which for a posted
+  /// notice is the evidence - see R-012.
+  proofDocumentId         String?
+  trackingNumber          String?
+  carrier                 String?
+  /// PORTAL service only, and write-once: the proof is when the tenant
+  /// FIRST read it, so a second view never overwrites the first.
+  readAt                  DateTime?
+  /// Whether the jurisdiction permits this method for this notice type.
+  /// NULL means no rule is configured - deliberately not `false`, because
+  /// "we do not know what this state allows" and "this state forbids it"
+  /// are different facts and only one of them is an accusation (D-4).
+  permittedByJurisdiction Boolean?
+  jurisdictionRuleId      String?
+  note                    String?
+  createdAt               DateTime            @default(now())
+
+  notice           Notice            @relation(fields: [noticeId], references: [id], onDelete: Restrict)
+  servedBy         StaffUser?        @relation("NoticeDeliveryServedBy", fields: [servedByStaffId], references: [id], onDelete: Restrict)
+  proofDocument    Document?         @relation("NoticeDeliveryProof", fields: [proofDocumentId], references: [id], onDelete: Restrict)
+  jurisdictionRule JurisdictionRule? @relation(fields: [jurisdictionRuleId], references: [id], onDelete: Restrict)
+
+  @@index([noticeId])
+  @@index([servedAt])
 }
 
 model Inspection {
@@ -2596,17 +2656,18 @@ model Document {
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
-  property          Property?     @relation(fields: [propertyId], references: [id])
-  unit              Unit?         @relation(fields: [unitId], references: [id])
-  lease             Lease?        @relation(fields: [leaseId], references: [id])
-  tenant            Tenant?       @relation(fields: [tenantId], references: [id])
-  vendor            Vendor?       @relation(fields: [vendorId], references: [id])
-  ticket            Ticket?       @relation(fields: [ticketId], references: [id])
-  workOrder         WorkOrder?    @relation(fields: [workOrderId], references: [id])
-  uploadedBy        StaffUser?    @relation("DocumentUploadedBy", fields: [uploadedByStaffId], references: [id])
-  noticesAsDocument Notice[]      @relation("NoticeDocument")
-  noticesAsProof    Notice[]      @relation("NoticeProofDocument")
-  utilityBills      UtilityBill[] @relation("UtilityBillDocument")
+  property             Property?        @relation(fields: [propertyId], references: [id])
+  unit                 Unit?            @relation(fields: [unitId], references: [id])
+  lease                Lease?           @relation(fields: [leaseId], references: [id])
+  tenant               Tenant?          @relation(fields: [tenantId], references: [id])
+  vendor               Vendor?          @relation(fields: [vendorId], references: [id])
+  ticket               Ticket?          @relation(fields: [ticketId], references: [id])
+  workOrder            WorkOrder?       @relation(fields: [workOrderId], references: [id])
+  uploadedBy           StaffUser?       @relation("DocumentUploadedBy", fields: [uploadedByStaffId], references: [id])
+  noticesAsDocument    Notice[]         @relation("NoticeDocument")
+  noticesAsProof       Notice[]         @relation("NoticeProofDocument")
+  noticeDeliveryProofs NoticeDelivery[] @relation("NoticeDeliveryProof")
+  utilityBills         UtilityBill[]    @relation("UtilityBillDocument")
 
   @@index([propertyId, type])
   @@index([unitId])
@@ -2703,6 +2764,24 @@ model JurisdictionRule {
   noticeToVacateDays     Int?
   rentIncreaseNoticeDays Int?
   justCauseRequired      Boolean @default(false)
+  /// WHICH SERVICE METHODS THE STATE ALLOWS, PER NOTICE TYPE (R-051, COMM-02).
+  ///
+  /// `NoticeServiceMethod` lists the mechanics this product can record proof
+  /// for; it has never said any of them is lawful where you are, and that is
+  /// a jurisdiction fact like every other number here (D-4). Several states
+  /// require a notice to vacate be both posted AND mailed, and several forbid
+  /// email service outright.
+  ///
+  /// JSON rather than columns because notice TYPES are themselves free-form
+  /// configuration - see `Notice.type` - so a state that invents a new notice
+  /// must not require a migration, and neither must one that changes which
+  /// methods serve it. Shape: `{ "NOTICE_TO_VACATE": ["PERSONAL", "CERTIFIED_MAIL"] }`,
+  /// validated by `validateJurisdictionRule` on write.
+  ///
+  /// Null, or a type absent from the map, means NO RULE IS CONFIGURED - never
+  /// "no method is permitted". Service is still recordable and is flagged as
+  /// unverified, the same call R-044's `graceUnknown` makes.
+  noticeServiceMethods   Json?
 
   // Payments and applications (PAY-03, LEASE-03).
   /// Ordered ChargeType names - "rent before fees" where the state says so.
@@ -2734,8 +2813,9 @@ model JurisdictionRule {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  charges Charge[]
-  notices Notice[]
+  charges          Charge[]
+  notices          Notice[]
+  noticeDeliveries NoticeDelivery[]
 
   @@unique([state, jurisdiction, version])
   @@index([state, effectiveFrom])

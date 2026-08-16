@@ -52,6 +52,14 @@ export const DOCUMENT_TYPES = [
   /// the vendor's own proof of the fix, and R-030's verify-and-close reads
   /// it back to the tenant.
   'COMPLETION_PHOTO',
+  /// R-051: proof that a notice was actually served - the photograph of the
+  /// notice posted on the door, or the certified-mail receipt. Distinct from
+  /// NOTICE, which is the notice ITSELF (the generated PDF that was served);
+  /// this is the evidence that the serving happened. An eviction turns on
+  /// having both, and conflating them would make "did we serve it" and "what
+  /// did we serve" the same question when they are the two separate ones a
+  /// court asks.
+  'NOTICE_PROOF',
   'OTHER',
 ] as const
 export type DocumentTypeValue = (typeof DOCUMENT_TYPES)[number]

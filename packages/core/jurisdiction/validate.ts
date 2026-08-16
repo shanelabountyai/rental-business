@@ -1,5 +1,10 @@
 import type { ChargeType, LateFeeType } from '@rental/db'
 import { isUsStateCode } from '../property/us-states.ts'
+// Imported from the leaf module, not '../notices/index.ts': this file is
+// reachable from a client component (see the note below), so it takes the
+// smallest pure thing it needs rather than a barrel.
+import { NOTICE_SERVICE_METHODS } from '../notices/service-methods.ts'
+import type { ServiceMethodMap } from '../notices/service-methods.ts'
 
 // Validation for JurisdictionRule writes (D-4). Hand-rolled, matching
 // packages/core/property and packages/core/units' style rather than a schema
@@ -89,6 +94,10 @@ export interface JurisdictionRuleInput {
   justCauseRequired: boolean
 
   paymentAllocationOrder: string[]
+  /// Which service methods serve which notice type here (R-051, COMM-02).
+  /// Omitted/null means the state's service rules are simply not configured -
+  /// service is still recordable and is flagged unverified, never refused.
+  noticeServiceMethods?: ServiceMethodMap | null
   applicationFeeCapCents?: number | null
   rubsPermitted: boolean
 
@@ -212,6 +221,44 @@ export function validateJurisdictionRule(
       field: 'applicationFeeCapCents',
       message: 'Enter a realistic application-fee cap, or leave blank for no statutory cap.',
     })
+  }
+
+  // Notice service methods (R-051). The MAP is validated, never the question
+  // of whether a state "should" allow a method - that is the attorney review
+  // `citation`/`reviewedBy` record, not something code can check.
+  if (input.noticeServiceMethods != null) {
+    for (const [noticeType, methods] of Object.entries(input.noticeServiceMethods)) {
+      if (!noticeType.trim()) {
+        violations.push({
+          field: 'noticeServiceMethods',
+          message: 'A notice type cannot be blank.',
+        })
+        continue
+      }
+      if (!Array.isArray(methods)) {
+        violations.push({
+          field: 'noticeServiceMethods',
+          message: `Service methods for ${noticeType} must be a list.`,
+        })
+        continue
+      }
+      const seenMethods = new Set<string>()
+      for (const method of methods) {
+        if (!(NOTICE_SERVICE_METHODS as readonly string[]).includes(method)) {
+          violations.push({
+            field: 'noticeServiceMethods',
+            message: `"${method}" is not a service method this product can record proof for.`,
+          })
+        }
+        if (seenMethods.has(method)) {
+          violations.push({
+            field: 'noticeServiceMethods',
+            message: `${noticeType} lists ${method} twice.`,
+          })
+        }
+        seenMethods.add(method)
+      }
+    }
   }
 
   return violations

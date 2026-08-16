@@ -66,6 +66,12 @@ export const NAV_ITEMS: readonly NavItem[] = [
     ownedBy: 'R-011',
   },
   {
+    href: '/notices',
+    label: 'Notices',
+    permission: 'notice.read',
+    ownedBy: 'R-051',
+  },
+  {
     href: '/messages',
     label: 'Messages',
     permission: 'message.read',

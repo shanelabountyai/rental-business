@@ -2363,3 +2363,54 @@ No new D-number. The schema shape (a second, lease-level anchor alongside the ex
 
 - The two follow-ups immediately above.
 - No UI surfaces this fix — an owner would see it only as "a late fee that used to never post now posts." No new copy or panel was needed.
+
+## R-051 — Notice delivery proof
+**Commit:** `<pending>`  ·  **Date:** 2026-08-16
+
+**What it built.** COMM-02's proof of service: which methods a state actually permits per notice type, a service record that can hold more than one delivery, the three kinds of proof (photograph, certified-mail tracking, portal read receipt), the first PDF path in the repo, and the notice screens — staff and tenant — that had never existed.
+
+### Service is more than one event, and the schema could only hold one
+
+`Notice` has carried `serviceMethod` / `servedAt` / `proofDocumentId` / `trackingNumber` since R-002, and nothing had ever written the last two. Those columns model ONE service event. Several states require a notice to vacate be both posted on the door AND mailed, and each half has its own separate proof — a photograph for the posting, an article number and a receipt for the mailing. An owner who did the lawful thing could not record that they had.
+
+`NoticeDelivery` is one row per service event (**D-47**). The old columns are kept as the FIRST service, never rewritten by a later one, so every reader written before this item keeps working and list screens sort without a join. The migration backfills a delivery row for every notice already served, so history does not start today.
+
+**Append-only by trigger, with exactly one permitted mutation.** The reasoning that makes `LedgerEntry` and `AuditLog` append-only applies exactly: if "when did we serve it, and how" can be edited afterwards, it is not proof of anything. The exception is `readAt`, which cannot be known at insert time — the tenant opens the notice later, and that opening *is* the proof portal service reached them. The trigger allows one transition, null → a timestamp, and compares the rest of the row as `to_jsonb(NEW) - 'readAt'` against the old, so nothing can be smuggled in alongside it and a column added later cannot silently escape the check. Write-once, so a second view never overwrites the first: the evidence is when they FIRST read it.
+
+**Three CHECK constraints hold the shape each enum value promises** — POSTED_WITH_PHOTO requires a photograph, CERTIFIED_MAIL requires an article number, a read receipt exists only for PORTAL service. In Postgres rather than in the action, because a row claiming POSTED_WITH_PHOTO with no photograph is not a weaker record, it is a false one.
+
+### A mechanic is not a permission (D-48)
+
+`NoticeServiceMethod` has listed PERSONAL / POSTED_WITH_PHOTO / CERTIFIED_MAIL since R-002, and that list only ever meant "these are the ways this product can record proof". It never said any of them was lawful anywhere. `JurisdictionRule.noticeServiceMethods` now carries which methods serve which notice type, as JSON because notice *types* are themselves free-form configuration — a state that invents a new notice must not need a migration, and neither must one that changes which methods serve it.
+
+**Three answers, not two.** `servicePermitted()` returns `true`, `false`, or `null` for "nobody has told us" — the same call R-044 makes with `graceUnknown`. "We do not know what this state allows" and "this state forbids it" are different facts and only one is an accusation against the person serving the notice.
+
+**Recording is never blocked.** Choosing a method Texas does not list produces a loud warning and still records, flagged `permittedByJurisdiction: false`. An owner in an unconfigured state still has to serve notices, and refusing to record what they actually did produces no evidence at all — strictly worse than evidence carrying an honest flag. The verdict is stored as it stood at service and never recomputed, because D-4 says rules apply prospectively: a state that legalises door-posting next year must not retroactively make last year's posting look compliant.
+
+Texas's real rules are seeded from §24.005(f), with **email deliberately absent from the eviction-track notices** — the statute does not name it, and a notice that cannot be proved served starts a clock the landlord cannot defend.
+
+### The first PDF in the repo
+
+`pdf-lib`, chosen over a print stylesheet because the artifact posted on a door has to be *archived exactly as served*. `Notice.documentId` has said "the generated PDF" since R-002; a print-to-PDF route stores nothing, so the only record of what the tenant received would be a template that has since been edited. Generation is idempotent — a second render would produce a different file for the same served notice, and then "which of these did they actually receive" has no answer.
+
+Pure JS, no native binary and no headless browser, so it runs in a Vercel function unchanged. The cost is that pdf-lib draws at coordinates: word wrapping and pagination are the renderer's job, and both are tested — including that a 200-paragraph notice grows past one page rather than being silently clipped, which is the failure mode that looks fine until somebody reads page two in court.
+
+### What else it decided
+
+- **Generating and serving are separate acts**, and the product now says so. The two existing notice writers set `servedAt` in the same statement that created the row — fine for an entry notice delivered to the portal in the same breath, wrong for every notice somebody has to physically take somewhere.
+- **`NOTICE_PROOF` is a distinct document type from `NOTICE`.** The notice itself and the evidence it was served are the two separate questions a court asks; conflating them would make "what did we serve" and "did we serve it" the same field.
+- **The read receipt is written from the tenant's own authenticated view of the notice text**, server-side before render — never from the list page, never from an open-pixel, never from a client effect. A receipt that depends on JavaScript running is missing for exactly the tenant who disabled it.
+
+### Found along the way
+
+- **A pre-existing iCloud hazard, now confirmed as recurring and damaging.** `verify-link 2.ts` — the stale duplicate R-046 already found and deleted once — had reappeared, along with 167 duplicated files across `node_modules` and `packages/db/generated`, and two byte-identical `.claude/settings 2.json` copies that were *committed* back at R-029 and R-039a. It also corrupted the esbuild binary twice mid-session, each time surfacing as a bogus "you installed esbuild for another platform" error. Cleaned up; the underlying cause is that this repo lives under an iCloud-synced `~/Documents`.
+- **Two bugs in this item's own tests, both caught by the tests themselves.** A hardcoded `2026-08-16T09:30` fixture that was genuinely in the future for a Chicago property once the machine passed UTC midnight — the same UTC-vs-property-local fencepost the product's own date helpers exist to kill, committed in a fixture. And an assertion on a success banner that was still on screen from the previous submit, so it passed instantly and raced the action it was meant to wait for; now it waits on server-rendered rows.
+- **A regression this item caused, caught by the sweep and fixed.** `entry-notice.spec.ts`'s cleanup did `notice.deleteMany`, which now fails: every served notice carries a `NoticeDelivery` row that RESTRICTs it. That is the design working exactly as intended — proof of service outlives the fixture that produced it, and CLAUDE.md's own rule already says test cleanup must retire rather than delete what an append-only table references. The cleanup now ends the lease and deactivates the property instead.
+- **The portal has no password sign-in at all** — it is magic-link only. The first draft of the e2e spec assumed otherwise.
+
+### What it left behind
+
+- **TCPA consent capture is R-051b**, split out deliberately (the row bundles it, but STOP handling was already fully built at R-030 and consent is a different subsystem). Existing tenants will be grandfathered with a recorded `EXISTING_RELATIONSHIP` basis rather than silently losing their rent reminders.
+- **No admin UI for the service-method map yet.** Texas is seeded and `validateJurisdictionRule` enforces the shape on write, but configuring a *new* state's service rules means a seed or a direct write — the rule form has no matrix control. The next state added is when that becomes worth building.
+- **`Notice` itself is still mutable.** The service record is append-only; the notice body is not. Nothing edits it today, and locking it wants the same "correction is a new row" story the ledger has.
+- **No certified-mail API.** The tracking number is typed in and stored; nothing queries USPS for a delivery scan. R-081 owns the physical-mail integration, as the row says.

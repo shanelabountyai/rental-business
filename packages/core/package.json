@@ -21,6 +21,7 @@
     "./ledger": "./ledger/index.ts",
     "./maintenance": "./maintenance/index.ts",
     "./money": "./money/index.ts",
+    "./notices": "./notices/index.ts",
     "./notifications": "./notifications/index.ts",
     "./oncall": "./oncall/index.ts",
     "./operational": "./operational/index.ts",
