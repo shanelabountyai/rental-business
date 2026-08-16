@@ -2416,7 +2416,7 @@ Pure JS, no native binary and no headless browser, so it runs in a Vercel functi
 - **No certified-mail API.** The tracking number is typed in and stored; nothing queries USPS for a delivery scan. R-081 owns the physical-mail integration, as the row says.
 
 ## R-051b — TCPA consent capture
-**Commit:** `<pending>`  ·  **Date:** 2026-08-16
+**Commit:** `3044c97`  ·  **Date:** 2026-08-16
 
 **What it built.** The permission half of a permission/revocation pair that has only ever had the revocation. `TenantConsent`, the basis vocabulary behind it, a send-path gate with its own suppression reason, and the backfill that keeps the existing roster reachable.
 
