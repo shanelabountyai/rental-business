@@ -2327,3 +2327,39 @@ Of the seven tiles, two had a real query behind them already (aged delinquency v
 - The four cross-project bare-`requirePermission` sites named above (`/money`, `/workorders`, `/search`, `/jurisdiction`, message templates) are unaudited.
 - `rent-roll.spec.ts`'s UTC-anchored `daysAgo()` helper is unfixed — see above.
 - No date-range filtering on any drill-down beyond what the tile itself passes; that's RPT-02's/R-076's remainder, not this row's.
+
+## R-050b — Golden Path 2 repair
+**Commit:** `<pending>`  ·  **Date:** 2026-08-16
+
+**What it built.** Nothing new-feature. This is the repair of a real defect found by walking **Demo checkpoint 2** end to end for the first time (D-28) — the checkpoint R-050 defines and that nothing had ever run.
+
+### The bug: the late-fee engine silently did nothing for the common case
+
+`assessLateFees()` (`apps/web/lib/ledger/late-fees.ts`) queried `Charge` rows of `type: 'RENT'` and nothing else. Per D-11/D-40, a `Charge` row is minted for rent only in the exceptions — a move-in proration, a hand-recorded charge. **Ordinary subscription-billed rent, month two onward, the normal case for every lease past its first month, posts as an unlinked ledger entry with no `Charge` behind it at all.** `rentRoll()`'s aging (R-044) already hit this exact gap on the READ side and was fixed by falling back to a `rentDueDay`-derived due date when no dated charge exists. `assessLateFees` was never given the same fix — so it never even selected these leases into its query. PAY-04's grace-period late fee has been silently inert for the entire common case since it shipped.
+
+### Why the fix needed a migration, not a query tweak
+
+`rentRoll()`'s fallback only *reads* a synthetic due date. A late fee has to *anchor* to something: `Charge.assessedOnChargeId` is a real foreign key, used to compute the DELTA of a growing fee rather than recharging the cumulative total each night. Unlinked rent has no `Charge` row to point at.
+
+Added `Charge.assessedOnLeaseId` (the lease, when there's no charge to anchor to) and `Charge.assessedForDueOn` (which rent-due cycle the fee answers to). The second field is the one easy to miss: unlinked rent is a single lease-wide balance, not one row per missed period, so it can represent a *different* overdue cycle each time it's checked — March's debt, paid off, then May's. Without `assessedForDueOn`, a fee assessed against March would be read as "already assessed" against the unrelated May debt, and the delta math would silently zero out a fee that is genuinely owed. A CHECK constraint keeps the two anchors mutually exclusive (`assessedOnChargeId IS NULL OR assessedOnLeaseId IS NULL`).
+
+`assessLateFees` now runs two passes: the original per-charge loop, byte-for-byte unchanged (lower regression risk than unifying it); and a new per-lease pass, scoped to leases that never got a dated `RENT` charge at all, so the two passes never compete for the same debt. The new pass reuses `delinquencyFor()` — the exact function `rentRoll()` already reads from — rather than re-deriving grace/bucket logic, so a lease this pass fires a fee on and the rent-roll screen showing it "past grace" can never silently disagree.
+
+### Verified two ways
+
+- **11 unit tests** (`apps/web/lib/ledger/late-fees.test.ts`, the 6 pre-existing plus 5 new): the fee posts on rent with no `Charge` row at all; idempotent per day; charges the increment on a later day, never the cumulative total; leaves a fully paid balance alone; and — the case `assessedForDueOn` exists for — a later, distinct cycle is not silently netted against an earlier one already assessed and paid off.
+- **A full Golden Path 2 walk**, against the simulator (`STRIPE_SECRET_KEY` forced empty under Vitest, same as every other billing test): rent posts on two leases via `invoice.finalized`; autopay collects one via `invoice.payment_succeeded`; the other goes unpaid; on grace+1, `assessLateFees` now correctly fires a 10%-of-balance fee, capped under Texas's 12% ceiling; a pay-now link is minted and resolves to the correct payer; a completed payment (`payment_intent.succeeded`) halts the ladder — the lease is no longer past grace and its balance clears; and `dashboardSummary()`, scoped to the one LLC, shows the right billed total and zero tenancies past grace. Written as a temporary script and deleted after — not a permanent regression test, per how R-036b's own Golden Path 1 walk was recorded.
+
+### What it decided
+
+No new D-number. The schema shape (a second, lease-level anchor alongside the existing charge-level one) follows the precedent `assessedOnPaymentId` already set for NSF fees (R-039a) — a different trigger for the same kind of fee needs a different anchor, added the same way.
+
+### Found along the way, left for a named follow-up
+
+- **The grace-period reminder still mints no pay-now link.** `sendReminders()` — the rent-roll bulk chase, the one a tenant past grace actually receives — does not call `issuePayLink()`. Only the pre-grace due-soon/due-date reminder (`sendDueNotices()`, R-045) does. R-046's own "left behind" note already named this; the Golden Path walk needed to call `issuePayLink()` directly to get a token at all, which is the empirical confirmation the gap is real, not just documented.
+- **A cluster of bare-`requirePermission()` call sites on other admin pages** (`/money`, `/workorders`, `/search`, `/jurisdiction`, the message-template pages) — named in R-050's own entry above, not re-litigated here. Same class of bug as the one R-050 fixed on the dashboard and maintenance pages; unaudited.
+
+### What it left behind
+
+- The two follow-ups immediately above.
+- No UI surfaces this fix — an owner would see it only as "a late fee that used to never post now posts." No new copy or panel was needed.

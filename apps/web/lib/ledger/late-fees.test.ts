@@ -169,6 +169,186 @@ describe('assessLateFees', () => {
   }, 20_000)
 })
 
+describe('assessLateFees — unlinked rent (R-050b)', () => {
+  // ORDINARY SUBSCRIPTION RENT, THE WAY PRODUCTION ACTUALLY WRITES IT
+  // (mirrors e2e/rent-roll.spec.ts's own `unlinkedRentTenancy` fixture).
+  // D-11/D-40 mint no Charge row for the subscription's own rent line - the
+  // webhook posts an UNLINKED ledger entry, so the only record of when it
+  // was due at all is `Lease.rentDueDay`. This is the case `assessLateFees`
+  // could not see before this item: no Charge row means it was never even
+  // in the query.
+  //
+  // A FRESH LEASE PER TEST, deliberately - unlike the dated-charge tests
+  // above, which isolate by anchoring each fee to its own Charge id, an
+  // unlinked-rent fee is anchored to the LEASE's whole balance. Sharing one
+  // lease across tests would let one test's unpaid rent inflate another's
+  // balance and due-cycle math.
+  const leaseIds: string[] = []
+  const tenantIds: string[] = []
+
+  afterAll(async () => {
+    await prisma.tenant.updateMany({ where: { id: { in: tenantIds } }, data: { active: false } })
+    await prisma.lease.updateMany({ where: { id: { in: leaseIds } }, data: { status: 'ENDED' } })
+  })
+
+  async function seedUnlinkedLease() {
+    const stamp = `latefee-unlinked-${randomUUID().slice(0, 8)}`
+    const tenant = await prisma.tenant.create({
+      data: { firstName: 'Robin', lastName: `Unlinked-${stamp}` },
+    })
+    tenantIds.push(tenant.id)
+    const lease = await prisma.lease.create({
+      data: {
+        propertyId,
+        unitId,
+        status: 'ACTIVE',
+        startsOn: new Date('2026-01-01'),
+        rentCents: 150_000,
+        rentDueDay: 1,
+      },
+    })
+    leaseIds.push(lease.id)
+    await prisma.leaseTenant.create({ data: { leaseId: lease.id, tenantId: tenant.id } })
+    const payer = await prisma.leasePayer.create({
+      data: {
+        leaseId: lease.id,
+        propertyId,
+        payerType: 'TENANT',
+        tenantId: tenant.id,
+        stripeCustomerId: `cus_${randomUUID().replace(/-/g, '').slice(0, 14)}`,
+      },
+    })
+    return { leaseId: lease.id, payerId: payer.id }
+  }
+
+  async function unlinkedRentDue(leaseId: string, dueOn: string) {
+    // NO CHARGE ROW - `chargeId: null` is the whole point of the fixture.
+    await prisma.ledgerEntry.create({
+      data: {
+        propertyId,
+        leaseId,
+        chargeId: null,
+        type: 'CHARGE',
+        amountCents: 150_000,
+        occurredAt: new Date(`${dueOn}T00:00:00.000Z`),
+        description: 'Rent',
+      },
+    })
+  }
+
+  it('assesses a fee on rent that has NO Charge row at all — the gap this item closes', async () => {
+    const { leaseId } = await seedUnlinkedLease()
+    await unlinkedRentDue(leaseId, '2026-03-01')
+    const result = await assessLateFees(propertyId, new Date('2026-03-20T12:00:00Z'))
+
+    expect(result.chargesAssessed).toBeGreaterThan(0)
+    const fee = await prisma.charge.findFirstOrThrow({
+      where: { assessedOnLeaseId: leaseId, type: 'LATE_FEE' },
+    })
+    expect(fee.amountCents).toBeGreaterThan(0)
+    expect(fee.assessedForDueOn).not.toBeNull()
+    expect(fee.jurisdictionRuleId).not.toBeNull()
+    expect(fee.stripeInvoiceItemId).not.toBeNull()
+  }, 20_000)
+
+  it('does NOT charge twice for the same day', async () => {
+    const { leaseId } = await seedUnlinkedLease()
+    await unlinkedRentDue(leaseId, '2026-04-01')
+    const at = new Date('2026-04-20T12:00:00Z')
+    await assessLateFees(propertyId, at)
+    const afterFirst = await prisma.charge.aggregate({
+      where: { assessedOnLeaseId: leaseId, type: 'LATE_FEE' },
+      _sum: { amountCents: true },
+      _count: true,
+    })
+
+    await assessLateFees(propertyId, at)
+    const afterSecond = await prisma.charge.aggregate({
+      where: { assessedOnLeaseId: leaseId, type: 'LATE_FEE' },
+      _sum: { amountCents: true },
+      _count: true,
+    })
+    expect(afterSecond._count).toBe(afterFirst._count)
+    expect(afterSecond._sum.amountCents).toBe(afterFirst._sum.amountCents)
+  }, 20_000)
+
+  it('charges the INCREMENT on a later day, never the cumulative total', async () => {
+    const { leaseId } = await seedUnlinkedLease()
+    await unlinkedRentDue(leaseId, '2026-05-01')
+    await assessLateFees(propertyId, new Date('2026-05-10T12:00:00Z'))
+    const firstTotal =
+      (await prisma.charge.aggregate({
+        where: { assessedOnLeaseId: leaseId, type: 'LATE_FEE' },
+        _sum: { amountCents: true },
+      }))._sum.amountCents ?? 0
+
+    await assessLateFees(propertyId, new Date('2026-05-20T12:00:00Z'))
+    const secondTotal =
+      (await prisma.charge.aggregate({
+        where: { assessedOnLeaseId: leaseId, type: 'LATE_FEE' },
+        _sum: { amountCents: true },
+      }))._sum.amountCents ?? 0
+
+    expect(secondTotal).toBeGreaterThanOrEqual(firstTotal)
+    expect(secondTotal).toBeLessThan(firstTotal * 2)
+  }, 20_000)
+
+  it('leaves a fully paid unlinked rent balance alone', async () => {
+    const { leaseId, payerId } = await seedUnlinkedLease()
+    await unlinkedRentDue(leaseId, '2026-06-01')
+    await prisma.ledgerEntry.create({
+      data: {
+        propertyId,
+        leaseId,
+        leasePayerId: payerId,
+        chargeId: null,
+        type: 'PAYMENT',
+        amountCents: -150_000,
+        description: 'Paid',
+        occurredAt: new Date('2026-06-02T12:00:00Z'),
+      },
+    })
+
+    await assessLateFees(propertyId, new Date('2026-06-20T12:00:00Z'))
+    expect(
+      await prisma.charge.count({ where: { assessedOnLeaseId: leaseId, type: 'LATE_FEE' } }),
+    ).toBe(0)
+  }, 20_000)
+
+  it('a distinct later cycle is not silently netted against an earlier one already assessed', async () => {
+    // The exact risk `assessedForDueOn` exists to close: March's debt gets a
+    // fee, March is then paid off, and May goes unpaid too - May's fee must
+    // not be suppressed by March's already having "used up" the allowance.
+    const { leaseId, payerId } = await seedUnlinkedLease()
+    await unlinkedRentDue(leaseId, '2026-03-01')
+    await assessLateFees(propertyId, new Date('2026-03-20T12:00:00Z'))
+    const marchFee = await prisma.charge.findFirstOrThrow({
+      where: { assessedOnLeaseId: leaseId, type: 'LATE_FEE' },
+    })
+
+    await prisma.ledgerEntry.create({
+      data: {
+        propertyId,
+        leaseId,
+        leasePayerId: payerId,
+        chargeId: null,
+        type: 'PAYMENT',
+        amountCents: -150_000,
+        description: 'Paid March',
+        occurredAt: new Date('2026-03-25T12:00:00Z'),
+      },
+    })
+    await unlinkedRentDue(leaseId, '2026-05-01')
+    await assessLateFees(propertyId, new Date('2026-05-20T12:00:00Z'))
+
+    const mayFee = await prisma.charge.findFirstOrThrow({
+      where: { assessedOnLeaseId: leaseId, type: 'LATE_FEE', id: { not: marchFee.id } },
+    })
+    expect(mayFee.amountCents).toBeGreaterThan(0)
+    expect(mayFee.assessedForDueOn?.toISOString().slice(0, 10)).toBe('2026-05-01')
+  }, 20_000)
+})
+
 describe('waiverPatternByTenant (PAY-04, fair housing)', () => {
   it('reports tenants with NO waivers too, because they are half the pattern', async () => {
     // A report of waivers alone shows only generosity and hides its
