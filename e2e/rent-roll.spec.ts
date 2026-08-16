@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { hashPassword } from '@rental/core/auth'
+import { businessDate, businessDateToUtc } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
 import { uniquePhone } from './fixtures.ts'
@@ -33,13 +34,23 @@ const leaseIds: string[] = []
 const staffIds: string[] = []
 const templateIds: string[] = []
 
-/// `YYYY-MM-DD`, N days before today. Property-local by construction — the
-/// seeded property is America/Chicago and the assertions are about day
-/// counts, not clock times.
+/// `YYYY-MM-DD`, N days before today IN THE PROPERTY'S OWN TIMEZONE.
+///
+/// The comment here used to say "property-local by construction" and it was
+/// not true: `new Date()` read through UTC getters is the SERVER's calendar
+/// day. For the several hours each evening when UTC has rolled over and
+/// Chicago has not, every fixture below was silently a day younger than
+/// intended - the "one day late" tenancy landed on today's date, aged as
+/// `current`, and failed the grace assertions. Three consecutive sweeps
+/// wrote it off as flakiness before the claim in this comment was checked.
+///
+/// The seeded property is America/Chicago, and `delinquencyFor` ages against
+/// the PROPERTY's today (D-3), so the fixture has to be built from the same
+/// clock the assertion is judged by.
 function daysAgo(n: number): Date {
-  const d = new Date()
+  const d = businessDateToUtc(businessDate(new Date(), 'America/Chicago'))
   d.setUTCDate(d.getUTCDate() - n)
-  return new Date(d.toISOString().slice(0, 10) + 'T00:00:00.000Z')
+  return d
 }
 
 async function seedPropertyWithTenancies(
