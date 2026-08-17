@@ -3,6 +3,7 @@
 import {
   type LeaseStatusValue,
   type NoticePartyValue,
+  type RetaliationWarning,
   canGiveNotice,
   leaseCents,
   leaseIsInForce,
@@ -10,8 +11,10 @@ import {
   parseLeaseDate,
   validateGuarantor,
   validateLease,
+  validateRetaliationAck,
 } from '@rental/core/leases'
 import { validateDepositAmount } from '@rental/core/ledger'
+import { businessDate } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
@@ -21,6 +24,7 @@ import { provisionLeaseBilling } from '@/lib/billing/provision.ts'
 import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
 import { rulesFor } from '@/lib/jurisdiction/queries.ts'
 import { raiseIntakeTasks } from './intake.ts'
+import { retaliationCheckFor } from './retaliation-check.ts'
 
 // Writes for lease records (LEASE-06, RISK-08, R-033). Same shape as every
 // other lib/*/actions.ts in this repo: a resource-carrying permission check
@@ -36,6 +40,33 @@ export interface LeaseFormState {
   error?: string
   fieldErrors?: Record<string, string>
   notice?: string
+  /// RISK-06 (R-055). Present when the action is inside the property's
+  /// retaliation-presumption window and no reason has been given yet -
+  /// nothing was written; see `retaliationCheckFor`'s own header for why.
+  needsRetaliationAck?: {
+    category: string
+    /// ISO date only, in the property's own timezone (D-3) - the warning is
+    /// read by a human, not recomputed from it.
+    occurredOn: string
+    daysAgo: number
+    windowDays: number
+  }
+  /// What was actually typed, echoed back on the retaliation early return.
+  /// React 19 resets an uncontrolled field's DOM value once a form action
+  /// completes (see ScheduleForm's own comment on the same fact) - without
+  /// this, the rent increase that TRIGGERED the warning would be wiped from
+  /// the field showing it, and "save anyway" would silently save the OLD
+  /// rent instead of the one the warning is about.
+  values?: Record<string, string>
+}
+
+function retaliationAckView(warning: RetaliationWarning, timezone: string) {
+  return {
+    category: warning.category,
+    occurredOn: businessDate(warning.occurredAt, timezone),
+    daysAgo: warning.daysAgo,
+    windowDays: warning.windowDays,
+  }
 }
 
 function str(formData: FormData, name: string): string {
@@ -61,7 +92,9 @@ async function leaseForWrite(leaseId: string) {
   const lease = await prisma.lease.findUniqueOrThrow({
     where: { id: leaseId },
     include: {
-      property: { select: { id: true, legalEntityId: true, timezone: true } },
+      property: {
+        select: { id: true, legalEntityId: true, timezone: true, state: true, county: true },
+      },
       leaseTenants: { select: { id: true } },
     },
   })
@@ -255,6 +288,7 @@ export async function updateLeaseTerms(
     isMonthToMonth,
     mtmRentDollars: str(formData, 'mtmRentDollars') || null,
   }
+  const retaliationReason = str(formData, 'retaliationReason') || null
   const violations = [
     ...validateLease(input),
     ...(await depositCapViolations(lease.propertyId, input)),
@@ -286,6 +320,44 @@ export async function updateLeaseTerms(
     mtmRentCents: leaseCents(input.mtmRentDollars),
   }
 
+  // RISK-06 (R-055): a RAISE, not any rent change - a correction or a
+  // decrease is not the adverse action the guard exists to catch, and
+  // warning on one would train staff to click through it on every edit.
+  let retaliation: Awaited<ReturnType<typeof retaliationCheckFor>> = null
+  if (after.rentCents > before.rentCents) {
+    const now = new Date()
+    retaliation = await retaliationCheckFor({
+      leaseId,
+      propertyState: lease.property.state,
+      propertyCounty: lease.property.county,
+      actionDate: now,
+    })
+    if (retaliation) {
+      const ackViolations = validateRetaliationAck(retaliationReason)
+      if (ackViolations.length > 0) {
+        // NOTHING is written - same posture as R-027's entry-notice
+        // override. Saving the raise and asking for the reason afterwards
+        // would leave an unexplained retaliatory-looking increase on the
+        // record if the second step never happened.
+        return {
+          error: `This rent increase is ${retaliation.daysAgo} days after this tenant's ${retaliation.category} complaint, inside the ${retaliation.windowDays}-day retaliation-presumption window for ${lease.property.state}.`,
+          fieldErrors: Object.fromEntries(ackViolations.map((v) => [v.field, v.message])),
+          needsRetaliationAck: retaliationAckView(retaliation, lease.property.timezone),
+          values: {
+            startsOn: input.startsOn,
+            endsOn: input.endsOn ?? '',
+            rentDollars: input.rentDollars,
+            depositDollars: input.depositDollars ?? '',
+            nsfFeeDollars: input.nsfFeeDollars ?? '',
+            depositArrangement: input.depositArrangement,
+            rentDueDay: input.rentDueDay,
+            mtmRentDollars: input.mtmRentDollars ?? '',
+          },
+        }
+      }
+    }
+  }
+
   await prisma.$transaction(async (tx) => {
     await tx.lease.update({
       where: { id: leaseId },
@@ -306,6 +378,28 @@ export async function updateLeaseTerms(
       },
       tx,
     )
+    if (retaliation) {
+      await audit(
+        {
+          action: 'lease.retaliation_window_acknowledged',
+          entityType: 'Lease',
+          entityId: leaseId,
+          propertyId: lease.propertyId,
+          after: {
+            trigger: 'rent_increase',
+            fromCents: before.rentCents,
+            toCents: after.rentCents,
+            complaintTicketId: retaliation.ticketId,
+            complaintOccurredAt: retaliation.occurredAt.toISOString(),
+            daysAgo: retaliation.daysAgo,
+            windowDays: retaliation.windowDays,
+          },
+          reasonCode: 'owner_directive',
+          reason: retaliationReason!,
+        },
+        tx,
+      )
+    }
   })
 
   // A rent change has to reach Stripe, or the tenant keeps being billed the
@@ -461,6 +555,30 @@ export async function recordLeaseNotice(
   const decision = canGiveNotice({ status: lease.status, noticeGivenAt: lease.noticeGivenAt })
   if (!decision.allowed) return { error: decision.message }
 
+  // RISK-06 (R-055): only when WE gave notice. A tenant ending their own
+  // tenancy is not an adverse action anybody could call retaliation.
+  const retaliationReason = str(formData, 'retaliationReason') || null
+  let retaliation: Awaited<ReturnType<typeof retaliationCheckFor>> = null
+  if (by === 'LANDLORD') {
+    retaliation = await retaliationCheckFor({
+      leaseId,
+      propertyState: lease.property.state,
+      propertyCounty: lease.property.county,
+      actionDate: at,
+    })
+    if (retaliation) {
+      const ackViolations = validateRetaliationAck(retaliationReason)
+      if (ackViolations.length > 0) {
+        return {
+          error: `This notice is ${retaliation.daysAgo} days after this tenant's ${retaliation.category} complaint, inside the ${retaliation.windowDays}-day retaliation-presumption window for ${lease.property.state}.`,
+          fieldErrors: Object.fromEntries(ackViolations.map((v) => [v.field, v.message])),
+          needsRetaliationAck: retaliationAckView(retaliation, lease.property.timezone),
+          values: { noticeGivenBy: by, givenOn },
+        }
+      }
+    }
+  }
+
   await prisma.$transaction(async (tx) => {
     await tx.lease.update({
       where: { id: leaseId },
@@ -476,6 +594,27 @@ export async function recordLeaseNotice(
       },
       tx,
     )
+    if (retaliation) {
+      await audit(
+        {
+          action: 'lease.retaliation_window_acknowledged',
+          entityType: 'Lease',
+          entityId: leaseId,
+          propertyId: lease.propertyId,
+          after: {
+            trigger: 'landlord_notice',
+            noticeGivenAt: at.toISOString(),
+            complaintTicketId: retaliation.ticketId,
+            complaintOccurredAt: retaliation.occurredAt.toISOString(),
+            daysAgo: retaliation.daysAgo,
+            windowDays: retaliation.windowDays,
+          },
+          reasonCode: 'owner_directive',
+          reason: retaliationReason!,
+        },
+        tx,
+      )
+    }
   })
 
   revalidatePath(`/leases/${leaseId}`)

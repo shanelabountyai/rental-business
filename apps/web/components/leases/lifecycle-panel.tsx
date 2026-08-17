@@ -1,6 +1,6 @@
 'use client'
 
-import { useActionState } from 'react'
+import { useActionState, useState } from 'react'
 import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
 import { SelectField, TextField } from '@/components/form/field.tsx'
 import type { LeaseFormState } from '@/lib/leases/actions.ts'
@@ -103,9 +103,28 @@ function TransitionForm({
 function NoticeForm({ action }: { action: Action }) {
   const [state, formAction] = useActionState<LeaseFormState, FormData>(action, {})
   const errors = state.fieldErrors ?? {}
+  const retaliation = state.needsRetaliationAck
+  // Only populated on the retaliation early return - see LeaseFormState's
+  // own comment on `values` and ScheduleForm's identical note on why an
+  // uncontrolled field needs this at all under React 19.
+  const echoed = state.values ?? {}
+
+  // Whether a manual click has opened it, tracked so `open` is never pinned
+  // to `Boolean(retaliation)` alone - that would make React re-assert
+  // CLOSED on every render where there is no warning, and a tenant-given
+  // notice (never a warning) would have forced this panel shut the moment
+  // the success state came back. Derived at render time, not an effect:
+  // open whenever the person opened it OR a warning needs to be seen: this
+  // can only ever OPEN itself, never close a panel someone is looking at.
+  const [manuallyOpened, setManuallyOpened] = useState(false)
+  const open = manuallyOpened || Boolean(retaliation)
 
   return (
-    <details className="rounded-md border p-3">
+    <details
+      className="rounded-md border p-3"
+      open={open}
+      onToggle={(event) => setManuallyOpened(event.currentTarget.open)}
+    >
       <summary className="min-h-11 cursor-pointer text-sm font-medium">
         Record notice to end the tenancy
       </summary>
@@ -121,6 +140,8 @@ function NoticeForm({ action }: { action: Action }) {
             name="noticeGivenBy"
             required
             idPrefix="notice"
+            defaultValue={echoed.noticeGivenBy}
+            key={`by-${echoed.noticeGivenBy ?? ''}`}
             error={errors.noticeGivenBy}
             options={[
               { value: 'TENANT', label: 'The tenant' },
@@ -132,11 +153,35 @@ function NoticeForm({ action }: { action: Action }) {
             name="givenOn"
             type="date"
             idPrefix="notice"
+            defaultValue={echoed.givenOn}
+            key={`given-on-${echoed.givenOn ?? ''}`}
             error={errors.givenOn}
             hint="Leave blank for today."
           />
         </div>
-        <SubmitButton label="Record notice" />
+
+        {retaliation && (
+          <div className="flex flex-col gap-2 rounded-md border-2 border-amber-500 p-3">
+            <p className="text-sm font-medium">
+              {retaliation.daysAgo} day{retaliation.daysAgo === 1 ? '' : 's'} after this
+              tenant&rsquo;s {retaliation.category} complaint ({retaliation.occurredOn}) —
+              inside the {retaliation.windowDays}-day retaliation-presumption window
+            </p>
+            <p className="text-muted-foreground text-sm">
+              You can go ahead, but the business reason is recorded permanently and is
+              what this notice would be defended with.
+            </p>
+            <TextField
+              label="Why is this notice going out now?"
+              name="retaliationReason"
+              idPrefix="notice"
+              required
+              error={errors.retaliationReason}
+            />
+          </div>
+        )}
+
+        <SubmitButton label={retaliation ? 'Record notice anyway, with this reason' : 'Record notice'} />
       </form>
     </details>
   )

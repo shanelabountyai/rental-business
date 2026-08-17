@@ -329,6 +329,15 @@ export const AUDIT_ACTIONS = [
   /// exactly when are both on the entry.
   'lease.notice_given',
 
+  /// R-055 (RISK-06, D-4): a rent increase or a landlord's own notice went
+  /// ahead despite falling inside the property's retaliation-presumption
+  /// window. Its OWN action, deliberately not a flag on `lease.updated` or
+  /// `lease.notice_given` - same reasoning as `lease.terminated`'s own
+  /// comment: REASON_REQUIRED cannot express "required only when a warning
+  /// applied", and this row is the one a retaliation defense stands or
+  /// falls on, so it has to exist whichever action triggered it.
+  'lease.retaliation_window_acknowledged',
+
   /// R-033: somebody was added to or removed from the lease. Adding an
   /// occupant changes who is jointly liable and who can reach the portal;
   /// adding a guarantor changes who can be pursued and nothing else.
@@ -462,6 +471,7 @@ export const REASON_REQUIRED: ReadonlySet<AuditAction> = new Set([
   'lease.terminated',
   'payment.hold_changed',
   'consent.withdrawn',
+  'lease.retaliation_window_acknowledged',
 ])
 
 export function requiresReason(action: AuditAction): boolean {

@@ -92,6 +92,9 @@ export interface JurisdictionRuleInput {
   noticeToVacateDays?: number | null
   rentIncreaseNoticeDays?: number | null
   justCauseRequired: boolean
+  /// RISK-06 (R-055). Null means not configured - the retaliation guard is
+  /// simply not applied, never assumed to be zero days.
+  retaliationWindowDays?: number | null
 
   paymentAllocationOrder: string[]
   /// Which service methods serve which notice type here (R-051, COMM-02).
@@ -180,6 +183,7 @@ export function validateJurisdictionRule(
     'payOrQuitDays',
     'noticeToVacateDays',
     'rentIncreaseNoticeDays',
+    'retaliationWindowDays',
   ] as const) {
     const value = input[field]
     if (value != null && !isWholeNumberInRange(value, 365)) {

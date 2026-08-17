@@ -79,6 +79,12 @@ export function LeaseForm({
   const errors = state.fieldErrors ?? {}
   const [isMonthToMonth, setIsMonthToMonth] = useState(defaults?.isMonthToMonth ?? false)
   const [origin, setOrigin] = useState('APPLICATION')
+  const retaliation = state.needsRetaliationAck
+  // Only populated on the retaliation early return (see LeaseFormState's own
+  // comment on `values`) - `?? defaults?.x` for every OTHER validation
+  // failure, which already re-renders from the lease's last-saved terms the
+  // same way this form always has.
+  const echoed = state.values ?? {}
 
   return (
     <form action={formAction} className="flex max-w-xl flex-col gap-5">
@@ -151,7 +157,8 @@ export function LeaseForm({
           type="date"
           required
           idPrefix="lease"
-          defaultValue={defaults?.startsOn}
+          defaultValue={echoed.startsOn || defaults?.startsOn}
+          key={`starts-${echoed.startsOn ?? ''}`}
           error={errors.startsOn}
         />
         <TextField
@@ -160,7 +167,8 @@ export function LeaseForm({
           type="date"
           required={!isMonthToMonth}
           idPrefix="lease"
-          defaultValue={isMonthToMonth ? '' : defaults?.endsOn}
+          defaultValue={isMonthToMonth ? '' : echoed.endsOn || defaults?.endsOn}
+          key={`ends-${echoed.endsOn ?? ''}`}
           error={errors.endsOn}
           hint={
             isMonthToMonth
@@ -198,7 +206,8 @@ export function LeaseForm({
           inputMode="decimal"
           required
           idPrefix="lease"
-          defaultValue={defaults?.rentDollars}
+          defaultValue={echoed.rentDollars || defaults?.rentDollars}
+          key={`rent-${echoed.rentDollars ?? ''}`}
           error={errors.rentDollars}
         />
         {/* THE ARRANGEMENT SITS BESIDE THE AMOUNT, not in some other section,
@@ -211,7 +220,8 @@ export function LeaseForm({
           label="Deposit type"
           name="depositArrangement"
           idPrefix="lease"
-          defaultValue={defaults?.depositArrangement ?? 'CASH'}
+          defaultValue={echoed.depositArrangement || defaults?.depositArrangement || 'CASH'}
+          key={`deposit-type-${echoed.depositArrangement ?? ''}`}
           error={errors.depositArrangement}
           options={[
             { value: 'CASH', label: 'Cash deposit held' },
@@ -227,7 +237,8 @@ export function LeaseForm({
           step="0.01"
           inputMode="decimal"
           idPrefix="lease"
-          defaultValue={defaults?.depositDollars}
+          defaultValue={echoed.depositDollars || defaults?.depositDollars}
+          key={`deposit-${echoed.depositDollars ?? ''}`}
           error={errors.depositDollars}
         />
       </div>
@@ -248,7 +259,8 @@ export function LeaseForm({
           inputMode="decimal"
           idPrefix="lease"
           hint="Only if the lease says so. Leave blank for no fee — the state's own cap still applies."
-          defaultValue={defaults?.nsfFeeDollars}
+          defaultValue={echoed.nsfFeeDollars || defaults?.nsfFeeDollars}
+          key={`nsf-${echoed.nsfFeeDollars ?? ''}`}
           error={errors.nsfFeeDollars}
         />
       </div>
@@ -275,7 +287,8 @@ export function LeaseForm({
           max="28"
           inputMode="numeric"
           idPrefix="lease"
-          defaultValue={defaults?.rentDueDay ?? '1'}
+          defaultValue={echoed.rentDueDay || defaults?.rentDueDay || '1'}
+          key={`due-day-${echoed.rentDueDay ?? ''}`}
           error={errors.rentDueDay}
           hint="1 to 28 — later has no equivalent in February."
         />
@@ -288,7 +301,8 @@ export function LeaseForm({
             step="0.01"
             inputMode="decimal"
             idPrefix="lease"
-            defaultValue={defaults?.mtmRentDollars}
+            defaultValue={echoed.mtmRentDollars || defaults?.mtmRentDollars}
+            key={`mtm-${echoed.mtmRentDollars ?? ''}`}
             error={errors.mtmRentDollars}
             hint="Optional. Blank keeps the current rent when the term rolls over."
           />
@@ -315,7 +329,28 @@ export function LeaseForm({
         </div>
       </fieldset>
 
-      <SubmitButton label={submitLabel} />
+      {retaliation && (
+        <div className="flex flex-col gap-2 rounded-md border-2 border-amber-500 p-3">
+          <p className="text-sm font-medium">
+            {retaliation.daysAgo} day{retaliation.daysAgo === 1 ? '' : 's'} after this
+            tenant&rsquo;s {retaliation.category} complaint ({retaliation.occurredOn}) — inside
+            the {retaliation.windowDays}-day retaliation-presumption window
+          </p>
+          <p className="text-muted-foreground text-sm">
+            You can go ahead, but the business reason is recorded permanently and is what
+            this increase would be defended with.
+          </p>
+          <TextField
+            label="Why are you raising rent now?"
+            name="retaliationReason"
+            idPrefix="lease"
+            required
+            error={errors.retaliationReason}
+          />
+        </div>
+      )}
+
+      <SubmitButton label={retaliation ? 'Save anyway, with this reason' : submitLabel} />
     </form>
   )
 }

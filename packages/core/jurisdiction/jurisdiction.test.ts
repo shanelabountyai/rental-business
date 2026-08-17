@@ -25,6 +25,7 @@ function baseInput(
     payOrQuitDays: 3,
     noticeToVacateDays: 30,
     rentIncreaseNoticeDays: 30,
+    retaliationWindowDays: 180,
     justCauseRequired: false,
     paymentAllocationOrder: ['RENT', 'LATE_FEE'],
     applicationFeeCapCents: null,
@@ -53,9 +54,19 @@ describe('validateJurisdictionRule', () => {
           payOrQuitDays: null,
           noticeToVacateDays: null,
           rentIncreaseNoticeDays: null,
+          retaliationWindowDays: null,
         }),
       ),
     ).toEqual([])
+  })
+
+  it('rejects an unrealistic retaliation-window day count', () => {
+    expect(
+      validateJurisdictionRule(baseInput({ retaliationWindowDays: -1 })),
+    ).toContainEqual(expect.objectContaining({ field: 'retaliationWindowDays' }))
+    expect(
+      validateJurisdictionRule(baseInput({ retaliationWindowDays: 400 })),
+    ).toContainEqual(expect.objectContaining({ field: 'retaliationWindowDays' }))
   })
 
   it('rejects a state that is not a real US state code', () => {

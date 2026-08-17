@@ -51,6 +51,7 @@ export interface RuleFormDefaults {
   payOrQuitDays?: number | ''
   noticeToVacateDays?: number | ''
   rentIncreaseNoticeDays?: number | ''
+  retaliationWindowDays?: number | ''
   justCauseRequired?: boolean
   paymentAllocationOrder?: readonly string[]
   applicationFeeCapDollars?: number | ''
@@ -282,6 +283,17 @@ export function RuleForm({
             max={365}
             defaultValue={defaults.rentIncreaseNoticeDays}
             error={errors.rentIncreaseNoticeDays}
+          />
+          <TextField
+            label="Retaliation-presumption window, days (optional)"
+            name="retaliationWindowDays"
+            type="number"
+            inputMode="numeric"
+            min={0}
+            max={365}
+            defaultValue={defaults.retaliationWindowDays}
+            error={errors.retaliationWindowDays}
+            hint="Commonly ~180 (six months). Left blank, the retaliation guard (RISK-06) stays silent for this state rather than assuming a number."
           />
         </div>
         <CheckboxField

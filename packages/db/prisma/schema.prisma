@@ -2801,6 +2801,12 @@ model JurisdictionRule {
   noticeToVacateDays     Int?
   rentIncreaseNoticeDays Int?
   justCauseRequired      Boolean @default(false)
+  /// RISK-06 (R-055, D-4). How long after a tenant complaint a rent
+  /// increase, non-renewal or notice carries a rebuttable presumption of
+  /// retaliation - commonly ~180 days (six months), never a constant in
+  /// code. Null means not configured, not "no window applies" - see
+  /// packages/core/leases/retaliation.ts for how a null window is read.
+  retaliationWindowDays  Int?
   /// WHICH SERVICE METHODS THE STATE ALLOWS, PER NOTICE TYPE (R-051, COMM-02).
   ///
   /// `NoticeServiceMethod` lists the mechanics this product can record proof

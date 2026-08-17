@@ -95,6 +95,15 @@ async function seedJurisdictionRules() {
       console.info('Backfilled TX notice service methods (added at R-051).')
       return
     }
+    // Same narrow exception, same reasoning, for the column R-055 added.
+    if (existing.retaliationWindowDays == null) {
+      await prisma.jurisdictionRule.update({
+        where: { id: existing.id },
+        data: { retaliationWindowDays: 180 },
+      })
+      console.info('Backfilled TX retaliation window (added at R-055).')
+      return
+    }
     console.info('Jurisdiction rule already seeded (TX, statewide, v1).')
     return
   }
@@ -135,6 +144,10 @@ async function seedJurisdictionRules() {
       rentIncreaseNoticeDays: 30,
       // Texas is not a just-cause state.
       justCauseRequired: false,
+      // Tex. Prop. Code §92.332(a): a rebuttable presumption of retaliation
+      // if the landlord acts within six months of the tenant's good-faith
+      // complaint or exercise of rights (RISK-06, R-055).
+      retaliationWindowDays: 180,
 
       // WHICH METHODS SERVE WHICH NOTICE (R-051, COMM-02, D-4).
       //
