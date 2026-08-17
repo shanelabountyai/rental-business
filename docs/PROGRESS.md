@@ -2603,7 +2603,7 @@ The unanswered-message sweep's own test — following `sweepUnansweredDispatches
 ---
 
 ## R-055 — Retaliation-claim guard
-**Commit:** `PENDING`  ·  **Date:** 2026-08-17
+**Commit:** `cb2689e`  ·  **Date:** 2026-08-17
 
 **What it built.** RISK-06: a rent increase or an owner's own notice drafted inside a property's retaliation-presumption window now warns with the specific complaint and its date, and refuses to save until a business reason is given and recorded. New `JurisdictionRule.retaliationWindowDays` (nullable Int, D-4; TX seeded 180 per Tex. Prop. Code §92.332(a)), a pure decision module (`packages/core/leases/retaliation.ts`), a database query (`apps/web/lib/leases/retaliation-check.ts`), and the guard wired into the two lease actions that already exist and already do the thing RISK-06 describes.
 
