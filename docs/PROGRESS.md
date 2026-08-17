@@ -2530,7 +2530,7 @@ Every failure degrades to a named gap rather than a thrown export — **silence 
 ---
 
 ## R-053 — Segment announcements
-**Commit:** `PENDING`  ·  **Date:** 2026-08-17
+**Commit:** `e3d81b2`  ·  **Date:** 2026-08-17
 
 **What it built.** A staff-composed broadcast to a segment — all tenants, one property, one metro, or one tag — with per-recipient delivery status shown right after sending. New `/messages/announcements` page and composer, `Property.metro`/`Property.tags` (freeform grouping fields), a new `announcement` notification category, and a second managed-template carrier so an announcement's send preference is independent of a rent reminder's.
 
