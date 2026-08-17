@@ -5,6 +5,7 @@ import {
   type NotificationChannel,
   type SuppressionReason,
   bypassesQuietHours,
+  isDigestEligible,
   isLockedCategory,
   isNotificationCategory,
   quietHoursEndAfter,
@@ -212,6 +213,28 @@ export async function notify(
         )
       : { allowed: true, reason: null }
 
+  // NOTIF-04: this recipient asked for eligible categories batched into one
+  // daily email instead of sent as they happen. The same `digest_daily`
+  // preference row is what `notifications.digest-job.ts` reads permission
+  // to send the digest ITSELF from - one flag, one intent ("batch me"),
+  // rather than two that could disagree.
+  const digestBatchedEmail =
+    template.channels.includes('EMAIL') &&
+    isDigestEligible(input.category) &&
+    addressFor('EMAIL', input.recipient) !== null
+      ? (
+          await db.notificationPreference.findFirst({
+            where: {
+              recipientType: input.recipient.type,
+              recipientId: input.recipient.id,
+              category: 'digest_daily',
+              channel: 'EMAIL',
+            },
+            select: { enabled: true },
+          })
+        )?.enabled === true
+      : false
+
   const outcomes: ChannelOutcome[] = []
 
   for (const channel of template.channels) {
@@ -246,6 +269,12 @@ export async function notify(
     } else if (!decision?.send) {
       status = 'SUPPRESSED'
       reason = decision?.reason ?? 'preference_off'
+    } else if (channel === 'EMAIL' && digestBatchedEmail) {
+      // AFTER the category's own preference, deliberately: a recipient who
+      // turned this category off entirely still sees `preference_off`, not
+      // "batched" for a message that was never going out at all.
+      status = 'SUPPRESSED'
+      reason = 'digest_batched'
     } else if (!config.enabled) {
       status = 'SUPPRESSED'
       reason = 'kill_switch'

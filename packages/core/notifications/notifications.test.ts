@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import {
   DEFAULT_QUIET_HOURS,
+  DIGEST_ELIGIBLE_CATEGORIES,
   LOCKED_CATEGORIES,
   NOTIFICATION_CATEGORIES,
   bypassesQuietHours,
+  channelsFor,
   defaultEnabled,
+  isDigestEligible,
   isLockedCategory,
   isNotificationCategory,
   quietHoursEndAfter,
@@ -50,6 +53,40 @@ describe('the category vocabulary', () => {
     expect(defaultEnabled('rent_reminder', 'EMAIL')).toBe(true)
     expect(defaultEnabled('payment_failed', 'SMS')).toBe(true)
     expect(defaultEnabled('legal_notice', 'SMS')).toBe(true)
+  })
+})
+
+describe('NOTIF-04 digest eligibility (R-054)', () => {
+  it('marks only the categories named as batchable', () => {
+    expect(isDigestEligible('rent_reminder')).toBe(true)
+    expect(isDigestEligible('announcement')).toBe(true)
+    // Money-timing, prompt-decision and clock-starting categories all stay
+    // immediate.
+    expect(isDigestEligible('payment_failed')).toBe(false)
+    expect(isDigestEligible('autopay_predebit')).toBe(false)
+    expect(isDigestEligible('approval_needed')).toBe(false)
+    expect(isDigestEligible('vendor_response')).toBe(false)
+    expect(isDigestEligible('move_out')).toBe(false)
+    expect(isDigestEligible('work_order_assigned')).toBe(false)
+  })
+
+  it('never makes a locked category batchable', () => {
+    // LOCKED_CATEGORIES always sends regardless of preference, so this would
+    // be dead code either way - asserted so the two lists cannot silently
+    // start disagreeing.
+    for (const category of DIGEST_ELIGIBLE_CATEGORIES) {
+      expect(isLockedCategory(category)).toBe(false)
+    }
+  })
+
+  it('defaults the digest itself to OFF, unlike every other EMAIL default', () => {
+    expect(defaultEnabled('digest_daily', 'EMAIL')).toBe(false)
+    expect(defaultEnabled('rent_reminder', 'EMAIL')).toBe(true)
+  })
+
+  it('restricts the digest category to EMAIL, and leaves everything else at every channel', () => {
+    expect(channelsFor('digest_daily')).toEqual(['EMAIL'])
+    expect(channelsFor('rent_reminder')).toEqual(['EMAIL', 'SMS', 'PORTAL'])
   })
 })
 
@@ -209,5 +246,24 @@ describe('templates', () => {
     const template = templateFor('unit.make_ready')
     expect(template).toBeDefined()
     expect(isNotificationCategory(template!.category)).toBe(true)
+  })
+
+  it('renders the digest as a numbered list of what was batched', () => {
+    const rendered = renderTemplate(
+      'notifications.digest_daily',
+      {
+        items: [
+          { subject: 'Rent is due in 3 days', body: 'fallback body one' },
+          { subject: null, body: 'No subject line for this one\nsecond line' },
+        ],
+      },
+      'EMAIL',
+    )
+    expect(rendered.subject).toContain('2 updates')
+    expect(rendered.body).toContain('1. Rent is due in 3 days')
+    // Falls back to the first line of the body when a channel (SMS,
+    // typically) had no subject to render.
+    expect(rendered.body).toContain('2. No subject line for this one')
+    expect(rendered.body).not.toContain('second line')
   })
 })

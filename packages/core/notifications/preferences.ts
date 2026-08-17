@@ -34,6 +34,12 @@ export const SUPPRESSION_REASONS = [
   /// permission they gave, and the two have different fixes: an opt-out is
   /// theirs to reverse, a missing consent is ours to go and ask for.
   'no_consent',
+  /// NOTIF-04: this recipient opted into the daily digest for this category,
+  /// so the individual send is folded into `notifications.digest_daily`
+  /// instead. Not `preference_off` - the category itself is wanted, only
+  /// its timing changed, and "why didn't this arrive on its own" needs a
+  /// different answer than "they turned it off".
+  'digest_batched',
 ] as const
 
 export type SuppressionReason = (typeof SUPPRESSION_REASONS)[number]

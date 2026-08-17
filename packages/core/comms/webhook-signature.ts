@@ -66,3 +66,73 @@ export function verifyTwilioSignature(args: {
     provided.length === computed.length && timingSafeEqual(provided, computed)
   )
 }
+
+// Resend webhook signature verification (R-054), Svix's scheme - the one
+// Resend and several other providers use rather than inventing their own:
+//
+//   1. The signed content is `${svix-id}.${svix-timestamp}.${raw body}`.
+//   2. The secret arrives as `whsec_<base64>`; the prefix is stripped and
+//      the rest base64-decoded to get the actual HMAC key.
+//   3. HMAC-SHA256 that content with the decoded key, base64 the result.
+//   4. The header can carry several space-separated `v1,<signature>` pairs
+//      (a key rotation in progress) - a match against ANY of them is valid.
+//
+// Implemented here rather than pulling the `svix` package, for the same
+// reason `verifyTwilioSignature` above is hand-rolled: it is the entire
+// authentication story for a public endpoint, it is small enough to read
+// completely, and it can be tested exhaustively offline against a known
+// secret - which is exactly the distinction D-15 draws between an untested
+// outbound client (not worth building yet) and a receiver this build can
+// exercise completely with synthetic requests.
+
+/**
+ * Whether ANY signature in `signatureHeader` is valid for this payload.
+ *
+ * Constant-time per candidate, and a length check before each comparison for
+ * the same reason as the Twilio verifier: `timingSafeEqual` throws on a
+ * length mismatch, and an auth check must fail closed with `false`, never an
+ * uncaught exception.
+ */
+export function verifyResendSignature(args: {
+  /// The raw `whsec_...` secret from the Resend dashboard.
+  secret: string
+  svixId: string | null
+  svixTimestamp: string | null
+  /// The raw `svix-signature` header - possibly several space-separated
+  /// `v1,<sig>` entries.
+  signatureHeader: string | null
+  /// The exact bytes Resend sent, unparsed - signing is over the raw body,
+  /// and re-serializing a parsed JSON object is not guaranteed to reproduce
+  /// it byte for byte.
+  rawBody: string
+}): boolean {
+  if (!args.secret || !args.svixId || !args.svixTimestamp || !args.signatureHeader) {
+    return false
+  }
+
+  const encoded = args.secret.startsWith('whsec_')
+    ? args.secret.slice('whsec_'.length)
+    : args.secret
+  let key: Buffer
+  try {
+    key = Buffer.from(encoded, 'base64')
+  } catch {
+    return false
+  }
+
+  const signedContent = `${args.svixId}.${args.svixTimestamp}.${args.rawBody}`
+  const expected = createHmac('sha256', key).update(signedContent).digest('base64')
+  const computed = Buffer.from(expected, 'utf8')
+
+  return args.signatureHeader
+    .split(' ')
+    .filter(Boolean)
+    .some((entry) => {
+      const [version, signature] = entry.split(',')
+      if (version !== 'v1' || !signature) return false
+      const provided = Buffer.from(signature, 'utf8')
+      return (
+        provided.length === computed.length && timingSafeEqual(provided, computed)
+      )
+    })
+}

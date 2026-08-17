@@ -29,7 +29,11 @@ export type ProviderDeliveryStatus =
 
 /// What we record. A subset of DeliveryStatus - a callback can never move a
 /// row to SUPPRESSED or DEFERRED, which are decisions we made before sending.
-export type MappedDeliveryStatus = 'SENT' | 'DELIVERED' | 'READ' | 'FAILED' | null
+/// BOUNCED is Resend's vocabulary, not Twilio's - see `mapResendEventStatus`
+/// below - but it is ranked alongside the rest here rather than in a second
+/// copy of RANK, because "may this overwrite what's recorded" has one answer
+/// regardless of which provider is asking.
+export type MappedDeliveryStatus = 'SENT' | 'DELIVERED' | 'READ' | 'FAILED' | 'BOUNCED' | null
 
 /**
  * Provider error codes that mean "this number has opted out".
@@ -79,6 +83,28 @@ export function mapDeliveryStatus(status: string): MappedDeliveryStatus {
 }
 
 /**
+ * Map a Resend webhook event type onto ours (R-054's bounce/failure path).
+ *
+ * Only the two events this build acts on. `email.delivery_delayed` and
+ * `email.complained` carry no verdict this column can hold - a delay is not
+ * a status change, and a spam complaint is a different fact from "did it
+ * arrive" - so both fall through to null rather than being guessed at, the
+ * same restraint `mapDeliveryStatus` shows Twilio's in-flight statuses.
+ * `email.opened`/`email.clicked` are read receipts this product does not
+ * track for email the way `READ` does for SMS.
+ */
+export function mapResendEventStatus(eventType: string): MappedDeliveryStatus {
+  switch (eventType.trim().toLowerCase()) {
+    case 'email.delivered':
+      return 'DELIVERED'
+    case 'email.bounced':
+      return 'BOUNCED'
+    default:
+      return null
+  }
+}
+
+/**
  * May this status overwrite what is already recorded?
  *
  * Callbacks are not ordered. Twilio promises delivery of each callback, not
@@ -96,6 +122,10 @@ const RANK: Record<Exclude<MappedDeliveryStatus, null>, number> = {
   DELIVERED: 2,
   READ: 3,
   FAILED: 4,
+  // Ranked above FAILED, not tied with it: a bounce is more specific than a
+  // generic failure and must be able to overwrite one that already landed,
+  // while a later generic FAILED must not erase a bounce already recorded.
+  BOUNCED: 5,
 }
 
 export function shouldApplyStatus(

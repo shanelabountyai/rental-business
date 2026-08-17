@@ -1076,6 +1076,43 @@ export const cardExpiringTemplate: NotificationTemplate<CardExpiringContext> = {
   },
 }
 
+/// Context for `notifications.digest_daily` (NOTIF-04, R-054). Each item is
+/// an already-rendered notification that was batched instead of sent on its
+/// own - see `send.ts`'s `digest_batched` branch - so this template lists
+/// what each one already said rather than re-deriving it.
+export interface DigestContext {
+  items: readonly { subject: string | null; body: string }[]
+}
+
+/**
+ * The daily digest itself (NOTIF-04: "notification fatigue kills adoption").
+ *
+ * EMAIL only (see `channelsFor` in categories.ts) - a digest is exactly the
+ * long-form, read-when-convenient shape SMS is wrong for, and there is
+ * nothing to batch into a portal notice that isn't already sitting in the
+ * portal.
+ */
+export const digestTemplate: NotificationTemplate<DigestContext> = {
+  key: 'notifications.digest_daily',
+  category: 'digest_daily',
+  channels: ['EMAIL'],
+  render: (context) => {
+    const count = context.items.length
+    const subject = `Daily digest — ${count} update${count === 1 ? '' : 's'}`
+    const body = context.items
+      .map((item, index) => `${index + 1}. ${item.subject ?? item.body.split('\n')[0]}`)
+      .join('\n\n')
+    return {
+      subject,
+      body: [
+        `Batched from today's non-urgent notifications, sent once instead of ${count === 1 ? 'on its own' : 'one at a time'}:`,
+        '',
+        body,
+      ].join('\n'),
+    }
+  },
+}
+
 export const TEMPLATES: Readonly<Record<string, NotificationTemplate<never>>> = {
   [vendorDeclinedTemplate.key]:
     vendorDeclinedTemplate as unknown as NotificationTemplate<never>,
@@ -1112,6 +1149,7 @@ export const TEMPLATES: Readonly<Record<string, NotificationTemplate<never>>> = 
     paymentFailedFixTemplate as unknown as NotificationTemplate<never>,
   [cardExpiringTemplate.key]:
     cardExpiringTemplate as unknown as NotificationTemplate<never>,
+  [digestTemplate.key]: digestTemplate as unknown as NotificationTemplate<never>,
 }
 
 export class UnknownTemplateError extends Error {

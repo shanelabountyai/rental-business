@@ -7,6 +7,7 @@ import '@/lib/jobs/registrations.ts'
 import { runDueJobs } from '@/lib/jobs/runner.ts'
 import { reconcileLedger } from '@/lib/ledger/reconcile.ts'
 import { storageIsDurable } from '@/lib/storage/index.ts'
+import { sweepUnansweredTenantMessages } from '@/lib/comms/unanswered-sweep.ts'
 import { dispatchPendingNotifications } from '@/lib/notifications/send.ts'
 import { sweepUnansweredDispatches } from '@/lib/vendors/no-response.ts'
 import { sweepEntryReminders } from '@/lib/workorders/entry-reminders.ts'
@@ -51,6 +52,10 @@ export async function GET(request: Request) {
   // a fixed distance in hours from a scheduled instant, not a calendar-day
   // question, and "tomorrow" sent at 3am is not a reminder anybody reads.
   const entryReminders = await sweepEntryReminders()
+  // COMM-07: "unanswered tenant messages past X days surface on the
+  // dashboard." Elapsed-time, not a calendar-day question, for the same
+  // reason as the sweeps above.
+  const unanswered = await sweepUnansweredTenantMessages()
   // The ledger projection, checked against the event log that produced it
   // (D-11, R-035). Hourly rather than a SCHEDULED_JOBS entry for the same
   // reason as the sweeps above: it is not a per-property calendar-day
@@ -93,6 +98,8 @@ export async function GET(request: Request) {
     vendorSilencePrompted: vendorSilence.prompted,
     entryRemindersChecked: entryReminders.checked,
     entryRemindersSent: entryReminders.reminded,
+    unansweredChecked: unanswered.checked,
+    unansweredFlagged: unanswered.flagged,
     ledgerEventsChecked: reconciliation.checkedEvents,
     ledgerEntriesChecked: reconciliation.checkedEntries,
     ledgerDrift: reconciliation.drift.length,

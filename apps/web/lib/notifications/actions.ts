@@ -1,9 +1,9 @@
 'use server'
 
 import {
+  channelsFor,
   isLockedCategory,
   isNotificationCategory,
-  NOTIFICATION_CHANNELS,
   type NotificationChannel,
 } from '@rental/core/notifications'
 import { prisma } from '@rental/db'
@@ -37,7 +37,7 @@ export async function setNotificationPreference(
   if (!isNotificationCategory(category)) {
     return { error: 'Unknown notification category.' }
   }
-  if (!(NOTIFICATION_CHANNELS as readonly string[]).includes(channel)) {
+  if (!(channelsFor(category) as readonly string[]).includes(channel)) {
     return { error: 'Unknown channel.' }
   }
   // The server-side half of NOTIF-02's lock. The screen does not render a

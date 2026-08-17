@@ -1,6 +1,7 @@
 import 'server-only'
 
 import type { NotificationChannel } from '@rental/core/notifications'
+import { isOptedOut } from '@/lib/comms/opt-out-store.ts'
 import { notificationConfig } from './config.ts'
 import { notificationAdapter } from './provider.ts'
 
@@ -23,6 +24,17 @@ import { notificationAdapter } from './provider.ts'
 // precisely because a manager answering a tenant at 9pm is not spam, and
 // preference-gating a direct reply would silently drop an answer to a
 // question the tenant just asked.
+//
+// THE CARRIER OPT-OUT LIST IS THE ONE EXCEPTION, AND IT LIVES HERE (R-054).
+// `notify()` already checked `SmsOptOut` before a QUEUED row was ever
+// written, so a blocked number never reached this function on that path -
+// but `sendThreadMessage()` went straight from "staff typed a reply" to a
+// send, with nothing in between. STOP is not a preference a human reply gets
+// to override: the carrier itself will not carry the message, and texting a
+// number that said stop is the one mistake this shared function exists to
+// make impossible for every caller at once, present and future, rather than
+// something each caller has to remember to check for itself - the same
+// "shared, not per-path" fix D-9 already made for the one Task queue.
 
 export interface DeliveryOutcome {
   status: 'SENT' | 'SUPPRESSED' | 'FAILED'
@@ -55,6 +67,9 @@ export async function deliverOverChannel(args: {
   }
   if (!notificationAdapter.supports(args.channel)) {
     return { status: 'SUPPRESSED', suppressedReason: 'unsupported_channel' }
+  }
+  if (args.channel === 'SMS' && (await isOptedOut(args.to))) {
+    return { status: 'SUPPRESSED', suppressedReason: 'sms_opt_out' }
   }
 
   const to = config.sandboxTo ?? args.to

@@ -44,6 +44,7 @@ export interface DashboardSummary {
   leaseExpiry: LeaseExpirySummary
   pendingApprovals: PendingApprovalsSummary
   renewalAlerts: RenewalAlertsSummary
+  unansweredMessages: UnansweredMessagesSummary
 }
 
 // ---- 1. Collected vs billed ----
@@ -323,7 +324,31 @@ export async function renewalAlertsSummary(
   return { count: alerts.length }
 }
 
-// ---- All seven, one call ----
+// ---- 8. Unanswered tenant messages (COMM-07, R-054) ----
+
+export interface UnansweredMessagesSummary {
+  count: number
+}
+
+/**
+ * Same shape as `pendingApprovalsSummary` above: `unanswered-sweep.ts`
+ * raises a `tenant_unanswered` Task, this counts the open ones in scope.
+ */
+export async function unansweredMessagesSummary(
+  scope: ResolvedScope,
+): Promise<UnansweredMessagesSummary> {
+  if (scope.propertyIds.length === 0) return { count: 0 }
+  const count = await prisma.task.count({
+    where: {
+      propertyId: { in: scope.propertyIds },
+      type: 'tenant_unanswered',
+      status: { in: [...OPEN_TASK_STATUSES] },
+    },
+  })
+  return { count }
+}
+
+// ---- All eight, one call ----
 
 export async function dashboardSummary(
   scope: ResolvedScope,
@@ -337,6 +362,7 @@ export async function dashboardSummary(
     leaseExpiry,
     pendingApprovals,
     renewalAlerts,
+    unansweredMessages,
   ] = await Promise.all([
     collectedVsBilled(scope, asOf),
     delinquencySummary(scope, asOf),
@@ -345,6 +371,7 @@ export async function dashboardSummary(
     leaseExpirySummary(scope, asOf),
     pendingApprovalsSummary(scope),
     renewalAlertsSummary(scope, asOf),
+    unansweredMessagesSummary(scope),
   ])
 
   return {
@@ -355,6 +382,7 @@ export async function dashboardSummary(
     leaseExpiry,
     pendingApprovals,
     renewalAlerts,
+    unansweredMessages,
   }
 }
 

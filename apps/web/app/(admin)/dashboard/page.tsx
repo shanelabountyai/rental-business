@@ -132,6 +132,15 @@ export default async function DashboardPage() {
           value={String(summary.renewalAlerts.count)}
           detail="Mortgage & insurance dates, not statutory compliance"
         />
+
+        <Tile
+          href="/tasks?type=tenant_unanswered"
+          label="Unanswered tenant messages"
+          value={String(summary.unansweredMessages.count)}
+          detail={
+            summary.unansweredMessages.count > 0 ? 'No staff reply in 2+ days' : undefined
+          }
+        />
       </ul>
     </div>
   )

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   isOptOutErrorCode,
   mapDeliveryStatus,
+  mapResendEventStatus,
   shouldApplyStatus,
 } from './delivery-status.ts'
 
@@ -57,6 +58,45 @@ describe('shouldApplyStatus', () => {
     expect(shouldApplyStatus('DELIVERED', 'SUPPRESSED')).toBe(false)
     expect(shouldApplyStatus('SENT', 'SUPPRESSED')).toBe(false)
     expect(shouldApplyStatus('FAILED', 'DEFERRED')).toBe(false)
+  })
+})
+
+describe('mapResendEventStatus (R-054)', () => {
+  it('maps the two events this build acts on', () => {
+    expect(mapResendEventStatus('email.delivered')).toBe('DELIVERED')
+    expect(mapResendEventStatus('email.bounced')).toBe('BOUNCED')
+  })
+
+  it('ignores events that carry no verdict this column can hold', () => {
+    expect(mapResendEventStatus('email.sent')).toBeNull()
+    expect(mapResendEventStatus('email.delivery_delayed')).toBeNull()
+    expect(mapResendEventStatus('email.complained')).toBeNull()
+    expect(mapResendEventStatus('email.opened')).toBeNull()
+    expect(mapResendEventStatus('email.clicked')).toBeNull()
+    expect(mapResendEventStatus('something-new-resend-invented')).toBeNull()
+  })
+
+  it('does not care about case or padding', () => {
+    expect(mapResendEventStatus(' Email.Bounced ')).toBe('BOUNCED')
+  })
+})
+
+describe('shouldApplyStatus with a bounce in the mix', () => {
+  it('lets a bounce overwrite a plain SENT or DELIVERED', () => {
+    expect(shouldApplyStatus('BOUNCED', 'SENT')).toBe(true)
+    expect(shouldApplyStatus('BOUNCED', 'DELIVERED')).toBe(true)
+  })
+
+  it('outranks a generic FAILED, and is not itself overwritten by one', () => {
+    // A bounce is more specific than a generic failure - it must be able to
+    // record over one that already landed, and a later generic FAILED must
+    // not erase the more specific fact once it's recorded.
+    expect(shouldApplyStatus('BOUNCED', 'FAILED')).toBe(true)
+    expect(shouldApplyStatus('FAILED', 'BOUNCED')).toBe(false)
+  })
+
+  it('is idempotent for a redelivered bounce callback', () => {
+    expect(shouldApplyStatus('BOUNCED', 'BOUNCED')).toBe(false)
   })
 })
 

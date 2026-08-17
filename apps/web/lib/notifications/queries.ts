@@ -2,9 +2,9 @@ import 'server-only'
 
 import {
   NOTIFICATION_CATEGORIES,
-  NOTIFICATION_CHANNELS,
   type NotificationCategory,
   type NotificationChannel,
+  channelsFor,
   defaultEnabled,
   isLockedCategory,
   lockedReason,
@@ -88,7 +88,7 @@ export async function getPreferences(
 
   const rows: PreferenceRow[] = []
   for (const category of NOTIFICATION_CATEGORIES) {
-    for (const channel of NOTIFICATION_CHANNELS) {
+    for (const channel of channelsFor(category)) {
       const locked = isLockedCategory(category)
       rows.push({
         category,

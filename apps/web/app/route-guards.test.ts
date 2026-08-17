@@ -54,6 +54,8 @@ const PUBLIC_ROUTES: Record<string, string> = {
     "Twilio's inbound-SMS webhook (R-021). Authenticated by an HMAC-SHA1 request signature rather than a session - Twilio has no credentials of ours to present. The signature check is the FIRST thing the route does and it refuses outright when TWILIO_AUTH_TOKEN is unset, the same posture api/cron takes with CRON_SECRET.",
   'api/sms/status/route.ts':
     "Twilio's delivery-status callback (R-040e, D-38). Same authentication story as the inbound webhook next door - an HMAC-SHA1 request signature, checked first, refusing outright when TWILIO_AUTH_TOKEN is unset - because Twilio holds no credential of ours either way. It exists so `SENT` can stop meaning merely *the provider accepted it*: for entry_notice, which is legally significant and which a tenant may not switch off, the difference between accepted and delivered is the whole evidentiary value of the record. It writes only to NotificationDelivery, never to the append-only Notification, and every write is idempotent because callbacks are retried and unordered.",
+  'api/webhooks/resend/route.ts':
+    "Resend's delivery webhook (R-054's bounce/failure path). Same shape as the Twilio callbacks above but Svix-signed rather than HMAC-SHA1 - the svix-id/svix-timestamp/svix-signature headers, checked first over the raw body, refusing outright when RESEND_WEBHOOK_SECRET is unset - because Resend holds no credential of ours either way. It writes to NotificationDelivery or MessageDelivery, never to either append-only parent, and raises a Task (never a new column) when a hard bounce needs a human to fix a tenant's email on file.",
 }
 
 /// Any of these in a file counts as guarding it.

@@ -1,5 +1,5 @@
 import {
-  NOTIFICATION_CHANNELS,
+  channelsFor,
   type NotificationCategory,
   type NotificationChannel,
 } from '@rental/core/notifications'
@@ -46,6 +46,7 @@ const CATEGORY_LABELS: Record<NotificationCategory, string> = {
   unit_make_ready: 'Units ready to turn',
   compliance_due: 'Compliance dates coming up',
   vendor_response: 'Vendor replies on your jobs',
+  digest_daily: 'Daily digest instead of one at a time (rent reminders, maintenance updates, renewals, announcements, ready units, compliance dates, your assigned tasks)',
 }
 
 const CHANNEL_LABELS: Record<NotificationChannel, string> = {
@@ -98,7 +99,7 @@ export function NotificationPreferencesSection({
               </div>
               {!locked && (
                 <div className="flex flex-wrap gap-x-6 gap-y-2">
-                  {NOTIFICATION_CHANNELS.map((channel) => {
+                  {channelsFor(category).map((channel) => {
                     const row = rows.find((r) => r.channel === channel)
                     if (!row) return null
                     return (

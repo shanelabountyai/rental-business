@@ -33,11 +33,16 @@ export default async function AnnouncementsPage() {
         </p>
       </header>
 
-      {templates.length === 0 && (
-        <Link href="/messages/templates/new" className="text-sm underline underline-offset-4">
-          Write a template
+      <div className="flex gap-4">
+        {templates.length === 0 && (
+          <Link href="/messages/templates/new" className="text-sm underline underline-offset-4">
+            Write a template
+          </Link>
+        )}
+        <Link href="/messages/announcements/history" className="text-sm underline underline-offset-4">
+          History
         </Link>
-      )}
+      </div>
 
       <AnnouncementForm
         options={options}

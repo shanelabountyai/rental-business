@@ -66,9 +66,57 @@ export const NOTIFICATION_CATEGORIES = [
   /// is about a job going OUT: these are the replies coming back, and an
   /// operator who wants one without the other has to be able to say so.
   'vendor_response',
+
+  /// The combined email R-054/NOTIF-04 sends instead of several separate
+  /// ones. Its own category so it shows up in the send log like anything
+  /// else - see DIGEST_ELIGIBLE_CATEGORIES for what it can carry.
+  'digest_daily',
 ] as const
 
 export type NotificationCategory = (typeof NOTIFICATION_CATEGORIES)[number]
+
+/**
+ * Categories NOTIF-04 may batch into one daily email instead of sending
+ * individually - "non-urgent" read narrowly. Left off: anything
+ * money-timing-sensitive (`payment_receipt`, `payment_failed`,
+ * `autopay_predebit`, `rent due today`), anything that needs a prompt
+ * decision (`approval_needed`, `vendor_response`), a locked category (never
+ * reaches here - LOCKED_CATEGORIES always sends), and `move_out` /
+ * `work_order_assigned`, which start a clock somebody is meant to act on
+ * today.
+ */
+export const DIGEST_ELIGIBLE_CATEGORIES: ReadonlySet<NotificationCategory> = new Set([
+  'rent_reminder',
+  'maintenance_update',
+  'lease_renewal',
+  'announcement',
+  'unit_make_ready',
+  'compliance_due',
+  'task_assigned',
+])
+
+export function isDigestEligible(category: NotificationCategory): boolean {
+  return DIGEST_ELIGIBLE_CATEGORIES.has(category)
+}
+
+/**
+ * Channels a category may be TOGGLED on, beyond "every channel" (the
+ * default every other category gets). `digest_daily` only ever goes by
+ * EMAIL - see the digest template - so an SMS or portal toggle for it would
+ * promise something the engine never does. Consulted by the preferences
+ * screen and its save action; `resolveChannels` itself does not need it,
+ * because a channel with no address or no template variant already falls
+ * out on its own.
+ */
+const CATEGORY_CHANNELS: Partial<Record<NotificationCategory, readonly NotificationChannel[]>> = {
+  digest_daily: ['EMAIL'],
+}
+
+export function channelsFor(
+  category: NotificationCategory,
+): readonly NotificationChannel[] {
+  return CATEGORY_CHANNELS[category] ?? NOTIFICATION_CHANNELS
+}
 
 /**
  * Categories that SOLICIT rather than inform (R-051b, COMM-02).
@@ -170,6 +218,10 @@ export function defaultEnabled(
   category: NotificationCategory,
   channel: NotificationChannel,
 ): boolean {
+  // Opt-IN, unlike everything else here: batching is a deliberate choice to
+  // hear about things later rather than now, and defaulting it on would mean
+  // "non-urgent" is decided for a recipient who never asked for it.
+  if (category === 'digest_daily') return false
   if (channel === 'PORTAL') return true
   if (channel === 'EMAIL') return true
   // SMS
