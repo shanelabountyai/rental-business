@@ -15,6 +15,7 @@ import { BillingPanel } from '@/components/leases/billing-panel.tsx'
 import { PaymentHoldPanel } from '@/components/leases/payment-hold-panel.tsx'
 import { IntakePanel } from '@/components/leases/intake-panel.tsx'
 import { LedgerPanel } from '@/components/leases/ledger-panel.tsx'
+import { ExportStatementForm } from '@/components/ledger/export-statement-form.tsx'
 import { LeaseForm } from '@/components/leases/lease-form.tsx'
 import { LifecyclePanel } from '@/components/leases/lifecycle-panel.tsx'
 import { FeesPanel } from '@/components/leases/fees-panel.tsx'
@@ -38,6 +39,7 @@ import { leaseBillingState } from '@/lib/billing/provision.ts'
 import { recurringChargesForLease } from '@/lib/billing/recurring.ts'
 import { addRecurringCharge, endRecurringCharge } from '@/lib/billing/recurring-actions.ts'
 import { leaseStatement, waivableFees } from '@/lib/ledger/queries.ts'
+import { exportLedgerStatement } from '@/lib/ledger/statement.ts'
 import { waiveCharge } from '@/lib/ledger/waivers.ts'
 import { outstandingIntakeGaps } from '@/lib/leases/intake.ts'
 import { recordOfflinePayment } from '@/lib/payments/offline.ts'
@@ -304,6 +306,24 @@ export default async function LeaseDetailPage({
           reversed: reversed.has(line.id),
         }))}
       />
+
+      {/* Gated on `ledger` being readable at all - `leaseStatement` returns
+          null outside the actor's scope, which is the same gate the panel
+          above uses. The export shows nothing the panel does not; what it
+          adds is a file that leaves the building, and that is audited. */}
+      {ledger && (
+        <section className="flex flex-col gap-3">
+          <h2 className="text-lg font-semibold tracking-tight">
+            Statement of account
+          </h2>
+          <ExportStatementForm
+            // Bound HERE, on the server, for the reason the status actions
+            // above spell out - only a 'use server' export has an identity
+            // the client can call back to.
+            action={exportLedgerStatement.bind(null, lease.id)}
+          />
+        </section>
+      )}
 
       <BillingPanel
         live={billingIsLive()}

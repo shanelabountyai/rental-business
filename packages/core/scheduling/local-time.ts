@@ -377,3 +377,51 @@ export function friendlyDate(
     timeZone,
   }).format(instant)
 }
+
+/**
+ * An instant as a property-local timestamp, NAMING THE ZONE: `3 Mar 2026,
+ * 09:14 CST`.
+ *
+ * The zone abbreviation is not decoration (R-052). This is the format the
+ * communications transcript and the ledger statement print, and both are
+ * documents that leave the building — an adjuster, an attorney or a court
+ * reads them somewhere else, on a different clock. "09:14" alone is a time in
+ * no particular place, and the whole evidentiary claim of a transcript is
+ * that events happened in a specific order at specific moments. Two parties
+ * arguing about whether a notice landed before a deadline cannot do it from
+ * timestamps with no zone on them.
+ *
+ * Same instant-not-calendar-day rule as `friendlyDate` above: a `@db.Date`
+ * value must never come through here.
+ */
+export function friendlyTimestamp(instant: Date, timeZone: string): string {
+  // `timeZoneName: 'short'` is what appends CST/CDT, and it is why this is
+  // one formatter call rather than `friendlyDate` plus a time — the
+  // abbreviation has to come from the same resolution that picked the offset,
+  // or a document printed on a DST boundary labels the wrong one.
+  //
+  // `en-US`, NOT the `en-GB` that `friendlyDate` uses, and the difference is
+  // the whole reason this is not a one-line wrapper around it. Under `en-GB`,
+  // ICU renders an American zone as `GMT-5` rather than `CDT` — technically
+  // an offset and useless on a Texas court exhibit, where the reader knows
+  // what CDT is and has no reason to convert anything. The day/month/year
+  // order is chosen below from the parts, so picking the US locale costs
+  // nothing: the output is still `3 Mar 2026`, not `Mar 3, 2026`.
+  //
+  // `hourCycle: 'h23'` rather than bare `hour12: false` — some ICU builds emit
+  // hour "24" for midnight under the latter, which is the same trap
+  // `localParts` documents above.
+  const parts = new Intl.DateTimeFormat('en-US', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+    timeZone,
+    timeZoneName: 'short',
+  }).formatToParts(instant)
+
+  const at = (type: string) => parts.find((p) => p.type === type)?.value ?? ''
+  return `${at('day')} ${at('month')} ${at('year')}, ${at('hour')}:${at('minute')} ${at('timeZoneName')}`
+}

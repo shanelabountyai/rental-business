@@ -60,6 +60,19 @@ export const DOCUMENT_TYPES = [
   /// did we serve" the same question when they are the two separate ones a
   /// court asks.
   'NOTICE_PROOF',
+  /// R-052: a communications transcript produced for a court, an attorney or
+  /// an adjuster (COMM-05). Archived rather than regenerated on demand, and
+  /// the reason is worth stating because "it is derivable, so do not store
+  /// it" was the obvious call and is wrong: the underlying rows are immutable
+  /// but they KEEP ARRIVING, so a transcript exported in March and
+  /// regenerated in June is a different document. "Which transcript did we
+  /// give the attorney" then has no answer - the same failure R-051 avoided
+  /// by archiving the notice PDF instead of re-rendering the template.
+  'COMMS_TRANSCRIPT',
+  /// R-052: a court-ready statement of account for one lease and period
+  /// (PAY-09), with the payment processor's own invoices appended (D-50).
+  /// Archived for the same reason as the transcript above.
+  'LEDGER_STATEMENT',
   'OTHER',
 ] as const
 export type DocumentTypeValue = (typeof DOCUMENT_TYPES)[number]

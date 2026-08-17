@@ -542,6 +542,29 @@ export class StripeBillingProvider implements BillingProvider {
     )
   }
 
+  /**
+   * Fetches an invoice's PDF from Stripe (R-052, D-50).
+   *
+   * TWO HOPS, and the second one is deliberately unauthenticated. The API
+   * returns `invoice_pdf` as a pre-signed URL on Stripe's file host; sending
+   * the secret key there would leak it to a different origin than the one it
+   * belongs to. So the key authenticates the lookup, and the download uses
+   * the signed URL alone.
+   *
+   * Every failure returns null rather than throwing. Producing a statement is
+   * the important operation and one unavailable invoice must not cost the
+   * owner the whole document - the caller names what is missing on the page.
+   */
+  async getInvoicePdf(stripeInvoiceId: string): Promise<Uint8Array | null> {
+    const invoice = await this.#get(`/invoices/${encodeURIComponent(stripeInvoiceId)}`)
+    const url = invoice?.invoice_pdf
+    if (typeof url !== 'string' || url.length === 0) return null
+
+    const response = await fetch(url)
+    if (!response.ok) return null
+    return new Uint8Array(await response.arrayBuffer())
+  }
+
   async getOpenInvoice(
     input: SubscriptionRef,
   ): Promise<{ stripeInvoiceId: string; amountRemainingCents: number } | null> {

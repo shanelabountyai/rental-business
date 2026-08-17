@@ -2,10 +2,12 @@ import { formatPhone } from '@rental/core/comms'
 import { utcToWallClock } from '@rental/core/scheduling'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { ExportTranscriptForm } from '@/components/comms/export-transcript-form.tsx'
 import { LogCallForm } from '@/components/comms/log-call-form.tsx'
 import { ReplyForm } from '@/components/comms/reply-form.tsx'
 import { actorCan, propertyResource, requireScope } from '@/lib/auth/guard.ts'
 import { logCallInThread, replyInThread } from '@/lib/comms/actions.ts'
+import { exportThreadTranscript } from '@/lib/comms/transcript.ts'
 import { getThread } from '@/lib/comms/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 
@@ -148,6 +150,22 @@ export default async function ThreadPage({
           </details>
         </>
       )}
+
+      {/* Gated on `message.read`, the same permission that renders this page -
+          the export discloses nothing the reader cannot already see one
+          message at a time. What makes it privileged is that the whole
+          history leaves as a file, and that is recorded in the audit trail
+          rather than gated behind a permission no role has yet. */}
+      <details>
+        <summary className="cursor-pointer text-sm font-medium">
+          Export this conversation
+        </summary>
+        <div className="pt-3">
+          <ExportTranscriptForm
+            action={exportThreadTranscript.bind(null, thread.id)}
+          />
+        </div>
+      </details>
     </div>
   )
 }

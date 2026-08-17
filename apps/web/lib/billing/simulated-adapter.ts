@@ -320,6 +320,22 @@ export class SimulatedBillingProvider implements BillingProvider {
   ): Promise<{ expMonth: number; expYear: number } | null> {
     return simulatedCardExpiry(stripePaymentMethodId)
   }
+
+  /**
+   * Always null - the simulator has no invoice PDFs (R-052, D-50).
+   *
+   * NOT A FABRICATED PDF, deliberately. Returning a plausible-looking
+   * generated document would make every statement produced on the demo and
+   * e2e paths carry attachments that are not evidence of anything, and the
+   * one thing a court packet must never contain is a manufactured record that
+   * looks like a provider's. Null is the honest answer, and the statement
+   * prints the invoice as unattached-but-cited, which is exactly the outcome
+   * a real provider outage produces too - so the path that says "we could not
+   * get this one" is the path the tests actually exercise.
+   */
+  async getInvoicePdf(): Promise<Uint8Array | null> {
+    return null
+  }
 }
 
 /**

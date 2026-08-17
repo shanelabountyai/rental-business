@@ -343,4 +343,21 @@ export interface BillingProvider {
   paymentMethodExpiry(
     stripePaymentMethodId: string,
   ): Promise<{ expMonth: number; expYear: number } | null>
+
+  /**
+   * The provider's own PDF for an invoice (R-052, PAY-09, D-50).
+   *
+   * WHY THE PROVIDER'S FILE AND NOT OURS. D-11 makes Stripe the system of
+   * record for money and `LedgerEntry` a projection of it. A statement of
+   * account is therefore our READING of the record, and the invoice is the
+   * record. A court packet containing only the reading asks the reader to
+   * trust the projection; appending the invoices lets them check it.
+   *
+   * NULL, NEVER A THROW, when the invoice cannot be produced - the simulator
+   * has no such file at all, and the live provider can be down or can have
+   * had the invoice voided. The caller prints which invoices are missing on
+   * the statement itself rather than quietly shipping a shorter document
+   * (see `attachmentBlocks` for why silence there would be a false claim).
+   */
+  getInvoicePdf(stripeInvoiceId: string): Promise<Uint8Array | null>
 }

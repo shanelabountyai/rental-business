@@ -1,3 +1,4 @@
+import type { DocumentBlock } from '../documents/blocks.ts'
 import { noticeTypeLabel } from './service-methods.ts'
 
 // The CONTENT of a served notice, as structured blocks (R-051, COMM-02).
@@ -29,10 +30,10 @@ export interface NoticeDocumentFacts {
   citation?: string | null
 }
 
-export interface NoticeDocumentBlock {
-  kind: 'heading' | 'meta' | 'paragraph' | 'footer'
-  text: string
-}
+/// An alias since R-052, which generalized this shape so the communications
+/// transcript and the ledger statement could share one renderer. A notice
+/// only ever uses the `heading`/`meta`/`paragraph`/`footer` kinds.
+export type NoticeDocumentBlock = DocumentBlock
 
 /// D-4's standing requirement, on every legal artifact this product emits.
 /// The existing body generators each end with their own copy of this

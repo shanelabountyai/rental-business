@@ -67,6 +67,67 @@ export function statement(rows: readonly LedgerRow[]): StatementLine[] {
   })
 }
 
+export interface PeriodStatement {
+  /// What was owed the instant before the window opened.
+  openingBalanceCents: Cents
+  lines: StatementLine[]
+  /// What was owed at the end of it. Equal to the opening balance when
+  /// nothing happened in the window, which is a real and readable outcome.
+  closingBalanceCents: Cents
+}
+
+/**
+ * A statement bounded to a period, with the balance carried forward into it.
+ *
+ * ==========================================================================
+ * THE OPENING BALANCE IS THE WHOLE REASON THIS IS NOT A FILTER.
+ *
+ * The obvious implementation - filter the rows to the window, then run
+ * `statement()` - produces a document that starts every period at zero. For a
+ * tenant who entered March owing $500, a March statement would show a closing
+ * balance $500 short of what they actually owe, with every line on it
+ * arithmetically correct. That is the most dangerous kind of wrong: a court
+ * document that is internally consistent and materially false, and nothing on
+ * its face reveals it.
+ *
+ * So the running balance is computed across the tenancy's ENTIRE history and
+ * the window is applied afterwards. Every figure printed is therefore the
+ * real balance on that date, not a balance relative to an arbitrary start.
+ * ==========================================================================
+ *
+ * `from` and `to` are instants and both are INCLUSIVE, matching how a person
+ * asks for "January to March". Pass `null` for either to leave that end open.
+ */
+export function statementForPeriod(
+  rows: readonly LedgerRow[],
+  from: Date | null,
+  to: Date | null,
+): PeriodStatement {
+  const all = statement(rows)
+
+  const inWindow = (line: StatementLine) =>
+    (from === null || line.occurredAt.getTime() >= from.getTime()) &&
+    (to === null || line.occurredAt.getTime() <= to.getTime())
+
+  const lines = all.filter(inWindow)
+
+  // The balance BEFORE the window: the running balance of the last line that
+  // precedes it. Read off the already-computed running total rather than
+  // re-summing, so the opening figure and the line figures can never be
+  // computed two different ways and disagree.
+  const before = from === null ? [] : all.filter((line) => line.occurredAt.getTime() < from.getTime())
+  const openingBalanceCents = before[before.length - 1]?.runningBalanceCents ?? 0
+
+  return {
+    openingBalanceCents,
+    lines,
+    // Not `balanceCents(rows)`: a statement that closes on 31 March must
+    // close at the 31 March balance, even when later entries exist.
+    closingBalanceCents:
+      lines[lines.length - 1]?.runningBalanceCents ?? openingBalanceCents,
+  }
+}
+
 /**
  * Entries that have been reversed, and the reversals themselves.
  *

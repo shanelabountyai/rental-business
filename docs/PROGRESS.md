@@ -2466,3 +2466,63 @@ Recording either of the first two as the third would hide a real gap behind a pr
 - **There is still no tenant-onboarding form anywhere in the product**, so the row's "captured at onboarding" has nothing to hang off. Capture is a staff action gated on `tenant.write`; a real onboarding flow is whichever item builds tenant creation.
 - **No portal-side consent screen.** A tenant cannot see or withdraw their own consent from `/portal` — they can still text STOP, which is honoured, but the two are separate records and only one is self-service.
 - **Email consent is modelled and not enforced.** `ConsentChannel` carries `EMAIL` and `VOICE`; the send path gates SMS only, because that is what the TCPA governs and what this row asked for. CAN-SPAM is a different regime with different rules.
+
+---
+
+## R-052 — Immutable communications audit, thread transcript, court-ready ledger statement
+**Commit:** `PENDING`  ·  **Date:** 2026-08-17
+
+**What it built.** The packet you hand an attorney, an adjuster or a judge: one chronological communications record merged across three tables, a timestamped PDF transcript with delivery metadata, and a statement of account that carries a real balance and embeds the payment processor's own invoices.
+
+### The "immutable audit log" COMM-05 asks for already existed — the gap was a read
+
+COMM-05 reads like an instruction to build a table: *"every message, notice and delivery event writes to an immutable audit log."* Building one would have made the record **worse**.
+
+`Message`, `Notification`, `NoticeDelivery` and `AuditLog` are each append-only by trigger already — R-002, R-016 and R-051 did that work. Copying every row into a fifth table would duplicate evidence into a second place that can drift from the first, and *"which of these two records of the same message is the real one"* is the exact question an evidence trail exists so nobody ever has to ask.
+
+The real defect was that **nothing had ever read those tables together**. A thread transcript showed `Message` rows only — so it omitted every automated notification. Rent reminders, late notices, entry notices and payment receipts are all `Notification` rows, which for an ordinary tenancy is most of what was ever sent. A transcript handed to a court showing a tenant's complaints but none of the eleven reminders we sent them is not a partial record, it is a misleading one: **the omission argues the tenant's case for them.** `packages/core/comms/record.ts` merges and writes nothing.
+
+### The document says no more than the evidence supports
+
+`SENT` in this system has always meant *the provider accepted it*, never *it arrived* — `delivery-status.ts` was built around that distinction at R-040e. So the transcript prints "accepted by the provider", not "delivered". A page that blurred the two would let a landlord tell a court a notice was delivered when all that is recorded is that Twilio took it, and **the transcript's own authority is what would make the overstatement persuasive.**
+
+Three other places take the same posture: an outbound entry with no delivery row says so outright rather than rendering blank (absent and failed must not look alike); an unrecognised suppression reason prints its raw token rather than a friendly guess, so a reason added later and not added here looks unfinished instead of looking explained; and an empty transcript states that it is empty, because "nothing was sent" is frequently the finding somebody asked for.
+
+### The opening balance is why the statement is not a filter (PAY-09)
+
+The obvious implementation of "a statement for a period" is *filter the rows, then run the existing `statement()`*. That produces a document that starts every period at zero.
+
+For a tenant who entered March owing $500, a March statement would close $500 light **with every line on it arithmetically correct**. That is the most dangerous kind of wrong — internally consistent, materially false, and nothing on its face reveals it. `statementForPeriod()` therefore computes the running balance across the entire tenancy and applies the window afterwards, so every figure printed is the real balance on that date.
+
+### "No cryptic codes" is a requirement about the reader
+
+The person the statement has to work for has never seen this system and is reading it once, under time pressure, beside the other side's version. So entry types are spelled out ("Correction of an earlier entry", not `REVERSAL`); a credit balance prints `$25.00 CR` with a footnote rather than a minus sign that reads as a typo; a reversal says it corrects an earlier line **and the corrected line stays visible**, because D-11 forbids editing history and a reader who cannot see the correction cannot check it.
+
+The money columns line up because the statement is drawn in Courier via a new `mono` block kind — padding characters in core, where the alignment can be asserted character-by-character, rather than drawing a table at coordinates in the renderer, where it could not.
+
+### Stripe's invoices are embedded, and the ones we could not get are named (D-50)
+
+D-11 makes Stripe the system of record and `LedgerEntry` a projection of it, so the statement is our *reading* of the evidence and the invoice is the evidence. `getInvoicePdf()` joins the adapter and `appendPdfs()` copies the pages onto the end, so one file carries both.
+
+Every failure degrades to a named gap rather than a thrown export — **silence would be a false claim.** A statement one attachment short with no note reads as "there was no invoice for that line", which is a different assertion from "we could not retrieve it". When an invoice arrives but will not parse, the statement is **re-rendered before archiving** rather than shipped with an attachment list that disagrees with its own contents.
+
+### What it decided
+
+- **Both exports are archived, not regenerated on demand.** The obvious call was the opposite — the source rows are immutable, so why store a derivable artifact? Because the rows **keep arriving**: a transcript exported in March and regenerated in June is a different document, and "which transcript did we give the attorney" then has no answer. Same failure R-051 avoided by archiving the notice PDF instead of re-rendering the template. Neither export is idempotent, deliberately, and that is the difference from `generateNoticePdf` (one artifact, served once, where a re-render would be a falsification).
+- **Neither document is linked to the tenant.** A `tenantId` would publish a packet assembled *for a dispute with that tenant* into their own portal papers list.
+- **Gated on `message.read` / `ledger.read`, the permissions that already render those screens.** The export discloses nothing the actor could not read one row at a time; what is privileged is that the whole history leaves as a file, so the control is the audit row (`comms.transcript_exported`, `ledger.statement_exported`) rather than a permission no role holds yet.
+- **The simulated adapter returns `null` for an invoice PDF, never a fabricated one.** A manufactured document that looks like a provider's is the one thing a court packet must never contain.
+- **R-051's renderer was generalized rather than copied.** `renderNoticePdf` is now a wrapper over `renderBlocksPdf`; `NoticeDocumentBlock` is an alias of the shared `DocumentBlock`. Notices behave identically.
+
+### Found along the way
+
+- **A real bug in this item's own first draft, caught by its test.** The statement's continuation line — whose entire job is printing the description that did not fit in its column — was itself run through the truncating layout, so it cut the one thing it was added to show. Now wrapped (`wrapMono`), never truncated.
+- **`friendlyTimestamp` under `en-GB` labels an American zone `GMT-5`, not `CDT`.** Technically an offset and useless on a Texas exhibit. Switched to `en-US` for the zone abbreviation; the day/month/year order is assembled from parts, so the output is still `3 Mar 2026`. Also pinned `hourCycle: 'h23'` — the same midnight-becomes-24 trap `localParts` already documents.
+- **The environment, not the code: 10 duplicate Prisma query-engine binaries** (190 MB) left in `packages/db/generated/client` by the pre-move iCloud sync. The first e2e run failed all six specs in ~400ms each with `Prisma Client could not locate the Query Engine` — the wall-of-fast-failures signature CLAUDE.md warns is environmental. Regenerated the client and removed the duplicates. The working directory has since been moved off iCloud.
+
+### What it left behind
+
+- **The work-order timeline still has no PDF.** R-032's `workOrderTimelineText` says in its own header that the PDF packet belongs to this item. It is thread-scoped work that this item's backlog line does not name (that timeline is one *incident* for an adjuster and includes internal staff notes; this transcript is one *party's* whole history), and the renderer it needs now exists — mapping `TimelineEntry` to `DocumentBlock` is the whole job. Named rather than done, to keep this item's scope to what COMM-05 and PAY-09 asked for.
+- **The embedding path is only exercised against live Stripe.** Demo and e2e run on the simulator, which returns `null`, so those runs exercise the could-not-attach branch and never the copy-pages one. Stated in D-50 as the accepted cost.
+- **No page-number index for appended invoices.** The "Underlying records" section lists invoice ids in append order, not "invoice `in_123` begins on page 7".
+- **`Notice` itself is still mutable** (carried over from R-051), and the bare-`requirePermission` scoping bug R-050 flagged on `/money`, `/workorders`, `/search`, `/jurisdiction` and the message-template pages is still open.

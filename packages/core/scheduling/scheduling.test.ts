@@ -11,6 +11,7 @@ import {
   isDue,
   utcToWallClock,
   wallClockToUtc,
+  friendlyTimestamp,
   localParts,
   utcToBusinessDate,
 } from './local-time.ts'
@@ -387,5 +388,32 @@ describe('wall-clock times in a property timezone', () => {
   it('refuses a malformed wall clock rather than inventing one', () => {
     expect(() => wallClockToUtc('not a time', CHICAGO)).toThrow(RangeError)
     expect(() => wallClockToUtc('2026-08-05', CHICAGO)).toThrow(RangeError)
+  })
+})
+
+describe('friendlyTimestamp', () => {
+  // R-052: the format the communications transcript and the ledger statement
+  // print. Both leave the building, so the zone is part of the evidence.
+
+  it('names the zone, because the reader is somewhere else', () => {
+    // "09:14" alone is a time in no particular place, and two parties arguing
+    // about whether a notice landed before a deadline cannot do it from a
+    // timestamp with no zone on it.
+    const instant = new Date('2026-03-03T15:14:00Z')
+    expect(friendlyTimestamp(instant, CHICAGO)).toBe('3 Mar 2026, 09:14 CST')
+  })
+
+  it('labels the zone the DST rules actually chose, not a fixed guess', () => {
+    // The abbreviation comes from the same resolution that picked the offset.
+    // A hardcoded 'CST' would mislabel every timestamp for eight months of
+    // the year, on documents whose whole point is being precise about when.
+    const summer = new Date('2026-07-03T14:14:00Z')
+    expect(friendlyTimestamp(summer, CHICAGO)).toBe('3 Jul 2026, 09:14 CDT')
+  })
+
+  it('formats the same instant differently per property zone', () => {
+    const instant = new Date('2026-03-03T15:14:00Z')
+    expect(friendlyTimestamp(instant, 'America/New_York')).toContain('10:14')
+    expect(friendlyTimestamp(instant, 'UTC')).toContain('15:14')
   })
 })

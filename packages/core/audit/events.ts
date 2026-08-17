@@ -269,6 +269,23 @@ export const AUDIT_ACTIONS = [
   /// is the question asked three weeks later, and a bare count cannot
   /// answer it.
   'message.bulk_sent',
+  /// R-052 (COMM-05): a communications transcript was produced for a party -
+  /// every message, notification and served notice on their record, in one
+  /// PDF that leaves the building.
+  ///
+  /// THE EXPORT IS THE PRIVILEGED ACT, not the reading. Nothing here is new
+  /// information to the staff member who ran it; what changed is that a
+  /// tenant's entire communications history now exists as a file somebody can
+  /// forward. That is the moment worth a trail - who took it, when, for which
+  /// party, and how many entries it contained, so a later dispute about what
+  /// was disclosed can be answered against a record rather than a memory.
+  'comms.transcript_exported',
+  /// R-052 (PAY-09): a statement of account was produced for a lease and
+  /// period, with the payment processor's invoices appended (D-50). Records
+  /// the window and the closing balance, because a statement handed to a
+  /// court is a claim about what was owed on a date, and which claim we made
+  /// has to survive the ledger continuing to move afterwards.
+  'ledger.statement_exported',
   'template.saved',
   /// R-049: a translation was marked approved for a LEGAL notice. THE most
   /// consequential row in this area. The product cannot verify an attorney
