@@ -2470,7 +2470,7 @@ Recording either of the first two as the third would hide a real gap behind a pr
 ---
 
 ## R-052 — Immutable communications audit, thread transcript, court-ready ledger statement
-**Commit:** `PENDING`  ·  **Date:** 2026-08-17
+**Commit:** `c520386`  ·  **Date:** 2026-08-17
 
 **What it built.** The packet you hand an attorney, an adjuster or a judge: one chronological communications record merged across three tables, a timestamped PDF transcript with delivery metadata, and a statement of account that carries a real balance and embeds the payment processor's own invoices.
 
