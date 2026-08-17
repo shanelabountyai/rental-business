@@ -48,6 +48,14 @@ export const NOTIFICATION_CATEGORIES = [
   'lease_renewal',
   'move_out',
 
+  /// Staff-authored broadcasts to a segment - "the city is flushing hydrants
+  /// Tuesday" (COMM-04, R-053). Informational, not a per-tenancy event, so it
+  /// gets its own category rather than riding on `rent_reminder` the way the
+  /// managed-template carrier already does for the bulk chase - a tenant who
+  /// muted rent reminders must not also lose hydrant-flushing notices, and
+  /// the reverse.
+  'announcement',
+
   // Staff-facing operations
   'approval_needed',
   'task_assigned',

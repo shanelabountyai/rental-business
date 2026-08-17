@@ -40,6 +40,7 @@ const CATEGORY_LABELS: Record<NotificationCategory, string> = {
   work_order_assigned: 'Work orders assigned to you',
   lease_renewal: 'Lease renewals',
   move_out: 'Move-out',
+  announcement: 'Announcements',
   approval_needed: 'Approvals waiting on you',
   task_assigned: 'Tasks assigned to you',
   unit_make_ready: 'Units ready to turn',

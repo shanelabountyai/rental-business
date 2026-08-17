@@ -269,6 +269,11 @@ export const AUDIT_ACTIONS = [
   /// is the question asked three weeks later, and a bare count cannot
   /// answer it.
   'message.bulk_sent',
+  /// R-053 (COMM-04): a segment announcement went out — all tenants, one
+  /// property, one metro or one tag. Same reasoning as `message.bulk_sent`:
+  /// records what segment was targeted, what was requested, what was sent,
+  /// and every skip with its reason.
+  'message.announcement_sent',
   /// R-052 (COMM-05): a communications transcript was produced for a party -
   /// every message, notification and served notice on their record, in one
   /// PDF that leaves the building.

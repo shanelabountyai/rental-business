@@ -31,6 +31,8 @@ export interface PropertyDefaults {
   bathrooms?: number | ''
   yearBuilt?: number | ''
   acquiredOn?: string
+  metro?: string
+  tags?: string
 }
 
 /// Converts what the action echoed back (PropertyInput: number|null,
@@ -54,6 +56,8 @@ function defaultsFromSubmitted(
     bathrooms: submitted.bathrooms ?? '',
     yearBuilt: submitted.yearBuilt ?? '',
     acquiredOn: submitted.acquiredOn ?? undefined,
+    metro: submitted.metro ?? undefined,
+    tags: submitted.tags?.join(', '),
   }
 }
 
@@ -294,6 +298,28 @@ export function PropertyForm({
         defaultValue={values.acquiredOn}
         error={errors.acquiredOn}
       />
+
+      <fieldset className="flex flex-col gap-4 rounded-md border p-4">
+        <legend className="px-1 text-sm font-medium">Announcement grouping</legend>
+        <p className="text-muted-foreground text-sm">
+          Used only to target segment announcements — sending one message to
+          everyone in a metro, or everyone under a shared tag.
+        </p>
+        <TextField
+          label="Metro (optional)"
+          name="metro"
+          defaultValue={values.metro}
+          error={errors.metro}
+          hint="Freeform, e.g. &quot;Dallas-Fort Worth&quot; — spell it the same way across properties so they group together."
+        />
+        <TextField
+          label="Tags (optional)"
+          name="tags"
+          defaultValue={values.tags}
+          error={errors.tags}
+          hint="Comma-separated, e.g. &quot;downtown, flood-zone&quot;."
+        />
+      </fieldset>
 
       <SubmitButton label={submitLabel} />
     </form>

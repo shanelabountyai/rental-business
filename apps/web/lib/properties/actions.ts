@@ -173,6 +173,11 @@ function propertyInputFrom(formData: FormData): PropertyInput {
     bathrooms: optionalNumber(formData, 'bathrooms'),
     yearBuilt: optionalNumber(formData, 'yearBuilt'),
     acquiredOn: str(formData, 'acquiredOn') || null,
+    metro: str(formData, 'metro') || null,
+    tags: str(formData, 'tags')
+      .split(',')
+      .map((tag) => tag.trim())
+      .filter(Boolean),
   }
 }
 
@@ -246,6 +251,8 @@ export async function createProperty(
         bathrooms: input.bathrooms,
         yearBuilt: input.yearBuilt,
         acquiredOn: input.acquiredOn ? new Date(`${input.acquiredOn}T00:00:00Z`) : null,
+        metro: input.metro,
+        tags: input.tags ?? [],
       },
     })
     await audit(
@@ -309,6 +316,8 @@ export async function updateProperty(
         bathrooms: input.bathrooms,
         yearBuilt: input.yearBuilt,
         acquiredOn: input.acquiredOn ? new Date(`${input.acquiredOn}T00:00:00Z`) : null,
+        metro: input.metro,
+        tags: input.tags ?? [],
       },
     })
     await audit(

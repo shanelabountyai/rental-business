@@ -51,6 +51,8 @@ export default async function EditPropertyPage({
           acquiredOn: property.acquiredOn
             ? property.acquiredOn.toISOString().slice(0, 10)
             : undefined,
+          metro: property.metro ?? undefined,
+          tags: property.tags.join(', '),
         }}
       />
     </div>

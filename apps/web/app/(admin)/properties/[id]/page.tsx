@@ -167,6 +167,18 @@ export default async function PropertyDetailPage({
             </dd>
           </>
         )}
+        {property.metro != null && (
+          <>
+            <dt className="text-muted-foreground">Metro</dt>
+            <dd className="col-span-1 sm:col-span-2">{property.metro}</dd>
+          </>
+        )}
+        {property.tags.length > 0 && (
+          <>
+            <dt className="text-muted-foreground">Tags</dt>
+            <dd className="col-span-1 sm:col-span-2">{property.tags.join(', ')}</dd>
+          </>
+        )}
       </dl>
 
       <div className="flex flex-col gap-3">

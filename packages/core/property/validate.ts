@@ -94,6 +94,13 @@ export interface PropertyInput extends AddressInput {
   yearBuilt?: number | null
   /// ISO date string (yyyy-mm-dd) from a <input type="date">, or empty.
   acquiredOn?: string | null
+  /// Freeform, staff-set - "Dallas-Fort Worth" - used only to target segment
+  /// announcements (R-053, COMM-04). No validation: two properties
+  /// disagreeing on spelling just fail to group together on the segment
+  /// picker.
+  metro?: string | null
+  /// Freeform ad-hoc labels, same reasoning as `metro` (R-053, COMM-04).
+  tags?: string[]
 }
 
 const CURRENT_YEAR = new Date().getUTCFullYear()

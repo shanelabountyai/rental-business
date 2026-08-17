@@ -2526,3 +2526,41 @@ Every failure degrades to a named gap rather than a thrown export — **silence 
 - **The embedding path is only exercised against live Stripe.** Demo and e2e run on the simulator, which returns `null`, so those runs exercise the could-not-attach branch and never the copy-pages one. Stated in D-50 as the accepted cost.
 - **No page-number index for appended invoices.** The "Underlying records" section lists invoice ids in append order, not "invoice `in_123` begins on page 7".
 - **`Notice` itself is still mutable** (carried over from R-051), and the bare-`requirePermission` scoping bug R-050 flagged on `/money`, `/workorders`, `/search`, `/jurisdiction` and the message-template pages is still open.
+
+---
+
+## R-053 — Segment announcements
+**Commit:** `PENDING`  ·  **Date:** 2026-08-17
+
+**What it built.** A staff-composed broadcast to a segment — all tenants, one property, one metro, or one tag — with per-recipient delivery status shown right after sending. New `/messages/announcements` page and composer, `Property.metro`/`Property.tags` (freeform grouping fields), a new `announcement` notification category, and a second managed-template carrier so an announcement's send preference is independent of a rent reminder's.
+
+### A segment is a filter, and that is a deliberate difference from R-044
+
+R-044's bulk chase sends to an EXPLICIT list of lease ids reviewed on a screen, because "past grace" can change between the page rendering and the button being pressed — somebody could pay at 6:02am, and chasing them anyway is the fair-housing exposure that item is built around. An announcement has no equivalent fact to go stale: "the city is flushing hydrants Tuesday" is true for whoever is a tenant at send time, and the whole point of a segment is that nobody enumerates it by hand. So the recipient set here is resolved as a filter, at send time, against `propertyWhere(scope)` — the same helper every other scoped list in the app already uses — intersected with the chosen segment. A crafted `segmentValue` naming a property outside the actor's scope simply matches nothing; there is no separate list to re-check against.
+
+### "Per-recipient delivery status" already had a table
+
+`Notification`/`NotificationDelivery` (R-016) is already one row per recipient per channel with a real status — `QUEUED`/`SENT`/`SUPPRESSED`/`FAILED` and why. A fifth table for announcement outcomes would have duplicated evidence R-052 already treats as the single source of truth, the exact ambiguity an evidence trail exists to prevent. The send action collects the `deliveryId`s it just wrote, dispatches only its own batch (`dispatchPendingNotifications(..., { deliveryIds })`, never the global queue), reads the final statuses back, and returns them in the same response the composer renders — no persistent "announcement" record, no second read path. Sending it again later, or reading history across sends, is what R-054's message history owns; this item only had to prove the send itself.
+
+### `notify()`'s own category check is why a second template exists
+
+The engine refuses to dispatch when a template's fixed category disagrees with the call's category — the guard that keeps a tenant who muted rent reminders from also losing something unrelated by accident. `comms.managed_template` has been hardcoded to `rent_reminder` since R-044, so it could not also carry an announcement without breaking that guard for the reminder path. Rather than parameterize the category (which would let ANY caller send ANY managed template under ANY category, silently), registered a second carrier — `comms.announcement`, category `announcement`, identical render function — so each managed-template use declares its own preference bucket honestly.
+
+### Metro and tags are freeform on purpose
+
+PRD COMM-04 names "one metro" and "tag" as segments, and neither concept existed on `Property` — the closest field was `city`, and a real metro (Dallas–Fort Worth) spans city boundaries a straight match can't group. Building a canonical geography table or a tag taxonomy for a 10–50 unit portfolio would have been exactly the kind of scaffolding nobody asked for. `metro` is a plain nullable string and `tags` a plain string array, both staff-set on the property edit form; two properties that spell a metro differently just fail to group together on the segment picker, which is visible and correctable, unlike a wrong automatic grouping would have been.
+
+### Found and fixed inside this item: a real accessibility bug
+
+The first draft of the composer hand-wrote `<label>` elements WRAPPING their `<select>`s, matching `RentRollTable`'s existing pattern. That turned out to be a latent bug already sitting in the codebase, just never triggered: a label that wraps its control gets an accessible name computed from the control's own rendered content — for a `<select>`, that pulls in ALL its `<option>` text, not just the currently-selected one. The segment-type select's own "One property" option collided under `getByLabel('Property')` with the global property/entity switcher's unrelated "Filter by property or entity" label, caught immediately by this item's own e2e spec (`e2e/announcements.spec.ts`) rather than shipping quietly. Fixed by switching to `components/form/field.tsx`'s existing `SelectField`, which keeps the label a SIBLING associated by `htmlFor`/`id` — the reuse rung of the ladder turned out to be the accessibility fix too. `RentRollTable`'s "Template" select has the identical latent shape and has simply never collided with another label's text; not touched here, since fixing it is outside this item's scope.
+
+### Found, flagged, not fixed: a shared-database test race
+
+While chasing an unrelated failure in a full local sweep, found that `apps/web/lib/ledger/nsf-fees.test.ts` and `apps/web/lib/jurisdiction/queries.test.ts` each independently picked the literal state code `'YY'` as their own "nothing configured for this state" fixture. Run in the same process with vitest's default file parallelism against one shared test database, `jurisdiction/queries.test.ts`'s "returns null" assertions can observe `nsf-fees.test.ts`'s still-live `JurisdictionRule('YY')` row before that file's own `afterAll` cleanup has run. Reproduced once in a full sweep, passed clean on an immediate rerun, and confirmed by running `jurisdiction/queries.test.ts` alone (also clean) — a genuine test-isolation hazard between two files this item never touched, not something introduced here. Left as a named follow-up rather than fixed under this item's scope.
+
+### What it left behind
+
+- **No bulk tool for metro/tags.** Setting either is one property at a time on the edit form — fine at 10–50 units, a real gap past that.
+- **No "how many will this reach" preview.** The composer shows the segment size only in the per-recipient result table AFTER sending, not before — matching this item's S-sized scope, but a PM cannot sanity-check a segment before committing to it.
+- **Persistent announcement history is R-054's.** This item proves one send's outcome; re-reading past sends, a shared suppression list, and the bounce/failure→`Task` path all belong to the next item.
+- **The `RentRollTable` "Template" select's identical label-wraps-control shape is unfixed.** Flagged in the section above; it has never collided with another label on that page, so it was left rather than widened into this item's diff.

@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { propertyScope, scopeIsEmpty } from '@rental/core/rbac'
 import { actorCan, requireScope } from '@/lib/auth/guard.ts'
 import { listThreads, unroutedCount } from '@/lib/comms/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
@@ -39,6 +40,12 @@ export default async function MessagesPage() {
     // template belongs to no property (R-049).
     actorCan('template.write'),
   ])
+  // SCOPED, not `actorCan('message.send')` with no resource — a
+  // property-scoped manager holds message.send over their own properties
+  // only, and a resource-less check would hide the link from exactly the
+  // person whose job this is (the same trap the rent roll's `canSend`
+  // documents).
+  const canSendAnnouncements = !scopeIsEmpty(propertyScope(actor, 'message.send'))
 
   return (
     <div className="flex flex-col gap-6">
@@ -48,14 +55,24 @@ export default async function MessagesPage() {
           Every conversation, whatever channel it came in on. Logged calls sit
           in the same history.
         </p>
-        {canWriteTemplates && (
-          <Link
-            href="/messages/templates"
-            className="focus-visible:ring-ring w-fit text-sm underline underline-offset-4 focus-visible:ring-2 focus-visible:outline-none"
-          >
-            Message templates
-          </Link>
-        )}
+        <div className="flex gap-4">
+          {canWriteTemplates && (
+            <Link
+              href="/messages/templates"
+              className="focus-visible:ring-ring w-fit text-sm underline underline-offset-4 focus-visible:ring-2 focus-visible:outline-none"
+            >
+              Message templates
+            </Link>
+          )}
+          {canSendAnnouncements && (
+            <Link
+              href="/messages/announcements"
+              className="focus-visible:ring-ring w-fit text-sm underline underline-offset-4 focus-visible:ring-2 focus-visible:outline-none"
+            >
+              Send an announcement
+            </Link>
+          )}
+        </div>
       </header>
 
       {unrouted > 0 && (

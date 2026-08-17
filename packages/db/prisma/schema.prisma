@@ -413,6 +413,16 @@ model Property {
   state          String
   postalCode     String
   county         String?
+  /// Freeform, staff-set label - "Dallas-Fort Worth" - not derived from
+  /// `city`/`state` (R-053, COMM-04). A real metro spans city boundaries a
+  /// straight city match cannot group, and there is no canonical geography
+  /// table here: two properties disagreeing on spelling just fail to group
+  /// on the segment picker, which is visible and correctable, unlike a wrong
+  /// automatic grouping would be.
+  metro          String?
+  /// Freeform staff labels for ad-hoc grouping - "downtown", "flood-zone" -
+  /// used today only to target segment announcements (R-053, COMM-04).
+  tags           String[]     @default([])
   country        String       @default("US")
   latitude       Decimal?     @db.Decimal(9, 6)
   longitude      Decimal?     @db.Decimal(9, 6)

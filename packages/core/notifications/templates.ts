@@ -867,6 +867,22 @@ export const managedTemplate: NotificationTemplate<ManagedTemplateContext> = {
       : { subject: context.subject ?? undefined, body: context.body },
 }
 
+/**
+ * The same carrier, registered under `announcement` (COMM-04, R-053).
+ *
+ * `notify()` refuses when a template's fixed category disagrees with the
+ * call's category, so `managedTemplate` above - locked to `rent_reminder` -
+ * cannot also carry a segment announcement. A second registration, not a
+ * parameter: the render function has no category-specific behavior, only the
+ * key and category differ.
+ */
+export const announcementTemplate: NotificationTemplate<ManagedTemplateContext> = {
+  key: 'comms.announcement',
+  category: 'announcement',
+  channels: ['SMS', 'EMAIL', 'PORTAL'],
+  render: managedTemplate.render,
+}
+
 /// Context for `payment.due_soon` and `payment.due` (PAY-02, R-045). One
 /// template, two lead times - the wording differs by a handful of words and
 /// having two functions drift apart is a worse failure mode than one
@@ -1089,6 +1105,8 @@ export const TEMPLATES: Readonly<Record<string, NotificationTemplate<never>>> = 
     chargebackPostedTemplate as unknown as NotificationTemplate<never>,
   [managedTemplate.key]:
     managedTemplate as unknown as NotificationTemplate<never>,
+  [announcementTemplate.key]:
+    announcementTemplate as unknown as NotificationTemplate<never>,
   [rentDueTemplate.key]: rentDueTemplate as unknown as NotificationTemplate<never>,
   [paymentFailedFixTemplate.key]:
     paymentFailedFixTemplate as unknown as NotificationTemplate<never>,
