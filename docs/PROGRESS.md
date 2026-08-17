@@ -2681,7 +2681,7 @@ Both were genuine defects and both are worth naming, because "the app worked, th
 ---
 
 ## R-057 — SimulatedSyndicationAdapter + feed builder
-**Commit:** `PENDING`  ·  **Date:** 2026-08-17
+**Commit:** `590884f`  ·  **Date:** 2026-08-17
 
 **What it built.** LEASE-02: a PM sends a PUBLISHED listing to simulated networks (Zillow/Apartments.com/Zumper-class), each visit through that network's own tracked link is attributed back to it, and a lease going ACTIVE on the unit pulls the listing down - locally within the same transaction, off every network within the hour. New `ListingSyndication`/`SyndicationStatus` and `ListingLead` models, `packages/core/listings/feed.ts` (pure feed builder), `apps/web/lib/listings/{adapter,simulated-adapter,provider}.ts` (D-7's syndication adapter), a `lease.activated` emission + consumer, and an hourly reconciliation sweep.
 
