@@ -137,12 +137,70 @@ export function TextField({
   )
 }
 
+/// Same accessible shape as TextField (label, error, hint, idPrefix) for
+/// multi-line text - a listing's description or requirements, not a single
+/// line INPUT_CLASSES was sized for. Added rather than hand-rolled a third
+/// time on the same page (R-056 needed it for description, requirements AND
+/// the pet-policy text, all at once).
+export function TextareaField({
+  label,
+  name,
+  required = false,
+  defaultValue,
+  error,
+  hint,
+  rows = 4,
+  idPrefix,
+}: {
+  label: string
+  name: string
+  required?: boolean
+  defaultValue?: string
+  error?: string
+  hint?: string
+  rows?: number
+  idPrefix?: string
+}) {
+  const id = idPrefix ? `field-${idPrefix}-${name}` : `field-${name}`
+  const errorId = `${id}-error`
+  const hintId = `${id}-hint`
+  const describedBy = [error ? errorId : null, hint ? hintId : null]
+    .filter(Boolean)
+    .join(' ')
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <label htmlFor={id} className="text-sm font-medium">
+        {label}
+        {required && <span aria-hidden="true"> *</span>}
+      </label>
+      {hint && (
+        <p id={hintId} className="text-muted-foreground text-sm">
+          {hint}
+        </p>
+      )}
+      <textarea
+        id={id}
+        name={name}
+        required={required}
+        defaultValue={defaultValue}
+        rows={rows}
+        aria-invalid={Boolean(error) || undefined}
+        aria-describedby={describedBy || undefined}
+        className={INPUT_CLASSES}
+      />
+      <FieldError id={errorId} message={error} />
+    </div>
+  )
+}
+
 export function CheckboxField({
   label,
   name,
   value,
   defaultChecked,
   hint,
+  onChange,
 }: {
   label: string
   name: string
@@ -155,6 +213,10 @@ export function CheckboxField({
   value?: string
   defaultChecked?: boolean
   hint?: string
+  /// Same escape hatch as TextField's own `onChange` - something outside
+  /// the form needs to react as the box is (un)checked. Stays UNCONTROLLED
+  /// (`defaultChecked`, not `checked`) either way.
+  onChange?: (checked: boolean) => void
 }) {
   const id = value ? `field-${name}-${value}` : `field-${name}`
   const hintId = `${id}-hint`
@@ -167,6 +229,7 @@ export function CheckboxField({
         type="checkbox"
         value={value}
         defaultChecked={defaultChecked}
+        onChange={onChange ? (event) => onChange(event.target.checked) : undefined}
         aria-describedby={hint ? hintId : undefined}
         className="border-input mt-1 size-5 rounded"
       />

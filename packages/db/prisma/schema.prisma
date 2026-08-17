@@ -74,6 +74,18 @@ enum UnitStatus {
   DOWN
 }
 
+/// R-056 (LEASE-01). DRAFT is edited but never public. PUBLISHED is the
+/// hosted page anyone can reach. UNPUBLISHED is a listing that WAS public
+/// and no longer is - kept, not deleted, so re-listing the same unit later
+/// is a new row rather than resurrecting one that has since gone stale, and
+/// so R-057's "delist within 24h of lease-up" has a real state to move to
+/// rather than only DRAFT/PUBLISHED to choose between.
+enum ListingStatus {
+  DRAFT
+  PUBLISHED
+  UNPUBLISHED
+}
+
 /// The lease lifecycle (LEASE-06, R-033).
 ///
 /// NOTE WHAT IS ABSENT: there is no NOTICE_GIVEN state. A tenancy under
@@ -459,6 +471,7 @@ model Property {
   notices           Notice[]
   tasks             Task[]
   documents         Document[]
+  listings          Listing[]
   auditLogs         AuditLog[]
   assignments       StaffAssignment[]
   outboxEvents      OutboxEvent[]
@@ -600,9 +613,55 @@ model Unit {
   appliances      Appliance[]
   utilityAccounts UtilityAccount[]
   shutoffs        ShutoffLocation[]
+  listings        Listing[]
 
   @@unique([propertyId, name])
   @@index([status])
+}
+
+/// A listing for one unit (LEASE-01, R-056). Photos are NOT copied here -
+/// they are read live from the unit's own photo library (`Document`, type
+/// `UNIT_PHOTO`), so a photo added or retired on the unit record is
+/// reflected on a live PUBLISHED listing without anybody re-uploading
+/// anything. Disclosure text (deposit cap, fee cap, source-of-income
+/// protection) is likewise never stored - it is composed at read time from
+/// the property's CURRENT `JurisdictionRule` (packages/core/listings), the
+/// same "never a stored guess" posture every other jurisdiction-derived
+/// number in this product already takes (D-4): a listing is a live page,
+/// not a signed document, and should say what the law requires TODAY.
+///
+/// Ordinary mutable record, not append-only - a listing is edited and
+/// republished the way a lease or a property is, not evidence of a single
+/// past event the way a Message or a Notice is.
+model Listing {
+  id          String        @id @default(cuid())
+  propertyId  String
+  unitId      String
+  status      ListingStatus @default(DRAFT)
+  headline    String?
+  description String?
+  rentCents   Int
+  /// The ASKING deposit stated in the listing - independent of `Deposit`,
+  /// which is the per-lease liability record that exists only once a
+  /// tenancy is signed. Null means "not stated", not zero.
+  depositCents Int?
+  /// Property-local calendar day (D-3), matching Lease.startsOn's own
+  /// @db.Date - a move-in date has no time of day.
+  availableOn DateTime      @db.Date
+  requirements String?
+  petsAllowed Boolean       @default(false)
+  petPolicyText String?
+  publishedAt DateTime?
+  createdByStaffId String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  property  Property   @relation(fields: [propertyId], references: [id])
+  unit      Unit       @relation(fields: [unitId], references: [id])
+  createdBy StaffUser? @relation("ListingCreatedBy", fields: [createdByStaffId], references: [id])
+
+  @@index([propertyId, status])
+  @@index([unitId, status])
 }
 
 // ---------------------------------------------------------------------------
@@ -777,6 +836,7 @@ model StaffUser {
   templatesUpdated                MessageTemplate[]            @relation("TemplateUpdatedBy")
   translationsApproved            MessageTemplateTranslation[] @relation("TranslationApprovedBy")
   paymentHoldsSet                 LeasePayer[]                 @relation("PaymentHoldSetBy")
+  listingsCreated                 Listing[]                    @relation("ListingCreatedBy")
 
   @@index([active])
 }
@@ -2846,6 +2906,13 @@ model JurisdictionRule {
   cardSurchargeMaxBps    Int?
   applicationFeeCapCents Int?
   rubsPermitted          Boolean  @default(true)
+  /// LEASE-01 (R-056, D-4). Whether this jurisdiction makes source of income
+  /// (housing vouchers, Section 8) a protected class - required disclosure
+  /// on a listing where it applies. A THIRD state, not a boolean: null means
+  /// unreviewed, exactly like `retaliationWindowDays`'s own null - a listing
+  /// disclosure must never assert protection that was never actually
+  /// checked, and must never assert its absence either.
+  sourceOfIncomeProtected Boolean?
 
   /// Statute citation and who reviewed it. Every one of these numbers needs
   /// an attorney's eyes before it governs a real tenancy; this is where that

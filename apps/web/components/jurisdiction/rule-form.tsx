@@ -52,6 +52,7 @@ export interface RuleFormDefaults {
   noticeToVacateDays?: number | ''
   rentIncreaseNoticeDays?: number | ''
   retaliationWindowDays?: number | ''
+  sourceOfIncomeProtected?: boolean | null
   justCauseRequired?: boolean
   paymentAllocationOrder?: readonly string[]
   applicationFeeCapDollars?: number | ''
@@ -346,6 +347,29 @@ export function RuleForm({
           name="rubsPermitted"
           defaultChecked={defaults.rubsPermitted ?? true}
         />
+        <div className="flex flex-col gap-1.5">
+          <SelectField
+            label="Source-of-income protected class (LEASE-01)"
+            name="sourceOfIncomeProtected"
+            idPrefix="rule"
+            defaultValue={
+              defaults.sourceOfIncomeProtected == null
+                ? ''
+                : String(defaults.sourceOfIncomeProtected)
+            }
+            error={errors.sourceOfIncomeProtected}
+            placeholder="Not reviewed"
+            options={[
+              { value: 'true', label: 'Yes, protected' },
+              { value: 'false', label: 'No' },
+            ]}
+          />
+          <p className="text-muted-foreground text-sm">
+            Whether this state treats housing vouchers / source of income as protected. Left
+            unreviewed, a published listing&rsquo;s disclosure says so honestly rather than
+            guessing.
+          </p>
+        </div>
       </fieldset>
 
       <fieldset className="flex flex-col gap-4">

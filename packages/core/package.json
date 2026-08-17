@@ -20,6 +20,7 @@
     "./jurisdiction": "./jurisdiction/index.ts",
     "./leases": "./leases/index.ts",
     "./ledger": "./ledger/index.ts",
+    "./listings": "./listings/index.ts",
     "./maintenance": "./maintenance/index.ts",
     "./money": "./money/index.ts",
     "./notices": "./notices/index.ts",

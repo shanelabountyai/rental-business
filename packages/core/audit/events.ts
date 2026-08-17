@@ -25,6 +25,15 @@ export const AUDIT_ACTIONS = [
   /// MAKE_READY. Attributed to SYSTEM, not a staff member.
   'unit.auto_made_ready',
 
+  // Listings (LEASE-01, R-056)
+  'listing.created',
+  'listing.updated',
+  /// The moment a listing becomes a page anyone can reach. Its own action,
+  /// not folded into `listing.updated`, because "when did this go public"
+  /// is a different question than "what changed" and both get asked.
+  'listing.published',
+  'listing.unpublished',
+
   // Access and identity
   'auth.signed_in',
   'auth.locked_out',

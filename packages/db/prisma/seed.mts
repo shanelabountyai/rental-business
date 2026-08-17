@@ -104,6 +104,15 @@ async function seedJurisdictionRules() {
       console.info('Backfilled TX retaliation window (added at R-055).')
       return
     }
+    // Same again for the column R-056 added.
+    if (existing.sourceOfIncomeProtected == null) {
+      await prisma.jurisdictionRule.update({
+        where: { id: existing.id },
+        data: { sourceOfIncomeProtected: false },
+      })
+      console.info('Backfilled TX source-of-income disclosure (added at R-056).')
+      return
+    }
     console.info('Jurisdiction rule already seeded (TX, statewide, v1).')
     return
   }
@@ -198,6 +207,13 @@ async function seedJurisdictionRules() {
       // No statutory cap on application fees in Texas.
       applicationFeeCapCents: null,
       rubsPermitted: true,
+      // No STATEWIDE source-of-income protection in Texas (R-056). Some
+      // Texas cities have local ordinances requiring voucher acceptance
+      // (Austin's is the best known) - this row is the statewide rule
+      // (jurisdiction: null), and a local ordinance would need its own
+      // JurisdictionRule row to override it, the same way any other local
+      // rule already overrides the statewide one.
+      sourceOfIncomeProtected: false,
 
       citation: 'Tex. Prop. Code §§92.019, 92.103-.104, 24.005, 24.005(f), 91.001; Tex. Bus. & Com. Code §§604A.003, 3.506',
       reviewedBy: null,

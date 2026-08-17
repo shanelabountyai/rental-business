@@ -103,6 +103,9 @@ export interface JurisdictionRuleInput {
   noticeServiceMethods?: ServiceMethodMap | null
   applicationFeeCapCents?: number | null
   rubsPermitted: boolean
+  /// LEASE-01 (R-056). Null means unreviewed - see the schema's own comment
+  /// on this column.
+  sourceOfIncomeProtected?: boolean | null
 
   citation?: string | null
   reviewedBy?: string | null

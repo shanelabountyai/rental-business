@@ -26,6 +26,7 @@ function baseInput(
     noticeToVacateDays: 30,
     rentIncreaseNoticeDays: 30,
     retaliationWindowDays: 180,
+    sourceOfIncomeProtected: false,
     justCauseRequired: false,
     paymentAllocationOrder: ['RENT', 'LATE_FEE'],
     applicationFeeCapCents: null,

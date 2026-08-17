@@ -5,6 +5,7 @@ import { OperationalDataSection } from '@/components/operational/operational-dat
 import { actorCan, propertyResource, requireScope } from '@/lib/auth/guard.ts'
 import { currentScope as switcherScope } from '@/lib/scope/current-scope.ts'
 import { listDeletedDocuments, listDocuments } from '@/lib/documents/queries.ts'
+import { listingForUnit } from '@/lib/listings/queries.ts'
 import { getOperationalData } from '@/lib/operational/queries.ts'
 import { getUnitDetail } from '@/lib/units/queries.ts'
 
@@ -15,6 +16,70 @@ const STATUS_LABELS: Record<string, string> = {
   VACANT: 'Vacant',
   MAKE_READY: 'Make-ready',
   DOWN: 'Down',
+}
+
+const LISTING_STATUS_LABELS: Record<string, string> = {
+  DRAFT: 'Draft — not public',
+  PUBLISHED: 'Published',
+  UNPUBLISHED: 'Unpublished',
+}
+
+/// LEASE-01 (R-056). "Create" only when there is no CURRENT listing - a
+/// DRAFT or PUBLISHED one is edited, not duplicated; an UNPUBLISHED one
+/// (a prior vacancy, already let) is what re-listing after the next
+/// vacancy starts fresh from, so it offers "create" again rather than
+/// resurrecting a stale row.
+function ListingSection({
+  propertyId,
+  unitId,
+  listing,
+  canWrite,
+}: {
+  propertyId: string
+  unitId: string
+  listing: { id: string; status: string; rentCents: number } | null
+  canWrite: boolean
+}) {
+  const base = `/properties/${propertyId}/units/${unitId}/listing`
+  const canCreate = canWrite && (!listing || listing.status === 'UNPUBLISHED')
+
+  return (
+    <section className="flex flex-col gap-1 rounded-md border p-4">
+      <h2 className="text-sm font-semibold">Listing</h2>
+      {listing ? (
+        <>
+          <p className="text-muted-foreground text-sm">
+            {LISTING_STATUS_LABELS[listing.status] ?? listing.status} — $
+            {(listing.rentCents / 100).toLocaleString()}/mo
+          </p>
+          <div className="flex gap-4 text-sm">
+            {(canWrite || listing.status === 'PUBLISHED') && (
+              <Link href={`${base}/${listing.id}`} className="underline underline-offset-4">
+                {canWrite ? 'Edit listing' : 'View listing'}
+              </Link>
+            )}
+            {listing.status === 'PUBLISHED' && (
+              <Link
+                href={`/listings/${listing.id}`}
+                className="underline underline-offset-4"
+                target="_blank"
+                rel="noreferrer"
+              >
+                View public page
+              </Link>
+            )}
+          </div>
+        </>
+      ) : (
+        <p className="text-muted-foreground text-sm">Not listed.</p>
+      )}
+      {canCreate && (
+        <Link href={`${base}/new`} className="w-fit text-sm underline underline-offset-4">
+          {listing ? 'Create a new listing' : 'Create listing'}
+        </Link>
+      )}
+    </section>
+  )
 }
 
 /// Same convention as the property detail page: a section this item does not
@@ -59,6 +124,7 @@ export default async function UnitDetailPage({
     canDeleteDocuments,
     operationalData,
     canReveal,
+    listing,
   ] = await Promise.all([
     actorCan('unit.write', propertyResource(unit.property)),
     listDocuments(propertyId, scope, unitId),
@@ -67,6 +133,7 @@ export default async function UnitDetailPage({
     actorCan('document.delete', propertyResource(unit.property)),
     getOperationalData(propertyId, unitId, scope),
     actorCan('accesscode.reveal', propertyResource(unit.property)),
+    listingForUnit(unitId, scope),
   ])
 
   return (
@@ -150,6 +217,12 @@ export default async function UnitDetailPage({
             canReveal={canReveal}
           />
         )}
+        <ListingSection
+          propertyId={propertyId}
+          unitId={unitId}
+          listing={listing}
+          canWrite={canWrite}
+        />
         <EmptySection
           title="Lease"
           ownedBy="R-033"

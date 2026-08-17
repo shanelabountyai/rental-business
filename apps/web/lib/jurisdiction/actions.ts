@@ -43,6 +43,15 @@ function optionalNumber(formData: FormData, name: string): number | null {
   return raw ? Number(raw) : null
 }
 
+/// Blank -> null (unreviewed), 'true'/'false' -> the boolean - the tri-state
+/// SelectField's own values, matching optionalNumber's identical shape.
+function optionalBoolean(formData: FormData, name: string): boolean | null {
+  const raw = str(formData, name)
+  if (raw === 'true') return true
+  if (raw === 'false') return false
+  return null
+}
+
 function optionalCents(formData: FormData, name: string): number | null {
   const dollars = optionalNumber(formData, name)
   return dollars != null ? Math.round(dollars * 100) : null
@@ -78,6 +87,7 @@ function ruleInputFrom(formData: FormData): JurisdictionRuleInput {
     noticeToVacateDays: optionalNumber(formData, 'noticeToVacateDays'),
     rentIncreaseNoticeDays: optionalNumber(formData, 'rentIncreaseNoticeDays'),
     retaliationWindowDays: optionalNumber(formData, 'retaliationWindowDays'),
+    sourceOfIncomeProtected: optionalBoolean(formData, 'sourceOfIncomeProtected'),
     justCauseRequired: formData.get('justCauseRequired') === 'on',
     paymentAllocationOrder: formData.getAll('paymentAllocationOrder').map(String),
     applicationFeeCapCents: optionalCents(formData, 'applicationFeeCapDollars'),
@@ -157,6 +167,7 @@ export async function createRuleVersion(
         noticeToVacateDays: input.noticeToVacateDays,
         rentIncreaseNoticeDays: input.rentIncreaseNoticeDays,
         retaliationWindowDays: input.retaliationWindowDays,
+        sourceOfIncomeProtected: input.sourceOfIncomeProtected,
         justCauseRequired: input.justCauseRequired,
         paymentAllocationOrder: input.paymentAllocationOrder,
         applicationFeeCapCents: input.applicationFeeCapCents,
