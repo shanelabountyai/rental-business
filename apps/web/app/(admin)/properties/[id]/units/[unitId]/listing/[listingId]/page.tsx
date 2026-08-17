@@ -4,8 +4,11 @@ import Link from 'next/link'
 import { prisma } from '@rental/db'
 import { ListingForm } from '@/components/listings/listing-form.tsx'
 import { ListingPublishControls } from '@/components/listings/listing-publish-controls.tsx'
+import { ListingSyndicationSection } from '@/components/listings/listing-syndication.tsx'
 import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
 import { publishListing, unpublishListing, updateListing } from '@/lib/listings/actions.ts'
+import { leadCountsForListing, listingSyndications } from '@/lib/listings/queries.ts'
+import { syndicateListing } from '@/lib/listings/syndication.ts'
 import { rulesFor } from '@/lib/jurisdiction/queries.ts'
 
 export const metadata = { title: 'Listing — Rental Operations' }
@@ -25,10 +28,14 @@ export default async function ListingDetailPage({
 
   await requirePermission('unit.write', propertyResource(listing.property))
 
-  const rule = await rulesFor(
-    { state: listing.property.state, county: listing.property.county },
-    new Date(),
-  ).catch(() => null)
+  const [rule, syndications, leadCounts] = await Promise.all([
+    rulesFor(
+      { state: listing.property.state, county: listing.property.county },
+      new Date(),
+    ).catch(() => null),
+    listingSyndications(listing.id),
+    leadCountsForListing(listing.id),
+  ])
   const disclosures = rule
     ? listingDisclosures({
         state: rule.state,
@@ -63,6 +70,28 @@ export default async function ListingDetailPage({
         publish={publishListing.bind(null, listing.id)}
         unpublish={unpublishListing.bind(null, listing.id)}
       />
+
+      <ListingSyndicationSection
+        action={syndicateListing.bind(null, listing.id)}
+        canSyndicate={listing.status === 'PUBLISHED'}
+        rows={syndications}
+      />
+
+      {leadCounts.length > 0 && (
+        <section aria-labelledby="leads" className="flex flex-col gap-2 rounded-md border p-4">
+          <h2 id="leads" className="text-sm font-semibold">
+            Visits by source
+          </h2>
+          <ul className="flex flex-col gap-1 text-sm">
+            {leadCounts.map((row) => (
+              <li key={row.source} className="flex items-center justify-between">
+                <span>{row.source}</span>
+                <span className="text-muted-foreground">{row.count}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <ListingForm
         action={updateListing.bind(null, listing.id)}

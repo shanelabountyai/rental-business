@@ -8,6 +8,7 @@ import { runDueJobs } from '@/lib/jobs/runner.ts'
 import { reconcileLedger } from '@/lib/ledger/reconcile.ts'
 import { storageIsDurable } from '@/lib/storage/index.ts'
 import { sweepUnansweredTenantMessages } from '@/lib/comms/unanswered-sweep.ts'
+import { sweepPendingDelists } from '@/lib/listings/delist-sweep.ts'
 import { dispatchPendingNotifications } from '@/lib/notifications/send.ts'
 import { sweepUnansweredDispatches } from '@/lib/vendors/no-response.ts'
 import { sweepEntryReminders } from '@/lib/workorders/entry-reminders.ts'
@@ -56,6 +57,11 @@ export async function GET(request: Request) {
   // dashboard." Elapsed-time, not a calendar-day question, for the same
   // reason as the sweeps above.
   const unanswered = await sweepUnansweredTenantMessages()
+  // LEASE-02's "≤24h delist on lease-up" (R-057, D-7). Reconciles the
+  // network side of a listing delist-consumer.ts already applied locally -
+  // never inside that consumer's own transaction, see delist-sweep.ts's
+  // own header for why.
+  const delisting = await sweepPendingDelists()
   // The ledger projection, checked against the event log that produced it
   // (D-11, R-035). Hourly rather than a SCHEDULED_JOBS entry for the same
   // reason as the sweeps above: it is not a per-property calendar-day
@@ -100,6 +106,9 @@ export async function GET(request: Request) {
     entryRemindersSent: entryReminders.reminded,
     unansweredChecked: unanswered.checked,
     unansweredFlagged: unanswered.flagged,
+    delistingChecked: delisting.checked,
+    delistingDelisted: delisting.delisted,
+    delistingFailed: delisting.failed,
     ledgerEventsChecked: reconciliation.checkedEvents,
     ledgerEntriesChecked: reconciliation.checkedEntries,
     ledgerDrift: reconciliation.drift.length,

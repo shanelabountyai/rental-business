@@ -23,6 +23,7 @@ import { syncLease } from '@/lib/billing/lifecycle.ts'
 import { provisionLeaseBilling } from '@/lib/billing/provision.ts'
 import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
 import { rulesFor } from '@/lib/jurisdiction/queries.ts'
+import { emitEvent } from '@/lib/jobs/outbox.ts'
 import { raiseIntakeTasks } from './intake.ts'
 import { retaliationCheckFor } from './retaliation-check.ts'
 
@@ -472,6 +473,20 @@ export async function changeLeaseStatus(
       await tx.unit.updateMany({
         where: { id: lease.unitId },
         data: { status: 'OCCUPIED' },
+      })
+      // R-057 (LEASE-02, D-7): "≤24h delist on lease-up." A lease going
+      // live IS lease-up, whichever status it arrived from - a
+      // PENDING_SIGNATURE lease activating and an inherited lease recorded
+      // straight into ACTIVE both mean the unit is no longer available,
+      // and both must pull any published listing down. The consumer reads
+      // unitId off the payload rather than re-deriving it from the lease,
+      // since the lease itself is what this event is already about.
+      await emitEvent(tx, {
+        type: 'lease.activated',
+        aggregateType: 'Lease',
+        aggregateId: leaseId,
+        propertyId: lease.propertyId,
+        payload: { unitId: lease.unitId },
       })
     }
     if (wasInForce && !willBeInForce) {

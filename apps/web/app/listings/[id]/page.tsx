@@ -2,6 +2,7 @@ import { listingDisclosures } from '@rental/core/listings'
 import { formatCents } from '@rental/core/money'
 import { notFound } from 'next/navigation'
 import { rulesFor } from '@/lib/jurisdiction/queries.ts'
+import { recordListingLead } from '@/lib/listings/leads.ts'
 import { publicListing, unitPhotosForListing } from '@/lib/listings/queries.ts'
 
 export const dynamic = 'force-dynamic'
@@ -39,12 +40,19 @@ export async function generateMetadata({
 // or the response itself would confirm a draft's id is real.
 export default async function PublicListingPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>
+  searchParams: Promise<{ src?: string }>
 }) {
   const { id } = await params
+  const { src } = await searchParams
   const listing = await publicListing(id)
   if (!listing) notFound()
+
+  // Fire-and-forget - see recordListingLead's own comment for why a lead
+  // write failing must never be why a prospect cannot see the listing.
+  void recordListingLead(id, src)
 
   const [photos, rule] = await Promise.all([
     unitPhotosForListing(listing.unitId),

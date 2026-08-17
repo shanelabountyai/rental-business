@@ -656,12 +656,81 @@ model Listing {
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
-  property  Property   @relation(fields: [propertyId], references: [id])
-  unit      Unit       @relation(fields: [unitId], references: [id])
-  createdBy StaffUser? @relation("ListingCreatedBy", fields: [createdByStaffId], references: [id])
+  property     Property             @relation(fields: [propertyId], references: [id])
+  unit         Unit                 @relation(fields: [unitId], references: [id])
+  createdBy    StaffUser?           @relation("ListingCreatedBy", fields: [createdByStaffId], references: [id])
+  syndications ListingSyndication[]
+  leads        ListingLead[]
 
   @@index([propertyId, status])
   @@index([unitId, status])
+}
+
+/// LISTED means the simulated network currently carries it. FAILED is
+/// terminal for that attempt, not for the listing - a retry issues a fresh
+/// `list()` call and moves the same row back to LISTED.
+enum SyndicationStatus {
+  LISTED
+  DELISTED
+  FAILED
+}
+
+/// One row per (listing, network) - R-057 (LEASE-02, D-7).
+///
+/// `externalId` and `lastFaultCode` are what makes this D-27-compliant: they
+/// record what the simulated network actually TOLD us, not a mirror of our
+/// own `Listing.status`. If this table only ever restated our own state, "is
+/// it live on the network" and "did we mean to publish it" would agree by
+/// construction, and the ≤24h-delist path R-057 exists to prove would have
+/// nothing independent to check against - the same defect D-27 found and
+/// fixed in the Stripe simulator.
+model ListingSyndication {
+  id            String            @id @default(cuid())
+  listingId     String
+  /// Closed vocabulary in packages/core/listings (SYNDICATION_NETWORKS) -
+  /// a plain string, not a DB enum, so a real driver adding a network later
+  /// (D-7: Phase 3, partner-gated) is a one-line code change, not a
+  /// migration - the same call Document.type already makes for the same
+  /// reason.
+  network       String
+  status        SyndicationStatus
+  /// The id the simulated network assigned when it accepted the listing.
+  /// Null until a successful `list()` call.
+  externalId    String?
+  /// Set only when the last attempt faulted (D-7's "fault injection... so
+  /// the error paths are exercised in CI"). Cleared on the next success.
+  lastFaultCode String?
+  listedAt      DateTime?
+  delistedAt    DateTime?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  listing Listing @relation(fields: [listingId], references: [id])
+
+  @@unique([listingId, network])
+  @@index([listingId])
+}
+
+/// An inbound visit to the public listing page carrying a tracked source
+/// (LEASE-02: "inbound leads carry source attribution"). Deliberately bare -
+/// no name, email or message field - because there is no intake to attach
+/// one to yet; R-058's prospect pipeline is what turns a visit into a real
+/// lead record with a person behind it. This is the minimum this item can
+/// build honestly: proof of WHICH network sent someone, for R-058 to build
+/// on, the same "shared thing before its second consumer" call D-9 already
+/// made for the one Task queue.
+model ListingLead {
+  id         String   @id @default(cuid())
+  listingId  String
+  /// A network name from SYNDICATION_NETWORKS, or "direct" for a visit with
+  /// no `?src=` at all - recorded rather than skipped, so "how many visits
+  /// had no attributable source" is answerable instead of invisible.
+  source     String
+  occurredAt DateTime @default(now())
+
+  listing Listing @relation(fields: [listingId], references: [id])
+
+  @@index([listingId, occurredAt])
 }
 
 // ---------------------------------------------------------------------------
