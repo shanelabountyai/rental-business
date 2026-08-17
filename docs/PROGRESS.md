@@ -2568,7 +2568,7 @@ While chasing an unrelated failure in a full local sweep, found that `apps/web/l
 ---
 
 ## R-054 — Message history, shared suppression, bounce path, unanswered-message sweep, daily digest
-**Commit:** `PENDING`  ·  **Date:** 2026-08-17
+**Commit:** `999f2e4`  ·  **Date:** 2026-08-17
 
 **What it built.** Four sub-features named in one backlog row (COMM-07, NOTIF-04, COMM-01), each closing a real gap over machinery that already existed rather than adding new tables:
 
