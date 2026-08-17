@@ -2648,7 +2648,7 @@ One real, separate test-authoring bug was found and fixed along the way, unrelat
 ---
 
 ## R-056 — Listing creation + hosted listing page
-**Commit:** `PENDING`  ·  **Date:** 2026-08-17
+**Commit:** `c7f1cce`  ·  **Date:** 2026-08-17
 
 **What it built.** LEASE-01: a PM creates a listing from a unit (photos, rent, deposit, requirements, pet policy, available date), publishes it, and a hosted `/listings/[id]` page shows it to anyone - with jurisdiction disclosures (deposit cap, fee cap, source-of-income acceptance). New `Listing` model and `ListingStatus` enum (DRAFT/PUBLISHED/UNPUBLISHED), `JurisdictionRule.sourceOfIncomeProtected`, `packages/core/listings` (validation + disclosure text, pure), `apps/web/lib/listings` (queries + actions), admin create/edit pages off the unit detail page, and the public hosted page with its own photo-serving route.
 
