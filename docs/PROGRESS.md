@@ -2798,7 +2798,7 @@ A DB-integration test seeded a `Prospect` with `status: 'PRE_SCREENED'` set dire
 ---
 
 ## R-061 — FCRA adverse action
-**Commit:** _pending_  ·  **Date:** 2026-08-18
+**Commit:** `0467a35`  ·  **Date:** 2026-08-18
 
 **What it built.** LEASE-05: the moment `recordScreeningDecision` (R-060) writes a DECLINED or APPROVED_WITH_CONDITIONS decision, the same transaction generates an FCRA adverse-action `Notice` (CRA name/address/phone, the "did not make the decision" disclosure, the free-report and dispute rights, the specific FAILS criteria and the staff member's own individualized-assessment note) and - when the applicant has an email and a current address on file - auto-serves it by email in the same request, the way an entry notice already auto-serves to the portal. The pipeline's SCREENED→APPROVED auto-advance now also checks that no applicant still owes an unsent notice; `advanceProspectStage`'s manual move to APPROVED/SIGNED gets the identical check, warns, and accepts a logged override reason when staff need to go ahead anyway (mirrors `scheduleEntry`'s own warn-and-override for entry notices).
 
