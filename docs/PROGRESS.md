@@ -2817,7 +2817,7 @@ A DB-integration test seeded a `Prospect` with `status: 'PRE_SCREENED'` set dire
 ---
 
 ## R-062 — Document generation service
-**Commit:** _pending_  ·  **Date:** 2026-08-18
+**Commit:** `58fa5a1`  ·  **Date:** 2026-08-18
 
 **What it built.** DOC-04/§6.4, in two genuinely separate halves.
 
