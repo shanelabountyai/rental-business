@@ -53,6 +53,10 @@ export default async function EditPropertyPage({
             : undefined,
           metro: property.metro ?? undefined,
           tags: property.tags.join(', '),
+          hasPool: property.hasPool,
+          hasWellOrSeptic: property.hasWellOrSeptic,
+          moldHistoryNotes: property.moldHistoryNotes ?? undefined,
+          bedbugHistoryNotes: property.bedbugHistoryNotes ?? undefined,
         }}
       />
     </div>

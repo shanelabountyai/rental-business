@@ -101,6 +101,13 @@ export interface PropertyInput extends AddressInput {
   metro?: string | null
   /// Freeform ad-hoc labels, same reasoning as `metro` (R-053, COMM-04).
   tags?: string[]
+  /// R-063's lease-addenda triggers (LEASE-06). No validation - same
+  /// posture as `metro`: a boolean or a note is true or it is not, and
+  /// there is nothing to check it against.
+  hasPool?: boolean
+  hasWellOrSeptic?: boolean
+  moldHistoryNotes?: string | null
+  bedbugHistoryNotes?: string | null
 }
 
 const CURRENT_YEAR = new Date().getUTCFullYear()

@@ -178,6 +178,10 @@ function propertyInputFrom(formData: FormData): PropertyInput {
       .split(',')
       .map((tag) => tag.trim())
       .filter(Boolean),
+    hasPool: formData.get('hasPool') === 'on',
+    hasWellOrSeptic: formData.get('hasWellOrSeptic') === 'on',
+    moldHistoryNotes: str(formData, 'moldHistoryNotes') || null,
+    bedbugHistoryNotes: str(formData, 'bedbugHistoryNotes') || null,
   }
 }
 
@@ -253,6 +257,10 @@ export async function createProperty(
         acquiredOn: input.acquiredOn ? new Date(`${input.acquiredOn}T00:00:00Z`) : null,
         metro: input.metro,
         tags: input.tags ?? [],
+        hasPool: input.hasPool ?? false,
+        hasWellOrSeptic: input.hasWellOrSeptic ?? false,
+        moldHistoryNotes: input.moldHistoryNotes,
+        bedbugHistoryNotes: input.bedbugHistoryNotes,
       },
     })
     await audit(
@@ -318,6 +326,10 @@ export async function updateProperty(
         acquiredOn: input.acquiredOn ? new Date(`${input.acquiredOn}T00:00:00Z`) : null,
         metro: input.metro,
         tags: input.tags ?? [],
+        hasPool: input.hasPool ?? false,
+        hasWellOrSeptic: input.hasWellOrSeptic ?? false,
+        moldHistoryNotes: input.moldHistoryNotes,
+        bedbugHistoryNotes: input.bedbugHistoryNotes,
       },
     })
     await audit(

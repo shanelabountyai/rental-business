@@ -65,6 +65,14 @@ export async function getLease(id: string, scope: ResolvedScope) {
           createdAt: true,
         },
       },
+      // R-063: at most one non-VOIDED at a time (LeaseEnvelope.leaseId's own
+      // comment) - most recent first so the page's own "current envelope"
+      // read is just `envelopes[0]`, with any earlier voided ones still
+      // visible as the record of what was withdrawn and why.
+      envelopes: {
+        orderBy: { createdAt: 'desc' },
+        include: { signers: { orderBy: { order: 'asc' } } },
+      },
     },
   })
   if (!lease || !scope.propertyIds.includes(lease.propertyId)) return null

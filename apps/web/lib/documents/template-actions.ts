@@ -1,6 +1,7 @@
 'use server'
 
 import { validateDocumentTemplate } from '@rental/core/documents'
+import { unknownLeaseMergeFields } from '@rental/core/leases'
 import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
@@ -33,12 +34,30 @@ export async function saveDocumentTemplate(
     name: str(formData, 'name'),
     documentType: str(formData, 'documentType'),
     body: str(formData, 'body'),
+    // R-063: per-state selection, and which addendum this is when the
+    // documentType is ADDENDUM. Blank means "the default, any state" / "not
+    // an addendum" - see DocumentTemplate.state/addendumKey's own comments.
+    state: str(formData, 'state') || null,
+    addendumKey: str(formData, 'addendumKey') || null,
   }
 
   // VALIDATED HERE, THE LAST MOMENT A HUMAN IS PRESENT - saveTemplate's own
   // reasoning: a typo'd merge field that reaches generation goes out wrong
   // on the actual PDF, not in a preview somebody was still looking at.
   const violations = validateDocumentTemplate(input)
+  // A LEASE/ADDENDUM template's merge fields are checked against
+  // `@rental/core/leases`' own LEASE_MERGE_FIELDS catalogue here, not inside
+  // `validateDocumentTemplate` - see that function's own comment for the
+  // import-cycle reason the check could not live there.
+  if (input.documentType === 'LEASE' || input.documentType === 'ADDENDUM') {
+    const unknown = unknownLeaseMergeFields(input.body)
+    if (unknown.length > 0) {
+      violations.push({
+        field: 'body',
+        message: `Not a merge field: ${[...new Set(unknown)].map((k) => `{{${k}}}`).join(', ')}. Pick from the list.`,
+      })
+    }
+  }
   if (violations.length > 0) {
     return {
       error: 'Fix the highlighted fields.',
@@ -49,7 +68,7 @@ export async function saveDocumentTemplate(
   const existing = templateId
     ? await prisma.documentTemplate.findUnique({
         where: { id: templateId },
-        select: { name: true, documentType: true, body: true },
+        select: { name: true, documentType: true, body: true, state: true, addendumKey: true },
       })
     : null
   if (templateId && !existing) return { error: 'That template no longer exists.' }

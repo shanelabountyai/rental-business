@@ -3,7 +3,7 @@
 import { COMMON_US_TIMEZONES, US_STATE_OPTIONS } from '@rental/core/property'
 import { useActionState, useState } from 'react'
 import { FormAlerts } from '@/components/auth-form.tsx'
-import { SelectField, TextField } from '@/components/form/field.tsx'
+import { CheckboxField, SelectField, TextareaField, TextField } from '@/components/form/field.tsx'
 import { SubmitButton } from '@/components/auth-form.tsx'
 import type { PropertyFormState } from '@/lib/properties/actions.ts'
 
@@ -33,6 +33,10 @@ export interface PropertyDefaults {
   acquiredOn?: string
   metro?: string
   tags?: string
+  hasPool?: boolean
+  hasWellOrSeptic?: boolean
+  moldHistoryNotes?: string
+  bedbugHistoryNotes?: string
 }
 
 /// Converts what the action echoed back (PropertyInput: number|null,
@@ -58,6 +62,10 @@ function defaultsFromSubmitted(
     acquiredOn: submitted.acquiredOn ?? undefined,
     metro: submitted.metro ?? undefined,
     tags: submitted.tags?.join(', '),
+    hasPool: submitted.hasPool ?? false,
+    hasWellOrSeptic: submitted.hasWellOrSeptic ?? false,
+    moldHistoryNotes: submitted.moldHistoryNotes ?? undefined,
+    bedbugHistoryNotes: submitted.bedbugHistoryNotes ?? undefined,
   }
 }
 
@@ -318,6 +326,35 @@ export function PropertyForm({
           defaultValue={values.tags}
           error={errors.tags}
           hint="Comma-separated, e.g. &quot;downtown, flood-zone&quot;."
+        />
+      </fieldset>
+
+      <fieldset className="flex flex-col gap-4 rounded-md border p-4">
+        <legend className="px-1 text-sm font-medium">Lease addenda triggers</legend>
+        <p className="text-muted-foreground text-sm">
+          Drives which addenda R-063 attaches when a lease is generated for this
+          property (lead-paint disclosure is already covered by year built above,
+          and an HOA addendum by whether an HOA record exists).
+        </p>
+        <CheckboxField label="Has a pool or spa" name="hasPool" defaultChecked={values.hasPool} />
+        <CheckboxField
+          label="On a well or septic system"
+          name="hasWellOrSeptic"
+          defaultChecked={values.hasWellOrSeptic}
+        />
+        <TextareaField
+          label="Mold history (optional)"
+          name="moldHistoryNotes"
+          defaultValue={values.moldHistoryNotes}
+          error={errors.moldHistoryNotes}
+          hint="Leave blank if there is no known history. Any text here triggers the mold disclosure addendum."
+        />
+        <TextareaField
+          label="Bed bug history (optional)"
+          name="bedbugHistoryNotes"
+          defaultValue={values.bedbugHistoryNotes}
+          error={errors.bedbugHistoryNotes}
+          hint="Leave blank if there is no known history. Any text here triggers the bed bug disclosure addendum."
         />
       </fieldset>
 

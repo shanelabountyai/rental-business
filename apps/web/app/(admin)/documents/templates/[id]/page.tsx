@@ -48,6 +48,8 @@ export default async function DocumentTemplatePage({
           name: template.name,
           documentType: template.documentType,
           body: template.body,
+          state: template.state ?? undefined,
+          addendumKey: template.addendumKey ?? undefined,
         }}
         documentTypeOptions={DOCUMENT_TYPE_OPTIONS}
         action={saveDocumentTemplate.bind(null, template.id)}

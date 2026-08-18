@@ -405,6 +405,30 @@ export const AUDIT_ACTIONS = [
   /// adding a guarantor changes who can be pursued and nothing else.
   'lease.party_changed',
 
+  /// R-063 (LEASE-06, DOC-02): a lease's document was generated and sent for
+  /// e-signature - the base template, the addenda selected, and every
+  /// signer named. Carries the provider name, matching `billing.provisioned`'s
+  /// own reasoning for why that matters on a simulated-vs-real distinction.
+  'envelope.sent',
+
+  /// R-063: one signer completed their electronic signature. Its own action
+  /// per signer, not a single `envelope.completed` - "who signed and when"
+  /// is the fact an identity dispute over ONE signature turns on, and a
+  /// completion event alone could not answer it for a multi-signer lease.
+  'envelope.signer_signed',
+
+  /// R-063: every signer has signed. The lease's own `lease.status_changed`
+  /// (DRAFT/PENDING_SIGNATURE → ACTIVE) fires alongside this in the same
+  /// transaction, matching how `billing.provisioned` sits beside a status
+  /// change rather than replacing it.
+  'envelope.completed',
+
+  /// R-063: a sent-but-unsigned envelope was abandoned so the lease could be
+  /// regenerated - REASON_REQUIRED, the same call `lease.terminated` makes:
+  /// "we changed our minds" and "the tenant wants a term changed" are
+  /// different claims about why a legal document was withdrawn.
+  'envelope.voided',
+
   /// R-034 (D-11): a lease's Stripe Customer and Subscription were opened.
   /// Carries the provider name, because a record that does not say whether
   /// it was Stripe or the simulator is a record somebody will misread the
@@ -535,6 +559,7 @@ export const REASON_REQUIRED: ReadonlySet<AuditAction> = new Set([
   'payment.hold_changed',
   'consent.withdrawn',
   'lease.retaliation_window_acknowledged',
+  'envelope.voided',
 ])
 
 export function requiresReason(action: AuditAction): boolean {

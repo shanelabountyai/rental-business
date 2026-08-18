@@ -53,6 +53,16 @@ export interface DocumentTemplateInput {
   name: string
   documentType: string
   body: string
+  /// R-063: per-state selection. Null/absent means "the default, any
+  /// state". Format-checked here only (two letters) - the closed list of
+  /// states lives in `packages/core/property`, which this module does not
+  /// import, to avoid a cycle with `packages/core/leases` (which imports
+  /// FROM documents for the `DocumentBlock` type).
+  state?: string | null
+  /// R-063: set only when documentType is ADDENDUM. The actual closed list
+  /// of addendum keys is `packages/core/leases`' `ADDENDUM_KEYS` - checked
+  /// there, at lease-generation time, for the same cycle-avoidance reason.
+  addendumKey?: string | null
 }
 
 /// Named distinctly from every other submodule's own `Violation` - core's
@@ -79,8 +89,29 @@ export function validateDocumentTemplate(input: DocumentTemplateInput): Document
   if (!input.body.trim()) {
     violations.push({ field: 'body', message: 'A template needs a body.' })
   }
+  if (input.state?.trim() && !/^[A-Z]{2}$/.test(input.state.trim())) {
+    violations.push({ field: 'state', message: 'Use a two-letter state code, or leave it blank for every state.' })
+  }
+  if (input.addendumKey?.trim() && input.documentType !== 'ADDENDUM') {
+    violations.push({
+      field: 'addendumKey',
+      message: 'An addendum key only applies to an ADDENDUM template.',
+    })
+  }
 
-  const unknown = unknownDocumentMergeFields(input.body)
+  // Deliberately NOT validated against DOCUMENT_MERGE_FIELDS below for a
+  // LEASE/ADDENDUM template - `packages/core/leases`' own LEASE_MERGE_FIELDS
+  // is the catalogue those two document types actually render against, and
+  // this module cannot import that without the cycle noted on
+  // DocumentTemplateInput above. The save action for those two documentTypes
+  // (apps/web/lib/documents/template-actions.ts) calls
+  // `unknownLeaseMergeFields` from `@rental/core/leases` itself, where that
+  // catalogue is already in scope; this generic check still applies to
+  // every other documentType.
+  const unknown =
+    input.documentType === 'LEASE' || input.documentType === 'ADDENDUM'
+      ? []
+      : unknownDocumentMergeFields(input.body)
   if (unknown.length > 0) {
     violations.push({
       field: 'body',

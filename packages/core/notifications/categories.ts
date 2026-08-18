@@ -47,6 +47,12 @@ export const NOTIFICATION_CATEGORIES = [
   // Tenancy
   'lease_renewal',
   'move_out',
+  /// R-063: a signer's own review-and-sign link for a lease sent for
+  /// e-signature. Its own category rather than folded into `lease_renewal`
+  /// - a guarantor recipient (NotificationRecipientType.GUARANTOR) is never
+  /// party to a renewal, so a single toggle covering both would let a
+  /// guarantor mute the one message actually addressed to them.
+  'lease_signature',
 
   /// Staff-authored broadcasts to a segment - "the city is flushing hydrants
   /// Tuesday" (COMM-04, R-053). Informational, not a per-tenancy event, so it
@@ -131,6 +137,12 @@ const CATEGORY_CHANNELS: Partial<Record<NotificationCategory, readonly Notificat
   /// Same reasoning, same restriction - an APPLICANT has no account either
   /// (NotificationRecipientType.APPLICANT's own schema comment).
   prospect_application: ['EMAIL', 'SMS'],
+  /// A GUARANTOR recipient has no portal login at all (LEASE-06: "no portal
+  /// access to maintenance/comms"), and a TENANT signing a brand-new lease
+  /// may not have set one up yet either - the signing link goes to its own
+  /// token-gated page (`/sign/[token]`), not the portal, so PORTAL would
+  /// promise a read surface that does not apply here.
+  lease_signature: ['EMAIL', 'SMS'],
 }
 
 export function channelsFor(
@@ -191,6 +203,8 @@ export const LOCKED_CATEGORIES: Readonly<
     'Advance notice before someone enters your home is required by law in most states, and the required hours come from your property’s own jurisdiction rules.',
   maintenance_emergency:
     'Emergency maintenance can involve gas, flooding, or loss of heat. These reach you whatever your other settings say, including during quiet hours.',
+  lease_signature:
+    'This is how you review and sign your lease. Turning it off would leave nobody able to reach you to finish signing.',
 }
 
 export function isLockedCategory(category: NotificationCategory): boolean {

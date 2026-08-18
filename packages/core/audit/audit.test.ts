@@ -296,6 +296,7 @@ describe('the audit vocabulary', () => {
       'accesscode.reveal': 'accesscode.revealed',
       'template.approve': 'template.translation_approved',
       'screening.decide': 'screening.decided',
+      'lease.execute': 'envelope.sent',
     }
     for (const permission of PRIVILEGED_PERMISSIONS) {
       const action = recordable[permission]

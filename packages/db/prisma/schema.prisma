@@ -425,46 +425,60 @@ model LegalEntity {
 }
 
 model Property {
-  id             String       @id @default(cuid())
-  legalEntityId  String
-  name           String
-  addressLine1   String
-  addressLine2   String?
-  city           String
+  id                 String       @id @default(cuid())
+  legalEntityId      String
+  name               String
+  addressLine1       String
+  addressLine2       String?
+  city               String
   /// Two-letter state code. Drives EVERY jurisdiction lookup (D-4) - a
   /// property with the wrong state silently gets another state's grace
   /// period, deposit deadline and notice periods.
-  state          String
-  postalCode     String
-  county         String?
+  state              String
+  postalCode         String
+  county             String?
   /// Freeform, staff-set label - "Dallas-Fort Worth" - not derived from
   /// `city`/`state` (R-053, COMM-04). A real metro spans city boundaries a
   /// straight city match cannot group, and there is no canonical geography
   /// table here: two properties disagreeing on spelling just fail to group
   /// on the segment picker, which is visible and correctable, unlike a wrong
   /// automatic grouping would be.
-  metro          String?
+  metro              String?
   /// Freeform staff labels for ad-hoc grouping - "downtown", "flood-zone" -
   /// used today only to target segment announcements (R-053, COMM-04).
-  tags           String[]     @default([])
-  country        String       @default("US")
-  latitude       Decimal?     @db.Decimal(9, 6)
-  longitude      Decimal?     @db.Decimal(9, 6)
+  tags               String[]     @default([])
+  country            String       @default("US")
+  latitude           Decimal?     @db.Decimal(9, 6)
+  longitude          Decimal?     @db.Decimal(9, 6)
   /// IANA zone, e.g. "America/Chicago". Every nightly job runs in this zone,
   /// not UTC (D-3). Not nullable: a property without one cannot be billed.
-  timezone       String
-  propertyType   PropertyType
-  bedrooms       Int?
-  bathrooms      Decimal?     @db.Decimal(3, 1)
-  yearBuilt      Int?
-  acquiredOn     DateTime?    @db.Date
+  timezone           String
+  propertyType       PropertyType
+  bedrooms           Int?
+  bathrooms          Decimal?     @db.Decimal(3, 1)
+  yearBuilt          Int?
+  acquiredOn         DateTime?    @db.Date
   /// From the deed/closing disclosure (PROP-06). A single fact, not its own
   /// model, unlike Mortgage/InsurancePolicy/Warranty below - there is only
   /// ever one basis, not a repeating or versioned record.
-  costBasisCents Int?
-  active         Boolean      @default(true)
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  costBasisCents     Int?
+  /// R-063's lease-addenda triggers (LEASE-06). Property facts, not
+  /// jurisdiction config (D-4) - a pool or a well is true or false about
+  /// THIS property regardless of state, unlike a grace period or a notice
+  /// hour. `yearBuilt` above already answers the lead-paint (pre-1978)
+  /// trigger; `hoaInfo` below already answers the HOA-rules trigger. These
+  /// four are the ones nothing existing could derive.
+  hasPool            Boolean      @default(false)
+  hasWellOrSeptic    Boolean      @default(false)
+  /// Free text, not a boolean - "treated 2019, none since" is a fact an
+  /// addendum can quote; a flag cannot. Null means no known history, which
+  /// is the honest default for a property nobody has told this system
+  /// otherwise about.
+  moldHistoryNotes   String?
+  bedbugHistoryNotes String?
+  active             Boolean      @default(true)
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
 
   legalEntity       LegalEntity       @relation(fields: [legalEntityId], references: [id])
   units             Unit[]
@@ -1273,6 +1287,7 @@ model Tenant {
   leaseTenants           LeaseTenant[]
   workOrderVerifications WorkOrderVerification[]
   leasePayers            LeasePayer[]
+  leaseSignatures        LeaseSigner[]
   tickets                Ticket[]
   threads                Thread[]
   messages               Message[]               @relation("MessageFromTenant")
@@ -1297,7 +1312,8 @@ model Guarantor {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  lease Lease @relation(fields: [leaseId], references: [id])
+  lease           Lease         @relation(fields: [leaseId], references: [id])
+  leaseSignatures LeaseSigner[]
 
   @@index([leaseId])
 }
@@ -1430,6 +1446,9 @@ model Lease {
   unit             Unit              @relation(fields: [unitId], references: [id])
   leaseTenants     LeaseTenant[]
   guarantors       Guarantor[]
+  /// Almost always zero or one - see LeaseEnvelope.leaseId's own comment for
+  /// why this is not a to-one relation.
+  envelopes        LeaseEnvelope[]
   leasePayers      LeasePayer[]
   charges          Charge[]          @relation("ChargeLease")
   /// Late fees assessed against this lease's own unlinked-rent balance,
@@ -1466,6 +1485,135 @@ model LeaseTenant {
 
   @@unique([leaseId, tenantId])
   @@index([tenantId])
+}
+
+// ---------------------------------------------------------------------------
+// Lease generation + e-signature (LEASE-06, DOC-02, R-063; D-7)
+//
+// SimulatedESignAdapter (apps/web/lib/esign) simulates "signer order,
+// viewed/signed events, completion certificate, executed PDF hash" (master
+// PRD §14) - it holds no state of its own (D-27, matching every other D-7
+// adapter), so every fact about WHO signed WHEN lives here, not in the
+// adapter.
+//
+// ONE ENVELOPE PER LEASE (leaseId is unique). A lease that needs to be
+// resent starts over from a fresh generate-and-send, which is a deliberate
+// simplification for this build - see the item's own PROGRESS entry for
+// what a real amend-and-resend flow would need instead.
+// ---------------------------------------------------------------------------
+
+enum LeaseEnvelopeStatus {
+  /// Generated, not yet sent to the provider - the state a failed
+  /// createEnvelope() call leaves it in, safe to retry from.
+  DRAFT
+  SENT
+  PARTIALLY_SIGNED
+  COMPLETED
+  VOIDED
+}
+
+enum LeaseSignerStatus {
+  PENDING
+  SENT
+  VIEWED
+  SIGNED
+  DECLINED
+}
+
+/// Only the two roles LEASE-06 names ("signer order incl. guarantors") -
+/// not OWNER/STAFF, because nothing in this build asks for a PM
+/// countersignature; the lease already names the owner as a party in its
+/// own printed text.
+enum LeaseSignerRole {
+  TENANT
+  GUARANTOR
+}
+
+model LeaseEnvelope {
+  id                 String              @id @default(cuid())
+  /// NOT unique. A voided envelope is kept as evidence (the same
+  /// "retire, don't delete" rule every append-only-adjacent row in this
+  /// product follows) rather than replaced in place, so a lease can
+  /// accumulate more than one row over its life - at most one of them
+  /// ever not VOIDED, enforced in
+  /// apps/web/lib/leases/esign-staff-actions.ts rather than a DB
+  /// constraint, the same app-layer call most business invariants here
+  /// make (the DB enforces only the four append-only tables, by trigger).
+  leaseId            String
+  templateId         String
+  status             LeaseEnvelopeStatus @default(DRAFT)
+  /// Which addenda (packages/core/leases/addenda.ts's closed list) were
+  /// included, decided once at generation time by `applicableAddenda()` and
+  /// recorded here rather than recomputed later - a property's pool gets
+  /// filled in between generation and signing must not change what the
+  /// tenant already signed.
+  addendumKeys       String[]
+  /// The provider's own envelope id (D-27: never invented by us). Null
+  /// until createEnvelope() succeeds.
+  providerId         String?             @unique
+  /// The unsigned generated PDF, archived the moment it is produced -
+  /// R-062's "the PDF is the archived artifact, not a re-render" rule
+  /// applied here.
+  draftDocumentId    String?             @unique
+  /// The final, all-signatures-collected PDF plus its completion
+  /// certificate page. Null until every signer has signed.
+  executedDocumentId String?             @unique
+  sentAt             DateTime?
+  completedAt        DateTime?
+  voidedAt           DateTime?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  lease            Lease            @relation(fields: [leaseId], references: [id], onDelete: Restrict)
+  template         DocumentTemplate @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  draftDocument    Document?        @relation("LeaseEnvelopeDraftDocument", fields: [draftDocumentId], references: [id], onDelete: Restrict)
+  executedDocument Document?        @relation("LeaseEnvelopeExecutedDocument", fields: [executedDocumentId], references: [id], onDelete: Restrict)
+  signers          LeaseSigner[]
+
+  @@index([leaseId])
+  @@index([status])
+}
+
+model LeaseSigner {
+  id               String            @id @default(cuid())
+  envelopeId       String
+  /// Signing order (LEASE-06's own ask). Not enforced as a hard sequential
+  /// gate today - every signer's link is live from the moment the envelope
+  /// is sent - it is recorded and displayed so staff can see who is
+  /// expected to go first, matching how a real embedded provider's
+  /// "signer 1, signer 2" ordering is informational for parallel-capable
+  /// envelopes.
+  order            Int
+  role             LeaseSignerRole
+  name             String
+  email            String?
+  /// Frozen at generation time, same reasoning as `name`/`email` - a
+  /// tenant's phone changing mid-signature must not silently redirect where
+  /// the signing link already sent goes.
+  phone            String?
+  tenantId         String?
+  guarantorId      String?
+  status           LeaseSignerStatus @default(PENDING)
+  /// The provider's own signer id within the envelope (D-27).
+  providerSignerId String?
+  viewedAt         DateTime?
+  signedAt         DateTime?
+  /// The typed legal name at signing - part of the completion certificate,
+  /// distinct from `name` above (the name staff entered when the envelope
+  /// was built), because what the signer actually typed is the fact a
+  /// dispute over identity turns on.
+  signedName       String?
+  signedIp         String?
+  declinedAt       DateTime?
+  declineReason    String?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  envelope  LeaseEnvelope @relation(fields: [envelopeId], references: [id], onDelete: Cascade)
+  tenant    Tenant?       @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  guarantor Guarantor?    @relation(fields: [guarantorId], references: [id], onDelete: Restrict)
+
+  @@index([envelopeId, order])
 }
 
 // ---------------------------------------------------------------------------
@@ -1747,6 +1895,27 @@ enum AuthTokenPurpose {
   /// shorter than seven, while a real household needs more than three days
   /// to coordinate finding pay stubs and a photo ID for every adult.
   APPLICATION_LINK
+  /// R-063: one signer's own view of a lease sent for e-signature -
+  /// review the document, then sign it. Scoped to a single `LeaseSigner.id`,
+  /// never to the `LeaseEnvelope` as a whole - the same "the person's own
+  /// row, not the group" call APPLICATION_LINK already made for a household.
+  ///
+  /// MULTI-USE until it expires, like VENDOR_WORK_ORDER/TENANT_VERIFY/
+  /// TENANT_PAY_LINK/APPLICATION_LINK: a signer who opens the document,
+  /// reads it, and comes back a day later to actually sign must not find
+  /// the link dead. The single ANSWER - signing - is gated by
+  /// `LeaseSigner.signedAt`, the same business-state gate
+  /// `Applicant.completedAt` already is for APPLICATION_LINK, not by
+  /// burning the token.
+  ///
+  /// SEVEN DAYS, matching TENANT_VERIFY rather than APPLICATION_LINK's
+  /// five or TENANT_PAY_LINK's three: opening this link moves no money by
+  /// itself (the deposit charge and rent subscription only fire once EVERY
+  /// signer on the envelope has signed, not this one alone), so the
+  /// shorter, money-driven windows do not apply - a signer reading a lease
+  /// with a family member or an attorney needs the same week TENANT_VERIFY
+  /// gives a tenant confirming a repair.
+  LEASE_SIGN
 }
 
 model StaffCredential {
@@ -3202,6 +3371,18 @@ model DocumentTemplate {
   /// same posture `Document.type` and `Notice.type` already take, so a new
   /// class needs no migration here.
   documentType     String
+  /// R-063: per-state template selection (LEASE-06's own ask). Null means
+  /// "the default, any state" - the fallback a portfolio's first state uses
+  /// before a second one needs its own wording. Meaningless for a
+  /// documentType a PM sends by hand (LETTER, ESTOPPEL_CERTIFICATE), which
+  /// is why it stays optional rather than required.
+  state            String?
+  /// R-063: set only when documentType is ADDENDUM - which addenda trigger
+  /// (LEAD_PAINT, MOLD, BEDBUG, HOA_RULES, POOL, WELL_SEPTIC;
+  /// packages/core/leases/addenda.ts owns the closed list) this template is
+  /// the text for. Null for a LEASE base template or any non-lease
+  /// documentType.
+  addendumKey      String?
   body             String
   /// Retired rather than deleted - a document generated FROM this template
   /// is evidence, and the template it came from is part of explaining it,
@@ -3212,13 +3393,15 @@ model DocumentTemplate {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
-  createdBy StaffUser  @relation("DocumentTemplateCreatedBy", fields: [createdByStaffId], references: [id])
+  createdBy      StaffUser       @relation("DocumentTemplateCreatedBy", fields: [createdByStaffId], references: [id])
   /// Restrict, not the SetNull Prisma defaults to for an optional relation -
   /// who last edited a template is part of explaining a document generated
   /// from it, `MessageTemplate.updatedBy`'s own reasoning restated.
-  updatedBy StaffUser? @relation("DocumentTemplateUpdatedBy", fields: [updatedByStaffId], references: [id], onDelete: Restrict)
+  updatedBy      StaffUser?      @relation("DocumentTemplateUpdatedBy", fields: [updatedByStaffId], references: [id], onDelete: Restrict)
+  leaseEnvelopes LeaseEnvelope[]
 
   @@index([active, name])
+  @@index([documentType, state])
 }
 
 model Document {
@@ -3255,19 +3438,21 @@ model Document {
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
-  property             Property?        @relation(fields: [propertyId], references: [id])
-  unit                 Unit?            @relation(fields: [unitId], references: [id])
-  lease                Lease?           @relation(fields: [leaseId], references: [id])
-  tenant               Tenant?          @relation(fields: [tenantId], references: [id])
-  vendor               Vendor?          @relation(fields: [vendorId], references: [id])
-  ticket               Ticket?          @relation(fields: [ticketId], references: [id])
-  workOrder            WorkOrder?       @relation(fields: [workOrderId], references: [id])
-  applicant            Applicant?       @relation(fields: [applicantId], references: [id])
-  uploadedBy           StaffUser?       @relation("DocumentUploadedBy", fields: [uploadedByStaffId], references: [id])
-  noticesAsDocument    Notice[]         @relation("NoticeDocument")
-  noticesAsProof       Notice[]         @relation("NoticeProofDocument")
-  noticeDeliveryProofs NoticeDelivery[] @relation("NoticeDeliveryProof")
-  utilityBills         UtilityBill[]    @relation("UtilityBillDocument")
+  property                Property?        @relation(fields: [propertyId], references: [id])
+  unit                    Unit?            @relation(fields: [unitId], references: [id])
+  lease                   Lease?           @relation(fields: [leaseId], references: [id])
+  tenant                  Tenant?          @relation(fields: [tenantId], references: [id])
+  vendor                  Vendor?          @relation(fields: [vendorId], references: [id])
+  ticket                  Ticket?          @relation(fields: [ticketId], references: [id])
+  workOrder               WorkOrder?       @relation(fields: [workOrderId], references: [id])
+  applicant               Applicant?       @relation(fields: [applicantId], references: [id])
+  uploadedBy              StaffUser?       @relation("DocumentUploadedBy", fields: [uploadedByStaffId], references: [id])
+  noticesAsDocument       Notice[]         @relation("NoticeDocument")
+  noticesAsProof          Notice[]         @relation("NoticeProofDocument")
+  noticeDeliveryProofs    NoticeDelivery[] @relation("NoticeDeliveryProof")
+  utilityBills            UtilityBill[]    @relation("UtilityBillDocument")
+  leaseEnvelopeAsDraft    LeaseEnvelope?   @relation("LeaseEnvelopeDraftDocument")
+  leaseEnvelopeAsExecuted LeaseEnvelope?   @relation("LeaseEnvelopeExecutedDocument")
 
   @@index([propertyId, type])
   @@index([unitId])

@@ -70,6 +70,13 @@ export const PERMISSIONS = [
   /// actions ROLE-03 lists, ahead of this permission existing, and this is
   /// where that forward reference gets a permission to point at.
   'screening.decide',
+  /// Generating a lease document and sending it for e-signature (LEASE-06,
+  /// R-063) - its own permission rather than folded into `lease.write` for
+  /// the same reason `screening.decide` is: this is the action that makes a
+  /// legally binding document and, once every signer completes, moves the
+  /// lease live and creates the deposit charge and rent subscription. Also
+  /// covers voiding a sent-but-unsigned envelope.
+  'lease.execute',
 ] as const
 
 export type Permission = (typeof PERMISSIONS)[number]
@@ -104,6 +111,7 @@ export const PRIVILEGED_PERMISSIONS: ReadonlySet<Permission> = new Set([
   'document.delete',
   'accesscode.reveal',
   'screening.decide',
+  'lease.execute',
 ])
 
 export function requiresMfa(permission: Permission): boolean {
@@ -168,6 +176,7 @@ export const ROLE_DEFINITIONS: Record<
       'lease.read',
       'lease.write',
       'screening.decide',
+      'lease.execute',
       'tenant.read',
       'tenant.write',
       'ledger.read',

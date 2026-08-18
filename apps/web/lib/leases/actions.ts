@@ -23,7 +23,7 @@ import { syncLease } from '@/lib/billing/lifecycle.ts'
 import { provisionLeaseBilling } from '@/lib/billing/provision.ts'
 import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
 import { rulesFor } from '@/lib/jurisdiction/queries.ts'
-import { emitEvent } from '@/lib/jobs/outbox.ts'
+import { activateLeaseSideEffects } from './activate.ts'
 import { raiseIntakeTasks } from './intake.ts'
 import { retaliationCheckFor } from './retaliation-check.ts'
 
@@ -448,6 +448,24 @@ export async function changeLeaseStatus(
   )
   if (!decision.allowed) return { error: decision.message }
 
+  // A lease sent for e-signature (R-063) must not be short-circuited to
+  // ACTIVE by the generic status button while a signer could still be
+  // partway through - that is what `esign-actions.ts`'s own completion path
+  // is for, and it does not run here. Void the envelope first
+  // (`voidEnvelope`, /leases/[id]) if the intent is really to skip signing.
+  if (lease.status === 'PENDING_SIGNATURE' && to === 'ACTIVE') {
+    const liveEnvelope = await prisma.leaseEnvelope.findFirst({
+      where: { leaseId, status: { in: ['SENT', 'PARTIALLY_SIGNED'] } },
+      select: { id: true },
+    })
+    if (liveEnvelope) {
+      return {
+        error:
+          'This lease is out for signature. Void the envelope before activating it any other way.',
+      }
+    }
+  }
+
   const now = new Date()
   const wasInForce = leaseIsInForce(lease.status)
   const willBeInForce = leaseIsInForce(to)
@@ -469,25 +487,11 @@ export async function changeLeaseStatus(
     })
 
     if (!wasInForce && willBeInForce) {
-      // Going live occupies the unit.
-      await tx.unit.updateMany({
-        where: { id: lease.unitId },
-        data: { status: 'OCCUPIED' },
-      })
-      // R-057 (LEASE-02, D-7): "≤24h delist on lease-up." A lease going
-      // live IS lease-up, whichever status it arrived from - a
-      // PENDING_SIGNATURE lease activating and an inherited lease recorded
-      // straight into ACTIVE both mean the unit is no longer available,
-      // and both must pull any published listing down. The consumer reads
-      // unitId off the payload rather than re-deriving it from the lease,
-      // since the lease itself is what this event is already about.
-      await emitEvent(tx, {
-        type: 'lease.activated',
-        aggregateType: 'Lease',
-        aggregateId: leaseId,
-        propertyId: lease.propertyId,
-        payload: { unitId: lease.unitId },
-      })
+      // Going live occupies the unit and delists any published listing
+      // (R-057, LEASE-02, D-7: "≤24h delist on lease-up") - shared with the
+      // esign completion path in esign-actions.ts, see activate.ts's own
+      // header for why it is one function rather than two copies.
+      await activateLeaseSideEffects(tx, lease)
     }
     if (wasInForce && !willBeInForce) {
       // Coming off. Guarded on OCCUPIED so a unit somebody has already

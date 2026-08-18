@@ -1198,6 +1198,46 @@ export const applicationInviteTemplate: NotificationTemplate<ApplicationInviteCo
   },
 }
 
+/// Context for `lease.sign_invite` (LEASE-06, R-063) - one signer's own
+/// review-and-sign link.
+export interface LeaseSignInviteContext {
+  name: string
+  addressLine1: string
+  /// The signer's own LEASE_SIGN link (multi-use until it expires).
+  url: string
+}
+
+/**
+ * "Your lease is ready to sign" (LEASE-06, R-063).
+ *
+ * ONE LINK PER SIGNER, not a shared one - each recipient's `url` is scoped
+ * to their own `LeaseSigner.id` (see the schema's own comment on
+ * `AuthTokenPurpose.LEASE_SIGN`), so a co-tenant or guarantor sent this
+ * message can only sign their own line.
+ */
+export const leaseSignInviteTemplate: NotificationTemplate<LeaseSignInviteContext> = {
+  key: 'lease.sign_invite',
+  category: 'lease_signature',
+  channels: ['SMS', 'EMAIL'],
+  render: (context, channel) => {
+    if (channel === 'SMS') {
+      return {
+        body: [`Your lease for ${context.addressLine1} is ready to sign:`, context.url].join('\n'),
+      }
+    }
+    return {
+      subject: `Sign your lease — ${context.addressLine1}`,
+      body: [
+        `Hi ${context.name},`,
+        '',
+        `Your lease for ${context.addressLine1} is ready for your signature. Review it and sign here:`,
+        '',
+        context.url,
+      ].join('\n'),
+    }
+  },
+}
+
 /// Context for `application.coapplicant_invite` (LEASE-03, R-059) - anyone
 /// the lead applicant adds to the household after being invited.
 export interface CoApplicantInviteContext {
@@ -1338,6 +1378,8 @@ export const TEMPLATES: Readonly<Record<string, NotificationTemplate<never>>> = 
     applicationFeePaidTemplate as unknown as NotificationTemplate<never>,
   [applicationAdverseActionTemplate.key]:
     applicationAdverseActionTemplate as unknown as NotificationTemplate<never>,
+  [leaseSignInviteTemplate.key]:
+    leaseSignInviteTemplate as unknown as NotificationTemplate<never>,
 }
 
 export class UnknownTemplateError extends Error {

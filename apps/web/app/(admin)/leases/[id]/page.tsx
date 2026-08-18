@@ -13,6 +13,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { BillingPanel } from '@/components/leases/billing-panel.tsx'
 import { PaymentHoldPanel } from '@/components/leases/payment-hold-panel.tsx'
+import { EsignPanel } from '@/components/leases/esign-panel.tsx'
 import { IntakePanel } from '@/components/leases/intake-panel.tsx'
 import { LedgerPanel } from '@/components/leases/ledger-panel.tsx'
 import { ExportStatementForm } from '@/components/ledger/export-statement-form.tsx'
@@ -33,6 +34,7 @@ import {
   resolveIntakeItem,
   updateLeaseTerms,
 } from '@/lib/leases/actions.ts'
+import { generateAndSendLease, voidEnvelope } from '@/lib/leases/esign-staff-actions.ts'
 import { resyncLease, setPaymentHold } from '@/lib/billing/actions.ts'
 import { billingIsLive, billingProviderName } from '@/lib/billing/provider.ts'
 import { leaseBillingState } from '@/lib/billing/provision.ts'
@@ -55,7 +57,11 @@ export const metadata = { title: 'Lease — Rental Operations' }
 /// with the real facts, which is why an incomplete lease shows no "make it
 /// active" button rather than one that refuses when pressed.
 const OFFER_LABELS: Record<string, string> = {
-  PENDING_SIGNATURE: 'Send for signature',
+  // NOT PENDING_SIGNATURE - that transition now only happens through
+  // "Generate & send for e-signature" below, which actually produces a
+  // document and signer links. A bare status flip with nothing behind it
+  // would leave the lease PENDING_SIGNATURE with no envelope for anyone to
+  // sign (R-063).
   ACTIVE: 'Make this lease active',
   MONTH_TO_MONTH: 'Roll over to month-to-month',
   ENDED: 'Record that the tenancy ended',
@@ -118,6 +124,15 @@ export default async function LeaseDetailPage({
   // so they run on `ledger.adjust` — the same privileged permission a ledger
   // adjustment needs, with a proved second factor (R-047).
   const holdDecision = await actorDecision('ledger.adjust', propertyResource(lease.property))
+  // R-063: generating a lease and sending it for e-signature makes a
+  // legally binding document and, on completion, moves money - the same bar
+  // `screening.decide` sets for its own permission.
+  const execDecision = await actorDecision('lease.execute', propertyResource(lease.property))
+
+  const currentEnvelope = lease.envelopes[0] ?? null
+  const envelopeIsLive = currentEnvelope
+    ? currentEnvelope.status === 'SENT' || currentEnvelope.status === 'PARTIALLY_SIGNED'
+    : false
 
   const facts = {
     status: lease.status,
@@ -127,10 +142,13 @@ export default async function LeaseDetailPage({
     endsOn: lease.endsOn,
     isMonthToMonth: lease.isMonthToMonth,
   }
-  const offers = (
-    ['PENDING_SIGNATURE', 'ACTIVE', 'MONTH_TO_MONTH', 'ENDED', 'TERMINATED'] as const
-  )
+  const offers = (['ACTIVE', 'MONTH_TO_MONTH', 'ENDED', 'TERMINATED'] as const)
     .filter((to) => {
+      // A lease out for signature only activates through the esign
+      // completion path (every signer signed) - the generic button is
+      // hidden while that is in flight, matching the refusal
+      // `changeLeaseStatus` itself now gives if this filter is ever wrong.
+      if (to === 'ACTIVE' && lease.status === 'PENDING_SIGNATURE' && envelopeIsLive) return false
       // TERMINATED always needs a reason, which the form collects - so it is
       // asked WITH one, or it would never be offered.
       const decision = leaseTransition(facts, to, to === 'TERMINATED' ? 'x' : undefined)
@@ -453,6 +471,47 @@ export default async function LeaseDetailPage({
         addTenant={addLeaseTenant.bind(null, lease.id)}
         removeTenant={removeLeaseTenant.bind(null, lease.id)}
         addGuarantor={addGuarantor.bind(null, lease.id)}
+      />
+
+      <EsignPanel
+        canExecute={execDecision.allowed}
+        mfaRequired={!execDecision.allowed && execDecision.reason === 'mfa_required'}
+        offerGenerate={lease.status === 'DRAFT'}
+        envelope={
+          currentEnvelope
+            ? {
+                status: currentEnvelope.status,
+                addendumKeys: currentEnvelope.addendumKeys,
+                draftDocumentId: currentEnvelope.draftDocumentId,
+                executedDocumentId: currentEnvelope.executedDocumentId,
+                sentAt: currentEnvelope.sentAt
+                  ? businessDate(currentEnvelope.sentAt, lease.property.timezone)
+                  : null,
+                completedAt: currentEnvelope.completedAt
+                  ? businessDate(currentEnvelope.completedAt, lease.property.timezone)
+                  : null,
+                voidedAt: currentEnvelope.voidedAt
+                  ? businessDate(currentEnvelope.voidedAt, lease.property.timezone)
+                  : null,
+                signers: currentEnvelope.signers.map((signer) => ({
+                  id: signer.id,
+                  order: signer.order,
+                  role: signer.role,
+                  name: signer.name,
+                  status: signer.status,
+                  viewedAt: signer.viewedAt
+                    ? businessDate(signer.viewedAt, lease.property.timezone)
+                    : null,
+                  signedAt: signer.signedAt
+                    ? businessDate(signer.signedAt, lease.property.timezone)
+                    : null,
+                  signedName: signer.signedName,
+                })),
+              }
+            : null
+        }
+        generateAction={generateAndSendLease.bind(null, lease.id)}
+        voidAction={voidEnvelope.bind(null, lease.id)}
       />
 
       {canWrite && (

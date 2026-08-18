@@ -192,6 +192,10 @@ describe('can — MFA gate (ROLE-05)', () => {
       'accesscode.reveal',
       'document.delete',
       'fee.waive',
+      // R-063. Generating a lease and sending it for e-signature makes a
+      // legally binding document, and completion moves the lease live and
+      // creates the deposit charge and rent subscription.
+      'lease.execute',
       'ledger.adjust',
       // R-060. A screening accept/decline is a fair-housing-sensitive
       // judgement, the same class of harm a stolen session moving money is.

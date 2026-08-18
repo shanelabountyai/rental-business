@@ -98,6 +98,13 @@ export const TOKEN_TTL_MINUTES = {
   /// more than three days to coordinate pay stubs and photo IDs for
   /// several adults.
   APPLICATION_LINK: 60 * 24 * 5,
+  /// R-063: one signer's own review-and-sign link for a lease sent for
+  /// e-signature. SEVEN DAYS, matching TENANT_VERIFY rather than
+  /// APPLICATION_LINK's five or TENANT_PAY_LINK's three - see the schema's
+  /// own comment on `AuthTokenPurpose.LEASE_SIGN` for why: opening this link
+  /// moves no money by itself, since the deposit charge and rent
+  /// subscription only fire once every signer on the envelope has signed.
+  LEASE_SIGN: 60 * 24 * 7,
 } as const
 
 export type TokenPurpose = keyof typeof TOKEN_TTL_MINUTES
