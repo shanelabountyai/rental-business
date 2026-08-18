@@ -1,9 +1,11 @@
 'use server'
 
+import { adverseActionNoticeText, adverseActionOwed, evaluateCriteria } from '@rental/core/screening'
 import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { audit } from '@/lib/audit/index.ts'
 import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
+import { dispatchPendingNotifications, notify } from '@/lib/notifications/send.ts'
 import { outOfOrderApplicationIds } from './order.ts'
 
 // STAFF writes for ScreeningReport (LEASE-04, R-060) - separate from any
@@ -41,6 +43,15 @@ function str(formData: FormData, name: string): string {
  * for the SAME listing that has no decision yet requires `deviationReason`
  * - recorded as 'application_order.deviated', which is REASON_REQUIRED and
  * throws with no reason (packages/core/audit/events.ts).
+ *
+ * "Generated on any decline or approve-with-conditions" (R-061, LEASE-05):
+ * a DECLINED or APPROVED_WITH_CONDITIONS decision writes an FCRA
+ * adverse-action Notice in the SAME transaction as the decision, and - when
+ * the applicant has an email on file - serves it immediately (EMAIL) the
+ * same way an entry notice auto-serves to the portal (scheduling.ts's own
+ * precedent). No email on file means no auto-serve; the compliance block
+ * below then requires a staff member to record service some other way, or
+ * override it with a reason.
  */
 export async function recordScreeningDecision(
   _previous: DecisionFormState,
@@ -90,7 +101,18 @@ export async function recordScreeningDecision(
     }
   }
 
-  await prisma.$transaction(async (tx) => {
+  const owesAdverseAction = decision === 'DECLINED' || decision === 'APPROVED_WITH_CONDITIONS'
+  const addressOfRecord = [
+    applicant.currentAddressLine1,
+    [applicant.currentCity, applicant.currentState, applicant.currentPostalCode]
+      .filter(Boolean)
+      .join(', '),
+  ]
+    .filter(Boolean)
+    .join('\n')
+  const canAutoServe = owesAdverseAction && Boolean(applicant.email) && Boolean(addressOfRecord)
+
+  const { noticeId, autoServed, bodyText } = await prisma.$transaction(async (tx) => {
     await tx.screeningReport.update({
       where: { applicantId },
       data: {
@@ -123,17 +145,114 @@ export async function recordScreeningDecision(
         tx,
       )
     }
+
+    if (!owesAdverseAction) return { noticeId: null, autoServed: false, bodyText: null }
+
+    const criteria = await tx.screeningCriteria.findUniqueOrThrow({
+      where: { version: applicant.screeningReport!.criteriaVersion },
+    })
+    const factors = evaluateCriteria(criteria, {
+      monthlyIncomeCents: applicant.monthlyIncomeCents,
+      rentCents: application.listing.rentCents,
+      creditScore: applicant.screeningReport!.creditScore,
+      evictionRecordFound: applicant.screeningReport!.evictionRecordFound,
+      criminalRecordFound: applicant.screeningReport!.criminalRecordFound,
+    })
+      .filter((c) => c.result === 'FAILS')
+      .map((c) => c.detail)
+
+    const bodyText = adverseActionNoticeText({
+      applicantName: `${applicant.firstName} ${applicant.lastName}`,
+      addressLine1: application.property.addressLine1,
+      decision: decision as 'APPROVED_WITH_CONDITIONS' | 'DECLINED',
+      agencyContact: applicant.screeningReport!.agencyContact ?? '(agency not on file)',
+      factors,
+      decisionNotes: notes || null,
+    })
+
+    const now = new Date()
+    const notice = await tx.notice.create({
+      data: {
+        propertyId: application.propertyId,
+        applicantId,
+        type: 'ADVERSE_ACTION',
+        addressOfRecord: addressOfRecord || '(no address on file)',
+        bodyText,
+        ...(canAutoServe
+          ? { serviceMethod: 'EMAIL', servedAt: now, servedByStaffId: actor.id }
+          : {}),
+      },
+    })
+
+    if (canAutoServe) {
+      await tx.noticeDelivery.create({
+        data: { noticeId: notice.id, method: 'EMAIL', servedAt: now, servedByStaffId: actor.id },
+      })
+      await audit(
+        {
+          action: 'notice.served',
+          entityType: 'Notice',
+          entityId: notice.id,
+          propertyId: application.propertyId,
+          after: { type: 'ADVERSE_ACTION', serviceMethod: 'EMAIL' },
+        },
+        tx,
+      )
+    }
+
+    await tx.screeningReport.update({
+      where: { applicantId },
+      data: { adverseActionNoticeId: notice.id },
+    })
+
+    return { noticeId: notice.id, autoServed: canAutoServe, bodyText }
   })
 
-  // Every applicant in the household now decided and none declined -
-  // advance the pipeline to APPROVED. A decline stays at SCREENED; there is
-  // no separate ProspectStatus for it (that enum's own comment already
-  // notes only the first two transitions are automated - see
-  // order.ts's identical guard for why this never overwrites a later stage
-  // staff already set by hand).
+  // The email ITSELF, outside the transaction (R-016's rule, scheduling.ts's
+  // own precedent: notify decides and records, dispatch sends, neither
+  // belongs inside a transaction holding row locks).
+  if (autoServed && noticeId) {
+    try {
+      const outcomes = await notify({
+        category: 'prospect_application',
+        templateKey: 'application.adverse_action',
+        recipient: { type: 'APPLICANT', id: applicant.id, email: applicant.email, phone: applicant.phone },
+        context: {
+          firstName: applicant.firstName,
+          addressLine1: application.property.addressLine1,
+          noticeText: bodyText!,
+        },
+        propertyId: application.propertyId,
+        idempotencyKey: `adverse-action:${noticeId}`,
+      })
+      await dispatchPendingNotifications(new Date(), 50, {
+        deliveryIds: outcomes.map((o) => o.deliveryId).filter((id): id is string => id != null),
+      })
+    } catch (error) {
+      console.error(`[screening] failed to email adverse action notice ${noticeId}`, error)
+    }
+  }
+
+  // Every applicant in the household now decided, none declined, and no
+  // adverse action still owed - advance the pipeline to APPROVED. A decline
+  // stays at SCREENED; there is no separate ProspectStatus for it (that
+  // enum's own comment already notes only the first two transitions are
+  // automated - see order.ts's identical guard for why this never
+  // overwrites a later stage staff already set by hand). An
+  // APPROVED_WITH_CONDITIONS applicant with an unsent, un-overridden notice
+  // holds the WHOLE household at SCREENED until that is resolved - this is
+  // "blocks closing the application" (LEASE-05).
   const allApplicants = await prisma.applicant.findMany({
     where: { applicationId: application.id },
-    include: { screeningReport: { select: { decision: true } } },
+    include: {
+      screeningReport: {
+        select: {
+          decision: true,
+          adverseActionOverriddenAt: true,
+          adverseActionNotice: { select: { servedAt: true } },
+        },
+      },
+    },
   })
   const allDecided = allApplicants.every((a) => a.screeningReport?.decision != null)
   const allApproved = allApplicants.every(
@@ -141,7 +260,15 @@ export async function recordScreeningDecision(
       a.screeningReport?.decision === 'APPROVED' ||
       a.screeningReport?.decision === 'APPROVED_WITH_CONDITIONS',
   )
-  if (allDecided && allApproved) {
+  const noneOwed = allApplicants.every(
+    (a) =>
+      !adverseActionOwed({
+        decision: a.screeningReport?.decision ?? null,
+        noticeSentAt: a.screeningReport?.adverseActionNotice?.servedAt ?? null,
+        overriddenAt: a.screeningReport?.adverseActionOverriddenAt ?? null,
+      }),
+  )
+  if (allDecided && allApproved && noneOwed) {
     await prisma.prospect.updateMany({
       where: { id: application.prospectId, status: 'SCREENED' },
       data: { status: 'APPROVED' },

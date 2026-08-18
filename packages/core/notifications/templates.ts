@@ -1266,6 +1266,31 @@ export const applicationFeePaidTemplate: NotificationTemplate<ApplicationFeePaid
   },
 }
 
+/// Context for `application.adverse_action` (LEASE-05, R-061) - the FCRA
+/// notice, sent by EMAIL the moment a DECLINED or APPROVED_WITH_CONDITIONS
+/// decision is recorded (never SMS - CRA name/address/phone and a rights
+/// disclosure do not fit a text message, and channelsFor('prospect_application')
+/// already restricts this category to EMAIL/SMS, not PORTAL, since an
+/// applicant has no account).
+export interface AdverseActionEmailContext {
+  firstName: string
+  addressLine1: string
+  /// The full notice body (adverseActionNoticeText()) - the actual
+  /// FCRA-required content, reproduced verbatim rather than summarized or
+  /// linked, since an applicant has no portal to click through to.
+  noticeText: string
+}
+
+export const applicationAdverseActionTemplate: NotificationTemplate<AdverseActionEmailContext> = {
+  key: 'application.adverse_action',
+  category: 'prospect_application',
+  channels: ['EMAIL'],
+  render: (context) => ({
+    subject: `Notice of adverse action - ${context.addressLine1}`,
+    body: [`Hi ${context.firstName},`, '', context.noticeText].join('\n'),
+  }),
+}
+
 export const TEMPLATES: Readonly<Record<string, NotificationTemplate<never>>> = {
   [vendorDeclinedTemplate.key]:
     vendorDeclinedTemplate as unknown as NotificationTemplate<never>,
@@ -1311,6 +1336,8 @@ export const TEMPLATES: Readonly<Record<string, NotificationTemplate<never>>> = 
     coApplicantInviteTemplate as unknown as NotificationTemplate<never>,
   [applicationFeePaidTemplate.key]:
     applicationFeePaidTemplate as unknown as NotificationTemplate<never>,
+  [applicationAdverseActionTemplate.key]:
+    applicationAdverseActionTemplate as unknown as NotificationTemplate<never>,
 }
 
 export class UnknownTemplateError extends Error {

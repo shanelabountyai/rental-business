@@ -19,6 +19,9 @@ const noticeInclude = {
       },
     },
   },
+  /// The "or" half of Notice's either/or (R-061) - an FCRA adverse-action
+  /// notice has no lease, only the applicant it was addressed to.
+  applicant: { select: { id: true, firstName: true, lastName: true } },
   document: { select: { id: true, fileName: true, sizeBytes: true } },
   deliveries: {
     orderBy: { servedAt: 'asc' },

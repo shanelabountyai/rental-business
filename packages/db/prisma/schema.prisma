@@ -648,17 +648,17 @@ model Unit {
 /// republished the way a lease or a property is, not evidence of a single
 /// past event the way a Message or a Notice is.
 model Listing {
-  id          String        @id @default(cuid())
-  propertyId  String
-  unitId      String
-  status      ListingStatus @default(DRAFT)
-  headline    String?
-  description String?
-  rentCents   Int
+  id                  String        @id @default(cuid())
+  propertyId          String
+  unitId              String
+  status              ListingStatus @default(DRAFT)
+  headline            String?
+  description         String?
+  rentCents           Int
   /// The ASKING deposit stated in the listing - independent of `Deposit`,
   /// which is the per-lease liability record that exists only once a
   /// tenancy is signed. Null means "not stated", not zero.
-  depositCents Int?
+  depositCents        Int?
   /// The ASKING application fee (R-059) - independent of
   /// `JurisdictionRule.applicationFeeCapCents`, the statutory ceiling.
   /// Null means "no fee configured", not zero; charging clamps whatever is
@@ -666,14 +666,14 @@ model Listing {
   applicationFeeCents Int?
   /// Property-local calendar day (D-3), matching Lease.startsOn's own
   /// @db.Date - a move-in date has no time of day.
-  availableOn DateTime      @db.Date
-  requirements String?
-  petsAllowed Boolean       @default(false)
-  petPolicyText String?
-  publishedAt DateTime?
-  createdByStaffId String?
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  availableOn         DateTime      @db.Date
+  requirements        String?
+  petsAllowed         Boolean       @default(false)
+  petPolicyText       String?
+  publishedAt         DateTime?
+  createdByStaffId    String?
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
 
   property     Property             @relation(fields: [propertyId], references: [id])
   unit         Unit                 @relation(fields: [unitId], references: [id])
@@ -807,9 +807,9 @@ model Application {
 /// `Deposit.depositCents` already gives for freezing a lease's own number
 /// at signing rather than tracking the listing forever.
 model Applicant {
-  id            String   @id @default(cuid())
+  id            String    @id @default(cuid())
   applicationId String
-  isLead        Boolean  @default(false)
+  isLead        Boolean   @default(false)
   firstName     String
   lastName      String
   email         String?
@@ -824,10 +824,10 @@ model Applicant {
   employerName           String?
   monthlyIncomeCents     Int?
 
-  feeCents           Int?
-  stripeCustomerId   String?
+  feeCents              Int?
+  stripeCustomerId      String?
   stripePaymentIntentId String?
-  feePaidAt          DateTime?
+  feePaidAt             DateTime?
 
   /// The form itself validated clean and was submitted - set synchronously
   /// by the submit action. Separate from `completedAt` because a fee clears
@@ -843,7 +843,7 @@ model Applicant {
   /// either half is outstanding - "progress is saved" (the PRD's
   /// save-and-resume line) means every write before this happens, not just
   /// the last one.
-  completedAt DateTime?
+  completedAt     DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -851,6 +851,9 @@ model Applicant {
   application     Application      @relation(fields: [applicationId], references: [id])
   documents       Document[]
   screeningReport ScreeningReport?
+  /// FCRA adverse-action notices (R-061) - the "either" half of Notice's
+  /// either/or, the "or" being `leaseId`.
+  notices         Notice[]
 
   @@index([applicationId])
   @@index([stripeCustomerId])
@@ -893,9 +896,9 @@ model ScreeningCriteria {
   /// weighed by a person, not a threshold.
   criminalLookbackMonths     Int
 
-  citation  String?
+  citation   String?
   reviewedBy String?
-  notes     String?
+  notes      String?
 
   effectiveFrom    DateTime  @default(now())
   effectiveTo      DateTime?
@@ -942,9 +945,9 @@ model ScreeningReport {
   status      String
   faultCode   String?
 
-  creditScore          Int?
-  evictionRecordFound  Boolean?
-  criminalRecordFound  Boolean?
+  creditScore         Int?
+  evictionRecordFound Boolean?
+  criminalRecordFound Boolean?
 
   criteriaVersion Int
 
@@ -961,11 +964,38 @@ model ScreeningReport {
   decidedAt        DateTime?
   decidedByStaffId String?
 
+  /// The reporting agency's own identity, as the (simulated) adapter
+  /// returned it at order time - rendered, multi-line text, not structured
+  /// columns, since nothing here ever queries by agency name or address;
+  /// it exists only to be reproduced verbatim in the FCRA adverse-action
+  /// notice (R-061), which is required to name the CRA that supplied the
+  /// report. Frozen at order time for the same reason `criteriaVersion` is:
+  /// a real adapter swap later must not rewrite what an already-screened
+  /// applicant was told.
+  agencyContact String?
+
+  /// The FCRA adverse-action notice generated the moment `decision` is
+  /// written as anything but a plain APPROVED (R-061) - null for an
+  /// APPROVED decision, since none is owed. Set inside the same
+  /// transaction that writes `decision`.
+  adverseActionNoticeId            String?   @unique
+  /// The compliance block's escape hatch: "blocks closing the application
+  /// until sent or overridden with a logged reason" (LEASE-05). Null until
+  /// a staff member explicitly overrides the block - see
+  /// 'adverse_action.overridden' in packages/core/audit/events.ts, which is
+  /// REASON_REQUIRED, the same enforcement `entry_notice.overridden`
+  /// already gives its own override.
+  adverseActionOverrideReason      String?
+  adverseActionOverriddenAt        DateTime?
+  adverseActionOverriddenByStaffId String?
+
   orderedAt   DateTime  @default(now())
   completedAt DateTime?
 
-  applicant Applicant  @relation(fields: [applicantId], references: [id])
-  decidedBy StaffUser? @relation(fields: [decidedByStaffId], references: [id])
+  applicant                 Applicant  @relation(fields: [applicantId], references: [id])
+  decidedBy                 StaffUser? @relation("ScreeningReportDecidedBy", fields: [decidedByStaffId], references: [id])
+  adverseActionNotice       Notice?    @relation(fields: [adverseActionNoticeId], references: [id])
+  adverseActionOverriddenBy StaffUser? @relation("ScreeningReportAdverseActionOverriddenBy", fields: [adverseActionOverriddenByStaffId], references: [id])
 
   @@index([applicantId])
 }
@@ -993,22 +1023,22 @@ enum ProspectStatus {
 /// comment). Created only when real contact information is actually
 /// submitted through the public inquiry form, never from a bare page visit.
 model Prospect {
-  id        String         @id @default(cuid())
+  id         String         @id @default(cuid())
   propertyId String
-  listingId String
-  firstName String
-  lastName  String
-  email     String?
-  phone     String?
+  listingId  String
+  firstName  String
+  lastName   String
+  email      String?
+  phone      String?
   /// Free text from the inquiry form itself - never a substitute for the
   /// five fixed pre-screening fields below, which stay their own columns so
   /// every prospect answers the identical structured question (the whole
   /// fair-housing point of this item).
-  message   String?
+  message    String?
   /// A network name from SYNDICATION_NETWORKS, or "direct" - same meaning
   /// as ListingLead.source, carried onto the named record once one exists.
-  source    String
-  status    ProspectStatus @default(INQUIRY)
+  source     String
+  status     ProspectStatus @default(INQUIRY)
 
   // The five fixed pre-screening answers (LEASE-07's own list). All null
   // until preScreenRespondedAt is set - a prospect who has not yet answered
@@ -1185,34 +1215,35 @@ model StaffUser {
   assignments        StaffAssignment[]
   assignmentsGranted StaffAssignment[] @relation("AssignmentGrantedBy")
 
-  paymentsReceived                Payment[]                    @relation("PaymentReceivedBy")
-  chargesWaived                   Charge[]                     @relation("ChargeWaivedBy")
-  utilityBillsAllocated           UtilityBill[]                @relation("UtilityBillAllocatedBy")
-  workOrdersApproved              WorkOrder[]                  @relation("WorkOrderApprovedBy")
-  workOrdersAssigned              WorkOrder[]                  @relation("WorkOrderAssignedTo")
-  workOrdersEntryPermissionLogged WorkOrder[]                  @relation("WorkOrderEntryPermission")
-  workOrdersClosed                WorkOrder[]                  @relation("WorkOrderClosedBy")
-  workOrderNotesWritten           WorkOrderNote[]
-  workOrderMessagesLinked         WorkOrderMessageLink[]
-  ticketsAcknowledged             Ticket[]                     @relation("TicketAcknowledgedBy")
-  tasksAssigned                   Task[]                       @relation("TaskAssignedTo")
-  tasksCompleted                  Task[]                       @relation("TaskCompletedBy")
-  inspectionsPerformed            Inspection[]                 @relation("InspectionPerformedBy")
-  noticesServed                   Notice[]                     @relation("NoticeServedBy")
-  noticeDeliveriesServed          NoticeDelivery[]             @relation("NoticeDeliveryServedBy")
-  tenantConsentsRecorded          TenantConsent[]              @relation("TenantConsentRecordedBy")
-  messagesSent                    Message[]                    @relation("MessageSentBy")
-  documentsUploaded               Document[]                   @relation("DocumentUploadedBy")
-  auditLogs                       AuditLog[]                   @relation("AuditLogActor")
-  accessCodesCreated              AccessCode[]
-  messagesRouted                  UnroutedMessage[]            @relation("UnroutedMessageRoutedBy")
-  templatesCreated                MessageTemplate[]            @relation("TemplateCreatedBy")
-  templatesUpdated                MessageTemplate[]            @relation("TemplateUpdatedBy")
-  translationsApproved            MessageTemplateTranslation[] @relation("TranslationApprovedBy")
-  paymentHoldsSet                 LeasePayer[]                 @relation("PaymentHoldSetBy")
-  listingsCreated                 Listing[]                    @relation("ListingCreatedBy")
-  screeningCriteriaCreated        ScreeningCriteria[]
-  screeningReportsDecided         ScreeningReport[]
+  paymentsReceived                        Payment[]                    @relation("PaymentReceivedBy")
+  chargesWaived                           Charge[]                     @relation("ChargeWaivedBy")
+  utilityBillsAllocated                   UtilityBill[]                @relation("UtilityBillAllocatedBy")
+  workOrdersApproved                      WorkOrder[]                  @relation("WorkOrderApprovedBy")
+  workOrdersAssigned                      WorkOrder[]                  @relation("WorkOrderAssignedTo")
+  workOrdersEntryPermissionLogged         WorkOrder[]                  @relation("WorkOrderEntryPermission")
+  workOrdersClosed                        WorkOrder[]                  @relation("WorkOrderClosedBy")
+  workOrderNotesWritten                   WorkOrderNote[]
+  workOrderMessagesLinked                 WorkOrderMessageLink[]
+  ticketsAcknowledged                     Ticket[]                     @relation("TicketAcknowledgedBy")
+  tasksAssigned                           Task[]                       @relation("TaskAssignedTo")
+  tasksCompleted                          Task[]                       @relation("TaskCompletedBy")
+  inspectionsPerformed                    Inspection[]                 @relation("InspectionPerformedBy")
+  noticesServed                           Notice[]                     @relation("NoticeServedBy")
+  noticeDeliveriesServed                  NoticeDelivery[]             @relation("NoticeDeliveryServedBy")
+  tenantConsentsRecorded                  TenantConsent[]              @relation("TenantConsentRecordedBy")
+  messagesSent                            Message[]                    @relation("MessageSentBy")
+  documentsUploaded                       Document[]                   @relation("DocumentUploadedBy")
+  auditLogs                               AuditLog[]                   @relation("AuditLogActor")
+  accessCodesCreated                      AccessCode[]
+  messagesRouted                          UnroutedMessage[]            @relation("UnroutedMessageRoutedBy")
+  templatesCreated                        MessageTemplate[]            @relation("TemplateCreatedBy")
+  templatesUpdated                        MessageTemplate[]            @relation("TemplateUpdatedBy")
+  translationsApproved                    MessageTemplateTranslation[] @relation("TranslationApprovedBy")
+  paymentHoldsSet                         LeasePayer[]                 @relation("PaymentHoldSetBy")
+  listingsCreated                         Listing[]                    @relation("ListingCreatedBy")
+  screeningCriteriaCreated                ScreeningCriteria[]
+  screeningReportsDecided                 ScreeningReport[]            @relation("ScreeningReportDecidedBy")
+  screeningReportsAdverseActionOverridden ScreeningReport[]            @relation("ScreeningReportAdverseActionOverriddenBy")
 
   @@index([active])
 }
@@ -2981,10 +3012,17 @@ model MessageTemplateTranslation {
 /// is stored as rendered rather than joined at read time: what matters in a
 /// dispute is the address the notice actually carried on the day it went out,
 /// not the tenant's address today.
+///
+/// EXACTLY ONE of `leaseId` / `applicantId` (CHECK constraint, R-061) - a
+/// notice is addressed to a tenancy or to an applicant who has none yet
+/// (LEASE-05's FCRA adverse action), never both and never neither. Mirrors
+/// the either/or shape MAINT-03 already gave `WorkOrder` assignment (D-9).
 model Notice {
   id                 String               @id @default(cuid())
   propertyId         String
-  leaseId            String
+  leaseId            String?
+  /// FCRA adverse action (R-061) - the other half of the either/or above.
+  applicantId        String?
   /// Notice types are jurisdiction config (D-4), not an enum here - a state
   /// that invents a new notice must not require a migration.
   type               String
@@ -3019,15 +3057,24 @@ model Notice {
   createdAt          DateTime             @default(now())
 
   property           Property          @relation(fields: [propertyId], references: [id])
-  lease              Lease             @relation(fields: [leaseId], references: [id])
+  // Both explicit onDelete: Restrict, made EXPLICIT now that leaseId is
+  // optional - a required relation defaults to Restrict, but an optional
+  // one defaults to SetNull, and a notice silently losing its lease or
+  // applicant link on delete is exactly the evidence loss this table
+  // exists to prevent (leaseId's own original migration already set
+  // RESTRICT; this keeps that true now that the column can be null).
+  lease              Lease?            @relation(fields: [leaseId], references: [id], onDelete: Restrict)
+  applicant          Applicant?        @relation(fields: [applicantId], references: [id], onDelete: Restrict)
   servedBy           StaffUser?        @relation("NoticeServedBy", fields: [servedByStaffId], references: [id])
   jurisdictionRule   JurisdictionRule? @relation(fields: [jurisdictionRuleId], references: [id])
   document           Document?         @relation("NoticeDocument", fields: [documentId], references: [id])
   proofDocument      Document?         @relation("NoticeProofDocument", fields: [proofDocumentId], references: [id])
   entryForWorkOrders WorkOrder[]       @relation("WorkOrderEntryNotice")
   deliveries         NoticeDelivery[]
+  adverseActionFor   ScreeningReport?
 
   @@index([leaseId])
+  @@index([applicantId])
   @@index([propertyId, servedAt])
 }
 
@@ -3301,7 +3348,7 @@ model JurisdictionRule {
 
   // Payments and applications (PAY-03, LEASE-03).
   /// Ordered ChargeType names - "rent before fees" where the state says so.
-  paymentAllocationOrder String[]
+  paymentAllocationOrder  String[]
   /// PAY-01's card pass-through, as configuration rather than a literal
   /// (D-4). Several states restrict surcharging outright and some regulate
   /// rent convenience fees specifically, so whether the tenant may be
@@ -3311,14 +3358,14 @@ model JurisdictionRule {
   /// (D-4). Texas caps a returned-check fee at 30 USD (Tex. Bus. & Com. Code
   /// §3.506); other states differ and several bar one entirely. Core
   /// computes and clamps it (D-12).
-  nsfFeePermitted        Boolean  @default(true)
-  nsfFeeMaxCents         Int?
-  cardSurchargePermitted Boolean  @default(true)
+  nsfFeePermitted         Boolean  @default(true)
+  nsfFeeMaxCents          Int?
+  cardSurchargePermitted  Boolean  @default(true)
   /// A statutory ceiling on the surcharge, in basis points of the amount
   /// being paid. Null where the state sets none. Core clamps to it (D-12).
-  cardSurchargeMaxBps    Int?
-  applicationFeeCapCents Int?
-  rubsPermitted          Boolean  @default(true)
+  cardSurchargeMaxBps     Int?
+  applicationFeeCapCents  Int?
+  rubsPermitted           Boolean  @default(true)
   /// LEASE-01 (R-056, D-4). Whether this jurisdiction makes source of income
   /// (housing vouchers, Section 8) a protected class - required disclosure
   /// on a listing where it applies. A THIRD state, not a boolean: null means

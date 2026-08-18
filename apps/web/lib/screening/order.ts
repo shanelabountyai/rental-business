@@ -55,6 +55,19 @@ export async function orderScreeningForApplicant(applicant: ApplicantToScreen): 
   const criteria = await currentScreeningCriteria()
   const result = await screeningAdapter.order({ applicantId: applicant.id })
 
+  // Rendered here, once, and frozen onto the row - the notice generator
+  // (R-061) reproduces this text verbatim rather than re-formatting a
+  // structured `agency` object it would otherwise have to import from the
+  // app layer into pure core.
+  const agencyContact = result.agency
+    ? [
+        result.agency.name,
+        result.agency.addressLine1,
+        `${result.agency.city}, ${result.agency.state} ${result.agency.postalCode}`,
+        result.agency.phone,
+      ].join('\n')
+    : null
+
   await prisma.screeningReport.create({
     data: {
       applicantId: applicant.id,
@@ -64,6 +77,7 @@ export async function orderScreeningForApplicant(applicant: ApplicantToScreen): 
       creditScore: result.creditScore ?? null,
       evictionRecordFound: result.evictionRecordFound ?? null,
       criminalRecordFound: result.criminalRecordFound ?? null,
+      agencyContact,
       criteriaVersion: criteria.version,
       completedAt: result.status === 'COMPLETE' ? new Date() : null,
     },

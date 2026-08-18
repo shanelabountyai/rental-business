@@ -45,7 +45,14 @@ export default async function NoticesPage() {
       ) : (
         <ul className="flex flex-col divide-y rounded-md border">
           {notices.map((notice) => {
-            const tenant = notice.lease.leaseTenants[0]?.tenant
+            // EITHER a lease or an applicant (R-061's either/or) - whichever
+            // this notice actually has names the recipient.
+            const tenant = notice.lease?.leaseTenants[0]?.tenant
+            const recipientName = tenant
+              ? `${tenant.firstName} ${tenant.lastName}`
+              : notice.applicant
+                ? `${notice.applicant.firstName} ${notice.applicant.lastName} (applicant)`
+                : 'No recipient on file'
             const methods = notice.deliveries.map((d) => SERVICE_METHOD_LABELS[d.method] ?? d.method)
             return (
               <li key={notice.id}>
@@ -56,7 +63,7 @@ export default async function NoticesPage() {
                   <span className="flex flex-wrap items-center justify-between gap-2">
                     <span className="font-medium">
                       {noticeTypeLabel(notice.type)} — {notice.property.name}
-                      {notice.lease.unit ? ` · ${notice.lease.unit.name}` : ''}
+                      {notice.lease?.unit ? ` · ${notice.lease.unit.name}` : ''}
                     </span>
                     {notice.servedAt ? (
                       <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-900 dark:bg-green-950 dark:text-green-100">
@@ -69,7 +76,7 @@ export default async function NoticesPage() {
                     )}
                   </span>
                   <span className="text-muted-foreground text-sm">
-                    {tenant ? `${tenant.firstName} ${tenant.lastName}` : 'No tenant on file'}
+                    {recipientName}
                     {' · '}
                     {methods.length > 0 ? methods.join(' + ') : 'no service recorded'}
                     {notice.documentId && ' · PDF archived'}

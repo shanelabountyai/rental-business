@@ -45,9 +45,12 @@ export default async function NoticePage({
   ).catch(() => null)
   const permittedMethods = serviceMethodsFor(rule, notice.type)
 
-  const tenants = notice.lease.leaseTenants.map(
-    (lt) => `${lt.tenant.firstName} ${lt.tenant.lastName}`,
-  )
+  // EITHER a lease or an applicant (R-061's either/or).
+  const tenants = notice.lease
+    ? notice.lease.leaseTenants.map((lt) => `${lt.tenant.firstName} ${lt.tenant.lastName}`)
+    : notice.applicant
+      ? [`${notice.applicant.firstName} ${notice.applicant.lastName} (applicant)`]
+      : []
 
   return (
     <div className="flex max-w-3xl flex-col gap-6">
@@ -63,7 +66,7 @@ export default async function NoticePage({
         </h1>
         <p className="text-muted-foreground text-sm">
           {notice.property.name}
-          {notice.lease.unit ? ` — ${notice.lease.unit.name}` : ''} ·{' '}
+          {notice.lease?.unit ? ` — ${notice.lease.unit.name}` : ''} ·{' '}
           {tenants.length > 0 ? tenants.join(', ') : 'No tenant on file'} · generated{' '}
           {friendlyDate(notice.generatedAt, notice.property.timezone)}
         </p>

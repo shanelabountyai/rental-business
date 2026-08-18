@@ -218,7 +218,30 @@ export default async function ProspectDetailPage({
                     <span className="font-medium">{DECISION_LABELS[a.decision] ?? a.decision}</span>
                     {a.decisionNotes && <span> — {a.decisionNotes}</span>}
                   </p>
-                ) : (
+                ) : null}
+                {a.adverseAction && (
+                  <p className="text-sm">
+                    <span className="text-muted-foreground">Adverse-action notice: </span>
+                    {a.adverseAction.sentAt ? (
+                      <span className="text-green-800 dark:text-green-300">
+                        Sent {a.adverseAction.sentAt.toISOString().slice(0, 10)}
+                      </span>
+                    ) : a.adverseAction.overriddenAt ? (
+                      <span className="text-amber-800 dark:text-amber-300">
+                        Not sent — overridden {a.adverseAction.overriddenAt.toISOString().slice(0, 10)}
+                      </span>
+                    ) : (
+                      <span className="text-red-700 dark:text-red-400">Not sent yet</span>
+                    )}{' '}
+                    <Link
+                      href={`/notices/${a.adverseAction.noticeId}`}
+                      className="underline underline-offset-2"
+                    >
+                      view
+                    </Link>
+                  </p>
+                )}
+                {!a.decision && (
                   a.reportStatus === 'COMPLETE' && (
                     <ScreeningDecisionForm
                       action={recordScreeningDecision}

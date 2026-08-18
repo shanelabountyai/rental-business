@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { SimulatedScreeningAdapter, simulatedScreeningFacts } from './simulated-adapter.ts'
+import { SIMULATED_AGENCY, SimulatedScreeningAdapter, simulatedScreeningFacts } from './simulated-adapter.ts'
 
 // The simulated screening provider (D-7, R-060). No database - this is the
 // adapter's own contract, exercised the way listings/simulated-adapter.test.ts
@@ -56,5 +56,16 @@ describe('SimulatedScreeningAdapter', () => {
     expect(result.status).toBe('FAILED')
     expect(result.faultCode).toBe('timeout')
     expect(result.creditScore).toBeUndefined()
+  })
+
+  it('names its own (fake) agency on a completed order, and none on a fault', async () => {
+    const adapter = new SimulatedScreeningAdapter()
+    const result = await adapter.order({ applicantId: 'app_1' })
+    expect(result.agency).toEqual(SIMULATED_AGENCY)
+    expect(result.agency?.name).toMatch(/not a real bureau/)
+
+    const faulted = new SimulatedScreeningAdapter({ fault: () => 'timeout' })
+    const failedResult = await faulted.order({ applicantId: 'app_1' })
+    expect(failedResult.agency).toBeUndefined()
   })
 })

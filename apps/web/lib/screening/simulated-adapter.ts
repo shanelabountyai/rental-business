@@ -3,6 +3,7 @@ import 'server-only'
 import { createHash, randomBytes } from 'node:crypto'
 import type {
   ScreeningAdapter,
+  ScreeningAgency,
   ScreeningFault,
   ScreeningOrderInput,
   ScreeningOrderResult,
@@ -35,6 +36,18 @@ import type {
 
 function providerId(): string {
   return `scr_${randomBytes(12).toString('hex')}`
+}
+
+/// LOUD ABOUT WHAT IT IS, same as `name = 'simulated'` above - a real
+/// driver names the actual bureau it integrates with; this one does not
+/// pretend to be Equifax/Experian/TransUnion.
+export const SIMULATED_AGENCY: ScreeningAgency = {
+  name: 'Simulated Consumer Reporting Agency (not a real bureau)',
+  addressLine1: '1 Simulated Bureau Way',
+  city: 'Austin',
+  state: 'TX',
+  postalCode: '78701',
+  phone: '(800) 555-0100',
 }
 
 function factsFor(applicantId: string): {
@@ -72,7 +85,7 @@ export class SimulatedScreeningAdapter implements ScreeningAdapter {
 
     const facts = factsFor(input.applicantId)
     console.info(`[screening:simulated] completed order ${id} for ${input.applicantId}`)
-    return { providerId: id, status: 'COMPLETE', ...facts }
+    return { providerId: id, status: 'COMPLETE', ...facts, agency: SIMULATED_AGENCY }
   }
 }
 

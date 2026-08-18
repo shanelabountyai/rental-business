@@ -61,6 +61,7 @@ async function seedScreenedApplicant(
     evictionRecordFound: false,
     criminalRecordFound: false,
   },
+  options: { withEmailAndAddress?: boolean } = {},
 ) {
   const unique = randomUUID().slice(0, 8)
   const entity = await prisma.legalEntity.create({
@@ -121,6 +122,15 @@ async function seedScreenedApplicant(
       monthlyIncomeCents,
       formSubmittedAt: new Date(),
       completedAt: new Date(),
+      ...(options.withEmailAndAddress
+        ? {
+            email: `applicant-${unique}@example.test`,
+            currentAddressLine1: '45 Current St',
+            currentCity: 'Houston',
+            currentState: 'TX',
+            currentPostalCode: '77003',
+          }
+        : {}),
     },
   })
   const criteria = await prisma.screeningCriteria.findFirstOrThrow({
@@ -135,6 +145,11 @@ async function seedScreenedApplicant(
       creditScore: 720,
       evictionRecordFound: reportFacts.evictionRecordFound,
       criminalRecordFound: reportFacts.criminalRecordFound,
+      // What SimulatedScreeningAdapter's own agency renders to (order.ts's
+      // join) - hand-seeded here since this fixture bypasses
+      // orderScreeningForApplicant, the same wall screening.test.ts's own
+      // header names.
+      agencyContact: 'Simulated Consumer Reporting Agency (not a real bureau)\n1 Simulated Bureau Way\nAustin, TX 78701\n(800) 555-0100',
       criteriaVersion: criteria.version,
       completedAt: new Date(),
     },
@@ -169,12 +184,13 @@ test.beforeEach(async ({ page }) => {
 })
 
 test.afterAll(async () => {
-  await prisma.screeningReport.deleteMany({
-    where: { applicant: { application: { propertyId: { in: propertyIds } } } },
-  })
-  await prisma.applicant.deleteMany({ where: { application: { propertyId: { in: propertyIds } } } })
-  await prisma.application.deleteMany({ where: { propertyId: { in: propertyIds } } })
-  await prisma.prospect.deleteMany({ where: { id: { in: prospectIds } } })
+  // NoticeDelivery is append-only by trigger (CLAUDE.md's own rule), and
+  // Notice.applicantId is RESTRICT - so a Notice with a delivery on it
+  // (the auto-served adverse-action spec below) cannot be deleted, and
+  // neither can the Applicant/Application/Prospect chain underneath it.
+  // Retire, don't delete: only the tables that carry an `active` flag get
+  // one here, the same choice every other spec in this suite already
+  // makes for rows an append-only table references.
   await prisma.property.updateMany({ where: { id: { in: propertyIds } }, data: { active: false } })
   await prisma.legalEntity.updateMany({ where: { id: { in: entityIds } }, data: { active: false } })
   await prisma.staffUser.updateMany({ where: { id: { in: staffIds } }, data: { active: false } })
@@ -241,4 +257,103 @@ test('refuses a decline with no individualized-assessment note', async ({ page }
   // SCREENED, right where the fixture started it.
   const updated = await prisma.prospect.findUniqueOrThrow({ where: { id: prospect.id } })
   expect(updated.status).toBe('SCREENED')
+})
+
+test('a decline generates and auto-serves an FCRA adverse-action notice by email', async ({
+  page,
+}) => {
+  const staff = await createStaff()
+  const { prospect, applicant } = await seedScreenedApplicant(
+    600_000,
+    { evictionRecordFound: true, criminalRecordFound: false },
+    { withEmailAndAddress: true },
+  )
+
+  await signIn(page, staff)
+  await page.goto(`/prospects/${prospect.id}`)
+
+  await page.getByLabel('Decision').selectOption('DECLINED')
+  await page.getByLabel('Individualized-assessment notes').fill('Recent eviction on record.')
+  await page.getByRole('button', { name: 'Record decision' }).click()
+  await expect(page.getByText('Declined')).toBeVisible()
+
+  const report = await prisma.screeningReport.findUniqueOrThrow({
+    where: { applicantId: applicant.id },
+    include: { adverseActionNotice: { include: { deliveries: true } } },
+  })
+  const notice = report.adverseActionNotice
+  expect(notice).not.toBeNull()
+  expect(notice?.type).toBe('ADVERSE_ACTION')
+  expect(notice?.applicantId).toBe(applicant.id)
+  expect(notice?.bodyText).toContain('Simulated Consumer Reporting Agency')
+  expect(notice?.bodyText).toMatch(/free copy of your report/)
+  expect(notice?.bodyText).toContain('A record was found')
+  // Auto-served by EMAIL, the moment the decision was recorded - no separate
+  // staff click.
+  expect(notice?.servedAt).not.toBeNull()
+  expect(notice?.serviceMethod).toBe('EMAIL')
+  expect(notice?.deliveries).toHaveLength(1)
+  expect(notice?.deliveries[0]?.method).toBe('EMAIL')
+
+  const emailed = await prisma.notification.findFirst({
+    where: { recipientType: 'APPLICANT', recipientId: applicant.id, templateKey: 'application.adverse_action' },
+  })
+  expect(emailed).not.toBeNull()
+
+  // Visible on the Prospect page too.
+  await expect(page.getByText(/Adverse-action notice:.*Sent/)).toBeVisible()
+})
+
+test('a conditional approval with no reachable adverse-action notice blocks closing until overridden', async ({
+  page,
+}) => {
+  const staff = await createStaff()
+  // No email/address on file, so the notice cannot auto-serve - the
+  // realistic "we can't reach them" gap the block exists for.
+  const { prospect, applicant } = await seedScreenedApplicant(600_000)
+
+  await signIn(page, staff)
+  await page.goto(`/prospects/${prospect.id}`)
+
+  await page.getByLabel('Decision').selectOption('APPROVED_WITH_CONDITIONS')
+  await page.getByLabel('Individualized-assessment notes').fill('Approved with a co-signer.')
+  await page.getByRole('button', { name: 'Record decision' }).click()
+  await expect(page.getByText('Approved with conditions')).toBeVisible()
+  await expect(page.getByText(/Adverse-action notice:.*Not sent yet/)).toBeVisible()
+
+  // NOT auto-advanced to APPROVED - the notice is unsent (staff-actions.ts's
+  // own `noneOwed` guard).
+  let current = await prisma.prospect.findUniqueOrThrow({ where: { id: prospect.id } })
+  expect(current.status).toBe('SCREENED')
+
+  // Trying to move the pipeline to Approved by hand is blocked too.
+  await page.getByLabel('Move to stage').selectOption('APPROVED')
+  await page.getByRole('button', { name: 'Update' }).click()
+  await expect(page.getByText(/No adverse-action notice sent/)).toBeVisible()
+
+  current = await prisma.prospect.findUniqueOrThrow({ where: { id: prospect.id } })
+  expect(current.status).toBe('SCREENED')
+
+  // Override, with a reason - the escape hatch.
+  await page.getByLabel('Move to stage').selectOption('APPROVED')
+  await page.getByLabel('Why are you going ahead?').fill('Notice mailed by hand today; no email on file.')
+  await page.getByRole('button', { name: 'Move ahead, with this reason' }).click()
+
+  await expect
+    .poll(async () => {
+      const row = await prisma.prospect.findUniqueOrThrow({ where: { id: prospect.id } })
+      return row.status
+    })
+    .toBe('APPROVED')
+
+  const report = await prisma.screeningReport.findUniqueOrThrow({
+    where: { applicantId: applicant.id },
+  })
+  expect(report.adverseActionOverriddenAt).not.toBeNull()
+  expect(report.adverseActionOverrideReason).toMatch(/mailed by hand/)
+
+  const audited = await prisma.auditLog.findFirst({
+    where: { action: 'adverse_action.overridden', entityId: report.id },
+  })
+  expect(audited?.reason).toMatch(/mailed by hand/)
 })

@@ -224,6 +224,13 @@ export const AUDIT_ACTIONS = [
   'entry_notice.overridden',
   'screening.decided',
   'application_order.deviated',
+  /// R-061: staff moved a prospect to APPROVED/SIGNED despite an unsent
+  /// FCRA adverse-action notice - "blocks closing the application until
+  /// sent or overridden with a logged reason" (LEASE-05). Its own action
+  /// rather than a flag on `prospect.stage_changed`, the same call
+  /// `entry_notice.overridden` already made for `workorder`'s stage change:
+  /// REASON_REQUIRED cannot express "required only when a notice is owed".
+  'adverse_action.overridden',
 
   /// R-010: a new effective-dated version of a JurisdictionRule. The one
   /// mutation this entity gets - versions are added, never edited in place
@@ -518,6 +525,7 @@ export const REASON_REQUIRED: ReadonlySet<AuditAction> = new Set([
   'document.delete_marked',
   'entry_notice.overridden',
   'application_order.deviated',
+  'adverse_action.overridden',
   'lease.terminated',
   'payment.hold_changed',
   'consent.withdrawn',

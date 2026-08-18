@@ -13,6 +13,19 @@ export interface ScreeningOrderInput {
   applicantId: string
 }
 
+/// The reporting agency's own identity - 15 U.S.C. § 1681m(a)(1) requires
+/// an adverse-action notice to name the CRA that furnished the report, by
+/// name, address and phone. A real driver's CRA is whichever bureau it
+/// integrates with; the simulated one names itself plainly as such.
+export interface ScreeningAgency {
+  name: string
+  addressLine1: string
+  city: string
+  state: string
+  postalCode: string
+  phone: string
+}
+
 export interface ScreeningOrderResult {
   /// What the provider says this order's id is - stored on
   /// ScreeningReport.providerId, never invented by us and never read back
@@ -27,6 +40,10 @@ export interface ScreeningOrderResult {
   creditScore?: number
   evictionRecordFound?: boolean
   criminalRecordFound?: boolean
+  /// Present only when status is COMPLETE. Frozen onto
+  /// ScreeningReport.agencyContact at order time (R-061) - see that
+  /// column's own schema comment for why.
+  agency?: ScreeningAgency
 }
 
 /// §14 of the master PRD asks every simulated adapter to be able to produce

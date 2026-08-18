@@ -56,6 +56,9 @@ const NOTICE_INCLUDE = {
       },
     },
   },
+  /// The "or" half of Notice's either/or (R-061) - see that column's own
+  /// schema comment.
+  applicant: { select: { id: true, firstName: true, lastName: true } },
 } as const
 
 /**
@@ -85,14 +88,22 @@ export async function generateNoticePdf(noticeId: string): Promise<FormState> {
     new Date(),
   ).catch(() => null)
 
+  // EITHER a lease or an applicant, never both (the CHECK constraint, R-061)
+  // - `notice.lease`/`notice.applicant` are the two names on the letter's
+  // own "To:" line, whichever one this notice actually has.
+  const unitName = notice.lease?.unit.name ?? null
+  const recipientNames = notice.lease
+    ? notice.lease.leaseTenants.map((lt) => `${lt.tenant.firstName} ${lt.tenant.lastName}`)
+    : notice.applicant
+      ? [`${notice.applicant.firstName} ${notice.applicant.lastName}`]
+      : []
+
   const bytes = await renderNoticePdf({
     noticeType: notice.type,
     addressOfRecord: notice.addressOfRecord,
     propertyName: notice.property.name,
-    unitName: notice.lease.unit.name,
-    tenantNames: notice.lease.leaseTenants.map(
-      (lt) => `${lt.tenant.firstName} ${lt.tenant.lastName}`,
-    ),
+    unitName,
+    tenantNames: recipientNames,
     bodyText: notice.bodyText,
     // The PROPERTY's calendar day, not the server's (D-3). A notice dated by
     // a machine in another timezone is dated wrong on the day it matters.
@@ -114,10 +125,11 @@ export async function generateNoticePdf(noticeId: string): Promise<FormState> {
       data: {
         propertyId: notice.propertyId,
         leaseId: notice.leaseId,
+        applicantId: notice.applicantId,
         // The TENANT link is what puts it in their /portal/papers list with
         // no further work - `listTenantDocuments` already maps NOTICE to
-        // "A notice".
-        tenantId: notice.lease.leaseTenants[0]?.tenant.id ?? null,
+        // "A notice". An applicant has no portal to put anything in.
+        tenantId: notice.lease?.leaseTenants[0]?.tenant.id ?? null,
         type: 'NOTICE',
         fileName,
         contentType: 'application/pdf',
@@ -253,6 +265,7 @@ export async function recordNoticeService(
       data: {
         propertyId: notice.propertyId,
         leaseId: notice.leaseId,
+        applicantId: notice.applicantId,
         type: 'NOTICE_PROOF',
         fileName: proofFile.name,
         contentType,

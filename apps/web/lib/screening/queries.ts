@@ -19,6 +19,14 @@ export interface ApplicantScreeningSummary {
   decision: string | null
   decisionNotes: string | null
   decidedAt: Date | null
+  /// R-061: set only for DECLINED/APPROVED_WITH_CONDITIONS. Null noticeId
+  /// with a non-null decision means one is still owed and unresolved - see
+  /// `adverseActionOwed()`.
+  adverseAction: {
+    noticeId: string
+    sentAt: Date | null
+    overriddenAt: Date | null
+  } | null
 }
 
 export interface ApplicationScreeningSummary {
@@ -40,7 +48,12 @@ export async function screeningForApplication(
     where: { id: applicationId, propertyId: { in: scope.propertyIds } },
     include: {
       listing: { select: { rentCents: true } },
-      applicants: { include: { screeningReport: true }, orderBy: [{ isLead: 'desc' }, { createdAt: 'asc' }] },
+      applicants: {
+        include: {
+          screeningReport: { include: { adverseActionNotice: { select: { id: true, servedAt: true } } } },
+        },
+        orderBy: [{ isLead: 'desc' }, { createdAt: 'asc' }],
+      },
     },
   })
   if (!application) return null
@@ -86,6 +99,13 @@ export async function screeningForApplication(
       decision: report?.decision ?? null,
       decisionNotes: report?.decisionNotes ?? null,
       decidedAt: report?.decidedAt ?? null,
+      adverseAction: report?.adverseActionNotice
+        ? {
+            noticeId: report.adverseActionNotice.id,
+            sentAt: report.adverseActionNotice.servedAt,
+            overriddenAt: report.adverseActionOverriddenAt,
+          }
+        : null,
     }
   })
 

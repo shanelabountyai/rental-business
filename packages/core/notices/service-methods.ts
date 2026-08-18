@@ -69,6 +69,9 @@ export const KNOWN_NOTICE_TYPES = [
   'LEASE_VIOLATION',
   'RENT_INCREASE',
   'REPAIR_CHARGE',
+  /// R-061 (LEASE-05) - the only type here addressed to an Applicant
+  /// (Notice.applicantId) rather than a Lease.
+  'ADVERSE_ACTION',
 ] as const
 
 export const NOTICE_TYPE_LABELS: Record<string, string> = {
@@ -78,6 +81,7 @@ export const NOTICE_TYPE_LABELS: Record<string, string> = {
   LEASE_VIOLATION: 'Lease violation',
   RENT_INCREASE: 'Rent increase',
   REPAIR_CHARGE: 'Repair charge',
+  ADVERSE_ACTION: 'Adverse action (FCRA)',
 }
 
 export function noticeTypeLabel(type: string): string {
