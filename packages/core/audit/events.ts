@@ -34,6 +34,21 @@ export const AUDIT_ACTIONS = [
   'listing.published',
   'listing.unpublished',
 
+  // Prospect pipeline (LEASE-07, R-058)
+  'prospect.created',
+  /// A prospect answered the five fixed pre-screening questions. Its own
+  /// action rather than folded into a generic update, matching
+  /// `listing.published`'s own reasoning: "when did this happen" is a
+  /// question worth answering on its own.
+  'prospect.prescreened',
+  /// A staff member moved a prospect along the pipeline by hand (SHOWING,
+  /// APPLIED, SCREENED, APPROVED, SIGNED) - the downstream stages nothing
+  /// in this build yet drives automatically. Its own action, not
+  /// `prospect.updated`, for the same reason `lease.status_changed` is
+  /// separate from a plain field edit: a stage move is a business decision
+  /// worth its own row, distinct from correcting a typo in a name.
+  'prospect.stage_changed',
+
   // Access and identity
   'auth.signed_in',
   'auth.locked_out',

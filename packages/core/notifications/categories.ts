@@ -71,6 +71,12 @@ export const NOTIFICATION_CATEGORIES = [
   /// ones. Its own category so it shows up in the send log like anything
   /// else - see DIGEST_ELIGIBLE_CATEGORIES for what it can carry.
   'digest_daily',
+
+  /// R-058: the identical five-question pre-screening invite sent to every
+  /// prospect. Its own category, not folded into anything a tenant-facing
+  /// preference could touch - a PROSPECT recipient has no preferences to
+  /// read in the first place (no account exists yet to hold one).
+  'prospect_prescreening',
 ] as const
 
 export type NotificationCategory = (typeof NOTIFICATION_CATEGORIES)[number]
@@ -110,6 +116,9 @@ export function isDigestEligible(category: NotificationCategory): boolean {
  */
 const CATEGORY_CHANNELS: Partial<Record<NotificationCategory, readonly NotificationChannel[]>> = {
   digest_daily: ['EMAIL'],
+  /// Never PORTAL - a prospect has no account and no portal to read one in
+  /// (NotificationRecipientType.PROSPECT's own schema comment).
+  prospect_prescreening: ['EMAIL', 'SMS'],
 }
 
 export function channelsFor(
@@ -228,6 +237,12 @@ export function defaultEnabled(
   return (
     isLockedCategory(category) ||
     category === 'payment_failed' ||
-    category === 'work_order_assigned'
+    category === 'work_order_assigned' ||
+    // R-058: a transactional reply to a form the prospect just submitted,
+    // to a number they just typed in themselves - not an ongoing
+    // relationship they might want fewer texts from. Defaulting this off
+    // would silently never reach a phone-only submission, which is exactly
+    // the persona SMS-to-ticket (R-021) already exists to serve.
+    category === 'prospect_prescreening'
   )
 }

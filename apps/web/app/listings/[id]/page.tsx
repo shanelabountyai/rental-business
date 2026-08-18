@@ -1,9 +1,11 @@
 import { listingDisclosures } from '@rental/core/listings'
 import { formatCents } from '@rental/core/money'
 import { notFound } from 'next/navigation'
+import { ListingInquiryForm } from '@/components/listings/listing-inquiry-form.tsx'
 import { rulesFor } from '@/lib/jurisdiction/queries.ts'
 import { recordListingLead } from '@/lib/listings/leads.ts'
 import { publicListing, unitPhotosForListing } from '@/lib/listings/queries.ts'
+import { submitInquiry } from '@/lib/prospects/actions.ts'
 
 export const dynamic = 'force-dynamic'
 
@@ -155,6 +157,17 @@ export default async function PublicListingPage({
             No jurisdiction disclosures are on file for {listing.property.state}.
           </p>
         )}
+      </section>
+
+      <section aria-labelledby="inquire" className="flex flex-col gap-3 border-t pt-4">
+        <h2 id="inquire" className="text-lg font-semibold">
+          Ask about this listing
+        </h2>
+        <p className="text-muted-foreground text-sm">
+          We&rsquo;ll send a few quick pre-screening questions - the same ones everyone who inquires
+          gets asked.
+        </p>
+        <ListingInquiryForm action={submitInquiry.bind(null, listing.id)} source={src ?? 'direct'} />
       </section>
     </main>
   )

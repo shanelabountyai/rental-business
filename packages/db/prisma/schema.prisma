@@ -349,6 +349,13 @@ enum NotificationRecipientType {
   TENANT
   GUARANTOR
   VENDOR
+  /// R-058. Has no account and never will for this message - a prospect
+  /// answering pre-screening questions is not yet a Tenant. Never reaches
+  /// PORTAL (packages/core/notifications categoryChannels restricts
+  /// `prospect_prescreening` to EMAIL/SMS): "the notification IS the
+  /// delivery, read in the portal" (Notification's own comment on PORTAL)
+  /// has no portal for this recipient to read it in.
+  PROSPECT
 }
 
 /// How a legally significant notice was served. Which of these are valid for
@@ -472,6 +479,7 @@ model Property {
   tasks             Task[]
   documents         Document[]
   listings          Listing[]
+  prospects         Prospect[]
   auditLogs         AuditLog[]
   assignments       StaffAssignment[]
   outboxEvents      OutboxEvent[]
@@ -661,6 +669,7 @@ model Listing {
   createdBy    StaffUser?           @relation("ListingCreatedBy", fields: [createdByStaffId], references: [id])
   syndications ListingSyndication[]
   leads        ListingLead[]
+  prospects    Prospect[]
 
   @@index([propertyId, status])
   @@index([unitId, status])
@@ -731,6 +740,73 @@ model ListingLead {
   listing Listing @relation(fields: [listingId], references: [id])
 
   @@index([listingId, occurredAt])
+}
+
+/// inquiry -> pre-screened -> showing -> applied -> screened -> approved ->
+/// signed (LEASE-07's own phrasing). Only the first two transitions are
+/// automated by anything built so far - the rest are set by a staff member
+/// tracking real-world progress a link-hover-away future item will
+/// eventually drive (showing scheduling is LEASE-08, application is
+/// LEASE-03, screening is LEASE-04, e-sign is LEASE-06) - the same "ship
+/// the state before its automated consumer exists" call R-056/057 already
+/// made for ListingStatus.UNPUBLISHED.
+enum ProspectStatus {
+  INQUIRY
+  PRE_SCREENED
+  SHOWING
+  APPLIED
+  SCREENED
+  APPROVED
+  SIGNED
+}
+
+/// A named person behind an inquiry (LEASE-07, R-058) - the record
+/// `ListingLead` was deliberately built without one (see that model's own
+/// comment). Created only when real contact information is actually
+/// submitted through the public inquiry form, never from a bare page visit.
+model Prospect {
+  id        String         @id @default(cuid())
+  propertyId String
+  listingId String
+  firstName String
+  lastName  String
+  email     String?
+  phone     String?
+  /// Free text from the inquiry form itself - never a substitute for the
+  /// five fixed pre-screening fields below, which stay their own columns so
+  /// every prospect answers the identical structured question (the whole
+  /// fair-housing point of this item).
+  message   String?
+  /// A network name from SYNDICATION_NETWORKS, or "direct" - same meaning
+  /// as ListingLead.source, carried onto the named record once one exists.
+  source    String
+  status    ProspectStatus @default(INQUIRY)
+
+  // The five fixed pre-screening answers (LEASE-07's own list). All null
+  // until preScreenRespondedAt is set - a prospect who has not yet answered
+  // has partial data, never zeros or empty strings standing in for "unknown".
+  moveDate             DateTime? @db.Date
+  occupants            Int?
+  petsDescription      String?
+  /// Closed vocabulary in packages/core/prospects (INCOME_RANGES) - a
+  /// plain string, not a DB enum, matching Notification.category's own
+  /// reasoning: a bracket added later is a one-line code change, not a
+  /// migration.
+  incomeRange          String?
+  priorEvictions       Boolean?
+  priorEvictionsDetail String?
+
+  preScreenSentAt      DateTime?
+  preScreenRespondedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  property Property @relation(fields: [propertyId], references: [id])
+  listing  Listing  @relation(fields: [listingId], references: [id])
+
+  @@index([propertyId, status])
+  @@index([listingId])
 }
 
 // ---------------------------------------------------------------------------
@@ -1376,6 +1452,15 @@ enum AuthTokenPurpose {
   /// dead. Paying twice is prevented by the balance itself going to zero,
   /// not by burning the token.
   TENANT_PAY_LINK
+  /// R-058: a prospect's identical pre-screening questions (move date,
+  /// occupants, pets, income range, prior evictions), answerable with no
+  /// account - the prospect has none. SINGLE-USE, unlike its three
+  /// multi-use siblings above: those exist so a distracted return visit
+  /// finds a live link, which this ALSO needs (checkToken() is read
+  /// non-consumingly for the page itself) - but here the single ANSWER a
+  /// prospect ever gives is what the token itself guards, burned only when
+  /// the answers are actually submitted, not when the page is opened.
+  PROSPECT_PRESCREEN
 }
 
 model StaffCredential {

@@ -72,6 +72,16 @@ export const TOKEN_TTL_MINUTES = {
   /// it gets the vendor links' three days rather than the verify link's
   /// seven.
   TENANT_PAY_LINK: 60 * 24 * 3,
+  /// R-058: a prospect's identical pre-screening questions. FOURTEEN DAYS -
+  /// longer than every other purpose here, because a prospect has no
+  /// existing relationship pulling them back to check a link, unlike a
+  /// tenant or a vendor already mid-job. Safe to be this long because of
+  /// what it can do: answer five fixed questions about one listing. It
+  /// opens no session, reads no document and moves no money - the same
+  /// bounded blast radius TENANT_VERIFY's own comment argues from, stretched
+  /// further because the person on the other end is a stranger who saw a
+  /// listing once, not someone already inside a tenancy.
+  PROSPECT_PRESCREEN: 60 * 24 * 14,
 } as const
 
 export type TokenPurpose = keyof typeof TOKEN_TTL_MINUTES

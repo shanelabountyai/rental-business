@@ -2709,3 +2709,32 @@ No `Lead` or `Inquiry` entity exists anywhere - not in `schema.prisma`, not in t
 - **No feed-format driver exists, by design** (D-7: Phase 3, partner-gated). `FeedEntry` is this build's own internal shape; mapping it to whatever a real network's actual feed format requires is entirely unbuilt, and no format (RETS, RESO Web API, an ILS XML feed) was ever specified to build toward.
 - **A listing can be sent to a network more than once if it is republished after being unpublished.** Re-syndicating after a `PUBLISHED -> UNPUBLISHED -> PUBLISHED` cycle creates a fresh `LISTED` row (via the same unique-key upsert) rather than distinguishing "never sent" from "sent, taken down, sent again" - the history of a listing's syndication is whatever the single current row says, not a log of what happened.
 - **No admin visibility into `ListingLead` beyond a same-listing count.** The "visits by source" panel on the listing detail page is the only read; there is no cross-listing or cross-property view of which networks are actually producing traffic.
+
+---
+
+## R-058 — Prospect pipeline + identical pre-screening questions
+**Commit:** PENDING  ·  **Date:** 2026-08-17
+
+**What it built.** LEASE-07: a visitor's inquiry on a published listing creates a `Prospect` (the named person R-057's own note promised, separate from `ListingLead`'s bare anonymous visit log), an identical five-question pre-screen invite (move date, occupants, pets, income range, prior evictions) goes out automatically over a single-use token, and staff track the pipeline (INQUIRY → PRE_SCREENED → SHOWING → APPLIED → SCREENED → APPROVED → SIGNED) from a new `/prospects` list and detail page. New `Prospect`/`ProspectStatus` model, `PROSPECT_PRESCREEN` auth-token purpose (14-day TTL), `PROSPECT` notification recipient type, a fixed `prospect.prescreen_invite` template, and public pages at `/listings/[id]` (inquiry form) and `/prescreen/[token]` (answers).
+
+### Identical wording is the fair-housing requirement, not a preference
+
+The five questions are a **fixed code template**, not a PM-editable managed one (R-049's own system). Two independent reasons landed on the same answer: fair housing requires every inquiry to see the exact same wording, so an editable version would be the wrong tool even if it fit technically - and it doesn't fit technically anyway, since `renderForRecipient`'s managed-template path renders against a `TenancyRef` a prospect (no lease, no unit yet) simply doesn't have. `Prospect` itself stayed the honestly-scoped record R-057 named for it: `ListingLead` is untouched, still just `listing`/`source`/`occurredAt`; a `Prospect` row is created only when a real name and a real email-or-phone are actually submitted.
+
+### The Auth.js/Vitest split, now a repeatable pattern
+
+A single file mixing a public, session-less action (`submitInquiry`) with a staff action that calls `audit()` (`advanceProspectStage`) fails to import under Vitest for **every** export in the file - `audit()` lives in `lib/audit/index.ts`, which transitively pulls in Auth.js, and Auth.js cannot load outside a real request context. The fix is a physical file split (`actions.ts` public / `staff-actions.ts` staff), not a runtime guard, and this is now the second time the exact same split has paid for itself - R-032c's `verify-link-actions.ts` vs. its staff counterpart drew the identical line for the identical reason. A second, adjacent constraint earned this item: `next/headers`'s `headers()` throws outside a real request scope under Vitest with no workaround, so `submitInquiry` (IP-rate-limited via `clientIp()`) is e2e-only by construction - documented in `prospects.test.ts`'s own header rather than rediscovered next time something reads `headers()`.
+
+### Two real bugs, both caught by e2e and neither by inline review
+
+The prescreen success screen never rendered: `submitPrescreenAnswers` wrote the DB correctly but never called `revalidatePath`, so the Server Component reading `prescreenLinkStatus()` on every request had no reason to refetch after the client-side `useActionState` update landed - the "already answered" success branch was dead code no test reached until e2e drove a real browser through it twice. Separately, the admin detail page's three-way ternary checked `preScreenSentAt` (was an invite ever sent) **before** `preScreenRespondedAt` (did they actually answer) - a prospect who answered showed "Not sent yet." instead of their real answers whenever the two facts diverged, which is exactly what happens for any prospect whose token was minted outside the normal invite flow (the e2e spec's own fixture, and conceivably a resend edge case later). Fixed to gate on `answered` first, `preScreenSentAt` only as the fallback message underneath it.
+
+### The rate-limit bucket local e2e traffic didn't expect
+
+Local e2e traffic carries no `x-forwarded-for` header, so `clientIp()`'s documented fallback resolves to the loopback address - observed as `prospect-inquiry:::1`, not the `:unknown` its own comment assumed. Every anonymous inquiry across every run of the spec, in every browser project, therefore shared **one** `RateLimitCounter` row, and enough manual re-runs during this item's own debugging tripped `RATE_LIMITS.prospectInquiry` (5 per 15 minutes) for real - a genuine rate limit doing its job, not a flake. `e2e/prospects.spec.ts` now clears that bucket by key prefix in `beforeAll`. Production behind Vercel always has a real per-visitor IP, so this collision is local-only, but the pattern (any public, IP-rate-limited action's e2e spec needs the same clearing) is worth remembering before it costs a debugging pass again.
+
+### What it left behind
+
+- **No resend control for a bounced or never-answered invite.** `sendPrescreenInvite` is exported specifically so a later "resend" button has something to call; nothing calls it a second time yet.
+- **No automation past `PRE_SCREENED`.** Showing, applied, screened, approved and signed are staff-recorded status only (`advanceProspectStage`), same posture the page's own copy states plainly - R-059 (online application) and R-064 (showings) are where those stages actually get built out.
+- **No duplicate-prospect detection.** The same person inquiring on two listings, or twice on one, creates two independent `Prospect` rows with no merge or cross-reference.

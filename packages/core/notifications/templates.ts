@@ -1113,6 +1113,58 @@ export const digestTemplate: NotificationTemplate<DigestContext> = {
   },
 }
 
+/// Context for `prospect.prescreen_invite` (LEASE-07, R-058).
+export interface ProspectPrescreenContext {
+  firstName: string
+  addressLine1: string
+  /// The five-question pre-screen link (a single-use PROSPECT_PRESCREEN
+  /// token).
+  url: string
+}
+
+/**
+ * The identical pre-screening invite (LEASE-07: "auto-sent... identical for
+ * all inquirers").
+ *
+ * A CODE TEMPLATE, DELIBERATELY NOT A MANAGED ONE. R-049's managed-template
+ * carrier (`comms.managed_template`/`comms.announcement`) exists so a PM can
+ * author and edit wording per property - which is exactly the axis this
+ * message must NOT vary on. Fair housing requires every inquirer see the
+ * identical five questions in the identical words; a PM-editable template
+ * would let two prospects on two properties be asked differently, which is
+ * the one thing this item exists to prevent. `renderForRecipient()`
+ * (apps/web/lib/comms/templates.ts) is also built around a TENANT audience
+ * (`{ tenantId, leaseId }`) a prospect does not have - a second reason this
+ * is the simpler, more correct choice, not merely the lazier one.
+ */
+export const prospectPrescreenTemplate: NotificationTemplate<ProspectPrescreenContext> = {
+  key: 'prospect.prescreen_invite',
+  category: 'prospect_prescreening',
+  channels: ['SMS', 'EMAIL'],
+  render: (context, channel) => {
+    if (channel === 'SMS') {
+      return {
+        body: [
+          `Thanks for your interest in ${context.addressLine1}. A few quick questions before we go further:`,
+          context.url,
+        ].join('\n'),
+      }
+    }
+    return {
+      subject: `A few questions about ${context.addressLine1}`,
+      body: [
+        `Hi ${context.firstName},`,
+        '',
+        `Thanks for asking about ${context.addressLine1}. Before we go further, we ask everyone who inquires the same five questions - move date, occupants, pets, income range, and prior evictions:`,
+        '',
+        context.url,
+        '',
+        "It takes about a minute, and it's how we keep this fair to everyone who inquires.",
+      ].join('\n'),
+    }
+  },
+}
+
 export const TEMPLATES: Readonly<Record<string, NotificationTemplate<never>>> = {
   [vendorDeclinedTemplate.key]:
     vendorDeclinedTemplate as unknown as NotificationTemplate<never>,
@@ -1150,6 +1202,8 @@ export const TEMPLATES: Readonly<Record<string, NotificationTemplate<never>>> = 
   [cardExpiringTemplate.key]:
     cardExpiringTemplate as unknown as NotificationTemplate<never>,
   [digestTemplate.key]: digestTemplate as unknown as NotificationTemplate<never>,
+  [prospectPrescreenTemplate.key]:
+    prospectPrescreenTemplate as unknown as NotificationTemplate<never>,
 }
 
 export class UnknownTemplateError extends Error {

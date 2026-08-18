@@ -38,6 +38,10 @@ export const RATE_LIMITS = {
   /// Per session. A six-digit code is 10^6 wide; without this, an attacker
   /// holding a valid password could simply enumerate it.
   mfaVerify: { limit: 8, windowMs: 5 * 60_000 },
+  /// Per IP (R-058). Unauthenticated, sends a message, and its whole point
+  /// is a stranger with no account can trigger it - the same shape
+  /// magicLinkRequest guards for the same reason.
+  prospectInquiry: { limit: 5, windowMs: 15 * 60_000 },
 } as const satisfies Record<string, RateLimitPolicy>
 
 export type RateLimitName = keyof typeof RATE_LIMITS

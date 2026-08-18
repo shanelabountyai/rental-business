@@ -47,6 +47,11 @@ const CATEGORY_LABELS: Record<NotificationCategory, string> = {
   compliance_due: 'Compliance dates coming up',
   vendor_response: 'Vendor replies on your jobs',
   digest_daily: 'Daily digest instead of one at a time (rent reminders, maintenance updates, renewals, announcements, ready units, compliance dates, your assigned tasks)',
+  // Never actually shown on this screen in practice - the only recipient
+  // this category ever sends to is PROSPECT, which has no staff account and
+  // therefore no preferences row to read. Present so the exhaustive map
+  // stays exhaustive rather than because anyone will see it.
+  prospect_prescreening: 'Prospect pre-screening invites',
 }
 
 const CHANNEL_LABELS: Record<NotificationChannel, string> = {
