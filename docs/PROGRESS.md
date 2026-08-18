@@ -2777,7 +2777,7 @@ A DB-integration test seeded a `Prospect` with `status: 'PRE_SCREENED'` set dire
 ---
 
 ## R-060 — SimulatedScreeningAdapter + written screening criteria
-**Commit:** _pending_  ·  **Date:** 2026-08-18
+**Commit:** `88f8d67`  ·  **Date:** 2026-08-18
 
 **What it built.** LEASE-04: a third `Adapter`/`SimulatedAdapter`/`provider` family (D-7, after syndication and billing) orders a per-applicant consumer report the moment a household's application completes - no separate staff click, no fake "continue to provider" redirect page, since no real vendor exists yet. `ScreeningCriteria` is a versioned config table (v1 seeded with placeholder income/credit/lookback defaults, `reviewedBy: null`), and `ScreeningReport` holds the provider's own facts plus a staff-only `decision`/`decisionNotes` pair. `evaluateCriteria()` (`packages/core/screening`) returns one MEETS/FAILS/UNKNOWN verdict per criterion - never a composite score - for the Prospect detail page's new Screening section to show alongside the criteria that produced it. `screening.decide` is a new privileged, MFA-gated permission; `recordScreeningDecision` enforces order-of-completed-application (`earlierUndecidedApplications`, pure) and requires an individualized-assessment note for anything but a plain approval.
 
