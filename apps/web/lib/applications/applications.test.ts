@@ -77,6 +77,13 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await prisma.document.deleteMany({ where: { propertyId } })
+  // ScreeningReport is not append-only, but its FK to Applicant is RESTRICT
+  // (CLAUDE.md's own rule for a table pointing at one) - R-060's automatic
+  // ordering means every applicant seeded here now has one, so it has to go
+  // before the applicant does.
+  await prisma.screeningReport.deleteMany({
+    where: { applicant: { application: { propertyId } } },
+  })
   await prisma.applicant.deleteMany({ where: { application: { propertyId } } })
   await prisma.application.deleteMany({ where: { id: { in: applicationIds } } })
   await prisma.prospect.deleteMany({ where: { id: { in: prospectIds } } })
@@ -195,10 +202,15 @@ describe('submitApplicantForm', () => {
     const app = await prisma.application.findUniqueOrThrow({ where: { id: application.id } })
     expect(app.completedAt).not.toBeNull()
 
+    // SCREENED, not APPLIED - completing the application (R-060) orders a
+    // screening report for every applicant automatically, and the
+    // simulated adapter completes it inline, so the pipeline advances past
+    // APPLIED in the same call. screening.test.ts covers the ordering
+    // itself; this only has to not regress on the side effect.
     const updatedProspect = await prisma.prospect.findUniqueOrThrow({
       where: { id: prospect.id },
     })
-    expect(updatedProspect.status).toBe('APPLIED')
+    expect(updatedProspect.status).toBe('SCREENED')
 
     const audited = await prisma.auditLog.findFirst({
       where: { action: 'application.completed', entityId: application.id },
@@ -333,10 +345,12 @@ describe('projectApplicationFeeEvent (the webhook half)', () => {
     const app = await prisma.application.findUniqueOrThrow({ where: { id: application.id } })
     expect(app.completedAt).not.toBeNull()
 
+    // SCREENED, not APPLIED - see the identical comment on the no-fee test
+    // above.
     const updatedProspect = await prisma.prospect.findUniqueOrThrow({
       where: { id: prospect.id },
     })
-    expect(updatedProspect.status).toBe('APPLIED')
+    expect(updatedProspect.status).toBe('SCREENED')
 
     const notification = await prisma.notification.findFirst({
       where: { recipientType: 'APPLICANT', recipientId: lead.id },

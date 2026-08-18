@@ -4,6 +4,7 @@ import type { ProjectionIntent } from '@rental/core/billing'
 import { prisma } from '@rental/db'
 import { auditAsSystem } from '@/lib/audit/system.ts'
 import { notify } from '@/lib/notifications/send.ts'
+import { orderScreeningForApplication } from '@/lib/screening/order.ts'
 
 // The application-fee half of the Stripe webhook pipeline (R-059).
 //
@@ -138,4 +139,12 @@ async function maybeCompleteApplication(applicationId: string): Promise<void> {
       tx,
     )
   })
+
+  // OUTSIDE the transaction, deliberately - the same rule
+  // lib/listings/actions.ts states for its own provider call: an outbound
+  // call held inside a transaction pins a pooled connection open for as
+  // long as a third party takes to answer. Screening (LEASE-04, R-060) is
+  // "applicant-initiated" in the sense that the household completing their
+  // own application IS the initiating act.
+  await orderScreeningForApplication(applicationId)
 }

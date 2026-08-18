@@ -68,6 +68,13 @@ export const AUDIT_ACTIONS = [
   /// order applications by.
   'application.completed',
 
+  // Screening (LEASE-04, R-060)
+  /// A consumer report was ordered from the (simulated) provider for one
+  /// applicant, triggered automatically once their household's application
+  /// completed - attributed to SYSTEM, the same posture 'unit.auto_made_ready'
+  /// already gives an automated write.
+  'screening.ordered',
+
   // Access and identity
   'auth.signed_in',
   'auth.locked_out',

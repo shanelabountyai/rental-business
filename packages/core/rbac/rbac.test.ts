@@ -193,6 +193,9 @@ describe('can — MFA gate (ROLE-05)', () => {
       'document.delete',
       'fee.waive',
       'ledger.adjust',
+      // R-060. A screening accept/decline is a fair-housing-sensitive
+      // judgement, the same class of harm a stolen session moving money is.
+      'screening.decide',
       'staff.manage',
       // R-049. Signing off a legal translation is a claim that somebody with
       // authority read it; the product can only record who said so, so the

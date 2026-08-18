@@ -225,9 +225,56 @@ async function seedJurisdictionRules() {
   console.info('Seeded 1 jurisdiction rule (TX, statewide, v1).')
 }
 
+/// LEASE-04's own gate (OQ-6 in 07-decisions.md, still an open hard block):
+/// screening cannot start with nothing written to version. `reviewedBy` is
+/// null and `notes` says so plainly - these are placeholder defaults
+/// authored by this build, not criteria an attorney has reviewed, the same
+/// honestly-flagged posture seedJurisdictionRules() already gives its own
+/// un-reviewed seed.
+async function seedScreeningCriteria() {
+  const existing = await prisma.screeningCriteria.findFirst({
+    where: { version: 1 },
+  })
+  if (existing) {
+    console.info('Screening criteria already seeded (v1).')
+    return
+  }
+
+  await prisma.screeningCriteria.create({
+    data: {
+      version: 1,
+      effectiveFrom: new Date('2026-01-01'),
+      // Common industry default (3x rent) - no statute sets this number,
+      // it is owner policy.
+      incomeToRentMultiplierX100: 300,
+      // A floor is applied, but never as an automatic decline by itself -
+      // evaluateCriteria() only ever returns MEETS/FAILS/UNKNOWN per
+      // criterion; decision-making is entirely staff's, and this number is
+      // exactly the kind of choice OQ-6's owner/counsel review has to land
+      // on before it governs a real applicant.
+      minCreditScore: 600,
+      // 7 years - the common FCRA reporting horizon for a civil judgment,
+      // not a fixed legal requirement for how far back landlord policy may
+      // look.
+      evictionLookbackMonths: 84,
+      // Same window. HUD's 2016 guidance on criminal-history screening is
+      // why a record found inside it is a FLAG for individualized
+      // assessment, never an automatic decline - see ScreeningReport's own
+      // schema comment and evaluate.ts's own header.
+      criminalLookbackMonths: 84,
+      citation: null,
+      reviewedBy: null,
+      notes:
+        'Placeholder defaults drafted at R-060 with no attorney review - OQ-6 in 07-decisions.md is still an open hard block. Do not treat these numbers as legal advice or a defensible policy until an owner records who reviewed them.',
+    },
+  })
+  console.info('Seeded 1 screening criteria version (v1, unreviewed placeholder).')
+}
+
 async function main() {
   await seedRoles()
   await seedJurisdictionRules()
+  await seedScreeningCriteria()
 }
 
 main()

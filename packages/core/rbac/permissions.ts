@@ -64,6 +64,12 @@ export const PERMISSIONS = [
   /// machine translation in marks their own work approved and a defective
   /// notice to vacate goes out in a language nobody with authority read.
   'template.approve',
+  /// Recording a screening accept/decline (LEASE-04, R-060). Its own
+  /// permission rather than folded into `lease.write` - audit/events.ts's
+  /// header already named "screening decision" among the privileged
+  /// actions ROLE-03 lists, ahead of this permission existing, and this is
+  /// where that forward reference gets a permission to point at.
+  'screening.decide',
 ] as const
 
 export type Permission = (typeof PERMISSIONS)[number]
@@ -97,6 +103,7 @@ export const PRIVILEGED_PERMISSIONS: ReadonlySet<Permission> = new Set([
   'staff.manage',
   'document.delete',
   'accesscode.reveal',
+  'screening.decide',
 ])
 
 export function requiresMfa(permission: Permission): boolean {
@@ -160,6 +167,7 @@ export const ROLE_DEFINITIONS: Record<
       'unit.write',
       'lease.read',
       'lease.write',
+      'screening.decide',
       'tenant.read',
       'tenant.write',
       'ledger.read',

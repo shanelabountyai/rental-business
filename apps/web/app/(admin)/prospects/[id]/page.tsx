@@ -2,12 +2,28 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { InviteToApplyForm } from '@/components/applications/invite-to-apply-form.tsx'
 import { ProspectStageForm } from '@/components/prospects/prospect-stage-form.tsx'
+import { ScreeningDecisionForm } from '@/components/screening/screening-decision-form.tsx'
 import { inviteToApply } from '@/lib/applications/staff-actions.ts'
 import { applicationForProspect } from '@/lib/applications/queries.ts'
 import { requireScope } from '@/lib/auth/guard.ts'
 import { advanceProspectStage } from '@/lib/prospects/staff-actions.ts'
 import { prospectForWrite } from '@/lib/prospects/queries.ts'
+import { recordScreeningDecision } from '@/lib/screening/staff-actions.ts'
+import { screeningForApplication } from '@/lib/screening/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
+
+const CRITERION_LABELS: Record<string, string> = {
+  income: 'Income',
+  credit: 'Credit',
+  eviction: 'Eviction history',
+  criminal: 'Criminal history',
+}
+
+const DECISION_LABELS: Record<string, string> = {
+  APPROVED: 'Approved',
+  APPROVED_WITH_CONDITIONS: 'Approved with conditions',
+  DECLINED: 'Declined',
+}
 
 export const metadata = { title: 'Prospect — Rental Operations' }
 
@@ -42,6 +58,9 @@ export default async function ProspectDetailPage({
 
   const answered = prospect.preScreenRespondedAt != null
   const application = await applicationForProspect(id, scope)
+  const screening = application?.completedAt
+    ? await screeningForApplication(application.id, scope)
+    : null
 
   return (
     <div className="flex max-w-2xl flex-col gap-6">
@@ -155,14 +174,73 @@ export default async function ProspectDetailPage({
         </section>
       )}
 
+      {screening && (
+        <section aria-labelledby="screening" className="flex flex-col gap-3 rounded-md border p-4">
+          <h2 id="screening" className="text-sm font-semibold">
+            Screening
+          </h2>
+          <ul className="flex flex-col gap-3 text-sm">
+            {screening.applicants.map((a) => (
+              <li key={a.applicantId} className="flex flex-col gap-2 rounded border p-2">
+                <span className="font-medium">
+                  {a.firstName} {a.lastName}
+                </span>
+                {a.reportStatus === 'NONE' && (
+                  <p className="text-muted-foreground">No report ordered yet.</p>
+                )}
+                {a.reportStatus === 'FAILED' && (
+                  <p className="text-red-700 dark:text-red-400">
+                    The report failed. Not evaluated against criteria.
+                  </p>
+                )}
+                {(a.reportStatus === 'COMPLETE' || a.reportStatus === 'ORDERED') && (
+                  <dl className="grid grid-cols-2 gap-x-4 gap-y-1 sm:grid-cols-[max-content_1fr]">
+                    {a.criteria.map((c) => (
+                      <span key={c.key} className="contents">
+                        <dt className="text-muted-foreground">{CRITERION_LABELS[c.key]}</dt>
+                        <dd
+                          className={
+                            c.result === 'FAILS'
+                              ? 'text-red-700 dark:text-red-400'
+                              : c.result === 'UNKNOWN'
+                                ? 'text-muted-foreground'
+                                : ''
+                          }
+                        >
+                          {c.detail}
+                        </dd>
+                      </span>
+                    ))}
+                  </dl>
+                )}
+                {a.decision ? (
+                  <p>
+                    <span className="font-medium">{DECISION_LABELS[a.decision] ?? a.decision}</span>
+                    {a.decisionNotes && <span> — {a.decisionNotes}</span>}
+                  </p>
+                ) : (
+                  a.reportStatus === 'COMPLETE' && (
+                    <ScreeningDecisionForm
+                      action={recordScreeningDecision}
+                      applicantId={a.applicantId}
+                      outOfOrder={screening.outOfOrder}
+                    />
+                  )
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       {answered && (
         <section aria-labelledby="stage" className="flex flex-col gap-2 rounded-md border p-4">
           <h2 id="stage" className="text-sm font-semibold">
             Pipeline
           </h2>
           <p className="text-muted-foreground text-sm">
-            Showing, screening and e-sign are not automated yet - this records where things
-            actually stand.
+            Showing and e-sign are not automated yet. Screening orders itself once an
+            application completes; this records everything else by hand.
           </p>
           <ProspectStageForm
             action={advanceProspectStage.bind(null, prospect.id)}

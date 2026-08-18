@@ -120,6 +120,9 @@ const fillApplicantForm = async (page: import('@playwright/test').Page) => {
 
 test.afterAll(async () => {
   await prisma.document.deleteMany({ where: { propertyId: { in: propertyIds } } })
+  await prisma.screeningReport.deleteMany({
+    where: { applicant: { application: { propertyId: { in: propertyIds } } } },
+  })
   await prisma.applicant.deleteMany({ where: { application: { propertyId: { in: propertyIds } } } })
   await prisma.application.deleteMany({ where: { propertyId: { in: propertyIds } } })
   await prisma.prospect.deleteMany({ where: { id: { in: prospectIds } } })
@@ -180,12 +183,15 @@ test('staff invites a prospect, the lead adds a co-applicant, and the household 
   await expect(coPage.getByText('Thanks - your section is complete.')).toBeVisible()
   await coContext.close()
 
+  // SCREENED, not APPLIED - completing the application (R-060) orders a
+  // screening report for both applicants automatically, and the simulated
+  // adapter completes it inline in the same request.
   await expect
     .poll(async () => {
       const row = await prisma.prospect.findUniqueOrThrow({ where: { id: prospect.id } })
       return row.status
     })
-    .toBe('APPLIED')
+    .toBe('SCREENED')
 
   await page.goto(`/prospects/${prospect.id}`)
   await expect(page.getByText(/^Complete \d{4}-\d{2}-\d{2}\.$/)).toBeVisible()

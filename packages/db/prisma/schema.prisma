@@ -848,11 +848,126 @@ model Applicant {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  application Application @relation(fields: [applicationId], references: [id])
-  documents   Document[]
+  application     Application      @relation(fields: [applicationId], references: [id])
+  documents       Document[]
+  screeningReport ScreeningReport?
 
   @@index([applicationId])
   @@index([stripeCustomerId])
+}
+
+/// Written screening criteria (LEASE-04, R-060; D-7), versioned like
+/// AccessCode/JurisdictionRule (D-4's pattern reused): never edited in
+/// place, a new version supersedes the old one so a past decision stays
+/// explainable against the criteria actually in force when it was made.
+///
+/// NOT scoped like JurisdictionRule (state/jurisdiction) - D-4 scopes that
+/// table to statute, each field carrying a citation. Screening criteria are
+/// owner policy, not law, and the fair-housing defense this table exists
+/// for depends on the SAME criteria applying to every applicant across the
+/// whole portfolio, not a jurisdiction-by-jurisdiction patchwork.
+///
+/// `reviewedBy` is null until an owner records who actually reviewed a
+/// version - the seeded v1 row is a placeholder drafted with no attorney
+/// review (07-decisions.md OQ-6 was answered "draft defaults now" rather
+/// than "criteria already exist"), the same honestly-flagged posture
+/// JurisdictionRule's own seed comment already uses for the identical gap.
+model ScreeningCriteria {
+  id      String @id @default(cuid())
+  version Int
+
+  /// Minimum monthly income as a multiple of rent, x100 (300 = 3.00x) -
+  /// integer, same reasoning money-as-cents gives everywhere else: a float
+  /// multiplier invites rounding drift into a number a decline gets
+  /// defended against.
+  incomeToRentMultiplierX100 Int
+  /// Null = no floor applied. Compared only against the provider's own
+  /// reported score (ScreeningReport.creditScore) - never against anything
+  /// derived from Applicant's own fields (D-27).
+  minCreditScore             Int?
+  evictionLookbackMonths     Int
+  /// A record found inside this window is flagged for staff to read, never
+  /// an automatic decline - HUD's 2016 guidance on criminal-history
+  /// screening is why "individualized-assessment notes" exists on
+  /// ScreeningReport at all: nature, severity and time elapsed have to be
+  /// weighed by a person, not a threshold.
+  criminalLookbackMonths     Int
+
+  citation  String?
+  reviewedBy String?
+  notes     String?
+
+  effectiveFrom    DateTime  @default(now())
+  effectiveTo      DateTime?
+  createdByStaffId String?
+  createdAt        DateTime  @default(now())
+
+  createdBy StaffUser? @relation(fields: [createdByStaffId], references: [id])
+
+  @@unique([version])
+  @@index([effectiveTo])
+}
+
+/// One consumer report per Applicant (LEASE-04, R-060) - screening is
+/// individual, not per household: FCRA consent and the report itself
+/// belong to one person, the same granularity R-059 already gave income,
+/// documents and the fee.
+///
+/// PROVIDER-HOSTED, NO SSN: nothing upstream of `ScreeningAdapter.order()`
+/// carries anything SSN-shaped (see this file's header) - the adapter is
+/// handed an applicant id and returns a provider reference and report
+/// facts, exactly what a real hosted-flow integration would hand back over
+/// its own webhook.
+///
+/// THE REPORT FACTS ARE NEVER DERIVED FROM ANYTHING THE DECISION READS
+/// (D-27). `SimulatedScreeningAdapter` generates them from a hash of the
+/// applicant id, not from `Applicant.monthlyIncomeCents` or any other
+/// field the criteria comparison also reads - otherwise the simulator
+/// would agree with the criteria evaluator by construction and "results
+/// displayed alongside criteria" would prove nothing.
+///
+/// `criteriaVersion` is pinned at order time, the same snapshot reasoning
+/// `Applicant.feeCents` already gives the application fee: a criteria
+/// version bump after ordering must not silently move what this applicant
+/// is judged against.
+///
+/// NO ALGORITHMIC SCORE COLUMN EXISTS HERE, EVER (LEASE-04's own words).
+/// `decision` is written by a staff member alone - see
+/// apps/web/lib/screening/staff-actions.ts.
+model ScreeningReport {
+  id          String  @id @default(cuid())
+  applicantId String  @unique
+  providerId  String
+  /// ORDERED, COMPLETE, FAILED.
+  status      String
+  faultCode   String?
+
+  creditScore          Int?
+  evictionRecordFound  Boolean?
+  criminalRecordFound  Boolean?
+
+  criteriaVersion Int
+
+  /// APPROVED, APPROVED_WITH_CONDITIONS, DECLINED. Null until a staff
+  /// member decides - "accept/decline always an explicit human action"
+  /// (LEASE-04).
+  decision         String?
+  /// The individualized-assessment note LEASE-04 asks to retain - required
+  /// for anything but a plain APPROVED (apps/web/lib/screening's own
+  /// validation), because a decline or a conditional approval is exactly
+  /// the case HUD's guidance says needs a person's stated reasoning, not a
+  /// threshold.
+  decisionNotes    String?
+  decidedAt        DateTime?
+  decidedByStaffId String?
+
+  orderedAt   DateTime  @default(now())
+  completedAt DateTime?
+
+  applicant Applicant  @relation(fields: [applicantId], references: [id])
+  decidedBy StaffUser? @relation(fields: [decidedByStaffId], references: [id])
+
+  @@index([applicantId])
 }
 
 /// inquiry -> pre-screened -> showing -> applied -> screened -> approved ->
@@ -1096,6 +1211,8 @@ model StaffUser {
   translationsApproved            MessageTemplateTranslation[] @relation("TranslationApprovedBy")
   paymentHoldsSet                 LeasePayer[]                 @relation("PaymentHoldSetBy")
   listingsCreated                 Listing[]                    @relation("ListingCreatedBy")
+  screeningCriteriaCreated        ScreeningCriteria[]
+  screeningReportsDecided         ScreeningReport[]
 
   @@index([active])
 }
