@@ -2742,7 +2742,7 @@ Local e2e traffic carries no `x-forwarded-for` header, so `clientIp()`'s documen
 ---
 
 ## R-059 — Online application, one per adult 18+
-**Commit:** PENDING  ·  **Date:** 2026-08-18
+**Commit:** `fc7d572`  ·  **Date:** 2026-08-18
 
 **What it built.** LEASE-03: staff invite a pre-screened prospect to apply from their own detail page; the lead applicant fills in their own section (name, DOB, current address, employer/income), uploads ID and income documents, adds co-applicants who each get their own link, and pays a per-applicant fee (Stripe-hosted fields, clamped to the jurisdiction cap) before their section counts as complete. New `Application`/`Applicant` models, `APPLICATION_LINK` auth-token purpose, a `prospect_application` notification category with three fixed templates (invite, co-applicant invite, fee-paid confirmation), two new `BillingProvider` methods for a one-off per-applicant fee, and public pages at `/apply/[token]`.
 
