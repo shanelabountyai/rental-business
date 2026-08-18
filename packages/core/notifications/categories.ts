@@ -77,6 +77,15 @@ export const NOTIFICATION_CATEGORIES = [
   /// preference could touch - a PROSPECT recipient has no preferences to
   /// read in the first place (no account exists yet to hold one).
   'prospect_prescreening',
+
+  /// R-059: every application-pipeline message an APPLICANT recipient gets -
+  /// the invite to apply, a co-applicant's own invite, and the fee-paid
+  /// confirmation. One category rather than three, unlike prospect
+  /// pre-screening's own single-purpose one: these all share the identical
+  /// "no account, no preferences to read" reasoning and none of them are
+  /// PM-editable content, so splitting them would not buy anything a
+  /// template key does not already give for free.
+  'prospect_application',
 ] as const
 
 export type NotificationCategory = (typeof NOTIFICATION_CATEGORIES)[number]
@@ -119,6 +128,9 @@ const CATEGORY_CHANNELS: Partial<Record<NotificationCategory, readonly Notificat
   /// Never PORTAL - a prospect has no account and no portal to read one in
   /// (NotificationRecipientType.PROSPECT's own schema comment).
   prospect_prescreening: ['EMAIL', 'SMS'],
+  /// Same reasoning, same restriction - an APPLICANT has no account either
+  /// (NotificationRecipientType.APPLICANT's own schema comment).
+  prospect_application: ['EMAIL', 'SMS'],
 }
 
 export function channelsFor(
@@ -243,6 +255,10 @@ export function defaultEnabled(
     // relationship they might want fewer texts from. Defaulting this off
     // would silently never reach a phone-only submission, which is exactly
     // the persona SMS-to-ticket (R-021) already exists to serve.
-    category === 'prospect_prescreening'
+    category === 'prospect_prescreening' ||
+    // R-059: the same reasoning - an application invite (own or a
+    // co-applicant's) and a fee-paid confirmation are each a direct reply
+    // to something the recipient just did, to a number they just gave.
+    category === 'prospect_application'
   )
 }

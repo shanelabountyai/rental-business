@@ -42,6 +42,12 @@ export const RATE_LIMITS = {
   /// is a stranger with no account can trigger it - the same shape
   /// magicLinkRequest guards for the same reason.
   prospectInquiry: { limit: 5, windowMs: 15 * 60_000 },
+  /// Per applicant (R-059), not per IP - the caller already holds a valid
+  /// APPLICATION_LINK, so the thing worth bounding is one household member
+  /// hammering the upload endpoint (a script, a retried large file), not an
+  /// anonymous stranger. Generous on purpose: one person may upload a photo
+  /// ID front and back plus several months of pay stubs in one sitting.
+  applicationDocumentUpload: { limit: 20, windowMs: 15 * 60_000 },
 } as const satisfies Record<string, RateLimitPolicy>
 
 export type RateLimitName = keyof typeof RATE_LIMITS

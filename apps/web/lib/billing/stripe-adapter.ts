@@ -609,6 +609,56 @@ export class StripeBillingProvider implements BillingProvider {
     }
   }
 
+  async createApplicationFeeCustomer(input: {
+    applicantId: string
+    applicationId: string
+    propertyId: string
+    name: string
+    email: string | null
+    phone: string | null
+  }): Promise<ProvisionedCustomer> {
+    const customer = await this.#post(
+      '/customers',
+      {
+        name: input.name,
+        email: input.email,
+        phone: input.phone,
+        'metadata[applicantId]': input.applicantId,
+        'metadata[applicationId]': input.applicationId,
+        'metadata[propertyId]': input.propertyId,
+      },
+      // Derived from the applicant, not random - one applicant has one
+      // customer, matching createCustomer's own idempotency shape.
+      `application-customer:${input.applicantId}`,
+    )
+    return { stripeCustomerId: customer.id as string }
+  }
+
+  async createApplicationFeePaymentIntent(input: {
+    stripeCustomerId: string
+    amountCents: number
+    currency: string
+    applicantId: string
+    idempotencyKey: string
+  }): Promise<{ stripePaymentIntentId: string; clientSecret: string }> {
+    const intent = await this.#post(
+      '/payment_intents',
+      {
+        customer: input.stripeCustomerId,
+        amount: input.amountCents,
+        currency: input.currency,
+        // Card only - no ACH-vs-card policy question for a one-off fee.
+        'payment_method_types[0]': 'card',
+        'metadata[applicantId]': input.applicantId,
+      },
+      input.idempotencyKey,
+    )
+    return {
+      stripePaymentIntentId: intent.id as string,
+      clientSecret: intent.client_secret as string,
+    }
+  }
+
   async paymentMethodExpiry(
     stripePaymentMethodId: string,
   ): Promise<{ expMonth: number; expYear: number } | null> {

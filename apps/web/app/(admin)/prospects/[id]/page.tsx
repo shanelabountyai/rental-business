@@ -1,6 +1,9 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
+import { InviteToApplyForm } from '@/components/applications/invite-to-apply-form.tsx'
 import { ProspectStageForm } from '@/components/prospects/prospect-stage-form.tsx'
+import { inviteToApply } from '@/lib/applications/staff-actions.ts'
+import { applicationForProspect } from '@/lib/applications/queries.ts'
 import { requireScope } from '@/lib/auth/guard.ts'
 import { advanceProspectStage } from '@/lib/prospects/staff-actions.ts'
 import { prospectForWrite } from '@/lib/prospects/queries.ts'
@@ -38,6 +41,7 @@ export default async function ProspectDetailPage({
   if (!prospect) notFound()
 
   const answered = prospect.preScreenRespondedAt != null
+  const application = await applicationForProspect(id, scope)
 
   return (
     <div className="flex max-w-2xl flex-col gap-6">
@@ -108,13 +112,57 @@ export default async function ProspectDetailPage({
       </section>
 
       {answered && (
+        <section aria-labelledby="application" className="flex flex-col gap-3 rounded-md border p-4">
+          <h2 id="application" className="text-sm font-semibold">
+            Application
+          </h2>
+          {!application ? (
+            <>
+              <p className="text-muted-foreground text-sm">Not invited to apply yet.</p>
+              <InviteToApplyForm action={inviteToApply.bind(null, prospect.id)} />
+            </>
+          ) : (
+            <>
+              <p className="text-muted-foreground text-sm">
+                {application.completedAt
+                  ? `Complete ${application.completedAt.toISOString().slice(0, 10)}.`
+                  : 'In progress.'}
+              </p>
+              <ul className="flex flex-col gap-2 text-sm">
+                {application.applicants.map((a) => (
+                  <li key={a.id} className="rounded border p-2">
+                    <span className="font-medium">
+                      {a.firstName} {a.lastName}
+                    </span>
+                    {a.isLead ? ' (lead)' : ''}
+                    {' — '}
+                    {a.completedAt
+                      ? 'done'
+                      : a.formSubmittedAt
+                        ? a.feeCents
+                          ? a.feePaidAt
+                            ? 'fee paid, finishing up'
+                            : 'waiting on fee'
+                          : 'submitted'
+                        : 'in progress'}
+                    {' · '}
+                    {a.documentCount} document{a.documentCount === 1 ? '' : 's'}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </section>
+      )}
+
+      {answered && (
         <section aria-labelledby="stage" className="flex flex-col gap-2 rounded-md border p-4">
           <h2 id="stage" className="text-sm font-semibold">
             Pipeline
           </h2>
           <p className="text-muted-foreground text-sm">
-            Showing, application, screening and e-sign are not automated yet - this records
-            where things actually stand.
+            Showing, screening and e-sign are not automated yet - this records where things
+            actually stand.
           </p>
           <ProspectStageForm
             action={advanceProspectStage.bind(null, prospect.id)}

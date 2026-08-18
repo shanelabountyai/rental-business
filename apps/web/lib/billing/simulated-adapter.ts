@@ -315,6 +315,39 @@ export class SimulatedBillingProvider implements BillingProvider {
     }
   }
 
+  async createApplicationFeeCustomer(input: {
+    applicantId: string
+    applicationId: string
+    propertyId: string
+    name: string
+    email: string | null
+    phone: string | null
+  }): Promise<ProvisionedCustomer> {
+    const stripeCustomerId = stripeId('cus')
+    console.info(
+      `[billing:simulated] customer ${stripeCustomerId} for applicant ${input.applicantId} (${input.name})`,
+    )
+    return { stripeCustomerId }
+  }
+
+  async createApplicationFeePaymentIntent(input: {
+    stripeCustomerId: string
+    amountCents: number
+    currency: string
+    applicantId: string
+    idempotencyKey: string
+  }): Promise<{ stripePaymentIntentId: string; clientSecret: string }> {
+    const stripePaymentIntentId = stripeId('pi')
+    console.info(
+      `[billing:simulated] application fee payment intent ${stripePaymentIntentId} for ` +
+        `${input.amountCents}c on applicant ${input.applicantId} (key ${input.idempotencyKey})`,
+    )
+    return {
+      stripePaymentIntentId,
+      clientSecret: `${stripePaymentIntentId}_secret_${randomBytes(8).toString('hex')}`,
+    }
+  }
+
   async paymentMethodExpiry(
     stripePaymentMethodId: string,
   ): Promise<{ expMonth: number; expYear: number } | null> {

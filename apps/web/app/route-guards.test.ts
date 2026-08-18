@@ -62,6 +62,8 @@ const PUBLIC_ROUTES: Record<string, string> = {
     "Bytes for the public listing page above, same authorization as the page itself (a PUBLISHED listing owning this unit's photo) rather than any session. A separate route from api/documents/[id]/file for the same reason the vendor photo route is separate from it - see that route's own comment.",
   'prescreen/[token]/page.tsx':
     "A prospect's identical pre-screening questions (LEASE-07, R-058), answerable with no account - a prospect has none by definition. Same shape as verify/[token] and pay/[token]: the token in the path IS the credential, and `prescreenLinkStatus()` is the entire authorization. Single-use, unlike its two token-gated siblings, because the one answer a prospect ever gives is what the token itself guards - see AuthTokenPurpose.PROSPECT_PRESCREEN's own schema comment.",
+  'apply/[token]/page.tsx':
+    "One adult's own application (LEASE-03, R-059), answerable with no account - an applicant has none. Same shape as prescreen/[token]: the token in the path IS the credential, and `applicationLinkStatus()` is the entire authorization. MULTI-USE, unlike prescreen's single-use link, because a household gathering documents across several sittings must not find it dead partway through - see AuthTokenPurpose.APPLICATION_LINK's own schema comment.",
 }
 
 /// Any of these in a file counts as guarding it.

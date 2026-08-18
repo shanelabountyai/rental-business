@@ -52,6 +52,7 @@ const CATEGORY_LABELS: Record<NotificationCategory, string> = {
   // therefore no preferences row to read. Present so the exhaustive map
   // stays exhaustive rather than because anyone will see it.
   prospect_prescreening: 'Prospect pre-screening invites',
+  prospect_application: 'Application invites and fee confirmations',
 }
 
 const CHANNEL_LABELS: Record<NotificationChannel, string> = {

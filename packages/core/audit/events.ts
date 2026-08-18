@@ -49,6 +49,25 @@ export const AUDIT_ACTIONS = [
   /// worth its own row, distinct from correcting a typo in a name.
   'prospect.stage_changed',
 
+  // Application pipeline (LEASE-03, R-059)
+  /// Staff invited a prospect to apply - creates the Application group and
+  /// its lead Applicant in one action.
+  'application.invited',
+  /// The lead added a co-applicant, who gets their own APPLICATION_LINK.
+  'application.coapplicant_added',
+  /// One applicant's own form section was saved (may still be incomplete -
+  /// see the field-level violations, not this row, for whether it validated
+  /// clean; this fires on every save so partial progress is provable too).
+  'application.applicant_saved',
+  /// One applicant's fee cleared. Written from the Stripe webhook, never
+  /// from the form submit - D-11's rule that the ledger (and here, a fee
+  /// fact) moves only on confirmation, not on intent.
+  'application.fee_paid',
+  /// Every Applicant under the group is done (form complete, fee cleared or
+  /// none due) - the "completion timestamp" the backlog names for R-060 to
+  /// order applications by.
+  'application.completed',
+
   // Access and identity
   'auth.signed_in',
   'auth.locked_out',

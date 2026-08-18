@@ -17,6 +17,7 @@
 // no internal identifier - no backlog id, no status enum, no entity name - may
 // appear in one. `renderTemplate` cannot enforce that; review does.
 
+import { formatCents } from '../money/money.ts'
 import type { NotificationCategory, NotificationChannel } from './categories.ts'
 
 export interface RenderedMessage {
@@ -1165,6 +1166,106 @@ export const prospectPrescreenTemplate: NotificationTemplate<ProspectPrescreenCo
   },
 }
 
+/// Context for `application.invite` (LEASE-03, R-059) - the lead
+/// applicant, invited by staff off their own Prospect record.
+export interface ApplicationInviteContext {
+  firstName: string
+  addressLine1: string
+  /// The applicant's own APPLICATION_LINK (multi-use until it expires).
+  url: string
+}
+
+export const applicationInviteTemplate: NotificationTemplate<ApplicationInviteContext> = {
+  key: 'application.invite',
+  category: 'prospect_application',
+  channels: ['SMS', 'EMAIL'],
+  render: (context, channel) => {
+    if (channel === 'SMS') {
+      return {
+        body: [`Ready to apply for ${context.addressLine1}? Start here:`, context.url].join('\n'),
+      }
+    }
+    return {
+      subject: `Apply for ${context.addressLine1}`,
+      body: [
+        `Hi ${context.firstName},`,
+        '',
+        `You're invited to apply for ${context.addressLine1}. The link below is yours - come back to it anytime to finish, your progress is saved as you go:`,
+        '',
+        context.url,
+      ].join('\n'),
+    }
+  },
+}
+
+/// Context for `application.coapplicant_invite` (LEASE-03, R-059) - anyone
+/// the lead applicant adds to the household after being invited.
+export interface CoApplicantInviteContext {
+  firstName: string
+  /// Whoever added them - "Jordan Blake invited you to apply alongside
+  /// them", not a bare link with no explanation of why it arrived.
+  leadName: string
+  addressLine1: string
+  url: string
+}
+
+export const coApplicantInviteTemplate: NotificationTemplate<CoApplicantInviteContext> = {
+  key: 'application.coapplicant_invite',
+  category: 'prospect_application',
+  channels: ['SMS', 'EMAIL'],
+  render: (context, channel) => {
+    if (channel === 'SMS') {
+      return {
+        body: [
+          `${context.leadName} added you to their application for ${context.addressLine1}. Your own link:`,
+          context.url,
+        ].join('\n'),
+      }
+    }
+    return {
+      subject: `${context.leadName} added you to an application`,
+      body: [
+        `Hi ${context.firstName},`,
+        '',
+        `${context.leadName} listed you as a co-applicant for ${context.addressLine1}. Fill in your own section here - it takes a few minutes, and your progress is saved as you go:`,
+        '',
+        context.url,
+      ].join('\n'),
+    }
+  },
+}
+
+/// Context for `application.fee_paid` (LEASE-03, R-059) - one applicant's
+/// own confirmation, sent once their fee clears (never before - D-11's
+/// webhook-confirmed rule, same as every other payment confirmation here).
+export interface ApplicationFeePaidContext {
+  firstName: string
+  addressLine1: string
+  amountCents: number
+}
+
+export const applicationFeePaidTemplate: NotificationTemplate<ApplicationFeePaidContext> = {
+  key: 'application.fee_paid',
+  category: 'prospect_application',
+  channels: ['SMS', 'EMAIL'],
+  render: (context, channel) => {
+    const amount = formatCents(context.amountCents)
+    if (channel === 'SMS') {
+      return {
+        body: `Got it - your ${amount} application fee for ${context.addressLine1} is paid. Thanks!`,
+      }
+    }
+    return {
+      subject: `Application fee received - ${context.addressLine1}`,
+      body: [
+        `Hi ${context.firstName},`,
+        '',
+        `We received your ${amount} application fee for ${context.addressLine1}. Thanks for applying.`,
+      ].join('\n'),
+    }
+  },
+}
+
 export const TEMPLATES: Readonly<Record<string, NotificationTemplate<never>>> = {
   [vendorDeclinedTemplate.key]:
     vendorDeclinedTemplate as unknown as NotificationTemplate<never>,
@@ -1204,6 +1305,12 @@ export const TEMPLATES: Readonly<Record<string, NotificationTemplate<never>>> = 
   [digestTemplate.key]: digestTemplate as unknown as NotificationTemplate<never>,
   [prospectPrescreenTemplate.key]:
     prospectPrescreenTemplate as unknown as NotificationTemplate<never>,
+  [applicationInviteTemplate.key]:
+    applicationInviteTemplate as unknown as NotificationTemplate<never>,
+  [coApplicantInviteTemplate.key]:
+    coApplicantInviteTemplate as unknown as NotificationTemplate<never>,
+  [applicationFeePaidTemplate.key]:
+    applicationFeePaidTemplate as unknown as NotificationTemplate<never>,
 }
 
 export class UnknownTemplateError extends Error {

@@ -29,6 +29,7 @@
     "./operational": "./operational/index.ts",
     "./payments": "./payments/index.ts",
     "./portal": "./portal/index.ts",
+    "./applications": "./applications/index.ts",
     "./property": "./property/index.ts",
     "./prospects": "./prospects/index.ts",
     "./rbac": "./rbac/index.ts",

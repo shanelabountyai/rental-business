@@ -344,6 +344,51 @@ export interface BillingProvider {
     stripePaymentMethodId: string,
   ): Promise<{ expMonth: number; expYear: number } | null>
 
+  // ---- Application fees (R-059) ----
+  //
+  // SIBLING METHODS, NOT A WIDENED createCustomer/createPaymentIntent. Both
+  // of those are hard-wired to an existing tenancy (`leasePayerId`,
+  // `leaseId`) that an applicant simply does not have yet - this interface's
+  // own header already states the rule for exactly this situation: "each
+  // will widen this interface when it needs to - a wider one now would be
+  // method signatures guessed at ahead of their only caller." Widening
+  // means adding, here, not making R-037's required fields optional under
+  // an applicant that cannot supply them.
+
+  /// One Stripe customer per Applicant, keyed the same way
+  /// `createCustomer`'s own idempotency key is keyed off `leasePayerId` -
+  /// one applicant, one customer, and a retry finds the first one rather
+  /// than making a second.
+  createApplicationFeeCustomer(input: {
+    applicantId: string
+    applicationId: string
+    propertyId: string
+    name: string
+    email: string | null
+    phone: string | null
+  }): Promise<ProvisionedCustomer>
+
+  /**
+   * The one-time fee for a single applicant (PAY-01's pattern, applied
+   * here). CARD ONLY - unlike the tenant-facing `createPaymentIntent`,
+   * which offers every rail PAY-01 supports, a one-off application fee has
+   * no ACH-vs-card policy question behind it, so this does not thread a
+   * `rail` through at all.
+   *
+   * `amountCents` is already clamped to the jurisdiction cap by core
+   * (`applicationFeeCentsFor`, D-4/D-12) before this is ever called -
+   * Stripe is never asked to work out what an applicant owes.
+   */
+  createApplicationFeePaymentIntent(input: {
+    stripeCustomerId: string
+    amountCents: number
+    currency: string
+    applicantId: string
+    /// Ours, and stable for the attempt - the retry of a timed-out request
+    /// must not become a second charge.
+    idempotencyKey: string
+  }): Promise<{ stripePaymentIntentId: string; clientSecret: string }>
+
   /**
    * The provider's own PDF for an invoice (R-052, PAY-09, D-50).
    *

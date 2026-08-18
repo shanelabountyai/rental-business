@@ -12,6 +12,10 @@ import { formatCents } from '@rental/core/money'
 import { returnAction, reversalAmountCents } from '@rental/core/payments'
 import { businessDate } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
+import {
+  findApplicantByStripeCustomer,
+  projectApplicationFeeEvent,
+} from '@/lib/applications/fee-webhook.ts'
 import { authUrl } from '@/lib/auth/delivery.ts'
 import { isUniqueViolation } from '@/lib/db/unique-violation.ts'
 import { auditAsSystem } from '@/lib/audit/system.ts'
@@ -104,6 +108,18 @@ export async function processStripeEvent(
   }
 
   const intent = interpretation.intent
+
+  // Application-fee customers are Applicants (R-059), not LeasePayers.
+  // Checked FIRST, because the LeasePayer lookup below finds nothing for
+  // one of these and would otherwise silently "ignore" the one event that
+  // confirms a fee actually cleared.
+  const applicant = await findApplicantByStripeCustomer(intent.stripeCustomerId)
+  if (applicant) {
+    const detail = await projectApplicationFeeEvent(applicant, intent)
+    await recordOutcome(event.id, 'projected', detail)
+    return { outcome: 'projected', detail }
+  }
+
   const payer = await prisma.leasePayer.findFirst({
     where: { stripeCustomerId: intent.stripeCustomerId ?? undefined },
     select: { id: true, leaseId: true, propertyId: true },

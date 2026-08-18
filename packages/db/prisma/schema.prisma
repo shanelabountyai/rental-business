@@ -356,6 +356,11 @@ enum NotificationRecipientType {
   /// delivery, read in the portal" (Notification's own comment on PORTAL)
   /// has no portal for this recipient to read it in.
   PROSPECT
+  /// R-059. One adult in a household application - a SEPARATE recipient
+  /// type from PROSPECT even for the lead applicant (who is also a
+  /// Prospect), because an invite is addressed to the person filling in
+  /// THIS form at THIS link, not to the household's original inquiry.
+  APPLICANT
 }
 
 /// How a legally significant notice was served. Which of these are valid for
@@ -480,6 +485,7 @@ model Property {
   documents         Document[]
   listings          Listing[]
   prospects         Prospect[]
+  applications      Application[]
   auditLogs         AuditLog[]
   assignments       StaffAssignment[]
   outboxEvents      OutboxEvent[]
@@ -653,6 +659,11 @@ model Listing {
   /// which is the per-lease liability record that exists only once a
   /// tenancy is signed. Null means "not stated", not zero.
   depositCents Int?
+  /// The ASKING application fee (R-059) - independent of
+  /// `JurisdictionRule.applicationFeeCapCents`, the statutory ceiling.
+  /// Null means "no fee configured", not zero; charging clamps whatever is
+  /// set here to the cap at charge time (D-4, D-12), never the reverse.
+  applicationFeeCents Int?
   /// Property-local calendar day (D-3), matching Lease.startsOn's own
   /// @db.Date - a move-in date has no time of day.
   availableOn DateTime      @db.Date
@@ -670,6 +681,7 @@ model Listing {
   syndications ListingSyndication[]
   leads        ListingLead[]
   prospects    Prospect[]
+  applications Application[]
 
   @@index([propertyId, status])
   @@index([unitId, status])
@@ -742,6 +754,107 @@ model ListingLead {
   @@index([listingId, occurredAt])
 }
 
+/// The household applying for one listing (LEASE-03, R-059) - the group the
+/// PRD means by "co-applicants get their own links and the applications
+/// group". Deliberately a THIN group record: every real answer (name, DOB,
+/// income, the fee) lives on `Applicant`, one row per adult, so a household
+/// of three is three independent, individually-linked people rather than
+/// one record wearing three hats. Always descends from a `Prospect` -
+/// staff invite the prospect who inquired (or was shown the unit) to apply,
+/// which is what creates this row and its first (lead) `Applicant` -
+/// there is no route to an Application with no Prospect behind it.
+///
+/// `completedAt` is the "completion timestamp (which drives
+/// order-of-processing)" the backlog names for R-060 to build on - set only
+/// once EVERY `Applicant` under this group has its own `completedAt`, i.e.
+/// the whole household is done, not just whoever applied first.
+model Application {
+  id          String    @id @default(cuid())
+  propertyId  String
+  listingId   String
+  prospectId  String
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  property   Property    @relation(fields: [propertyId], references: [id])
+  listing    Listing     @relation(fields: [listingId], references: [id])
+  prospect   Prospect    @relation(fields: [prospectId], references: [id])
+  applicants Applicant[]
+
+  @@index([propertyId])
+  @@index([listingId])
+  @@index([prospectId])
+}
+
+/// One adult (LEASE-03: "one per adult 18+"). `isLead` marks the person
+/// staff actually invited (the prospect); everyone else was added BY the
+/// lead through `inviteCoApplicant` and got their own `APPLICATION_LINK`
+/// token, subject-typed to their own `Applicant.id` - never to the
+/// `Application` as a whole, which is the entire mechanism behind "their
+/// own links" in the PRD text.
+///
+/// Residence/income capture is deliberately ONE current address and ONE
+/// employer, not a repeatable history list - the PRD says "residence
+/// history" but a multi-entry timeline is a bigger form than an MVP
+/// warrants; this is the minimum that lets R-060's screening actually ask
+/// "where do you live and what do you earn".
+///
+/// `feeCents` is snapshotted from `Listing.applicationFeeCents` (clamped to
+/// `JurisdictionRule.applicationFeeCapCents`) at invite time, not read live
+/// at payment time - a fee that changes after someone was invited must not
+/// change what they owe mid-application, the same reasoning
+/// `Deposit.depositCents` already gives for freezing a lease's own number
+/// at signing rather than tracking the listing forever.
+model Applicant {
+  id            String   @id @default(cuid())
+  applicationId String
+  isLead        Boolean  @default(false)
+  firstName     String
+  lastName      String
+  email         String?
+  phone         String?
+  dateOfBirth   DateTime? @db.Date
+
+  currentAddressLine1    String?
+  currentCity            String?
+  currentState           String?
+  currentPostalCode      String?
+  monthsAtCurrentAddress Int?
+  employerName           String?
+  monthlyIncomeCents     Int?
+
+  feeCents           Int?
+  stripeCustomerId   String?
+  stripePaymentIntentId String?
+  feePaidAt          DateTime?
+
+  /// The form itself validated clean and was submitted - set synchronously
+  /// by the submit action. Separate from `completedAt` because a fee clears
+  /// asynchronously, on Stripe's own timeline (the webhook, D-11): an
+  /// applicant can submit a fully valid form and then wait seconds or
+  /// minutes for `feePaidAt` to catch up, and this is what lets the page
+  /// tell "still filling it in" apart from "submitted, just waiting on
+  /// payment" instead of collapsing both into the same null.
+  formSubmittedAt DateTime?
+  /// `formSubmittedAt` is set AND the fee cleared (or none was due) - set
+  /// by the fee webhook once both are true, since the webhook is always the
+  /// LAST of the two to happen when a fee is owed. Null the whole time
+  /// either half is outstanding - "progress is saved" (the PRD's
+  /// save-and-resume line) means every write before this happens, not just
+  /// the last one.
+  completedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  application Application @relation(fields: [applicationId], references: [id])
+  documents   Document[]
+
+  @@index([applicationId])
+  @@index([stripeCustomerId])
+}
+
 /// inquiry -> pre-screened -> showing -> applied -> screened -> approved ->
 /// signed (LEASE-07's own phrasing). Only the first two transitions are
 /// automated by anything built so far - the rest are set by a staff member
@@ -802,8 +915,9 @@ model Prospect {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  property Property @relation(fields: [propertyId], references: [id])
-  listing  Listing  @relation(fields: [listingId], references: [id])
+  property     Property      @relation(fields: [propertyId], references: [id])
+  listing      Listing       @relation(fields: [listingId], references: [id])
+  applications Application[]
 
   @@index([propertyId, status])
   @@index([listingId])
@@ -1461,6 +1575,28 @@ enum AuthTokenPurpose {
   /// prospect ever gives is what the token itself guards, burned only when
   /// the answers are actually submitted, not when the page is opened.
   PROSPECT_PRESCREEN
+  /// R-059: one adult's own application - their form, their document
+  /// uploads, their fee payment, all scoped to their own `Applicant.id`
+  /// (subjectId), never to the `Application` group as a whole.
+  ///
+  /// MULTI-USE until it expires, like VENDOR_WORK_ORDER/TENANT_VERIFY/
+  /// TENANT_PAY_LINK: a household gathering pay stubs and ID scans across
+  /// several sittings must not find the link dead partway through -
+  /// "progress is saved" is the PRD's own line. Submission is once-only by
+  /// business state (`Applicant.completedAt`), the same shape
+  /// `prescreenLinkStatus`'s `already_answered` check already uses on top
+  /// of a token that is still structurally alive - not by burning the
+  /// token, which would also kill the ability to come back and check fee
+  /// status after paying.
+  ///
+  /// FIVE DAYS - a deliberate middle point, not a copy of either neighbor.
+  /// TENANT_PAY_LINK's three days is short BECAUSE it only shows a balance
+  /// and takes a payment; TENANT_VERIFY's seven is long BECAUSE it moves no
+  /// money and opens no document. This purpose does both of those things at
+  /// once (uploads ID/income documents AND can pay a fee), which argues
+  /// shorter than seven, while a real household needs more than three days
+  /// to coordinate finding pay stubs and a photo ID for every adult.
+  APPLICATION_LINK
 }
 
 model StaffCredential {
@@ -2886,6 +3022,10 @@ model Document {
   vendorId          String?
   ticketId          String?
   workOrderId       String?
+  /// R-059: an ID scan or income document attached to one household
+  /// member's application, not to the household or the listing - screening
+  /// (R-060) reads a specific person's documents, never "the household's".
+  applicantId       String?
   /// Document class - lease, notice, invoice, w9, coi, inspection_photo, etc.
   /// Drives the retention rules R-012 configures (DOC-05).
   type              String
@@ -2914,6 +3054,7 @@ model Document {
   vendor               Vendor?          @relation(fields: [vendorId], references: [id])
   ticket               Ticket?          @relation(fields: [ticketId], references: [id])
   workOrder            WorkOrder?       @relation(fields: [workOrderId], references: [id])
+  applicant            Applicant?       @relation(fields: [applicantId], references: [id])
   uploadedBy           StaffUser?       @relation("DocumentUploadedBy", fields: [uploadedByStaffId], references: [id])
   noticesAsDocument    Notice[]         @relation("NoticeDocument")
   noticesAsProof       Notice[]         @relation("NoticeProofDocument")
@@ -2924,6 +3065,7 @@ model Document {
   @@index([unitId])
   @@index([leaseId])
   @@index([workOrderId])
+  @@index([applicantId])
 }
 
 // ---------------------------------------------------------------------------

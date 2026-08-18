@@ -82,6 +82,22 @@ export const TOKEN_TTL_MINUTES = {
   /// further because the person on the other end is a stranger who saw a
   /// listing once, not someone already inside a tenancy.
   PROSPECT_PRESCREEN: 60 * 24 * 14,
+  /// R-059: one adult's own application - their form, their document
+  /// uploads, their fee payment, scoped to their own Applicant.id.
+  ///
+  /// MULTI-USE until it expires, like VENDOR_WORK_ORDER/TENANT_VERIFY/
+  /// TENANT_PAY_LINK: a household gathering pay stubs and ID scans across
+  /// several sittings must not find the link dead partway through -
+  /// "progress is saved" is the PRD's own line.
+  ///
+  /// FIVE DAYS - a deliberate middle point. TENANT_PAY_LINK's three days is
+  /// short BECAUSE it only shows a balance and takes a payment;
+  /// TENANT_VERIFY's seven is long BECAUSE it moves no money and opens no
+  /// document. This purpose does both at once (uploads documents AND can
+  /// pay a fee), arguing shorter than seven, while a real household needs
+  /// more than three days to coordinate pay stubs and photo IDs for
+  /// several adults.
+  APPLICATION_LINK: 60 * 24 * 5,
 } as const
 
 export type TokenPurpose = keyof typeof TOKEN_TTL_MINUTES
