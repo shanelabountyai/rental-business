@@ -2713,7 +2713,7 @@ No `Lead` or `Inquiry` entity exists anywhere - not in `schema.prisma`, not in t
 ---
 
 ## R-058 — Prospect pipeline + identical pre-screening questions
-**Commit:** PENDING  ·  **Date:** 2026-08-17
+**Commit:** `ee9b2b9`  ·  **Date:** 2026-08-17
 
 **What it built.** LEASE-07: a visitor's inquiry on a published listing creates a `Prospect` (the named person R-057's own note promised, separate from `ListingLead`'s bare anonymous visit log), an identical five-question pre-screen invite (move date, occupants, pets, income range, prior evictions) goes out automatically over a single-use token, and staff track the pipeline (INQUIRY → PRE_SCREENED → SHOWING → APPLIED → SCREENED → APPROVED → SIGNED) from a new `/prospects` list and detail page. New `Prospect`/`ProspectStatus` model, `PROSPECT_PRESCREEN` auth-token purpose (14-day TTL), `PROSPECT` notification recipient type, a fixed `prospect.prescreen_invite` template, and public pages at `/listings/[id]` (inquiry form) and `/prescreen/[token]` (answers).
 
