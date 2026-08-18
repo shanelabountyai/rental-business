@@ -178,6 +178,11 @@ export const AUDIT_ACTIONS = [
   'document.uploaded',
   'document.delete_marked',
   'document.restored',
+  /// R-062 (DOC-04): a PDF produced from a `DocumentTemplate` and archived,
+  /// separate from `document.uploaded` because nobody uploaded a file -
+  /// this product generated one, from a template a PM wrote and a merge
+  /// field it filled in.
+  'document.generated',
   'notice.served',
   /// R-051: the notice PDF was rendered and archived as a Document. Separate
   /// from `notice.served` because generating the artifact and serving it are

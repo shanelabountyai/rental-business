@@ -73,6 +73,16 @@ export const DOCUMENT_TYPES = [
   /// (PAY-09), with the payment processor's own invoices appended (D-50).
   /// Archived for the same reason as the transcript above.
   'LEDGER_STATEMENT',
+  /// R-062 (DOC-04): a PM-authored, merge-field-templated letter with no
+  /// dedicated flow of its own - the generic case the notice/lease/
+  /// disposition generators are each too specific to cover.
+  'LETTER',
+  /// R-062 (DOC-04): "an estoppel certificate for a property sale" is the
+  /// PRD's own named example of a document beyond a lease that a PM needs
+  /// to generate from a template - kept as its own type rather than
+  /// folded into LETTER because a buyer's title company asks for these by
+  /// name.
+  'ESTOPPEL_CERTIFICATE',
   'OTHER',
 ] as const
 export type DocumentTypeValue = (typeof DOCUMENT_TYPES)[number]

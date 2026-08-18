@@ -60,6 +60,11 @@ export const RETENTION_RULES: Record<DocumentTypeValue, RetentionRule> = {
     years: null,
     note: 'R-052: kept indefinitely, and carries the payment processor’s own invoices inside it (D-50) - purging it would discard the underlying records too.',
   },
+  LETTER: { years: null, note: 'R-062: PM-authored correspondence - kept indefinitely.' },
+  ESTOPPEL_CERTIFICATE: {
+    years: null,
+    note: 'R-062: what was represented to a buyer/title company at closing - kept indefinitely, the same reasoning a lease itself is kept for.',
+  },
   OTHER: { years: null, note: 'Uncategorized - no automatic rule.' },
 }
 

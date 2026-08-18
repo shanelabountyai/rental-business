@@ -95,4 +95,10 @@ export const NAV_ITEMS: readonly NavItem[] = [
     permission: 'lease.read',
     ownedBy: 'R-058',
   },
+  {
+    href: '/documents/templates',
+    label: 'Document templates',
+    permission: 'template.write',
+    ownedBy: 'R-062',
+  },
 ]

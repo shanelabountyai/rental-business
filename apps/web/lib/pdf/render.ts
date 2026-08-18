@@ -1,7 +1,21 @@
 import 'server-only'
 
 import type { DocumentBlock, DocumentBlockKind } from '@rental/core/documents'
-import { PDFDocument, StandardFonts, type PDFFont, rgb } from 'pdf-lib'
+import {
+  PDFArray,
+  PDFBool,
+  PDFDict,
+  PDFDocument,
+  PDFName,
+  PDFNumber,
+  PDFOperator,
+  PDFOperatorNames,
+  type PDFPage,
+  type PDFRef,
+  StandardFonts,
+  type PDFFont,
+  rgb,
+} from 'pdf-lib'
 
 // Drawing a block document to PDF (R-051, generalized at R-052).
 //
@@ -30,9 +44,10 @@ const SIZES: Record<DocumentBlockKind, number> = {
   paragraph: 11,
   // 9pt Courier is 5.4pt per character, so 84 characters fit the 468pt text
   // column with a little slack. `MONO_COLUMNS` in core is sized against this
-  // number, and `render.test.ts` pins the two together - a mono row wider
-  // than the page would be silently clipped at the right margin, which is
-  // the one failure this renderer must not have on a money document.
+  // number, and `packages/core/ledger/statement-document.test.ts` pins the
+  // two together - a mono row wider than the page would be silently
+  // clipped at the right margin, which is the one failure this renderer
+  // must not have on a money document.
   mono: 9,
   footer: 8,
 }
@@ -96,6 +111,35 @@ export interface RenderOptions {
   /// viewers put in the window bar, so it is a real accessibility field
   /// rather than metadata nobody sees (§6.4).
   title: string
+  /// The PDF's `/Lang` (§6.4, R-062). BCP 47. Every document this product
+  /// generates today is English, so the default covers every existing
+  /// caller with no change to them.
+  lang?: string
+}
+
+/// A block's kind maps to a real PDF structure type, not a made-up one - a
+/// screen reader (or Acrobat's own accessibility checker) resolves `/H1`,
+/// `/H2` and `/P` without a `/RoleMap`, because they are Standard Structure
+/// Types (ISO 32000-1 §14.8.4).
+///
+/// `mono` IS TAGGED `/P`, NOT `/Table` (§6.4 asks for "table headers", and
+/// this is the one place that requirement is not literally met - decided
+/// and written down rather than silently skipped). `mono`'s own content is
+/// space-padded Courier text, not real table cells (`blocks.ts`'s own
+/// header explains why: no column model, no cell primitive) - tagging it
+/// `/Table`/`/TR`/`/TH`/`/TD` would assert a cell structure that does not
+/// exist in the content, which is a WORSE accessibility artifact than an
+/// honest `/P`: a screen reader told "this is a table" then finds run-on
+/// padded text with no actual cell boundaries to navigate. A real `/Table`
+/// tag needs the renderer to know column boundaries as data, which is
+/// R-052's own documented trade-off reversed - out of scope here.
+const STRUCT_ROLE: Record<DocumentBlockKind, string> = {
+  heading: 'H1',
+  subheading: 'H2',
+  meta: 'P',
+  paragraph: 'P',
+  mono: 'P',
+  footer: 'P',
 }
 
 /**
@@ -119,6 +163,7 @@ export async function renderBlocksPdf(
 
   pdf.setTitle(options.title)
   pdf.setProducer('Rental Operations')
+  pdf.setLanguage(options.lang ?? 'en-US')
   // No CreationDate is set deliberately: pdf-lib defaults to now, and a
   // deterministic document is worth more here than a redundant timestamp -
   // the row that records when this was made already exists, and two clocks
@@ -133,6 +178,41 @@ export async function renderBlocksPdf(
     y = PAGE_HEIGHT - MARGIN
   }
 
+  // Heading structure and reading order (§6.4). One StructElem per marked-
+  // content run, in DRAW order - which is already the correct reading order,
+  // since nothing here reflows text out of block order. `rootRef` is
+  // reserved before any child exists so each StructElem can point back at
+  // its parent immediately, the way ISO 32000-1's tree wants it built.
+  const rootRef = pdf.context.nextRef()
+  const structKids: PDFRef[] = []
+  let nextMcid = 0
+
+  function beginMarkedContent(role: string, mcid: number) {
+    const props = PDFDict.withContext(pdf.context)
+    props.set(PDFName.of('MCID'), PDFNumber.of(mcid))
+    // `PDFOperator.of`'s own type omits PDFDict from the args it accepts,
+    // but a marked-content properties dict IS a valid BDC operand (ISO
+    // 32000-1 §14.6.2) - pdf-lib serializes any operand via a shared
+    // `.toString()`/`.copyBytesInto()` interface every PDFObject
+    // implements, and this exact call round-trips correctly (verified by
+    // hand against a saved-and-reloaded document before writing this).
+    return PDFOperator.of(PDFOperatorNames.BeginMarkedContentSequence, [
+      PDFName.of(role),
+      props as unknown as PDFNumber,
+    ])
+  }
+  const endMarkedContent = () => PDFOperator.of(PDFOperatorNames.EndMarkedContent, [])
+
+  function registerStructElem(role: string, mcid: number, onPage: PDFPage): PDFRef {
+    const dict = PDFDict.withContext(pdf.context)
+    dict.set(PDFName.of('Type'), PDFName.of('StructElem'))
+    dict.set(PDFName.of('S'), PDFName.of(role))
+    dict.set(PDFName.of('P'), rootRef)
+    dict.set(PDFName.of('Pg'), onPage.ref)
+    dict.set(PDFName.of('K'), PDFNumber.of(mcid))
+    return pdf.context.register(dict)
+  }
+
   for (const block of blocks) {
     const size = SIZES[block.kind]
     const font =
@@ -143,6 +223,7 @@ export async function renderBlocksPdf(
           : body
     const leading = size * LINE_HEIGHT
     const color = block.kind === 'footer' ? rgb(0.35, 0.35, 0.35) : rgb(0, 0, 0)
+    const role = STRUCT_ROLE[block.kind]
 
     // A mono block is PRE-FORMATTED - its spacing is the layout. Word-wrapping
     // it would re-flow a table row into two ragged ones and destroy the
@@ -152,15 +233,60 @@ export async function renderBlocksPdf(
         ? block.text.split('\n')
         : wrap(block.text, font, size, maxWidth)
 
+    // One marked-content run per PAGE this block's lines land on - a block
+    // that itself breaks across a page boundary becomes two sibling
+    // StructElems of the same role rather than one element spanning two
+    // pages (a real simplification, not the fully general PDF/UA shape: an
+    // MCID is only unique per page, and a single StructElem CAN reference
+    // content on more than one page via several /K entries, but that needs
+    // a /ParentTree - the reverse content→structure lookup, and this
+    // renderer omits it, see the header on `pdf.catalog`'s /StructTreeRoot
+    // entry below). Reading order across the resulting siblings is still
+    // exactly right; only "this was logically one paragraph" is lost.
+    let openPage = page
+    let mcid = nextMcid++
+    openPage.pushOperators(beginMarkedContent(role, mcid))
+
     for (const line of lines) {
       // Break BEFORE drawing, never after: a line drawn below the bottom
       // margin is a line that silently does not exist on the printed page.
-      if (y - leading < MARGIN) newPage()
+      if (y - leading < MARGIN) {
+        openPage.pushOperators(endMarkedContent())
+        structKids.push(registerStructElem(role, mcid, openPage))
+        newPage()
+        openPage = page
+        mcid = nextMcid++
+        openPage.pushOperators(beginMarkedContent(role, mcid))
+      }
       page.drawText(line, { x: MARGIN, y: y - leading, size, font, color })
       y -= leading
     }
+    openPage.pushOperators(endMarkedContent())
+    structKids.push(registerStructElem(role, mcid, openPage))
+
     y -= SPACE_AFTER[block.kind]
   }
+
+  // /MarkInfo and /StructTreeRoot together are what tells a reader "this
+  // file is tagged, start here" (ISO 32000-1 §14.7/§14.8). No `/ParentTree`
+  // - that number tree exists for looking a MARKED-CONTENT RUN back up to
+  // its StructElem (used by "read this selection", not by the linear
+  // announce-the-document flow every screen reader uses first), and adding
+  // it is real, fiddly, untested surface for a lookup direction nothing in
+  // this product needs yet.
+  // ponytail: no /ParentTree (reverse content→structure lookup only) -
+  // add it if a real screen-reader audit finds the gap actually matters.
+  const kids = PDFArray.withContext(pdf.context)
+  for (const ref of structKids) kids.push(ref)
+  const rootDict = PDFDict.withContext(pdf.context)
+  rootDict.set(PDFName.of('Type'), PDFName.of('StructTreeRoot'))
+  rootDict.set(PDFName.of('K'), kids)
+  pdf.context.assign(rootRef, rootDict)
+  pdf.catalog.set(PDFName.of('StructTreeRoot'), rootRef)
+
+  const markInfo = PDFDict.withContext(pdf.context)
+  markInfo.set(PDFName.of('Marked'), PDFBool.True)
+  pdf.catalog.set(PDFName.of('MarkInfo'), pdf.context.register(markInfo))
 
   return pdf.save()
 }

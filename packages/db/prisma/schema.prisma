@@ -1238,6 +1238,8 @@ model StaffUser {
   messagesRouted                          UnroutedMessage[]            @relation("UnroutedMessageRoutedBy")
   templatesCreated                        MessageTemplate[]            @relation("TemplateCreatedBy")
   templatesUpdated                        MessageTemplate[]            @relation("TemplateUpdatedBy")
+  documentTemplatesCreated                DocumentTemplate[]           @relation("DocumentTemplateCreatedBy")
+  documentTemplatesUpdated                DocumentTemplate[]           @relation("DocumentTemplateUpdatedBy")
   translationsApproved                    MessageTemplateTranslation[] @relation("TranslationApprovedBy")
   paymentHoldsSet                         LeasePayer[]                 @relation("PaymentHoldSetBy")
   listingsCreated                         Listing[]                    @relation("ListingCreatedBy")
@@ -3177,6 +3179,48 @@ model InspectionItem {
 ///
 /// `capturedAt` is the EXIF timestamp and must never be stripped: a photo's
 /// timestamp IS the evidence.
+/// A PM-authored, merge-field document template (DOC-04, R-062) - the same
+/// shape `MessageTemplate` already gives messages (R-049), applied to a
+/// generated PDF instead of an email/SMS body. `packages/core/comms/merge-fields.ts`'s
+/// own header already made the case for why a managed template needs this
+/// much machinery around a plain string: nothing a compiler checks for a
+/// typed generator (an entry notice, an adverse-action letter) is available
+/// once the author is a property manager typing into a textarea.
+///
+/// Deliberately NOT for notices, leases or dispositions - those already
+/// have (or will have) their own typed generators, driven by business logic
+/// a PM cannot safely hand-edit (jurisdiction rules, computed amounts,
+/// statute citations). This is for the genuinely PM-authored case DOC-04
+/// names directly: "notices, letters, estoppel certificates" - the ones
+/// with no computed number and no compliance clock behind them.
+model DocumentTemplate {
+  id               String   @id @default(cuid())
+  /// Free text, shown in the picker.
+  name             String
+  /// One of `packages/core/documents`' closed `DOCUMENT_TYPES` - what the
+  /// generated artifact is archived as. Validated at the application layer,
+  /// same posture `Document.type` and `Notice.type` already take, so a new
+  /// class needs no migration here.
+  documentType     String
+  body             String
+  /// Retired rather than deleted - a document generated FROM this template
+  /// is evidence, and the template it came from is part of explaining it,
+  /// the identical reasoning `MessageTemplate.active`'s own comment gives.
+  active           Boolean  @default(true)
+  createdByStaffId String
+  updatedByStaffId String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  createdBy StaffUser  @relation("DocumentTemplateCreatedBy", fields: [createdByStaffId], references: [id])
+  /// Restrict, not the SetNull Prisma defaults to for an optional relation -
+  /// who last edited a template is part of explaining a document generated
+  /// from it, `MessageTemplate.updatedBy`'s own reasoning restated.
+  updatedBy StaffUser? @relation("DocumentTemplateUpdatedBy", fields: [updatedByStaffId], references: [id], onDelete: Restrict)
+
+  @@index([active, name])
+}
+
 model Document {
   id                String    @id @default(cuid())
   propertyId        String?
