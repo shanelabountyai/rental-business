@@ -149,7 +149,7 @@ Marketing a vacancy through screening, lease execution and renewal. Deep because
 | 64 | ✅ R-064 | Showings: self-serve slot booking with reminders, **occupied-unit showings generate and log the tenant entry notice** from R-027's machinery; smart-lockbox self-showing (ID capture, one-time codes, entry log, instant kill) deferred to R-094 (row corrected - originally said R-087, an unrelated item) | PRD LEASE-08 | M | R-058, R-027 | MVP |
 | 65 | ✅ R-065 | Renewals: 120/90-day flags, **rent-increase rule check** (notice period and any cap jurisdiction — blocked with the specific rule when violated), offer → e-sign → ledger updates on the effective date, MTM rollover applying the configured rate automatically, renewal rate tracked as a metric | PRD LEASE-09; D-4 | M | R-063, R-016 | MVP |
 | 66 | R-066 | Notice to vacate + non-renewal: tenant portal form (date, forwarding address, lease-notice-period validation) timestamped; owner non-renewal with delivery logging and just-cause-jurisdiction flags; **R-055's retaliation guard fires here** | PRD LEASE-11, RISK-06 | M | R-051, R-055 | MVP |
-| 67 | R-067 | Renter's insurance tracking with expiry and lapse alerts | PRD LEASE-10 | S | R-012, R-016 | Phase 2 |
+| 67 | ✅ R-067 | Renter's insurance tracking with expiry and lapse alerts | PRD LEASE-10 | S | R-012, R-016 | Phase 2 |
 
 ## Milestone 6: Inspections, deposits & the turn
 

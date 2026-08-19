@@ -2911,3 +2911,20 @@ A DB-integration test seeded a `Prospect` with `status: 'PRE_SCREENED'` set dire
 
 **Bugs found along the way.**
 - **A test-authored one, not a product one, but the exact trap CLAUDE.md already names for a different spec**: the e2e's `waitForURL` regex excluded `/leases/new` but not the PAGE IT STARTED ON — since the test navigates to `/leases/<predecessor-id>` before submitting the offer, that URL already satisfies a bare `/leases/<id>` pattern, so the wait resolved instantly against the predecessor's own page before the real redirect to the successor happened. Fixed by excluding the specific starting lease id, not just the literal string "new".
+
+---
+
+## R-067 — Renter's insurance tracking
+**Commit:** `PENDING`  ·  **Date:** 2026-08-19
+
+**What it built.** LEASE-10 end to end: a new lease-scoped `RenterInsurancePolicy` model (carrier, policy number, liability coverage, expiry, an optional linked certificate `Document`), recorded from the lease detail page's new "Renter's insurance" section (`recordRenterInsurance`) — the certificate file is genuinely optional, since carrier/dates read off a phone call are a real, useful state before the PDF arrives. A new daily job (`renter-insurance-job.ts`) flags a lease's current policy once it is within 60 days of expiring (`ROUTINE`) or once it has lapsed (`URGENT`), the same 120/90-day-flag shape R-065's `renewal-window-job.ts` just established, reusing `businessDaysBetween` rather than hand-rolling a second date-diff. Recording a fresh policy auto-closes whichever alert Task it supersedes.
+
+**What it decided.** Recorded as **D-55**:
+- **A new row every time, never an update.** `RenterInsurancePolicy.leaseId` is deliberately not unique — an annual renewal is a new certificate with its own expiry, and overwriting the old row in place would erase the record of what was on file when it lapsed. The most recent row is read as "the current policy" everywhere (the panel, the alert job).
+- **A third, deliberately distinct document type.** `RENTER_INSURANCE_COI` is not `INSURANCE_COI` (a vendor's own proof of coverage, R-025) or `INSURANCE_DECLARATION` (the property owner's own policy, R-015) — three different entities insuring three different interests that happen to share an English word, each already carrying a comment saying so.
+- **A lease with no policy on file at all is not flagged.** LEASE-10 tracks the expiry/lapse of a certificate that exists; nothing in this product's data model says a given lease *requires* one (no `insuranceRequired` toggle anywhere), so inventing a "missing entirely" alert would enforce a rule the product was never told exists — the identical trap D-4 already names for an unconfigured jurisdiction number.
+
+**What it left behind.**
+- **No "insurance required" toggle, and no alert for a lease that has never had a policy recorded.** Named in D-55 as the real follow-on if an owner ever wants to *require* coverage rather than only track it once provided.
+- **No tenant-facing reminder to renew.** LEASE-10's own story is framed entirely from the PM side ("As a PM, I can require and track"); the alert is a staff Task, not a tenant notification.
+- **No resend/upload-later flow beyond the plain "record a new policy" form** — a PM re-uploading a renewed certificate just records a new row, same posture every other invite/document flow in this codebase has already settled for its own first version.

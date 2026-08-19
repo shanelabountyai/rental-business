@@ -23,6 +23,7 @@ import { FeesPanel } from '@/components/leases/fees-panel.tsx'
 import { RecurringChargesPanel } from '@/components/leases/recurring-panel.tsx'
 import { PartiesPanel } from '@/components/leases/parties-panel.tsx'
 import { RenewalPanel } from '@/components/leases/renewal-panel.tsx'
+import { RenterInsurancePanel } from '@/components/leases/renter-insurance-panel.tsx'
 import { OfflinePaymentForm } from '@/components/payments/offline-payment-form.tsx'
 import { actorCan, actorDecision, propertyResource, requireScope } from '@/lib/auth/guard.ts'
 import { rulesFor } from '@/lib/jurisdiction/queries.ts'
@@ -45,6 +46,7 @@ import { leaseStatement, waivableFees } from '@/lib/ledger/queries.ts'
 import { exportLedgerStatement } from '@/lib/ledger/statement.ts'
 import { waiveCharge } from '@/lib/ledger/waivers.ts'
 import { outstandingIntakeGaps } from '@/lib/leases/intake.ts'
+import { recordRenterInsurance } from '@/lib/leases/insurance-actions.ts'
 import { offerRenewal } from '@/lib/leases/renewal-actions.ts'
 import { recordOfflinePayment } from '@/lib/payments/offline.ts'
 import { getLease, selectableTenants } from '@/lib/leases/queries.ts'
@@ -560,6 +562,27 @@ export default async function LeaseDetailPage({
           rentCents: r.rentCents,
         }))}
         action={offerRenewal.bind(null, lease.id)}
+      />
+
+      <RenterInsurancePanel
+        canWrite={canWrite}
+        current={
+          lease.renterInsurancePolicies[0]
+            ? {
+                id: lease.renterInsurancePolicies[0].id,
+                carrier: lease.renterInsurancePolicies[0].carrier,
+                policyNumber: lease.renterInsurancePolicies[0].policyNumber,
+                liabilityCents: lease.renterInsurancePolicies[0].liabilityCents,
+                expiresOn: lease.renterInsurancePolicies[0].expiresOn
+                  ? utcToBusinessDate(lease.renterInsurancePolicies[0].expiresOn)
+                  : null,
+                documentId: lease.renterInsurancePolicies[0].documentId,
+                documentFileName: lease.renterInsurancePolicies[0].document?.fileName ?? null,
+                createdAt: lease.renterInsurancePolicies[0].createdAt.toISOString(),
+              }
+            : null
+        }
+        action={recordRenterInsurance.bind(null, lease.id)}
       />
 
       {canWrite && (

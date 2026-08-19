@@ -1526,6 +1526,7 @@ model Lease {
   payments         Payment[]
   ledgerEntries    LedgerEntry[]
   deposits         Deposit[]
+  renterInsurancePolicies RenterInsurancePolicy[]
   recurringCharges RecurringCharge[]
   tickets          Ticket[]
   inspections      Inspection[]
@@ -1555,6 +1556,41 @@ model LeaseTenant {
 
   @@unique([leaseId, tenantId])
   @@index([tenantId])
+}
+
+/// A tenant's own renter's-liability certificate (LEASE-10, R-067). NOT
+/// unique per lease: an annual renewal is a NEW certificate with its own
+/// expiry, kept as its own row rather than overwritten in place - the same
+/// "history, not the latest edit" call `LeaseEnvelope.leaseId`'s own comment
+/// already makes, since a lapsed certificate a PM is disputing with a tenant
+/// is exactly the record this would otherwise erase. The most recent row
+/// (by `createdAt`) is read as "the current policy".
+///
+/// Deliberately distinct from the property-level `InsurancePolicy` (PROP-06,
+/// the OWNER's own coverage) - a different entity insuring a different
+/// interest, which happens to share an English word.
+model RenterInsurancePolicy {
+  id             String    @id @default(cuid())
+  leaseId        String
+  carrier        String
+  policyNumber   String?
+  /// Liability coverage amount, when the certificate states one. Null means
+  /// not recorded, not "no coverage" - the certificate itself (`documentId`)
+  /// is the actual proof; this is a convenience field for the list view.
+  liabilityCents Int?
+  /// Null means not yet on file for this row - a policy recorded from its
+  /// paperwork before every field was transcribed. Distinct from "no
+  /// coverage": the certificate (`documentId`) is what states the truth.
+  expiresOn      DateTime? @db.Date
+  documentId     String?   @unique
+  notes          String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  lease    Lease     @relation(fields: [leaseId], references: [id])
+  document Document? @relation(fields: [documentId], references: [id], onDelete: Restrict)
+
+  @@index([leaseId, createdAt])
 }
 
 // ---------------------------------------------------------------------------
@@ -3534,6 +3570,7 @@ model Document {
   utilityBills            UtilityBill[]    @relation("UtilityBillDocument")
   leaseEnvelopeAsDraft    LeaseEnvelope?   @relation("LeaseEnvelopeDraftDocument")
   leaseEnvelopeAsExecuted LeaseEnvelope?   @relation("LeaseEnvelopeExecutedDocument")
+  renterInsurancePolicy   RenterInsurancePolicy?
 
   @@index([propertyId, type])
   @@index([unitId])

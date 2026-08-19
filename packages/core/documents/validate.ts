@@ -83,6 +83,12 @@ export const DOCUMENT_TYPES = [
   /// folded into LETTER because a buyer's title company asks for these by
   /// name.
   'ESTOPPEL_CERTIFICATE',
+  /// R-067 (LEASE-10): a tenant's own renter's-liability certificate,
+  /// tracked per lease. Deliberately distinct from INSURANCE_COI (a
+  /// VENDOR's proof of coverage) and INSURANCE_DECLARATION (the property
+  /// owner's own policy) - same "different concept, same word" trap those
+  /// two already carry a comment about, now a third time.
+  'RENTER_INSURANCE_COI',
   'OTHER',
 ] as const
 export type DocumentTypeValue = (typeof DOCUMENT_TYPES)[number]

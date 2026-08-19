@@ -27,6 +27,13 @@ const leaseInclude = {
     select: { id: true, status: true, startsOn: true, rentCents: true, createdAt: true },
     orderBy: { createdAt: 'desc' },
   },
+  // LEASE-10 (R-067): most-recent-first, so `[0]` is always "the current
+  // policy" - RenterInsurancePolicy.leaseId is deliberately not unique (see
+  // the model's own comment), history and all.
+  renterInsurancePolicies: {
+    orderBy: { createdAt: 'desc' },
+    include: { document: { select: { id: true, fileName: true } } },
+  },
 } as const
 
 /// Every lease in scope, running ones first. A PM opening this section is

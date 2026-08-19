@@ -32,6 +32,7 @@ export const RETENTION_RULES: Record<DocumentTypeValue, RetentionRule> = {
   NOTICE_PROOF: { years: null, note: 'Proof of service - kept indefinitely, for the same reason as the notice itself.' },
   INVOICE: { years: null, note: 'No DOC-05 number given; kept indefinitely pending counsel input.' },
   INSURANCE_COI: { years: null, note: 'Kept indefinitely; superseded by a newer COI, not purged.' },
+  RENTER_INSURANCE_COI: { years: null, note: 'Kept indefinitely; superseded by a newer certificate, not purged.' },
   W9: { years: null, note: 'Kept indefinitely; a tax record.' },
   INSPECTION_REPORT: { years: null, note: 'PROP-08/deposit-defense evidence - kept indefinitely.' },
   UNIT_PHOTO: { years: null, note: 'PROP-08: persists across turns, permanently.' },

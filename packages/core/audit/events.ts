@@ -433,6 +433,11 @@ export const AUDIT_ACTIONS = [
   /// configured rate automatically".
   'lease.rolled_to_month_to_month',
 
+  /// R-067 (LEASE-10): a tenant's renter's-insurance certificate was
+  /// recorded against a lease - carrier, policy number, expiry and the
+  /// archived certificate itself.
+  'lease.renter_insurance_recorded',
+
   /// R-063 (LEASE-06, DOC-02): a lease's document was generated and sent for
   /// e-signature - the base template, the addenda selected, and every
   /// signer named. Carries the provider name, matching `billing.provisioned`'s
