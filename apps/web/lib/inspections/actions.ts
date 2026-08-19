@@ -17,8 +17,13 @@ import { audit } from '@/lib/audit/index.ts'
 import { authUrl } from '@/lib/auth/delivery.ts'
 import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
 import { extractCapturedAt, extractGeotag } from '@/lib/documents/exif.ts'
+import { itemsFromMoveIn } from '@/lib/inspections/move-out-copy.ts'
 import { dispatchPendingNotifications, notify } from '@/lib/notifications/send.ts'
 import { generateStorageKey, storage } from '@/lib/storage/index.ts'
+
+/// MOVE_OUT and PRE_MOVE_OUT both compare against move-in (INSP-02) - a
+/// preliminary walkthrough and the real one read the same baseline.
+const MOVE_OUT_FAMILY = new Set(['MOVE_OUT', 'PRE_MOVE_OUT'])
 
 // Writes for Inspection (INSP-01, R-068). Same shape every other
 // lib/*/actions.ts in this repo takes: a resource-carrying permission check
@@ -75,9 +80,6 @@ export async function startInspection(
   if (!isInspectionType(type)) {
     return { error: 'Choose an inspection type.', fieldErrors: { type: 'Required.' } }
   }
-  if (!templateId) {
-    return { error: 'Choose a checklist.', fieldErrors: { templateId: 'Required.' } }
-  }
 
   const unit = await prisma.unit.findUniqueOrThrow({
     where: { id: unitId },
@@ -85,17 +87,37 @@ export async function startInspection(
   })
   await requirePermission('inspection.write', propertyResource(unit.property))
 
-  const template = await prisma.inspectionTemplate.findUnique({ where: { id: templateId } })
-  if (!template) return { error: 'That checklist no longer exists.' }
-  const checklist = template.items as unknown as TemplateChecklistItem[]
-
-  // The unit's own current tenancy, if any - an inspection on an occupied
-  // unit is naturally tied to the lease it concerns; a vacant-unit
-  // inspection (a periodic check between tenancies) has none.
+  // The unit's own tenancy this inspection concerns. NOT limited to
+  // ACTIVE/MONTH_TO_MONTH: by the time staff runs the real move-out walk the
+  // lease has often already been marked ENDED, and a move-out inspection
+  // that cannot find "its own" lease can never be paired against that
+  // lease's move-in (INSP-02) or show up on the tenant's own portal. The
+  // most recently STARTED tenancy on the unit is the right one whatever its
+  // current status - there is at most one lease actually running or just
+  // finished on a single-family unit at a time.
   const lease = await prisma.lease.findFirst({
-    where: { unitId, status: { in: ['ACTIVE', 'MONTH_TO_MONTH'] } },
+    where: { unitId, status: { in: ['ACTIVE', 'MONTH_TO_MONTH', 'ENDED', 'TERMINATED'] } },
     select: { id: true },
+    orderBy: { startsOn: 'desc' },
   })
+
+  // MOVE_OUT/PRE_MOVE_OUT: prefer copying the lease's own move-in checklist
+  // over whatever template was picked, so every item is pre-linked to its
+  // move-in counterpart (moveInItemId) and the side-by-side comparison has
+  // something to show without staff re-typing the room/item list. Falls
+  // through to the ordinary template path when there is nothing to copy.
+  const moveInCopy = MOVE_OUT_FAMILY.has(type) ? await itemsFromMoveIn(prisma, lease?.id ?? null) : null
+
+  let template: { id: string; name: string; items: unknown } | null = null
+  let checklist: TemplateChecklistItem[] = []
+  if (!moveInCopy) {
+    if (!templateId) {
+      return { error: 'Choose a checklist.', fieldErrors: { templateId: 'Required.' } }
+    }
+    template = await prisma.inspectionTemplate.findUnique({ where: { id: templateId } })
+    if (!template) return { error: 'That checklist no longer exists.' }
+    checklist = template.items as unknown as TemplateChecklistItem[]
+  }
 
   const inspection = await prisma.$transaction(async (tx) => {
     const created = await tx.inspection.create({
@@ -104,13 +126,11 @@ export async function startInspection(
         unitId,
         leaseId: lease?.id ?? null,
         type,
-        templateId,
+        templateId: moveInCopy ? null : templateId,
         items: {
-          create: checklist.map((row, index) => ({
-            room: row.room,
-            item: row.item,
-            order: index,
-          })),
+          create: moveInCopy
+            ? moveInCopy.items
+            : checklist.map((row, index) => ({ room: row.room, item: row.item, order: index })),
         },
       },
     })
@@ -120,7 +140,13 @@ export async function startInspection(
         entityType: 'Inspection',
         entityId: created.id,
         propertyId: unit.propertyId,
-        after: { type, templateId, templateName: template.name, itemCount: checklist.length },
+        after: moveInCopy
+          ? {
+              type,
+              copiedFromInspectionId: moveInCopy.sourceInspectionId,
+              itemCount: moveInCopy.items.length,
+            }
+          : { type, templateId, templateName: template!.name, itemCount: checklist.length },
       },
       tx,
     )

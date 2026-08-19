@@ -113,6 +113,15 @@ async function seedJurisdictionRules() {
       console.info('Backfilled TX source-of-income disclosure (added at R-056).')
       return
     }
+    // Same again for the column R-070 added.
+    if (existing.preMoveOutWalkthroughRequired == null) {
+      await prisma.jurisdictionRule.update({
+        where: { id: existing.id },
+        data: { preMoveOutWalkthroughRequired: false },
+      })
+      console.info('Backfilled TX pre-move-out walkthrough right (added at R-070).')
+      return
+    }
     console.info('Jurisdiction rule already seeded (TX, statewide, v1).')
     return
   }
@@ -139,6 +148,13 @@ async function seedJurisdictionRules() {
       depositDispositionDays: 30,
       depositEscrowRequired: false,
       depositInterestRequired: false,
+
+      // Texas grants no statutory pre-move-out walkthrough right (INSP-02,
+      // R-070) - unlike, e.g., California's initial-inspection right (Cal.
+      // Civ. Code §1950.5(f)). daysBefore is left null since it is unused
+      // where the right is not granted.
+      preMoveOutWalkthroughRequired: false,
+      preMoveOutWalkthroughDaysBefore: null,
 
       // Texas sets no statutory entry-notice-hours requirement; 24 hours is
       // common lease practice and the "reasonable notice" convention, not a

@@ -62,6 +62,8 @@ export default async function NewJurisdictionRulePage({
           depositDispositionDays: previous?.depositDispositionDays ?? '',
           depositEscrowRequired: previous?.depositEscrowRequired,
           depositInterestRequired: previous?.depositInterestRequired,
+          preMoveOutWalkthroughRequired: previous?.preMoveOutWalkthroughRequired ?? null,
+          preMoveOutWalkthroughDaysBefore: previous?.preMoveOutWalkthroughDaysBefore ?? '',
           entryNoticeHours: previous?.entryNoticeHours ?? '',
           payOrQuitDays: previous?.payOrQuitDays ?? '',
           noticeToVacateDays: previous?.noticeToVacateDays ?? '',

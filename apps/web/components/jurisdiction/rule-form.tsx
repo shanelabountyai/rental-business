@@ -47,6 +47,8 @@ export interface RuleFormDefaults {
   depositDispositionDays?: number | ''
   depositEscrowRequired?: boolean
   depositInterestRequired?: boolean
+  preMoveOutWalkthroughRequired?: boolean | null
+  preMoveOutWalkthroughDaysBefore?: number | ''
   entryNoticeHours?: number | ''
   payOrQuitDays?: number | ''
   noticeToVacateDays?: number | ''
@@ -238,6 +240,45 @@ export function RuleForm({
           label="Interest on deposit required"
           name="depositInterestRequired"
           defaultChecked={defaults.depositInterestRequired}
+        />
+      </fieldset>
+
+      <fieldset className="flex flex-col gap-4">
+        <legend className="text-sm font-semibold">
+          Move-out walkthrough (INSP-02)
+        </legend>
+        <div className="flex flex-col gap-1.5">
+          <SelectField
+            label="Pre-move-out walkthrough right"
+            name="preMoveOutWalkthroughRequired"
+            idPrefix="rule"
+            defaultValue={
+              defaults.preMoveOutWalkthroughRequired == null
+                ? ''
+                : String(defaults.preMoveOutWalkthroughRequired)
+            }
+            error={errors.preMoveOutWalkthroughRequired}
+            placeholder="Not reviewed"
+            options={[
+              { value: 'true', label: 'Yes, granted' },
+              { value: 'false', label: 'No' },
+            ]}
+          />
+          <p className="text-muted-foreground text-sm">
+            Whether this state grants tenants a pre-move-out inspection right. Left unreviewed, no
+            walkthrough is ever auto-scheduled for this state rather than guessing.
+          </p>
+        </div>
+        <TextField
+          label="Days before move-out (optional)"
+          name="preMoveOutWalkthroughDaysBefore"
+          type="number"
+          inputMode="numeric"
+          min={0}
+          max={180}
+          defaultValue={defaults.preMoveOutWalkthroughDaysBefore}
+          error={errors.preMoveOutWalkthroughDaysBefore}
+          hint="Only used when the right above is granted."
         />
       </fieldset>
 

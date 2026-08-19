@@ -95,6 +95,18 @@ export default async function InspectionPage({
               geotagged: photo.latitude != null && photo.longitude != null,
             }))}
             editable={editable}
+            moveIn={
+              item.moveInItem && {
+                condition: item.moveInItem.condition,
+                notes: item.moveInItem.notes,
+                photos: item.moveInItem.photos.map((photo) => ({
+                  id: photo.id,
+                  fileName: photo.fileName,
+                  capturedAt: photo.capturedAt?.toISOString() ?? null,
+                  geotagged: photo.latitude != null && photo.longitude != null,
+                })),
+              }
+            }
           />
         ))}
       </ul>

@@ -38,6 +38,20 @@ export async function getInspection(id: string, scope: ResolvedScope) {
             orderBy: { createdAt: 'asc' },
             select: { id: true, fileName: true, capturedAt: true, latitude: true, longitude: true },
           },
+          // The side-by-side comparison (INSP-02): each move-out item's own
+          // move-in counterpart, via the real FK - never re-derived by
+          // matching room/item text, which a re-labeled room would break.
+          moveInItem: {
+            select: {
+              condition: true,
+              notes: true,
+              photos: {
+                where: { deletedAt: null },
+                orderBy: { createdAt: 'asc' },
+                select: { id: true, fileName: true, capturedAt: true, latitude: true, longitude: true },
+              },
+            },
+          },
         },
       },
     },

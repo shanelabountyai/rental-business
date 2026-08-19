@@ -56,6 +56,11 @@ export function StartInspectionForm({
         error={errors.templateId}
         options={templates.map((template) => ({ value: template.id, label: template.label }))}
       />
+      <p className="text-muted-foreground text-sm">
+        For a move-out or pre-move-out walkthrough, the lease&rsquo;s own move-in checklist is used
+        instead whenever one is on record, so it can compare side by side (INSP-02) - this
+        selection only applies otherwise.
+      </p>
       <SubmitButton label="Start inspection" />
     </form>
   )

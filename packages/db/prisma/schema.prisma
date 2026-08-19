@@ -3745,6 +3745,18 @@ model JurisdictionRule {
   depositEscrowRequired   Boolean @default(false)
   depositInterestRequired Boolean @default(false)
 
+  // Move-out walkthrough (INSP-02, R-070). A THIRD state on the boolean,
+  // not a default `false` - null means unreviewed, the same posture
+  // `sourceOfIncomeProtected` already takes, because asserting "this state
+  // grants no such right" without ever having checked is exactly as wrong
+  // as asserting it does. `preMoveOutWalkthroughDaysBefore` is only
+  // meaningful when the right is granted; several states that grant it
+  // (e.g. California) specify how far ahead of the actual move-out the
+  // pre-inspection must happen, which is why this is a jurisdiction column
+  // and not a literal (D-4).
+  preMoveOutWalkthroughRequired   Boolean?
+  preMoveOutWalkthroughDaysBefore Int?
+
   // Entry and notices (MAINT-05, PAY-14, LEASE-09).
   entryNoticeHours       Int?
   payOrQuitDays          Int?

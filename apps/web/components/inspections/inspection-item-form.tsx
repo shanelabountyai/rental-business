@@ -21,6 +21,49 @@ export interface ItemPhoto {
   geotagged: boolean
 }
 
+export interface MoveInComparison {
+  condition: string | null
+  notes: string | null
+  photos: readonly ItemPhoto[]
+}
+
+function conditionLabel(condition: string | null): string {
+  return condition ? CONDITION_OPTIONS.find((c) => c.value === condition)?.label ?? condition : 'Not recorded'
+}
+
+/// The move-in side of the comparison (INSP-02) - read-only always, since
+/// the move-in report is either locked evidence or somebody else's walk in
+/// progress, never something a move-out walk edits.
+function MoveInPanel({ moveIn }: { moveIn: MoveInComparison }) {
+  return (
+    <div className="rounded-md border border-dashed p-2 text-sm">
+      <p className="text-muted-foreground font-medium">At move-in</p>
+      <p>
+        {conditionLabel(moveIn.condition)}
+        {moveIn.notes && ` · ${moveIn.notes}`}
+      </p>
+      {moveIn.photos.length > 0 && (
+        <ul className="mt-2 flex flex-wrap gap-2">
+          {moveIn.photos.map((photo) => (
+            <li key={photo.id}>
+              <a href={`/api/documents/${photo.id}/file`} target="_blank" rel="noopener noreferrer">
+                {/* eslint-disable-next-line @next/next/no-img-element -- an
+                    inline thumbnail of an uploaded photo, not an optimizable
+                    static asset next/image is built for. */}
+                <img
+                  src={`/api/documents/${photo.id}/file`}
+                  alt={`Move-in condition${photo.geotagged ? ', geotagged' : ''}`}
+                  className="h-20 w-20 rounded-md border object-cover"
+                />
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
 export function InspectionItemForm({
   action,
   photoAction,
@@ -31,6 +74,7 @@ export function InspectionItemForm({
   notes,
   photos,
   editable,
+  moveIn,
 }: {
   /// Omitted on the tenant's own read-only review, which never renders a
   /// form at all (the `!editable` branch below returns before either
@@ -54,6 +98,10 @@ export function InspectionItemForm({
   notes: string | null
   photos: readonly ItemPhoto[]
   editable: boolean
+  /// The paired move-in item (INSP-02), when this is a MOVE_OUT/PRE_MOVE_OUT
+  /// item created from one. Omitted on a MOVE_IN item itself, or one with
+  /// nothing to compare against (no move-in inspection on record).
+  moveIn?: MoveInComparison | null
 }) {
   const [state, formAction] = useActionState<InspectionFormState, FormData>(
     action ?? (async (previous) => previous),
@@ -79,6 +127,12 @@ export function InspectionItemForm({
     </ul>
   )
 
+  const comparison = moveIn && (
+    <div className="mt-2 grid gap-2 sm:grid-cols-2">
+      <MoveInPanel moveIn={moveIn} />
+    </div>
+  )
+
   if (!editable) {
     return (
       <li className="rounded-lg border p-3">
@@ -86,10 +140,11 @@ export function InspectionItemForm({
           {room} — {item}
         </p>
         <p className="text-muted-foreground text-sm">
-          {condition ? CONDITION_OPTIONS.find((c) => c.value === condition)?.label : 'Not recorded'}
+          {conditionLabel(condition)}
           {notes && ` · ${notes}`}
         </p>
         {photoGallery}
+        {comparison}
       </li>
     )
   }
@@ -99,6 +154,7 @@ export function InspectionItemForm({
       <p className="font-medium">
         {room} — {item}
       </p>
+      {comparison}
       <form action={formAction} className="mt-2 flex flex-col gap-2">
         <FormAlerts state={state} />
         <div className="grid gap-2 sm:grid-cols-[1fr_2fr_auto] sm:items-end">

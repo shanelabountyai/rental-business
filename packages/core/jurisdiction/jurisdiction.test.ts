@@ -70,6 +70,24 @@ describe('validateJurisdictionRule', () => {
     ).toContainEqual(expect.objectContaining({ field: 'retaliationWindowDays' }))
   })
 
+  it('leaves the pre-move-out walkthrough right unreviewed (null) by default, and accepts it granted with a day count', () => {
+    expect(validateJurisdictionRule(baseInput())).toEqual([])
+    expect(
+      validateJurisdictionRule(
+        baseInput({ preMoveOutWalkthroughRequired: true, preMoveOutWalkthroughDaysBefore: 14 }),
+      ),
+    ).toEqual([])
+  })
+
+  it('rejects an unrealistic pre-move-out walkthrough day count', () => {
+    expect(
+      validateJurisdictionRule(baseInput({ preMoveOutWalkthroughDaysBefore: -1 })),
+    ).toContainEqual(expect.objectContaining({ field: 'preMoveOutWalkthroughDaysBefore' }))
+    expect(
+      validateJurisdictionRule(baseInput({ preMoveOutWalkthroughDaysBefore: 200 })),
+    ).toContainEqual(expect.objectContaining({ field: 'preMoveOutWalkthroughDaysBefore' }))
+  })
+
   it('rejects a state that is not a real US state code', () => {
     const violations = validateJurisdictionRule(baseInput({ state: 'ZZ' }))
     expect(violations).toContainEqual(

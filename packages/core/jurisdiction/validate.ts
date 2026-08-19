@@ -87,6 +87,14 @@ export interface JurisdictionRuleInput {
   depositEscrowRequired: boolean
   depositInterestRequired: boolean
 
+  /// INSP-02 (R-070). Null means unreviewed - see the schema's own comment
+  /// on this column, the same "third state" posture `sourceOfIncomeProtected`
+  /// already takes.
+  preMoveOutWalkthroughRequired?: boolean | null
+  /// Only meaningful when the right above is granted. Null there is simply
+  /// unused, not a missing review.
+  preMoveOutWalkthroughDaysBefore?: number | null
+
   entryNoticeHours?: number | null
   payOrQuitDays?: number | null
   noticeToVacateDays?: number | null
@@ -172,6 +180,16 @@ export function validateJurisdictionRule(
     violations.push({
       field: 'depositDispositionDays',
       message: 'Enter a realistic number of disposition days (0–180).',
+    })
+  }
+
+  if (
+    input.preMoveOutWalkthroughDaysBefore != null &&
+    !isWholeNumberInRange(input.preMoveOutWalkthroughDaysBefore, 180)
+  ) {
+    violations.push({
+      field: 'preMoveOutWalkthroughDaysBefore',
+      message: 'Enter a realistic number of days (0–180), or leave blank if the right is not granted here.',
     })
   }
 

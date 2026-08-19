@@ -335,3 +335,65 @@ test('a photo attaches to an item, and the tenant reviews and signs the report f
   })
   expect(lockedAudit?.after).toMatchObject({ signed: true })
 })
+
+test('a move-out inspection copies the move-in checklist and shows the side-by-side comparison (R-070)', async ({
+  page,
+}) => {
+  const staff = await createStaff()
+  const { unit, lease } = await seedUnitWithTenant()
+
+  const moveIn = await prisma.inspection.create({
+    data: {
+      propertyId: unit.propertyId,
+      unitId: unit.id,
+      leaseId: lease.id,
+      type: 'MOVE_IN',
+      lockedAt: new Date(),
+      items: {
+        create: [{ room: 'Kitchen', item: 'Refrigerator', condition: 'GOOD', order: 0 }],
+      },
+    },
+  })
+  const template = await prisma.inspectionTemplate.create({
+    data: {
+      name: `Ignored template ${randomUUID().slice(0, 8)}`,
+      items: [{ room: 'Bathroom', item: 'Toilet' }],
+      createdByStaffId: staff.id,
+    },
+  })
+  templateIds.push(template.id)
+
+  await signIn(page, staff.email)
+  await page.goto('/inspections/new')
+  await page.getByLabel('Unit').selectOption(unit.id)
+  await page.getByLabel('Type').selectOption('MOVE_OUT')
+  await page.getByLabel('Checklist').selectOption(template.id)
+  await page.getByRole('button', { name: 'Start inspection' }).click()
+  await page.waitForURL(/\/inspections\/(?!new$)[a-z0-9]+$/)
+
+  // The move-in checklist, NOT the (ignored) template selected above.
+  await expect(page.getByText('Kitchen — Refrigerator')).toBeVisible()
+  await expect(page.getByText('Bathroom — Toilet')).toHaveCount(0)
+  // Scoped to the move-in panel itself, not a bare getByText('Good') - the
+  // move-out item's own Condition <select> carries an identical "Good"
+  // <option>, and matching both is a strict-mode violation.
+  const moveInPanel = page.getByText('At move-in').locator('..')
+  await expect(moveInPanel).toBeVisible()
+  await expect(moveInPanel).toContainText('Good')
+
+  const id = new URL(page.url()).pathname.split('/').pop()!
+  const created = await prisma.inspection.findUniqueOrThrow({
+    where: { id },
+    include: { items: true },
+  })
+  expect(created.type).toBe('MOVE_OUT')
+  expect(created.leaseId).toBe(lease.id)
+  expect(created.items).toHaveLength(1)
+  const moveInItem = await prisma.inspectionItem.findFirstOrThrow({ where: { inspectionId: moveIn.id } })
+  expect(created.items[0]!.moveInItemId).toBe(moveInItem.id)
+
+  const audited = await prisma.auditLog.findFirst({
+    where: { action: 'inspection.created', entityId: id },
+  })
+  expect(audited?.after).toMatchObject({ copiedFromInspectionId: moveIn.id })
+})
