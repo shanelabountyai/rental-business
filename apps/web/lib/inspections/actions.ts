@@ -1,5 +1,6 @@
 'use server'
 
+import { createHash } from 'node:crypto'
 import {
   canEditItem,
   canFinishInspection,
@@ -13,18 +14,23 @@ import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { audit } from '@/lib/audit/index.ts'
+import { authUrl } from '@/lib/auth/delivery.ts'
 import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
+import { extractCapturedAt, extractGeotag } from '@/lib/documents/exif.ts'
+import { dispatchPendingNotifications, notify } from '@/lib/notifications/send.ts'
+import { generateStorageKey, storage } from '@/lib/storage/index.ts'
 
 // Writes for Inspection (INSP-01, R-068). Same shape every other
 // lib/*/actions.ts in this repo takes: a resource-carrying permission check
 // first, then a transaction pairing the write with its audit entry where
 // one is warranted.
 //
-// PHASE 1 OF THIS ITEM. What this file does NOT do yet, named rather than
-// silently missing: no photo capture, no geotagging, no tenant-portal
-// e-sign, no auto-finalize job. `canRecordSignature`'s own comment states
-// the interim posture - a staff member records that a tenant signed in
-// person, on the inspector's own phone.
+// PHASE 2 OF THIS ITEM adds photo capture (this file) and a
+// tenant-portal e-sign (apps/web/lib/portal/inspection-actions.ts) and an
+// auto-finalize job (apps/web/lib/inspections/auto-finalize-job.ts) on top
+// of phase 1's engine. `recordSignature` below is still the STAFF path -
+// "a tenant signed in person, on the inspector's own phone" - now alongside
+// the tenant's own portal path, not replaced by it.
 
 export interface InspectionFormState {
   error?: string
@@ -41,7 +47,8 @@ async function inspectionForWrite(inspectionId: string) {
   const inspection = await prisma.inspection.findUniqueOrThrow({
     where: { id: inspectionId },
     include: {
-      property: { select: { id: true, legalEntityId: true } },
+      property: { select: { id: true, legalEntityId: true, addressLine1: true, timezone: true } },
+      unit: { select: { name: true } },
       items: { select: { id: true, condition: true } },
     },
   })
@@ -160,6 +167,72 @@ export async function recordItem(
   return { notice: 'Saved.' }
 }
 
+/**
+ * Attaches a photo to one checklist item (INSP-01: "photos (timestamped,
+ * geotagged)"). Multiple photos per item are allowed - each call adds a
+ * new `Document` row rather than replacing one, the same "a new row every
+ * time" posture `recordRenterInsurance` already takes for the identical
+ * reason: a photo already taken is evidence, not a draft to overwrite.
+ *
+ * Gated by `canEditItem`, the same guard `recordItem` uses - a photo is
+ * part of editing the item's evidence, and must be refused once locked
+ * exactly like a condition/notes change would be.
+ */
+export async function recordItemPhoto(
+  itemId: string,
+  _previous: InspectionFormState,
+  formData: FormData,
+): Promise<InspectionFormState> {
+  const item = await prisma.inspectionItem.findUniqueOrThrow({
+    where: { id: itemId },
+    include: { inspection: { include: { property: { select: { id: true, legalEntityId: true } } } } },
+  })
+  await requirePermission('inspection.write', propertyResource(item.inspection.property))
+
+  const decision = canEditItem({ lockedAt: item.inspection.lockedAt })
+  if (!decision.allowed) return { error: decision.message }
+
+  const file = formData.get('file')
+  if (!(file instanceof File) || file.size === 0) {
+    return { error: 'Choose a photo.', fieldErrors: { file: 'Required.' } }
+  }
+
+  const buffer = Buffer.from(await file.arrayBuffer())
+  const contentType = file.type || 'application/octet-stream'
+  const sha256 = createHash('sha256').update(buffer).digest('hex')
+  const capturedAt = await extractCapturedAt(buffer, contentType)
+  const geotag = await extractGeotag(buffer, contentType)
+  const storageKey = generateStorageKey(item.inspection.propertyId, file.name)
+  // Written before the row exists - same ordering documents/actions.ts's
+  // own uploadDocument uses: an orphaned file costs disk space, an orphaned
+  // pointer is a document nobody can ever open.
+  await storage.put(storageKey, buffer, contentType)
+
+  await prisma.document.create({
+    data: {
+      propertyId: item.inspection.propertyId,
+      // Set whenever the inspection has one, so the tenant portal's own
+      // document visibility rule (tenantCanSeeDocument, DOC-03) already
+      // covers it - the tenant reviewing this report needs to see the same
+      // photos staff took, with no separate plumbing for this one type.
+      leaseId: item.inspection.leaseId,
+      inspectionItemId: itemId,
+      type: 'INSPECTION_PHOTO',
+      fileName: file.name,
+      contentType,
+      sizeBytes: file.size,
+      storageKey,
+      sha256,
+      capturedAt,
+      latitude: geotag?.latitude,
+      longitude: geotag?.longitude,
+    },
+  })
+
+  revalidatePath(`/inspections/${item.inspectionId}`)
+  return { notice: 'Photo added.' }
+}
+
 /// Marks the walk performed - every item must already carry a condition
 /// (canFinishInspection's own check).
 export async function finishInspection(
@@ -193,12 +266,55 @@ export async function finishInspection(
     )
   })
 
+  // Outside the transaction - a notification send must not hold row locks
+  // (R-016's rule, the same posture every other notify() call in this
+  // codebase takes). Best-effort: a failed send must not undo the walk
+  // just finished, the same reasoning scheduleEntry's own identical
+  // try/catch gives its tenant notification.
+  if (inspection.leaseId) {
+    try {
+      const primaryTenant = await prisma.leaseTenant.findFirst({
+        where: { leaseId: inspection.leaseId, isPrimary: true },
+        include: { tenant: { select: { id: true, firstName: true, email: true, phone: true } } },
+      })
+      if (primaryTenant) {
+        const outcomes = await notify({
+          category: 'inspection_signature',
+          templateKey: 'inspection.signature_needed',
+          recipient: {
+            type: 'TENANT',
+            id: primaryTenant.tenant.id,
+            email: primaryTenant.tenant.email,
+            phone: primaryTenant.tenant.phone,
+          },
+          context: {
+            tenantName: primaryTenant.tenant.firstName,
+            addressLine1: inspection.property.addressLine1,
+            unitName: inspection.unit.name,
+            url: authUrl(`/portal/papers/inspections/${inspectionId}`),
+          },
+          propertyId: inspection.propertyId,
+          idempotencyKey: `inspection-signature-needed:${inspectionId}`,
+        })
+        await dispatchPendingNotifications(new Date(), 100, {
+          deliveryIds: outcomes.map((o) => o.deliveryId).filter((id): id is string => id != null),
+        })
+      }
+    } catch (error) {
+      console.error(`[inspections] failed to notify tenant for ${inspectionId}`, error)
+    }
+  }
+
   revalidatePath(`/inspections/${inspectionId}`)
   return { notice: 'Walk finished.' }
 }
 
-/// Staff records that a tenant signed - see this file's own header for why
-/// this is not a tenant-portal e-sign flow yet.
+/// Staff records that a tenant signed in person, on the inspector's own
+/// phone - the STAFF doorway. `apps/web/lib/portal/inspection-actions.ts`'s
+/// `signInspectionAsTenant` is the tenant's own doorway, from the portal;
+/// both write the identical `inspection.signed` audit action, distinguished
+/// by `actorType` (STAFF here, TENANT there) rather than two different
+/// actions for the same fact.
 export async function recordSignature(
   inspectionId: string,
   _previous: InspectionFormState,
@@ -213,9 +329,21 @@ export async function recordSignature(
   })
   if (!decision.allowed) return { error: decision.message }
 
-  await prisma.inspection.update({
-    where: { id: inspectionId },
-    data: { tenantSignedAt: new Date() },
+  await prisma.$transaction(async (tx) => {
+    await tx.inspection.update({
+      where: { id: inspectionId },
+      data: { tenantSignedAt: new Date() },
+    })
+    await audit(
+      {
+        action: 'inspection.signed',
+        entityType: 'Inspection',
+        entityId: inspectionId,
+        propertyId: inspection.propertyId,
+        after: { recordedBy: 'STAFF' },
+      },
+      tx,
+    )
   })
 
   revalidatePath(`/inspections/${inspectionId}`)

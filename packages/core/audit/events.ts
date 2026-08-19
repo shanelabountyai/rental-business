@@ -217,6 +217,14 @@ export const AUDIT_ACTIONS = [
   /// evidence of anything); this is the fact the report's own conclusions
   /// rest on.
   'inspection.performed',
+  /// R-068 phase 2: somebody signed - the tenant, from the portal, or a
+  /// staff member recording that they signed in person. Its own action,
+  /// not folded into `inspection.locked`, because "who signed and when" is
+  /// the fact an authenticity dispute over the signature itself turns on,
+  /// the same reasoning `envelope.signer_signed` already gives a lease
+  /// e-signature (R-063) - `actorType` on this row is what tells the two
+  /// paths apart (TENANT vs STAFF).
+  'inspection.signed',
   /// Locked - the report becomes immutable evidence. Stubbed here since
   /// before R-068, unused until now.
   'inspection.locked',

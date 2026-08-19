@@ -30,7 +30,16 @@ export async function getInspection(id: string, scope: ResolvedScope) {
       lease: { select: { id: true } },
       template: { select: { id: true, name: true } },
       performedBy: { select: { name: true } },
-      items: { orderBy: { order: 'asc' } },
+      items: {
+        orderBy: { order: 'asc' },
+        include: {
+          photos: {
+            where: { deletedAt: null },
+            orderBy: { createdAt: 'asc' },
+            select: { id: true, fileName: true, capturedAt: true, latitude: true, longitude: true },
+          },
+        },
+      },
     },
   })
   if (!inspection || !scope.propertyIds.includes(inspection.propertyId)) return null

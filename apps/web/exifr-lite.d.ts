@@ -11,6 +11,15 @@ declare module 'exifr/dist/lite.esm.mjs' {
       input: Buffer | Uint8Array | ArrayBuffer,
       options?: { exif?: boolean | { pick?: readonly string[] } },
     ): Promise<Record<string, unknown> | undefined>
+    /// R-068 phase 2. The library's own type declares this as always
+    /// returning `{latitude, longitude}` with no undefined case; the actual
+    /// implementation (node_modules/exifr/src/highlevel/gps.mjs) returns
+    /// `undefined` when the photo carries no GPS block - narrowed here to
+    /// match runtime behaviour rather than the library's own optimistic
+    /// declaration, since extractGeotag() has to handle that case anyway.
+    gps(
+      input: Buffer | Uint8Array | ArrayBuffer,
+    ): Promise<{ latitude: number; longitude: number } | undefined>
   }
   const exifr: ExifrLite
   export default exifr

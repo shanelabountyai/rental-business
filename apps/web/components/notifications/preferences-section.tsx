@@ -55,6 +55,7 @@ const CATEGORY_LABELS: Record<NotificationCategory, string> = {
   prospect_prescreening: 'Prospect pre-screening invites',
   prospect_application: 'Application invites and fee confirmations',
   prospect_showing: 'Showing bookings and reminders',
+  inspection_signature: 'Inspection reports ready to review and sign',
 }
 
 const CHANNEL_LABELS: Record<NotificationChannel, string> = {

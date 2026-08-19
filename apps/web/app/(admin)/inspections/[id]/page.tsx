@@ -9,6 +9,7 @@ import {
   finishInspection,
   lockInspection,
   recordItem,
+  recordItemPhoto,
   recordSignature,
 } from '@/lib/inspections/actions.ts'
 import { getInspection } from '@/lib/inspections/queries.ts'
@@ -81,11 +82,18 @@ export default async function InspectionPage({
           <InspectionItemForm
             key={item.id}
             action={recordItem.bind(null, item.id)}
+            photoAction={recordItemPhoto.bind(null, item.id)}
             itemId={item.id}
             room={item.room}
             item={item.item}
             condition={item.condition}
             notes={item.notes}
+            photos={item.photos.map((photo) => ({
+              id: photo.id,
+              fileName: photo.fileName,
+              capturedAt: photo.capturedAt?.toISOString() ?? null,
+              geotagged: photo.latitude != null && photo.longitude != null,
+            }))}
             editable={editable}
           />
         ))}

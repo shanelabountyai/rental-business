@@ -45,3 +45,35 @@ export async function extractCapturedAt(
     return null
   }
 }
+
+export interface Geotag {
+  latitude: number
+  longitude: number
+}
+
+/**
+ * Where the photo was taken (R-068 phase 2: "photos (timestamped,
+ * geotagged)"). Null is the ordinary case - most screenshots and scans
+ * carry no GPS tag at all, and plenty of phones have location services off
+ * - never guessed from the property's own address, which would misrepresent
+ * an ungeotagged photo as geotagged.
+ *
+ * `exifr.gps()` is the SAME lite build's own high-level helper (this file's
+ * own header explains why the lite build, not the full one) - it already
+ * carries the GPS dictionary and needs no separate import.
+ */
+export async function extractGeotag(
+  buffer: Buffer,
+  contentType: string,
+): Promise<Geotag | null> {
+  if (!contentType.startsWith('image/')) return null
+  try {
+    const result = await exifr.gps(buffer)
+    if (!result || typeof result.latitude !== 'number' || typeof result.longitude !== 'number') {
+      return null
+    }
+    return { latitude: result.latitude, longitude: result.longitude }
+  } catch {
+    return null
+  }
+}

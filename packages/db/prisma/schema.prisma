@@ -3522,6 +3522,7 @@ model InspectionItem {
   inspection  Inspection      @relation(fields: [inspectionId], references: [id])
   moveInItem  InspectionItem? @relation("MoveInToMoveOut", fields: [moveInItemId], references: [id])
   moveOutItem InspectionItem? @relation("MoveInToMoveOut")
+  photos      Document[]
 
   @@index([inspectionId])
 }
@@ -3602,6 +3603,12 @@ model Document {
   /// member's application, not to the household or the listing - screening
   /// (R-060) reads a specific person's documents, never "the household's".
   applicantId       String?
+  /// R-068 phase 2: a condition photo belongs to the checklist ROW it is
+  /// evidence for ("every photo on this item"), not the inspection as a
+  /// whole - the real query path INSP-01's own "per-item... photos" asks
+  /// for, the same directness `workOrderId` already gives a completion
+  /// photo over going through its parent Ticket.
+  inspectionItemId  String?
   /// Document class - lease, notice, invoice, w9, coi, inspection_photo, etc.
   /// Drives the retention rules R-012 configures (DOC-05).
   type              String
@@ -3615,6 +3622,12 @@ model Document {
   /// Original capture time from EXIF, preserved. Distinct from createdAt,
   /// which is only when it was uploaded.
   capturedAt        DateTime?
+  /// R-068 phase 2: EXIF GPS, when the camera recorded one. Null is the
+  /// ordinary case (most phones can, but plenty of photos carry no GPS tag
+  /// at all) - never guessed from the property's own address, which would
+  /// misrepresent a photo as geotagged when it was not.
+  latitude          Decimal?  @db.Decimal(9, 6)
+  longitude         Decimal?  @db.Decimal(9, 6)
   uploadedByStaffId String?
   /// Soft-delete marker (DOC-05's 30-day undelete). Null means active. Who
   /// deleted it and why lives in AuditLog ('document.delete_marked'), not
@@ -3631,6 +3644,7 @@ model Document {
   ticket                  Ticket?          @relation(fields: [ticketId], references: [id])
   workOrder               WorkOrder?       @relation(fields: [workOrderId], references: [id])
   applicant               Applicant?       @relation(fields: [applicantId], references: [id])
+  inspectionItem          InspectionItem?  @relation(fields: [inspectionItemId], references: [id])
   uploadedBy              StaffUser?       @relation("DocumentUploadedBy", fields: [uploadedByStaffId], references: [id])
   noticesAsDocument       Notice[]         @relation("NoticeDocument")
   noticesAsProof          Notice[]         @relation("NoticeProofDocument")
@@ -3645,6 +3659,7 @@ model Document {
   @@index([leaseId])
   @@index([workOrderId])
   @@index([applicantId])
+  @@index([inspectionItemId])
 }
 
 // ---------------------------------------------------------------------------

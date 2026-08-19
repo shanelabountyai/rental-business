@@ -874,6 +874,72 @@ export const nonRenewalTemplate: NotificationTemplate<NonRenewalContext> = {
   },
 }
 
+/// Context for `inspection.signature_needed` (INSP-01, R-068 phase 2) - the
+/// walk is done and waiting on the tenant's own review.
+export interface InspectionSignatureNeededContext {
+  tenantName: string
+  addressLine1: string
+  unitName: string
+  /// Deep link to the tenant's own portal review page.
+  url: string
+}
+
+export const inspectionSignatureNeededTemplate: NotificationTemplate<InspectionSignatureNeededContext> = {
+  key: 'inspection.signature_needed',
+  category: 'inspection_signature',
+  channels: ['SMS', 'EMAIL', 'PORTAL'],
+  render: (context, channel) => {
+    const where = `${context.addressLine1}${context.unitName ? ` (${context.unitName})` : ''}`
+    if (channel === 'SMS') {
+      return {
+        body: [`Your inspection report for ${where} is ready to review and sign:`, context.url].join(
+          '\n',
+        ),
+      }
+    }
+    return {
+      subject: `Review and sign your inspection report — ${where}`,
+      body: [
+        `Hi ${context.tenantName},`,
+        '',
+        `The inspection at ${where} is done. Review it and sign here:`,
+        '',
+        context.url,
+      ].join('\n'),
+    }
+  },
+}
+
+/// Context for `inspection.auto_finalized` (INSP-01, R-068 phase 2) - the
+/// signature window closed with no signature on file.
+export interface InspectionAutoFinalizedContext {
+  tenantName: string
+  addressLine1: string
+  unitName: string
+}
+
+export const inspectionAutoFinalizedTemplate: NotificationTemplate<InspectionAutoFinalizedContext> = {
+  key: 'inspection.auto_finalized',
+  category: 'inspection_signature',
+  channels: ['SMS', 'EMAIL', 'PORTAL'],
+  render: (context, channel) => {
+    const where = `${context.addressLine1}${context.unitName ? ` (${context.unitName})` : ''}`
+    if (channel === 'SMS') {
+      return {
+        body: `Your inspection report for ${where} is now final - nobody signed within the review window.`,
+      }
+    }
+    return {
+      subject: `Inspection report finalized — ${where}`,
+      body: [
+        `Hi ${context.tenantName},`,
+        '',
+        `Nobody signed the inspection report for ${where} within the review window, so it has been finalized as recorded. Contact us if anything about it looks wrong.`,
+      ].join('\n'),
+    }
+  },
+}
+
 /// Context for `comms.managed_template` (COMM-03, R-044). Already rendered -
 /// see the template below.
 export interface ManagedTemplateContext {
@@ -1556,6 +1622,10 @@ export const TEMPLATES: Readonly<Record<string, NotificationTemplate<never>>> = 
   [mtmRolloverTemplate.key]: mtmRolloverTemplate as unknown as NotificationTemplate<never>,
   [showingInviteTemplate.key]: showingInviteTemplate as unknown as NotificationTemplate<never>,
   [nonRenewalTemplate.key]: nonRenewalTemplate as unknown as NotificationTemplate<never>,
+  [inspectionSignatureNeededTemplate.key]:
+    inspectionSignatureNeededTemplate as unknown as NotificationTemplate<never>,
+  [inspectionAutoFinalizedTemplate.key]:
+    inspectionAutoFinalizedTemplate as unknown as NotificationTemplate<never>,
 }
 
 export class UnknownTemplateError extends Error {

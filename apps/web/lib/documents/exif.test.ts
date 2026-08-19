@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { extractCapturedAt } from './exif.ts'
+import { extractCapturedAt, extractGeotag } from './exif.ts'
 
 // EXIF extraction against the REAL library (PROP-08, D-14).
 //
@@ -64,6 +64,86 @@ function jpegWithCaptureTime(): Buffer {
   ])
   return Buffer.concat([Buffer.from([0xff, 0xd8]), app1, Buffer.from([0xff, 0xd9])])
 }
+
+/// A raw ASCII TIFF entry value, when the string is short enough to fit
+/// inline in the 4-byte value field (count <= 4 for a 1-byte-per-char
+/// type) - stored as the literal bytes, not a numeric offset, which is why
+/// this is a separate helper from `entry()` above.
+function asciiEntry(tag: number, str: string): Buffer {
+  const bytes = Buffer.alloc(4)
+  Buffer.from(str, 'ascii').copy(bytes)
+  return Buffer.concat([u16(tag), u16(2), u32(str.length), bytes])
+}
+
+/// A JPEG carrying one APP1/EXIF segment whose GPS IFD holds a real
+/// latitude/longitude - Pittsburgh, in degrees/minutes/seconds, the classic
+/// GPS EXIF example (40°26'46"N, 79°58'56"W).
+function jpegWithGps(): Buffer {
+  const ifd0Offset = 8
+  const gpsIfdOffset = ifd0Offset + 2 + 12 + 4 // count + one entry + next-ifd pointer
+  const ifd0 = Buffer.concat([
+    u16(1),
+    entry(0x8825, 4, 1, gpsIfdOffset), // GPSInfoIFDPointer, LONG
+    u32(0),
+  ])
+
+  const latRationalsOffset = gpsIfdOffset + 2 + 4 * 12 + 4 // count + 4 entries + next-ifd pointer
+  const lonRationalsOffset = latRationalsOffset + 24
+  const gpsIfd = Buffer.concat([
+    u16(4),
+    asciiEntry(0x0001, 'N\0'), // GPSLatitudeRef
+    entry(0x0002, 5, 3, latRationalsOffset), // GPSLatitude, RATIONAL x3
+    asciiEntry(0x0003, 'W\0'), // GPSLongitudeRef
+    entry(0x0004, 5, 3, lonRationalsOffset), // GPSLongitude, RATIONAL x3
+    u32(0),
+  ])
+  const latRationals = Buffer.concat([u32(40), u32(1), u32(26), u32(1), u32(46), u32(1)])
+  const lonRationals = Buffer.concat([u32(79), u32(1), u32(58), u32(1), u32(56), u32(1)])
+
+  const tiff = Buffer.concat([
+    Buffer.from('MM', 'ascii'),
+    u16(0x2a),
+    u32(ifd0Offset),
+    ifd0,
+    gpsIfd,
+    latRationals,
+    lonRationals,
+  ])
+  const payload = Buffer.concat([Buffer.from('Exif\0\0', 'ascii'), tiff])
+  const app1 = Buffer.concat([
+    Buffer.from([0xff, 0xe1]),
+    u16(payload.length + 2),
+    payload,
+  ])
+  return Buffer.concat([Buffer.from([0xff, 0xd8]), app1, Buffer.from([0xff, 0xd9])])
+}
+
+describe('extractGeotag', () => {
+  it('reads a real GPS block and converts degrees/minutes/seconds to decimal', async () => {
+    const geotag = await extractGeotag(jpegWithGps(), 'image/jpeg')
+    expect(geotag).not.toBeNull()
+    // 40 + 26/60 + 46/3600
+    expect(geotag?.latitude).toBeCloseTo(40.446111, 5)
+    // South/West refs are negative - 79 + 58/60 + 56/3600, negated for W.
+    expect(geotag?.longitude).toBeCloseTo(-79.982222, 5)
+  })
+
+  it('returns null for a non-image content type', async () => {
+    expect(await extractGeotag(jpegWithGps(), 'application/pdf')).toBeNull()
+  })
+
+  it('returns null rather than throwing on something that is not an image', async () => {
+    expect(await extractGeotag(Buffer.from('not a photo'), 'image/jpeg')).toBeNull()
+  })
+
+  it('returns null for a JPEG with no GPS block at all', async () => {
+    // A screenshot, a scan, or a phone with location services off - never
+    // guessed from anywhere else, the same "undated beats wrongly dated"
+    // posture extractCapturedAt already takes.
+    const bare = Buffer.from([0xff, 0xd8, 0xff, 0xd9])
+    expect(await extractGeotag(bare, 'image/jpeg')).toBeNull()
+  })
+})
 
 describe('extractCapturedAt', () => {
   it('reads DateTimeOriginal out of a real EXIF block', async () => {

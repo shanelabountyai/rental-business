@@ -2969,3 +2969,24 @@ Full reasoning in `07-decisions.md`.
 - **No tenant-portal e-sign.** `recordSignature` is staff-only ("recorded that a tenant signed on the inspector's own phone"); `canRecordSignature`'s own comment names this as the interim posture, not the destination.
 - **No auto-finalize-after-a-window job.** INSP-01 asks for a report to auto-finalize if nobody signs within a stated window; today a report simply waits, un-locked, until a staff member locks it by hand.
 - **No R-069/R-070-specific wiring yet** (door codes withheld until funds clear, the side-by-side move-in/move-out comparison via `moveInItemId`) - this item builds the engine those items drive, not their own logic.
+
+---
+
+## R-068 — Inspection engine (phase 2 of 2)
+**Commit:** _pending_  ·  **Date:** 2026-08-19
+
+**What it built.** The three pieces phase 1 named and deliberately deferred. Photo capture: `Document.inspectionItemId` (a new, real FK - "the checklist row it is evidence for," matching `workOrderId`'s own directness) plus new `latitude`/`longitude` columns, generic on `Document` since EXIF GPS is a property of the file itself, not of being an inspection photo specifically. `extractGeotag()` sits beside the existing `extractCapturedAt()` in `documents/exif.ts`, using the same lite `exifr` build's own `.gps()` helper (tested against a real, hand-encoded GPS EXIF block, the same "against the real library" posture that file's own header already argued for `capturedAt`). A tenant's own e-sign: `signInspectionAsTenant` (portal-side, session-based) signs AND locks in one transaction - unlike the staff path, which stays two separate steps from phase 1. An auto-finalize job (`auto-finalize-job.ts`) locks a performed-but-unsigned report after 3 days and notifies the tenant either way (`inspection.signature_needed` when the walk finishes, `inspection.auto_finalized` if nobody signed in time) via a new `inspection_signature` notification category.
+
+**What it decided.** Recorded as **D-58**:
+- **Every inspection photo also gets `Document.leaseId` set from the inspection's own lease** - not a new visibility rule, just feeding the EXISTING tenant-portal document rule (`tenantCanSeeDocument`, DOC-03) the fact it already knows how to use.
+- **A tenant's portal signature locks the report in the same step; a staff-recorded one still does not.** Deliberate, not inconsistent: a tenant signing from the portal has already done their own review by definition (the page IS the review), where a staff member recording someone else's in-person signature reasonably keeps a checkpoint before finalizing. Both write the identical `inspection.signed` audit action, told apart by `actorType`.
+- **Rejected a public `/inspections/sign/[token]` magic-link page**, the shape R-063 uses for a brand-new lease signer. That page exists because a new tenant has no portal account yet; an inspection happens during an active tenancy, so the tenant already has one - a second, parallel public-token surface would just duplicate `requireTenantWithScope()` for no reason.
+- **3 days, a literal constant** for the auto-finalize window - no `JurisdictionRule` concept exists for this, and every sibling job in this codebase (`renter-insurance-job.ts`, `renewal-window-job.ts`) already makes the identical call for its own day-count rather than inventing config nobody asked to vary.
+
+Full reasoning in `07-decisions.md`.
+
+**What it left behind.**
+- **No manual reordering or removal of a checklist template's items beyond the fixed-rows form** - a PM builds or edits a checklist by filling/clearing rows, not by dragging or renumbering. Fine for a room-by-room list that rarely changes mid-life.
+- **No photo deletion or replacement from the inspection UI** - `Document`'s own soft-delete (DOC-05) exists but nothing here calls it; a wrong photo today means adding a correct one alongside it, not removing the mistake.
+- **The auto-finalize job notifies the tenant, not staff.** A PM who wants to know a report finalized without a signature has to check `/inspections`; no Task is raised the way `renter-insurance-job.ts` raises one for its own alerts - deliberately, since auto-finalizing IS the terminal action here, not a prompt for a human to act on.
+- **Still no R-069/R-070-specific wiring** - the engine is now complete end to end (checklist → walk → photos → signature → lock, staff or tenant), but door-codes-withheld-until-funds-clear (R-069) and the side-by-side move-in/move-out comparison via `moveInItemId` (R-070) remain those items' own work.

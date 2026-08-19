@@ -89,6 +89,12 @@ export const DOCUMENT_TYPES = [
   /// owner's own policy) - same "different concept, same word" trap those
   /// two already carry a comment about, now a third time.
   'RENTER_INSURANCE_COI',
+  /// R-068 phase 2: a condition photo attached to one InspectionItem
+  /// (Document.inspectionItemId) - distinct from UNIT_PHOTO (staff's
+  /// condition-over-time library, not tied to a specific checklist walk)
+  /// and MAINTENANCE_PHOTO/COMPLETION_PHOTO (a reported problem and its
+  /// fix, not a room-by-room inspection).
+  'INSPECTION_PHOTO',
   'OTHER',
 ] as const
 export type DocumentTypeValue = (typeof DOCUMENT_TYPES)[number]

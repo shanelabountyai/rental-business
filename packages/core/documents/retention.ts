@@ -66,6 +66,10 @@ export const RETENTION_RULES: Record<DocumentTypeValue, RetentionRule> = {
     years: null,
     note: 'R-062: what was represented to a buyer/title company at closing - kept indefinitely, the same reasoning a lease itself is kept for.',
   },
+  INSPECTION_PHOTO: {
+    years: null,
+    note: 'R-068: per-item condition evidence, kept indefinitely for the same reason INSPECTION_REPORT is - a locked report is worth nothing if the photos behind it can vanish.',
+  },
   OTHER: { years: null, note: 'Uncategorized - no automatic rule.' },
 }
 

@@ -98,6 +98,14 @@ export const NOTIFICATION_CATEGORIES = [
   /// `prospect_prescreening` - a PROSPECT recipient has no account and
   /// therefore no preferences to read.
   'prospect_showing',
+
+  /// R-068 phase 2: a tenant's own inspection report is ready for their
+  /// review and signature, and the follow-up when it auto-finalized
+  /// instead because nobody signed in time. Unlike `lease_signature`, a
+  /// TENANT recipient here already has portal access by definition (an
+  /// inspection happens during an active tenancy, never before move-in) -
+  /// no reason to restrict this to EMAIL/SMS the way that category does.
+  'inspection_signature',
 ] as const
 
 export type NotificationCategory = (typeof NOTIFICATION_CATEGORIES)[number]

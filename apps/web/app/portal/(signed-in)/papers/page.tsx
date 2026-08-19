@@ -1,4 +1,5 @@
 import { requireTenantWithScope } from '@/lib/portal/guard.ts'
+import { inspectionsAwaitingTenantSignature } from '@/lib/portal/inspection-queries.ts'
 import { listTenantDocuments } from '@/lib/portal/queries.ts'
 
 export const metadata = { title: 'Your papers' }
@@ -39,7 +40,10 @@ function fileSize(bytes: number): string {
 
 export default async function PortalPapersPage() {
   const { scope } = await requireTenantWithScope()
-  const documents = await listTenantDocuments(scope)
+  const [documents, awaitingSignature] = await Promise.all([
+    listTenantDocuments(scope),
+    inspectionsAwaitingTenantSignature(scope),
+  ])
 
   return (
     <div className="flex flex-col gap-6">
@@ -50,6 +54,25 @@ export default async function PortalPapersPage() {
           appear here.
         </p>
       </div>
+
+      {awaitingSignature.length > 0 && (
+        <ul className="flex flex-col gap-3">
+          {awaitingSignature.map((inspection) => (
+            <li key={inspection.id}>
+              <a
+                href={`/portal/papers/inspections/${inspection.id}`}
+                className="hover:bg-accent focus-visible:ring-ring flex min-h-14 flex-col justify-center gap-1 rounded-md border-2 border-amber-500 px-4 py-3 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+              >
+                <span className="font-medium">Review and sign your inspection report</span>
+                <span className="text-muted-foreground">
+                  {inspection.property.addressLine1}
+                  {inspection.unit.name ? ` (${inspection.unit.name})` : ''}
+                </span>
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
 
       {documents.length === 0 ? (
         <p>
