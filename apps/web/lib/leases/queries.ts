@@ -10,7 +10,7 @@ import type { ResolvedScope } from '@/lib/scope/current-scope.ts'
 
 const leaseInclude = {
   property: { select: { id: true, name: true, legalEntityId: true, timezone: true, state: true, county: true } },
-  unit: { select: { id: true, name: true } },
+  unit: { select: { id: true, name: true, marketRentCents: true } },
   leaseTenants: {
     orderBy: { isPrimary: 'desc' },
     include: {
@@ -18,6 +18,15 @@ const leaseInclude = {
     },
   },
   guarantors: { orderBy: { createdAt: 'asc' } },
+  // LEASE-09 (R-065): the renewal lineage in both directions. Small enough
+  // to carry on every read rather than a second query - a lease has at most
+  // a handful of renewal attempts over its life (LeaseEnvelope.leaseId's
+  // own "not unique" precedent, applied here).
+  renewedFrom: { select: { id: true, status: true, endsOn: true, rentCents: true } },
+  renewalLeases: {
+    select: { id: true, status: true, startsOn: true, rentCents: true, createdAt: true },
+    orderBy: { createdAt: 'desc' },
+  },
 } as const
 
 /// Every lease in scope, running ones first. A PM opening this section is

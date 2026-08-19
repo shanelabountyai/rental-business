@@ -8,7 +8,7 @@ import {
 } from '@rental/core/leases'
 import { depositObligations } from '@rental/core/ledger'
 import { formatCents } from '@rental/core/money'
-import { businessDate } from '@rental/core/scheduling'
+import { businessDate, utcToBusinessDate } from '@rental/core/scheduling'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { BillingPanel } from '@/components/leases/billing-panel.tsx'
@@ -22,6 +22,7 @@ import { LifecyclePanel } from '@/components/leases/lifecycle-panel.tsx'
 import { FeesPanel } from '@/components/leases/fees-panel.tsx'
 import { RecurringChargesPanel } from '@/components/leases/recurring-panel.tsx'
 import { PartiesPanel } from '@/components/leases/parties-panel.tsx'
+import { RenewalPanel } from '@/components/leases/renewal-panel.tsx'
 import { OfflinePaymentForm } from '@/components/payments/offline-payment-form.tsx'
 import { actorCan, actorDecision, propertyResource, requireScope } from '@/lib/auth/guard.ts'
 import { rulesFor } from '@/lib/jurisdiction/queries.ts'
@@ -44,6 +45,7 @@ import { leaseStatement, waivableFees } from '@/lib/ledger/queries.ts'
 import { exportLedgerStatement } from '@/lib/ledger/statement.ts'
 import { waiveCharge } from '@/lib/ledger/waivers.ts'
 import { outstandingIntakeGaps } from '@/lib/leases/intake.ts'
+import { offerRenewal } from '@/lib/leases/renewal-actions.ts'
 import { recordOfflinePayment } from '@/lib/payments/offline.ts'
 import { getLease, selectableTenants } from '@/lib/leases/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
@@ -172,6 +174,32 @@ export default async function LeaseDetailPage({
     waivableFees(lease.id),
     recurringChargesForLease(lease.id),
   ])
+  // LEASE-09 (R-065): the 120/90-day job is what FLAGS a lease (raises the
+  // Task a PM's queue shows); the offer form itself is not gated behind that
+  // flag existing - a PM asked about renewing early, or who already closed
+  // the flag Task, is not blocked from making an offer, the same posture
+  // `changeLeaseStatus`'s own buttons take (available whenever the move is
+  // legal, never behind some other artifact). `existingSuccessor` blocks a
+  // second concurrent offer, the same guard `offerRenewal` re-checks itself.
+  const existingSuccessor = lease.renewalLeases.find((r) =>
+    (['DRAFT', 'PENDING_SIGNATURE', 'ACTIVE'] as const).includes(r.status as never),
+  )
+  const canOfferRenewal =
+    canWrite && !existingSuccessor && (lease.status === 'ACTIVE' || lease.status === 'MONTH_TO_MONTH')
+  // Plain UTC-midnight arithmetic, deliberately not `businessDate()`
+  // (property-local), when starting from `endsOn`: that column is a
+  // @db.Date, always UTC midnight for its calendar day (CLAUDE.md's own
+  // warning on this exact column type) - adding whole days in that same
+  // UTC frame and reading the result with `utcToBusinessDate` never crosses
+  // a timezone boundary. The no-`endsOn` fallback (an MTM lease with no
+  // term to count from) starts from a real instant instead, so THAT one
+  // does need the property's own zone.
+  const renewalDefaultStartsOn = lease.endsOn
+    ? utcToBusinessDate(new Date(lease.endsOn.getTime() + 24 * 3_600_000))
+    : businessDate(new Date(), lease.property.timezone)
+  const renewalDefaultEndsOn = utcToBusinessDate(
+    new Date(new Date(`${renewalDefaultStartsOn}T00:00:00.000Z`).getTime() + 365 * 24 * 3_600_000),
+  )
   const reversed = new Set(
     (ledger?.lines ?? []).map((line) => line.reversesId).filter(Boolean) as string[],
   )
@@ -512,6 +540,26 @@ export default async function LeaseDetailPage({
         }
         generateAction={generateAndSendLease.bind(null, lease.id)}
         voidAction={voidEnvelope.bind(null, lease.id)}
+      />
+
+      <RenewalPanel
+        canOffer={canOfferRenewal}
+        currentRentCents={lease.rentCents}
+        marketRentCents={lease.unit.marketRentCents}
+        defaultStartsOn={renewalDefaultStartsOn}
+        defaultEndsOn={renewalDefaultEndsOn}
+        predecessor={
+          lease.renewedFrom
+            ? { id: lease.renewedFrom.id, status: lease.renewedFrom.status, rentCents: lease.renewedFrom.rentCents }
+            : null
+        }
+        successors={lease.renewalLeases.map((r) => ({
+          id: r.id,
+          status: r.status,
+          startsOn: r.startsOn.toISOString().slice(0, 10),
+          rentCents: r.rentCents,
+        }))}
+        action={offerRenewal.bind(null, lease.id)}
       />
 
       {canWrite && (

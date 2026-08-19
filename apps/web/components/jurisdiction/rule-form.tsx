@@ -51,6 +51,7 @@ export interface RuleFormDefaults {
   payOrQuitDays?: number | ''
   noticeToVacateDays?: number | ''
   rentIncreaseNoticeDays?: number | ''
+  rentIncreaseCapPercent?: number | ''
   retaliationWindowDays?: number | ''
   sourceOfIncomeProtected?: boolean | null
   justCauseRequired?: boolean
@@ -284,6 +285,17 @@ export function RuleForm({
             max={365}
             defaultValue={defaults.rentIncreaseNoticeDays}
             error={errors.rentIncreaseNoticeDays}
+          />
+          <TextField
+            label="Rent-increase cap (% of current rent, optional)"
+            name="rentIncreaseCapPercent"
+            type="number"
+            inputMode="decimal"
+            min={0}
+            step={1}
+            defaultValue={defaults.rentIncreaseCapPercent}
+            error={errors.rentIncreaseCapPercentBps}
+            hint="Leave blank where the state sets no statutory ceiling on a renewal's rent increase (LEASE-09)."
           />
           <TextField
             label="Retaliation-presumption window, days (optional)"

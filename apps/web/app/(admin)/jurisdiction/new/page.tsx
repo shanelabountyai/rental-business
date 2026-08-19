@@ -66,6 +66,9 @@ export default async function NewJurisdictionRulePage({
           payOrQuitDays: previous?.payOrQuitDays ?? '',
           noticeToVacateDays: previous?.noticeToVacateDays ?? '',
           rentIncreaseNoticeDays: previous?.rentIncreaseNoticeDays ?? '',
+          rentIncreaseCapPercent: previous?.rentIncreaseCapPercentBps
+            ? previous.rentIncreaseCapPercentBps / 100
+            : '',
           retaliationWindowDays: previous?.retaliationWindowDays ?? '',
           sourceOfIncomeProtected: previous?.sourceOfIncomeProtected ?? null,
           justCauseRequired: previous?.justCauseRequired,

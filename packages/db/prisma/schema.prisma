@@ -124,6 +124,12 @@ enum LeaseOrigin {
   /// seller handed over, which is frequently a photocopy and sometimes
   /// nothing. Every gap this creates is tracked rather than papered over.
   INHERITED
+  /// LEASE-09 (R-065). A renewal's successor lease - `renewedFromLeaseId`
+  /// names which lease it replaces. Neither of the above: there is no new
+  /// application (the tenant is already screened and in place) and nothing
+  /// was inherited from a seller, so forcing either value would misstate
+  /// where this tenancy actually came from.
+  RENEWAL
 }
 
 /// Whether the security deposit money actually reached us (RISK-08).
@@ -1487,6 +1493,24 @@ model Lease {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
+  /// LEASE-09 (R-065). Set only on a renewal's successor lease. A renewed
+  /// fixed term is a NEW Lease row, never a mutation of the one it replaces
+  /// - see packages/core/leases/status.ts's own comment: MTM rollover is
+  /// one-way, and agreeing a new fixed term after either an ACTIVE or an
+  /// MTM lease is "a new lease". This is the lineage pointer that makes
+  /// "what did this replace" and "what replaced this" answerable without
+  /// guessing from matching dates. Not unique - a voided renewal attempt is
+  /// kept as evidence rather than replaced in place, the same
+  /// "not unique, several rows over a lease's life" call LeaseEnvelope.leaseId
+  /// already makes (D-52), so a predecessor can accumulate more than one
+  /// renewal successor over time even though only one is ever live. Restrict,
+  /// not SetNull: nothing in this product deletes a Lease row, so there is no
+  /// delete path this FK needs to survive - Restrict just says so rather than
+  /// pretending otherwise.
+  renewedFromLeaseId String?
+  renewedFrom        Lease?  @relation("LeaseRenewal", fields: [renewedFromLeaseId], references: [id], onDelete: Restrict)
+  renewalLeases       Lease[] @relation("LeaseRenewal")
+
   property         Property          @relation(fields: [propertyId], references: [id])
   unit             Unit              @relation(fields: [unitId], references: [id])
   leaseTenants     LeaseTenant[]
@@ -1513,6 +1537,7 @@ model Lease {
   @@index([unitId])
   @@index([status])
   @@index([endsOn])
+  @@index([renewedFromLeaseId])
 }
 
 /// A lease has one row per adult occupant (LEASE-06). Separate from
@@ -3605,6 +3630,15 @@ model JurisdictionRule {
   payOrQuitDays          Int?
   noticeToVacateDays     Int?
   rentIncreaseNoticeDays Int?
+  /// LEASE-09 (R-065, D-4). A statutory ceiling on how much rent may rise at
+  /// renewal, in basis points of the current rent (5% is 500) - the same
+  /// bps convention `lateFeeMaxPercentBps`/`depositMaxBps` already use, not
+  /// a dollar figure, because every real rent-cap statute is expressed as a
+  /// percentage of the existing rent. Null means no statutory cap on file,
+  /// not "increases are unlimited" - Texas has none; several other states
+  /// do, and inventing a number for an unconfigured jurisdiction would be
+  /// enforcing a rule that does not exist (D-4's own rule, restated).
+  rentIncreaseCapPercentBps Int?
   justCauseRequired      Boolean @default(false)
   /// RISK-06 (R-055, D-4). How long after a tenant complaint a rent
   /// increase, non-renewal or notice carries a rebuttable presumption of

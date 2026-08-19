@@ -91,6 +91,8 @@ export interface JurisdictionRuleInput {
   payOrQuitDays?: number | null
   noticeToVacateDays?: number | null
   rentIncreaseNoticeDays?: number | null
+  /// LEASE-09 (R-065). Null means no statutory cap on file, not unlimited.
+  rentIncreaseCapPercentBps?: number | null
   justCauseRequired: boolean
   /// RISK-06 (R-055). Null means not configured - the retaliation guard is
   /// simply not applied, never assumed to be zero days.
@@ -195,6 +197,15 @@ export function validateJurisdictionRule(
         message: 'Enter a realistic number of days (0–365).',
       })
     }
+  }
+  if (
+    input.rentIncreaseCapPercentBps != null &&
+    !isWholeNumberInRange(input.rentIncreaseCapPercentBps, 10_000)
+  ) {
+    violations.push({
+      field: 'rentIncreaseCapPercentBps',
+      message: 'Enter a realistic rent-increase cap in basis points, or leave blank for no statutory cap.',
+    })
   }
 
   if (input.paymentAllocationOrder.length === 0) {

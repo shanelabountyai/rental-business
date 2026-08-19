@@ -42,6 +42,11 @@ export interface DashboardSummary {
   tickets: TicketSummary
   vacancies: VacancySummary
   leaseExpiry: LeaseExpirySummary
+  /// LEASE-09 (R-065). Named distinctly from `renewalAlerts` below, which
+  /// D-46 already claimed for mortgage/insurance renewals before this item
+  /// existed - a LEASE renewing and a loan's ARM date resetting are
+  /// unrelated facts that happen to share an English word.
+  renewalRate: RenewalRateSummary
   pendingApprovals: PendingApprovalsSummary
   renewalAlerts: RenewalAlertsSummary
   unansweredMessages: UnansweredMessagesSummary
@@ -280,6 +285,56 @@ export async function leaseExpirySummary(
   return { within90, within120 }
 }
 
+export interface RenewalRateSummary {
+  /// A fixed-term lease that reached a continuing outcome - a signed
+  /// renewal successor, or the automatic MTM rollover job's own transition -
+  /// rather than the tenant simply leaving.
+  renewed: number
+  /// A fixed-term lease that ENDED with no successor and never rolled to
+  /// MTM - the tenant left.
+  endedWithoutRenewal: number
+  /// renewed / (renewed + endedWithoutRenewal), or 0 with nothing to divide.
+  rate: number
+}
+
+/**
+ * LEASE-09's "renewal rate is tracked as a metric".
+ *
+ * A structural snapshot of every ORIGINAL tenancy's outcome, not a
+ * trailing-window rate - `origin: { not: 'RENEWAL' }` excludes a successor
+ * lease itself from the count, since its existence is the OUTCOME being
+ * counted on the predecessor's own row, not a second original tenancy.
+ * MONTH_TO_MONTH counts as "renewed" whatever put it there (this item's own
+ * automatic rollover job, or a lease started on MTM terms directly) - both
+ * are a continuing tenancy, which is the number this metric is actually
+ * asking about.
+ */
+export async function renewalRateSummary(scope: ResolvedScope): Promise<RenewalRateSummary> {
+  if (scope.propertyIds.length === 0) return { renewed: 0, endedWithoutRenewal: 0, rate: 0 }
+
+  const leases = await prisma.lease.findMany({
+    where: {
+      propertyId: { in: scope.propertyIds },
+      status: { in: ['ENDED', 'MONTH_TO_MONTH'] },
+      origin: { not: 'RENEWAL' },
+    },
+    select: { status: true, renewalLeases: { select: { id: true }, take: 1 } },
+  })
+
+  let renewed = 0
+  let endedWithoutRenewal = 0
+  for (const lease of leases) {
+    if (lease.status === 'MONTH_TO_MONTH' || lease.renewalLeases.length > 0) {
+      renewed++
+    } else {
+      endedWithoutRenewal++
+    }
+  }
+
+  const total = renewed + endedWithoutRenewal
+  return { renewed, endedWithoutRenewal, rate: total > 0 ? renewed / total : 0 }
+}
+
 // ---- 6. Pending approvals ----
 
 export interface PendingApprovalsSummary {
@@ -360,6 +415,7 @@ export async function dashboardSummary(
     tickets,
     vacancies,
     leaseExpiry,
+    renewalRate,
     pendingApprovals,
     renewalAlerts,
     unansweredMessages,
@@ -369,6 +425,7 @@ export async function dashboardSummary(
     ticketSummary(scope, asOf),
     vacancySummary(scope, asOf),
     leaseExpirySummary(scope, asOf),
+    renewalRateSummary(scope),
     pendingApprovalsSummary(scope),
     renewalAlertsSummary(scope, asOf),
     unansweredMessagesSummary(scope),
@@ -380,6 +437,7 @@ export async function dashboardSummary(
     tickets,
     vacancies,
     leaseExpiry,
+    renewalRate,
     pendingApprovals,
     renewalAlerts,
     unansweredMessages,

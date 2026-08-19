@@ -4,9 +4,11 @@ import { createHash } from 'node:crypto'
 import { headers } from 'next/headers'
 import { type DocumentBlock } from '@rental/core/documents'
 import { leaseTransition } from '@rental/core/leases'
+import { businessDate } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { auditAsSystem, auditAsTenant } from '@/lib/audit/system.ts'
+import { syncLease } from '@/lib/billing/lifecycle.ts'
 import { provisionLeaseBilling } from '@/lib/billing/provision.ts'
 import { chargeDeposit } from './deposit-charge.ts'
 import { esignAdapter } from '@/lib/esign/provider.ts'
@@ -184,6 +186,8 @@ async function completeEnvelope(envelopeId: string): Promise<void> {
           startsOn: true,
           endsOn: true,
           isMonthToMonth: true,
+          renewedFromLeaseId: true,
+          property: { select: { timezone: true } },
           leaseTenants: { select: { id: true } },
         },
       },
@@ -253,6 +257,18 @@ async function completeEnvelope(envelopeId: string): Promise<void> {
   const storageKey = generateStorageKey(envelope.lease.propertyId, fileName)
   await storage.put(storageKey, executedBuffer, 'application/pdf')
 
+  const isRenewal = envelope.lease.renewedFromLeaseId != null
+  // A renewal successor does not activate the moment it is signed - two live
+  // Stripe subscriptions on the same unit at once is real double-billing,
+  // not a theoretical one, and a lease commonly gets signed weeks ahead of
+  // its statutory notice period. It activates on ITS OWN EFFECTIVE DATE
+  // instead, via the cutover job below (renewal-cutover-job.ts) - unless
+  // that date has already arrived by the time every signer finishes, which
+  // is the ordinary case for an ordinary (non-renewal) lease and ALSO a
+  // legitimate renewal signed right up against its own start.
+  const activateNow =
+    !isRenewal || businessDate(new Date(), envelope.lease.property.timezone) >= businessDate(envelope.lease.startsOn, envelope.lease.property.timezone)
+
   await prisma.$transaction(async (tx) => {
     const document = await tx.document.create({
       data: {
@@ -270,6 +286,23 @@ async function completeEnvelope(envelopeId: string): Promise<void> {
       where: { id: envelope.id },
       data: { status: 'COMPLETED', completedAt: new Date(), executedDocumentId: document.id },
     })
+    await auditAsSystem(
+      'esign.completion',
+      {
+        action: 'envelope.completed',
+        entityType: 'LeaseEnvelope',
+        entityId: envelope.id,
+        propertyId: envelope.lease.propertyId,
+        after: { executedDocumentId: document.id, sha256: executedSha256, signerCount: envelope.signers.length },
+      },
+      tx,
+    )
+
+    if (!activateNow) {
+      // Fully signed, evidence archived, but the lease stays PENDING_SIGNATURE
+      // until its effective date - the cutover job is what activates it.
+      return
+    }
 
     // Same side effects `changeLeaseStatus` gives a staff-driven activation
     // - see activate.ts's own header for why this is one shared function.
@@ -283,30 +316,46 @@ async function completeEnvelope(envelopeId: string): Promise<void> {
       data: { status: 'ACTIVE', activatedAt: new Date() },
     })
 
-    await auditAsSystem(
-      'esign.completion',
-      {
-        action: 'envelope.completed',
-        entityType: 'LeaseEnvelope',
-        entityId: envelope.id,
-        propertyId: envelope.lease.propertyId,
-        after: { executedDocumentId: document.id, sha256: executedSha256, signerCount: envelope.signers.length },
-      },
-      tx,
-    )
-    await auditAsSystem(
-      'esign.completion',
-      {
-        action: 'lease.status_changed',
-        entityType: 'Lease',
-        entityId: envelope.lease.id,
-        propertyId: envelope.lease.propertyId,
-        before: { status: envelope.lease.status },
-        after: { status: 'ACTIVE' },
-      },
-      tx,
-    )
+    if (isRenewal) {
+      // The predecessor's term is over as of the SAME moment the successor
+      // goes live - ended here, in the SAME transaction, so the two rows
+      // never both read as the live tenancy even for an instant. Deliberately
+      // NOT `changeLeaseStatus`: that function also flips the unit to
+      // MAKE_READY on the way off, correct for an ordinary end of tenancy and
+      // wrong here, since the tenant never left. `moveOutAt` is deliberately
+      // left unset for the identical reason.
+      await tx.lease.update({
+        where: { id: envelope.lease.renewedFromLeaseId! },
+        data: { status: 'ENDED' },
+      })
+      await auditAsSystem(
+        'esign.completion',
+        {
+          action: 'lease.renewed',
+          entityType: 'Lease',
+          entityId: envelope.lease.id,
+          propertyId: envelope.lease.propertyId,
+          after: { renewedFromLeaseId: envelope.lease.renewedFromLeaseId, effectiveOn: envelope.lease.startsOn.toISOString() },
+        },
+        tx,
+      )
+    } else {
+      await auditAsSystem(
+        'esign.completion',
+        {
+          action: 'lease.status_changed',
+          entityType: 'Lease',
+          entityId: envelope.lease.id,
+          propertyId: envelope.lease.propertyId,
+          before: { status: envelope.lease.status },
+          after: { status: 'ACTIVE' },
+        },
+        tx,
+      )
+    }
   })
+
+  if (!activateNow) return
 
   // Billing follows the tenancy (D-11) - AFTER the commit and never allowed
   // to fail the completion itself, the same posture `changeLeaseStatus`
@@ -314,7 +363,17 @@ async function completeEnvelope(envelopeId: string): Promise<void> {
   await provisionLeaseBilling(envelope.lease.id).catch((error: unknown) => {
     console.error(`[esign] billing provisioning failed for ${envelope.lease.id}`, error)
   })
-  await chargeDeposit(envelope.lease.id).catch((error: unknown) => {
-    console.error(`[esign] deposit charge failed for ${envelope.lease.id}`, error)
-  })
+  if (isRenewal) {
+    // No deposit charge - the deposit already held under the predecessor
+    // lease is not recollected (this item's own PROGRESS entry names the
+    // continuity gap that leaves). The predecessor's own subscription is
+    // cancelled instead of provisioning a second one.
+    await syncLease(envelope.lease.renewedFromLeaseId!).catch((error: unknown) => {
+      console.error(`[esign] billing sync failed for predecessor ${envelope.lease.renewedFromLeaseId}`, error)
+    })
+  } else {
+    await chargeDeposit(envelope.lease.id).catch((error: unknown) => {
+      console.error(`[esign] deposit charge failed for ${envelope.lease.id}`, error)
+    })
+  }
 }

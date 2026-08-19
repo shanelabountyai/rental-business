@@ -121,6 +121,13 @@ export default async function DashboardPage() {
         />
 
         <Tile
+          href="/tasks?type=lease_renewal"
+          label="Renewal rate"
+          value={`${Math.round(summary.renewalRate.rate * 100)}%`}
+          detail={`${summary.renewalRate.renewed} renewed · ${summary.renewalRate.endedWithoutRenewal} not renewed`}
+        />
+
+        <Tile
           href="/tasks?type=workorder_approval"
           label="Pending approvals"
           value={String(summary.pendingApprovals.count)}

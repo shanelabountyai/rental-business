@@ -405,6 +405,34 @@ export const AUDIT_ACTIONS = [
   /// adding a guarantor changes who can be pursued and nothing else.
   'lease.party_changed',
 
+  /// R-065 (LEASE-09): a renewal offer created a successor DRAFT lease -
+  /// `renewedFromLeaseId` names which lease it replaces. The rent proposed,
+  /// the check that ran against it, and who drew it up are all on the entry.
+  'lease.renewal_offered',
+
+  /// R-065: a renewal offer's proposed rent gave less than the property's
+  /// configured notice period, and staff proceeded anyway. Its OWN action,
+  /// same reasoning `lease.retaliation_window_acknowledged` and
+  /// `entry_notice.overridden` already give: REASON_REQUIRED cannot express
+  /// "required only when the warning fired", and this is the row a
+  /// short-notice increase is defended with. There is no equivalent action
+  /// for a CAPPED rent - that basis blocks with no override, so nothing is
+  /// ever written for it to acknowledge.
+  'lease.renewal_rent_check_overridden',
+
+  /// R-065: the effective-date cutover activated a signed renewal successor
+  /// lease and ended the one it replaces, in the same transaction. Separate
+  /// from `lease.status_changed` because two Lease rows change status at
+  /// once here and a reader needs both without inferring the link from
+  /// matching dates.
+  'lease.renewed',
+
+  /// R-065: a fixed-term lease reached its end date with no successor lease
+  /// in flight, and rolled itself to MONTH_TO_MONTH at the configured MTM
+  /// rate with no staff action - LEASE-09's "MTM rollover applying the
+  /// configured rate automatically".
+  'lease.rolled_to_month_to_month',
+
   /// R-063 (LEASE-06, DOC-02): a lease's document was generated and sent for
   /// e-signature - the base template, the addenda selected, and every
   /// signer named. Carries the provider name, matching `billing.provisioned`'s
@@ -570,6 +598,7 @@ export const REASON_REQUIRED: ReadonlySet<AuditAction> = new Set([
   'payment.hold_changed',
   'consent.withdrawn',
   'lease.retaliation_window_acknowledged',
+  'lease.renewal_rent_check_overridden',
   'envelope.voided',
 ])
 

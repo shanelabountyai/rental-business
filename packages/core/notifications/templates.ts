@@ -1424,6 +1424,41 @@ export const showingTemplate: NotificationTemplate<ShowingContext> = {
   },
 }
 
+/// Context for `lease.mtm_rollover` (LEASE-09, R-065) - sent the moment the
+/// automatic MTM rollover job actually changes the tenant's rent, since that
+/// is the one fact ("your rent is now $X, month to month") a tenant cannot
+/// otherwise learn until the next invoice arrives.
+export interface MtmRolloverContext {
+  tenantName: string
+  addressLine1: string
+  unitName: string
+  rentCents: number
+}
+
+export const mtmRolloverTemplate: NotificationTemplate<MtmRolloverContext> = {
+  key: 'lease.mtm_rollover',
+  category: 'lease_renewal',
+  channels: ['SMS', 'EMAIL'],
+  render: (context, channel) => {
+    const rent = formatCents(context.rentCents)
+    if (channel === 'SMS') {
+      return {
+        body: `Your lease at ${context.addressLine1} rolled over to month-to-month at ${rent}/month.`,
+      }
+    }
+    return {
+      subject: `Your lease at ${context.addressLine1} is now month-to-month`,
+      body: [
+        `Hi ${context.tenantName},`,
+        '',
+        `Your lease term at ${context.addressLine1}${context.unitName ? ` (${context.unitName})` : ''} has ended with no new term agreed, so it has rolled over to month-to-month at ${rent}/month, effective now.`,
+        '',
+        'Contact us if you would like to discuss a new fixed-term lease.',
+      ].join('\n'),
+    }
+  },
+}
+
 export const TEMPLATES: Readonly<Record<string, NotificationTemplate<never>>> = {
   [vendorDeclinedTemplate.key]:
     vendorDeclinedTemplate as unknown as NotificationTemplate<never>,
@@ -1474,6 +1509,7 @@ export const TEMPLATES: Readonly<Record<string, NotificationTemplate<never>>> = 
   [leaseSignInviteTemplate.key]:
     leaseSignInviteTemplate as unknown as NotificationTemplate<never>,
   [showingTemplate.key]: showingTemplate as unknown as NotificationTemplate<never>,
+  [mtmRolloverTemplate.key]: mtmRolloverTemplate as unknown as NotificationTemplate<never>,
   [showingInviteTemplate.key]: showingInviteTemplate as unknown as NotificationTemplate<never>,
 }
 
