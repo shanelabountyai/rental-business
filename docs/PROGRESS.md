@@ -2952,7 +2952,7 @@ Full reasoning, and the rejected alternatives (per-party notice-period fields, a
 ---
 
 ## R-068 — Inspection engine (phase 1 of 2)
-**Commit:** _pending_  ·  **Date:** 2026-08-19
+**Commit:** `3218bda`  ·  **Date:** 2026-08-19
 
 **What it built.** The reusable checklist engine INSP-01 asks for, minus photos and e-sign - a deliberate split for an L item, agreed with a concurrent session on this same repo before starting (the backlog row's own note names exactly what phase 2 still owes). `InspectionTemplate` (a portfolio-wide, PM-authored room/item checklist - one JSON column, not a child table, since nothing ever queries into a single template item on its own) is copied wholesale into fresh `InspectionItem` rows the moment a PM starts an inspection, independent of the template from that point on. The full lifecycle is a derived status, not a stored one: `inspectionStatus()` reads `scheduledFor`/`performedAt`/`tenantSignedAt`/`lockedAt` in order (DRAFT → SCHEDULED → IN_PROGRESS → PENDING_SIGNATURE → SIGNED → LOCKED), the same "facts, not a status column" call `LeaseStatus` already made. A staff member walks every item (condition + notes), finishes the walk once every item is recorded, records that a tenant signed (in person, on the inspector's own phone - no tenant-portal e-sign yet), and locks the report - `canEditItem()` refuses every further item write once locked, proved end to end in `e2e/inspections.spec.ts`.
 
