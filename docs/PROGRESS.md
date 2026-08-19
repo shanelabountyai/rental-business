@@ -2932,7 +2932,7 @@ A DB-integration test seeded a `Prospect` with `status: 'PRE_SCREENED'` set dire
 ---
 
 ## R-066 — Notice to vacate + non-renewal
-**Commit:** _pending_  ·  **Date:** 2026-08-19
+**Commit:** `3684713`  ·  **Date:** 2026-08-19
 
 **What it built.** LEASE-11 end to end, both directions of "notice to end the tenancy": a tenant's own self-serve intake (`/portal/papers/notice`, D-10's plain "Give notice to vacate") records date + forwarding address as an inbound fact, no override needed; an owner's non-renewal, recorded from the existing `recordLeaseNotice` staff form, now generates and serves a real `Notice` (type `NON_RENEWAL`) with `NoticeDelivery` and a tenant notification, reusing R-027's own `entryDecision`-style machinery rather than building a parallel one. Both directions run the SAME `noticePeriodCheck()` against `JurisdictionRule.noticeToVacateDays` (present on the schema, unused until now) — warn-and-override on the staff side, purely informational on the tenant's own submission. RISK-06's retaliation guard, already wired into `recordLeaseNotice`'s LANDLORD branch by R-055, now fires alongside the notice-period check rather than instead of it — both warnings surface together in one round trip. A jurisdiction with `justCauseRequired` set (also present, unused until now) makes a stated cause a plain required field on a LANDLORD notice, embedded verbatim in the served notice's body — never a canned list of legally-qualifying reasons this product would be picking on the owner's behalf.
 
