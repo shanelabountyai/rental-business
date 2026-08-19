@@ -2915,7 +2915,7 @@ A DB-integration test seeded a `Prospect` with `status: 'PRE_SCREENED'` set dire
 ---
 
 ## R-067 — Renter's insurance tracking
-**Commit:** `PENDING`  ·  **Date:** 2026-08-19
+**Commit:** `8219916`  ·  **Date:** 2026-08-19
 
 **What it built.** LEASE-10 end to end: a new lease-scoped `RenterInsurancePolicy` model (carrier, policy number, liability coverage, expiry, an optional linked certificate `Document`), recorded from the lease detail page's new "Renter's insurance" section (`recordRenterInsurance`) — the certificate file is genuinely optional, since carrier/dates read off a phone call are a real, useful state before the PDF arrives. A new daily job (`renter-insurance-job.ts`) flags a lease's current policy once it is within 60 days of expiring (`ROUTINE`) or once it has lapsed (`URGENT`), the same 120/90-day-flag shape R-065's `renewal-window-job.ts` just established, reusing `businessDaysBetween` rather than hand-rolling a second date-diff. Recording a fresh policy auto-closes whichever alert Task it supersedes.
 
