@@ -189,6 +189,9 @@ describe('can — MFA gate (ROLE-05)', () => {
 
   it('covers the actions ROLE-03 calls privileged', () => {
     expect([...PRIVILEGED_PERMISSIONS].sort()).toEqual([
+      // R-069. Releasing a code to a tenant at move-in, gated on move-in
+      // funds actually clearing.
+      'accesscode.issue',
       'accesscode.reveal',
       'document.delete',
       'fee.waive',

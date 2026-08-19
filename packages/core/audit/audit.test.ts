@@ -294,6 +294,7 @@ describe('the audit vocabulary', () => {
       'staff.manage': 'staff.assignment_granted',
       'document.delete': 'document.delete_marked',
       'accesscode.reveal': 'accesscode.revealed',
+      'accesscode.issue': 'accesscode.issued',
       'template.approve': 'template.translation_approved',
       'screening.decide': 'screening.decided',
       'lease.execute': 'envelope.sent',

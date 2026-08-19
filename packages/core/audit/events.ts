@@ -236,6 +236,13 @@ export const AUDIT_ACTIONS = [
   /// writes, and this one would miss the event that matters most in a
   /// break-in dispute.
   'accesscode.revealed',
+  /// R-069: a code handed to the TENANT at move-in, distinct from
+  /// `accesscode.revealed` above (a vendor/tech viewing it for a job).
+  /// Keyed to the LEASE, not the AccessCode, so a lease's own page can read
+  /// its full issuance history without joining through the unit - the same
+  /// "audit entry keyed to what a later screen actually queries" call
+  /// `lease.notice_period_overridden` already makes.
+  'accesscode.issued',
   /// R-014: a new code recorded for a unit (AccessCode's own version history
   /// is the change record; this is the evidence-trail entry alongside it,
   /// matching document.uploaded's "audit the write too, not only removal"

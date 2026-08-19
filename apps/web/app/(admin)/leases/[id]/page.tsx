@@ -11,6 +11,7 @@ import { formatCents } from '@rental/core/money'
 import { businessDate, utcToBusinessDate } from '@rental/core/scheduling'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { AccessCodesPanel } from '@/components/leases/access-codes-panel.tsx'
 import { BillingPanel } from '@/components/leases/billing-panel.tsx'
 import { PaymentHoldPanel } from '@/components/leases/payment-hold-panel.tsx'
 import { EsignPanel } from '@/components/leases/esign-panel.tsx'
@@ -24,6 +25,7 @@ import { RecurringChargesPanel } from '@/components/leases/recurring-panel.tsx'
 import { PartiesPanel } from '@/components/leases/parties-panel.tsx'
 import { RenewalPanel } from '@/components/leases/renewal-panel.tsx'
 import { RenterInsurancePanel } from '@/components/leases/renter-insurance-panel.tsx'
+import { accessCodesForLease } from '@/lib/leases/access-code-queries.ts'
 import { OfflinePaymentForm } from '@/components/payments/offline-payment-form.tsx'
 import { actorCan, actorDecision, propertyResource, requireScope } from '@/lib/auth/guard.ts'
 import { rulesFor } from '@/lib/jurisdiction/queries.ts'
@@ -132,6 +134,11 @@ export default async function LeaseDetailPage({
   // legally binding document and, on completion, moves money - the same bar
   // `screening.decide` sets for its own permission.
   const execDecision = await actorDecision('lease.execute', propertyResource(lease.property))
+  // R-069: releasing a code to the tenant is privileged/MFA-gated like
+  // `accesscode.reveal`, but a plain `actorCan` is enough here - unlike the
+  // decisions above, the panel never offers an "issue" button to someone who
+  // cannot yet act, so there is no "allowed but needs MFA" state to render.
+  const canIssue = await actorCan('accesscode.issue', propertyResource(lease.property))
 
   const currentEnvelope = lease.envelopes[0] ?? null
   const envelopeIsLive = currentEnvelope
@@ -168,14 +175,20 @@ export default async function LeaseDetailPage({
       action: changeLeaseStatus.bind(null, lease.id, to),
     }))
 
-  const [gaps, tenants, payers, ledger, fees, recurring] = await Promise.all([
+  const [gaps, tenants, payers, ledger, fees, recurring, accessCodes] = await Promise.all([
     outstandingIntakeGaps(lease),
     canWrite ? selectableTenants() : Promise.resolve([]),
     leaseBillingState(lease.id),
     leaseStatement(lease.id, scope),
     waivableFees(lease.id),
     recurringChargesForLease(lease.id),
+    accessCodesForLease(lease.unitId, lease.id),
   ])
+  // R-069: nothing to clear on a zero-deposit lease (NONE/SURETY_BOND hold
+  // zero by the database CHECK constraint `chargeDeposit()`'s own comment
+  // names) - `lease.deposits` only ever populates from the deposit-clearing
+  // job once real cash has cleared.
+  const depositCleared = lease.depositCents === 0 || lease.deposits.length > 0
   // LEASE-09 (R-065): the 120/90-day job is what FLAGS a lease (raises the
   // Task a PM's queue shows); the offer form itself is not gated behind that
   // flag existing - a PM asked about renewing early, or who already closed
@@ -599,6 +612,18 @@ export default async function LeaseDetailPage({
             : null
         }
         action={recordRenterInsurance.bind(null, lease.id)}
+      />
+
+      <AccessCodesPanel
+        leaseId={lease.id}
+        canIssue={canIssue}
+        depositCleared={depositCleared}
+        codes={accessCodes.map((code) => ({
+          id: code.id,
+          type: code.type,
+          label: code.label,
+          issuedAt: code.issuedAt?.toISOString() ?? null,
+        }))}
       />
 
       {canWrite && (

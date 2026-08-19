@@ -42,6 +42,13 @@ export const PERMISSIONS = [
   /// A vendor or tech seeing a lockbox code is a privileged read, and R-005
   /// logs every one of them (PROP-03).
   'accesscode.reveal',
+  /// Handing a code to the TENANT at move-in (INSP-01, R-069) - its own
+  /// permission rather than folded into `accesscode.reveal`, because a
+  /// maintenance tech revealing a code for their own job and a manager
+  /// releasing keys to a new tenant are different acts with different
+  /// consequences if done at the wrong moment. `issueAccessCodeToTenant`
+  /// gates this on the deposit having actually cleared.
+  'accesscode.issue',
   'report.financial',
   'audit.read',
   /// Portfolio-wide only (R-010): a JurisdictionRule applies by state, not by
@@ -110,6 +117,7 @@ export const PRIVILEGED_PERMISSIONS: ReadonlySet<Permission> = new Set([
   'staff.manage',
   'document.delete',
   'accesscode.reveal',
+  'accesscode.issue',
   'screening.decide',
   'lease.execute',
 ])
@@ -205,6 +213,10 @@ export const ROLE_DEFINITIONS: Record<
       'task.write',
       'staff.read',
       'accesscode.reveal',
+      /// Releasing keys to a tenant is leasing/PM work, not a maintenance
+      /// tech's job (they keep `accesscode.reveal` for their own jobs, not
+      /// this).
+      'accesscode.issue',
       'report.financial',
       /// Read, not write: a jurisdiction config change is a legal release
       /// gate (D-4), not day-to-day portfolio work.

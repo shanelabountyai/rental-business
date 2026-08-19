@@ -42,6 +42,10 @@ const leaseInclude = {
     orderBy: { createdAt: 'desc' },
     select: { id: true, type: true, servedAt: true },
   },
+  // R-069: whether the deposit has actually cleared is read as "does a
+  // Deposit row exist yet" (deposit-clearing-job.ts's own job creates it),
+  // not recomputed here - one source of truth, derived once.
+  deposits: { select: { id: true, receivedAt: true } },
 } as const
 
 /// Every lease in scope, running ones first. A PM opening this section is
