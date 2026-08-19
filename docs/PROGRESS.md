@@ -2973,7 +2973,7 @@ Full reasoning in `07-decisions.md`.
 ---
 
 ## R-068 — Inspection engine (phase 2 of 2)
-**Commit:** _pending_  ·  **Date:** 2026-08-19
+**Commit:** `9e94a70`  ·  **Date:** 2026-08-19
 
 **What it built.** The three pieces phase 1 named and deliberately deferred. Photo capture: `Document.inspectionItemId` (a new, real FK - "the checklist row it is evidence for," matching `workOrderId`'s own directness) plus new `latitude`/`longitude` columns, generic on `Document` since EXIF GPS is a property of the file itself, not of being an inspection photo specifically. `extractGeotag()` sits beside the existing `extractCapturedAt()` in `documents/exif.ts`, using the same lite `exifr` build's own `.gps()` helper (tested against a real, hand-encoded GPS EXIF block, the same "against the real library" posture that file's own header already argued for `capturedAt`). A tenant's own e-sign: `signInspectionAsTenant` (portal-side, session-based) signs AND locks in one transaction - unlike the staff path, which stays two separate steps from phase 1. An auto-finalize job (`auto-finalize-job.ts`) locks a performed-but-unsigned report after 3 days and notifies the tenant either way (`inspection.signature_needed` when the walk finishes, `inspection.auto_finalized` if nobody signed in time) via a new `inspection_signature` notification category.
 
