@@ -485,6 +485,17 @@ export const AUDIT_ACTIONS = [
   /// was not delivered on a given date, this is the row that answers it.
   'notification.opted_out',
   'notification.opted_in',
+
+  /// R-064: a prospect self-booked a showing slot. SYSTEM-actor by
+  /// construction - the booking action is public and session-less, the same
+  /// reasoning `prospect.prescreened` already gives.
+  'showing.booked',
+
+  /// R-064: staff withdrew a booked showing. No REASON_REQUIRED - unlike an
+  /// entry-notice override or a voided envelope, there is no dispute a
+  /// cancelled showing could later be litigated over, so this stays the
+  /// same shape as `task.canceled` rather than `envelope.voided`.
+  'showing.canceled',
 ] as const
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number]

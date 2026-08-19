@@ -105,6 +105,12 @@ export const TOKEN_TTL_MINUTES = {
   /// moves no money by itself, since the deposit charge and rent
   /// subscription only fire once every signer on the envelope has signed.
   LEASE_SIGN: 60 * 24 * 7,
+  /// R-064: a prospect's own self-serve showing booking, sent right after
+  /// pre-screening. FOURTEEN DAYS, matching PROSPECT_PRESCREEN - the same
+  /// stranger-with-no-existing-relationship reasoning, and the single
+  /// ACTION it guards (booking one slot) is no more sensitive than
+  /// answering five questions: no document, no money, a fixed slot grid.
+  SHOWING_BOOKING: 60 * 24 * 14,
 } as const
 
 export type TokenPurpose = keyof typeof TOKEN_TTL_MINUTES

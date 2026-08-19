@@ -5,6 +5,7 @@ import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { auditAsSystem } from '@/lib/audit/system.ts'
 import { redeemToken } from '@/lib/auth/store.ts'
+import { sendShowingInvite } from '@/lib/showings/actions.ts'
 import { prescreenLinkStatus } from './prescreen-link.ts'
 
 // Recording a prospect's answers (LEASE-07, R-058).
@@ -126,6 +127,18 @@ export async function submitPrescreenAnswers(
   // branch that IS this page's success screen (see the page's own comment)
   // would never actually render.
   revalidatePath(`/prescreen/${rawToken}`)
+
+  // Outside the write above - a notification send must not undo the
+  // recorded answers, same reasoning submitInquiry's own call to
+  // sendPrescreenInvite gives for the identical shape. Keeps the whole
+  // inquiry-to-booking chain self-serve (LEASE-08) with no staff action in
+  // between.
+  await sendShowingInvite(status.prospect.id).catch((error) => {
+    console.error(
+      `[prospects] failed to send the showing invite for ${status.prospect.id}`,
+      error,
+    )
+  })
 
   return { notice: "Thanks - we'll be in touch." }
 }

@@ -92,6 +92,12 @@ export const NOTIFICATION_CATEGORIES = [
   /// PM-editable content, so splitting them would not buy anything a
   /// template key does not already give for free.
   'prospect_application',
+
+  /// R-064: a prospect's own showing booking confirmation and its T-1-day/
+  /// T-2-hour reminders. Its own category, same reasoning as
+  /// `prospect_prescreening` - a PROSPECT recipient has no account and
+  /// therefore no preferences to read.
+  'prospect_showing',
 ] as const
 
 export type NotificationCategory = (typeof NOTIFICATION_CATEGORIES)[number]
@@ -137,6 +143,9 @@ const CATEGORY_CHANNELS: Partial<Record<NotificationCategory, readonly Notificat
   /// Same reasoning, same restriction - an APPLICANT has no account either
   /// (NotificationRecipientType.APPLICANT's own schema comment).
   prospect_application: ['EMAIL', 'SMS'],
+  /// Same reasoning again - a PROSPECT has no account and no portal to read
+  /// one in.
+  prospect_showing: ['EMAIL', 'SMS'],
   /// A GUARANTOR recipient has no portal login at all (LEASE-06: "no portal
   /// access to maintenance/comms"), and a TENANT signing a brand-new lease
   /// may not have set one up yet either - the signing link goes to its own
@@ -273,6 +282,10 @@ export function defaultEnabled(
     // R-059: the same reasoning - an application invite (own or a
     // co-applicant's) and a fee-paid confirmation are each a direct reply
     // to something the recipient just did, to a number they just gave.
-    category === 'prospect_application'
+    category === 'prospect_application' ||
+    // R-064: same reasoning again, and the reminders are the entire point
+    // of the category - a showing reminder that defaults off is a no-show
+    // reduction feature nobody receives.
+    category === 'prospect_showing'
   )
 }

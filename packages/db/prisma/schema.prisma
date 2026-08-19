@@ -499,6 +499,7 @@ model Property {
   documents         Document[]
   listings          Listing[]
   prospects         Prospect[]
+  showings          Showing[]
   applications      Application[]
   auditLogs         AuditLog[]
   assignments       StaffAssignment[]
@@ -642,6 +643,7 @@ model Unit {
   utilityAccounts UtilityAccount[]
   shutoffs        ShutoffLocation[]
   listings        Listing[]
+  showings        Showing[]
 
   @@unique([propertyId, name])
   @@index([status])
@@ -1077,9 +1079,52 @@ model Prospect {
   property     Property      @relation(fields: [propertyId], references: [id])
   listing      Listing       @relation(fields: [listingId], references: [id])
   applications Application[]
+  showings     Showing[]
 
   @@index([propertyId, status])
   @@index([listingId])
+}
+
+enum ShowingStatus {
+  BOOKED
+  CANCELED
+}
+
+/// A self-serve showing booking (LEASE-08, R-064). No lockbox exists yet
+/// (that is R-094, Phase 3), so every showing here - vacant or occupied - is
+/// staff-escorted: booking always raises an `escort_showing` Task (D-9), and
+/// there is no unaccompanied-entry code path.
+///
+/// `entryNoticeId` is set if and only if the unit was OCCUPIED at booking
+/// time - vacant showings need no notice and generate none. That single
+/// column is the record of both facts at once, the same shape
+/// `WorkOrder.entryNoticeId` already gives entry-notice compliance for a
+/// maintenance visit.
+///
+/// No NO_SHOW / COMPLETED status, unlike a work order's own richer
+/// `tenantNoShowAt` - nothing downstream reads a showing's outcome yet, so
+/// there is nothing a third status would drive. CANCELED exists because a
+/// stale BOOKED row would keep blocking its own slot and leave its escort
+/// Task open forever; left behind for whoever needs no-show tracking.
+model Showing {
+  id             String        @id @default(cuid())
+  propertyId     String
+  unitId         String
+  prospectId     String
+  scheduledStart DateTime
+  scheduledEnd   DateTime
+  status         ShowingStatus @default(BOOKED)
+  entryNoticeId  String?
+  canceledAt     DateTime?
+  createdAt      DateTime      @default(now())
+
+  property    Property @relation(fields: [propertyId], references: [id], onDelete: Restrict)
+  unit        Unit     @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  prospect    Prospect @relation(fields: [prospectId], references: [id], onDelete: Restrict)
+  entryNotice Notice?  @relation("ShowingEntryNotice", fields: [entryNoticeId], references: [id])
+
+  @@index([unitId, scheduledStart])
+  @@index([status, scheduledStart])
 }
 
 // ---------------------------------------------------------------------------
@@ -1916,6 +1961,16 @@ enum AuthTokenPurpose {
   /// with a family member or an attorney needs the same week TENANT_VERIFY
   /// gives a tenant confirming a repair.
   LEASE_SIGN
+  /// R-064: a prospect's own self-serve showing booking, sent right after
+  /// they answer pre-screening. SINGLE-USE, same reasoning as
+  /// PROSPECT_PRESCREEN: the single ACTION a prospect ever takes with it is
+  /// booking one slot, burned only when a slot is actually reserved.
+  ///
+  /// FOURTEEN DAYS, matching PROSPECT_PRESCREEN rather than any of the
+  /// shorter tenant/vendor purposes - the same stranger-with-no-existing-
+  /// relationship reasoning, and it opens no document, moves no money and
+  /// reads only a fixed slot grid.
+  SHOWING_BOOKING
 }
 
 model StaffCredential {
@@ -3241,6 +3296,7 @@ model Notice {
   document           Document?         @relation("NoticeDocument", fields: [documentId], references: [id])
   proofDocument      Document?         @relation("NoticeProofDocument", fields: [proofDocumentId], references: [id])
   entryForWorkOrders WorkOrder[]       @relation("WorkOrderEntryNotice")
+  entryForShowings   Showing[]         @relation("ShowingEntryNotice")
   deliveries         NoticeDelivery[]
   adverseActionFor   ScreeningReport?
 

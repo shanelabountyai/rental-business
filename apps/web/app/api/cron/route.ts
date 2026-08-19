@@ -10,6 +10,7 @@ import { storageIsDurable } from '@/lib/storage/index.ts'
 import { sweepUnansweredTenantMessages } from '@/lib/comms/unanswered-sweep.ts'
 import { sweepPendingDelists } from '@/lib/listings/delist-sweep.ts'
 import { dispatchPendingNotifications } from '@/lib/notifications/send.ts'
+import { sweepShowingReminders } from '@/lib/showings/reminders.ts'
 import { sweepUnansweredDispatches } from '@/lib/vendors/no-response.ts'
 import { sweepEntryReminders } from '@/lib/workorders/entry-reminders.ts'
 
@@ -53,6 +54,9 @@ export async function GET(request: Request) {
   // a fixed distance in hours from a scheduled instant, not a calendar-day
   // question, and "tomorrow" sent at 3am is not a reminder anybody reads.
   const entryReminders = await sweepEntryReminders()
+  // T-1-day / T-2-hour showing reminders (LEASE-08, R-064). Same elapsed-
+  // time reasoning as the entry reminders above.
+  const showingReminders = await sweepShowingReminders()
   // COMM-07: "unanswered tenant messages past X days surface on the
   // dashboard." Elapsed-time, not a calendar-day question, for the same
   // reason as the sweeps above.
@@ -104,6 +108,8 @@ export async function GET(request: Request) {
     vendorSilencePrompted: vendorSilence.prompted,
     entryRemindersChecked: entryReminders.checked,
     entryRemindersSent: entryReminders.reminded,
+    showingRemindersChecked: showingReminders.checked,
+    showingRemindersSent: showingReminders.reminded,
     unansweredChecked: unanswered.checked,
     unansweredFlagged: unanswered.flagged,
     delistingChecked: delisting.checked,

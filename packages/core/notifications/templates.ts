@@ -1331,6 +1331,99 @@ export const applicationAdverseActionTemplate: NotificationTemplate<AdverseActio
   }),
 }
 
+/// Context for `showing.invite` (LEASE-08, R-064) - the link to book a
+/// slot, sent right after a prospect answers pre-screening.
+export interface ShowingInviteContext {
+  firstName: string
+  addressLine1: string
+  /// The prospect's own single-use SHOWING_BOOKING link.
+  url: string
+}
+
+/**
+ * "Book a showing" (LEASE-08's "self-serve slot booking"). A code template,
+ * same reasoning `prospectPrescreenTemplate`'s own comment gives - not
+ * per-property editable, so it stays out of R-049's managed-template
+ * carrier.
+ */
+export const showingInviteTemplate: NotificationTemplate<ShowingInviteContext> = {
+  key: 'showing.invite',
+  category: 'prospect_showing',
+  channels: ['SMS', 'EMAIL'],
+  render: (context, channel) => {
+    if (channel === 'SMS') {
+      return {
+        body: [`Ready to see ${context.addressLine1}? Book a time that works:`, context.url].join(
+          '\n',
+        ),
+      }
+    }
+    return {
+      subject: `Book a showing - ${context.addressLine1}`,
+      body: [
+        `Hi ${context.firstName},`,
+        '',
+        `Pick a time that works for you to see ${context.addressLine1}:`,
+        '',
+        context.url,
+      ].join('\n'),
+    }
+  },
+}
+
+/// Context for `showing.scheduled` (LEASE-08, R-064) - a prospect's own
+/// booking confirmation, and its T-1-day/T-2-hour reminders.
+export interface ShowingContext {
+  firstName: string
+  addressLine1: string
+  unitName: string
+  scheduledStart: string
+  scheduledEnd: string
+  timezone: string
+  /// Set on the two reminder sweeps, same trick `EntryNoticeContext.isReminder`
+  /// uses to read confirmation and reminder as different messages sharing
+  /// one template.
+  isReminder?: boolean
+}
+
+/**
+ * A showing booking confirmation, and its T-1-day/T-2-hour reminders
+ * (LEASE-08: "SMS reminders send - no-show reduction").
+ */
+export const showingTemplate: NotificationTemplate<ShowingContext> = {
+  key: 'showing.scheduled',
+  category: 'prospect_showing',
+  channels: ['SMS', 'EMAIL'],
+  render: (context, channel) => {
+    const window = formatEntryWindow(
+      new Date(context.scheduledStart),
+      new Date(context.scheduledEnd),
+      context.timezone,
+    )
+    const lead = context.isReminder ? 'Reminder' : "You're booked"
+
+    if (channel === 'SMS') {
+      return {
+        body: [`${lead}: showing at ${context.addressLine1}`, window].join('\n'),
+      }
+    }
+    return {
+      subject: `${lead}: your showing at ${context.addressLine1}`,
+      body: [
+        `Hi ${context.firstName},`,
+        '',
+        context.isReminder
+          ? 'A reminder about the showing you booked:'
+          : `You're booked to see ${context.addressLine1}${context.unitName ? ` (${context.unitName})` : ''}:`,
+        '',
+        window,
+        '',
+        'A member of our team will meet you there.',
+      ].join('\n'),
+    }
+  },
+}
+
 export const TEMPLATES: Readonly<Record<string, NotificationTemplate<never>>> = {
   [vendorDeclinedTemplate.key]:
     vendorDeclinedTemplate as unknown as NotificationTemplate<never>,
@@ -1380,6 +1473,8 @@ export const TEMPLATES: Readonly<Record<string, NotificationTemplate<never>>> = 
     applicationAdverseActionTemplate as unknown as NotificationTemplate<never>,
   [leaseSignInviteTemplate.key]:
     leaseSignInviteTemplate as unknown as NotificationTemplate<never>,
+  [showingTemplate.key]: showingTemplate as unknown as NotificationTemplate<never>,
+  [showingInviteTemplate.key]: showingInviteTemplate as unknown as NotificationTemplate<never>,
 }
 
 export class UnknownTemplateError extends Error {

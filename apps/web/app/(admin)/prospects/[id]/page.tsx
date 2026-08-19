@@ -1,8 +1,10 @@
+import { friendlyTimestamp } from '@rental/core/scheduling'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { InviteToApplyForm } from '@/components/applications/invite-to-apply-form.tsx'
 import { ProspectStageForm } from '@/components/prospects/prospect-stage-form.tsx'
 import { ScreeningDecisionForm } from '@/components/screening/screening-decision-form.tsx'
+import { TaskActionButton } from '@/components/tasks/action-button.tsx'
 import { inviteToApply } from '@/lib/applications/staff-actions.ts'
 import { applicationForProspect } from '@/lib/applications/queries.ts'
 import { requireScope } from '@/lib/auth/guard.ts'
@@ -10,6 +12,8 @@ import { advanceProspectStage } from '@/lib/prospects/staff-actions.ts'
 import { prospectForWrite } from '@/lib/prospects/queries.ts'
 import { recordScreeningDecision } from '@/lib/screening/staff-actions.ts'
 import { screeningForApplication } from '@/lib/screening/queries.ts'
+import { cancelShowing } from '@/lib/showings/staff-actions.ts'
+import { showingsForProspect } from '@/lib/showings/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 
 const CRITERION_LABELS: Record<string, string> = {
@@ -57,6 +61,7 @@ export default async function ProspectDetailPage({
   if (!prospect) notFound()
 
   const answered = prospect.preScreenRespondedAt != null
+  const showings = await showingsForProspect(id)
   const application = await applicationForProspect(id, scope)
   const screening = application?.completedAt
     ? await screeningForApplication(application.id, scope)
@@ -129,6 +134,27 @@ export default async function ProspectDetailPage({
           </dl>
         )}
       </section>
+
+      {showings.length > 0 && (
+        <section aria-labelledby="showings" className="flex flex-col gap-3 rounded-md border p-4">
+          <h2 id="showings" className="text-sm font-semibold">
+            Showing
+          </h2>
+          <ul className="flex flex-col gap-2 text-sm">
+            {showings.map((showing) => (
+              <li key={showing.id} className="flex items-center justify-between gap-3 rounded border p-2">
+                <span>
+                  {showing.unit.name} — {friendlyTimestamp(showing.scheduledStart, showing.property.timezone)}
+                  {showing.status === 'CANCELED' && ' (cancelled)'}
+                </span>
+                {showing.status === 'BOOKED' && (
+                  <TaskActionButton action={cancelShowing.bind(null, showing.id)} label="Cancel" />
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {answered && (
         <section aria-labelledby="application" className="flex flex-col gap-3 rounded-md border p-4">
@@ -262,8 +288,9 @@ export default async function ProspectDetailPage({
             Pipeline
           </h2>
           <p className="text-muted-foreground text-sm">
-            Showing and e-sign are not automated yet. Screening orders itself once an
-            application completes; this records everything else by hand.
+            A showing invite sends automatically once pre-screening is answered, and the
+            prospect books their own slot above. Screening orders itself once an application
+            completes; this records everything else by hand.
           </p>
           <ProspectStageForm
             action={advanceProspectStage.bind(null, prospect.id)}
