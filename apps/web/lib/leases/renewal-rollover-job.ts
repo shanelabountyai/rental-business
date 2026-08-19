@@ -37,7 +37,13 @@ SCHEDULED_JOBS.push({
     const asOf = businessDateToUtc(businessDate)
 
     const candidates = await prisma.lease.findMany({
-      where: { propertyId, status: 'ACTIVE', endsOn: { not: null, lt: asOf } },
+      // noticeGivenAt: null (R-066) - a tenancy under NOTICE, from either
+      // party, is deliberately ending, not silently continuing. Without
+      // this a landlord's own served non-renewal (or a tenant's own notice
+      // to vacate) would be overridden the very next night by this same
+      // job rolling the lease to MONTH_TO_MONTH - the collision this item's
+      // own PROGRESS entry names as the reason the exclusion exists.
+      where: { propertyId, status: 'ACTIVE', endsOn: { not: null, lt: asOf }, noticeGivenAt: null },
       select: {
         id: true,
         unitId: true,

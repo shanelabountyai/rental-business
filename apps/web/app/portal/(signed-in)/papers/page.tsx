@@ -83,6 +83,14 @@ export default async function PortalPapersPage() {
           ))}
         </ul>
       )}
+
+      <a
+        href="/portal/papers/notice"
+        className="hover:bg-accent focus-visible:ring-ring flex min-h-14 flex-col justify-center gap-1 rounded-md border px-4 py-3 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+      >
+        <span className="font-medium">Moving out?</span>
+        <span className="text-muted-foreground">Give notice to vacate</span>
+      </a>
     </div>
   )
 }

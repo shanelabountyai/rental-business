@@ -8,9 +8,13 @@ import {
   leaseCents,
   leaseIsInForce,
   leaseTransition,
+  nonRenewalNoticeText,
+  noticePeriodCheck,
   parseLeaseDate,
   validateGuarantor,
+  validateJustCauseStatement,
   validateLease,
+  validateNoticePeriodOverride,
   validateRetaliationAck,
 } from '@rental/core/leases'
 import { validateDepositAmount } from '@rental/core/ledger'
@@ -21,8 +25,10 @@ import { redirect } from 'next/navigation'
 import { audit } from '@/lib/audit/index.ts'
 import { syncLease } from '@/lib/billing/lifecycle.ts'
 import { provisionLeaseBilling } from '@/lib/billing/provision.ts'
+import { authUrl } from '@/lib/auth/delivery.ts'
 import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
 import { rulesFor } from '@/lib/jurisdiction/queries.ts'
+import { dispatchPendingNotifications, notify } from '@/lib/notifications/send.ts'
 import { activateLeaseSideEffects } from './activate.ts'
 import { raiseIntakeTasks } from './intake.ts'
 import { retaliationCheckFor } from './retaliation-check.ts'
@@ -51,6 +57,15 @@ export interface LeaseFormState {
     occurredOn: string
     daysAgo: number
     windowDays: number
+  }
+  /// R-066 (LEASE-11). Present when notice to end the tenancy gives less
+  /// than the jurisdiction's configured `noticeToVacateDays` and no reason
+  /// has been given yet - same shape `needsRetaliationAck` gives its own
+  /// warning, and the two can fire together on one notice.
+  needsNoticePeriodAck?: {
+    daysGiven: number
+    requiredDays: number
+    shortfallDays: number
   }
   /// What was actually typed, echoed back on the retaliation early return.
   /// React 19 resets an uncontrolled field's DOM value once a form action
@@ -94,7 +109,14 @@ async function leaseForWrite(leaseId: string) {
     where: { id: leaseId },
     include: {
       property: {
-        select: { id: true, legalEntityId: true, timezone: true, state: true, county: true },
+        select: {
+          id: true,
+          legalEntityId: true,
+          timezone: true,
+          state: true,
+          county: true,
+          addressLine1: true,
+        },
       },
       leaseTenants: { select: { id: true } },
     },
@@ -544,19 +566,31 @@ export async function changeLeaseStatus(
 }
 
 /**
- * Records notice to end the tenancy (LEASE-09's input, R-062's clock).
+ * Records notice to end the tenancy (LEASE-11, RISK-06, R-062's clock, R-066).
  *
  * Does NOT change the status. A tenancy under notice is still running -
  * rent is still due, repairs are still owed - and modelling notice as a
  * state would mean every "is this lease in force?" check had to remember to
  * include it. See LeaseStatus's own schema comment.
+ *
+ * A LANDLORD notice is a real outbound legal document - it generates and
+ * serves a `Notice` (type NON_RENEWAL) the same way `scheduleEntry()`
+ * serves an entry notice, with delivery logging and a notification to the
+ * tenant. A TENANT'S OWN notice to vacate is the opposite: an inbound fact
+ * we record, never something served, so no Notice row exists for it.
+ *
+ * Two independent warn-and-override checks can fire on the SAME notice -
+ * the jurisdiction's notice-period (either party can give short notice) and
+ * RISK-06's retaliation guard (landlord notices only) - and both are
+ * checked and returned together rather than one at a time, so staff never
+ * clears one warning only to be handed a second on the next submit.
  */
 export async function recordLeaseNotice(
   leaseId: string,
   _previous: LeaseFormState,
   formData: FormData,
 ): Promise<LeaseFormState> {
-  const { lease } = await leaseForWrite(leaseId)
+  const { lease, actor } = await leaseForWrite(leaseId)
 
   const by = str(formData, 'noticeGivenBy')
   if (by !== 'TENANT' && by !== 'LANDLORD') {
@@ -565,25 +599,86 @@ export async function recordLeaseNotice(
       fieldErrors: { noticeGivenBy: 'Tenant or landlord?' },
     }
   }
-  const givenOn = str(formData, 'givenOn')
-  const at = givenOn ? parseLeaseDate(givenOn) : new Date()
-  if (!at) {
+  const givenOnRaw = str(formData, 'givenOn')
+  const givenOn = givenOnRaw ? parseLeaseDate(givenOnRaw) : new Date()
+  if (!givenOn) {
     return { error: 'That date could not be read.', fieldErrors: { givenOn: 'Check the date.' } }
+  }
+  const effectiveOnRaw = str(formData, 'effectiveOn')
+  const effectiveOn = parseLeaseDate(effectiveOnRaw)
+  if (!effectiveOn) {
+    return {
+      error: 'Say when the tenancy will actually end.',
+      fieldErrors: { effectiveOn: 'Check the date.' },
+    }
+  }
+  const forwardingAddress = str(formData, 'forwardingAddress') || null
+  const justCauseStatement = str(formData, 'justCauseStatement') || null
+  const noticePeriodReason = str(formData, 'noticePeriodReason') || null
+  const retaliationReason = str(formData, 'retaliationReason') || null
+  const values = {
+    noticeGivenBy: by,
+    givenOn: givenOnRaw,
+    effectiveOn: effectiveOnRaw,
+    forwardingAddress: forwardingAddress ?? '',
+    justCauseStatement: justCauseStatement ?? '',
   }
 
   const decision = canGiveNotice({ status: lease.status, noticeGivenAt: lease.noticeGivenAt })
   if (!decision.allowed) return { error: decision.message }
 
+  const rule = await rulesFor(
+    { state: lease.property.state, county: lease.property.county },
+    givenOn,
+  ).catch(() => null)
+
+  // PRD §7's "just-cause jurisdiction flag" - required BEFORE either warning
+  // below, because it is not conditional on timing the way they are: a
+  // jurisdiction that requires a stated cause requires one on every
+  // non-renewal, not only a hastily-timed one. Never a canned list of
+  // causes this product picks - see validateJustCauseStatement's own header.
+  const justCauseViolations = validateJustCauseStatement(
+    by === 'LANDLORD' && Boolean(rule?.justCauseRequired),
+    justCauseStatement,
+  )
+  if (justCauseViolations.length > 0) {
+    return {
+      error: 'This jurisdiction requires a stated cause for non-renewal.',
+      fieldErrors: Object.fromEntries(justCauseViolations.map((v) => [v.field, v.message])),
+      values,
+    }
+  }
+
+  const noticePeriod = noticePeriodCheck({
+    givenOn,
+    effectiveOn,
+    noticeToVacateDays: rule?.noticeToVacateDays ?? null,
+  })
+  if (noticePeriod.needsOverride) {
+    const violations = validateNoticePeriodOverride(noticePeriodReason)
+    if (violations.length > 0) {
+      return {
+        error: `This is ${noticePeriod.shortfallDays} day${noticePeriod.shortfallDays === 1 ? '' : 's'} short of the ${noticePeriod.requiredDays}-day notice period for ${lease.property.state}.`,
+        fieldErrors: Object.fromEntries(violations.map((v) => [v.field, v.message])),
+        needsNoticePeriodAck: {
+          daysGiven: noticePeriod.daysGiven,
+          requiredDays: noticePeriod.requiredDays!,
+          shortfallDays: noticePeriod.shortfallDays!,
+        },
+        values,
+      }
+    }
+  }
+
   // RISK-06 (R-055): only when WE gave notice. A tenant ending their own
   // tenancy is not an adverse action anybody could call retaliation.
-  const retaliationReason = str(formData, 'retaliationReason') || null
   let retaliation: Awaited<ReturnType<typeof retaliationCheckFor>> = null
   if (by === 'LANDLORD') {
     retaliation = await retaliationCheckFor({
       leaseId,
       propertyState: lease.property.state,
       propertyCounty: lease.property.county,
-      actionDate: at,
+      actionDate: givenOn,
     })
     if (retaliation) {
       const ackViolations = validateRetaliationAck(retaliationReason)
@@ -592,16 +687,42 @@ export async function recordLeaseNotice(
           error: `This notice is ${retaliation.daysAgo} days after this tenant's ${retaliation.category} complaint, inside the ${retaliation.windowDays}-day retaliation-presumption window for ${lease.property.state}.`,
           fieldErrors: Object.fromEntries(ackViolations.map((v) => [v.field, v.message])),
           needsRetaliationAck: retaliationAckView(retaliation, lease.property.timezone),
-          values: { noticeGivenBy: by, givenOn },
+          values,
         }
       }
     }
   }
 
+  // Fetched separately from leaseForWrite's own query, deliberately - that
+  // one is shared by every action in this file and its leaseTenants shape
+  // (a bare count, used elsewhere) must not silently narrow to primary-only
+  // for every OTHER caller just because this one needs a name and an
+  // address to write to.
+  let noticeId: string | null = null
+  const primaryTenant =
+    by === 'LANDLORD'
+      ? await prisma.leaseTenant.findFirst({
+          where: { leaseId, isPrimary: true },
+          include: { tenant: { select: { id: true, firstName: true, lastName: true, email: true, phone: true } } },
+        })
+      : null
+  const unitName =
+    by === 'LANDLORD'
+      ? (await prisma.unit.findUnique({ where: { id: lease.unitId }, select: { name: true } }))?.name ?? ''
+      : ''
+
   await prisma.$transaction(async (tx) => {
     await tx.lease.update({
       where: { id: leaseId },
-      data: { noticeGivenAt: at, noticeGivenBy: by as NoticePartyValue },
+      data: {
+        noticeGivenAt: givenOn,
+        noticeGivenBy: by as NoticePartyValue,
+        noticeEffectiveOn: effectiveOn,
+        // Never set for a LANDLORD non-renewal - see the schema's own
+        // comment on why a forwarding address only ever comes from the
+        // tenant.
+        noticeForwardingAddress: by === 'TENANT' ? forwardingAddress : null,
+      },
     })
     await audit(
       {
@@ -609,10 +730,83 @@ export async function recordLeaseNotice(
         entityType: 'Lease',
         entityId: leaseId,
         propertyId: lease.propertyId,
-        after: { noticeGivenAt: at.toISOString(), noticeGivenBy: by },
+        after: {
+          noticeGivenAt: givenOn.toISOString(),
+          noticeGivenBy: by,
+          effectiveOn: effectiveOn.toISOString(),
+        },
       },
       tx,
     )
+
+    if (by === 'LANDLORD' && primaryTenant) {
+      const notice = await tx.notice.create({
+        data: {
+          propertyId: lease.propertyId,
+          leaseId,
+          type: 'NON_RENEWAL',
+          addressOfRecord: lease.property.addressLine1,
+          bodyText: nonRenewalNoticeText({
+            tenantName: `${primaryTenant.tenant.firstName} ${primaryTenant.tenant.lastName}`,
+            addressLine1: lease.property.addressLine1,
+            unitName,
+            timezone: lease.property.timezone,
+            effectiveOn,
+            justCauseStatement,
+            noticeToVacateDays: rule?.noticeToVacateDays ?? null,
+          }),
+          serviceMethod: 'PORTAL',
+          servedAt: givenOn,
+          servedByStaffId: actor.id,
+          jurisdictionRuleId: rule?.id ?? null,
+        },
+      })
+      noticeId = notice.id
+      await tx.noticeDelivery.create({
+        data: {
+          noticeId: notice.id,
+          method: 'PORTAL',
+          servedAt: givenOn,
+          servedByStaffId: actor.id,
+          jurisdictionRuleId: rule?.id ?? null,
+        },
+      })
+      await audit(
+        {
+          action: 'notice.served',
+          entityType: 'Notice',
+          entityId: notice.id,
+          propertyId: lease.propertyId,
+          after: {
+            type: 'NON_RENEWAL',
+            serviceMethod: 'PORTAL',
+            effectiveOn: effectiveOn.toISOString(),
+            jurisdictionRuleId: rule?.id ?? null,
+          },
+        },
+        tx,
+      )
+    }
+
+    if (noticePeriod.needsOverride) {
+      await audit(
+        {
+          action: 'lease.notice_period_overridden',
+          entityType: 'Lease',
+          entityId: leaseId,
+          propertyId: lease.propertyId,
+          after: {
+            noticeGivenBy: by,
+            daysGiven: noticePeriod.daysGiven,
+            requiredDays: noticePeriod.requiredDays,
+            shortfallDays: noticePeriod.shortfallDays,
+          },
+          reasonCode: 'owner_directive',
+          reason: noticePeriodReason!,
+        },
+        tx,
+      )
+    }
     if (retaliation) {
       await audit(
         {
@@ -622,7 +816,7 @@ export async function recordLeaseNotice(
           propertyId: lease.propertyId,
           after: {
             trigger: 'landlord_notice',
-            noticeGivenAt: at.toISOString(),
+            noticeGivenAt: givenOn.toISOString(),
             complaintTicketId: retaliation.ticketId,
             complaintOccurredAt: retaliation.occurredAt.toISOString(),
             daysAgo: retaliation.daysAgo,
@@ -635,6 +829,37 @@ export async function recordLeaseNotice(
       )
     }
   })
+
+  // Tell the tenant, outside the transaction - notify() decides and
+  // records, dispatch sends, neither belongs inside a transaction holding
+  // row locks (R-016's rule, same as scheduleEntry's own identical call).
+  if (noticeId && primaryTenant) {
+    try {
+      const outcomes = await notify({
+        category: 'legal_notice',
+        templateKey: 'lease.non_renewal',
+        recipient: {
+          type: 'TENANT',
+          id: primaryTenant.tenant.id,
+          email: primaryTenant.tenant.email,
+          phone: primaryTenant.tenant.phone,
+        },
+        context: {
+          tenantName: primaryTenant.tenant.firstName,
+          addressLine1: lease.property.addressLine1,
+          effectiveOn: businessDate(effectiveOn, lease.property.timezone),
+          url: authUrl(`/portal/notices/${noticeId}`),
+        },
+        propertyId: lease.propertyId,
+        idempotencyKey: `non-renewal:${noticeId}`,
+      })
+      await dispatchPendingNotifications(new Date(), 100, {
+        deliveryIds: outcomes.map((o) => o.deliveryId).filter((id): id is string => id != null),
+      })
+    } catch (error) {
+      console.error(`[leases] failed to notify tenant of non-renewal for ${leaseId}`, error)
+    }
+  }
 
   revalidatePath(`/leases/${leaseId}`)
   return { notice: 'Notice recorded.' }

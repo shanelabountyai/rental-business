@@ -830,6 +830,50 @@ export const chargebackPostedTemplate: NotificationTemplate<ChargebackPostedCont
   },
 }
 
+/// Context for `lease.non_renewal` (LEASE-11, R-066).
+export interface NonRenewalContext {
+  tenantName: string
+  addressLine1: string
+  effectiveOn: string
+  /// Deep link to the served notice in the tenant's own portal.
+  url: string
+}
+
+/**
+ * "Your tenancy will not be renewed" (LEASE-11, RISK-06, R-066).
+ *
+ * `legal_notice`, same locked category `workorder.chargeback_posted` uses
+ * above and for the identical reason: this is not something a tenant may
+ * silently miss because a preference happened to be off.
+ */
+export const nonRenewalTemplate: NotificationTemplate<NonRenewalContext> = {
+  key: 'lease.non_renewal',
+  category: 'legal_notice',
+  channels: ['SMS', 'EMAIL', 'PORTAL'],
+  render: (context, channel) => {
+    if (channel === 'SMS') {
+      return {
+        body: [
+          `Notice: your tenancy at ${context.addressLine1} will not be renewed - ends ${context.effectiveOn}.`,
+          `Full notice: ${context.url}`,
+        ].join('\n'),
+      }
+    }
+    return {
+      subject: `Notice of non-renewal — ${context.addressLine1}`,
+      body: [
+        `Hello ${context.tenantName},`,
+        '',
+        `This is to let you know your tenancy at ${context.addressLine1} will not be renewed. It will end on ${context.effectiveOn}.`,
+        '',
+        `The full notice is here: ${context.url}`,
+        '',
+        'If you have questions, reply to this message.',
+      ].join('\n'),
+    }
+  },
+}
+
 /// Context for `comms.managed_template` (COMM-03, R-044). Already rendered -
 /// see the template below.
 export interface ManagedTemplateContext {
@@ -1511,6 +1555,7 @@ export const TEMPLATES: Readonly<Record<string, NotificationTemplate<never>>> = 
   [showingTemplate.key]: showingTemplate as unknown as NotificationTemplate<never>,
   [mtmRolloverTemplate.key]: mtmRolloverTemplate as unknown as NotificationTemplate<never>,
   [showingInviteTemplate.key]: showingInviteTemplate as unknown as NotificationTemplate<never>,
+  [nonRenewalTemplate.key]: nonRenewalTemplate as unknown as NotificationTemplate<never>,
 }
 
 export class UnknownTemplateError extends Error {

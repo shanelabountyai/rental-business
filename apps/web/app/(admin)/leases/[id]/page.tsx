@@ -300,6 +300,22 @@ export default async function LeaseDetailPage({
             <dd className="col-span-1 sm:col-span-2">
               Given by {lease.noticeGivenBy === 'TENANT' ? 'the tenant' : 'us'} on{' '}
               {businessDate(lease.noticeGivenAt, lease.property.timezone)}
+              {lease.noticeEffectiveOn &&
+                ` — ends ${businessDate(lease.noticeEffectiveOn, lease.property.timezone)}`}
+              {lease.noticeForwardingAddress && (
+                <>
+                  <br />
+                  Forwarding address: {lease.noticeForwardingAddress}
+                </>
+              )}
+              {lease.notices[0] && (
+                <>
+                  {' · '}
+                  <Link href={`/notices/${lease.notices[0].id}`} className="underline underline-offset-2">
+                    view non-renewal notice
+                  </Link>
+                </>
+              )}
             </dd>
           </>
         )}
@@ -593,7 +609,11 @@ export default async function LeaseDetailPage({
             lease.noticeGivenAt
               ? `Notice was given by ${
                   lease.noticeGivenBy === 'TENANT' ? 'the tenant' : 'us'
-                } on ${businessDate(lease.noticeGivenAt, lease.property.timezone)}. The tenancy is still running until it ends.`
+                } on ${businessDate(lease.noticeGivenAt, lease.property.timezone)}. The tenancy is still running until ${
+                  lease.noticeEffectiveOn
+                    ? `it ends on ${businessDate(lease.noticeEffectiveOn, lease.property.timezone)}`
+                    : 'it ends'
+                }.`
               : null
           }
           recordNotice={recordLeaseNotice.bind(null, lease.id)}

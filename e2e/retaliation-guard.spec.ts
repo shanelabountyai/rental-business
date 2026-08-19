@@ -128,11 +128,14 @@ test.afterAll(async () => {
     // AuditLog is append-only; this is best-effort tidiness in a test
     // database, not something the trigger will actually allow if it fails.
   })
+  // NoticeDelivery is append-only and Notice.leaseId is RESTRICT - R-066's
+  // landlord-notice test now serves a real NON_RENEWAL Notice, so the
+  // lease it names (and everything beneath it) can no longer be
+  // hard-deleted. Same shape notices.test.ts's own header documents.
+  // Applied uniformly rather than only for the notice-serving test, since
+  // some leases in this file end up with one and some do not.
   await prisma.ticket.deleteMany({ where: { id: { in: ticketIds } } })
-  await prisma.leaseTenant.deleteMany({ where: { leaseId: { in: leaseIds } } })
-  await prisma.lease.deleteMany({ where: { id: { in: leaseIds } } })
-  await prisma.tenant.deleteMany({ where: { id: { in: tenantIds } } })
-  await prisma.unit.deleteMany({ where: { id: { in: unitIds } } })
+  await prisma.tenant.updateMany({ where: { id: { in: tenantIds } }, data: { active: false } })
   await prisma.property.updateMany({ where: { id: { in: propertyIds } }, data: { active: false } })
   await prisma.staffUser.updateMany({ where: { id: { in: staffIds } }, data: { active: false } })
 })
@@ -199,6 +202,9 @@ test('the landlord giving notice inside the window is blocked and requires a rea
   await page.getByText('Record notice to end the tenancy').click()
   await page.getByLabel('Who gave notice').selectOption('LANDLORD')
   await page.getByLabel('Date notice was given').fill('2026-08-17')
+  // 34 days out - clear of TX's 30-day noticeToVacateDays (R-066), so only
+  // the retaliation guard is under test here.
+  await page.getByLabel('Date the tenancy actually ends').fill('2026-09-20')
   await page.getByRole('button', { name: 'Record notice' }).click()
 
   // NOT a pinned day count: `givenOn` is a fixed UTC-midnight calendar date
@@ -235,6 +241,7 @@ test('the tenant giving their own notice is never a retaliation claim', async ({
   await page.getByText('Record notice to end the tenancy').click()
   await page.getByLabel('Who gave notice').selectOption('TENANT')
   await page.getByLabel('Date notice was given').fill('2026-08-17')
+  await page.getByLabel('Date the tenancy actually ends').fill('2026-09-20')
   await page.getByRole('button', { name: 'Record notice' }).click()
 
   // A successful notice swaps the whole form for the "still running" summary

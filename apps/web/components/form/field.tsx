@@ -254,6 +254,7 @@ export function SelectField({
   options,
   placeholder = 'Select…',
   idPrefix,
+  onChange,
 }: {
   label: string
   name: string
@@ -264,6 +265,11 @@ export function SelectField({
   placeholder?: string
   /// See TextField's identical param for why this exists.
   idPrefix?: string
+  /// Only for a caller that needs to react to the choice client-side (e.g.
+  /// showing a different field below depending on which option is picked) -
+  /// the field stays uncontrolled (`defaultValue`, not `value`) either way,
+  /// so a form action's own React-19 reset behaviour is unaffected.
+  onChange?: (event: React.ChangeEvent<HTMLSelectElement>) => void
 }) {
   const id = idPrefix ? `field-${idPrefix}-${name}` : `field-${name}`
   const errorId = `${id}-error`
@@ -282,6 +288,7 @@ export function SelectField({
         aria-invalid={Boolean(error) || undefined}
         aria-describedby={error ? errorId : undefined}
         className={INPUT_CLASSES}
+        onChange={onChange}
       >
         <option value="" disabled>
           {placeholder}

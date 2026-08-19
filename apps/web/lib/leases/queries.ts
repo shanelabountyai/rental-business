@@ -34,6 +34,14 @@ const leaseInclude = {
     orderBy: { createdAt: 'desc' },
     include: { document: { select: { id: true, fileName: true } } },
   },
+  // R-066 (LEASE-11): the non-renewal notice, if the landlord ever served
+  // one - just enough to link to it. A tenant's own notice to vacate is
+  // never a Notice row (recordLeaseNotice's own comment), so this can only
+  // ever hold NON_RENEWAL rows in practice.
+  notices: {
+    orderBy: { createdAt: 'desc' },
+    select: { id: true, type: true, servedAt: true },
+  },
 } as const
 
 /// Every lease in scope, running ones first. A PM opening this section is

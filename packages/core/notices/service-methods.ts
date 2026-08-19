@@ -72,6 +72,11 @@ export const KNOWN_NOTICE_TYPES = [
   /// R-061 (LEASE-05) - the only type here addressed to an Applicant
   /// (Notice.applicantId) rather than a Lease.
   'ADVERSE_ACTION',
+  /// R-066 (LEASE-11): the owner's own decision not to renew - distinct
+  /// from NOTICE_TO_VACATE above, which is the INBOUND fact that a tenant
+  /// is ending their own tenancy and generates no outbound Notice at all
+  /// (see recordLeaseNotice's own comment).
+  'NON_RENEWAL',
 ] as const
 
 export const NOTICE_TYPE_LABELS: Record<string, string> = {
@@ -82,6 +87,7 @@ export const NOTICE_TYPE_LABELS: Record<string, string> = {
   RENT_INCREASE: 'Rent increase',
   REPAIR_CHARGE: 'Repair charge',
   ADVERSE_ACTION: 'Adverse action (FCRA)',
+  NON_RENEWAL: 'Non-renewal',
 }
 
 export function noticeTypeLabel(type: string): string {

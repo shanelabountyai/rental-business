@@ -322,6 +322,12 @@ test.describe('the lifecycle', () => {
     await expectFocusSurvived(page, 'opening “Record notice to end the tenancy” — a lease disclosure')
     await page.getByLabel('Who gave notice').selectOption('TENANT')
     await page.getByLabel('Date notice was given').fill('2026-06-01')
+    // 44 days out - clear of TX's 30-day noticeToVacateDays, so this stays
+    // the clean path; R-066's short-notice warning has its own test below.
+    await page.getByLabel('Date the tenancy actually ends').fill('2026-07-15')
+    await page
+      .getByLabel('Forwarding address')
+      .fill('900 Departure Ave, Austin, TX 78701')
     await page.getByRole('button', { name: 'Record notice' }).click()
 
     await expect(page.getByText(/still running until it ends/)).toBeVisible()
@@ -329,6 +335,8 @@ test.describe('the lifecycle', () => {
     const after = await prisma.lease.findUniqueOrThrow({ where: { id: lease.id } })
     expect(after.noticeGivenAt).not.toBeNull()
     expect(after.noticeGivenBy).toBe('TENANT')
+    expect(after.noticeEffectiveOn).not.toBeNull()
+    expect(after.noticeForwardingAddress).toBe('900 Departure Ave, Austin, TX 78701')
     // Unchanged. That is the whole point.
     expect(after.status).toBe('ACTIVE')
   })

@@ -76,10 +76,18 @@ export async function getTenantHome(scope: TenantScope) {
     orderBy: { startsOn: 'desc' },
     select: {
       id: true,
+      propertyId: true,
       status: true,
       startsOn: true,
       endsOn: true,
       rentCents: true,
+      // R-066: whether notice has already been given, and how it ends -
+      // added here rather than a second dedicated query, since a tenant's
+      // own notice-to-vacate form needs exactly the same lease this page
+      // already resolves as "the one home" and nothing else.
+      noticeGivenAt: true,
+      noticeGivenBy: true,
+      noticeEffectiveOn: true,
       unit: { select: { name: true } },
       property: {
         select: {
@@ -88,6 +96,7 @@ export async function getTenantHome(scope: TenantScope) {
           addressLine2: true,
           city: true,
           state: true,
+          county: true,
           postalCode: true,
           timezone: true,
         },

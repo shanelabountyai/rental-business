@@ -75,7 +75,14 @@ async function makeTenant() {
 
 async function makeLease(
   unitId: string,
-  overrides: Partial<{ endsOn: string; mtmRentCents: number | null; rentCents: number; status: string }> = {},
+  overrides: Partial<{
+    endsOn: string
+    mtmRentCents: number | null
+    rentCents: number
+    status: string
+    noticeGivenAt: Date
+    noticeGivenBy: string
+  }> = {},
 ) {
   const lease = await prisma.lease.create({
     data: {
@@ -86,6 +93,8 @@ async function makeLease(
       endsOn: new Date(`${overrides.endsOn ?? '2026-06-30'}T00:00:00Z`),
       rentCents: overrides.rentCents ?? 150_000,
       mtmRentCents: overrides.mtmRentCents,
+      noticeGivenAt: overrides.noticeGivenAt,
+      noticeGivenBy: overrides.noticeGivenBy as never,
     },
   })
   leaseIds.push(lease.id)
@@ -139,6 +148,21 @@ describe('the MTM auto-rollover job', () => {
       },
     })
     leaseIds.push(successor.id)
+
+    await runAt('2026-07-02T09:00:00Z')
+
+    const updated = await prisma.lease.findUniqueOrThrow({ where: { id: lease.id } })
+    expect(updated.status).toBe('ACTIVE')
+  })
+
+  it('does not roll over a lease under notice - R-066: a declared non-renewal or notice to vacate must not be silently overridden', async () => {
+    const unit = await makeUnit('U6')
+    const lease = await makeLease(unit.id, {
+      endsOn: '2026-06-30',
+      mtmRentCents: 175_000,
+      noticeGivenAt: new Date('2026-05-01T00:00:00Z'),
+      noticeGivenBy: 'LANDLORD',
+    })
 
     await runAt('2026-07-02T09:00:00Z')
 

@@ -2,7 +2,7 @@
 
 import { useActionState, useState } from 'react'
 import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
-import { SelectField, TextField } from '@/components/form/field.tsx'
+import { SelectField, TextareaField, TextField } from '@/components/form/field.tsx'
 import type { LeaseFormState } from '@/lib/leases/actions.ts'
 
 // Moving a lease through its lifecycle (LEASE-06, R-033).
@@ -104,10 +104,17 @@ function NoticeForm({ action }: { action: Action }) {
   const [state, formAction] = useActionState<LeaseFormState, FormData>(action, {})
   const errors = state.fieldErrors ?? {}
   const retaliation = state.needsRetaliationAck
-  // Only populated on the retaliation early return - see LeaseFormState's
-  // own comment on `values` and ScheduleForm's identical note on why an
+  const noticePeriod = state.needsNoticePeriodAck
+  // Only populated on a warning early return - see LeaseFormState's own
+  // comment on `values` and ScheduleForm's identical note on why an
   // uncontrolled field needs this at all under React 19.
   const echoed = state.values ?? {}
+
+  // Which fields to show - forwarding address only makes sense for the
+  // tenant's own notice, a just-cause statement only for ours (R-066).
+  // Defaults from the echoed value so a warning round trip does not lose
+  // the choice already made.
+  const [by, setBy] = useState(echoed.noticeGivenBy ?? '')
 
   // Whether a manual click has opened it, tracked so `open` is never pinned
   // to `Boolean(retaliation)` alone - that would make React re-assert
@@ -117,7 +124,7 @@ function NoticeForm({ action }: { action: Action }) {
   // open whenever the person opened it OR a warning needs to be seen: this
   // can only ever OPEN itself, never close a panel someone is looking at.
   const [manuallyOpened, setManuallyOpened] = useState(false)
-  const open = manuallyOpened || Boolean(retaliation)
+  const open = manuallyOpened || Boolean(retaliation) || Boolean(noticePeriod)
 
   return (
     <details
@@ -132,7 +139,7 @@ function NoticeForm({ action }: { action: Action }) {
         <FormAlerts state={state} />
         <p className="text-muted-foreground text-sm">
           The tenancy keeps running — rent is still due and repairs are still
-          owed. This records the date the clock started.
+          owed. This records the date the clock started and when it actually ends.
         </p>
         <div className="grid gap-3 sm:grid-cols-2">
           <SelectField
@@ -147,6 +154,7 @@ function NoticeForm({ action }: { action: Action }) {
               { value: 'TENANT', label: 'The tenant' },
               { value: 'LANDLORD', label: 'We did' },
             ]}
+            onChange={(event: React.ChangeEvent<HTMLSelectElement>) => setBy(event.target.value)}
           />
           <TextField
             label="Date notice was given"
@@ -159,6 +167,56 @@ function NoticeForm({ action }: { action: Action }) {
             hint="Leave blank for today."
           />
         </div>
+        <TextField
+          label="Date the tenancy actually ends"
+          name="effectiveOn"
+          type="date"
+          required
+          idPrefix="notice"
+          defaultValue={echoed.effectiveOn}
+          key={`effective-on-${echoed.effectiveOn ?? ''}`}
+          error={errors.effectiveOn}
+        />
+
+        {by === 'TENANT' && (
+          <TextField
+            label="Forwarding address"
+            name="forwardingAddress"
+            idPrefix="notice"
+            defaultValue={echoed.forwardingAddress}
+            key={`forwarding-${echoed.forwardingAddress ?? ''}`}
+            error={errors.forwardingAddress}
+            hint="Where the deposit disposition goes once they are gone. Optional now, but chase it before they leave."
+          />
+        )}
+        {by === 'LANDLORD' && (
+          <TextareaField
+            label="Reason for non-renewal"
+            name="justCauseStatement"
+            idPrefix="notice"
+            defaultValue={echoed.justCauseStatement}
+            key={`just-cause-${echoed.justCauseStatement ?? ''}`}
+            error={errors.justCauseStatement}
+            hint="Some jurisdictions require a stated cause for non-renewal. Filled in even where it is not required - it costs nothing and helps later."
+            rows={2}
+          />
+        )}
+
+        {noticePeriod && (
+          <div className="flex flex-col gap-2 rounded-md border-2 border-amber-500 p-3">
+            <p className="text-sm font-medium">
+              {noticePeriod.shortfallDays} day{noticePeriod.shortfallDays === 1 ? '' : 's'} short
+              of the {noticePeriod.requiredDays}-day notice period this jurisdiction requires
+            </p>
+            <TextField
+              label="Why is this notice this short?"
+              name="noticePeriodReason"
+              idPrefix="notice"
+              required
+              error={errors.noticePeriodReason}
+            />
+          </div>
+        )}
 
         {retaliation && (
           <div className="flex flex-col gap-2 rounded-md border-2 border-amber-500 p-3">
@@ -181,7 +239,11 @@ function NoticeForm({ action }: { action: Action }) {
           </div>
         )}
 
-        <SubmitButton label={retaliation ? 'Record notice anyway, with this reason' : 'Record notice'} />
+        <SubmitButton
+          label={
+            retaliation || noticePeriod ? 'Record notice anyway, with this reason' : 'Record notice'
+          }
+        />
       </form>
     </details>
   )

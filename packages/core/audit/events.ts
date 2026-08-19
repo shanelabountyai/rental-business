@@ -400,6 +400,15 @@ export const AUDIT_ACTIONS = [
   /// falls on, so it has to exist whichever action triggered it.
   'lease.retaliation_window_acknowledged',
 
+  /// R-066 (LEASE-11, D-4): notice to end the tenancy - by either party -
+  /// gave less than the jurisdiction's configured `noticeToVacateDays`, and
+  /// it was recorded anyway. Its OWN action, same reasoning
+  /// `lease.renewal_rent_check_overridden` already gives the identical
+  /// shortfall shape on a rent increase instead of an end-of-tenancy date:
+  /// REASON_REQUIRED cannot express "required only when short", and this is
+  /// the row a short-notice non-renewal is defended with.
+  'lease.notice_period_overridden',
+
   /// R-033: somebody was added to or removed from the lease. Adding an
   /// occupant changes who is jointly liable and who can reach the portal;
   /// adding a guarantor changes who can be pursued and nothing else.
@@ -604,6 +613,7 @@ export const REASON_REQUIRED: ReadonlySet<AuditAction> = new Set([
   'consent.withdrawn',
   'lease.retaliation_window_acknowledged',
   'lease.renewal_rent_check_overridden',
+  'lease.notice_period_overridden',
   'envelope.voided',
 ])
 

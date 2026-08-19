@@ -2928,3 +2928,23 @@ A DB-integration test seeded a `Prospect` with `status: 'PRE_SCREENED'` set dire
 - **No "insurance required" toggle, and no alert for a lease that has never had a policy recorded.** Named in D-55 as the real follow-on if an owner ever wants to *require* coverage rather than only track it once provided.
 - **No tenant-facing reminder to renew.** LEASE-10's own story is framed entirely from the PM side ("As a PM, I can require and track"); the alert is a staff Task, not a tenant notification.
 - **No resend/upload-later flow beyond the plain "record a new policy" form** — a PM re-uploading a renewed certificate just records a new row, same posture every other invite/document flow in this codebase has already settled for its own first version.
+
+---
+
+## R-066 — Notice to vacate + non-renewal
+**Commit:** _pending_  ·  **Date:** 2026-08-19
+
+**What it built.** LEASE-11 end to end, both directions of "notice to end the tenancy": a tenant's own self-serve intake (`/portal/papers/notice`, D-10's plain "Give notice to vacate") records date + forwarding address as an inbound fact, no override needed; an owner's non-renewal, recorded from the existing `recordLeaseNotice` staff form, now generates and serves a real `Notice` (type `NON_RENEWAL`) with `NoticeDelivery` and a tenant notification, reusing R-027's own `entryDecision`-style machinery rather than building a parallel one. Both directions run the SAME `noticePeriodCheck()` against `JurisdictionRule.noticeToVacateDays` (present on the schema, unused until now) — warn-and-override on the staff side, purely informational on the tenant's own submission. RISK-06's retaliation guard, already wired into `recordLeaseNotice`'s LANDLORD branch by R-055, now fires alongside the notice-period check rather than instead of it — both warnings surface together in one round trip. A jurisdiction with `justCauseRequired` set (also present, unused until now) makes a stated cause a plain required field on a LANDLORD notice, embedded verbatim in the served notice's body — never a canned list of legally-qualifying reasons this product would be picking on the owner's behalf.
+
+**What it decided.** Recorded as **D-56**:
+- **One notice-period number serves both directions.** No jurisdiction has ever been asked to distinguish "how much notice must a tenant give" from "how much notice must an owner give before non-renewing" — `noticeToVacateDays` is read symmetrically rather than inventing a second config field for a split nobody has configured.
+- **The tenant's own portal submission gets no override round trip for a short notice period**, deliberately unlike the staff side — a tenant is not defending a business decision a later dispute could turn on, so a shortfall is stated as a plain consequence (rent may still be owed through the required period), not demanded as a justification.
+- **Two `Lease` columns, `noticeEffectiveOn` and `noticeForwardingAddress`, sit beside the existing `noticeGivenAt`/`noticeGivenBy`** — still a fact about a running lease, never folded into `LeaseStatus` (that model's own comment on why holds unchanged).
+- **A real collision found and fixed**: R-065's `renewal-rollover-job.ts` would have silently auto-rolled a lease under notice — landlord non-renewal or tenant's own notice to vacate alike — to MONTH_TO_MONTH the very next night, since its candidate query never checked `noticeGivenAt` at all. Fixed with one added clause, covered by a new test case.
+
+Full reasoning, and the rejected alternatives (per-party notice-period fields, a canned just-cause list), are in `07-decisions.md`.
+
+**What it left behind.**
+- **No enforcement that a non-renewal actually reaches the unit's turnover pipeline.** Serving the notice and blocking the auto-MTM-rollover are as far as this item goes; what happens operationally as the move-out date approaches (R-070/R-072's territory) is unconnected to this beyond the dates now sitting on the lease.
+- **No staff-facing resend for the tenant notification**, same gap every invite-shaped flow in this codebase (R-058/R-059/R-060/R-063/R-064) has already left for its own first version.
+- **The tenant's own notice-to-vacate form has no "change my mind" / withdraw control.** `canGiveNotice()` refuses a second notice on the same lease outright; correcting a mistaken date today means a staff member editing the record directly, not a tenant-facing undo.

@@ -1467,6 +1467,18 @@ model Lease {
   /// flags, R-062's notice periods), and a bare timestamp cannot tell them
   /// apart.
   noticeGivenBy         NoticeParty?
+  /// When the tenancy actually ends, per the notice recorded above (R-066).
+  /// Distinct from `endsOn` - a fixed term's own contractual end date -
+  /// because notice can end an MTM tenancy or cut a fixed term short, and
+  /// because this is what the notice-period check (JurisdictionRule.
+  /// noticeToVacateDays) is measured against, not a date recomputed later.
+  noticeEffectiveOn     DateTime?             @db.Date
+  /// Where to send the tenant's deposit disposition once they are gone
+  /// (R-066, feeding R-071). Collected at notice time because a tenant who
+  /// has already moved by the disposition deadline is not reliably
+  /// reachable at the property any more - never set for a LANDLORD-given
+  /// non-renewal, since the tenant has not necessarily decided yet.
+  noticeForwardingAddress String?
   terminationReason     String?
 
   /// R-033. Where this tenancy came from - see LeaseOrigin.
