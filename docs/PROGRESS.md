@@ -2948,3 +2948,24 @@ Full reasoning, and the rejected alternatives (per-party notice-period fields, a
 - **No enforcement that a non-renewal actually reaches the unit's turnover pipeline.** Serving the notice and blocking the auto-MTM-rollover are as far as this item goes; what happens operationally as the move-out date approaches (R-070/R-072's territory) is unconnected to this beyond the dates now sitting on the lease.
 - **No staff-facing resend for the tenant notification**, same gap every invite-shaped flow in this codebase (R-058/R-059/R-060/R-063/R-064) has already left for its own first version.
 - **The tenant's own notice-to-vacate form has no "change my mind" / withdraw control.** `canGiveNotice()` refuses a second notice on the same lease outright; correcting a mistaken date today means a staff member editing the record directly, not a tenant-facing undo.
+
+---
+
+## R-068 — Inspection engine (phase 1 of 2)
+**Commit:** _pending_  ·  **Date:** 2026-08-19
+
+**What it built.** The reusable checklist engine INSP-01 asks for, minus photos and e-sign - a deliberate split for an L item, agreed with a concurrent session on this same repo before starting (the backlog row's own note names exactly what phase 2 still owes). `InspectionTemplate` (a portfolio-wide, PM-authored room/item checklist - one JSON column, not a child table, since nothing ever queries into a single template item on its own) is copied wholesale into fresh `InspectionItem` rows the moment a PM starts an inspection, independent of the template from that point on. The full lifecycle is a derived status, not a stored one: `inspectionStatus()` reads `scheduledFor`/`performedAt`/`tenantSignedAt`/`lockedAt` in order (DRAFT → SCHEDULED → IN_PROGRESS → PENDING_SIGNATURE → SIGNED → LOCKED), the same "facts, not a status column" call `LeaseStatus` already made. A staff member walks every item (condition + notes), finishes the walk once every item is recorded, records that a tenant signed (in person, on the inspector's own phone - no tenant-portal e-sign yet), and locks the report - `canEditItem()` refuses every further item write once locked, proved end to end in `e2e/inspections.spec.ts`.
+
+**What it decided.** Recorded as **D-57**:
+- **A portfolio-wide template, not per-property.** The same checklist has to be walked at move-in and move-out for R-070's own side-by-side comparison to mean anything - scoping a template to one property would work against the feature that depends on it staying identical.
+- **No status column - four facts and one pure function that reads them**, matching `Lease.noticeGivenAt`'s own precedent rather than adding a fifth thing that could drift from what actually happened.
+- **A real e2e failure changed the UI shape**: a client-side "Add item"/"Remove" button for building a checklist hit CLAUDE.md's own documented trap - `onClick` is inert until hydration, and a Playwright click (the same as a real person tapping fast on a slow connection) landing before that moment was a silent no-op that left the test hanging on a row that never appeared. Replaced with a fixed 8 blank row slots, needing no client JS to work at all - the same progressive-enhancement posture every `<form action>` in this codebase already gets for free.
+- **Two pre-existing test-isolation flakes found while verifying the gate, confirmed unrelated to this item by rerunning each in isolation**: a `JurisdictionRule` race on state `'ZZ'` between several test files, and a global `AuthToken` count assertion in `vendors/reissue.test.ts` that can shift under full-suite parallel execution. Not fixed - out of this item's scope - but named here so a future session does not re-diagnose them from nothing.
+
+Full reasoning in `07-decisions.md`.
+
+**What it left behind — explicitly PHASE 2, not a silent gap:**
+- **No photo capture on an item, no EXIF timestamp, no geotag.** INSP-01's own line ("per-item condition, notes, photos (timestamped, geotagged)") is half-built - the schema has no `Document` linkage to an `InspectionItem` yet either, deliberately deferred alongside the UI that would use it.
+- **No tenant-portal e-sign.** `recordSignature` is staff-only ("recorded that a tenant signed on the inspector's own phone"); `canRecordSignature`'s own comment names this as the interim posture, not the destination.
+- **No auto-finalize-after-a-window job.** INSP-01 asks for a report to auto-finalize if nobody signs within a stated window; today a report simply waits, un-locked, until a staff member locks it by hand.
+- **No R-069/R-070-specific wiring yet** (door codes withheld until funds clear, the side-by-side move-in/move-out comparison via `moveInItemId`) - this item builds the engine those items drive, not their own logic.

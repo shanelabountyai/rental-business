@@ -204,6 +204,21 @@ export const AUDIT_ACTIONS = [
   /// stop being allowed to text them" is what a dispute turns on, and a
   /// withdrawal with no stated reason is indistinguishable from a misclick.
   'consent.withdrawn',
+
+  // Inspection engine (INSP-01, R-068).
+  /// A new inspection was started, from a template or ad hoc - which
+  /// template (if any) and the room/item list it copied are on the entry,
+  /// because a template can be edited later and this is the record of what
+  /// this inspection actually started from.
+  'inspection.created',
+  /// The walk was marked performed - every checklist item now carries a
+  /// recorded condition. Item-by-item edits before this point are not
+  /// individually audited (a correction while still walking is not itself
+  /// evidence of anything); this is the fact the report's own conclusions
+  /// rest on.
+  'inspection.performed',
+  /// Locked - the report becomes immutable evidence. Stubbed here since
+  /// before R-068, unused until now.
   'inspection.locked',
 
   /// PROP-03: "Given access codes, when an external vendor views a work

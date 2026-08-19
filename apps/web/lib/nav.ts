@@ -101,4 +101,10 @@ export const NAV_ITEMS: readonly NavItem[] = [
     permission: 'template.write',
     ownedBy: 'R-062',
   },
+  {
+    href: '/inspections',
+    label: 'Inspections',
+    permission: 'inspection.read',
+    ownedBy: 'R-068',
+  },
 ]

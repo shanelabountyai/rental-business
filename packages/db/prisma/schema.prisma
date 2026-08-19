@@ -1305,6 +1305,8 @@ model StaffUser {
   templatesUpdated                        MessageTemplate[]            @relation("TemplateUpdatedBy")
   documentTemplatesCreated                DocumentTemplate[]           @relation("DocumentTemplateCreatedBy")
   documentTemplatesUpdated                DocumentTemplate[]           @relation("DocumentTemplateUpdatedBy")
+  inspectionTemplatesCreated              InspectionTemplate[]         @relation("InspectionTemplateCreatedBy")
+  inspectionTemplatesUpdated              InspectionTemplate[]         @relation("InspectionTemplateUpdatedBy")
   translationsApproved                    MessageTemplateTranslation[] @relation("TranslationApprovedBy")
   paymentHoldsSet                         LeasePayer[]                 @relation("PaymentHoldSetBy")
   listingsCreated                         Listing[]                    @relation("ListingCreatedBy")
@@ -3421,12 +3423,55 @@ model NoticeDelivery {
   @@index([servedAt])
 }
 
+/// A reusable room-by-room checklist a PM defines once (R-068, INSP-01).
+/// Portfolio-wide, not per-property: the same tenancy's move-in and
+/// move-out inspection have to walk the SAME room/item list for R-070's
+/// side-by-side comparison to mean anything, and a PM with several
+/// differently-shaped units is better served by picking from a short list
+/// of named templates ("3BR house", "studio") than by this product trying
+/// to infer which one fits a given unit.
+///
+/// `items` is one JSON column, not a child table - nothing ever queries
+/// INTO an individual template item on its own, only "give me the whole
+/// checklist to copy from" when an inspection starts. Same "structured but
+/// always read/written as a whole" call `Lease.utilityResponsibility`
+/// already makes for the identical reason.
+model InspectionTemplate {
+  id               String   @id @default(cuid())
+  name             String
+  /// An ordered array of `{ room: string, item: string }` objects -
+  /// validated at the application layer (packages/core/inspections/template.ts),
+  /// the same posture every other JSON-shaped config in this schema takes.
+  items            Json
+  /// Retired rather than deleted - an inspection built from this template
+  /// keeps its own copied InspectionItem rows regardless, but a retired
+  /// template stops being offered for a NEW inspection. Same reasoning
+  /// DocumentTemplate.active's own comment gives.
+  active           Boolean  @default(true)
+  createdByStaffId String
+  updatedByStaffId String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  createdBy    StaffUser    @relation("InspectionTemplateCreatedBy", fields: [createdByStaffId], references: [id])
+  /// Restrict, not the SetNull Prisma defaults to for an optional relation -
+  /// same reasoning DocumentTemplate.updatedBy already gives.
+  updatedBy    StaffUser?   @relation("InspectionTemplateUpdatedBy", fields: [updatedByStaffId], references: [id], onDelete: Restrict)
+  inspections  Inspection[]
+
+  @@index([active])
+}
+
 model Inspection {
-  id                 String         @id @default(cuid())
+  id                 String              @id @default(cuid())
   propertyId         String
   unitId             String
   leaseId            String?
   type               InspectionType
+  /// Which checklist this inspection's items were copied from at creation
+  /// time - null for one built ad hoc with no template. Never re-read after
+  /// creation (the copy is the record); this is provenance, not a live link.
+  templateId         String?
   scheduledFor       DateTime?
   performedAt        DateTime?
   performedByStaffId String?
@@ -3436,13 +3481,14 @@ model Inspection {
   /// after the damage is found.
   lockedAt           DateTime?
   notes              String?
-  createdAt          DateTime       @default(now())
-  updatedAt          DateTime       @updatedAt
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
 
-  property    Property         @relation(fields: [propertyId], references: [id])
-  unit        Unit             @relation(fields: [unitId], references: [id])
-  lease       Lease?           @relation(fields: [leaseId], references: [id])
-  performedBy StaffUser?       @relation("InspectionPerformedBy", fields: [performedByStaffId], references: [id])
+  property    Property             @relation(fields: [propertyId], references: [id])
+  unit        Unit                 @relation(fields: [unitId], references: [id])
+  lease       Lease?               @relation(fields: [leaseId], references: [id])
+  template    InspectionTemplate?  @relation(fields: [templateId], references: [id])
+  performedBy StaffUser?           @relation("InspectionPerformedBy", fields: [performedByStaffId], references: [id])
   items       InspectionItem[]
 
   @@index([propertyId, type])
@@ -3454,14 +3500,24 @@ model Inspection {
 /// - the photo then next to the photo now - is the deposit-disposition
 /// evidence (INSP-02), so it is a real foreign key, not a convention.
 model InspectionItem {
-  id           String        @id @default(cuid())
+  id           String         @id @default(cuid())
   inspectionId String
   room         String
   item         String
-  condition    ItemCondition
+  /// Null until the inspector actually walks this item - a copied-in
+  /// checklist row starts unanswered, not defaulted to some condition
+  /// nobody observed. R-068's own "immutable lock on completion" is what
+  /// this null protects: `canFinishInspection()` refuses to let the walk be
+  /// marked performed while any item is still null.
+  condition    ItemCondition?
   notes        String?
-  moveInItemId String?       @unique
-  createdAt    DateTime      @default(now())
+  /// Walk order, copied from the template's own array position at creation
+  /// time - independent of the template afterward, so re-ordering a
+  /// template never reshuffles an inspection already built from it.
+  order        Int            @default(0)
+  moveInItemId String?        @unique
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
 
   inspection  Inspection      @relation(fields: [inspectionId], references: [id])
   moveInItem  InspectionItem? @relation("MoveInToMoveOut", fields: [moveInItemId], references: [id])
