@@ -2871,7 +2871,7 @@ A DB-integration test seeded a `Prospect` with `status: 'PRE_SCREENED'` set dire
 ---
 
 ## R-064 — Showings
-**Commit:** _pending_  ·  **Date:** 2026-08-19
+**Commit:** `7d6d410`  ·  **Date:** 2026-08-19
 
 **What it built.** LEASE-08's non-lockbox half: answering pre-screening (R-058) now auto-sends a prospect a single-use `SHOWING_BOOKING` link; `/showings/[token]` shows every open slot on a fixed 9am-6pm/30-minute grid (`availableShowingSlots()`, `packages/core/scheduling/showings.ts`) and lets them book one with no account. Booking an occupied unit's slot generates and serves the required tenant entry notice inline, reusing R-027's own `entryDecision()`/`entryNoticeText()` machinery - the same decision a work order's `scheduleEntry()` makes, applied here with no warn-and-override path, since a self-serve form has nobody present to give an override reason: a slot that fails the check is simply refused rather than booked-and-flagged, and the offered slot list already excludes anything short of `earliestCompliantStart()` in the first place. Every booking - vacant or occupied - raises an `escort_showing` `Task` (D-9), because R-064 ships no unaccompanied-entry mechanism; that is R-094 (Phase 3), not this item. `sweepShowingReminders()` sends the prospect a T-1-day and T-2-hour SMS/email reminder off the hourly cron tick, same elapsed-time-sweep shape as R-027's own `sweepEntryReminders()`. Staff see the booked (or cancelled) showing on the prospect's own detail page, with a `cancelShowing` action that also cancels the escort task rather than leaving it open against a visit that is not happening.
 
