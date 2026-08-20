@@ -1,8 +1,8 @@
 'use client'
 
-import { useActionState } from 'react'
+import { useActionState, useState } from 'react'
 import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
-import { SelectField } from '@/components/form/field.tsx'
+import { CheckboxField, SelectField } from '@/components/form/field.tsx'
 import type { InspectionFormState } from '@/lib/inspections/actions.ts'
 
 const TYPE_OPTIONS = [
@@ -28,6 +28,7 @@ export function StartInspectionForm({
 }) {
   const [state, formAction] = useActionState<InspectionFormState, FormData>(action, {})
   const errors = state.fieldErrors ?? {}
+  const [type, setType] = useState('')
 
   return (
     <form action={formAction} className="flex flex-col gap-5">
@@ -47,7 +48,14 @@ export function StartInspectionForm({
         idPrefix="inspection"
         error={errors.type}
         options={TYPE_OPTIONS}
+        onChange={(event) => setType(event.target.value)}
       />
+      {type === 'MOVE_IN' && (
+        <CheckboxField
+          label="Let the tenant complete this themselves, from the portal (self-guided)"
+          name="selfGuided"
+        />
+      )}
       <SelectField
         label="Checklist"
         name="templateId"

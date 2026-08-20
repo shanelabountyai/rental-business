@@ -940,6 +940,72 @@ export const inspectionAutoFinalizedTemplate: NotificationTemplate<InspectionAut
   },
 }
 
+/// Context for `inspection.move_in_ready` (INSP-05, R-074) - staff created a
+/// self-guided MOVE_IN report; it's the tenant's turn to walk it.
+export interface InspectionMoveInReadyContext {
+  tenantName: string
+  addressLine1: string
+  unitName: string
+  /// Deep link to the tenant's own portal walk page.
+  url: string
+}
+
+export const inspectionMoveInReadyTemplate: NotificationTemplate<InspectionMoveInReadyContext> = {
+  key: 'inspection.move_in_ready',
+  category: 'inspection_signature',
+  channels: ['SMS', 'EMAIL', 'PORTAL'],
+  render: (context, channel) => {
+    const where = `${context.addressLine1}${context.unitName ? ` (${context.unitName})` : ''}`
+    if (channel === 'SMS') {
+      return {
+        body: [`Welcome home! Walk through ${where} on your phone and record what you find:`, context.url].join(
+          '\n',
+        ),
+      }
+    }
+    return {
+      subject: `Complete your move-in walkthrough — ${where}`,
+      body: [
+        `Hi ${context.tenantName},`,
+        '',
+        `Welcome to ${where}. Walk through your new home room by room, on your phone, and record what you find - it's how we agree on the condition before you moved in.`,
+        '',
+        context.url,
+      ].join('\n'),
+    }
+  },
+}
+
+/// Context for `inspection.move_in_overdue` (INSP-05, R-074) - the
+/// walkthrough window closed with the report still unwalked.
+export interface InspectionMoveInOverdueContext {
+  tenantName: string
+  addressLine1: string
+  unitName: string
+}
+
+export const inspectionMoveInOverdueTemplate: NotificationTemplate<InspectionMoveInOverdueContext> = {
+  key: 'inspection.move_in_overdue',
+  category: 'inspection_signature',
+  channels: ['SMS', 'EMAIL', 'PORTAL'],
+  render: (context, channel) => {
+    const where = `${context.addressLine1}${context.unitName ? ` (${context.unitName})` : ''}`
+    if (channel === 'SMS') {
+      return {
+        body: `You haven't finished your move-in walkthrough for ${where} yet - we've let the office know. Reply if you need help.`,
+      }
+    }
+    return {
+      subject: `Still waiting on your move-in walkthrough — ${where}`,
+      body: [
+        `Hi ${context.tenantName},`,
+        '',
+        `We haven't seen a completed move-in walkthrough for ${where} yet, so we've let the office know to follow up. Reply here if you need a hand finishing it.`,
+      ].join('\n'),
+    }
+  },
+}
+
 /// Context for `comms.managed_template` (COMM-03, R-044). Already rendered -
 /// see the template below.
 export interface ManagedTemplateContext {
@@ -1626,6 +1692,10 @@ export const TEMPLATES: Readonly<Record<string, NotificationTemplate<never>>> = 
     inspectionSignatureNeededTemplate as unknown as NotificationTemplate<never>,
   [inspectionAutoFinalizedTemplate.key]:
     inspectionAutoFinalizedTemplate as unknown as NotificationTemplate<never>,
+  [inspectionMoveInReadyTemplate.key]:
+    inspectionMoveInReadyTemplate as unknown as NotificationTemplate<never>,
+  [inspectionMoveInOverdueTemplate.key]:
+    inspectionMoveInOverdueTemplate as unknown as NotificationTemplate<never>,
 }
 
 export class UnknownTemplateError extends Error {

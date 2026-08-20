@@ -2,7 +2,11 @@ import { randomUUID } from 'node:crypto'
 import type { TenantScope } from '@rental/core/portal'
 import { prisma } from '@rental/db'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { getTenantInspection, inspectionsAwaitingTenantSignature } from './inspection-queries.ts'
+import {
+  getTenantInspection,
+  inspectionsAwaitingTenantSignature,
+  inspectionsAwaitingTenantWalk,
+} from './inspection-queries.ts'
 
 // Reads for a tenant's own inspection review (INSP-01, R-068 phase 2) - the
 // write (signInspectionAsTenant) is session-dependent via
@@ -104,6 +108,42 @@ describe('inspectionsAwaitingTenantSignature', () => {
 
   it('returns nothing outside the tenant\'s own leases', async () => {
     expect(await inspectionsAwaitingTenantSignature(scopeFor([]))).toEqual([])
+  })
+})
+
+describe('inspectionsAwaitingTenantWalk (INSP-05, R-074)', () => {
+  it('lists a self-guided MOVE_IN inspection not yet performed', async () => {
+    const inspection = await prisma.inspection.create({
+      data: { propertyId, unitId, leaseId, type: 'MOVE_IN', selfGuided: true },
+    })
+    inspectionIds.push(inspection.id)
+
+    const list = await inspectionsAwaitingTenantWalk(scopeFor([leaseId]))
+    expect(list.map((i) => i.id)).toContain(inspection.id)
+  })
+
+  it('excludes a traditional staff-performed MOVE_IN inspection', async () => {
+    const inspection = await prisma.inspection.create({
+      data: { propertyId, unitId, leaseId, type: 'MOVE_IN', selfGuided: false },
+    })
+    inspectionIds.push(inspection.id)
+
+    const list = await inspectionsAwaitingTenantWalk(scopeFor([leaseId]))
+    expect(list.map((i) => i.id)).not.toContain(inspection.id)
+  })
+
+  it('excludes one already performed', async () => {
+    const inspection = await prisma.inspection.create({
+      data: { propertyId, unitId, leaseId, type: 'MOVE_IN', selfGuided: true, performedAt: new Date() },
+    })
+    inspectionIds.push(inspection.id)
+
+    const list = await inspectionsAwaitingTenantWalk(scopeFor([leaseId]))
+    expect(list.map((i) => i.id)).not.toContain(inspection.id)
+  })
+
+  it('returns nothing outside the tenant\'s own leases', async () => {
+    expect(await inspectionsAwaitingTenantWalk(scopeFor([]))).toEqual([])
   })
 })
 

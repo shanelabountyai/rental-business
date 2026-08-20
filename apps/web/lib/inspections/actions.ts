@@ -1,13 +1,11 @@
 'use server'
 
-import { createHash } from 'node:crypto'
 import {
   canEditItem,
   canFinishInspection,
   canLockInspection,
   canRecordSignature,
   isInspectionType,
-  validateItemRecord,
   type TemplateChecklistItem,
 } from '@rental/core/inspections'
 import { prisma } from '@rental/db'
@@ -16,10 +14,9 @@ import { redirect } from 'next/navigation'
 import { audit } from '@/lib/audit/index.ts'
 import { authUrl } from '@/lib/auth/delivery.ts'
 import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
-import { extractCapturedAt, extractGeotag } from '@/lib/documents/exif.ts'
+import { writeItemCondition, writeItemPhoto } from '@/lib/inspections/item-writes.ts'
 import { itemsFromMoveIn } from '@/lib/inspections/move-out-copy.ts'
 import { dispatchPendingNotifications, notify } from '@/lib/notifications/send.ts'
-import { generateStorageKey, storage } from '@/lib/storage/index.ts'
 import { draftPunchListFromInspection } from '@/lib/turnover/punch-list.ts'
 
 /// MOVE_OUT and PRE_MOVE_OUT both compare against move-in (INSP-02) - a
@@ -77,6 +74,10 @@ export async function startInspection(
   const unitId = str(formData, 'unitId')
   const type = str(formData, 'type')
   const templateId = str(formData, 'templateId')
+  // INSP-05 (R-074): only meaningful for MOVE_IN - ignored for every other
+  // type rather than rejected, so a stray checked box from the client never
+  // turns into a form error for a type where it does nothing.
+  const selfGuided = type === 'MOVE_IN' && formData.get('selfGuided') === 'on'
   if (!unitId) return { error: 'Choose a unit.', fieldErrors: { unitId: 'Required.' } }
   if (!isInspectionType(type)) {
     return { error: 'Choose an inspection type.', fieldErrors: { type: 'Required.' } }
@@ -84,7 +85,7 @@ export async function startInspection(
 
   const unit = await prisma.unit.findUniqueOrThrow({
     where: { id: unitId },
-    include: { property: { select: { id: true, legalEntityId: true } } },
+    include: { property: { select: { id: true, legalEntityId: true, addressLine1: true } } },
   })
   await requirePermission('inspection.write', propertyResource(unit.property))
 
@@ -127,6 +128,7 @@ export async function startInspection(
         unitId,
         leaseId: lease?.id ?? null,
         type,
+        selfGuided,
         templateId: moveInCopy ? null : templateId,
         items: {
           create: moveInCopy
@@ -144,15 +146,53 @@ export async function startInspection(
         after: moveInCopy
           ? {
               type,
+              selfGuided,
               copiedFromInspectionId: moveInCopy.sourceInspectionId,
               itemCount: moveInCopy.items.length,
             }
-          : { type, templateId, templateName: template!.name, itemCount: checklist.length },
+          : { type, selfGuided, templateId, templateName: template!.name, itemCount: checklist.length },
       },
       tx,
     )
     return created
   })
+
+  // Outside the transaction, best-effort, same posture finishInspection's
+  // own notify call already takes: a self-guided report is useless to a
+  // tenant who never learns it exists.
+  if (selfGuided && lease) {
+    try {
+      const primaryTenant = await prisma.leaseTenant.findFirst({
+        where: { leaseId: lease.id, isPrimary: true },
+        include: { tenant: { select: { id: true, firstName: true, email: true, phone: true } } },
+      })
+      if (primaryTenant) {
+        const outcomes = await notify({
+          category: 'inspection_signature',
+          templateKey: 'inspection.move_in_ready',
+          recipient: {
+            type: 'TENANT',
+            id: primaryTenant.tenant.id,
+            email: primaryTenant.tenant.email,
+            phone: primaryTenant.tenant.phone,
+          },
+          context: {
+            tenantName: primaryTenant.tenant.firstName,
+            addressLine1: unit.property.addressLine1,
+            unitName: unit.name,
+            url: authUrl(`/portal/papers/inspections/${inspection.id}`),
+          },
+          propertyId: unit.propertyId,
+          idempotencyKey: `inspection-move-in-ready:${inspection.id}`,
+        })
+        await dispatchPendingNotifications(new Date(), 100, {
+          deliveryIds: outcomes.map((o) => o.deliveryId).filter((id): id is string => id != null),
+        })
+      }
+    } catch (error) {
+      console.error(`[inspections] failed to notify tenant for self-guided ${inspection.id}`, error)
+    }
+  }
 
   revalidatePath('/inspections')
   redirect(`/inspections/${inspection.id}`)
@@ -177,18 +217,8 @@ export async function recordItem(
   if (!decision.allowed) return { error: decision.message }
 
   const input = { condition: str(formData, 'condition'), notes: str(formData, 'notes') || null }
-  const violations = validateItemRecord(input)
-  if (violations.length > 0) {
-    return {
-      error: 'Fix the highlighted fields.',
-      fieldErrors: Object.fromEntries(violations.map((v) => [v.field, v.message])),
-    }
-  }
-
-  await prisma.inspectionItem.update({
-    where: { id: itemId },
-    data: { condition: input.condition as never, notes: input.notes },
-  })
+  const violation = await writeItemCondition(itemId, input)
+  if (violation) return violation
 
   revalidatePath(`/inspections/${item.inspectionId}`)
   return { notice: 'Saved.' }
@@ -224,37 +254,10 @@ export async function recordItemPhoto(
     return { error: 'Choose a photo.', fieldErrors: { file: 'Required.' } }
   }
 
-  const buffer = Buffer.from(await file.arrayBuffer())
-  const contentType = file.type || 'application/octet-stream'
-  const sha256 = createHash('sha256').update(buffer).digest('hex')
-  const capturedAt = await extractCapturedAt(buffer, contentType)
-  const geotag = await extractGeotag(buffer, contentType)
-  const storageKey = generateStorageKey(item.inspection.propertyId, file.name)
-  // Written before the row exists - same ordering documents/actions.ts's
-  // own uploadDocument uses: an orphaned file costs disk space, an orphaned
-  // pointer is a document nobody can ever open.
-  await storage.put(storageKey, buffer, contentType)
-
-  await prisma.document.create({
-    data: {
-      propertyId: item.inspection.propertyId,
-      // Set whenever the inspection has one, so the tenant portal's own
-      // document visibility rule (tenantCanSeeDocument, DOC-03) already
-      // covers it - the tenant reviewing this report needs to see the same
-      // photos staff took, with no separate plumbing for this one type.
-      leaseId: item.inspection.leaseId,
-      inspectionItemId: itemId,
-      type: 'INSPECTION_PHOTO',
-      fileName: file.name,
-      contentType,
-      sizeBytes: file.size,
-      storageKey,
-      sha256,
-      capturedAt,
-      latitude: geotag?.latitude,
-      longitude: geotag?.longitude,
-    },
-  })
+  await writeItemPhoto(
+    { id: itemId, propertyId: item.inspection.propertyId, leaseId: item.inspection.leaseId },
+    file,
+  )
 
   revalidatePath(`/inspections/${item.inspectionId}`)
   return { notice: 'Photo added.' }

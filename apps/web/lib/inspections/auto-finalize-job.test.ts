@@ -38,6 +38,7 @@ beforeAll(async () => {
 })
 
 afterEach(async () => {
+  await prisma.task.deleteMany({ where: { propertyId } })
   await prisma.inspectionItem.deleteMany({ where: { inspectionId: { in: inspectionIds } } })
   await prisma.inspection.deleteMany({ where: { id: { in: inspectionIds } } })
   await prisma.leaseTenant.deleteMany({ where: { leaseId: { in: leaseIds } } })
@@ -147,5 +148,105 @@ describe('the inspection auto-finalize job', () => {
 
     const after = await prisma.inspection.findUniqueOrThrow({ where: { id: inspection.id } })
     expect(after.lockedAt).toEqual(inspection.lockedAt)
+  })
+})
+
+describe('the move-in walkthrough escalation job (INSP-05, R-074)', () => {
+  it('raises a staff Task and reminds the tenant once the window elapses unwalked', async () => {
+    const { unit, lease } = await makeLeaseAndTenant('d')
+    const inspection = await prisma.inspection.create({
+      data: {
+        propertyId,
+        unitId: unit.id,
+        leaseId: lease.id,
+        type: 'MOVE_IN',
+        selfGuided: true,
+        createdAt: new Date('2026-07-01T12:00:00Z'),
+      },
+    })
+    inspectionIds.push(inspection.id)
+
+    await runAt('2026-07-09T12:00:00Z') // 8 days later, past the 7-day window
+
+    // Never locked - a blank report is not evidence of anything, so this
+    // job escalates rather than finalizing.
+    const after = await prisma.inspection.findUniqueOrThrow({ where: { id: inspection.id } })
+    expect(after.performedAt).toBeNull()
+    expect(after.lockedAt).toBeNull()
+
+    const task = await prisma.task.findFirst({
+      where: { type: 'inspection.move_in_overdue', subjectId: inspection.id },
+    })
+    expect(task).not.toBeNull()
+  })
+
+  it('leaves an unwalked report alone while still inside the window', async () => {
+    const { unit, lease } = await makeLeaseAndTenant('e')
+    const inspection = await prisma.inspection.create({
+      data: {
+        propertyId,
+        unitId: unit.id,
+        leaseId: lease.id,
+        type: 'MOVE_IN',
+        selfGuided: true,
+        createdAt: new Date('2026-07-04T12:00:00Z'),
+      },
+    })
+    inspectionIds.push(inspection.id)
+
+    await runAt('2026-07-05T12:00:00Z') // 1 day later
+
+    const task = await prisma.task.findFirst({
+      where: { type: 'inspection.move_in_overdue', subjectId: inspection.id },
+    })
+    expect(task).toBeNull()
+  })
+
+  it('never escalates a traditional staff-performed MOVE_IN inspection', async () => {
+    const { unit, lease } = await makeLeaseAndTenant('f')
+    const inspection = await prisma.inspection.create({
+      data: {
+        propertyId,
+        unitId: unit.id,
+        leaseId: lease.id,
+        type: 'MOVE_IN',
+        selfGuided: false,
+        createdAt: new Date('2026-07-01T12:00:00Z'),
+      },
+    })
+    inspectionIds.push(inspection.id)
+
+    await runAt('2026-07-09T12:00:00Z')
+
+    const task = await prisma.task.findFirst({
+      where: { type: 'inspection.move_in_overdue', subjectId: inspection.id },
+    })
+    expect(task).toBeNull()
+  })
+
+  it('is idempotent - running the job again the next day raises only one Task', async () => {
+    const { unit, lease } = await makeLeaseAndTenant('g')
+    const inspection = await prisma.inspection.create({
+      data: {
+        propertyId,
+        unitId: unit.id,
+        leaseId: lease.id,
+        type: 'MOVE_IN',
+        selfGuided: true,
+        createdAt: new Date('2026-07-01T12:00:00Z'),
+      },
+    })
+    inspectionIds.push(inspection.id)
+
+    // Both runs are past the deadline, on different business dates - the
+    // job's own createTask call is keyed on the FIXED due date, not "today",
+    // which is what makes a second run a no-op instead of a second Task.
+    await runAt('2026-07-09T12:00:00Z')
+    await runAt('2026-07-10T12:00:00Z')
+
+    const tasks = await prisma.task.findMany({
+      where: { type: 'inspection.move_in_overdue', subjectId: inspection.id },
+    })
+    expect(tasks).toHaveLength(1)
   })
 })

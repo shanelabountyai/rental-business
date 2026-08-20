@@ -1,5 +1,8 @@
 import { requireTenantWithScope } from '@/lib/portal/guard.ts'
-import { inspectionsAwaitingTenantSignature } from '@/lib/portal/inspection-queries.ts'
+import {
+  inspectionsAwaitingTenantSignature,
+  inspectionsAwaitingTenantWalk,
+} from '@/lib/portal/inspection-queries.ts'
 import { listTenantDocuments } from '@/lib/portal/queries.ts'
 
 export const metadata = { title: 'Your papers' }
@@ -40,9 +43,10 @@ function fileSize(bytes: number): string {
 
 export default async function PortalPapersPage() {
   const { scope } = await requireTenantWithScope()
-  const [documents, awaitingSignature] = await Promise.all([
+  const [documents, awaitingSignature, awaitingWalk] = await Promise.all([
     listTenantDocuments(scope),
     inspectionsAwaitingTenantSignature(scope),
+    inspectionsAwaitingTenantWalk(scope),
   ])
 
   return (
@@ -54,6 +58,25 @@ export default async function PortalPapersPage() {
           appear here.
         </p>
       </div>
+
+      {awaitingWalk.length > 0 && (
+        <ul className="flex flex-col gap-3">
+          {awaitingWalk.map((inspection) => (
+            <li key={inspection.id}>
+              <a
+                href={`/portal/papers/inspections/${inspection.id}`}
+                className="hover:bg-accent focus-visible:ring-ring flex min-h-14 flex-col justify-center gap-1 rounded-md border-2 border-amber-500 px-4 py-3 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+              >
+                <span className="font-medium">Complete your move-in walkthrough</span>
+                <span className="text-muted-foreground">
+                  {inspection.property.addressLine1}
+                  {inspection.unit.name ? ` (${inspection.unit.name})` : ''}
+                </span>
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
 
       {awaitingSignature.length > 0 && (
         <ul className="flex flex-col gap-3">

@@ -27,6 +27,28 @@ export async function inspectionsAwaitingTenantSignature(scope: TenantScope) {
   })
 }
 
+/// This tenant's own self-guided MOVE_IN reports waiting on their walk
+/// (INSP-05, R-074) - `selfGuided`, not yet performed, not locked. What a
+/// "complete your move-in walkthrough" prompt on the portal reads to decide
+/// whether to show one at all.
+export async function inspectionsAwaitingTenantWalk(scope: TenantScope) {
+  if (scope.leaseIds.length === 0) return []
+  return prisma.inspection.findMany({
+    where: {
+      leaseId: { in: [...scope.leaseIds] },
+      type: 'MOVE_IN',
+      selfGuided: true,
+      performedAt: null,
+      lockedAt: null,
+    },
+    orderBy: { createdAt: 'asc' },
+    include: {
+      property: { select: { name: true, addressLine1: true } },
+      unit: { select: { name: true } },
+    },
+  })
+}
+
 /// One inspection, with its items - null if it is not on this tenant's own
 /// lease. "Not yours" and "does not exist" read the same, the same rule
 /// DOC-03 already states for every other portal read.

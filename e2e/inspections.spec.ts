@@ -336,6 +336,123 @@ test('a photo attaches to an item, and the tenant reviews and signs the report f
   expect(lockedAudit?.after).toMatchObject({ signed: true })
 })
 
+test('a tenant self-guides a move-in walkthrough from their own portal (INSP-05)', async ({
+  page,
+  browser,
+}) => {
+  const staff = await createStaff()
+  const { property, unit, tenant, lease, unique } = await seedUnitWithTenant()
+  await signIn(page, staff.email)
+
+  await page.goto('/inspections/templates/new')
+  await page.getByLabel('Name').fill(`SelfGuided-${unique}`)
+  await page.getByLabel('Room').first().fill('Kitchen')
+  await page.getByLabel('Item').first().fill('Stove')
+  await page.getByRole('button', { name: 'Save' }).click()
+  await expect(page).toHaveURL(/\/inspections\/templates\/(?!new$)[a-z0-9]+$/)
+
+  const template = await prisma.inspectionTemplate.findFirstOrThrow({
+    where: { name: `SelfGuided-${unique}` },
+  })
+  templateIds.push(template.id)
+
+  await page.goto('/inspections/new')
+  await page.getByLabel('Unit').selectOption({ label: `${property.name} — ${unit.name}` })
+  await page.getByLabel('Type').selectOption('MOVE_IN')
+  await page.getByLabel(/self-guided/).check()
+  await page.getByLabel('Checklist').selectOption({ label: `SelfGuided-${unique}` })
+  await page.getByRole('button', { name: 'Start inspection' }).click()
+  await expect(page).toHaveURL(/\/inspections\/(?!new$)[a-z0-9]+$/)
+
+  const inspection = await prisma.inspection.findFirstOrThrow({ where: { unitId: unit.id } })
+  expect(inspection.selfGuided).toBe(true)
+
+  // Creating a self-guided report notifies the tenant with a direct link -
+  // the real signal a tenant would follow, rather than this test navigating
+  // there by knowing the id in advance.
+  await expect
+    .poll(() =>
+      prisma.notification.count({
+        where: { recipientType: 'TENANT', recipientId: tenant.id, templateKey: 'inspection.move_in_ready' },
+      }),
+    )
+    .toBeGreaterThan(0)
+
+  const anon = await browser.newContext()
+  const tenantPage = await anon.newPage()
+  await tenantPage.goto(await magicLinkFor(tenant.id))
+  await tenantPage.goto('/portal/papers')
+  await expect(
+    tenantPage.getByRole('link', { name: /Complete your move-in walkthrough/ }),
+  ).toBeVisible()
+  await tenantPage.getByRole('link', { name: /Complete your move-in walkthrough/ }).click()
+
+  const itemForm = tenantPage.locator('li', { hasText: 'Kitchen — Stove' })
+  await itemForm.getByLabel('Add a photo').setInputFiles({
+    name: 'stove.png',
+    mimeType: 'image/png',
+    buffer: PNG_1PX,
+  })
+  await itemForm.getByRole('button', { name: 'Upload' }).click()
+  await expect(itemForm.getByRole('img')).toBeVisible()
+
+  const item = await prisma.inspectionItem.findFirstOrThrow({ where: { inspectionId: inspection.id } })
+  const photo = await prisma.document.findFirstOrThrow({ where: { inspectionItemId: item.id } })
+  expect(photo.leaseId).toBe(inspection.leaseId)
+
+  await itemForm.getByLabel('Condition').selectOption('NEW')
+  await itemForm.getByRole('button', { name: 'Save' }).click()
+  await expect
+    .poll(async () => (await prisma.inspectionItem.findUniqueOrThrow({ where: { id: item.id } })).condition)
+    .toBe('NEW')
+
+  await tenantPage.getByRole('button', { name: 'Finish walkthrough' }).click()
+  await expect(tenantPage.getByText(/reviewed this report/)).toBeVisible()
+
+  await tenantPage.getByLabel(/reviewed this report/).check()
+  await tenantPage.getByRole('button', { name: 'Sign', exact: true }).click()
+  await expect(tenantPage.getByText(/You signed this report on/)).toBeVisible()
+
+  const done = await prisma.inspection.findUniqueOrThrow({ where: { id: inspection.id } })
+  expect(done.performedAt).not.toBeNull()
+  expect(done.performedByStaffId).toBeNull()
+  expect(done.tenantSignedAt).not.toBeNull()
+  expect(done.lockedAt).not.toBeNull()
+
+  // No longer prompts on a fresh visit.
+  await tenantPage.goto('/portal/papers')
+  await expect(
+    tenantPage.getByRole('link', { name: /Complete your move-in walkthrough/ }),
+  ).toHaveCount(0)
+  await anon.close()
+
+  // A traditional staff-performed MOVE_IN inspection on the SAME lease
+  // (selfGuided false, unperformed) stays read-only on the tenant's own
+  // portal - `selfGuided` gates the write, not just `type === 'MOVE_IN'` or
+  // "not yet performed". A tenant who happens to know this id gets the same
+  // read-only rows the phase-2 review page has always shown, never a form.
+  const staffInspection = await prisma.inspection.create({
+    data: {
+      propertyId: property.id,
+      unitId: unit.id,
+      leaseId: lease.id,
+      type: 'MOVE_IN',
+      selfGuided: false,
+      items: { create: [{ room: 'Bedroom', item: 'Closet', order: 0 }] },
+    },
+  })
+  const blocked = await browser.newContext()
+  const blockedPage = await blocked.newPage()
+  await blockedPage.goto(await magicLinkFor(tenant.id))
+  await blockedPage.goto(`/portal/papers/inspections/${staffInspection.id}`)
+  await expect(blockedPage.getByText('Bedroom — Closet')).toBeVisible()
+  await expect(blockedPage.getByRole('button', { name: 'Save' })).toHaveCount(0)
+  await expect(blockedPage.getByRole('button', { name: 'Finish walkthrough' })).toHaveCount(0)
+  await blocked.close()
+  await prisma.inspectionItem.deleteMany({ where: { inspectionId: staffInspection.id } })
+  await prisma.inspection.deleteMany({ where: { id: staffInspection.id } })
+})
+
 test('a move-out inspection copies the move-in checklist and shows the side-by-side comparison (R-070)', async ({
   page,
 }) => {

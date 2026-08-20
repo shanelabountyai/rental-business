@@ -3621,6 +3621,15 @@ model Inspection {
   /// comparison is only worth anything if the move-in side cannot be edited
   /// after the damage is found.
   lockedAt           DateTime?
+  /// INSP-05 (R-074): true when staff created this MOVE_IN inspection for
+  /// the TENANT to walk themselves from the portal, rather than staff
+  /// walking it in person. Never set for any other type. This is what
+  /// authorizes a tenant to write InspectionItem rows at all (the tenant
+  /// portal actions check it, not just `type === 'MOVE_IN'`) and what the
+  /// walkthrough-window job below filters on - without it, a traditional
+  /// staff-performed MOVE_IN inspection that simply hasn't been walked yet
+  /// would otherwise look identical to one a tenant was asked to complete.
+  selfGuided         Boolean        @default(false)
   notes              String?
   createdAt          DateTime       @default(now())
   updatedAt          DateTime       @updatedAt

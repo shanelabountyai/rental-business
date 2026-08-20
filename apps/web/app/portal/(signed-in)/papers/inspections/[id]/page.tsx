@@ -1,9 +1,15 @@
 import { notFound } from 'next/navigation'
 import { businessDate } from '@rental/core/scheduling'
 import { InspectionItemForm } from '@/components/inspections/inspection-item-form.tsx'
+import { InspectionFinishForm } from '@/components/portal/inspection-finish-form.tsx'
 import { InspectionSignForm } from '@/components/portal/inspection-sign-form.tsx'
 import { requireTenantWithScope } from '@/lib/portal/guard.ts'
-import { signInspectionAsTenant } from '@/lib/portal/inspection-actions.ts'
+import {
+  finishInspectionAsTenant,
+  recordItemAsTenant,
+  recordItemPhotoAsTenant,
+  signInspectionAsTenant,
+} from '@/lib/portal/inspection-actions.ts'
 import { getTenantInspection } from '@/lib/portal/inspection-queries.ts'
 
 export const metadata = { title: 'Your inspection report' }
@@ -24,6 +30,12 @@ export default async function TenantInspectionPage({
 
   const inspection = await getTenantInspection(id, scope)
   if (!inspection) notFound()
+
+  // INSP-05 (R-074): a self-guided MOVE_IN report the tenant hasn't walked
+  // yet is editable; every other state on this page (a staff-performed
+  // report awaiting signature, or anything already locked) stays read-only,
+  // exactly as before this item.
+  const selfGuidedWalk = inspection.selfGuided && !inspection.performedAt && !inspection.lockedAt
 
   return (
     <div className="flex flex-col gap-6">
@@ -49,6 +61,11 @@ export default async function TenantInspectionPage({
             This report finalized on {businessDate(inspection.lockedAt, inspection.property.timezone)}{' '}
             without a signature on file - contact us if anything about it looks wrong.
           </p>
+        ) : selfGuidedWalk ? (
+          <p>
+            Walk through your new home room by room and record what you find, with a photo where it
+            helps. Once every room is recorded, finish the walk and sign at the bottom.
+          </p>
         ) : (
           <p>Review each room below, then sign at the bottom.</p>
         )}
@@ -58,6 +75,8 @@ export default async function TenantInspectionPage({
         {inspection.items.map((item) => (
           <InspectionItemForm
             key={item.id}
+            action={selfGuidedWalk ? recordItemAsTenant.bind(null, item.id) : undefined}
+            photoAction={selfGuidedWalk ? recordItemPhotoAsTenant.bind(null, item.id) : undefined}
             itemId={item.id}
             room={item.room}
             item={item.item}
@@ -69,12 +88,14 @@ export default async function TenantInspectionPage({
               capturedAt: null,
               geotagged: false,
             }))}
-            editable={false}
+            editable={selfGuidedWalk}
           />
         ))}
       </ul>
 
-      {!inspection.tenantSignedAt && !inspection.lockedAt && (
+      {selfGuidedWalk && <InspectionFinishForm action={finishInspectionAsTenant.bind(null, inspection.id)} />}
+
+      {!selfGuidedWalk && !inspection.tenantSignedAt && !inspection.lockedAt && (
         <InspectionSignForm action={signInspectionAsTenant.bind(null, inspection.id)} />
       )}
     </div>
