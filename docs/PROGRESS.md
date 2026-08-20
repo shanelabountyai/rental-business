@@ -3071,3 +3071,22 @@ Full reasoning in `07-decisions.md`.
 - **No stage is auto-inferred for a punch-list finding.** A move-out inspection's DAMAGED countertop drafts as an unstaged work order; a PM triages it into REPAIRS/PAINT/etc. by hand rather than the product guessing from the item name.
 - **No completion gate on "mark rent-ready."** A PM can mark the turn done with punch-list items still open - deliberate (a low-priority line item should not hold a rentable unit hostage), but it means the panel's "done" state is a PM's judgment call, not a database-enforced one.
 - **No UI surfaces the portfolio-wide turnover list** - only the single most recent turn per unit, from that unit's own page. A "turns in progress across the portfolio" view (closer to R-081's territory) is real follow-on, not built here.
+
+---
+
+## R-073 — Periodic inspections
+**Commit:** _pending_  ·  **Date:** 2026-08-20
+
+**What it built.** INSP-04's auto-scheduled half, over machinery R-068 already shipped rather than a new one - `PERIODIC`/`SEASONAL`/`DRIVE_BY` have existed in `InspectionType` since the engine's own migration, and a PM could already start one by hand from `/inspections/new`. What was missing was a calendar: a new `InspectionTemplate.defaultForType` column (nullable, unique per type) lets a PM designate one checklist as the default for each of the three types, from a small addition to the existing checklist editor. A new daily job, `periodic-scheduling-job.ts`, mirrors `pre-move-out-scheduling-job.ts`'s own PULL shape exactly: for each type with a default checklist assigned, it finds every unit with no open (unperformed) inspection of that type, computes whether the interval since the last one has passed, and if so creates the `Inspection` row (items copied from the default template, same as the manual path) plus a `Task` for staff. A unit never inspected before under this clock is due immediately, not a year from whenever its row happened to be created. The due-date math (`nextPeriodicDueDate()`, `packages/core/inspections/periodic.ts`) is the one piece of real logic - `lastPerformed` plus a fixed interval (12/6/3 months for PERIODIC/SEASONAL/DRIVE_BY), clamped to the target month's actual last day so a Feb-29 anchor doesn't roll into March - and has its own unit tests, alongside a full job test mirroring `pre-move-out-scheduling-job.test.ts`'s own fixtures.
+
+**What it decided.** Recorded as **D-63**:
+- **The scheduling job reads a real `defaultForType` column, never guesses a template by name or invents a new config table.** Same "nothing on file, so nothing happens" posture D-60 already established for an unreviewed jurisdiction fact, reused here for an undesignated checklist.
+- **The cadence (12/6/3 months) is a bare literal, marked `ponytail:` in the source, not JurisdictionRule or Property config.** Nothing in the PRD makes inspection frequency statutory the way entry-notice hours are - inventing config nobody asked to vary would be the same trap D-59/D-60 both name for other numbers.
+- **A never-inspected unit is due now, not anchored to `Unit.createdAt`.** The system has no real evidence a unit was ever periodically walked before this feature shipped; treating it as already-overdue is the honest default.
+
+Full reasoning in `07-decisions.md`.
+
+**What it left behind.**
+- **No entry-notice compliance wired into PERIODIC scheduling**, despite `packages/core/entry/notice.ts` (R-027) existing exactly for a non-emergency entry into an occupied unit. This is a known gap, not a new one - `PRE_MOVE_OUT` (R-070, also an interior walk of an occupied unit) doesn't serve one either, and this item follows that existing precedent rather than fixing it for one type in isolation. A future item should wire `entryDecision()`/`entryNoticeText()` into whichever inspection-scheduling path serves the interior first, covering both types at once.
+- **No "periodic inspections due" filtered view.** The existing `/inspections` list already shows every inspection including auto-scheduled ones; a dedicated "what's coming due" filter is small, real follow-on, not built here.
+- **The cadence is portfolio-wide, not per-property or per-unit.** An owner who wants a different interval for one property (e.g. a Section-8 unit with its own recertification cadence, R-073's own downstream R-088) has no lever yet beyond the shared literal - promote `PERIODIC_INTERVAL_MONTHS` to config if that turns out to matter.

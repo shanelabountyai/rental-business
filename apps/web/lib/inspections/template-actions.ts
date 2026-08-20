@@ -1,11 +1,12 @@
 'use server'
 
-import { validateInspectionTemplate } from '@rental/core/inspections'
+import { isPeriodicType, validateInspectionTemplate } from '@rental/core/inspections'
 import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { audit } from '@/lib/audit/index.ts'
 import { requirePermission } from '@/lib/auth/guard.ts'
+import { isUniqueViolation } from '@/lib/db/unique-violation.ts'
 
 // Writing inspection checklist templates (INSP-01, R-068) - the same
 // PORTFOLIO-WIDE, no-resource `inspection.write` check
@@ -45,10 +46,14 @@ export async function saveInspectionTemplate(
 ): Promise<InspectionTemplateFormState> {
   const actor = await requirePermission('inspection.write')
 
+  const defaultForTypeRaw = str(formData, 'defaultForType')
   const input = {
     name: str(formData, 'name'),
     items: readChecklistItems(formData),
   }
+  // Empty option means "not the default for anything" - the ordinary case
+  // for most checklists, which exist to be picked by hand.
+  const defaultForType = isPeriodicType(defaultForTypeRaw) ? defaultForTypeRaw : null
 
   const violations = validateInspectionTemplate(input)
   if (violations.length > 0) {
@@ -59,33 +64,49 @@ export async function saveInspectionTemplate(
   }
 
   const existing = templateId
-    ? await prisma.inspectionTemplate.findUnique({ where: { id: templateId }, select: { name: true, items: true } })
+    ? await prisma.inspectionTemplate.findUnique({
+        where: { id: templateId },
+        select: { name: true, items: true, defaultForType: true },
+      })
     : null
   if (templateId && !existing) return { error: 'That checklist no longer exists.' }
 
   let savedId = templateId
-  await prisma.$transaction(async (tx) => {
-    const saved = templateId
-      ? await tx.inspectionTemplate.update({
-          where: { id: templateId },
-          data: { name: input.name, items: input.items, updatedByStaffId: actor.id },
-        })
-      : await tx.inspectionTemplate.create({
-          data: { name: input.name, items: input.items, createdByStaffId: actor.id },
-        })
-    savedId = saved.id
+  try {
+    await prisma.$transaction(async (tx) => {
+      const saved = templateId
+        ? await tx.inspectionTemplate.update({
+            where: { id: templateId },
+            data: { name: input.name, items: input.items, defaultForType, updatedByStaffId: actor.id },
+          })
+        : await tx.inspectionTemplate.create({
+            data: { name: input.name, items: input.items, defaultForType, createdByStaffId: actor.id },
+          })
+      savedId = saved.id
 
-    await audit(
-      {
-        action: 'template.saved',
-        entityType: 'InspectionTemplate',
-        entityId: saved.id,
-        before: existing ?? undefined,
-        after: input,
-      },
-      tx,
-    )
-  })
+      await audit(
+        {
+          action: 'template.saved',
+          entityType: 'InspectionTemplate',
+          entityId: saved.id,
+          before: existing ?? undefined,
+          after: { ...input, defaultForType },
+        },
+        tx,
+      )
+    })
+  } catch (error) {
+    // The unique index (InspectionTemplate.defaultForType) refuses a second
+    // checklist claiming the same auto-scheduled type - the honest error is
+    // "pick another checklist's default first", not a generic save failure.
+    if (isUniqueViolation(error)) {
+      return {
+        error: 'Another checklist is already the default for that type. Change its default first.',
+        fieldErrors: { defaultForType: 'Already in use.' },
+      }
+    }
+    throw error
+  }
 
   revalidatePath('/inspections/templates')
   if (!templateId) redirect(`/inspections/templates/${savedId}`)

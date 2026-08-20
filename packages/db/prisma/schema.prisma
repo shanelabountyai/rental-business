@@ -3583,6 +3583,12 @@ model InspectionTemplate {
   /// template stops being offered for a NEW inspection. Same reasoning
   /// DocumentTemplate.active's own comment gives.
   active           Boolean  @default(true)
+  /// Which auto-scheduled periodic type (INSP-04, R-073) this checklist is
+  /// used for, when it is one - PERIODIC/SEASONAL/DRIVE_BY only; MOVE_IN/
+  /// MOVE_OUT/PRE_MOVE_OUT are lease-event-driven and never read this. At
+  /// most one active template per type: the scheduling job looks this up
+  /// directly rather than guessing by name.
+  defaultForType   InspectionType? @unique
   createdByStaffId String
   updatedByStaffId String?
   createdAt        DateTime @default(now())

@@ -2,8 +2,15 @@
 
 import { useActionState } from 'react'
 import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
-import { TextField } from '@/components/form/field.tsx'
+import { SelectField, TextField } from '@/components/form/field.tsx'
 import type { InspectionTemplateFormState } from '@/lib/inspections/template-actions.ts'
+
+const DEFAULT_FOR_TYPE_OPTIONS = [
+  { value: '', label: "Not a default - pick it by hand each time" },
+  { value: 'PERIODIC', label: 'Default for Periodic (annual interior)' },
+  { value: 'SEASONAL', label: 'Default for Seasonal (exterior)' },
+  { value: 'DRIVE_BY', label: 'Default for Drive-by' },
+]
 
 type Action = (
   state: InspectionTemplateFormState,
@@ -23,10 +30,12 @@ export function InspectionTemplateForm({
   action,
   defaultName = '',
   defaultItems = [],
+  defaultForType = '',
 }: {
   action: Action
   defaultName?: string
   defaultItems?: readonly { room: string; item: string }[]
+  defaultForType?: string
 }) {
   const [state, formAction] = useActionState<InspectionTemplateFormState, FormData>(action, {})
   const errors = state.fieldErrors ?? {}
@@ -38,6 +47,14 @@ export function InspectionTemplateForm({
     <form action={formAction} className="flex flex-col gap-5">
       <FormAlerts state={state} />
       <TextField label="Name" name="name" required idPrefix="checklist" defaultValue={defaultName} error={errors.name} />
+      <SelectField
+        label="Auto-scheduling"
+        name="defaultForType"
+        idPrefix="checklist"
+        defaultValue={defaultForType}
+        error={errors.defaultForType}
+        options={DEFAULT_FOR_TYPE_OPTIONS}
+      />
 
       <div className="flex flex-col gap-4">
         <p className="text-sm font-medium">Checklist</p>

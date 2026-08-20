@@ -39,6 +39,7 @@ export default async function InspectionTemplatePage({
         action={saveInspectionTemplate.bind(null, template.id)}
         defaultName={template.name}
         defaultItems={template.items as unknown as { room: string; item: string }[]}
+        defaultForType={template.defaultForType ?? ''}
       />
 
       <RetireInspectionTemplateForm
