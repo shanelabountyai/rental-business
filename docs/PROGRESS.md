@@ -3075,7 +3075,7 @@ Full reasoning in `07-decisions.md`.
 ---
 
 ## R-073 — Periodic inspections
-**Commit:** _pending_  ·  **Date:** 2026-08-20
+**Commit:** `1c6a3e1`  ·  **Date:** 2026-08-20
 
 **What it built.** INSP-04's auto-scheduled half, over machinery R-068 already shipped rather than a new one - `PERIODIC`/`SEASONAL`/`DRIVE_BY` have existed in `InspectionType` since the engine's own migration, and a PM could already start one by hand from `/inspections/new`. What was missing was a calendar: a new `InspectionTemplate.defaultForType` column (nullable, unique per type) lets a PM designate one checklist as the default for each of the three types, from a small addition to the existing checklist editor. A new daily job, `periodic-scheduling-job.ts`, mirrors `pre-move-out-scheduling-job.ts`'s own PULL shape exactly: for each type with a default checklist assigned, it finds every unit with no open (unperformed) inspection of that type, computes whether the interval since the last one has passed, and if so creates the `Inspection` row (items copied from the default template, same as the manual path) plus a `Task` for staff. A unit never inspected before under this clock is due immediately, not a year from whenever its row happened to be created. The due-date math (`nextPeriodicDueDate()`, `packages/core/inspections/periodic.ts`) is the one piece of real logic - `lastPerformed` plus a fixed interval (12/6/3 months for PERIODIC/SEASONAL/DRIVE_BY), clamped to the target month's actual last day so a Feb-29 anchor doesn't roll into March - and has its own unit tests, alongside a full job test mirroring `pre-move-out-scheduling-job.test.ts`'s own fixtures.
 
