@@ -77,6 +77,10 @@ export const KNOWN_NOTICE_TYPES = [
   /// is ending their own tenancy and generates no outbound Notice at all
   /// (see recordLeaseNotice's own comment).
   'NON_RENEWAL',
+  /// R-071 (INSP-03): the itemized deposit accounting sent after move-out.
+  /// Reuses this exact generate/serve machinery unmodified - the only new
+  /// thing R-071 builds is what decides the letter's own body text.
+  'DEPOSIT_DISPOSITION',
 ] as const
 
 export const NOTICE_TYPE_LABELS: Record<string, string> = {
@@ -88,6 +92,7 @@ export const NOTICE_TYPE_LABELS: Record<string, string> = {
   REPAIR_CHARGE: 'Repair charge',
   ADVERSE_ACTION: 'Adverse action (FCRA)',
   NON_RENEWAL: 'Non-renewal',
+  DEPOSIT_DISPOSITION: 'Deposit disposition',
 }
 
 export function noticeTypeLabel(type: string): string {

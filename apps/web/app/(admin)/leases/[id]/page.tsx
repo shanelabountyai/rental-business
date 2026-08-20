@@ -292,6 +292,13 @@ export default async function LeaseDetailPage({
               ))}
             </ul>
           )}
+          {lease.deposits.length > 0 && (
+            <p className="mt-1 text-sm">
+              <Link href={`/leases/${lease.id}/deposit`} className="underline underline-offset-2">
+                Deposit disposition
+              </Link>
+            </p>
+          )}
         </dd>
         {Object.keys(utilities).length > 0 && (
           <>

@@ -486,7 +486,7 @@ model Property {
   createdAt          DateTime     @default(now())
   updatedAt          DateTime     @updatedAt
 
-  legalEntity       LegalEntity       @relation(fields: [legalEntityId], references: [id])
+  legalEntity       LegalEntity        @relation(fields: [legalEntityId], references: [id])
   units             Unit[]
   leases            Lease[]
   leasePayers       LeasePayer[]
@@ -494,6 +494,7 @@ model Property {
   payments          Payment[]
   ledgerEntries     LedgerEntry[]
   deposits          Deposit[]
+  depositDeductions DepositDeduction[]
   recurringCharges  RecurringCharge[]
   utilityBills      UtilityBill[]
   tickets           Ticket[]
@@ -1307,6 +1308,7 @@ model StaffUser {
   documentTemplatesUpdated                DocumentTemplate[]           @relation("DocumentTemplateUpdatedBy")
   inspectionTemplatesCreated              InspectionTemplate[]         @relation("InspectionTemplateCreatedBy")
   inspectionTemplatesUpdated              InspectionTemplate[]         @relation("InspectionTemplateUpdatedBy")
+  depositDeductionsCreated                DepositDeduction[]           @relation("DepositDeductionCreatedBy")
   translationsApproved                    MessageTemplateTranslation[] @relation("TranslationApprovedBy")
   paymentHoldsSet                         LeasePayer[]                 @relation("PaymentHoldSetBy")
   listingsCreated                         Listing[]                    @relation("ListingCreatedBy")
@@ -1410,22 +1412,22 @@ model Vendor {
 }
 
 model Lease {
-  id                    String             @id @default(cuid())
-  propertyId            String
-  unitId                String
-  status                LeaseStatus        @default(DRAFT)
-  startsOn              DateTime           @db.Date
-  endsOn                DateTime?          @db.Date
-  rentCents             Int
+  id                      String             @id @default(cuid())
+  propertyId              String
+  unitId                  String
+  status                  LeaseStatus        @default(DRAFT)
+  startsOn                DateTime           @db.Date
+  endsOn                  DateTime?          @db.Date
+  rentCents               Int
   /// Day of month rent is due, property-local. The Stripe subscription anchor
   /// is computed from this in local time, then expressed to Stripe (D-11).
-  rentDueDay            Int                @default(1)
+  rentDueDay              Int                @default(1)
   /// How a PART month is prorated (R-042, PAY-08). A term of the contract,
   /// so it lives on the contract: leases genuinely disagree, and the two
   /// methods differ by real money - a 9-day February move-in on $1,500 is
   /// $482.14 on actual days and $450.00 on a flat 30-day month.
-  prorationMethod       ProrationMethod    @default(ACTUAL)
-  depositCents          Int                @default(0)
+  prorationMethod         ProrationMethod    @default(ACTUAL)
+  depositCents            Int                @default(0)
   /// HOW the deposit is held, which `depositCents` alone cannot say (R-041).
   ///
   /// CASH is a liability - the tenant's money, held on trust, returnable
@@ -1436,7 +1438,7 @@ model Lease {
   /// A database CHECK enforces that anything other than CASH holds zero: the
   /// contradiction is what sends somebody hunting at move-out for money that
   /// was never collected.
-  depositArrangement    DepositArrangement @default(CASH)
+  depositArrangement      DepositArrangement @default(CASH)
   /// What THIS LEASE provides for if a payment is returned (R-039a, PAY-02).
   ///
   /// Null means the lease is silent, which means no fee - not zero, and
@@ -1446,42 +1448,42 @@ model Lease {
   /// The statutory ceiling is NOT here: `JurisdictionRule.nsfFeePermitted`
   /// and `nsfFeeMaxCents` clamp this (D-4), so a state that forbids or caps
   /// the fee overrides the lease without anybody editing a lease.
-  nsfFeeCents           Int?
+  nsfFeeCents             Int?
   /// An owner policy that overrides the collection method (R-039a, D-29).
   /// `send_invoice` allows partial payments; this refuses them anyway, which
   /// is what an owner wants for a tenant whose payment plan has already
   /// failed once. On the lease because it is a decision about a tenancy.
-  requireFullBalance    Boolean            @default(false)
-  isMonthToMonth        Boolean            @default(false)
+  requireFullBalance      Boolean            @default(false)
+  isMonthToMonth          Boolean            @default(false)
   /// Rate applied on MTM rollover (LEASE-09). Null = keep the current rent.
-  mtmRentCents          Int?
+  mtmRentCents            Int?
   /// Who pays which utility. Shape is a lease-template concern (R-063), not
   /// something to normalize before there is a template to normalize against.
-  utilityResponsibility Json?
-  moveInAt              DateTime?
-  moveOutAt             DateTime?
+  utilityResponsibility   Json?
+  moveInAt                DateTime?
+  moveOutAt               DateTime?
   /// Notice to end the tenancy has been given - by either side. A FACT
   /// about an active lease, not a status of it; see LeaseStatus's own
   /// comment for why.
-  noticeGivenAt         DateTime?
+  noticeGivenAt           DateTime?
   /// Who gave it. A tenant giving notice and a landlord giving notice have
   /// completely different downstream consequences (LEASE-09's renewal
   /// flags, R-062's notice periods), and a bare timestamp cannot tell them
   /// apart.
-  noticeGivenBy         NoticeParty?
+  noticeGivenBy           NoticeParty?
   /// When the tenancy actually ends, per the notice recorded above (R-066).
   /// Distinct from `endsOn` - a fixed term's own contractual end date -
   /// because notice can end an MTM tenancy or cut a fixed term short, and
   /// because this is what the notice-period check (JurisdictionRule.
   /// noticeToVacateDays) is measured against, not a date recomputed later.
-  noticeEffectiveOn     DateTime?             @db.Date
+  noticeEffectiveOn       DateTime?          @db.Date
   /// Where to send the tenant's deposit disposition once they are gone
   /// (R-066, feeding R-071). Collected at notice time because a tenant who
   /// has already moved by the disposition deadline is not reliably
   /// reachable at the property any more - never set for a LANDLORD-given
   /// non-renewal, since the tenant has not necessarily decided yet.
   noticeForwardingAddress String?
-  terminationReason     String?
+  terminationReason       String?
 
   /// R-033. Where this tenancy came from - see LeaseOrigin.
   origin                LeaseOrigin           @default(APPLICATION)
@@ -1523,30 +1525,30 @@ model Lease {
   /// pretending otherwise.
   renewedFromLeaseId String?
   renewedFrom        Lease?  @relation("LeaseRenewal", fields: [renewedFromLeaseId], references: [id], onDelete: Restrict)
-  renewalLeases       Lease[] @relation("LeaseRenewal")
+  renewalLeases      Lease[] @relation("LeaseRenewal")
 
-  property         Property          @relation(fields: [propertyId], references: [id])
-  unit             Unit              @relation(fields: [unitId], references: [id])
-  leaseTenants     LeaseTenant[]
-  guarantors       Guarantor[]
+  property                Property                @relation(fields: [propertyId], references: [id])
+  unit                    Unit                    @relation(fields: [unitId], references: [id])
+  leaseTenants            LeaseTenant[]
+  guarantors              Guarantor[]
   /// Almost always zero or one - see LeaseEnvelope.leaseId's own comment for
   /// why this is not a to-one relation.
-  envelopes        LeaseEnvelope[]
-  leasePayers      LeasePayer[]
-  charges          Charge[]          @relation("ChargeLease")
+  envelopes               LeaseEnvelope[]
+  leasePayers             LeasePayer[]
+  charges                 Charge[]                @relation("ChargeLease")
   /// Late fees assessed against this lease's own unlinked-rent balance,
   /// rather than against a specific Charge (R-050b). See `Charge.assessedOnLeaseId`.
-  assessedLateFees Charge[]          @relation("ChargeAssessedOnLease")
-  payments         Payment[]
-  ledgerEntries    LedgerEntry[]
-  deposits         Deposit[]
+  assessedLateFees        Charge[]                @relation("ChargeAssessedOnLease")
+  payments                Payment[]
+  ledgerEntries           LedgerEntry[]
+  deposits                Deposit[]
   renterInsurancePolicies RenterInsurancePolicy[]
-  recurringCharges RecurringCharge[]
-  tickets          Ticket[]
-  inspections      Inspection[]
-  threads          Thread[]
-  notices          Notice[]
-  documents        Document[]
+  recurringCharges        RecurringCharge[]
+  tickets                 Ticket[]
+  inspections             Inspection[]
+  threads                 Thread[]
+  notices                 Notice[]
+  documents               Document[]
 
   @@index([propertyId])
   @@index([unitId])
@@ -2603,19 +2605,75 @@ model Deposit {
   interestAccruedCents Int         @default(0)
   /// Property-local statutory deadline, frozen at move-out (D-12).
   dispositionDueOn     DateTime?   @db.Date
+  /// Stamped when the disposition is finalized (R-071) - the itemized
+  /// letter's own arithmetic is locked at this instant, and every
+  /// `DepositDeduction` under it stops accepting edits. Distinct from
+  /// `NoticeDelivery.servedAt` (a real mailing/posting event, still tracked
+  /// separately on `notice.deliveries` the ordinary way, R-051) - this is
+  /// "the disposition was decided and dispatched to become a letter," not
+  /// "the letter reached the tenant's mailbox".
   dispositionSentAt    DateTime?
   forwardingAddress    String?
   appliedCents         Int         @default(0)
   refundedCents        Int         @default(0)
+  /// The generated disposition letter (R-071) - a real `Notice` (type
+  /// DEPOSIT_DISPOSITION), reusing R-051's existing generate/serve
+  /// machinery unmodified rather than a second document pipeline.
+  noticeId             String?     @unique
   createdAt            DateTime    @default(now())
   updatedAt            DateTime    @updatedAt
 
-  property Property @relation(fields: [propertyId], references: [id])
-  lease    Lease    @relation(fields: [leaseId], references: [id])
+  property   Property           @relation(fields: [propertyId], references: [id])
+  lease      Lease              @relation(fields: [leaseId], references: [id])
+  notice     Notice?            @relation(fields: [noticeId], references: [id])
+  deductions DepositDeduction[]
 
   @@index([leaseId])
   @@index([propertyId])
   @@index([dispositionDueOn])
+}
+
+/// One itemized deduction against a held deposit (INSP-03, R-071). Editable
+/// until the disposition is finalized (`Deposit.dispositionSentAt` set) -
+/// gated in the action layer, the same posture `InspectionItem.condition`
+/// takes against `Inspection.lockedAt` rather than a database trigger, since
+/// this is a draft staff builds up before committing to a letter, not
+/// append-only evidence from the moment it exists.
+///
+/// "Unsupported" (INSP-03's own wording) is DERIVED, never stored: true
+/// when neither `workOrderId`, `inspectionItemId`, nor an attached
+/// `Document` exists - see `isUnsupportedDeduction()`.
+model DepositDeduction {
+  id                String   @id @default(cuid())
+  propertyId        String
+  depositId         String
+  description       String
+  amountCents       Int
+  /// The repair this deduction is for, when its real cost IS the deduction
+  /// - `jobCostCents()` already computes the defensible number from the
+  /// work order's own actuals/invoice, the same figure a chargeback ceiling
+  /// reads (D-42).
+  workOrderId       String?
+  /// The move-out condition photo this deduction is evidence for.
+  inspectionItemId  String?
+  /// Staff's own estimate, feeding `depreciationGuidance()` - not a
+  /// system-tracked install date, since none exists for most fixtures
+  /// (`Appliance.installedOn` covers only appliances specifically, not
+  /// flooring or paint).
+  estimatedAgeYears Int?
+  usefulLifeYears   Int?
+  createdByStaffId  String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  property       Property        @relation(fields: [propertyId], references: [id])
+  deposit        Deposit         @relation(fields: [depositId], references: [id])
+  workOrder      WorkOrder?      @relation(fields: [workOrderId], references: [id])
+  inspectionItem InspectionItem? @relation(fields: [inspectionItemId], references: [id])
+  createdBy      StaffUser?      @relation("DepositDeductionCreatedBy", fields: [createdByStaffId], references: [id])
+  evidence       Document[]
+
+  @@index([depositId])
 }
 
 // ---------------------------------------------------------------------------
@@ -2775,6 +2833,7 @@ model WorkOrder {
   messageLinks            WorkOrderMessageLink[]
   /// At most one, by partial unique index - see `Charge.workOrderId`.
   chargebacks             Charge[]
+  depositDeductions       DepositDeduction[]
 
   @@index([propertyId, status])
   @@index([unitId])
@@ -3374,6 +3433,7 @@ model Notice {
   entryForShowings   Showing[]         @relation("ShowingEntryNotice")
   deliveries         NoticeDelivery[]
   adverseActionFor   ScreeningReport?
+  depositDisposition Deposit?
 
   @@index([leaseId])
   @@index([applicantId])
@@ -3453,17 +3513,17 @@ model InspectionTemplate {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
-  createdBy    StaffUser    @relation("InspectionTemplateCreatedBy", fields: [createdByStaffId], references: [id])
+  createdBy   StaffUser    @relation("InspectionTemplateCreatedBy", fields: [createdByStaffId], references: [id])
   /// Restrict, not the SetNull Prisma defaults to for an optional relation -
   /// same reasoning DocumentTemplate.updatedBy already gives.
-  updatedBy    StaffUser?   @relation("InspectionTemplateUpdatedBy", fields: [updatedByStaffId], references: [id], onDelete: Restrict)
-  inspections  Inspection[]
+  updatedBy   StaffUser?   @relation("InspectionTemplateUpdatedBy", fields: [updatedByStaffId], references: [id], onDelete: Restrict)
+  inspections Inspection[]
 
   @@index([active])
 }
 
 model Inspection {
-  id                 String              @id @default(cuid())
+  id                 String         @id @default(cuid())
   propertyId         String
   unitId             String
   leaseId            String?
@@ -3481,14 +3541,14 @@ model Inspection {
   /// after the damage is found.
   lockedAt           DateTime?
   notes              String?
-  createdAt          DateTime            @default(now())
-  updatedAt          DateTime            @updatedAt
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
 
-  property    Property             @relation(fields: [propertyId], references: [id])
-  unit        Unit                 @relation(fields: [unitId], references: [id])
-  lease       Lease?               @relation(fields: [leaseId], references: [id])
-  template    InspectionTemplate?  @relation(fields: [templateId], references: [id])
-  performedBy StaffUser?           @relation("InspectionPerformedBy", fields: [performedByStaffId], references: [id])
+  property    Property            @relation(fields: [propertyId], references: [id])
+  unit        Unit                @relation(fields: [unitId], references: [id])
+  lease       Lease?              @relation(fields: [leaseId], references: [id])
+  template    InspectionTemplate? @relation(fields: [templateId], references: [id])
+  performedBy StaffUser?          @relation("InspectionPerformedBy", fields: [performedByStaffId], references: [id])
   items       InspectionItem[]
 
   @@index([propertyId, type])
@@ -3519,10 +3579,11 @@ model InspectionItem {
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
 
-  inspection  Inspection      @relation(fields: [inspectionId], references: [id])
-  moveInItem  InspectionItem? @relation("MoveInToMoveOut", fields: [moveInItemId], references: [id])
-  moveOutItem InspectionItem? @relation("MoveInToMoveOut")
-  photos      Document[]
+  inspection        Inspection         @relation(fields: [inspectionId], references: [id])
+  moveInItem        InspectionItem?    @relation("MoveInToMoveOut", fields: [moveInItemId], references: [id])
+  moveOutItem       InspectionItem?    @relation("MoveInToMoveOut")
+  photos            Document[]
+  depositDeductions DepositDeduction[]
 
   @@index([inspectionId])
 }
@@ -3591,67 +3652,72 @@ model DocumentTemplate {
 }
 
 model Document {
-  id                String    @id @default(cuid())
-  propertyId        String?
-  unitId            String?
-  leaseId           String?
-  tenantId          String?
-  vendorId          String?
-  ticketId          String?
-  workOrderId       String?
+  id                 String    @id @default(cuid())
+  propertyId         String?
+  unitId             String?
+  leaseId            String?
+  tenantId           String?
+  vendorId           String?
+  ticketId           String?
+  workOrderId        String?
   /// R-059: an ID scan or income document attached to one household
   /// member's application, not to the household or the listing - screening
   /// (R-060) reads a specific person's documents, never "the household's".
-  applicantId       String?
+  applicantId        String?
   /// R-068 phase 2: a condition photo belongs to the checklist ROW it is
   /// evidence for ("every photo on this item"), not the inspection as a
   /// whole - the real query path INSP-01's own "per-item... photos" asks
   /// for, the same directness `workOrderId` already gives a completion
   /// photo over going through its parent Ticket.
-  inspectionItemId  String?
+  inspectionItemId   String?
+  /// R-071: the itemized deduction this invoice/photo backs up - the same
+  /// directness `inspectionItemId` gives a condition photo over going
+  /// through the parent Inspection.
+  depositDeductionId String?
   /// Document class - lease, notice, invoice, w9, coi, inspection_photo, etc.
   /// Drives the retention rules R-012 configures (DOC-05).
-  type              String
-  fileName          String
-  contentType       String
-  sizeBytes         Int
+  type               String
+  fileName           String
+  contentType        String
+  sizeBytes          Int
   /// Object-store key. Files never live in Postgres.
-  storageKey        String
-  sha256            String?
-  version           Int       @default(1)
+  storageKey         String
+  sha256             String?
+  version            Int       @default(1)
   /// Original capture time from EXIF, preserved. Distinct from createdAt,
   /// which is only when it was uploaded.
-  capturedAt        DateTime?
+  capturedAt         DateTime?
   /// R-068 phase 2: EXIF GPS, when the camera recorded one. Null is the
   /// ordinary case (most phones can, but plenty of photos carry no GPS tag
   /// at all) - never guessed from the property's own address, which would
   /// misrepresent a photo as geotagged when it was not.
-  latitude          Decimal?  @db.Decimal(9, 6)
-  longitude         Decimal?  @db.Decimal(9, 6)
-  uploadedByStaffId String?
+  latitude           Decimal?  @db.Decimal(9, 6)
+  longitude          Decimal?  @db.Decimal(9, 6)
+  uploadedByStaffId  String?
   /// Soft-delete marker (DOC-05's 30-day undelete). Null means active. Who
   /// deleted it and why lives in AuditLog ('document.delete_marked'), not
   /// here - the same split Property.active relies on for the same reason.
-  deletedAt         DateTime?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  deletedAt          DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
-  property                Property?        @relation(fields: [propertyId], references: [id])
-  unit                    Unit?            @relation(fields: [unitId], references: [id])
-  lease                   Lease?           @relation(fields: [leaseId], references: [id])
-  tenant                  Tenant?          @relation(fields: [tenantId], references: [id])
-  vendor                  Vendor?          @relation(fields: [vendorId], references: [id])
-  ticket                  Ticket?          @relation(fields: [ticketId], references: [id])
-  workOrder               WorkOrder?       @relation(fields: [workOrderId], references: [id])
-  applicant               Applicant?       @relation(fields: [applicantId], references: [id])
-  inspectionItem          InspectionItem?  @relation(fields: [inspectionItemId], references: [id])
-  uploadedBy              StaffUser?       @relation("DocumentUploadedBy", fields: [uploadedByStaffId], references: [id])
-  noticesAsDocument       Notice[]         @relation("NoticeDocument")
-  noticesAsProof          Notice[]         @relation("NoticeProofDocument")
-  noticeDeliveryProofs    NoticeDelivery[] @relation("NoticeDeliveryProof")
-  utilityBills            UtilityBill[]    @relation("UtilityBillDocument")
-  leaseEnvelopeAsDraft    LeaseEnvelope?   @relation("LeaseEnvelopeDraftDocument")
-  leaseEnvelopeAsExecuted LeaseEnvelope?   @relation("LeaseEnvelopeExecutedDocument")
+  property                Property?              @relation(fields: [propertyId], references: [id])
+  unit                    Unit?                  @relation(fields: [unitId], references: [id])
+  lease                   Lease?                 @relation(fields: [leaseId], references: [id])
+  tenant                  Tenant?                @relation(fields: [tenantId], references: [id])
+  vendor                  Vendor?                @relation(fields: [vendorId], references: [id])
+  ticket                  Ticket?                @relation(fields: [ticketId], references: [id])
+  workOrder               WorkOrder?             @relation(fields: [workOrderId], references: [id])
+  applicant               Applicant?             @relation(fields: [applicantId], references: [id])
+  inspectionItem          InspectionItem?        @relation(fields: [inspectionItemId], references: [id])
+  depositDeduction        DepositDeduction?      @relation(fields: [depositDeductionId], references: [id])
+  uploadedBy              StaffUser?             @relation("DocumentUploadedBy", fields: [uploadedByStaffId], references: [id])
+  noticesAsDocument       Notice[]               @relation("NoticeDocument")
+  noticesAsProof          Notice[]               @relation("NoticeProofDocument")
+  noticeDeliveryProofs    NoticeDelivery[]       @relation("NoticeDeliveryProof")
+  utilityBills            UtilityBill[]          @relation("UtilityBillDocument")
+  leaseEnvelopeAsDraft    LeaseEnvelope?         @relation("LeaseEnvelopeDraftDocument")
+  leaseEnvelopeAsExecuted LeaseEnvelope?         @relation("LeaseEnvelopeExecutedDocument")
   renterInsurancePolicy   RenterInsurancePolicy?
 
   @@index([propertyId, type])
@@ -3758,10 +3824,10 @@ model JurisdictionRule {
   preMoveOutWalkthroughDaysBefore Int?
 
   // Entry and notices (MAINT-05, PAY-14, LEASE-09).
-  entryNoticeHours       Int?
-  payOrQuitDays          Int?
-  noticeToVacateDays     Int?
-  rentIncreaseNoticeDays Int?
+  entryNoticeHours          Int?
+  payOrQuitDays             Int?
+  noticeToVacateDays        Int?
+  rentIncreaseNoticeDays    Int?
   /// LEASE-09 (R-065, D-4). A statutory ceiling on how much rent may rise at
   /// renewal, in basis points of the current rent (5% is 500) - the same
   /// bps convention `lateFeeMaxPercentBps`/`depositMaxBps` already use, not
@@ -3771,13 +3837,13 @@ model JurisdictionRule {
   /// do, and inventing a number for an unconfigured jurisdiction would be
   /// enforcing a rule that does not exist (D-4's own rule, restated).
   rentIncreaseCapPercentBps Int?
-  justCauseRequired      Boolean @default(false)
+  justCauseRequired         Boolean @default(false)
   /// RISK-06 (R-055, D-4). How long after a tenant complaint a rent
   /// increase, non-renewal or notice carries a rebuttable presumption of
   /// retaliation - commonly ~180 days (six months), never a constant in
   /// code. Null means not configured, not "no window applies" - see
   /// packages/core/leases/retaliation.ts for how a null window is read.
-  retaliationWindowDays  Int?
+  retaliationWindowDays     Int?
   /// WHICH SERVICE METHODS THE STATE ALLOWS, PER NOTICE TYPE (R-051, COMM-02).
   ///
   /// `NoticeServiceMethod` lists the mechanics this product can record proof
@@ -3795,7 +3861,7 @@ model JurisdictionRule {
   /// Null, or a type absent from the map, means NO RULE IS CONFIGURED - never
   /// "no method is permitted". Service is still recordable and is flagged as
   /// unverified, the same call R-044's `graceUnknown` makes.
-  noticeServiceMethods   Json?
+  noticeServiceMethods      Json?
 
   // Payments and applications (PAY-03, LEASE-03).
   /// Ordered ChargeType names - "rent before fees" where the state says so.

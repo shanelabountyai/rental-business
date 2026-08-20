@@ -3013,6 +3013,26 @@ Full reasoning in `07-decisions.md`.
 
 ---
 
+## R-071 — Deposit disposition
+**Commit:** `<pending>`  ·  **Date:** 2026-08-19
+
+**What it built.** The rest of `Deposit` - `dispositionDueOn`, `dispositionSentAt`, `forwardingAddress`, `appliedCents`, `refundedCents` all existed on the schema since R-041, unwritten until now. `startDepositDisposition()` (called best-effort right after `changeLeaseStatus` commits a lease to ENDED/TERMINATED, the same posture `chargeDeposit()`/`syncLease()` already take) freezes the statutory deadline from `Lease.moveOutAt` - the REAL move-out fact, not R-070's merely-planned `noticeEffectiveOn` - and snapshots the tenant's forwarding address. A new daily job (`deposit-disposition-reminder-job.ts`) raises a ROUTINE Task at 50% elapsed and a URGENT one once overdue, each exactly once. A new `DepositDeduction` model lets staff itemize deductions, each optionally linked to a work order, a move-out inspection photo, or an uploaded invoice - "unsupported" (INSP-03's own word) is derived from all three being absent, never stored. `depreciationGuidance()` prorates a claim against staff-supplied age/useful-life estimates, flagging a claim that exceeds it (the "full replacement cost on nine-year-old carpet loses in court" case from the PRD itself). A new page, `/leases/[id]/deposit`, lets a PM build the list, see the running totals (`computeDisposition()` - held, deducted, the lease's own outstanding ledger balance netted in, refund due or a disclosed shortfall) and finalize: locks the deductions, computes final totals, and creates a real `Notice` (a new `DEPOSIT_DISPOSITION` type) with the itemized letter as its body - then hands off directly to R-051's existing `/notices/[id]` page for generating the PDF and recording its service to the forwarding address, unmodified.
+
+**What it decided.** Recorded as **D-61**:
+- **The countdown freezes from `Lease.moveOutAt`, never `noticeEffectiveOn`** - "the recorded move-out date" (INSP-03's own words) is a fact, not a plan, and the two can differ by weeks.
+- **The letter reuses R-051's Notice machinery unmodified** rather than a second document pipeline - `dispositionLetterText()` is a plain string template (the same shape `nonRenewalNoticeText()` already established), and "delivery... logged" needed zero new code beyond one new entry in `KNOWN_NOTICE_TYPES`.
+- **A shortfall beyond the deposit is disclosed in the letter, never auto-charged.** Collecting from a tenant who has already moved out and whose billing has been canceled is a real, separate problem - left as a named gap rather than half-solved here.
+- **`Deposit.appliedCents`/`refundedCents` are written directly, not derived from a movement log.** `depositHeldCents()`'s own R-041 comment gestured at a `DepositMovement` table that the schema was never actually given; `computeDisposition()` writes the two flat integers the schema really has.
+
+Full reasoning in `07-decisions.md`.
+
+**What it left behind.**
+- **No collection path for a shortfall** (deductions plus an outstanding ledger balance exceeding what was held) - disclosed in the letter's own text, nothing more. A future item owning post-move-out collections would need to decide how to actually re-bill someone who has left.
+- **No UI for editing or retracting a finalized disposition.** Once `dispositionSentAt` is set the deduction list locks for good - a mistake found after finalizing has no path back here; it would need a correction on the Notice/ledger side directly, the same way every other locked evidence artifact in this product is corrected (a reversing entry, never an edit).
+- **Depreciation guidance is a flat straight-line proration with staff-supplied inputs**, not a jurisdiction-specific useful-life table - no state publishes one this product could read instead, so age and useful life are estimates a PM types in per deduction, not looked up.
+
+---
+
 ## R-070 — Move-out inspection: side-by-side comparison + auto-scheduled walkthrough
 **Commit:** `6ab55ae`  ·  **Date:** 2026-08-19
 

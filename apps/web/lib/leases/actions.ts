@@ -25,6 +25,7 @@ import { redirect } from 'next/navigation'
 import { audit } from '@/lib/audit/index.ts'
 import { syncLease } from '@/lib/billing/lifecycle.ts'
 import { provisionLeaseBilling } from '@/lib/billing/provision.ts'
+import { startDepositDisposition } from '@/lib/leases/deposit-disposition-start.ts'
 import { authUrl } from '@/lib/auth/delivery.ts'
 import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
 import { rulesFor } from '@/lib/jurisdiction/queries.ts'
@@ -557,6 +558,11 @@ export async function changeLeaseStatus(
     // tenancy ending on the last day of a month still bills that month.
     await syncLease(leaseId).catch((error) => {
       console.error(`[lease] billing sync failed for ${leaseId}`, error)
+    })
+    // The statutory disposition countdown starts from THIS move-out (R-071,
+    // INSP-03) - a no-op for a zero-deposit lease or one already started.
+    await startDepositDisposition(leaseId).catch((error) => {
+      console.error(`[lease] deposit disposition start failed for ${leaseId}`, error)
     })
   }
 

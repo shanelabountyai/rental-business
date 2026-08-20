@@ -205,6 +205,17 @@ export const AUDIT_ACTIONS = [
   /// withdrawal with no stated reason is indistinguishable from a misclick.
   'consent.withdrawn',
 
+  // Deposit disposition (INSP-03, R-071).
+  /// An itemized deduction added or removed against a held deposit -
+  /// forgeable money-affecting entries, the same class `payment.recorded`
+  /// already treats as worth auditing every time, not only on the final
+  /// letter.
+  'deposit.deduction_added',
+  'deposit.deduction_removed',
+  /// The disposition letter's arithmetic is locked and a Notice is created
+  /// for it - the moment `DepositDeduction` rows stop accepting edits.
+  'deposit.disposition_finalized',
+
   // Inspection engine (INSP-01, R-068).
   /// A new inspection was started, from a template or ad hoc - which
   /// template (if any) and the room/item list it copied are on the entry,
