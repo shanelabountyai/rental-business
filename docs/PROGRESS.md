@@ -3113,7 +3113,7 @@ Full reasoning in `07-decisions.md`.
 ---
 
 ## R-075 — Shared `metrics` module in core
-**Commit:** _pending_  ·  **Date:** 2026-08-20
+**Commit:** `ee8514e`  ·  **Date:** 2026-08-20
 
 **What it built.** `packages/core/metrics`, but only for the metrics that had no single tested definition before this item — mapped first, rather than assumed: `occupancyRate` and `daysToFill` (occupancy) had never been computed anywhere at all; `firstResponseHours`/`resolutionByPriority` (time-to-resolve by priority) likewise, distinct from `sla.ts`'s own `firstResponseSlaState`, which classifies the same clock into a state rather than returning the duration; `renewalRate` and `turnCostCents` were correct but inline in two app-layer query functions, now extracted verbatim and imported instead. `getTurnoverForUnit`'s own days-vacant figure turned out to be a genuine bug-shaped simplification along the way: it called `daysOnMarket()` (a different, open-ended metric) with its `unitCreatedAt` fallback forced equal to `lastMoveOutAt` to neutralize a branch that does not apply to a terminal, already-filled vacancy — `daysToFill()` is that number, named and tested on its own rather than borrowed from a function built for a different question. `costPerUnitPerMonth` is a fresh division-only formula, not wired into a screen yet. Three of the ten named metrics — days-vacant (`daysOnMarket`, `@rental/core/units`), delinquency buckets (`bucketFor`/`delinquencyFor`/`agingTotals`, `@rental/core/ledger`), and `daysPastDue` (`@rental/core/money`, already bug-free per R-045) — were left exactly where they already lived, deliberately not relocated.
 
