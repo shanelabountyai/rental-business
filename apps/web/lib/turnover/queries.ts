@@ -1,7 +1,7 @@
 import 'server-only'
 
+import { daysToFill, turnCostCents } from '@rental/core/metrics'
 import { businessDate, utcToBusinessDate } from '@rental/core/scheduling'
-import { daysOnMarket } from '@rental/core/units'
 import { jobCostCents } from '@rental/core/workorders'
 import { prisma } from '@rental/db'
 
@@ -87,9 +87,11 @@ export async function getTurnoverForUnit(
     select: { moveInAt: true },
   })
 
-  const clockEnd = nextLease?.moveInAt
-    ? utcToBusinessDate(nextLease.moveInAt)
-    : businessDate(asOf, timezone)
+  const fill = daysToFill({
+    vacatedOn: moveOutDate,
+    filledOn: nextLease?.moveInAt ? utcToBusinessDate(nextLease.moveInAt) : null,
+    asOf: businessDate(asOf, timezone),
+  })
 
   return {
     id: project.id,
@@ -101,13 +103,9 @@ export async function getTurnoverForUnit(
       : null,
     rentReadyAt: project.rentReadyAt,
     moveOutDate,
-    daysVacant: daysOnMarket({
-      lastMoveOutAt: moveOutDate,
-      unitCreatedAt: moveOutDate,
-      asOf: clockEnd,
-    }),
-    daysVacantIsFinal: nextLease?.moveInAt != null,
-    totalCostCents: project.workOrders.reduce((sum, wo) => sum + jobCostCents(wo), 0),
+    daysVacant: fill.days,
+    daysVacantIsFinal: fill.isFinal,
+    totalCostCents: turnCostCents(project.workOrders),
     items: project.workOrders.map((wo) => ({
       id: wo.id,
       scope: wo.scope,

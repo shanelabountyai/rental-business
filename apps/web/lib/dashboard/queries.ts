@@ -3,6 +3,7 @@ import 'server-only'
 import { daysUntilExpiry, expiryWindow } from '@rental/core/leases'
 import { OPEN_TICKET_STATUSES } from '@rental/core/comms'
 import { OPEN_TICKET_GLOW_HOURS, ticketGlows } from '@rental/core/maintenance'
+import { renewalRate, type RenewalRate } from '@rental/core/metrics'
 import { businessDate, businessDateToUtc, utcToBusinessDate } from '@rental/core/scheduling'
 import { priorityRank } from '@rental/core/tasks'
 import { dailyCostOfVacancyCents, daysOnMarket } from '@rental/core/units'
@@ -285,29 +286,18 @@ export async function leaseExpirySummary(
   return { within90, within120 }
 }
 
-export interface RenewalRateSummary {
-  /// A fixed-term lease that reached a continuing outcome - a signed
-  /// renewal successor, or the automatic MTM rollover job's own transition -
-  /// rather than the tenant simply leaving.
-  renewed: number
-  /// A fixed-term lease that ENDED with no successor and never rolled to
-  /// MTM - the tenant left.
-  endedWithoutRenewal: number
-  /// renewed / (renewed + endedWithoutRenewal), or 0 with nothing to divide.
-  rate: number
-}
+/// The formula itself moved to `renewalRate()` in `@rental/core/metrics`
+/// (R-075) - this is just the return shape, kept as its own name here since
+/// `DashboardSummary` already refers to it as `RenewalRateSummary`.
+export type RenewalRateSummary = RenewalRate
 
 /**
- * LEASE-09's "renewal rate is tracked as a metric".
- *
- * A structural snapshot of every ORIGINAL tenancy's outcome, not a
- * trailing-window rate - `origin: { not: 'RENEWAL' }` excludes a successor
- * lease itself from the count, since its existence is the OUTCOME being
- * counted on the predecessor's own row, not a second original tenancy.
- * MONTH_TO_MONTH counts as "renewed" whatever put it there (this item's own
- * automatic rollover job, or a lease started on MTM terms directly) - both
- * are a continuing tenancy, which is the number this metric is actually
- * asking about.
+ * LEASE-09's "renewal rate is tracked as a metric" - the query's own half:
+ * fetch every original tenancy that reached ENDED or MONTH_TO_MONTH, and
+ * hand the rows to `renewalRate()` (`@rental/core/metrics`) for the formula
+ * itself. `origin: { not: 'RENEWAL' }` excludes a successor lease from the
+ * count, since its existence is the OUTCOME being counted on the
+ * predecessor's own row, not a second original tenancy.
  */
 export async function renewalRateSummary(scope: ResolvedScope): Promise<RenewalRateSummary> {
   if (scope.propertyIds.length === 0) return { renewed: 0, endedWithoutRenewal: 0, rate: 0 }
@@ -321,18 +311,7 @@ export async function renewalRateSummary(scope: ResolvedScope): Promise<RenewalR
     select: { status: true, renewalLeases: { select: { id: true }, take: 1 } },
   })
 
-  let renewed = 0
-  let endedWithoutRenewal = 0
-  for (const lease of leases) {
-    if (lease.status === 'MONTH_TO_MONTH' || lease.renewalLeases.length > 0) {
-      renewed++
-    } else {
-      endedWithoutRenewal++
-    }
-  }
-
-  const total = renewed + endedWithoutRenewal
-  return { renewed, endedWithoutRenewal, rate: total > 0 ? renewed / total : 0 }
+  return renewalRate(leases)
 }
 
 // ---- 6. Pending approvals ----

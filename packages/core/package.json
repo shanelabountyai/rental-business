@@ -23,6 +23,7 @@
     "./ledger": "./ledger/index.ts",
     "./listings": "./listings/index.ts",
     "./maintenance": "./maintenance/index.ts",
+    "./metrics": "./metrics/index.ts",
     "./money": "./money/index.ts",
     "./notices": "./notices/index.ts",
     "./notifications": "./notifications/index.ts",

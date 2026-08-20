@@ -3109,3 +3109,21 @@ Full reasoning in `07-decisions.md`.
 - **No countdown shown to the tenant on the walkthrough page itself** - matches the existing signature-window page, which shows none either; the day-7 reminder notification is the parallel signal.
 - **No portfolio-wide "self-guided reports outstanding" view** - only the tenant's own `/portal/papers` banner and the staff Task the escalation job raises surface it.
 - **A tenant and staff writing items on the same still-unperformed report at once is not specifically guarded against** - an unlikely edge case for a single-family portfolio, no worse than any other concurrent-edit path in this codebase, and not worth solving for an S-sized item.
+
+---
+
+## R-075 — Shared `metrics` module in core
+**Commit:** _pending_  ·  **Date:** 2026-08-20
+
+**What it built.** `packages/core/metrics`, but only for the metrics that had no single tested definition before this item — mapped first, rather than assumed: `occupancyRate` and `daysToFill` (occupancy) had never been computed anywhere at all; `firstResponseHours`/`resolutionByPriority` (time-to-resolve by priority) likewise, distinct from `sla.ts`'s own `firstResponseSlaState`, which classifies the same clock into a state rather than returning the duration; `renewalRate` and `turnCostCents` were correct but inline in two app-layer query functions, now extracted verbatim and imported instead. `getTurnoverForUnit`'s own days-vacant figure turned out to be a genuine bug-shaped simplification along the way: it called `daysOnMarket()` (a different, open-ended metric) with its `unitCreatedAt` fallback forced equal to `lastMoveOutAt` to neutralize a branch that does not apply to a terminal, already-filled vacancy — `daysToFill()` is that number, named and tested on its own rather than borrowed from a function built for a different question. `costPerUnitPerMonth` is a fresh division-only formula, not wired into a screen yet. Three of the ten named metrics — days-vacant (`daysOnMarket`, `@rental/core/units`), delinquency buckets (`bucketFor`/`delinquencyFor`/`agingTotals`, `@rental/core/ledger`), and `daysPastDue` (`@rental/core/money`, already bug-free per R-045) — were left exactly where they already lived, deliberately not relocated.
+
+**What it decided.** Recorded as **D-65**:
+- **"Every metric has one written, tested formula" is the rule this item satisfies — "every metric physically lives under `packages/core/metrics`" is not.** Moving three already-correct, well-tested modules into a new directory would be pure churn (every caller, every test file re-pointed) for zero behavior change, and no domain `index.ts` in this codebase re-exports a sibling's.
+- **The turnover panel's roll-up-equals-sum check lives in `turnover.test.ts`**: the itemized per-work-order `costCents` and the reported `totalCostCents` header are both built from the identical `jobCostCents()` call, asserted to sum to the same total.
+- **`occupancyRate`, `resolutionByPriority` and `costPerUnitPerMonth` are not wired into any screen yet** — R-076 (the five weekly saved views) and R-081 (maintenance analytics) are their first real callers.
+
+Full reasoning in `07-decisions.md`.
+
+**What it left behind.**
+- **No new UI surfaces any of the newly-written metrics.** This item's own scope was the formula and its test; a dashboard tile or report column is real follow-on for whichever item actually needs to show the number (R-076 names five candidates).
+- **`occupancyRate` treats a `DOWN` (long-term uninhabitable) unit as not-occupied, counted the same as `VACANT`** — a physical-occupancy reading, not an economic one that excludes non-rentable inventory from the denominator. Revisit if an owner wants the rentable-only number instead.
