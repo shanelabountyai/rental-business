@@ -3050,3 +3050,24 @@ Full reasoning in `07-decisions.md`.
 - **No UI reads `conditionChange()`/`isFixableCondition()` yet** - a "what got worse" badge or a filtered fixable-items list on the move-out page is real follow-on polish, not required by INSP-02's own acceptance text, and left for whoever needs it (likely R-071's itemized-deductions screen).
 - **The pre-move-out walkthrough is calendared (`scheduledFor` set, a Task raised) but nothing reminds staff as the date approaches** - no digest, no escalation. `renter-insurance-job.ts`'s own alert-cadence pattern is the template to copy if that turns out to matter.
 - **Texas seeded `preMoveOutWalkthroughRequired: false`** (no statutory right); every other state stays `null` (unreviewed) until an owner/attorney checks it, per D-60's own "third state" rule - nothing is auto-scheduled anywhere until that review happens.
+
+---
+
+## R-072 — Turnover / make-ready as a project
+**Commit:** _pending_  ·  **Date:** 2026-08-20
+
+**What it built.** LEASE-12's checklist, and INSP-06's auto-draft, over machinery this product already had rather than a new one. A new `TurnoverProject` model is only the envelope - property, unit, the departing lease, a target rent-ready date, and when it actually finished (`rentReadyAt`, no separate status column). Every checklist LINE is an ordinary `WorkOrder`, tagged with two new nullable columns (`turnoverProjectId`, `turnoverStage`) - `createWorkOrder`'s own R-024 comment already called a make-ready turn "ticketless," so vendor assignment, cost recording (`jobCostCents()`) and closing needed no new code at all. `startTurnoverProjectForLease()` starts the turn idempotently (`upsert` on the unique `leaseId`) from both places a unit goes MAKE_READY: the manual status change in `leases/actions.ts` and the nightly `unit.auto_make_ready` job - which, fixing a real gap, now actually stamps `Lease.moveOutAt` from `endsOn` for a lapsed lease, something `vacancy.ts`'s own comment already claimed it did. INSP-06's punch list drafts inside `lockInspection`'s own transaction: a locked MOVE_OUT report's POOR/DAMAGED/MISSING items (`isFixableCondition`, already built for R-070) become new, ticketless, unstaged work orders filed against whatever turnover project already exists for that lease. The unit detail page grew a `TurnoverPanel`: days-vacant (computed live from `Lease.moveOutAt` and, once one exists, the next lease's `moveInAt` - reusing R-050's own `daysOnMarket()`, storing neither), cost roll-up, the punch list table, an "add checklist item" quick form, a target-date field, and a "mark rent-ready" action that flips the unit MAKE_READY → VACANT.
+
+**What it decided.** Recorded as **D-62**:
+- **No second checklist table.** A turnover line is `WorkOrder` with two extra columns, not a new entity with its own status/vendor/cost machinery to keep in sync with the real one.
+- **`TurnoverStage` is display vocabulary, not an enforced sequence.** Nothing blocks starting PAINT before REPAIRS closes - the backlog names an order, not a dependency graph, and no other workflow in this product enforces one either.
+- **The days-vacant clock is never stored** - `daysVacant`/`daysVacantIsFinal` are computed at read time from `Lease.moveOutAt` and the next lease's `moveInAt`, the same facts R-050's vacancy tile already reads, rather than a third copy that could drift.
+- **INSP-06's auto-draft does not retroactively catch up.** A MOVE_OUT report locked before the lease formally ends (no `TurnoverProject` yet) drafts nothing - the normal order is the lease ending first, and creating a project ahead of a real `moveOutAt` would anchor the whole clock on a fact nobody has yet.
+
+Full reasoning in `07-decisions.md`.
+
+**What it left behind.**
+- **A real, unrelated bug found and fixed along the way**: `auto-make-ready.ts` flipped a lapsed lease's unit to MAKE_READY without ever writing `Lease.moveOutAt`, despite `vacancy.ts`'s own comment claiming it did - meaning R-050's vacancy-days tile silently fell back to the unit's `createdAt` for exactly the "lease lapsed with nobody clicking anything" path the job exists to handle. Fixed as part of wiring this item's own clock to the same fact.
+- **No stage is auto-inferred for a punch-list finding.** A move-out inspection's DAMAGED countertop drafts as an unstaged work order; a PM triages it into REPAIRS/PAINT/etc. by hand rather than the product guessing from the item name.
+- **No completion gate on "mark rent-ready."** A PM can mark the turn done with punch-list items still open - deliberate (a low-priority line item should not hold a rentable unit hostage), but it means the panel's "done" state is a PM's judgment call, not a database-enforced one.
+- **No UI surfaces the portfolio-wide turnover list** - only the single most recent turn per unit, from that unit's own page. A "turns in progress across the portfolio" view (closer to R-081's territory) is real follow-on, not built here.

@@ -8,6 +8,7 @@
 // generated Prisma client into the browser bundle.
 
 import type { Priority } from '@rental/db'
+import { isTurnoverStage } from '../turnover/stages.ts'
 
 interface Violation {
   field: string
@@ -38,6 +39,10 @@ export interface WorkOrderInput {
   /// MAINT-03's own criterion: surfaced and decided at creation, not
   /// inferred later. See warranty.ts for how the create form suggests it.
   warrantyClaim?: boolean
+  /// LEASE-12 (R-072): set together when this job is one line of a
+  /// turnover's punch list. Absent for an ordinary maintenance work order.
+  turnoverProjectId?: string | null
+  turnoverStage?: string | null
 }
 
 export function validateWorkOrder(input: WorkOrderInput): Violation[] {
@@ -60,6 +65,9 @@ export function validateWorkOrder(input: WorkOrderInput): Violation[] {
     (!Number.isInteger(input.estimateCents) || input.estimateCents < 0)
   ) {
     violations.push({ field: 'estimateCents', message: 'Enter a whole-dollar amount of $0 or more.' })
+  }
+  if (input.turnoverStage != null && !isTurnoverStage(input.turnoverStage)) {
+    violations.push({ field: 'turnoverStage', message: 'Choose a valid checklist stage.' })
   }
 
   return violations

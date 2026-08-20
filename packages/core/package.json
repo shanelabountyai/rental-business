@@ -37,6 +37,7 @@
     "./scheduling": "./scheduling/index.ts",
     "./screening": "./screening/index.ts",
     "./tasks": "./tasks/index.ts",
+    "./turnover": "./turnover/index.ts",
     "./units": "./units/index.ts",
     "./vendors": "./vendors/index.ts",
     "./workorders": "./workorders/index.ts"

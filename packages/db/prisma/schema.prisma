@@ -274,6 +274,23 @@ enum TaskStatus {
   CANCELED
 }
 
+/// The turnover checklist's canonical stages (LEASE-12, R-072), in the
+/// order the backlog names them: trash-out, then repairs, then the finish
+/// work, then re-key last. Not a hard sequence the database enforces -
+/// nothing here blocks starting PAINT before REPAIRS closes - just the
+/// vocabulary a work order's punch-list card is filed under. OTHER covers
+/// anything that does not fit the six named stages; null (unset) is a
+/// move-out-inspection finding nobody has triaged into a stage yet.
+enum TurnoverStage {
+  TRASH_OUT
+  REPAIRS
+  PAINT
+  FLOORS
+  CLEAN
+  REKEY
+  OTHER
+}
+
 enum InspectionType {
   MOVE_IN
   MOVE_OUT
@@ -499,6 +516,7 @@ model Property {
   utilityBills      UtilityBill[]
   tickets           Ticket[]
   workOrders        WorkOrder[]
+  turnoverProjects  TurnoverProject[]
   inspections       Inspection[]
   threads           Thread[]
   notices           Notice[]
@@ -639,18 +657,19 @@ model Unit {
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
 
-  property        Property          @relation(fields: [propertyId], references: [id])
-  leases          Lease[]
-  tickets         Ticket[]
-  workOrders      WorkOrder[]
-  inspections     Inspection[]
-  documents       Document[]
-  accessCodes     AccessCode[]
-  appliances      Appliance[]
-  utilityAccounts UtilityAccount[]
-  shutoffs        ShutoffLocation[]
-  listings        Listing[]
-  showings        Showing[]
+  property         Property          @relation(fields: [propertyId], references: [id])
+  leases           Lease[]
+  tickets          Ticket[]
+  workOrders       WorkOrder[]
+  turnoverProjects TurnoverProject[]
+  inspections      Inspection[]
+  documents        Document[]
+  accessCodes      AccessCode[]
+  appliances       Appliance[]
+  utilityAccounts  UtilityAccount[]
+  shutoffs         ShutoffLocation[]
+  listings         Listing[]
+  showings         Showing[]
 
   @@unique([propertyId, name])
   @@index([status])
@@ -1549,6 +1568,7 @@ model Lease {
   threads                 Thread[]
   notices                 Notice[]
   documents               Document[]
+  turnoverProject         TurnoverProject?
 
   @@index([propertyId])
   @@index([unitId])
@@ -2812,6 +2832,13 @@ model WorkOrder {
   /// move-out deposit deduction.
   tenantCaused                   Boolean         @default(false)
   warrantyClaim                  Boolean         @default(false)
+  /// Set only for a job that is one line of a turnover's punch list
+  /// (LEASE-12, R-072) - a make-ready work order has no ticket behind it
+  /// (see `createWorkOrder`'s own comment), and this is the other half of
+  /// that: which turn it belongs to and which checklist stage it is. Both
+  /// null for an ordinary maintenance work order.
+  turnoverProjectId              String?
+  turnoverStage                  TurnoverStage?
   createdAt                      DateTime        @default(now())
   updatedAt                      DateTime        @updatedAt
 
@@ -2819,6 +2846,7 @@ model WorkOrder {
   unit                    Unit                    @relation(fields: [unitId], references: [id])
   ticket                  Ticket?                 @relation(fields: [ticketId], references: [id])
   vendor                  Vendor?                 @relation(fields: [vendorId], references: [id])
+  turnoverProject         TurnoverProject?        @relation(fields: [turnoverProjectId], references: [id])
   assignedTo              StaffUser?              @relation("WorkOrderAssignedTo", fields: [assignedStaffId], references: [id])
   approvedBy              StaffUser?              @relation("WorkOrderApprovedBy", fields: [approvedByStaffId], references: [id])
   entryNotice             Notice?                 @relation("WorkOrderEntryNotice", fields: [entryNoticeId], references: [id])
@@ -2839,6 +2867,7 @@ model WorkOrder {
   @@index([unitId])
   @@index([vendorId])
   @@index([status, priority])
+  @@index([turnoverProjectId])
 }
 
 /// One vendor's price for one work order (MAINT-04's bid-collection
@@ -2965,6 +2994,52 @@ model WorkOrderBid {
   /// vendor, not collecting a second opinion from them.
   @@unique([workOrderId, vendorId])
   @@index([workOrderId])
+}
+
+/// Turnover / make-ready as a project (LEASE-12, R-072): the mini-project a
+/// unit runs through between one tenancy ending and the next one starting.
+/// The checklist itself is NOT a new table of steps - D-9's "one queue, not
+/// a second one" lesson applies here too, so each checklist line is an
+/// ordinary `WorkOrder` (vendor assignment, cost tracking, closing - all of
+/// it already built) tagged with this project's id and a `TurnoverStage`.
+/// This row is only the project envelope: which vacancy it is, the target
+/// date, and when it actually finished.
+///
+/// One per lease's move-out, by the unique constraint below - created
+/// idempotently the moment that lease stops being in force (see
+/// `apps/web/lib/turnover/start.ts`, called from both the manual status
+/// change in leases/actions.ts and the nightly auto-make-ready job).
+///
+/// The days-vacant clock (LEASE-12's own phrase) reads `Lease.moveOutAt`
+/// (this project's lease) and, once it exists, the NEXT lease's
+/// `moveInAt` on the same unit - not a field here. Two facts the product
+/// already records elsewhere are the honest clock; a third copy is exactly
+/// the class of drift bug this codebase keeps a running list of avoiding
+/// (see `packages/core/units/vacancy.ts`'s own comment).
+model TurnoverProject {
+  id                  String    @id @default(cuid())
+  propertyId          String
+  unitId              String
+  /// The departing lease whose move-out started this turn. Restrict, not
+  /// SetNull: nothing in this product deletes a Lease row (see
+  /// `Lease.renewedFromLeaseId`'s own comment), so there is no delete path
+  /// this FK needs to survive.
+  leaseId             String    @unique
+  targetRentReadyDate DateTime? @db.Date
+  /// Set when staff marks the turn done. No separate status column - null
+  /// vs. set IS the status, so there is nothing for a second field to
+  /// disagree with.
+  rentReadyAt         DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  property   Property    @relation(fields: [propertyId], references: [id])
+  unit       Unit        @relation(fields: [unitId], references: [id])
+  lease      Lease       @relation(fields: [leaseId], references: [id], onDelete: Restrict)
+  workOrders WorkOrder[]
+
+  @@index([propertyId])
+  @@index([unitId, rentReadyAt])
 }
 
 // ---------------------------------------------------------------------------

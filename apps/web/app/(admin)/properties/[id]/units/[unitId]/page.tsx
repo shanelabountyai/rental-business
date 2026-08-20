@@ -2,12 +2,16 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { DocumentsSection } from '@/components/documents/documents-section.tsx'
 import { OperationalDataSection } from '@/components/operational/operational-data-section.tsx'
+import { TurnoverPanel } from '@/components/turnover/turnover-panel.tsx'
 import { actorCan, propertyResource, requireScope } from '@/lib/auth/guard.ts'
 import { currentScope as switcherScope } from '@/lib/scope/current-scope.ts'
 import { listDeletedDocuments, listDocuments } from '@/lib/documents/queries.ts'
 import { listingForUnit } from '@/lib/listings/queries.ts'
 import { getOperationalData } from '@/lib/operational/queries.ts'
+import { markTurnoverRentReady, setTurnoverTargetDate } from '@/lib/turnover/actions.ts'
+import { getTurnoverForUnit } from '@/lib/turnover/queries.ts'
 import { getUnitDetail } from '@/lib/units/queries.ts'
+import { createWorkOrder } from '@/lib/workorders/actions.ts'
 
 export const metadata = { title: 'Unit — Rental Operations' }
 
@@ -125,6 +129,7 @@ export default async function UnitDetailPage({
     operationalData,
     canReveal,
     listing,
+    turnover,
   ] = await Promise.all([
     actorCan('unit.write', propertyResource(unit.property)),
     listDocuments(propertyId, scope, unitId),
@@ -134,6 +139,7 @@ export default async function UnitDetailPage({
     getOperationalData(propertyId, unitId, scope),
     actorCan('accesscode.reveal', propertyResource(unit.property)),
     listingForUnit(unitId, scope),
+    getTurnoverForUnit(unitId, unit.property.timezone, new Date()),
   ])
 
   return (
@@ -223,6 +229,25 @@ export default async function UnitDetailPage({
           listing={listing}
           canWrite={canWrite}
         />
+        {turnover && (
+          <TurnoverPanel
+            unitId={unitId}
+            canWrite={canWrite}
+            turnover={{
+              id: turnover.id,
+              targetRentReadyDate: turnover.targetRentReadyDate,
+              rentReadyAt: turnover.rentReadyAt ? turnover.rentReadyAt.toISOString() : null,
+              moveOutDate: turnover.moveOutDate,
+              daysVacant: turnover.daysVacant,
+              daysVacantIsFinal: turnover.daysVacantIsFinal,
+              totalCostCents: turnover.totalCostCents,
+              items: turnover.items,
+            }}
+            setTargetDateAction={setTurnoverTargetDate.bind(null, turnover.id)}
+            markRentReadyAction={markTurnoverRentReady.bind(null, turnover.id)}
+            addItemAction={createWorkOrder}
+          />
+        )}
         <EmptySection
           title="Lease"
           ownedBy="R-033"

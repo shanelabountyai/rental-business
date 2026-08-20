@@ -488,6 +488,22 @@ export const AUDIT_ACTIONS = [
   /// archived certificate itself.
   'lease.renter_insurance_recorded',
 
+  // Turnover / make-ready (LEASE-12, INSP-06, R-072). The checklist's own
+  // line items are ordinary WorkOrders - `workorder.created`/`.closed`
+  // already cover their evidence trail; these two are the project envelope
+  // itself, the facts no WorkOrder row carries.
+  /// A target rent-ready date was set or changed on a turn.
+  'turnover.target_date_set',
+  /// Staff marked the checklist done. Flips the unit MAKE_READY -> VACANT
+  /// when the unit is still in that state; `after.unitFlippedToVacant`
+  /// records whether it actually did.
+  'turnover.rent_ready',
+  /// INSP-06: locking a MOVE_OUT inspection auto-drafted its punch list -
+  /// one work order per item at POOR/DAMAGED/MISSING, filed against the
+  /// unit's turnover project. Carries the count, not one row per item -
+  /// each item's own `workorder.created` entry already exists.
+  'turnover.punch_list_drafted',
+
   /// R-063 (LEASE-06, DOC-02): a lease's document was generated and sent for
   /// e-signature - the base template, the addenda selected, and every
   /// signer named. Carries the provider name, matching `billing.provisioned`'s

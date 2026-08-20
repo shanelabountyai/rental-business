@@ -26,6 +26,7 @@ import { audit } from '@/lib/audit/index.ts'
 import { syncLease } from '@/lib/billing/lifecycle.ts'
 import { provisionLeaseBilling } from '@/lib/billing/provision.ts'
 import { startDepositDisposition } from '@/lib/leases/deposit-disposition-start.ts'
+import { startTurnoverProjectForLease } from '@/lib/turnover/start.ts'
 import { authUrl } from '@/lib/auth/delivery.ts'
 import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
 import { rulesFor } from '@/lib/jurisdiction/queries.ts'
@@ -563,6 +564,11 @@ export async function changeLeaseStatus(
     // INSP-03) - a no-op for a zero-deposit lease or one already started.
     await startDepositDisposition(leaseId).catch((error) => {
       console.error(`[lease] deposit disposition start failed for ${leaseId}`, error)
+    })
+    // The turnover / make-ready project starts from the same move-out
+    // (LEASE-12, R-072) - idempotent, so a status change re-run is a no-op.
+    await startTurnoverProjectForLease(leaseId).catch((error) => {
+      console.error(`[lease] turnover project start failed for ${leaseId}`, error)
     })
   }
 

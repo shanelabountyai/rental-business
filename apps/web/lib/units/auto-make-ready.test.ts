@@ -40,6 +40,9 @@ beforeAll(async () => {
 })
 
 afterEach(async () => {
+  // TurnoverProject.leaseId is RESTRICT (R-072) - a real transition in this
+  // file now starts one, same as R-071's deposit and R-011's task before it.
+  await prisma.turnoverProject.deleteMany({ where: { leaseId: { in: leaseIds } } })
   await prisma.lease.deleteMany({ where: { id: { in: leaseIds } } })
   await prisma.unit.deleteMany({ where: { id: { in: unitIds } } })
   await prisma.jobRun.deleteMany({ where: { propertyId } })
@@ -223,6 +226,20 @@ describe('the auto-make-ready job', () => {
     expect(entry?.actorType).toBe('SYSTEM')
     expect(entry?.before).toMatchObject({ status: 'OCCUPIED' })
     expect(entry?.after).toMatchObject({ status: 'MAKE_READY' })
+  })
+
+  it('stamps moveOutAt from endsOn and starts a turnover project (LEASE-12, R-072)', async () => {
+    const unit = await makeUnit('OCCUPIED')
+    const lease = await makeLease(unit.id, { endsOn: '2026-06-30' })
+
+    await runAt('2026-07-02T08:00:00Z')
+
+    const updated = await prisma.lease.findUniqueOrThrow({ where: { id: lease.id } })
+    expect(updated.moveOutAt?.toISOString()).toBe(lease.endsOn?.toISOString())
+
+    const project = await prisma.turnoverProject.findUnique({ where: { leaseId: lease.id } })
+    expect(project).not.toBeNull()
+    expect(project?.unitId).toBe(unit.id)
   })
 
   it('emits nothing when no transition happens', async () => {

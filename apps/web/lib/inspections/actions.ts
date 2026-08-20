@@ -20,6 +20,7 @@ import { extractCapturedAt, extractGeotag } from '@/lib/documents/exif.ts'
 import { itemsFromMoveIn } from '@/lib/inspections/move-out-copy.ts'
 import { dispatchPendingNotifications, notify } from '@/lib/notifications/send.ts'
 import { generateStorageKey, storage } from '@/lib/storage/index.ts'
+import { draftPunchListFromInspection } from '@/lib/turnover/punch-list.ts'
 
 /// MOVE_OUT and PRE_MOVE_OUT both compare against move-in (INSP-02) - a
 /// preliminary walkthrough and the real one read the same baseline.
@@ -54,7 +55,7 @@ async function inspectionForWrite(inspectionId: string) {
     include: {
       property: { select: { id: true, legalEntityId: true, addressLine1: true, timezone: true } },
       unit: { select: { name: true } },
-      items: { select: { id: true, condition: true } },
+      items: { select: { id: true, room: true, item: true, condition: true, notes: true } },
     },
   })
   const actor = await requirePermission('inspection.write', propertyResource(inspection.property))
@@ -383,7 +384,7 @@ export async function lockInspection(
   _previous: InspectionFormState,
   _formData: FormData,
 ): Promise<InspectionFormState> {
-  const { inspection } = await inspectionForWrite(inspectionId)
+  const { inspection, actor } = await inspectionForWrite(inspectionId)
 
   const decision = canLockInspection({
     performedAt: inspection.performedAt,
@@ -406,6 +407,12 @@ export async function lockInspection(
       },
       tx,
     )
+    // INSP-06 (R-072): the same lock that makes this report immutable
+    // evidence also drafts the turnover's punch list from it.
+    await draftPunchListFromInspection(tx, inspection, inspection.items, {
+      type: 'STAFF',
+      staffUserId: actor.id,
+    })
   })
 
   revalidatePath(`/inspections/${inspectionId}`)

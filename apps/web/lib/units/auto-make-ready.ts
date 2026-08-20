@@ -5,6 +5,7 @@ import { businessDateToUtc } from '@rental/core/scheduling'
 import { type LeaseStatus, prisma } from '@rental/db'
 import { emitEvent } from '@/lib/jobs/outbox.ts'
 import { SCHEDULED_JOBS } from '@/lib/jobs/runner.ts'
+import { startTurnoverProjectForLease } from '@/lib/turnover/start.ts'
 
 // recordAudit straight from packages/core/audit, not the app-layer
 // auditAsSystem() wrapper in @/lib/audit/index.ts: that wrapper's whole job is
@@ -60,7 +61,7 @@ SCHEDULED_JOBS.push({
         endsOn: { not: null, lt: asOf },
         unit: { status: 'OCCUPIED' },
       },
-      select: { id: true, unitId: true, endsOn: true },
+      select: { id: true, unitId: true, endsOn: true, moveOutAt: true },
     })
 
     let transitioned = 0
@@ -80,12 +81,25 @@ SCHEDULED_JOBS.push({
       // ended leases on the same unit (should not happen, but the query above
       // does not prevent it) must not both fire the transition and both
       // report success.
-      await prisma.$transaction(async (tx) => {
+      const madeReady = await prisma.$transaction(async (tx) => {
         const updated = await tx.unit.updateMany({
           where: { id: lease.unitId, status: 'OCCUPIED' },
           data: { status: 'MAKE_READY' },
         })
-        if (updated.count === 0) return
+        if (updated.count === 0) return false
+
+        // The move-out fact `vacancy.ts`'s own comment already claims this
+        // job records - true from here on. `leases/actions.ts` stamps the
+        // exact instant a PM clicked a button; this lease never got one, so
+        // its own contractual `endsOn` is the honest date instead. Guarded
+        // on null so a lease somebody DID record a move-out for already
+        // (an edge nothing above rules out) keeps that answer.
+        if (!lease.moveOutAt) {
+          await tx.lease.update({
+            where: { id: lease.id },
+            data: { moveOutAt: lease.endsOn! },
+          })
+        }
 
         await emitEvent(tx, {
           type: 'unit.became_make_ready',
@@ -104,8 +118,17 @@ SCHEDULED_JOBS.push({
           before: { status: 'OCCUPIED' },
           after: { status: 'MAKE_READY' },
         })
+        return true
       })
+      if (!madeReady) continue
       transitioned++
+
+      // Outside the transaction, same "a failure here must not undo the
+      // transition just committed" posture every other post-commit side
+      // effect in this codebase takes (LEASE-12, R-072).
+      await startTurnoverProjectForLease(lease.id).catch((error) => {
+        console.error(`[units] turnover project start failed for ${lease.id}`, error)
+      })
     }
 
     return { checked: endedLeases.length, transitioned }

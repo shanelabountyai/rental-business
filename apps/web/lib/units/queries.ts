@@ -23,7 +23,7 @@ export async function getUnitDetail(
   if (!scope.propertyIds.includes(propertyId)) return null
   const unit = await prisma.unit.findUnique({
     where: { id: unitId },
-    include: { property: { select: { id: true, name: true, legalEntityId: true } } },
+    include: { property: { select: { id: true, name: true, legalEntityId: true, timezone: true } } },
   })
   // Belt and suspenders: also confirm the unit actually belongs to the
   // property named in the URL, not just SOME property in scope - a unit id

@@ -98,6 +98,12 @@ export async function createWorkOrder(
   const property = await prisma.property.findUniqueOrThrow({ where: { id: propertyId } })
   const actor = await requirePermission('workorder.write', propertyResource(property))
 
+  // LEASE-12 (R-072): a turnover's punch list adds a work order through
+  // this same form, from the unit page rather than /workorders/new -
+  // `turnoverProjectId` is a hidden field there, never user-typed.
+  const turnoverProjectId = str(formData, 'turnoverProjectId') || null
+  const turnoverStage = str(formData, 'turnoverStage') || null
+
   const input: WorkOrderInput = {
     propertyId,
     unitId,
@@ -111,6 +117,8 @@ export async function createWorkOrder(
     entryPermission: formData.get('entryPermission') === 'true',
     petWarning: formData.get('petWarning') === 'true',
     warrantyClaim: formData.get('warrantyClaim') === 'true',
+    turnoverProjectId,
+    turnoverStage,
   }
   const violations = validateWorkOrder(input)
   if (violations.length > 0) return violationsToState(violations)
@@ -125,6 +133,8 @@ export async function createWorkOrder(
         priority: input.priority as never,
         estimateCents: input.estimateCents,
         warrantyClaim: input.warrantyClaim === true,
+        turnoverProjectId,
+        turnoverStage: turnoverStage as never,
       },
     })
     await audit(
@@ -175,6 +185,10 @@ export async function createWorkOrder(
 
   revalidatePath('/workorders')
   if (ticketId) revalidatePath(`/maintenance/${ticketId}`)
+  // Back to the unit page, not /workorders/[id]: a punch-list line is
+  // triaged from the turnover panel it was added on, the same "stay where
+  // you started" call the renewal and renter-insurance panels already make.
+  if (turnoverProjectId) redirect(`/properties/${propertyId}/units/${unitId}`)
   redirect(`/workorders/${workOrder.id}`)
 }
 
