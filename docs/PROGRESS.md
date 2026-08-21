@@ -3257,7 +3257,7 @@ Full reasoning in `07-decisions.md`.
 ---
 
 ## R-081a — The per-property operating report
-**Commit:** `PENDING`  ·  **Date:** 2026-08-21
+**Commit:** `7825e71`  ·  **Date:** 2026-08-21
 
 **What it built.** RPT-05's "which house is a lemon" view at `/reports/operating`: one row per property — income, maintenance spend, all expenses, net, vacant days with a rate, ticket count — sorted worst net first, with a monthly net grid behind it, entity totals, turn cost, renewal rate, and maintenance spend by trade. `packages/core/metrics/operating.ts` holds the formulas; `apps/web/lib/reports/operating.ts` does the fetching. `startOfMonth`, `endOfMonth` and `monthStartsBetween` join `local-time.ts` on the third caller, not the first.
 
