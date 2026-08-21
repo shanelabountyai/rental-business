@@ -3168,7 +3168,7 @@ Full reasoning in `07-decisions.md`.
 ---
 
 ## R-079 — Vendor management
-**Commit:** _pending_  ·  **Date:** 2026-08-21
+**Commit:** `43b8e97`  ·  **Date:** 2026-08-21
 
 **What it built.** A staff-facing `/vendors` CRUD surface (`/vendors`, `/vendors/new`, `/vendors/[id]`) - no admin surface for "manage vendor records" existed before this item at all; a vendor row could only ever be created by hand in the database. The assignment picker on `/workorders/[id]` now calls `fallbackVendorsForTrade()` (built in R-025, never actually wired to anything until now) instead of a flat, unranked `activeVendors()` - preferred vendors for the job's trade sort first, and each row is labeled with "no W-9"/"COI expired" warnings rather than being silently filtered out. `fallbackVendorsForTrade()`'s `trade` parameter widened to accept `null`, skipping the trade filter for a ticketless work order. Invoice lifecycle status ("not received → approved → paid," MAINT-09) is computed by `invoiceLifecycleStatus()` from three already-true facts - `invoiceCents`, the same tolerance check `closeWorkOrder` already runs, and the one new stored fact `invoicePaidAt`/`invoicePaymentMethod` - shown identically on both the staff work-order page and the vendor's own magic-link page. `vendorPaymentTotalsForYear()` sums `jobCostCents()` by payment method per calendar year, with a $600 1099-NEC candidate banner on the vendor page.
 
