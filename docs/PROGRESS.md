@@ -3229,7 +3229,7 @@ Full reasoning in `07-decisions.md`.
 ---
 
 ## R-078 — Capital-improvement log and the year-end tax export
-**Commit:** `PENDING`  ·  **Date:** 2026-08-21
+**Commit:** `437563f`  ·  **Date:** 2026-08-21
 
 **What it built.** RPT-03 and PROP-07, together, because one is the other's missing input. `CapitalImprovement` is a per-property record — category, description, cost, in-service date, warranty docs via a new `Document.capitalImprovementId`, and an optional link to the work order that did the job — added as a sixth section of the existing filing cabinet rather than a new surface. `packages/core/tax` maps the money this product records onto IRS Schedule E Part I lines and QuickBooks account names, and `/reports/tax` renders one legal entity's year with a CSV download behind the previously-unused `report.financial` permission. Income comes from the Stripe projection or from charges depending on basis; expenses come from work orders (`jobCostCents()`, D-42's books number), the owner's absorbed utility share, and eviction costs. Everything that cannot be mapped goes on an exception list carried in the same CSV as the totals.
 
