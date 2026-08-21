@@ -535,40 +535,41 @@ model Property {
   createdAt          DateTime     @default(now())
   updatedAt          DateTime     @updatedAt
 
-  legalEntity       LegalEntity        @relation(fields: [legalEntityId], references: [id])
-  units             Unit[]
-  leases            Lease[]
-  leasePayers       LeasePayer[]
-  charges           Charge[]
-  payments          Payment[]
-  ledgerEntries     LedgerEntry[]
-  deposits          Deposit[]
-  depositDeductions DepositDeduction[]
-  complianceItems   ComplianceItem[]
-  recurringCharges  RecurringCharge[]
-  utilityBills      UtilityBill[]
-  tickets           Ticket[]
-  workOrders        WorkOrder[]
-  turnoverProjects  TurnoverProject[]
-  inspections       Inspection[]
-  threads           Thread[]
-  notices           Notice[]
-  evictionCases     EvictionCase[]
-  tasks             Task[]
-  documents         Document[]
-  listings          Listing[]
-  prospects         Prospect[]
-  showings          Showing[]
-  applications      Application[]
-  auditLogs         AuditLog[]
-  assignments       StaffAssignment[]
-  outboxEvents      OutboxEvent[]
-  jobRuns           JobRun[]
-  mortgages         Mortgage[]
-  insurancePolicies InsurancePolicy[]
-  hoaInfo           HoaInfo?
-  warranties        Warranty[]
-  notifications     Notification[]
+  legalEntity         LegalEntity          @relation(fields: [legalEntityId], references: [id])
+  units               Unit[]
+  leases              Lease[]
+  leasePayers         LeasePayer[]
+  charges             Charge[]
+  payments            Payment[]
+  ledgerEntries       LedgerEntry[]
+  deposits            Deposit[]
+  depositDeductions   DepositDeduction[]
+  complianceItems     ComplianceItem[]
+  recurringCharges    RecurringCharge[]
+  utilityBills        UtilityBill[]
+  tickets             Ticket[]
+  workOrders          WorkOrder[]
+  turnoverProjects    TurnoverProject[]
+  inspections         Inspection[]
+  threads             Thread[]
+  notices             Notice[]
+  evictionCases       EvictionCase[]
+  tasks               Task[]
+  documents           Document[]
+  listings            Listing[]
+  prospects           Prospect[]
+  showings            Showing[]
+  applications        Application[]
+  auditLogs           AuditLog[]
+  assignments         StaffAssignment[]
+  outboxEvents        OutboxEvent[]
+  jobRuns             JobRun[]
+  mortgages           Mortgage[]
+  insurancePolicies   InsurancePolicy[]
+  hoaInfo             HoaInfo?
+  warranties          Warranty[]
+  capitalImprovements CapitalImprovement[]
+  notifications       Notification[]
 
   @@index([legalEntityId])
   @@index([state])
@@ -730,6 +731,51 @@ model ComplianceCompletion {
   document       Document?      @relation(fields: [documentId], references: [id])
 
   @@index([complianceItemId, completedOn])
+}
+
+/// A capital project on a property - roof, HVAC, repipe (PROP-07, R-078).
+/// Distinct from a repair in exactly the way the tax code is: a repair is
+/// deducted in the year it is paid, an improvement is capitalised and
+/// depreciated from the day it is PLACED IN SERVICE. Getting that wrong in
+/// either direction is a real filing error, which is why this is its own
+/// record rather than a boolean on WorkOrder: PROP-07 names "roof 2024,
+/// HVAC 2023" - improvements that predate the platform and have no work
+/// order to carry a flag, and a roof bought straight from a contractor
+/// never passes through maintenance at all.
+model CapitalImprovement {
+  id                String    @id @default(cuid())
+  propertyId        String
+  /// Closed vocabulary in code, free-form column - the same posture
+  /// `Warranty.category` and `EvictionCost.type` take. A component nobody
+  /// anticipated must not need a migration.
+  category          String
+  description       String
+  costCents         Int
+  /// When the improvement was PLACED IN SERVICE, which is what starts
+  /// depreciation - NOT the invoice date, and the two genuinely differ
+  /// (a furnace bought in December and commissioned in January is a
+  /// January asset). Nullable because recording the project and pinning
+  /// that date are two moments, the same call `UtilityBill.documentId`
+  /// makes; an improvement with no date in service lands on the export's
+  /// exception list rather than being silently depreciated from a guess.
+  inServiceOn       DateTime? @db.Date
+  /// Set when the project ran through maintenance. UNIQUE, and load-bearing
+  /// for the tax export: a work order behind a capitalised improvement must
+  /// NOT also appear as a deductible repair, so `taxExportFacts` excludes
+  /// exactly the work orders named here. Two improvements pointing at one
+  /// work order would make that exclusion ambiguous.
+  workOrderId       String?   @unique
+  recordedByStaffId String
+  notes             String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  property   Property   @relation(fields: [propertyId], references: [id])
+  workOrder  WorkOrder? @relation(fields: [workOrderId], references: [id])
+  recordedBy StaffUser  @relation("CapitalImprovementRecordedBy", fields: [recordedByStaffId], references: [id])
+  documents  Document[]
+
+  @@index([propertyId, inServiceOn])
 }
 
 model Warranty {
@@ -1443,6 +1489,7 @@ model StaffUser {
   pmTemplatesCreated                      PreventiveMaintenanceTemplate[]
   evictionCasesOpened                     EvictionCase[]                  @relation("EvictionCaseOpenedBy")
   evictionCostsRecorded                   EvictionCost[]                  @relation("EvictionCostRecordedBy")
+  capitalImprovementsRecorded             CapitalImprovement[]            @relation("CapitalImprovementRecordedBy")
   depositDeductionsCreated                DepositDeduction[]              @relation("DepositDeductionCreatedBy")
   complianceCompletionsRecorded           ComplianceCompletion[]
   translationsApproved                    MessageTemplateTranslation[]    @relation("TranslationApprovedBy")
@@ -3002,6 +3049,9 @@ model WorkOrder {
   /// At most one, by partial unique index - see `Charge.workOrderId`.
   chargebacks             Charge[]
   depositDeductions       DepositDeduction[]
+  /// R-078: set when this job's cost was CAPITALISED rather than expensed.
+  /// The tax export excludes these from repairs on the strength of it.
+  capitalImprovement      CapitalImprovement?
 
   @@index([propertyId, status])
   @@index([unitId])
@@ -4005,54 +4055,59 @@ model DocumentTemplate {
 }
 
 model Document {
-  id                 String    @id @default(cuid())
-  propertyId         String?
-  unitId             String?
-  leaseId            String?
-  tenantId           String?
-  vendorId           String?
-  ticketId           String?
-  workOrderId        String?
+  id                   String    @id @default(cuid())
+  propertyId           String?
+  unitId               String?
+  leaseId              String?
+  tenantId             String?
+  vendorId             String?
+  ticketId             String?
+  workOrderId          String?
   /// R-059: an ID scan or income document attached to one household
   /// member's application, not to the household or the listing - screening
   /// (R-060) reads a specific person's documents, never "the household's".
-  applicantId        String?
+  applicantId          String?
   /// R-068 phase 2: a condition photo belongs to the checklist ROW it is
   /// evidence for ("every photo on this item"), not the inspection as a
   /// whole - the real query path INSP-01's own "per-item... photos" asks
   /// for, the same directness `workOrderId` already gives a completion
   /// photo over going through its parent Ticket.
-  inspectionItemId   String?
+  inspectionItemId     String?
   /// R-071: the itemized deduction this invoice/photo backs up - the same
   /// directness `inspectionItemId` gives a condition photo over going
   /// through the parent Inspection.
-  depositDeductionId String?
+  depositDeductionId   String?
+  /// R-078 (PROP-07): the warranty paperwork and the invoice for a capital
+  /// improvement. Its own FK rather than `propertyId + type`, because the
+  /// question asked at a sale or an audit is "what backs up the roof I
+  /// capitalised in 2024", not "what roof documents does this house have".
+  capitalImprovementId String?
   /// Document class - lease, notice, invoice, w9, coi, inspection_photo, etc.
   /// Drives the retention rules R-012 configures (DOC-05).
-  type               String
-  fileName           String
-  contentType        String
-  sizeBytes          Int
+  type                 String
+  fileName             String
+  contentType          String
+  sizeBytes            Int
   /// Object-store key. Files never live in Postgres.
-  storageKey         String
-  sha256             String?
-  version            Int       @default(1)
+  storageKey           String
+  sha256               String?
+  version              Int       @default(1)
   /// Original capture time from EXIF, preserved. Distinct from createdAt,
   /// which is only when it was uploaded.
-  capturedAt         DateTime?
+  capturedAt           DateTime?
   /// R-068 phase 2: EXIF GPS, when the camera recorded one. Null is the
   /// ordinary case (most phones can, but plenty of photos carry no GPS tag
   /// at all) - never guessed from the property's own address, which would
   /// misrepresent a photo as geotagged when it was not.
-  latitude           Decimal?  @db.Decimal(9, 6)
-  longitude          Decimal?  @db.Decimal(9, 6)
-  uploadedByStaffId  String?
+  latitude             Decimal?  @db.Decimal(9, 6)
+  longitude            Decimal?  @db.Decimal(9, 6)
+  uploadedByStaffId    String?
   /// Soft-delete marker (DOC-05's 30-day undelete). Null means active. Who
   /// deleted it and why lives in AuditLog ('document.delete_marked'), not
   /// here - the same split Property.active relies on for the same reason.
-  deletedAt          DateTime?
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
+  deletedAt            DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 
   property                Property?              @relation(fields: [propertyId], references: [id])
   unit                    Unit?                  @relation(fields: [unitId], references: [id])
@@ -4064,6 +4119,7 @@ model Document {
   applicant               Applicant?             @relation(fields: [applicantId], references: [id])
   inspectionItem          InspectionItem?        @relation(fields: [inspectionItemId], references: [id])
   depositDeduction        DepositDeduction?      @relation(fields: [depositDeductionId], references: [id])
+  capitalImprovement      CapitalImprovement?    @relation(fields: [capitalImprovementId], references: [id])
   uploadedBy              StaffUser?             @relation("DocumentUploadedBy", fields: [uploadedByStaffId], references: [id])
   noticesAsDocument       Notice[]               @relation("NoticeDocument")
   noticesAsProof          Notice[]               @relation("NoticeProofDocument")
@@ -4081,6 +4137,7 @@ model Document {
   @@index([workOrderId])
   @@index([applicantId])
   @@index([inspectionItemId])
+  @@index([capitalImprovementId])
 }
 
 // ---------------------------------------------------------------------------

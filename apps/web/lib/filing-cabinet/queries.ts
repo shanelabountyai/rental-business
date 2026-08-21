@@ -1,6 +1,6 @@
 import 'server-only'
 
-import type { HoaInfo, InsurancePolicy, Mortgage, Warranty } from '@rental/db'
+import type { CapitalImprovement, HoaInfo, InsurancePolicy, Mortgage, Warranty } from '@rental/db'
 import { prisma } from '@rental/db'
 import {
   insuranceRenewalDue,
@@ -20,6 +20,7 @@ export interface FilingCabinet {
   insurancePolicies: InsurancePolicy[]
   hoaInfo: HoaInfo | null
   warranties: Warranty[]
+  capitalImprovements: CapitalImprovement[]
 }
 
 export async function getFilingCabinet(
@@ -29,14 +30,27 @@ export async function getFilingCabinet(
   const property = await getPropertyDetail(propertyId, scope)
   if (!property) return null
 
-  const [mortgages, insurancePolicies, hoaInfo, warranties] = await Promise.all([
+  const [mortgages, insurancePolicies, hoaInfo, warranties, capitalImprovements] = await Promise.all([
     prisma.mortgage.findMany({ where: { propertyId }, orderBy: { createdAt: 'asc' } }),
     prisma.insurancePolicy.findMany({ where: { propertyId }, orderBy: { renewsOn: 'asc' } }),
     prisma.hoaInfo.findUnique({ where: { propertyId } }),
     prisma.warranty.findMany({ where: { propertyId }, orderBy: { category: 'asc' } }),
+    // Newest first: the improvement somebody is about to look up is almost
+    // always the one just done.
+    prisma.capitalImprovement.findMany({
+      where: { propertyId },
+      orderBy: [{ inServiceOn: 'desc' }, { createdAt: 'desc' }],
+    }),
   ])
 
-  return { costBasisCents: property.costBasisCents, mortgages, insurancePolicies, hoaInfo, warranties }
+  return {
+    costBasisCents: property.costBasisCents,
+    mortgages,
+    insurancePolicies,
+    hoaInfo,
+    warranties,
+    capitalImprovements,
+  }
 }
 
 /// Every filing-cabinet alert due within its window, across every property in

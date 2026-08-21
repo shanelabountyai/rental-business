@@ -82,6 +82,25 @@ export default async function ReportsPage() {
           </Link>
         </li>
       </ul>
+
+      {/* Not one of RPT-04's five weekly views - an annual one (RPT-03), so
+          it gets its own group rather than padding a list whose heading says
+          "weekly". */}
+      <h2 className="text-sm font-semibold">Annual</h2>
+      <ul className="flex flex-col divide-y rounded-md border">
+        <li>
+          <Link
+            href="/reports/tax"
+            className="hover:bg-accent focus-visible:ring-ring flex min-h-14 flex-col justify-center gap-0.5 px-4 py-3 focus-visible:ring-2 focus-visible:-outline-offset-2 focus-visible:outline-none"
+          >
+            <span className="font-medium">Year-end tax export</span>
+            <span className="text-muted-foreground text-sm">
+              Income and expenses per legal entity on Schedule E lines, CapEx flagged separately,
+              cash or accrual.
+            </span>
+          </Link>
+        </li>
+      </ul>
     </div>
   )
 }

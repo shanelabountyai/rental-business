@@ -75,6 +75,9 @@ test.afterAll(async () => {
   await prisma.insurancePolicy.deleteMany({ where: { propertyId: { in: propertyIds } } })
   await prisma.hoaInfo.deleteMany({ where: { propertyId: { in: propertyIds } } })
   await prisma.warranty.deleteMany({ where: { propertyId: { in: propertyIds } } })
+  // BEFORE the staff cleanup below: `recordedByStaffId` is onDelete Restrict,
+  // so an improvement left behind blocks the staff user it names.
+  await prisma.capitalImprovement.deleteMany({ where: { propertyId: { in: propertyIds } } })
 
   const auditedProperties = new Set(
     (
@@ -332,5 +335,80 @@ test.describe('accessibility', () => {
       .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
       .analyze()
     expect(results.violations).toEqual([])
+  })
+})
+
+test.describe('capital improvements (PROP-07)', () => {
+  test('records one, and flags it when no in-service date was given', async ({ page }) => {
+    const { property } = await seedProperty()
+    const staff = await createStaff('owner')
+    await signIn(page, staff.email)
+
+    await page.goto(`/properties/${property.id}`)
+    await page.getByText('Add an improvement').click()
+    await page.getByLabel('Component').selectOption('ROOF')
+    await page.getByLabel('What was done').fill('Full tear-off, architectural shingle')
+    await page.getByLabel('Project cost').fill('14500')
+    await page.getByLabel('Placed in service on').fill('2026-05-02')
+    await page.getByRole('button', { name: 'Add improvement' }).click()
+
+    await expect(page.getByText('Roof — Full tear-off, architectural shingle')).toBeVisible()
+    await expect(page.getByText('In service 2026-05-02')).toBeVisible()
+
+    // The second one has no date, so the export could not depreciate it -
+    // said on the record itself rather than only in the export, because this
+    // is the screen where somebody can fix it.
+    await page.getByText('Add an improvement').click()
+    await page.getByLabel('Component').selectOption('HVAC')
+    await page.getByLabel('What was done').fill('Condenser and coil')
+    await page.getByLabel('Project cost').fill('6200')
+    await page.getByRole('button', { name: 'Add improvement' }).click()
+
+    await expect(
+      page.getByText('No in-service date — cannot be depreciated'),
+    ).toBeVisible()
+  })
+
+  test('refuses an improvement with no cost', async ({ page }) => {
+    const { property } = await seedProperty()
+    const staff = await createStaff('owner')
+    await signIn(page, staff.email)
+
+    await page.goto(`/properties/${property.id}`)
+    await page.getByText('Add an improvement').click()
+    await page.getByLabel('Component').selectOption('ROOF')
+    await page.getByLabel('What was done').fill('Roof')
+    // Zero, not blank: a blank `required` number field is refused by the
+    // BROWSER, so the server-side guard this test exists for never runs.
+    await page.getByLabel('Project cost').fill('0')
+    await page.getByRole('button', { name: 'Add improvement' }).click()
+
+    await expect(page.getByText('Enter what the improvement cost.')).toBeVisible()
+  })
+
+  test("refuses a work order that belongs to another property", async ({ page }) => {
+    const { property: mine } = await seedProperty('Mine')
+    const { property: theirs } = await seedProperty('Theirs')
+    const unit = await prisma.unit.create({
+      data: { propertyId: theirs.id, name: `U-${randomUUID().slice(0, 6)}`, status: 'VACANT' },
+    })
+    const job = await prisma.workOrder.create({
+      data: { propertyId: theirs.id, unitId: unit.id, scope: 'Someone else’s roof' },
+    })
+    const staff = await createStaff('owner')
+    await signIn(page, staff.email)
+
+    await page.goto(`/properties/${mine.id}`)
+    await page.getByText('Add an improvement').click()
+    await page.getByLabel('Component').selectOption('ROOF')
+    await page.getByLabel('What was done').fill('Roof')
+    await page.getByLabel('Project cost').fill('14500')
+    await page.getByLabel('Work order ID').fill(job.id)
+    await page.getByRole('button', { name: 'Add improvement' }).click()
+
+    await expect(page.getByText('No work order on this property has that ID.')).toBeVisible()
+
+    await prisma.workOrder.delete({ where: { id: job.id } })
+    await prisma.unit.delete({ where: { id: unit.id } })
   })
 })

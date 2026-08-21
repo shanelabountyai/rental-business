@@ -11,6 +11,8 @@ import {
   validateMortgage,
   validateWarranty,
 } from '@rental/core/filing-cabinet'
+import { type CapitalImprovementInput, validateCapitalImprovement } from '@rental/core/tax'
+import { businessDateToUtc } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
@@ -268,6 +270,78 @@ export async function deleteWarranty(propertyId: string, warrantyId: string): Pr
   await requirePermission('property.write', propertyResource(property))
 
   await prisma.warranty.deleteMany({ where: { id: warrantyId, propertyId } })
+  revalidatePath(`/properties/${propertyId}`)
+  return {}
+}
+
+/// PROP-07 (R-078): a capital project - roof, HVAC, repipe. Recorded here
+/// rather than as a flag on a work order because the improvements that
+/// matter most to a return are the ones that predate the platform ("roof
+/// 2024") and the ones bought straight from a contractor, neither of which
+/// has a work order to carry a flag.
+export async function addCapitalImprovement(
+  propertyId: string,
+  _previous: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const property = await propertyOrThrow(propertyId)
+  const actor = await requirePermission('property.write', propertyResource(property))
+
+  const input: CapitalImprovementInput = {
+    propertyId,
+    category: str(formData, 'category'),
+    description: str(formData, 'description'),
+    costCents: optionalCents(formData, 'costDollars'),
+    inServiceOn: str(formData, 'inServiceOn') || null,
+    workOrderId: str(formData, 'workOrderId') || null,
+    notes: str(formData, 'notes') || null,
+  }
+  const violations = validateCapitalImprovement(input)
+  if (violations.length > 0) return violationsToState(violations)
+
+  // The work order must belong to THIS property. Without the check a
+  // mistyped id would capitalise a job on somebody else's house and quietly
+  // remove its cost from that property's deductible repairs.
+  if (input.workOrderId) {
+    const job = await prisma.workOrder.findFirst({
+      where: { id: input.workOrderId, propertyId },
+      select: { id: true },
+    })
+    if (!job) {
+      return violationsToState([
+        { field: 'workOrderId', message: 'No work order on this property has that ID.' },
+      ])
+    }
+  }
+
+  await prisma.capitalImprovement.create({
+    data: {
+      propertyId,
+      category: input.category,
+      description: input.description,
+      // Validated above as a positive integer, so the assertion is safe.
+      costCents: input.costCents as number,
+      // `@db.Date`: the calendar day it was placed in service, converted the
+      // one way a date-only value may be (D-3).
+      inServiceOn: input.inServiceOn ? businessDateToUtc(input.inServiceOn) : null,
+      workOrderId: input.workOrderId || null,
+      notes: input.notes,
+      recordedByStaffId: actor.id,
+    },
+  })
+
+  revalidatePath(`/properties/${propertyId}`)
+  redirect(`/properties/${propertyId}`)
+}
+
+export async function deleteCapitalImprovement(
+  propertyId: string,
+  capitalImprovementId: string,
+): Promise<FormState> {
+  const property = await propertyOrThrow(propertyId)
+  await requirePermission('property.write', propertyResource(property))
+
+  await prisma.capitalImprovement.deleteMany({ where: { id: capitalImprovementId, propertyId } })
   revalidatePath(`/properties/${propertyId}`)
   return {}
 }

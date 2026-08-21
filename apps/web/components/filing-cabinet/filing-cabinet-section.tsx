@@ -1,9 +1,10 @@
-import type { HoaInfo, InsurancePolicy, Mortgage, Warranty } from '@rental/db'
+import type { CapitalImprovement, HoaInfo, InsurancePolicy, Mortgage, Warranty } from '@rental/db'
 import {
   insuranceRenewalDue,
   mortgageArmAdjustmentDue,
   mortgageBalloonMaturityDue,
 } from '@rental/core/filing-cabinet'
+import { AddCapitalImprovementForm } from '@/components/filing-cabinet/add-capital-improvement-form.tsx'
 import { AddInsurancePolicyForm } from '@/components/filing-cabinet/add-insurance-policy-form.tsx'
 import { AddMortgageForm } from '@/components/filing-cabinet/add-mortgage-form.tsx'
 import { AddWarrantyForm } from '@/components/filing-cabinet/add-warranty-form.tsx'
@@ -11,15 +12,32 @@ import { CostBasisForm } from '@/components/filing-cabinet/cost-basis-form.tsx'
 import { HoaInfoForm } from '@/components/filing-cabinet/hoa-info-form.tsx'
 import { DeleteRowButton } from '@/components/operational/delete-row-button.tsx'
 import {
+  addCapitalImprovement,
   addInsurancePolicy,
   addMortgage,
   addWarranty,
+  deleteCapitalImprovement,
   deleteInsurancePolicy,
   deleteMortgage,
   deleteWarranty,
   setCostBasis,
   setHoaInfo,
 } from '@/lib/filing-cabinet/actions.ts'
+
+const CAPEX_CATEGORY_LABELS: Record<string, string> = {
+  ROOF: 'Roof',
+  HVAC: 'HVAC',
+  WATER_HEATER: 'Water heater',
+  PLUMBING: 'Plumbing',
+  ELECTRICAL: 'Electrical',
+  WINDOWS: 'Windows and doors',
+  FLOORING: 'Flooring',
+  APPLIANCE: 'Appliance',
+  STRUCTURE: 'Structure and foundation',
+  EXTERIOR: 'Exterior and siding',
+  LANDSCAPE: 'Landscaping and site work',
+  OTHER: 'Other',
+}
 
 const WARRANTY_CATEGORY_LABELS: Record<string, string> = {
   ROOF: 'Roof',
@@ -61,6 +79,7 @@ export function FilingCabinetSection({
   insurancePolicies,
   hoaInfo,
   warranties,
+  capitalImprovements,
   canWrite,
 }: {
   propertyId: string
@@ -69,6 +88,7 @@ export function FilingCabinetSection({
   insurancePolicies: InsurancePolicy[]
   hoaInfo: HoaInfo | null
   warranties: Warranty[]
+  capitalImprovements: CapitalImprovement[]
   canWrite: boolean
 }) {
   const asOf = new Date()
@@ -213,6 +233,50 @@ export function FilingCabinetSection({
             <summary className="cursor-pointer text-sm font-medium">Add a warranty</summary>
             <div className="pt-2">
               <AddWarrantyForm action={addWarranty.bind(null, propertyId)} />
+            </div>
+          </details>
+        )}
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <h3 className="text-sm font-medium">Capital improvements</h3>
+        <p className="text-muted-foreground text-xs">
+          Capitalised and depreciated from the day placed in service, not deducted as a repair
+          (PROP-07). These are the rows the year-end tax export puts on its CapEx schedule.
+        </p>
+        {capitalImprovements.length === 0 ? (
+          <p className="text-muted-foreground text-sm">No capital improvements on file.</p>
+        ) : (
+          <ul className="flex flex-col divide-y">
+            {capitalImprovements.map((improvement) => (
+              <li key={improvement.id} className="flex flex-col gap-1 py-2 text-sm">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span>
+                    {CAPEX_CATEGORY_LABELS[improvement.category] ?? improvement.category} —{' '}
+                    {improvement.description} · {dollars(improvement.costCents)}
+                  </span>
+                  {canWrite && (
+                    <DeleteRowButton
+                      action={deleteCapitalImprovement.bind(null, propertyId, improvement.id)}
+                    />
+                  )}
+                </div>
+                {improvement.inServiceOn ? (
+                  <span className="text-muted-foreground text-xs">
+                    In service {isoDate(improvement.inServiceOn)}
+                  </span>
+                ) : (
+                  <AlertBadge>No in-service date — cannot be depreciated</AlertBadge>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+        {canWrite && (
+          <details>
+            <summary className="cursor-pointer text-sm font-medium">Add an improvement</summary>
+            <div className="pt-2">
+              <AddCapitalImprovementForm action={addCapitalImprovement.bind(null, propertyId)} />
             </div>
           </details>
         )}

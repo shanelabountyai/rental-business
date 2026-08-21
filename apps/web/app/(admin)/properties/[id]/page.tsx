@@ -257,6 +257,7 @@ export default async function PropertyDetailPage({
           insurancePolicies={filingCabinet.insurancePolicies}
           hoaInfo={filingCabinet.hoaInfo}
           warranties={filingCabinet.warranties}
+          capitalImprovements={filingCabinet.capitalImprovements}
           canWrite={canWrite}
         />
         <EmptySection
