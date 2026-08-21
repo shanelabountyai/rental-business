@@ -3187,7 +3187,7 @@ Full reasoning in `07-decisions.md`.
 ---
 
 ## R-080 — Preventive maintenance + seasonal batch templates
-**Commit:** _pending_  ·  **Date:** 2026-08-21
+**Commit:** `acb0262`  ·  **Date:** 2026-08-21
 
 **What it built.** A free-form, PM-created `PreventiveMaintenanceTemplate` (name, optional trade, cadence in months) - the same "nothing hardcoded" posture `InspectionTemplate`/`ComplianceItem` already take, covering MAINT-08's ~11 named categories (HVAC filters, gutters, winterization, smoke/CO, water heater flush, dryer vent, sump pump, pest, well/septic, chimney) as illustrative examples, not seeded rows. New `/maintenance/preventive`, `/maintenance/preventive/new`, `/maintenance/preventive/[id]` pages. `nextPreventiveDueDate()` (`packages/core/workorders`) is a third near-duplicate of the clamped-month-rollover algorithm R-073/R-077 already established. `WorkOrder.pmTemplateId` (new nullable FK, the same tagging shape `turnoverProjectId` already takes) lets "when was this last done" read straight off the latest CLOSED job, no second schedule table. "One click creates the batch across properties, assigned by vendor territory" is `runPreventiveBatch()`: every due unit in the actor's own scope gets a new SUBMITTED work order, auto-assigned by composing a new `vendorCoversProperty()` (territory match against `Vendor.serviceAreas`, R-079's field, never matched against anything until now) with the existing `fallbackVendorsForTrade()` ranking - unmatched units stay unassigned for a PM to assign by hand.
 
