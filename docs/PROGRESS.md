@@ -3164,3 +3164,22 @@ Full reasoning in `07-decisions.md`.
 - **No edit or delete for a `ComplianceItem` itself once created** - a wrong due date or label has no fix-up path from the UI yet; matches the "add a version, never edit" posture other config-shaped models in this product already take, but nothing here builds the "add a version" half.
 - **No portfolio-wide "N items overdue" dashboard tile.** The compliance calendar is reachable from nav and from `/reports/dates`; a dashboard exception tile is real follow-on, not required by PROP-05's own acceptance text.
 - **No e2e coverage of an entity-level item's own add/list flow** - the alert job's entity-level dedup has direct db-test coverage; the UI's entity-vs-property scope picker is proven only by typecheck/build, not a browser test.
+
+---
+
+## R-079 — Vendor management
+**Commit:** _pending_  ·  **Date:** 2026-08-21
+
+**What it built.** A staff-facing `/vendors` CRUD surface (`/vendors`, `/vendors/new`, `/vendors/[id]`) - no admin surface for "manage vendor records" existed before this item at all; a vendor row could only ever be created by hand in the database. The assignment picker on `/workorders/[id]` now calls `fallbackVendorsForTrade()` (built in R-025, never actually wired to anything until now) instead of a flat, unranked `activeVendors()` - preferred vendors for the job's trade sort first, and each row is labeled with "no W-9"/"COI expired" warnings rather than being silently filtered out. `fallbackVendorsForTrade()`'s `trade` parameter widened to accept `null`, skipping the trade filter for a ticketless work order. Invoice lifecycle status ("not received → approved → paid," MAINT-09) is computed by `invoiceLifecycleStatus()` from three already-true facts - `invoiceCents`, the same tolerance check `closeWorkOrder` already runs, and the one new stored fact `invoicePaidAt`/`invoicePaymentMethod` - shown identically on both the staff work-order page and the vendor's own magic-link page. `vendorPaymentTotalsForYear()` sums `jobCostCents()` by payment method per calendar year, with a $600 1099-NEC candidate banner on the vendor page.
+
+**What it decided.** Recorded as **D-68**:
+- **Invoice status is derived, never a stored enum column** - reuses the existing tolerance check rather than a second copy of ceiling math or a status that could drift from what that check would say.
+- **`fallbackVendorsForTrade(trade: string | null)`**, not a second query function, for the ticketless-work-order case.
+- **`vendor.write`/`vendor.read` (record CRUD) are portfolio-wide, no resource** - `Vendor` has no `propertyId`, matching `JurisdictionRule`'s existing posture. Distinct from the pre-existing, unchanged, resource-carrying `vendor.read` check on the assignment picker.
+- **`Vendor.trades` (free-form lowercase) vs. `Ticket.category` (closed uppercase enum)** - handled by lowercasing the category before matching, not by unifying the two vocabularies.
+
+Full reasoning in `07-decisions.md`.
+
+**What it left behind.**
+- **No live QuickBooks push for the 1099-NEC totals** - OQ-8 (bookkeeping system) is still unanswered and gates R-078/R-081, not this item; the totals read `jobCostCents()` so an export built later starts from the right number.
+- **No re-dispatch / "next vendor on the list" UI** - `fallbackVendorsForTrade()`'s `excludeVendorIds` parameter exists and is tested, but nothing in the UI calls it yet; the picker always shows the full ranked list, not "the next one after the last one declined."

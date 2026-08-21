@@ -1,4 +1,6 @@
+import { actualTotalCents, reapprovalCheck } from '@rental/core/approvals'
 import { utcToWallClock } from '@rental/core/scheduling'
+import { INVOICE_STATUS_LABELS, invoiceLifecycleStatus } from '@rental/core/vendors'
 import { prisma } from '@rental/db'
 import { VendorJob } from '@/components/vendors/vendor-job.tsx'
 import {
@@ -13,6 +15,7 @@ import { vendorRejectionMessage } from '@/lib/vendors/messages.ts'
 import { verifyVendorLink } from '@/lib/vendors/link.ts'
 import { reissueOnExpiry } from '@/lib/vendors/reissue.ts'
 import { vendorJobContext } from '@/lib/vendors/queries.ts'
+import { policyFor } from '@/lib/workorders/queries.ts'
 import { vendorWorkOrderThread } from '@/lib/workorders/timeline.ts'
 
 export const metadata = {
@@ -76,6 +79,23 @@ export default async function VendorLinkPage({
 
   const { workOrder } = link
   const context = await vendorJobContext(workOrder)
+
+  // The vendor's own "where's my check" answer (MAINT-09) - the identical
+  // `invoiceLifecycleStatus()`/tolerance read the staff-side work order
+  // page uses, so the two can never tell the vendor and the PM two
+  // different stories.
+  const policy = await policyFor(workOrder.propertyId)
+  const invoiceOverTolerance =
+    workOrder.invoiceCents != null &&
+    reapprovalCheck(workOrder.approvedAmountCents, actualTotalCents(workOrder), policy).outcome ===
+      'reapproval_required'
+  const invoiceStatusLabel = INVOICE_STATUS_LABELS[
+    invoiceLifecycleStatus({
+      invoiceCents: workOrder.invoiceCents,
+      overTolerance: invoiceOverTolerance,
+      invoicePaidAt: workOrder.invoicePaidAt,
+    })
+  ]
 
   // COMM-06's vendor thread, gets-or-creates on first read the same as
   // every other thread in the product - reading it must not require
@@ -144,6 +164,7 @@ export default async function VendorLinkPage({
         entryPermission: workOrder.ticket?.entryPermission ?? null,
         invoiceUploaded: context.photos.some((p) => p.type === 'INVOICE'),
         completionPhotoUploaded: context.photos.some((p) => p.type === 'COMPLETION_PHOTO'),
+        invoiceStatusLabel,
       }}
       photos={context.photos.map((p) => ({
         id: p.id,

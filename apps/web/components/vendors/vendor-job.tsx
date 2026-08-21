@@ -47,6 +47,10 @@ export interface VendorJobProps {
     /// MAINT-06's required completion photo. Gates "mark complete", so the
     /// button can say what is missing instead of failing on press.
     completionPhotoUploaded: boolean
+    /// "Received → approved → paid" (MAINT-09, R-079) - the same read the
+    /// staff-side work order page shows, so nobody hears two different
+    /// answers to "where's my check".
+    invoiceStatusLabel: string
   }
   photos: readonly { id: string; fileName: string; href: string }[]
   appliances: readonly {
@@ -402,6 +406,11 @@ export function VendorJob({
               </p>
             </section>
           )}
+
+          <section className="flex flex-col gap-2 rounded-md border p-4">
+            <h2 className="text-sm font-medium">Invoice status</h2>
+            <p className="text-sm">{job.invoiceStatusLabel}</p>
+          </section>
 
           <section className="flex flex-col gap-4 rounded-md border p-4">
             <h2 className="text-sm font-medium">When you&rsquo;re done</h2>

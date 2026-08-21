@@ -218,6 +218,11 @@ describe('fallbackVendorsForTrade', () => {
     expect(alpha.coiExpired).toBe(true)
     expect(ranked.find((v) => v.id === 'v1')!.w9Missing).toBe(false)
   })
+
+  it('R-079: trade=null skips the trade filter and ranks every active vendor', () => {
+    const ranked = fallbackVendorsForTrade(vendors, null, now)
+    expect(ranked.map((v) => v.id).sort()).toEqual(['v1', 'v2', 'v3', 'v5'])
+  })
 })
 
 describe('validateVendorResponse', () => {

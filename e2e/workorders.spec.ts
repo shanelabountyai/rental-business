@@ -360,7 +360,11 @@ test.describe('assigning a work order', () => {
     await signIn(page, staff.email)
 
     await page.goto(`/workorders/${workOrder.id}`)
-    await page.getByLabel('Assign to vendor').selectOption({ label: vendor.name })
+    // By value, not label (R-079): the picker now appends "no W-9"/"COI
+    // expired" warnings onto a vendor's label, so an exact-label match
+    // against the bare name no longer resolves. The option's value is
+    // always the vendor's own id (see AssignForm).
+    await page.getByLabel('Assign to vendor').selectOption({ value: vendor.id })
     await page.getByRole('button', { name: 'Assign to vendor' }).click()
 
     await expect

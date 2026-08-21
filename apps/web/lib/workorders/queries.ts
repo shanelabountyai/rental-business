@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { resolvePolicy } from '@rental/core/approvals'
+import { fallbackVendorsForTrade } from '@rental/core/vendors'
 import { prisma } from '@rental/db'
 import type { ResolvedScope } from '@/lib/scope/current-scope.ts'
 import { getOperationalData } from '@/lib/operational/queries.ts'
@@ -159,14 +160,26 @@ export async function unitsInScope(scope: ResolvedScope) {
   })
 }
 
-/// Active vendors, for the assignment picker. A 10-50 unit portfolio's own
-/// vendor list is short enough to show whole and let the PM read trades off
-/// each row - not a query built for a row count this scale will never see.
-export async function activeVendors() {
-  return prisma.vendor.findMany({
+/**
+ * Active vendors for the assignment picker, ranked and flagged
+ * (`fallbackVendorsForTrade()`, MAINT-11, R-079) - preferred vendors for the
+ * job's own trade first, each carrying whether its W-9 is missing or its
+ * COI has lapsed so the PM sees that BEFORE dispatching, not after.
+ *
+ * `trade` is lowercased before matching: `Vendor.trades`' own schema
+ * comment gives lowercase examples ("plumbing", "hvac"), but
+ * `Ticket.category` is an uppercase enum (`PLUMBING`) - the two vocabularies
+ * were never unified, so a naive exact match would silently filter every
+ * vendor out for every ticket-driven job. `trade: null` (a ticketless work
+ * order - a turnover job, say) skips the filter and ranks every active
+ * vendor instead.
+ */
+export async function vendorsForAssignment(trade: string | null) {
+  const vendors = await prisma.vendor.findMany({
     where: { active: true },
-    orderBy: { name: 'asc' },
+    select: { id: true, name: true, trades: true, preferredRank: true, active: true, w9OnFile: true, coiExpiresOn: true },
   })
+  return fallbackVendorsForTrade(vendors, trade?.toLowerCase() ?? null, new Date())
 }
 
 /**

@@ -334,6 +334,13 @@ export const AUDIT_ACTIONS = [
 
   /// R-029: a vendor was added to or removed from the after-hours list.
   'vendor.emergency_availability_changed',
+  /// R-079 (MAINT-11): a vendor record was added or edited - trades,
+  /// service areas, W-9/COI status, license, preferred rank.
+  'vendor.record_saved',
+  /// R-079 (MAINT-09): staff marked a vendor invoice as actually paid - the
+  /// one real event in the "received → approved → paid" lifecycle nothing
+  /// else can derive.
+  'workorder.invoice_paid',
 
   /// R-030: the work is finished and the tenant is being asked. A distinct
   /// action from `workorder.closed` because these are different claims by

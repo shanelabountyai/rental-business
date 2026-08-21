@@ -119,4 +119,10 @@ export const NAV_ITEMS: readonly NavItem[] = [
     permission: 'property.read',
     ownedBy: 'R-077',
   },
+  {
+    href: '/vendors',
+    label: 'Vendors',
+    permission: 'vendor.read',
+    ownedBy: 'R-079',
+  },
 ]

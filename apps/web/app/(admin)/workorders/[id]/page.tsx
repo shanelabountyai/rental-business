@@ -1,4 +1,4 @@
-import { actualTotalCents, compareBids } from '@rental/core/approvals'
+import { actualTotalCents, compareBids, reapprovalCheck } from '@rental/core/approvals'
 import { earliestCompliantStart } from '@rental/core/entry'
 import { utcToWallClock, businessDate } from '@rental/core/scheduling'
 import { formatCents } from '@rental/core/money'
@@ -8,6 +8,7 @@ import {
   likelyMatchingWarranty,
   vendorReopenRates,
 } from '@rental/core/workorders'
+import { INVOICE_STATUS_LABELS, invoiceLifecycleStatus } from '@rental/core/vendors'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { prisma } from '@rental/db'
@@ -16,6 +17,7 @@ import { BidsPanel } from '@/components/workorders/bids-panel.tsx'
 import { AssignForm } from '@/components/workorders/assign-form.tsx'
 import { ChargebackPanel } from '@/components/workorders/chargeback-panel.tsx'
 import { ClosePanel } from '@/components/workorders/close-panel.tsx'
+import { InvoiceStatusPanel } from '@/components/workorders/invoice-status-panel.tsx'
 import { RecordActualsForm } from '@/components/workorders/record-actuals-form.tsx'
 import { ScheduleForm } from '@/components/workorders/schedule-form.tsx'
 import { TaskActionButton } from '@/components/tasks/action-button.tsx'
@@ -50,12 +52,14 @@ import {
   scheduleEntry,
 } from '@/lib/workorders/scheduling.ts'
 import {
-  activeVendors,
   getWorkOrder,
   jobContextForWorkOrder,
+  policyFor,
   staffForWorkOrderAssignment,
+  vendorsForAssignment,
   warrantiesForProperty,
 } from '@/lib/workorders/queries.ts'
+import { markInvoicePaid } from '@/lib/vendors/staff-actions.ts'
 
 export const metadata = { title: 'Work order — Rental Operations' }
 
@@ -111,11 +115,26 @@ export default async function WorkOrderDetailPage({
       ? await chargebackContext(workOrder.id)
       : null
 
-  const [warranties, staff, vendors] = await Promise.all([
+  const [warranties, staff, vendors, policy] = await Promise.all([
     warrantiesForProperty(workOrder.propertyId).then((w) => activeWarranties(w, new Date())),
     canWrite ? staffForWorkOrderAssignment(workOrder.propertyId) : Promise.resolve([]),
-    canWrite && canSeeVendors ? activeVendors() : Promise.resolve([]),
+    canWrite && canSeeVendors
+      ? vendorsForAssignment(workOrder.ticket?.category ?? null)
+      : Promise.resolve([]),
+    policyFor(workOrder.propertyId),
   ])
+  // The SAME tolerance check `closeWorkOrder`'s own action runs (D-42) -
+  // MAINT-09's "invoices within tolerance route straight to approved" reads
+  // this, not a second copy of the ceiling math.
+  const invoiceOverTolerance =
+    workOrder.invoiceCents != null &&
+    reapprovalCheck(workOrder.approvedAmountCents, actualTotalCents(workOrder), policy).outcome ===
+      'reapproval_required'
+  const invoiceStatus = invoiceLifecycleStatus({
+    invoiceCents: workOrder.invoiceCents,
+    overTolerance: invoiceOverTolerance,
+    invoicePaidAt: workOrder.invoicePaidAt,
+  })
   const likely = workOrder.ticket
     ? likelyMatchingWarranty(workOrder.ticket.category, warranties)
     : null
@@ -531,6 +550,14 @@ export default async function WorkOrderDetailPage({
           currentAnswer={answers.find((a) => a.round === currentRound) ?? null}
           history={answers}
           closeAction={closeWorkOrder.bind(null, workOrder.id)}
+        />
+      )}
+
+      {workOrder.vendorId && workOrder.invoiceCents != null && (
+        <InvoiceStatusPanel
+          statusLabel={INVOICE_STATUS_LABELS[invoiceStatus]}
+          canMarkPaid={canWrite && invoiceStatus === 'approved'}
+          markPaidAction={canWrite ? markInvoicePaid.bind(null, workOrder.id) : undefined}
         />
       )}
 

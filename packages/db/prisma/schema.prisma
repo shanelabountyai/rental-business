@@ -2861,6 +2861,20 @@ model WorkOrder {
   actualLaborCents               Int?
   actualMaterialsCents           Int?
   invoiceCents                   Int?
+  /// Set once the invoice is actually paid - the terminal stage of MAINT-09's
+  /// "received → approved → paid", the vendor's own visible status
+  /// (R-079). "Received" and "approved for payment" are both DERIVED, never
+  /// stored: received is `invoiceCents != null`, approved-for-payment is
+  /// that plus being inside the entity's own tolerance
+  /// (`packages/core/workorders`' existing `closeDecision()`/`overApproved`
+  /// logic, not a second copy of it) - only "paid" is a real event nothing
+  /// else can compute, so it is the one new fact this item stores.
+  invoicePaidAt                  DateTime?
+  /// How the vendor was actually paid - check, ACH, card, cash. Free-form,
+  /// validated against a closed list in core (the same "closed vocabulary
+  /// in code, not a Prisma enum" posture `Notice.type`/`ComplianceItem.type`
+  /// already take) - cumulative 1099-NEC totals are broken out by this.
+  invoicePaymentMethod           String?
   scheduledStart                 DateTime?
   scheduledEnd                   DateTime?
   /// When the vendor magic link was last sent (R-025). Drives the

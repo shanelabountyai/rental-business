@@ -17,7 +17,11 @@ export function AssignForm({
 }: {
   action: (state: WorkOrderFormState, formData: FormData) => Promise<WorkOrderFormState>
   staff: readonly { id: string; name: string }[]
-  vendors: readonly { id: string; name: string }[]
+  /// Already ranked best-first for the job's own trade (MAINT-11, R-079) -
+  /// `w9Missing`/`coiExpired` are surfaced in the label so a PM sees the
+  /// gap BEFORE dispatching, never silently filtered out (the only plumber
+  /// who answers at 2am is still on this list).
+  vendors: readonly { id: string; name: string; w9Missing: boolean; coiExpired: boolean }[]
 }) {
   const [staffState, staffFormAction] = useActionState<WorkOrderFormState, FormData>(action, {})
   const [vendorState, vendorFormAction] = useActionState<WorkOrderFormState, FormData>(action, {})
@@ -46,7 +50,12 @@ export function AssignForm({
             name="vendorId"
             idPrefix="assign-vendor"
             required
-            options={vendors.map((v) => ({ value: v.id, label: v.name }))}
+            options={vendors.map((v) => ({
+              value: v.id,
+              label: [v.name, v.w9Missing && 'no W-9', v.coiExpired && 'COI expired']
+                .filter(Boolean)
+                .join(' — '),
+            }))}
           />
           <SubmitButton label="Assign to vendor" />
         </form>

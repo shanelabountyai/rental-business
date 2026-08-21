@@ -78,3 +78,52 @@ export function validateVendorInvoice(input: VendorInvoiceInput): Violation[] {
   }
   return []
 }
+
+// Vendor records themselves (MAINT-11, R-079) - what a PM types managing
+// the vendor list, distinct from everything above this line, which is what
+// a VENDOR submits through their own magic link.
+
+export interface VendorRecordInput {
+  name: string
+  trades: readonly string[]
+  contactName?: string | null
+  email?: string | null
+  phone?: string | null
+  serviceAreas?: readonly string[]
+  licenseNumber?: string | null
+  w9OnFile: boolean
+  /// A calendar day (`Vendor.coiExpiresOn` is `@db.Date`), or empty for "no
+  /// COI on file yet" - not the same as an expired one, which still has a
+  /// date, just a past one.
+  coiExpiresOn?: string | null
+  preferredRank?: number | null
+  emergencyAvailable: boolean
+}
+
+export function validateVendorRecord(input: VendorRecordInput): Violation[] {
+  const violations: Violation[] = []
+  if (!input.name.trim()) violations.push({ field: 'name', message: 'Required.' })
+  if (input.trades.length === 0) {
+    violations.push({ field: 'trades', message: 'Enter at least one trade.' })
+  }
+  if (
+    input.preferredRank != null &&
+    (!Number.isInteger(input.preferredRank) || input.preferredRank < 0)
+  ) {
+    violations.push({ field: 'preferredRank', message: 'Enter a whole number, or leave blank.' })
+  }
+  if (input.coiExpiresOn && Number.isNaN(new Date(`${input.coiExpiresOn}T00:00:00.000Z`).getTime())) {
+    violations.push({ field: 'coiExpiresOn', message: 'Enter a valid date.' })
+  }
+  return violations
+}
+
+/// The channels a landlord actually pays a vendor through - a closed list
+/// in code, the same "free-form column, validated here, never a Prisma
+/// enum" posture `Notice.type`/`ComplianceItem.type` already take.
+export const VENDOR_PAYMENT_METHODS = ['CHECK', 'ACH', 'CARD', 'CASH', 'OTHER'] as const
+export type VendorPaymentMethodValue = (typeof VENDOR_PAYMENT_METHODS)[number]
+
+export function isVendorPaymentMethod(value: string): value is VendorPaymentMethodValue {
+  return (VENDOR_PAYMENT_METHODS as readonly string[]).includes(value)
+}

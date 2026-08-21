@@ -107,7 +107,11 @@ export interface RankedVendor extends VendorCandidate {
 
 /**
  * The fallback list for a trade: active vendors who work that trade, best
- * first.
+ * first. `trade: null` skips the trade filter entirely and ranks every
+ * active vendor instead - the picker for a ticketless work order (a
+ * turnover job, say) has no single category to filter by, and MAINT-11's
+ * own W-9/COI flagging is exactly as useful there as it is per-trade
+ * (R-079).
  *
  * `excludeVendorIds` is how re-dispatch skips whoever already declined or
  * went silent - the PM asking for "the next vendor" means next, not the same
@@ -115,13 +119,13 @@ export interface RankedVendor extends VendorCandidate {
  */
 export function fallbackVendorsForTrade(
   vendors: readonly VendorCandidate[],
-  trade: string,
+  trade: string | null,
   now: Date,
   excludeVendorIds: readonly string[] = [],
 ): RankedVendor[] {
   const excluded = new Set(excludeVendorIds)
   return vendors
-    .filter((v) => v.active && !excluded.has(v.id) && v.trades.includes(trade))
+    .filter((v) => v.active && !excluded.has(v.id) && (trade == null || v.trades.includes(trade)))
     .map((v) => ({
       ...v,
       w9Missing: !v.w9OnFile,
