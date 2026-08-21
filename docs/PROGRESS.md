@@ -3145,3 +3145,22 @@ Full reasoning in `07-decisions.md`.
 **What it left behind.**
 - **`resolutionByPriority` (R-075) still has no UI caller.** This item's own scope was reports built from EXISTING numbers plus the two genuinely missing ones; a resolution-time summary alongside the open-work-orders list is real follow-on, not required by RPT-04's own literal wording ("by age and priority" names the open list, not a closed-ticket average).
 - **No e2e coverage of the turnover-stage display on `/vacancies`** (no fixture built a `TurnoverProject` for the drill-down test) - `currentStageFor()` itself has direct unit coverage; the page wiring is proven only by typecheck/build and the existing dashboard e2e's unchanged assertions still passing.
+
+---
+
+## R-077 — Compliance calendar
+**Commit:** `<pending>`  ·  **Date:** 2026-08-20
+
+**What it built.** A generic `ComplianceItem`/`ComplianceCompletion` pair covering everything PROP-05 names except mortgage ARM/balloon and insurance renewal (those already had their own tested date field from R-015 and are unioned into the calendar rather than duplicated - `Mortgage`, `InsurancePolicy`). `ComplianceItem.type` is free-form (`Notice.type`'s own posture); a hand-written CHECK constraint enforces exactly one of `propertyId`/`legalEntityId` since a property-level license and an entity-level LLC annual report are different facts. `ComplianceCompletion` is the permanent log PROP-05 asks for - never edited or deleted, so "when was this last done" always reads from the most recent row. `nextComplianceDueDate()` (`packages/core/compliance`) advances a recurring item's due date from whenever it was actually completed, the same clamped-month-rollover shape `nextPeriodicDueDate()` (R-073) already established for inspections. A new daily job (`alert-job.ts`) raises a ROUTINE Task once an item enters its own per-item lead-time window and a URGENT one once overdue - an entity-level item spanning several properties gets flagged exactly once, deduped naturally through `Task.subjectId` being the compliance item's own id rather than any special-casing. New `/compliance` (list), `/compliance/new` (add item, scope picker toggles property vs. entity by type), and `/compliance/[id]` (completion history + record-completion form) pages. R-076's `upcomingCriticalDates()` now unions `ComplianceItem` in as a fifth source, closing the gap that item and R-050 both named honestly rather than overclaiming.
+
+**What it decided.** Recorded as **D-67**:
+- **One generic model, not a table per obligation category.** Every PRD-named obligation is the same shape (label, due date, optional recurrence, completion log) - the same "one queue, not many" argument D-9 already makes for `Task`, one level up.
+- **Per-item lead time, not a global constant.** PROP-05's own examples span a 7-day smoke-detector check and a 60-day insurance-style notice; nothing in this product's history has ever found one number that fits every obligation.
+- **`nextComplianceDueDate()` is a deliberate near-duplicate of `nextPeriodicDueDate()`**, not a shared/generalized function - D-65's own call again, for a ten-line function this size.
+
+Full reasoning in `07-decisions.md`.
+
+**What it left behind.**
+- **No edit or delete for a `ComplianceItem` itself once created** - a wrong due date or label has no fix-up path from the UI yet; matches the "add a version, never edit" posture other config-shaped models in this product already take, but nothing here builds the "add a version" half.
+- **No portfolio-wide "N items overdue" dashboard tile.** The compliance calendar is reachable from nav and from `/reports/dates`; a dashboard exception tile is real follow-on, not required by PROP-05's own acceptance text.
+- **No e2e coverage of an entity-level item's own add/list flow** - the alert job's entity-level dedup has direct db-test coverage; the UI's entity-vs-property scope picker is proven only by typecheck/build, not a browser test.

@@ -8,10 +8,10 @@ export const metadata = { title: 'Critical dates — Rental Operations' }
 
 // RPT-04's "upcoming critical dates, next 60 days": lease expirations,
 // insurance/mortgage renewals, renter's-insurance expiry, deposit-return
-// deadlines (R-076). NOT statutory compliance (permits, mandated
-// inspections) - that calendar is R-077's own item and does not exist in
-// this product yet, the same honest gap R-050's "Renewals & alerts" tile
-// already names rather than overclaiming.
+// deadlines (R-076), and the compliance calendar (R-077) - the gap R-050
+// and R-076 both named honestly rather than overclaiming is closed here,
+// `upcomingCriticalDates()` unions `ComplianceItem` in alongside everything
+// else rather than this page reading it a second, separate way.
 export default async function CriticalDatesPage() {
   const { actor } = await requireScope('property.read')
   const scope = await currentScope(actor)
@@ -27,10 +27,7 @@ export default async function CriticalDatesPage() {
           ← Reports
         </Link>
         <h1 className="text-2xl font-semibold tracking-tight">Upcoming critical dates</h1>
-        <p className="text-muted-foreground text-sm">
-          Next 60 days. Statutory compliance dates (permits, mandated inspections) are not yet
-          tracked anywhere in this product — see R-077.
-        </p>
+        <p className="text-muted-foreground text-sm">Next 60 days.</p>
       </header>
 
       {dates.length === 0 ? (

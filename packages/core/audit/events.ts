@@ -216,6 +216,13 @@ export const AUDIT_ACTIONS = [
   /// for it - the moment `DepositDeduction` rows stop accepting edits.
   'deposit.disposition_finalized',
 
+  // Compliance calendar (PROP-05, R-077).
+  'compliance.item_created',
+  /// A compliance obligation was actually satisfied - the permanent
+  /// completion log's own write, and the fact "when was this last done"
+  /// answers from (PROP-05's own wording).
+  'compliance.completed',
+
   // Inspection engine (INSP-01, R-068).
   /// A new inspection was started, from a template or ad hoc - which
   /// template (if any) and the room/item list it copied are on the entry,

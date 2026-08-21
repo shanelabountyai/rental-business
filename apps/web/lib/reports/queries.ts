@@ -130,6 +130,7 @@ export type CriticalDateKind =
   | 'INSURANCE_RENEWAL'
   | 'RENTER_INSURANCE_EXPIRING'
   | 'DEPOSIT_DISPOSITION_DUE'
+  | 'COMPLIANCE_ITEM_DUE'
 
 export interface CriticalDate {
   propertyId: string
@@ -140,18 +141,15 @@ export interface CriticalDate {
 }
 
 /**
- * The union RPT-04 names: "lease expirations, compliance, insurance
- * renewals, COI expiries, deposit-return clocks" - minus statutory
- * compliance, which is R-077's own item and does not exist in this product
- * yet (the same honest gap R-050's "Renewals & alerts" tile already names
- * rather than overclaiming). Every source already has its own tested
- * definition (`filingCabinetAlertsDue`, R-015; `Deposit.dispositionDueOn`,
- * R-071) - this only unions and re-filters them to one 60-day window,
- * since each source's own internal alert window differs (mortgage ARM and
- * insurance are already 60 days; balloon maturity is 180, so a real
- * upcoming balloon 90 days out would otherwise be silently excluded from a
- * REPORT whose own name promises "next 60 days" and included here only if
- * inside it).
+ * The full union RPT-04 names: "lease expirations, compliance, insurance
+ * renewals, COI expiries, deposit-return clocks". Every source already has
+ * its own tested definition (`filingCabinetAlertsDue`, R-015;
+ * `Deposit.dispositionDueOn`, R-071; `ComplianceItem.dueOn`, R-077) - this
+ * only unions and re-filters them to one 60-day window, since each
+ * source's own internal alert window differs (mortgage ARM and insurance
+ * are already 60 days; balloon maturity is 180, so a real upcoming balloon
+ * 90 days out would otherwise be silently excluded from a REPORT whose own
+ * name promises "next 60 days" and included here only if inside it).
  */
 export async function upcomingCriticalDates(
   scope: ResolvedScope,
@@ -249,6 +247,51 @@ export async function upcomingCriticalDates(
       kind: 'DEPOSIT_DISPOSITION_DUE',
       dueOn: deposit.dispositionDueOn!,
       label: `Deposit disposition due — ${deposit.lease.unit.name}`,
+    })
+  }
+
+  // ComplianceItem (R-077) - both property- and entity-scoped. An
+  // entity-level item (an LLC annual report, say) names no single property,
+  // so it carries the entity's own name instead - `propertyId` stays a real
+  // id only when the item actually has one, never faked to satisfy the
+  // type.
+  const entityIds = [...new Set(scope.availableProperties.map((p) => p.legalEntityId))]
+  const entityName = new Map(scope.availableProperties.map((p) => [p.legalEntityId, '']))
+  if (entityIds.length > 0) {
+    const entities = await prisma.legalEntity.findMany({
+      where: { id: { in: entityIds } },
+      select: { id: true, name: true },
+    })
+    for (const entity of entities) entityName.set(entity.id, entity.name)
+  }
+
+  const complianceItems = await prisma.complianceItem.findMany({
+    where: {
+      OR: [{ propertyId: { in: scope.propertyIds } }, { legalEntityId: { in: entityIds } }],
+      dueOn: { gte: todayUtc, lte: cutoff },
+    },
+    select: {
+      id: true,
+      propertyId: true,
+      legalEntityId: true,
+      label: true,
+      dueOn: true,
+      completions: { take: 1, select: { id: true } },
+      recurrenceMonths: true,
+    },
+  })
+  for (const item of complianceItems) {
+    // A satisfied one-time item is done for good - see alert-job.ts's own
+    // identical check.
+    if (item.recurrenceMonths == null && item.completions.length > 0) continue
+    dates.push({
+      propertyId: item.propertyId ?? '',
+      propertyName: item.propertyId
+        ? (propertyName.get(item.propertyId) ?? '')
+        : `${entityName.get(item.legalEntityId!) ?? ''} (entity-wide)`,
+      kind: 'COMPLIANCE_ITEM_DUE',
+      dueOn: item.dueOn,
+      label: item.label,
     })
   }
 

@@ -441,8 +441,9 @@ model LegalEntity {
   createdAt               DateTime        @default(now())
   updatedAt               DateTime        @updatedAt
 
-  properties  Property[]
-  assignments StaffAssignment[]
+  properties      Property[]
+  complianceItems ComplianceItem[]
+  assignments     StaffAssignment[]
 
   @@index([active])
 }
@@ -512,6 +513,7 @@ model Property {
   ledgerEntries     LedgerEntry[]
   deposits          Deposit[]
   depositDeductions DepositDeduction[]
+  complianceItems   ComplianceItem[]
   recurringCharges  RecurringCharge[]
   utilityBills      UtilityBill[]
   tickets           Ticket[]
@@ -618,6 +620,84 @@ model HoaInfo {
   updatedAt       DateTime @updatedAt
 
   property Property @relation(fields: [propertyId], references: [id])
+}
+
+/// One compliance obligation with a due date, property- or entity-scoped
+/// (PROP-05, R-077): licenses/registrations, CO/periodic city inspections,
+/// smoke/CO certifications, lead disclosures, HOA obligations, property tax
+/// due dates and appeal windows, Section 8 dates, LLC annual reports,
+/// registered-agent renewals. Mortgage ARM/balloon and insurance-policy
+/// renewal are DELIBERATELY NOT here - `Mortgage`/`InsurancePolicy` (R-015)
+/// already have one tested date field each, and the compliance calendar
+/// reads them alongside this table rather than duplicating them.
+///
+/// EXACTLY ONE OF `propertyId`/`legalEntityId` IS SET, enforced by a
+/// database CHECK constraint (the migration's own comment) - a
+/// property-level license and an entity-level annual report are different
+/// facts and neither scope is optional-both.
+model ComplianceItem {
+  id               String   @id @default(cuid())
+  propertyId       String?
+  /// LLC annual reports, registered-agent renewals - obligations that
+  /// belong to the entity, not any one property under it.
+  legalEntityId    String?
+  /// Free-form, the same "a state/owner obligation this product has never
+  /// heard of must not need a migration" posture `Notice.type` already
+  /// takes.
+  type             String
+  /// A human label distinguishing two items of the same type - "City of
+  /// Houston rental registration" vs. "Harris County smoke detector cert" -
+  /// since `type` alone is a category, not a specific obligation.
+  label            String
+  /// The CURRENT cycle's due date. For a recurring item this advances every
+  /// time a completion is recorded (`nextComplianceDueDate()`); for a
+  /// one-time item it never changes - completion is read from whether any
+  /// `ComplianceCompletion` exists at all, not from this column.
+  dueOn            DateTime @db.Date
+  /// Null means one-time (e.g. a lead disclosure acknowledgment signed
+  /// once); set means it recurs every N months from whenever it was last
+  /// actually completed - the same "anchored to when the work really
+  /// happened, not a fixed calendar slot" posture
+  /// `nextPeriodicDueDate()` (R-073) already takes for inspections.
+  recurrenceMonths Int?
+  /// How many days before `dueOn` the alert Task is raised - per item,
+  /// because a 60-day insurance-style notice and a 7-day smoke-detector
+  /// battery check are not the same lead time, and nothing here is a
+  /// jurisdiction fact D-4 would otherwise want configured centrally.
+  leadTimeDays     Int      @default(30)
+  notes            String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  property    Property?              @relation(fields: [propertyId], references: [id])
+  legalEntity LegalEntity?           @relation(fields: [legalEntityId], references: [id])
+  completions ComplianceCompletion[]
+
+  @@index([propertyId])
+  @@index([legalEntityId])
+  @@index([dueOn])
+}
+
+/// The permanent log - "when was this last done, in one lookup" (PROP-05's
+/// own wording). Never edited or deleted; a correction is a new row, the
+/// same posture every other evidence log in this product takes for the
+/// identical reason (RenterInsurancePolicy, AccessCode's own version
+/// history).
+model ComplianceCompletion {
+  id                 String   @id @default(cuid())
+  complianceItemId   String
+  completedOn        DateTime @db.Date
+  completedByStaffId String?
+  /// Proof - a certificate, a paid receipt, a filed confirmation.
+  documentId         String?
+  notes              String?
+  createdAt          DateTime @default(now())
+
+  complianceItem ComplianceItem @relation(fields: [complianceItemId], references: [id])
+  completedBy    StaffUser?     @relation(fields: [completedByStaffId], references: [id])
+  document       Document?      @relation(fields: [documentId], references: [id])
+
+  @@index([complianceItemId, completedOn])
 }
 
 model Warranty {
@@ -1328,6 +1408,7 @@ model StaffUser {
   inspectionTemplatesCreated              InspectionTemplate[]         @relation("InspectionTemplateCreatedBy")
   inspectionTemplatesUpdated              InspectionTemplate[]         @relation("InspectionTemplateUpdatedBy")
   depositDeductionsCreated                DepositDeduction[]           @relation("DepositDeductionCreatedBy")
+  complianceCompletionsRecorded           ComplianceCompletion[]
   translationsApproved                    MessageTemplateTranslation[] @relation("TranslationApprovedBy")
   paymentHoldsSet                         LeasePayer[]                 @relation("PaymentHoldSetBy")
   listingsCreated                         Listing[]                    @relation("ListingCreatedBy")
@@ -3572,7 +3653,7 @@ model NoticeDelivery {
 /// always read/written as a whole" call `Lease.utilityResponsibility`
 /// already makes for the identical reason.
 model InspectionTemplate {
-  id               String   @id @default(cuid())
+  id               String          @id @default(cuid())
   name             String
   /// An ordered array of `{ room: string, item: string }` objects -
   /// validated at the application layer (packages/core/inspections/template.ts),
@@ -3582,7 +3663,7 @@ model InspectionTemplate {
   /// keeps its own copied InspectionItem rows regardless, but a retired
   /// template stops being offered for a NEW inspection. Same reasoning
   /// DocumentTemplate.active's own comment gives.
-  active           Boolean  @default(true)
+  active           Boolean         @default(true)
   /// Which auto-scheduled periodic type (INSP-04, R-073) this checklist is
   /// used for, when it is one - PERIODIC/SEASONAL/DRIVE_BY only; MOVE_IN/
   /// MOVE_OUT/PRE_MOVE_OUT are lease-event-driven and never read this. At
@@ -3591,8 +3672,8 @@ model InspectionTemplate {
   defaultForType   InspectionType? @unique
   createdByStaffId String
   updatedByStaffId String?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
 
   createdBy   StaffUser    @relation("InspectionTemplateCreatedBy", fields: [createdByStaffId], references: [id])
   /// Restrict, not the SetNull Prisma defaults to for an optional relation -
@@ -3809,6 +3890,7 @@ model Document {
   leaseEnvelopeAsDraft    LeaseEnvelope?         @relation("LeaseEnvelopeDraftDocument")
   leaseEnvelopeAsExecuted LeaseEnvelope?         @relation("LeaseEnvelopeExecutedDocument")
   renterInsurancePolicy   RenterInsurancePolicy?
+  complianceCompletions   ComplianceCompletion[]
 
   @@index([propertyId, type])
   @@index([unitId])
