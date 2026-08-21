@@ -1,4 +1,5 @@
-import { friendlyDate } from '@rental/core/scheduling'
+import { businessDate, businessDaysBetween, friendlyDate } from '@rental/core/scheduling'
+import { priorityRank } from '@rental/core/tasks'
 import Link from 'next/link'
 import { requirePermission } from '@/lib/auth/guard.ts'
 import { listOpenWorkOrders } from '@/lib/workorders/queries.ts'
@@ -33,16 +34,28 @@ const STATUS_LABELS: Record<string, string> = {
 }
 
 /**
- * A bare, unsorted-by-priority list of everything open (MAINT-03) - the
- * same "R-022's own list before R-023 built the real queue on top" shape.
+ * The PM's oversight view of every open work order, assigned or not, staff
+ * or vendor (MAINT-03) - and RPT-04's own "open work orders by age and
+ * priority" weekly report, once sorted that way (R-076; this page was
+ * "bare, unsorted" until this item, per its own prior comment). Worst
+ * priority first, oldest within a priority first - the same ordering a PM
+ * triaging a Monday-morning list actually wants, EMERGENCY items that have
+ * sat the longest at the very top.
+ *
  * The in-house job list this item ALSO builds is the Task queue itself
- * (D-9, /tasks); this page is the PM's oversight view of every work order,
- * assigned or not, staff or vendor.
+ * (D-9, /tasks); this page is the oversight view, not the work queue.
  */
+function ageInDays(createdAt: Date, timezone: string): number {
+  return businessDaysBetween(businessDate(createdAt, timezone), businessDate(new Date(), timezone))
+}
+
 export default async function WorkOrdersPage() {
   const actor = await requirePermission('workorder.read')
   const scope = await currentScope(actor)
-  const workOrders = await listOpenWorkOrders(scope)
+  const unsorted = await listOpenWorkOrders(scope)
+  const workOrders = [...unsorted].sort(
+    (a, b) => priorityRank(a.priority) - priorityRank(b.priority) || a.createdAt.getTime() - b.createdAt.getTime(),
+  )
 
   return (
     <div className="flex flex-col gap-6">
@@ -83,7 +96,8 @@ export default async function WorkOrdersPage() {
                   {PRIORITY_LABELS[wo.priority] ?? wo.priority} ·{' '}
                   {STATUS_LABELS[wo.status] ?? wo.status} ·{' '}
                   {wo.assignedTo?.name ?? wo.vendor?.name ?? 'Unassigned'} ·{' '}
-                  {friendlyDate(wo.createdAt, wo.property.timezone)}
+                  {friendlyDate(wo.createdAt, wo.property.timezone)} (
+                  {ageInDays(wo.createdAt, wo.property.timezone)}d)
                 </span>
               </Link>
             </li>

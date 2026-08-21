@@ -3127,3 +3127,21 @@ Full reasoning in `07-decisions.md`.
 **What it left behind.**
 - **No new UI surfaces any of the newly-written metrics.** This item's own scope was the formula and its test; a dashboard tile or report column is real follow-on for whichever item actually needs to show the number (R-076 names five candidates).
 - **`occupancyRate` treats a `DOWN` (long-term uninhabitable) unit as not-occupied, counted the same as `VACANT`** — a physical-occupancy reading, not an economic one that excludes non-rentable inventory from the denominator. Revisit if an owner wants the rentable-only number instead.
+
+---
+
+## R-076 — The five weekly saved views
+**Commit:** `<pending>`  ·  **Date:** 2026-08-20
+
+**What it built.** RPT-04's five reports, three of them existing pages found already complete or one fix away rather than duplicated. Rent roll + delinquency aging was already `/money/rent-roll` (R-044) - unchanged. Open work orders by age/priority was `/workorders`, whose own prior comment already named the gap ("bare, unsorted") - fixed in place (`priorityRank()` then age, an age-in-days shown per row). Vacancy/turn status extends `/vacancies` (R-050) with each unit's own turnover stage (`currentStageFor()`, derived from its `TurnoverProject`'s open work orders, never stored) and a "this week" leasing-activity summary (new leads, showings, applications). Cash summary per entity (new `/reports/cash`) groups `collectedVsBilled()`'s own arithmetic (R-050) by legal entity instead of the whole scope, plus each entity's biggest closed-job outflows. Upcoming critical dates (new `/reports/dates`) unions lease expirations, `filingCabinetAlertsDue()` (R-015), renter's-insurance expiry (R-067) and deposit-disposition due dates (R-071) into one real 60-day window. A new `/reports` index page links to all five; a new nav entry reaches it.
+
+**What it decided.** Recorded as **D-66**:
+- **No `SavedView` persistence model.** RPT-04's "as first-class saved views" reads as "real page routes," not a request for user-configurable persisted filters - nothing else in this product has one either.
+- **No reserve-vs-target on the cash summary.** Nothing configures a reserve target anywhere in the schema; R-082 owns building that. Showing one here would be inventing a number nobody set.
+- **No statutory compliance dates in the critical-dates report**, despite RPT-04's own prose naming "compliance" - that calendar is R-077's and does not exist yet; the page says so rather than overclaiming, matching R-050's own "Renewals & alerts" precedent.
+
+Full reasoning in `07-decisions.md`.
+
+**What it left behind.**
+- **`resolutionByPriority` (R-075) still has no UI caller.** This item's own scope was reports built from EXISTING numbers plus the two genuinely missing ones; a resolution-time summary alongside the open-work-orders list is real follow-on, not required by RPT-04's own literal wording ("by age and priority" names the open list, not a closed-ticket average).
+- **No e2e coverage of the turnover-stage display on `/vacancies`** (no fixture built a `TurnoverProject` for the drill-down test) - `currentStageFor()` itself has direct unit coverage; the page wiring is proven only by typecheck/build and the existing dashboard e2e's unchanged assertions still passing.

@@ -1,19 +1,33 @@
 import { formatCents } from '@rental/core/money'
 import Link from 'next/link'
 import { requireScope } from '@/lib/auth/guard.ts'
-import { vacantUnits } from '@/lib/dashboard/queries.ts'
+import { thisWeekLeasingActivity, vacantUnitsWithTurnover } from '@/lib/reports/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 
 export const metadata = { title: 'Vacancies — Rental Operations' }
 
-// The dashboard's vacancies tile drilling into a real list (R-050, RPT-01).
-// No cross-property unit list existed before this - units were only ever
-// browsed per-property under /properties/[id]. `vacantUnits()` is the same
-// query the tile's own numbers are folded from, so the two can't disagree.
+const STAGE_LABELS: Record<string, string> = {
+  TRASH_OUT: 'Trash-out',
+  REPAIRS: 'Repairs',
+  PAINT: 'Paint',
+  FLOORS: 'Floors',
+  CLEAN: 'Clean',
+  REKEY: 'Re-key',
+  OTHER: 'Other',
+}
+
+// The dashboard's vacancies tile drilling into a real list (R-050, RPT-01),
+// extended into RPT-04's "vacancy and turn status" weekly report (R-076):
+// each vacancy's own turnover stage and target rent-ready date, plus this
+// week's leasing activity feeding the pipeline behind them.
 export default async function VacanciesPage() {
   const { actor } = await requireScope('property.read')
   const scope = await currentScope(actor)
-  const units = await vacantUnits(scope, new Date())
+  const now = new Date()
+  const [units, activity] = await Promise.all([
+    vacantUnitsWithTurnover(scope, now),
+    thisWeekLeasingActivity(scope, now),
+  ])
   const sorted = [...units].sort((a, b) => b.daysOnMarket - a.daysOnMarket)
 
   return (
@@ -31,6 +45,26 @@ export default async function VacanciesPage() {
           oldest first.
         </p>
       </header>
+
+      <section aria-labelledby="this-week" className="flex flex-col gap-2">
+        <h2 id="this-week" className="text-sm font-semibold">
+          This week&rsquo;s leasing activity
+        </h2>
+        <dl className="grid grid-cols-3 gap-3 text-sm">
+          <div className="flex flex-col gap-1 rounded-lg border p-3">
+            <dt className="text-muted-foreground text-xs font-medium">New leads</dt>
+            <dd className="text-xl font-semibold tabular-nums">{activity.newLeads}</dd>
+          </div>
+          <div className="flex flex-col gap-1 rounded-lg border p-3">
+            <dt className="text-muted-foreground text-xs font-medium">Showings</dt>
+            <dd className="text-xl font-semibold tabular-nums">{activity.showingsScheduled}</dd>
+          </div>
+          <div className="flex flex-col gap-1 rounded-lg border p-3">
+            <dt className="text-muted-foreground text-xs font-medium">Applications</dt>
+            <dd className="text-xl font-semibold tabular-nums">{activity.applicationsStarted}</dd>
+          </div>
+        </dl>
+      </section>
 
       {sorted.length === 0 ? (
         <p className="text-muted-foreground text-sm">Nothing vacant right now.</p>
@@ -50,6 +84,10 @@ export default async function VacanciesPage() {
                   {unit.dailyCostCents != null && (
                     <> · {formatCents(unit.dailyCostCents)}/day</>
                   )}
+                  {unit.currentStage && (
+                    <> · {STAGE_LABELS[unit.currentStage] ?? unit.currentStage}</>
+                  )}
+                  {unit.targetRentReadyDate && <> · rent-ready {unit.targetRentReadyDate}</>}
                 </span>
               </Link>
             </li>
