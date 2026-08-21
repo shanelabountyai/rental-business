@@ -83,11 +83,23 @@ export default async function ReportsPage() {
         </li>
       </ul>
 
-      {/* Not one of RPT-04's five weekly views - an annual one (RPT-03), so
-          it gets its own group rather than padding a list whose heading says
+      {/* Not among RPT-04's five weekly views - these are periodic, so they
+          get their own group rather than padding a list whose heading says
           "weekly". */}
-      <h2 className="text-sm font-semibold">Annual</h2>
+      <h2 className="text-sm font-semibold">Periodic</h2>
       <ul className="flex flex-col divide-y rounded-md border">
+        <li>
+          <Link
+            href="/reports/operating"
+            className="hover:bg-accent focus-visible:ring-ring flex min-h-14 flex-col justify-center gap-0.5 px-4 py-3 focus-visible:ring-2 focus-visible:-outline-offset-2 focus-visible:outline-none"
+          >
+            <span className="font-medium">Operating report per property</span>
+            <span className="text-muted-foreground text-sm">
+              Income, maintenance spend, vacant days and ticket counts per house, worst net first,
+              with the monthly P&amp;L behind it.
+            </span>
+          </Link>
+        </li>
         <li>
           <Link
             href="/reports/tax"

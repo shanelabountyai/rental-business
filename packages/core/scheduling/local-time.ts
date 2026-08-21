@@ -278,6 +278,48 @@ function daysInMonth(year: number, month: number): number {
   return new Date(Date.UTC(year, month, 0)).getUTCDate()
 }
 
+/// The first day of the month `date` falls in.
+///
+/// Extracted on the third caller, not the first: the dashboard's cash tile
+/// and the weekly cash summary had each copied the same
+/// `today.split('-')` + `${year}-${month}-01` two-liner, and R-081a's monthly
+/// P&L was about to be the third. Pure string work - a calendar day is never
+/// converted through a timezone (D-3).
+export function startOfMonth(date: BusinessDate): BusinessDate {
+  return `${date.slice(0, 7)}-01`
+}
+
+/// The last day of the month `date` falls in, clamped to that month's real
+/// length. February is 28 or 29 and this says which.
+export function endOfMonth(date: BusinessDate): BusinessDate {
+  const [year, month] = date.split('-').map(Number)
+  return dueDateInMonth(year, month, 31)
+}
+
+/**
+ * Every calendar month touched by `[from, to]`, as that month's first day,
+ * oldest first.
+ *
+ * INCLUSIVE AT BOTH ENDS, and a partial month at either end still counts: a
+ * range of 28 March to 2 April is two months, because a monthly report that
+ * silently dropped March's four days would show a total that does not match
+ * its own columns.
+ */
+export function monthStartsBetween(from: BusinessDate, to: BusinessDate): BusinessDate[] {
+  if (from > to) return []
+  const months: BusinessDate[] = []
+  let cursor = startOfMonth(from)
+  const last = startOfMonth(to)
+  // Bounded by construction, but a guard costs nothing and a malformed date
+  // that never advances would otherwise hang a request.
+  while (cursor <= last && months.length < 1200) {
+    months.push(cursor)
+    const [year, month] = cursor.split('-').map(Number)
+    cursor = month === 12 ? `${year + 1}-01-01` : `${year}-${String(month + 1).padStart(2, '0')}-01`
+  }
+  return months
+}
+
 /**
  * Which calendar day `dueDay` falls on, in `year`-`month`, clamped to the
  * length of that month.

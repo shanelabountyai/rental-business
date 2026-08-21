@@ -40,10 +40,17 @@ export function MaintenanceSpendSection({ jobs }: { jobs: ClosedJob[] }) {
             since the property was added — and an unlabelled total on a
             property page reads like an annual figure somebody re-keys into a
             spreadsheet, which is the re-keying D-19 exists to prevent.
-            Per-period and per-entity reporting is R-081's; this is a tile. */}
+            Per-period and per-entity reporting is the operating report's
+            (R-081a); this is still a tile, and now it says where the real
+            report lives instead of only saying it does not exist. */}
         <p className="text-muted-foreground text-xs">
           Every job closed since this property was added — not a period or
-          entity report.
+          entity report. For a year, by trade, beside income and vacancy, see
+          the{' '}
+          <Link href="/reports/operating" className="underline underline-offset-2">
+            operating report
+          </Link>
+          .
         </p>
       </div>
 
@@ -96,7 +103,7 @@ export function MaintenanceSpendSection({ jobs }: { jobs: ClosedJob[] }) {
           {jobs.length > 10 && (
             <p className="text-muted-foreground text-xs">
               Showing the 10 most recent of {jobs.length} closed jobs, all time.
-              Filtering by period is not built yet.
+              The operating report filters by year.
             </p>
           )}
         </>
