@@ -125,4 +125,10 @@ export const NAV_ITEMS: readonly NavItem[] = [
     permission: 'vendor.read',
     ownedBy: 'R-079',
   },
+  {
+    href: '/maintenance/preventive',
+    label: 'Preventive maintenance',
+    permission: 'workorder.read',
+    ownedBy: 'R-080',
+  },
 ]

@@ -342,6 +342,10 @@ export const AUDIT_ACTIONS = [
   /// else can derive.
   'workorder.invoice_paid',
 
+  /// R-080 (MAINT-08): a preventive-maintenance template was added or
+  /// edited - name, trade, cadence.
+  'preventive.template_saved',
+
   /// R-030: the work is finished and the tenant is being asked. A distinct
   /// action from `workorder.closed` because these are different claims by
   /// different people - "I have finished" from whoever did the work, and "I

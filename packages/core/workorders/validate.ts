@@ -73,6 +73,21 @@ export function validateWorkOrder(input: WorkOrderInput): Violation[] {
   return violations
 }
 
+export interface PreventiveTemplateInput {
+  name: string
+  trade?: string | null
+  intervalMonths: number
+}
+
+export function validatePreventiveTemplate(input: PreventiveTemplateInput): Violation[] {
+  const violations: Violation[] = []
+  if (!input.name.trim()) violations.push({ field: 'name', message: 'Name this task.' })
+  if (!Number.isInteger(input.intervalMonths) || input.intervalMonths < 1) {
+    violations.push({ field: 'intervalMonths', message: 'Enter a whole number of months, at least 1.' })
+  }
+  return violations
+}
+
 export interface AssignmentInput {
   assignedStaffId?: string | null
   vendorId?: string | null

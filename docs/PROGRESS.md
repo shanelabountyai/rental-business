@@ -3183,3 +3183,23 @@ Full reasoning in `07-decisions.md`.
 **What it left behind.**
 - **No live QuickBooks push for the 1099-NEC totals** - OQ-8 (bookkeeping system) is still unanswered and gates R-078/R-081, not this item; the totals read `jobCostCents()` so an export built later starts from the right number.
 - **No re-dispatch / "next vendor on the list" UI** - `fallbackVendorsForTrade()`'s `excludeVendorIds` parameter exists and is tested, but nothing in the UI calls it yet; the picker always shows the full ranked list, not "the next one after the last one declined."
+
+---
+
+## R-080 — Preventive maintenance + seasonal batch templates
+**Commit:** _pending_  ·  **Date:** 2026-08-21
+
+**What it built.** A free-form, PM-created `PreventiveMaintenanceTemplate` (name, optional trade, cadence in months) - the same "nothing hardcoded" posture `InspectionTemplate`/`ComplianceItem` already take, covering MAINT-08's ~11 named categories (HVAC filters, gutters, winterization, smoke/CO, water heater flush, dryer vent, sump pump, pest, well/septic, chimney) as illustrative examples, not seeded rows. New `/maintenance/preventive`, `/maintenance/preventive/new`, `/maintenance/preventive/[id]` pages. `nextPreventiveDueDate()` (`packages/core/workorders`) is a third near-duplicate of the clamped-month-rollover algorithm R-073/R-077 already established. `WorkOrder.pmTemplateId` (new nullable FK, the same tagging shape `turnoverProjectId` already takes) lets "when was this last done" read straight off the latest CLOSED job, no second schedule table. "One click creates the batch across properties, assigned by vendor territory" is `runPreventiveBatch()`: every due unit in the actor's own scope gets a new SUBMITTED work order, auto-assigned by composing a new `vendorCoversProperty()` (territory match against `Vendor.serviceAreas`, R-079's field, never matched against anything until now) with the existing `fallbackVendorsForTrade()` ranking - unmatched units stay unassigned for a PM to assign by hand.
+
+**What it decided.** Recorded as **D-69**:
+- **No `PROPERTY`-vs-`UNIT` scope on a template** - `WorkOrder.unitId` is required and this is a single-family-first product; every task creates one job per unit, a named limitation for a genuinely multi-unit property, not built around.
+- **The batch run is PM-triggered, not a `SCHEDULED_JOBS` entry** - MAINT-08's own "one click" framing, unlike R-073's fully-automatic overnight scheduling.
+- **Empty `Vendor.serviceAreas` covers everywhere** - the same "absence is not exclusion" posture `preferredRank: null`/`trade: null` (R-079/D-68) already take.
+- **Template CRUD and the batch run both use `workorder.write` with no resource**, scoped by `currentScope()` - the same coarse-permission-then-scope shape the `/workorders` list page already takes.
+
+Full reasoning in `07-decisions.md`.
+
+**What it left behind.**
+- **"Smoke/CO test-and-battery logged at every entry" has no per-visit hook** - no generic "unit entry" event table exists anywhere in this codebase; smoke/CO is just another recurring template (e.g. annual), not wired to individual visits. Named honestly rather than building new entry-log infrastructure for one phrase, matching D-63's own precedent.
+- **No tenant-facing "filter delivered, photo confirmed" workflow** - reuses the existing completion-photo convention on `markWorkComplete()` instead of a new mechanism.
+- **No seed data for the ~11 example categories** - a PM populates their own list, matching `InspectionTemplate`'s precedent.

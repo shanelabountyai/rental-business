@@ -1380,41 +1380,42 @@ model StaffUser {
   assignments        StaffAssignment[]
   assignmentsGranted StaffAssignment[] @relation("AssignmentGrantedBy")
 
-  paymentsReceived                        Payment[]                    @relation("PaymentReceivedBy")
-  chargesWaived                           Charge[]                     @relation("ChargeWaivedBy")
-  utilityBillsAllocated                   UtilityBill[]                @relation("UtilityBillAllocatedBy")
-  workOrdersApproved                      WorkOrder[]                  @relation("WorkOrderApprovedBy")
-  workOrdersAssigned                      WorkOrder[]                  @relation("WorkOrderAssignedTo")
-  workOrdersEntryPermissionLogged         WorkOrder[]                  @relation("WorkOrderEntryPermission")
-  workOrdersClosed                        WorkOrder[]                  @relation("WorkOrderClosedBy")
+  paymentsReceived                        Payment[]                       @relation("PaymentReceivedBy")
+  chargesWaived                           Charge[]                        @relation("ChargeWaivedBy")
+  utilityBillsAllocated                   UtilityBill[]                   @relation("UtilityBillAllocatedBy")
+  workOrdersApproved                      WorkOrder[]                     @relation("WorkOrderApprovedBy")
+  workOrdersAssigned                      WorkOrder[]                     @relation("WorkOrderAssignedTo")
+  workOrdersEntryPermissionLogged         WorkOrder[]                     @relation("WorkOrderEntryPermission")
+  workOrdersClosed                        WorkOrder[]                     @relation("WorkOrderClosedBy")
   workOrderNotesWritten                   WorkOrderNote[]
   workOrderMessagesLinked                 WorkOrderMessageLink[]
-  ticketsAcknowledged                     Ticket[]                     @relation("TicketAcknowledgedBy")
-  tasksAssigned                           Task[]                       @relation("TaskAssignedTo")
-  tasksCompleted                          Task[]                       @relation("TaskCompletedBy")
-  inspectionsPerformed                    Inspection[]                 @relation("InspectionPerformedBy")
-  noticesServed                           Notice[]                     @relation("NoticeServedBy")
-  noticeDeliveriesServed                  NoticeDelivery[]             @relation("NoticeDeliveryServedBy")
-  tenantConsentsRecorded                  TenantConsent[]              @relation("TenantConsentRecordedBy")
-  messagesSent                            Message[]                    @relation("MessageSentBy")
-  documentsUploaded                       Document[]                   @relation("DocumentUploadedBy")
-  auditLogs                               AuditLog[]                   @relation("AuditLogActor")
+  ticketsAcknowledged                     Ticket[]                        @relation("TicketAcknowledgedBy")
+  tasksAssigned                           Task[]                          @relation("TaskAssignedTo")
+  tasksCompleted                          Task[]                          @relation("TaskCompletedBy")
+  inspectionsPerformed                    Inspection[]                    @relation("InspectionPerformedBy")
+  noticesServed                           Notice[]                        @relation("NoticeServedBy")
+  noticeDeliveriesServed                  NoticeDelivery[]                @relation("NoticeDeliveryServedBy")
+  tenantConsentsRecorded                  TenantConsent[]                 @relation("TenantConsentRecordedBy")
+  messagesSent                            Message[]                       @relation("MessageSentBy")
+  documentsUploaded                       Document[]                      @relation("DocumentUploadedBy")
+  auditLogs                               AuditLog[]                      @relation("AuditLogActor")
   accessCodesCreated                      AccessCode[]
-  messagesRouted                          UnroutedMessage[]            @relation("UnroutedMessageRoutedBy")
-  templatesCreated                        MessageTemplate[]            @relation("TemplateCreatedBy")
-  templatesUpdated                        MessageTemplate[]            @relation("TemplateUpdatedBy")
-  documentTemplatesCreated                DocumentTemplate[]           @relation("DocumentTemplateCreatedBy")
-  documentTemplatesUpdated                DocumentTemplate[]           @relation("DocumentTemplateUpdatedBy")
-  inspectionTemplatesCreated              InspectionTemplate[]         @relation("InspectionTemplateCreatedBy")
-  inspectionTemplatesUpdated              InspectionTemplate[]         @relation("InspectionTemplateUpdatedBy")
-  depositDeductionsCreated                DepositDeduction[]           @relation("DepositDeductionCreatedBy")
+  messagesRouted                          UnroutedMessage[]               @relation("UnroutedMessageRoutedBy")
+  templatesCreated                        MessageTemplate[]               @relation("TemplateCreatedBy")
+  templatesUpdated                        MessageTemplate[]               @relation("TemplateUpdatedBy")
+  documentTemplatesCreated                DocumentTemplate[]              @relation("DocumentTemplateCreatedBy")
+  documentTemplatesUpdated                DocumentTemplate[]              @relation("DocumentTemplateUpdatedBy")
+  inspectionTemplatesCreated              InspectionTemplate[]            @relation("InspectionTemplateCreatedBy")
+  inspectionTemplatesUpdated              InspectionTemplate[]            @relation("InspectionTemplateUpdatedBy")
+  pmTemplatesCreated                      PreventiveMaintenanceTemplate[]
+  depositDeductionsCreated                DepositDeduction[]              @relation("DepositDeductionCreatedBy")
   complianceCompletionsRecorded           ComplianceCompletion[]
-  translationsApproved                    MessageTemplateTranslation[] @relation("TranslationApprovedBy")
-  paymentHoldsSet                         LeasePayer[]                 @relation("PaymentHoldSetBy")
-  listingsCreated                         Listing[]                    @relation("ListingCreatedBy")
+  translationsApproved                    MessageTemplateTranslation[]    @relation("TranslationApprovedBy")
+  paymentHoldsSet                         LeasePayer[]                    @relation("PaymentHoldSetBy")
+  listingsCreated                         Listing[]                       @relation("ListingCreatedBy")
   screeningCriteriaCreated                ScreeningCriteria[]
-  screeningReportsDecided                 ScreeningReport[]            @relation("ScreeningReportDecidedBy")
-  screeningReportsAdverseActionOverridden ScreeningReport[]            @relation("ScreeningReportAdverseActionOverriddenBy")
+  screeningReportsDecided                 ScreeningReport[]               @relation("ScreeningReportDecidedBy")
+  screeningReportsAdverseActionOverridden ScreeningReport[]               @relation("ScreeningReportAdverseActionOverriddenBy")
 
   @@index([active])
 }
@@ -2934,19 +2935,27 @@ model WorkOrder {
   /// null for an ordinary maintenance work order.
   turnoverProjectId              String?
   turnoverStage                  TurnoverStage?
+  /// Set only for a job the preventive-maintenance batch action created
+  /// (MAINT-08, R-080) - which recurring template it fulfills, so the next
+  /// batch run can read "when was this last done" straight off this job
+  /// rather than a second schedule-tracking table. Null for an ordinary
+  /// maintenance work order, the same "tag, don't duplicate" shape
+  /// `turnoverProjectId` already takes above.
+  pmTemplateId                   String?
   createdAt                      DateTime        @default(now())
   updatedAt                      DateTime        @updatedAt
 
-  property                Property                @relation(fields: [propertyId], references: [id])
-  unit                    Unit                    @relation(fields: [unitId], references: [id])
-  ticket                  Ticket?                 @relation(fields: [ticketId], references: [id])
-  vendor                  Vendor?                 @relation(fields: [vendorId], references: [id])
-  turnoverProject         TurnoverProject?        @relation(fields: [turnoverProjectId], references: [id])
-  assignedTo              StaffUser?              @relation("WorkOrderAssignedTo", fields: [assignedStaffId], references: [id])
-  approvedBy              StaffUser?              @relation("WorkOrderApprovedBy", fields: [approvedByStaffId], references: [id])
-  entryNotice             Notice?                 @relation("WorkOrderEntryNotice", fields: [entryNoticeId], references: [id])
-  entryPermissionLoggedBy StaffUser?              @relation("WorkOrderEntryPermission", fields: [entryPermissionLoggedByStaffId], references: [id])
-  closedBy                StaffUser?              @relation("WorkOrderClosedBy", fields: [closedByStaffId], references: [id])
+  property                Property                       @relation(fields: [propertyId], references: [id])
+  unit                    Unit                           @relation(fields: [unitId], references: [id])
+  ticket                  Ticket?                        @relation(fields: [ticketId], references: [id])
+  vendor                  Vendor?                        @relation(fields: [vendorId], references: [id])
+  turnoverProject         TurnoverProject?               @relation(fields: [turnoverProjectId], references: [id])
+  pmTemplate              PreventiveMaintenanceTemplate? @relation(fields: [pmTemplateId], references: [id])
+  assignedTo              StaffUser?                     @relation("WorkOrderAssignedTo", fields: [assignedStaffId], references: [id])
+  approvedBy              StaffUser?                     @relation("WorkOrderApprovedBy", fields: [approvedByStaffId], references: [id])
+  entryNotice             Notice?                        @relation("WorkOrderEntryNotice", fields: [entryNoticeId], references: [id])
+  entryPermissionLoggedBy StaffUser?                     @relation("WorkOrderEntryPermission", fields: [entryPermissionLoggedByStaffId], references: [id])
+  closedBy                StaffUser?                     @relation("WorkOrderClosedBy", fields: [closedByStaffId], references: [id])
   verifications           WorkOrderVerification[]
   threads                 Thread[]
   documents               Document[]
@@ -2963,6 +2972,35 @@ model WorkOrder {
   @@index([vendorId])
   @@index([status, priority])
   @@index([turnoverProjectId])
+  @@index([pmTemplateId])
+}
+
+/// A recurring preventive-maintenance task the PM can batch-create across
+/// properties in one click (MAINT-08, R-080) - HVAC filters, gutters,
+/// winterization, smoke/CO test-and-battery, water heater flush, and so on.
+/// Free-form, PM-created, the same "nothing hardcoded" posture
+/// `InspectionTemplate`/`ComplianceItem` already take: a task this product
+/// has never heard of needs no migration, only a new row.
+model PreventiveMaintenanceTemplate {
+  id               String   @id @default(cuid())
+  name             String
+  /// Matched against `Vendor.trades` for auto-assignment on a batch run
+  /// (lowercased, the same vocabulary posture R-079/D-68 already
+  /// established) - null means the task has no single trade (e.g. a
+  /// tenant-notice-only winterization step) and is never auto-assigned.
+  trade            String?
+  /// Months between one completion and the next due date
+  /// (`nextPreventiveDueDate()`). A PM-set number, not a fixed enum - MAINT-08
+  /// names cadences from quarterly (pest) to annual (chimney), and nothing in
+  /// this product's history has found one cadence that fits every task.
+  intervalMonths   Int
+  active           Boolean  @default(true)
+  createdByStaffId String
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  createdBy  StaffUser   @relation(fields: [createdByStaffId], references: [id])
+  workOrders WorkOrder[]
 }
 
 /// One vendor's price for one work order (MAINT-04's bid-collection
