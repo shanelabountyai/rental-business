@@ -17,6 +17,7 @@
     "./documents": "./documents/index.ts",
     "./entry": "./entry/index.ts",
     "./events": "./events/index.ts",
+    "./evictions": "./evictions/index.ts",
     "./filing-cabinet": "./filing-cabinet/index.ts",
     "./inspections": "./inspections/index.ts",
     "./jurisdiction": "./jurisdiction/index.ts",

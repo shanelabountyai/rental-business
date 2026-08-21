@@ -51,6 +51,14 @@ export const PERMISSIONS = [
   'accesscode.issue',
   'report.financial',
   'audit.read',
+  /// Opening and running an eviction case (PAY-14, R-083). ITS OWN
+  /// PERMISSION, not folded into `lease.write` or `notice.send`, because
+  /// starting an eviction is the most consequential thing this product does
+  /// to a person and it should be possible to hand somebody the leasing and
+  /// notice-serving job without also handing them that. `notice.send` still
+  /// gates the legally operative act - serving the notice itself - so the
+  /// two are checked at different moments, deliberately.
+  'eviction.manage',
   /// Portfolio-wide only (R-010): a JurisdictionRule applies by state, not by
   /// property or entity, so there is no scoped resource to check it against.
   /// `requirePermission('jurisdiction.write')` with no resource is the
@@ -221,6 +229,9 @@ export const ROLE_DEFINITIONS: Record<
       /// Read, not write: a jurisdiction config change is a legal release
       /// gate (D-4), not day-to-day portfolio work.
       'jurisdiction.read',
+      /// Running the eviction path is squarely a property manager's job
+      /// (PAY-14, R-083) - they serve the notices and attend the hearing.
+      'eviction.manage',
     ],
     // ROLE-02's example boundary, in cents. Owner-configurable per user.
     defaultApproveWorkOrderCents: 50_000,

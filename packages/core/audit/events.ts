@@ -346,6 +346,30 @@ export const AUDIT_ACTIONS = [
   /// edited - name, trade, cadence.
   'preventive.template_saved',
 
+  // Evictions (PAY-14, R-083). NOTHING HERE FILES ANYTHING ANYWHERE - these
+  // record what a human did, so the file can be handed to an attorney.
+  /// REASON_REQUIRED. "Why did you start evicting this person" is the exact
+  /// question a retaliation defence asks, and R-047 already made the same
+  /// call one step earlier for `payment.hold_changed` - a hold placed for no
+  /// recorded reason being indistinguishable from a retaliatory one. Opening
+  /// the case is the larger act and gets the same treatment.
+  'eviction.case_opened',
+  /// A case moved a rung - filed, court date set, judgment, writ, lockout.
+  /// The dates and their ORDER are the evidence, so each transition is its
+  /// own row rather than a diff of a mutable column.
+  'eviction.stage_changed',
+  /// REASON_REQUIRED. How a case ended - and cash-for-keys in particular is
+  /// a settlement whose terms somebody will ask about later.
+  'eviction.case_closed',
+  /// An owner-side outlay recorded against a case (filing fee, attorney).
+  'eviction.cost_recorded',
+  /// The attorney packet was produced. Records what actually went in it and
+  /// what could not be attached (D-50), because the packet's own index makes
+  /// that claim and the two must agree.
+  'eviction.packet_exported',
+  /// A served notice was filed under a case, or unfiled from it.
+  'eviction.notice_attached',
+
   /// R-030: the work is finished and the tenant is being asked. A distinct
   /// action from `workorder.closed` because these are different claims by
   /// different people - "I have finished" from whoever did the work, and "I
@@ -690,6 +714,11 @@ export const REASON_REQUIRED: ReadonlySet<AuditAction> = new Set([
   'lease.renewal_rent_check_overridden',
   'lease.notice_period_overridden',
   'envelope.voided',
+  // R-083. See the two events' own comments: opening an eviction and settling
+  // one are both acts a retaliation or bad-faith claim is argued from, and
+  // neither is defensible from a record that does not say why.
+  'eviction.case_opened',
+  'eviction.case_closed',
 ])
 
 export function requiresReason(action: AuditAction): boolean {

@@ -131,4 +131,10 @@ export const NAV_ITEMS: readonly NavItem[] = [
     permission: 'workorder.read',
     ownedBy: 'R-080',
   },
+  {
+    href: '/evictions',
+    label: 'Evictions',
+    permission: 'eviction.manage',
+    ownedBy: 'R-083',
+  },
 ]

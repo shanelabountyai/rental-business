@@ -399,6 +399,37 @@ enum NoticeServiceMethod {
   PROCESS_SERVER
 }
 
+/// Where an eviction case has got to (PAY-14, R-083). A real enum rather than
+/// the free-form string `Notice.type` uses, for the same reason
+/// `NoticeServiceMethod` is one: these are not operator data a state can
+/// invent, they are the fixed procedural ladder every court runs, and a row
+/// claiming a stage that does not exist is not a weaker record but a false
+/// one. Order is enforced in `packages/core/evictions` (`canAdvanceTo`), not
+/// here - Postgres has no opinion about which rung follows which.
+enum EvictionStage {
+  NOTICE
+  FILING
+  COURT
+  JUDGMENT
+  WRIT
+  LOCKOUT
+  CLOSED
+}
+
+/// How a case ended. CASH_FOR_KEYS is first-class because PAY-14 names it as
+/// "a documented alternative outcome" - and because it is frequently the
+/// right commercial answer, which a product should not make harder to record
+/// than a writ.
+enum EvictionOutcome {
+  PAID_AND_CURED
+  CASH_FOR_KEYS
+  VOLUNTARY_MOVE_OUT
+  JUDGMENT_FOR_OWNER
+  JUDGMENT_FOR_TENANT
+  DISMISSED
+  WITHDRAWN
+}
+
 enum LateFeeType {
   NONE
   FLAT
@@ -522,6 +553,7 @@ model Property {
   inspections       Inspection[]
   threads           Thread[]
   notices           Notice[]
+  evictionCases     EvictionCase[]
   tasks             Task[]
   documents         Document[]
   listings          Listing[]
@@ -741,6 +773,7 @@ model Unit {
   leases           Lease[]
   tickets          Ticket[]
   workOrders       WorkOrder[]
+  evictionCases    EvictionCase[]
   turnoverProjects TurnoverProject[]
   inspections      Inspection[]
   documents        Document[]
@@ -1408,6 +1441,8 @@ model StaffUser {
   inspectionTemplatesCreated              InspectionTemplate[]            @relation("InspectionTemplateCreatedBy")
   inspectionTemplatesUpdated              InspectionTemplate[]            @relation("InspectionTemplateUpdatedBy")
   pmTemplatesCreated                      PreventiveMaintenanceTemplate[]
+  evictionCasesOpened                     EvictionCase[]                  @relation("EvictionCaseOpenedBy")
+  evictionCostsRecorded                   EvictionCost[]                  @relation("EvictionCostRecordedBy")
   depositDeductionsCreated                DepositDeduction[]              @relation("DepositDeductionCreatedBy")
   complianceCompletionsRecorded           ComplianceCompletion[]
   translationsApproved                    MessageTemplateTranslation[]    @relation("TranslationApprovedBy")
@@ -1649,6 +1684,7 @@ model Lease {
   inspections             Inspection[]
   threads                 Thread[]
   notices                 Notice[]
+  evictionCases           EvictionCase[]
   documents               Document[]
   turnoverProject         TurnoverProject?
 
@@ -3585,12 +3621,101 @@ model MessageTemplateTranslation {
 /// notice is addressed to a tenancy or to an applicant who has none yet
 /// (LEASE-05's FCRA adverse action), never both and never neither. Mirrors
 /// the either/or shape MAINT-03 already gave `WorkOrder` assignment (D-9).
+/// The delinquency-to-eviction path as a case file (PAY-14, R-083).
+///
+/// THIS SYSTEM NEVER FILES ANYTHING ANYWHERE. Every date here is a record of
+/// something a human did or is scheduled to do; nothing transmits to a court,
+/// a clerk or a process server. The file exists to be handed to an attorney.
+///
+/// Notices are NOT duplicated onto this model - `Notice.evictionCaseId` links
+/// them, so the pay-or-quit that starts the cure clock stays the same row
+/// R-051 generated, served and archived, with its own `NoticeDelivery` proof.
+model EvictionCase {
+  id              String           @id @default(cuid())
+  propertyId      String
+  unitId          String
+  leaseId         String
+  stage           EvictionStage    @default(NOTICE)
+  /// Set only when `stage` is CLOSED, and required there - "this is over"
+  /// without saying how is the record that helps nobody a year later.
+  outcome         EvictionOutcome?
+  /// Free text for the outcome's own detail: the agreed cash-for-keys sum, a
+  /// judge's stated reason. Not a substitute for `outcome`.
+  outcomeNote     String?
+  openedAt        DateTime         @default(now())
+  openedByStaffId String
+  closedAt        DateTime?
+  /// The forward-looking procedural dates. Columns rather than an
+  /// append-only stage-history table because a court date is a FUTURE
+  /// scheduled fact, which no transition log can hold - and because
+  /// `WorkOrderStatus`/`TurnoverStage` already established that this repo
+  /// keeps current state in a column and reconstructs history from AuditLog.
+  filedOn         DateTime?        @db.Date
+  /// A real timestamp, not a date: hearings have a time, and a PM who misses
+  /// one by reading "the 14th" loses by default.
+  courtDate       DateTime?
+  judgmentOn      DateTime?        @db.Date
+  writOn          DateTime?        @db.Date
+  lockoutOn       DateTime?        @db.Date
+  notes           String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  property Property       @relation(fields: [propertyId], references: [id])
+  unit     Unit           @relation(fields: [unitId], references: [id])
+  lease    Lease          @relation(fields: [leaseId], references: [id])
+  openedBy StaffUser      @relation("EvictionCaseOpenedBy", fields: [openedByStaffId], references: [id])
+  notices  Notice[]
+  costs    EvictionCost[]
+
+  @@index([propertyId, stage])
+  @@index([leaseId])
+}
+
+/// What the eviction cost the OWNER (PAY-14, R-083).
+///
+/// NOT a `LedgerEntry` and never to become one: that table is an append-only
+/// projection of Stripe (D-11) and a filing fee paid to a district clerk is
+/// money Stripe never saw. NOT a `Charge` either - a charge is billed to a
+/// tenant, and whether any of this is recoverable from them is the court's
+/// judgment, not this product's. This is the first owner-side outlay in the
+/// schema.
+///
+/// Lost rent is deliberately NOT enterable here - it is the ledger balance,
+/// and the packet prints the statement of account. See
+/// `LOST_RENT_IS_DERIVED` in packages/core/evictions/costs.ts.
+model EvictionCost {
+  id                String   @id @default(cuid())
+  evictionCaseId    String
+  /// Closed vocabulary in code, free-form column - the same posture
+  /// `Notice.type` and `WorkOrder.invoicePaymentMethod` take. A county that
+  /// invents a fee must not need a migration.
+  type              String
+  amountCents       Int
+  incurredOn        DateTime @db.Date
+  description       String
+  /// A receipt or invoice, when there is one.
+  documentId        String?
+  recordedByStaffId String
+  createdAt         DateTime @default(now())
+
+  evictionCase EvictionCase @relation(fields: [evictionCaseId], references: [id])
+  document     Document?    @relation("EvictionCostReceipt", fields: [documentId], references: [id])
+  recordedBy   StaffUser    @relation("EvictionCostRecordedBy", fields: [recordedByStaffId], references: [id])
+
+  @@index([evictionCaseId])
+}
+
 model Notice {
   id                 String               @id @default(cuid())
   propertyId         String
   leaseId            String?
   /// FCRA adverse action (R-061) - the other half of the either/or above.
   applicantId        String?
+  /// Set when this notice belongs to an eviction case (PAY-14, R-083). The
+  /// notice itself is unchanged - it is still R-051's generated, served and
+  /// proof-carrying row; this only files it under a case.
+  evictionCaseId     String?
   /// Notice types are jurisdiction config (D-4), not an enum here - a state
   /// that invents a new notice must not require a migration.
   type               String
@@ -3642,9 +3767,14 @@ model Notice {
   deliveries         NoticeDelivery[]
   adverseActionFor   ScreeningReport?
   depositDisposition Deposit?
+  // Restrict, not the SetNull an optional relation defaults to: a notice
+  // quietly losing its case link is the same evidence loss the lease and
+  // applicant relations above are explicit about.
+  evictionCase       EvictionCase?     @relation(fields: [evictionCaseId], references: [id], onDelete: Restrict)
 
   @@index([leaseId])
   @@index([applicantId])
+  @@index([evictionCaseId])
   @@index([propertyId, servedAt])
 }
 
@@ -3938,6 +4068,7 @@ model Document {
   noticesAsDocument       Notice[]               @relation("NoticeDocument")
   noticesAsProof          Notice[]               @relation("NoticeProofDocument")
   noticeDeliveryProofs    NoticeDelivery[]       @relation("NoticeDeliveryProof")
+  evictionCostReceipts    EvictionCost[]         @relation("EvictionCostReceipt")
   utilityBills            UtilityBill[]          @relation("UtilityBillDocument")
   leaseEnvelopeAsDraft    LeaseEnvelope?         @relation("LeaseEnvelopeDraftDocument")
   leaseEnvelopeAsExecuted LeaseEnvelope?         @relation("LeaseEnvelopeExecutedDocument")

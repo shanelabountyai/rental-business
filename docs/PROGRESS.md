@@ -3203,3 +3203,25 @@ Full reasoning in `07-decisions.md`.
 - **"Smoke/CO test-and-battery logged at every entry" has no per-visit hook** - no generic "unit entry" event table exists anywhere in this codebase; smoke/CO is just another recurring template (e.g. annual), not wired to individual visits. Named honestly rather than building new entry-log infrastructure for one phrase, matching D-63's own precedent.
 - **No tenant-facing "filter delivered, photo confirmed" workflow** - reuses the existing completion-photo convention on `markWorkComplete()` instead of a new mechanism.
 - **No seed data for the ~11 example categories** - a PM populates their own list, matching `InspectionTemplate`'s precedent.
+
+---
+
+## R-083 — Eviction case files
+**Commit:** _pending_  ·  **Date:** 2026-08-21
+
+**What it built.** The delinquency-to-eviction path as a case file (PAY-14), and **nothing in it files anything anywhere** — no court, clerk or process-server integration exists, which is stated in the module headers, the schema comments and on the screen. Almost none of the notice half needed building: R-051 already generates pay-or-quit notices, logs each service with its own proof, and stores a three-valued verdict on whether the state names that method (`NoticeDelivery.permittedByJurisdiction`, D-48). What had never been drawn was the consequence. `cureClock()` (`packages/core/evictions`) derives the cure period from the **earliest good service** — a defective Monday service followed by a good Wednesday one starts Wednesday, and two good services cannot be used to restart a clock by re-serving. `readyToFile()` is the one place this product actively stops a PM, refusing a filing that is premature or founded on service the state does not name. New `EvictionCase` (stage enum, forward-looking court dates, outcome) and `EvictionCost` — the first owner-side outlay in the schema, since a district-clerk filing fee is neither a `LedgerEntry` (a Stripe projection, D-11) nor a `Charge` (billed to a tenant). New `/evictions` list, `/evictions/new`, and a `/evictions/[id]` case file. The one-click attorney packet is assembly rather than new machinery — `renderBlocksPdf`/`appendPdfs`/`DocumentBlock` (R-051→R-052) and `statementForPeriod` all already existed — bundling the case summary, a freshly rendered statement of account, every notice with its proof of service, the executed lease and the photographs on record, with an exhibit index naming anything it could not attach.
+
+**What it decided.** Recorded as **D-70**:
+- **The cure clock is derived from R-051's stored verdict, never recomputed** (D-4: rules apply prospectively). `permittedByJurisdiction: null` counts as GOOD service — refusing to start a clock because this product has not been taught a state's rules would invent a defect the law never asserted.
+- **An unconfigured cure period does not block filing and never yields a guessed deadline** — that would substitute this product's ignorance for the owner's attorney. The packet prints "not configured for this jurisdiction" instead.
+- **`EvictionStage` is a real Prisma enum** (the fixed procedural ladder every court runs, like `NoticeServiceMethod`), but its ORDER lives in `canAdvanceTo()` — forward one rung at a time, **closing from anywhere**, because a product that made "we settled" harder to record than "we got a writ" would be telling an owner something it has no business telling them.
+- **`eviction.manage` is its own permission**, and both open and close are REASON_REQUIRED — extending R-047's own reasoning for `payment.hold_changed` to the larger act.
+- **Lost rent is derived, never entered** — a typed figure beside a computed one could only agree by luck, and the two disagreeing on one exhibit is what opposing counsel would need.
+
+Full reasoning in `07-decisions.md`.
+
+**What it left behind.**
+- **Photographs are named on the exhibit index but not embedded as pages.** `appendPdfs` copies PDF pages and correctly refuses a JPEG, so every image lands in the "could not be attached" list — honest under D-50, but it means the packet cites condition photos rather than carrying them. Embedding images (`pdf-lib`'s `embedJpg`/`embedPng`) is the real follow-on, and the second render already keeps the index truthful in the meantime.
+- **A found defect, left as documented behaviour:** closing a case returns a `'Case closed.'` notice that is never seen — closing removes the section its panel lives in, so the live region is unmounted in the same pass that would have filled it (the self-replacing-panel trap `auth-form.tsx` documents). The page's own header and outcome line are the real feedback; the e2e asserts those instead, and both the action and the spec say why.
+- **No court-date reminder Task.** `courtDate` is stored and displayed but nothing schedules against it; a missed hearing loses by default, so a `SCHEDULED_JOBS` entry raising a Task is worth an item.
+- **No admin matrix for a new state's eviction config** — `payOrQuitDays` is seeded for Texas only, and R-051 already named the same gap for service methods.
