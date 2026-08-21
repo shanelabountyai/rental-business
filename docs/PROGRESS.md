@@ -3131,7 +3131,7 @@ Full reasoning in `07-decisions.md`.
 ---
 
 ## R-076 — The five weekly saved views
-**Commit:** `<pending>`  ·  **Date:** 2026-08-20
+**Commit:** `646c09e`  ·  **Date:** 2026-08-20
 
 **What it built.** RPT-04's five reports, three of them existing pages found already complete or one fix away rather than duplicated. Rent roll + delinquency aging was already `/money/rent-roll` (R-044) - unchanged. Open work orders by age/priority was `/workorders`, whose own prior comment already named the gap ("bare, unsorted") - fixed in place (`priorityRank()` then age, an age-in-days shown per row). Vacancy/turn status extends `/vacancies` (R-050) with each unit's own turnover stage (`currentStageFor()`, derived from its `TurnoverProject`'s open work orders, never stored) and a "this week" leasing-activity summary (new leads, showings, applications). Cash summary per entity (new `/reports/cash`) groups `collectedVsBilled()`'s own arithmetic (R-050) by legal entity instead of the whole scope, plus each entity's biggest closed-job outflows. Upcoming critical dates (new `/reports/dates`) unions lease expirations, `filingCabinetAlertsDue()` (R-015), renter's-insurance expiry (R-067) and deposit-disposition due dates (R-071) into one real 60-day window. A new `/reports` index page links to all five; a new nav entry reaches it.
 
