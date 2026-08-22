@@ -3290,7 +3290,7 @@ Full reasoning in `07-decisions.md`.
 ---
 
 ## R-081b — The year-end tax packet
-**Commit:** `PENDING`  ·  **Date:** 2026-08-21
+**Commit:** `699174c`  ·  **Date:** 2026-08-21
 
 **What it built.** RPT-07 at `/reports/tax-packet`, plus one CSV: Schedule E **per property** (the form is filed per address; R-078 totals per entity for QuickBooks, and both are right for their own reader), the CapEx/fixed-asset schedule, security-deposit liability as a **balance at 31 December**, and the 1099-NEC candidate list with W-9 status. `MortgageAnnualStatement` is a new model — the lender's Form 1098, recorded per loan per tax year — which gives Schedule E line 12 a real number for the first time; it is recorded on each mortgage in the property filing cabinet. `packages/core/tax/packet.ts` holds the three new formulas; `apps/web/lib/tax/packet.ts` fetches.
 
