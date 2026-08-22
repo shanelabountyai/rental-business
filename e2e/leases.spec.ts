@@ -262,7 +262,27 @@ test.describe('creating a tenancy', () => {
     await expect(page.getByText(/· primary/)).toBeVisible()
 
     await page.getByRole('button', { name: 'Make this lease active' }).click()
-    await expect(page.getByText('active', { exact: false }).first()).toBeVisible()
+
+    // ==========================================================================
+    // POLLED, because every UI signal here resolves before the write lands.
+    //
+    // This was `getByText('active')`, which is a case-insensitive SUBSTRING
+    // match against a page saying "active" in several places — already true
+    // before the click, so the read below raced the mutation. It won that race
+    // for a year and started losing the moment R-085 put a panel reading "on
+    // active duty" above it.
+    //
+    // Waiting for the BUTTON to disappear is the obvious replacement and is
+    // the same bug again: `SubmitButton` renders "Working…" while pending, so
+    // the old accessible name is gone the instant the form submits, not when
+    // the server answers.
+    //
+    // So poll the fact itself. `leaseRow` above already documents why a single
+    // read lands a beat early against pooled connections; this is that, for a
+    // mutation rather than a create.
+    // ==========================================================================
+    await expect.poll(() => prisma.lease.findUniqueOrThrow({ where: { id: lease.id } })
+      .then((row) => row.status)).toBe('ACTIVE')
 
     const live = await prisma.lease.findUniqueOrThrow({ where: { id: lease.id } })
     expect(live.status).toBe('ACTIVE')

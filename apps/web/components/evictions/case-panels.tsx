@@ -24,6 +24,7 @@ export function AdvanceStagePanel({
   needsTime: boolean
 }) {
   const [state, formAction] = useActionState<EvictionFormState, FormData>(action, {})
+  const errors = state.fieldErrors ?? {}
 
   return (
     <form action={formAction} className="flex max-w-sm flex-col gap-3">
@@ -34,6 +35,34 @@ export function AdvanceStagePanel({
       ) : (
         <TextField label={dateLabel} name="stageDate" type="date" idPrefix="advance" required />
       )}
+
+      {/* R-085: asked only at the judgment, because 50 U.S.C. §3931 turns
+          entirely on it — a contested hearing needs no military-service
+          affidavit and a default judgment does. Radios rather than a
+          checkbox: an unticked box means "no" and this question genuinely
+          has three states, of which "nobody said" must not silently become
+          one of the answers. */}
+      {nextStage === 'JUDGMENT' && (
+        <fieldset className="flex flex-col gap-2">
+          <legend className="text-sm font-medium">Did the tenant appear?</legend>
+          <p className="text-muted-foreground text-xs">
+            A default judgment needs the §3931 military-service affidavit, and
+            the affidavit needs a DMDC search on this tenancy.
+          </p>
+          <label className="flex min-h-11 items-center gap-2 text-sm">
+            <input type="radio" name="tenantAppeared" value="yes" className="size-5" />
+            <span>Yes — contested</span>
+          </label>
+          <label className="flex min-h-11 items-center gap-2 text-sm">
+            <input type="radio" name="tenantAppeared" value="no" className="size-5" />
+            <span>No — this is a default judgment</span>
+          </label>
+          {errors.tenantAppeared && (
+            <p className="text-destructive text-sm">{errors.tenantAppeared}</p>
+          )}
+        </fieldset>
+      )}
+
       <SubmitButton label={nextLabel} />
     </form>
   )

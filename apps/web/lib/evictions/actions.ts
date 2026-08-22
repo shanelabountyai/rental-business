@@ -11,7 +11,8 @@ import {
   validateEvictionCost,
   type EvictionStageValue,
 } from '@rental/core/evictions'
-import { businessDateToUtc } from '@rental/core/scheduling'
+import { AFFIDAVIT_REFUSAL_MESSAGES, affidavitReadiness } from '@rental/core/scra'
+import { businessDate, businessDateToUtc } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
@@ -19,6 +20,7 @@ import { audit } from '@/lib/audit/index.ts'
 import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 import { cureClockFor, getEvictionCase } from '@/lib/evictions/queries.ts'
+import { affidavitLookupFor } from '@/lib/scra/queries.ts'
 
 // Writes for eviction case files (PAY-14, R-083).
 //
@@ -185,12 +187,43 @@ export async function advanceEvictionStage(
     if (!readiness.ready) return { error: FILING_REFUSAL_MESSAGES[readiness.refusal!] }
   }
 
+  // R-085 (RISK-12): 50 U.S.C. §3931. The second place this product actively
+  // stops a PM, and the second-most expensive mistake on the path after
+  // filing early - a default judgment entered without the military-service
+  // affidavit is voidable on the servicemember's own application, and a
+  // knowingly false affidavit is a criminal offence under §3931(c).
+  //
+  // "Did they appear" is asked here rather than assumed because the whole
+  // requirement turns on it: a contested hearing needs no affidavit at all.
+  let tenantAppeared: boolean | null = null
+  if (target === 'JUDGMENT') {
+    const appeared = str(formData, 'tenantAppeared')
+    if (appeared !== 'yes' && appeared !== 'no') {
+      return {
+        error: 'Fix the highlighted fields.',
+        fieldErrors: {
+          tenantAppeared:
+            'Did the tenant appear? A default judgment needs the §3931 military-service affidavit; a contested one does not.',
+        },
+      }
+    }
+    tenantAppeared = appeared === 'yes'
+
+    const decision = affidavitReadiness({
+      tenantAppeared,
+      lookup: await affidavitLookupFor(evictionCase.leaseId),
+      today: businessDate(new Date(), evictionCase.property.timezone),
+    })
+    if (!decision.ready) return { error: AFFIDAVIT_REFUSAL_MESSAGES[decision.refusal!] }
+  }
+
   const stageDate = optionalDate(formData, 'stageDate')
   const courtDateTime = str(formData, 'courtDate')
   const data: Record<string, unknown> = { stage: target }
   if (target === 'FILING' && stageDate) data.filedOn = businessDateToUtc(stageDate)
   if (target === 'COURT' && courtDateTime) data.courtDate = new Date(courtDateTime)
   if (target === 'JUDGMENT' && stageDate) data.judgmentOn = businessDateToUtc(stageDate)
+  if (target === 'JUDGMENT') data.tenantAppeared = tenantAppeared
   if (target === 'WRIT' && stageDate) data.writOn = businessDateToUtc(stageDate)
   if (target === 'LOCKOUT' && stageDate) data.lockoutOn = businessDateToUtc(stageDate)
 

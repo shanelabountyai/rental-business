@@ -14,6 +14,7 @@ import { notFound } from 'next/navigation'
 import { AccessCodesPanel } from '@/components/leases/access-codes-panel.tsx'
 import { HoldBanner } from '@/components/holds/hold-banner.tsx'
 import { HoldsPanel } from '@/components/holds/holds-panel.tsx'
+import { ScraLookupsPanel, ScraTerminationPanel } from '@/components/scra/scra-panels.tsx'
 import { BillingPanel } from '@/components/leases/billing-panel.tsx'
 import { PaymentHoldPanel } from '@/components/leases/payment-hold-panel.tsx'
 import { EsignPanel } from '@/components/leases/esign-panel.tsx'
@@ -30,6 +31,8 @@ import { RenterInsurancePanel } from '@/components/leases/renter-insurance-panel
 import { accessCodesForLease } from '@/lib/leases/access-code-queries.ts'
 import { liftLeaseHold, placeLeaseHold } from '@/lib/holds/actions.ts'
 import { holdsForLease } from '@/lib/holds/queries.ts'
+import { recordScraLookup, recordScraTermination } from '@/lib/scra/actions.ts'
+import { lookupsForLease } from '@/lib/scra/queries.ts'
 import { OfflinePaymentForm } from '@/components/payments/offline-payment-form.tsx'
 import { actorCan, actorDecision, propertyResource, requireScope } from '@/lib/auth/guard.ts'
 import { rulesFor } from '@/lib/jurisdiction/queries.ts'
@@ -187,7 +190,8 @@ export default async function LeaseDetailPage({
       action: changeLeaseStatus.bind(null, lease.id, to),
     }))
 
-  const [gaps, tenants, payers, ledger, fees, recurring, accessCodes, holds] = await Promise.all([
+  const [gaps, tenants, payers, ledger, fees, recurring, accessCodes, holds, scraLookups] =
+    await Promise.all([
     outstandingIntakeGaps(lease),
     canWrite ? selectableTenants() : Promise.resolve([]),
     leaseBillingState(lease.id),
@@ -196,6 +200,7 @@ export default async function LeaseDetailPage({
     recurringChargesForLease(lease.id),
     accessCodesForLease(lease.unitId, lease.id),
     holdsForLease(lease.id),
+    lookupsForLease(lease.id),
   ])
   // R-069: nothing to clear on a zero-deposit lease (NONE/SURETY_BOND hold
   // zero by the database CHECK constraint `chargeDeposit()`'s own comment
@@ -471,6 +476,36 @@ export default async function LeaseDetailPage({
         }))}
         placeAction={placeLeaseHold}
         liftAction={liftLeaseHold}
+      />
+
+      {/* R-085. Below the holds, because a positive search PLACES one — the
+          two read top to bottom in the order they actually happen. */}
+      <ScraLookupsPanel
+        lookups={scraLookups}
+        canRecord={canWrite}
+        recordAction={recordScraLookup.bind(null, lease.id)}
+        tenants={lease.leaseTenants.map((lt) => ({
+          id: lt.tenant.id,
+          name: `${lt.tenant.firstName} ${lt.tenant.lastName}`,
+        }))}
+      />
+
+      <ScraTerminationPanel
+        action={recordScraTermination.bind(null, lease.id)}
+        canRecord={canWrite && (lease.status === 'ACTIVE' || lease.status === 'MONTH_TO_MONTH')}
+        recorded={
+          lease.scraTerminationBasis
+            ? {
+                basis:
+                  lease.scraTerminationBasis === 'ENTERED_SERVICE'
+                    ? 'entered_service'
+                    : 'pcs_or_deployment',
+                effectiveOn: lease.noticeEffectiveOn
+                  ? utcToBusinessDate(lease.noticeEffectiveOn)
+                  : '—',
+              }
+            : null
+        }
       />
 
       <PaymentHoldPanel

@@ -39,6 +39,7 @@
     "./prospects": "./prospects/index.ts",
     "./rbac": "./rbac/index.ts",
     "./scheduling": "./scheduling/index.ts",
+    "./scra": "./scra/index.ts",
     "./screening": "./screening/index.ts",
     "./tasks": "./tasks/index.ts",
     "./tax": "./tax/index.ts",

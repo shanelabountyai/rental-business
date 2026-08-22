@@ -575,6 +575,7 @@ model Property {
   invoiceSplits       VendorInvoiceSplit[]
   reserve             PropertyReserve?
   leaseHolds          LeaseHold[]
+  scraLookups         ScraLookup[]
 
   @@index([legalEntityId])
   @@index([state])
@@ -1587,6 +1588,7 @@ model StaffUser {
   complianceCompletionsRecorded           ComplianceCompletion[]
   translationsApproved                    MessageTemplateTranslation[]    @relation("TranslationApprovedBy")
   paymentHoldsSet                         LeasePayer[]                    @relation("PaymentHoldSetBy")
+  scraLookupsRecorded                     ScraLookup[]                    @relation("ScraLookupRecordedBy")
   leaseHoldsPlaced                        LeaseHold[]                     @relation("LeaseHoldPlacedBy")
   leaseHoldsLifted                        LeaseHold[]                     @relation("LeaseHoldLiftedBy")
   listingsCreated                         Listing[]                       @relation("ListingCreatedBy")
@@ -1626,6 +1628,7 @@ model Tenant {
   messages               Message[]               @relation("MessageFromTenant")
   documents              Document[]
   consents               TenantConsent[]
+  scraLookups            ScraLookup[]
 
   @@index([lastName, firstName])
   @@index([email])
@@ -1854,6 +1857,17 @@ model Lease {
   noticeForwardingAddress String?
   terminationReason       String?
 
+  /// R-085 (RISK-12): set when this tenancy was ended under SCRA §3955,
+  /// naming which limb of §3955(b) was invoked. Null for every ordinary
+  /// termination.
+  ///
+  /// A column rather than a table because a lease is terminated once, and
+  /// because the notice itself already lives in `noticeGivenAt` /
+  /// `noticeGivenBy` / `noticeEffectiveOn` (R-066) - an SCRA termination IS
+  /// a tenant-given notice with a federally computed effective date, not a
+  /// second kind of ending that needs its own entity.
+  scraTerminationBasis  ScraTerminationBasis?
+
   /// R-033. Where this tenancy came from - see LeaseOrigin.
   origin                LeaseOrigin           @default(APPLICATION)
   /// RISK-08. Defaults to NOT_APPLICABLE, which is correct for the ordinary
@@ -1921,6 +1935,7 @@ model Lease {
   documents               Document[]
   turnoverProject         TurnoverProject?
   holds                   LeaseHold[]
+  scraLookups             ScraLookup[]
 
   @@index([propertyId])
   @@index([unitId])
@@ -2011,6 +2026,83 @@ model LeaseHold {
 
   @@index([leaseId, liftedAt])
   @@index([propertyId, liftedAt])
+}
+
+/// Which limb of SCRA §3955(b) a termination was invoked under (R-085).
+/// Mirrors `SCRA_TERMINATION_BASES` in packages/core/scra.
+enum ScraTerminationBasis {
+  ENTERED_SERVICE
+  PCS_OR_DEPLOYMENT
+}
+
+/// What a DMDC search said. THREE-VALUED, and the third value is the point:
+/// `INDETERMINATE` (DMDC could not match the identifiers) is not
+/// `NOT_IN_SERVICE`, and collapsing the two is how a false §3931 affidavit
+/// gets signed. Mirrors `SCRA_LOOKUP_RESULTS` in packages/core/scra.
+enum ScraLookupResult {
+  IN_SERVICE
+  NOT_IN_SERVICE
+  INDETERMINATE
+}
+
+/// One military-service search against the Defense Manpower Data Center
+/// (RISK-12, R-085).
+///
+/// RECORDED, NOT INTEGRATED. There is no adapter behind this and there
+/// should not be one - DMDC serves single-record requests through a web form
+/// returning a signed PDF, and bulk requests through an authenticated file
+/// upload; there is no per-tenant API to stand a simulator in front of. So a
+/// human runs the search and this table records that they did, what it said,
+/// and the certificate they got back. See packages/core/scra's own header
+/// for why that is D-15's reasoning rather than a shortcut.
+///
+/// HISTORY, NOT THE LATEST ANSWER. A tenancy accumulates searches - one when
+/// the case opens, another before the hearing because the first went stale -
+/// and each is evidence as of its own date. `affidavitReadiness` reads the
+/// most recent; the older rows are what answer "what did you know in March".
+model ScraLookup {
+  id             String           @id @default(cuid())
+  leaseId        String
+  propertyId     String
+  /// Who was searched for. Per TENANT, not per lease: §3931's affidavit is
+  /// about a named defendant, and a two-adult tenancy needs two searches.
+  tenantId       String
+  /// Null for a search run outside any case - which is the good time to run
+  /// one, before an eviction is even opened.
+  evictionCaseId String?
+  result         ScraLookupResult
+  /// The calendar day the search was RUN, as a date-only value: it is what
+  /// the certificate is dated and what staleness is measured from, and no
+  /// timezone may touch it (CLAUDE.md's @db.Date rule).
+  searchedOn     DateTime         @db.Date
+  /// DMDC's own reference on the certificate, when the certificate carries
+  /// one. Never invented by us.
+  providerReference String?
+  /// Active-duty dates the certificate states, when it states any. Only ever
+  /// populated for IN_SERVICE, and nullable even then - not every
+  /// certificate gives both ends.
+  activeDutyStartOn DateTime? @db.Date
+  activeDutyEndOn   DateTime? @db.Date
+  /// The signed PDF. Nullable because a search can be recorded the minute it
+  /// is run and the file attached a moment later, but a lookup with no
+  /// certificate is a claim rather than evidence and the UI says so.
+  certificateDocumentId String? @unique
+  notes          String?
+  recordedAt        DateTime @default(now())
+  recordedByStaffId String
+
+  lease        Lease         @relation(fields: [leaseId], references: [id])
+  property     Property      @relation(fields: [propertyId], references: [id])
+  tenant       Tenant        @relation(fields: [tenantId], references: [id])
+  evictionCase EvictionCase? @relation(fields: [evictionCaseId], references: [id], onDelete: Restrict)
+  certificate  Document?     @relation("ScraCertificate", fields: [certificateDocumentId], references: [id], onDelete: Restrict)
+  /// Restrict, like every other key pointing at evidence: who ran the search
+  /// is part of what an affidavit is sworn on.
+  recordedBy   StaffUser     @relation("ScraLookupRecordedBy", fields: [recordedByStaffId], references: [id], onDelete: Restrict)
+
+  @@index([leaseId, searchedOn])
+  @@index([evictionCaseId])
+  @@index([tenantId])
 }
 
 /// A tenant's own renter's-liability certificate (LEASE-10, R-067). NOT
@@ -3967,6 +4059,15 @@ model EvictionCase {
   /// A real timestamp, not a date: hearings have a time, and a PM who misses
   /// one by reading "the 14th" loses by default.
   courtDate       DateTime?
+  /// R-085 (RISK-12): did the tenant appear in the action?
+  ///
+  /// Null means nobody has said, which is NOT "no" - `affidavitReadiness`
+  /// treats it as not established and gates the judgment either way. It is
+  /// asked at the judgment stage because 50 U.S.C. §3931's affidavit
+  /// requirement turns entirely on it: a contested hearing needs none, and a
+  /// default judgment without one is voidable on the servicemember's own
+  /// application.
+  tenantAppeared  Boolean?
   judgmentOn      DateTime?        @db.Date
   writOn          DateTime?        @db.Date
   lockoutOn       DateTime?        @db.Date
@@ -3978,8 +4079,9 @@ model EvictionCase {
   unit     Unit           @relation(fields: [unitId], references: [id])
   lease    Lease          @relation(fields: [leaseId], references: [id])
   openedBy StaffUser      @relation("EvictionCaseOpenedBy", fields: [openedByStaffId], references: [id])
-  notices  Notice[]
-  costs    EvictionCost[]
+  notices     Notice[]
+  costs       EvictionCost[]
+  scraLookups ScraLookup[]
 
   @@index([propertyId, stage])
   @@index([leaseId])
@@ -4403,6 +4505,7 @@ model Document {
   leaseEnvelopeAsExecuted LeaseEnvelope?            @relation("LeaseEnvelopeExecutedDocument")
   renterInsurancePolicy   RenterInsurancePolicy?
   complianceCompletions   ComplianceCompletion[]
+  scraLookupAsCertificate ScraLookup?               @relation("ScraCertificate")
 
   @@index([propertyId, type])
   @@index([legalEntityId, type])

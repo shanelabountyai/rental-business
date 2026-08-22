@@ -589,6 +589,17 @@ export const AUDIT_ACTIONS = [
   /// is the one an eviction defence asks about. REASON_REQUIRED, both ways.
   'lease.hold_lifted',
 
+  /// R-085 (RISK-12): a DMDC military-service search was recorded against a
+  /// tenant - what it said, when it was run, and the certificate behind it.
+  /// The §3931 affidavit is sworn on this, so the trail has to answer "what
+  /// did you know, and when" years after the tenancy ended.
+  'scra.lookup_recorded',
+  /// R-085: a tenancy was ended under §3955. REASON_REQUIRED is deliberately
+  /// NOT applied - the basis and the orders on file ARE the reason, and
+  /// demanding free text as well would be asking a servicemember's PM to
+  /// justify a federal right.
+  'lease.scra_terminated',
+
   /// R-034 (D-11): a lease's Stripe Customer and Subscription were opened.
   /// Carries the provider name, because a record that does not say whether
   /// it was Stripe or the simulator is a record somebody will misread the

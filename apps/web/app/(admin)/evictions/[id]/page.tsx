@@ -15,7 +15,12 @@ import {
 } from '@rental/core/evictions'
 import { formatCents } from '@rental/core/money'
 import { noticeTypeLabel } from '@rental/core/notices'
-import { friendlyDate, friendlyTimestamp } from '@rental/core/scheduling'
+import {
+  AFFIDAVIT_REFUSAL_MESSAGES,
+  affidavitReadiness,
+  staleLookupWarning,
+} from '@rental/core/scra'
+import { businessDate, friendlyDate, friendlyTimestamp } from '@rental/core/scheduling'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { Fragment } from 'react'
@@ -27,6 +32,7 @@ import {
   RecordCostPanel,
 } from '@/components/evictions/case-panels.tsx'
 import { HoldBanner } from '@/components/holds/hold-banner.tsx'
+import { ScraLookupsPanel } from '@/components/scra/scra-panels.tsx'
 import { requirePermission } from '@/lib/auth/guard.ts'
 import {
   advanceEvictionStage,
@@ -34,6 +40,8 @@ import {
   recordEvictionCost,
 } from '@/lib/evictions/actions.ts'
 import { holdsForLease } from '@/lib/holds/queries.ts'
+import { recordScraLookup } from '@/lib/scra/actions.ts'
+import { affidavitLookupFor, lookupsForLease } from '@/lib/scra/queries.ts'
 import { exportAttorneyPacket } from '@/lib/evictions/packet.ts'
 import { attachableNotices, cureClockFor, getEvictionCase } from '@/lib/evictions/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
@@ -72,6 +80,22 @@ export default async function EvictionCasePage({ params }: { params: Promise<{ i
   // before a default judgment, a bankruptcy stay bars the filing outright,
   // and a dead tenant has nobody to serve.
   const holds = await holdsForLease(evictionCase.leaseId)
+
+  // R-085 (RISK-12). Shown BEFORE the PM tries to record a judgment, for the
+  // same reason `filingReadiness` is shown before they try to file: the gate
+  // exists to prevent an expensive mistake, and a gate that only speaks after
+  // the attempt teaches somebody to work around it.
+  const [scraLookups, affidavitLookup] = await Promise.all([
+    lookupsForLease(evictionCase.leaseId),
+    affidavitLookupFor(evictionCase.leaseId),
+  ])
+  const affidavit = affidavitReadiness({
+    // The gate itself asks; here we are only PREVIEWING what a default
+    // judgment would run into, so this deliberately assumes the worst case.
+    tenantAppeared: false,
+    lookup: affidavitLookup,
+    today: businessDate(new Date(), zone),
+  })
 
   // Shown BEFORE the PM tries, not as an error after - the whole point of
   // the gate is that filing early is expensive and irreversible.
@@ -127,6 +151,26 @@ export default async function EvictionCasePage({ params }: { params: Promise<{ i
           )
         )}
       </section>
+
+      <ScraLookupsPanel
+        lookups={scraLookups}
+        canRecord={stage !== 'CLOSED'}
+        recordAction={recordScraLookup.bind(null, evictionCase.leaseId)}
+        evictionCaseId={evictionCase.id}
+        tenants={evictionCase.lease.leaseTenants.map((lt) => ({
+          id: lt.tenant.id,
+          name: `${lt.tenant.firstName} ${lt.tenant.lastName}`,
+        }))}
+        prompt={
+          stage === 'CLOSED'
+            ? undefined
+            : !affidavit.ready
+              ? AFFIDAVIT_REFUSAL_MESSAGES[affidavit.refusal!]
+              : affidavit.stale
+                ? staleLookupWarning(affidavit.staleDays!)
+                : undefined
+        }
+      />
 
       <section aria-labelledby="notices" className="flex flex-col gap-3 rounded-md border p-4">
         <h2 id="notices" className="text-lg font-semibold">

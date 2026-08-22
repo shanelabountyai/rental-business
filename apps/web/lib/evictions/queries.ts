@@ -28,7 +28,10 @@ const caseInclude = {
       id: true,
       leaseTenants: {
         orderBy: { isPrimary: 'desc' as const },
-        select: { tenant: { select: { firstName: true, lastName: true } } },
+        // `id` too, since R-085: a §3931 search is run against a NAMED
+        // defendant, so the case page has to be able to say which person it
+        // is recording a result for.
+        select: { tenant: { select: { id: true, firstName: true, lastName: true } } },
       },
     },
   },

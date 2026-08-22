@@ -106,6 +106,16 @@ export const DOCUMENT_TYPES = [
   /// a packet is a claim about the record on a date, and the record keeps
   /// moving.
   'TAX_PACKET',
+  /// R-085 (RISK-12): the servicemember's own PCS, deployment or enlistment
+  /// orders, supplied by the TENANT to invoke §3955. Distinct from
+  /// SCRA_CERTIFICATE below in exactly the way NOTICE is distinct from
+  /// NOTICE_PROOF: this is the tenant's claim, that is our verification, and
+  /// a dispute asks about one or the other.
+  'MILITARY_ORDERS',
+  /// R-085: the signed PDF certificate a DMDC search returns, which is what
+  /// the §3931 affidavit is sworn on. OURS, obtained by us, about a date -
+  /// see packages/core/scra for why no adapter mints one.
+  'SCRA_CERTIFICATE',
   'OTHER',
 ] as const
 export type DocumentTypeValue = (typeof DOCUMENT_TYPES)[number]

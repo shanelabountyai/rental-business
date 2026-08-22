@@ -78,6 +78,14 @@ export const RETENTION_RULES: Record<DocumentTypeValue, RetentionRule> = {
     years: null,
     note: 'R-081d: what the preparer was given for a tax year. Kept indefinitely - a return is examinable for years afterwards and this is the record of what it was filed from.',
   },
+  MILITARY_ORDERS: {
+    years: null,
+    note: 'R-085: what the tenant gave us to invoke §3955. Kept indefinitely - a termination disputed years later is argued from these, and the tenancy they ended is long gone by then.',
+  },
+  SCRA_CERTIFICATE: {
+    years: null,
+    note: 'R-085: what the §3931 affidavit was sworn on. Kept indefinitely - a judgment reopened on a servicemember\'s application turns on what the search said and when it was run.',
+  },
   OTHER: { years: null, note: 'Uncategorized - no automatic rule.' },
 }
 
