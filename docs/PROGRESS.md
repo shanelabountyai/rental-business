@@ -3438,7 +3438,7 @@ Full reasoning in `07-decisions.md`.
 ---
 
 ## R-085 — SCRA: military service, §3955 terminations, and the §3931 affidavit
-**Commit:** `PENDING`  ·  **Date:** 2026-08-22
+**Commit:** `662f4db`  ·  **Date:** 2026-08-22
 
 **What it built.** RISK-12: `packages/core/scra` (the §3955 date arithmetic, the two termination bases, the three-valued lookup result, and the §3931 affidavit gate), a `ScraLookup` table with the migration `20260822030000_r085_scra`, two `Lease`/`EvictionCase` columns, two new document types, two audit actions, and three surfaces — a military-service search panel on both the lease and the eviction case file, a §3955 termination panel on the lease, and a "did the tenant appear" question on the judgment.
 
