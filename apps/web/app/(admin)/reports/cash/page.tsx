@@ -25,9 +25,9 @@ export default async function CashSummaryPage() {
         </Link>
         <h1 className="text-2xl font-semibold tracking-tight">Cash summary</h1>
         <p className="text-muted-foreground text-sm">
-          No reserve target is tracked anywhere in this product yet (R-082) - this shows
-          collected vs. billed and the largest outflows only, never a reserve figure nobody
-          configured.
+          Collected vs. billed and the largest outflows. Reserve targets and actuals live on
+          their own report (R-082) rather than here — this page is about the month, and a reserve
+          is about the years.
         </p>
       </header>
 

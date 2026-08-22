@@ -4,5 +4,6 @@
 export * from './access.ts'
 export * from './dispatch.ts'
 export * from './invoice.ts'
+export * from './invoice-split.ts'
 export * from './territory.ts'
 export * from './validate.ts'

@@ -476,6 +476,7 @@ model LegalEntity {
   complianceItems ComplianceItem[]
   assignments     StaffAssignment[]
   documents       Document[]
+  vendorInvoices  VendorInvoice[]
 
   @@index([active])
 }
@@ -571,6 +572,8 @@ model Property {
   warranties          Warranty[]
   capitalImprovements CapitalImprovement[]
   notifications       Notification[]
+  invoiceSplits       VendorInvoiceSplit[]
+  reserve             PropertyReserve?
 
   @@index([legalEntityId])
   @@index([state])
@@ -822,6 +825,46 @@ model CapitalImprovement {
   documents  Document[]
 
   @@index([propertyId, inServiceOn])
+}
+
+// ---------------------------------------------------------------------------
+// Reserve target and actual (PAY-11, R-082)
+//
+// BOTH NUMBERS ARE TYPED IN BY A HUMAN, and that is the decision, not an
+// omission (D-76). This product has no bank feed: it never sees a
+// distribution taken, a mortgage principal payment, or the cash that bought
+// the house. Deriving a reserve balance from net operating income would
+// therefore overstate cash on hand - usually badly, always quietly - so the
+// balance is recorded the way R-081b records a lender's 1098: a figure this
+// product did not compute and does not pretend to have computed.
+//
+// `balanceAsOf` is what keeps that honest. A reserve balance with no date is
+// indistinguishable from a current one, and a stale figure read as current is
+// the failure mode this whole record exists to avoid.
+//
+// The ENTITY figure is the sum of its properties' rows and is not stored -
+// there is no second place for the two to disagree.
+// ---------------------------------------------------------------------------
+
+model PropertyReserve {
+  id           String    @id @default(cuid())
+  propertyId   String    @unique
+  /// What this property should be holding. Set by the owner, informed by the
+  /// capital plan's annual accrual - never overwritten by it, because the
+  /// plan is an estimate and the target is a decision.
+  targetCents  Int
+  /// What is actually held, as last counted. Null means nobody has said -
+  /// which the report shows as "not recorded", never as zero.
+  balanceCents Int?
+  balanceAsOf  DateTime? @db.Date
+  notes        String?
+
+  updatedByStaffId String
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  property  Property  @relation(fields: [propertyId], references: [id])
+  updatedBy StaffUser @relation("PropertyReserveUpdatedBy", fields: [updatedByStaffId], references: [id])
 }
 
 model Warranty {
@@ -1536,6 +1579,8 @@ model StaffUser {
   evictionCasesOpened                     EvictionCase[]                  @relation("EvictionCaseOpenedBy")
   evictionCostsRecorded                   EvictionCost[]                  @relation("EvictionCostRecordedBy")
   capitalImprovementsRecorded             CapitalImprovement[]            @relation("CapitalImprovementRecordedBy")
+  vendorInvoicesRecorded                  VendorInvoice[]                 @relation("VendorInvoiceRecordedBy")
+  propertyReservesUpdated                 PropertyReserve[]               @relation("PropertyReserveUpdatedBy")
   mortgageStatementsRecorded              MortgageAnnualStatement[]       @relation("MortgageAnnualStatementRecordedBy")
   depositDeductionsCreated                DepositDeduction[]              @relation("DepositDeductionCreatedBy")
   complianceCompletionsRecorded           ComplianceCompletion[]
@@ -1637,8 +1682,99 @@ model Vendor {
   threads       Thread[]
   messages      Message[]               @relation("MessageFromVendor")
   documents     Document[]
+  invoices      VendorInvoice[]
 
   @@index([active])
+}
+
+// ---------------------------------------------------------------------------
+// Vendor invoice splitting (PAY-10, R-082)
+//
+// The $900 handyman invoice covering three houses. Before this, every vendor
+// cost lived on a `WorkOrder`, which has exactly one property - so a bill
+// spanning three of them could only be recorded by inventing three work
+// orders and dividing the total by hand, leaving nothing that proves the
+// three came off one bill when the vendor's statement is reconciled.
+//
+// The invoice is the unit the VENDOR issued and the unit that gets paid; the
+// splits are how this owner books it. `totalCents` is therefore the vendor's
+// own number, not a derived sum - and the splits are required to add up to it
+// (`validateInvoiceSplits`), so a transcription error is refused at the form
+// rather than discovered as a variance in April.
+// ---------------------------------------------------------------------------
+
+model VendorInvoice {
+  id            String    @id @default(cuid())
+  /// Which set of books this bill belongs to. Every split's property must
+  /// belong to this entity - the tax export runs per entity, so a split
+  /// pointing at another entity's house would be money that leaves one
+  /// return without arriving on any other.
+  legalEntityId String
+  vendorId      String
+  /// The vendor's own invoice number, as printed. Nullable because a
+  /// handwritten ticket often has none, and refusing the bill for want of a
+  /// number it does not carry would just push the record back into a
+  /// spreadsheet.
+  invoiceNumber String?
+  /// The vendor's total, entered as printed. The splits must sum to exactly
+  /// this - see the model comment.
+  totalCents    Int
+  invoicedOn    DateTime  @db.Date
+  /// Set when the bill is actually paid. Drives the CASH basis: an invoice
+  /// with no payment date is not a cash-basis deduction in any year, exactly
+  /// as an unpaid work order is not.
+  paidAt        DateTime?
+  /// check / ACH / card / cash - the same closed-vocabulary-in-code posture
+  /// `WorkOrder.invoicePaymentMethod` takes, and read by the same 1099
+  /// breakdown.
+  paymentMethod String?
+  notes         String?
+
+  recordedByStaffId String
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  legalEntity LegalEntity          @relation(fields: [legalEntityId], references: [id])
+  vendor      Vendor               @relation(fields: [vendorId], references: [id])
+  recordedBy  StaffUser            @relation("VendorInvoiceRecordedBy", fields: [recordedByStaffId], references: [id])
+  splits      VendorInvoiceSplit[]
+
+  @@index([legalEntityId, invoicedOn])
+  @@index([vendorId, paidAt])
+}
+
+model VendorInvoiceSplit {
+  id              String  @id @default(cuid())
+  vendorInvoiceId String
+  propertyId      String
+  /// A `ScheduleEKey` (`packages/core/tax/schedule-e.ts`), restricted to the
+  /// expense lines a vendor can bill - `INVOICE_SPLIT_CATEGORIES`. Storing
+  /// the Schedule E key IS the export mapping PAY-10 asks for: there is no
+  /// second vocabulary to keep in step with the form.
+  ///
+  /// Free-form column against a closed list in code, the posture
+  /// `CapitalImprovement.category` and `Notice.type` already take.
+  category        String
+  amountCents     Int
+  /// Optional link to the job this share paid for. UNIQUE, and load-bearing
+  /// for the export exactly as `CapitalImprovement.workOrderId` is: a work
+  /// order whose cost arrives here must NOT also be deducted from its own
+  /// `invoiceCents`, and two splits claiming one job would make that
+  /// exclusion ambiguous.
+  workOrderId     String? @unique
+  /// What this share was for, when the job link does not already say it.
+  description     String?
+
+  vendorInvoice VendorInvoice @relation(fields: [vendorInvoiceId], references: [id], onDelete: Cascade)
+  property      Property      @relation(fields: [propertyId], references: [id])
+  /// Restrict, not the SetNull Prisma would default an optional relation to.
+  /// Silently unlinking would leave a booked deduction whose evidence chain
+  /// back to the job has vanished, and re-linking is impossible after the
+  /// fact. Refusing the delete makes it a decision somebody has to take.
+  workOrder     WorkOrder?    @relation(fields: [workOrderId], references: [id], onDelete: Restrict)
+
+  @@index([vendorInvoiceId])
+  @@index([propertyId])
 }
 
 model Lease {
@@ -3104,6 +3240,10 @@ model WorkOrder {
   /// R-078: set when this job's cost was CAPITALISED rather than expensed.
   /// The tax export excludes these from repairs on the strength of it.
   capitalImprovement      CapitalImprovement?
+  /// R-082: set when this job's cost arrives on a split vendor invoice
+  /// instead of its own `invoiceCents`. The export excludes it from repairs
+  /// for the same reason `capitalImprovement` does - one bill, one deduction.
+  invoiceSplit            VendorInvoiceSplit?
 
   @@index([propertyId, status])
   @@index([unitId])

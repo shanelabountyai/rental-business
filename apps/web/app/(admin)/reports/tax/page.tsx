@@ -215,14 +215,20 @@ export default async function TaxExportPage({
 
               <section aria-labelledby="tax-unsourced" className="flex flex-col gap-2 rounded-md border p-4">
                 <h2 id="tax-unsourced" className="text-sm font-semibold">
-                  Schedule E lines this product cannot fill
+                  Schedule E lines with nothing on them
                 </h2>
                 <p className="text-muted-foreground text-xs">
                   Named rather than left blank: a missing expense line reads as a zero, and a zero
-                  overstates income.
+                  overstates income. A line that this export DID fill is not listed here.
                 </p>
                 <ul className="flex flex-col divide-y text-sm">
-                  {UNSOURCED_LINES.map((gap) => (
+                  {UNSOURCED_LINES.filter(
+                    // R-082: most of these lines became fillable via a vendor
+                    // invoice split, so the list is now "empty", not
+                    // "impossible" - and a line with money on it must drop off
+                    // it entirely rather than tell a reader it cannot exist.
+                    (gap) => !report.totalsByLine.some((total) => total.key === gap.key),
+                  ).map((gap) => (
                     <li key={gap.key} className="flex flex-col py-2">
                       <span>
                         Line {SCHEDULE_E[gap.key].line} · {SCHEDULE_E[gap.key].label}

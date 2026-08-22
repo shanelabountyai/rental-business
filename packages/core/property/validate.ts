@@ -197,3 +197,46 @@ export function validateProperty(input: PropertyInput): Violation[] {
 
   return violations
 }
+
+/// The reserve target and last-counted balance (PAY-11, R-082). Both figures
+/// are typed in by a human - see `PropertyReserve`'s own comment for why the
+/// balance is not derived - so the validation's job is only to refuse the
+/// shapes that would make the report lie.
+export interface PropertyReserveInput {
+  targetCents: number | null
+  balanceCents: number | null
+  balanceAsOf?: string | null
+}
+
+export function validatePropertyReserve(input: PropertyReserveInput): Violation[] {
+  const violations: Violation[] = []
+
+  if (
+    input.targetCents == null ||
+    Number.isNaN(input.targetCents) ||
+    !Number.isInteger(input.targetCents) ||
+    input.targetCents < 0
+  ) {
+    violations.push({ field: 'targetDollars', message: 'Enter a target of $0 or more.' })
+  }
+  if (
+    input.balanceCents != null &&
+    (Number.isNaN(input.balanceCents) || !Number.isInteger(input.balanceCents) || input.balanceCents < 0)
+  ) {
+    violations.push({ field: 'balanceDollars', message: 'Enter a balance of $0 or more, or leave it blank.' })
+  }
+  if (input.balanceAsOf && Number.isNaN(Date.parse(input.balanceAsOf))) {
+    violations.push({ field: 'balanceAsOf', message: 'Enter a valid date.' })
+  }
+  // A balance with no date is the one combination that is worse than no
+  // balance at all: it reads as current for ever. The date is what stops a
+  // figure counted eighteen months ago from being trusted as today's.
+  if (input.balanceCents != null && !input.balanceAsOf) {
+    violations.push({
+      field: 'balanceAsOf',
+      message: 'Say when this balance was counted — an undated balance always reads as current.',
+    })
+  }
+
+  return violations
+}

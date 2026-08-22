@@ -132,19 +132,51 @@ export function workOrderExpenseLine(facts: { turnoverProjectId: string | null }
  * Rendered on the export so a reader is told what is missing rather than
  * left to infer from a blank that the number was zero. A silently absent
  * expense line is a return that overstates income.
+ *
+ * R-082 CHANGED WHAT "CANNOT" MEANS FOR MOST OF THIS LIST. A vendor invoice
+ * carries a Schedule E category per split (`INVOICE_SPLIT_CATEGORIES`), so
+ * advertising, insurance, commissions, supplies, management fees, travel and
+ * property tax now all have a way in - they just have nothing in them until
+ * somebody records the bill. That is a different statement to a reader
+ * ("nobody entered it") than the old one ("this product cannot represent
+ * it"), and getting it wrong sends them looking for a feature instead of a
+ * receipt. The caller drops any line that actually has money on it, so a line
+ * shown here is genuinely empty.
  */
 export const UNSOURCED_LINES: ReadonlyArray<{ key: ScheduleEKey; reason: string }> = [
-  { key: 'ADVERTISING', reason: 'Listing spend is not recorded as money anywhere yet.' },
-  { key: 'AUTO_TRAVEL', reason: 'No mileage log is captured (RPT-07 names one; nothing writes it).' },
-  { key: 'COMMISSIONS', reason: 'Leasing commissions are not recorded as money.' },
+  {
+    key: 'ADVERTISING',
+    reason: 'Nothing recorded. Listing spend has no home of its own — enter it as a vendor invoice.',
+  },
+  {
+    key: 'AUTO_TRAVEL',
+    reason:
+      'No mileage log is captured (RPT-07 names one; nothing writes it). Out-of-pocket travel can be entered as a vendor invoice.',
+  },
+  {
+    key: 'COMMISSIONS',
+    reason: 'Nothing recorded. A leasing commission can be entered as a vendor invoice.',
+  },
   {
     key: 'INSURANCE',
-    reason: 'InsurancePolicy records coverage, not premiums paid - there is no amount to export.',
+    reason:
+      'InsurancePolicy records coverage, not premiums paid. Enter the premium as a vendor invoice to deduct it.',
   },
-  { key: 'MANAGEMENT_FEES', reason: 'Self-managed; no management-fee expense is recorded.' },
+  {
+    key: 'MANAGEMENT_FEES',
+    reason: 'Nothing recorded. A third-party management fee can be entered as a vendor invoice.',
+  },
   { key: 'OTHER_INTEREST', reason: 'No non-mortgage interest is recorded.' },
-  { key: 'SUPPLIES', reason: 'Owner-purchased supplies outside a work order are not recorded.' },
-  { key: 'TAXES', reason: 'Property-tax DUE DATES are tracked (R-077); amounts paid are not.' },
+  {
+    key: 'SUPPLIES',
+    reason:
+      'Nothing recorded. Supplies bought outside a work order can be entered as a vendor invoice.',
+  },
+  {
+    key: 'TAXES',
+    reason:
+      'Property-tax DUE DATES are tracked (R-077); amounts paid are not. Enter the bill as a vendor invoice to deduct it.',
+  },
   {
     key: 'DEPRECIATION',
     reason:

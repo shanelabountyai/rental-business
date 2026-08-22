@@ -34,12 +34,20 @@ export default async function MoneyPage() {
           What Stripe is billing, and where it has stopped agreeing with the
           lease.
         </p>
-        <Link
-          href="/money/rent-roll"
-          className="focus-visible:ring-ring w-fit text-sm underline underline-offset-4 focus-visible:ring-2 focus-visible:outline-none"
-        >
-          Rent roll and delinquency aging
-        </Link>
+        <div className="flex flex-wrap gap-4">
+          <Link
+            href="/money/rent-roll"
+            className="focus-visible:ring-ring w-fit text-sm underline underline-offset-4 focus-visible:ring-2 focus-visible:outline-none"
+          >
+            Rent roll and delinquency aging
+          </Link>
+          <Link
+            href="/money/vendor-invoices"
+            className="focus-visible:ring-ring w-fit text-sm underline underline-offset-4 focus-visible:ring-2 focus-visible:outline-none"
+          >
+            Vendor invoices
+          </Link>
+        </div>
       </header>
 
       <BillingRuns

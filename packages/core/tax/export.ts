@@ -71,6 +71,33 @@ export interface WorkOrderFact {
   /// True when a `CapitalImprovement` names this job. Its cost is on the
   /// CapEx schedule and must NOT also be deducted as a repair.
   capitalised: boolean
+  /// True when a `VendorInvoiceSplit` names this job (R-082). Its cost
+  /// arrives on the split invoice's own line, so deducting `invoiceCents`
+  /// here as well would claim one bill twice - the same hazard `capitalised`
+  /// guards, from the other direction.
+  splitInvoiced: boolean
+}
+
+/**
+ * One line of a vendor invoice split across properties (PAY-10, R-082).
+ *
+ * The invoice's own dates and vendor are flattened onto every split because
+ * the export books lines, not invoices: a $900 bill across three houses is
+ * three deductions on three property P&Ls, and each needs its own date.
+ */
+export interface VendorInvoiceSplitFact {
+  id: string
+  propertyId: string
+  /// A `ScheduleEKey`, restricted to `INVOICE_SPLIT_CATEGORIES`. Validated at
+  /// the write; an unrecognised value here lands on the exception list rather
+  /// than being guessed into a line.
+  category: string
+  amountCents: number
+  description: string | null
+  vendorName: string
+  invoiceNumber: string | null
+  invoicedOn: Date
+  paidAt: Date | null
 }
 
 export interface UtilityBillFact {
@@ -133,6 +160,7 @@ export interface TaxExportFacts {
   propertyTimezones: ReadonlyMap<string, string>
   income: readonly IncomeFact[]
   workOrders: readonly WorkOrderFact[]
+  invoiceSplits: readonly VendorInvoiceSplitFact[]
   utilityBills: readonly UtilityBillFact[]
   evictionCosts: readonly EvictionCostFact[]
   capitalImprovements: readonly CapitalImprovementFact[]
@@ -189,6 +217,12 @@ export interface TaxExport {
     outOfYear: number
     /// A work order whose cost is carried by a CapitalImprovement instead.
     capitalised: number
+    /// A work order whose cost is carried by a split vendor invoice instead
+    /// (R-082). A fifth exit door, and it had to be counted rather than
+    /// folded into `capitalised`: the two mean different things to a reader
+    /// chasing a missing deduction, and the identity below only catches a
+    /// dropped row if every door is named.
+    splitInvoiced: number
   }
 }
 
@@ -204,6 +238,7 @@ export function buildTaxExport(facts: TaxExportFacts, basis: AccountingBasis): T
   const exceptions: ExportLine[] = []
   let outOfYear = 0
   let capitalised = 0
+  let splitInvoiced = 0
   const name = (propertyId: string) => facts.propertyNames.get(propertyId) ?? propertyId
 
   /// The reader for a real timestamp - `closedAt`, `invoicePaidAt`. Goes
@@ -300,6 +335,13 @@ export function buildTaxExport(facts: TaxExportFacts, basis: AccountingBasis): T
       capitalised += 1
       continue
     }
+    // Split-invoiced: the money is on the vendor-invoice section below, on
+    // whatever share of the bill this job actually accounted for - which is
+    // not necessarily this job's own `invoiceCents`, and that is the point.
+    if (job.splitInvoiced) {
+      splitInvoiced += 1
+      continue
+    }
 
     const bookedAt = basis === 'cash' ? job.invoicePaidAt : job.closedAt
     const bookedOn = bookedAt == null ? null : instantDay(bookedAt, job.propertyId)
@@ -333,6 +375,61 @@ export function buildTaxExport(facts: TaxExportFacts, basis: AccountingBasis): T
       continue
     }
     mapped('EXPENSE', workOrderExpenseLine(job), common)
+  }
+
+  // -- Split vendor invoices ------------------------------------------------
+  //
+  // One bill, several properties (PAY-10, R-082). Each split is booked on its
+  // OWN property's clock, which is why the zone lookup is per split rather
+  // than per invoice: the $900 handyman covering a Texas house and an Arizona
+  // one is one payment instant landing on two calendars, and at a year
+  // boundary those disagree.
+  //
+  // The category is already a Schedule E key, so there is no mapping step
+  // here - only the check that it is one this product recognises.
+  for (const split of facts.invoiceSplits) {
+    const bookedAt = basis === 'cash' ? split.paidAt : null
+    const bookedOn =
+      basis === 'cash'
+        ? bookedAt == null
+          ? null
+          : instantDay(bookedAt, split.propertyId)
+        : // Accrual books the bill when the vendor issued it. `invoicedOn` is
+          // a `@db.Date` - a calendar day no zone may touch.
+          calendarDay(split.invoicedOn)
+
+    const reference = split.invoiceNumber ? `invoice ${split.invoiceNumber}` : 'invoice'
+    const common = {
+      bookedOn,
+      propertyId: split.propertyId,
+      description: split.description
+        ? `${split.description} — ${split.vendorName}, ${reference}`
+        : `${split.vendorName}, ${reference}`,
+      amountCents: split.amountCents,
+      sourceKind: 'VendorInvoiceSplit',
+      sourceId: split.id,
+    }
+
+    if (bookedOn == null) {
+      except({
+        ...common,
+        reason:
+          'Not marked paid, so it cannot be booked on a cash basis. Record the payment date, or export on an accrual basis.',
+      })
+      continue
+    }
+    if (!inYear(bookedOn)) {
+      outOfYear += 1
+      continue
+    }
+    if (SCHEDULE_E[split.category] == null) {
+      except({
+        ...common,
+        reason: `Category "${split.category}" carries no Schedule E mapping. Re-categorise the line on the invoice.`,
+      })
+      continue
+    }
+    mapped('EXPENSE', split.category as ScheduleEKey, common)
   }
 
   // -- Utilities the owner absorbed -----------------------------------------
@@ -481,6 +578,7 @@ export function buildTaxExport(facts: TaxExportFacts, basis: AccountingBasis): T
       facts:
         facts.income.length +
         facts.workOrders.length +
+        facts.invoiceSplits.length +
         facts.utilityBills.length +
         facts.evictionCosts.length +
         facts.capitalImprovements.length +
@@ -489,6 +587,7 @@ export function buildTaxExport(facts: TaxExportFacts, basis: AccountingBasis): T
       excepted: exceptions.length,
       outOfYear,
       capitalised,
+      splitInvoiced,
     },
   }
 }

@@ -5,6 +5,7 @@ import {
   type IncomeFact,
   type TaxExportFacts,
   type UtilityBillFact,
+  type VendorInvoiceSplitFact,
   type WorkOrderFact,
   buildTaxExport,
 } from './export.ts'
@@ -22,6 +23,7 @@ function facts(overrides: Partial<TaxExportFacts> = {}): TaxExportFacts {
     propertyTimezones: new Map([[PROPERTY, 'America/Chicago']]),
     income: [],
     workOrders: [],
+    invoiceSplits: [],
     utilityBills: [],
     evictionCosts: [],
     capitalImprovements: [],
@@ -57,6 +59,22 @@ function job(overrides: Partial<WorkOrderFact> = {}): WorkOrderFact {
     closedAt: new Date('2026-03-10T15:00:00Z'),
     invoicePaidAt: new Date('2026-03-20T15:00:00Z'),
     capitalised: false,
+    splitInvoiced: false,
+    ...overrides,
+  }
+}
+
+function invoiceSplit(overrides: Partial<VendorInvoiceSplitFact> = {}): VendorInvoiceSplitFact {
+  return {
+    id: 'vis_1',
+    propertyId: PROPERTY,
+    category: 'REPAIRS',
+    amountCents: 40_000,
+    description: 'Gutter run',
+    vendorName: 'Ace Handyman',
+    invoiceNumber: '4471',
+    invoicedOn: new Date('2026-03-14T00:00:00Z'),
+    paidAt: new Date('2026-03-20T15:00:00Z'),
     ...overrides,
   }
 }
@@ -296,6 +314,108 @@ describe('capital improvements', () => {
   })
 })
 
+describe('split vendor invoices (PAY-10, R-082)', () => {
+  it('deducts each share on its own property, on its own Schedule E line', () => {
+    const result = buildTaxExport(
+      facts({
+        propertyNames: new Map([
+          ['prop_oak', 'Oak St'],
+          ['prop_elm', 'Elm Ave'],
+        ]),
+        propertyTimezones: new Map([
+          ['prop_oak', 'America/Chicago'],
+          ['prop_elm', 'America/Chicago'],
+        ]),
+        invoiceSplits: [
+          invoiceSplit({ id: 'vis_1', propertyId: 'prop_oak', amountCents: 40_000 }),
+          invoiceSplit({
+            id: 'vis_2',
+            propertyId: 'prop_elm',
+            amountCents: 50_000,
+            category: 'CLEANING_MAINTENANCE',
+          }),
+        ],
+      }),
+      'cash',
+    )
+    expect(result.expenseCents).toBe(90_000)
+    expect(result.lines.map((line) => [line.propertyName, line.scheduleELine, line.amountCents])).toEqual([
+      ['Oak St', 14, 40_000],
+      ['Elm Ave', 7, 50_000],
+    ])
+    expect(result.lines[0]?.description).toContain('Ace Handyman, invoice 4471')
+  })
+
+  // The mirror of the capitalised rule, from the other direction: the same
+  // bill must not be deducted once through the work order and again through
+  // the split that actually paid for it.
+  it('never deducts a split-invoiced job through its own work order as well', () => {
+    const result = buildTaxExport(
+      facts({
+        workOrders: [job({ invoiceCents: 26_000, splitInvoiced: true })],
+        invoiceSplits: [invoiceSplit({ amountCents: 40_000 })],
+      }),
+      'cash',
+    )
+    expect(result.expenseCents).toBe(40_000)
+    expect(result.counts.splitInvoiced).toBe(1)
+  })
+
+  it('books the invoice date on accrual and the payment date on cash', () => {
+    const straddling = invoiceSplit({
+      invoicedOn: new Date('2026-12-28T00:00:00Z'),
+      paidAt: new Date('2027-01-06T15:00:00Z'),
+    })
+    expect(buildTaxExport(facts({ invoiceSplits: [straddling] }), 'accrual').lines[0]?.bookedOn).toBe(
+      '2026-12-28',
+    )
+    // Paid in January: a 2026 accrual deduction and a 2027 cash one. Exactly
+    // the split D-71 exists for.
+    expect(buildTaxExport(facts({ invoiceSplits: [straddling] }), 'cash').counts.outOfYear).toBe(1)
+  })
+
+  it('excepts an unpaid invoice on a cash basis rather than booking it', () => {
+    const result = buildTaxExport(facts({ invoiceSplits: [invoiceSplit({ paidAt: null })] }), 'cash')
+    expect(result.expenseCents).toBe(0)
+    expect(result.exceptions[0]?.reason).toContain('Not marked paid')
+  })
+
+  it('excepts a category with no Schedule E line rather than guessing one', () => {
+    const result = buildTaxExport(
+      facts({ invoiceSplits: [invoiceSplit({ category: 'NOT_A_LINE' })] }),
+      'cash',
+    )
+    expect(result.exceptions[0]?.reason).toContain('carries no Schedule E mapping')
+  })
+
+  // Cash books on the payment instant, so the year is decided by the
+  // PROPERTY's clock - and one invoice can span zones. R-042's bug class, now
+  // reachable through a single payment.
+  it("reads the payment instant in each split's own property zone", () => {
+    const result = buildTaxExport(
+      facts({
+        year: 2026,
+        propertyNames: new Map([
+          ['prop_tx', 'Texas house'],
+          ['prop_utc', 'London house'],
+        ]),
+        propertyTimezones: new Map([
+          ['prop_tx', 'America/Chicago'],
+          ['prop_utc', 'UTC'],
+        ]),
+        invoiceSplits: [
+          invoiceSplit({ id: 'vis_tx', propertyId: 'prop_tx', paidAt: new Date('2027-01-01T00:30:00Z') }),
+          invoiceSplit({ id: 'vis_utc', propertyId: 'prop_utc', paidAt: new Date('2027-01-01T00:30:00Z') }),
+        ],
+      }),
+      'cash',
+    )
+    expect(result.lines.map((line) => line.sourceId)).toEqual(['vis_tx'])
+    expect(result.lines[0]?.bookedOn).toBe('2026-12-31')
+    expect(result.counts.outOfYear).toBe(1)
+  })
+})
+
 describe('the year boundary', () => {
   // R-042's bug class pointed at a tax year. A job paid at 6pm Central on
   // 31 December is 00:00 UTC on 1 January - so reading the instant in the
@@ -348,7 +468,13 @@ describe('the reconciliation', () => {
 
     for (const basis of ['cash', 'accrual'] as const) {
       const { counts } = buildTaxExport(everything, basis)
-      expect(counts.mapped + counts.excepted + counts.outOfYear + counts.capitalised).toBe(
+      expect(
+        counts.mapped +
+          counts.excepted +
+          counts.outOfYear +
+          counts.capitalised +
+          counts.splitInvoiced,
+      ).toBe(
         counts.facts,
       )
     }

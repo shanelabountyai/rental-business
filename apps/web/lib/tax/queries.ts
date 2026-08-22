@@ -108,6 +108,7 @@ export async function taxExportFacts(
     evictionCosts,
     mortgageStatements,
     capitalImprovements,
+    invoiceSplits,
   ] = await Promise.all([
       basis === 'cash'
         ? prisma.ledgerEntry.findMany({
@@ -165,6 +166,7 @@ export async function taxExportFacts(
           invoicePaidAt: true,
           vendor: { select: { name: true } },
           capitalImprovement: { select: { id: true } },
+          invoiceSplit: { select: { id: true } },
         },
       }),
       prisma.utilityBill.findMany({
@@ -221,6 +223,44 @@ export async function taxExportFacts(
           inServiceOn: true,
         },
       }),
+      // Split vendor invoices (PAY-10, R-082). The window is generous for the
+      // same reason the work-order one is: the accrual date and the cash date
+      // are different columns, they straddle the year boundary in opposite
+      // directions, and every year decision belongs to `buildTaxExport`.
+      //
+      // Scoped by SPLIT property, not by the invoice's entity: a bill entered
+      // against one entity whose lines name a property outside this scope
+      // must not leak that property's money into this report. The write
+      // refuses that combination, and this is the read-side belt.
+      prisma.vendorInvoiceSplit.findMany({
+        where: {
+          propertyId: { in: propertyIds },
+          vendorInvoice: {
+            OR: [
+              { paidAt: { gte: windowStart, lte: windowEnd } },
+              { invoicedOn: { gte: windowStart, lte: windowEnd } },
+              // An unpaid bill still has to reach the export, where a cash
+              // basis excepts it rather than dropping it silently.
+              { paidAt: null },
+            ],
+          },
+        },
+        select: {
+          id: true,
+          propertyId: true,
+          category: true,
+          amountCents: true,
+          description: true,
+          vendorInvoice: {
+            select: {
+              invoiceNumber: true,
+              invoicedOn: true,
+              paidAt: true,
+              vendor: { select: { name: true } },
+            },
+          },
+        },
+      }),
     ])
 
   const income: IncomeFact[] = [
@@ -265,6 +305,18 @@ export async function taxExportFacts(
       closedAt: row.closedAt,
       invoicePaidAt: row.invoicePaidAt,
       capitalised: row.capitalImprovement != null,
+      splitInvoiced: row.invoiceSplit != null,
+    })),
+    invoiceSplits: invoiceSplits.map((row) => ({
+      id: row.id,
+      propertyId: row.propertyId,
+      category: row.category,
+      amountCents: row.amountCents,
+      description: row.description,
+      vendorName: row.vendorInvoice.vendor.name,
+      invoiceNumber: row.vendorInvoice.invoiceNumber,
+      invoicedOn: row.vendorInvoice.invoicedOn,
+      paidAt: row.vendorInvoice.paidAt,
     })),
     utilityBills,
     evictionCosts: evictionCosts.map((row) => ({
