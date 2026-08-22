@@ -8,10 +8,12 @@ import {
 } from '@rental/core/leases'
 import { depositObligations } from '@rental/core/ledger'
 import { formatCents } from '@rental/core/money'
-import { businessDate, utcToBusinessDate } from '@rental/core/scheduling'
+import { businessDate, friendlyDate, utcToBusinessDate } from '@rental/core/scheduling'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { AccessCodesPanel } from '@/components/leases/access-codes-panel.tsx'
+import { HoldBanner } from '@/components/holds/hold-banner.tsx'
+import { HoldsPanel } from '@/components/holds/holds-panel.tsx'
 import { BillingPanel } from '@/components/leases/billing-panel.tsx'
 import { PaymentHoldPanel } from '@/components/leases/payment-hold-panel.tsx'
 import { EsignPanel } from '@/components/leases/esign-panel.tsx'
@@ -26,6 +28,8 @@ import { PartiesPanel } from '@/components/leases/parties-panel.tsx'
 import { RenewalPanel } from '@/components/leases/renewal-panel.tsx'
 import { RenterInsurancePanel } from '@/components/leases/renter-insurance-panel.tsx'
 import { accessCodesForLease } from '@/lib/leases/access-code-queries.ts'
+import { liftLeaseHold, placeLeaseHold } from '@/lib/holds/actions.ts'
+import { holdsForLease } from '@/lib/holds/queries.ts'
 import { OfflinePaymentForm } from '@/components/payments/offline-payment-form.tsx'
 import { actorCan, actorDecision, propertyResource, requireScope } from '@/lib/auth/guard.ts'
 import { rulesFor } from '@/lib/jurisdiction/queries.ts'
@@ -139,6 +143,14 @@ export default async function LeaseDetailPage({
   // decisions above, the panel never offers an "issue" button to someone who
   // cannot yet act, so there is no "allowed but needs MFA" state to render.
   const canIssue = await actorCan('accesscode.issue', propertyResource(lease.property))
+  // R-084. `hold.manage` alone: the panel offers a lift form on every active
+  // hold, and the PROTECTED ones re-check `hold.lift_protected` inside
+  // `liftLeaseHold` itself. Rendering the form to someone who then fails
+  // that check is deliberate — the alternative is a manager who holds the
+  // permission but has not verified their second factor seeing no control at
+  // all and no explanation, which is the failure `waiveDecision` two blocks
+  // up exists to avoid.
+  const canManageHolds = await actorCan('hold.manage', propertyResource(lease.property))
 
   const currentEnvelope = lease.envelopes[0] ?? null
   const envelopeIsLive = currentEnvelope
@@ -175,7 +187,7 @@ export default async function LeaseDetailPage({
       action: changeLeaseStatus.bind(null, lease.id, to),
     }))
 
-  const [gaps, tenants, payers, ledger, fees, recurring, accessCodes] = await Promise.all([
+  const [gaps, tenants, payers, ledger, fees, recurring, accessCodes, holds] = await Promise.all([
     outstandingIntakeGaps(lease),
     canWrite ? selectableTenants() : Promise.resolve([]),
     leaseBillingState(lease.id),
@@ -183,6 +195,7 @@ export default async function LeaseDetailPage({
     waivableFees(lease.id),
     recurringChargesForLease(lease.id),
     accessCodesForLease(lease.unitId, lease.id),
+    holdsForLease(lease.id),
   ])
   // R-069: nothing to clear on a zero-deposit lease (NONE/SURETY_BOND hold
   // zero by the database CHECK constraint `chargeDeposit()`'s own comment
@@ -243,6 +256,22 @@ export default async function LeaseDetailPage({
           {lease.origin === 'INHERITED' && ' · inherited at acquisition'}
         </p>
       </header>
+
+      {/* R-084. Directly under the header, above the money and every panel:
+          somebody who opens this lease to serve a notice or chase a balance
+          reads this before they read anything else. */}
+      <HoldBanner
+        holds={holds
+          .filter((hold) => hold.liftedAt === null)
+          .map((hold) => ({
+            type: hold.type,
+            reason: hold.reason,
+            // `friendlyDate`, not `businessDate` (R-101c): this is prose a
+            // person reads, not a key anything is computed from.
+            placedOn: friendlyDate(hold.placedAt, lease.property.timezone),
+            placedByName: hold.placedByName,
+          }))}
+      />
 
       <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm sm:grid-cols-3">
         <dt className="text-muted-foreground">Term</dt>
@@ -424,6 +453,24 @@ export default async function LeaseDetailPage({
           stripeCustomerId: payer.stripeCustomerId,
           stripeSubscriptionId: payer.stripeSubscriptionId,
         }))}
+      />
+
+      <HoldsPanel
+        leaseId={lease.id}
+        canManage={canManageHolds}
+        holds={holds.map((hold) => ({
+          id: hold.id,
+          type: hold.type,
+          reason: hold.reason,
+          // Real timestamps, so they read in the PROPERTY's zone (R-101c).
+          placedOn: friendlyDate(hold.placedAt, lease.property.timezone),
+          placedByName: hold.placedByName,
+          liftedOn: hold.liftedAt ? friendlyDate(hold.liftedAt, lease.property.timezone) : null,
+          liftedByName: hold.liftedByName,
+          liftReason: hold.liftReason,
+        }))}
+        placeAction={placeLeaseHold}
+        liftAction={liftLeaseHold}
       />
 
       <PaymentHoldPanel

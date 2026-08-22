@@ -31,6 +31,9 @@ SCHEDULED_JOBS.push({
       chargesAssessed: result.chargesAssessed,
       assessedCents: result.assessedCents,
       failed: result.failed,
+      // R-084: on the job's own record, so a month with no fees on a
+      // property is distinguishable from a month the job did not run.
+      heldLeases: result.heldLeases,
     }
   },
 })

@@ -577,6 +577,18 @@ export const AUDIT_ACTIONS = [
   /// different claims about why a legal document was withdrawn.
   'envelope.voided',
 
+  /// R-084 (RISK-11, RISK-12): a typed hold was placed on a tenancy. Carries
+  /// the type and the effects it switched on at that moment, snapshotted
+  /// rather than left to be recomputed - the effect table is code, code
+  /// changes, and "what did this hold actually stop in March" must not be a
+  /// question about what today's build thinks.
+  'lease.hold_placed',
+  /// R-084: a hold was lifted. Its own action rather than a second
+  /// `lease.hold_placed` with a flag, because this is the direction that
+  /// does harm: it is the moment collection, fees and access resume, and it
+  /// is the one an eviction defence asks about. REASON_REQUIRED, both ways.
+  'lease.hold_lifted',
+
   /// R-034 (D-11): a lease's Stripe Customer and Subscription were opened.
   /// Carries the provider name, because a record that does not say whether
   /// it was Stripe or the simulator is a record somebody will misread the
@@ -726,6 +738,12 @@ export const REASON_REQUIRED: ReadonlySet<AuditAction> = new Set([
   // neither is defensible from a record that does not say why.
   'eviction.case_opened',
   'eviction.case_closed',
+  // R-084. Both directions. Placing one for no recorded reason is
+  // indistinguishable from a retaliatory placement; lifting one for no
+  // recorded reason is the record that cannot answer "on what basis did you
+  // resume collecting from a bankrupt tenant".
+  'lease.hold_placed',
+  'lease.hold_lifted',
 ])
 
 export function requiresReason(action: AuditAction): boolean {

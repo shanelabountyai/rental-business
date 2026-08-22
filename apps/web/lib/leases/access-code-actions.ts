@@ -1,9 +1,11 @@
 'use server'
 
 import { openSecret } from '@rental/core/auth'
+import { holdTypeLabel, holdsCausing } from '@rental/core/holds'
 import { prisma } from '@rental/db'
 import { audit } from '@/lib/audit/index.ts'
 import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
+import { activeHoldsForLease } from '@/lib/holds/queries.ts'
 
 // Handing keys/codes to the tenant at move-in, gated on move-in funds
 // clearing (INSP-01, R-069) - "door codes withheld until move-in funds show
@@ -43,6 +45,23 @@ export async function issueAccessCodeToTenant(
     },
   })
   await requirePermission('accesscode.issue', propertyResource(lease.property))
+
+  // R-084. A hold that halts access changes is on a tenancy where who is
+  // lawfully entitled to possession is exactly what is unsettled — a dead
+  // tenant whose estate has not named anyone, a servicemember, a stay. A
+  // hard block for the same reason the funds check below is one: this is not
+  // a judgement call somebody might have good reason to make anyway, it is
+  // the whole content of the hold. Lifting the hold is the override, and it
+  // is recorded.
+  const holds = await activeHoldsForLease(lease.id)
+  const halting = holdsCausing(holds, 'halt_access_changes')
+  if (halting.length > 0) {
+    return {
+      error: `Access changes are halted on this tenancy: ${halting
+        .map(holdTypeLabel)
+        .join(', ')}. Lift the hold on the lease record first.`,
+    }
+  }
 
   if (lease.depositCents > 0 && lease.deposits.length === 0) {
     return {

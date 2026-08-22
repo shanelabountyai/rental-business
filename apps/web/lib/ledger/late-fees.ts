@@ -7,6 +7,7 @@ import { businessDate, dueDateOnOrBefore, utcToBusinessDate } from '@rental/core
 import { prisma } from '@rental/db'
 import { auditAsSystem } from '@/lib/audit/system.ts'
 import { getBillingProvider } from '@/lib/billing/provider.ts'
+import { haltedLeasesInProperty } from '@/lib/holds/queries.ts'
 import { rulesFor } from '@/lib/jurisdiction/queries.ts'
 
 // Assessing late fees (PAY-04; D-4, D-12, R-040, R-050b).
@@ -53,6 +54,12 @@ export interface AssessmentResult {
   chargesAssessed: number
   leasesChecked: number
   failed: number
+  /// R-084: tenancies the sweep passed over because a hold halts late fees -
+  /// a bankruptcy stay, an SCRA protection, a payment plan. Reported rather
+  /// than silently absent, because "the fee did not accrue" and "the job did
+  /// not see the lease" look identical on a ledger and are very different
+  /// problems.
+  heldLeases: number
 }
 
 /// Charge types a late fee is assessed ON. Rent, and deliberately nothing
@@ -170,7 +177,7 @@ export async function assessLateFees(
   // and inventing one for an unconfigured state is how a product charges an
   // unlawful fee in a market nobody has set up yet.
   if (!rule) {
-    return { assessedCents: 0, chargesAssessed: 0, leasesChecked: 0, failed: 0 }
+    return { assessedCents: 0, chargesAssessed: 0, leasesChecked: 0, failed: 0, heldLeases: 0 }
   }
 
   const result: AssessmentResult = {
@@ -178,7 +185,15 @@ export async function assessLateFees(
     chargesAssessed: 0,
     leasesChecked: 0,
     failed: 0,
+    heldLeases: 0,
   }
+
+  // R-084. ONE QUERY FOR THE WHOLE PROPERTY, read before either pass, and
+  // consulted by both - a per-lease check inside the loops would be a query
+  // per tenancy on the nightly job for ever. Asks for the EFFECT, never for
+  // a hold type: a seventh type that halts late fees is covered here on the
+  // day it is added to packages/core/holds.
+  const heldFromFees = await haltedLeasesInProperty(propertyId, 'halt_late_fees')
 
   // ---- Pass 1: dated RENT charges (unchanged) ----
 
@@ -215,6 +230,11 @@ export async function assessLateFees(
   result.leasesChecked += overdue.length
 
   for (const charge of overdue) {
+    if (heldFromFees.has(charge.leaseId)) {
+      result.heldLeases += 1
+      continue
+    }
+
     // Outstanding on the RENT itself. A partially-paid charge accrues a
     // percentage fee on the remainder, never on money already received -
     // see `LateFeeFacts.outstandingCents`.
@@ -305,6 +325,11 @@ export async function assessLateFees(
   result.leasesChecked += unlinkedLeases.length
 
   for (const lease of unlinkedLeases) {
+    if (heldFromFees.has(lease.id)) {
+      result.heldLeases += 1
+      continue
+    }
+
     const balance = balanceCents(lease.ledgerEntries)
     const rentDueDay = lease.leasePayers[0]?.debitDay ?? lease.rentDueDay
     const nearestRentDueOn = dueDateOnOrBefore(today, rentDueDay)

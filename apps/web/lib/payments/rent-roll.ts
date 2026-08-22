@@ -5,6 +5,7 @@ import type { AgingBucket } from '@rental/core/ledger'
 import { businessDate, dueDateOnOrBefore, utcToBusinessDate } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { selectApplicableRule } from '@rental/core/jurisdiction'
+import { leasesHalted } from '@/lib/holds/queries.ts'
 import type { ResolvedScope } from '@/lib/scope/types.ts'
 
 // The rent roll and delinquency aging — the Monday-morning report (PAY-06,
@@ -254,6 +255,14 @@ function groupBy<T>(rows: readonly T[], key: (row: T) => string): Map<string, T[
  * Chasing a tenant who is still inside the grace period their state grants
  * them is the exposure this whole item is shaped around. It is not a thing to
  * leave to the browser.
+ *
+ * R-084 ADDS THE SECOND REASON A LEASE MAY NOT BE CHASED, and puts it here
+ * rather than in `sendReminders` deliberately: this function is what the
+ * comment above calls "immediately before anything is sent", so a hold placed
+ * while the screen was open stops the message the same way a payment made
+ * while the screen was open does. Under an automatic stay, sending the chase
+ * is itself the violation — there is no version of it that is only a bit
+ * wrong.
  * ==========================================================================
  */
 export async function pastGraceLeaseIds(
@@ -319,5 +328,12 @@ export async function pastGraceLeaseIds(
     })
     if (delinquency.pastGrace) allowed.add(lease.id)
   }
+
+  // R-084. Asks for the EFFECT, not for a hold type — see
+  // lib/holds/queries.ts's own header for why no guard in this app names a
+  // type.
+  const held = await leasesHalted([...allowed], 'halt_dunning')
+  for (const leaseId of held) allowed.delete(leaseId)
+
   return allowed
 }

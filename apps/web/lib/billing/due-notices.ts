@@ -4,6 +4,7 @@ import { formatCents } from '@rental/core/money'
 import { businessDate } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { authUrl } from '@/lib/auth/delivery.ts'
+import { haltedLeasesInProperty } from '@/lib/holds/queries.ts'
 import { dispatchPendingNotifications, notify } from '@/lib/notifications/send.ts'
 import { issuePayLink } from '@/lib/portal/pay-link.ts'
 
@@ -28,6 +29,9 @@ export interface DueNoticeResult {
   leasesChecked: number
   dueSoonSent: number
   dueTodaySent: number
+  /// R-084: payers passed over because a hold halts dunning on their
+  /// tenancy.
+  heldPayers: number
 }
 
 /// Three days. The T in T-3.
@@ -84,9 +88,20 @@ export async function sendDueNotices(
 
   let dueSoonSent = 0
   let dueTodaySent = 0
+  let heldPayers = 0
+
+  // R-084. A rent reminder IS an act to collect — the automatic stay does
+  // not distinguish a polite one — so `halt_dunning` covers this job as well
+  // as R-044's bulk chase. One query for the property, not one per payer.
+  const heldFromDunning = await haltedLeasesInProperty(propertyId, 'halt_dunning')
 
   for (const payer of payers) {
     if (!payer.tenant) continue
+
+    if (heldFromDunning.has(payer.leaseId)) {
+      heldPayers += 1
+      continue
+    }
 
     // ALREADY COVERED BY `autopay.predebit`. Both halves of the same check
     // `predebit.ts` makes: on automatic collection, AND a method on file to
@@ -169,5 +184,5 @@ export async function sendDueNotices(
     }
   }
 
-  return { leasesChecked: payers.length, dueSoonSent, dueTodaySent }
+  return { leasesChecked: payers.length, dueSoonSent, dueTodaySent, heldPayers }
 }

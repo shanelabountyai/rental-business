@@ -26,12 +26,14 @@ import {
   ExportPacketPanel,
   RecordCostPanel,
 } from '@/components/evictions/case-panels.tsx'
+import { HoldBanner } from '@/components/holds/hold-banner.tsx'
 import { requirePermission } from '@/lib/auth/guard.ts'
 import {
   advanceEvictionStage,
   attachNoticeToCase,
   recordEvictionCost,
 } from '@/lib/evictions/actions.ts'
+import { holdsForLease } from '@/lib/holds/queries.ts'
 import { exportAttorneyPacket } from '@/lib/evictions/packet.ts'
 import { attachableNotices, cureClockFor, getEvictionCase } from '@/lib/evictions/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
@@ -66,6 +68,10 @@ export default async function EvictionCasePage({ params }: { params: Promise<{ i
   const next = NEXT_STAGE[stage]
   const totals = costTotals(evictionCase.costs)
   const attachable = await attachableNotices(evictionCase.leaseId)
+  // R-084. The screen where a hold matters most: SCRA needs an affidavit
+  // before a default judgment, a bankruptcy stay bars the filing outright,
+  // and a dead tenant has nobody to serve.
+  const holds = await holdsForLease(evictionCase.leaseId)
 
   // Shown BEFORE the PM tries, not as an error after - the whole point of
   // the gate is that filing early is expensive and irreversible.
@@ -91,6 +97,18 @@ export default async function EvictionCasePage({ params }: { params: Promise<{ i
           {evictionCase.openedBy.name}
         </p>
       </header>
+
+      <HoldBanner
+        context="Nothing on this page is blocked"
+        holds={holds
+          .filter((hold) => hold.liftedAt === null)
+          .map((hold) => ({
+            type: hold.type,
+            reason: hold.reason,
+            placedOn: friendlyDate(hold.placedAt, zone),
+            placedByName: hold.placedByName,
+          }))}
+      />
 
       <section aria-labelledby="clock" className="flex flex-col gap-2 rounded-md border p-4">
         <h2 id="clock" className="text-lg font-semibold">

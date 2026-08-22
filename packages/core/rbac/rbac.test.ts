@@ -195,6 +195,11 @@ describe('can — MFA gate (ROLE-05)', () => {
       'accesscode.reveal',
       'document.delete',
       'fee.waive',
+      // R-084. Taking a hold off a protected tenancy — SCRA, a bankruptcy
+      // stay, a dead tenant — resumes collection, fees and access against
+      // somebody the law protects. Placing one is NOT here: gating the safe
+      // direction behind MFA is how holds stop being placed.
+      'hold.lift_protected',
       // R-063. Generating a lease and sending it for e-signature makes a
       // legally binding document, and completion moves the lease live and
       // creates the deposit charge and rent subscription.

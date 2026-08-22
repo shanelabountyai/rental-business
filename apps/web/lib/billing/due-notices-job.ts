@@ -23,6 +23,7 @@ SCHEDULED_JOBS.push({
       leasesChecked: result.leasesChecked,
       dueSoonSent: result.dueSoonSent,
       dueTodaySent: result.dueTodaySent,
+      heldPayers: result.heldPayers,
     }
   },
 })

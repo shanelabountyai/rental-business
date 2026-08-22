@@ -7,10 +7,12 @@ import {
 import { friendlyDate } from '@rental/core/scheduling'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { HoldBanner } from '@/components/holds/hold-banner.tsx'
 import { ServeForm } from '@/components/notices/serve-form.tsx'
 import { actorCan, requireScope } from '@/lib/auth/guard.ts'
 import { rulesFor } from '@/lib/jurisdiction/queries.ts'
 import { generateNoticePdfAction, recordNoticeService } from '@/lib/notices/actions.ts'
+import { holdsForLease } from '@/lib/holds/queries.ts'
 import { getNotice } from '@/lib/notices/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 
@@ -45,6 +47,11 @@ export default async function NoticePage({
   ).catch(() => null)
   const permittedMethods = serviceMethodsFor(rule, notice.type)
 
+  // R-084. THE notice-generation screen the backlog names. An adverse-action
+  // notice to an applicant has no lease and therefore no holds — hence the
+  // conditional rather than an unconditional read.
+  const holds = notice.lease ? await holdsForLease(notice.lease.id) : []
+
   // EITHER a lease or an applicant (R-061's either/or).
   const tenants = notice.lease
     ? notice.lease.leaseTenants.map((lt) => `${lt.tenant.firstName} ${lt.tenant.lastName}`)
@@ -71,6 +78,18 @@ export default async function NoticePage({
           {friendlyDate(notice.generatedAt, notice.property.timezone)}
         </p>
       </header>
+
+      <HoldBanner
+        context="Generating and serving are not blocked"
+        holds={holds
+          .filter((hold) => hold.liftedAt === null)
+          .map((hold) => ({
+            type: hold.type,
+            reason: hold.reason,
+            placedOn: friendlyDate(hold.placedAt, notice.property.timezone),
+            placedByName: hold.placedByName,
+          }))}
+      />
 
       <section aria-labelledby="artifact" className="flex flex-col gap-3">
         <h2 id="artifact" className="text-lg font-semibold">

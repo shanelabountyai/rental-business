@@ -92,6 +92,18 @@ export const PERMISSIONS = [
   /// lease live and creates the deposit charge and rent subscription. Also
   /// covers voiding a sent-but-unsigned envelope.
   'lease.execute',
+  /// Placing a lease hold, and lifting one whose type does not call for the
+  /// permission below (RISK-11, RISK-12, R-084).
+  'hold.manage',
+  /// Lifting a hold where lifting is itself a legal judgement - SCRA,
+  /// bankruptcy, deceased. Its own permission for the same reason
+  /// `template.approve` is separate from `template.write`: the act being
+  /// controlled is not "edit this record", it is "assert the protection no
+  /// longer applies", and it is the one an eviction defence will ask about.
+  /// PRIVILEGED, so it needs a proved second factor - resuming collection
+  /// against a bankrupt or a deployed servicemember from a stolen session is
+  /// the same class of harm as moving money.
+  'hold.lift_protected',
 ] as const
 
 export type Permission = (typeof PERMISSIONS)[number]
@@ -128,6 +140,10 @@ export const PRIVILEGED_PERMISSIONS: ReadonlySet<Permission> = new Set([
   'accesscode.issue',
   'screening.decide',
   'lease.execute',
+  // R-084. Not `hold.manage` - placing a hold is the safe direction and
+  // gating it behind MFA is how holds stop being placed. Taking one off a
+  // protected tenancy is the direction that does harm.
+  'hold.lift_protected',
 ])
 
 export function requiresMfa(permission: Permission): boolean {
@@ -232,6 +248,12 @@ export const ROLE_DEFINITIONS: Record<
       /// Running the eviction path is squarely a property manager's job
       /// (PAY-14, R-083) - they serve the notices and attend the hearing.
       'eviction.manage',
+      /// R-084's "manager-or-above". Both are seeded to the manager because
+      /// the manager IS the person who learns a tenant has died or filed;
+      /// what makes the second one different is the MFA it carries, and that
+      /// an owner can revoke it from the role without a release (D-5).
+      'hold.manage',
+      'hold.lift_protected',
     ],
     // ROLE-02's example boundary, in cents. Owner-configurable per user.
     defaultApproveWorkOrderCents: 50_000,

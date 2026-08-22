@@ -172,6 +172,14 @@ test.afterAll(async () => {
   )
   const removable = allLeaseIds.filter((id) => !pinned.has(id))
   await prisma.leasePayer.deleteMany({ where: { leaseId: { in: removable } } })
+  // Ending a tenancy auto-opens a turnover project (R-072), and
+  // `TurnoverProject.leaseId` is Restrict - so the lease this file's own
+  // "offers nothing further on a lease that is over" test ENDS has a turn
+  // hanging off it and no ledger rows to pin it, and the delete below failed
+  // on the FK. Found by R-084, which ran this spec alongside its own; the
+  // failure lands on whichever test finished last in the worker, which is
+  // why it read as two unrelated lifecycle tests breaking.
+  await prisma.turnoverProject.deleteMany({ where: { leaseId: { in: removable } } })
   await prisma.lease.deleteMany({ where: { id: { in: removable } } })
   const stillLeased = new Set(
     (

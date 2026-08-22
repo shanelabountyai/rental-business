@@ -298,6 +298,7 @@ describe('the audit vocabulary', () => {
       'template.approve': 'template.translation_approved',
       'screening.decide': 'screening.decided',
       'lease.execute': 'envelope.sent',
+      'hold.lift_protected': 'lease.hold_lifted',
     }
     for (const permission of PRIVILEGED_PERMISSIONS) {
       const action = recordable[permission]

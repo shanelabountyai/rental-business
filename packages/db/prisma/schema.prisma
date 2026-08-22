@@ -574,6 +574,7 @@ model Property {
   notifications       Notification[]
   invoiceSplits       VendorInvoiceSplit[]
   reserve             PropertyReserve?
+  leaseHolds          LeaseHold[]
 
   @@index([legalEntityId])
   @@index([state])
@@ -1586,6 +1587,8 @@ model StaffUser {
   complianceCompletionsRecorded           ComplianceCompletion[]
   translationsApproved                    MessageTemplateTranslation[]    @relation("TranslationApprovedBy")
   paymentHoldsSet                         LeasePayer[]                    @relation("PaymentHoldSetBy")
+  leaseHoldsPlaced                        LeaseHold[]                     @relation("LeaseHoldPlacedBy")
+  leaseHoldsLifted                        LeaseHold[]                     @relation("LeaseHoldLiftedBy")
   listingsCreated                         Listing[]                       @relation("ListingCreatedBy")
   screeningCriteriaCreated                ScreeningCriteria[]
   screeningReportsDecided                 ScreeningReport[]               @relation("ScreeningReportDecidedBy")
@@ -1917,6 +1920,7 @@ model Lease {
   evictionCases           EvictionCase[]
   documents               Document[]
   turnoverProject         TurnoverProject?
+  holds                   LeaseHold[]
 
   @@index([propertyId])
   @@index([unitId])
@@ -1940,6 +1944,73 @@ model LeaseTenant {
 
   @@unique([leaseId, tenantId])
   @@index([tenantId])
+}
+
+/// What a hold is FOR. The effects follow from it — see
+/// packages/core/holds/index.ts, which is the whole policy. Nothing in this
+/// schema records what a hold switches off, deliberately: a per-effect
+/// boolean column here would let a row exist that says a bankruptcy stay
+/// permits late fees.
+enum LeaseHoldType {
+  MILITARY_SCRA
+  DECEASED
+  BANKRUPTCY
+  DISPUTE
+  PAYMENT_PLAN
+  DO_NOT_CONTACT
+}
+
+/// A declared reason the automation must not act on a tenancy (RISK-11,
+/// RISK-12; R-084).
+///
+/// HISTORY, NOT THE LATEST EDIT. A lifted hold keeps its row with `liftedAt`
+/// set — the same call `RenterInsurancePolicy` and `LeaseEnvelope` already
+/// make, and for a sharper reason here: "was the stay in force on the day
+/// that notice was served" is answerable only from a row that survived being
+/// lifted. So a tenancy can hold several rows of the same type over its life,
+/// and at most one of them active.
+///
+/// That "at most one active" is enforced by `placeLeaseHold`, not by a
+/// partial unique index. A partial index cannot be expressed in this schema,
+/// so it would report drift on every CI run for ever (CLAUDE.md names the
+/// SmsOptOut one that did), and the action has to read the active holds
+/// anyway to tell somebody it is already placed.
+model LeaseHold {
+  id         String        @id @default(cuid())
+  leaseId    String
+  /// Denormalized from the lease so scoping and the per-property sweeps can
+  /// filter without a join — the same call `Charge` and `LeasePayer` make.
+  propertyId String
+  type       LeaseHoldType
+  /// Required, always. A hold with no stated reason is indistinguishable
+  /// from one placed for a retaliatory one, which is the claim it will be
+  /// defended against — the same reasoning `payment.hold_changed` is on
+  /// REASON_REQUIRED for.
+  reason     String
+
+  placedAt        DateTime @default(now())
+  placedByStaffId String
+
+  /// Null while in force.
+  liftedAt        DateTime?
+  liftedByStaffId String?
+  /// Required by the application whenever `liftedAt` is set. Lifting an
+  /// automatic-stay hold is a claim that the stay ended; that claim needs a
+  /// basis on the record as much as placing it did.
+  liftReason      String?
+
+  createdAt DateTime @default(now())
+
+  lease    Lease    @relation(fields: [leaseId], references: [id])
+  property Property @relation(fields: [propertyId], references: [id])
+  /// Restrict on both, like every other key pointing at evidence: who placed
+  /// a hold, and who took it off, are part of explaining what happened to a
+  /// tenancy while it was on.
+  placedBy StaffUser  @relation("LeaseHoldPlacedBy", fields: [placedByStaffId], references: [id], onDelete: Restrict)
+  liftedBy StaffUser? @relation("LeaseHoldLiftedBy", fields: [liftedByStaffId], references: [id], onDelete: Restrict)
+
+  @@index([leaseId, liftedAt])
+  @@index([propertyId, liftedAt])
 }
 
 /// A tenant's own renter's-liability certificate (LEASE-10, R-067). NOT

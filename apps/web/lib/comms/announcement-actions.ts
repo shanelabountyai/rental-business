@@ -7,6 +7,7 @@ import { audit } from '@/lib/audit/index.ts'
 import { propertyWhere, requireScope } from '@/lib/auth/guard.ts'
 import { getTemplate, renderForRecipient } from '@/lib/comms/templates.ts'
 import { isSegmentType, segmentWhere } from '@/lib/comms/announcements.ts'
+import { leasesHalted } from '@/lib/holds/queries.ts'
 import { dispatchPendingNotifications, notify } from '@/lib/notifications/send.ts'
 
 // Sending a segment announcement (COMM-04, R-053).
@@ -109,7 +110,22 @@ export async function sendAnnouncement(
   // see the loop below.
   const pending: { row: AnnouncementRecipientResult; channel: string; deliveryId: string }[] = []
 
+  // R-084. Dropped from the AUDIENCE rather than the send being refused: a
+  // hydrant-flushing announcement is not worth refusing over one held
+  // tenancy, and the whole point of a segment is that nobody enumerates it
+  // by hand. Named in `skipped` like every other exclusion, so the sender
+  // sees who did not get it and why.
+  const suppressed = await leasesHalted(
+    leases.map((lease) => lease.id),
+    'suppress_marketing',
+  )
+
   for (const lease of leases) {
+    if (suppressed.has(lease.id)) {
+      skipped.push({ leaseId: lease.id, why: 'lease hold — excluded from announcements' })
+      continue
+    }
+
     const tenant = lease.leaseTenants.map((lt) => lt.tenant).find((t) => t.active)
     if (!tenant) {
       skipped.push({ leaseId: lease.id, why: 'no active tenant' })
