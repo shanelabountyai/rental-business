@@ -102,6 +102,29 @@ export default async function ReportsPage() {
         </li>
         <li>
           <Link
+            href="/reports/leasing"
+            className="hover:bg-accent focus-visible:ring-ring flex min-h-14 flex-col justify-center gap-0.5 px-4 py-3 focus-visible:ring-2 focus-visible:-outline-offset-2 focus-visible:outline-none"
+          >
+            <span className="font-medium">Leasing funnel</span>
+            <span className="text-muted-foreground text-sm">
+              Where prospects stop, which channels send people who qualify, and days to fill per
+              vacancy.
+            </span>
+          </Link>
+        </li>
+        <li>
+          <Link
+            href="/reports/maintenance"
+            className="hover:bg-accent focus-visible:ring-ring flex min-h-14 flex-col justify-center gap-0.5 px-4 py-3 focus-visible:ring-2 focus-visible:-outline-offset-2 focus-visible:outline-none"
+          >
+            <span className="font-medium">Maintenance analytics</span>
+            <span className="text-muted-foreground text-sm">
+              Time to resolve by priority, what keeps breaking, reopen rate and cost by vendor.
+            </span>
+          </Link>
+        </li>
+        <li>
+          <Link
             href="/reports/tax-packet"
             className="hover:bg-accent focus-visible:ring-ring flex min-h-14 flex-col justify-center gap-0.5 px-4 py-3 focus-visible:ring-2 focus-visible:-outline-offset-2 focus-visible:outline-none"
           >

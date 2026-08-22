@@ -3339,3 +3339,33 @@ Full reasoning in `07-decisions.md`.
 - **CapEx invoices are not in the bundle.** Useful at an audit and out of scope for a packet whose job is the numbers; the artifact names them as available from the property file rather than leaving them silently absent.
 - **No `document.read`-scoped listing of entity-level documents.** The archived packet is reachable by its link and by id; nothing yet lists an entity's own documents the way the property filing cabinet lists a property's.
 - **The audit row has no `propertyId`**, because the packet has no property — so a property-scoped manager reading the audit trail will not see it. Consistent with entity-level compliance rows, and worth knowing before somebody asks why an entry is missing.
+
+---
+
+## R-081c — Leasing funnel and maintenance analytics
+**Commit:** `pending`  ·  **Date:** 2026-08-21
+
+**What it built.** Two pages: `/reports/leasing` (RPT-06 — the funnel, channel quality, listing visits by source, days-to-fill per vacancy) and `/reports/maintenance` (MAINT-10 — time to resolve by priority, repeat issues, spend and rework, cost by vendor). `packages/core/metrics/funnel.ts` is new; `packages/core/metrics/maintenance.ts` gains `repeatIssues`, `reopenRate` and `vendorCosts`. `apps/web/lib/reports/funnel.ts` and `maintenance.ts` fetch.
+
+**Four formulas that already existed and had no caller.** R-075 wrote `resolutionByPriority` and `costPerUnitPerMonth` and named R-076 and R-081a as their intended first callers; neither needed them. `WorkOrder.reopenedAt` and `reopenCount` have been written since R-030 — the tenant answering "no, it is not fixed" increments them — and nothing read either one. This item is where all four land, which is why so much of it is wiring rather than new arithmetic.
+
+**What it decided.** Recorded as **D-75**.
+
+- **A funnel counts people, not events, and that is the correctness point of the whole item.** A prospect who rebooked twice has three `Showing` rows and is one person who viewed the home; dividing rows by rows reports 300% conversion for the entirely ordinary act of moving an appointment. Every stage collapses to that prospect's earliest qualifying moment.
+- **Conversion is measured within the cohort that reached the previous stage.** `applications / showings` can genuinely exceed one, because applying without a recorded viewing is common — a self-serve applicant, a prospect a PM walked through before the software knew about it. A ratio above 100% reads as a broken report rather than as the true fact it is, so the page answers "of the prospects who had a showing, how many went on to apply", which cannot exceed one, and the people who skipped the stage are counted separately rather than inflating a ratio they were never in.
+- **The window is the inquiry date for every stage**, not each stage's own date. Filtering each stage by its own timestamp would report approvals for people who inquired before the window and drop the approvals of people who inquired inside it — a cohort has to be one cohort followed forward, or every conversion between its stages is a ratio of two different populations.
+- **Anonymous listing visits are never divided into the funnel.** A `ListingLead` is a page visit with a `?src=` tag and no person attached (R-057 built it that way deliberately); a `Prospect` is somebody who typed their name into a form. Nothing keys one to the other, so a visit-to-inquiry rate would be two unrelated populations divided by each other and presented as a rate. They sit side by side and the page says why.
+- **Days to fill is a median of the vacancies that actually ended.** A mean would follow one house that sat empty through a roof replacement; a still-vacant unit's running count is a number that has not finished happening, and including it would make the headline improve every time a new vacancy opened. The still-vacant ones are listed, flagged.
+- **Repeat-issue chains extend rather than resetting at ninety days.** Four leaks eighty days apart are one chronic problem spanning most of a year, and a fixed window from the first ticket would report two unrelated pairs and hide exactly the pattern MAINT-10 exists to find.
+
+**A real wording bug, found by a strict-mode violation rather than by review.** A null conversion has two different causes: the first row genuinely has no previous stage, while a later row is null only because nobody reached the stage before it. Both rendered "first stage" — so on an empty portfolio the page told the reader that **Approved** is where the funnel starts. The e2e assertion could not be written unambiguously, which is what surfaced it; the two cases now read differently and the spec pins both.
+
+**Merged tickets are excluded, and here the exclusion is load-bearing.** Two people reporting one leak would themselves *be* a repeat issue, manufacturing the precise pattern the report hunts for. R-081a already excluded merged tickets from its counts for a weaker reason (a duplicate inflating a total); this is the same filter carrying real weight.
+
+**A vendor row's two halves are attributed differently, on purpose.** Cost belongs to whoever invoiced the job. The reopen rate comes from `vendorReopenRates`, keyed on `WorkOrderVerification.vendorId` captured when the *tenant answered*, because a reopened job is normally reassigned and blaming whoever eventually fixed it would be exactly backwards — MAINT-07's own reasoning, and the reason that column is captured at answer time. One row labelled "vendor" carrying two attributions could look like a bug, so the page states it.
+
+**What it left behind.**
+- **No cost per channel.** RPT-06 asks for cost as well as quality and nothing in this product records what a listing costs — there is no ad-spend entity and no invoice carrying one. Named on the page with the reason rather than shown as a zero, following R-078's rule for its unfillable Schedule E lines.
+- **No `signed` funnel stage.** Approval is where screening ends; an approved household that never signed is a different problem from one that never applied, and the renewal and turn reports already follow the tenancy.
+- **No CSV on either page.** RPT-06 and MAINT-10 do not ask for one, and both reports are built to be read and sorted on a screen.
+- **`occupancyRate` is still unwired.** R-075 built it, and this is now the third item that did not need it — vacancy questions here are day counts and terminal durations, not a point-in-time ratio. Whoever needs a snapshot occupancy figure is its first caller.
