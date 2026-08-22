@@ -3343,7 +3343,7 @@ Full reasoning in `07-decisions.md`.
 ---
 
 ## R-081c — Leasing funnel and maintenance analytics
-**Commit:** `pending`  ·  **Date:** 2026-08-21
+**Commit:** `995286b`  ·  **Date:** 2026-08-21
 
 **What it built.** Two pages: `/reports/leasing` (RPT-06 — the funnel, channel quality, listing visits by source, days-to-fill per vacancy) and `/reports/maintenance` (MAINT-10 — time to resolve by priority, repeat issues, spend and rework, cost by vendor). `packages/core/metrics/funnel.ts` is new; `packages/core/metrics/maintenance.ts` gains `repeatIssues`, `reopenRate` and `vendorCosts`. `apps/web/lib/reports/funnel.ts` and `maintenance.ts` fetch.
 
