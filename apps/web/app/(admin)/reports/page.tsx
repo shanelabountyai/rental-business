@@ -102,6 +102,18 @@ export default async function ReportsPage() {
         </li>
         <li>
           <Link
+            href="/reports/tax-packet"
+            className="hover:bg-accent focus-visible:ring-ring flex min-h-14 flex-col justify-center gap-0.5 px-4 py-3 focus-visible:ring-2 focus-visible:-outline-offset-2 focus-visible:outline-none"
+          >
+            <span className="font-medium">Year-end tax packet</span>
+            <span className="text-muted-foreground text-sm">
+              Schedule E per property, the CapEx schedule, deposit liability and the 1099-NEC
+              candidate list — what a preparer asks for in February.
+            </span>
+          </Link>
+        </li>
+        <li>
+          <Link
             href="/reports/tax"
             className="hover:bg-accent focus-visible:ring-ring flex min-h-14 flex-col justify-center gap-0.5 px-4 py-3 focus-visible:ring-2 focus-visible:-outline-offset-2 focus-visible:outline-none"
           >

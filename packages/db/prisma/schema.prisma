@@ -612,9 +612,54 @@ model Mortgage {
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 
-  property Property @relation(fields: [propertyId], references: [id])
+  property   Property                  @relation(fields: [propertyId], references: [id])
+  statements MortgageAnnualStatement[]
 
   @@index([propertyId])
+}
+
+/// One lender's Form 1098 for one tax year (RPT-07, R-081b).
+///
+/// RECORDED, NOT RECONCILED, and the distinction is deliberate. This product
+/// does not track mortgage payments — `Mortgage` holds the loan, not what was
+/// paid against it — so there is nothing to reconcile a 1098 AGAINST. What
+/// this row is, is the lender's own figure, entered once a year off the form
+/// and carrying the form itself as evidence. Schedule E line 12 reads it and
+/// says on the page that it came from the 1098 rather than from anything this
+/// product computed. Recording monthly payments so the two could genuinely be
+/// reconciled is a much larger build and belongs with PAY-11's capital plan,
+/// not with a tax packet (owner decision, 2026-08-21).
+model MortgageAnnualStatement {
+  id                String   @id @default(cuid())
+  mortgageId        String
+  /// The calendar year the form covers. A 1098 is always a calendar year;
+  /// there is no timezone question here and no `@db.Date` to misread.
+  taxYear           Int
+  /// Box 1. The only figure Schedule E needs, and the only required one.
+  interestCents     Int
+  /// Boxes 2-ish and escrow. Optional because a packet is still useful
+  /// without them and refusing the row until every box is transcribed means
+  /// the interest figure gets recorded nowhere — the same call
+  /// `UtilityBill.documentId` makes.
+  principalCents    Int?
+  escrowCents       Int?
+  /// The 1098 itself. Same shape as `EvictionCost.documentId` and
+  /// `UtilityBill.documentId`: the statement points at its evidence rather
+  /// than `Document` growing another FK.
+  documentId        String?
+  recordedByStaffId String
+  notes             String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  mortgage   Mortgage  @relation(fields: [mortgageId], references: [id])
+  document   Document? @relation("MortgageAnnualStatementDocument", fields: [documentId], references: [id])
+  recordedBy StaffUser @relation("MortgageAnnualStatementRecordedBy", fields: [recordedByStaffId], references: [id])
+
+  /// ONE 1098 PER LOAN PER YEAR. Two rows would double the interest on line
+  /// 12, which is a real overstated deduction rather than a tidiness issue.
+  @@unique([mortgageId, taxYear])
+  @@index([taxYear])
 }
 
 model InsurancePolicy {
@@ -1490,6 +1535,7 @@ model StaffUser {
   evictionCasesOpened                     EvictionCase[]                  @relation("EvictionCaseOpenedBy")
   evictionCostsRecorded                   EvictionCost[]                  @relation("EvictionCostRecordedBy")
   capitalImprovementsRecorded             CapitalImprovement[]            @relation("CapitalImprovementRecordedBy")
+  mortgageStatementsRecorded              MortgageAnnualStatement[]       @relation("MortgageAnnualStatementRecordedBy")
   depositDeductionsCreated                DepositDeduction[]              @relation("DepositDeductionCreatedBy")
   complianceCompletionsRecorded           ComplianceCompletion[]
   translationsApproved                    MessageTemplateTranslation[]    @relation("TranslationApprovedBy")
@@ -2774,8 +2820,13 @@ model LedgerEntry {
   @@index([stripeEventId])
 }
 
-/// A liability, never income (PAY-07). `heldCents` is what is still held;
-/// applied and refunded amounts account for the rest. The disposition
+/// A liability, never income (PAY-07). `heldCents` is what was RECEIVED and
+/// is never decremented; `appliedCents` and `refundedCents` account for it at
+/// disposition, so the liability still outstanding is
+/// `heldCents - appliedCents - refundedCents` (which is what `rent-roll.ts`
+/// and R-081b's deposit-liability schedule both compute). The older wording
+/// here said `heldCents` "is what is still held", which reads as already net
+/// and would double-count a disposition. The disposition
 /// deadline is computed from the property's JurisdictionRule at move-out and
 /// stored, so a later rule change never moves a deadline already running.
 model Deposit {
@@ -4109,25 +4160,26 @@ model Document {
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
 
-  property                Property?              @relation(fields: [propertyId], references: [id])
-  unit                    Unit?                  @relation(fields: [unitId], references: [id])
-  lease                   Lease?                 @relation(fields: [leaseId], references: [id])
-  tenant                  Tenant?                @relation(fields: [tenantId], references: [id])
-  vendor                  Vendor?                @relation(fields: [vendorId], references: [id])
-  ticket                  Ticket?                @relation(fields: [ticketId], references: [id])
-  workOrder               WorkOrder?             @relation(fields: [workOrderId], references: [id])
-  applicant               Applicant?             @relation(fields: [applicantId], references: [id])
-  inspectionItem          InspectionItem?        @relation(fields: [inspectionItemId], references: [id])
-  depositDeduction        DepositDeduction?      @relation(fields: [depositDeductionId], references: [id])
-  capitalImprovement      CapitalImprovement?    @relation(fields: [capitalImprovementId], references: [id])
-  uploadedBy              StaffUser?             @relation("DocumentUploadedBy", fields: [uploadedByStaffId], references: [id])
-  noticesAsDocument       Notice[]               @relation("NoticeDocument")
-  noticesAsProof          Notice[]               @relation("NoticeProofDocument")
-  noticeDeliveryProofs    NoticeDelivery[]       @relation("NoticeDeliveryProof")
-  evictionCostReceipts    EvictionCost[]         @relation("EvictionCostReceipt")
-  utilityBills            UtilityBill[]          @relation("UtilityBillDocument")
-  leaseEnvelopeAsDraft    LeaseEnvelope?         @relation("LeaseEnvelopeDraftDocument")
-  leaseEnvelopeAsExecuted LeaseEnvelope?         @relation("LeaseEnvelopeExecutedDocument")
+  property                Property?                 @relation(fields: [propertyId], references: [id])
+  unit                    Unit?                     @relation(fields: [unitId], references: [id])
+  lease                   Lease?                    @relation(fields: [leaseId], references: [id])
+  tenant                  Tenant?                   @relation(fields: [tenantId], references: [id])
+  vendor                  Vendor?                   @relation(fields: [vendorId], references: [id])
+  ticket                  Ticket?                   @relation(fields: [ticketId], references: [id])
+  workOrder               WorkOrder?                @relation(fields: [workOrderId], references: [id])
+  applicant               Applicant?                @relation(fields: [applicantId], references: [id])
+  inspectionItem          InspectionItem?           @relation(fields: [inspectionItemId], references: [id])
+  depositDeduction        DepositDeduction?         @relation(fields: [depositDeductionId], references: [id])
+  capitalImprovement      CapitalImprovement?       @relation(fields: [capitalImprovementId], references: [id])
+  uploadedBy              StaffUser?                @relation("DocumentUploadedBy", fields: [uploadedByStaffId], references: [id])
+  noticesAsDocument       Notice[]                  @relation("NoticeDocument")
+  noticesAsProof          Notice[]                  @relation("NoticeProofDocument")
+  noticeDeliveryProofs    NoticeDelivery[]          @relation("NoticeDeliveryProof")
+  evictionCostReceipts    EvictionCost[]            @relation("EvictionCostReceipt")
+  utilityBills            UtilityBill[]             @relation("UtilityBillDocument")
+  mortgageStatements      MortgageAnnualStatement[] @relation("MortgageAnnualStatementDocument")
+  leaseEnvelopeAsDraft    LeaseEnvelope?            @relation("LeaseEnvelopeDraftDocument")
+  leaseEnvelopeAsExecuted LeaseEnvelope?            @relation("LeaseEnvelopeExecutedDocument")
   renterInsurancePolicy   RenterInsurancePolicy?
   complianceCompletions   ComplianceCompletion[]
 

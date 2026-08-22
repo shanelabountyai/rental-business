@@ -1,6 +1,13 @@
 import 'server-only'
 
-import type { CapitalImprovement, HoaInfo, InsurancePolicy, Mortgage, Warranty } from '@rental/db'
+import type {
+  CapitalImprovement,
+  HoaInfo,
+  InsurancePolicy,
+  Mortgage,
+  MortgageAnnualStatement,
+  Warranty,
+} from '@rental/db'
 import { prisma } from '@rental/db'
 import {
   insuranceRenewalDue,
@@ -16,7 +23,7 @@ import type { ResolvedScope } from '@/lib/scope/current-scope.ts'
 
 export interface FilingCabinet {
   costBasisCents: number | null
-  mortgages: Mortgage[]
+  mortgages: (Mortgage & { statements: MortgageAnnualStatement[] })[]
   insurancePolicies: InsurancePolicy[]
   hoaInfo: HoaInfo | null
   warranties: Warranty[]
@@ -31,7 +38,11 @@ export async function getFilingCabinet(
   if (!property) return null
 
   const [mortgages, insurancePolicies, hoaInfo, warranties, capitalImprovements] = await Promise.all([
-    prisma.mortgage.findMany({ where: { propertyId }, orderBy: { createdAt: 'asc' } }),
+    prisma.mortgage.findMany({
+      where: { propertyId },
+      orderBy: { createdAt: 'asc' },
+      include: { statements: { orderBy: { taxYear: 'desc' } } },
+    }),
     prisma.insurancePolicy.findMany({ where: { propertyId }, orderBy: { renewsOn: 'asc' } }),
     prisma.hoaInfo.findUnique({ where: { propertyId } }),
     prisma.warranty.findMany({ where: { propertyId }, orderBy: { category: 'asc' } }),

@@ -3286,3 +3286,30 @@ Full reasoning in `07-decisions.md`.
 - **No CSV export.** RPT-02 and RPT-03 name CSV; RPT-05 does not, and the tax export already produces the line-level file.
 - **Quarterly is not a period option** — RPT-05 says "monthly/quarterly" and only the year picker with monthly columns is built. Quarters are a grouping of the same cells whenever somebody wants them.
 - **`occupancyRate` and `resolutionByPriority` are still unwired.** R-075 built them, R-076 and this item were meant to be their first callers, and this report needed neither: vacancy here is a day count over a period, not a point-in-time occupancy ratio. R-081c's maintenance analytics is where `resolutionByPriority` finally lands.
+
+---
+
+## R-081b — The year-end tax packet
+**Commit:** `PENDING`  ·  **Date:** 2026-08-21
+
+**What it built.** RPT-07 at `/reports/tax-packet`, plus one CSV: Schedule E **per property** (the form is filed per address; R-078 totals per entity for QuickBooks, and both are right for their own reader), the CapEx/fixed-asset schedule, security-deposit liability as a **balance at 31 December**, and the 1099-NEC candidate list with W-9 status. `MortgageAnnualStatement` is a new model — the lender's Form 1098, recorded per loan per tax year — which gives Schedule E line 12 a real number for the first time; it is recorded on each mortgage in the property filing cabinet. `packages/core/tax/packet.ts` holds the three new formulas; `apps/web/lib/tax/packet.ts` fetches.
+
+**What it decided.** Recorded as **D-73**, from two owner decisions taken before any code was written:
+- **The 1098 is recorded, not reconciled.** `Mortgage` holds the loan and nothing records a payment against it, so there was nothing to reconcile against — the real choice was between the lender's own figure, a whole monthly payment schedule, or leaving line 12 blank. `@@unique(mortgageId, taxYear)` is load-bearing: two rows would double the interest, an overstated deduction rather than untidiness, and the write is an upsert so a corrected 1098 replaces rather than adds. The line it produces carries **`bookedOn: null`** — a 1098 covers a calendar year and names no month, which is exactly why it does not appear in R-081a's monthly grid. Putting an annual lump into December would invent detail nobody recorded.
+- **The packet is a screen and one CSV; the archived PDF is R-081d.** Numbers first, assembly second.
+- **Card payments are excluded from the 1099-NEC reportable figure**, and this is the correctness point of the schedule. A card payment is reported by the *processor* on a 1099-K, not by the payer on a 1099-NEC — so $400 by card plus $300 by cheque is a $300 1099-NEC, not a $700 one, and a vendor can be under the threshold despite $700 paid. This is what RPT-07 means by "by payment method". Both figures are shown so the difference is never a mystery.
+- **Deposit liability respects the disposition date.** A deposit disposed of in March 2027 was still held *in full* on 31 December 2026; subtracting its applied and refunded amounts from that year would report a liability the owner did not yet have. A naive sum gets this wrong and looks right.
+- **Vendors under the threshold stay on the list** — "just under" is a judgement for the filer to make with the number in front of them, not one this product should make silently.
+
+Full reasoning in `07-decisions.md`.
+
+**A wrong schema comment, corrected.** `Deposit.heldCents`'s own doc comment said it "is what is still held", which reads as already net and would double-count a disposition. It is **gross and never decremented** — `rent-roll.ts` has always computed `held − applied − refunded`, and `computeDisposition`'s doc comment describes the same thing. Two of three descriptions of the same column agreed and the one on the column itself did not.
+
+**One query for every vendor, not one per vendor.** `vendorPaymentTotalsForYear` takes a single id, so a candidate list built on it would be one round trip per vendor on a screen opened in January with the whole portfolio in scope. The packet does a single grouped read, and reuses `jobCostCents()` so a vendor's 1099 total and their jobs' expense lines cannot disagree.
+
+**What it left behind.**
+- **Mileage stays unbuilt.** RPT-07 says "if captured" and nothing captures it; Schedule E line 6 keeps saying so on the page.
+- **No TIN/EIN on `Vendor`.** The packet flags a missing W-9 and names the vendor; the number belongs on the W-9 document, and `LegalEntity` already declines to hold an EIN for the same reason.
+- **Seven Schedule E lines still cannot be filled** — down from nine, since line 12 now has a source and this item did not touch the other eight. Advertising, auto/travel, commissions, insurance, management fees, other interest, supplies and taxes remain named-with-reasons on the export.
+- **The 1098 has no document upload yet.** `MortgageAnnualStatement.documentId` exists and nothing sets it; attaching the form is a filing-cabinet upload away and no screen offers it.
+- **R-081d owns the archived PDF**, and inherits D-50's rule: the index must name anything it could not include.

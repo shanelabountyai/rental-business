@@ -90,6 +90,21 @@ export interface EvictionCostFact {
   incurredOn: Date
 }
 
+/**
+ * One lender's Form 1098 for the year (R-081b).
+ *
+ * Annual by construction: a 1098 covers a calendar year and names no month,
+ * so `bookedOn` is null on the line it produces. That is why it does not
+ * appear in the operating report's monthly grid — a figure with no month
+ * cannot be put in one without inventing detail nobody recorded.
+ */
+export interface MortgageInterestFact {
+  id: string
+  propertyId: string
+  lender: string
+  interestCents: number
+}
+
 export interface CapitalImprovementFact {
   id: string
   propertyId: string
@@ -121,6 +136,10 @@ export interface TaxExportFacts {
   utilityBills: readonly UtilityBillFact[]
   evictionCosts: readonly EvictionCostFact[]
   capitalImprovements: readonly CapitalImprovementFact[]
+  /// The 1098s recorded for this tax year. Already year-scoped by the
+  /// caller - `taxYear` is a plain integer column, so there is no window and
+  /// no timezone question.
+  mortgageInterest: readonly MortgageInterestFact[]
 }
 
 export type ExportSection = 'INCOME' | 'EXPENSE' | 'DEPOSIT_LIABILITY' | 'CAPEX' | 'EXCEPTION'
@@ -371,6 +390,23 @@ export function buildTaxExport(facts: TaxExportFacts, basis: AccountingBasis): T
     })
   }
 
+  // -- Mortgage interest, from the lender's 1098 ----------------------------
+  //
+  // The same figure on either basis: a 1098 reports the interest RECEIVED by
+  // the lender in the calendar year, which is cash-basis by construction, and
+  // there is no accrual figure to prefer over it.
+  for (const statement of facts.mortgageInterest) {
+    mapped('EXPENSE', 'MORTGAGE_INTEREST', {
+      // No month. See `MortgageInterestFact`.
+      bookedOn: null,
+      propertyId: statement.propertyId,
+      description: `${statement.lender} — interest per Form 1098`,
+      amountCents: statement.interestCents,
+      sourceKind: 'MortgageAnnualStatement',
+      sourceId: statement.id,
+    })
+  }
+
   // -- Capital improvements -------------------------------------------------
   //
   // Not a Schedule E expense line: capitalised, and depreciated from the day
@@ -447,7 +483,8 @@ export function buildTaxExport(facts: TaxExportFacts, basis: AccountingBasis): T
         facts.workOrders.length +
         facts.utilityBills.length +
         facts.evictionCosts.length +
-        facts.capitalImprovements.length,
+        facts.capitalImprovements.length +
+        facts.mortgageInterest.length,
       mapped: lines.length,
       excepted: exceptions.length,
       outOfYear,

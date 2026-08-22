@@ -100,8 +100,15 @@ export async function taxExportFacts(
   const yearStart = new Date(Date.UTC(year, 0, 1))
   const yearEnd = new Date(Date.UTC(year, 11, 31))
 
-  const [ledgerRows, chargeRows, workOrders, utilityBills, evictionCosts, capitalImprovements] =
-    await Promise.all([
+  const [
+    ledgerRows,
+    chargeRows,
+    workOrders,
+    utilityBills,
+    evictionCosts,
+    mortgageStatements,
+    capitalImprovements,
+  ] = await Promise.all([
       basis === 'cash'
         ? prisma.ledgerEntry.findMany({
             where: {
@@ -188,6 +195,15 @@ export async function taxExportFacts(
           evictionCase: { select: { propertyId: true } },
         },
       }),
+      // The 1098s. `taxYear` is a plain integer, so no window and no zone.
+      prisma.mortgageAnnualStatement.findMany({
+        where: { taxYear: year, mortgage: { propertyId: { in: propertyIds } } },
+        select: {
+          id: true,
+          interestCents: true,
+          mortgage: { select: { propertyId: true, lender: true } },
+        },
+      }),
       prisma.capitalImprovement.findMany({
         where: {
           propertyId: { in: propertyIds },
@@ -260,6 +276,12 @@ export async function taxExportFacts(
       incurredOn: row.incurredOn,
     })),
     capitalImprovements,
+    mortgageInterest: mortgageStatements.map((row) => ({
+      id: row.id,
+      propertyId: row.mortgage.propertyId,
+      lender: row.mortgage.lender,
+      interestCents: row.interestCents,
+    })),
   }
 
   return buildTaxExport(facts, basis)

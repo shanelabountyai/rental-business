@@ -11,7 +11,12 @@ import {
   validateMortgage,
   validateWarranty,
 } from '@rental/core/filing-cabinet'
-import { type CapitalImprovementInput, validateCapitalImprovement } from '@rental/core/tax'
+import {
+  type CapitalImprovementInput,
+  type MortgageAnnualStatementInput,
+  validateCapitalImprovement,
+  validateMortgageAnnualStatement,
+} from '@rental/core/tax'
 import { businessDateToUtc } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
@@ -342,6 +347,81 @@ export async function deleteCapitalImprovement(
   await requirePermission('property.write', propertyResource(property))
 
   await prisma.capitalImprovement.deleteMany({ where: { id: capitalImprovementId, propertyId } })
+  revalidatePath(`/properties/${propertyId}`)
+  return {}
+}
+
+/// RPT-07 (R-081b): the lender's Form 1098 for one year. Upsert on
+/// (mortgageId, taxYear), which is a unique index - re-entering a corrected
+/// 1098 replaces the figure rather than doubling Schedule E line 12.
+export async function recordMortgageStatement(
+  propertyId: string,
+  mortgageId: string,
+  _previous: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const property = await propertyOrThrow(propertyId)
+  const actor = await requirePermission('property.write', propertyResource(property))
+
+  // The mortgage must belong to THIS property, or a mistyped id would put
+  // another house's interest on this one's Schedule E.
+  const mortgage = await prisma.mortgage.findFirst({
+    where: { id: mortgageId, propertyId },
+    select: { id: true },
+  })
+  if (!mortgage) {
+    return violationsToState([
+      { field: 'mortgageId', message: 'No mortgage on this property has that ID.' },
+    ])
+  }
+
+  const input: MortgageAnnualStatementInput = {
+    mortgageId,
+    taxYear: optionalNumber(formData, 'taxYear'),
+    interestCents: optionalCents(formData, 'interestDollars'),
+    principalCents: optionalCents(formData, 'principalDollars'),
+    escrowCents: optionalCents(formData, 'escrowDollars'),
+    notes: str(formData, 'notes') || null,
+  }
+  const violations = validateMortgageAnnualStatement(input)
+  if (violations.length > 0) return violationsToState(violations)
+
+  const taxYear = input.taxYear as number
+  const interestCents = input.interestCents as number
+  await prisma.mortgageAnnualStatement.upsert({
+    where: { mortgageId_taxYear: { mortgageId, taxYear } },
+    create: {
+      mortgageId,
+      taxYear,
+      interestCents,
+      principalCents: input.principalCents,
+      escrowCents: input.escrowCents,
+      notes: input.notes,
+      recordedByStaffId: actor.id,
+    },
+    update: {
+      interestCents,
+      principalCents: input.principalCents,
+      escrowCents: input.escrowCents,
+      notes: input.notes,
+      recordedByStaffId: actor.id,
+    },
+  })
+
+  revalidatePath(`/properties/${propertyId}`)
+  redirect(`/properties/${propertyId}`)
+}
+
+export async function deleteMortgageStatement(
+  propertyId: string,
+  statementId: string,
+): Promise<FormState> {
+  const property = await propertyOrThrow(propertyId)
+  await requirePermission('property.write', propertyResource(property))
+
+  await prisma.mortgageAnnualStatement.deleteMany({
+    where: { id: statementId, mortgage: { propertyId } },
+  })
   revalidatePath(`/properties/${propertyId}`)
   return {}
 }

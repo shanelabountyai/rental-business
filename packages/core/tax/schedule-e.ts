@@ -142,10 +142,6 @@ export const UNSOURCED_LINES: ReadonlyArray<{ key: ScheduleEKey; reason: string 
     reason: 'InsurancePolicy records coverage, not premiums paid - there is no amount to export.',
   },
   { key: 'MANAGEMENT_FEES', reason: 'Self-managed; no management-fee expense is recorded.' },
-  {
-    key: 'MORTGAGE_INTEREST',
-    reason: 'Mortgage records the loan, not the payments. 1098 reconciliation is R-081.',
-  },
   { key: 'OTHER_INTEREST', reason: 'No non-mortgage interest is recorded.' },
   { key: 'SUPPLIES', reason: 'Owner-purchased supplies outside a work order are not recorded.' },
   { key: 'TAXES', reason: 'Property-tax DUE DATES are tracked (R-077); amounts paid are not.' },

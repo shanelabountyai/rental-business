@@ -1,4 +1,11 @@
-import type { CapitalImprovement, HoaInfo, InsurancePolicy, Mortgage, Warranty } from '@rental/db'
+import type {
+  CapitalImprovement,
+  HoaInfo,
+  InsurancePolicy,
+  Mortgage,
+  MortgageAnnualStatement,
+  Warranty,
+} from '@rental/db'
 import {
   insuranceRenewalDue,
   mortgageArmAdjustmentDue,
@@ -7,6 +14,7 @@ import {
 import { AddCapitalImprovementForm } from '@/components/filing-cabinet/add-capital-improvement-form.tsx'
 import { AddInsurancePolicyForm } from '@/components/filing-cabinet/add-insurance-policy-form.tsx'
 import { AddMortgageForm } from '@/components/filing-cabinet/add-mortgage-form.tsx'
+import { MortgageStatementForm } from '@/components/filing-cabinet/mortgage-statement-form.tsx'
 import { AddWarrantyForm } from '@/components/filing-cabinet/add-warranty-form.tsx'
 import { CostBasisForm } from '@/components/filing-cabinet/cost-basis-form.tsx'
 import { HoaInfoForm } from '@/components/filing-cabinet/hoa-info-form.tsx'
@@ -19,6 +27,8 @@ import {
   deleteCapitalImprovement,
   deleteInsurancePolicy,
   deleteMortgage,
+  deleteMortgageStatement,
+  recordMortgageStatement,
   deleteWarranty,
   setCostBasis,
   setHoaInfo,
@@ -84,7 +94,7 @@ export function FilingCabinetSection({
 }: {
   propertyId: string
   costBasisCents: number | null
-  mortgages: Mortgage[]
+  mortgages: (Mortgage & { statements: MortgageAnnualStatement[] })[]
   insurancePolicies: InsurancePolicy[]
   hoaInfo: HoaInfo | null
   warranties: Warranty[]
@@ -122,6 +132,39 @@ export function FilingCabinetSection({
                   </span>
                   {canWrite && (
                     <DeleteRowButton action={deleteMortgage.bind(null, propertyId, mortgage.id)} />
+                  )}
+                </div>
+                {/* RPT-07 (R-081b): the 1098s recorded against this loan.
+                    Schedule E line 12 reads them, so they live on the loan
+                    rather than on their own screen. */}
+                <div className="flex flex-col gap-1 pl-4">
+                  {mortgage.statements.length === 0 ? (
+                    <span className="text-muted-foreground text-xs">No 1098 recorded.</span>
+                  ) : (
+                    <ul className="flex flex-col text-xs">
+                      {mortgage.statements.map((statement) => (
+                        <li key={statement.id} className="flex items-center justify-between gap-2">
+                          <span>
+                            {statement.taxYear} 1098 — {dollars(statement.interestCents)} interest
+                          </span>
+                          {canWrite && (
+                            <DeleteRowButton
+                              action={deleteMortgageStatement.bind(null, propertyId, statement.id)}
+                            />
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {canWrite && (
+                    <details>
+                      <summary className="cursor-pointer text-xs font-medium">Record a 1098</summary>
+                      <div className="pt-2">
+                        <MortgageStatementForm
+                          action={recordMortgageStatement.bind(null, propertyId, mortgage.id)}
+                        />
+                      </div>
+                    </details>
                   )}
                 </div>
                 <div className="flex flex-wrap gap-2">

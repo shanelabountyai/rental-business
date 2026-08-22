@@ -66,3 +66,50 @@ export function validateCapitalImprovement(input: CapitalImprovementInput): Viol
   }
   return violations
 }
+
+export interface MortgageAnnualStatementInput {
+  mortgageId: string
+  taxYear: number | null
+  interestCents: number | null
+  principalCents?: number | null
+  escrowCents?: number | null
+  notes?: string | null
+}
+
+function badCents(value: number | null | undefined, { required }: { required: boolean }): boolean {
+  if (value == null) return required
+  return Number.isNaN(value) || !Number.isInteger(value) || value < 0
+}
+
+/// A 1098 is always a calendar year, so `taxYear` is a plain integer and the
+/// bounds are a typo guard rather than a rule: 1900 and 2999 are both
+/// certainly mistakes, and refusing them beats storing a year that silently
+/// matches no report.
+export function validateMortgageAnnualStatement(
+  input: MortgageAnnualStatementInput,
+): { field: string; message: string }[] {
+  const violations: { field: string; message: string }[] = []
+  if (!input.mortgageId.trim()) {
+    violations.push({ field: 'mortgageId', message: 'A statement must belong to a mortgage.' })
+  }
+  if (
+    input.taxYear == null ||
+    Number.isNaN(input.taxYear) ||
+    !Number.isInteger(input.taxYear) ||
+    input.taxYear < 1980 ||
+    input.taxYear > 2100
+  ) {
+    violations.push({ field: 'taxYear', message: 'Enter the tax year the 1098 covers.' })
+  }
+  // Box 1 is the only figure Schedule E needs, so it is the only one required.
+  if (badCents(input.interestCents, { required: true })) {
+    violations.push({ field: 'interestDollars', message: 'Enter the interest from box 1.' })
+  }
+  if (badCents(input.principalCents, { required: false })) {
+    violations.push({ field: 'principalDollars', message: 'Enter a whole-dollar amount of $0 or more.' })
+  }
+  if (badCents(input.escrowCents, { required: false })) {
+    violations.push({ field: 'escrowDollars', message: 'Enter a whole-dollar amount of $0 or more.' })
+  }
+  return violations
+}

@@ -25,6 +25,7 @@ function facts(overrides: Partial<TaxExportFacts> = {}): TaxExportFacts {
     utilityBills: [],
     evictionCosts: [],
     capitalImprovements: [],
+    mortgageInterest: [],
     ...overrides,
   }
 }
