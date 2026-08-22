@@ -3317,7 +3317,7 @@ Full reasoning in `07-decisions.md`.
 ---
 
 ## R-081d — The tax packet as an archived artifact
-**Commit:** `pending`  ·  **Date:** 2026-08-21
+**Commit:** `caed79d`  ·  **Date:** 2026-08-21
 
 **What it built.** An "Archive packet as PDF" action on `/reports/tax-packet` that assembles every schedule R-081b computes into one PDF, appends the Form 1098s, stores it, creates a `Document` and writes a `tax.packet_archived` audit row. `packages/core/tax/packet-document.ts` decides what the page says; `apps/web/lib/tax/archive.ts` fetches, renders and persists. No new money math — every figure is `taxPacket()`'s, which is itself a regrouping of R-078's export lines (D-72).
 
