@@ -3373,7 +3373,7 @@ Full reasoning in `07-decisions.md`.
 ---
 
 ## R-082 — Invoice splitting, reserve targets and the crude capital plan
-**Commit:** `PENDING`  ·  **Date:** 2026-08-22
+**Commit:** `4d5770e`  ·  **Date:** 2026-08-22
 
 **What it built.** PAY-10: `VendorInvoice` + `VendorInvoiceSplit` (property, category, amount, optional work order), `packages/core/vendors/invoice-split.ts`, a new fact kind in `packages/core/tax/export.ts`, and `/money/vendor-invoices` to record and review bills. PAY-11: `PropertyReserve`, `packages/core/property/capital-plan.ts`, and `/reports/reserves` — target, held, gap, annual accrual and the component-by-component plan behind it. One hand-written migration, `20260822010000_r082_invoice_splits_reserves`.
 
