@@ -50,14 +50,25 @@ export async function GET(
     return serve(document)
   }
 
-  // Staff: R-004's property-scoped RBAC, unchanged. A document with no
-  // property has no resource to scope against, so it is refused rather than
-  // waved through.
-  if (!document.property) {
-    return new Response('Not found', { status: 404 })
+  // Staff: R-004's property-scoped RBAC. A document with NEITHER a property
+  // nor an entity has no resource to scope against, so it is refused rather
+  // than waved through.
+  //
+  // The entity branch is R-081d's. Before it, `Document.legalEntityId` did not
+  // exist and this route's only question was "which property" - so an
+  // entity-level artifact (the year-end tax packet, an entity-level compliance
+  // completion) was unreachable to everybody, including the owner who produced
+  // it. `assignmentCovers` picks ONE branch per assignment and never falls
+  // back, which is why the entity id is passed on both paths.
+  if (document.property) {
+    await requirePermission('document.read', propertyResource(document.property))
+    return serve(document)
   }
-  await requirePermission('document.read', propertyResource(document.property))
-  return serve(document)
+  if (document.legalEntityId) {
+    await requirePermission('document.read', { legalEntityId: document.legalEntityId })
+    return serve(document)
+  }
+  return new Response('Not found', { status: 404 })
 }
 
 async function serve(document: {

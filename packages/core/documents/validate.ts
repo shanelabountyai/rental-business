@@ -95,6 +95,17 @@ export const DOCUMENT_TYPES = [
   /// and MAINTENANCE_PHOTO/COMPLETION_PHOTO (a reported problem and its
   /// fix, not a room-by-room inspection).
   'INSPECTION_PHOTO',
+  /// R-083: the assembled eviction case file handed to counsel. ADDED BY
+  /// R-081d, not by R-083 - `lib/evictions/packet.ts` has been writing this
+  /// string since R-083 and it was never in this closed vocabulary, so
+  /// `RETENTION_RULES[type]` was undefined and `retentionCutoff` threw on any
+  /// portfolio holding one. See `retentionCutoff`'s own guard.
+  'ATTORNEY_PACKET',
+  /// R-081d: the year-end tax packet as one archived PDF (RPT-07). Archived
+  /// rather than regenerated, for the same reason as LEDGER_STATEMENT above -
+  /// a packet is a claim about the record on a date, and the record keeps
+  /// moving.
+  'TAX_PACKET',
   'OTHER',
 ] as const
 export type DocumentTypeValue = (typeof DOCUMENT_TYPES)[number]

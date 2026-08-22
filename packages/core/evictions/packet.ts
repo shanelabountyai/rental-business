@@ -13,8 +13,13 @@
 // that quietly omitted the one photograph that would not parse is worse than
 // one that never claimed to have photographs - and this bundle carries far
 // more attachments than that statement ever did.
+//
+// The index itself now lives in `documents/exhibits.ts`, moved there by
+// R-081d when the tax packet needed the identical thing. `PacketExhibit` is
+// re-exported below so nothing that imported it from here had to change.
 
 import type { DocumentBlock } from '../documents/blocks.ts'
+import { type PacketExhibit, exhibitIndexBlocks } from '../documents/exhibits.ts'
 import { formatCents } from '../money/money.ts'
 import { EVICTION_COST_LABELS, isEvictionCostType, type CostTotals } from './costs.ts'
 import { CURE_STATE_LABELS, type CureClock } from './cure.ts'
@@ -33,16 +38,7 @@ import {
 export const PACKET_DISCLAIMER =
   'This packet was assembled automatically from records held in this system. It is not legal advice, no part of it has been filed with any court by this system, and nothing in it has been reviewed by an attorney for this matter.'
 
-export interface PacketExhibit {
-  label: string
-  /// What it is - "Notice of proof of service", "Condition photograph".
-  kind: string
-  /// When the underlying thing happened, already formatted for display.
-  occurredOn: string | null
-  /// False when the file could not be read or would not parse. Named on the
-  /// index either way (D-50).
-  attached: boolean
-}
+export type { PacketExhibit }
 
 export interface PacketFacts {
   propertyName: string
@@ -154,31 +150,7 @@ export function packetBlocks(facts: PacketFacts): DocumentBlock[] {
   }
 
   blocks.push({ kind: 'subheading', text: 'Exhibits' })
-  if (facts.exhibits.length === 0) {
-    blocks.push({ kind: 'paragraph', text: 'No exhibits were available to attach.' })
-  } else {
-    for (const [index, exhibit] of facts.exhibits.entries()) {
-      const when = exhibit.occurredOn ? ` · ${exhibit.occurredOn}` : ''
-      blocks.push({
-        kind: 'mono',
-        text: `${String(index + 1).padStart(3)}. ${exhibit.kind}: ${exhibit.label}${when}${
-          exhibit.attached ? '' : '   [NOT ATTACHED]'
-        }`,
-      })
-    }
-  }
-
-  const unattached = facts.exhibits.filter((e) => !e.attached)
-  if (unattached.length > 0) {
-    // The honest sentence, not a silent gap. Phrased so a reader knows to go
-    // asking for the missing file rather than concluding it never existed.
-    blocks.push({
-      kind: 'paragraph',
-      text: `${unattached.length} ${
-        unattached.length === 1 ? 'exhibit is' : 'exhibits are'
-      } listed above but could not be attached to this file — the underlying record exists in the system and can be produced separately.`,
-    })
-  }
+  blocks.push(...exhibitIndexBlocks(facts.exhibits, 'No exhibits were available to attach.'))
 
   blocks.push({ kind: 'footer', text: `Produced ${facts.generatedAt} (${facts.timezone}) by ${facts.generatedBy}` })
   blocks.push({ kind: 'footer', text: PACKET_DISCLAIMER })

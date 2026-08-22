@@ -1,8 +1,10 @@
 import { formatCents } from '@rental/core/money'
 import { isAccountingBasis } from '@rental/core/tax'
 import Link from 'next/link'
+import { ArchivePacketPanel } from '@/components/tax/archive-panel.tsx'
 import { requireScope } from '@/lib/auth/guard.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
+import { archiveTaxPacket } from '@/lib/tax/archive.ts'
 import { taxPacket } from '@/lib/tax/packet.ts'
 import { exportableEntities } from '@/lib/tax/queries.ts'
 
@@ -13,8 +15,9 @@ export const metadata = { title: 'Tax packet — Rental Operations' }
 //
 // NO `loading.tsx` HERE OR ABOVE (R-099).
 //
-// The archived-PDF form of this is R-081d; this is the screen and the CSV
-// (owner decision, 2026-08-21).
+// R-081d added the archived PDF alongside the screen and the CSV: the CSV is
+// the working file a preparer imports, the PDF is the artifact that records
+// what they were given on a date.
 
 export default async function TaxPacketPage({
   searchParams,
@@ -331,6 +334,28 @@ export default async function TaxPacketPage({
                     ))}
                   </ul>
                 )}
+              </section>
+
+              <section
+                aria-labelledby="pk-archive"
+                className="flex flex-col gap-2 rounded-md border p-4"
+              >
+                <h2 id="pk-archive" className="text-sm font-semibold">
+                  Archive this packet
+                </h2>
+                <p className="text-muted-foreground text-xs">
+                  Produces one PDF of everything above and keeps it. Each one is archived
+                  separately rather than regenerated, because a packet is a claim about the books
+                  on a date and the books keep moving — so &ldquo;the packet the preparer got in
+                  February&rdquo; survives February. Any Form 1098 without an uploaded copy is
+                  named on the index rather than quietly left out.
+                </p>
+                <ArchivePacketPanel
+                  action={archiveTaxPacket}
+                  entityId={packet.legalEntityId}
+                  year={packet.year}
+                  basis={packet.basis}
+                />
               </section>
 
               <section

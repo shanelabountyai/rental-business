@@ -1,4 +1,5 @@
 export * from './blocks.ts'
+export * from './exhibits.ts'
 export * from './retention.ts'
 export * from './template.ts'
 export * from './validate.ts'

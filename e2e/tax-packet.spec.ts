@@ -121,6 +121,12 @@ test.beforeEach(async ({ page }) => {
 })
 
 test.afterAll(async () => {
+  // The archived packets first: nothing append-only references them, and
+  // leaving them behind would orphan rows against entities this teardown is
+  // about to remove.
+  await prisma.document.deleteMany({
+    where: { type: 'TAX_PACKET', legalEntityId: { in: entityIds } },
+  })
   await prisma.mortgageAnnualStatement.deleteMany({
     where: { mortgage: { propertyId: { in: propertyIds } } },
   })
@@ -350,6 +356,99 @@ test.describe('the CSV', () => {
       `/api/reports/tax-packet?entity=${theirs.id}&year=${YEAR}&basis=cash`,
     )
     expect(response.status()).toBe(404)
+  })
+})
+
+test.describe('the archived packet (R-081d)', () => {
+  test('produces a downloadable PDF and names the 1098 it could not attach', async ({ page }) => {
+    const entity = await seedEntity('Archive')
+    const { property } = await seedProperty(entity.id, 'Archive House')
+    const staff = await createStaff()
+
+    // A recorded 1098 with NO uploaded form - R-081b's deliberate gap, and
+    // exactly the case D-50 says must be named rather than left silent.
+    const mortgage = await prisma.mortgage.create({
+      data: {
+        propertyId: property.id,
+        lender: 'Unattached Bank',
+        rateType: 'FIXED',
+        isBalloon: false,
+      },
+    })
+    mortgageIds.push(mortgage.id)
+    await prisma.mortgageAnnualStatement.create({
+      data: {
+        mortgageId: mortgage.id,
+        taxYear: YEAR,
+        interestCents: 980_000,
+        recordedByStaffId: staff.id,
+      },
+    })
+
+    await signIn(page, staff.email)
+    await page.goto(`/reports/tax-packet?entity=${entity.id}&year=${YEAR}&basis=cash`)
+
+    await page.getByRole('button', { name: 'Archive packet as PDF' }).click()
+    await expect(page.getByText(/named on the index but could not be attached/)).toBeVisible()
+
+    // The artifact has to be REACHABLE, which is the whole reason
+    // `Document.legalEntityId` exists: before it, a document with no property
+    // was refused to every staff member by the file route, including the
+    // owner who had just produced it.
+    const link = page.getByRole('link', { name: 'Open the archived packet' })
+    await expect(link).toBeVisible()
+    const href = await link.getAttribute('href')
+    const file = await page.request.get(href!)
+    expect(file.status()).toBe(200)
+    expect(file.headers()['content-type']).toBe('application/pdf')
+    const body = await file.body()
+    // A real PDF, not an error page rendered with the wrong header.
+    expect(body.subarray(0, 5).toString()).toBe('%PDF-')
+
+    const document = await prisma.document.findFirstOrThrow({
+      where: { legalEntityId: entity.id, type: 'TAX_PACKET' },
+    })
+    expect(document.propertyId).toBeNull()
+    // The audit row and the packet's own index must agree about what is in
+    // the file - the packet claims one unattached exhibit, so must this.
+    const entry = await prisma.auditLog.findFirstOrThrow({
+      where: { action: 'tax.packet_archived', entityId: entity.id },
+    })
+    const after = entry.after as { exhibitsNotAttached: string[]; exhibitsAttached: number }
+    expect(after.exhibitsNotAttached).toHaveLength(1)
+    expect(after.exhibitsAttached).toBe(0)
+  })
+
+  test('archives each export separately rather than overwriting the last', async ({ page }) => {
+    // A packet is a claim about the books on a date and the books keep
+    // moving, so "the packet the preparer got in February" has to survive
+    // February. Two clicks, two documents.
+    const entity = await seedEntity('Twice')
+    await seedProperty(entity.id, 'Twice House')
+    const staff = await createStaff()
+
+    await signIn(page, staff.email)
+    await page.goto(`/reports/tax-packet?entity=${entity.id}&year=${YEAR}&basis=cash`)
+
+    const archive = page.getByRole('button', { name: 'Archive packet as PDF' })
+    const link = page.getByRole('link', { name: 'Open the archived packet' })
+
+    await archive.click()
+    await expect(link).toBeVisible()
+    const first = await link.getAttribute('href')
+
+    // Wait for the href to CHANGE, not merely to be visible: it is already
+    // visible from the first archive, so a visibility assertion resolves
+    // instantly and reads the database before the second action has landed.
+    await archive.click()
+    await expect(link).not.toHaveAttribute('href', first!)
+
+    const documents = await prisma.document.findMany({
+      where: { legalEntityId: entity.id, type: 'TAX_PACKET' },
+      select: { storageKey: true },
+    })
+    expect(documents).toHaveLength(2)
+    expect(new Set(documents.map((row) => row.storageKey)).size).toBe(2)
   })
 })
 

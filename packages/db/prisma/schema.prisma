@@ -475,6 +475,7 @@ model LegalEntity {
   properties      Property[]
   complianceItems ComplianceItem[]
   assignments     StaffAssignment[]
+  documents       Document[]
 
   @@index([active])
 }
@@ -4108,6 +4109,14 @@ model DocumentTemplate {
 model Document {
   id                   String    @id @default(cuid())
   propertyId           String?
+  /// R-081d: a document that belongs to the ENTITY rather than to any one
+  /// property under it - the year-end tax packet, an entity-level compliance
+  /// completion (an LLC annual report). Not a convenience: staff access to a
+  /// document is scoped through its owning record, so a document with neither
+  /// a property nor an entity is correctly refused to everyone and therefore
+  /// unreachable. `ComplianceItem` already carries exactly this pair for
+  /// exactly this reason.
+  legalEntityId        String?
   unitId               String?
   leaseId              String?
   tenantId             String?
@@ -4161,6 +4170,7 @@ model Document {
   updatedAt            DateTime  @updatedAt
 
   property                Property?                 @relation(fields: [propertyId], references: [id])
+  legalEntity             LegalEntity?              @relation(fields: [legalEntityId], references: [id])
   unit                    Unit?                     @relation(fields: [unitId], references: [id])
   lease                   Lease?                    @relation(fields: [leaseId], references: [id])
   tenant                  Tenant?                   @relation(fields: [tenantId], references: [id])
@@ -4184,6 +4194,7 @@ model Document {
   complianceCompletions   ComplianceCompletion[]
 
   @@index([propertyId, type])
+  @@index([legalEntityId, type])
   @@index([unitId])
   @@index([leaseId])
   @@index([workOrderId])

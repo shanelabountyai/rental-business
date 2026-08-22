@@ -70,17 +70,37 @@ export const RETENTION_RULES: Record<DocumentTypeValue, RetentionRule> = {
     years: null,
     note: 'R-068: per-item condition evidence, kept indefinitely for the same reason INSPECTION_REPORT is - a locked report is worth nothing if the photos behind it can vanish.',
   },
+  ATTORNEY_PACKET: {
+    years: null,
+    note: 'R-083: what was handed to counsel, and when - kept indefinitely, for the same reason LEDGER_STATEMENT is. It carries the notices and photographs inside it (D-50), so purging it would discard the underlying evidence too.',
+  },
+  TAX_PACKET: {
+    years: null,
+    note: 'R-081d: what the preparer was given for a tax year. Kept indefinitely - a return is examinable for years afterwards and this is the record of what it was filed from.',
+  },
   OTHER: { years: null, note: 'Uncategorized - no automatic rule.' },
 }
 
-/// The day a document of this type becomes eligible for retention review, or
-/// null if it never automatically does.
+/**
+ * The day a document of this type becomes eligible for retention review, or
+ * null if it never automatically does.
+ *
+ * AN UNRECOGNISED TYPE IS `null`, NOT A CRASH. `Document.type` is a free-form
+ * text column and every caller reaches this through a `as DocumentTypeValue`
+ * cast, so the type system's guarantee stops at the database boundary. It has
+ * already been wrong once: `ATTORNEY_PACKET` was written by R-083 and never
+ * added to DOCUMENT_TYPES, so the whole retention report threw on any
+ * portfolio holding an eviction packet. Both halves are fixed - the value is
+ * in the vocabulary now, and a future one that is not can no longer take the
+ * report down with it. Erring toward "no automatic window" is the safe
+ * direction: it keeps evidence rather than proposing it for purge.
+ */
 export function retentionCutoff(
   type: DocumentTypeValue,
   createdAt: Date,
 ): Date | null {
-  const rule = RETENTION_RULES[type]
-  if (rule.years == null) return null
+  const rule = RETENTION_RULES[type] as RetentionRule | undefined
+  if (rule?.years == null) return null
   const cutoff = new Date(createdAt)
   cutoff.setUTCFullYear(cutoff.getUTCFullYear() + rule.years)
   return cutoff

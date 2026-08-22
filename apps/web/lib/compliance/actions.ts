@@ -154,6 +154,12 @@ export async function recordCompletion(
       const document = await tx.document.create({
         data: {
           propertyId: item.propertyId,
+          // R-081d: an entity-level item (an LLC annual report) has no
+          // property, and a document with neither key is refused to every
+          // staff member by the file route - so these have been unreachable
+          // since R-077. Set both; `ComplianceItem` has always carried the
+          // same pair.
+          legalEntityId: item.legalEntityId,
           type: 'OTHER',
           fileName: file.name,
           contentType,

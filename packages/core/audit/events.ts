@@ -436,6 +436,13 @@ export const AUDIT_ACTIONS = [
   /// court is a claim about what was owed on a date, and which claim we made
   /// has to survive the ledger continuing to move afterwards.
   'ledger.statement_exported',
+  /// R-081d (RPT-07): a year-end tax packet was assembled and archived for
+  /// one entity, year and basis. Recorded for the same reason as the
+  /// statement above - the packet is a claim about the books on a date, and
+  /// the books keep moving, so which packet the preparer was actually given
+  /// has to survive that. Carries the exhibits it could NOT attach (D-50),
+  /// so the audit row and the document's own index agree.
+  'tax.packet_archived',
   'template.saved',
   /// R-049: a translation was marked approved for a LEGAL notice. THE most
   /// consequential row in this area. The product cannot verify an attorney
