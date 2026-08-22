@@ -3407,7 +3407,7 @@ Full reasoning in `07-decisions.md`.
 ---
 
 ## R-084 — Lease holds
-**Commit:** `PENDING`  ·  **Date:** 2026-08-22
+**Commit:** `47e479e`  ·  **Date:** 2026-08-22
 
 **What it built.** RISK-11/RISK-12: `packages/core/holds` (the six types, the four effects, and the table that maps one to the other), a `LeaseHold` table with the migration `20260822020000_r084_lease_holds`, two permissions, two audit actions, four enforcement guards, a persistent banner on the lease page / the notice page / the eviction case file, and a place-and-lift panel on the lease.
 
