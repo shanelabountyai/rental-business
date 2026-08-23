@@ -504,6 +504,23 @@ export const AUDIT_ACTIONS = [
   /// adding a guarantor changes who can be pursued and nothing else.
   'lease.party_changed',
 
+  /// R-090 (RISK-10): an amendment changing who is a party to a live lease
+  /// went out for signature. Names who is leaving, who is joining, the
+  /// applicant whose screening let them in, and from when.
+  ///
+  /// SEPARATE FROM `lease.party_changed`, which is the moment somebody
+  /// actually comes on or off the lease. Between the two there is a document
+  /// out with several people, and a dispute about a roommate change asks
+  /// about that gap specifically: when was it proposed, who was asked, and
+  /// did everyone agree before it took effect.
+  'lease.party_change_started',
+
+  /// R-090: an amendment out for signature was withdrawn. REASON_REQUIRED -
+  /// the same call `envelope.voided` already makes, for the same reason:
+  /// asking several people to sign a change to their tenancy and then
+  /// pulling it is an act somebody will ask about.
+  'lease.party_change_voided',
+
   /// R-065 (LEASE-09): a renewal offer created a successor DRAFT lease -
   /// `renewedFromLeaseId` names which lease it replaces. The rent proposed,
   /// the check that ran against it, and who drew it up are all on the entry.
@@ -844,6 +861,11 @@ export const REASON_REQUIRED: ReadonlySet<AuditAction> = new Set([
   // resume collecting from a bankrupt tenant".
   'lease.hold_placed',
   'lease.hold_lifted',
+  // R-090. Withdrawing a change of parties that several people were already
+  // asked to sign. Starting one is not on this list for the same reason
+  // `claim.opened` is not: the change carries its own required `reason`
+  // column, which the audit entry copies.
+  'lease.party_change_voided',
 ])
 
 export function requiresReason(action: AuditAction): boolean {

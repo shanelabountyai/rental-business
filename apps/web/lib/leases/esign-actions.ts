@@ -15,6 +15,7 @@ import { esignAdapter } from '@/lib/esign/provider.ts'
 import { appendPdfs, renderBlocksPdf } from '@/lib/pdf/render.ts'
 import { generateStorageKey, storage } from '@/lib/storage/index.ts'
 import { activateLeaseSideEffects } from './activate.ts'
+import { completePartyChangeEnvelope } from './party-change-apply.ts'
 import { verifySignerLink } from './sign-link.ts'
 
 // A signer's own "sign the lease" action (LEASE-06, DOC-02, R-063).
@@ -63,17 +64,20 @@ export async function signLeaseDocument(
           : 'This signing link is not working. Contact your property manager.',
     }
   }
+  const what = link.kind === 'AMENDMENT' ? 'change to the lease' : 'lease'
   if (link.envelopeStatus === 'VOIDED') {
-    return { error: 'This lease was withdrawn. Contact your property manager for a new link.' }
+    return {
+      error: `This ${what} was withdrawn. Contact your property manager for a new link.`,
+    }
   }
   if (link.status === 'SIGNED') {
-    return { notice: 'You already signed this lease.' }
+    return { notice: `You already signed this ${what}.` }
   }
 
   const signedName = str(formData, 'signedName')
   const agreed = formData.get('agree') === 'on'
   if (!signedName) {
-    return { error: 'Type your full legal name exactly as it should appear on the lease.' }
+    return { error: `Type your full legal name exactly as it should appear on the ${what}.` }
   }
   if (!agreed) {
     return { error: 'Check the box to confirm this counts as your electronic signature.' }
@@ -81,13 +85,26 @@ export async function signLeaseDocument(
 
   const signer = await prisma.leaseSigner.findUniqueOrThrow({
     where: { id: link.signerId },
-    include: { envelope: { select: { id: true, status: true, providerId: true, leaseId: true, lease: { select: { propertyId: true } } } } },
+    include: {
+      envelope: {
+        select: {
+          id: true,
+          kind: true,
+          status: true,
+          providerId: true,
+          leaseId: true,
+          lease: { select: { propertyId: true } },
+        },
+      },
+    },
   })
   // Re-checked against the live row - the link's own check ran against
   // whatever was true a moment ago.
-  if (signer.status === 'SIGNED') return { notice: 'You already signed this lease.' }
+  if (signer.status === 'SIGNED') return { notice: `You already signed this ${what}.` }
   if (signer.envelope.status === 'VOIDED') {
-    return { error: 'This lease was withdrawn. Contact your property manager for a new link.' }
+    return {
+      error: `This ${what} was withdrawn. Contact your property manager for a new link.`,
+    }
   }
   if (!signer.envelope.providerId || !signer.providerSignerId) {
     return { error: 'This envelope has not finished sending yet. Try again in a moment.' }
@@ -135,7 +152,14 @@ export async function signLeaseDocument(
   })
 
   if (remaining === 0) {
-    await completeEnvelope(signer.envelopeId)
+    // R-090: an amendment's completion applies a change of occupants and
+    // touches nothing else; a lease's activates the tenancy. The two share
+    // the ceremony above and nothing below it.
+    if (signer.envelope.kind === 'AMENDMENT') {
+      await completePartyChangeEnvelope(signer.envelopeId)
+    } else {
+      await completeEnvelope(signer.envelopeId)
+    }
   } else {
     // Some, but not all, have signed - moves off SENT so the lease page
     // (and the generic activate-button guard in leases/actions.ts) can tell
@@ -147,11 +171,12 @@ export async function signLeaseDocument(
   }
 
   revalidatePath(`/leases/${signer.envelope.leaseId}`)
+  if (remaining > 0) return { notice: 'Signed. Thank you.' }
   return {
     notice:
-      remaining === 0
-        ? 'Signed. Every signer has now completed, and the lease is active.'
-        : 'Signed. Thank you.',
+      signer.envelope.kind === 'AMENDMENT'
+        ? 'Signed. Everybody has now signed, and the change to the lease is in effect.'
+        : 'Signed. Every signer has now completed, and the lease is active.',
   }
 }
 
@@ -196,6 +221,9 @@ async function completeEnvelope(envelopeId: string): Promise<void> {
     },
   })
   if (envelope.status === 'COMPLETED' || !envelope.draftDocument || !envelope.providerId) return
+  // R-090: LEASE envelopes only. Its caller already branches, and this is
+  // the belt to that pair of braces - everything below activates a tenancy.
+  if (envelope.kind !== 'LEASE') return
 
   // Routed through the same guarded machine every other status write here
   // uses - see activate.ts's own header. A lease that somehow left

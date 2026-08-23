@@ -116,6 +116,13 @@ export const DOCUMENT_TYPES = [
   /// the §3931 affidavit is sworn on. OURS, obtained by us, about a date -
   /// see packages/core/scra for why no adapter mints one.
   'SCRA_CERTIFICATE',
+  /// R-090 (RISK-10): the signed amendment that changes who is a party to a
+  /// lease - a roommate release, a replacement joining, a whole-tenancy
+  /// assignment. Distinct from ADDENDUM, which travels WITH a lease at
+  /// signing and is generated from a template a PM authored; this is a
+  /// later agreement between the same parties about the lease that already
+  /// exists, and its text comes from the change itself.
+  'LEASE_AMENDMENT',
   'OTHER',
 ] as const
 export type DocumentTypeValue = (typeof DOCUMENT_TYPES)[number]

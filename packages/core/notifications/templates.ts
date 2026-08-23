@@ -1414,6 +1414,59 @@ export const leaseSignInviteTemplate: NotificationTemplate<LeaseSignInviteContex
   },
 }
 
+/// Context for `lease.amendment_sign_invite` (RISK-10, R-090) - one signer's
+/// own link to a change-of-occupants amendment.
+export interface LeaseAmendmentSignInviteContext {
+  name: string
+  addressLine1: string
+  /// What is actually changing, in one clause - "Bob Ray is leaving and Cara
+  /// Diaz is joining". A bare "please sign an amendment" gives the recipient
+  /// no way to tell a legitimate request from a phishing attempt, and this
+  /// message goes to a departing roommate who may already have one foot out
+  /// of the relationship.
+  summary: string
+  effectiveOn: string
+  url: string
+}
+
+/**
+ * "There is a change to who is on your lease, and it needs your signature"
+ * (RISK-10, R-090).
+ *
+ * ITS OWN TEMPLATE RATHER THAN `lease.sign_invite`. The recipient list is
+ * different in kind: one of them is LEAVING the tenancy, and telling that
+ * person "your lease is ready to sign" would be actively misleading about
+ * what they are being asked to put their name to.
+ */
+export const leaseAmendmentSignInviteTemplate: NotificationTemplate<LeaseAmendmentSignInviteContext> =
+  {
+    key: 'lease.amendment_sign_invite',
+    category: 'lease_signature',
+    channels: ['SMS', 'EMAIL'],
+    render: (context, channel) => {
+      if (channel === 'SMS') {
+        return {
+          body: [
+            `A change to who is on the lease at ${context.addressLine1} needs your signature (${context.summary}, from ${context.effectiveOn}):`,
+            context.url,
+          ].join('\n'),
+        }
+      }
+      return {
+        subject: `Sign the change to your lease — ${context.addressLine1}`,
+        body: [
+          `Hi ${context.name},`,
+          '',
+          `A change to who is on the lease at ${context.addressLine1} needs your signature: ${context.summary}, effective ${context.effectiveOn}.`,
+          '',
+          'The rent, the term and the deposit held are unchanged. Read the amendment in full and sign here:',
+          '',
+          context.url,
+        ].join('\n'),
+      }
+    },
+  }
+
 /// Context for `application.coapplicant_invite` (LEASE-03, R-059) - anyone
 /// the lead applicant adds to the household after being invited.
 export interface CoApplicantInviteContext {
@@ -1727,6 +1780,8 @@ export const TEMPLATES: Readonly<Record<string, NotificationTemplate<never>>> = 
     applicationAdverseActionTemplate as unknown as NotificationTemplate<never>,
   [leaseSignInviteTemplate.key]:
     leaseSignInviteTemplate as unknown as NotificationTemplate<never>,
+  [leaseAmendmentSignInviteTemplate.key]:
+    leaseAmendmentSignInviteTemplate as unknown as NotificationTemplate<never>,
   [showingTemplate.key]: showingTemplate as unknown as NotificationTemplate<never>,
   [mtmRolloverTemplate.key]: mtmRolloverTemplate as unknown as NotificationTemplate<never>,
   [showingInviteTemplate.key]: showingInviteTemplate as unknown as NotificationTemplate<never>,

@@ -35,7 +35,11 @@ SCHEDULED_JOBS.push({
         status: 'PENDING_SIGNATURE',
         renewedFromLeaseId: { not: null },
         startsOn: { lte: asOf },
-        envelopes: { some: { status: 'COMPLETED' } },
+        // R-090: `kind` matters, and this is the query that would have
+        // done real damage without it - a completed party-change amendment
+        // is a COMPLETED envelope on the lease, and would have satisfied
+        // "the renewal has been signed" for a renewal nobody had signed.
+        envelopes: { some: { kind: 'LEASE', status: 'COMPLETED' } },
       },
       select: {
         id: true,

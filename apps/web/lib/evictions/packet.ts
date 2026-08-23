@@ -153,7 +153,10 @@ export async function exportAttorneyPacket(
 
   // The executed lease, and then everything else worth showing.
   const envelope = await prisma.leaseEnvelope.findFirst({
-    where: { leaseId: evictionCase.leaseId, executedDocumentId: { not: null } },
+    // R-090: `kind` matters. An executed AMENDMENT also has an
+    // `executedDocumentId`, and the most recent one would have been handed to
+    // counsel labelled "Executed lease and addenda".
+    where: { leaseId: evictionCase.leaseId, kind: 'LEASE', executedDocumentId: { not: null } },
     orderBy: { createdAt: 'desc' },
     select: { executedDocumentId: true },
   })

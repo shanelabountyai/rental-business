@@ -3,7 +3,10 @@ import { signLeaseDocument } from '@/lib/leases/esign-actions.ts'
 import { markSignerViewed, verifySignerLink } from '@/lib/leases/sign-link.ts'
 
 export const metadata = {
-  title: 'Sign your lease',
+  // Generic on purpose: the page serves both a lease and a change-of-
+  // occupants amendment (R-090), and a token page's title is one of the few
+  // things that leaks into a browser history somebody else may read.
+  title: 'Sign your document',
   // A magic link must never be indexed, and the URL itself is the
   // credential - the same rule every other token-scoped page here follows.
   robots: { index: false, follow: false },
@@ -48,6 +51,11 @@ export default async function SignLinkPage({
   await markSignerViewed(link.signerId)
 
   const where = `${link.propertyName} — ${link.unitName}`
+  // R-090. A departing roommate is being asked to sign themselves OFF a
+  // tenancy; calling that "your lease" would be wrong about the one thing
+  // they most need to understand before typing their name.
+  const isAmendment = link.kind === 'AMENDMENT'
+  const what = isAmendment ? 'change to the lease' : 'lease'
 
   return (
     <main className="mx-auto flex max-w-md flex-col gap-6 p-6">
@@ -63,13 +71,13 @@ export default async function SignLinkPage({
           rel="noreferrer"
           className="rounded-md border p-4 text-center font-medium underline underline-offset-4"
         >
-          Read the lease before signing
+          {isAmendment ? 'Read the change in full before signing' : 'Read the lease before signing'}
         </a>
       )}
 
       {link.envelopeStatus === 'VOIDED' ? (
         <p className="rounded-md border p-4">
-          This lease was withdrawn. Contact your property manager for a new link.
+          This {what} was withdrawn. Contact your property manager for a new link.
         </p>
       ) : link.status === 'SIGNED' ? (
         // COVERS THE JUST-SIGNED CASE TOO, not only a repeat visit. A form
@@ -81,15 +89,17 @@ export default async function SignLinkPage({
         // header for why there is no separate "thank you" screen.
         <p className="rounded-md border p-4">
           {link.envelopeStatus === 'COMPLETED'
-            ? 'You have signed this lease. Every signer has now completed, and the lease is active.'
-            : 'You have signed this lease. Still waiting on the remaining signer(s) - you can read it above at any time.'}
+            ? isAmendment
+              ? 'You have signed this change. Everybody has now signed, and it is in effect.'
+              : 'You have signed this lease. Every signer has now completed, and the lease is active.'
+            : `You have signed this ${what}. Still waiting on the remaining signer(s) - you can read it above at any time.`}
         </p>
       ) : (
         <SignForm action={signLeaseDocument.bind(null, token)} />
       )}
 
       <p className="text-muted-foreground text-xs">
-        You don&rsquo;t need to sign in to sign this lease. This link only opens your own
+        You don&rsquo;t need to sign in to sign this {what}. This link only opens your own
         signature on this one document.
       </p>
     </main>

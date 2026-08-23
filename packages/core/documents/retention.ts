@@ -28,6 +28,7 @@ export interface RetentionRule {
 export const RETENTION_RULES: Record<DocumentTypeValue, RetentionRule> = {
   LEASE: { years: 7, note: 'DOC-05: leases retained >= 7 years.' },
   ADDENDUM: { years: 7, note: 'DOC-05: travels with its lease.' },
+  LEASE_AMENDMENT: { years: 7, note: 'DOC-05: part of the lease it amends, kept for as long as the lease.' },
   NOTICE: { years: null, note: 'Evidence trail - kept indefinitely.' },
   NOTICE_PROOF: { years: null, note: 'Proof of service - kept indefinitely, for the same reason as the notice itself.' },
   INVOICE: { years: null, note: 'No DOC-05 number given; kept indefinitely pending counsel input.' },

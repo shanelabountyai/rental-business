@@ -98,8 +98,38 @@ export async function getLease(id: string, scope: ResolvedScope) {
       // read is just `envelopes[0]`, with any earlier voided ones still
       // visible as the record of what was withdrawn and why.
       envelopes: {
+        // R-090: the lease's own envelopes. A party-change amendment is
+        // loaded separately (`partyChanges`) and belongs to its own panel -
+        // `envelopes[0]` below means "the current LEASE envelope".
+        where: { kind: 'LEASE' },
         orderBy: { createdAt: 'desc' },
         include: { signers: { orderBy: { order: 'asc' } } },
+      },
+      // R-090 (RISK-10): every change of occupants this tenancy has been
+      // through, most recent first. The whole history, not only the live
+      // one - a withdrawn amendment is the record that somebody was asked
+      // to sign themselves off the lease and then was not, which is exactly
+      // what a later dispute asks about.
+      partyChanges: {
+        orderBy: { createdAt: 'desc' },
+        include: {
+          parties: {
+            include: { tenant: { select: { id: true, firstName: true, lastName: true } } },
+            orderBy: { createdAt: 'asc' },
+          },
+          envelope: {
+            select: {
+              id: true,
+              status: true,
+              draftDocumentId: true,
+              executedDocumentId: true,
+              signers: {
+                orderBy: { order: 'asc' },
+                select: { id: true, name: true, role: true, status: true, signedAt: true },
+              },
+            },
+          },
+        },
       },
     },
   })
@@ -159,6 +189,41 @@ export async function selectableTenants() {
   return prisma.tenant.findMany({
     where: { active: true },
     select: { id: true, firstName: true, lastName: true, email: true, phone: true },
+    orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
+  })
+}
+
+/**
+ * Applicants who could join an existing tenancy as a replacement roommate
+ * or an assignee (RISK-10, R-090).
+ *
+ * ONLY THOSE WITH A DECIDED SCREENING, and declines are filtered out here as
+ * well as refused in core - a declined applicant appearing in a picker is an
+ * invitation to add them and find out afterwards, and the fair-housing
+ * answer to "why was this person not added" should never be "the form let
+ * me try".
+ *
+ * Scoped to the properties the actor can see. An applicant reaches this list
+ * through the property their application was made against, which is the same
+ * scoping every other staff read here uses.
+ */
+export async function screenedApplicants(scope: ResolvedScope) {
+  return prisma.applicant.findMany({
+    where: {
+      application: { propertyId: { in: scope.propertyIds } },
+      screeningReport: { decision: { in: ['APPROVED', 'CONDITIONAL'] } },
+      // Already on a live tenancy through an earlier change - offering them
+      // again would only produce the "already on this lease" refusal, or
+      // worse, a second Tenant row for the same person on a second lease.
+      partyChanges: { none: { change: { status: { in: ['PENDING_SIGNATURE', 'COMPLETED'] } } } },
+    },
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      email: true,
+      screeningReport: { select: { decision: true } },
+    },
     orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
   })
 }

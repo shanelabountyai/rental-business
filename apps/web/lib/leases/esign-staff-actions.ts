@@ -81,7 +81,14 @@ async function leaseForEsign(leaseId: string) {
       },
       guarantors: true,
       recurringCharges: { where: { type: 'PET_RENT', active: true }, take: 1 },
-      envelopes: { where: { status: { not: 'VOIDED' } }, orderBy: { createdAt: 'desc' }, take: 1 },
+      // R-090: LEASE only. Without it a live amendment on an in-force
+      // lease would answer "this lease already has an envelope out for
+      // signature" to a perfectly ordinary lease generation.
+      envelopes: {
+        where: { kind: 'LEASE', status: { not: 'VOIDED' } },
+        orderBy: { createdAt: 'desc' },
+        take: 1,
+      },
     },
   })
   const actor = await requirePermission('lease.execute', propertyResource(lease.property))

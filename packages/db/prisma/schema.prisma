@@ -1337,7 +1337,7 @@ model Applicant {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  application     Application      @relation(fields: [applicationId], references: [id])
+  application     Application             @relation(fields: [applicationId], references: [id])
   documents       Document[]
   screeningReport ScreeningReport?
   /// FCRA adverse-action notices (R-061) - the "either" half of Notice's
@@ -1348,6 +1348,9 @@ model Applicant {
   /// record would erase the proof this occupant was held to the same
   /// criteria as everybody else.
   violationCases  ViolationCase[]
+  /// R-090: the roommate changes this applicant joined a tenancy through.
+  /// Restricted for the identical reason as `violationCases` above.
+  partyChanges    LeasePartyChangeParty[]
 
   @@index([applicationId])
   @@index([stripeCustomerId])
@@ -1772,6 +1775,7 @@ model StaffUser {
   documentsUploaded                       Document[]                      @relation("DocumentUploadedBy")
   auditLogs                               AuditLog[]                      @relation("AuditLogActor")
   accessCodesCreated                      AccessCode[]
+  partyChangesStarted                     LeasePartyChange[]
   messagesRouted                          UnroutedMessage[]               @relation("UnroutedMessageRoutedBy")
   templatesCreated                        MessageTemplate[]               @relation("TemplateCreatedBy")
   templatesUpdated                        MessageTemplate[]               @relation("TemplateUpdatedBy")
@@ -1840,6 +1844,7 @@ model Tenant {
   consents               TenantConsent[]
   scraLookups            ScraLookup[]
   accommodations         AccommodationRequest[]
+  partyChanges           LeasePartyChangeParty[]
 
   @@index([lastName, firstName])
   @@index([email])
@@ -2151,6 +2156,7 @@ model Lease {
   abandonmentCases           AbandonmentCase[]
   violationCases             ViolationCase[]
   insuranceClaimsLossOfRents InsuranceClaim[]        @relation("ClaimLossOfRentsLease")
+  partyChanges               LeasePartyChange[]
 
   @@index([propertyId])
   @@index([unitId])
@@ -2173,6 +2179,104 @@ model LeaseTenant {
   tenant Tenant @relation(fields: [tenantId], references: [id])
 
   @@unique([leaseId, tenantId])
+  @@index([tenantId])
+}
+
+enum PartyChangeStatus {
+  /// Sent for signature. There is no DRAFT: a change is created by the same
+  /// action that sends its amendment, because a half-filled roommate change
+  /// nobody has been asked to sign is a decision, not a record.
+  PENDING_SIGNATURE
+  COMPLETED
+  VOIDED
+}
+
+enum PartyChangeDirection {
+  OUTGOING
+  INCOMING
+}
+
+/// One roommate change or lease assignment on a LIVE tenancy (RISK-10,
+/// R-090): somebody leaves, somebody joins, or both.
+///
+/// THE SAME LEASE ROW IS THE WHOLE DESIGN (D-104). A renewal creates a
+/// successor Lease (`Lease.renewedFromLeaseId`); a party change must NOT,
+/// and every hard part of RISK-10 falls out of that single decision.
+/// "Ledger continuity" stops being a feature to build and becomes what
+/// happens when nothing ends: no lease closed, so no deposit disposition
+/// was triggered, no Stripe subscription cancelled, no balance carried
+/// anywhere. The deposit stays with the unit because there was never a
+/// moment at which anything could have disposed of it.
+///
+/// So this table holds no money columns at all, and that absence is
+/// deliberate and load-bearing: RISK-10's hard rule is "no partial
+/// mid-tenancy refunds", and the way to enforce it is to build no column,
+/// no field and no code path that could pay one. Departing roommates
+/// settle their share between themselves; the amendment says so in as many
+/// words.
+model LeasePartyChange {
+  id          String            @id @default(cuid())
+  leaseId     String
+  status      PartyChangeStatus @default(PENDING_SIGNATURE)
+  /// The date the parties agreed the change takes effect. RECORDED AND
+  /// PRINTED ON THE AMENDMENT, but it is not a scheduler: the change is
+  /// applied when the last signature lands, never on a timer. A future
+  /// date that quietly removed somebody's portal access and stopped their
+  /// notices before they had moved out is the failure mode avoided; see
+  /// lib/leases/party-change-actions.ts for the full reasoning.
+  effectiveOn DateTime          @db.Date
+  /// Why, in whoever's words. Required - a change of who is liable on a
+  /// tenancy with no stated reason is the one a dispute asks about.
+  reason      String
+
+  /// The amendment everybody signs. One per change: voiding the envelope
+  /// voids the change, and starting over means a new change, rather than
+  /// a change that accumulates withdrawn documents and has to explain
+  /// which one it means.
+  envelopeId String? @unique
+
+  appliedAt        DateTime?
+  voidedAt         DateTime?
+  voidReason       String?
+  createdByStaffId String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  lease    Lease                   @relation(fields: [leaseId], references: [id], onDelete: Restrict)
+  envelope LeaseEnvelope?          @relation(fields: [envelopeId], references: [id], onDelete: Restrict)
+  staff    StaffUser               @relation(fields: [createdByStaffId], references: [id], onDelete: Restrict)
+  parties  LeasePartyChangeParty[]
+
+  @@index([leaseId, status])
+}
+
+/// One person moving on or off the tenancy.
+///
+/// `tenantId` is NOT NULL in both directions. An incoming party's Tenant
+/// row is created when the amendment is SENT, not when it completes -
+/// they have to be a real, addressable party to receive a signing link at
+/// all, and a LeaseSigner with neither a tenantId nor a guarantorId is a
+/// signature attributable to nobody.
+///
+/// `applicantId` is required for an INCOMING party BY DATABASE CHECK, which
+/// is RISK-10's "screened to full criteria" made unfalsifiable: a
+/// replacement with no screening record cannot exist in this table. Whether
+/// that screening was APPROVED is checked in the action, because a decision
+/// is a column on ScreeningReport that a CHECK here cannot reach.
+model LeasePartyChangeParty {
+  id          String               @id @default(cuid())
+  changeId    String
+  direction   PartyChangeDirection
+  tenantId    String
+  applicantId String?
+  createdAt   DateTime             @default(now())
+
+  change    LeasePartyChange @relation(fields: [changeId], references: [id], onDelete: Cascade)
+  tenant    Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  applicant Applicant?       @relation(fields: [applicantId], references: [id], onDelete: Restrict)
+
+  @@unique([changeId, tenantId])
   @@index([tenantId])
 }
 
@@ -2777,8 +2881,26 @@ enum LeaseSignerRole {
   GUARANTOR
 }
 
+/// What an envelope is FOR (R-090). LEASE is R-063's original and only
+/// meaning; AMENDMENT is a mid-tenancy change of parties that reuses the
+/// whole signing ceremony - document, per-signer links, typed-name
+/// ceremony, completion certificate - without any of the lease-activation
+/// consequences that follow a signed LEASE.
+///
+/// ADDING THIS VALUE WAS NOT ONE EDIT (CLAUDE.md's own warning). Five
+/// queries ask a lease for "its envelope" and every one of them meant
+/// LEASE; each now says so. The one that would have caused real damage is
+/// `renewal-cutover-job.ts`'s `envelopes: { some: { status: 'COMPLETED' } }`,
+/// which a completed amendment on the predecessor's successor would have
+/// satisfied.
+enum LeaseEnvelopeKind {
+  LEASE
+  AMENDMENT
+}
+
 model LeaseEnvelope {
   id                 String              @id @default(cuid())
+  kind               LeaseEnvelopeKind   @default(LEASE)
   /// NOT unique. A voided envelope is kept as evidence (the same
   /// "retire, don't delete" rule every append-only-adjacent row in this
   /// product follows) rather than replaced in place, so a lease can
@@ -2788,7 +2910,13 @@ model LeaseEnvelope {
   /// constraint, the same app-layer call most business invariants here
   /// make (the DB enforces only the four append-only tables, by trigger).
   leaseId            String
-  templateId         String
+  /// Null for an AMENDMENT. A party-change amendment's text is generated
+  /// from the facts of the change (who leaves, who joins, from when, and
+  /// the sentence saying everything else is unchanged) rather than from a
+  /// PM-authored template - there is nothing in it for an author to write
+  /// that is not already a field, and requiring a template would mean a
+  /// portfolio could not run a roommate change until somebody seeded one.
+  templateId         String?
   status             LeaseEnvelopeStatus @default(DRAFT)
   /// Which addenda (packages/core/leases/addenda.ts's closed list) were
   /// included, decided once at generation time by `applicableAddenda()` and
@@ -2812,10 +2940,11 @@ model LeaseEnvelope {
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
 
-  lease            Lease            @relation(fields: [leaseId], references: [id], onDelete: Restrict)
-  template         DocumentTemplate @relation(fields: [templateId], references: [id], onDelete: Restrict)
-  draftDocument    Document?        @relation("LeaseEnvelopeDraftDocument", fields: [draftDocumentId], references: [id], onDelete: Restrict)
-  executedDocument Document?        @relation("LeaseEnvelopeExecutedDocument", fields: [executedDocumentId], references: [id], onDelete: Restrict)
+  lease            Lease             @relation(fields: [leaseId], references: [id], onDelete: Restrict)
+  template         DocumentTemplate? @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  partyChange      LeasePartyChange?
+  draftDocument    Document?         @relation("LeaseEnvelopeDraftDocument", fields: [draftDocumentId], references: [id], onDelete: Restrict)
+  executedDocument Document?         @relation("LeaseEnvelopeExecutedDocument", fields: [executedDocumentId], references: [id], onDelete: Restrict)
   signers          LeaseSigner[]
 
   @@index([leaseId])

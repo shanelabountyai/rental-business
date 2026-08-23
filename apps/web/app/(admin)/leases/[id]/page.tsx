@@ -3,6 +3,7 @@ import {
   CONDITION_BASELINE_DOCUMENT_TYPE,
   type LeaseStatusValue,
   depositTransferLabel,
+  leaseIsInForce,
   leaseStatusLabel,
   leaseTransition,
 } from '@rental/core/leases'
@@ -28,6 +29,7 @@ import { LifecyclePanel } from '@/components/leases/lifecycle-panel.tsx'
 import { FeesPanel } from '@/components/leases/fees-panel.tsx'
 import { RecurringChargesPanel } from '@/components/leases/recurring-panel.tsx'
 import { PartiesPanel } from '@/components/leases/parties-panel.tsx'
+import { PartyChangePanel } from '@/components/leases/party-change-panel.tsx'
 import { RenewalPanel } from '@/components/leases/renewal-panel.tsx'
 import { RenterInsurancePanel } from '@/components/leases/renter-insurance-panel.tsx'
 import { accessCodesForLease } from '@/lib/leases/access-code-queries.ts'
@@ -71,7 +73,8 @@ import { outstandingIntakeGaps } from '@/lib/leases/intake.ts'
 import { recordRenterInsurance } from '@/lib/leases/insurance-actions.ts'
 import { offerRenewal } from '@/lib/leases/renewal-actions.ts'
 import { recordOfflinePayment } from '@/lib/payments/offline.ts'
-import { getLease, selectableTenants } from '@/lib/leases/queries.ts'
+import { getLease, screenedApplicants, selectableTenants } from '@/lib/leases/queries.ts'
+import { startPartyChange, voidPartyChange } from '@/lib/leases/party-change-actions.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 
 export const metadata = { title: 'Lease — Rental Operations' }
@@ -219,6 +222,7 @@ export default async function LeaseDetailPage({
     accommodations,
     abandonmentCases,
     violationCases,
+    applicantsForChange,
   ] = await Promise.all([
     outstandingIntakeGaps(lease),
     canWrite ? selectableTenants() : Promise.resolve([]),
@@ -232,6 +236,10 @@ export default async function LeaseDetailPage({
     requestsForLease(lease.id),
     casesForLease(lease.id),
     violationCasesForLease(lease.id),
+    // R-090: only fetched for somebody who could actually send an amendment.
+    execDecision.allowed && leaseIsInForce(lease.status)
+      ? screenedApplicants(scope)
+      : Promise.resolve([]),
   ])
   // R-069: nothing to clear on a zero-deposit lease (NONE/SURETY_BOND hold
   // zero by the database CHECK constraint `chargeDeposit()`'s own comment
@@ -695,6 +703,49 @@ export default async function LeaseDetailPage({
         addTenant={addLeaseTenant.bind(null, lease.id)}
         removeTenant={removeLeaseTenant.bind(null, lease.id)}
         addGuarantor={addGuarantor.bind(null, lease.id)}
+      />
+
+      <PartyChangePanel
+        canStart={execDecision.allowed}
+        leaseIsRunning={leaseIsInForce(lease.status)}
+        currentTenants={lease.leaseTenants.map((lt) => ({
+          leaseTenantId: lt.id,
+          name: `${lt.tenant.firstName} ${lt.tenant.lastName}`,
+        }))}
+        screenedApplicants={applicantsForChange.map((a) => ({
+          id: a.id,
+          name: `${a.firstName} ${a.lastName}`,
+          detail: [a.email, `screening: ${a.screeningReport?.decision?.toLowerCase() ?? 'none'}`]
+            .filter(Boolean)
+            .join(' · '),
+        }))}
+        changes={lease.partyChanges.map((change) => ({
+          id: change.id,
+          status: change.status,
+          effectiveOn: utcToBusinessDate(change.effectiveOn),
+          reason: change.reason,
+          leavingNames: change.parties
+            .filter((p) => p.direction === 'OUTGOING')
+            .map((p) => `${p.tenant.firstName} ${p.tenant.lastName}`),
+          joiningNames: change.parties
+            .filter((p) => p.direction === 'INCOMING')
+            .map((p) => `${p.tenant.firstName} ${p.tenant.lastName}`),
+          voidReason: change.voidReason,
+          draftDocumentId: change.envelope?.draftDocumentId ?? null,
+          executedDocumentId: change.envelope?.executedDocumentId ?? null,
+          signers: (change.envelope?.signers ?? []).map((signer) => ({
+            id: signer.id,
+            name: signer.name,
+            role: signer.role,
+            status: signer.status,
+            signedAt: signer.signedAt
+              ? businessDate(signer.signedAt, lease.property.timezone)
+              : null,
+          })),
+        }))}
+        today={businessDate(new Date(), lease.property.timezone)}
+        startAction={startPartyChange.bind(null, lease.id)}
+        voidAction={voidPartyChange.bind(null, lease.id)}
       />
 
       <EsignPanel

@@ -31,6 +31,11 @@ export type SignerLinkResult =
       leaseId: string
       name: string
       role: 'TENANT' | 'GUARANTOR'
+      /// R-090: what the signer is being asked to put their name to. The
+      /// page and the sign action both word themselves from this - telling
+      /// a departing roommate "your lease is ready to sign" would be
+      /// actively wrong about what they are agreeing to.
+      kind: 'LEASE' | 'AMENDMENT'
       status: 'PENDING' | 'SENT' | 'VIEWED' | 'SIGNED' | 'DECLINED'
       envelopeStatus: 'DRAFT' | 'SENT' | 'PARTIALLY_SIGNED' | 'COMPLETED' | 'VOIDED'
       propertyName: string
@@ -77,6 +82,7 @@ export async function verifySignerLink(token: string, now = new Date()): Promise
     leaseId: signer.envelope.leaseId,
     name: signer.name,
     role: signer.role,
+    kind: signer.envelope.kind,
     status: signer.status,
     envelopeStatus: signer.envelope.status,
     propertyName: signer.envelope.lease.property.name,

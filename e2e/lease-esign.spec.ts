@@ -203,10 +203,14 @@ test('generates a lease, sends it for signature, and activates the tenancy once 
   await expect(page.getByText('Sent for signature')).toBeVisible()
 
   const envelope = await prisma.leaseEnvelope.findFirstOrThrow({
-    where: { leaseId: lease.id },
+    where: { leaseId: lease.id, kind: 'LEASE' },
     include: { signers: { orderBy: { order: 'asc' } } },
   })
   expect(envelope.status).toBe('SENT')
+  // R-090 made `templateId` nullable for AMENDMENT envelopes. A LEASE one
+  // still must have one, and the database CHECK says so - this asserts the
+  // same thing from the other side rather than casting the null away.
+  expect(envelope.templateId).not.toBeNull()
   // NOT asserted against `templateIds` - another worker running this same
   // spec concurrently may have its own equally-valid default (documentType
   // LEASE, state null) template active at the same moment, and
@@ -214,7 +218,7 @@ test('generates a lease, sends it for signature, and activates the tenancy once 
   // genuinely ambiguous under real parallel load. What matters is that a
   // real LEASE template was used, not whose fixture it was.
   const usedTemplate = await prisma.documentTemplate.findUniqueOrThrow({
-    where: { id: envelope.templateId },
+    where: { id: envelope.templateId! },
   })
   expect(usedTemplate.documentType).toBe('LEASE')
   expect(envelope.signers).toHaveLength(2)

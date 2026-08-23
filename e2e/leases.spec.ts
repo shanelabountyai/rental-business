@@ -513,9 +513,17 @@ test.describe('parties', () => {
     expect(await prisma.leaseTenant.count({ where: { leaseId: lease.id } })).toBe(1)
   })
 
-  test('refuses to empty a RUNNING tenancy', async ({ page }) => {
-    // Rent owed by nobody, a unit occupied by nobody. RISK-10's
-    // roommate-change flow handles a departing tenant; this is not it.
+  test('refuses to take anybody off a RUNNING tenancy', async ({ page }) => {
+    // WIDENED BY R-090, from "cannot empty it" to "cannot touch it".
+    //
+    // This refused only when the removal would have left NOBODY on the
+    // lease, which meant a roommate could be taken off a live, signed
+    // tenancy with one click and no record: no release, no signature from
+    // the people who stay, nothing said about what they were and were not
+    // released from, and nothing at all told to the person leaving. This
+    // button is the DRAFT-lease editing tool - somebody typed in the wrong
+    // person before anything was signed - and it hard deletes the row.
+    // RISK-10's change-of-occupants flow now exists, so it refuses outright.
     const seed = await seedUnit()
     const lease = await seedLease(seed, { status: 'ACTIVE' })
     const staff = await createStaff()
@@ -524,7 +532,7 @@ test.describe('parties', () => {
     await page.goto(`/leases/${lease.id}`)
     await page.getByRole('button', { name: 'Remove' }).click()
 
-    await expect(page.getByText(/needs at least one person on it/)).toBeVisible()
+    await expect(page.getByText(/is a change of occupants/)).toBeVisible()
     expect(await prisma.leaseTenant.count({ where: { leaseId: lease.id } })).toBe(1)
   })
 })

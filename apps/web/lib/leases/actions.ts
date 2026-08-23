@@ -479,7 +479,10 @@ export async function changeLeaseStatus(
   // (`voidEnvelope`, /leases/[id]) if the intent is really to skip signing.
   if (lease.status === 'PENDING_SIGNATURE' && to === 'ACTIVE') {
     const liveEnvelope = await prisma.leaseEnvelope.findFirst({
-      where: { leaseId, status: { in: ['SENT', 'PARTIALLY_SIGNED'] } },
+      // R-090: LEASE only. An amendment out for signature is not a reason
+      // to refuse a lease activation - and cannot co-occur with one anyway,
+      // since a change of parties requires an in-force tenancy.
+      where: { leaseId, kind: 'LEASE', status: { in: ['SENT', 'PARTIALLY_SIGNED'] } },
       select: { id: true },
     })
     if (liveEnvelope) {
@@ -936,13 +939,21 @@ export async function removeLeaseTenant(
   const row = await prisma.leaseTenant.findUnique({ where: { id: leaseTenantId } })
   if (!row || row.leaseId !== leaseId) return { error: 'That person is not on this lease.' }
 
-  // A LIVE tenancy cannot be emptied. Removing the last occupant from a
-  // running lease would leave rent owed by nobody and a unit occupied by
-  // nobody - RISK-10's roommate-change flow is what actually handles a
-  // departing tenant, and it is not this.
-  if (leaseIsInForce(lease.status) && lease.leaseTenants.length <= 1) {
+  // NOT A PATH OFF A LIVE TENANCY, AND NOW IT SAYS SO (R-090). This is the
+  // draft-lease editing tool - somebody typed in the wrong person before the
+  // lease was ever signed - and it HARD DELETES the row.
+  //
+  // Until R-090 it refused only when the removal would empty the tenancy,
+  // which meant a roommate could be taken off a running, signed lease with
+  // one click and no record beyond an audit line: no release, no signature
+  // from the people who stay, no document saying what they were and were not
+  // released from, and nothing at all told to the person leaving. This
+  // comment already pointed at "RISK-10's roommate-change flow"; that flow
+  // now exists, so this refuses and sends the operator to it.
+  if (leaseIsInForce(lease.status)) {
     return {
-      error: 'A running tenancy needs at least one person on it. End the lease instead.',
+      error:
+        'This lease is running. Taking somebody off a live tenancy is a change of occupants — start one below, so everybody signs the amendment.',
     }
   }
 
