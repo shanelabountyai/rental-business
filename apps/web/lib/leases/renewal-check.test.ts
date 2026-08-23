@@ -21,7 +21,7 @@ beforeAll(async () => {
       name: stamp,
       addressLine1: '9 Renewal Ct',
       city: 'Houston',
-      state: 'ZZ', // a state deliberately never configured
+      state: 'ZY', // a state deliberately never configured
       postalCode: '77002',
       timezone: 'America/Chicago',
       propertyType: 'SINGLE_FAMILY',
@@ -41,13 +41,20 @@ afterEach(async () => {
   ruleIds.length = 0
 })
 
+/// STATE 'ZY', NOT 'ZZ'. `apps/web/lib/jurisdiction/queries.test.ts` also
+/// seeds ZZ rules against this same database, and `rulesFor` fetches EVERY
+/// rule for a state before choosing the applicable one — so with both files
+/// in flight this one's cap could be masked by the other's rows and the
+/// check reported `within_limits`. Found by R-087, whose new core test file
+/// shifted vitest's scheduling enough to make the race lose. A magic state
+/// code is only isolated if exactly one file uses it.
 async function seedRule(overrides: {
   rentIncreaseCapPercentBps?: number | null
   rentIncreaseNoticeDays?: number | null
 }) {
   const rule = await prisma.jurisdictionRule.create({
     data: {
-      state: 'ZZ',
+      state: 'ZY',
       version: 1,
       effectiveFrom: new Date('2020-01-01'),
       graceDays: 0,
@@ -66,7 +73,7 @@ describe('renewalRentCheckFor', () => {
     await seedRule({ rentIncreaseCapPercentBps: 500, rentIncreaseNoticeDays: 30 })
 
     const decision = await renewalRentCheckFor({
-      propertyState: 'ZZ',
+      propertyState: 'ZY',
       propertyCounty: null,
       currentRentCents: 100_000,
       proposedRentCents: 110_000, // 10%, over the 5% cap
@@ -97,7 +104,7 @@ describe('renewalRentCheckFor', () => {
     await seedRule({ rentIncreaseCapPercentBps: null, rentIncreaseNoticeDays: 60 })
 
     const decision = await renewalRentCheckFor({
-      propertyState: 'ZZ',
+      propertyState: 'ZY',
       propertyCounty: null,
       currentRentCents: 100_000,
       proposedRentCents: 200_000, // 100% raise - would be capped if anything were configured

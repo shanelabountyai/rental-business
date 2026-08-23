@@ -106,6 +106,20 @@ export interface JurisdictionRuleInput {
   /// simply not applied, never assumed to be zero days.
   retaliationWindowDays?: number | null
 
+  // Abandonment (RISK-01, R-087). All three null means unconfigured, and the
+  // two halves are read very differently: an unknown presumption period
+  // WARNS (the operator decides, like every other clock here), and an
+  // unknown storage period REFUSES disposal outright - see
+  // `disposalReadiness` for why that one is the exception.
+  /// How long a tenancy may go silent before the state treats it as
+  /// presumptively abandoned.
+  abandonmentPresumedAfterDays?: number | null
+  /// How long the tenant's belongings must be stored before disposal.
+  belongingsStorageDays?: number | null
+  /// Notice of intended disposal the state requires ON TOP of the storage
+  /// period. Null means not configured; 0 means expressly none needed.
+  belongingsNoticeDays?: number | null
+
   paymentAllocationOrder: string[]
   /// Which service methods serve which notice type here (R-051, COMM-02).
   /// Omitted/null means the state's service rules are simply not configured -
@@ -207,6 +221,9 @@ export function validateJurisdictionRule(
     'noticeToVacateDays',
     'rentIncreaseNoticeDays',
     'retaliationWindowDays',
+    'abandonmentPresumedAfterDays',
+    'belongingsStorageDays',
+    'belongingsNoticeDays',
   ] as const) {
     const value = input[field]
     if (value != null && !isWholeNumberInRange(value, 365)) {

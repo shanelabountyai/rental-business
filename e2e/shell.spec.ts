@@ -111,6 +111,11 @@ test.describe('the shell', () => {
     await signIn(page, staff.email)
 
     const nav = page.getByRole('navigation', { name: 'Sections' })
+    // `exact: true`, for the reason the next test down already documents:
+    // an accessible-name match is a case-insensitive SUBSTRING, so
+    // "Maintenance" also matches "Preventive maintenance" (R-080's own nav
+    // entry) and the strict-mode locator resolves to two links. Latent since
+    // that entry was added; surfaced by R-087 running this spec again.
     for (const label of [
       'Dashboard',
       'Properties',
@@ -119,7 +124,7 @@ test.describe('the shell', () => {
       'Money',
       'Tasks',
     ]) {
-      await expect(nav.getByRole('link', { name: label })).toBeVisible()
+      await expect(nav.getByRole('link', { name: label, exact: true })).toBeVisible()
     }
   })
 
@@ -151,10 +156,11 @@ test.describe('the shell', () => {
     await signIn(page, staff.email)
 
     const nav = page.getByRole('navigation', { name: 'Sections' })
-    await expect(nav.getByRole('link', { name: 'Maintenance' })).toBeVisible()
+    // Exact here too — same substring trap as above.
+    await expect(nav.getByRole('link', { name: 'Maintenance', exact: true })).toBeVisible()
     // No financials, no leases - the tech role carries neither permission.
-    await expect(nav.getByRole('link', { name: 'Money' })).toHaveCount(0)
-    await expect(nav.getByRole('link', { name: 'Leases' })).toHaveCount(0)
+    await expect(nav.getByRole('link', { name: 'Money', exact: true })).toHaveCount(0)
+    await expect(nav.getByRole('link', { name: 'Leases', exact: true })).toHaveCount(0)
   })
 
   // ROLE-01: "not just hidden UI". The link being absent proves nothing; the

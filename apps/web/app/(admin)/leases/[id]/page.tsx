@@ -12,6 +12,7 @@ import { businessDate, friendlyDate, utcToBusinessDate } from '@rental/core/sche
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { AccessCodesPanel } from '@/components/leases/access-codes-panel.tsx'
+import { OpenAbandonmentCasePanel } from '@/components/abandonment/open-case-panel.tsx'
 import { AccommodationsPanel } from '@/components/accommodations/accommodations-panel.tsx'
 import { HoldBanner } from '@/components/holds/hold-banner.tsx'
 import { HoldsPanel } from '@/components/holds/holds-panel.tsx'
@@ -37,6 +38,8 @@ import {
   requestDocumentation,
 } from '@/lib/accommodations/actions.ts'
 import { requestsForLease } from '@/lib/accommodations/queries.ts'
+import { openAbandonmentCase } from '@/lib/abandonment/actions.ts'
+import { casesForLease } from '@/lib/abandonment/queries.ts'
 import { holdsForLease } from '@/lib/holds/queries.ts'
 import { recordScraLookup, recordScraTermination } from '@/lib/scra/actions.ts'
 import { lookupsForLease } from '@/lib/scra/queries.ts'
@@ -161,6 +164,9 @@ export default async function LeaseDetailPage({
   // all and no explanation, which is the failure `waiveDecision` two blocks
   // up exists to avoid.
   const canManageHolds = await actorCan('hold.manage', propertyResource(lease.property))
+  // R-087: opening a gone-dark case starts a path that ends in entering
+  // somebody's home, so it sits behind the same permission an eviction does.
+  const canManageEvictions = await actorCan('eviction.manage', propertyResource(lease.property))
 
   const currentEnvelope = lease.envelopes[0] ?? null
   const envelopeIsLive = currentEnvelope
@@ -208,6 +214,7 @@ export default async function LeaseDetailPage({
     holds,
     scraLookups,
     accommodations,
+    abandonmentCases,
   ] = await Promise.all([
     outstandingIntakeGaps(lease),
     canWrite ? selectableTenants() : Promise.resolve([]),
@@ -219,6 +226,7 @@ export default async function LeaseDetailPage({
     holdsForLease(lease.id),
     lookupsForLease(lease.id),
     requestsForLease(lease.id),
+    casesForLease(lease.id),
   ])
   // R-069: nothing to clear on a zero-deposit lease (NONE/SURETY_BOND hold
   // zero by the database CHECK constraint `chargeDeposit()`'s own comment
@@ -524,6 +532,23 @@ export default async function LeaseDetailPage({
         documentationAction={requestDocumentation}
         decideAction={decideAccommodationRequest}
       />
+
+      {/* R-087. `eviction.manage`, not `lease.write`: this path ends in
+          entering somebody's home, which is the same class of act as opening
+          an eviction. */}
+      {canManageEvictions && (
+        <OpenAbandonmentCasePanel
+          action={openAbandonmentCase.bind(null, lease.id)}
+          existing={
+            abandonmentCases.find((row) => row.status !== 'CLOSED')
+              ? {
+                  id: abandonmentCases.find((row) => row.status !== 'CLOSED')!.id,
+                  status: abandonmentCases.find((row) => row.status !== 'CLOSED')!.status,
+                }
+              : null
+          }
+        />
+      )}
 
       <ScraTerminationPanel
         action={recordScraTermination.bind(null, lease.id)}

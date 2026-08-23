@@ -577,6 +577,7 @@ model Property {
   leaseHolds          LeaseHold[]
   scraLookups         ScraLookup[]
   accommodations      AccommodationRequest[]
+  abandonmentCases    AbandonmentCase[]
 
   @@index([legalEntityId])
   @@index([state])
@@ -921,6 +922,7 @@ model Unit {
   shutoffs         ShutoffLocation[]
   listings         Listing[]
   showings         Showing[]
+  abandonmentCases AbandonmentCase[]
 
   @@unique([propertyId, name])
   @@index([status])
@@ -1591,6 +1593,8 @@ model StaffUser {
   paymentHoldsSet                         LeasePayer[]                    @relation("PaymentHoldSetBy")
   scraLookupsRecorded                     ScraLookup[]                    @relation("ScraLookupRecordedBy")
   accommodationsDecided                   AccommodationRequest[]          @relation("AccommodationDecidedBy")
+  abandonmentCasesOpened                  AbandonmentCase[]               @relation("AbandonmentOpenedBy")
+  abandonmentAttemptsRecorded             AbandonmentContactAttempt[]     @relation("AbandonmentAttemptRecordedBy")
   leaseHoldsPlaced                        LeaseHold[]                     @relation("LeaseHoldPlacedBy")
   leaseHoldsLifted                        LeaseHold[]                     @relation("LeaseHoldLiftedBy")
   listingsCreated                         Listing[]                       @relation("ListingCreatedBy")
@@ -1940,6 +1944,7 @@ model Lease {
   holds                   LeaseHold[]
   scraLookups             ScraLookup[]
   accommodations          AccommodationRequest[]
+  abandonmentCases        AbandonmentCase[]
 
   @@index([propertyId])
   @@index([unitId])
@@ -2203,6 +2208,130 @@ model AccommodationRequest {
 
   @@index([leaseId, status])
   @@index([propertyId, status])
+}
+
+/// Mirrors `ABANDONMENT_STATUSES` in packages/core/abandonment.
+enum AbandonmentStatus {
+  MONITORING
+  ENTERED
+  BELONGINGS_HELD
+  CLOSED
+}
+
+/// Mirrors `ABANDONMENT_OUTCOMES`.
+enum AbandonmentOutcome {
+  TENANT_RETURNED
+  TENANT_REACHED_AND_SURRENDERED
+  DECEASED
+  ABANDONED_AND_RECOVERED
+  CONVERTED_TO_EVICTION
+}
+
+/// Mirrors `CONTACT_METHODS`. Three of these send nothing at all - knocking,
+/// asking a neighbour, a police welfare check - which is exactly why this
+/// workflow logs its own attempts instead of reading the comms thread.
+enum ContactMethod {
+  PHONE_CALL
+  TEXT
+  EMAIL
+  LETTER
+  DOOR_KNOCK
+  EMERGENCY_CONTACT
+  THIRD_PARTY
+  WELFARE_AUTHORITY
+}
+
+enum ContactOutcome {
+  NO_ANSWER
+  REACHED
+  UNDELIVERABLE
+  INFORMATION
+}
+
+/// A tenant-gone-dark / abandonment case file (RISK-01, R-087).
+///
+/// THE CASE FILE IS THE PROTECTION, and the risk runs both ways: acting too
+/// soon is a self-help eviction plus conversion, and acting too late leaves a
+/// unit nobody has looked inside. Nothing here declares a unit abandoned - it
+/// records what was tried, when the unit was entered and on what basis, and
+/// runs the two clocks the statutes turn on.
+model AbandonmentCase {
+  id         String             @id @default(cuid())
+  propertyId String
+  unitId     String
+  leaseId    String
+  status     AbandonmentStatus  @default(MONITORING)
+  outcome    AbandonmentOutcome?
+  /// Required when closing - "this is over" with no account of how is the
+  /// record that helps nobody, the same call EvictionCase.outcomeNote makes.
+  outcomeNote String?
+
+  openedAt        DateTime @default(now())
+  openedByStaffId String
+  closedAt        DateTime?
+
+  /// The last sign of the tenant, as best anybody knows - a payment, a
+  /// message, a sighting. A calendar day, and the silence clock measures
+  /// from it. Null while nobody has established one.
+  lastContactOn DateTime? @db.Date
+
+  /// The welfare-check entry. Nullable until one happens, and the notice
+  /// behind it is the proof that it was lawful - `Notice` already carries
+  /// service and its own jurisdiction verdict (R-051), so this points at one
+  /// rather than re-recording any of that.
+  enteredAt       DateTime?
+  entryNoticeId   String?   @unique
+  /// What was actually found. Free text on purpose - "post piled to the
+  /// door, fridge cleared, no furniture in the back bedroom" is the real
+  /// shape of this, and a checklist would flatten the one thing a court
+  /// reads closely.
+  entryFindings   String?
+
+  /// The belongings clock. `belongingsHeldFrom` is the day the property was
+  /// inventoried and secured - NOT the day the tenant was last seen, which
+  /// is a different and much earlier date somebody would otherwise reach for.
+  belongingsHeldFrom     DateTime? @db.Date
+  belongingsInventory    String?
+  belongingsNoticeSentOn DateTime? @db.Date
+  belongingsDisposedAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  property    Property                    @relation(fields: [propertyId], references: [id])
+  unit        Unit                        @relation(fields: [unitId], references: [id])
+  lease       Lease                       @relation(fields: [leaseId], references: [id])
+  openedBy    StaffUser                   @relation("AbandonmentOpenedBy", fields: [openedByStaffId], references: [id], onDelete: Restrict)
+  entryNotice Notice?                     @relation("AbandonmentEntryNotice", fields: [entryNoticeId], references: [id], onDelete: Restrict)
+  attempts    AbandonmentContactAttempt[]
+  documents   Document[]                  @relation("AbandonmentDocuments")
+
+  @@index([propertyId, status])
+  @@index([leaseId])
+}
+
+/// One logged attempt to reach the tenant, or to find out where they are.
+///
+/// ITS OWN TABLE RATHER THAN A `Message`. Half of these send nothing: a door
+/// knock, a neighbour asked, a police welfare check. Recording them as
+/// messages would either invent outbound messages that were never sent or
+/// leave the most persuasive evidence off the record entirely.
+model AbandonmentContactAttempt {
+  id       String         @id @default(cuid())
+  caseId   String
+  method   ContactMethod
+  outcome  ContactOutcome
+  /// The calendar day it happened, property-local.
+  attemptedOn DateTime    @db.Date
+  /// What happened, in whoever's words.
+  note     String?
+  recordedAt        DateTime @default(now())
+  recordedByStaffId String
+
+  case       AbandonmentCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  recordedBy StaffUser       @relation("AbandonmentAttemptRecordedBy", fields: [recordedByStaffId], references: [id], onDelete: Restrict)
+
+  @@index([caseId, attemptedOn])
 }
 
 /// A tenant's own renter's-liability certificate (LEASE-10, R-067). NOT
@@ -4279,6 +4408,7 @@ model Notice {
   proofDocument      Document?         @relation("NoticeProofDocument", fields: [proofDocumentId], references: [id])
   entryForWorkOrders WorkOrder[]       @relation("WorkOrderEntryNotice")
   entryForShowings   Showing[]         @relation("ShowingEntryNotice")
+  entryForAbandonment AbandonmentCase? @relation("AbandonmentEntryNotice")
   deliveries         NoticeDelivery[]
   adverseActionFor   ScreeningReport?
   depositDisposition Deposit?
@@ -4608,6 +4738,8 @@ model Document {
   scraLookupAsCertificate ScraLookup?               @relation("ScraCertificate")
   accommodationRequestId  String?
   accommodationRequest    AccommodationRequest?     @relation("AccommodationDocuments", fields: [accommodationRequestId], references: [id])
+  abandonmentCaseId       String?
+  abandonmentCase         AbandonmentCase?          @relation("AbandonmentDocuments", fields: [abandonmentCaseId], references: [id])
 
   @@index([propertyId, type])
   @@index([legalEntityId, type])
@@ -4618,6 +4750,7 @@ model Document {
   @@index([inspectionItemId])
   @@index([capitalImprovementId])
   @@index([accommodationRequestId])
+  @@index([abandonmentCaseId])
 }
 
 // ---------------------------------------------------------------------------
@@ -4736,6 +4869,22 @@ model JurisdictionRule {
   /// code. Null means not configured, not "no window applies" - see
   /// packages/core/leases/retaliation.ts for how a null window is read.
   retaliationWindowDays     Int?
+
+  // Abandonment (RISK-01, R-087; D-4). Three periods, and the two halves are
+  // read in opposite directions - `assessEvidence` WARNS on an unconfigured
+  // presumption period and leaves the call with the human, while
+  // `disposalReadiness` REFUSES on an unconfigured storage period. Disposal
+  // is the only irreversible step in the workflow, which is why it is the
+  // one place in this product where an unknown rule blocks.
+  /// Days of silence before the state treats a tenancy as presumptively
+  /// abandoned. Null = not configured, never "no period applies".
+  abandonmentPresumedAfterDays Int?
+  /// How long the tenant's belongings must be held before disposal.
+  belongingsStorageDays        Int?
+  /// Notice of intended disposal required ON TOP of the storage period.
+  /// Null = not configured; 0 = expressly none needed, which is a different
+  /// statement and `disposalReadiness` treats it as one.
+  belongingsNoticeDays         Int?
   /// WHICH SERVICE METHODS THE STATE ALLOWS, PER NOTICE TYPE (R-051, COMM-02).
   ///
   /// `NoticeServiceMethod` lists the mechanics this product can record proof

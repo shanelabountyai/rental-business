@@ -137,4 +137,15 @@ export const NAV_ITEMS: readonly NavItem[] = [
     permission: 'eviction.manage',
     ownedBy: 'R-083',
   },
+  {
+    href: '/abandonment',
+    label: 'Gone dark',
+    /// Deliberately NOT "Abandonment" in the nav. A case is opened on a
+    /// suspicion and the commonest outcome is the tenant coming back, so a
+    /// menu item that already calls it abandonment prejudges every one of
+    /// them - and it is the word that ends up quoted back in a
+    /// self-help-eviction claim.
+    permission: 'eviction.manage',
+    ownedBy: 'R-087',
+  },
 ]

@@ -589,6 +589,31 @@ export const AUDIT_ACTIONS = [
   /// is the one an eviction defence asks about. REASON_REQUIRED, both ways.
   'lease.hold_lifted',
 
+  /// R-087 (RISK-01): an abandonment / tenant-gone-dark case was opened.
+  /// REASON_REQUIRED - opening one is the first step on a path that ends in
+  /// somebody's home being entered and their possessions moved, and "why did
+  /// you think they had gone" is the first question asked afterwards.
+  'abandonment.case_opened',
+  /// R-087: one logged attempt to reach the tenant, or to find out where
+  /// they are. Audited per attempt rather than counted at the end - a case
+  /// that says "three attempts" without saying when each was made proves
+  /// nothing, and the dates are what a court reads.
+  'abandonment.contact_attempted',
+  /// R-087: the unit was entered and what was found recorded. Carries the
+  /// entry basis and the notice behind it, because whether the entry was
+  /// lawful is the whole of an unlawful-eviction defence.
+  'abandonment.entered',
+  /// R-087: belongings inventoried and secured, starting the storage clock.
+  'abandonment.belongings_held',
+  /// R-087: belongings disposed of. The irreversible one - recorded with
+  /// the clock that permitted it, so "on what basis was this lawful" has an
+  /// answer that does not depend on recomputing a rule that may since have
+  /// been re-versioned.
+  'abandonment.belongings_disposed',
+  /// R-087: the case closed, and how. REASON_REQUIRED, the same call
+  /// `eviction.case_closed` makes.
+  'abandonment.case_closed',
+
   /// R-086 (RISK-13): a reasonable-accommodation request for an assistance
   /// animal was logged. Audited AT INTAKE, not only at the determination -
   /// the commonest fair-housing failure here is a request nobody can prove
@@ -764,6 +789,11 @@ export const REASON_REQUIRED: ReadonlySet<AuditAction> = new Set([
   // neither is defensible from a record that does not say why.
   'eviction.case_opened',
   'eviction.case_closed',
+  // R-087. Opening one starts a path that ends in somebody's home being
+  // entered; closing one is the account of what happened. Both are argued
+  // from later.
+  'abandonment.case_opened',
+  'abandonment.case_closed',
   // R-086. Both outcomes - see the action's own comment.
   'accommodation.decided',
   // R-084. Both directions. Placing one for no recorded reason is
