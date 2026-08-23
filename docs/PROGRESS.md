@@ -3535,7 +3535,7 @@ Two defects of my own in the new spec, and the second is the same shape. The evi
 - **No jurisdiction seed for the three new periods.** The Texas seed leaves all three null, which means the demo portfolio refuses disposal — correctly, and visibly. Whoever configures Texas properly owns filling them in.
 
 ## R-088 — Unauthorized occupants and animals, and the conditions a hoarding case is enforced on
-**Commit:** `PENDING`  ·  **Date:** 2026-08-23
+**Commit:** `51c2b15`  ·  **Date:** 2026-08-23
 
 **What it built.** RISK-02 and RISK-03: `packages/core/violations` (the kinds, the closed ground vocabulary, observation and closure validation, the legitimize routes and the animal fork), `ViolationCase` + `ViolationObservation` with the migration `20260823020000_r088_violations`, a fourth `JurisdictionRule` period (`leaseViolationCureDays`), three audit actions, a `/violations` register and case file, an open-a-case panel on the tenancy — and a widening of R-086's `AccommodationRequest` from assistance-animals-only to the general reasonable-accommodation framework.
 
