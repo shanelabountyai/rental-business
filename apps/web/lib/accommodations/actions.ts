@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto'
 import {
   DOCUMENTATION_REFUSAL_MESSAGES,
   documentationRequestable,
-  isAnimalKind,
+  isAccommodationKind,
   validateDetermination,
 } from '@rental/core/accommodations'
 import { businessDate, businessDateToUtc } from '@rental/core/scheduling'
@@ -43,7 +43,7 @@ export interface AccommodationFormState {
   /// asserts the surviving text. The outcome select is left visibly empty
   /// and `required`, so the retry is obvious rather than silent, and the
   /// expensive thing to lose (the written determination) is kept.
-  values?: { outcome?: string; determinationText?: string; animalDescription?: string }
+  values?: { outcome?: string; determinationText?: string; subjectDescription?: string }
 }
 
 function str(formData: FormData, key: string): string {
@@ -134,7 +134,7 @@ export async function receiveAccommodationRequest(
   const receivedOn = str(formData, 'receivedOn')
 
   const fieldErrors: Record<string, string> = {}
-  if (!isAnimalKind(kind)) fieldErrors.kind = 'Service animal, or assistance animal?'
+  if (!isAccommodationKind(kind)) fieldErrors.kind = 'Which kind of accommodation is this?'
   if (requestText.length < 10) {
     fieldErrors.requestText = 'Record what was actually asked for, in their words where you have them.'
   }
@@ -315,6 +315,10 @@ export async function decideAccommodationRequest(
       leaseId: true,
       propertyId: true,
       status: true,
+      // R-088: the determination's wording depends on the kind — "which
+      // animal" against an animal, "what exactly was agreed" against a policy
+      // exception.
+      kind: true,
       receivedOn: true,
       tenantId: true,
       tenant: { select: { id: true, firstName: true, email: true, phone: true } },
@@ -340,8 +344,8 @@ export async function decideAccommodationRequest(
 
   const outcome = str(formData, 'outcome')
   const determinationText = str(formData, 'determinationText')
-  const animalDescription = str(formData, 'animalDescription')
-  const values = { outcome, determinationText, animalDescription }
+  const subjectDescription = str(formData, 'subjectDescription')
+  const values = { outcome, determinationText, subjectDescription }
 
   if (outcome !== 'APPROVED' && outcome !== 'DENIED') {
     return {
@@ -351,7 +355,12 @@ export async function decideAccommodationRequest(
     }
   }
 
-  const violations = validateDetermination({ outcome, determinationText, animalDescription })
+  const violations = validateDetermination({
+    outcome,
+    determinationText,
+    subjectDescription,
+    kind: request.kind,
+  })
   if (violations.length > 0) {
     return {
       error: 'Fix the highlighted fields.',
@@ -372,8 +381,8 @@ export async function decideAccommodationRequest(
         decidedByStaffId: actor.id,
         determinationText,
         // Only on an approval - the database CHECK requires it there and a
-        // denial has no approved animal to name.
-        ...(outcome === 'APPROVED' ? { animalDescription } : {}),
+        // denial has nothing approved to name.
+        ...(outcome === 'APPROVED' ? { subjectDescription } : {}),
       },
     })
     await audit(
@@ -387,7 +396,7 @@ export async function decideAccommodationRequest(
           requestId,
           outcome,
           decidedOn: today,
-          animalDescription: outcome === 'APPROVED' ? animalDescription : null,
+          subjectDescription: outcome === 'APPROVED' ? subjectDescription : null,
         },
       },
       tx,

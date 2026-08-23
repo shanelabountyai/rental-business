@@ -148,4 +148,15 @@ export const NAV_ITEMS: readonly NavItem[] = [
     permission: 'eviction.manage',
     ownedBy: 'R-087',
   },
+  {
+    href: '/violations',
+    label: 'Violations',
+    /// `lease.read`, not `eviction.manage`. Most of what happens here ends
+    /// with the tenant keeping their home - the commonest outcome of finding
+    /// an unauthorized occupant is that they apply and stay - and a leasing
+    /// person who cannot see the register records nothing. Escalating to
+    /// eviction is the one act behind the eviction permission.
+    permission: 'lease.read',
+    ownedBy: 'R-088',
+  },
 ]

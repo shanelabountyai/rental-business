@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
-  ANIMAL_KINDS,
+  ACCOMMODATION_KINDS,
+  ACCOMMODATION_KIND_LABELS,
   clockSummary,
   documentationRequestable,
   isOpen,
@@ -60,8 +61,31 @@ describe('what may lawfully be asked', () => {
     ).toEqual({ requestable: true })
   })
 
-  it('has a label for both kinds', () => {
-    expect(ANIMAL_KINDS).toHaveLength(2)
+  it('lets a policy exception be documented on the general rule, with no ADA carve-out', () => {
+    // R-088 widened this beyond animals. The ADA two-question limit is the
+    // one genuinely animal-shaped rule in here, so it must NOT fire on a
+    // policy exception - but the observability rule still must.
+    expect(
+      documentationRequestable({
+        kind: 'POLICY_EXCEPTION',
+        disabilityObservable: false,
+        needObservable: false,
+      }),
+    ).toEqual({ requestable: true })
+    expect(
+      documentationRequestable({
+        kind: 'POLICY_EXCEPTION',
+        disabilityObservable: true,
+        needObservable: false,
+      }),
+    ).toEqual({ requestable: false, refusal: 'observable' })
+  })
+
+  it('has a label for every kind', () => {
+    expect(ACCOMMODATION_KINDS).toHaveLength(3)
+    for (const kind of ACCOMMODATION_KINDS) {
+      expect(ACCOMMODATION_KIND_LABELS[kind].length).toBeGreaterThan(0)
+    }
   })
 })
 
@@ -132,7 +156,8 @@ describe('the written determination', () => {
     const violations = validateDetermination({
       outcome: 'DENIED',
       determinationText: 'no',
-      animalDescription: '',
+      subjectDescription: '',
+      kind: 'ASSISTANCE_ANIMAL',
     })
     expect(violations.map((v) => v.field)).toContain('determinationText')
     expect(violations[0]!.message).toMatch(/discriminatory/)
@@ -144,7 +169,8 @@ describe('the written determination', () => {
     const violations = validateDetermination({
       outcome: 'APPROVED',
       determinationText: 'ok',
-      animalDescription: 'Bella, a labrador',
+      subjectDescription: 'Bella, a labrador',
+      kind: 'ASSISTANCE_ANIMAL',
     })
     expect(violations.map((v) => v.field)).toEqual(['determinationText'])
   })
@@ -153,9 +179,10 @@ describe('the written determination', () => {
     const violations = validateDetermination({
       outcome: 'APPROVED',
       determinationText: 'Approved as an assistance animal under the FHA; no pet charges apply.',
-      animalDescription: '',
+      subjectDescription: '',
+      kind: 'ASSISTANCE_ANIMAL',
     })
-    expect(violations.map((v) => v.field)).toEqual(['animalDescription'])
+    expect(violations.map((v) => v.field)).toEqual(['subjectDescription'])
   })
 
   it('accepts a properly written approval', () => {
@@ -164,7 +191,8 @@ describe('the written determination', () => {
         outcome: 'APPROVED',
         determinationText:
           'Approved as an assistance animal under the FHA; no pet rent, fee or deposit applies.',
-        animalDescription: 'Bella, a labrador retriever',
+        subjectDescription: 'Bella, a labrador retriever',
+        kind: 'ASSISTANCE_ANIMAL',
       }),
     ).toEqual([])
   })

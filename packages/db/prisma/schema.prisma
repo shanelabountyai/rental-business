@@ -537,7 +537,7 @@ model Property {
   createdAt          DateTime     @default(now())
   updatedAt          DateTime     @updatedAt
 
-  legalEntity         LegalEntity          @relation(fields: [legalEntityId], references: [id])
+  legalEntity         LegalEntity            @relation(fields: [legalEntityId], references: [id])
   units               Unit[]
   leases              Lease[]
   leasePayers         LeasePayer[]
@@ -578,6 +578,7 @@ model Property {
   scraLookups         ScraLookup[]
   accommodations      AccommodationRequest[]
   abandonmentCases    AbandonmentCase[]
+  violationCases      ViolationCase[]
 
   @@index([legalEntityId])
   @@index([state])
@@ -923,6 +924,7 @@ model Unit {
   listings         Listing[]
   showings         Showing[]
   abandonmentCases AbandonmentCase[]
+  violationCases   ViolationCase[]
 
   @@unique([propertyId, name])
   @@index([status])
@@ -1149,6 +1151,11 @@ model Applicant {
   /// FCRA adverse-action notices (R-061) - the "either" half of Notice's
   /// either/or, the "or" being `leaseId`.
   notices         Notice[]
+  /// R-088: the unauthorized-occupant cases legitimized through this
+  /// application. Restricted from the other side - deleting the screening
+  /// record would erase the proof this occupant was held to the same
+  /// criteria as everybody else.
+  violationCases  ViolationCase[]
 
   @@index([applicationId])
   @@index([stripeCustomerId])
@@ -1594,6 +1601,8 @@ model StaffUser {
   scraLookupsRecorded                     ScraLookup[]                    @relation("ScraLookupRecordedBy")
   accommodationsDecided                   AccommodationRequest[]          @relation("AccommodationDecidedBy")
   abandonmentCasesOpened                  AbandonmentCase[]               @relation("AbandonmentOpenedBy")
+  violationCasesOpened                    ViolationCase[]                 @relation("ViolationOpenedBy")
+  violationObservationsRecorded           ViolationObservation[]          @relation("ViolationObservedBy")
   abandonmentAttemptsRecorded             AbandonmentContactAttempt[]     @relation("AbandonmentAttemptRecordedBy")
   leaseHoldsPlaced                        LeaseHold[]                     @relation("LeaseHoldPlacedBy")
   leaseHoldsLifted                        LeaseHold[]                     @relation("LeaseHoldLiftedBy")
@@ -1873,7 +1882,7 @@ model Lease {
   /// `noticeGivenBy` / `noticeEffectiveOn` (R-066) - an SCRA termination IS
   /// a tenant-given notice with a federally computed effective date, not a
   /// second kind of ending that needs its own entity.
-  scraTerminationBasis  ScraTerminationBasis?
+  scraTerminationBasis ScraTerminationBasis?
 
   /// R-033. Where this tenancy came from - see LeaseOrigin.
   origin                LeaseOrigin           @default(APPLICATION)
@@ -1945,6 +1954,7 @@ model Lease {
   scraLookups             ScraLookup[]
   accommodations          AccommodationRequest[]
   abandonmentCases        AbandonmentCase[]
+  violationCases          ViolationCase[]
 
   @@index([propertyId])
   @@index([unitId])
@@ -2025,8 +2035,8 @@ model LeaseHold {
 
   createdAt DateTime @default(now())
 
-  lease    Lease    @relation(fields: [leaseId], references: [id])
-  property Property @relation(fields: [propertyId], references: [id])
+  lease    Lease      @relation(fields: [leaseId], references: [id])
+  property Property   @relation(fields: [propertyId], references: [id])
   /// Restrict on both, like every other key pointing at evidence: who placed
   /// a hold, and who took it off, are part of explaining what happened to a
   /// tenancy while it was on.
@@ -2070,35 +2080,35 @@ enum ScraLookupResult {
 /// and each is evidence as of its own date. `affidavitReadiness` reads the
 /// most recent; the older rows are what answer "what did you know in March".
 model ScraLookup {
-  id             String           @id @default(cuid())
-  leaseId        String
-  propertyId     String
+  id                    String           @id @default(cuid())
+  leaseId               String
+  propertyId            String
   /// Who was searched for. Per TENANT, not per lease: §3931's affidavit is
   /// about a named defendant, and a two-adult tenancy needs two searches.
-  tenantId       String
+  tenantId              String
   /// Null for a search run outside any case - which is the good time to run
   /// one, before an eviction is even opened.
-  evictionCaseId String?
-  result         ScraLookupResult
+  evictionCaseId        String?
+  result                ScraLookupResult
   /// The calendar day the search was RUN, as a date-only value: it is what
   /// the certificate is dated and what staleness is measured from, and no
   /// timezone may touch it (CLAUDE.md's @db.Date rule).
-  searchedOn     DateTime         @db.Date
+  searchedOn            DateTime         @db.Date
   /// DMDC's own reference on the certificate, when the certificate carries
   /// one. Never invented by us.
-  providerReference String?
+  providerReference     String?
   /// Active-duty dates the certificate states, when it states any. Only ever
   /// populated for IN_SERVICE, and nullable even then - not every
   /// certificate gives both ends.
-  activeDutyStartOn DateTime? @db.Date
-  activeDutyEndOn   DateTime? @db.Date
+  activeDutyStartOn     DateTime?        @db.Date
+  activeDutyEndOn       DateTime?        @db.Date
   /// The signed PDF. Nullable because a search can be recorded the minute it
   /// is run and the file attached a moment later, but a lookup with no
   /// certificate is a claim rather than evidence and the UI says so.
-  certificateDocumentId String? @unique
-  notes          String?
-  recordedAt        DateTime @default(now())
-  recordedByStaffId String
+  certificateDocumentId String?          @unique
+  notes                 String?
+  recordedAt            DateTime         @default(now())
+  recordedByStaffId     String
 
   lease        Lease         @relation(fields: [leaseId], references: [id])
   property     Property      @relation(fields: [propertyId], references: [id])
@@ -2114,13 +2124,22 @@ model ScraLookup {
   @@index([tenantId])
 }
 
-/// The two kinds HUD's FHEO-2020-01 guidance distinguishes. Mirrors
-/// `ANIMAL_KINDS` in packages/core/accommodations. The distinction decides
-/// what may lawfully be ASKED, not what may be charged - neither may be
-/// charged for.
-enum AssistanceAnimalKind {
+/// What kind of reasonable accommodation this is. Mirrors
+/// `ACCOMMODATION_KINDS` in packages/core/accommodations. The distinction
+/// decides what may lawfully be ASKED, not what may be charged - no animal
+/// kind may be charged for.
+///
+/// R-088 widened this from the two animal kinds (it was
+/// `AssistanceAnimalKind`) and added `POLICY_EXCEPTION`, because a hoarding
+/// case's accommodation is never an animal and a second accommodation table
+/// would be a second vocabulary to keep in step. A physical modification
+/// under §100.203 is deliberately NOT a value here - the tenant usually pays
+/// for one and usually has to restore it, and this product has no home for
+/// that yet.
+enum AccommodationKind {
   SERVICE_ANIMAL
   ASSISTANCE_ANIMAL
+  POLICY_EXCEPTION
 }
 
 /// Mirrors `REQUEST_STATUSES` in packages/core/accommodations.
@@ -2150,26 +2169,28 @@ enum AccommodationRequestStatus {
 /// matters is enforced at the money (`petMoneyAllowed`), not at a type
 /// column.
 model AccommodationRequest {
-  id         String                     @id @default(cuid())
-  propertyId String
-  leaseId    String
+  id              String  @id @default(cuid())
+  propertyId      String
+  leaseId         String
   /// Who asked. Nullable because a household member who is not on the lease
   /// may be the person with the disability, and a request from them is still
   /// a request - refusing to record it because they are not a `LeaseTenant`
   /// would lose the very thing this table exists to prove was received.
-  tenantId   String?
+  tenantId        String?
   /// In whoever's words, when the requester is not a tenant on file.
   requestedByName String?
 
-  kind   AssistanceAnimalKind
+  kind   AccommodationKind
   status AccommodationRequestStatus @default(RECEIVED)
 
   /// What was asked for, as received.
-  requestText       String
-  /// Species, name, whatever identifies WHICH animal. Required by the
-  /// application before an approval (`validateDetermination`), because a
-  /// dispute two years later is about which animal was agreed.
-  animalDescription String?
+  requestText        String
+  /// What is being approved: species and name for an animal, the exact scope
+  /// and duration for a policy exception. Required by the application before
+  /// an approval (`validateDetermination`), because the dispute two years
+  /// later is about which animal, or about how far the exception went.
+  /// Called `animalDescription` until R-088 widened the table.
+  subjectDescription String?
 
   /// The two observations that decide whether documentation may lawfully be
   /// requested. Recorded as they were assessed AT INTAKE, never recomputed -
@@ -2179,16 +2200,16 @@ model AccommodationRequest {
 
   /// Calendar days, all of them: no timezone may touch a date the clock is
   /// measured from (D-3, and the `@db.Date` rule in CLAUDE.md).
-  receivedOn           DateTime  @db.Date
+  receivedOn      DateTime  @db.Date
   /// When documentation was requested, if it was. Does NOT stop the clock -
   /// see `responseClock`'s own header for why.
-  infoRequestedOn      DateTime? @db.Date
-  decidedOn            DateTime? @db.Date
+  infoRequestedOn DateTime? @db.Date
+  decidedOn       DateTime? @db.Date
 
   /// The written determination itself (RISK-13's "written determination").
   /// Text, not a status flip: the reasoning has to survive on the record.
-  determinationText    String?
-  decidedByStaffId     String?
+  determinationText String?
+  decidedByStaffId  String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -2206,8 +2227,157 @@ model AccommodationRequest {
   decidedBy StaffUser? @relation("AccommodationDecidedBy", fields: [decidedByStaffId], references: [id], onDelete: Restrict)
   documents Document[] @relation("AccommodationDocuments")
 
+  /// R-088: the violation case this request answers, when it answers one. A
+  /// hoarding case and the accommodation asked for in response to it are the
+  /// same conversation, and reading either one without the other is how the
+  /// escalation gets made that the request was about to prevent.
+  violationCaseId String?
+  violationCase   ViolationCase? @relation(fields: [violationCaseId], references: [id], onDelete: Restrict)
+
   @@index([leaseId, status])
   @@index([propertyId, status])
+  @@index([violationCaseId])
+}
+
+/// Mirrors `VIOLATION_KINDS` in packages/core/violations.
+///
+/// THERE IS NO `HOARDING` VALUE, and its absence is the design - see that
+/// module's header. A hoarding case is a `PREMISES_CONDITION` case whose
+/// observations name enforceable grounds.
+enum ViolationKind {
+  UNAUTHORIZED_OCCUPANT
+  UNAUTHORIZED_ANIMAL
+  PREMISES_CONDITION
+}
+
+/// Mirrors `VIOLATION_GROUNDS`. A closed list of things a notice could
+/// actually cite. Nothing in it describes a person, their housekeeping or
+/// their health, because none of those is a term anybody can cure and
+/// hoarding disorder is a disability.
+enum ViolationGround {
+  BLOCKED_EGRESS
+  FIRE_LOAD
+  PEST_HARBORAGE
+  SANITATION
+  SYSTEMS_INACCESSIBLE
+}
+
+/// Mirrors `VIOLATION_STATUSES`. Only two, deliberately: the stage a case has
+/// reached is the notice series hanging off it, which `cureClock` already
+/// reads from the `NoticeDelivery` rows. A `NOTICE_SERVED` status here would
+/// be a second copy of that fact, and the two would disagree the first time
+/// somebody recorded a service from the notices screen.
+enum ViolationStatus {
+  OPEN
+  CLOSED
+}
+
+/// Mirrors `VIOLATION_OUTCOMES`.
+enum ViolationOutcome {
+  CURED
+  LEGITIMIZED
+  ACCOMMODATED
+  WITHDRAWN
+  ESCALATED
+}
+
+/// A lease-violation case file (RISK-02, RISK-03; R-088).
+///
+/// ONE TABLE FOR THREE SITUATIONS, because they are the same shape: an
+/// alleged breach, evidenced by dated observations with photographs, notified
+/// through a series of notices with cure deadlines, exiting by cure, by
+/// legitimization, by accommodation, or into eviction. Three tables would be
+/// three copies of the timeline and three places to add the next kind.
+///
+/// THE LEGITIMIZE EXIT IS FIRST-CLASS, which is RISK-02's actual point: the
+/// common real-world outcome of finding an unauthorized occupant is that they
+/// apply and stay. A product that only models the enforcement path pushes
+/// every case down it.
+model ViolationCase {
+  id         String @id @default(cuid())
+  propertyId String
+  unitId     String
+  leaseId    String
+
+  kind   ViolationKind
+  status ViolationStatus @default(OPEN)
+
+  /// Set only on close.
+  outcome        ViolationOutcome?
+  outcomeNote    String?
+  /// Why the operator proceeded past a warning - today, escalating to
+  /// eviction while an accommodation request is undecided. Free text, and
+  /// demanded rather than offered (`validateClosure`).
+  overrideReason String?
+
+  openedAt        DateTime  @default(now())
+  openedByStaffId String
+  closedAt        DateTime?
+
+  /// The applicant an unauthorized occupant was legitimized through. Not a
+  /// `Tenant`: the fact that matters is that they went through an
+  /// application and were screened against the current written criteria, and
+  /// `Applicant` is where the screening report hangs. Adding them to the
+  /// lease afterwards is `LeaseTenant`'s business and is not re-recorded
+  /// here.
+  legitimizedApplicantId String?
+  /// The animal an unauthorized-animal case authorized, described well enough
+  /// that "which animal" has an answer. Text for the same reason
+  /// `AccommodationRequest` holds one: this product has no `Pet` entity and
+  /// inventing one here would be D-87 reversed by the back door.
+  authorizedAnimal       String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  property             Property   @relation(fields: [propertyId], references: [id])
+  unit                 Unit       @relation(fields: [unitId], references: [id])
+  lease                Lease      @relation(fields: [leaseId], references: [id])
+  openedBy             StaffUser  @relation("ViolationOpenedBy", fields: [openedByStaffId], references: [id], onDelete: Restrict)
+  /// Restrict, explicitly: an optional relation with no `onDelete` defaults
+  /// to SetNull, which would quietly erase the evidence that this occupant
+  /// was screened at all.
+  legitimizedApplicant Applicant? @relation(fields: [legitimizedApplicantId], references: [id], onDelete: Restrict)
+
+  observations          ViolationObservation[]
+  /// The notice series (RISK-03's "violation-notice series"). Notices are
+  /// R-051's, unchanged - this only says which case they belong to.
+  notices               Notice[]
+  accommodationRequests AccommodationRequest[]
+
+  @@index([propertyId, status])
+  @@index([leaseId])
+  @@index([status, openedAt])
+  @@index([legitimizedApplicantId])
+}
+
+/// One dated observation on a case, with its photographs.
+///
+/// THE TIMELINE IS THE PRODUCT for a hoarding case: RISK-03 asks for
+/// "inspection photos over time", and what makes a series of photographs
+/// evidence rather than a folder is that each one is dated, attributed and
+/// tied to the term it shows a breach of.
+model ViolationObservation {
+  id     String @id @default(cuid())
+  caseId String
+
+  /// Required on a `PREMISES_CONDITION` case and forbidden on the others,
+  /// where the kind of case IS the ground. Enforced by CHECK constraint as
+  /// well as by `validateObservation`.
+  ground ViolationGround?
+
+  /// A calendar day. No timezone may touch it.
+  observedOn DateTime @db.Date
+  note       String
+
+  recordedAt        DateTime @default(now())
+  recordedByStaffId String
+
+  case       ViolationCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  recordedBy StaffUser     @relation("ViolationObservedBy", fields: [recordedByStaffId], references: [id], onDelete: Restrict)
+  photos     Document[]    @relation("ViolationObservationPhotos")
+
+  @@index([caseId, observedOn])
 }
 
 /// Mirrors `ABANDONMENT_STATUSES` in packages/core/abandonment.
@@ -2256,17 +2426,17 @@ enum ContactOutcome {
 /// records what was tried, when the unit was entered and on what basis, and
 /// runs the two clocks the statutes turn on.
 model AbandonmentCase {
-  id         String             @id @default(cuid())
-  propertyId String
-  unitId     String
-  leaseId    String
-  status     AbandonmentStatus  @default(MONITORING)
-  outcome    AbandonmentOutcome?
+  id          String              @id @default(cuid())
+  propertyId  String
+  unitId      String
+  leaseId     String
+  status      AbandonmentStatus   @default(MONITORING)
+  outcome     AbandonmentOutcome?
   /// Required when closing - "this is over" with no account of how is the
   /// record that helps nobody, the same call EvictionCase.outcomeNote makes.
   outcomeNote String?
 
-  openedAt        DateTime @default(now())
+  openedAt        DateTime  @default(now())
   openedByStaffId String
   closedAt        DateTime?
 
@@ -2279,13 +2449,13 @@ model AbandonmentCase {
   /// behind it is the proof that it was lawful - `Notice` already carries
   /// service and its own jurisdiction verdict (R-051), so this points at one
   /// rather than re-recording any of that.
-  enteredAt       DateTime?
-  entryNoticeId   String?   @unique
+  enteredAt     DateTime?
+  entryNoticeId String?   @unique
   /// What was actually found. Free text on purpose - "post piled to the
   /// door, fridge cleared, no furniture in the back bedroom" is the real
   /// shape of this, and a checklist would flatten the one thing a court
   /// reads closely.
-  entryFindings   String?
+  entryFindings String?
 
   /// The belongings clock. `belongingsHeldFrom` is the day the property was
   /// inventoried and secured - NOT the day the tenant was last seen, which
@@ -2317,15 +2487,15 @@ model AbandonmentCase {
 /// messages would either invent outbound messages that were never sent or
 /// leave the most persuasive evidence off the record entirely.
 model AbandonmentContactAttempt {
-  id       String         @id @default(cuid())
-  caseId   String
-  method   ContactMethod
-  outcome  ContactOutcome
+  id                String         @id @default(cuid())
+  caseId            String
+  method            ContactMethod
+  outcome           ContactOutcome
   /// The calendar day it happened, property-local.
-  attemptedOn DateTime    @db.Date
+  attemptedOn       DateTime       @db.Date
   /// What happened, in whoever's words.
-  note     String?
-  recordedAt        DateTime @default(now())
+  note              String?
+  recordedAt        DateTime       @default(now())
   recordedByStaffId String
 
   case       AbandonmentCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
@@ -4304,10 +4474,10 @@ model EvictionCase {
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
 
-  property Property       @relation(fields: [propertyId], references: [id])
-  unit     Unit           @relation(fields: [unitId], references: [id])
-  lease    Lease          @relation(fields: [leaseId], references: [id])
-  openedBy StaffUser      @relation("EvictionCaseOpenedBy", fields: [openedByStaffId], references: [id])
+  property    Property       @relation(fields: [propertyId], references: [id])
+  unit        Unit           @relation(fields: [unitId], references: [id])
+  lease       Lease          @relation(fields: [leaseId], references: [id])
+  openedBy    StaffUser      @relation("EvictionCaseOpenedBy", fields: [openedByStaffId], references: [id])
   notices     Notice[]
   costs       EvictionCost[]
   scraLookups ScraLookup[]
@@ -4393,33 +4563,40 @@ model Notice {
   generatedAt        DateTime             @default(now())
   createdAt          DateTime             @default(now())
 
-  property           Property          @relation(fields: [propertyId], references: [id])
+  property            Property          @relation(fields: [propertyId], references: [id])
   // Both explicit onDelete: Restrict, made EXPLICIT now that leaseId is
   // optional - a required relation defaults to Restrict, but an optional
   // one defaults to SetNull, and a notice silently losing its lease or
   // applicant link on delete is exactly the evidence loss this table
   // exists to prevent (leaseId's own original migration already set
   // RESTRICT; this keeps that true now that the column can be null).
-  lease              Lease?            @relation(fields: [leaseId], references: [id], onDelete: Restrict)
-  applicant          Applicant?        @relation(fields: [applicantId], references: [id], onDelete: Restrict)
-  servedBy           StaffUser?        @relation("NoticeServedBy", fields: [servedByStaffId], references: [id])
-  jurisdictionRule   JurisdictionRule? @relation(fields: [jurisdictionRuleId], references: [id])
-  document           Document?         @relation("NoticeDocument", fields: [documentId], references: [id])
-  proofDocument      Document?         @relation("NoticeProofDocument", fields: [proofDocumentId], references: [id])
-  entryForWorkOrders WorkOrder[]       @relation("WorkOrderEntryNotice")
-  entryForShowings   Showing[]         @relation("ShowingEntryNotice")
-  entryForAbandonment AbandonmentCase? @relation("AbandonmentEntryNotice")
+  lease               Lease?            @relation(fields: [leaseId], references: [id], onDelete: Restrict)
+  applicant           Applicant?        @relation(fields: [applicantId], references: [id], onDelete: Restrict)
+  servedBy            StaffUser?        @relation("NoticeServedBy", fields: [servedByStaffId], references: [id])
+  jurisdictionRule    JurisdictionRule? @relation(fields: [jurisdictionRuleId], references: [id])
+  document            Document?         @relation("NoticeDocument", fields: [documentId], references: [id])
+  proofDocument       Document?         @relation("NoticeProofDocument", fields: [proofDocumentId], references: [id])
+  entryForWorkOrders  WorkOrder[]       @relation("WorkOrderEntryNotice")
+  entryForShowings    Showing[]         @relation("ShowingEntryNotice")
+  entryForAbandonment AbandonmentCase?  @relation("AbandonmentEntryNotice")
+
+  /// R-088: the violation case this notice was served under, when it was
+  /// served under one. RISK-03's "violation-notice series" is this key plus
+  /// the notices that already existed - nothing about serving changed.
+  violationCaseId    String?
+  violationCase      ViolationCase?   @relation(fields: [violationCaseId], references: [id], onDelete: Restrict)
   deliveries         NoticeDelivery[]
   adverseActionFor   ScreeningReport?
   depositDisposition Deposit?
   // Restrict, not the SetNull an optional relation defaults to: a notice
   // quietly losing its case link is the same evidence loss the lease and
   // applicant relations above are explicit about.
-  evictionCase       EvictionCase?     @relation(fields: [evictionCaseId], references: [id], onDelete: Restrict)
+  evictionCase       EvictionCase?    @relation(fields: [evictionCaseId], references: [id], onDelete: Restrict)
 
   @@index([leaseId])
   @@index([applicantId])
   @@index([evictionCaseId])
+  @@index([violationCaseId])
   @@index([propertyId, servedAt])
 }
 
@@ -4740,6 +4917,12 @@ model Document {
   accommodationRequest    AccommodationRequest?     @relation("AccommodationDocuments", fields: [accommodationRequestId], references: [id])
   abandonmentCaseId       String?
   abandonmentCase         AbandonmentCase?          @relation("AbandonmentDocuments", fields: [abandonmentCaseId], references: [id])
+  /// R-088: photographs hang off the OBSERVATION, not the case. A hoarding
+  /// file is a series of dated visits and a photo that cannot say which visit
+  /// it came from proves the condition existed at some point, which is not
+  /// what anybody is arguing about.
+  violationObservationId  String?
+  violationObservation    ViolationObservation?     @relation("ViolationObservationPhotos", fields: [violationObservationId], references: [id])
 
   @@index([propertyId, type])
   @@index([legalEntityId, type])
@@ -4751,6 +4934,7 @@ model Document {
   @@index([capitalImprovementId])
   @@index([accommodationRequestId])
   @@index([abandonmentCaseId])
+  @@index([violationObservationId])
 }
 
 // ---------------------------------------------------------------------------
@@ -4885,6 +5069,15 @@ model JurisdictionRule {
   /// Null = not configured; 0 = expressly none needed, which is a different
   /// statement and `disposalReadiness` treats it as one.
   belongingsNoticeDays         Int?
+
+  /// R-088 (D-4): days a tenant has to cure a NON-MONETARY breach after a
+  /// violation notice is served. Distinct from `payOrQuitDays`, which is the
+  /// nonpayment clock - most states set the two differently, and several set
+  /// no cure period at all for some breaches. Null means this product has not
+  /// been taught the state's period; `cureClock` then reports the clock as
+  /// running with NO deadline rather than as expired, because a deadline this
+  /// product invented is what gets a case dismissed and started over.
+  leaseViolationCureDays Int?
   /// WHICH SERVICE METHODS THE STATE ALLOWS, PER NOTICE TYPE (R-051, COMM-02).
   ///
   /// `NoticeServiceMethod` lists the mechanics this product can record proof
@@ -4902,7 +5095,7 @@ model JurisdictionRule {
   /// Null, or a type absent from the map, means NO RULE IS CONFIGURED - never
   /// "no method is permitted". Service is still recordable and is flagged as
   /// unverified, the same call R-044's `graceUnknown` makes.
-  noticeServiceMethods      Json?
+  noticeServiceMethods   Json?
 
   // Payments and applications (PAY-03, LEASE-03).
   /// Ordered ChargeType names - "rent before fees" where the state says so.

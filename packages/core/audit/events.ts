@@ -614,6 +614,22 @@ export const AUDIT_ACTIONS = [
   /// `eviction.case_closed` makes.
   'abandonment.case_closed',
 
+  /// R-088 (RISK-02, RISK-03): a lease-violation case was opened -
+  /// unauthorized occupant, unauthorized animal, or a premises condition.
+  /// REASON_REQUIRED: every one of these ends either in somebody being told
+  /// to leave or in somebody being told to change how they live, and "what
+  /// did you actually see" is the first question asked afterwards.
+  'violation.case_opened',
+  /// R-088: one dated observation, audited per observation rather than
+  /// counted at the end. A hoarding file that says "we visited several times"
+  /// without saying when proves nothing, and the dates are what gets read.
+  'violation.observed',
+  /// R-088: the case closed, and how. REASON_REQUIRED, the same call
+  /// `eviction.case_closed` and `abandonment.case_closed` make - and here it
+  /// carries the legitimize path too, where the entry is the record that the
+  /// occupant was screened against the same criteria as everybody else.
+  'violation.case_closed',
+
   /// R-086 (RISK-13): a reasonable-accommodation request for an assistance
   /// animal was logged. Audited AT INTAKE, not only at the determination -
   /// the commonest fair-housing failure here is a request nobody can prove
@@ -796,6 +812,11 @@ export const REASON_REQUIRED: ReadonlySet<AuditAction> = new Set([
   'abandonment.case_closed',
   // R-086. Both outcomes - see the action's own comment.
   'accommodation.decided',
+  // R-088. Opening one starts a path that ends in somebody being told to
+  // leave or to change how they live; closing one is the account of what
+  // happened, including whether a legitimized occupant was actually screened.
+  'violation.case_opened',
+  'violation.case_closed',
   // R-084. Both directions. Placing one for no recorded reason is
   // indistinguishable from a retaliatory placement; lifting one for no
   // recorded reason is the record that cannot answer "on what basis did you

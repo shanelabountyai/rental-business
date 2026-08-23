@@ -1,18 +1,18 @@
 import 'server-only'
 
 import { utcToBusinessDate } from '@rental/core/scheduling'
-import type { AnimalKind, RequestStatus } from '@rental/core/accommodations'
+import { ANIMAL_KINDS, type AccommodationKind, type RequestStatus } from '@rental/core/accommodations'
 import { prisma } from '@rental/db'
 
 // Reading assistance-animal accommodation requests (RISK-13, R-086).
 
 export interface RequestView {
   id: string
-  kind: AnimalKind
+  kind: AccommodationKind
   status: RequestStatus
   requesterName: string
   requestText: string
-  animalDescription: string | null
+  subjectDescription: string | null
   disabilityObservable: boolean
   needObservable: boolean
   /// Calendar days, read with `utcToBusinessDate` — the clock is measured in
@@ -30,7 +30,7 @@ const SELECT = {
   kind: true,
   status: true,
   requestText: true,
-  animalDescription: true,
+  subjectDescription: true,
   disabilityObservable: true,
   needObservable: true,
   receivedOn: true,
@@ -52,13 +52,13 @@ export async function requestsForLease(leaseId: string): Promise<RequestView[]> 
 
   return rows.map((row) => ({
     id: row.id,
-    kind: row.kind as AnimalKind,
+    kind: row.kind as AccommodationKind,
     status: row.status as RequestStatus,
     requesterName: row.tenant
       ? `${row.tenant.firstName} ${row.tenant.lastName}`
       : (row.requestedByName ?? 'Not recorded'),
     requestText: row.requestText,
-    animalDescription: row.animalDescription,
+    subjectDescription: row.subjectDescription,
     disabilityObservable: row.disabilityObservable,
     needObservable: row.needObservable,
     receivedOn: utcToBusinessDate(row.receivedOn),
@@ -85,9 +85,19 @@ export async function requestsForLease(leaseId: string): Promise<RequestView[]> 
  * put the check by accident.
  * ==========================================================================
  */
+/**
+ * FILTERED TO THE ANIMAL KINDS, and it has to be.
+ *
+ * R-088 widened this table to cover every reasonable accommodation, not only
+ * assistance animals. An unfiltered `status: 'APPROVED'` would then mean an
+ * approved request for extra time to clear a unit silently refused the
+ * tenancy's pet rent — a rule about animals firing on a request that has
+ * nothing to do with one. That is the "adding a value to an enum is never one
+ * edit" trap in CLAUDE.md, arriving through the reader rather than the writer.
+ */
 export async function hasApprovedAssistanceAnimal(leaseId: string): Promise<boolean> {
   const count = await prisma.accommodationRequest.count({
-    where: { leaseId, status: 'APPROVED' },
+    where: { leaseId, status: 'APPROVED', kind: { in: [...ANIMAL_KINDS] } },
   })
   return count > 0
 }
@@ -98,7 +108,7 @@ export async function leasesWithApprovedAssistanceAnimal(
 ): Promise<ReadonlySet<string>> {
   if (leaseIds.length === 0) return new Set()
   const rows = await prisma.accommodationRequest.findMany({
-    where: { leaseId: { in: [...leaseIds] }, status: 'APPROVED' },
+    where: { leaseId: { in: [...leaseIds] }, status: 'APPROVED', kind: { in: [...ANIMAL_KINDS] } },
     select: { leaseId: true },
     distinct: ['leaseId'],
   })

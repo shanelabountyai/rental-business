@@ -146,7 +146,7 @@ test('THE POINT: approving an assistance animal refuses pet rent on the tenancy'
       decidedOn: new Date('2026-08-05T00:00:00.000Z'),
       decidedByStaffId: staff.id,
       determinationText: 'Approved as an assistance animal under the FHA; no pet charges apply.',
-      animalDescription: 'Bella, a labrador retriever',
+      subjectDescription: 'Bella, a labrador retriever',
     },
   })
 

@@ -1,13 +1,14 @@
 'use client'
 
 import {
-  ANIMAL_KIND_LABELS,
-  ANIMAL_KINDS,
-  type AnimalKind,
+  ACCOMMODATION_KIND_LABELS,
+  ACCOMMODATION_KINDS,
+  type AccommodationKind,
   clockSummary,
   documentationRequestable,
   DOCUMENTATION_REFUSAL_MESSAGES,
   LAWFUL_DENIAL_GROUNDS,
+  isAnimalKind,
   REQUEST_STATUS_LABELS,
   type RequestStatus,
   responseClock,
@@ -17,17 +18,18 @@ import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
 import { FieldError, SelectField, TextField, TextareaField } from '@/components/form/field.tsx'
 import type { AccommodationFormState } from '@/lib/accommodations/actions.ts'
 
-// Assistance-animal requests on one tenancy (RISK-13, R-086).
+// Reasonable-accommodation requests on one tenancy (RISK-13, R-086; widened
+// to non-animal accommodations by R-088 for RISK-03's hoarding cases).
 
 type Action = (state: AccommodationFormState, formData: FormData) => Promise<AccommodationFormState>
 
 export interface RequestRow {
   id: string
-  kind: AnimalKind
+  kind: AccommodationKind
   status: RequestStatus
   requesterName: string
   requestText: string
-  animalDescription: string | null
+  subjectDescription: string | null
   disabilityObservable: boolean
   needObservable: boolean
   receivedOn: string
@@ -78,12 +80,12 @@ function IntakeForm({
       />
 
       <SelectField
-        label="What was presented"
+        label="What is being asked for"
         name="kind"
         required
         idPrefix="accom"
         error={errors.kind}
-        options={ANIMAL_KINDS.map((value) => ({ value, label: ANIMAL_KIND_LABELS[value] }))}
+        options={ACCOMMODATION_KINDS.map((value) => ({ value, label: ACCOMMODATION_KIND_LABELS[value] }))}
       />
 
       <TextField
@@ -220,19 +222,33 @@ function DecisionForm({ request, action }: { request: RequestRow; action: Action
 
       {currentOutcome === 'APPROVED' && (
         <>
-          <TextField
-            label="Which animal"
-            name="animalDescription"
-            required
-            idPrefix={`dec-${request.id}`}
-            error={errors.animalDescription}
-            defaultValue={submitted?.animalDescription ?? request.animalDescription ?? ''}
-            hint="Species, and a name if there is one. A dispute two years later is about which animal."
-          />
-          <p className="text-muted-foreground text-sm">
-            Approving stops pet rent, pet fees and pet deposits on this
-            tenancy — the product will refuse them.
-          </p>
+          {isAnimalKind(request.kind) ? (
+            <TextField
+              label="Which animal"
+              name="subjectDescription"
+              required
+              idPrefix={`dec-${request.id}`}
+              error={errors.subjectDescription}
+              defaultValue={submitted?.subjectDescription ?? request.subjectDescription ?? ''}
+              hint="Species, and a name if there is one. A dispute two years later is about which animal."
+            />
+          ) : (
+            <TextField
+              label="The exception being granted"
+              name="subjectDescription"
+              required
+              idPrefix={`dec-${request.id}`}
+              error={errors.subjectDescription}
+              defaultValue={submitted?.subjectDescription ?? request.subjectDescription ?? ''}
+              hint="Exactly what is being changed, and for how long. An approval against an unrecorded scope is what the disagreement two years from now is about."
+            />
+          )}
+          {isAnimalKind(request.kind) && (
+            <p className="text-muted-foreground text-sm">
+              Approving stops pet rent, pet fees and pet deposits on this
+              tenancy — the product will refuse them.
+            </p>
+          )}
         </>
       )}
 
@@ -299,7 +315,7 @@ export function AccommodationsPanel({
     <section aria-labelledby="accommodations" className="flex flex-col gap-4 border-t pt-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 id="accommodations" className="text-lg font-semibold">
-          Assistance-animal requests
+          Accommodation requests
         </h2>
         {open.length > 0 && (
           <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900 dark:bg-amber-950 dark:text-amber-100">
@@ -333,7 +349,7 @@ export function AccommodationsPanel({
                 </span>
 
                 <span className="text-muted-foreground text-sm">
-                  {ANIMAL_KIND_LABELS[request.kind]} · received {request.receivedOn}
+                  {ACCOMMODATION_KIND_LABELS[request.kind]} · received {request.receivedOn}
                   {request.infoRequestedOn && ` · documentation requested ${request.infoRequestedOn}`}
                 </span>
 
@@ -369,7 +385,7 @@ export function AccommodationsPanel({
                     <p className="font-medium">
                       {REQUEST_STATUS_LABELS[request.status]} on {request.decidedOn}
                       {request.decidedByName ? ` by ${request.decidedByName}` : ''}
-                      {request.animalDescription ? ` — ${request.animalDescription}` : ''}
+                      {request.subjectDescription ? ` — ${request.subjectDescription}` : ''}
                     </p>
                     <p className="text-muted-foreground mt-1 whitespace-pre-wrap">
                       {request.determinationText}

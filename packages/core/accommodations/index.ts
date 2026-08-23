@@ -1,4 +1,29 @@
-// Assistance-animal requests (RISK-13, R-086).
+// Reasonable-accommodation requests (RISK-13 and RISK-03; R-086, widened by
+// R-088).
+//
+// ==========================================================================
+// THIS STARTED AS AN ASSISTANCE-ANIMAL FILE AND IS NOW THE GENERAL ONE.
+//
+// R-086 built it for assistance animals, which are the commonest kind of
+// reasonable-accommodation request by a wide margin. R-088 needed the other
+// kind: a tenant working through a hoarding case asks for time, for a
+// support person at inspections, for an exception to a storage rule - never
+// for an animal. The choice was to widen this or to stand a second
+// accommodation table beside it, and two tables recording the same statutory
+// process is two vocabularies to keep in step and one of them will rot.
+//
+// So `POLICY_EXCEPTION` joined the two animal kinds. What did NOT change is
+// the shape, because the shape was never animal-specific: the FHA framework
+// is one framework, and the two observations that decide whether
+// documentation may be asked for are the Joint Statement's general rule, not
+// an animal rule. The ADA service-animal carve-out is the one genuinely
+// animal-shaped thing in here, and it is one branch.
+//
+// A physical MODIFICATION under §100.203 - a grab bar, a ramp, a widened
+// door - is a different animal again, chiefly because the tenant usually
+// pays for it and usually has to restore it. It is deliberately NOT a value
+// here, and has no home in this product yet.
+// ==========================================================================
 //
 // ==========================================================================
 // THIS IS A FAIR-HOUSING FILE, AND IT IS SHAPED AROUND THE MISTAKES.
@@ -35,12 +60,12 @@
 import type { BusinessDate } from '../scheduling/local-time.ts'
 
 // ---------------------------------------------------------------------------
-// The animal, and what may never be charged for it
+// What is being asked for, and what may never be charged for an animal
 // ---------------------------------------------------------------------------
 
 /**
- * The two kinds HUD's guidance distinguishes, and the distinction is not
- * cosmetic — it decides what you are allowed to ASK.
+ * What kind of accommodation this is. The distinction is not cosmetic — it
+ * decides what you are allowed to ASK.
  *
  * A `SERVICE_ANIMAL` is the ADA category: a dog (or miniature horse)
  * individually trained to do work or perform tasks for a person with a
@@ -50,17 +75,43 @@ import type { BusinessDate } from '../scheduling/local-time.ts'
  * An `ASSISTANCE_ANIMAL` is the broader FHA category, which includes
  * emotional-support animals. Documentation may be requested only where
  * neither the disability nor the need is readily observable.
+ *
+ * A `POLICY_EXCEPTION` is everything else the FHA calls a reasonable
+ * accommodation: a change to a rule, policy, practice or service. Time to
+ * clear a unit, a support person present at an inspection, a reserved
+ * parking space, an exception to a storage or occupancy rule, rent accepted
+ * on a benefits-payment date. R-088 needed this for hoarding cases
+ * (RISK-03), where the accommodation asked for is never an animal. The
+ * observability rule applies to it exactly as it does to an assistance
+ * animal; only the ADA two-question carve-out does not.
+ */
+export const ACCOMMODATION_KINDS = [
+  'SERVICE_ANIMAL',
+  'ASSISTANCE_ANIMAL',
+  'POLICY_EXCEPTION',
+] as const
+export type AccommodationKind = (typeof ACCOMMODATION_KINDS)[number]
+
+export function isAccommodationKind(value: string): value is AccommodationKind {
+  return (ACCOMMODATION_KINDS as readonly string[]).includes(value)
+}
+
+export const ACCOMMODATION_KIND_LABELS: Record<AccommodationKind, string> = {
+  SERVICE_ANIMAL: 'Service animal (ADA — trained to perform a task)',
+  ASSISTANCE_ANIMAL: 'Assistance animal (FHA — includes emotional support)',
+  POLICY_EXCEPTION: 'A change to a rule, policy, practice or service',
+}
+
+/**
+ * The kinds that are about an animal. Used where the copy or the rule is
+ * genuinely animal-shaped — `PET_MONEY_TYPES`, the ADA carve-out, and the
+ * "which animal" half of a determination.
  */
 export const ANIMAL_KINDS = ['SERVICE_ANIMAL', 'ASSISTANCE_ANIMAL'] as const
 export type AnimalKind = (typeof ANIMAL_KINDS)[number]
 
 export function isAnimalKind(value: string): value is AnimalKind {
   return (ANIMAL_KINDS as readonly string[]).includes(value)
-}
-
-export const ANIMAL_KIND_LABELS: Record<AnimalKind, string> = {
-  SERVICE_ANIMAL: 'Service animal (ADA — trained to perform a task)',
-  ASSISTANCE_ANIMAL: 'Assistance animal (FHA — includes emotional support)',
 }
 
 /**
@@ -151,14 +202,15 @@ export function isOpen(status: RequestStatus): boolean {
 // ---------------------------------------------------------------------------
 
 export interface DocumentationEnquiry {
-  kind: AnimalKind
+  kind: AccommodationKind
   /// Is the disability itself readily observable? (A person using a
   /// wheelchair, or who is visibly blind.)
   disabilityObservable: boolean
-  /// Is the DISABILITY-RELATED NEED for the animal readily observable? (A
-  /// dog guiding its handler, or retrieving dropped items.) Distinct from
-  /// the above, and the guidance treats them as two separate observations —
-  /// either one being obvious removes the basis for asking.
+  /// Is the DISABILITY-RELATED NEED for what is asked readily observable? (A
+  /// dog guiding its handler; a wheelchair user asking for the one parking
+  /// space by the ramp.) Distinct from the above, and the guidance treats
+  /// them as two separate observations — either one being obvious removes
+  /// the basis for asking.
   needObservable: boolean
 }
 
@@ -289,9 +341,13 @@ export interface DeterminationInput {
   /// The written determination itself. RISK-13 asks for a written one, and
   /// this is it — not a status flip with the reasoning in somebody's head.
   determinationText: string
-  /// Required for an approval: the animal being approved has to be described
-  /// well enough that a later dispute about WHICH animal has an answer.
-  animalDescription: string
+  /// Required for an approval: what is being approved has to be described
+  /// well enough that a later dispute about WHICH animal, or about how far
+  /// an exception went, has an answer.
+  subjectDescription: string
+  /// Decides only the wording of the refusal — an animal and a policy
+  /// exception need describing for the same reason.
+  kind: AccommodationKind
 }
 
 /**
@@ -314,10 +370,12 @@ export function validateDetermination(input: DeterminationInput): Violation[] {
     })
   }
 
-  if (input.outcome === 'APPROVED' && input.animalDescription.trim().length < 3) {
+  if (input.outcome === 'APPROVED' && input.subjectDescription.trim().length < 3) {
     violations.push({
-      field: 'animalDescription',
-      message: 'Describe the animal being approved — species, and a name if there is one.',
+      field: 'subjectDescription',
+      message: isAnimalKind(input.kind)
+        ? 'Describe the animal being approved — species, and a name if there is one.'
+        : 'Write down exactly what was agreed, and for how long. "Approved" against an unrecorded scope is what the disagreement two years from now is about.',
     })
   }
 

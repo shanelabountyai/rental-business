@@ -100,7 +100,7 @@ async function request(
             status === 'APPROVED'
               ? 'Approved as an assistance animal under the FHA; no pet charges apply.'
               : 'Denied: no disability-related need was established after documentation was lawfully requested.',
-          ...(status === 'APPROVED' ? { animalDescription: 'Bella, a labrador retriever' } : {}),
+          ...(status === 'APPROVED' ? { subjectDescription: 'Bella, a labrador retriever' } : {}),
         }
 
   return prisma.accommodationRequest.create({
@@ -183,7 +183,7 @@ describe('the database refuses an indefensible record', () => {
           status: 'DENIED',
           requestText: 'Asked to keep a support dog.',
           receivedOn: new Date('2026-08-01T00:00:00.000Z'),
-          animalDescription: 'A dog',
+          subjectDescription: 'A dog',
         },
       }),
     ).rejects.toThrow()

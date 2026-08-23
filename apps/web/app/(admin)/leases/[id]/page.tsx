@@ -40,6 +40,9 @@ import {
 import { requestsForLease } from '@/lib/accommodations/queries.ts'
 import { openAbandonmentCase } from '@/lib/abandonment/actions.ts'
 import { casesForLease } from '@/lib/abandonment/queries.ts'
+import { OpenViolationCasePanel } from '@/components/violations/open-case-panel.tsx'
+import { openViolationCase } from '@/lib/violations/actions.ts'
+import { casesForLease as violationCasesForLease } from '@/lib/violations/queries.ts'
 import { holdsForLease } from '@/lib/holds/queries.ts'
 import { recordScraLookup, recordScraTermination } from '@/lib/scra/actions.ts'
 import { lookupsForLease } from '@/lib/scra/queries.ts'
@@ -215,6 +218,7 @@ export default async function LeaseDetailPage({
     scraLookups,
     accommodations,
     abandonmentCases,
+    violationCases,
   ] = await Promise.all([
     outstandingIntakeGaps(lease),
     canWrite ? selectableTenants() : Promise.resolve([]),
@@ -227,6 +231,7 @@ export default async function LeaseDetailPage({
     lookupsForLease(lease.id),
     requestsForLease(lease.id),
     casesForLease(lease.id),
+    violationCasesForLease(lease.id),
   ])
   // R-069: nothing to clear on a zero-deposit lease (NONE/SURETY_BOND hold
   // zero by the database CHECK constraint `chargeDeposit()`'s own comment
@@ -547,6 +552,17 @@ export default async function LeaseDetailPage({
                 }
               : null
           }
+        />
+      )}
+
+      {/* R-088. `lease.write`, deliberately NOT `eviction.manage`: recording
+          what was seen is the safe direction and the commonest outcome here
+          is the tenant keeping their home. Only closing a case as ESCALATED
+          asks for the eviction permission, and it asks at that moment. */}
+      {canWrite && (
+        <OpenViolationCasePanel
+          action={openViolationCase.bind(null, lease.id)}
+          cases={violationCases}
         />
       )}
 
