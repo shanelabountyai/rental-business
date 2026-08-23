@@ -614,6 +614,24 @@ export const AUDIT_ACTIONS = [
   /// `eviction.case_closed` makes.
   'abandonment.case_closed',
 
+  /// R-089 (RISK-07): an insurance claim was opened. Deliberately NOT
+  /// REASON_REQUIRED, unlike every other case-opening action in this
+  /// product: those are acts against a tenant, argued about later by that
+  /// tenant. A claim is a conversation with a carrier, and the claim's own
+  /// `description` column already carries what happened.
+  'claim.opened',
+  /// R-089: money arrived. Audited per payment because a settlement usually
+  /// lands as several cheques over months, and the P&L reads the payments -
+  /// a single recorded total could not say when any of it came.
+  'claim.payment_recorded',
+  /// R-089: one timeline or correspondence entry. What the carrier actually
+  /// said, and when, is the whole of a disputed claim.
+  'claim.event_logged',
+  /// R-089: the claim closed, and how. REASON_REQUIRED, the call every other
+  /// case-closing action in this product makes - this is the record the next
+  /// renewal conversation is had against.
+  'claim.closed',
+
   /// R-088 (RISK-02, RISK-03): a lease-violation case was opened -
   /// unauthorized occupant, unauthorized animal, or a premises condition.
   /// REASON_REQUIRED: every one of these ends either in somebody being told
@@ -812,6 +830,9 @@ export const REASON_REQUIRED: ReadonlySet<AuditAction> = new Set([
   'abandonment.case_closed',
   // R-086. Both outcomes - see the action's own comment.
   'accommodation.decided',
+  // R-089. Closing only. See `claim.opened`'s own comment for why opening a
+  // claim is not on this list.
+  'claim.closed',
   // R-088. Opening one starts a path that ends in somebody being told to
   // leave or to change how they live; closing one is the account of what
   // happened, including whether a legitimized occupant was actually screened.

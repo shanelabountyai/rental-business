@@ -3,13 +3,19 @@ import {
   type CapitalImprovementFact,
   type EvictionCostFact,
   type IncomeFact,
+  type InsuranceProceedFact,
   type TaxExportFacts,
   type UtilityBillFact,
   type VendorInvoiceSplitFact,
   type WorkOrderFact,
   buildTaxExport,
 } from './export.ts'
-import { CHARGE_TYPE_MAPPING, ledgerIncomeMapping, workOrderExpenseLine } from './schedule-e.ts'
+import {
+  CHARGE_TYPE_MAPPING,
+  SCHEDULE_E,
+  ledgerIncomeMapping,
+  workOrderExpenseLine,
+} from './schedule-e.ts'
 import { validateCapitalImprovement } from './validate.ts'
 
 const PROPERTY = 'prop_1'
@@ -26,6 +32,7 @@ function facts(overrides: Partial<TaxExportFacts> = {}): TaxExportFacts {
     invoiceSplits: [],
     utilityBills: [],
     evictionCosts: [],
+    insuranceProceeds: [],
     capitalImprovements: [],
     mortgageInterest: [],
     ...overrides,
@@ -98,6 +105,19 @@ function evictionCost(overrides: Partial<EvictionCostFact> = {}): EvictionCostFa
     description: 'JP court filing',
     amountCents: 12_100,
     incurredOn: new Date('2026-02-11T00:00:00Z'),
+    ...overrides,
+  }
+}
+
+function proceed(overrides: Partial<InsuranceProceedFact> = {}): InsuranceProceedFact {
+  return {
+    id: 'icp_1',
+    propertyId: PROPERTY,
+    claimId: 'clm_1',
+    claimNumber: 'CLM-77',
+    category: 'REPAIR',
+    amountCents: 480_000,
+    receivedOn: new Date('2026-03-04T00:00:00Z'),
     ...overrides,
   }
 }
@@ -463,6 +483,11 @@ describe('the reconciliation', () => {
       ],
       utilityBills: [utilityBill(), utilityBill({ id: 'ub_2', periodEnd: new Date('2025-06-30T00:00:00Z') })],
       evictionCosts: [evictionCost(), evictionCost({ id: 'ec_2', incurredOn: new Date('2025-02-11T00:00:00Z') })],
+      insuranceProceeds: [
+        proceed(),
+        proceed({ id: 'icp_2', category: 'LOSS_OF_RENTS' }),
+        proceed({ id: 'icp_3', receivedOn: new Date('2025-03-04T00:00:00Z') }),
+      ],
       capitalImprovements: [capex(), capex({ id: 'ci_2', inServiceOn: null })],
     })
 
@@ -478,6 +503,59 @@ describe('the reconciliation', () => {
         counts.facts,
       )
     }
+  })
+})
+
+describe('insurance proceeds (R-089)', () => {
+  // The one half that is not a judgement call: rent replacement is rent.
+  it('books loss-of-rents proceeds as rents received', () => {
+    const { lines } = buildTaxExport(
+      facts({ insuranceProceeds: [proceed({ category: 'LOSS_OF_RENTS' })] }),
+      'cash',
+    )
+    const line = lines.find((l) => l.sourceKind === 'InsuranceClaimPayment')
+    expect(line?.section).toBe('INCOME')
+    expect(line?.scheduleELabel).toBe(SCHEDULE_E.RENTS_RECEIVED.label)
+    expect(line?.amountCents).toBe(480_000)
+  })
+
+  // ==========================================================================
+  // AND THE OTHER HALF IS REFUSED, LOUDLY, RATHER THAN NETTED.
+  //
+  // Whether damage proceeds reduce a deduction, reduce basis, or are deferred
+  // under §1033 depends on facts this product holds and does not adjudicate.
+  // Netting them against the repair automatically would be this export making
+  // a tax call, silently, and being wrong in the cases that matter most.
+  // ==========================================================================
+  it('excepts damage proceeds instead of netting them against the repair', () => {
+    const result = buildTaxExport(facts({ insuranceProceeds: [proceed()] }), 'cash')
+    expect(result.lines.some((l) => l.sourceKind === 'InsuranceClaimPayment')).toBe(false)
+    const exception = result.exceptions.find((l) => l.sourceKind === 'InsuranceClaimPayment')
+    expect(exception).toBeDefined()
+    expect(exception!.reason).toMatch(/capitalised/)
+    expect(result.incomeCents).toBe(0)
+  })
+
+  it('does not exclude a claimed work order from the expense side', () => {
+    // A repair paid for by insurance is still a deductible repair - the
+    // proceeds are the offsetting item. There is deliberately no sixth
+    // exclusion door beside `capitalised` and `splitInvoiced`, so the job's
+    // own cost still reaches the export.
+    const result = buildTaxExport(
+      facts({ workOrders: [job()], insuranceProceeds: [proceed()] }),
+      'cash',
+    )
+    expect(result.counts.mapped).toBeGreaterThan(0)
+    expect(result.expenseCents).toBeGreaterThan(0)
+  })
+
+  it('counts a payment received in another year as out-of-year, never dropped', () => {
+    const { counts } = buildTaxExport(
+      facts({ insuranceProceeds: [proceed({ receivedOn: new Date('2025-03-04T00:00:00Z') })] }),
+      'cash',
+    )
+    expect(counts.outOfYear).toBe(1)
+    expect(counts.facts).toBe(1)
   })
 })
 

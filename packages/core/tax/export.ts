@@ -118,6 +118,40 @@ export interface EvictionCostFact {
 }
 
 /**
+ * One insurance payment that actually arrived (R-089, RISK-07).
+ *
+ * ==========================================================================
+ * THE TWO HALVES GO TO DIFFERENT PLACES, AND THAT IS WHY `category` IS HERE.
+ *
+ * Loss-of-rents proceeds REPLACE RENT, and rent is income — they map to
+ * `RENTS_RECEIVED` with no more ceremony than a tenant's payment.
+ *
+ * Proceeds for physical damage are not income in the ordinary case. What they
+ * actually do depends on facts this product holds but does not adjudicate:
+ * whether the repair was deducted as a repair or capitalised, whether the
+ * proceeds exceeded the adjusted basis, whether a §1033 involuntary-conversion
+ * deferral is being elected. Netting them against the repair deduction
+ * automatically would be this export making a tax call it has no business
+ * making — and getting it wrong silently, which is worse than not making it.
+ *
+ * So they are EXCEPTED, with the reasoning and the linked jobs named, and the
+ * counted exception is what makes them impossible to overlook. That is the
+ * same posture `UNSOURCED_LINES` takes about premiums and the utility bill
+ * takes about cash-basis dates: say plainly what this product will not
+ * decide, and put it in front of the preparer.
+ * ==========================================================================
+ */
+export interface InsuranceProceedFact {
+  id: string
+  propertyId: string
+  claimId: string
+  claimNumber: string | null
+  category: 'REPAIR' | 'LOSS_OF_RENTS' | 'CONTENTS' | 'OTHER'
+  amountCents: number
+  receivedOn: Date
+}
+
+/**
  * One lender's Form 1098 for the year (R-081b).
  *
  * Annual by construction: a 1098 covers a calendar year and names no month,
@@ -163,6 +197,9 @@ export interface TaxExportFacts {
   invoiceSplits: readonly VendorInvoiceSplitFact[]
   utilityBills: readonly UtilityBillFact[]
   evictionCosts: readonly EvictionCostFact[]
+  /// R-089. Payments received against insurance claims, already scoped to
+  /// this entity's properties by the caller.
+  insuranceProceeds: readonly InsuranceProceedFact[]
   capitalImprovements: readonly CapitalImprovementFact[]
   /// The 1098s recorded for this tax year. Already year-scoped by the
   /// caller - `taxYear` is a plain integer column, so there is no window and
@@ -487,6 +524,43 @@ export function buildTaxExport(facts: TaxExportFacts, basis: AccountingBasis): T
     })
   }
 
+  // -- Insurance proceeds ---------------------------------------------------
+  //
+  // `receivedOn` is the only date these carry and it is a receipt date, so
+  // the same day serves both bases — the same reasoning eviction costs get,
+  // arriving from the opposite direction.
+  for (const proceed of facts.insuranceProceeds) {
+    if (!inYear(calendarDay(proceed.receivedOn))) {
+      outOfYear += 1
+      continue
+    }
+    const label = proceed.claimNumber ? `claim ${proceed.claimNumber}` : 'unnumbered claim'
+    const common = {
+      bookedOn: calendarDay(proceed.receivedOn),
+      propertyId: proceed.propertyId,
+      amountCents: proceed.amountCents,
+      sourceKind: 'InsuranceClaimPayment' as const,
+      sourceId: proceed.id,
+    }
+
+    // Rent replacement is rent. The one half of this that is not a judgement
+    // call.
+    if (proceed.category === 'LOSS_OF_RENTS') {
+      mapped('INCOME', 'RENTS_RECEIVED', {
+        ...common,
+        description: `Insurance loss-of-rents proceeds — ${label}`,
+      })
+      continue
+    }
+
+    except({
+      ...common,
+      description: `Insurance proceeds (${proceed.category.toLowerCase()}) — ${label}`,
+      reason:
+        'Proceeds for physical damage are not ordinarily rental income, and what they are instead depends on whether the repair was deducted or capitalised, on the property’s adjusted basis, and on whether a §1033 deferral is being elected. This export will not decide that. The repair itself is deducted where the work orders record it — take both to your preparer together.',
+    })
+  }
+
   // -- Mortgage interest, from the lender's 1098 ----------------------------
   //
   // The same figure on either basis: a 1098 reports the interest RECEIVED by
@@ -581,6 +655,7 @@ export function buildTaxExport(facts: TaxExportFacts, basis: AccountingBasis): T
         facts.invoiceSplits.length +
         facts.utilityBills.length +
         facts.evictionCosts.length +
+        facts.insuranceProceeds.length +
         facts.capitalImprovements.length +
         facts.mortgageInterest.length,
       mapped: lines.length,

@@ -5,6 +5,9 @@ import { closedJobCostsForProperty } from '@/lib/workorders/verify.ts'
 import { notFound } from 'next/navigation'
 import { DocumentsSection } from '@/components/documents/documents-section.tsx'
 import { FilingCabinetSection } from '@/components/filing-cabinet/filing-cabinet-section.tsx'
+import { OpenClaimPanel } from '@/components/insurance/open-claim-panel.tsx'
+import { openClaim } from '@/lib/insurance/actions.ts'
+import { claimsForProperty, policiesForProperty } from '@/lib/insurance/queries.ts'
 import { actorCan, propertyResource, requireScope } from '@/lib/auth/guard.ts'
 import { currentScope as switcherScope } from '@/lib/scope/current-scope.ts'
 import { listDeletedDocuments, listDocuments } from '@/lib/documents/queries.ts'
@@ -76,16 +79,27 @@ export default async function PropertyDetailPage({
   // manager's Edit button was wrongly hidden here until this fix, the same
   // gap as the edit page's own guard.
   const canWrite = await actorCan('property.write', propertyResource(property))
-  const [units, canWriteUnits, documents, deletedDocuments, canWriteDocuments, canDeleteDocuments, filingCabinet] =
-    await Promise.all([
-      listUnits(id, scope),
-      actorCan('unit.write', propertyResource(property)),
-      listDocuments(id, scope),
-      listDeletedDocuments(id, scope),
-      actorCan('document.write', propertyResource(property)),
-      actorCan('document.delete', propertyResource(property)),
-      getFilingCabinet(id, scope),
-    ])
+  const [
+    units,
+    canWriteUnits,
+    documents,
+    deletedDocuments,
+    canWriteDocuments,
+    canDeleteDocuments,
+    filingCabinet,
+    claims,
+    policies,
+  ] = await Promise.all([
+    listUnits(id, scope),
+    actorCan('unit.write', propertyResource(property)),
+    listDocuments(id, scope),
+    listDeletedDocuments(id, scope),
+    actorCan('document.write', propertyResource(property)),
+    actorCan('document.delete', propertyResource(property)),
+    getFilingCabinet(id, scope),
+    claimsForProperty(id),
+    policiesForProperty(id),
+  ])
   // R-030's "attach to the property and flow to reporting". Costed here
   // rather than in the query so `jobCostCents()` stays the one rule for what
   // the business is asked to PAY - the same function the close screen and
@@ -260,6 +274,16 @@ export default async function PropertyDetailPage({
           capitalImprovements={filingCabinet.capitalImprovements}
           canWrite={canWrite}
         />
+        {/* R-089. Below the filing cabinet on purpose: a claim is opened
+            against a policy that lives up there, and the panel refuses
+            outright when none is on file. */}
+        {canWrite && (
+          <OpenClaimPanel
+            action={openClaim.bind(null, id)}
+            claims={claims}
+            policies={policies}
+          />
+        )}
         <EmptySection
           title="Financials"
           ownedBy="R-035"

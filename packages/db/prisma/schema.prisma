@@ -568,6 +568,7 @@ model Property {
   jobRuns             JobRun[]
   mortgages           Mortgage[]
   insurancePolicies   InsurancePolicy[]
+  insuranceClaims     InsuranceClaim[]
   hoaInfo             HoaInfo?
   warranties          Warranty[]
   capitalImprovements CapitalImprovement[]
@@ -686,9 +687,199 @@ model InsurancePolicy {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  property Property @relation(fields: [propertyId], references: [id])
+  property Property         @relation(fields: [propertyId], references: [id])
+  claims   InsuranceClaim[]
 
   @@index([propertyId, renewsOn])
+}
+
+/// Mirrors `CAUSES_OF_LOSS` in packages/core/insurance.
+enum CauseOfLoss {
+  WATER
+  FIRE
+  WIND_HAIL
+  THEFT_VANDALISM
+  LIABILITY
+  OTHER
+}
+
+/// Two values, the same call R-088's `ViolationStatus` makes: the STAGE a
+/// claim has reached is its event log, not a column that would then have to
+/// be kept in step with it. Its own enum rather than sharing that one -
+/// a field typed `ViolationStatus` on an insurance claim reads as a mistake
+/// every time somebody meets it.
+enum ClaimStatus {
+  OPEN
+  CLOSED
+}
+
+/// Mirrors `CLAIM_OUTCOMES`.
+enum ClaimOutcome {
+  PAID
+  PARTIALLY_PAID
+  DENIED
+  WITHDRAWN
+}
+
+/// Mirrors `PAYMENT_CATEGORIES`. The split exists because the two halves are
+/// taxed differently - loss-of-rents proceeds replace rent and are income;
+/// proceeds for physical damage are not, in the ordinary case. Which half a
+/// payment belongs to is knowable exactly once, when the cheque and its
+/// letter are in front of somebody, so it is a required column rather than
+/// something reconstructed in January from a bank line reading "CLAIM
+/// SETTLEMENT".
+enum ClaimPaymentCategory {
+  REPAIR
+  LOSS_OF_RENTS
+  CONTENTS
+  OTHER
+}
+
+/// Mirrors `CLAIM_EVENT_KINDS`. One vocabulary for the timeline and the
+/// correspondence log, because they are one thing: what happened, when, and
+/// what paper it left.
+enum ClaimEventKind {
+  REPORTED
+  ADJUSTER_ASSIGNED
+  INSPECTION
+  ESTIMATE_RECEIVED
+  CORRESPONDENCE_IN
+  CORRESPONDENCE_OUT
+  OFFER
+  NOTE
+}
+
+/// An insurance claim (RISK-07, R-089).
+///
+/// THERE IS NO `repairCostCents` COLUMN, deliberately. RISK-07 asks for
+/// "payout vs actual repair cost" and the tempting build is a number typed
+/// off the adjuster's worksheet. D-19 settled that: the cost of a job is
+/// typed once, on the work order, and every downstream reader computes from
+/// that row. A claim LINKS work orders (`WorkOrder.insuranceClaimId`) and
+/// `claimPosition` sums `jobCostCents` over them, so the claim's repair cost
+/// and the property's maintenance spend cannot disagree.
+///
+/// The deductible and whether loss of rents is covered are NOT copied here
+/// either - they are `InsurancePolicy`'s, which is why `policyId` is
+/// required. A claim against no policy on file is a claim nobody can
+/// evaluate.
+model InsuranceClaim {
+  id         String @id @default(cuid())
+  propertyId String
+  policyId   String
+
+  /// Null until the carrier assigns one, which is often days later.
+  claimNumber String?
+  cause       CauseOfLoss
+  description String
+
+  /// When the loss happened, and when somebody started drying, boarding or
+  /// making safe. The gap between them is what a disputed water claim turns
+  /// on - see `mitigationClock`.
+  incidentAt          DateTime
+  mitigationStartedAt DateTime?
+  /// When the carrier was told.
+  reportedAt          DateTime?
+
+  /// An adjuster is not a `Vendor`: that model is a dispatchable, payable
+  /// trade contact carrying W-9 status, trades, service areas and emergency
+  /// availability, none of which means anything here. Four columns beat
+  /// misusing a model whose fields have jobs elsewhere.
+  adjusterName    String?
+  adjusterCompany String?
+  adjusterPhone   String?
+  adjusterEmail   String?
+
+  /// Loss-of-rents evidence. The RENT IS NOT STORED - the lease's own
+  /// `rentCents` is the best evidence there is, and the unit's asking rent
+  /// is the fallback when the tenancy had already ended. Which source was
+  /// used is part of the answer and is recomputed on every read.
+  lossOfRentsUnitId  String?
+  lossOfRentsLeaseId String?
+  lossOfRentsFromOn  DateTime? @db.Date
+  lossOfRentsToOn    DateTime? @db.Date
+
+  status      ClaimStatus   @default(OPEN)
+  outcome     ClaimOutcome?
+  outcomeNote String?
+
+  openedAt        DateTime  @default(now())
+  openedByStaffId String
+  closedAt        DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  property         Property        @relation(fields: [propertyId], references: [id])
+  policy           InsurancePolicy @relation(fields: [policyId], references: [id])
+  openedBy         StaffUser       @relation("ClaimOpenedBy", fields: [openedByStaffId], references: [id], onDelete: Restrict)
+  /// Restrict, explicitly. An optional relation with no `onDelete` defaults
+  /// to SetNull, which would quietly erase which tenancy's rent was lost -
+  /// the whole of a loss-of-rents figure's provenance.
+  lossOfRentsUnit  Unit?           @relation("ClaimLossOfRentsUnit", fields: [lossOfRentsUnitId], references: [id], onDelete: Restrict)
+  lossOfRentsLease Lease?          @relation("ClaimLossOfRentsLease", fields: [lossOfRentsLeaseId], references: [id], onDelete: Restrict)
+
+  workOrders WorkOrder[]
+  payments   InsuranceClaimPayment[]
+  events     InsuranceClaimEvent[]
+  documents  Document[]              @relation("InsuranceClaimDocuments")
+
+  @@index([propertyId, status])
+  @@index([policyId])
+  @@index([status, openedAt])
+  @@index([lossOfRentsUnitId])
+  @@index([lossOfRentsLeaseId])
+}
+
+/// Money that actually arrived, split by what it was for.
+///
+/// Its own table rather than a column on the claim, for the reason
+/// `EvictionCost` has one: a settlement usually arrives as several cheques
+/// over months - an advance on mitigation, then the building, then the rents
+/// - and a single total cannot say when any of it landed. The tax export
+/// reads these rows directly, the way it reads `EvictionCost`, because
+/// `LedgerEntry` is strictly lease-scoped and a property-level receipt has no
+/// route through it.
+model InsuranceClaimPayment {
+  id      String @id @default(cuid())
+  claimId String
+
+  category    ClaimPaymentCategory
+  amountCents Int
+  receivedOn  DateTime             @db.Date
+  /// Cheque number, EFT reference, whatever identifies it on a statement.
+  reference   String?
+  note        String?
+
+  recordedAt        DateTime @default(now())
+  recordedByStaffId String
+
+  claim      InsuranceClaim @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  recordedBy StaffUser      @relation("ClaimPaymentRecordedBy", fields: [recordedByStaffId], references: [id], onDelete: Restrict)
+
+  @@index([claimId, receivedOn])
+}
+
+/// The timeline and the correspondence log, which are one thing.
+model InsuranceClaimEvent {
+  id      String @id @default(cuid())
+  claimId String
+
+  kind       ClaimEventKind
+  occurredAt DateTime
+  note       String
+  /// The letter, the estimate, the scope. Same shape `EvictionCost` uses for
+  /// its receipt.
+  documentId String?
+
+  recordedAt        DateTime @default(now())
+  recordedByStaffId String
+
+  claim      InsuranceClaim @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  document   Document?      @relation("ClaimEventDocument", fields: [documentId], references: [id], onDelete: Restrict)
+  recordedBy StaffUser      @relation("ClaimEventRecordedBy", fields: [recordedByStaffId], references: [id], onDelete: Restrict)
+
+  @@index([claimId, occurredAt])
 }
 
 /// One row per property, unlike Mortgage/InsurancePolicy/Warranty - a
@@ -909,22 +1100,23 @@ model Unit {
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
 
-  property         Property          @relation(fields: [propertyId], references: [id])
-  leases           Lease[]
-  tickets          Ticket[]
-  workOrders       WorkOrder[]
-  evictionCases    EvictionCase[]
-  turnoverProjects TurnoverProject[]
-  inspections      Inspection[]
-  documents        Document[]
-  accessCodes      AccessCode[]
-  appliances       Appliance[]
-  utilityAccounts  UtilityAccount[]
-  shutoffs         ShutoffLocation[]
-  listings         Listing[]
-  showings         Showing[]
-  abandonmentCases AbandonmentCase[]
-  violationCases   ViolationCase[]
+  property                   Property          @relation(fields: [propertyId], references: [id])
+  leases                     Lease[]
+  tickets                    Ticket[]
+  workOrders                 WorkOrder[]
+  evictionCases              EvictionCase[]
+  turnoverProjects           TurnoverProject[]
+  inspections                Inspection[]
+  documents                  Document[]
+  accessCodes                AccessCode[]
+  appliances                 Appliance[]
+  utilityAccounts            UtilityAccount[]
+  shutoffs                   ShutoffLocation[]
+  listings                   Listing[]
+  showings                   Showing[]
+  abandonmentCases           AbandonmentCase[]
+  violationCases             ViolationCase[]
+  insuranceClaimsLossOfRents InsuranceClaim[]  @relation("ClaimLossOfRentsUnit")
 
   @@unique([propertyId, name])
   @@index([status])
@@ -1602,6 +1794,9 @@ model StaffUser {
   accommodationsDecided                   AccommodationRequest[]          @relation("AccommodationDecidedBy")
   abandonmentCasesOpened                  AbandonmentCase[]               @relation("AbandonmentOpenedBy")
   violationCasesOpened                    ViolationCase[]                 @relation("ViolationOpenedBy")
+  insuranceClaimsOpened                   InsuranceClaim[]                @relation("ClaimOpenedBy")
+  insuranceClaimPaymentsRecorded          InsuranceClaimPayment[]         @relation("ClaimPaymentRecordedBy")
+  insuranceClaimEventsRecorded            InsuranceClaimEvent[]           @relation("ClaimEventRecordedBy")
   violationObservationsRecorded           ViolationObservation[]          @relation("ViolationObservedBy")
   abandonmentAttemptsRecorded             AbandonmentContactAttempt[]     @relation("AbandonmentAttemptRecordedBy")
   leaseHoldsPlaced                        LeaseHold[]                     @relation("LeaseHoldPlacedBy")
@@ -1926,35 +2121,36 @@ model Lease {
   renewedFrom        Lease?  @relation("LeaseRenewal", fields: [renewedFromLeaseId], references: [id], onDelete: Restrict)
   renewalLeases      Lease[] @relation("LeaseRenewal")
 
-  property                Property                @relation(fields: [propertyId], references: [id])
-  unit                    Unit                    @relation(fields: [unitId], references: [id])
-  leaseTenants            LeaseTenant[]
-  guarantors              Guarantor[]
+  property                   Property                @relation(fields: [propertyId], references: [id])
+  unit                       Unit                    @relation(fields: [unitId], references: [id])
+  leaseTenants               LeaseTenant[]
+  guarantors                 Guarantor[]
   /// Almost always zero or one - see LeaseEnvelope.leaseId's own comment for
   /// why this is not a to-one relation.
-  envelopes               LeaseEnvelope[]
-  leasePayers             LeasePayer[]
-  charges                 Charge[]                @relation("ChargeLease")
+  envelopes                  LeaseEnvelope[]
+  leasePayers                LeasePayer[]
+  charges                    Charge[]                @relation("ChargeLease")
   /// Late fees assessed against this lease's own unlinked-rent balance,
   /// rather than against a specific Charge (R-050b). See `Charge.assessedOnLeaseId`.
-  assessedLateFees        Charge[]                @relation("ChargeAssessedOnLease")
-  payments                Payment[]
-  ledgerEntries           LedgerEntry[]
-  deposits                Deposit[]
-  renterInsurancePolicies RenterInsurancePolicy[]
-  recurringCharges        RecurringCharge[]
-  tickets                 Ticket[]
-  inspections             Inspection[]
-  threads                 Thread[]
-  notices                 Notice[]
-  evictionCases           EvictionCase[]
-  documents               Document[]
-  turnoverProject         TurnoverProject?
-  holds                   LeaseHold[]
-  scraLookups             ScraLookup[]
-  accommodations          AccommodationRequest[]
-  abandonmentCases        AbandonmentCase[]
-  violationCases          ViolationCase[]
+  assessedLateFees           Charge[]                @relation("ChargeAssessedOnLease")
+  payments                   Payment[]
+  ledgerEntries              LedgerEntry[]
+  deposits                   Deposit[]
+  renterInsurancePolicies    RenterInsurancePolicy[]
+  recurringCharges           RecurringCharge[]
+  tickets                    Ticket[]
+  inspections                Inspection[]
+  threads                    Thread[]
+  notices                    Notice[]
+  evictionCases              EvictionCase[]
+  documents                  Document[]
+  turnoverProject            TurnoverProject?
+  holds                      LeaseHold[]
+  scraLookups                ScraLookup[]
+  accommodations             AccommodationRequest[]
+  abandonmentCases           AbandonmentCase[]
+  violationCases             ViolationCase[]
+  insuranceClaimsLossOfRents InsuranceClaim[]        @relation("ClaimLossOfRentsLease")
 
   @@index([propertyId])
   @@index([unitId])
@@ -3807,12 +4003,25 @@ model WorkOrder {
   /// for the same reason `capitalImprovement` does - one bill, one deduction.
   invoiceSplit            VendorInvoiceSplit?
 
+  /// R-089: the claim this job is being recovered under, if any. The claim's
+  /// repair cost is `jobCostCents` summed over these rows - which is why the
+  /// claim carries no cost column of its own (D-19).
+  ///
+  /// Being on a claim does NOT exclude a job from the expense export the way
+  /// a CapitalImprovement or a split invoice does: a repair paid for by
+  /// insurance is still a deductible repair, and the PROCEEDS are the
+  /// offsetting item. A sixth exclusion door here would delete the deduction
+  /// and leave the proceeds unreported, which is the wrong answer twice.
+  insuranceClaimId String?
+  insuranceClaim   InsuranceClaim? @relation(fields: [insuranceClaimId], references: [id], onDelete: Restrict)
+
   @@index([propertyId, status])
   @@index([unitId])
   @@index([vendorId])
   @@index([status, priority])
   @@index([turnoverProjectId])
   @@index([pmTemplateId])
+  @@index([insuranceClaimId])
 }
 
 /// A recurring preventive-maintenance task the PM can batch-create across
@@ -4923,6 +5132,15 @@ model Document {
   /// what anybody is arguing about.
   violationObservationId  String?
   violationObservation    ViolationObservation?     @relation("ViolationObservationPhotos", fields: [violationObservationId], references: [id])
+  /// R-089: loss photographs and video, attached to the CLAIM rather than to
+  /// an event - the first thing anybody does at a fresh loss is photograph
+  /// everything, before there is any correspondence to file it against, and a
+  /// prompt demanding an event first is one nobody completes while standing in
+  /// six inches of water.
+  insuranceClaimId        String?
+  insuranceClaim          InsuranceClaim?           @relation("InsuranceClaimDocuments", fields: [insuranceClaimId], references: [id])
+  /// The letter or estimate behind one event.
+  claimEvents             InsuranceClaimEvent[]     @relation("ClaimEventDocument")
 
   @@index([propertyId, type])
   @@index([legalEntityId, type])
@@ -4935,6 +5153,7 @@ model Document {
   @@index([accommodationRequestId])
   @@index([abandonmentCaseId])
   @@index([violationObservationId])
+  @@index([insuranceClaimId])
 }
 
 // ---------------------------------------------------------------------------

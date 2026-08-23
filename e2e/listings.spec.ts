@@ -73,6 +73,17 @@ async function signIn(page: import('@playwright/test').Page, email: string) {
 }
 
 test.afterAll(async () => {
+  // Leads first, and this spec is the reason the ordering matters: its own
+  // anonymous-visitor test loads the hosted listing page, and every visit to
+  // that page writes a `ListingLead` (R-057's attribution log). Deleting the
+  // listing out from under one violates `ListingLead_listingId_fkey`.
+  //
+  // Latent rather than always-red because `recordListingLead` is
+  // fire-and-forget - the row sometimes lands after teardown has already run,
+  // so the failure only appears when the write wins the race. The three specs
+  // that already delete leads first (listing-syndication, leasing-analytics,
+  // prospects) had the line and this one did not.
+  await prisma.listingLead.deleteMany({ where: { listingId: { in: listingIds } } })
   await prisma.listing.deleteMany({ where: { id: { in: listingIds } } })
   await prisma.unit.deleteMany({ where: { id: { in: unitIds } } })
   await prisma.property.updateMany({ where: { id: { in: propertyIds } }, data: { active: false } })

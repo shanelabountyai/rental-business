@@ -149,6 +149,15 @@ export const NAV_ITEMS: readonly NavItem[] = [
     ownedBy: 'R-087',
   },
   {
+    href: '/claims',
+    label: 'Claims',
+    /// Property-level, so the property permission. Not `report.financial`:
+    /// the money here never touches the tenant ledger, and the people who
+    /// need to see a live water claim are the ones who manage the building.
+    permission: 'property.read',
+    ownedBy: 'R-089',
+  },
+  {
     href: '/violations',
     label: 'Violations',
     /// `lease.read`, not `eviction.manage`. Most of what happens here ends

@@ -109,6 +109,7 @@ export async function taxExportFacts(
     mortgageStatements,
     capitalImprovements,
     invoiceSplits,
+    insuranceProceeds,
   ] = await Promise.all([
       basis === 'cash'
         ? prisma.ledgerEntry.findMany({
@@ -261,6 +262,23 @@ export async function taxExportFacts(
           },
         },
       }),
+      // R-089. Widened to the same window the other receipt-dated facts use,
+      // so a payment landing either side of the year boundary still reaches
+      // the export and is counted out rather than dropped silently.
+      prisma.insuranceClaimPayment.findMany({
+        where: {
+          receivedOn: { gte: windowStart, lte: windowEnd },
+          claim: { propertyId: { in: propertyIds } },
+        },
+        select: {
+          id: true,
+          category: true,
+          amountCents: true,
+          receivedOn: true,
+          claimId: true,
+          claim: { select: { propertyId: true, claimNumber: true } },
+        },
+      }),
     ])
 
   const income: IncomeFact[] = [
@@ -326,6 +344,15 @@ export async function taxExportFacts(
       description: row.description,
       amountCents: row.amountCents,
       incurredOn: row.incurredOn,
+    })),
+    insuranceProceeds: insuranceProceeds.map((row) => ({
+      id: row.id,
+      propertyId: row.claim.propertyId,
+      claimId: row.claimId,
+      claimNumber: row.claim.claimNumber,
+      category: row.category,
+      amountCents: row.amountCents,
+      receivedOn: row.receivedOn,
     })),
     capitalImprovements,
     mortgageInterest: mortgageStatements.map((row) => ({
