@@ -3506,7 +3506,7 @@ Two defects of my own in the new spec, and the second is the same shape. The evi
 ---
 
 ## R-087 — Tenant goes dark: the abandonment case file
-**Commit:** `PENDING`  ·  **Date:** 2026-08-23
+**Commit:** `742dd93`  ·  **Date:** 2026-08-23
 
 **What it built.** RISK-01: `packages/core/abandonment` (contact methods and outcomes, the evidence assessment, and the two statutory clocks), `AbandonmentCase` + `AbandonmentContactAttempt` with the migration `20260823010000_r087_abandonment`, three new `JurisdictionRule` periods, six audit actions, a `/abandonment` register and case file, and an open-a-case panel on the tenancy.
 
