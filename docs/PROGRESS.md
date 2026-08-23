@@ -3565,7 +3565,7 @@ Two defects of my own in the new spec, and the second is the same shape. The evi
 - **The unauthorized-pet fee path is a pointer, not a flow.** Closing as legitimized records which animal was authorized; adding the pet rent is then the operator's own trip to the recurring-charge panel, which is where `petMoneyAllowed` already guards it. Wiring the two together would have meant a second pet-money writer, which is exactly what D-88 says not to build.
 
 ## R-089 — Insurance claims
-**Commit:** `PENDING`  ·  **Date:** 2026-08-23
+**Commit:** `7a02a9b`  ·  **Date:** 2026-08-23
 
 **What it built.** RISK-07: `packages/core/insurance` (causes of loss, the mitigation clock, loss-of-rents pricing, `claimPosition`, closure validation), `InsuranceClaim` + `InsuranceClaimPayment` + `InsuranceClaimEvent` with the migration `20260823030000_r089_insurance_claims`, `WorkOrder.insuranceClaimId`, a new `InsuranceProceedFact` in the tax export, four audit actions, a `/claims` register and claim file, and an open-a-claim panel on the property.
 
