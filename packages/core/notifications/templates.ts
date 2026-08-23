@@ -1635,7 +1635,50 @@ export const mtmRolloverTemplate: NotificationTemplate<MtmRolloverContext> = {
   },
 }
 
+/// Context for `accommodation.determination` (RISK-13, R-086) - the written
+/// determination on an assistance-animal request, sent to the person who
+/// asked.
+///
+/// EMAIL ONLY, and that is deliberate. RISK-13 asks for a WRITTEN
+/// determination; a 160-character text saying "approved" is not one, and
+/// splitting the reasoning across message parts would produce a record that
+/// reads differently depending on the carrier. The determination text goes
+/// out whole or not at all.
+export interface AccommodationDeterminationContext {
+  tenantName: string
+  addressLine1: string
+  approved: boolean
+  determinationText: string
+}
+
+export const accommodationDeterminationTemplate: NotificationTemplate<AccommodationDeterminationContext> =
+  {
+    key: 'accommodation.determination',
+    category: 'legal_notice',
+    channels: ['EMAIL'],
+    render: (context) => ({
+      subject: `Your accommodation request for ${context.addressLine1}`,
+      body: [
+        `Hi ${context.tenantName},`,
+        '',
+        `This is our written determination on your request for an assistance animal at ${context.addressLine1}.`,
+        '',
+        context.approved ? 'Your request has been APPROVED.' : 'Your request has been DENIED.',
+        '',
+        context.determinationText,
+        '',
+        // Said on every determination, not only denials: somebody who was
+        // approved on narrower terms than they asked for has the same right
+        // to say so, and a product that only mentions it when refusing is
+        // telling them something about which answers are contestable.
+        'If you believe this determination is wrong, tell us — and you may also contact HUD or your state fair-housing agency.',
+      ].join('\n'),
+    }),
+  }
+
 export const TEMPLATES: Readonly<Record<string, NotificationTemplate<never>>> = {
+  [accommodationDeterminationTemplate.key]:
+    accommodationDeterminationTemplate as unknown as NotificationTemplate<never>,
   [vendorDeclinedTemplate.key]:
     vendorDeclinedTemplate as unknown as NotificationTemplate<never>,
   [vendorMessageTemplate.key]:

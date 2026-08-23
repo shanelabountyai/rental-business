@@ -263,10 +263,17 @@ test.describe('notification preferences (NOTIF-02)', () => {
     await signIn(page, staff.email)
 
     await page.goto('/account')
-    const rentReminders = page
-      .getByRole('listitem')
-      .filter({ hasText: 'Rent reminders' })
-    const emailToggle = rentReminders.getByLabel('Email')
+    // BY ITS ID, not by filtering list items on "Rent reminders".
+    //
+    // `hasText` is a case-insensitive SUBSTRING match, and the daily-digest
+    // row's own label spells out what it replaces — "(rent reminders,
+    // maintenance updates, renewals, …)" — so the filter matches two list
+    // items and the Email checkbox inside them resolves to two elements.
+    // Latent since the digest category was given that explanatory label;
+    // found by R-086, which was the first item to run this spec alongside
+    // its own. The ids are deliberately constructed as
+    // `pref-${category}-${channel}`, so this names exactly one control.
+    const emailToggle = page.locator('#pref-rent_reminder-EMAIL')
     await expect(emailToggle).toBeChecked()
 
     // A Server Action form ships a placeholder action until hydration

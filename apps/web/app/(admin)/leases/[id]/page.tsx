@@ -12,6 +12,7 @@ import { businessDate, friendlyDate, utcToBusinessDate } from '@rental/core/sche
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { AccessCodesPanel } from '@/components/leases/access-codes-panel.tsx'
+import { AccommodationsPanel } from '@/components/accommodations/accommodations-panel.tsx'
 import { HoldBanner } from '@/components/holds/hold-banner.tsx'
 import { HoldsPanel } from '@/components/holds/holds-panel.tsx'
 import { ScraLookupsPanel, ScraTerminationPanel } from '@/components/scra/scra-panels.tsx'
@@ -30,6 +31,12 @@ import { RenewalPanel } from '@/components/leases/renewal-panel.tsx'
 import { RenterInsurancePanel } from '@/components/leases/renter-insurance-panel.tsx'
 import { accessCodesForLease } from '@/lib/leases/access-code-queries.ts'
 import { liftLeaseHold, placeLeaseHold } from '@/lib/holds/actions.ts'
+import {
+  decideAccommodationRequest,
+  receiveAccommodationRequest,
+  requestDocumentation,
+} from '@/lib/accommodations/actions.ts'
+import { requestsForLease } from '@/lib/accommodations/queries.ts'
 import { holdsForLease } from '@/lib/holds/queries.ts'
 import { recordScraLookup, recordScraTermination } from '@/lib/scra/actions.ts'
 import { lookupsForLease } from '@/lib/scra/queries.ts'
@@ -190,8 +197,18 @@ export default async function LeaseDetailPage({
       action: changeLeaseStatus.bind(null, lease.id, to),
     }))
 
-  const [gaps, tenants, payers, ledger, fees, recurring, accessCodes, holds, scraLookups] =
-    await Promise.all([
+  const [
+    gaps,
+    tenants,
+    payers,
+    ledger,
+    fees,
+    recurring,
+    accessCodes,
+    holds,
+    scraLookups,
+    accommodations,
+  ] = await Promise.all([
     outstandingIntakeGaps(lease),
     canWrite ? selectableTenants() : Promise.resolve([]),
     leaseBillingState(lease.id),
@@ -201,6 +218,7 @@ export default async function LeaseDetailPage({
     accessCodesForLease(lease.unitId, lease.id),
     holdsForLease(lease.id),
     lookupsForLease(lease.id),
+    requestsForLease(lease.id),
   ])
   // R-069: nothing to clear on a zero-deposit lease (NONE/SURETY_BOND hold
   // zero by the database CHECK constraint `chargeDeposit()`'s own comment
@@ -488,6 +506,23 @@ export default async function LeaseDetailPage({
           id: lt.tenant.id,
           name: `${lt.tenant.firstName} ${lt.tenant.lastName}`,
         }))}
+      />
+
+      {/* R-086. Above the SCRA panels rather than below: an approved
+          assistance animal changes what may be BILLED, so it belongs near
+          the money and the holds rather than at the bottom of the page. */}
+      <AccommodationsPanel
+        leaseId={lease.id}
+        requests={accommodations}
+        canManage={canWrite}
+        today={businessDate(new Date(), lease.property.timezone)}
+        tenants={lease.leaseTenants.map((lt) => ({
+          id: lt.tenant.id,
+          name: `${lt.tenant.firstName} ${lt.tenant.lastName}`,
+        }))}
+        receiveAction={receiveAccommodationRequest.bind(null, lease.id)}
+        documentationAction={requestDocumentation}
+        decideAction={decideAccommodationRequest}
       />
 
       <ScraTerminationPanel

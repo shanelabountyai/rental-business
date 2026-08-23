@@ -576,6 +576,7 @@ model Property {
   reserve             PropertyReserve?
   leaseHolds          LeaseHold[]
   scraLookups         ScraLookup[]
+  accommodations      AccommodationRequest[]
 
   @@index([legalEntityId])
   @@index([state])
@@ -1589,6 +1590,7 @@ model StaffUser {
   translationsApproved                    MessageTemplateTranslation[]    @relation("TranslationApprovedBy")
   paymentHoldsSet                         LeasePayer[]                    @relation("PaymentHoldSetBy")
   scraLookupsRecorded                     ScraLookup[]                    @relation("ScraLookupRecordedBy")
+  accommodationsDecided                   AccommodationRequest[]          @relation("AccommodationDecidedBy")
   leaseHoldsPlaced                        LeaseHold[]                     @relation("LeaseHoldPlacedBy")
   leaseHoldsLifted                        LeaseHold[]                     @relation("LeaseHoldLiftedBy")
   listingsCreated                         Listing[]                       @relation("ListingCreatedBy")
@@ -1629,6 +1631,7 @@ model Tenant {
   documents              Document[]
   consents               TenantConsent[]
   scraLookups            ScraLookup[]
+  accommodations         AccommodationRequest[]
 
   @@index([lastName, firstName])
   @@index([email])
@@ -1936,6 +1939,7 @@ model Lease {
   turnoverProject         TurnoverProject?
   holds                   LeaseHold[]
   scraLookups             ScraLookup[]
+  accommodations          AccommodationRequest[]
 
   @@index([propertyId])
   @@index([unitId])
@@ -2103,6 +2107,102 @@ model ScraLookup {
   @@index([leaseId, searchedOn])
   @@index([evictionCaseId])
   @@index([tenantId])
+}
+
+/// The two kinds HUD's FHEO-2020-01 guidance distinguishes. Mirrors
+/// `ANIMAL_KINDS` in packages/core/accommodations. The distinction decides
+/// what may lawfully be ASKED, not what may be charged - neither may be
+/// charged for.
+enum AssistanceAnimalKind {
+  SERVICE_ANIMAL
+  ASSISTANCE_ANIMAL
+}
+
+/// Mirrors `REQUEST_STATUSES` in packages/core/accommodations.
+enum AccommodationRequestStatus {
+  RECEIVED
+  INFO_REQUESTED
+  APPROVED
+  DENIED
+  WITHDRAWN
+}
+
+/// A reasonable-accommodation request for an assistance animal (RISK-13,
+/// R-086).
+///
+/// THE DATES ARE THE PRODUCT. RISK-13 asks for "dated records" and an
+/// airtight request-to-response timeline, because the single most common
+/// failure is not a wrong decision - it is no decision, arriving late, with
+/// nothing on file to show when it was asked for. So every transition has
+/// its own timestamp column rather than being reconstructed from AuditLog:
+/// the clock is read on every render, and a report that has to replay an
+/// audit log to say "how long has this been open" is one nobody runs.
+///
+/// AN APPROVED REQUEST IS THE ASSISTANCE-ANIMAL RECORD. There is deliberately
+/// no separate `Animal` table and no `Pet` table - this product has never had
+/// one, and inventing a pet entity to be "distinct from" would be building an
+/// unrequested feature to make a comparison look tidy. The distinction that
+/// matters is enforced at the money (`petMoneyAllowed`), not at a type
+/// column.
+model AccommodationRequest {
+  id         String                     @id @default(cuid())
+  propertyId String
+  leaseId    String
+  /// Who asked. Nullable because a household member who is not on the lease
+  /// may be the person with the disability, and a request from them is still
+  /// a request - refusing to record it because they are not a `LeaseTenant`
+  /// would lose the very thing this table exists to prove was received.
+  tenantId   String?
+  /// In whoever's words, when the requester is not a tenant on file.
+  requestedByName String?
+
+  kind   AssistanceAnimalKind
+  status AccommodationRequestStatus @default(RECEIVED)
+
+  /// What was asked for, as received.
+  requestText       String
+  /// Species, name, whatever identifies WHICH animal. Required by the
+  /// application before an approval (`validateDetermination`), because a
+  /// dispute two years later is about which animal was agreed.
+  animalDescription String?
+
+  /// The two observations that decide whether documentation may lawfully be
+  /// requested. Recorded as they were assessed AT INTAKE, never recomputed -
+  /// the same posture `NoticeDelivery.permittedByJurisdiction` takes (D-48).
+  disabilityObservable Boolean @default(false)
+  needObservable       Boolean @default(false)
+
+  /// Calendar days, all of them: no timezone may touch a date the clock is
+  /// measured from (D-3, and the `@db.Date` rule in CLAUDE.md).
+  receivedOn           DateTime  @db.Date
+  /// When documentation was requested, if it was. Does NOT stop the clock -
+  /// see `responseClock`'s own header for why.
+  infoRequestedOn      DateTime? @db.Date
+  decidedOn            DateTime? @db.Date
+
+  /// The written determination itself (RISK-13's "written determination").
+  /// Text, not a status flip: the reasoning has to survive on the record.
+  determinationText    String?
+  decidedByStaffId     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  property  Property   @relation(fields: [propertyId], references: [id])
+  lease     Lease      @relation(fields: [leaseId], references: [id])
+  /// Restrict, and EXPLICITLY so. An optional relation with no `onDelete`
+  /// defaults to SetNull in Prisma, which would quietly erase who asked -
+  /// the one fact a fair-housing complaint starts from. Nothing in this
+  /// product deletes a Tenant anyway (they are deactivated), so this only
+  /// ever says out loud what the row is for.
+  tenant    Tenant?    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  /// Restrict, like every key pointing at evidence: who decided a
+  /// fair-housing request is part of defending it.
+  decidedBy StaffUser? @relation("AccommodationDecidedBy", fields: [decidedByStaffId], references: [id], onDelete: Restrict)
+  documents Document[] @relation("AccommodationDocuments")
+
+  @@index([leaseId, status])
+  @@index([propertyId, status])
 }
 
 /// A tenant's own renter's-liability certificate (LEASE-10, R-067). NOT
@@ -4506,6 +4606,8 @@ model Document {
   renterInsurancePolicy   RenterInsurancePolicy?
   complianceCompletions   ComplianceCompletion[]
   scraLookupAsCertificate ScraLookup?               @relation("ScraCertificate")
+  accommodationRequestId  String?
+  accommodationRequest    AccommodationRequest?     @relation("AccommodationDocuments", fields: [accommodationRequestId], references: [id])
 
   @@index([propertyId, type])
   @@index([legalEntityId, type])
@@ -4515,6 +4617,7 @@ model Document {
   @@index([applicantId])
   @@index([inspectionItemId])
   @@index([capitalImprovementId])
+  @@index([accommodationRequestId])
 }
 
 // ---------------------------------------------------------------------------

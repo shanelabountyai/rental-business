@@ -1,11 +1,13 @@
 'use server'
 
+import { PET_MONEY_REFUSAL, petMoneyAllowed } from '@rental/core/accommodations'
 import { validateRecurringCharge } from '@rental/core/billing'
 import { dollarsToCents, formatCents } from '@rental/core/money'
 import { utcToBusinessDate } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { audit } from '@/lib/audit/index.ts'
+import { hasApprovedAssistanceAnimal } from '@/lib/accommodations/queries.ts'
 import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
 import { createRecurringCharge, deactivateRecurringCharge } from './recurring.ts'
 
@@ -49,6 +51,17 @@ export async function addRecurringCharge(
   // `utcToBusinessDate` - a calendar day never goes through a timezone.
   const startsOn = String(formData.get('startsOn') ?? '') || utcToBusinessDate(lease.startsOn)
   const endsOn = String(formData.get('endsOn') ?? '').trim() || null
+
+  // R-086 (RISK-13). BEFORE anything is validated or priced, because the
+  // answer does not depend on the amount: an assistance animal is not a pet,
+  // so no pet rent may attach to this tenancy at any figure.
+  //
+  // `petMoneyAllowed` names all three pet-money types, including the two
+  // nothing writes yet - see PET_MONEY_TYPES in packages/core/accommodations
+  // for why the rule lives there rather than as a condition here.
+  if (type === 'PET_RENT' && !petMoneyAllowed(await hasApprovedAssistanceAnimal(leaseId))) {
+    return { error: PET_MONEY_REFUSAL, fieldErrors: { type: 'Not on this tenancy.' } }
+  }
 
   const amount = Number(amountDollars)
   if (!amountDollars || !Number.isFinite(amount)) {

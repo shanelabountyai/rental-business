@@ -589,6 +589,21 @@ export const AUDIT_ACTIONS = [
   /// is the one an eviction defence asks about. REASON_REQUIRED, both ways.
   'lease.hold_lifted',
 
+  /// R-086 (RISK-13): a reasonable-accommodation request for an assistance
+  /// animal was logged. Audited AT INTAKE, not only at the determination -
+  /// the commonest fair-housing failure here is a request nobody can prove
+  /// arrived, and an entry written when it did is the answer.
+  'accommodation.received',
+  /// R-086: reliable documentation was requested. Its own action because the
+  /// question a complaint asks is whether we were ENTITLED to ask, so the
+  /// entry carries the two observations that decided it.
+  'accommodation.info_requested',
+  /// R-086: the written determination. REASON_REQUIRED both ways - a denial
+  /// with no recorded basis is indistinguishable from a discriminatory one,
+  /// and an approval with no record of what was approved is what produces
+  /// "we never agreed to the second dog" two years later.
+  'accommodation.decided',
+
   /// R-085 (RISK-12): a DMDC military-service search was recorded against a
   /// tenant - what it said, when it was run, and the certificate behind it.
   /// The §3931 affidavit is sworn on this, so the trail has to answer "what
@@ -749,6 +764,8 @@ export const REASON_REQUIRED: ReadonlySet<AuditAction> = new Set([
   // neither is defensible from a record that does not say why.
   'eviction.case_opened',
   'eviction.case_closed',
+  // R-086. Both outcomes - see the action's own comment.
+  'accommodation.decided',
   // R-084. Both directions. Placing one for no recorded reason is
   // indistinguishable from a retaliatory placement; lifting one for no
   // recorded reason is the record that cannot answer "on what basis did you

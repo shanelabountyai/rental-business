@@ -7,6 +7,7 @@
   "types": "./index.ts",
   "exports": {
     ".": "./index.ts",
+    "./accommodations": "./accommodations/index.ts",
     "./approvals": "./approvals/index.ts",
     "./audit": "./audit/index.ts",
     "./auth": "./auth/index.ts",
