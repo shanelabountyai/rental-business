@@ -3473,7 +3473,7 @@ Two defects of my own in the new spec, and the second is the same shape. The evi
 ---
 
 ## R-086 — ESA / assistance-animal requests
-**Commit:** `PENDING`  ·  **Date:** 2026-08-22
+**Commit:** `4afdd24`  ·  **Date:** 2026-08-22
 
 **What it built.** RISK-13: `packages/core/accommodations` (what may lawfully be asked, the ten-day response clock, the pet-money rule and the determination validator), an `AccommodationRequest` table with the migration `20260822040000_r086_accommodations`, three audit actions, a guard on the one live pet-money writer, an email-only determination template, and a panel on the lease page covering intake → documentation → written determination.
 
