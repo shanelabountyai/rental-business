@@ -3596,7 +3596,7 @@ Two defects of my own in the new spec, and the second is the same shape. The evi
 - **The below-deductible warning is advisory only.** It appears once a linked job's cost is under the deductible; nothing stops a claim being filed anyway, and nothing tracks loss history across claims, which is the number that actually changes what renewal costs.
 
 ## R-090 — Roommate changes and lease assignment
-**Commit:** `PENDING`  ·  **Date:** 2026-08-23
+**Commit:** `8c94c68`  ·  **Date:** 2026-08-23
 
 **What it built.** RISK-10: `packages/core/leases/party-change.ts` (the assessment, the three standing clauses, the amendment's document blocks), `LeasePartyChange` + `LeasePartyChangeParty` with the migration `20260823040000_r090_party_changes`, `LeaseEnvelope.kind` (LEASE | AMENDMENT) with a nullable `templateId`, a `LEASE_AMENDMENT` document type and its retention rule, two audit actions, a `lease.amendment_sign_invite` template, a change-of-occupants panel on `/leases/[id]`, and the completion path that applies the change when the last signature lands.
 
