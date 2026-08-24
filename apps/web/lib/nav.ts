@@ -48,6 +48,17 @@ export const NAV_ITEMS: readonly NavItem[] = [
     ownedBy: 'R-022',
   },
   {
+    href: '/confidential',
+    label: 'Confidential',
+    // RISK-04 / ROLE-05 (R-091). Seeded to the Owner role alone, so this link
+    // simply is not there for anybody else - not greyed out, not present with
+    // a tooltip. A nav entry a manager can see but not open would announce
+    // that the product holds restricted records, which is most of what the
+    // access control is for.
+    permission: 'confidential.read',
+    ownedBy: 'R-091',
+  },
+  {
     href: '/workorders',
     label: 'Work orders',
     permission: 'workorder.read',

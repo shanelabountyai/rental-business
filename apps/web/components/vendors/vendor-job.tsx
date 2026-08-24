@@ -39,6 +39,10 @@ export interface VendorJobProps {
     /// a key needs it before they turn the handle, not buried under the
     /// equipment list.
     petWarning: boolean
+    /// RISK-04 (R-091): who may be handed keys, codes or access on this job.
+    /// Null on every ordinary job. See the schema column's own comment for
+    /// why it names only the authorized party.
+    restrictedPartyNote: string | null
     /// Whether the tenant agreed we may enter when they are not home. Null
     /// when there is no ticket behind the job — a staff-raised work order has
     /// nobody to have answered.
@@ -130,6 +134,32 @@ export function VendorJob({
         </p>
         <h1 className="text-2xl font-semibold tracking-tight">{job.scope}</h1>
       </header>
+
+      {/* ABOVE the pet warning, and above "Where", because it governs what
+          the vendor does when they get there and because a locksmith who
+          reads it after handing over keys has read it too late (RISK-04,
+          R-091).
+
+          It names who MAY be given keys and never who may not. The job says
+          nothing about why it exists — this is an ordinary re-key as far as
+          this page, this vendor and every maintenance screen are concerned,
+          and that is the protection working rather than information
+          missing. */}
+      {job.restrictedPartyNote && (
+        <section
+          role="note"
+          aria-labelledby="restricted-party"
+          className="flex flex-col gap-1 rounded-md border-2 border-sky-600 bg-sky-50 p-4 dark:border-sky-500 dark:bg-sky-950"
+        >
+          <h2
+            id="restricted-party"
+            className="text-sm font-semibold text-sky-900 dark:text-sky-100"
+          >
+            Who may be given keys on this job
+          </h2>
+          <p className="text-sm text-sky-900 dark:text-sky-100">{job.restrictedPartyNote}</p>
+        </section>
+      )}
 
       {/* ABOVE "Where", because it is read before somebody sets off and it
           is the only thing on this page that can hurt them. R-019 asked the

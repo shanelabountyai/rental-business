@@ -12,6 +12,27 @@ import { vendorFollowUp } from './follow-up.ts'
 // below that pins exactly that asymmetry, because it is invisible from inside
 // either function.
 
+// ==========================================================================
+// WHY 90s AND NOT THE 20s THIS FILE USED TO CARRY.
+//
+// `vendorFollowUp` PAGES SOMEBODY, and paging is slow by construction: the
+// rota is resolved, then per recipient per channel there is a preference
+// lookup, an idempotency check, two inserts and an audit row, then two more
+// round trips to claim and send. CLAUDE.md's rule is that a timeout set at
+// the measured cost is a flake generator, and 20s was set at roughly the
+// ISOLATED cost — this file runs in 10.5s on its own.
+//
+// Under the full suite's parallel load the same three tests measure 17.9s,
+// 20.0s and 13.6s, and the file takes 60.7s. So the 20s budget had no
+// headroom at all and finally tipped: it went red on a run whose changes
+// touched nothing near it, which is the third time this month a "flaky" test
+// here has turned out to be a deadline rather than randomness (R-102b,
+// R-040e). The ceiling is now four to five times the measured parallel-load
+// cost, and the measurement is written here so the next person raising it
+// knows what it was.
+// ==========================================================================
+const PAGING_TIMEOUT_MS = 90_000
+
 let entityId: string
 let propertyId: string
 let unitId: string
@@ -126,7 +147,7 @@ describe('vendorFollowUp', () => {
     // The JOB's priority, not a downgrade. A declined urgent job is still
     // urgent — nothing has been fixed.
     expect(tasks[0]!.priority).toBe('URGENT')
-  }, 20_000)
+  }, PAGING_TIMEOUT_MS)
 
   it('tells somebody, because a decline will not keep until morning', async () => {
     const workOrder = await seedWorkOrder('EMERGENCY')
@@ -137,7 +158,7 @@ describe('vendorFollowUp', () => {
     // SMS is on this template deliberately — an email at 6pm about a burst
     // pipe arrives too late to be a notification.
     expect(deliveries.map((d) => d.channel)).toContain('SMS')
-  }, 20_000)
+  }, PAGING_TIMEOUT_MS)
 
   it('carries the reason through, because it changes who you call next', async () => {
     const workOrder = await seedWorkOrder()
@@ -146,7 +167,7 @@ describe('vendorFollowUp', () => {
     const deliveries = await notificationsFor(workOrder.id)
     const bodies = deliveries.map((d) => `${d.subject ?? ''} ${d.body ?? ''}`).join(' ')
     expect(bodies).toContain('Not my trade')
-  }, 20_000)
+  }, PAGING_TIMEOUT_MS)
 
   it('raises a SCHEDULE task on accept — accepting is not scheduling', async () => {
     // R-027 owns confirming a window, and `respondToWorkOrder` leaves an
@@ -159,7 +180,7 @@ describe('vendorFollowUp', () => {
     expect(tasks).toHaveLength(1)
     expect(tasks[0]!.type).toBe('workorder_schedule')
     expect(tasks[0]!.title).toContain('confirm a window')
-  }, 20_000)
+  }, PAGING_TIMEOUT_MS)
 
   it('raises one on a proposed time too — they have responded, so the sweep skips them', async () => {
     const workOrder = await seedWorkOrder()
@@ -168,7 +189,7 @@ describe('vendorFollowUp', () => {
     const tasks = await tasksFor(workOrder.id)
     expect(tasks[0]!.type).toBe('workorder_schedule')
     expect(tasks[0]!.title).toContain('proposed a time')
-  }, 20_000)
+  }, PAGING_TIMEOUT_MS)
 
   it('surfaces an inbound message, which R-032 left unread', async () => {
     const workOrder = await seedWorkOrder('EMERGENCY')
@@ -191,7 +212,7 @@ describe('vendorFollowUp', () => {
     // NO SMS here, unlike a decline. This one can wait until somebody sits
     // down, and the split is the whole reason the category is separate.
     expect(deliveries.map((d) => d.channel)).not.toContain('SMS')
-  }, 20_000)
+  }, PAGING_TIMEOUT_MS)
 
   it('raises an invoice task, but NOT when the ceiling already did', async () => {
     const within = await seedWorkOrder()
@@ -204,7 +225,7 @@ describe('vendorFollowUp', () => {
     const over = await seedWorkOrder()
     await vendorFollowUp(over, { kind: 'invoice', overCeiling: true })
     expect(await tasksFor(over.id)).toHaveLength(0)
-  }, 20_000)
+  }, PAGING_TIMEOUT_MS)
 
   it('is idempotent within a day, so a retried action bills no second task', async () => {
     const workOrder = await seedWorkOrder()
@@ -212,7 +233,7 @@ describe('vendorFollowUp', () => {
     await vendorFollowUp(workOrder, { kind: 'declined', declineReason: null })
 
     expect(await tasksFor(workOrder.id)).toHaveLength(1)
-  }, 20_000)
+  }, PAGING_TIMEOUT_MS)
 
   it('NEVER throws into the caller, whatever goes wrong downstream', async () => {
     // Every call site is a vendor on a magic link who has just done what was
@@ -228,5 +249,5 @@ describe('vendorFollowUp', () => {
       vendor: { name: 'V' },
     }
     await expect(vendorFollowUp(broken, { kind: 'accepted' })).resolves.toBeUndefined()
-  }, 20_000)
+  }, PAGING_TIMEOUT_MS)
 })

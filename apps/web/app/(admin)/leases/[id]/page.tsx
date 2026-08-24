@@ -42,6 +42,9 @@ import {
 import { requestsForLease } from '@/lib/accommodations/queries.ts'
 import { openAbandonmentCase } from '@/lib/abandonment/actions.ts'
 import { casesForLease } from '@/lib/abandonment/queries.ts'
+import { OpenConfidentialCasePanel } from '@/components/confidential/open-case-panel.tsx'
+import { openConfidentialCase } from '@/lib/confidential/actions.ts'
+import { confidentialCaseCount } from '@/lib/confidential/queries.ts'
 import { OpenViolationCasePanel } from '@/components/violations/open-case-panel.tsx'
 import { openViolationCase } from '@/lib/violations/actions.ts'
 import { casesForLease as violationCasesForLease } from '@/lib/violations/queries.ts'
@@ -172,6 +175,13 @@ export default async function LeaseDetailPage({
   const canManageHolds = await actorCan('hold.manage', propertyResource(lease.property))
   // R-087: opening a gone-dark case starts a path that ends in entering
   // somebody's home, so it sits behind the same permission an eviction does.
+  // RISK-04 (R-091). Gates the panel AND the count query - a manager must not
+  // learn that a case exists here, so the read is not made at all rather than
+  // made and hidden.
+  const canManageConfidential = await actorCan(
+    'confidential.manage',
+    propertyResource(lease.property),
+  )
   const canManageEvictions = await actorCan('eviction.manage', propertyResource(lease.property))
 
   const currentEnvelope = lease.envelopes[0] ?? null
@@ -223,6 +233,7 @@ export default async function LeaseDetailPage({
     abandonmentCases,
     violationCases,
     applicantsForChange,
+    confidentialCases,
   ] = await Promise.all([
     outstandingIntakeGaps(lease),
     canWrite ? selectableTenants() : Promise.resolve([]),
@@ -240,6 +251,9 @@ export default async function LeaseDetailPage({
     execDecision.allowed && leaseIsInForce(lease.status)
       ? screenedApplicants(scope)
       : Promise.resolve([]),
+    canManageConfidential
+      ? confidentialCaseCount(lease.id)
+      : Promise.resolve({ open: 0, total: 0 }),
   ])
   // R-069: nothing to clear on a zero-deposit lease (NONE/SURETY_BOND hold
   // zero by the database CHECK constraint `chargeDeposit()`'s own comment
@@ -704,6 +718,20 @@ export default async function LeaseDetailPage({
         removeTenant={removeLeaseTenant.bind(null, lease.id)}
         addGuarantor={addGuarantor.bind(null, lease.id)}
       />
+
+      {canManageConfidential && (
+        <OpenConfidentialCasePanel
+          leaseId={lease.id}
+          openCount={confidentialCases.open}
+          totalCount={confidentialCases.total}
+          today={businessDate(new Date(), lease.property.timezone)}
+          tenantOptions={lease.leaseTenants.map((lt) => ({
+            id: lt.tenant.id,
+            label: `${lt.tenant.firstName} ${lt.tenant.lastName}`,
+          }))}
+          action={openConfidentialCase}
+        />
+      )}
 
       <PartyChangePanel
         canStart={execDecision.allowed}

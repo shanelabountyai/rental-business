@@ -161,6 +161,7 @@ export default async function VendorLinkPage({
         // physical-safety consequence; the entry permission stops the office
         // being asked a question the tenant already answered.
         petWarning: workOrder.ticket?.petWarning ?? false,
+        restrictedPartyNote: workOrder.restrictedPartyNote,
         entryPermission: workOrder.ticket?.entryPermission ?? null,
         invoiceUploaded: context.photos.some((p) => p.type === 'INVOICE'),
         completionPhotoUploaded: context.photos.some((p) => p.type === 'COMPLETION_PHOTO'),

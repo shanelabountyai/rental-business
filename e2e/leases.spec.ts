@@ -296,14 +296,26 @@ test.describe('creating a tenancy', () => {
     // And it opens billing (D-11, R-034). Polled: provisioning runs after
     // the transaction commits, deliberately, so activation is never undone
     // by a billing provider being unreachable.
+    //
+    // POLLED ON THE IDS, NOT ON THE ROW EXISTING. The row is written first
+    // and the provider's ids are filled in by later round trips, so a poll
+    // that waits for `count === 1` and then reads the ids is waiting for the
+    // wrong fact - it wins whenever provisioning is quick and loses when it
+    // is not. It lost here on a run that changed nothing near it, which is
+    // the same shape as the `getByText('active')` race CLAUDE.md already
+    // records: poll the thing you are about to assert.
     await expect
-      .poll(() => prisma.leasePayer.count({ where: { leaseId: lease.id } }))
-      .toBe(1)
-    const payer = await prisma.leasePayer.findFirstOrThrow({
-      where: { leaseId: lease.id },
-    })
-    expect(payer.stripeCustomerId).toMatch(/^cus_/)
-    expect(payer.stripeSubscriptionId).toMatch(/^sub_/)
+      .poll(async () => {
+        const row = await prisma.leasePayer.findFirst({
+          where: { leaseId: lease.id },
+          select: { stripeCustomerId: true, stripeSubscriptionId: true },
+        })
+        return row?.stripeCustomerId && row.stripeSubscriptionId
+          ? `${row.stripeCustomerId} ${row.stripeSubscriptionId}`
+          : null
+      })
+      .toMatch(/^cus_\S+ sub_/)
+    expect(await prisma.leasePayer.count({ where: { leaseId: lease.id } })).toBe(1)
     await expect(page.getByRole('heading', { name: 'Billing' })).toBeVisible()
     // Labelled honestly - the ids are Stripe-shaped on purpose, so the
     // label is the only thing telling a simulator apart from the real thing.

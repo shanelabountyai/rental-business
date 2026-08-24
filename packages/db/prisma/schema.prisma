@@ -1776,6 +1776,8 @@ model StaffUser {
   auditLogs                               AuditLog[]                      @relation("AuditLogActor")
   accessCodesCreated                      AccessCode[]
   partyChangesStarted                     LeasePartyChange[]
+  confidentialCasesOpened                 ConfidentialCase[]              @relation("ConfidentialCaseOpenedBy")
+  confidentialDocumentationSeen           ConfidentialCase[]              @relation("ConfidentialCaseDocumentationSeenBy")
   messagesRouted                          UnroutedMessage[]               @relation("UnroutedMessageRoutedBy")
   templatesCreated                        MessageTemplate[]               @relation("TemplateCreatedBy")
   templatesUpdated                        MessageTemplate[]               @relation("TemplateUpdatedBy")
@@ -1845,6 +1847,10 @@ model Tenant {
   scraLookups            ScraLookup[]
   accommodations         AccommodationRequest[]
   partyChanges           LeasePartyChangeParty[]
+  /// R-091. Named on a restricted case as the party a tenancy is being
+  /// protected from. Restrict, so this record cannot be erased by deleting
+  /// the person.
+  confidentialCases      ConfidentialCase[]      @relation("ConfidentialCaseRestrictedTenant")
 
   @@index([lastName, firstName])
   @@index([email])
@@ -2157,6 +2163,7 @@ model Lease {
   violationCases             ViolationCase[]
   insuranceClaimsLossOfRents InsuranceClaim[]        @relation("ClaimLossOfRentsLease")
   partyChanges               LeasePartyChange[]
+  confidentialCases          ConfidentialCase[]
 
   @@index([propertyId])
   @@index([unitId])
@@ -2278,6 +2285,83 @@ model LeasePartyChangeParty {
 
   @@unique([changeId, tenantId])
   @@index([tenantId])
+}
+
+enum ConfidentialCaseStatus {
+  OPEN
+  CLOSED
+}
+
+/// A restricted case file on a tenancy (RISK-04, ROLE-05; R-091).
+///
+/// THE NAME IS DELIBERATELY NOT WHAT IT PROTECTS, and neither is the route,
+/// nor any audit action, nor any column outside this table. RISK-04 is
+/// domestic violence; ROLE-05 asks for "confidential flags (e.g. DV-related
+/// records) visible only to Owner role". A table called `DvCase`, a URL
+/// reading `/dv/abc123` or an audit action `dv.case_opened` would each
+/// disclose the very fact the access control exists to hold - to anybody
+/// reading a schema, a browser history, or a log line. So the vocabulary
+/// everywhere outside the wall says "confidential" and stops.
+///
+/// THE CASE IS CONFIDENTIAL; ITS CONSEQUENCES ARE NOT, AND CANNOT BE. The
+/// locks genuinely have to be changed, which means a real work order a real
+/// dispatcher assigns to a real locksmith. What must never leak is WHY - so
+/// the work order is an ordinary re-key job carrying an instruction about who
+/// may receive keys, and the link between the two lives HERE, on the
+/// restricted side: `WorkOrder` gains no column whose mere presence is a
+/// disclosure. (Prisma requires a back-relation field for the FK, but it is
+/// a navigation with no column behind it, and nothing traverses it.)
+///
+/// NO DOCUMENT IS STORED. A protective order or police report uploaded as a
+/// `Document` would be readable by every role holding `document.read` -
+/// which is the manager, the maintenance tech and the read-only partner.
+/// What is recorded is that documentation of a stated type was produced and
+/// verified, by whom and on what date, which is what a state's early-
+/// termination right actually turns on. See R-091b, which consumes it.
+model ConfidentialCase {
+  id      String                 @id @default(cuid())
+  leaseId String
+  status  ConfidentialCaseStatus @default(OPEN)
+  /// What is going on, in the owner's own words. Restricted, and never
+  /// copied into an audit payload - see `audit/events.ts` on
+  /// `confidential.case_opened`.
+  summary String
+
+  /// Who the tenancy is being protected FROM. Free text, because they are as
+  /// often somebody with no record in this system as they are a co-tenant -
+  /// an ex-partner who was never on the lease has no row to point at.
+  restrictedPartyName     String?
+  /// Set as well when the restricted party IS on the lease, which is the
+  /// case R-091b's bifurcation path acts on. The FK points OUT of this
+  /// table; nothing on Tenant points back in.
+  restrictedPartyTenantId String?
+
+  /// PROTECTIVE_ORDER, POLICE_REPORT, PROVIDER_STATEMENT - the classes a
+  /// state's statute typically accepts. A string rather than an enum because
+  /// which classes count is jurisdiction configuration (D-4) and belongs in
+  /// `JurisdictionRule`, not in a shape this table fixes for all fifty
+  /// states. Null until something has actually been produced.
+  documentationType          String?
+  documentedOn               DateTime? @db.Date
+  documentationSeenByStaffId String?
+
+  /// The re-key job this case ordered, if it ordered one. On this side so
+  /// that a WorkOrder carries no column whose mere presence is a disclosure.
+  lockChangeWorkOrderId String? @unique
+
+  openedByStaffId String
+  openedAt        DateTime  @default(now())
+  closedAt        DateTime?
+  closedNote      String?
+  updatedAt       DateTime  @updatedAt
+
+  lease               Lease      @relation(fields: [leaseId], references: [id], onDelete: Restrict)
+  restrictedTenant    Tenant?    @relation("ConfidentialCaseRestrictedTenant", fields: [restrictedPartyTenantId], references: [id], onDelete: Restrict)
+  documentationSeenBy StaffUser? @relation("ConfidentialCaseDocumentationSeenBy", fields: [documentationSeenByStaffId], references: [id], onDelete: Restrict)
+  openedBy            StaffUser  @relation("ConfidentialCaseOpenedBy", fields: [openedByStaffId], references: [id], onDelete: Restrict)
+  lockChangeWorkOrder WorkOrder? @relation(fields: [lockChangeWorkOrderId], references: [id], onDelete: Restrict)
+
+  @@index([leaseId, status])
 }
 
 /// What a hold is FOR. The effects follow from it — see
@@ -4084,6 +4168,19 @@ model WorkOrder {
   closedByStaffId                String?
   /// Drives the mid-lease chargeback flow (MAINT-07) - distinct from a
   /// move-out deposit deduction.
+  /// RISK-04 (R-091): who may be handed keys, codes or access on this job.
+  ///
+  /// ITS OWN COLUMN, NOT PART OF `scope`, for the reason R-032b established
+  /// for the pet warning: an instruction the person at the door must not
+  /// miss gets rendered as a bordered note above the address, and one buried
+  /// in a paragraph of work description is one that gets missed.
+  ///
+  /// NAMES WHO IS AUTHORIZED, NEVER WHO IS NOT. "Do not give keys to John
+  /// Smith" tells a locksmith something about a household that is not theirs
+  /// to know and that they may repeat; "release keys only to Jane Doe" is
+  /// the same protection with nothing disclosed. Nothing in this column ever
+  /// says why the job exists.
+  restrictedPartyNote            String?
   tenantCaused                   Boolean         @default(false)
   warrantyClaim                  Boolean         @default(false)
   /// Set only for a job that is one line of a turnover's punch list
@@ -4142,7 +4239,8 @@ model WorkOrder {
   /// offsetting item. A sixth exclusion door here would delete the deduction
   /// and leave the proceeds unreported, which is the wrong answer twice.
   insuranceClaimId String?
-  insuranceClaim   InsuranceClaim? @relation(fields: [insuranceClaimId], references: [id], onDelete: Restrict)
+  insuranceClaim   InsuranceClaim?   @relation(fields: [insuranceClaimId], references: [id], onDelete: Restrict)
+  confidentialCase ConfidentialCase?
 
   @@index([propertyId, status])
   @@index([unitId])

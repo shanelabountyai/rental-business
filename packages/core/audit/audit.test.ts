@@ -299,6 +299,7 @@ describe('the audit vocabulary', () => {
       'screening.decide': 'screening.decided',
       'lease.execute': 'envelope.sent',
       'hold.lift_protected': 'lease.hold_lifted',
+      'confidential.manage': 'confidential.case_opened',
     }
     for (const permission of PRIVILEGED_PERMISSIONS) {
       const action = recordable[permission]

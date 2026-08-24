@@ -193,6 +193,12 @@ describe('can — MFA gate (ROLE-05)', () => {
       // funds actually clearing.
       'accesscode.issue',
       'accesscode.reveal',
+      // R-091 (RISK-04). Ordering the lock change on a safety case and
+      // retiring the codes a restricted party may know are acts somebody's
+      // physical safety rests on. `confidential.read` is NOT here - locking
+      // an owner out of a safety case because they have not finished setting
+      // up an authenticator is the wrong failure.
+      'confidential.manage',
       'document.delete',
       'fee.waive',
       // R-084. Taking a hold off a protected tenancy — SCRA, a bankruptcy

@@ -104,6 +104,28 @@ export const PERMISSIONS = [
   /// against a bankrupt or a deployed servicemember from a stolen session is
   /// the same class of harm as moving money.
   'hold.lift_protected',
+  /// RISK-04 / ROLE-05 (R-091): reading a confidential safety case.
+  ///
+  /// THE ONLY PERMISSION IN THIS LIST SEEDED TO THE OWNER ROLE ALONE, which
+  /// happens by construction rather than by a rule: `owner` carries
+  /// `PERMISSIONS` entire and every other role names its own, so a new key
+  /// is owner-only until somebody adds it to a role.
+  ///
+  /// A permission rather than a hard-coded `role === 'owner'` test, because
+  /// of D-5: roles are data, so an owner who genuinely wants a trusted
+  /// manager to carry this can grant it deliberately, without a release. A
+  /// role check would look identical from the outside and make that
+  /// impossible.
+  ///
+  /// It is a READ on this list at all, which is the exception to the rule
+  /// PRIVILEGED_PERMISSIONS states below about reads never being privileged.
+  /// It is not itself privileged - locking an owner out of a safety case
+  /// because they have not finished setting up an authenticator is the wrong
+  /// failure - but `confidential.manage` is.
+  'confidential.read',
+  /// Opening, updating and closing a confidential case, ordering its lock
+  /// change, and retiring the access codes a restricted party may know.
+  'confidential.manage',
 ] as const
 
 export type Permission = (typeof PERMISSIONS)[number]
@@ -144,6 +166,11 @@ export const PRIVILEGED_PERMISSIONS: ReadonlySet<Permission> = new Set([
   // gating it behind MFA is how holds stop being placed. Taking one off a
   // protected tenancy is the direction that does harm.
   'hold.lift_protected',
+  // R-091. See the permission's own comment: ordering a lock change and
+  // retiring the codes a restricted party may know are acts somebody's
+  // physical safety rests on, and neither should be reachable from a stolen
+  // session. `confidential.read` is deliberately NOT here.
+  'confidential.manage',
 ])
 
 export function requiresMfa(permission: Permission): boolean {

@@ -594,6 +594,44 @@ export const AUDIT_ACTIONS = [
   /// different claims about why a legal document was withdrawn.
   'envelope.voided',
 
+  /// RISK-04 / ROLE-05 (R-091): a confidential safety case was opened.
+  ///
+  /// THE PAYLOAD CARRIES THE CASE ID AND NOTHING ELSE ABOUT IT. Not the
+  /// summary, not the restricted party's name, not what documentation was
+  /// produced. `AuditLog` is the table `audit.read` exists to expose broadly,
+  /// and an audit trail that quotes the contents of the record it is
+  /// protecting has moved the secret rather than kept it. The case row,
+  /// behind `confidential.read`, is where the content lives; this records
+  /// only that somebody with authority did the thing, and when.
+  ///
+  /// The names say "confidential" and never what they protect, for the same
+  /// reason the table and the route do - see ConfidentialCase's own comment.
+  'confidential.case_opened',
+
+  /// R-091: a case was updated - documentation recorded, the restricted party
+  /// named, the summary revised. Same payload discipline as above.
+  'confidential.case_updated',
+
+  /// R-091: closed. REASON_REQUIRED, and the reason is the only content that
+  /// crosses into this table, because a decision that a safety risk has
+  /// passed is exactly the one somebody asks about afterwards.
+  'confidential.case_closed',
+
+  /// R-091: a re-key job was ordered from a case. The work order's own
+  /// `workorder.created` entry is the ordinary, readable record that a job
+  /// exists; this one records that a case ordered it, and lives here so the
+  /// link is only ever visible from the restricted side.
+  'confidential.lock_change_ordered',
+
+  /// R-091: every open-ended access code on the unit was retired, because a
+  /// restricted party may know them. Records HOW MANY, never which.
+  ///
+  /// Its own action rather than a reused `accesscode.set`: that one means "a
+  /// new code was recorded", this means "the codes on file are no longer to
+  /// be handed out", and the second is what a later question about somebody
+  /// being locked out turns on.
+  'confidential.codes_retired',
+
   /// R-084 (RISK-11, RISK-12): a typed hold was placed on a tenancy. Carries
   /// the type and the effects it switched on at that moment, snapshotted
   /// rather than left to be recomputed - the effect table is code, code
@@ -861,6 +899,11 @@ export const REASON_REQUIRED: ReadonlySet<AuditAction> = new Set([
   // resume collecting from a bankrupt tenant".
   'lease.hold_placed',
   'lease.hold_lifted',
+  // R-091. Closing only. Opening one is not on this list because the case
+  // carries a required `summary` saying why, and asking for the same
+  // sentence twice teaches people to type "see summary". Closing a safety
+  // case is a decision that the risk has passed.
+  'confidential.case_closed',
   // R-090. Withdrawing a change of parties that several people were already
   // asked to sign. Starting one is not on this list for the same reason
   // `claim.opened` is not: the change carries its own required `reason`
