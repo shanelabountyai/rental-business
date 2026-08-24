@@ -1,5 +1,5 @@
 import { timingSafeEqual } from 'node:crypto'
-import { extractReplyKey, htmlToText, stripQuotedReply } from '@rental/core/comms'
+import { emailAddressOnly, extractReplyKey, htmlToText, stripQuotedReply } from '@rental/core/comms'
 import { handleInboundEmail } from '@/lib/comms/email-intake.ts'
 import { inboundEmailConfig } from '@/lib/comms/inbound-email-config.ts'
 import type { InboundAttachment } from '@/lib/comms/inbound-attachments.ts'
@@ -117,7 +117,11 @@ export async function POST(request: Request) {
     return new Response('Bad request', { status: 400 })
   }
 
-  const from = addresses(payload.from)[0]
+  // NOT through `addresses()`: a From: header is one mailbox, so splitting it
+  // on commas turns `"Vaughan, Dorothy" <d@example.com>` into `"Vaughan`.
+  // `emailAddressOnly` is what makes the ordinary display-name form route at
+  // all - see its own comment for the defect that reached production here.
+  const from = payload.from ? emailAddressOnly(payload.from) : ''
   // R-097d. HTML-ONLY MAIL IS NOT AN EMPTY MESSAGE, and the first version of
   // this treated it as one: several mobile clients send no plain-text part
   // at all, so a tenant who typed a paragraph got a record saying they said

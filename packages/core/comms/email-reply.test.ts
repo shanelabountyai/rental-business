@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  emailAddressOnly,
   emailOptOutConfirmation,
   extractReplyKey,
   isEmailOptOutRequest,
@@ -13,6 +14,25 @@ import {
 
 const KEY = 'k7x2ab34cd56ef78gh90ij12'
 const INBOUND = { inboundLocalPart: 'hello', inboundDomain: 'inbound.example.com' }
+
+describe('the address out of a header', () => {
+  // THE DEFECT GOLDEN PATH 4 FOUND (D-132). This was inline in
+  // `extractReplyKey` and applied to recipients only, so `From:` - which is
+  // what the ROUTING compares - kept its display name and matched no tenant.
+  it('unwraps the display-name form every real client sends', () => {
+    expect(emailAddressOnly('Dorothy Vaughan <d@example.com>')).toBe('d@example.com')
+  })
+
+  it('keeps a bare address, which providers also send', () => {
+    expect(emailAddressOnly('  D@Example.com ')).toBe('d@example.com')
+  })
+
+  it('is not confused by a comma inside the display name', () => {
+    // The second way the old code broke: `addresses()` split the From: header
+    // on commas first, leaving `"Vaughan` as the sender.
+    expect(emailAddressOnly('"Vaughan, Dorothy" <d@example.com>')).toBe('d@example.com')
+  })
+})
 
 describe('the reply address', () => {
   it('plus-addresses the thread key', () => {

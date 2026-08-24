@@ -57,6 +57,37 @@ export function replyAddress(input: {
 }
 
 /**
+ * The bare address out of one mail header value.
+ *
+ * ==========================================================================
+ * EVERY REAL MAIL CLIENT SENDS `Display Name <addr@example.com>`, and this
+ * used to be applied to the RECIPIENT list only - where the reply key is -
+ * and never to `From:`, where the ROUTING is.
+ *
+ * So `candidatesForEmail` compared the whole header value against
+ * `Tenant.email` and matched nothing, and every inbound email from a client
+ * that sets a display name went to the unrouted queue. That is R-097a,
+ * R-097d, R-097e and R-097f all silently doing nothing for a real tenant: no
+ * ticket, the photograph counted rather than kept, the opt-out not honoured.
+ * And it is INVISIBLE, because an unrouted message is what the queue is for -
+ * it looks exactly like mail from a stranger we cannot place. Found by Golden
+ * Path 4, which is the first thing to send a From: header shaped the way a
+ * mail client shapes one (D-132).
+ *
+ * A `From:` header is ONE mailbox, so it is never split on commas: doing that
+ * is what broke `"Vaughan, Dorothy" <d@example.com>` a second way, leaving
+ * `"Vaughan` as the sender.
+ * ==========================================================================
+ *
+ * Lower-cased, matching `candidatesForEmail`, which lower-cases before it
+ * compares. Returns the input trimmed when there are no angle brackets - a
+ * bare address is the other half of what providers send.
+ */
+export function emailAddressOnly(raw: string): string {
+  return (raw.match(/<([^>]+)>/)?.[1] ?? raw).trim().toLowerCase()
+}
+
+/**
  * The reply key an inbound message was addressed to, if any.
  *
  * Reads every recipient header the provider gives us - a reply that CC'd the
@@ -74,7 +105,7 @@ export function extractReplyKey(input: {
 
   for (const raw of input.recipients) {
     // `Name <addr@example.com>` as well as a bare address.
-    const address = (raw.match(/<([^>]+)>/)?.[1] ?? raw).trim().toLowerCase()
+    const address = emailAddressOnly(raw)
     const [localPart, host] = address.split('@')
     if (!localPart || host !== domain) continue
     const [base, ...tagParts] = localPart.split('+')
