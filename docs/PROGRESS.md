@@ -3951,7 +3951,7 @@ Two defects of my own in the new spec, and the second is the same shape. The evi
 - **Nothing links an emailed ticket back to the message thread on screen.** The ticket carries the tenant's words in its description and the photo is attached, but a reader on the ticket cannot jump to the conversation. R-032's `WorkOrderMessageLink` is the shape that would fix it.
 
 ## Demo checkpoint 3 — Golden Path 3, defined and walked
-**Commit:** `pending`  ·  **Date:** 2026-08-24
+**Commit:** `f3baa47`  ·  **Date:** 2026-08-24
 
 **What it did.** Defined the demo checkpoint Milestone 8 never had, wrote it as a kept spec (`e2e/golden-path-3.spec.ts`) rather than a manual pass, walked it, and fixed what it found. Recorded as **D-129** and **D-130**.
 
