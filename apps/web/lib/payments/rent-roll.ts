@@ -57,6 +57,10 @@ export interface RentRollRow {
   /// No jurisdiction rule configured for this property's state (D-4). Surfaced
   /// rather than silently treated as zero grace.
   graceUnknown: boolean
+  /// A hold carrying `halt_dunning` is in force on this tenancy (R-084), so
+  /// the chase is off. SEPARATE FROM `pastGrace` on purpose: the debt is
+  /// still owed, still aged, still on the report. What stops is the asking.
+  chaseHeld: boolean
 }
 
 export interface RentRoll {
@@ -134,6 +138,15 @@ export async function rentRoll(scope: ResolvedScope, asOfDate?: Date): Promise<R
         })
       : Promise.resolve([]),
   ])
+
+  // R-084's `halt_dunning`, resolved for the WHOLE report rather than only
+  // at send time. `pastGraceLeaseIds` has always subtracted these, so the
+  // press was already refused — but the screen went on offering the
+  // checkbox, counting the tenancy in "select all past grace", and giving no
+  // reason in the row. This table's own header states the rule it broke: a
+  // row that is not chaseable gets no control and a written reason instead
+  // (Golden Path 5, D-134).
+  const chaseHeldLeases = await leasesHalted(leaseIds, 'halt_dunning')
 
   const entriesByLease = groupBy(entries, (row) => row.leaseId)
   const chargesByLease = groupBy(charges, (row) => row.leaseId)
@@ -214,6 +227,7 @@ export async function rentRoll(scope: ResolvedScope, asOfDate?: Date): Promise<R
         ? businessDate(lastContact.get(tenant.id)!, zone)
         : null,
       graceUnknown: rule == null,
+      chaseHeld: chaseHeldLeases.has(lease.id),
     }
   })
 

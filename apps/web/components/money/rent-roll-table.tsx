@@ -41,6 +41,7 @@ export interface Row {
   subsidyCents: number
   lastContactOn: string | null
   graceUnknown: boolean
+  chaseHeld: boolean
 }
 
 export function RentRollTable({
@@ -61,7 +62,12 @@ export function RentRollTable({
     sendAction,
     {},
   )
-  const chaseable = rows.filter((row) => row.pastGrace)
+  // A held tenancy is past grace AND not chaseable, which is the case this
+  // list did not have until R-084 introduced it. It must drop out here and
+  // not merely at send time: it feeds "select all N past grace", and a count
+  // that includes a tenancy under an automatic stay is an invitation to
+  // press the one button that violates it.
+  const chaseable = rows.filter((row) => row.pastGrace && !row.chaseHeld)
   const [selected, setSelected] = useState<Set<string>>(new Set())
 
   const toggle = (leaseId: string) =>
@@ -77,6 +83,26 @@ export function RentRollTable({
 
   return (
     <form action={action} className="flex flex-col gap-4">
+      {/* OUTSIDE the panel below, and always mounted while the user can send.
+          What the last press did is not conditional on there still being
+          somebody left to chase — and the case where there is not is exactly
+          the interesting one: press Send on a stale selection whose only
+          tenancy has just gone under a hold, and the panel that would have
+          carried the refusal is the thing that disappears. The result then
+          renders nowhere and the operator is told nothing at all, which is
+          worse than the wrong reason this walk started out fixing. Always
+          mounted rather than conditionally, so `aria-live` has somewhere to
+          announce into rather than arriving with the text already in it —
+          the self-replacing-panel trap R-086 documents at length. */}
+      {canSend && (
+        <div>
+          <FieldError id="reminder-error" message={state.error} />
+          <LiveRegion>
+            {state.notice && <p className="text-sm">{state.notice}</p>}
+          </LiveRegion>
+        </div>
+      )}
+
       {canSend && chaseable.length > 0 && (
         <div className="flex flex-col gap-3 rounded-lg border p-4">
           <h2 className="text-sm font-medium">Chase everyone past grace</h2>
@@ -125,11 +151,6 @@ export function RentRollTable({
             </p>
           )}
 
-          <FieldError id="reminder-error" message={state.error} />
-          <LiveRegion>
-            {state.notice && <p className="text-sm">{state.notice}</p>}
-          </LiveRegion>
-
           <button
             type="submit"
             disabled={pending || selected.size === 0 || templates.length === 0}
@@ -165,7 +186,7 @@ export function RentRollTable({
               <tr key={row.leaseId} className="border-b last:border-0">
                 {canSend && (
                   <td className="py-2 pr-2">
-                    {row.pastGrace ? (
+                    {row.pastGrace && !row.chaseHeld ? (
                       <>
                         <input
                           type="checkbox"
@@ -179,8 +200,13 @@ export function RentRollTable({
                       </>
                     ) : (
                       // No control at all, not a disabled one. Nothing the
-                      // user can do would make this selectable.
-                      <span className="sr-only">Not past grace</span>
+                      // user can do would make this selectable — and for a
+                      // hold, the one thing that would is lifting it, which
+                      // is not a thing to nudge somebody towards from a
+                      // chase screen.
+                      <span className="sr-only">
+                        {row.chaseHeld ? 'Not chaseable while a hold is in force' : 'Not past grace'}
+                      </span>
                     )}
                   </td>
                 )}
@@ -218,9 +244,15 @@ export function RentRollTable({
                       <span className="text-muted-foreground block text-xs">
                         {row.graceUnknown
                           ? 'no rule configured for this state'
-                          : row.pastGrace
-                            ? 'past grace'
-                            : 'still within grace'}
+                          : row.chaseHeld
+                            ? // Deliberately does NOT contain the words "past
+                              // grace": `getByText` is a substring match, and
+                              // a held row answering to that phrase would let
+                              // a future test believe the chase was on offer.
+                              'chase paused by a hold'
+                            : row.pastGrace
+                              ? 'past grace'
+                              : 'still within grace'}
                       </span>
                     </>
                   )}

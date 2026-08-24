@@ -240,6 +240,16 @@ Twenty years of scar tissue, encoded. Each is a case file with timestamps and de
 >
 > **What it found was in the product** (D-132), unlike checkpoint 3: `From: Name <addr@example.com>` — the form every real mail client sends — never routed at all.
 
+> **Demo checkpoint 5 (Golden Path 5 — the money path).** Defined and walked 2026-08-24. Checkpoint 3's PROGRESS entry and checkpoint 4's both end with the same note — the money path has no equivalent walk, and R-083's evictions, R-084's holds and R-087's abandonment make promises of the same kind about what automation must not do to a protected tenancy. This is that walk, at the third time of asking, and it is the checkpoint Milestone 8 never had for its **collections** half (checkpoint 3 covered its confidential half).
+>
+> **The thesis, and it is neither of theirs.** Checkpoint 3 asked what leaks; checkpoint 4 asked what an unauthenticated stranger is allowed to cause. This one asks: **when the law puts a fence around a tenancy, what must the collections machine stop doing — and what must the fence never forgive?** R-044 built the arrears chase in Milestone 4; R-084 built the fence in Milestone 8, four milestones later; R-085 built the one statute that raises it by itself. They meet nowhere in the suite. `lib/holds/holds.test.ts` proves `leasesHalted` returns the right **set**, `scra.spec.ts` proves a certificate places the hold, `rent-roll.spec.ts` proves the chase chases — and nothing joins the three, which is where an operator actually lives.
+>
+> One tenancy, followed as its legal status changes underneath a screen somebody is already looking at. She falls behind → is chased, lawfully and correctly, asserted at the notification engine rather than the screen → the rent roll is re-rendered, she is ticked, the template chosen, and **nothing is pressed** → in a second session a DMDC certificate comes back `in_service` and the SCRA hold places itself, the only automatic hold in the product → **then** the aimed press lands.
+>
+> **The gate is that press, and it has two halves that must both hold.** It must refuse — R-084's own text claims exactly this, that a hold placed while the screen was open stops the chase the same way a payment does — and it must say **why** it refused, because under a federal protection the reason a chase was withheld is the record. Then the screen is reloaded: the chase is no longer offered and the row says so, **and the balance is still $1,500.00 in its late bucket**. If the debt had vanished with the chase the product would have forgiven something nobody decided to forgive; if the chase had survived it would have violated the stay while displaying a banner saying it was in force. Only the contrast tells a guard from an off switch.
+>
+> **What it found was in the product** (D-134), as checkpoint 4's was: the refusal blamed the grace period. A tenancy under an automatic stay was reported to the operator, and written into the audit row, as *"not past the grace period"* — and the rent roll went on offering the checkbox and counting it in "select all past grace".
+
 ---
 
 ## How to use this backlog with Claude Code

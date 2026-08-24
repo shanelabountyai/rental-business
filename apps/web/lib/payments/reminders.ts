@@ -6,6 +6,7 @@ import { audit } from '@/lib/audit/index.ts'
 import { actorCan, propertyResource, requireScope } from '@/lib/auth/guard.ts'
 import { renderForRecipient } from '@/lib/comms/templates.ts'
 import { getTemplate } from '@/lib/comms/templates.ts'
+import { leasesHalted } from '@/lib/holds/queries.ts'
 import { dispatchPendingNotifications, notify } from '@/lib/notifications/send.ts'
 import { businessDate } from '@rental/core/scheduling'
 import { pastGraceLeaseIds } from './rent-roll.ts'
@@ -101,6 +102,14 @@ export async function sendReminders(
   // the page rendering and this press a tenant can have paid, and a crafted
   // post can name any lease at all.
   const chaseable = await pastGraceLeaseIds(leaseIds)
+  // WHY a lease was dropped, not just that it was. `pastGraceLeaseIds`
+  // subtracts held leases from the same set as paid ones, so a bare "not in
+  // the set" cannot tell a tenant who paid from a tenancy under an automatic
+  // stay — and reporting the second as the first is worse than saying
+  // nothing: it sends somebody looking for a payment that was never made,
+  // and it writes that fiction into the audit row below. Under a protection,
+  // the reason a chase was withheld IS the record (Golden Path 5, D-134).
+  const held = await leasesHalted(leaseIds, 'halt_dunning')
 
   const sent: string[] = []
   const skipped: { leaseId: string; why: string }[] = []
@@ -116,10 +125,15 @@ export async function sendReminders(
     }
 
     if (!chaseable.has(lease.id)) {
-      // Paid since the page rendered, or never past grace at all. Skipped
-      // rather than refused for the batch, so one stale row does not stop the
-      // other forty going out.
-      skipped.push({ leaseId: lease.id, why: 'not past the grace period' })
+      // Paid since the page rendered, never past grace at all, or held.
+      // Skipped rather than refused for the batch, so one stale row does not
+      // stop the other forty going out.
+      skipped.push({
+        leaseId: lease.id,
+        why: held.has(lease.id)
+          ? 'under a hold that stops the chase'
+          : 'not past the grace period',
+      })
       continue
     }
 

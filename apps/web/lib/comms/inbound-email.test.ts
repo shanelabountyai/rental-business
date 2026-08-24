@@ -414,9 +414,19 @@ describe('email-to-ticket (R-097f)', () => {
   it('never opens a ticket for a message nobody could route', async () => {
     // A ticket has to belong to a property and a tenant, and inventing
     // either is exactly what decideRoute refuses to do.
-    const before = await prisma.ticket.count()
+    // SCOPED TO THIS FILE'S OWN PROPERTIES, not `prisma.ticket.count()` over
+    // the whole database. The unscoped version read every row in a shared
+    // Postgres that other files are writing to in parallel, so any test
+    // anywhere opening a ticket between the two counts turned this red — it
+    // lost for the first time on Golden Path 5's confirming run, having
+    // passed in isolation every time it was asked. Same family as the two
+    // `state: 'ZZ'` files CLAUDE.md already records. A wrongly-opened ticket
+    // could only land on a property this file created, which is exactly what
+    // is counted now.
+    const mine = { propertyId: { in: [propertyA, propertyB] } }
+    const before = await prisma.ticket.count({ where: mine })
     const result = await emailFrom({ from: `nobody-${randomUUID().slice(0, 8)}@example.test` })
     expect(result.outcome).toBe('unrouted')
-    expect(await prisma.ticket.count()).toBe(before)
+    expect(await prisma.ticket.count({ where: mine })).toBe(before)
   })
 })
