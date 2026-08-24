@@ -111,6 +111,23 @@ export const TOKEN_TTL_MINUTES = {
   /// ACTION it guards (booking one slot) is no more sensitive than
   /// answering five questions: no document, no money, a fixed slot grid.
   SHOWING_BOOKING: 60 * 24 * 14,
+  /// R-094: the prospect's link to the door for a showing they have already
+  /// booked.
+  ///
+  /// THREE DAYS, and it is deliberately NOT the fourteen its sibling gets.
+  /// SHOWING_BOOKING's fourteen days are safe because the single action it
+  /// guards is picking a slot on a grid; this one is opened by somebody who
+  /// already has a slot, so it only has to survive from the confirmation to
+  /// the viewing - and a booking made three weeks out gets its link when the
+  /// reminder goes, not now.
+  ///
+  /// AND THE NUMBER BARELY MATTERS, which is the part worth writing down:
+  /// this link cannot open a door. It shows a page that runs an identity
+  /// check and, inside `ShowingAccess.validFrom`/`validTo` and nowhere else,
+  /// displays a code. A leaked link outside that window shows a sentence
+  /// saying the code is not live. The window is the control; this is the
+  /// second lock, not the first.
+  SHOWING_ACCESS: 60 * 24 * 3,
 } as const
 
 export type TokenPurpose = keyof typeof TOKEN_TTL_MINUTES

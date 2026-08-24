@@ -171,6 +171,17 @@ export async function bookShowing(
     }
   }
 
+  // Read BEFORE the booking transaction so the escort Task and the
+  // confirmation message agree about which kind of showing this is.
+  const smartLock =
+    link.unitStatus === 'VACANT'
+      ? await prisma.smartLock.findUnique({
+          where: { unitId: link.unitId },
+          select: { id: true, active: true },
+        })
+      : null
+  const selfService = smartLock?.active === true
+
   const redeemed = await redeemToken(rawToken, {
     purpose: 'SHOWING_BOOKING',
     subjectType: 'Prospect',
@@ -202,23 +213,34 @@ export async function bookShowing(
       },
       tx,
     )
-    // Every showing is staff-escorted (D-9) - no lockbox exists yet (R-094).
-    // Idempotent create-or-return, keyed on the Showing itself, so a retried
-    // form submission cannot raise two escort tasks for one booking.
-    await createTask(tx, {
-      propertyId: link.propertyId,
-      type: 'escort_showing',
-      subjectType: 'Showing',
-      subjectId: created.id,
-      businessDate: businessDate(requested, link.timezone),
-      priority: 'ROUTINE',
-      title: `Escort showing for ${link.unitName} at ${friendlyTimestamp(requested, link.timezone)}`,
-    })
+    // R-094: SELF-SERVE ONLY WHERE A LOCK IS FITTED AND THE UNIT IS EMPTY.
+    // Everything else books exactly as R-064 booked it - escorted, with a
+    // staff Task - so a unit nobody has fitted a lock to is untouched by
+    // this feature existing.
+    //
+    // The occupied case is not a missing feature. LEASE-08 offers
+    // self-showings for VACANT units and escorted showings for occupied
+    // ones, and an unaccompanied code on an occupied home is a stranger
+    // with a key to somebody's house.
+    if (!selfService) {
+      // Idempotent create-or-return, keyed on the Showing itself, so a
+      // retried form submission cannot raise two escort tasks for one
+      // booking.
+      await createTask(tx, {
+        propertyId: link.propertyId,
+        type: 'escort_showing',
+        subjectType: 'Showing',
+        subjectId: created.id,
+        businessDate: businessDate(requested, link.timezone),
+        priority: 'ROUTINE',
+        title: `Escort showing for ${link.unitName} at ${friendlyTimestamp(requested, link.timezone)}`,
+      })
+    }
     return created
   })
 
+  const prospect = await prisma.prospect.findUniqueOrThrow({ where: { id: link.prospectId } })
   try {
-    const prospect = await prisma.prospect.findUniqueOrThrow({ where: { id: link.prospectId } })
     const outcomes = await notify({
       category: 'prospect_showing',
       templateKey: 'showing.scheduled',
@@ -235,6 +257,10 @@ export async function bookShowing(
         scheduledStart: requested.toISOString(),
         scheduledEnd: scheduledEnd.toISOString(),
         timezone: link.timezone,
+        // Without this the confirmation ends "a member of our team will meet
+        // you there", which was true of every showing R-064 could book and
+        // is a promise nobody is going to keep here.
+        selfService,
       },
       propertyId: link.propertyId,
       idempotencyKey: `showing-confirmed:${showing.id}`,
@@ -244,6 +270,45 @@ export async function bookShowing(
     })
   } catch (error) {
     console.error(`[showings] failed to send booking confirmation for ${showing.id}`, error)
+  }
+
+  // R-094: the link to the door, its own message and its own token. Sent
+  // separately from the confirmation on purpose - it is the one a prospect
+  // has to find again when they are standing outside, and burying it in a
+  // booking confirmation is how it gets scrolled past.
+  //
+  // BEST-EFFORT, like every other send here. A booking that failed because a
+  // provider was down would lose the slot to protect the message.
+  if (selfService) {
+    try {
+      const issued = await issueToken('SHOWING_ACCESS', { type: 'Showing', id: showing.id })
+      const outcomes = await notify({
+        category: 'prospect_showing',
+        templateKey: 'showing.self_access',
+        recipient: {
+          type: 'PROSPECT',
+          id: link.prospectId,
+          email: prospect.email,
+          phone: prospect.phone,
+        },
+        context: {
+          firstName: link.firstName,
+          addressLine1: link.addressLine1,
+          unitName: link.unitName,
+          scheduledStart: requested.toISOString(),
+          scheduledEnd: scheduledEnd.toISOString(),
+          timezone: link.timezone,
+          url: authUrl(`/showings/access/${issued.token}`),
+        },
+        propertyId: link.propertyId,
+        idempotencyKey: `showing-access-link:${showing.id}`,
+      })
+      await dispatchPendingNotifications(now, 100, {
+        deliveryIds: outcomes.map((o) => o.deliveryId).filter((id): id is string => id != null),
+      })
+    } catch (error) {
+      console.error(`[showings] failed to send the access link for ${showing.id}`, error)
+    }
   }
 
   revalidatePath(`/showings/${rawToken}`)

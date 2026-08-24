@@ -46,8 +46,10 @@ export default async function ShowingBookingPage({
           <p className="text-base">
             {link.booked.addressLine1}
             {link.booked.unitName ? ` (${link.booked.unitName})` : ''}, {' '}
-            {friendlyTimestamp(link.booked.scheduledStart, link.booked.timezone)}. A member of
-            our team will meet you there.
+            {friendlyTimestamp(link.booked.scheduledStart, link.booked.timezone)}.{' '}
+            {link.booked.selfService
+              ? 'You are letting yourself in — use the entry-code link we sent you separately.'
+              : 'A member of our team will meet you there.'}
           </p>
         </main>
       )

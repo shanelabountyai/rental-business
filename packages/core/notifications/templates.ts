@@ -1613,6 +1613,15 @@ export interface ShowingContext {
   /// uses to read confirmation and reminder as different messages sharing
   /// one template.
   isReminder?: boolean
+  /// R-094: the unit has a smart lock and the prospect is going on their own.
+  ///
+  /// THIS FLAG EXISTS BECAUSE THE SENTENCE BELOW WAS A PROMISE. Every
+  /// confirmation this template has ever sent ends "a member of our team
+  /// will meet you there", which was true for every showing R-064 could
+  /// book. Left alone, the first self-showing prospect would have been told
+  /// somebody would be waiting, gone to an empty house, and been right to be
+  /// annoyed.
+  selfService?: boolean
 }
 
 /**
@@ -1647,7 +1656,73 @@ export const showingTemplate: NotificationTemplate<ShowingContext> = {
         '',
         window,
         '',
-        'A member of our team will meet you there.',
+        context.selfService
+          ? 'You will let yourself in. We will send you a separate link with an entry code — you will need to confirm who you are before it will show you the code, so do that in advance rather than on the doorstep.'
+          : 'A member of our team will meet you there.',
+      ].join('\n'),
+    }
+  },
+}
+
+/// Context for `showing.self_access` (LEASE-08, R-094) - the link a prospect
+/// uses to confirm who they are and, at the time they booked, to get the
+/// entry code.
+export interface ShowingAccessContext {
+  firstName: string
+  addressLine1: string
+  unitName: string
+  scheduledStart: string
+  scheduledEnd: string
+  timezone: string
+  url: string
+}
+
+/**
+ * The link to the door (LEASE-08's self-showing).
+ *
+ * IT CARRIES NO CODE, and it never will. The link opens a page that decides,
+ * at the moment it is opened, whether a code may be shown - which is what
+ * lets the code be killed after this message has been sent and read. A code
+ * pasted into an SMS is live for as long as the SMS exists, on a phone that
+ * may be lent, forwarded or backed up.
+ *
+ * IT ASKS THEM TO VERIFY IN ADVANCE, in as many words. Somebody discovering
+ * on the doorstep that they need their driving licence is somebody standing
+ * outside a house they cannot get into.
+ */
+export const showingAccessTemplate: NotificationTemplate<ShowingAccessContext> = {
+  key: 'showing.self_access',
+  category: 'prospect_showing',
+  channels: ['SMS', 'EMAIL'],
+  render: (context, channel) => {
+    const window = formatEntryWindow(
+      new Date(context.scheduledStart),
+      new Date(context.scheduledEnd),
+      context.timezone,
+    )
+    if (channel === 'SMS') {
+      return {
+        body: [
+          `Letting yourself in at ${context.addressLine1}, ${window}.`,
+          'Confirm who you are here, then this page shows your entry code at the time you booked:',
+          context.url,
+        ].join('\n'),
+      }
+    }
+    return {
+      subject: `Your entry code for ${context.addressLine1}`,
+      body: [
+        `Hi ${context.firstName},`,
+        '',
+        `You are seeing ${context.addressLine1}${context.unitName ? ` (${context.unitName})` : ''} on your own:`,
+        '',
+        window,
+        '',
+        'Open this link and confirm who you are — please do it before you set off rather than on the doorstep:',
+        '',
+        context.url,
+        '',
+        'The same page shows your entry code from a few minutes before your slot until a few minutes after it. The code will not be in any message we send you.',
       ].join('\n'),
     }
   },
@@ -1783,6 +1858,7 @@ export const TEMPLATES: Readonly<Record<string, NotificationTemplate<never>>> = 
   [leaseAmendmentSignInviteTemplate.key]:
     leaseAmendmentSignInviteTemplate as unknown as NotificationTemplate<never>,
   [showingTemplate.key]: showingTemplate as unknown as NotificationTemplate<never>,
+  [showingAccessTemplate.key]: showingAccessTemplate as unknown as NotificationTemplate<never>,
   [mtmRolloverTemplate.key]: mtmRolloverTemplate as unknown as NotificationTemplate<never>,
   [showingInviteTemplate.key]: showingInviteTemplate as unknown as NotificationTemplate<never>,
   [nonRenewalTemplate.key]: nonRenewalTemplate as unknown as NotificationTemplate<never>,

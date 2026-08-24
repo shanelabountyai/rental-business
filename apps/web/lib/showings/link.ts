@@ -32,7 +32,16 @@ export type ShowingLinkResult =
       /// Server Action always triggers a refresh of the page that called
       /// it, so this rejected branch is the ONLY one a booking prospect
       /// ever actually sees painted.
-      booked?: { scheduledStart: Date; unitName: string; addressLine1: string; timezone: string }
+      booked?: {
+        scheduledStart: Date
+        unitName: string
+        addressLine1: string
+        timezone: string
+        /// R-094. Without this the confirmation below promises an escort for
+        /// a viewing nobody is going to attend - the same promise the
+        /// `showing.scheduled` template was making.
+        selfService: boolean
+      }
     }
 
 export async function showingLinkStatus(rawToken: string): Promise<ShowingLinkResult> {
@@ -45,7 +54,10 @@ export async function showingLinkStatus(rawToken: string): Promise<ShowingLinkRe
       const showing = await prisma.showing.findFirst({
         where: { prospectId: stored.subjectId, status: 'BOOKED' },
         orderBy: { createdAt: 'desc' },
-        include: { unit: { select: { name: true } }, property: { select: { addressLine1: true, timezone: true } } },
+        include: {
+          unit: { select: { name: true, status: true, smartLock: { select: { active: true } } } },
+          property: { select: { addressLine1: true, timezone: true } },
+        },
       })
       if (showing) {
         return {
@@ -56,6 +68,8 @@ export async function showingLinkStatus(rawToken: string): Promise<ShowingLinkRe
             unitName: showing.unit.name,
             addressLine1: showing.property.addressLine1,
             timezone: showing.property.timezone,
+            selfService:
+              showing.unit.status === 'VACANT' && showing.unit.smartLock?.active === true,
           },
         }
       }

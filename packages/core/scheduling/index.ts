@@ -3,3 +3,4 @@
 // can put the clock wherever they need it.
 export * from './local-time.ts'
 export * from './showings.ts'
+export * from './self-showing.ts'

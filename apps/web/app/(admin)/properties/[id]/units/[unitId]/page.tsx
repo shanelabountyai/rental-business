@@ -8,6 +8,10 @@ import { currentScope as switcherScope } from '@/lib/scope/current-scope.ts'
 import { listDeletedDocuments, listDocuments } from '@/lib/documents/queries.ts'
 import { listingForUnit } from '@/lib/listings/queries.ts'
 import { getOperationalData } from '@/lib/operational/queries.ts'
+import { SmartLockPanel } from '@/components/showings/smart-lock-panel.tsx'
+import { smartLockPanel } from '@/lib/showings/lock-queries.ts'
+import { revokeShowingAccess, syncLockEvents } from '@/lib/showings/staff-actions.ts'
+import { friendlyTimestamp } from '@rental/core/scheduling'
 import { markTurnoverRentReady, setTurnoverTargetDate } from '@/lib/turnover/actions.ts'
 import { getTurnoverForUnit } from '@/lib/turnover/queries.ts'
 import { getUnitDetail } from '@/lib/units/queries.ts'
@@ -130,6 +134,8 @@ export default async function UnitDetailPage({
     canReveal,
     listing,
     turnover,
+    lockPanel,
+    canRevokeAccess,
   ] = await Promise.all([
     actorCan('unit.write', propertyResource(unit.property)),
     listDocuments(propertyId, scope, unitId),
@@ -140,6 +146,10 @@ export default async function UnitDetailPage({
     actorCan('accesscode.reveal', propertyResource(unit.property)),
     listingForUnit(unitId, scope),
     getTurnoverForUnit(unitId, unit.property.timezone, new Date()),
+    // R-094. Null for every unit nobody has fitted a lock to, which is what
+    // keeps self-showings opt-in per unit.
+    smartLockPanel(unitId),
+    actorCan('lease.write', propertyResource(unit.property)),
   ])
 
   return (
@@ -246,6 +256,46 @@ export default async function UnitDetailPage({
             setTargetDateAction={setTurnoverTargetDate.bind(null, turnover.id)}
             markRentReadyAction={markTurnoverRentReady.bind(null, turnover.id)}
             addItemAction={createWorkOrder}
+          />
+        )}
+        {lockPanel && (
+          <SmartLockPanel
+            label={`${lockPanel.lock.label} · ${lockPanel.lock.provider.toLowerCase()} · ${
+              lockPanel.lock.active
+                ? 'active — vacant viewings here are self-serve'
+                : 'inactive — viewings here are escorted'
+            }`}
+            canRevoke={canRevokeAccess}
+            accesses={lockPanel.accesses.map((access) => ({
+              showingId: access.showingId,
+              revokeAction: revokeShowingAccess.bind(null, access.showingId),
+              prospectName: `${access.showing.prospect.firstName} ${access.showing.prospect.lastName}`,
+              when: friendlyTimestamp(access.showing.scheduledStart, unit.property.timezone),
+              window: `${friendlyTimestamp(access.validFrom, unit.property.timezone)} – ${friendlyTimestamp(access.validTo, unit.property.timezone)}`,
+              live: access.revokedAt == null,
+              revoked: access.revokedAt
+                ? {
+                    at: friendlyTimestamp(access.revokedAt, unit.property.timezone),
+                    reason: access.revokedReason ?? '',
+                    by: access.revokedBy?.name ?? null,
+                    reachedDevice: access.revokeReachedDevice,
+                  }
+                : null,
+              // The name on the document, not just "verified": a later
+              // question about who was let in is answered by the name they
+              // showed, and it is already on the row.
+              identity: `${access.identityCheck.result.toLowerCase().replace(/_/g, ' ')} as ${access.identityCheck.documentName}`,
+            }))}
+            events={lockPanel.events.map((event) => ({
+              id: event.id,
+              kind: event.kind,
+              when: friendlyTimestamp(event.occurredAt, unit.property.timezone),
+              actorLabel: event.actorLabel,
+              who: event.access
+                ? `${event.access.showing.prospect.firstName} ${event.access.showing.prospect.lastName}`
+                : null,
+            }))}
+            syncAction={syncLockEvents.bind(null, unitId)}
           />
         )}
         <EmptySection

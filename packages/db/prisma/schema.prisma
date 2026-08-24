@@ -1117,6 +1117,7 @@ model Unit {
   abandonmentCases           AbandonmentCase[]
   violationCases             ViolationCase[]
   insuranceClaimsLossOfRents InsuranceClaim[]  @relation("ClaimLossOfRentsUnit")
+  smartLock                  SmartLock?
 
   @@unique([propertyId, name])
   @@index([status])
@@ -1557,10 +1558,11 @@ model Prospect {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  property     Property      @relation(fields: [propertyId], references: [id])
-  listing      Listing       @relation(fields: [listingId], references: [id])
-  applications Application[]
-  showings     Showing[]
+  property       Property        @relation(fields: [propertyId], references: [id])
+  listing        Listing         @relation(fields: [listingId], references: [id])
+  applications   Application[]
+  showings       Showing[]
+  identityChecks IdentityCheck[]
 
   @@index([propertyId, status])
   @@index([listingId])
@@ -1599,13 +1601,188 @@ model Showing {
   canceledAt     DateTime?
   createdAt      DateTime      @default(now())
 
-  property    Property @relation(fields: [propertyId], references: [id], onDelete: Restrict)
-  unit        Unit     @relation(fields: [unitId], references: [id], onDelete: Restrict)
-  prospect    Prospect @relation(fields: [prospectId], references: [id], onDelete: Restrict)
-  entryNotice Notice?  @relation("ShowingEntryNotice", fields: [entryNoticeId], references: [id])
+  property    Property       @relation(fields: [propertyId], references: [id], onDelete: Restrict)
+  unit        Unit           @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  prospect    Prospect       @relation(fields: [prospectId], references: [id], onDelete: Restrict)
+  entryNotice Notice?        @relation("ShowingEntryNotice", fields: [entryNoticeId], references: [id])
+  access      ShowingAccess?
 
   @@index([unitId, scheduledStart])
   @@index([status, scheduledStart])
+}
+
+enum SmartLockProvider {
+  SIMULATED
+}
+
+/// A smart lockbox or lock on one unit (LEASE-08, PROP-03; R-094).
+///
+/// ONE PER UNIT, AND ITS ABSENCE IS THE FEATURE FLAG. A unit with no lock
+/// row books exactly the way R-064 already books - escorted, with a staff
+/// Task - so nothing about an existing unit changes by this table existing.
+/// Self-showings are opt-in per unit, by an owner physically fitting a lock.
+model SmartLock {
+  id String @id @default(cuid())
+
+  unitId     String            @unique
+  provider   SmartLockProvider @default(SIMULATED)
+  /// The device's own id at the provider. Never invented here (D-27).
+  externalId String
+  label      String
+
+  installedAt DateTime @default(now())
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  unit     Unit            @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  accesses ShowingAccess[]
+  events   LockEvent[]
+
+  @@unique([provider, externalId])
+}
+
+/// Mirrors `IDENTITY_CHECK_RESULTS` in packages/core/scheduling.
+///
+/// NAME_MISMATCH is its own value rather than a flavour of FAILED, because
+/// the two mean opposite things to whoever reads them: a failed check is a
+/// photo that would not read and the prospect should try again, while a
+/// mismatch is a document in somebody else's name, and it is the single
+/// outcome a person should actually look at.
+enum IdentityCheckResult {
+  VERIFIED
+  NAME_MISMATCH
+  FAILED
+}
+
+/// One identity check on a prospect (LEASE-08's "identity verification";
+/// R-094).
+///
+/// NO PHOTO ID IS STORED, ANYWHERE, and D-108 is the settled form of the
+/// reasoning: a `Document` row is readable by every role holding
+/// `document.read` - the manager, the maintenance tech, the read-only
+/// partner - so uploading a stranger's driving licence to prove they are who
+/// they say would put it in front of whoever comes to fix the boiler, and
+/// keep it for ever. What is recorded is that a check of a stated class was
+/// run, by which provider, with what reference, on what date, and the name
+/// the document gave.
+///
+/// `documentName` and nothing else about the document. No date of birth, no
+/// document number, no expiry, no image - none of which any decision here
+/// reads, and each of which would be a thing to lose. The name is here
+/// because "the ID said somebody else" is the branch this whole feature
+/// exists to catch, and a decision nobody can reconstruct is not a decision.
+///
+/// HISTORY, NOT THE LATEST ANSWER. A prospect who failed once and passed on
+/// the third go keeps all three rows: that sequence is exactly what a later
+/// fair-housing question asks about, and the row that bought a code is
+/// pinned by `ShowingAccess.identityCheckId`.
+model IdentityCheck {
+  id           String              @id @default(cuid())
+  prospectId   String
+  provider     String
+  /// The provider's own reference. What a later question is taken back to
+  /// them with, since none of the evidence is held here.
+  reference    String
+  result       IdentityCheckResult
+  documentName String
+  checkedAt    DateTime            @default(now())
+
+  prospect Prospect       @relation(fields: [prospectId], references: [id], onDelete: Restrict)
+  access   ShowingAccess?
+
+  @@index([prospectId, checkedAt])
+}
+
+/// The one-time code that lets a stranger into a vacant house on their own
+/// (LEASE-08, R-094).
+///
+/// `identityCheckId` IS NOT NULL, at the database rather than by manners:
+/// there is no code path, now or later, that issues one of these to somebody
+/// unverified.
+///
+/// `validFrom`/`validTo` ARE THE REAL CONTROL, and they are not the link's
+/// lifetime. The prospect's link may be opened the day before to get the
+/// check done; the code answers only inside the window around the slot they
+/// booked.
+///
+/// `revokedAt` is the instant kill (LEASE-08), and the row survives it. "Was
+/// that code live at 3pm on Tuesday" is answerable only from a row that
+/// outlived being killed - the same call `LeaseHold.liftedAt` makes.
+model ShowingAccess {
+  id              String @id @default(cuid())
+  showingId       String @unique
+  smartLockId     String
+  identityCheckId String @unique
+
+  providerRef String
+  /// Sealed by the same box `AccessCode.sealedCode` uses (R-005). The
+  /// prospect sees it through their own link inside the window; staff
+  /// reading it is `accesscode.reveal`, privileged and audited.
+  sealedCode  String
+
+  validFrom DateTime
+  validTo   DateTime
+  issuedAt  DateTime @default(now())
+
+  revokedAt           DateTime?
+  /// Required by a database CHECK whenever `revokedAt` is set. A kill with
+  /// no stated reason is indistinguishable from a mis-click, and "why was
+  /// this pulled" is what somebody standing at a locked door asks.
+  revokedReason       String?
+  revokedByStaffId    String?
+  /// Whether the provider actually accepted the revoke. FALSE means the row
+  /// says "pulled" and the DOOR MAY NOT AGREE - somebody has to go and check
+  /// the device or change the lock.
+  ///
+  /// A column rather than a return value, and that is the whole reason it
+  /// exists: the warning used to live in the action's result, rendered by
+  /// the very form that a successful revoke then unmounts, so the one
+  /// message asking somebody to go and change a lock was destroyed by the
+  /// re-render that followed it. A durable fact, on the row it describes.
+  revokeReachedDevice Boolean?
+
+  showing       Showing       @relation(fields: [showingId], references: [id], onDelete: Restrict)
+  smartLock     SmartLock     @relation(fields: [smartLockId], references: [id], onDelete: Restrict)
+  identityCheck IdentityCheck @relation(fields: [identityCheckId], references: [id], onDelete: Restrict)
+  revokedBy     StaffUser?    @relation("ShowingAccessRevokedBy", fields: [revokedByStaffId], references: [id], onDelete: Restrict)
+  events        LockEvent[]
+
+  @@index([smartLockId, validFrom])
+}
+
+/// DENIED is as much of the entry log as UNLOCKED: a run of refusals at a
+/// door at 11pm is the thing somebody wants to see, and a log recording only
+/// successes shows nothing at all on the night it mattered.
+enum LockEventKind {
+  UNLOCKED
+  DENIED
+}
+
+/// What the device says happened at the door (LEASE-08's "entry logs";
+/// R-094). Read back from the provider, never written from our own state - a
+/// log we generated from what we BELIEVE we issued would agree with us by
+/// construction (D-27) and could never show the entry we did not expect.
+model LockEvent {
+  id              String        @id @default(cuid())
+  smartLockId     String
+  /// Null for an event no code of ours explains - a key, somebody's own app,
+  /// a code issued before this system knew about the lock. Kept rather than
+  /// dropped: an unexplained entry is precisely the one worth a record.
+  showingAccessId String?
+  kind            LockEventKind
+  occurredAt      DateTime
+  /// The device's own event id. The unique below is what makes syncing
+  /// idempotent, so running it twice does not double the log.
+  providerRef     String
+  actorLabel      String
+  createdAt       DateTime      @default(now())
+
+  smartLock SmartLock      @relation(fields: [smartLockId], references: [id], onDelete: Restrict)
+  access    ShowingAccess? @relation(fields: [showingAccessId], references: [id], onDelete: Restrict)
+
+  @@unique([smartLockId, providerRef])
+  @@index([smartLockId, occurredAt])
 }
 
 // ---------------------------------------------------------------------------
@@ -1811,6 +1988,7 @@ model StaffUser {
   screeningCriteriaCreated                ScreeningCriteria[]
   screeningReportsDecided                 ScreeningReport[]               @relation("ScreeningReportDecidedBy")
   screeningReportsAdverseActionOverridden ScreeningReport[]               @relation("ScreeningReportAdverseActionOverriddenBy")
+  showingAccessesRevoked                  ShowingAccess[]                 @relation("ShowingAccessRevokedBy")
 
   @@index([active])
 }
@@ -3423,6 +3601,14 @@ enum AuthTokenPurpose {
   /// relationship reasoning, and it opens no document, moves no money and
   /// reads only a fixed slot grid.
   SHOWING_BOOKING
+  /// R-094: a prospect's link to the door for a self-showing they have
+  /// already booked. MULTI-USE until it expires, unlike SHOWING_BOOKING
+  /// which is burned on the one slot it books - this one is opened at least
+  /// twice by design (once to get the identity check done, once standing at
+  /// the door), and a link that died on first open would strand somebody
+  /// outside a house. Its lifetime is NOT the code's: `ShowingAccess`
+  /// carries the window the code actually answers in.
+  SHOWING_ACCESS
 }
 
 model StaffCredential {

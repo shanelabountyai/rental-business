@@ -823,6 +823,35 @@ export const AUDIT_ACTIONS = [
   /// cancelled showing could later be litigated over, so this stays the
   /// same shape as `task.canceled` rather than `envelope.voided`.
   'showing.canceled',
+
+  /// R-094 (LEASE-08): a prospect's identity was checked before being let
+  /// into a vacant house on their own.
+  ///
+  /// CARRIES WHETHER THE NAMES AGREED, NEVER THE NAME. The `IdentityCheck`
+  /// row behind it holds what the document said, for whoever has to
+  /// reconstruct the decision; `AuditLog` is the table `audit.read` exposes
+  /// broadly, and a stranger's identity document details are not something
+  /// to spread across it. Written for every result, including the failures -
+  /// "how many times did somebody try, and under what names" is the question
+  /// this exists to answer.
+  'showing.identity_checked',
+
+  /// R-094: an unaccompanied entry code was issued for a booked showing.
+  /// NEVER CARRIES THE CODE - a trail that quotes the secret whose release
+  /// it is recording has moved it rather than logged it, the same rule
+  /// `accesscode.revealed` already follows.
+  'showing.access_issued',
+
+  /// R-094: the instant kill (LEASE-08). REASON_REQUIRED, and the database
+  /// enforces the same pairing from the other side: a code pulled for no
+  /// stated reason is indistinguishable from a mis-click, and "why was this
+  /// cancelled" is what somebody standing at a locked door asks.
+  'showing.access_revoked',
+
+  /// R-094: the entry log was read back from the device. Records how many
+  /// events arrived and how many of them no code of ours explains - the
+  /// second number being the one worth looking at.
+  'showing.lock_events_synced',
 ] as const
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number]
@@ -931,7 +960,10 @@ export const REASON_REQUIRED: ReadonlySet<AuditAction> = new Set([
   // sentence twice teaches people to type "see summary". Closing a safety
   // case is a decision that the risk has passed.
   'confidential.case_closed',
-  // R-090. Withdrawing a change of parties that several people were already
+  // R-094. Pulling somebody's entry code while they may already be on their
+  // way to the property. The database enforces the same pairing.
+  'showing.access_revoked',
+    // R-090. Withdrawing a change of parties that several people were already
   // asked to sign. Starting one is not on this list for the same reason
   // `claim.opened` is not: the change carries its own required `reason`
   // column, which the audit entry copies.
