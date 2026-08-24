@@ -3799,7 +3799,7 @@ Two defects of my own in the new spec, and the second is the same shape. The evi
 - **No sweep reconciles our rows against the device.** If a code is deleted at the provider, or one exists there that we never issued, nothing notices. The entry log surfaces unexplained *entries*, not unexplained *codes*.
 
 ## R-091c — The confidential re-key reaches the smart lock
-**Commit:** `pending`  ·  **Date:** 2026-08-24
+**Commit:** `6ad263a`  ·  **Date:** 2026-08-24
 
 **What it built.** `orderLockChange` now revokes every `TenantLockCode` on the unit at the device and mints a replacement for everybody still authorized, shown once on the case page; a red panel naming anybody left without a working code; a new `confidential.door_codes_reissued` audit action; one e2e.
 
