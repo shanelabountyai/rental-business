@@ -3774,7 +3774,7 @@ Two defects of my own in the new spec, and the second is the same shape. The evi
 - **The identity check is a name and nothing else.** A real provider returns a document type, an expiry and a liveness result, and a real deployment may need to record which of those were checked. The adapter's return type is deliberately as narrow as what gets stored, so widening it is a deliberate act rather than a drift.
 
 ## R-094b — Smart-lock code lifecycle tied to lease state
-**Commit:** `pending`  ·  **Date:** 2026-08-24
+**Commit:** `f2a4cde`  ·  **Date:** 2026-08-24
 
 **What it built.** `TenantLockCode`, one live code per person per tenancy enforced by a partial unique index; `lib/locks/tenant-codes.ts` — issue and revoke, both ending at the device; three automatic revocation hooks (the tenancy leaving force, a party coming off the lease, and staff pulling one); a `Door codes` panel on the lease page; the entry log now resolving tenant entries as well as viewers'; 10 server-side tests and 3 e2e assertions.
 
