@@ -15,6 +15,7 @@ import { redirect } from 'next/navigation'
 import { audit } from '@/lib/audit/index.ts'
 import { propertyResource, requirePermission, requireScope } from '@/lib/auth/guard.ts'
 import { rulesFor } from '@/lib/jurisdiction/queries.ts'
+import { issueTenantLockCodeFor, revokeTenantLockCodes } from '@/lib/locks/tenant-codes.ts'
 import {
   buildPartyChange,
   loadLeaseForPartyChange,
@@ -50,6 +51,20 @@ export interface ConfidentialFormState {
   error?: string
   notice?: string
   fieldErrors?: Record<string, string>
+  /// R-091c: the replacement door codes the re-key minted, shown once.
+  ///
+  /// RETURNED RATHER THAN READ BACK, because reading a sealed code is
+  /// `accesscode.reveal` - privileged, audited, and a separate act. The
+  /// person who just ordered the re-key needs these digits in their hand
+  /// NOW, to read out to somebody who may be standing in front of them.
+  /// Safe to render even after `revalidatePath` swaps this panel to its
+  /// "ordered" branch: the component stays mounted, so its own
+  /// `useActionState` result survives - unlike the door-codes panel, where
+  /// the form subcomponent is what unmounts.
+  newDoorCodes?: { name: string; code: string }[]
+  /// Somebody who should have got a replacement and did not, because the
+  /// lock refused. The loudest thing on the page while it is true.
+  strandedNames?: string[]
 }
 
 function str(formData: FormData, name: string): string {
@@ -238,7 +253,7 @@ export async function orderLockChange(
 ): Promise<ConfidentialFormState> {
   const context = await caseForWrite(caseId)
   if (!context) return { error: 'That case no longer exists.' }
-  const { found } = context
+  const { found, actor } = context
   if (found.lockChangeWorkOrderId) {
     return { error: 'A re-key has already been ordered from this case.' }
   }
@@ -262,6 +277,18 @@ export async function orderLockChange(
     .map((lt) => `${lt.tenant.firstName} ${lt.tenant.lastName}`)
 
   const note = restrictedPartyNote({ authorizedNames, callbackLabel })
+
+  // R-091c. Who KEEPS a way in: whoever is on the tenancy, minus the
+  // restricted party if they are one of them - the same list the locksmith's
+  // note is built from, and deliberately the same expression, so the person
+  // who may be handed keys and the person who gets a new door code can never
+  // be two different answers.
+  const stillAuthorized = found.lease.leaseTenants
+    .filter((lt) => lt.tenant.id !== found.restrictedPartyTenantId)
+    .map((lt) => ({
+      id: lt.tenant.id,
+      name: `${lt.tenant.firstName} ${lt.tenant.lastName}`,
+    }))
 
   const workOrderId = await prisma.$transaction(async (tx) => {
     const workOrder = await tx.workOrder.create({
@@ -305,6 +332,42 @@ export async function orderLockChange(
       tx,
     )
 
+    // R-091c. THE SMART LOCK, WHERE THERE IS ONE - and this is the half
+    // R-091 could not do, because no lock existed then. Retiring an
+    // `AccessCode` row closes our record; it changes no lock, which R-091's
+    // own panel says in as many words. A door code IS the lock, so the
+    // restricted party keeps working access until the locksmith arrives
+    // unless it is revoked here.
+    //
+    // EVERYBODY'S, NOT JUST THE RESTRICTED PARTY'S, for the reason the
+    // whole re-key exists: households share codes, and a restricted party
+    // who was told the survivor's code walks in on the survivor's code. This
+    // is the digital half of changing the locks, so it changes all of them.
+    await revokeTenantLockCodes(
+      { leaseId: found.lease.id },
+      { reason: 'The locks are being changed.', staffId: actor.id },
+      tx,
+    ).then(async (revoked) => {
+      if (revoked.length === 0) return
+      // On the LEASE, readable, and saying nothing: a door code changing is
+      // an ordinary fact about a tenancy, and the reason above names no
+      // person and no cause (D-107).
+      await audit(
+        {
+          action: 'accesscode.tenant_code_revoked',
+          entityType: 'Lease',
+          entityId: found.lease.id,
+          propertyId: found.lease.propertyId,
+          reason: 'The locks are being changed.',
+          after: {
+            codeIds: revoked.map((code) => code.id),
+            reachedDevice: revoked.every((code) => code.reachedDevice),
+          },
+        },
+        tx,
+      )
+    })
+
     // Every code still open-ended on this unit. `effectiveTo` is R-005's own
     // retirement mechanism (see `addAccessCode`), reused rather than a second
     // notion of "retired" - a code with an end date is already what every
@@ -333,9 +396,75 @@ export async function orderLockChange(
     return workOrder.id
   })
 
+  // ==========================================================================
+  // R-091c. THE REPLACEMENT CODES, AFTER THE COMMIT AND NEVER INSIDE IT.
+  //
+  // Revoking is the safety act and it must not be held up by anything;
+  // minting is a call to a third party that can fail. If this fails the
+  // tenancy is CODE-LESS, which is a survivor locked out of their own home
+  // at night - the exact failure D-118 refuses to build an auto-expiring
+  // tenant code for - so it is never silent: the names come back and the
+  // page says them in red.
+  //
+  // NO FUNDS GATE AND NO HOLD GATE, unlike `issueTenantLockCode`. Those
+  // guard a MOVE-IN, which is a decision about whether somebody is entitled
+  // to possession yet. This is a sitting tenant whose code was just killed
+  // for their own safety, and refusing to give it back because a deposit has
+  // not cleared would be the product getting the situation exactly backwards.
+  // That is why the gates live in the action and not in the module.
+  // ==========================================================================
+  const newDoorCodes: { name: string; code: string }[] = []
+  const strandedNames: string[] = []
+  for (const person of stillAuthorized) {
+    const result = await issueTenantLockCodeFor({
+      leaseId: found.lease.id,
+      tenantId: person.id,
+      staffId: actor.id,
+    })
+    if (result.refusal === 'no_smart_lock') break
+    if (result.refusal) {
+      strandedNames.push(person.name)
+      continue
+    }
+    newDoorCodes.push({ name: person.name, code: result.issued.code })
+    await audit({
+      action: 'accesscode.issued',
+      entityType: 'Lease',
+      entityId: found.lease.id,
+      propertyId: found.lease.propertyId,
+      after: {
+        tenantLockCodeId: result.issued.id,
+        tenantId: person.id,
+        programmedAtDevice: true,
+      },
+    })
+  }
+
+  if (newDoorCodes.length > 0 || strandedNames.length > 0) {
+    // On the CASE side, and counts only - how many, never which, the same
+    // call `confidential.codes_retired` already makes (D-107). Its OWN
+    // action, not a second one of those: retiring an `AccessCode` closes our
+    // record and changes no lock, and this changes the door.
+    await audit({
+      action: 'confidential.door_codes_reissued',
+      entityType: 'ConfidentialCase',
+      entityId: caseId,
+      propertyId: found.lease.propertyId,
+      after: {
+        caseId,
+        unitId: found.lease.unitId,
+        doorCodesReissued: newDoorCodes.length,
+        doorCodesStranded: strandedNames.length,
+      },
+    })
+  }
+
   revalidatePath(`/confidential/${caseId}`)
+  revalidatePath(`/leases/${found.lease.id}`)
   return {
     notice: `Re-key ordered as work order ${workOrderId.slice(-6)}. Assign it to a locksmith from the work-order queue.`,
+    newDoorCodes: newDoorCodes.length > 0 ? newDoorCodes : undefined,
+    strandedNames: strandedNames.length > 0 ? strandedNames : undefined,
   }
 }
 

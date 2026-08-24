@@ -161,6 +161,97 @@ test.afterAll(async () => {
   await prisma.staffUser.updateMany({ where: { id: { in: staffIds } }, data: { active: false } })
 })
 
+test('the re-key kills the door codes and hands the survivor a new one (R-091c)', async ({
+  page,
+}) => {
+  const seed = await seedLease({ withCoTenant: true })
+  const { lease, unit, coTenant, tenant, unique } = seed
+  const owner = await createStaff('owner', seed.entity.id)
+
+  // A smart lock, and a live door code each. R-091 could only retire the
+  // RECORD of a code; a door code is the lock itself, so the restricted
+  // party kept working access until the locksmith arrived.
+  const lock = await prisma.smartLock.create({
+    data: { unitId: unit.id, externalId: `dev-conf-${unique}`, label: 'Front door keypad' },
+  })
+  const codeFor = (tenantId: string) =>
+    prisma.tenantLockCode.create({
+      data: {
+        smartLockId: lock.id,
+        leaseId: lease.id,
+        tenantId,
+        providerRef: `ref-${tenantId.slice(-8)}`,
+        sealedCode: 'sealed-placeholder',
+        issuedByStaffId: owner.id,
+      },
+    })
+  const survivorCode = await codeFor(tenant.id)
+  const restrictedCode = await codeFor(coTenant!.id)
+
+  await signIn(page, owner)
+  await page.goto(`/leases/${lease.id}`)
+  await page.getByText('Open a confidential case').click()
+  await page.getByLabel('What is going on').fill('Locks need changing today.')
+  await page.getByLabel('Name of the restricted party').fill(`Sam Ex-${unique}`)
+  await page.getByRole('button', { name: 'Open the case' }).click()
+  await page.waitForURL(/\/confidential\/[a-z0-9]+$/)
+  await page.getByLabel('Are they on this tenancy?').selectOption(coTenant!.id)
+  await page.getByRole('button', { name: 'Save this case' }).click()
+  await expect(page.getByText('Case updated.')).toBeVisible()
+
+  await page
+    .getByLabel('Who the locksmith should ring if anybody else asks')
+    .fill('Sam Rivera on 555-0100')
+  await page.getByRole('button', { name: 'Order the re-key and retire the codes' }).click()
+  await expect(page.getByText('Re-key ordered as work order')).toBeVisible()
+
+  // BOTH old codes die, not just the restricted party's: households share
+  // codes, and somebody told the survivor's code walks in on the survivor's
+  // code. This is the digital half of changing the locks.
+  for (const old of [survivorCode, restrictedCode]) {
+    const after = await prisma.tenantLockCode.findUniqueOrThrow({ where: { id: old.id } })
+    expect(after.revokedAt).not.toBeNull()
+    expect(after.revokedReason).toBe('The locks are being changed.')
+  }
+
+  // And the survivor is not left locked out of her own home - a replacement
+  // is minted and shown once, right here, to the person who may have her on
+  // the phone.
+  const live = await prisma.tenantLockCode.findMany({
+    where: { leaseId: lease.id, revokedAt: null },
+  })
+  expect(live).toHaveLength(1)
+  expect(live[0]!.tenantId).toBe(tenant.id)
+  // Scoped to the panel: the case-details form above lists every tenant in
+  // its "Are they on this tenancy?" select, so an unscoped name match finds
+  // both people twice over.
+  const lockPanel = page.getByRole('region', { name: 'Locks and access codes' })
+  await expect(lockPanel.getByText('New door codes')).toBeVisible()
+  await expect(lockPanel.getByText(`Jane Survivor-${unique}`)).toBeVisible()
+  // The restricted party gets nothing, and is not named on this panel.
+  await expect(lockPanel.getByText(`Sam Ex-${unique}`)).toHaveCount(0)
+
+  // The case-side audit counts, and never says who (D-107).
+  const retired = await prisma.auditLog.findFirstOrThrow({
+    where: {
+      entityType: 'ConfidentialCase',
+      action: 'confidential.door_codes_reissued',
+      propertyId: seed.property.id,
+    },
+  })
+  expect(retired.after).toMatchObject({ doorCodesReissued: 1, doorCodesStranded: 0 })
+  expect(JSON.stringify(retired.after)).not.toContain(`Sam Ex-${unique}`)
+  expect(JSON.stringify(retired.after)).not.toContain(`Jane Survivor-${unique}`)
+
+  // The lease-side entries are ordinary and say nothing about why.
+  const leaseEntries = await prisma.auditLog.findMany({
+    where: { entityType: 'Lease', entityId: lease.id },
+  })
+  const payloads = JSON.stringify(leaseEntries)
+  expect(payloads).not.toContain('confidential')
+  expect(leaseEntries.map((entry) => entry.reason)).toContain('The locks are being changed.')
+})
+
 test('opens a case, orders the re-key, and retires the codes on file', async ({ page }) => {
   const seed = await seedLease()
   const { lease, unit, unique } = seed

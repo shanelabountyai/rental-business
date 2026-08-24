@@ -3797,3 +3797,24 @@ Two defects of my own in the new spec, and the second is the same shape. The evi
 - **No code is issued automatically at move-in**, deliberately — the funds gate is a decision somebody makes, and a code minted by a job would skip it. But it does mean a new tenant with a smart lock gets nothing until somebody presses the button, and no task reminds them.
 - **A re-key ordered from a confidential case (R-091) does not revoke tenant codes.** It retires `AccessCode` rows and orders a locksmith; with a smart lock fitted, the restricted party's own door code would survive until the locksmith arrives. That is a real gap on the safety path and nothing owns it.
 - **No sweep reconciles our rows against the device.** If a code is deleted at the provider, or one exists there that we never issued, nothing notices. The entry log surfaces unexplained *entries*, not unexplained *codes*.
+
+## R-091c — The confidential re-key reaches the smart lock
+**Commit:** `pending`  ·  **Date:** 2026-08-24
+
+**What it built.** `orderLockChange` now revokes every `TenantLockCode` on the unit at the device and mints a replacement for everybody still authorized, shown once on the case page; a red panel naming anybody left without a working code; a new `confidential.door_codes_reissued` audit action; one e2e.
+
+**Why it existed.** R-094b named it as a gap nothing owned. R-091's panel says — correctly — that retiring an `AccessCode` closes our record and changes no lock, and the work order is what makes the door different. A smart-lock door code is the exception, because the code *is* the lock: before this, a restricted party kept working access to the home until a locksmith physically arrived, which is hours on the one case where hours matter.
+
+**What it decided.** Recorded as **D-120**.
+
+- **Every code goes, not just the restricted party's.** The same reason the physical re-key exists: households share codes, and somebody who was told the survivor's code walks in on the survivor's code. This is the digital half of changing the locks, so it changes all of them.
+- **The survivor is not left locked out of her own home.** A replacement is minted for every tenant except the restricted party, from the *same expression* that builds the locksmith's authorized-names note — so who may be handed keys and who gets a new door code can never be two different answers. The codes are shown once, on the case page, to the person who may have the tenant on the phone right now.
+- **No funds gate and no hold gate on the re-issue**, unlike `issueTenantLockCode`. Those guard a move-in, which is a question about whether somebody is entitled to possession yet; this is a sitting tenant whose code was just killed for her own safety, and refusing to give it back because a deposit has not cleared would be the product getting the situation exactly backwards. That is precisely why R-094b put those gates in the action rather than in the module.
+- **Revoking commits before minting is attempted.** The safety act must not wait on a third party. If the lock then refuses a replacement, the tenancy is code-less — a survivor locked out at night — so it is never silent: the names come back and the panel says them in red.
+- **The new codes render outside the panel's ordered/not-ordered branch**, so they survive the `revalidatePath` that flips it. The component stays mounted across that swap and keeps its own action state — unlike the door-codes panel, where the form subcomponent is what unmounts. Third time this trap has come up in three items, from a different direction each time.
+
+**Found along the way.** Two different events were sharing `confidential.codes_retired` with two different payload shapes — the `AccessCode` retirement and the new door-code re-issue — and a test found it by reading the wrong one. Split into its own action, because the two also mean different things: one closes our record and changes no lock, the other changes the door.
+
+**What it left behind.**
+- **Nothing re-keys on a bifurcation.** R-091b removes the restricted party from the lease and R-094b revokes their door code, but that path never orders a re-key — correctly, since removing somebody from a lease is not the same decision as changing the locks. An operator who does one expecting the other gets less than they think, and nothing says so on either panel.
+- **The replacement codes are shown once and nowhere else.** If the page is closed before they are read out, the only route back is revoking and re-issuing from the tenancy, which is a second pair of acts. A reveal path for `TenantLockCode` (the audited `accesscode.reveal` shape) does not exist yet.

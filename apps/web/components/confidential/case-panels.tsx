@@ -170,6 +170,45 @@ export function LockChangePanel({
       </h2>
       <FormAlerts state={state} />
 
+      {/* R-091c. RENDERED OUTSIDE THE ordered/not-ordered branch, so it
+          survives the `revalidatePath` that flips this panel the moment the
+          re-key lands. This component stays mounted across that swap, so its
+          own action state does too - unlike the door-codes panel, where the
+          form subcomponent is what unmounts and the code has to be read
+          before it does. */}
+      {state.strandedNames && (
+        <div className="flex flex-col gap-1 rounded-md border border-red-300 p-3 text-sm text-red-800 dark:border-red-900 dark:text-red-200">
+          <p className="font-medium">
+            {state.strandedNames.join(', ')} {state.strandedNames.length === 1 ? 'has' : 'have'} no
+            working door code.
+          </p>
+          <p>
+            The old codes were pulled but the lock would not accept a replacement. Until this is
+            fixed they cannot get into their own home — ring them now, and get somebody to the
+            property or issue a code from the tenancy once the lock answers.
+          </p>
+        </div>
+      )}
+
+      {state.newDoorCodes && (
+        <div className="flex flex-col gap-2 rounded-md border p-3">
+          <p className="text-sm font-medium">New door codes</p>
+          {/* Shown once, here, because the person who ordered this may have
+              the tenant in front of them or on the phone right now. Reading
+              one back afterwards is a separate, logged act. */}
+          <ul className="flex flex-col gap-1">
+            {state.newDoorCodes.map((entry) => (
+              <li key={entry.name} className="text-sm">
+                {entry.name}: <span className="font-mono text-lg tracking-[0.2em]">{entry.code}</span>
+              </li>
+            ))}
+          </ul>
+          <p className="text-muted-foreground text-sm">
+            The old ones no longer open the door. Give these out now — they are shown once.
+          </p>
+        </div>
+      )}
+
       {ordered ? (
         <p className="text-sm">
           A re-key was ordered as work order{' '}
@@ -193,6 +232,12 @@ export function LockChangePanel({
             Retiring a code stops this system handing it out again — to a vendor or to a
             tenant. It does not change any lock. The work order is what makes the door
             different, so it still has to be assigned and done.
+          </p>
+          {/* R-091c. The one exception to the sentence above, and it has to
+              be next to it or the two readings fight. */}
+          <p className="text-sm">
+            A smart lock is the exception: door codes on this unit are revoked at the device
+            straight away, and everybody still on the tenancy gets a new one, shown here once.
           </p>
           <TextField
             label="Who the locksmith should ring if anybody else asks"

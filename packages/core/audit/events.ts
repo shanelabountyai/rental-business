@@ -659,6 +659,21 @@ export const AUDIT_ACTIONS = [
   /// being locked out turns on.
   'confidential.codes_retired',
 
+  /// R-091c: the unit's smart-lock door codes were revoked and reissued as
+  /// part of the re-key.
+  ///
+  /// ITS OWN ACTION RATHER THAN A SECOND `confidential.codes_retired`, and
+  /// the first version of this was exactly that - two events sharing one
+  /// name with two different payload shapes, which a test found by reading
+  /// the wrong one. They also mean different things: retiring an
+  /// `AccessCode` closes OUR RECORD of a code and changes no lock, while
+  /// this one changes the door.
+  ///
+  /// Counts only, never who (D-107) - and the second count is the one that
+  /// matters, because a stranded tenant is somebody locked out of their own
+  /// home.
+  'confidential.door_codes_reissued',
+
   /// R-084 (RISK-11, RISK-12): a typed hold was placed on a tenancy. Carries
   /// the type and the effects it switched on at that moment, snapshotted
   /// rather than left to be recomputed - the effect table is code, code
