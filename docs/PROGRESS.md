@@ -3905,7 +3905,7 @@ Two defects of my own in the new spec, and the second is the same shape. The evi
 - **No virus scanning.** Files from strangers are stored and served back to staff. The type and size caps narrow it; a scanner is a vendor decision nobody has made.
 
 ## R-097e — Email honours "stop emailing me"
-**Commit:** `pending`  ·  **Date:** 2026-08-24
+**Commit:** `d7e5bbc`  ·  **Date:** 2026-08-24
 
 **What it built.** `isEmailOptOutRequest` and `emailOptOutConfirmation` in core with 8 tests; `email-opt-out.ts`, which switches off every email preference a recipient is allowed to switch off and confirms what is left; the webhook wiring; `CATEGORY_LABELS` moved from a client component into core; 2 more database tests.
 
