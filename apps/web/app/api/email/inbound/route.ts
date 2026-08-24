@@ -1,5 +1,6 @@
 import { timingSafeEqual } from 'node:crypto'
-import { stripQuotedReply } from '@rental/core/comms'
+import { htmlToText, stripQuotedReply } from '@rental/core/comms'
+import type { InboundAttachment } from '@/lib/comms/inbound-attachments.ts'
 import { receiveInboundMessage } from '@/lib/comms/messages.ts'
 
 // The inbound-email webhook (COMM-08, R-097a).
@@ -41,6 +42,16 @@ interface InboundPayload {
   html?: string
   messageId?: string
   'message-id'?: string
+  /// R-097d. Base64 is the lowest common denominator across providers that
+  /// post JSON; one that posts multipart would be parsed into this same
+  /// shape in this same place (D-7's rule).
+  attachments?: {
+    filename?: string
+    name?: string
+    contentType?: string
+    content_type?: string
+    content?: string
+  }[]
 }
 
 function addresses(...values: (string | string[] | undefined)[]): string[] {
@@ -49,6 +60,24 @@ function addresses(...values: (string | string[] | undefined)[]): string[] {
     .flatMap((value) => value.split(','))
     .map((value) => value.trim())
     .filter(Boolean)
+}
+
+/// Decoded here, in the one place that knows a provider's shape, and handed
+/// on as bytes. `Buffer.from(..., 'base64')` never throws on rubbish - it
+/// returns what it could decode - so a mangled attachment becomes a short
+/// buffer that the size and type checks then refuse, rather than an
+/// exception that would cost the whole message.
+function parseAttachments(payload: InboundPayload): InboundAttachment[] {
+  return (payload.attachments ?? []).flatMap((raw) => {
+    if (!raw.content) return []
+    return [
+      {
+        fileName: raw.filename ?? raw.name ?? 'attachment',
+        contentType: raw.contentType ?? raw.content_type ?? 'application/octet-stream',
+        content: Buffer.from(raw.content, 'base64'),
+      },
+    ]
+  })
 }
 
 function secretMatches(provided: string, expected: string): boolean {
@@ -88,7 +117,13 @@ export async function POST(request: Request) {
   }
 
   const from = addresses(payload.from)[0]
-  const body = payload.text ?? payload['body-plain'] ?? ''
+  // R-097d. HTML-ONLY MAIL IS NOT AN EMPTY MESSAGE, and the first version of
+  // this treated it as one: several mobile clients send no plain-text part
+  // at all, so a tenant who typed a paragraph got a record saying they said
+  // nothing. Plain text is still preferred where it exists - it is what the
+  // sender's client thought the words were.
+  const plain = payload.text ?? payload['body-plain'] ?? ''
+  const body = plain.trim() !== '' ? plain : payload.html ? htmlToText(payload.html) : ''
   if (!from) {
     // No sender at all: nothing to file and nothing to triage, since even the
     // unrouted queue is keyed on who tried to make contact. Accepted rather
@@ -111,6 +146,7 @@ export async function POST(request: Request) {
       // second copy in somebody's history.
       externalId: payload.messageId ?? payload['message-id'] ?? null,
       recipients: addresses(payload.to, payload.cc, payload.recipient),
+      attachments: parseAttachments(payload),
     })
     return Response.json({ outcome: result.outcome }, { status: 200 })
   } catch (error) {

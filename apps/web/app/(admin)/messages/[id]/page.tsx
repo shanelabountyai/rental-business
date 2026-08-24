@@ -122,6 +122,26 @@ export default async function ThreadPage({
                   </span>
                 </div>
                 <p className="whitespace-pre-wrap">{message.body}</p>
+                {/* R-097d. Stored and never shown is only half of not losing
+                    it — a tenant who photographed a leak needs somebody to
+                    be able to open the photograph. */}
+                {message.documents.length > 0 && (
+                  <ul className="flex flex-col gap-1 pt-1">
+                    {message.documents.map((document) => (
+                      <li key={document.id} className="text-xs">
+                        <Link
+                          href={`/api/documents/${document.id}/file`}
+                          className="underline underline-offset-4"
+                        >
+                          {document.fileName}
+                        </Link>{' '}
+                        <span className="text-muted-foreground">
+                          ({Math.max(1, Math.round(document.sizeBytes / 1024))} KB)
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </li>
             )
           })}

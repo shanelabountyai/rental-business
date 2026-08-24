@@ -4871,6 +4871,16 @@ model UnroutedMessage {
   routedMessage Message?   @relation(fields: [routedMessageId], references: [id])
   routedBy      StaffUser? @relation("UnroutedMessageRoutedBy", fields: [routedByStaffId], references: [id])
 
+  /// R-097d: how many attachments could NOT be kept.
+  ///
+  /// An unrouted message has no property and a `Document` must have one, so
+  /// an attachment on a message nobody could place is discarded - inventing
+  /// a property to hang it on is exactly the guess `decideRoute` refuses.
+  /// What must not happen is that the discarding is INVISIBLE: whoever
+  /// triages this needs to know there was a photograph so they can ask for
+  /// it again.
+  attachmentsDropped Int @default(0)
+
   @@index([routedAt, receivedAt])
 }
 
@@ -4917,6 +4927,8 @@ model Message {
   delivery      MessageDelivery?
   unrouted      UnroutedMessage?
   workOrderLink WorkOrderMessageLink?
+  /// R-097d: attachments that arrived on this message.
+  documents     Document[]
 
   @@index([threadId, sentAt])
   @@index([externalId])
@@ -5613,6 +5625,13 @@ model Document {
   /// question asked at a sale or an audit is "what backs up the roof I
   /// capitalised in 2024", not "what roof documents does this house have".
   capitalImprovementId String?
+  /// R-097d (COMM-08): the inbound message this file arrived on.
+  ///
+  /// On THIS side, not on `Message`, which is append-only - the association
+  /// is made when the document is written, so there is nothing to amend
+  /// later and no join table is needed. (`WorkOrderMessageLink` exists
+  /// because that association genuinely IS late; this one is not.)
+  messageId            String?
   /// Document class - lease, notice, invoice, w9, coi, inspection_photo, etc.
   /// Drives the retention rules R-012 configures (DOC-05).
   type                 String
@@ -5683,6 +5702,7 @@ model Document {
   insuranceClaim          InsuranceClaim?           @relation("InsuranceClaimDocuments", fields: [insuranceClaimId], references: [id])
   /// The letter or estimate behind one event.
   claimEvents             InsuranceClaimEvent[]     @relation("ClaimEventDocument")
+  message                 Message?                  @relation(fields: [messageId], references: [id], onDelete: Restrict)
 
   @@index([propertyId, type])
   @@index([legalEntityId, type])
@@ -5696,6 +5716,7 @@ model Document {
   @@index([abandonmentCaseId])
   @@index([violationObservationId])
   @@index([insuranceClaimId])
+  @@index([messageId])
 }
 
 // ---------------------------------------------------------------------------

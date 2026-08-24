@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { extractReplyKey, isReplyKey, replyAddress, stripQuotedReply } from './email-reply.ts'
+import {
+  extractReplyKey,
+  htmlToText,
+  isReplyKey,
+  replyAddress,
+  stripQuotedReply,
+} from './email-reply.ts'
 
 // Inbound email threading (COMM-08, R-097a).
 
@@ -94,5 +100,43 @@ describe('stripping the quoted tail', () => {
     expect(stripQuotedReply('The boiler is making a noise again.')).toBe(
       'The boiler is making a noise again.',
     )
+  })
+})
+
+describe('HTML-only email', () => {
+  it('keeps the words when there is no plain-text part', () => {
+    // R-097a stored an empty string here, so a tenant who typed a paragraph
+    // got a record saying they said nothing.
+    expect(htmlToText('<p>The boiler is making a noise.</p>')).toBe(
+      'The boiler is making a noise.',
+    )
+  })
+
+  it('keeps paragraph structure rather than one run-on sentence', () => {
+    expect(htmlToText('<p>First.</p><p>Second.</p>')).toBe('First.\nSecond.')
+    expect(htmlToText('Line one.<br>Line two.')).toBe('Line one.\nLine two.')
+  })
+
+  it('drops a stylesheet rather than filing it as body text', () => {
+    expect(htmlToText('<head><style>p{color:red}</style></head><p>Hello.</p>')).toBe('Hello.')
+    expect(htmlToText('<script>alert(1)</script><p>Hello.</p>')).toBe('Hello.')
+  })
+
+  it('decodes the entities that actually turn up, and leaves the rest alone', () => {
+    expect(htmlToText('<p>Tom &amp; Jerry&apos;s tap &lt;dripping&gt;</p>')).toBe(
+      "Tom & Jerry's tap <dripping>",
+    )
+    expect(htmlToText('<p>&#8364;50</p>')).toBe('€50')
+    // A wrong guess is a changed sentence in an evidence trail; a visible
+    // entity is a cosmetic blemish.
+    expect(htmlToText('<p>&hellip;</p>')).toBe('&hellip;')
+  })
+
+  it('marks list items so a list still reads as one', () => {
+    expect(htmlToText('<ul><li>Tap</li><li>Boiler</li></ul>')).toBe('• Tap\n• Boiler')
+  })
+
+  it('collapses the indentation mail HTML is full of', () => {
+    expect(htmlToText('<div>\n    <p>   Spaced   out   </p>\n</div>')).toBe('Spaced out')
   })
 })

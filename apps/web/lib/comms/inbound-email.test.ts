@@ -21,6 +21,7 @@ let unitB: string
 const tenantIds: string[] = []
 const leaseIds: string[] = []
 const threadIds: string[] = []
+const documentIds: string[] = []
 
 beforeEach(() => {
   process.env.INBOUND_EMAIL_ADDRESS = 'hello@inbound.example.test'
@@ -57,6 +58,7 @@ beforeAll(async () => {
 })
 
 afterAll(async () => {
+  await prisma.document.deleteMany({ where: { id: { in: documentIds } } })
   await prisma.unroutedMessage.deleteMany({ where: { fromAddress: { contains: 'inmail-' } } })
   await prisma.leaseTenant.deleteMany({ where: { leaseId: { in: leaseIds } } })
   await prisma.lease.deleteMany({ where: { id: { in: leaseIds } } })
@@ -210,5 +212,78 @@ describe('duplicates', () => {
     const externalId = `msg-${randomUUID()}`
     expect((await inbound({ from: email, externalId })).outcome).toBe('routed')
     expect((await inbound({ from: email, externalId })).outcome).toBe('duplicate')
+  })
+})
+
+describe('attachments (R-097d)', () => {
+  const photo = (over: Partial<{ fileName: string; contentType: string; bytes: number }> = {}) => ({
+    fileName: over.fileName ?? 'leak.jpg',
+    contentType: over.contentType ?? 'image/jpeg',
+    content: Buffer.alloc(over.bytes ?? 2048, 7),
+  })
+
+  it('keeps a photograph a tenant emailed, on the message it arrived with', async () => {
+    // R-097a filed the words and threw the photograph away, silently.
+    const email = `photo-${randomUUID().slice(0, 8)}@example.test`
+    const tenant = await tenantAt([propertyA], email)
+    const result = await inbound({ from: email, attachments: [photo()] })
+    expect(result.outcome).toBe('routed')
+    if (result.outcome !== 'routed') return
+
+    const documents = await prisma.document.findMany({ where: { messageId: result.messageId } })
+    expect(documents).toHaveLength(1)
+    expect(documents[0]).toMatchObject({
+      propertyId: propertyA,
+      tenantId: tenant.id,
+      // The same type R-019 gives a photo arriving through the portal: it is
+      // the same evidence whichever way it was sent.
+      type: 'MAINTENANCE_PHOTO',
+      fileName: 'leak.jpg',
+    })
+    documentIds.push(documents[0]!.id)
+  })
+
+  it('refuses a type nobody sends on purpose, and keeps the message anyway', async () => {
+    // A closed list, not a block list - and the words are already recorded by
+    // the time an attachment is judged.
+    const email = `exe-${randomUUID().slice(0, 8)}@example.test`
+    await tenantAt([propertyA], email)
+    const result = await inbound({
+      from: email,
+      attachments: [photo({ fileName: 'invoice.pdf.exe', contentType: 'application/x-msdownload' })],
+    })
+    expect(result.outcome).toBe('routed')
+    if (result.outcome !== 'routed') return
+    expect(await prisma.document.count({ where: { messageId: result.messageId } })).toBe(0)
+    const message = await prisma.message.findUniqueOrThrow({ where: { id: result.messageId } })
+    expect(message.body).toContain('boiler')
+  })
+
+  it('refuses one that is too big', async () => {
+    const email = `big-${randomUUID().slice(0, 8)}@example.test`
+    await tenantAt([propertyA], email)
+    const result = await inbound({
+      from: email,
+      attachments: [photo({ bytes: 16 * 1024 * 1024 })],
+    })
+    expect(result.outcome).toBe('routed')
+    if (result.outcome !== 'routed') return
+    expect(await prisma.document.count({ where: { messageId: result.messageId } })).toBe(0)
+  })
+
+  it('RECORDS what it dropped when the message could not be routed', async () => {
+    // The half it would be easy to leave broken: an unrouted message has no
+    // property to hang a Document on, and silently discarding is the exact
+    // defect this item exists to fix.
+    const result = await inbound({
+      from: `nobody-${randomUUID().slice(0, 8)}@example.test`,
+      attachments: [photo(), photo({ fileName: 'second.png', contentType: 'image/png' })],
+    })
+    expect(result.outcome).toBe('unrouted')
+    if (result.outcome !== 'unrouted') return
+    const row = await prisma.unroutedMessage.findUniqueOrThrow({
+      where: { id: result.unroutedId },
+    })
+    expect(row.attachmentsDropped).toBe(2)
   })
 })

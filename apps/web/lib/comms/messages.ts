@@ -15,6 +15,7 @@ import { type Prisma, prisma } from '@rental/db'
 import { deliverOverChannel } from '@/lib/notifications/deliver.ts'
 import { candidatesForEmail, candidatesForPhone, resolveThread } from './threads.ts'
 import { inboundEmailConfig } from './inbound-email-config.ts'
+import { type InboundAttachment, storeInboundAttachments } from './inbound-attachments.ts'
 
 // Writing to a thread (COMM-01, R-017).
 //
@@ -285,6 +286,9 @@ export async function receiveInboundMessage(args: {
   /// a colleague still carries it somewhere, and taking only `To:` would
   /// drop it.
   recipients?: readonly string[]
+  /// R-097d: what the message carried. Stored only for a ROUTED message -
+  /// a `Document` must have a property and an unrouted message has none.
+  attachments?: readonly InboundAttachment[]
 }): Promise<InboundResult> {
   if (args.externalId) {
     const [seenMessage, seenUnrouted] = await Promise.all([
@@ -316,7 +320,7 @@ export async function receiveInboundMessage(args: {
     if (key) {
       const thread = await prisma.thread.findUnique({
         where: { replyKey: key },
-        select: { id: true, tenantId: true, vendorId: true },
+        select: { id: true, propertyId: true, tenantId: true, vendorId: true },
       })
       // A key naming no thread falls through rather than failing. A deleted
       // conversation, a forwarded old email, a mangled tag: all of them
@@ -339,6 +343,7 @@ export async function receiveInboundMessage(args: {
           await touchThread(tx, thread.id, args.receivedAt)
           return created
         })
+        await storeAttachments(args, message.id, thread.propertyId, thread.tenantId, thread.vendorId)
         return { outcome: 'routed', threadId: thread.id, messageId: message.id }
       }
     }
@@ -364,6 +369,11 @@ export async function receiveInboundMessage(args: {
         reason: decision.reason,
         externalId: args.externalId ?? null,
         receivedAt: args.receivedAt,
+        // Recorded rather than silently discarded: whoever triages this
+        // needs to know there was a photograph, so they can ask for it
+        // again. Storing it is not an option - a Document must have a
+        // property, and inventing one is the guess decideRoute refuses.
+        attachmentsDropped: args.attachments?.length ?? 0,
       },
     })
     return {
@@ -400,7 +410,36 @@ export async function receiveInboundMessage(args: {
     return created
   })
 
+  await storeAttachments(
+    args,
+    message.id,
+    candidate.propertyId,
+    candidate.scope === 'TENANT' ? candidate.partyId : null,
+    candidate.scope === 'VENDOR' ? candidate.partyId : null,
+  )
   return { outcome: 'routed', threadId: thread.id, messageId: message.id }
+}
+
+/// Never allowed to fail the message. By the time this runs the words are
+/// already recorded, which is the half that matters - a storage outage must
+/// not lose what somebody said as well as what they attached.
+async function storeAttachments(
+  args: { attachments?: readonly InboundAttachment[] },
+  messageId: string,
+  propertyId: string,
+  tenantId: string | null,
+  vendorId: string | null,
+): Promise<void> {
+  if (!args.attachments || args.attachments.length === 0) return
+  await storeInboundAttachments({
+    attachments: args.attachments,
+    messageId,
+    propertyId,
+    tenantId,
+    vendorId,
+  }).catch((error) => {
+    console.error(`[inbound-email] attachment storage failed for message ${messageId}`, error)
+  })
 }
 
 /**

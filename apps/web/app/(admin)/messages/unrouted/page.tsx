@@ -94,6 +94,20 @@ export default async function UnroutedMessagesPage() {
                   {REASON_LABELS[message.reason] ?? message.reason}
                 </p>
                 <p className="whitespace-pre-wrap">{message.body}</p>
+                {/* R-097d. An unrouted message has no property, and a
+                    Document must have one - so an attachment here cannot be
+                    stored, and inventing a property to hang it on is exactly
+                    the guess `decideRoute` refuses. What must not happen is
+                    that the discarding is invisible: whoever files this needs
+                    to know to ask for the photograph again. */}
+                {message.attachmentsDropped > 0 && (
+                  <p className="text-sm font-medium">
+                    {message.attachmentsDropped}{' '}
+                    {message.attachmentsDropped === 1 ? 'attachment was' : 'attachments were'} sent
+                    with this and could not be kept — there was no tenancy to file them against.
+                    Ask the sender to send them again once this is filed.
+                  </p>
+                )}
               </div>
               {canFile && tenants.length > 0 && (
                 <FileUnroutedForm

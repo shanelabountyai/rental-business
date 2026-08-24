@@ -71,6 +71,13 @@ export async function getThread(threadId: string, scope: ResolvedScope) {
         include: {
           staffUser: { select: { id: true, name: true } },
           delivery: true,
+          // R-097d: what arrived attached. Stored and then never shown is
+          // only half of not losing it.
+          documents: {
+            where: { deletedAt: null },
+            select: { id: true, fileName: true, contentType: true, sizeBytes: true },
+            orderBy: { createdAt: 'asc' },
+          },
         },
       },
     },

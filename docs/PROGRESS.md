@@ -3880,3 +3880,26 @@ Two defects of my own in the new spec, and the second is the same shape. The evi
 - **Attachments are dropped.** A tenant photographing a leak and emailing it gets their words filed and their picture discarded silently. R-019 already has the upload path for a maintenance photo; wiring the two together is a real item and nothing owns it.
 - **No inbound-email opt-out.** SMS has `STOP` handling (R-040e) and email has no equivalent here — a tenant replying "stop emailing me" threads like any other message and changes nothing about what we send.
 - **HTML-only email is stored empty.** The route prefers the plain-text part and does not strip HTML, so a client that sent only HTML files a blank message. Better than storing markup, worse than converting it, and the fix is a converter nobody needs yet.
+
+## R-097d — An inbound email keeps what it carried
+**Commit:** `pending`  ·  **Date:** 2026-08-24
+
+**What it built.** `htmlToText` in core with 6 tests; `inbound-attachments.ts` — the trust-boundary rules for accepting a file from a stranger; `Document.messageId` and `UnroutedMessage.attachmentsDropped`; attachments rendered on the thread and the dropped count on the triage queue; 4 more database tests.
+
+**Why it existed.** R-097a named both of these as gaps in its own PROGRESS entry the same day. They are better described as defects: a tenant photographing a leak and emailing it got their sentence recorded and their evidence discarded, silently; and a client that sent only HTML filed a blank message, so somebody who typed a paragraph got a record saying they said nothing.
+
+**What it decided.** Recorded as **D-126**.
+
+- **The HTML converter is not a parser and adds no dependency.** It only ever deletes — script and style contents whole, then every tag — and the result goes into an append-only body that React renders as text, so the worst a hostile input can produce is nonsense somebody reads. Unrecognised entities are left as written: a visible `&hellip;` is a cosmetic blemish, a wrong guess is a changed sentence in an evidence trail. Plain text still wins where it exists, because that is what the sender's own client thought the words were.
+- **An attachment arrives from an unauthenticated stranger**, and every rule follows from that. A closed type list — images and PDFs, what tenants and vendors actually send — rather than a block list somebody has to keep ahead of. A size cap *and* a count cap, because without both one message is an unbounded write to somebody else's storage bill. The declared content type is recorded because it is what the sender claimed, and trusted for nothing else: nothing here executes, renders or parses the bytes. And the filename is sanitised for **display** as well as for the storage key, which `generateStorageKey` already handled — `invoice.pdf.exe` from a stranger should not read as an invoice on a staff screen.
+- **An image is `MAINTENANCE_PHOTO`, a PDF is `OTHER`.** The first matches R-019's own type for the same thing arriving through the portal — a photograph of a leak is the same evidence whichever way it was sent. The second is deliberately unguessed: a PDF is as often an invoice as anything else, and guessing would attach a wrong retention rule (DOC-05).
+- **Nothing is stored for an unrouted message, and the drop is visible.** A `Document` must have a property; an unrouted message has none, and inventing one is exactly the guess `decideRoute` refuses. So the count goes on the row and the triage queue says a photograph was sent and could not be kept, with the instruction to ask for it again. Fixing only the routed half would have left the original defect — silent loss — in the harder one.
+- **Attachment storage can never fail the message.** By the time it runs the words are already recorded, which is the half that matters; a storage outage must not lose what somebody said as well as what they attached.
+- **`Document.messageId`, not a join table.** CLAUDE.md's rule is that late association with an append-only row needs a join table (`WorkOrderMessageLink` exists for exactly that). This association is not late: the document is written knowing its message, so the FK goes on the mutable side and `Message` is never amended.
+
+**Found along the way.** Nothing broken. Worth noting that a `prisma format` failure is silent under `tail -1` — the same trap as R-094b, hit again while adding these columns: the migration applied and the schema was left incomplete, caught only because `db:drift` disagreed. The drift check is doing real work in this repo.
+
+**What it left behind.**
+- **No inbound-email opt-out.** SMS honours `STOP` (R-040e); email has no equivalent, so a tenant replying "stop emailing me" threads like any other message and changes nothing about what we send. The clearest remaining gap in inbound email, and nothing owns it.
+- **Attachments are not linked to a ticket.** An emailed photo lands on the message and on the property; R-019's portal path attaches one to a *ticket*, which is what makes it show on the job. Whoever wires SMS-to-ticket's sibling for email should do both at once.
+- **No virus scanning.** Files from strangers are stored and served back to staff. The type and size caps narrow it; a scanner is a vendor decision nobody has made.

@@ -133,3 +133,63 @@ export function stripQuotedReply(body: string): string {
   const kept = lines.slice(0, cut).join('\n').trim()
   return kept.length > 0 ? kept : body.trim()
 }
+
+// ---------------------------------------------------------------------------
+// HTML-only email (R-097d)
+// ---------------------------------------------------------------------------
+
+/// The entities that actually turn up in mail. Deliberately not a full table:
+/// a handful covers real messages, and anything unrecognised is left as
+/// written rather than guessed at - a visible `&hellip;` is a cosmetic
+/// blemish, a wrong guess is a changed sentence in an evidence trail.
+const ENTITIES: Record<string, string> = {
+  amp: '&',
+  lt: '<',
+  gt: '>',
+  quot: '"',
+  apos: "'",
+  nbsp: ' ',
+}
+
+/**
+ * The readable text of an HTML-only email.
+ *
+ * THIS EXISTS BECAUSE THE ALTERNATIVE WAS STORING NOTHING. R-097a took the
+ * plain-text part and fell back to an empty string, so a client that sent
+ * only HTML - which several mobile clients do by default - filed a blank
+ * message. A tenant who typed a paragraph got a record saying they said
+ * nothing, which is worse than a record that is slightly ugly.
+ *
+ * NO DEPENDENCY, AND NO PARSER. A converter that is correct on hostile HTML
+ * is a large thing; this one is correct on the mail people actually send and
+ * is trivially safe on anything else, because it only ever DELETES. Nothing
+ * here interprets, executes, fetches or renders - script and style contents
+ * are dropped whole, every remaining tag is removed, and what is left is
+ * text. The output goes into an append-only message body and is rendered as
+ * text by React, so the worst a malicious input can produce is nonsense
+ * somebody reads.
+ */
+export function htmlToText(html: string): string {
+  return (
+    html
+      // Whole elements whose CONTENT is not prose. Dropped before tags are
+      // stripped, or a stylesheet becomes body text.
+      .replace(/<(script|style|head)\b[^>]*>[\s\S]*?<\/\1>/gi, '')
+      // Block boundaries become line breaks before the tags go, so a
+      // paragraph structure survives as blank lines rather than collapsing
+      // into one run-on sentence.
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<\/(p|div|li|tr|h[1-6]|blockquote)>/gi, '\n')
+      .replace(/<li\b[^>]*>/gi, '• ')
+      .replace(/<[^>]+>/g, '')
+      .replace(/&#(\d+);/g, (_, code: string) => String.fromCodePoint(Number(code)))
+      .replace(/&([a-z]+);/gi, (whole, name: string) => ENTITIES[name.toLowerCase()] ?? whole)
+      // Mail HTML is full of indentation that means nothing once the tags
+      // are gone.
+      .split('\n')
+      .map((line) => line.replace(/[ \t ]+/g, ' ').trim())
+      .join('\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim()
+  )
+}
