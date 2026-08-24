@@ -3685,7 +3685,7 @@ Two defects of my own in the new spec, and the second is the same shape. The evi
 - **`lib/` actions are checked but tenant- and vendor-facing guards are not.** `requireTenant`/`verifyVendorLink` have their own shapes and their own failure modes; nothing here says anything about them.
 
 ## R-091b — Early-termination rights and lease bifurcation
-**Commit:** `pending`  ·  **Date:** 2026-08-24
+**Commit:** `18a0216`  ·  **Date:** 2026-08-24
 
 **What it built.** Three `JurisdictionRule` columns for the statutory early-termination right, three-valued on the first; `earlyTermination()` in `packages/core/confidential` with eight unit tests; a panel on the confidential case page that records the termination as R-066's ordinary tenant-given notice; `party-change-builder.ts`, R-090's whole party-change flow extracted so two entry points can share it; `LeasePartyChange.unsignedRemovalBasis`; a second panel that sends the amendment with the restricted party left off the signing list; and two e2e specs. Texas is seeded from §92.016/§92.0161 as draft configuration.
 
