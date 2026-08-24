@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto'
 import { prisma } from '@rental/db'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { getPreferences } from '@/lib/notifications/queries.ts'
+import { honourEmailOptOut } from './email-opt-out.ts'
 import { receiveInboundMessage } from './messages.ts'
 
 // Inbound email threading against a real database (COMM-08, R-097a).
@@ -58,6 +60,9 @@ beforeAll(async () => {
 })
 
 afterAll(async () => {
+  await prisma.notificationPreference.deleteMany({
+    where: { recipientType: 'TENANT', recipientId: { in: tenantIds } },
+  })
   await prisma.document.deleteMany({ where: { id: { in: documentIds } } })
   await prisma.unroutedMessage.deleteMany({ where: { fromAddress: { contains: 'inmail-' } } })
   await prisma.leaseTenant.deleteMany({ where: { leaseId: { in: leaseIds } } })
@@ -285,5 +290,48 @@ describe('attachments (R-097d)', () => {
       where: { id: result.unroutedId },
     })
     expect(row.attachmentsDropped).toBe(2)
+  })
+})
+
+describe('"stop emailing me" (R-097e)', () => {
+  it('switches off what it can and leaves the locked categories alone', async () => {
+    const email = `optout-${randomUUID().slice(0, 8)}@example.test`
+    const tenant = await tenantAt([propertyA], email)
+    const outcome = await honourEmailOptOut('TENANT', tenant.id, email)
+
+    expect(outcome.stopped).toBeGreaterThan(0)
+    const stored = await prisma.notificationPreference.findMany({
+      where: { recipientType: 'TENANT', recipientId: tenant.id, channel: 'EMAIL' },
+    })
+    expect(stored.length).toBe(outcome.stopped)
+    expect(stored.every((row) => row.enabled === false)).toBe(true)
+
+    // THE HALF THAT MATTERS. A legal notice that did not arrive is a notice
+    // that was not served, and an entry notice is an obligation of ours
+    // rather than a subscription of theirs - so no preference row exists to
+    // turn them off, and `getPreferences` reports them on regardless.
+    const categories = new Set(stored.map((row) => row.category))
+    for (const locked of ['legal_notice', 'entry_notice', 'maintenance_emergency']) {
+      expect(categories.has(locked), locked).toBe(false)
+    }
+    expect(outcome.stillSending).toContain('Entry notices')
+
+    const effective = await getPreferences('TENANT', tenant.id)
+    const emailRows = effective.filter((row) => row.channel === 'EMAIL')
+    expect(emailRows.filter((row) => row.locked).every((row) => row.enabled)).toBe(true)
+    expect(emailRows.filter((row) => !row.locked).every((row) => !row.enabled)).toBe(true)
+  })
+
+  it('keeps the message in the conversation rather than swallowing it', async () => {
+    // R-040e's rule for a `STOP` text, applied here: the tenant did send it,
+    // it is part of their record, and an evidence trail that quietly drops
+    // the one message that changed what we may send them is not one.
+    const email = `keep-${randomUUID().slice(0, 8)}@example.test`
+    await tenantAt([propertyA], email)
+    const result = await inbound({ from: email, body: 'Please stop emailing me.' })
+    expect(result.outcome).toBe('routed')
+    if (result.outcome !== 'routed') return
+    const message = await prisma.message.findUniqueOrThrow({ where: { id: result.messageId } })
+    expect(message.body).toBe('Please stop emailing me.')
   })
 })

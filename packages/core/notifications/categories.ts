@@ -297,3 +297,45 @@ export function defaultEnabled(
     category === 'prospect_showing'
   )
 }
+
+/**
+ * What each category is called wherever it is named to a person.
+ *
+ * IN CORE RATHER THAN IN THE SETTINGS SCREEN, because R-097e needs the same
+ * words in an email confirming an opt-out, and two copies of a vocabulary is
+ * one copy that eventually stops matching - the same call
+ * `LOCKED_CATEGORIES` made about its explanations, and for the same reason.
+ *
+ * Typed against the union, so the compiler refuses the next category added
+ * without a label. CLAUDE.md's "adding a value to a status enum is never one
+ * edit", caught by the type system instead of by somebody reading a screen.
+ */
+export const CATEGORY_LABELS: Record<NotificationCategory, string> = {
+  rent_reminder: 'Rent reminders',
+  payment_receipt: 'Payment receipts',
+  payment_failed: 'Failed payments',
+  autopay_predebit: 'Autopay pre-debit notice',
+  legal_notice: 'Legal notices',
+  entry_notice: 'Entry notices',
+  maintenance_update: 'Maintenance updates',
+  maintenance_emergency: 'Emergency maintenance',
+  work_order_assigned: 'Work orders assigned to you',
+  lease_renewal: 'Lease renewals',
+  move_out: 'Move-out',
+  lease_signature: 'Lease signing links',
+  announcement: 'Announcements',
+  approval_needed: 'Approvals waiting on you',
+  task_assigned: 'Tasks assigned to you',
+  unit_make_ready: 'Units ready to turn',
+  compliance_due: 'Compliance dates coming up',
+  vendor_response: 'Vendor replies on your jobs',
+  digest_daily: 'Daily digest instead of one at a time (rent reminders, maintenance updates, renewals, announcements, ready units, compliance dates, your assigned tasks)',
+  // Never actually shown on this screen in practice - the only recipient
+  // this category ever sends to is PROSPECT, which has no staff account and
+  // therefore no preferences row to read. Present so the exhaustive map
+  // stays exhaustive rather than because anyone will see it.
+  prospect_prescreening: 'Prospect pre-screening invites',
+  prospect_application: 'Application invites and fee confirmations',
+  prospect_showing: 'Showing bookings and reminders',
+  inspection_signature: 'Inspection reports ready to review and sign',
+}

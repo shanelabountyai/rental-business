@@ -3903,3 +3903,27 @@ Two defects of my own in the new spec, and the second is the same shape. The evi
 - **No inbound-email opt-out.** SMS honours `STOP` (R-040e); email has no equivalent, so a tenant replying "stop emailing me" threads like any other message and changes nothing about what we send. The clearest remaining gap in inbound email, and nothing owns it.
 - **Attachments are not linked to a ticket.** An emailed photo lands on the message and on the property; R-019's portal path attaches one to a *ticket*, which is what makes it show on the job. Whoever wires SMS-to-ticket's sibling for email should do both at once.
 - **No virus scanning.** Files from strangers are stored and served back to staff. The type and size caps narrow it; a scanner is a vendor decision nobody has made.
+
+## R-097e — Email honours "stop emailing me"
+**Commit:** `pending`  ·  **Date:** 2026-08-24
+
+**What it built.** `isEmailOptOutRequest` and `emailOptOutConfirmation` in core with 8 tests; `email-opt-out.ts`, which switches off every email preference a recipient is allowed to switch off and confirms what is left; the webhook wiring; `CATEGORY_LABELS` moved from a client component into core; 2 more database tests.
+
+**Why it existed.** SMS has honoured `STOP` since R-040e. Email honoured nothing, so a tenant replying "please stop emailing me" got a message threaded and no change to what we sent them — named as the clearest unowned gap when R-097d shipped.
+
+**What it decided.** Recorded as **D-127**.
+
+- **An email opt-out is not an SMS `STOP`, and treating it as one is wrong in both directions.** `STOP` is a single token with legal force the *carrier* enforces — it blocks the number, which is why `optOutReply` deliberately sends no confirmation. Email has no carrier and no command grammar: people write a sentence, and nobody else enforces anything.
+- **So the false-positive trade-off inverts.** `classifyOptOutKeyword` is deliberately generous, because filing "STOP the leak" as a repair risks continuing to text somebody who asked us not to. Here the expensive mistake is the opposite: a tenant whose rent reminders were silently switched off because they wrote "stop" in a sentence about a dripping tap gets a late fee. Every phrase is multi-word and unambiguous, `stop` alone is deliberately not one of them, and there is a test full of real maintenance sentences that must not match.
+- **Detection reads the stripped body.** Almost every marketing email ever sent carries "unsubscribe" in its footer, so a reply quoting one would otherwise opt somebody out every single time. There is a test for exactly that, asserting the raw body *would* have matched and the stripped one does not.
+- **The dangerous outcome is not "we kept emailing them".** Four categories are locked on by NOTIF-02 and no request can switch them off — a legal notice that did not arrive is a notice that was not served, and an entry notice is an obligation of ours rather than a subscription of theirs. The failure to avoid is a tenant who believes they switched off every email, misses an entry notice, and finds somebody in their home, **having been misled by us**.
+- **Hence one more email after being asked for none.** That is the standard shape and it earns the intrusion by naming exactly what will still arrive, in `LOCKED_CATEGORIES`' own words — NOTIF-02 already requires that reason be shown wherever the question is asked, and this is one of the places it is asked.
+- **Sent through `deliverOverChannel`, not `notify()`.** Routing it through the preference engine would let the message announcing a preference change be suppressed by the change it announces. The kill switch and sandbox redirect still apply, because they live in `deliverOverChannel` and cover everything.
+- **Email only.** An opt-out arriving by email says nothing about whether somebody wants a text at midnight about a burst pipe; reading it as portfolio-wide silence is a far larger inference than the sentence supports.
+- **The message stays in the conversation** rather than being swallowed by the command — R-040e's rule for a `STOP` text, and for the same reason: an evidence trail that quietly drops the one message that changed what we may send is not an evidence trail.
+- **`CATEGORY_LABELS` moved into core.** The confirmation needs the same words as the settings screen, and two copies of a vocabulary is one copy that eventually stops matching — the call `LOCKED_CATEGORIES` already made about its explanations. The exhaustive `Record` still makes a new category a compile error.
+
+**What it left behind.**
+- **No way back except replying.** The confirmation says to reply and somebody will turn them on again; there is no one-click resubscribe link, which would need another token purpose. A staff member has to act on the reply.
+- **Nothing tells staff it happened.** The preferences change and the confirmation goes out, but no task is raised and the thread shows only the tenant's own message. Whoever wants "who has muted us" needs a report, and none exists.
+- **A guarantor cannot opt out this way.** Routing resolves a tenant or a vendor, and a guarantor emailing in is unrouted — so their request lands in triage like any other unmatched message.

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
+  emailOptOutConfirmation,
   extractReplyKey,
+  isEmailOptOutRequest,
   htmlToText,
   isReplyKey,
   replyAddress,
@@ -138,5 +140,78 @@ describe('HTML-only email', () => {
 
   it('collapses the indentation mail HTML is full of', () => {
     expect(htmlToText('<div>\n    <p>   Spaced   out   </p>\n</div>')).toBe('Spaced out')
+  })
+})
+
+describe('"stop emailing me" (R-097e)', () => {
+  it('recognises the ways people actually ask', () => {
+    for (const body of [
+      'Please unsubscribe me.',
+      'Can you stop emailing me about this',
+      'Remove me from your mailing list please',
+      'I want to opt out of these',
+      "Don't email me again",
+      'No more emails thanks',
+    ]) {
+      expect(isEmailOptOutRequest(body), body).toBe(true)
+    }
+  })
+
+  it('does NOT fire on a message about a repair', () => {
+    // The expensive mistake here is the opposite of the SMS one: a tenant
+    // whose rent reminders were silently switched off because they wrote
+    // "stop" in a sentence about a tap gets a late fee. Every phrase is
+    // multi-word for exactly this reason, and "stop" alone is not one.
+    for (const body of [
+      'The tap will not stop dripping.',
+      'Stop the water at the main, the photo shows where it is.',
+      'The boiler stops and starts all night.',
+      'Please remove the old fridge from the garage.',
+      'Can you take me through how the thermostat works?',
+    ]) {
+      expect(isEmailOptOutRequest(body), body).toBe(false)
+    }
+  })
+
+  it('reads the STRIPPED body, so a quoted footer is not a request', () => {
+    // Almost every marketing email ever sent has "unsubscribe" in its
+    // footer, so a reply quoting one would otherwise opt somebody out every
+    // single time.
+    const raw = 'Thursday is fine.\n\nOn Mon, we wrote:\n> ... click here to unsubscribe'
+    expect(isEmailOptOutRequest(stripQuotedReply(raw))).toBe(false)
+    expect(isEmailOptOutRequest(raw)).toBe(true)
+  })
+})
+
+describe('the opt-out confirmation', () => {
+  const confirmation = emailOptOutConfirmation({
+    businessName: 'Rental Operations',
+    stoppedCount: 4,
+    stillSending: [
+      { label: 'Entry notices', explanation: 'Required by law in most states.' },
+      { label: 'Legal notices', explanation: 'Must reach you to be effective.' },
+    ],
+  })
+
+  it('says what will STILL arrive, which is the point of sending it', () => {
+    // A tenant who believes they switched off every email and then misses an
+    // entry notice has been misled by us.
+    expect(confirmation.body).toContain('Entry notices')
+    expect(confirmation.body).toContain('Required by law')
+    expect(confirmation.body).toContain('cannot afford to miss')
+  })
+
+  it('offers a way back', () => {
+    expect(confirmation.body).toContain('reply to this message')
+  })
+
+  it('reads sensibly when nothing is locked', () => {
+    const none = emailOptOutConfirmation({
+      businessName: 'Rental Operations',
+      stoppedCount: 0,
+      stillSending: [],
+    })
+    expect(none.body).not.toContain('•')
+    expect(none.body).toContain('stopped sending you')
   })
 })

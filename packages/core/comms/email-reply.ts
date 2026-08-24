@@ -193,3 +193,103 @@ export function htmlToText(html: string): string {
       .trim()
   )
 }
+
+// ---------------------------------------------------------------------------
+// "Stop emailing me" (R-097e)
+// ---------------------------------------------------------------------------
+//
+// ==========================================================================
+// AN EMAIL OPT-OUT IS NOT AN SMS `STOP`, AND TREATING IT AS ONE WOULD BE
+// WRONG IN BOTH DIRECTIONS.
+//
+// `STOP` is a single token with legal force that the CARRIER enforces - it
+// blocks the number itself, which is why `optOutReply` deliberately sends no
+// confirmation. Email has no carrier and no command grammar: people write a
+// sentence, and nobody else enforces anything. So detection has to read
+// prose, and the product has to do the honouring itself.
+//
+// WHICH MAKES A FALSE POSITIVE THE EXPENSIVE MISTAKE HERE, exactly inverting
+// `classifyOptOutKeyword`'s trade-off. That one is deliberately generous,
+// because filing "STOP the leak" as a maintenance request risks continuing to
+// text somebody who asked us not to. Here, a tenant whose rent reminders were
+// silently switched off because they wrote "stop" in a sentence about a
+// dripping tap gets a late fee. So every phrase below is MULTI-WORD and
+// unambiguous - none of them can occur in a message about a boiler - and
+// "stop" alone is deliberately not one of them.
+// ==========================================================================
+
+/// Each of these is a sentence fragment nobody writes by accident while
+/// reporting a repair. `unsubscribe` is the single exception to the
+/// multi-word rule, because the word has exactly one meaning in an email.
+const OPT_OUT_PHRASES: readonly string[] = [
+  'unsubscribe',
+  'stop emailing',
+  'stop sending me email',
+  'stop sending emails',
+  'remove me from your',
+  'take me off your',
+  'opt out',
+  'opt-out',
+  'do not email me',
+  "don't email me",
+  'no more emails',
+]
+
+/**
+ * Whether an inbound email is asking us to stop emailing.
+ *
+ * Reads the body AFTER the quoted tail has been stripped, which matters more
+ * than it looks: almost every marketing email ever sent contains the word
+ * "unsubscribe" in its footer, so a reply quoting one would otherwise read as
+ * an opt-out request every single time.
+ */
+export function isEmailOptOutRequest(strippedBody: string): boolean {
+  const text = strippedBody.toLowerCase()
+  return OPT_OUT_PHRASES.some((phrase) => text.includes(phrase))
+}
+
+/**
+ * The one email that goes out after honouring it.
+ *
+ * ONE MORE EMAIL AFTER BEING ASKED TO STOP, deliberately, and it is the
+ * standard and expected shape: somebody who asks to be unsubscribed expects
+ * to be told it happened. What makes it worth the intrusion is the second
+ * half - it NAMES WHAT WILL STILL ARRIVE. A tenant who believes they have
+ * switched off every email and then misses an entry notice has been misled by
+ * us, and the categories that keep coming are exactly the ones they cannot
+ * afford to miss.
+ *
+ * The explanations are `LOCKED_CATEGORIES`' own words, not a second copy:
+ * NOTIF-02 requires that reason be shown wherever the question is asked, and
+ * this is one of the places it is asked.
+ */
+export function emailOptOutConfirmation(input: {
+  businessName: string
+  stoppedCount: number
+  stillSending: readonly { label: string; explanation: string }[]
+}): { subject: string; body: string } {
+  const lines = [
+    `We have stopped sending you ${input.stoppedCount === 0 ? 'optional' : 'the optional'} emails about your home.`,
+    '',
+  ]
+
+  if (input.stillSending.length > 0) {
+    lines.push(
+      'Some emails will still reach you, because they are the ones you cannot afford to miss:',
+      '',
+    )
+    for (const item of input.stillSending) {
+      lines.push(`• ${item.label} — ${item.explanation}`)
+    }
+    lines.push('')
+  }
+
+  lines.push(
+    'If you did not mean to do this, or you would like these back on, reply to this message and we will turn them on again.',
+  )
+
+  return {
+    subject: `${input.businessName}: we have stopped emailing you about your home`,
+    body: lines.join('\n'),
+  }
+}
