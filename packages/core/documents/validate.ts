@@ -106,6 +106,10 @@ export const DOCUMENT_TYPES = [
   /// a packet is a claim about the record on a date, and the record keeps
   /// moving.
   'TAX_PACKET',
+  /// R-092: the sale/acquisition handoff packet for one property (DOC-06,
+  /// RISK-09). Property-keyed, unlike TAX_PACKET, which is per entity - a
+  /// handoff is about one house changing hands.
+  'HANDOFF_PACKET',
   /// R-085 (RISK-12): the servicemember's own PCS, deployment or enlistment
   /// orders, supplied by the TENANT to invoke §3955. Distinct from
   /// SCRA_CERTIFICATE below in exactly the way NOTICE is distinct from

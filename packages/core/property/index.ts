@@ -3,5 +3,6 @@
 // their result as form field errors.
 export * from './address.ts'
 export * from './capital-plan.ts'
+export * from './handoff.ts'
 export * from './us-states.ts'
 export * from './validate.ts'

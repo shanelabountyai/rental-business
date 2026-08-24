@@ -79,6 +79,10 @@ export const RETENTION_RULES: Record<DocumentTypeValue, RetentionRule> = {
     years: null,
     note: 'R-081d: what the preparer was given for a tax year. Kept indefinitely - a return is examinable for years afterwards and this is the record of what it was filed from.',
   },
+  HANDOFF_PACKET: {
+    years: null,
+    note: 'R-092: what was represented about a property at the moment it changed hands. Kept indefinitely, for the same reason ESTOPPEL_CERTIFICATE is - a buyer disputing what they were told about a tenancy argues from this, and the tenancies it describes have long since moved on.',
+  },
   MILITARY_ORDERS: {
     years: null,
     note: 'R-085: what the tenant gave us to invoke §3955. Kept indefinitely - a termination disputed years later is argued from these, and the tenancy they ended is long gone by then.',

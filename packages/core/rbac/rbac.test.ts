@@ -211,6 +211,14 @@ describe('can — MFA gate (ROLE-05)', () => {
       // creates the deposit charge and rent subscription.
       'lease.execute',
       'ledger.adjust',
+      // R-092 (DOC-06, RISK-09). The one entry here that is a READ, and it
+      // needs its exception stated: the objection to gating reads is that
+      // locking a manager out of the rent roll is how MFA gets switched off,
+      // and nothing about this one costs anybody their day job - it gates a
+      // button and no screen. What it produces is the largest egress in the
+      // product: a whole property's file in one portable document. Closer to
+      // `accesscode.reveal`, also a read and also here, than to a report.
+      'property.export',
       // R-060. A screening accept/decline is a fair-housing-sensitive
       // judgement, the same class of harm a stolen session moving money is.
       'screening.decide',

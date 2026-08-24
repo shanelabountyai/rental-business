@@ -6,12 +6,19 @@ import { notFound } from 'next/navigation'
 import { DocumentsSection } from '@/components/documents/documents-section.tsx'
 import { FilingCabinetSection } from '@/components/filing-cabinet/filing-cabinet-section.tsx'
 import { OpenClaimPanel } from '@/components/insurance/open-claim-panel.tsx'
+import { HandoffPanel } from '@/components/properties/handoff-panel.tsx'
+import {
+  archiveHandoffPacket,
+  generateEstoppelCertificates,
+} from '@/lib/properties/handoff-actions.ts'
 import { openClaim } from '@/lib/insurance/actions.ts'
 import { claimsForProperty, policiesForProperty } from '@/lib/insurance/queries.ts'
 import { actorCan, propertyResource, requireScope } from '@/lib/auth/guard.ts'
 import { currentScope as switcherScope } from '@/lib/scope/current-scope.ts'
 import { listDeletedDocuments, listDocuments } from '@/lib/documents/queries.ts'
 import { getFilingCabinet } from '@/lib/filing-cabinet/queries.ts'
+import { friendlyDate } from '@rental/core/scheduling'
+import { prisma } from '@rental/db'
 import { getPropertyDetail } from '@/lib/properties/queries.ts'
 import { listUnits } from '@/lib/units/queries.ts'
 
@@ -89,6 +96,10 @@ export default async function PropertyDetailPage({
     filingCabinet,
     claims,
     policies,
+    canExport,
+    runningLeaseCount,
+    estoppelCount,
+    handoffPackets,
   ] = await Promise.all([
     listUnits(id, scope),
     actorCan('unit.write', propertyResource(property)),
@@ -99,6 +110,18 @@ export default async function PropertyDetailPage({
     getFilingCabinet(id, scope),
     claimsForProperty(id),
     policiesForProperty(id),
+    // R-092. Privileged and owner-only by construction, so most viewers of
+    // this page never see the panel at all.
+    actorCan('property.export', propertyResource(property)),
+    prisma.lease.count({ where: { propertyId: id, status: { in: ['ACTIVE', 'MONTH_TO_MONTH'] } } }),
+    prisma.document.count({
+      where: { propertyId: id, type: 'ESTOPPEL_CERTIFICATE', deletedAt: null },
+    }),
+    prisma.document.findMany({
+      where: { propertyId: id, type: 'HANDOFF_PACKET', deletedAt: null },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, fileName: true, createdAt: true },
+    }),
   ])
   // R-030's "attach to the property and flow to reporting". Costed here
   // rather than in the query so `jobCostCents()` stays the one rule for what
@@ -282,6 +305,19 @@ export default async function PropertyDetailPage({
             action={openClaim.bind(null, id)}
             claims={claims}
             policies={policies}
+          />
+        )}
+        {canExport && (
+          <HandoffPanel
+            leaseCount={runningLeaseCount}
+            estoppelCount={estoppelCount}
+            packets={handoffPackets.map((packet) => ({
+              id: packet.id,
+              fileName: packet.fileName,
+              createdOn: friendlyDate(packet.createdAt, property.timezone),
+            }))}
+            generateAction={generateEstoppelCertificates.bind(null, id)}
+            archiveAction={archiveHandoffPacket.bind(null, id)}
           />
         )}
         <EmptySection

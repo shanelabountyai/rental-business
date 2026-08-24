@@ -50,6 +50,17 @@ export const PERMISSIONS = [
   /// gates this on the deposit having actually cleared.
   'accesscode.issue',
   'report.financial',
+  /// Assembling the sale/acquisition handoff packet for a property (DOC-06,
+  /// RISK-09; R-092).
+  ///
+  /// ITS OWN PERMISSION, AND OWNER-ONLY BY CONSTRUCTION - `owner` carries
+  /// `PERMISSIONS` entire and no other role names this one. Every fact in the
+  /// packet is already readable by a manager on the screens it came from;
+  /// what the packet adds is that it puts all of them in ONE PORTABLE FILE
+  /// that leaves the building. Selling a house is an owner's act, and D-5
+  /// makes this an ordinary grant an owner can hand to a manager they trust
+  /// rather than something the product decided for them.
+  'property.export',
   'audit.read',
   /// Opening and running an eviction case (PAY-14, R-083). ITS OWN
   /// PERMISSION, not folded into `lease.write` or `notice.send`, because
@@ -171,6 +182,16 @@ export const PRIVILEGED_PERMISSIONS: ReadonlySet<Permission> = new Set([
   // physical safety rests on, and neither should be reachable from a stolen
   // session. `confidential.read` is deliberately NOT here.
   'confidential.manage',
+  // R-092. THE ONE ENTRY ON THIS LIST THAT LOOKS LIKE A READ, and the
+  // docstring above says reading is never here - so the exception needs its
+  // reason. The objection to gating reads is that locking a manager out of
+  // the rent roll is how MFA gets switched off by an irritated owner; nothing
+  // about `property.export` costs anybody their day job, because it gates one
+  // button and no screen. What it produces is the single largest egress this
+  // product performs: every lease, every balance, every tenant's details and
+  // the whole vendor history of a house, in one file. That is much closer to
+  // `accesscode.reveal` - already here, and also a read - than to a report.
+  'property.export',
 ])
 
 export function requiresMfa(permission: Permission): boolean {

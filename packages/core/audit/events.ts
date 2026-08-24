@@ -623,6 +623,19 @@ export const AUDIT_ACTIONS = [
   /// link is only ever visible from the restricted side.
   'confidential.lock_change_ordered',
 
+  /// R-092 (DOC-06, RISK-09): an estoppel certificate was generated for a
+  /// tenancy. A record of what was REPRESENTED to a buyer about that tenancy,
+  /// and on what date - which is the question a buyer asks afterwards when
+  /// the tenant says something different.
+  'lease.estoppel_generated',
+
+  /// R-092: a property's whole file was assembled into one portable document.
+  /// The largest single egress this product performs, so the entry carries
+  /// what the packet CLAIMED - the deposit total, the tenancy count, the hash
+  /// - alongside who produced it. `property.export` is privileged for the
+  /// same reason.
+  'property.handoff_packet_archived',
+
   /// R-091b: the statutory early-termination right was claimed and the
   /// tenancy's notice recorded. Case id and nothing else - the tenancy's own
   /// `lease.notice_given` is the ordinary, readable record that notice was
