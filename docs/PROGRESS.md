@@ -4034,7 +4034,7 @@ So one tenancy is followed. She falls behind and is chased, lawfully and correct
 - **No further checkpoint to define.** Milestone 9 is the last milestone and everything unbuilt in it is gated on a vendor or on the furnisher review D-4 already requires. When a gate opens, define the checkpoint before the item — the thing 3, 4 and 5 were each written to stop repeating.
 
 ## Inbound email: a recipient list is split quote-aware
-**Commit:** _(recorded below)_  ·  **Date:** 2026-08-24
+**Commit:** `d24f2e0`  ·  **Date:** 2026-08-24
 
 **What it built.** `splitAddressList` in `packages/core/comms/email-reply.ts`, and the webhook's `addresses()` now uses it instead of `value.split(',')`. Recorded as **D-135**.
 
