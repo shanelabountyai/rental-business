@@ -3929,7 +3929,7 @@ Two defects of my own in the new spec, and the second is the same shape. The evi
 - **A guarantor cannot opt out this way.** Routing resolves a tenant or a vendor, and a guarantor emailing in is unrouted — so their request lands in triage like any other unmatched message.
 
 ## R-097f — Email opens maintenance tickets
-**Commit:** `pending`  ·  **Date:** 2026-08-24
+**Commit:** `f0d8093`  ·  **Date:** 2026-08-24
 
 **What it built.** `decideEmailIntake` and `formatEmailTicketDescription` in core with 6 tests; `email-intake.ts`, the sibling of `sms-intake.ts`; the webhook rewired through it; emailed attachments now hung off the ticket as well as the message; 5 more database tests.
 
