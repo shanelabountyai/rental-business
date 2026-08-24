@@ -131,6 +131,15 @@ export interface JurisdictionRuleInput {
   /// on this column.
   sourceOfIncomeProtected?: boolean | null
 
+  /// RISK-04 (R-091b). Null means nobody has reviewed whether this state
+  /// grants a statutory early-termination right on a safety ground - a
+  /// different claim from `false`, which says somebody looked and it does
+  /// not. The days and the accepted classes are meaningful only where the
+  /// right exists.
+  earlyTerminationRightExists?: boolean | null
+  earlyTerminationNoticeDays?: number | null
+  earlyTerminationDocumentationTypes?: readonly string[]
+
   citation?: string | null
   reviewedBy?: string | null
   notes?: string | null
@@ -205,6 +214,34 @@ export function validateJurisdictionRule(
       field: 'preMoveOutWalkthroughDaysBefore',
       message: 'Enter a realistic number of days (0–180), or leave blank if the right is not granted here.',
     })
+  }
+
+  if (
+    input.earlyTerminationNoticeDays != null &&
+    !isWholeNumberInRange(input.earlyTerminationNoticeDays, 180)
+  ) {
+    violations.push({
+      field: 'earlyTerminationNoticeDays',
+      message: 'Enter a realistic number of days (0–180), or leave blank if the right is not granted here.',
+    })
+  }
+  // The database refuses the same row from the other side. Both, because the
+  // CHECK produces a 500 and this produces the sentence that says which field
+  // to fix - and because a rule saying "no right here, 30 days' notice for it"
+  // is a half-finished edit that would read as reviewed configuration.
+  if (input.earlyTerminationRightExists !== true) {
+    if (input.earlyTerminationNoticeDays != null) {
+      violations.push({
+        field: 'earlyTerminationNoticeDays',
+        message: 'A notice period only means something where the right is granted.',
+      })
+    }
+    if ((input.earlyTerminationDocumentationTypes ?? []).length > 0) {
+      violations.push({
+        field: 'earlyTerminationDocumentationTypes',
+        message: 'Accepted documentation only means something where the right is granted.',
+      })
+    }
   }
 
   if (

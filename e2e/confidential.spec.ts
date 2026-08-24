@@ -52,7 +52,7 @@ async function createStaff(roleKey: 'owner' | 'manager', legalEntityId: string) 
   return { ...staff, secret: enrolment.secret }
 }
 
-async function seedLease() {
+async function seedLease({ withCoTenant = false } = {}) {
   const unique = randomUUID().slice(0, 8)
   const entity = await prisma.legalEntity.create({
     data: { name: `Conf LLC-${unique}`, type: 'LLC' },
@@ -100,6 +100,25 @@ async function seedLease() {
   await prisma.leaseTenant.create({
     data: { leaseId: lease.id, tenantId: tenant.id, isPrimary: true },
   })
+  // R-091b's bifurcation acts on a restricted party who is ON the lease, so
+  // that path needs a second occupant. Off by default: every other test here
+  // is about a single-occupant tenancy and a co-tenant would change what the
+  // locksmith's note says.
+  let coTenant: { id: string; firstName: string; lastName: string } | null = null
+  if (withCoTenant) {
+    coTenant = await prisma.tenant.create({
+      data: {
+        firstName: 'Sam',
+        lastName: `Ex-${unique}`,
+        email: `sam-${unique}@example.test`,
+        phone: uniquePhone(),
+      },
+    })
+    tenantIds.push(coTenant.id)
+    await prisma.leaseTenant.create({
+      data: { leaseId: lease.id, tenantId: coTenant.id, isPrimary: false },
+    })
+  }
   // A code the restricted party may well know. Retiring it is half of what
   // "order the re-key" does.
   await prisma.accessCode.create({
@@ -111,7 +130,7 @@ async function seedLease() {
       version: 1,
     },
   })
-  return { entity, property, unit, lease, tenant, unique }
+  return { entity, property, unit, lease, tenant, coTenant, unique }
 }
 
 async function signIn(
@@ -324,4 +343,192 @@ test('an owner outside the property gets a 404 on the case, never a 403', async 
   } finally {
     await scopedPage.close()
   }
+})
+
+// ===========================================================================
+// R-091b — the statutory right, and the removal.
+//
+// The arithmetic and every refusal branch are proved in
+// packages/core/confidential/confidential.test.ts. What only a browser proves
+// is the half that is about disclosure: that ending a tenancy on a statutory
+// safety ground leaves the TENANCY showing an ordinary tenant-given notice,
+// and that taking somebody off a lease without their signature leaves a
+// perfectly readable amendment that says only that a statute excused it.
+// ===========================================================================
+
+test('records the statutory early termination, and the tenancy shows only a tenant notice', async ({
+  page,
+}) => {
+  const seed = await seedLease()
+  const { lease, unique } = seed
+  const owner = await createStaff('owner', seed.entity.id)
+
+  await signIn(page, owner)
+  await page.goto(`/leases/${lease.id}`)
+  await page.getByText('Open a confidential case').click()
+  await page
+    .getByLabel('What is going on')
+    .fill('Tenant asked what their options are for leaving before the term ends.')
+  await page.getByLabel('Name of the restricted party').fill(`Sam Ex-${unique}`)
+  await page.getByRole('button', { name: 'Open the case' }).click()
+  await page.waitForURL(/\/confidential\/[a-z0-9]+$/)
+  const caseUrl = page.url()
+
+  const panel = page.getByRole('region', { name: 'Ending the tenancy early' })
+
+  // Nothing was recorded about what anybody was shown, and the statutory
+  // right is the one thing in this whole feature that turns on it (D-108).
+  await panel.getByLabel('Date they gave written notice').fill('2026-08-20')
+  await panel.getByRole('button', { name: 'Record the early termination' }).click()
+  await expect(page.getByText('The statutory right is the one thing')).toBeVisible()
+  expect((await prisma.lease.findUniqueOrThrow({ where: { id: lease.id } })).noticeGivenAt).toBeNull()
+
+  // A class Texas does not accept for it, either. §92.016 turns on a
+  // protective order and §92.0161 on a provider's documentation; a police
+  // report on its own is neither, and the seeded rule itemises exactly that.
+  await page.getByLabel('What you were shown').selectOption('POLICE_REPORT')
+  await page.getByLabel('Date you were shown it').fill('2026-08-19')
+  await page.getByRole('button', { name: 'Save this case' }).click()
+  await expect(page.getByText('Case updated.')).toBeVisible()
+  await panel.getByLabel('Date they gave written notice').fill('2026-08-20')
+  await panel.getByRole('button', { name: 'Record the early termination' }).click()
+  await expect(page.getByText('not a class this state accepts')).toBeVisible()
+
+  await page.getByLabel('What you were shown').selectOption('PROTECTIVE_ORDER')
+  await page.getByRole('button', { name: 'Save this case' }).click()
+  await expect(page.getByText('Case updated.')).toBeVisible()
+
+  await panel.getByLabel('Date they gave written notice').fill('2026-08-20')
+  await panel
+    .getByLabel('Where to send the deposit disposition')
+    .fill('12 Elsewhere Street, Houston TX')
+  await panel.getByRole('button', { name: 'Record the early termination' }).click()
+  // TX's seeded rule: 30 days from the day notice was delivered. Not the
+  // state's `noticeToVacateDays`, which this path never consults. The
+  // arithmetic is asserted against the alert, which is the only place the
+  // number and the day count appear together.
+  await expect(page.getByText('2026-09-19 — 30 days from the notice')).toBeVisible()
+
+  // ==========================================================================
+  // WHAT THE TENANCY SHOWS. R-066's ordinary tenant-given notice and nothing
+  // else - no basis column, because a `Lease` column naming this one would be
+  // readable by everybody holding `lease.read` and would be the disclosure
+  // (D-107). R-085's SCRA writes one and is right to: being a servicemember
+  // is not a secret.
+  // ==========================================================================
+  const after = await prisma.lease.findUniqueOrThrow({ where: { id: lease.id } })
+  expect(after.noticeGivenBy).toBe('TENANT')
+  expect(after.noticeEffectiveOn?.toISOString().slice(0, 10)).toBe('2026-09-19')
+  expect(after.noticeForwardingAddress).toBe('12 Elsewhere Street, Houston TX')
+  expect(after.scraTerminationBasis).toBeNull()
+  expect(after.terminationReason).toBeNull()
+
+  const leaseEntries = await prisma.auditLog.findMany({
+    where: { entityType: 'Lease', entityId: lease.id },
+  })
+  const leasePayloads = JSON.stringify(leaseEntries)
+  expect(leaseEntries.map((e) => e.action)).toContain('lease.notice_given')
+  expect(leasePayloads).not.toContain('PROTECTIVE_ORDER')
+  expect(leasePayloads).not.toContain('confidential')
+  expect(leasePayloads).not.toContain('earlyTermination')
+
+  const found = await prisma.confidentialCase.findFirstOrThrow({ where: { leaseId: lease.id } })
+  expect(found.earlyTerminationRecordedAt).not.toBeNull()
+  const caseEntry = await prisma.auditLog.findFirstOrThrow({
+    // Scoped to THIS case. Unscoped, it picks up the other browser project's
+    // row from the same shared database - which is what it did.
+    where: {
+      entityType: 'ConfidentialCase',
+      entityId: found.id,
+      action: 'confidential.early_termination_recorded',
+    },
+  })
+  expect(caseEntry.after).toEqual({ caseId: found.id })
+
+  // Recorded once. A second one would be a second notice on a tenancy that
+  // already has one.
+  await page.goto(caseUrl)
+  await expect(panel.getByText('The tenancy ends on 2026-09-19')).toBeVisible()
+  await expect(panel.getByLabel('Date they gave written notice')).toHaveCount(0)
+})
+
+test('removes the restricted party without their signature, and the amendment says only that', async ({
+  page,
+}) => {
+  const seed = await seedLease({ withCoTenant: true })
+  const { lease, coTenant, unique } = seed
+  const owner = await createStaff('owner', seed.entity.id)
+
+  await signIn(page, owner)
+  await page.goto(`/leases/${lease.id}`)
+  await page.getByText('Open a confidential case').click()
+  await page
+    .getByLabel('What is going on')
+    .fill('The other occupant needs to come off the tenancy and will not be signing.')
+  await page.getByLabel('Name of the restricted party').fill(`Sam Ex-${unique}`)
+  await page.getByRole('button', { name: 'Open the case' }).click()
+  await page.waitForURL(/\/confidential\/[a-z0-9]+$/)
+
+  const panel = page.getByRole('region', { name: 'Taking the restricted party off the tenancy' })
+  // The case named them but not as somebody on the lease, so there is nobody
+  // here to remove and the panel says so rather than offering the button.
+  await expect(panel.getByText('does not name the restricted party')).toBeVisible()
+
+  await page.getByLabel('Are they on this tenancy?').selectOption(coTenant!.id)
+  await page.getByRole('button', { name: 'Save this case' }).click()
+  await expect(page.getByText('Case updated.')).toBeVisible()
+
+  await panel.getByLabel('Date the removal takes effect').fill('2026-09-01')
+  await panel.getByRole('button', { name: 'Send the amendment without their signature' }).click()
+  // The panel's own POST-SEND text, not the alert and not the form's prose.
+  // The first version of this waited on a sentence the form was already
+  // showing before the click, so the query below raced the write and lost -
+  // the same "assertion that is already true" CLAUDE.md records for
+  // `getByText('active')`.
+  await expect(panel.getByText('An amendment was sent as change')).toBeVisible()
+
+  const change = await prisma.leasePartyChange.findFirstOrThrow({
+    where: { leaseId: lease.id },
+    include: { parties: true, envelope: { include: { signers: true } } },
+  })
+  expect(change.status).toBe('PENDING_SIGNATURE')
+  expect(change.unsignedRemovalBasis).toBe('STATUTORY_EXEMPTION')
+  expect(change.parties.map((p) => [p.direction, p.tenantId])).toEqual([
+    ['OUTGOING', coTenant!.id],
+  ])
+
+  // ==========================================================================
+  // THE PERSON BEING REMOVED IS NOT A SIGNER, and everybody else still is.
+  // That, and the basis column, are the entire mechanical difference from an
+  // ordinary change - which is why they share one builder.
+  // ==========================================================================
+  const signers = change.envelope!.signers
+  expect(signers.map((s) => s.tenantId)).toEqual([seed.tenant.id])
+  expect(
+    await prisma.notification.count({
+      where: { recipientId: coTenant!.id, templateKey: 'lease.amendment_sign_invite' },
+    }),
+  ).toBe(0)
+
+  // ==========================================================================
+  // AND WHAT IT SAYS. The reason is a fixed string, because it is printed on
+  // a document every signer reads, archived where `document.read` reaches the
+  // maintenance tech, and copied into `lease.party_changed`. A free-text box
+  // here is an invitation to type the one sentence the wall exists to hold.
+  // ==========================================================================
+  for (const word of ['violence', 'abuse', 'assault', 'protective', 'restraining', 'confidential']) {
+    expect(change.reason.toLowerCase(), word).not.toContain(word)
+  }
+  const startedEntry = await prisma.auditLog.findFirstOrThrow({
+    where: { entityType: 'Lease', entityId: lease.id, action: 'lease.party_change_started' },
+  })
+  expect(JSON.stringify(startedEntry.after)).toContain('STATUTORY_EXEMPTION')
+  expect(JSON.stringify(startedEntry).toLowerCase()).not.toContain('confidential')
+
+  // It is an ordinary change of occupants on the tenancy, visible to anybody
+  // who can read the lease - which is the point. Its consequences cannot be
+  // hidden; its reason can.
+  await page.goto(`/leases/${lease.id}`)
+  const leasePanel = page.getByRole('region', { name: 'Roommate changes and assignment' })
+  await expect(leasePanel.getByText('under a statutory right')).toBeVisible()
 })

@@ -2221,6 +2221,13 @@ enum PartyChangeDirection {
 /// no field and no code path that could pay one. Departing roommates
 /// settle their share between themselves; the amendment says so in as many
 /// words.
+/// On what basis a party was removed from a tenancy without signing
+/// (R-091b). One value: a statute excused the signature. It does not name
+/// WHICH statute, because that would name what R-091's wall is holding.
+enum PartyRemovalBasis {
+  STATUTORY_EXEMPTION
+}
+
 model LeasePartyChange {
   id          String            @id @default(cuid())
   leaseId     String
@@ -2247,13 +2254,29 @@ model LeasePartyChange {
   voidReason       String?
   createdByStaffId String
 
+  /// Why somebody was removed from this tenancy without signing (R-091b).
+  /// Null for every ordinary change, which is every change started from the
+  /// lease page: there is no "skip signatures" option there and never will
+  /// be. Set only by the path that has a statutory basis for it, which
+  /// carries its own permission wall.
+  ///
+  /// AN ENUM RATHER THAN FREE TEXT, deliberately. This row renders on the
+  /// lease page and its reason is copied into `lease.party_changed`, both of
+  /// which are read by everybody holding `lease.read` - so the basis must be
+  /// a value nobody can type a disclosure into. It says a statute excused the
+  /// signature and stops there (D-107).
+  unsignedRemovalBasis PartyRemovalBasis?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  lease    Lease                   @relation(fields: [leaseId], references: [id], onDelete: Restrict)
-  envelope LeaseEnvelope?          @relation(fields: [envelopeId], references: [id], onDelete: Restrict)
-  staff    StaffUser               @relation(fields: [createdByStaffId], references: [id], onDelete: Restrict)
-  parties  LeasePartyChangeParty[]
+  lease            Lease                   @relation(fields: [leaseId], references: [id], onDelete: Restrict)
+  envelope         LeaseEnvelope?          @relation(fields: [envelopeId], references: [id], onDelete: Restrict)
+  staff            StaffUser               @relation(fields: [createdByStaffId], references: [id], onDelete: Restrict)
+  parties          LeasePartyChangeParty[]
+  /// Navigation only, for the FK Prisma requires on the other side. Nothing
+  /// traverses it, and no column behind it exists on this table.
+  confidentialCase ConfidentialCase?
 
   @@index([leaseId, status])
 }
@@ -2349,17 +2372,30 @@ model ConfidentialCase {
   /// that a WorkOrder carries no column whose mere presence is a disclosure.
   lockChangeWorkOrderId String? @unique
 
+  /// The amendment that took the restricted party off the tenancy, if one was
+  /// sent (R-091b). Held here for the identical reason: the change itself has
+  /// to be visible to whoever runs the lease, and a pointer from it back to a
+  /// case would say why it happened.
+  partyChangeId String? @unique
+
+  /// That the statutory early-termination right was claimed and recorded
+  /// (R-091b). The DATES are not here - they are the ordinary R-066 notice
+  /// columns on the Lease, because what the tenancy shows everybody is a
+  /// tenant-given notice and nothing else.
+  earlyTerminationRecordedAt DateTime?
+
   openedByStaffId String
   openedAt        DateTime  @default(now())
   closedAt        DateTime?
   closedNote      String?
   updatedAt       DateTime  @updatedAt
 
-  lease               Lease      @relation(fields: [leaseId], references: [id], onDelete: Restrict)
-  restrictedTenant    Tenant?    @relation("ConfidentialCaseRestrictedTenant", fields: [restrictedPartyTenantId], references: [id], onDelete: Restrict)
-  documentationSeenBy StaffUser? @relation("ConfidentialCaseDocumentationSeenBy", fields: [documentationSeenByStaffId], references: [id], onDelete: Restrict)
-  openedBy            StaffUser  @relation("ConfidentialCaseOpenedBy", fields: [openedByStaffId], references: [id], onDelete: Restrict)
-  lockChangeWorkOrder WorkOrder? @relation(fields: [lockChangeWorkOrderId], references: [id], onDelete: Restrict)
+  lease               Lease             @relation(fields: [leaseId], references: [id], onDelete: Restrict)
+  restrictedTenant    Tenant?           @relation("ConfidentialCaseRestrictedTenant", fields: [restrictedPartyTenantId], references: [id], onDelete: Restrict)
+  documentationSeenBy StaffUser?        @relation("ConfidentialCaseDocumentationSeenBy", fields: [documentationSeenByStaffId], references: [id], onDelete: Restrict)
+  openedBy            StaffUser         @relation("ConfidentialCaseOpenedBy", fields: [openedByStaffId], references: [id], onDelete: Restrict)
+  lockChangeWorkOrder WorkOrder?        @relation(fields: [lockChangeWorkOrderId], references: [id], onDelete: Restrict)
+  partyChange         LeasePartyChange? @relation(fields: [partyChangeId], references: [id], onDelete: Restrict)
 
   @@index([leaseId, status])
 }
@@ -5570,6 +5606,24 @@ model JurisdictionRule {
   /// disclosure must never assert protection that was never actually
   /// checked, and must never assert its absence either.
   sourceOfIncomeProtected Boolean?
+
+  // Early termination on a statutory safety right (RISK-04, R-091b; D-4).
+  //
+  // STATE LAW, NOT VAWA - which is what makes this configuration where
+  // R-085's SCRA is not (D-82). VAWA binds federally assisted housing; a
+  // private single-family portfolio answers to e.g. Tex. Prop. Code §92.016 /
+  // §92.0161, and states differ on all three of whether the right exists, how
+  // much notice it takes, and what documentation counts.
+  //
+  // THREE-VALUED, the same posture as `sourceOfIncomeProtected` above: null
+  // means nobody has reviewed this state, which is NOT the same claim as
+  // "this state grants no such right", and the two produce different messages
+  // and different remedies. `earlyTerminationDocumentationTypes` is empty
+  // where nobody has itemised the classes, and an empty list accepts any
+  // class actually recorded rather than refusing over our own gap.
+  earlyTerminationRightExists        Boolean?
+  earlyTerminationNoticeDays         Int?
+  earlyTerminationDocumentationTypes String[]
 
   /// Statute citation and who reviewed it. Every one of these numbers needs
   /// an attorney's eyes before it governs a real tenancy; this is where that

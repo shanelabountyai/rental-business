@@ -3,7 +3,7 @@
 import { useActionState } from 'react'
 import { FormAlerts, LiveRegion, SubmitButton } from '@/components/auth-form.tsx'
 import { CheckboxField, TextField, TextareaField } from '@/components/form/field.tsx'
-import type { PartyChangeFormState } from '@/lib/leases/party-change-actions.ts'
+import type { PartyChangeFormState } from '@/lib/leases/party-change-builder.ts'
 
 // Roommate changes and lease assignment (RISK-10, R-090).
 //

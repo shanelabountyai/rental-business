@@ -623,6 +623,20 @@ export const AUDIT_ACTIONS = [
   /// link is only ever visible from the restricted side.
   'confidential.lock_change_ordered',
 
+  /// R-091b: the statutory early-termination right was claimed and the
+  /// tenancy's notice recorded. Case id and nothing else - the tenancy's own
+  /// `lease.notice_given` is the ordinary, readable record that notice was
+  /// given, and it says nothing about a case, a basis or a statute. Anybody
+  /// reading the lease sees a tenant-given notice, which is what it is.
+  'confidential.early_termination_recorded',
+
+  /// R-091b: an amendment removing the restricted party from the tenancy was
+  /// sent. The change's own `lease.party_change_started` is the readable
+  /// record, and it carries `unsignedRemovalBasis` so that "you took me off
+  /// my lease without my consent" has an answer without this entry. This one
+  /// records only that a case was what sent it.
+  'confidential.party_change_started',
+
   /// R-091: every open-ended access code on the unit was retired, because a
   /// restricted party may know them. Records HOW MANY, never which.
   ///

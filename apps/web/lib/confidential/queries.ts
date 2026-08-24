@@ -16,7 +16,24 @@ const caseInclude = {
       id: true,
       propertyId: true,
       unitId: true,
-      property: { select: { id: true, name: true, legalEntityId: true, timezone: true } },
+      status: true,
+      // R-091b reads the tenancy's own notice columns back: the statutory
+      // termination writes R-066's ordinary fields and no basis column, so
+      // this is where the date it computed lives.
+      noticeEffectiveOn: true,
+      // `state` and `county` because R-091b resolves this property's
+      // jurisdiction rule from them - the early-termination right is state
+      // law, unlike R-085's federal SCRA (D-4, D-82).
+      property: {
+        select: {
+          id: true,
+          name: true,
+          legalEntityId: true,
+          timezone: true,
+          state: true,
+          county: true,
+        },
+      },
       unit: { select: { id: true, name: true } },
       leaseTenants: {
         orderBy: { isPrimary: 'desc' },

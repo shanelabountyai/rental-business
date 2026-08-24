@@ -122,6 +122,19 @@ async function seedJurisdictionRules() {
       console.info('Backfilled TX pre-move-out walkthrough right (added at R-070).')
       return
     }
+    // Same again for the three columns R-091b added.
+    if (existing.earlyTerminationRightExists == null) {
+      await prisma.jurisdictionRule.update({
+        where: { id: existing.id },
+        data: {
+          earlyTerminationRightExists: true,
+          earlyTerminationNoticeDays: 30,
+          earlyTerminationDocumentationTypes: ['PROTECTIVE_ORDER', 'PROVIDER_STATEMENT'],
+        },
+      })
+      console.info('Backfilled TX early-termination right (added at R-091b).')
+      return
+    }
     console.info('Jurisdiction rule already seeded (TX, statewide, v1).')
     return
   }
@@ -155,6 +168,25 @@ async function seedJurisdictionRules() {
       // where the right is not granted.
       preMoveOutWalkthroughRequired: false,
       preMoveOutWalkthroughDaysBefore: null,
+
+      // Tex. Prop. Code §92.016 (family violence) and §92.0161 (certain sexual
+      // offences and stalking): a tenant may end the tenancy early and avoid
+      // liability for future rent, on 30 days' written notice, having provided
+      // documentation the statute names. DRAFT CONFIGURATION, LIKE EVERY
+      // NUMBER IN THIS ROW - D-4 requires attorney review before it governs a
+      // real tenancy, and `citation` and `reviewedBy` are where that is
+      // recorded.
+      //
+      // POLICE_REPORT IS DELIBERATELY ABSENT rather than forgotten. §92.016
+      // turns on a protective order, and §92.0161 on documentation from a
+      // licensed health-care or mental-health provider, a sexual-assault
+      // program or a similar advocate - a police report on its own is not
+      // among the classes either section names. An empty list would have
+      // accepted it silently, which is the reason the list is itemised here at
+      // all.
+      earlyTerminationRightExists: true,
+      earlyTerminationNoticeDays: 30,
+      earlyTerminationDocumentationTypes: ['PROTECTIVE_ORDER', 'PROVIDER_STATEMENT'],
 
       // Texas sets no statutory entry-notice-hours requirement; 24 hours is
       // common lease practice and the "reasonable notice" convention, not a

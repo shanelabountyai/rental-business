@@ -1,15 +1,19 @@
-import { friendlyDate, utcToBusinessDate } from '@rental/core/scheduling'
+import { businessDate, friendlyDate, utcToBusinessDate } from '@rental/core/scheduling'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import {
   CaseDetailsPanel,
   CloseCasePanel,
+  EarlyTerminationPanel,
   LockChangePanel,
+  RemovePartyPanel,
 } from '@/components/confidential/case-panels.tsx'
 import { actorCan, propertyResource, requireScope } from '@/lib/auth/guard.ts'
 import {
   closeConfidentialCase,
   orderLockChange,
+  recordEarlyTermination,
+  startConfidentialBifurcation,
   updateConfidentialCase,
 } from '@/lib/confidential/actions.ts'
 import { getConfidentialCase } from '@/lib/confidential/queries.ts'
@@ -55,6 +59,9 @@ export default async function ConfidentialCasePage({
   // catch, so wrapping it in a try/catch here would swallow the redirect and
   // silently render the page to somebody who was being sent away.
   const canManage = await actorCan('confidential.manage', propertyResource(found.lease.property))
+  const today = businessDate(new Date(), zone)
+  const leaseIsRunning =
+    found.lease.status === 'ACTIVE' || found.lease.status === 'MONTH_TO_MONTH'
 
   return (
     <div className="flex max-w-3xl flex-col gap-4">
@@ -101,6 +108,35 @@ export default async function ConfidentialCasePage({
           workOrderId={found.lockChangeWorkOrderId}
           workOrderStatus={found.lockChangeWorkOrder?.status ?? null}
           action={orderLockChange.bind(null, found.id)}
+        />
+      )}
+
+      {/* R-091b. Both are only offered on a tenancy that is still running:
+          neither the statutory right nor a change of parties means anything
+          on a lease that has already ended, and the case itself deliberately
+          outlives the tenancy (see `validateConfidentialCase`). */}
+      {canManage && leaseIsRunning && (
+        <EarlyTerminationPanel
+          recorded={found.earlyTerminationRecordedAt != null}
+          effectiveOn={
+            found.lease.noticeEffectiveOn
+              ? utcToBusinessDate(found.lease.noticeEffectiveOn)
+              : null
+          }
+          hasDocumentation={found.documentationType != null}
+          today={today}
+          action={recordEarlyTermination.bind(null, found.id)}
+        />
+      )}
+
+      {canManage && leaseIsRunning && (
+        <RemovePartyPanel
+          sent={found.partyChangeId != null}
+          changeId={found.partyChangeId}
+          restrictedPartyName={found.restrictedPartyName}
+          restrictedPartyOnLease={found.restrictedPartyTenantId != null}
+          today={today}
+          action={startConfidentialBifurcation.bind(null, found.id)}
         />
       )}
 

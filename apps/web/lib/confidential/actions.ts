@@ -1,16 +1,24 @@
 'use server'
 
 import {
+  BIFURCATION_REASON,
+  EARLY_TERMINATION_REFUSAL_MESSAGES,
   LOCK_CHANGE_SCOPE,
+  earlyTermination,
   restrictedPartyNote,
   validateConfidentialCase,
 } from '@rental/core/confidential'
-import { businessDate, businessDateToUtc } from '@rental/core/scheduling'
+import { businessDate, businessDateToUtc, utcToBusinessDate } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { audit } from '@/lib/audit/index.ts'
 import { propertyResource, requirePermission, requireScope } from '@/lib/auth/guard.ts'
+import { rulesFor } from '@/lib/jurisdiction/queries.ts'
+import {
+  buildPartyChange,
+  loadLeaseForPartyChange,
+} from '@/lib/leases/party-change-builder.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 import { getConfidentialCase } from './queries.ts'
 
@@ -374,4 +382,251 @@ export async function closeConfidentialCase(
 
   revalidatePath(`/confidential/${caseId}`)
   return { notice: 'Case closed.' }
+}
+
+// ---------------------------------------------------------------------------
+// R-091b: the statutory right, and the removal
+// ---------------------------------------------------------------------------
+
+/**
+ * Records the tenancy's early termination under this state's statute.
+ *
+ * ==========================================================================
+ * ITS OWN ACTION RATHER THAN A FLAG ON `recordLeaseNotice`, for the reasons
+ * `recordScraTermination` gives and one more.
+ *
+ *   * The state's `noticeToVacateDays` does not apply. The early-termination
+ *     statute is what governs this date; treating the ordinary notice period
+ *     as a floor would demand an override reason from somebody exercising a
+ *     statutory right, which is D-82's objection to §3955 running through
+ *     `noticePeriodCheck`, arriving from a different statute.
+ *   * Just cause and retaliation do not apply: the tenant is ending their own
+ *     tenancy.
+ *   * The effective date is COMPUTED from configuration, not typed.
+ *   * And the one that is new here: the reason must not reach the tenancy.
+ *     An SCRA termination writes `Lease.scraTerminationBasis`, which is safe
+ *     because being a servicemember is not a secret. There is no equivalent
+ *     column here and there must not be: a `Lease` column naming this basis
+ *     would be readable by everybody holding `lease.read` and would be the
+ *     disclosure (D-107). What the tenancy shows is R-066's ordinary
+ *     tenant-given notice; that the right was claimed is recorded HERE,
+ *     behind the wall.
+ * ==========================================================================
+ */
+export async function recordEarlyTermination(
+  caseId: string,
+  _previous: ConfidentialFormState,
+  formData: FormData,
+): Promise<ConfidentialFormState> {
+  const context = await caseForWrite(caseId)
+  if (!context) return { error: 'That case no longer exists.' }
+  const { found } = context
+  // Ending a tenancy is a lease act whatever the reason for it. An actor who
+  // could not record a notice on the lease page must not be able to record
+  // one from here either.
+  await requirePermission('lease.write', propertyResource(found.lease.property))
+
+  if (found.earlyTerminationRecordedAt) {
+    return { error: 'An early termination has already been recorded from this case.' }
+  }
+
+  const lease = await prisma.lease.findUniqueOrThrow({
+    where: { id: found.lease.id },
+    select: { id: true, status: true, noticeGivenAt: true },
+  })
+  if (lease.status !== 'ACTIVE' && lease.status !== 'MONTH_TO_MONTH') {
+    return { error: 'Only a running tenancy can be terminated early.' }
+  }
+  if (lease.noticeGivenAt) {
+    return {
+      error:
+        'Notice has already been recorded on this tenancy. Clearing it and starting again is a lease edit, not a second notice.',
+    }
+  }
+
+  const zone = found.lease.property.timezone
+  const deliveredOn = str(formData, 'deliveredOn')
+  const forwardingAddress = str(formData, 'forwardingAddress') || null
+  if (!deliveredOn) {
+    return {
+      error: 'Fix the highlighted fields.',
+      fieldErrors: { deliveredOn: 'When did they give written notice?' },
+    }
+  }
+
+  // An unconfigured state reaches `earlyTermination` as `rightExists: null`
+  // rather than throwing, so the operator gets the sentence that says what to
+  // do instead of a 500. Failing OPEN in the sense that matters: nothing
+  // about the case, the lock change or the retired codes waits on this.
+  const rule = await rulesFor(
+    { state: found.lease.property.state, county: found.lease.property.county },
+    businessDateToUtc(deliveredOn),
+  ).catch(() => null)
+
+  const decision = earlyTermination({
+    deliveredOn,
+    today: businessDate(new Date(), zone),
+    rule: {
+      rightExists: rule?.earlyTerminationRightExists ?? null,
+      noticeDays: rule?.earlyTerminationNoticeDays ?? null,
+      acceptedDocumentationTypes: rule?.earlyTerminationDocumentationTypes ?? [],
+    },
+    // FROM THE CASE, NEVER FROM THIS FORM (D-108). What the statute turns on
+    // is that documentation of an accepted class was produced, which the case
+    // already records whole - type, date and who saw it - under a database
+    // CHECK. A second copy typed here would be a second answer to the same
+    // question.
+    documentationType: found.documentationType,
+    documentedOn: found.documentedOn ? utcToBusinessDate(found.documentedOn) : null,
+  })
+  if (decision.refusal) {
+    return { error: EARLY_TERMINATION_REFUSAL_MESSAGES[decision.refusal] }
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.lease.update({
+      where: { id: lease.id },
+      data: {
+        // A tenant-given notice, because that is what it is (R-066). No
+        // basis column, deliberately - see this function's own header.
+        noticeGivenAt: businessDateToUtc(deliveredOn),
+        noticeGivenBy: 'TENANT',
+        noticeEffectiveOn: businessDateToUtc(decision.effectiveOn),
+        noticeForwardingAddress: forwardingAddress,
+      },
+    })
+    await tx.confidentialCase.update({
+      where: { id: caseId },
+      data: { earlyTerminationRecordedAt: new Date() },
+    })
+    // The ordinary, readable entry every other notice writes. It carries no
+    // basis, no statute and no case - the tenancy's trail shows a tenant who
+    // gave notice, which is true and is all of it that is anybody else's.
+    await audit(
+      {
+        action: 'lease.notice_given',
+        entityType: 'Lease',
+        entityId: lease.id,
+        propertyId: found.lease.propertyId,
+        after: {
+          noticeGivenAt: businessDateToUtc(deliveredOn).toISOString(),
+          noticeGivenBy: 'TENANT',
+          effectiveOn: businessDateToUtc(decision.effectiveOn).toISOString(),
+        },
+      },
+      tx,
+    )
+    await audit(
+      {
+        action: 'confidential.early_termination_recorded',
+        entityType: 'ConfidentialCase',
+        entityId: caseId,
+        propertyId: found.lease.propertyId,
+        after: { caseId },
+      },
+      tx,
+    )
+  })
+
+  revalidatePath(`/confidential/${caseId}`)
+  revalidatePath(`/leases/${found.lease.id}`)
+  return {
+    notice: `Recorded. The tenancy ends on ${decision.effectiveOn} — ${decision.noticeDays} days from the notice. The tenancy shows an ordinary tenant-given notice and nothing else.`,
+  }
+}
+
+/**
+ * Sends the amendment that takes the restricted party off the tenancy.
+ *
+ * ==========================================================================
+ * THE ONLY CALLER THAT CAN BUILD A PARTY CHANGE NOBODY IS ASKED TO SIGN, and
+ * it is one of exactly two entry points into the same builder. The other is
+ * the lease page's ordinary panel, which passes `unsigned: null` and has no
+ * way to pass anything else. A "skip signatures" checkbox on that panel would
+ * have been the same feature reachable by the ordinary permission and offered
+ * to every operator doing a roommate swap.
+ *
+ * THE REASON IS A FIXED STRING. The ordinary path takes free text and should;
+ * here the same field is printed on a document every signer reads, archived
+ * as a `Document` that `document.read` puts in front of the maintenance tech,
+ * and copied into `lease.party_changed` - so a box an operator types into is
+ * an invitation to disclose (D-107).
+ *
+ * IT REMOVES SOMEBODY FROM A LEASE, NOT FROM A HOUSE. The panel says so in
+ * as many words, because acting on this alone would be a self-help eviction.
+ * ==========================================================================
+ */
+export async function startConfidentialBifurcation(
+  caseId: string,
+  _previous: ConfidentialFormState,
+  formData: FormData,
+): Promise<ConfidentialFormState> {
+  const context = await caseForWrite(caseId)
+  if (!context) return { error: 'That case no longer exists.' }
+  const { found } = context
+
+  if (found.partyChangeId) {
+    return { error: 'An amendment has already been sent from this case.' }
+  }
+  if (!found.restrictedPartyTenantId) {
+    return {
+      error:
+        'This case does not name the restricted party as somebody on the tenancy, so there is nobody here to remove. Name them on the case first — and if they were never on the lease, there is nothing to amend.',
+    }
+  }
+
+  // `lease.execute`, checked inside. Loaded after the case checks so that an
+  // actor without it is refused before anything is generated.
+  const { lease, actor } = await loadLeaseForPartyChange(found.lease.id)
+
+  const effectiveOn = str(formData, 'effectiveOn')
+  if (!effectiveOn) {
+    return {
+      error: 'Fix the highlighted fields.',
+      fieldErrors: { effectiveOn: 'When does the removal take effect?' },
+    }
+  }
+
+  const result = await buildPartyChange({
+    lease,
+    actorId: actor.id,
+    outgoingTenantIds: [found.restrictedPartyTenantId],
+    incomingApplicantIds: [],
+    effectiveOn,
+    reason: BIFURCATION_REASON,
+    // No warning can arise here: the household-income warning needs an
+    // incoming party and there is never one on this path.
+    acknowledgedWarnings: true,
+    unsigned: { tenantIds: [found.restrictedPartyTenantId] },
+  })
+  if (!result.changeId) {
+    const { changeId: _unused, ...state } = result
+    return state
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.confidentialCase.update({
+      where: { id: caseId },
+      data: { partyChangeId: result.changeId },
+    })
+    await audit(
+      {
+        action: 'confidential.party_change_started',
+        entityType: 'ConfidentialCase',
+        entityId: caseId,
+        propertyId: found.lease.propertyId,
+        after: { caseId, changeId: result.changeId },
+      },
+      tx,
+    )
+  })
+
+  revalidatePath(`/confidential/${caseId}`)
+  revalidatePath(`/leases/${found.lease.id}`)
+  return {
+    error: result.error,
+    notice: result.error
+      ? undefined
+      : 'Amendment sent. The person being removed is not asked to sign it and is not sent a link.',
+  }
 }

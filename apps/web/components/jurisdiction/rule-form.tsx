@@ -1,5 +1,9 @@
 'use client'
 
+import {
+  DOCUMENTATION_ACCEPTED_LABELS,
+  DOCUMENTATION_TYPES,
+} from '@rental/core/confidential'
 import { PAYMENT_ALLOCATION_CHARGE_TYPES } from '@rental/core/jurisdiction'
 import { US_STATE_OPTIONS } from '@rental/core/property'
 import { useActionState } from 'react'
@@ -56,6 +60,9 @@ export interface RuleFormDefaults {
   rentIncreaseCapPercent?: number | ''
   retaliationWindowDays?: number | ''
   sourceOfIncomeProtected?: boolean | null
+  earlyTerminationRightExists?: boolean | null
+  earlyTerminationNoticeDays?: number | ''
+  earlyTerminationDocumentationTypes?: readonly string[]
   justCauseRequired?: boolean
   paymentAllocationOrder?: readonly string[]
   applicationFeeCapDollars?: number | ''
@@ -89,6 +96,9 @@ export function RuleForm({
   const errors = state.fieldErrors ?? {}
   const checkedAllocations = new Set(
     defaults.paymentAllocationOrder ?? ['RENT', 'LATE_FEE'],
+  )
+  const acceptedDocumentation = new Set<string>(
+    defaults.earlyTerminationDocumentationTypes ?? [],
   )
 
   return (
@@ -422,6 +432,75 @@ export function RuleForm({
             unreviewed, a published listing&rsquo;s disclosure says so honestly rather than
             guessing.
           </p>
+        </div>
+      </fieldset>
+
+      {/* R-091b. State law, unlike R-085's SCRA (D-82) — which is exactly why
+          it is here and §3955 is not. Three-valued, so "nobody has looked at
+          this state" stays distinguishable from "this state grants no such
+          right": one is a five-minute edit on this form, the other is a legal
+          conclusion, and getting them the wrong way round refuses somebody a
+          statutory right. */}
+      <fieldset className="flex flex-col gap-4">
+        <legend className="text-sm font-semibold">
+          Early termination on a safety ground (RISK-04)
+        </legend>
+        <div className="flex flex-col gap-1.5">
+          <SelectField
+            label="Statutory early-termination right"
+            name="earlyTerminationRightExists"
+            idPrefix="rule"
+            defaultValue={
+              defaults.earlyTerminationRightExists == null
+                ? ''
+                : String(defaults.earlyTerminationRightExists)
+            }
+            error={errors.earlyTerminationRightExists}
+            placeholder="Not reviewed"
+            options={[
+              { value: 'true', label: 'Yes, granted' },
+              { value: 'false', label: 'No' },
+            ]}
+          />
+          <p className="text-muted-foreground text-sm">
+            Whether this state lets a tenant end a tenancy early, without penalty, on a
+            statutory safety ground. Left unreviewed, the product says so rather than
+            answering for the state either way.
+          </p>
+        </div>
+        <TextField
+          label="Days of notice the early-termination right requires"
+          name="earlyTerminationNoticeDays"
+          type="number"
+          inputMode="numeric"
+          min={0}
+          max={180}
+          defaultValue={defaults.earlyTerminationNoticeDays}
+          error={errors.earlyTerminationNoticeDays}
+          hint="Counted in calendar days from the day the tenant delivers notice. Only used where the right above is granted."
+        />
+        <div className="flex flex-col gap-2">
+          <span className="text-sm font-medium">Documentation this state accepts</span>
+          <p className="text-muted-foreground text-sm">
+            Leaving all of these unticked does not mean the state accepts none — it means
+            nobody has itemised them, and any class actually recorded will be taken.
+          </p>
+          {errors.earlyTerminationDocumentationTypes && (
+            <p role="alert" className="text-sm text-red-700 dark:text-red-400">
+              {errors.earlyTerminationDocumentationTypes}
+            </p>
+          )}
+          <div className="flex flex-col gap-2">
+            {DOCUMENTATION_TYPES.map((documentationType) => (
+              <CheckboxField
+                key={documentationType}
+                label={DOCUMENTATION_ACCEPTED_LABELS[documentationType]}
+                name="earlyTerminationDocumentationTypes"
+                value={documentationType}
+                defaultChecked={acceptedDocumentation.has(documentationType)}
+              />
+            ))}
+          </div>
         </div>
       </fieldset>
 

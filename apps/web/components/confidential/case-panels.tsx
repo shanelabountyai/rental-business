@@ -2,7 +2,12 @@
 
 import Link from 'next/link'
 import { useActionState } from 'react'
-import { DOCUMENTATION_LABELS, DOCUMENTATION_IS_NOT_STORED } from '@rental/core/confidential'
+import {
+  BIFURCATION_IS_NOT_AN_EVICTION,
+  DOCUMENTATION_IS_NOT_STORED,
+  DOCUMENTATION_LABELS,
+  EARLY_TERMINATION_LIABILITY_NOTE,
+} from '@rental/core/confidential'
 import { FormAlerts, LiveRegion, SubmitButton } from '@/components/auth-form.tsx'
 import { SelectField, TextField, TextareaField } from '@/components/form/field.tsx'
 import type { ConfidentialFormState } from '@/lib/confidential/actions.ts'
@@ -243,6 +248,159 @@ export function CloseCasePanel({
             hint="Recorded on the case and in the audit trail. It is the only part of this case that goes into the audit log."
           />
           <SubmitButton label="Close this case" />
+        </form>
+      )}
+    </section>
+  )
+}
+
+/**
+ * The statutory early-termination right (R-091b).
+ *
+ * NEUTRAL LABELS, LIKE EVERY OTHER PANEL HERE. "Early termination", "written
+ * notice", "where they want the deposit sent". And the field names are chosen
+ * against the rest of this page as well as against themselves — `/leases/[id]`
+ * has cost three items a strict-mode collision by not doing that, and this
+ * page is heading the same way.
+ */
+export function EarlyTerminationPanel({
+  recorded,
+  effectiveOn,
+  hasDocumentation,
+  today,
+  action,
+}: {
+  recorded: boolean
+  effectiveOn: string | null
+  hasDocumentation: boolean
+  today: string
+  action: Action
+}) {
+  const [state, submit] = useActionState<ConfidentialFormState, FormData>(action, {})
+  const errors = state.fieldErrors ?? {}
+
+  return (
+    <section aria-labelledby="early-termination" className="flex flex-col gap-3 border-t pt-4">
+      <h2 id="early-termination" className="text-lg font-semibold">
+        Ending the tenancy early
+      </h2>
+      <FormAlerts state={state} />
+      <LiveRegion>
+        {recorded && (
+          <p className="text-sm">
+            Recorded. The tenancy ends on {effectiveOn}. On the tenancy itself this is an
+            ordinary tenant-given notice and says nothing more.
+          </p>
+        )}
+      </LiveRegion>
+
+      {!recorded && (
+        <form action={submit} className="flex flex-col gap-3">
+          <p className="text-sm">
+            Where the state grants it, a tenant may end the tenancy early without penalty. The
+            date is computed from that state&rsquo;s rule — it is not typed, and this
+            state&rsquo;s ordinary notice period does not apply to it.
+          </p>
+          <p className="text-sm">{EARLY_TERMINATION_LIABILITY_NOTE}</p>
+          {/* Documentation gates the statutory right and nothing else (D-108).
+              Said here rather than discovered at the refusal, because an
+              operator who reads "documentation required" on this page will
+              reasonably think it gates the lock change too — and it never
+              did. */}
+          {!hasDocumentation && (
+            <p className="text-sm font-medium">
+              Nothing is recorded on this case about what you were shown, and the statutory
+              right is the one thing that turns on it. Record it above first. Nothing else on
+              this page waits on it.
+            </p>
+          )}
+          <TextField
+            label="Date they gave written notice"
+            name="deliveredOn"
+            type="date"
+            required
+            max={today}
+            idPrefix="early-termination"
+            error={errors.deliveredOn}
+          />
+          <TextField
+            label="Where to send the deposit disposition"
+            name="forwardingAddress"
+            idPrefix="early-termination"
+            error={errors.forwardingAddress}
+            hint="Optional, and it goes on the tenancy where the ordinary disposition reads it. Leave it blank if a forwarding address is itself something they would rather not put on file."
+          />
+          <SubmitButton label="Record the early termination" />
+        </form>
+      )}
+    </section>
+  )
+}
+
+/**
+ * Removing the restricted party from the tenancy (R-091b).
+ *
+ * THE PANEL SAYS WHAT THIS IS NOT, prominently, because the failure it is
+ * guarding against is an operator who reads "remove them from the lease" as
+ * "get them out of the house".
+ */
+export function RemovePartyPanel({
+  sent,
+  changeId,
+  restrictedPartyName,
+  restrictedPartyOnLease,
+  today,
+  action,
+}: {
+  sent: boolean
+  changeId: string | null
+  restrictedPartyName: string | null
+  restrictedPartyOnLease: boolean
+  today: string
+  action: Action
+}) {
+  const [state, submit] = useActionState<ConfidentialFormState, FormData>(action, {})
+  const errors = state.fieldErrors ?? {}
+
+  return (
+    <section aria-labelledby="remove-party" className="flex flex-col gap-3 border-t pt-4">
+      <h2 id="remove-party" className="text-lg font-semibold">
+        Taking the restricted party off the tenancy
+      </h2>
+      <FormAlerts state={state} />
+
+      {sent ? (
+        <p className="text-sm">
+          An amendment was sent as change {changeId?.slice(-6)}. It is on the tenancy like any
+          other change of occupants, and it carries no reason beyond a statutory one. Everyone
+          else on the lease signs it; the person being removed is not asked and is not sent a
+          link. It applies when the last signature lands.
+        </p>
+      ) : !restrictedPartyOnLease ? (
+        <p className="text-sm">
+          This case does not name the restricted party as somebody who is on the tenancy, so
+          there is nothing here to amend. If they are on it, name them on the case above.
+        </p>
+      ) : (
+        <form action={submit} className="flex flex-col gap-3">
+          <p className="text-sm">{BIFURCATION_IS_NOT_AN_EVICTION}</p>
+          <p className="text-sm">
+            This sends the same lease amendment the tenancy&rsquo;s own panel would, with one
+            difference: {restrictedPartyName} is left off the signing list altogether. The
+            change records that a statute excused the signature, and says nothing else — not on
+            the lease page, not in the document, and not in the audit trail.
+          </p>
+          <TextField
+            label="Date the removal takes effect"
+            name="effectiveOn"
+            type="date"
+            required
+            defaultValue={today}
+            idPrefix="remove-party"
+            error={errors.effectiveOn}
+            hint="Printed on the amendment. The change itself applies when the last signature lands, never on a timer."
+          />
+          <SubmitButton label="Send the amendment without their signature" />
         </form>
       )}
     </section>

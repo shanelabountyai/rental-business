@@ -7,6 +7,8 @@
 // stack trace, a schema, a browser history or a log line, and the fact this
 // case exists is the fact the access control is holding.
 
+import { addBusinessDays, type BusinessDate } from '../scheduling/local-time.ts'
+
 export interface ConfidentialCaseViolation {
   field: string
   message: string
@@ -27,6 +29,22 @@ export const DOCUMENTATION_LABELS: Record<DocumentationType, string> = {
   PROTECTIVE_ORDER: 'Protective or restraining order',
   POLICE_REPORT: 'Police report or incident number',
   PROVIDER_STATEMENT: 'Statement from a victim-services provider or medical professional',
+}
+
+/// The same three classes, worded for the jurisdiction rule form, where the
+/// question is not "what were you shown" but "what does this state take".
+///
+/// ITS OWN LABELS RATHER THAN THE ONES ABOVE, and the reason is a strict-mode
+/// failure worth keeping: "Statement from a victim-services provider…" put the
+/// word STATE inside a checkbox label on a form whose first field is labelled
+/// "State", and `getByLabel` is a case-insensitive SUBSTRING match - so four
+/// existing specs stopped being able to select a state at all. CLAUDE.md's
+/// rule, met head-on: prefer the longer, more specific wording, which is the
+/// better label here anyway.
+export const DOCUMENTATION_ACCEPTED_LABELS: Record<DocumentationType, string> = {
+  PROTECTIVE_ORDER: 'Accepts a protective or restraining order',
+  POLICE_REPORT: 'Accepts a police report or incident number',
+  PROVIDER_STATEMENT: 'Accepts a provider or medical professional’s documentation',
 }
 
 export function isDocumentationType(value: string): value is DocumentationType {
@@ -148,3 +166,156 @@ export function restrictedPartyNote(input: {
     `If anybody else asks you about this job, this address or who lives here — including someone who says they live here or owns it — say nothing and call ${input.callbackLabel} first.`,
   ].join(' ')
 }
+
+// ---------------------------------------------------------------------------
+// The statutory early-termination right (R-091b)
+// ---------------------------------------------------------------------------
+//
+// ==========================================================================
+// THIS ONE *IS* JURISDICTION CONFIGURATION, AND THAT IS THE WHOLE POINT OF
+// SPLITTING IT FROM R-085.
+//
+// D-82 hardcodes the SCRA because §§3931/3955 are federal, uniform across
+// fifty states, and preempt state law where they disagree - so a
+// `JurisdictionRule` column for §3955 would be a configuration point with one
+// correct value in fifty rows and fifty chances to get one wrong.
+//
+// A survivor's right to end a tenancy early without penalty is the opposite.
+// VAWA binds federally assisted housing; a private single-family portfolio
+// answers to state law - e.g. Tex. Prop. Code §92.016 (family violence) and
+// §92.0161 (certain sexual offences and stalking) - and states differ on
+// whether the right exists at all, how much notice it takes, and which
+// classes of documentation the statute accepts. D-4 applies unchanged.
+//
+// AND, LIKE §3955, IT DOES NOT RUN THROUGH `noticePeriodCheck`. The state's
+// `noticeToVacateDays` is not a floor a survivor has to clear; the
+// early-termination statute is what governs the date, and demanding an
+// override reason from somebody exercising a statutory right is the product
+// getting the law backwards (D-82's reasoning, applied to a different
+// statute).
+// ==========================================================================
+
+/// What the jurisdiction says. Three-valued on the first field, because
+/// "nobody has reviewed this state" is a different claim from "this state
+/// grants no such right" and the two need different messages and different
+/// remedies - one is a five-minute config edit, the other is a legal
+/// conclusion somebody has already reached.
+export interface EarlyTerminationRule {
+  rightExists: boolean | null
+  noticeDays: number | null
+  /// EMPTY IS NOT "NONE". It means nobody has itemised which classes this
+  /// state accepts, and the decision below then takes any class actually
+  /// recorded on the case rather than refusing over this product's own gap.
+  acceptedDocumentationTypes: readonly string[]
+}
+
+export const EARLY_TERMINATION_REFUSALS = [
+  'rule_not_reviewed',
+  'right_not_granted',
+  'notice_period_not_configured',
+  'no_documentation',
+  'documentation_not_accepted',
+  'delivered_in_future',
+] as const
+export type EarlyTerminationRefusal = (typeof EARLY_TERMINATION_REFUSALS)[number]
+
+/// Read on a page that is already behind the permission wall, so these can be
+/// direct - but they still never name what the case is about, because the
+/// wall is not the only way a screen gets read (D-107).
+export const EARLY_TERMINATION_REFUSAL_MESSAGES: Record<EarlyTerminationRefusal, string> = {
+  rule_not_reviewed:
+    'Nobody has reviewed whether this state grants an early-termination right, so this product cannot compute the date it would take effect. Add it to the jurisdiction rule for this state, then come back. This is a gap in our configuration, not an answer about the law — it does not mean the right does not exist, and it does not stop you honouring it outside this screen.',
+  right_not_granted:
+    'The reviewed rule for this state records no statutory early-termination right, so there is no statutory date to compute. Ending the tenancy by agreement or on ordinary notice is still open, on the tenancy itself.',
+  notice_period_not_configured:
+    'This state grants the right but its notice period is not on file, so the effective date cannot be computed. Add it to the jurisdiction rule for this state.',
+  no_documentation:
+    'The statutory right is the one thing documentation gates. Record what you were shown and the date, on this case, first. Nothing else here waits on it — the lock change never did.',
+  documentation_not_accepted:
+    'What was recorded on this case is not a class this state accepts for the statutory right. It changes nothing else about the case.',
+  delivered_in_future: 'Notice cannot be recorded as delivered on a date that has not happened.',
+}
+
+export interface EarlyTerminationInput {
+  /// The day the tenant delivered written notice. A BusinessDate.
+  deliveredOn: string
+  today: string
+  rule: EarlyTerminationRule
+  /// Taken from the case, never from the form. D-108: what the statute turns
+  /// on is that documentation of an accepted class was PRODUCED, which is a
+  /// fact already recorded, whole, by a database CHECK.
+  documentationType: string | null
+  documentedOn: string | null
+}
+
+export type EarlyTerminationDecision =
+  | { refusal: EarlyTerminationRefusal; effectiveOn?: undefined; noticeDays?: undefined }
+  | { refusal?: undefined; effectiveOn: BusinessDate; noticeDays: number }
+
+/**
+ * When a statutory early termination takes effect, or why it cannot be
+ * recorded.
+ *
+ * REFUSES RATHER THAN GUESSES, in every branch. The alternative is a computed
+ * termination date resting on a statute nobody has read, printed on a record
+ * that says the tenant exercised a right — and a wrong date here ends
+ * somebody's tenancy on the wrong day and releases the wrong month of rent.
+ *
+ * WHAT IT NEVER BLOCKS is the safety response. The lock change, the retired
+ * codes and the case itself are R-091's and are reached from the same page
+ * without passing through here. Documentation gates the statutory CLAIM only
+ * (D-108) — a survivor who has not been to court has no order to show, and a
+ * product that would not change the locks until they did would be holding
+ * somebody's safety against a filing deadline.
+ */
+export function earlyTermination(input: EarlyTerminationInput): EarlyTerminationDecision {
+  if (input.deliveredOn > input.today) return { refusal: 'delivered_in_future' }
+  if (input.rule.rightExists == null) return { refusal: 'rule_not_reviewed' }
+  if (!input.rule.rightExists) return { refusal: 'right_not_granted' }
+  if (!input.documentationType || !input.documentedOn) return { refusal: 'no_documentation' }
+  if (
+    input.rule.acceptedDocumentationTypes.length > 0 &&
+    !input.rule.acceptedDocumentationTypes.includes(input.documentationType)
+  ) {
+    return { refusal: 'documentation_not_accepted' }
+  }
+  // Zero is a real configuration - a state where the tenancy ends the day
+  // notice is delivered - so this tests for null, not for falsiness.
+  if (input.rule.noticeDays == null) return { refusal: 'notice_period_not_configured' }
+
+  return {
+    effectiveOn: addBusinessDays(input.deliveredOn, input.rule.noticeDays),
+    noticeDays: input.rule.noticeDays,
+  }
+}
+
+/// Printed on the panel, verbatim. The two halves a survivor and an owner
+/// each ask about, and they have opposite answers: future rent goes, past
+/// arrears do not (e.g. Tex. Prop. Code §92.016(f)). Stated because an
+/// operator who assumes the first also wipes the second is about to write off
+/// money nobody agreed to write off — and one who assumes neither is about to
+/// pursue rent the statute released.
+export const EARLY_TERMINATION_LIABILITY_NOTE =
+  'Recording this ends the tenancy on the computed date and stops rent accruing after it. It does not clear anything already owed on the day it ends, and it does not itself refund the deposit — the deposit runs its ordinary disposition from the move-out.'
+
+// ---------------------------------------------------------------------------
+// Removing the restricted party from the tenancy
+// ---------------------------------------------------------------------------
+
+/// The reason printed on a bifurcation amendment and copied into
+/// `lease.party_changed`'s audit payload.
+///
+/// A FIXED STRING, NOT SOMETHING AN OPERATOR TYPES. The ordinary path takes a
+/// free-text reason and should: a roommate change with no stated reason is
+/// the one a dispute asks about. Here the same field is read by every signer,
+/// lands in an archived `Document` that `document.read` exposes to the
+/// maintenance tech, and is copied into an audit row - so a free-text box is
+/// an invitation to type the one sentence this whole feature exists to keep
+/// off those screens (D-107).
+export const BIFURCATION_REASON =
+  'Removal of a party from the tenancy under a statutory right. The remaining tenancy continues unchanged on its existing terms.'
+
+/// Shown on the panel before it is used. The consequence an operator has to
+/// have understood, because the product cannot check it for them.
+export const BIFURCATION_IS_NOT_AN_EVICTION =
+  'This removes them from the lease. It does not remove them from the property, and it is not a notice, a lockout or an eviction — doing any of those on the strength of this alone would be a self-help eviction. What it changes is who is liable on the tenancy and who this system will contact, message and let into the portal.'

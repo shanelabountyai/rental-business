@@ -91,6 +91,11 @@ function ruleInputFrom(formData: FormData): JurisdictionRuleInput {
     rentIncreaseCapPercentBps: optionalBps(formData, 'rentIncreaseCapPercent'),
     retaliationWindowDays: optionalNumber(formData, 'retaliationWindowDays'),
     sourceOfIncomeProtected: optionalBoolean(formData, 'sourceOfIncomeProtected'),
+    earlyTerminationRightExists: optionalBoolean(formData, 'earlyTerminationRightExists'),
+    earlyTerminationNoticeDays: optionalNumber(formData, 'earlyTerminationNoticeDays'),
+    earlyTerminationDocumentationTypes: formData
+      .getAll('earlyTerminationDocumentationTypes')
+      .map(String),
     justCauseRequired: formData.get('justCauseRequired') === 'on',
     paymentAllocationOrder: formData.getAll('paymentAllocationOrder').map(String),
     applicationFeeCapCents: optionalCents(formData, 'applicationFeeCapDollars'),
@@ -167,6 +172,9 @@ export async function createRuleVersion(
         depositInterestRequired: input.depositInterestRequired,
         preMoveOutWalkthroughRequired: input.preMoveOutWalkthroughRequired,
         preMoveOutWalkthroughDaysBefore: input.preMoveOutWalkthroughDaysBefore,
+        earlyTerminationRightExists: input.earlyTerminationRightExists,
+        earlyTerminationNoticeDays: input.earlyTerminationNoticeDays,
+        earlyTerminationDocumentationTypes: [...(input.earlyTerminationDocumentationTypes ?? [])],
         entryNoticeHours: input.entryNoticeHours,
         payOrQuitDays: input.payOrQuitDays,
         noticeToVacateDays: input.noticeToVacateDays,
