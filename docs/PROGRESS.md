@@ -3835,7 +3835,7 @@ Two defects of my own in the new spec, and the second is the same shape. The evi
 **What it left behind.** Nothing built, by design. The three rows sit behind gates that are honest: a vendor decision and a furnisher review for R-097b, a written story for R-097c, and nothing at all for R-097a — which is the one of the three that could be started today.
 
 ## R-097c — The staff visit calendar
-**Commit:** `pending`  ·  **Date:** 2026-08-24
+**Commit:** `1259785`  ·  **Date:** 2026-08-24
 
 **What it built.** A new PRD story (**NOTIF-06**) — the row had none, which was its first instruction — then the read-only half: an iCalendar formatter in core with 10 tests, a scoped event query with a source-level disclosure guard, a public feed route, a per-person subscribe link on the account page, and 4 e2e specs. Also recorded the two owner answers that arrived with it: **D-122** cuts R-096, **D-123** re-gates R-095.
 
