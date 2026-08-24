@@ -4051,3 +4051,19 @@ So one tenancy is followed. She falls behind and is chased, lawfully and correct
 **What it left behind.**
 - **`emailAddressOnly` still takes the FIRST `<…>` group**, so a display name that itself contains a `<` reads wrongly. Left deliberately: a comma in a display name is the ordinary case, a `<` in one is not, and nothing in the quote-aware split makes that shape newly reachable.
 - **Seven unit tests and no new e2e.** The route's `addresses()` is now a two-line flatMap over a tested pure function, and the assertion that actually matters — the key survives a comma'd name beside it — is made against `extractReplyKey` directly.
+
+## R-048 cut — OQ-2 answered, no voucher tenancies
+**Commit:** _(recorded below)_  ·  **Date:** 2026-08-24
+
+**What it did.** Re-asked OQ-2 at the point it was actually blocking something, got a firm answer, and cut R-048 rather than leaving it gated. Recorded as **D-136**. No code changed.
+
+**Why it was worth asking rather than deferring again.** OQ-2 was answered "unsure / possible later" on 2026-08-01, and D-13's note said to re-ask before Milestone 3 planning — which never happened, so the row sat gated through five more milestones. It was the **last ungated-by-a-vendor row in the backlog**: R-037a/b, R-093 and R-097b all wait on outside parties, and this one waited on one sentence from the owner. The answer is **none now, none planned**, so the row is cut on D-121's reasoning and R-095/R-096's precedent: a row nobody will build reads to the next reader as work waiting to be done.
+
+**What was cut is the features, not the shape, and that distinction is the whole value of D-13.** Gone are recertification proration on effective dates, one bulk HAP deposit reconciled across many tenant projections, the housing-authority / caseworker / HAP-contract / inspection / abatement records, dunning that never pursues the HAP portion, and failed-HQS auto-work-orders against the re-inspection deadline. **`LeasePayer` and `PayerAllocation` stay**, and they are not dead weight held for a tenant who will not come: an ordinary lease is exactly one `LeasePayer` carrying the whole charge, and allocation always runs, so it is **one code path rather than a special case**. Nothing in the product is paying rent for this cut.
+
+**This is what taking it as a schema decision bought.** D-13 chose the low-regret option in R-002 — build the shape, defer the features — precisely so that whichever way OQ-2 eventually landed, the answer would be cheap. It was. The cut costs nothing to make, and a first voucher tenancy re-opens the row as a **feature build against a schema that already fits**, never as a migration of every financial query. The risk register's Section 8 entry was retired by D-13 in 2026-08-01, **not by this cut**, and that ordering is the thing worth remembering: the architectural risk was closed by a decision made while the answer was still unknown.
+
+**What it left behind.**
+- **The backlog now has no ungated row at all.** Every remaining unbuilt item — R-037a, R-037b, R-038a, R-093, R-097b — waits on a vendor relationship or on the furnisher review D-4 already requires. There is no next item to pull without opening one of those gates.
+- **Five open questions remain and none of them blocks a build**: OQ-1 (states, 24-month plan), OQ-5 (share of tenants who will never use a portal), OQ-6 (written screening criteria — answered "no" for real use), OQ-8's remaining half (whose books), OQ-10 (after-hours protocol). Each is worth answering for operational reasons; none is a gate.
+- **The re-ask itself is the transferable lesson.** OQ-2 carried "re-ask before Milestone 3 planning" and nothing made that happen. A deferred question with no owner and no trigger is a question that gets deferred again — which is the same failure as a checkpoint nobody defines until two milestones later.
