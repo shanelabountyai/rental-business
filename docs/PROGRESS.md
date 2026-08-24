@@ -4001,7 +4001,7 @@ One person is followed the whole way, and each item's promise is asserted agains
 - **Milestone 9 is the last milestone, and everything still unbuilt in it is gated** — R-093 on vendor partnerships, R-095 on one narrow owner question (D-123), R-097b on a vendor and the furnisher review D-4 already requires. So there is no next checkpoint to define yet; when a gate opens, define one before the item rather than after, which is the thing both 3 and 4 were written to stop repeating.
 
 ## Demo checkpoint 5 — Golden Path 5, the money path
-**Commits:** _(recorded below)_  ·  **Date:** 2026-08-24
+**Commit:** `fb5b16c`  ·  **Date:** 2026-08-24
 
 **What it did.** Wrote and walked the checkpoint that checkpoint 3 and checkpoint 4 both wrote down and neither did — `e2e/golden-path-5.spec.ts` — and fixed the product defect it found, plus a second defect the fix itself exposed. Recorded as **D-134**.
 
