@@ -3714,7 +3714,7 @@ Two defects of my own in the new spec, and the second is the same shape. The evi
 - **A second removal from the same case is refused by a `@unique` column, not by a considered rule.** One case sends one amendment. A case where the first is withdrawn and a second is needed has no path today.
 
 ## R-092 — Property sale and acquisition handoff
-**Commit:** `pending`  ·  **Date:** 2026-08-24
+**Commit:** `74b9170`  ·  **Date:** 2026-08-24
 
 **What it built.** `packages/core/property/handoff.ts` — the packet, the estoppel certificate and the deposit-transfer notice draft as pure block builders, with 16 unit tests; `handoff-file.ts`, the reads behind them, with a source-level test over its own exclusions; two actions behind a new `property.export` permission; a panel on the property page; `HANDOFF_PACKET` in the document vocabulary with its retention rule; and four e2e specs.
 
