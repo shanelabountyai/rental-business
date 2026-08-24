@@ -88,6 +88,75 @@ export function emailAddressOnly(raw: string): string {
 }
 
 /**
+ * One recipient header split into its individual mailboxes.
+ *
+ * ==========================================================================
+ * A COMMA INSIDE A QUOTED DISPLAY NAME IS NOT A SEPARATOR, and splitting on
+ * every comma is what D-132 left behind when it fixed `From:`. `To:` and
+ * `Cc:` genuinely ARE lists, so they do have to be split - but
+ * `"Vaughan, Dorothy" <d@example.com>, hello+k7x2…@inbound.example.com`
+ * split naively yields `"Vaughan`, `Dorothy" <d@example.com>` and the key,
+ * and the two broken halves are indistinguishable from real recipients.
+ *
+ * The cost is not the mangled name, which nothing reads. It is that a
+ * recipient list is where the REPLY KEY lives, and the key is the only
+ * high-confidence match inbound email has: lose it and a tenant with
+ * tenancies at two properties becomes `decideRoute`'s AMBIGUOUS case and
+ * lands in the unrouted queue. Sorting-office mail, autoresponders and
+ * anybody with a comma in their name all put one in that list routinely.
+ *
+ * THIS IS NOT AN RFC 5322 PARSER, and saying so is the point. It does not
+ * handle groups (`Managers: a@b, c@d;`), comments, folded headers or encoded
+ * words. What it handles is a comma that is inside a quoted string or inside
+ * angle brackets, which is the whole of what breaks on the mail people
+ * actually send. A real parser is a dependency or a large file, and neither
+ * is worth it for a header whose only job here is to be scanned for one tag.
+ * ==========================================================================
+ */
+export function splitAddressList(raw: string): string[] {
+  const parts: string[] = []
+  let current = ''
+  let quoted = false
+  let angled = false
+
+  for (let index = 0; index < raw.length; index += 1) {
+    const char = raw[index]!
+    if (quoted) {
+      // RFC 5322 quoted-pair: a backslash escapes whatever follows, so the
+      // closing quote of `"O\"Hara, P"` is the last one and not the middle
+      // one. Both characters are kept - this splits, it never rewrites.
+      if (char === '\\' && index + 1 < raw.length) {
+        current += char + raw[index + 1]!
+        index += 1
+        continue
+      }
+      if (char === '"') quoted = false
+      current += char
+      continue
+    }
+    if (char === '"') {
+      quoted = true
+      current += char
+      continue
+    }
+    // An addr-spec cannot contain a bare comma, so this guards a malformed
+    // `<a,b@c>` rather than a legal address - cheap, and it means a mangled
+    // header costs one unusable recipient instead of two.
+    if (char === '<') angled = true
+    else if (char === '>') angled = false
+    else if (char === ',' && !angled) {
+      parts.push(current)
+      current = ''
+      continue
+    }
+    current += char
+  }
+  parts.push(current)
+
+  return parts.map((part) => part.trim()).filter(Boolean)
+}
+
+/**
  * The reply key an inbound message was addressed to, if any.
  *
  * Reads every recipient header the provider gives us - a reply that CC'd the
@@ -103,7 +172,13 @@ export function extractReplyKey(input: {
   const local = input.inboundLocalPart.toLowerCase()
   const domain = input.inboundDomain.toLowerCase()
 
-  for (const raw of input.recipients) {
+  // Split again here rather than trusting the caller to have done it. This
+  // is the shared function every recipient list reaches, and D-132's lesson
+  // was precisely that a helper living beside one caller is a helper the
+  // next caller does not know exists - so a caller that passes a whole
+  // unsplit `To:` header works too. Idempotent on an already-split list: a
+  // single mailbox splits to itself.
+  for (const raw of input.recipients.flatMap(splitAddressList)) {
     // `Name <addr@example.com>` as well as a bare address.
     const address = emailAddressOnly(raw)
     const [localPart, host] = address.split('@')

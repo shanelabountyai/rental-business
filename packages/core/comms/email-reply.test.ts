@@ -7,6 +7,7 @@ import {
   htmlToText,
   isReplyKey,
   replyAddress,
+  splitAddressList,
   stripQuotedReply,
 } from './email-reply.ts'
 
@@ -34,6 +35,51 @@ describe('the address out of a header', () => {
   })
 })
 
+describe('splitting a recipient list', () => {
+  // The half D-132 named and left behind: From: was fixed, To:/Cc: were not.
+  it('does not split on a comma inside a quoted display name', () => {
+    expect(
+      splitAddressList(`"Vaughan, Dorothy" <d@example.com>, hello+${KEY}@inbound.example.com`),
+    ).toEqual([`"Vaughan, Dorothy" <d@example.com>`, `hello+${KEY}@inbound.example.com`])
+  })
+
+  it('still splits an ordinary list, which is what the header is for', () => {
+    expect(splitAddressList('a@example.com, Bee <b@example.com>')).toEqual([
+      'a@example.com',
+      'Bee <b@example.com>',
+    ])
+  })
+
+  it('is idempotent on a single mailbox, so a pre-split list survives it', () => {
+    expect(splitAddressList('  a@example.com ')).toEqual(['a@example.com'])
+    expect(splitAddressList('"Vaughan, Dorothy" <d@example.com>')).toEqual([
+      '"Vaughan, Dorothy" <d@example.com>',
+    ])
+  })
+
+  it('reads a quoted-pair rather than ending the quote on it', () => {
+    // `"O\"Hara, P"` - the escaped quote is not the closing one, so the
+    // comma after it is still inside the display name.
+    expect(splitAddressList('"O\\"Hara, P" <p@example.com>, b@example.com')).toEqual([
+      '"O\\"Hara, P" <p@example.com>',
+      'b@example.com',
+    ])
+  })
+
+  it('drops empty entries from a trailing or doubled comma', () => {
+    expect(splitAddressList('a@example.com,, ')).toEqual(['a@example.com'])
+  })
+
+  it('does not split inside angle brackets', () => {
+    // Malformed rather than legal, and the point is that it costs ONE
+    // unusable recipient instead of two fragments that look like addresses.
+    expect(splitAddressList('<a,b@example.com>, c@example.com')).toEqual([
+      '<a,b@example.com>',
+      'c@example.com',
+    ])
+  })
+})
+
 describe('the reply address', () => {
   it('plus-addresses the thread key', () => {
     expect(replyAddress({ ...INBOUND, replyKey: KEY })).toBe(`hello+${KEY}@inbound.example.com`)
@@ -41,6 +87,20 @@ describe('the reply address', () => {
 })
 
 describe('reading the key back', () => {
+  // THE POINT OF THE SPLITTER, asserted where it actually matters. A comma
+  // in somebody else's display name used to cost the reply key, which is the
+  // only high-confidence match inbound email has - so the message fell back
+  // to From:, and a tenant with two tenancies became AMBIGUOUS and unrouted.
+  it('survives a comma inside another recipient\'s display name', () => {
+    expect(
+      extractReplyKey({
+        ...INBOUND,
+        recipients: [`"Vaughan, Dorothy" <d@example.com>, hello+${KEY}@inbound.example.com`],
+      }),
+    ).toBe(KEY)
+  })
+
+
   it('finds it on any recipient header, not just To:', () => {
     // A reply that CC'd the office and To'd a colleague still carries our
     // address somewhere.

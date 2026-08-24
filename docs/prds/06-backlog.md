@@ -239,6 +239,8 @@ Twenty years of scar tissue, encoded. Each is a case file with timestamps and de
 > **The gate is the visit her own email caused.** The work order is scheduled, and the entry notice goes to the address she just asked us to stop using — because a locked category outranks any opt-out, and the outcome R-097e's own header names is a tenant who believes she switched everything off and finds somebody in her home. Then the job is marked complete, and the "did we fix it?" follow-up is `SUPPRESSED / preference_off`. **Both halves or neither proves anything:** if everything survived an opt-out the opt-out would not work, and the contrast is what tells them apart. R-027 and R-097e were built four milestones apart and have never met anywhere else.
 >
 > **What it found was in the product** (D-132), unlike checkpoint 3: `From: Name <addr@example.com>` — the form every real mail client sends — never routed at all.
+>
+> **Its remaining half was closed 2026-08-24** (D-135): `To:`/`Cc:` are genuinely lists, and splitting them on every comma cost the reply key whenever another recipient's display name contained one. `splitAddressList` is quote-aware and sits beside `emailAddressOnly`, so both halves of header parsing are one file.
 
 > **Demo checkpoint 5 (Golden Path 5 — the money path).** Defined and walked 2026-08-24. Checkpoint 3's PROGRESS entry and checkpoint 4's both end with the same note — the money path has no equivalent walk, and R-083's evictions, R-084's holds and R-087's abandonment make promises of the same kind about what automation must not do to a protected tenancy. This is that walk, at the third time of asking, and it is the checkpoint Milestone 8 never had for its **collections** half (checkpoint 3 covered its confidential half).
 >

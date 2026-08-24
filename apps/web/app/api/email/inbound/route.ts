@@ -1,5 +1,11 @@
 import { timingSafeEqual } from 'node:crypto'
-import { emailAddressOnly, extractReplyKey, htmlToText, stripQuotedReply } from '@rental/core/comms'
+import {
+  emailAddressOnly,
+  extractReplyKey,
+  htmlToText,
+  splitAddressList,
+  stripQuotedReply,
+} from '@rental/core/comms'
 import { handleInboundEmail } from '@/lib/comms/email-intake.ts'
 import { inboundEmailConfig } from '@/lib/comms/inbound-email-config.ts'
 import type { InboundAttachment } from '@/lib/comms/inbound-attachments.ts'
@@ -55,12 +61,15 @@ interface InboundPayload {
   }[]
 }
 
+/// `To:` and `Cc:` ARE lists, unlike `From:` - but a comma inside a quoted
+/// display name is not a separator, and splitting on every one of them is
+/// the half D-132 left behind. `splitAddressList` is quote-aware and lives
+/// in core beside `emailAddressOnly`, so the two halves of header parsing
+/// cannot drift apart again.
 function addresses(...values: (string | string[] | undefined)[]): string[] {
   return values
     .flatMap((value) => (Array.isArray(value) ? value : value ? [value] : []))
-    .flatMap((value) => value.split(','))
-    .map((value) => value.trim())
-    .filter(Boolean)
+    .flatMap(splitAddressList)
 }
 
 /// Decoded here, in the one place that knows a provider's shape, and handed
