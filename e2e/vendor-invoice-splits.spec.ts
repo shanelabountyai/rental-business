@@ -284,7 +284,21 @@ test.describe('recording a split vendor invoice', () => {
       .first()
       .fill(job.id)
     await page.getByRole('button', { name: 'Record invoice' }).click()
-    await page.waitForURL('**/money/vendor-invoices')
+
+    // POLL THE FACT, not the URL. `waitForURL('**/money/vendor-invoices')`
+    // was here and was ALREADY TRUE before the click - the form lives on
+    // that page, so the wait resolved instantly and the CSV fetch below
+    // raced the write that was supposed to feed it. It won for months and
+    // lost once at test 955 of a full sweep, which is exactly the shape
+    // CLAUDE.md records for `getByText('active')`: an assertion that is
+    // already true tests nothing and hides a race until load tips it over.
+    //
+    // The split claiming this job is the thing the export reads, so it is
+    // the thing to wait for - the same call leases.spec.ts's own `leaseRow`
+    // helper makes.
+    await expect
+      .poll(() => prisma.vendorInvoiceSplit.count({ where: { workOrderId: job.id } }))
+      .toBe(1)
 
     const csv = await (
       await page.request.get(`/api/reports/tax-export?entity=${entity.id}&year=2026&basis=cash`)
