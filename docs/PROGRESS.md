@@ -3629,7 +3629,7 @@ Two defects of my own in the new spec, and the second is the same shape. The evi
 - **The dev (Neon) branch would not take the migration** — `P3005`, the schema is not empty and has no `_prisma_migrations` table. Pre-existing and unrelated to this item; the local test database and CI both applied it cleanly. Somebody has to baseline that branch.
 
 ## R-091 — Confidential safety cases (RISK-04, the containment half)
-**Commit:** `PENDING`  ·  **Date:** 2026-08-24
+**Commit:** `8ddb6c5`  ·  **Date:** 2026-08-24
 
 **Split at the start.** The backlog row sizes RISK-04 as M and it is an L: four asks, two of which are whole legal processes. This item is the containment half — the case file, the permission wall, and the lock change. **R-091b** is early-termination rights and lease bifurcation, filed with its own row. The split is on the seam that matters: a survivor needs the locks changed today, and a termination in thirty days.
 
