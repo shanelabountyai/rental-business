@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto'
 import type { DocumentBlock } from '@rental/core/documents'
 import { prisma } from '@rental/db'
 import { auditAsSystem } from '@/lib/audit/system.ts'
+import { revokeTenantLockCodes } from '@/lib/locks/tenant-codes.ts'
 import { esignAdapter } from '@/lib/esign/provider.ts'
 import { appendPdfs, renderBlocksPdf } from '@/lib/pdf/render.ts'
 import { generateStorageKey, storage } from '@/lib/storage/index.ts'
@@ -151,6 +152,37 @@ export async function completePartyChangeEnvelope(envelopeId: string): Promise<v
         where: { id: { in: removed.map((r) => r.tenantId) } },
         data: { sessionsValidFrom: new Date() },
       })
+      // R-094b. THE DOOR, TOO. The line above kills the departing
+      // occupant's portal session, which was the whole of "they no longer
+      // have access" before a lock existed - and it was the smaller half.
+      // Somebody removed from a lease who can still key in at the front
+      // door is the failure this whole item exists to prevent, and a
+      // bifurcation (R-091b) removes the ONE person for whom it matters
+      // most.
+      for (const person of removed) {
+        const revoked = await revokeTenantLockCodes(
+          { leaseId: envelope.leaseId, tenantId: person.tenantId },
+          { reason: 'They came off the tenancy.', staffId: null },
+          tx,
+        )
+        if (revoked.length === 0) continue
+        await auditAsSystem(
+          'esign.completion',
+          {
+            action: 'accesscode.tenant_code_revoked',
+            entityType: 'Lease',
+            entityId: envelope.leaseId,
+            propertyId: envelope.lease.propertyId,
+            reason: 'They came off the tenancy.',
+            after: {
+              tenantId: person.tenantId,
+              codeIds: revoked.map((code) => code.id),
+              reachedDevice: revoked.every((code) => code.reachedDevice),
+            },
+          },
+          tx,
+        )
+      }
     }
 
     for (const party of incoming) {

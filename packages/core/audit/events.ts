@@ -852,6 +852,13 @@ export const AUDIT_ACTIONS = [
   /// events arrived and how many of them no code of ours explains - the
   /// second number being the one worth looking at.
   'showing.lock_events_synced',
+
+  /// R-094b (PROP-03): a tenant's own smart-lock code was revoked - by staff,
+  /// or automatically when the tenancy left force or they came off the
+  /// lease. Carries whether the DEVICE agreed, which is the fact somebody
+  /// has to act on; the row carries it too, in red, for as long as it is
+  /// false.
+  'accesscode.tenant_code_revoked',
 ] as const
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number]
@@ -963,6 +970,11 @@ export const REASON_REQUIRED: ReadonlySet<AuditAction> = new Set([
   // R-094. Pulling somebody's entry code while they may already be on their
   // way to the property. The database enforces the same pairing.
   'showing.access_revoked',
+  // R-094b. Taking somebody's own door code off the home they live in. The
+  // automatic revokes carry a reason too - "the tenancy ended", "they came
+  // off the lease" - because a code that stopped working for no recorded
+  // reason is the one somebody rings about at 9pm.
+  'accesscode.tenant_code_revoked',
     // R-090. Withdrawing a change of parties that several people were already
   // asked to sign. Starting one is not on this list for the same reason
   // `claim.opened` is not: the change carries its own required `reason`

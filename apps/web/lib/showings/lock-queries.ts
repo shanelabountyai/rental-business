@@ -39,6 +39,7 @@ export async function smartLockPanel(unitId: string) {
         access: {
           select: { showing: { select: { prospect: { select: { firstName: true, lastName: true } } } } },
         },
+        tenantCode: { select: { tenant: { select: { firstName: true, lastName: true } } } },
       },
     }),
   ])

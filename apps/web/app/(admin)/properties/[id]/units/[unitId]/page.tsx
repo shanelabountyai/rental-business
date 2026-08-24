@@ -292,8 +292,10 @@ export default async function UnitDetailPage({
               when: friendlyTimestamp(event.occurredAt, unit.property.timezone),
               actorLabel: event.actorLabel,
               who: event.access
-                ? `${event.access.showing.prospect.firstName} ${event.access.showing.prospect.lastName}`
-                : null,
+                ? `${event.access.showing.prospect.firstName} ${event.access.showing.prospect.lastName} (viewing)`
+                : event.tenantCode
+                  ? `${event.tenantCode.tenant.firstName} ${event.tenantCode.tenant.lastName}`
+                  : null,
             }))}
             syncAction={syncLockEvents.bind(null, unitId)}
           />

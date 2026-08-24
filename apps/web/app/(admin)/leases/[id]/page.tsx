@@ -33,6 +33,9 @@ import { PartyChangePanel } from '@/components/leases/party-change-panel.tsx'
 import { RenewalPanel } from '@/components/leases/renewal-panel.tsx'
 import { RenterInsurancePanel } from '@/components/leases/renter-insurance-panel.tsx'
 import { accessCodesForLease } from '@/lib/leases/access-code-queries.ts'
+import { DoorCodesPanel } from '@/components/leases/door-codes-panel.tsx'
+import { doorCodesForLease } from '@/lib/locks/tenant-code-queries.ts'
+import { issueTenantLockCode, revokeTenantLockCode } from '@/lib/leases/access-code-actions.ts'
 import { liftLeaseHold, placeLeaseHold } from '@/lib/holds/actions.ts'
 import {
   decideAccommodationRequest,
@@ -227,6 +230,7 @@ export default async function LeaseDetailPage({
     fees,
     recurring,
     accessCodes,
+    doorCodes,
     holds,
     scraLookups,
     accommodations,
@@ -242,6 +246,7 @@ export default async function LeaseDetailPage({
     waivableFees(lease.id),
     recurringChargesForLease(lease.id),
     accessCodesForLease(lease.unitId, lease.id),
+    doorCodesForLease(lease.id, lease.unitId),
     holdsForLease(lease.id),
     lookupsForLease(lease.id),
     requestsForLease(lease.id),
@@ -868,6 +873,38 @@ export default async function LeaseDetailPage({
           label: code.label,
           issuedAt: code.issuedAt?.toISOString() ?? null,
         }))}
+      />
+
+      {/* R-094b. Below the static access codes on purpose: an operator
+          reading down the page meets "here is the code we hand over" before
+          "here is the code the door actually knows", which is the order the
+          two facts have to be understood in. */}
+      <DoorCodesPanel
+        hasSmartLock={doorCodes.hasSmartLock}
+        canIssue={canIssue}
+        canRevoke={canWrite}
+        rows={lease.leaseTenants.map((leaseTenant) => {
+          const tenantId = leaseTenant.tenant.id
+          const mine = doorCodes.codes.filter((code) => code.tenantId === tenantId)
+          const live = mine.find((code) => code.revokedAt == null) ?? null
+          const stranded = mine.find((code) => code.revokeReachedDevice === false) ?? null
+          return {
+            tenantId,
+            name: `${leaseTenant.tenant.firstName} ${leaseTenant.tenant.lastName}`,
+            live: live
+              ? {
+                  issuedOn: friendlyDate(live.issuedAt, lease.property.timezone),
+                  issuedBy: live.issuedBy.name,
+                }
+              : null,
+            strandedAt:
+              stranded?.revokedAt != null
+                ? friendlyDate(stranded.revokedAt, lease.property.timezone)
+                : null,
+            issueAction: issueTenantLockCode.bind(null, lease.id, tenantId),
+            revokeAction: revokeTenantLockCode.bind(null, lease.id, tenantId),
+          }
+        })}
       />
 
       {canWrite && (

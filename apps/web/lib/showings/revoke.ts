@@ -32,6 +32,35 @@ export interface RevokeOutcome {
   reachedDevice: boolean
 }
 
+/**
+ * Tells the device to stop honouring a code, and says honestly whether it
+ * heard.
+ *
+ * SHARED BY EVERY KIND OF CODE (R-094's showings, R-094b's tenants). Not
+ * because the call is long, but because the HONESTY is the part that gets
+ * dropped when it is written a second time: the tempting version swallows
+ * the error and writes the row, and the caller then tells somebody the door
+ * is safe.
+ */
+export async function revokeAtDevice(input: {
+  externalId: string
+  providerRef: string
+  what: string
+}): Promise<boolean> {
+  try {
+    // Idempotent by the adapter's contract: an already-revoked code is a
+    // success, because the kill must never fail on a second press.
+    await smartLockAdapter.revokeCode({
+      externalId: input.externalId,
+      providerRef: input.providerRef,
+    })
+    return true
+  } catch (error) {
+    console.error(`[locks] device refused a revoke for ${input.what}`, error)
+    return false
+  }
+}
+
 export async function revokeShowingAccessFor(
   showingId: string,
   input: { reason: string; staffId: string | null },
@@ -44,18 +73,11 @@ export async function revokeShowingAccessFor(
   })
   if (!access || access.revokedAt) return null
 
-  let reachedDevice = true
-  try {
-    // Idempotent by the adapter's contract: an already-revoked code is a
-    // success, because the kill must never fail on a second press.
-    await smartLockAdapter.revokeCode({
-      externalId: access.smartLock.externalId,
-      providerRef: access.providerRef,
-    })
-  } catch (error) {
-    console.error(`[self-showing] device refused a revoke for showing ${showingId}`, error)
-    reachedDevice = false
-  }
+  const reachedDevice = await revokeAtDevice({
+    externalId: access.smartLock.externalId,
+    providerRef: access.providerRef,
+    what: `showing ${showingId}`,
+  })
 
   await client.showingAccess.update({
     where: { id: access.id },

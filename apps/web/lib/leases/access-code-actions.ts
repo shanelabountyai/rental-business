@@ -6,6 +6,12 @@ import { prisma } from '@rental/db'
 import { audit } from '@/lib/audit/index.ts'
 import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
 import { activeHoldsForLease } from '@/lib/holds/queries.ts'
+import {
+  ISSUE_REFUSAL_MESSAGES,
+  issueTenantLockCodeFor,
+  revokeTenantLockCodes,
+} from '@/lib/locks/tenant-codes.ts'
+import { revalidatePath } from 'next/cache'
 
 // Handing keys/codes to the tenant at move-in, gated on move-in funds
 // clearing (INSP-01, R-069) - "door codes withheld until move-in funds show
@@ -104,4 +110,138 @@ export async function issueAccessCodeToTenant(
   // state, same as a reveal; the persisted "Issued" label appears on the
   // next real navigation, when the server renders from current data anyway.
   return { code, label: accessCode.label ?? accessCode.type }
+}
+
+// ---------------------------------------------------------------------------
+// R-094b: the tenant's own smart-lock code
+// ---------------------------------------------------------------------------
+
+export interface TenantLockCodeState {
+  error?: string
+  notice?: string
+  code?: string
+  fieldErrors?: Record<string, string>
+}
+
+/**
+ * Issues one tenant their own code at the door.
+ *
+ * THE SAME TWO GATES AS `issueAccessCodeToTenant` ABOVE, and they are shared
+ * rather than restated: whether the money is safe to act on and whether a
+ * hold has halted access changes do not become different questions because
+ * the lock is electronic. Both are hard blocks with no override, for the
+ * reason that file's own header gives.
+ *
+ * WHAT IS DIFFERENT is that this one actually programs a door. The static
+ * path above records a handover of a code that already existed; this mints
+ * one at the device, and the code that comes back is the code the lock will
+ * accept.
+ */
+export async function issueTenantLockCode(
+  leaseId: string,
+  tenantId: string,
+): Promise<TenantLockCodeState> {
+  const lease = await prisma.lease.findUniqueOrThrow({
+    where: { id: leaseId },
+    select: {
+      id: true,
+      propertyId: true,
+      depositCents: true,
+      property: { select: { id: true, legalEntityId: true } },
+      deposits: { select: { id: true }, take: 1 },
+    },
+  })
+  const actor = await requirePermission('accesscode.issue', propertyResource(lease.property))
+
+  const holds = await activeHoldsForLease(lease.id)
+  const halting = holdsCausing(holds, 'halt_access_changes')
+  if (halting.length > 0) {
+    return {
+      error: `Access changes are halted on this tenancy: ${halting
+        .map(holdTypeLabel)
+        .join(', ')}. Lift the hold on the lease record first.`,
+    }
+  }
+  if (lease.depositCents > 0 && lease.deposits.length === 0) {
+    return {
+      error:
+        'Move-in funds have not cleared yet. Certified funds (money order, cash, ACH, card) clear immediately once settled; a personal check clears after its hold period.',
+    }
+  }
+
+  const result = await issueTenantLockCodeFor({ leaseId, tenantId, staffId: actor.id })
+  if (result.refusal) return { error: ISSUE_REFUSAL_MESSAGES[result.refusal] }
+
+  await audit({
+    action: 'accesscode.issued',
+    entityType: 'Lease',
+    entityId: leaseId,
+    propertyId: lease.propertyId,
+    after: {
+      tenantLockCodeId: result.issued.id,
+      tenantId,
+      // Says the DOOR was programmed, which is the fact that distinguishes
+      // this from the static handover above. Never the code itself.
+      programmedAtDevice: true,
+    },
+  })
+
+  // NO revalidatePath, the same call the static path above makes and for the
+  // identical reason: revalidating would re-render this lease page's Server
+  // tree as part of this action's own response and unmount the component
+  // whose local state was about to show the code.
+  return { code: result.issued.code }
+}
+
+/**
+ * Revokes one tenant's door code.
+ *
+ * `lease.write` AND DELIBERATELY NOT PRIVILEGED, unlike issuing. R-084's
+ * rule, and R-094 already applied it to a viewer's code: gating the safe
+ * direction behind MFA is how the safe direction stops being taken, and
+ * somebody who has just learned that a former occupant can still walk in
+ * must be able to stop it from whatever device is in their hand.
+ */
+export async function revokeTenantLockCode(
+  leaseId: string,
+  tenantId: string,
+  _previous: TenantLockCodeState,
+  formData: FormData,
+): Promise<TenantLockCodeState> {
+  const lease = await prisma.lease.findUniqueOrThrow({
+    where: { id: leaseId },
+    select: { id: true, propertyId: true, property: { select: { id: true, legalEntityId: true } } },
+  })
+  const actor = await requirePermission('lease.write', propertyResource(lease.property))
+
+  const reason = String(formData.get('reason') ?? '').trim()
+  if (!reason) {
+    return {
+      error: 'Fix the highlighted field.',
+      fieldErrors: { reason: 'Say why this door code is being revoked.' },
+    }
+  }
+
+  const revoked = await revokeTenantLockCodes({ leaseId, tenantId }, { reason, staffId: actor.id })
+  if (revoked.length === 0) return { error: 'They hold no live door code on this tenancy.' }
+
+  await audit({
+    action: 'accesscode.tenant_code_revoked',
+    entityType: 'Lease',
+    entityId: leaseId,
+    propertyId: lease.propertyId,
+    reason,
+    after: {
+      tenantId,
+      codeIds: revoked.map((code) => code.id),
+      reachedDevice: revoked.every((code) => code.reachedDevice),
+    },
+  })
+
+  revalidatePath(`/leases/${leaseId}`)
+  return {
+    notice: revoked.every((code) => code.reachedDevice)
+      ? 'Revoked. It no longer opens the door.'
+      : 'Recorded, but the lock did not answer — treat that code as still working until somebody has confirmed it at the device.',
+  }
 }

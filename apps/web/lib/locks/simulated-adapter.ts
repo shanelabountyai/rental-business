@@ -20,7 +20,7 @@ import type {
 /// keeps D-27 true - `events()` can report an unlock we never issued, which
 /// is exactly the case an entry log exists for.
 interface SimulatedDevice {
-  codes: Map<string, { code: string; validFrom: Date; validTo: Date; revoked: boolean }>
+  codes: Map<string, { code: string; validFrom: Date; validTo: Date | null; revoked: boolean }>
   events: LockEventRecord[]
 }
 
@@ -102,7 +102,8 @@ export class SimulatedSmartLockAdapter implements SmartLockAdapter {
         value.code === input.code &&
         !value.revoked &&
         value.validFrom.getTime() <= input.at.getTime() &&
-        value.validTo.getTime() >= input.at.getTime(),
+        // A null upper bound is open-ended - a tenant's own code.
+        (value.validTo === null || value.validTo.getTime() >= input.at.getTime()),
     )
     const event: LockEventRecord = {
       providerRef: `sim-event-${randomUUID().slice(0, 12)}`,

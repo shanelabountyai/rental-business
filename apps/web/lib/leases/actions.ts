@@ -26,6 +26,7 @@ import { audit } from '@/lib/audit/index.ts'
 import { syncLease } from '@/lib/billing/lifecycle.ts'
 import { provisionLeaseBilling } from '@/lib/billing/provision.ts'
 import { startDepositDisposition } from '@/lib/leases/deposit-disposition-start.ts'
+import { revokeTenantLockCodes } from '@/lib/locks/tenant-codes.ts'
 import { startTurnoverProjectForLease } from '@/lib/turnover/start.ts'
 import { authUrl } from '@/lib/auth/delivery.ts'
 import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
@@ -573,6 +574,35 @@ export async function changeLeaseStatus(
     await startTurnoverProjectForLease(leaseId).catch((error) => {
       console.error(`[lease] turnover project start failed for ${leaseId}`, error)
     })
+    // R-094b. THE DOOR STOPS WORKING WHEN THE TENANCY DOES. Every other
+    // consequence of a tenancy ending here is about money or scheduling and
+    // can be caught up by a re-run; this one is about whether a former
+    // occupant can still walk in, so it happens on the transition rather
+    // than waiting for anybody to remember. Best-effort like its siblings: a
+    // lock being offline must not undo a tenancy ending, and the row records
+    // that the device may not agree.
+    await revokeTenantLockCodes(
+      { leaseId },
+      { reason: 'The tenancy ended.', staffId: null },
+    )
+      .then(async (revoked) => {
+        if (revoked.length === 0) return
+        await audit({
+          action: 'accesscode.tenant_code_revoked',
+          entityType: 'Lease',
+          entityId: leaseId,
+          propertyId: lease.propertyId,
+          reason: 'The tenancy ended.',
+          after: {
+            codeIds: revoked.map((code) => code.id),
+            tenantIds: revoked.map((code) => code.tenantId),
+            reachedDevice: revoked.every((code) => code.reachedDevice),
+          },
+        })
+      })
+      .catch((error) => {
+        console.error(`[lease] tenant lock code revoke failed for ${leaseId}`, error)
+      })
   }
 
   revalidatePath(`/leases/${leaseId}`)

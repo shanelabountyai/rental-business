@@ -1635,9 +1635,10 @@ model SmartLock {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  unit     Unit            @relation(fields: [unitId], references: [id], onDelete: Restrict)
-  accesses ShowingAccess[]
-  events   LockEvent[]
+  unit        Unit             @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  accesses    ShowingAccess[]
+  events      LockEvent[]
+  tenantCodes TenantLockCode[]
 
   @@unique([provider, externalId])
 }
@@ -1751,6 +1752,71 @@ model ShowingAccess {
   @@index([smartLockId, validFrom])
 }
 
+/// One tenant's own smart-lock code (PROP-03, LEASE-08; R-094b).
+///
+/// ONE PER PERSON, NOT PER TENANCY, and that choice is most of the item. A
+/// shared household code is what a mechanical lockbox forces, and it makes
+/// both of the things this feature exists for impossible: the entry log
+/// cannot say who came in, and a roommate leaving cannot be taken off the
+/// door without changing the code for everybody staying.
+///
+/// ISSUING IS DELIBERATE, REVOKING IS AUTOMATIC. R-069 gates handing a code
+/// to a tenant on move-in funds clearing (INSP-01) and on no hold halting
+/// access changes (R-084), and none of that becomes less true because the
+/// lock is electronic. Revocation has no gate and needs none: it happens on
+/// its own when the tenancy leaves force and when a party comes off the
+/// lease, because the failure mode of a missed revoke is a former occupant
+/// who can still walk in.
+///
+/// THERE IS NO `validTo`, where a showing's window is the whole control. An
+/// expiring tenant code is a paying tenant locked out of their own home at
+/// midnight because a fixed term rolled to month-to-month and nobody
+/// noticed. The end of a tenancy is an event this system already acts on; it
+/// is not a clock to set in advance.
+///
+/// AT MOST ONE LIVE CODE PER PERSON PER TENANCY, enforced by a PARTIAL
+/// UNIQUE INDEX that lives only in the migration - Prisma cannot express one
+/// and would report drift on every CI run if it tried (CLAUDE.md records the
+/// `SmsOptOut` index that did). The issuing action checks it as well,
+/// because a 23505 is a 500 rather than a sentence.
+model TenantLockCode {
+  id          String @id @default(cuid())
+  smartLockId String
+  leaseId     String
+  tenantId    String
+  providerRef String
+  /// Sealed by the same box `AccessCode.sealedCode` uses (R-005).
+  sealedCode  String
+
+  issuedAt        DateTime @default(now())
+  issuedByStaffId String
+
+  revokedAt           DateTime?
+  /// Required by a database CHECK whenever `revokedAt` is set, and it
+  /// matters more here than on a showing: this one takes somebody out of the
+  /// home they live in.
+  revokedReason       String?
+  /// Null where the revoke was automatic - a tenancy ending has no person to
+  /// attribute, and inventing one is a worse record than an honest absence.
+  revokedByStaffId    String?
+  /// Whether the provider actually accepted it. FALSE means the row says
+  /// "revoked" and THE DOOR MAY NOT AGREE - see R-094's own column.
+  revokeReachedDevice Boolean?
+
+  createdAt DateTime @default(now())
+
+  smartLock SmartLock   @relation(fields: [smartLockId], references: [id], onDelete: Restrict)
+  lease     Lease       @relation(fields: [leaseId], references: [id], onDelete: Restrict)
+  tenant    Tenant      @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  issuedBy  StaffUser   @relation("TenantLockCodeIssuedBy", fields: [issuedByStaffId], references: [id], onDelete: Restrict)
+  revokedBy StaffUser?  @relation("TenantLockCodeRevokedBy", fields: [revokedByStaffId], references: [id], onDelete: Restrict)
+  events    LockEvent[]
+
+  @@index([leaseId])
+  @@index([smartLockId])
+  @@index([tenantId])
+}
+
 /// DENIED is as much of the entry log as UNLOCKED: a run of refusals at a
 /// door at 11pm is the thing somebody wants to see, and a log recording only
 /// successes shows nothing at all on the night it mattered.
@@ -1764,22 +1830,27 @@ enum LockEventKind {
 /// log we generated from what we BELIEVE we issued would agree with us by
 /// construction (D-27) and could never show the entry we did not expect.
 model LockEvent {
-  id              String        @id @default(cuid())
-  smartLockId     String
+  id               String        @id @default(cuid())
+  smartLockId      String
   /// Null for an event no code of ours explains - a key, somebody's own app,
   /// a code issued before this system knew about the lock. Kept rather than
   /// dropped: an unexplained entry is precisely the one worth a record.
-  showingAccessId String?
-  kind            LockEventKind
-  occurredAt      DateTime
+  showingAccessId  String?
+  /// The other thing that can explain an event. Without it every tenant
+  /// entry would read as unexplained, which is exactly the signal the null
+  /// above exists to carry.
+  tenantLockCodeId String?
+  kind             LockEventKind
+  occurredAt       DateTime
   /// The device's own event id. The unique below is what makes syncing
   /// idempotent, so running it twice does not double the log.
-  providerRef     String
-  actorLabel      String
-  createdAt       DateTime      @default(now())
+  providerRef      String
+  actorLabel       String
+  createdAt        DateTime      @default(now())
 
-  smartLock SmartLock      @relation(fields: [smartLockId], references: [id], onDelete: Restrict)
-  access    ShowingAccess? @relation(fields: [showingAccessId], references: [id], onDelete: Restrict)
+  smartLock  SmartLock       @relation(fields: [smartLockId], references: [id], onDelete: Restrict)
+  access     ShowingAccess?  @relation(fields: [showingAccessId], references: [id], onDelete: Restrict)
+  tenantCode TenantLockCode? @relation(fields: [tenantLockCodeId], references: [id], onDelete: Restrict)
 
   @@unique([smartLockId, providerRef])
   @@index([smartLockId, occurredAt])
@@ -1989,6 +2060,8 @@ model StaffUser {
   screeningReportsDecided                 ScreeningReport[]               @relation("ScreeningReportDecidedBy")
   screeningReportsAdverseActionOverridden ScreeningReport[]               @relation("ScreeningReportAdverseActionOverriddenBy")
   showingAccessesRevoked                  ShowingAccess[]                 @relation("ShowingAccessRevokedBy")
+  tenantLockCodesIssued                   TenantLockCode[]                @relation("TenantLockCodeIssuedBy")
+  tenantLockCodesRevoked                  TenantLockCode[]                @relation("TenantLockCodeRevokedBy")
 
   @@index([active])
 }
@@ -2029,6 +2102,7 @@ model Tenant {
   /// protected from. Restrict, so this record cannot be erased by deleting
   /// the person.
   confidentialCases      ConfidentialCase[]      @relation("ConfidentialCaseRestrictedTenant")
+  tenantLockCodes        TenantLockCode[]
 
   @@index([lastName, firstName])
   @@index([email])
@@ -2342,6 +2416,7 @@ model Lease {
   insuranceClaimsLossOfRents InsuranceClaim[]        @relation("ClaimLossOfRentsLease")
   partyChanges               LeasePartyChange[]
   confidentialCases          ConfidentialCase[]
+  tenantLockCodes            TenantLockCode[]
 
   @@index([propertyId])
   @@index([unitId])

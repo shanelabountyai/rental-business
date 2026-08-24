@@ -196,19 +196,30 @@ export async function syncLockEvents(unitId: string): Promise<AccessAdminState> 
     return { error: 'The lock did not answer. The log below is what we already had.' }
   }
 
-  const byProviderRef = new Map(
-    (
-      await prisma.showingAccess.findMany({
-        where: { smartLockId: unit.smartLock.id },
-        select: { id: true, providerRef: true },
-      })
-    ).map((access) => [access.providerRef, access.id]),
-  )
+  // BOTH KINDS OF CODE (R-094's viewers, R-094b's tenants). Without the
+  // second map every tenant entry would land as "no code of ours explains
+  // this", which is the exact signal a null is meant to carry - and it would
+  // fire on the ordinary case of somebody coming home.
+  const [accessRefs, tenantRefs] = await Promise.all([
+    prisma.showingAccess.findMany({
+      where: { smartLockId: unit.smartLock.id },
+      select: { id: true, providerRef: true },
+    }),
+    prisma.tenantLockCode.findMany({
+      where: { smartLockId: unit.smartLock.id },
+      select: { id: true, providerRef: true },
+    }),
+  ])
+  const byProviderRef = new Map(accessRefs.map((access) => [access.providerRef, access.id]))
+  const tenantByProviderRef = new Map(tenantRefs.map((code) => [code.providerRef, code.id]))
 
   let unexplained = 0
   for (const event of events) {
     const accessId = event.codeProviderRef ? (byProviderRef.get(event.codeProviderRef) ?? null) : null
-    if (!accessId) unexplained += 1
+    const tenantCodeId = event.codeProviderRef
+      ? (tenantByProviderRef.get(event.codeProviderRef) ?? null)
+      : null
+    if (!accessId && !tenantCodeId) unexplained += 1
     await prisma.lockEvent.upsert({
       where: {
         smartLockId_providerRef: {
@@ -223,6 +234,7 @@ export async function syncLockEvents(unitId: string): Promise<AccessAdminState> 
       create: {
         smartLockId: unit.smartLock.id,
         showingAccessId: accessId,
+        tenantLockCodeId: tenantCodeId,
         kind: event.kind,
         occurredAt: event.occurredAt,
         providerRef: event.providerRef,

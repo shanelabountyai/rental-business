@@ -221,6 +221,29 @@ test('swaps a roommate on the same lease, with the deposit and the ledger untouc
   const { property, unit, lease, alice, bob, unique } = await seedLiveLease()
   const cara = await seedApplicant(property, unit.id, unique)
 
+  // R-094b. A door code each, so completing the amendment can be checked
+  // against the thing that actually matters: whether the person leaving can
+  // still key in. The rows are written directly - issuing through the UI
+  // needs `accesscode.issue`, which is privileged, and this spec signs in
+  // plainly. That the DEVICE stops honouring a revoked code is proved in
+  // apps/web/lib/locks/tenant-codes.test.ts, which can reach the simulator.
+  const lock = await prisma.smartLock.create({
+    data: { unitId: unit.id, externalId: `dev-${unique}`, label: 'Front door keypad' },
+  })
+  const codeFor = async (tenantId: string) =>
+    prisma.tenantLockCode.create({
+      data: {
+        smartLockId: lock.id,
+        leaseId: lease.id,
+        tenantId,
+        providerRef: `ref-${tenantId.slice(-8)}`,
+        sealedCode: 'sealed-placeholder',
+        issuedByStaffId: staff.id,
+      },
+    })
+  const aliceCode = await codeFor(alice.id)
+  const bobCode = await codeFor(bob.id)
+
   await signIn(page, staff)
   await page.goto(`/leases/${lease.id}`)
 
@@ -322,6 +345,20 @@ test('swaps a roommate on the same lease, with the deposit and the ledger untouc
     where: { id: change.id },
     include: { envelope: true },
   })
+  // R-094b. Killing the departing occupant's portal session was the whole of
+  // "they no longer have access" before a lock existed, and it was the
+  // smaller half: somebody removed from a lease who can still key in at the
+  // front door is the failure the whole item exists to prevent.
+  const bobAfter = await prisma.tenantLockCode.findUniqueOrThrow({ where: { id: bobCode.id } })
+  expect(bobAfter.revokedAt).not.toBeNull()
+  expect(bobAfter.revokedReason).toBe('They came off the tenancy.')
+  // Automatic, so nobody to attribute it to - an invented actor is a worse
+  // record than an honest absence.
+  expect(bobAfter.revokedByStaffId).toBeNull()
+  // And the person staying is untouched, which is why codes are per person.
+  const aliceAfter = await prisma.tenantLockCode.findUniqueOrThrow({ where: { id: aliceCode.id } })
+  expect(aliceAfter.revokedAt).toBeNull()
+
   expect(applied.status).toBe('COMPLETED')
   expect(applied.appliedAt).not.toBeNull()
   expect(applied.envelope?.executedDocumentId).not.toBeNull()

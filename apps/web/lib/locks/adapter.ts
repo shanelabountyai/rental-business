@@ -38,7 +38,13 @@ export interface IssueCodeInput {
   /// The device's own id. Never one of ours.
   externalId: string
   validFrom: Date
-  validTo: Date
+  /// NULL MEANS OPEN-ENDED, which is what a tenant's own code is (R-094b). A
+  /// showing's window is its whole control; a tenancy's is not, and a code
+  /// that expired on a date set months earlier is a paying tenant locked out
+  /// of their home at midnight because a fixed term rolled to month-to-month
+  /// and nobody noticed. The end of a tenancy is an event this system
+  /// already acts on, not a clock to set in advance.
+  validTo: Date | null
   /// What the device should show in its own log for this code. A label, not
   /// a name - see `SimulatedSmartLockAdapter` on why it is not the prospect's.
   label: string
