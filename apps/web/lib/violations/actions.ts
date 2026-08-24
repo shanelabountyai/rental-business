@@ -14,7 +14,7 @@ import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { audit } from '@/lib/audit/index.ts'
-import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
+import { propertyResource, requirePermission, requireScope } from '@/lib/auth/guard.ts'
 import { extractCapturedAt } from '@/lib/documents/exif.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 import { generateStorageKey, storage } from '@/lib/storage/index.ts'
@@ -49,7 +49,11 @@ function str(formData: FormData, key: string): string {
 }
 
 async function caseForWrite(caseId: string) {
-  const actor = await requirePermission('lease.write')
+  // R-103: `requireScope`, never a resource-less `requirePermission` - an
+  // empty resource only ever matches a portfolio-wide grant, so the obvious
+  // guard locks out every entity- and property-scoped actor. See
+  // `requireScope`'s own comment.
+  const { actor } = await requireScope('lease.write')
   const scope = await currentScope(actor)
   const found = await getViolationCase(caseId, scope)
   if (!found) return null

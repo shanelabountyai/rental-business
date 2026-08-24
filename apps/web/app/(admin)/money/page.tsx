@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { BillingRuns } from '@/components/billing/billing-runs.tsx'
 import { WaiverPattern } from '@/components/money/waiver-pattern.tsx'
-import { requirePermission } from '@/lib/auth/guard.ts'
+import { requirePermission, requireScope } from '@/lib/auth/guard.ts'
 import { resyncPayer } from '@/lib/billing/actions.ts'
 import { billingRunRows } from '@/lib/billing/lifecycle.ts'
 import { billingIsLive, billingProviderName } from '@/lib/billing/provider.ts'
@@ -19,7 +19,11 @@ export const metadata = { title: 'Money — Rental Operations' }
 // billing, and where it has stopped agreeing with the lease.
 
 export default async function MoneyPage() {
-  const actor = await requirePermission('ledger.read')
+  // R-103: `requireScope`, never a resource-less `requirePermission` - an
+  // empty resource only ever matches a portfolio-wide grant, so the obvious
+  // guard locks out every entity- and property-scoped actor. See
+  // `requireScope`'s own comment.
+  const { actor } = await requireScope('ledger.read')
   const scope = await currentScope(actor)
   const [rows, waiverRows] = await Promise.all([
     billingRunRows(scope.propertyIds),

@@ -4,7 +4,7 @@ import {
 } from '@rental/core/abandonment'
 import { friendlyDate } from '@rental/core/scheduling'
 import Link from 'next/link'
-import { requirePermission } from '@/lib/auth/guard.ts'
+import { requirePermission, requireScope } from '@/lib/auth/guard.ts'
 import { listAbandonmentCases } from '@/lib/abandonment/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 
@@ -18,7 +18,11 @@ export const metadata = { title: 'Gone dark — Rental Operations' }
 // stopped trying, or because nobody entered a unit that needed looking at.
 
 export default async function AbandonmentPage() {
-  const actor = await requirePermission('eviction.manage')
+  // R-103: `requireScope`, never a resource-less `requirePermission` - an
+  // empty resource only ever matches a portfolio-wide grant, so the obvious
+  // guard locks out every entity- and property-scoped actor. See
+  // `requireScope`'s own comment.
+  const { actor } = await requireScope('eviction.manage')
   const scope = await currentScope(actor)
   const cases = await listAbandonmentCases(scope)
   const open = cases.filter((row) => row.status !== 'CLOSED')

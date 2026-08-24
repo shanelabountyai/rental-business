@@ -1,4 +1,4 @@
-import { requirePermission } from '@/lib/auth/guard.ts'
+import { requirePermission, requireScope } from '@/lib/auth/guard.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 
 export const metadata = { title: 'Search — Rental Operations' }
@@ -18,7 +18,11 @@ export default async function SearchPage({
 }: {
   searchParams: Promise<{ q?: string }>
 }) {
-  const actor = await requirePermission('property.read')
+  // R-103: `requireScope`, never a resource-less `requirePermission` - an
+  // empty resource only ever matches a portfolio-wide grant, so the obvious
+  // guard locks out every entity- and property-scoped actor. See
+  // `requireScope`'s own comment.
+  const { actor } = await requireScope('property.read')
   const [{ q }, scope] = await Promise.all([searchParams, currentScope(actor)])
   const query = q?.trim()
 

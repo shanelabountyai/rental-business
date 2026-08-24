@@ -26,7 +26,7 @@ import {
   recordEntry,
 } from '@/lib/abandonment/actions.ts'
 import { daysSinceContact, getAbandonmentCase } from '@/lib/abandonment/queries.ts'
-import { requirePermission } from '@/lib/auth/guard.ts'
+import { requirePermission, requireScope } from '@/lib/auth/guard.ts'
 import { balanceCents } from '@rental/core/ledger'
 import { prisma } from '@rental/db'
 import { rulesFor } from '@/lib/jurisdiction/queries.ts'
@@ -41,7 +41,11 @@ export default async function AbandonmentCasePage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
-  const actor = await requirePermission('eviction.manage')
+  // R-103: `requireScope`, never a resource-less `requirePermission` - an
+  // empty resource only ever matches a portfolio-wide grant, so the obvious
+  // guard locks out every entity- and property-scoped actor. See
+  // `requireScope`'s own comment.
+  const { actor } = await requireScope('eviction.manage')
   const scope = await currentScope(actor)
   const found = await getAbandonmentCase(id, scope)
   if (!found) notFound()

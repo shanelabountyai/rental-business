@@ -1,7 +1,7 @@
 import { EVICTION_STAGE_LABELS, type EvictionStageValue } from '@rental/core/evictions'
 import { friendlyDate } from '@rental/core/scheduling'
 import Link from 'next/link'
-import { requirePermission } from '@/lib/auth/guard.ts'
+import { requirePermission, requireScope } from '@/lib/auth/guard.ts'
 import { listEvictionCases } from '@/lib/evictions/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 
@@ -13,7 +13,11 @@ export const metadata = { title: 'Evictions — Rental Operations' }
 // the file can be handed to an attorney. Open cases sort first because they
 // are the ones with clocks running.
 export default async function EvictionsPage() {
-  const actor = await requirePermission('eviction.manage')
+  // R-103: `requireScope`, never a resource-less `requirePermission` - an
+  // empty resource only ever matches a portfolio-wide grant, so the obvious
+  // guard locks out every entity- and property-scoped actor. See
+  // `requireScope`'s own comment.
+  const { actor } = await requireScope('eviction.manage')
   const scope = await currentScope(actor)
   const cases = await listEvictionCases(scope)
 

@@ -33,7 +33,7 @@ import {
 } from '@/components/evictions/case-panels.tsx'
 import { HoldBanner } from '@/components/holds/hold-banner.tsx'
 import { ScraLookupsPanel } from '@/components/scra/scra-panels.tsx'
-import { requirePermission } from '@/lib/auth/guard.ts'
+import { requirePermission, requireScope } from '@/lib/auth/guard.ts'
 import {
   advanceEvictionStage,
   attachNoticeToCase,
@@ -65,7 +65,11 @@ const NEXT_STAGE: Partial<
 // NO `loading.tsx` HERE OR ABOVE (R-099): this page calls notFound().
 export default async function EvictionCasePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const actor = await requirePermission('eviction.manage')
+  // R-103: `requireScope`, never a resource-less `requirePermission` - an
+  // empty resource only ever matches a portfolio-wide grant, so the obvious
+  // guard locks out every entity- and property-scoped actor. See
+  // `requireScope`'s own comment.
+  const { actor } = await requireScope('eviction.manage')
   const scope = await currentScope(actor)
   const evictionCase = await getEvictionCase(id, scope)
   if (!evictionCase) notFound()

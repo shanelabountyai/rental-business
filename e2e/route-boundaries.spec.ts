@@ -159,3 +159,57 @@ test.describe('a link that goes nowhere', () => {
     await expect(page.getByRole('link', { name: 'Back to your queue' })).toBeVisible()
   })
 })
+
+// ===========================================================================
+// R-103. The other half of ROLE-01: a scoped actor must REACH the sections
+// their scope covers, not just be refused the ones it does not.
+//
+// `requirePermission('x.read')` with no resource compares `undefined` against
+// the assignment's `legalEntityId`, so it refuses every entity- and
+// property-scoped actor on a page whose own scoped query would have shown
+// them a real list. Seven shipped pages were unreachable this way, for every
+// non-owner scope in the product, and none of the existing tests noticed
+// because they all sign in as an owner.
+//
+// That is the gap this closes. `route-guards.test.ts` catches the pattern in
+// source and is the cheap, fast guard; this one proves the actual pages
+// answer, which is the thing a source grep can never quite promise.
+// ===========================================================================
+test.describe('a scoped actor reaches their own sections (R-103)', () => {
+  test('a property-scoped manager can open every section their role covers', async ({
+    page,
+  }) => {
+    const staff = await seedStaff()
+    await page.goto('/login')
+    await page.getByLabel('Email').fill(staff.email)
+    await page.getByLabel('Password').fill(PASSWORD)
+    await page.getByRole('button', { name: 'Sign in' }).click()
+    await page.waitForURL(/\/(dashboard|tasks)/)
+
+    // The seven that were broken, plus the two that already worked - kept
+    // together so a regression on either side reads the same.
+    const sections: readonly [string, RegExp][] = [
+      ['/violations', /Violations/],
+      ['/evictions', /Evictions/],
+      ['/workorders', /Work orders/],
+      ['/money', /Money/],
+      // The heading is the operator's phrase, not the route's - see the page.
+      ['/abandonment', /Gone dark/],
+      ['/claims', /Claims/],
+      ['/search', /Search/],
+      ['/leases', /Leases/],
+      ['/properties', /Properties/],
+    ]
+
+    for (const [href, heading] of sections) {
+      const response = await page.goto(href)
+      // The assertion that matters is the URL: a refusal here is a REDIRECT
+      // to /no-access, which returns a perfectly healthy 200 with a page that
+      // explains itself. Checking the status alone would pass for all seven
+      // broken pages.
+      expect(new URL(page.url()).pathname, `${href} redirected away`).toBe(href)
+      expect(response?.status(), `${href} status`).toBe(200)
+      await expect(page.getByRole('heading', { name: heading, level: 1 })).toBeVisible()
+    }
+  })
+})

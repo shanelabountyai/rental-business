@@ -2,7 +2,7 @@ import { CATEGORY_LABELS, emergencyDefinition } from '@rental/core/maintenance'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { EmergencyResponsePanel } from '@/components/maintenance/emergency-response-panel.tsx'
-import { actorCan, requirePermission } from '@/lib/auth/guard.ts'
+import { actorCan, requirePermission, requireScope } from '@/lib/auth/guard.ts'
 import {
   acknowledgeEmergency,
   setVendorEmergencyAvailability,
@@ -38,7 +38,11 @@ export default async function StaffTicketDetailPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
-  const actor = await requirePermission('ticket.read')
+  // R-103: `requireScope`, never a resource-less `requirePermission` - an
+  // empty resource only ever matches a portfolio-wide grant, so the obvious
+  // guard locks out every entity- and property-scoped actor. See
+  // `requireScope`'s own comment.
+  const { actor } = await requireScope('ticket.read')
   const scope = await currentScope(actor)
 
   const ticket = await getStaffTicket(id, scope)

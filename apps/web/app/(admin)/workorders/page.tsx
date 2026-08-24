@@ -1,7 +1,7 @@
 import { businessDate, businessDaysBetween, friendlyDate } from '@rental/core/scheduling'
 import { priorityRank } from '@rental/core/tasks'
 import Link from 'next/link'
-import { requirePermission } from '@/lib/auth/guard.ts'
+import { requirePermission, requireScope } from '@/lib/auth/guard.ts'
 import { listOpenWorkOrders } from '@/lib/workorders/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 
@@ -50,7 +50,11 @@ function ageInDays(createdAt: Date, timezone: string): number {
 }
 
 export default async function WorkOrdersPage() {
-  const actor = await requirePermission('workorder.read')
+  // R-103: `requireScope`, never a resource-less `requirePermission` - an
+  // empty resource only ever matches a portfolio-wide grant, so the obvious
+  // guard locks out every entity- and property-scoped actor. See
+  // `requireScope`'s own comment.
+  const { actor } = await requireScope('workorder.read')
   const scope = await currentScope(actor)
   const unsorted = await listOpenWorkOrders(scope)
   const workOrders = [...unsorted].sort(

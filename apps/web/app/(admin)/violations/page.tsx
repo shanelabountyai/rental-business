@@ -4,7 +4,7 @@ import {
   VIOLATION_OUTCOME_LABELS,
 } from '@rental/core/violations'
 import Link from 'next/link'
-import { requirePermission } from '@/lib/auth/guard.ts'
+import { requirePermission, requireScope } from '@/lib/auth/guard.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 import { listViolationCases } from '@/lib/violations/queries.ts'
 
@@ -18,7 +18,11 @@ export const metadata = { title: 'Violations — Rental Operations' }
 // them repeatedly" becomes indefensible.
 
 export default async function ViolationsPage() {
-  const actor = await requirePermission('lease.read')
+  // R-103: `requireScope`, never a resource-less `requirePermission` - an
+  // empty resource only ever matches a portfolio-wide grant, so the obvious
+  // guard locks out every entity- and property-scoped actor. See
+  // `requireScope`'s own comment.
+  const { actor } = await requireScope('lease.read')
   const scope = await currentScope(actor)
   const cases = await listViolationCases(scope)
 

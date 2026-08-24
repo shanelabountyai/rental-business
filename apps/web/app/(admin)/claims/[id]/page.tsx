@@ -12,7 +12,7 @@ import {
   PositionPanel,
   TimelinePanel,
 } from '@/components/insurance/claim-panels.tsx'
-import { requirePermission } from '@/lib/auth/guard.ts'
+import { requirePermission, requireScope } from '@/lib/auth/guard.ts'
 import {
   closeClaim,
   linkWorkOrder,
@@ -32,7 +32,11 @@ export const metadata = { title: 'Claim — Rental Operations' }
 // Suspense boundary above it puts a 200 on the wire before the page runs.
 export default async function ClaimPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const actor = await requirePermission('property.read')
+  // R-103: `requireScope`, never a resource-less `requirePermission` - an
+  // empty resource only ever matches a portfolio-wide grant, so the obvious
+  // guard locks out every entity- and property-scoped actor. See
+  // `requireScope`'s own comment.
+  const { actor } = await requireScope('property.read')
   const scope = await currentScope(actor)
   const claim = await getClaim(id, scope)
   if (!claim) notFound()

@@ -1,6 +1,6 @@
 import { CAUSE_OF_LOSS_LABELS, CLAIM_OUTCOME_LABELS } from '@rental/core/insurance'
 import Link from 'next/link'
-import { requirePermission } from '@/lib/auth/guard.ts'
+import { requirePermission, requireScope } from '@/lib/auth/guard.ts'
 import { listClaims } from '@/lib/insurance/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 
@@ -14,7 +14,11 @@ export const metadata = { title: 'Claims — Rental Operations' }
 // so it is the one row that has to be at the top of the list.
 
 export default async function ClaimsPage() {
-  const actor = await requirePermission('property.read')
+  // R-103: `requireScope`, never a resource-less `requirePermission` - an
+  // empty resource only ever matches a portfolio-wide grant, so the obvious
+  // guard locks out every entity- and property-scoped actor. See
+  // `requireScope`'s own comment.
+  const { actor } = await requireScope('property.read')
   const scope = await currentScope(actor)
   const claims = await listClaims(scope)
 

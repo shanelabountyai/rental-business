@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { OpenCaseForm } from '@/components/evictions/open-case-form.tsx'
-import { requirePermission } from '@/lib/auth/guard.ts'
+import { requirePermission, requireScope } from '@/lib/auth/guard.ts'
 import { openEvictionCase } from '@/lib/evictions/actions.ts'
 import { leasesWithoutOpenCase } from '@/lib/evictions/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
@@ -8,7 +8,11 @@ import { currentScope } from '@/lib/scope/current-scope.ts'
 export const metadata = { title: 'Open an eviction case — Rental Operations' }
 
 export default async function NewEvictionCasePage() {
-  const actor = await requirePermission('eviction.manage')
+  // R-103: `requireScope`, never a resource-less `requirePermission` - an
+  // empty resource only ever matches a portfolio-wide grant, so the obvious
+  // guard locks out every entity- and property-scoped actor. See
+  // `requireScope`'s own comment.
+  const { actor } = await requireScope('eviction.manage')
   const scope = await currentScope(actor)
   const leases = await leasesWithoutOpenCase(scope)
 

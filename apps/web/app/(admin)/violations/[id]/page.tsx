@@ -11,7 +11,7 @@ import {
   ObservationsPanel,
   type ApplicantOption,
 } from '@/components/violations/case-panels.tsx'
-import { requirePermission } from '@/lib/auth/guard.ts'
+import { requirePermission, requireScope } from '@/lib/auth/guard.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 import {
   closeViolationCase,
@@ -30,7 +30,11 @@ export default async function ViolationCasePage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
-  const actor = await requirePermission('lease.read')
+  // R-103: `requireScope`, never a resource-less `requirePermission` - an
+  // empty resource only ever matches a portfolio-wide grant, so the obvious
+  // guard locks out every entity- and property-scoped actor. See
+  // `requireScope`'s own comment.
+  const { actor } = await requireScope('lease.read')
   const scope = await currentScope(actor)
   const found = await getViolationCase(id, scope)
   if (!found) notFound()

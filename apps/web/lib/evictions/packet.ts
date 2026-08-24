@@ -8,7 +8,7 @@ import { businessDate, friendlyDate, friendlyTimestamp } from '@rental/core/sche
 import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { audit } from '@/lib/audit/index.ts'
-import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
+import { propertyResource, requirePermission, requireScope } from '@/lib/auth/guard.ts'
 import { appendPdfs, renderBlocksPdf } from '@/lib/pdf/render.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 import { cureClockFor, getEvictionCase } from '@/lib/evictions/queries.ts'
@@ -65,7 +65,12 @@ export async function exportAttorneyPacket(
   _previous: EvictionFormState,
   _formData: FormData,
 ): Promise<EvictionFormState> {
-  const scope = await currentScope(await requirePermission('eviction.manage'))
+  // R-103: `requireScope`, never a resource-less `requirePermission` - an
+  // empty resource only ever matches a portfolio-wide grant, so the obvious
+  // guard locks out every entity- and property-scoped actor. See
+  // `requireScope`'s own comment.
+  const { actor: guarded } = await requireScope('eviction.manage')
+  const scope = await currentScope(guarded)
   const evictionCase = await getEvictionCase(caseId, scope)
   if (!evictionCase) return { error: 'That case no longer exists.' }
 
