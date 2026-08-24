@@ -3743,7 +3743,7 @@ Two defects of my own in the new spec, and the second is the same shape. The evi
 - **`property.export` is granted to no role but `owner`**, so a manager assembling the file for their owner needs it granted by hand — and there is no UI for granting a single permission to a role (ROLE-07's custom role builder is still out of scope), which means the grant is a seed edit today.
 
 ## R-094 — Smart-lockbox self-showings
-**Commit:** `pending`  ·  **Date:** 2026-08-24
+**Commit:** `ce00f93`  ·  **Date:** 2026-08-24
 
 **What it built.** Four tables (`SmartLock`, `IdentityCheck`, `ShowingAccess`, `LockEvent`); `packages/core/scheduling/self-showing.ts` — the access window, the name comparison and one decision function, with 14 unit tests; two simulated adapters with fault injection (§14); a public page at the door; the instant kill and the entry log on the unit page; 7 server-side integration tests and 5 e2e specs. **Split at the start**: the smart-lock code lifecycle tied to lease state is filed as R-094b.
 
