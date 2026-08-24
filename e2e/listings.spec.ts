@@ -2,6 +2,16 @@ import { randomUUID } from 'node:crypto'
 import { hashPassword } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
+import { uniqueClientHeaders } from './fixtures.ts'
+
+// R-003's login limiter is ten attempts per IP per five minutes, and local
+// e2e traffic carries no x-forwarded-for - so without this every spec shares
+// one bucket and the full sweep starts refusing sign-ins around test 200.
+// See uniqueClientHeaders' own comment: the symptom looks nothing like the
+// cause.
+test.beforeEach(async ({ page }) => {
+  await page.setExtraHTTPHeaders(uniqueClientHeaders())
+})
 
 // Listing creation + hosted listing page (LEASE-01, R-056).
 //
@@ -124,7 +134,7 @@ test('a PM creates a listing, publishes it, and an anonymous visitor reads the h
   await expect(page.getByText('Draft — not public yet.')).toBeVisible()
 
   // Not public yet - an anonymous visitor gets a 404, not the page.
-  const anonBefore = await browser.newContext()
+  const anonBefore = await browser.newContext({ extraHTTPHeaders: uniqueClientHeaders() })
   const beforePublish = await anonBefore.newPage()
   const draftResponse = await beforePublish.goto(`/listings/${listingId}`)
   expect(draftResponse?.status()).toBe(404)
@@ -136,7 +146,7 @@ test('a PM creates a listing, publishes it, and an anonymous visitor reads the h
   // A FRESH, unauthenticated context - this is the whole point of a
   // "public by design" page (route-guards.test.ts's own reasoning): no
   // signIn() call anywhere below.
-  const anon = await browser.newContext()
+  const anon = await browser.newContext({ extraHTTPHeaders: uniqueClientHeaders() })
   const publicPage = await anon.newPage()
   const response = await publicPage.goto(`/listings/${listingId}`)
   expect(response?.status()).toBe(200)
@@ -155,7 +165,7 @@ test('a PM creates a listing, publishes it, and an anonymous visitor reads the h
   await page.getByRole('button', { name: /Unpublish/ }).click()
   await expect(page.getByText('Unpublished — no longer public.')).toBeVisible()
 
-  const anonAfter = await browser.newContext()
+  const anonAfter = await browser.newContext({ extraHTTPHeaders: uniqueClientHeaders() })
   const afterUnpublish = await anonAfter.newPage()
   const unpublishedResponse = await afterUnpublish.goto(`/listings/${listingId}`)
   expect(unpublishedResponse?.status()).toBe(404)

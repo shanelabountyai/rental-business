@@ -2,6 +2,16 @@ import { randomUUID } from 'node:crypto'
 import { hashPassword } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
+import { uniqueClientHeaders } from './fixtures.ts'
+
+// R-003's login limiter is ten attempts per IP per five minutes, and local
+// e2e traffic carries no x-forwarded-for - so without this every spec shares
+// one bucket and the full sweep starts refusing sign-ins around test 200.
+// See uniqueClientHeaders' own comment: the symptom looks nothing like the
+// cause.
+test.beforeEach(async ({ page }) => {
+  await page.setExtraHTTPHeaders(uniqueClientHeaders())
+})
 
 // Syndicating a published listing (LEASE-02, R-057).
 //
@@ -129,7 +139,7 @@ test('a visit through a tracked syndication link is attributed to that network',
 }) => {
   const { listing } = await seedPublishedListing()
 
-  const anon = await browser.newContext()
+  const anon = await browser.newContext({ extraHTTPHeaders: uniqueClientHeaders() })
   const anonPage = await anon.newPage()
   await anonPage.goto(`/listings/${listing.id}?src=ZILLOW`)
   await expect(anonPage.getByText('$1,600.00/mo')).toBeVisible()

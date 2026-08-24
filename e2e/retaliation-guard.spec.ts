@@ -2,7 +2,16 @@ import { randomUUID } from 'node:crypto'
 import { hashPassword } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
-import { uniquePhone } from './fixtures.ts'
+import { uniquePhone, uniqueClientHeaders } from './fixtures.ts'
+
+// R-003's login limiter is ten attempts per IP per five minutes, and local
+// e2e traffic carries no x-forwarded-for - so without this every spec shares
+// one bucket and the full sweep starts refusing sign-ins around test 200.
+// See uniqueClientHeaders' own comment: the symptom looks nothing like the
+// cause.
+test.beforeEach(async ({ page }) => {
+  await page.setExtraHTTPHeaders(uniqueClientHeaders())
+})
 
 // The retaliation-claim guard, through the browser (RISK-06, R-055).
 //

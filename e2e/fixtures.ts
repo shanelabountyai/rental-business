@@ -114,3 +114,32 @@ export async function expectAnnouncedInPlace(
     )
   }
 }
+
+/**
+ * A distinct client IP per browser context, for the auth rate limiter.
+ *
+ * ==========================================================================
+ * WITHOUT THIS, THE FULL SWEEP EATS ITS OWN LOGIN LIMIT. R-003 rate-limits
+ * staff sign-in at ten attempts per IP per five minutes (`RATE_LIMITS.login`),
+ * and local e2e traffic carries no `x-forwarded-for` - so every spec that does
+ * not set one shares a single bucket keyed on the same address. Nine specs
+ * were in that state when Golden Path 3's sweep found it, and past about the
+ * two-hundredth test the eleventh login in five minutes starts being refused.
+ *
+ * THE SYMPTOM LOOKS NOTHING LIKE THE CAUSE, which is why this comment is
+ * long: the failure is `page.waitForURL` timing out after clicking "Sign in",
+ * sixty seconds later, inside whichever spec happened to be running - it
+ * reads as a slow page or a broken form in a feature nobody touched. Both
+ * failures in that sweep were in notice specs, and neither had anything to do
+ * with notices.
+ *
+ * Several specs already did this inline. It is a helper now so the next spec
+ * cannot forget, and so `browser.newContext()` - which does NOT inherit
+ * `page.setExtraHTTPHeaders` - gets it too, which is the half that was
+ * missing even in the specs that had remembered.
+ * ==========================================================================
+ */
+export function uniqueClientHeaders(): Record<string, string> {
+  const octet = () => Math.floor(Math.random() * 254) + 1
+  return { 'x-forwarded-for': `10.${octet()}.${octet()}.${octet()}` }
+}

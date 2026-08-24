@@ -2,6 +2,16 @@ import { randomUUID } from 'node:crypto'
 import { hashPassword, mintToken } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
+import { uniqueClientHeaders } from './fixtures.ts'
+
+// R-003's login limiter is ten attempts per IP per five minutes, and local
+// e2e traffic carries no x-forwarded-for - so without this every spec shares
+// one bucket and the full sweep starts refusing sign-ins around test 200.
+// See uniqueClientHeaders' own comment: the symptom looks nothing like the
+// cause.
+test.beforeEach(async ({ page }) => {
+  await page.setExtraHTTPHeaders(uniqueClientHeaders())
+})
 
 // Smart-lockbox self-showings (LEASE-08, R-094).
 //
@@ -205,7 +215,7 @@ test('pulling the code takes it off the prospect’s page', async ({ page, brows
   const prospect = await seedProspect(seed, { first: 'Mary', last: 'Jackson' })
   const { showing, token } = await bookedNow(seed, prospect.id)
 
-  const prospectContext = await browser.newContext()
+  const prospectContext = await browser.newContext({ extraHTTPHeaders: uniqueClientHeaders() })
   const prospectPage = await prospectContext.newPage()
   await prospectPage.goto(`/showings/access/${token}`)
   await prospectPage

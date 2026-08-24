@@ -2,6 +2,16 @@ import { randomUUID } from 'node:crypto'
 import { hashPassword } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
+import { uniqueClientHeaders } from './fixtures.ts'
+
+// R-003's login limiter is ten attempts per IP per five minutes, and local
+// e2e traffic carries no x-forwarded-for - so without this every spec shares
+// one bucket and the full sweep starts refusing sign-ins around test 200.
+// See uniqueClientHeaders' own comment: the symptom looks nothing like the
+// cause.
+test.beforeEach(async ({ page }) => {
+  await page.setExtraHTTPHeaders(uniqueClientHeaders())
+})
 
 // The application pipeline (LEASE-03, R-059).
 //
@@ -149,7 +159,7 @@ test('staff invites a prospect, the lead adds a co-applicant, and the household 
   })
   const leadToken = await linkFor(lead.id, 'application.invite')
 
-  const leadContext = await browser.newContext()
+  const leadContext = await browser.newContext({ extraHTTPHeaders: uniqueClientHeaders() })
   const leadPage = await leadContext.newPage()
   await leadPage.goto(`/apply/${leadToken}`)
   await expect(leadPage.getByRole('heading', { name: /Morgan/ })).toBeVisible()
@@ -171,7 +181,7 @@ test('staff invites a prospect, the lead adds a co-applicant, and the household 
   })
   const coToken = await linkFor(coApplicant.id, 'application.coapplicant_invite')
 
-  const coContext = await browser.newContext()
+  const coContext = await browser.newContext({ extraHTTPHeaders: uniqueClientHeaders() })
   const coPage = await coContext.newPage()
   await coPage.goto(`/apply/${coToken}`)
   await expect(coPage.getByRole('heading', { name: /Riley/ })).toBeVisible()
@@ -217,7 +227,7 @@ test('an application fee is required, and paying it is what completes the applic
   expect(lead.feeCents).toBe(7_500)
   const leadToken = await linkFor(lead.id, 'application.invite')
 
-  const anon = await browser.newContext()
+  const anon = await browser.newContext({ extraHTTPHeaders: uniqueClientHeaders() })
   const anonPage = await anon.newPage()
   await anonPage.goto(`/apply/${leadToken}`)
   await fillApplicantForm(anonPage)

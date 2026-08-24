@@ -3,7 +3,7 @@ import { createTotpEnrolment, hashPassword, mintToken, sealSecret } from '@renta
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
 import { Secret, TOTP } from 'otpauth'
-import { uniquePhone } from './fixtures.ts'
+import { uniquePhone, uniqueClientHeaders } from './fixtures.ts'
 
 // Billing a tenant for a repair they caused (MAINT-07, R-031).
 //
@@ -283,7 +283,7 @@ test.describe('billing a tenant for a repair they caused (R-031)', () => {
     await closeAsTenantCaused(page, workOrder.id)
 
     const owner = await seedOwner()
-    const ownerContext = await browser.newContext()
+    const ownerContext = await browser.newContext({ extraHTTPHeaders: uniqueClientHeaders() })
     try {
       const ownerPage = await ownerContext.newPage()
       const octet = () => Math.floor(Math.random() * 254) + 1
@@ -383,7 +383,7 @@ test.describe('billing a tenant for a repair they caused (R-031)', () => {
     await closeAsTenantCaused(page, workOrder.id)
 
     const owner = await seedOwner()
-    const context = await browser.newContext()
+    const context = await browser.newContext({ extraHTTPHeaders: uniqueClientHeaders() })
     try {
       const ownerPage = await context.newPage()
       const octet = () => Math.floor(Math.random() * 254) + 1
@@ -426,7 +426,7 @@ test.describe('billing a tenant for a repair they caused (R-031)', () => {
     await closeAsTenantCaused(page, workOrder.id)
 
     const owner = await seedOwner()
-    const context = await browser.newContext()
+    const context = await browser.newContext({ extraHTTPHeaders: uniqueClientHeaders() })
     try {
       const ownerPage = await context.newPage()
       const octet = () => Math.floor(Math.random() * 254) + 1
@@ -457,7 +457,7 @@ test.describe('billing a tenant for a repair they caused (R-031)', () => {
     await closeAsTenantCaused(page, workOrder.id)
 
     const owner = await seedOwner()
-    const context = await browser.newContext()
+    const context = await browser.newContext({ extraHTTPHeaders: uniqueClientHeaders() })
     try {
       const ownerPage = await context.newPage()
       const octet = () => Math.floor(Math.random() * 254) + 1

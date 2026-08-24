@@ -3,7 +3,7 @@ import AxeBuilder from '@axe-core/playwright'
 import { hashPassword, mintToken } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
-import { uniquePhone } from './fixtures.ts'
+import { uniquePhone, uniqueClientHeaders } from './fixtures.ts'
 
 // Notice delivery proof, end to end (COMM-02, R-051).
 //
@@ -330,7 +330,7 @@ test.describe('notice delivery proof (COMM-02)', () => {
       data: { serviceMethod: 'PORTAL', servedAt: new Date('2026-08-16T15:00:00Z') },
     })
 
-    const context = await browser.newContext()
+    const context = await browser.newContext({ extraHTTPHeaders: uniqueClientHeaders() })
     try {
       const page = await context.newPage()
       await page.goto(await magicLinkFor(tenant.id))
@@ -392,7 +392,7 @@ test.describe('notice delivery proof (COMM-02)', () => {
       data: { serviceMethod: 'PORTAL', servedAt: new Date('2026-08-16T15:00:00Z') },
     })
 
-    const context = await browser.newContext()
+    const context = await browser.newContext({ extraHTTPHeaders: uniqueClientHeaders() })
     try {
       const page = await context.newPage()
       await page.goto(await magicLinkFor(mine.tenant.id))

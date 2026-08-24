@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { hashPassword, mintToken } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
+import { uniqueClientHeaders } from './fixtures.ts'
 
 // The prospect pipeline (LEASE-07, R-058).
 //
@@ -116,7 +117,7 @@ test('an anonymous visitor inquires, and the pipeline shows the inquiry', async 
   // on two matching rows).
   const lastName = `Patel-${randomUUID().slice(0, 8)}`
 
-  const anon = await browser.newContext()
+  const anon = await browser.newContext({ extraHTTPHeaders: uniqueClientHeaders() })
   const anonPage = await anon.newPage()
   await anonPage.goto(`/listings/${listing.id}?src=ZILLOW`)
   await anonPage.getByLabel('First name').fill('Priya')
@@ -176,7 +177,7 @@ test('a prospect answers the identical five questions, and staff moves the pipel
     },
   })
 
-  const anon = await browser.newContext()
+  const anon = await browser.newContext({ extraHTTPHeaders: uniqueClientHeaders() })
   const anonPage = await anon.newPage()
   await anonPage.goto(`/prescreen/${minted.token}`)
   await expect(anonPage.getByRole('heading', { name: /Marcus/ })).toBeVisible()

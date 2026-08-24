@@ -2,6 +2,16 @@ import { randomUUID } from 'node:crypto'
 import { hashPassword, mintToken } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
+import { uniqueClientHeaders } from './fixtures.ts'
+
+// R-003's login limiter is ten attempts per IP per five minutes, and local
+// e2e traffic carries no x-forwarded-for - so without this every spec shares
+// one bucket and the full sweep starts refusing sign-ins around test 200.
+// See uniqueClientHeaders' own comment: the symptom looks nothing like the
+// cause.
+test.beforeEach(async ({ page }) => {
+  await page.setExtraHTTPHeaders(uniqueClientHeaders())
+})
 
 // The inspection engine (INSP-01, R-068).
 //
@@ -289,7 +299,7 @@ test('a photo attaches to an item, and the tenant reviews and signs the report f
     )
     .toBeGreaterThan(0)
 
-  const anon = await browser.newContext()
+  const anon = await browser.newContext({ extraHTTPHeaders: uniqueClientHeaders() })
   const tenantPage = await anon.newPage()
   await tenantPage.goto(await magicLinkFor(tenant.id))
   await tenantPage.goto('/portal/papers')
@@ -378,7 +388,7 @@ test('a tenant self-guides a move-in walkthrough from their own portal (INSP-05)
     )
     .toBeGreaterThan(0)
 
-  const anon = await browser.newContext()
+  const anon = await browser.newContext({ extraHTTPHeaders: uniqueClientHeaders() })
   const tenantPage = await anon.newPage()
   await tenantPage.goto(await magicLinkFor(tenant.id))
   await tenantPage.goto('/portal/papers')
@@ -441,7 +451,7 @@ test('a tenant self-guides a move-in walkthrough from their own portal (INSP-05)
       items: { create: [{ room: 'Bedroom', item: 'Closet', order: 0 }] },
     },
   })
-  const blocked = await browser.newContext()
+  const blocked = await browser.newContext({ extraHTTPHeaders: uniqueClientHeaders() })
   const blockedPage = await blocked.newPage()
   await blockedPage.goto(await magicLinkFor(tenant.id))
   await blockedPage.goto(`/portal/papers/inspections/${staffInspection.id}`)

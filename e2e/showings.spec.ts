@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { hashPassword, mintToken } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
-import { uniquePhone } from './fixtures.ts'
+import { uniquePhone, uniqueClientHeaders } from './fixtures.ts'
 
 // Self-serve showing booking (LEASE-08, R-064).
 //
@@ -141,7 +141,7 @@ test('a prospect self-books a vacant-unit showing, raising an escort task, and s
   const { listing, unit } = await seedListing('VACANT')
   const lastName = `Booker-${randomUUID().slice(0, 8)}`
 
-  const anon = await browser.newContext()
+  const anon = await browser.newContext({ extraHTTPHeaders: uniqueClientHeaders() })
   const anonPage = await anon.newPage()
   await anonPage.goto(`/listings/${listing.id}`)
   await anonPage.getByLabel('First name').fill('Riley')
