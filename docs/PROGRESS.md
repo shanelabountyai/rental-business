@@ -4053,7 +4053,7 @@ So one tenancy is followed. She falls behind and is chased, lawfully and correct
 - **Seven unit tests and no new e2e.** The route's `addresses()` is now a two-line flatMap over a tested pure function, and the assertion that actually matters — the key survives a comma'd name beside it — is made against `extractReplyKey` directly.
 
 ## R-048 cut — OQ-2 answered, no voucher tenancies
-**Commit:** _(recorded below)_  ·  **Date:** 2026-08-24
+**Commit:** `cb7b09f`  ·  **Date:** 2026-08-24
 
 **What it did.** Re-asked OQ-2 at the point it was actually blocking something, got a firm answer, and cut R-048 rather than leaving it gated. Recorded as **D-136**. No code changed.
 
