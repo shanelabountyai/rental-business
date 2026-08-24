@@ -3882,7 +3882,7 @@ Two defects of my own in the new spec, and the second is the same shape. The evi
 - **HTML-only email is stored empty.** The route prefers the plain-text part and does not strip HTML, so a client that sent only HTML files a blank message. Better than storing markup, worse than converting it, and the fix is a converter nobody needs yet.
 
 ## R-097d — An inbound email keeps what it carried
-**Commit:** `pending`  ·  **Date:** 2026-08-24
+**Commit:** `2fe6393`  ·  **Date:** 2026-08-24
 
 **What it built.** `htmlToText` in core with 6 tests; `inbound-attachments.ts` — the trust-boundary rules for accepting a file from a stranger; `Document.messageId` and `UnroutedMessage.attachmentsDropped`; attachments rendered on the thread and the dropped count on the triage queue; 4 more database tests.
 
