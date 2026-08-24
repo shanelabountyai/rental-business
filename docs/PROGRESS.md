@@ -3833,3 +3833,27 @@ Two defects of my own in the new spec, and the second is the same shape. The evi
 - **R-097c — calendar sync has no PRD story at all**, which is the first thing to fix. Every other row points at a §5 story that the backlog calls the authoritative acceptance criteria; this appeared only in the bundle's prose. When the story is written it should split again: publishing out to a staff calendar is an M with no conflict model and is probably the whole real need, while two-way is an L whose wrong conflict policy silently moves a legally-noticed entry appointment (R-027) — a compliance failure, not a sync bug.
 
 **What it left behind.** Nothing built, by design. The three rows sit behind gates that are honest: a vendor decision and a furnisher review for R-097b, a written story for R-097c, and nothing at all for R-097a — which is the one of the three that could be started today.
+
+## R-097c — The staff visit calendar
+**Commit:** `pending`  ·  **Date:** 2026-08-24
+
+**What it built.** A new PRD story (**NOTIF-06**) — the row had none, which was its first instruction — then the read-only half: an iCalendar formatter in core with 10 tests, a scoped event query with a source-level disclosure guard, a public feed route, a per-person subscribe link on the account page, and 4 e2e specs. Also recorded the two owner answers that arrived with it: **D-122** cuts R-096, **D-123** re-gates R-095.
+
+**What it decided.** Recorded as **D-124**.
+
+- **An .ics subscription, not a calendar vendor's API.** The obvious build is OAuth against Google, then Outlook, then iCloud — three integrations, three token-refresh paths, three consent screens. RFC 5545 subscription is a feature all three already have: one URL, no install, no vendor, and the calendar app does the polling.
+- **It makes two-way impossible by construction**, which is the safe direction rather than a limitation. This row's own text warned that a wrong conflict policy silently moves a legally-noticed entry appointment (R-027) — a compliance failure, not a sync bug. A read-only feed has no conflict policy because it has nothing to conflict with.
+- **What it costs is said on the panel.** The calendar app decides when to refetch and Google is unhurried about it, so this is where the day's visits come from and not where an urgent change is learned. That is what the notification engine is for, and an operator who assumed otherwise would miss an emergency.
+- **What goes into a third party's calendar is a disclosure decision.** A subscribed feed ends up on a phone, in a desktop client and inside a cloud calendar — three copies this product does not control, with their own sharing features and retention. So: where, when, and what kind of visit. No tenant name, phone or email. No `restrictedPartyNote`, though the job itself appears, because D-109 is explicit that a confidential case's consequences cannot be hidden and somebody has to attend it. And **no work-order scope** — a scope line is free text somebody typed and can say anything about a household, while a closed vocabulary of visit kinds cannot.
+- **The scope is resolved on every fetch, never frozen into the token.** A person moved to one property, or deactivated, stops seeing the rest on their calendar's next poll — which is what ROLE-06's "access dies within a minute" means for a surface nobody ever logs out of. An e2e deactivates a staff member and watches the feed turn 404.
+- **A year-long token, per person, re-issuable.** An order of magnitude longer than anything else in `TOKEN_TTL_MINUTES`, because a subscription that expires silently stops updating and looks exactly like a quiet week. Safe on blast radius — it reads where and when somebody's own staff are visiting properties they can already see — and a leak is fixed by pressing a button rather than by rotating something everybody depends on.
+
+**Found along the way.**
+- **The source-level guard cried wolf on its own prose.** The first version forbade the word "tenant" anywhere in the query file and tripped on the string "A prospective tenant is viewing this unit" — which is exactly what the feed is supposed to say. Retightened to selection syntax. R-103's lesson, met from the other side: a test that flags correct code teaches the next person to weaken it.
+- **RFC 5545 line folding counts octets, not characters.** A character-counted fold splits a UTF-8 sequence on an accented street name and puts mojibake in somebody's calendar; there is a test for it.
+
+**What it left behind.**
+- **Two-way sync is not built and should stay unbuilt** unless something concrete demands it. The row's L-sized half needs a conflict policy, and the one that matters is the one that can move an entry appointment somebody was legally noticed about.
+- **No `VTIMEZONE`, and everything is UTC.** Correct for a portfolio spanning zones (D-3) and correct in every client, but an exported .ics opened in a text editor reads in UTC rather than property-local. A `VTIMEZONE` block per property zone would fix the cosmetics and is not worth the parser surface yet.
+- **No alarms, no attendees, no per-kind calendars.** A staff member wanting only inspections has to filter in their own client. Splitting into several feeds is a query-string away and nothing needs it yet.
+- **Entry appointments appear only where a work order or showing carries the schedule.** R-027 serves entry notices against those rows, so the calendar follows them — but a notice served for a visit that was never scheduled on a row has nothing to show.

@@ -3684,6 +3684,10 @@ enum AuthTokenPurpose {
   /// outside a house. Its lifetime is NOT the code's: `ShowingAccess`
   /// carries the window the code actually answers in.
   SHOWING_ACCESS
+  /// R-097c: a staff member's own read-only calendar subscription
+  /// (NOTIF-06). Long-lived and re-issuable per person - see
+  /// `TOKEN_TTL_MINUTES` for why a year is right here and nowhere else.
+  CALENDAR_FEED
 }
 
 model StaffCredential {

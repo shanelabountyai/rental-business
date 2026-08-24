@@ -128,6 +128,23 @@ export const TOKEN_TTL_MINUTES = {
   /// saying the code is not live. The window is the control; this is the
   /// second lock, not the first.
   SHOWING_ACCESS: 60 * 24 * 3,
+  /// R-097c: a staff member's own calendar subscription (NOTIF-06).
+  ///
+  /// A YEAR, WHICH IS AN ORDER OF MAGNITUDE LONGER THAN ANYTHING ELSE HERE,
+  /// and the reason is what the token is FOR: a calendar app is subscribed
+  /// once and polls for ever, so a link that expires is a calendar that
+  /// silently stops updating - the worst failure available, because it looks
+  /// exactly like a quiet week.
+  ///
+  /// Safe to be this long because of the blast radius, which is the argument
+  /// TENANT_VERIFY's own comment makes and this one stretches further. It
+  /// reads one thing: where and when somebody's staff are visiting
+  /// properties they can already see. It moves no money, opens no session,
+  /// reads no document, and carries no tenant's name or contact details.
+  /// **And it is per person and re-issuable**, so a leaked one is revoked by
+  /// pressing a button on an account page rather than by rotating anything
+  /// anybody else depends on.
+  CALENDAR_FEED: 60 * 24 * 365,
 } as const
 
 export type TokenPurpose = keyof typeof TOKEN_TTL_MINUTES

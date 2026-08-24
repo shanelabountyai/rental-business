@@ -1,0 +1,11 @@
+-- R-097c (NOTIF-06): a staff member's own read-only calendar subscription.
+--
+-- No table. The feed is computed from `Showing`, `Inspection` and the
+-- scheduled work orders that already exist, and the only new persistent
+-- thing is one more purpose on the token store that R-003 built for exactly
+-- this shape of credential.
+--
+-- ONE TOKEN PER PERSON, and re-issuing revokes only theirs. A single shared
+-- feed URL would mean a leak that could be fixed only by rotating everybody,
+-- which in practice means it never gets rotated.
+ALTER TYPE "AuthTokenPurpose" ADD VALUE 'CALENDAR_FEED';

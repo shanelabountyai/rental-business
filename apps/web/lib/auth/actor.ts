@@ -34,7 +34,12 @@ function knownPermissions(stored: string[]): Permission[] {
   return stored.filter(isPermission)
 }
 
-async function loadStaffActor(staffUserId: string, mfaVerified: boolean) {
+/// Exported for the one caller that has a staff id but no session: R-097c's
+/// calendar feed, authorized by a long-lived token in a URL. It passes
+/// `mfaVerified: false`, which is the honest value - a link in a calendar
+/// app is not a proved second factor - and is safe because the feed reads
+/// nothing that needs one.
+export async function loadStaffActor(staffUserId: string, mfaVerified: boolean) {
   const staffUser = await prisma.staffUser.findUnique({
     where: { id: staffUserId },
     select: {

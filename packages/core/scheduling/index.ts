@@ -4,3 +4,4 @@
 export * from './local-time.ts'
 export * from './showings.ts'
 export * from './self-showing.ts'
+export * from './icalendar.ts'

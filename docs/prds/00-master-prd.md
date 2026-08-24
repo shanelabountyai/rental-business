@@ -405,6 +405,8 @@ Core principle: **every communication is potential evidence.** One threaded, tim
 
 **NOTIF-05 [S]** Escalation chains: emergency ticket unacknowledged 15 min → escalate past on-call to owner; approval pending >24h → re-ping then escalate; quiet hours respected except emergencies.
 
+**NOTIF-06 [S]** As a staff member, I can subscribe my own calendar to the visits scheduled at the properties I can see — showings, inspections and noticed entry appointments — so the day's appointments appear on the phone I already look at. **Read-only, one direction.** The feed carries where and when and what kind of visit; it never carries a tenant's contact details, and nothing from a restricted record appears in it at all. Access is a per-person subscribe URL that can be revoked and re-issued without touching anybody else's.
+
 ---
 
 ### EPIC 10 — Users, Roles & Permissions (ROLE) — Must

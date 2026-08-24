@@ -874,6 +874,13 @@ export const AUDIT_ACTIONS = [
   /// has to act on; the row carries it too, in red, for as long as it is
   /// false.
   'accesscode.tenant_code_revoked',
+
+  /// R-097c (NOTIF-06): a staff member issued or re-issued their own
+  /// calendar subscription link. Records how many older links it killed,
+  /// which is the number somebody wants when they are asking whether a
+  /// leaked one stopped working. NEVER the token - a trail carrying the
+  /// credential whose issue it is recording has handed it out again.
+  'staff.calendar_feed_issued',
 ] as const
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number]

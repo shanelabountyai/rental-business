@@ -12,6 +12,8 @@ import {
 import { requireStaff } from '@/lib/auth/guard.ts'
 import { setOnCall } from '@/lib/oncall/actions.ts'
 import { getPreferences } from '@/lib/notifications/queries.ts'
+import { CalendarFeedPanel } from '@/components/account/calendar-feed-panel.tsx'
+import { regenerateCalendarFeed } from '@/lib/calendar/actions.ts'
 
 export const metadata = { title: 'Your account — Rental Operations' }
 
@@ -29,7 +31,7 @@ export default async function AccountPage({
     searchParams,
   ])
 
-  const [credential, assignments, preferences, onCall] = await Promise.all([
+  const [credential, assignments, preferences, onCall, calendarLinkCount] = await Promise.all([
     prisma.staffCredential.findUnique({
       where: { staffUserId: actor.id },
       select: { mfaEnrolledAt: true },
@@ -48,7 +50,19 @@ export default async function AccountPage({
       where: { id: actor.id },
       select: { onCallUntil: true },
     }),
+    // R-097c. Whether they hold one, never the token itself - it is hashed,
+    // like every other credential in this product, so there is no reading it
+    // back and the panel offers a new one instead.
+    prisma.authToken.count({
+      where: {
+        purpose: 'CALENDAR_FEED',
+        subjectId: actor.id,
+        consumedAt: null,
+        expiresAt: { gt: new Date() },
+      },
+    }),
   ])
+  const hasCalendarLink = calendarLinkCount > 0
 
   // Lapsed windows read as "not on call" here, exactly as the rota reads them
   // (packages/core/oncall) - a stale end date shown as if it were live would
@@ -121,6 +135,8 @@ export default async function AccountPage({
           <dd>{ceiling(actor.ceilings.waiveFeeCents)}</dd>
         </dl>
       </section>
+
+      <CalendarFeedPanel hasLink={hasCalendarLink} action={regenerateCalendarFeed} />
 
       <section aria-labelledby="on-call" className="flex flex-col gap-3">
         <h2 id="on-call" className="text-lg font-semibold">
