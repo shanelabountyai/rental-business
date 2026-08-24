@@ -1,0 +1,122 @@
+import { timingSafeEqual } from 'node:crypto'
+import { stripQuotedReply } from '@rental/core/comms'
+import { receiveInboundMessage } from '@/lib/comms/messages.ts'
+
+// The inbound-email webhook (COMM-08, R-097a).
+//
+// A PUBLIC ENDPOINT THAT WRITES TO SOMEBODY'S PERMANENT CONVERSATION, so it
+// is arranged the same way the Twilio one is (see that route's header for the
+// full reasoning about retries and status codes as control signals).
+//
+// A SHARED SECRET RATHER THAN A SIGNATURE, and the difference is worth
+// stating rather than glossing: Twilio signs its payload, so that route can
+// verify the request came from Twilio. Inbound-email providers vary - some
+// sign, most offer only a secret in the URL or a header - so this takes the
+// lowest common denominator and compares it in constant time. It is weaker,
+// and the mitigation is what the endpoint can DO: it files a message into an
+// existing conversation, or into the unrouted queue. It cannot create a
+// tenancy, move money, or say who somebody is.
+//
+// AND THAT IS THE HONEST LIMIT OF INBOUND EMAIL GENERALLY. A From: header is
+// trivially forged, so a message routed by From: address is only as
+// trustworthy as caller ID - which is exactly what SMS routing has lived with
+// since R-017. Nothing here pretends otherwise, and nothing downstream treats
+// an inbound message as authentication for anything.
+
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+
+/// One provider's payload, parsed in ONE PLACE (D-7's rule: no code outside
+/// the boundary may assume a provider's shape). Every field is optional
+/// because every provider names them differently, and a message that arrives
+/// with only a From and a body is still a message.
+interface InboundPayload {
+  from?: string
+  to?: string | string[]
+  cc?: string | string[]
+  recipient?: string
+  subject?: string
+  text?: string
+  'body-plain'?: string
+  html?: string
+  messageId?: string
+  'message-id'?: string
+}
+
+function addresses(...values: (string | string[] | undefined)[]): string[] {
+  return values
+    .flatMap((value) => (Array.isArray(value) ? value : value ? [value] : []))
+    .flatMap((value) => value.split(','))
+    .map((value) => value.trim())
+    .filter(Boolean)
+}
+
+function secretMatches(provided: string, expected: string): boolean {
+  const a = Buffer.from(provided)
+  const b = Buffer.from(expected)
+  // Length has to match before `timingSafeEqual`, and comparing lengths
+  // first leaks only the length - which is not the secret.
+  return a.length === b.length && timingSafeEqual(a, b)
+}
+
+export async function POST(request: Request) {
+  const expected = process.env.INBOUND_EMAIL_SECRET
+  if (!expected) {
+    // Refuses everything when unset, exactly as the SMS and cron routes do.
+    // 503 rather than 403 so a provider retries once it is configured, since
+    // a message lost during a misconfiguration window is a tenant who thinks
+    // they told us something.
+    console.error('[inbound-email] INBOUND_EMAIL_SECRET is not set; refusing webhook')
+    return new Response('Not configured', { status: 503 })
+  }
+
+  const provided =
+    request.headers.get('x-inbound-secret') ?? new URL(request.url).searchParams.get('secret') ?? ''
+  if (!secretMatches(provided, expected)) {
+    // 403, not 503: this one must NOT be retried. A wrong secret is wrong
+    // every time, and telling the provider to try again turns a
+    // misconfiguration into a loop.
+    return new Response('Forbidden', { status: 403 })
+  }
+
+  let payload: InboundPayload
+  try {
+    payload = (await request.json()) as InboundPayload
+  } catch {
+    // Unparseable is 400 and final. Retrying it produces the same result.
+    return new Response('Bad request', { status: 400 })
+  }
+
+  const from = addresses(payload.from)[0]
+  const body = payload.text ?? payload['body-plain'] ?? ''
+  if (!from) {
+    // No sender at all: nothing to file and nothing to triage, since even the
+    // unrouted queue is keyed on who tried to make contact. Accepted rather
+    // than retried - it will not get a From: header the second time.
+    console.error('[inbound-email] payload had no From address; dropping')
+    return new Response('Accepted', { status: 200 })
+  }
+
+  try {
+    const result = await receiveInboundMessage({
+      channel: 'EMAIL',
+      from,
+      // The quoted tail is cut here rather than stored and hidden in the UI:
+      // `Message` is append-only, so a third reply would otherwise store the
+      // first two again, for ever, and the transcript a court reads becomes
+      // mostly duplicates of itself.
+      body: stripQuotedReply(body),
+      receivedAt: new Date(),
+      // Providers retry; this makes a redelivery a no-op rather than a
+      // second copy in somebody's history.
+      externalId: payload.messageId ?? payload['message-id'] ?? null,
+      recipients: addresses(payload.to, payload.cc, payload.recipient),
+    })
+    return Response.json({ outcome: result.outcome }, { status: 200 })
+  } catch (error) {
+    // 500 so the provider retries: the message is real and losing it means a
+    // tenant told us something we never recorded.
+    console.error('[inbound-email] failed to file an inbound message', error)
+    return new Response('Error', { status: 500 })
+  }
+}

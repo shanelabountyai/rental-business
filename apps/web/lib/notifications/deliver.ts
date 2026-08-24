@@ -60,6 +60,8 @@ export async function deliverOverChannel(args: {
   to: string
   subject?: string
   body: string
+  /// R-097a: only ever set for a message that belongs to a thread.
+  replyTo?: string
 }): Promise<DeliveryOutcome> {
   const config = notificationConfig()
   if (!config.enabled) {
@@ -83,6 +85,7 @@ export async function deliverOverChannel(args: {
       to,
       subject: args.subject,
       body,
+      replyTo: args.replyTo,
     })
     return { status: 'SENT', externalId: result.externalId }
   } catch (error) {

@@ -1,15 +1,20 @@
 import 'server-only'
 
+import { randomBytes } from 'node:crypto'
 import {
   type OutboundChannel,
   type UnroutedReason,
+  REPLY_KEY_LENGTH,
   decideRoute,
+  extractReplyKey,
   normalizePhone,
+  replyAddress,
 } from '@rental/core/comms'
 import type { MessageChannel } from '@rental/db'
 import { type Prisma, prisma } from '@rental/db'
 import { deliverOverChannel } from '@/lib/notifications/deliver.ts'
-import { candidatesForPhone, resolveThread } from './threads.ts'
+import { candidatesForEmail, candidatesForPhone, resolveThread } from './threads.ts'
+import { inboundEmailConfig } from './inbound-email-config.ts'
 
 // Writing to a thread (COMM-01, R-017).
 //
@@ -19,6 +24,39 @@ import { candidatesForPhone, resolveThread } from './threads.ts'
 // separate MessageDelivery row a provider callback is free to move.
 
 type Db = Prisma.TransactionClient | typeof prisma
+
+/**
+ * The Reply-To for a thread's outbound email, minting the key if this is the
+ * first one (COMM-08, R-097a).
+ *
+ * Returns undefined where no inbound domain is configured, which is a
+ * supported state: replies then arrive wherever the provider forwards them
+ * and route by From: address, R-017's ordinary path. What is lost is thread
+ * precision, not the feature.
+ */
+async function replyAddressForThread(threadId: string): Promise<string | undefined> {
+  const inbound = inboundEmailConfig()
+  if (!inbound) return undefined
+
+  const thread = await prisma.thread.findUnique({
+    where: { id: threadId },
+    select: { replyKey: true },
+  })
+  if (!thread) return undefined
+
+  let key = thread.replyKey
+  if (!key) {
+    // Lower-case alphanumeric only: it goes into an address, and mail
+    // systems are free to change the case of a local part in transit.
+    key = randomBytes(16).toString('base64url').replace(/[^a-z0-9]/gi, '').toLowerCase().slice(0, REPLY_KEY_LENGTH)
+    await prisma.thread.update({ where: { id: threadId }, data: { replyKey: key } })
+  }
+  return replyAddress({
+    inboundLocalPart: inbound.localPart,
+    inboundDomain: inbound.domain,
+    replyKey: key,
+  })
+}
 
 /// Written in the same transaction as the message, so a thread can never
 /// claim a last-message time that no message backs up.
@@ -93,10 +131,18 @@ export async function sendThreadMessage(args: {
     return message
   }
 
+  // R-097a. The reply key is minted HERE, on the first outbound email in a
+  // thread, rather than when the thread is created - a portfolio that never
+  // emails never grows one, and a thread that only ever carried SMS has
+  // nothing to leak.
+  const replyTo =
+    args.channel === 'EMAIL' ? await replyAddressForThread(args.threadId) : undefined
+
   const outcome = await deliverOverChannel({
     channel: args.channel,
     to: args.toAddress,
     body: args.body,
+    replyTo,
   })
 
   await prisma.messageDelivery.updateMany({
@@ -233,6 +279,12 @@ export async function receiveInboundMessage(args: {
   /// Provider message id. Providers retry webhooks; this is what makes a
   /// redelivery a no-op rather than a second copy in somebody's history.
   externalId?: string | null
+  /// R-097a: every recipient header on an inbound email - To, Cc, and
+  /// whatever the provider calls the envelope recipient. Read only to find
+  /// our own plus-addressed reply key; a reply that CC'd the office and To'd
+  /// a colleague still carries it somewhere, and taking only `To:` would
+  /// drop it.
+  recipients?: readonly string[]
 }): Promise<InboundResult> {
   if (args.externalId) {
     const [seenMessage, seenUnrouted] = await Promise.all([
@@ -248,8 +300,57 @@ export async function receiveInboundMessage(args: {
     if (seenMessage || seenUnrouted) return { outcome: 'duplicate' }
   }
 
-  const e164 = normalizePhone(args.from)
-  const candidates = e164 ? await candidatesForPhone(e164) : []
+  // R-097a. THE REPLY KEY FIRST, AND IT SHORT-CIRCUITS EVERYTHING BELOW.
+  // It names the thread outright, which is the one thing candidate matching
+  // cannot do: a tenant with tenancies at two properties replying about one
+  // of them is `decideRoute`'s AMBIGUOUS case, and the key says which. It is
+  // only ever trusted to pick between conversations that already exist -
+  // never to create one, and never to say who somebody is.
+  const inbound = inboundEmailConfig()
+  if (args.channel === 'EMAIL' && inbound && args.recipients && args.recipients.length > 0) {
+    const key = extractReplyKey({
+      recipients: args.recipients,
+      inboundLocalPart: inbound.localPart,
+      inboundDomain: inbound.domain,
+    })
+    if (key) {
+      const thread = await prisma.thread.findUnique({
+        where: { replyKey: key },
+        select: { id: true, tenantId: true, vendorId: true },
+      })
+      // A key naming no thread falls through rather than failing. A deleted
+      // conversation, a forwarded old email, a mangled tag: all of them
+      // should still get the message filed by From: address if they can be.
+      if (thread) {
+        const message = await prisma.$transaction(async (tx) => {
+          const created = await tx.message.create({
+            data: {
+              threadId: thread.id,
+              channel: args.channel,
+              direction: 'INBOUND',
+              body: args.body,
+              sentAt: args.receivedAt,
+              tenantId: thread.tenantId,
+              vendorId: thread.vendorId,
+              externalId: args.externalId ?? null,
+              delivery: { create: { status: 'DELIVERED', deliveredAt: args.receivedAt } },
+            },
+          })
+          await touchThread(tx, thread.id, args.receivedAt)
+          return created
+        })
+        return { outcome: 'routed', threadId: thread.id, messageId: message.id }
+      }
+    }
+  }
+
+  const e164 = args.channel === 'EMAIL' ? null : normalizePhone(args.from)
+  const candidates =
+    args.channel === 'EMAIL'
+      ? await candidatesForEmail(args.from)
+      : e164
+        ? await candidatesForPhone(e164)
+        : []
   const decision = decideRoute(candidates)
 
   if (decision.outcome === 'unrouted') {

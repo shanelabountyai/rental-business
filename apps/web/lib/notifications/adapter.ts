@@ -14,6 +14,13 @@ export interface OutboundMessage {
   to: string
   subject?: string
   body: string
+  /// R-097a (COMM-08): where a reply should go, when the message belongs to
+  /// a conversation. Email only - an SMS reply comes back to the number it
+  /// was sent from, which R-017 already routes. An adapter that cannot set
+  /// a Reply-To simply ignores it: the reply then arrives at the default
+  /// inbound address and routes by From:, which is a graceful degradation
+  /// rather than a failure.
+  replyTo?: string
 }
 
 export interface SendResult {

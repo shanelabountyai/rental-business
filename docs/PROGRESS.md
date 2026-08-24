@@ -3857,3 +3857,26 @@ Two defects of my own in the new spec, and the second is the same shape. The evi
 - **No `VTIMEZONE`, and everything is UTC.** Correct for a portfolio spanning zones (D-3) and correct in every client, but an exported .ics opened in a text editor reads in UTC rather than property-local. A `VTIMEZONE` block per property zone would fix the cosmetics and is not worth the parser surface yet.
 - **No alarms, no attendees, no per-kind calendars.** A staff member wanting only inspections has to filter in their own client. Splitting into several feeds is a query-string away and nothing needs it yet.
 - **Entry appointments appear only where a work order or showing carries the schedule.** R-027 serves entry notices against those rows, so the calendar follows them — but a notice served for a visit that was never scheduled on a row has nothing to show.
+
+## R-097a — Inbound email auto-threading
+**Commit:** `pending`  ·  **Date:** 2026-08-24
+
+**What it built.** `packages/core/comms/email-reply.ts` — plus-addressed reply keys and quoted-tail stripping, 11 tests; `candidatesForEmail`; a reply-key branch in `receiveInboundMessage`; `Thread.replyKey`, minted lazily on the first outbound email; a `replyTo` field threaded through the notification adapter seam; the inbound webhook; 9 database tests.
+
+**What it decided.** Recorded as **D-125**.
+
+- **The safety-critical part was already built, and is not re-decided.** `decideRoute` refuses to guess between candidates and its own header explains why: a refusal costs somebody thirty seconds of triage, a wrong match files one tenant's conversation into another's permanent record with an audit trail saying it was legitimate. `candidatesForEmail` produces the same candidate shape and hands it to the same function, so a tenant live at two properties refuses by email exactly as they do by phone.
+- **A reply key buys precision, not trust.** `hello+<key>@inbound…` names the thread, which is the one thing candidate matching cannot do — it resolves the AMBIGUOUS case that From: matching has to refuse. It is only ever trusted to pick between conversations that already exist, never to create one and never to say who somebody is, and a key naming no thread falls through to From: matching rather than failing.
+- **`Thread.replyKey` is plaintext where every `AuthToken` is hashed.** It has to be rendered into a Reply-To header, so a hash would be useless — and it authenticates nobody. The identity of an inbound email is only as good as its From: header, which is exactly as weak as the caller ID SMS routing has lived with since R-017. Nothing downstream treats an inbound message as authentication for anything.
+- **The quoted tail is cut on the way in, not hidden in the UI.** `Message` is append-only, so a third reply would otherwise store the first two again, for ever, and the transcript a court reads becomes mostly duplicates of itself. The stripper cuts at the first marker and keeps everything above it — top-posting, which loses a bottom-posted reply, named rather than hidden — and **never returns empty**, because "they replied and it was blank" is itself a fact.
+- **Subject lines are never used for matching.** Subject threading is the single commonest way this class of feature puts an unrelated "Re: Maintenance" into somebody else's conversation.
+- **A shared secret rather than a signature on the webhook**, and the difference is stated rather than glossed: Twilio signs its payloads, most inbound-email providers offer only a secret. The mitigation is what the endpoint can do — file a message into an existing conversation or into the unrouted queue, and nothing else. 403 on a bad secret so it is not retried; 503 when unconfigured so it is; 500 on a failure because losing the message means a tenant told us something we never recorded.
+- **An unset inbound domain is a supported state.** Without one, no reply keys are minted and replies route by From: address — R-017's ordinary path. What is lost is thread precision, not the feature.
+
+**Found along the way.** Nothing broken, but two near-misses worth the tests that caught them: a key containing a `+` would have been silently truncated by the obvious `split('+')[1]`, and a lookalike domain would have routed if the host check had been loose. Both have their own test.
+
+**What it left behind.**
+- **No provider is wired.** The webhook parses a normalized payload in one place (D-7's rule), but which provider posts to it is a deployment decision, and `INBOUND_EMAIL_SECRET`/`INBOUND_EMAIL_ADDRESS` are unset by default so the endpoint refuses everything until somebody configures it.
+- **Attachments are dropped.** A tenant photographing a leak and emailing it gets their words filed and their picture discarded silently. R-019 already has the upload path for a maintenance photo; wiring the two together is a real item and nothing owns it.
+- **No inbound-email opt-out.** SMS has `STOP` handling (R-040e) and email has no equivalent here — a tenant replying "stop emailing me" threads like any other message and changes nothing about what we send.
+- **HTML-only email is stored empty.** The route prefers the plain-text part and does not strip HTML, so a client that sent only HTML files a blank message. Better than storing markup, worse than converting it, and the fix is a converter nobody needs yet.

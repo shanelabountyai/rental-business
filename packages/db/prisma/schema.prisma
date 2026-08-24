@@ -4760,7 +4760,21 @@ model TurnoverProject {
 // ---------------------------------------------------------------------------
 
 model Thread {
-  id String @id @default(cuid())
+  id       String  @id @default(cuid())
+  /// R-097a (COMM-08): the opaque label that names this conversation in the
+  /// address a reply is sent to - `hello+<replyKey>@inbound...`.
+  ///
+  /// A ROUTING LABEL, NOT A CREDENTIAL, which is why it is plaintext where
+  /// every `AuthToken` is hashed: it has to be rendered into a Reply-To
+  /// header on the way out, and it authenticates nobody. The identity of an
+  /// inbound email is only as good as its From: header - as weak as the
+  /// caller ID SMS routing has lived with since R-017. What it buys is
+  /// PRECISION: a tenant with tenancies at two properties replying about one
+  /// of them is `decideRoute`'s AMBIGUOUS case, and this says which.
+  ///
+  /// Minted lazily on the first outbound email, so a portfolio that never
+  /// emails never grows one.
+  replyKey String? @unique
 
   /// Deterministic identity, built by packages/core/comms - "tenant:<id>:
   /// property:<id>", "vendor:<id>:property:<id>", "property:<id>".

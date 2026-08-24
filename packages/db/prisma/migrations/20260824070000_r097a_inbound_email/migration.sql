@@ -1,0 +1,23 @@
+-- R-097a (COMM-08): inbound email threading.
+--
+-- ONE COLUMN. The routing decision, the thread model, the append-only
+-- message log and the unrouted triage queue are all R-017's, and email
+-- changes none of them - `decideRoute` already refuses to guess between
+-- candidates and already explains at length why a refusal beats a wrong
+-- match. What email needs that SMS did not is a way to name the THREAD in
+-- the address a reply goes to.
+--
+-- `replyKey` IS A ROUTING LABEL, NOT A CREDENTIAL, and the distinction is
+-- why it is stored in plaintext where every token in `AuthToken` is hashed.
+-- It has to be rendered into a Reply-To header on the way out, so a hash
+-- would be useless; and it authenticates nobody - the identity of an inbound
+-- email is only ever as good as its From: header, which is to say weak, and
+-- exactly as weak as the caller ID that SMS routing has lived with since
+-- R-017. What it buys is PRECISION, not trust: a tenant with tenancies at
+-- two properties replying to an email about one of them is precisely
+-- `decideRoute`'s AMBIGUOUS case, and the key says which conversation it is.
+--
+-- Minted lazily, on the first outbound email in a thread, so a portfolio
+-- that never emails never grows one.
+ALTER TABLE "Thread" ADD COLUMN "replyKey" TEXT;
+CREATE UNIQUE INDEX "Thread_replyKey_key" ON "Thread"("replyKey");

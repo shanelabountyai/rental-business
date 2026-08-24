@@ -93,6 +93,63 @@ export async function propertyForTenant(
  * real thing, and matching it would file a stranger's text into a closed
  * tenancy's record.
  */
+/**
+ * The same question asked of an email address (COMM-08, R-097a).
+ *
+ * ITS OWN FUNCTION RATHER THAN A PARAMETERISED ONE, and the reason is that
+ * the two are not the same query wearing different columns. A phone is
+ * normalised to E.164 before it is compared; an email is compared
+ * case-insensitively and is not normalised at all, because `.` and `+`
+ * handling differs per provider and "helpfully" canonicalising somebody's
+ * address is how two different people become one candidate.
+ *
+ * Everything downstream is shared: the same candidate shape, the same
+ * `decideRoute`, the same refusal to guess. The live-lease filtering and the
+ * distinct-property rule below are `candidatesForPhone`'s, and its comments
+ * explain both - a tenant with two concurrent leases refuses here for
+ * exactly the same reason.
+ */
+export async function candidatesForEmail(address: string, db: Db = prisma) {
+  const email = address.trim().toLowerCase()
+  if (!email) return []
+
+  const [tenants, vendors] = await Promise.all([
+    db.tenant.findMany({
+      where: { email: { equals: email, mode: 'insensitive' }, active: true },
+      select: {
+        id: true,
+        leaseTenants: {
+          where: { lease: { status: { in: ['ACTIVE', 'MONTH_TO_MONTH'] } } },
+          orderBy: { lease: { startsOn: 'desc' } },
+          select: { lease: { select: { propertyId: true } } },
+        },
+      },
+    }),
+    db.vendor.findMany({
+      where: { email: { equals: email, mode: 'insensitive' }, active: true },
+      select: { id: true, workOrders: { take: 1, select: { propertyId: true } } },
+    }),
+  ])
+
+  const candidates: {
+    scope: Extract<ThreadScope, 'TENANT' | 'VENDOR'>
+    partyId: string
+    propertyId: string
+  }[] = []
+
+  for (const tenant of tenants) {
+    for (const propertyId of new Set(tenant.leaseTenants.map((row) => row.lease.propertyId))) {
+      candidates.push({ scope: 'TENANT', partyId: tenant.id, propertyId })
+    }
+  }
+  for (const vendor of vendors) {
+    const propertyId = vendor.workOrders[0]?.propertyId
+    if (propertyId) candidates.push({ scope: 'VENDOR', partyId: vendor.id, propertyId })
+  }
+
+  return candidates
+}
+
 export async function candidatesForPhone(e164: string, db: Db = prisma) {
   const [tenants, vendors] = await Promise.all([
     db.tenant.findMany({
