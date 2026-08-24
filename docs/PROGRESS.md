@@ -3859,7 +3859,7 @@ Two defects of my own in the new spec, and the second is the same shape. The evi
 - **Entry appointments appear only where a work order or showing carries the schedule.** R-027 serves entry notices against those rows, so the calendar follows them — but a notice served for a visit that was never scheduled on a row has nothing to show.
 
 ## R-097a — Inbound email auto-threading
-**Commit:** `pending`  ·  **Date:** 2026-08-24
+**Commit:** `a594ce9`  ·  **Date:** 2026-08-24
 
 **What it built.** `packages/core/comms/email-reply.ts` — plus-addressed reply keys and quoted-tail stripping, 11 tests; `candidatesForEmail`; a reply-key branch in `receiveInboundMessage`; `Thread.replyKey`, minted lazily on the first outbound email; a `replyTo` field threaded through the notification adapter seam; the inbound webhook; 9 database tests.
 
