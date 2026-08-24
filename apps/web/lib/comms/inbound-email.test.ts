@@ -3,6 +3,7 @@ import { prisma } from '@rental/db'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { getPreferences } from '@/lib/notifications/queries.ts'
 import { honourEmailOptOut } from './email-opt-out.ts'
+import { handleInboundEmail } from './email-intake.ts'
 import { receiveInboundMessage } from './messages.ts'
 
 // Inbound email threading against a real database (COMM-08, R-097a).
@@ -24,6 +25,7 @@ const tenantIds: string[] = []
 const leaseIds: string[] = []
 const threadIds: string[] = []
 const documentIds: string[] = []
+const ticketIds: string[] = []
 
 beforeEach(() => {
   process.env.INBOUND_EMAIL_ADDRESS = 'hello@inbound.example.test'
@@ -64,6 +66,7 @@ afterAll(async () => {
     where: { recipientType: 'TENANT', recipientId: { in: tenantIds } },
   })
   await prisma.document.deleteMany({ where: { id: { in: documentIds } } })
+  await prisma.ticket.deleteMany({ where: { id: { in: ticketIds } } })
   await prisma.unroutedMessage.deleteMany({ where: { fromAddress: { contains: 'inmail-' } } })
   await prisma.leaseTenant.deleteMany({ where: { leaseId: { in: leaseIds } } })
   await prisma.lease.deleteMany({ where: { id: { in: leaseIds } } })
@@ -333,5 +336,87 @@ describe('"stop emailing me" (R-097e)', () => {
     if (result.outcome !== 'routed') return
     const message = await prisma.message.findUniqueOrThrow({ where: { id: result.messageId } })
     expect(message.body).toBe('Please stop emailing me.')
+  })
+})
+
+describe('email-to-ticket (R-097f)', () => {
+  const emailFrom = (over: Partial<Parameters<typeof handleInboundEmail>[0]> = {}) =>
+    handleInboundEmail({
+      from: 'nobody@example.test',
+      body: 'The boiler is making a noise.',
+      receivedAt: new Date(),
+      externalId: `msg-${randomUUID()}`,
+      hasReplyKey: false,
+      ...over,
+    })
+
+  it('opens a ticket for an unprompted email, as SMS already does for a text', async () => {
+    const email = `ticket-${randomUUID().slice(0, 8)}@example.test`
+    const tenant = await tenantAt([propertyA], email)
+    const result = await emailFrom({ from: email })
+    expect(result.outcome).toBe('ticket_opened')
+    if (result.outcome !== 'ticket_opened') return
+
+    const ticket = await prisma.ticket.findUniqueOrThrow({ where: { id: result.ticketId } })
+    ticketIds.push(ticket.id)
+    expect(ticket).toMatchObject({
+      source: 'EMAIL',
+      propertyId: propertyA,
+      tenantId: tenant.id,
+      // R-019's structured intake earns a category by ASKING; an email has
+      // answered nothing, and a keyword guess would put a wrong label on a
+      // path with no clarifying prompts to correct it.
+      category: 'UNCATEGORIZED',
+    })
+    expect(ticket.description).toContain('The boiler is making a noise.')
+  })
+
+  it('does NOT open one for a reply, which is the difference from SMS', async () => {
+    // Every "Thursday works" becoming a maintenance ticket would drown the
+    // queue R-023's triage depends on being real.
+    const email = `reply-${randomUUID().slice(0, 8)}@example.test`
+    await tenantAt([propertyA], email)
+    const result = await emailFrom({ from: email, body: 'Thursday works.', hasReplyKey: true })
+    expect(result.outcome).toBe('threaded')
+    expect(await prisma.ticket.count({ where: { description: { contains: 'Thursday works' } } }))
+      .toBe(0)
+  })
+
+  it('does not open one for somebody asking to be unsubscribed', async () => {
+    // A maintenance ticket titled "please unsubscribe me" is the visible half
+    // of getting this wrong.
+    const email = `nokticket-${randomUUID().slice(0, 8)}@example.test`
+    const tenant = await tenantAt([propertyA], email)
+    const result = await emailFrom({ from: email, body: 'Please unsubscribe me.' })
+    expect(result.outcome).toBe('threaded')
+    expect(await prisma.ticket.count({ where: { tenantId: tenant.id } })).toBe(0)
+  })
+
+  it('hangs the photograph off the ticket, so whoever is dispatched can see it', async () => {
+    // Stored against the message by R-097d, which is where it belongs — and
+    // without this the person sent to fix the leak never sees the picture.
+    const email = `photo-t-${randomUUID().slice(0, 8)}@example.test`
+    await tenantAt([propertyA], email)
+    const result = await emailFrom({
+      from: email,
+      attachments: [
+        { fileName: 'leak.jpg', contentType: 'image/jpeg', content: Buffer.alloc(2048, 7) },
+      ],
+    })
+    expect(result.outcome).toBe('ticket_opened')
+    if (result.outcome !== 'ticket_opened') return
+    ticketIds.push(result.ticketId)
+    const documents = await prisma.document.findMany({ where: { ticketId: result.ticketId } })
+    expect(documents).toHaveLength(1)
+    documentIds.push(documents[0]!.id)
+  })
+
+  it('never opens a ticket for a message nobody could route', async () => {
+    // A ticket has to belong to a property and a tenant, and inventing
+    // either is exactly what decideRoute refuses to do.
+    const before = await prisma.ticket.count()
+    const result = await emailFrom({ from: `nobody-${randomUUID().slice(0, 8)}@example.test` })
+    expect(result.outcome).toBe('unrouted')
+    expect(await prisma.ticket.count()).toBe(before)
   })
 })

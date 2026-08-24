@@ -83,3 +83,84 @@ export function formatSmsTicketDescription(body: string): string {
     'Sent by text message. The tenant has not answered any clarifying questions, and may not use the portal — reply by text.',
   ].join('\n')
 }
+
+// ---------------------------------------------------------------------------
+// Email intake (COMM-08, MAINT-01; R-097f)
+// ---------------------------------------------------------------------------
+
+/**
+ * How long after we emailed somebody a message from them still reads as a
+ * REPLY rather than as a new report.
+ *
+ * Fourteen days. Long enough that a slow answer to "can we come Thursday?"
+ * is still an answer; short enough that an email three months after the last
+ * one is a person telling us something new.
+ */
+export const REPLY_WINDOW_DAYS = 14
+
+export interface EmailIntakeFacts {
+  /// The message arrived addressed to a thread's own reply key, which is
+  /// proof rather than inference: they hit reply on something we sent.
+  hasReplyKey: boolean
+  /// When we last emailed into this conversation, if ever.
+  lastOutboundAt: Date | null
+  now: Date
+}
+
+/**
+ * Whether an inbound email opens a maintenance ticket.
+ *
+ * ==========================================================================
+ * THE SAME QUESTION AS `decideSmsIntake`, WITH ONE MORE ANSWER, AND THE
+ * DIFFERENCE IS NOT COSMETIC.
+ *
+ * A text message to a landlord is almost always a report: nobody texts their
+ * property manager to say "thanks". Email is a conversation - "Thursday
+ * works", "no problem", "see attached" - so applying the SMS rule verbatim
+ * would open a maintenance ticket for every "ok, thanks" and drown the queue
+ * that R-023's triage depends on being real.
+ *
+ * A REPLY IS NOT A REPORT, and that is decided on EVIDENCE rather than on
+ * what the words look like. This codebase refuses keyword-guessing at intake
+ * on principle - `formatSmsTicketDescription`'s own comment says a guessed
+ * category is worse on the one path with no clarifying prompts to correct it
+ * - and guessing "is this a complaint?" from prose would be the same mistake
+ * one level up. What counts instead is: did they reply to something of ours?
+ * The reply key answers it outright, and recent outbound in the same
+ * conversation answers it well enough when a mail system stripped the key.
+ * ==========================================================================
+ */
+export function decideEmailIntake(
+  openTickets: readonly { id: string; status: string }[],
+  facts: EmailIntakeFacts,
+): SmsIntakeDecision {
+  const existing = decideSmsIntake(openTickets)
+  if (existing.outcome === 'thread_only') return existing
+
+  if (facts.hasReplyKey) {
+    return { outcome: 'thread_only', existingTicketId: '' }
+  }
+  if (facts.lastOutboundAt) {
+    const age = facts.now.getTime() - facts.lastOutboundAt.getTime()
+    if (age <= REPLY_WINDOW_DAYS * 24 * 60 * 60_000) {
+      return { outcome: 'thread_only', existingTicketId: '' }
+    }
+  }
+  return { outcome: 'open_ticket' }
+}
+
+/**
+ * The description a ticket opened from an email carries.
+ *
+ * Same shape as the text version and a different closing line, because the
+ * thing whoever triages it needs to know is different: an emailer CAN be
+ * asked a follow-up question, at length, and may well have attached a
+ * photograph.
+ */
+export function formatEmailTicketDescription(body: string): string {
+  return [
+    body.trim(),
+    '',
+    'Sent by email. The tenant has not answered any clarifying questions — reply by email, and check the conversation for anything they attached.',
+  ].join('\n')
+}

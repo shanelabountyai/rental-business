@@ -1,7 +1,9 @@
 import { createHmac } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
 import {
+  decideEmailIntake,
   decideSmsIntake,
+  formatEmailTicketDescription,
   formatSmsTicketDescription,
   isOpenTicketStatus,
   verifyTwilioSignature,
@@ -227,5 +229,55 @@ describe('formatSmsTicketDescription', () => {
     // portal the tenant has never opened is not a reply.
     const text = formatSmsTicketDescription('no hot water')
     expect(text).toContain('reply by text')
+  })
+})
+
+describe('email intake (R-097f)', () => {
+  const NOW = new Date('2026-09-01T12:00:00Z')
+  const fresh = { hasReplyKey: false, lastOutboundAt: null, now: NOW }
+
+  it('opens a ticket for an unprompted email from somebody with nothing open', () => {
+    expect(decideEmailIntake([], fresh)).toEqual({ outcome: 'open_ticket' })
+  })
+
+  it('does NOT open one for a reply, which is the whole difference from SMS', () => {
+    // Nobody texts their property manager to say "thanks", but email is a
+    // conversation - and opening a ticket for every "ok, that works" would
+    // drown the queue R-023's triage depends on being real.
+    expect(decideEmailIntake([], { ...fresh, hasReplyKey: true }).outcome).toBe('thread_only')
+  })
+
+  it('treats recent outbound as evidence of a reply when the key was stripped', () => {
+    // Some corporate mail systems strip `+tags`. The conversation still says
+    // we wrote to them last week.
+    expect(
+      decideEmailIntake([], {
+        ...fresh,
+        lastOutboundAt: new Date('2026-08-28T09:00:00Z'),
+      }).outcome,
+    ).toBe('thread_only')
+  })
+
+  it('opens one again once the conversation has gone quiet', () => {
+    // Three months after the last exchange is a person telling us something
+    // new, not answering an old question.
+    expect(
+      decideEmailIntake([], {
+        ...fresh,
+        lastOutboundAt: new Date('2026-06-01T09:00:00Z'),
+      }).outcome,
+    ).toBe('open_ticket')
+  })
+
+  it('still defers to an already-open ticket, exactly as SMS does', () => {
+    const decision = decideEmailIntake([{ id: 'tkt_1', status: 'NEW' }], fresh)
+    expect(decision).toEqual({ outcome: 'thread_only', existingTicketId: 'tkt_1' })
+  })
+
+  it('tells whoever triages it that they can ask a follow-up, and to look for an attachment', () => {
+    const description = formatEmailTicketDescription('The boiler is making a noise.')
+    expect(description.startsWith('The boiler is making a noise.')).toBe(true)
+    expect(description).toContain('reply by email')
+    expect(description).toContain('attached')
   })
 })

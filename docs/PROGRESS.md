@@ -3927,3 +3927,25 @@ Two defects of my own in the new spec, and the second is the same shape. The evi
 - **No way back except replying.** The confirmation says to reply and somebody will turn them on again; there is no one-click resubscribe link, which would need another token purpose. A staff member has to act on the reply.
 - **Nothing tells staff it happened.** The preferences change and the confirmation goes out, but no task is raised and the thread shows only the tenant's own message. Whoever wants "who has muted us" needs a report, and none exists.
 - **A guarantor cannot opt out this way.** Routing resolves a tenant or a vendor, and a guarantor emailing in is unrouted — so their request lands in triage like any other unmatched message.
+
+## R-097f — Email opens maintenance tickets
+**Commit:** `pending`  ·  **Date:** 2026-08-24
+
+**What it built.** `decideEmailIntake` and `formatEmailTicketDescription` in core with 6 tests; `email-intake.ts`, the sibling of `sms-intake.ts`; the webhook rewired through it; emailed attachments now hung off the ticket as well as the message; 5 more database tests.
+
+**Why it existed.** R-021 has turned an inbound text from a tenant into a maintenance ticket since the MVP. Email did none of it — somebody emailing "my boiler is broken" got a threaded conversation and nothing in anybody's work queue. `TicketSource.EMAIL` has existed in the schema the whole time with nothing writing it.
+
+**What it decided.** Recorded as **D-128**.
+
+- **R-021's shape verbatim, including the ordering.** Thread first through `receiveInboundMessage`, then consider a ticket — because a message that cannot be routed must never open one. A ticket has to belong to a property and a tenant, and inventing either is exactly what `decideRoute` refuses to do. A test asserts an unroutable email opens nothing.
+- **The one real difference is that email is a conversation.** Nobody texts their property manager to say "thanks", so R-021's rule — any text from a tenant with nothing open becomes a ticket — is right for SMS. Applied verbatim to email, every "Thursday works" becomes a maintenance ticket and the triage queue R-023 depends on stops being real.
+- **The distinction is drawn on evidence, never on what the words look like.** A reply key is proof they hit reply on something of ours; recent outbound in the same conversation is good enough when a corporate mail system stripped the tag. Guessing "is this a complaint?" from prose would be the same mistake `formatSmsTicketDescription` already refuses one level down, where it declines to guess a *category* because a wrong label on the one intake path with no clarifying prompts is worse than no label. Fourteen days for the reply window, stated where it is defined: long enough that a slow answer is still an answer, short enough that an email three months later is somebody telling us something new.
+- **An opt-out is not a repair.** R-097e's check runs before the ticket decision, because a maintenance ticket titled "please unsubscribe me" is the visible half of getting that wrong.
+- **The photograph is hung off the ticket, not only the message.** R-097d stored it against the message, which is where it belongs; without this the person dispatched to fix the leak never sees the picture.
+- **The description tells triage something different from the SMS one.** An emailer *can* be asked a follow-up question, at length, and may well have attached something — so the closing line says to reply by email and check the conversation, where the text version says to reply by text and warns the sender may never open the portal.
+
+**What it left behind.**
+- **No category, deliberately**, matching SMS. R-023's triage assigns it from a human reading the words, and R-019's structured intake is the only path that earns one by asking.
+- **The reply window is a constant, not configuration.** Fourteen days is a guess with reasoning attached rather than a measurement; if a portfolio finds it wrong, it is one number in core with a test beside it.
+- **A vendor emailing about a job opens nothing**, matching SMS — their messages thread and stop there. R-025's magic link is the vendor's real surface, and a vendor saying "running late" is not a maintenance request from a tenant.
+- **Nothing links an emailed ticket back to the message thread on screen.** The ticket carries the tenant's words in its description and the photo is attached, but a reader on the ticket cannot jump to the conversation. R-032's `WorkOrderMessageLink` is the shape that would fix it.

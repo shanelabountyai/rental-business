@@ -1,9 +1,8 @@
 import { timingSafeEqual } from 'node:crypto'
-import { htmlToText, isEmailOptOutRequest, stripQuotedReply } from '@rental/core/comms'
-import { honourEmailOptOut } from '@/lib/comms/email-opt-out.ts'
-import { prisma } from '@rental/db'
+import { extractReplyKey, htmlToText, stripQuotedReply } from '@rental/core/comms'
+import { handleInboundEmail } from '@/lib/comms/email-intake.ts'
+import { inboundEmailConfig } from '@/lib/comms/inbound-email-config.ts'
 import type { InboundAttachment } from '@/lib/comms/inbound-attachments.ts'
-import { receiveInboundMessage } from '@/lib/comms/messages.ts'
 
 // The inbound-email webhook (COMM-08, R-097a).
 //
@@ -138,10 +137,18 @@ export async function POST(request: Request) {
   // almost every marketing email ever sent has "unsubscribe" in its footer,
   // so a reply quoting one would otherwise opt somebody out every time.
   const strippedBody = stripQuotedReply(body)
+  const recipients = addresses(payload.to, payload.cc, payload.recipient)
+  const inbound = inboundEmailConfig()
+  const hasReplyKey =
+    inbound != null &&
+    extractReplyKey({
+      recipients,
+      inboundLocalPart: inbound.localPart,
+      inboundDomain: inbound.domain,
+    }) != null
 
   try {
-    const result = await receiveInboundMessage({
-      channel: 'EMAIL',
+    const result = await handleInboundEmail({
       from,
       // The quoted tail is cut rather than stored and hidden in the UI:
       // `Message` is append-only, so a third reply would otherwise store the
@@ -152,16 +159,12 @@ export async function POST(request: Request) {
       // Providers retry; this makes a redelivery a no-op rather than a
       // second copy in somebody's history.
       externalId: payload.messageId ?? payload['message-id'] ?? null,
-      recipients: addresses(payload.to, payload.cc, payload.recipient),
+      recipients,
       attachments: parseAttachments(payload),
+      // Proof they hit reply on something of ours, which is what stops every
+      // "Thursday works" opening a maintenance ticket (R-097f).
+      hasReplyKey,
     })
-    // R-097e. AFTER the message is filed, always. The tenant said what they
-    // said and that is recorded whatever happens next - and an opt-out is a
-    // fact about the conversation, so the message stays in it rather than
-    // being swallowed by the command, exactly as R-040e keeps a `STOP` text.
-    if (result.outcome === 'routed' && isEmailOptOutRequest(strippedBody)) {
-      await honourOptOutFor(result.messageId, from)
-    }
     return Response.json({ outcome: result.outcome }, { status: 200 })
   } catch (error) {
     // 500 so the provider retries: the message is real and losing it means a
@@ -171,24 +174,3 @@ export async function POST(request: Request) {
   }
 }
 
-/// The recipient behind a routed message, and their opt-out applied. Read
-/// back from the message rather than passed down, because
-/// `receiveInboundMessage` is the one place that decided WHO this was, and a
-/// second guess here would be a second answer to the question `decideRoute`
-/// exists to answer once.
-async function honourOptOutFor(messageId: string, fromAddress: string): Promise<void> {
-  try {
-    const message = await prisma.message.findUnique({
-      where: { id: messageId },
-      select: { tenantId: true, vendorId: true },
-    })
-    if (message?.tenantId) {
-      await honourEmailOptOut('TENANT', message.tenantId, fromAddress)
-    } else if (message?.vendorId) {
-      await honourEmailOptOut('VENDOR', message.vendorId, fromAddress)
-    }
-  } catch (error) {
-    // Never costs the message, which is already filed.
-    console.error(`[inbound-email] could not honour an opt-out on ${messageId}`, error)
-  }
-}
