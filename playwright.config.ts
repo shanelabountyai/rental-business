@@ -44,6 +44,25 @@ process.env.TWILIO_AUTH_TOKEN ??= TEST_TWILIO_AUTH_TOKEN
 const TEST_STRIPE_WEBHOOK_SECRET = 'whsec_test-only-not-a-real-stripe-secret'
 process.env.STRIPE_WEBHOOK_SECRET ??= TEST_STRIPE_WEBHOOK_SECRET
 
+/**
+ * And the same again for the inbound-email webhook (R-097a, COMM-08).
+ *
+ * That route takes a shared secret rather than a signature, and refuses
+ * EVERYTHING with a 503 when the variable is unset - which is correct, and
+ * which would let e2e/golden-path-4.spec.ts's whole email leg "pass" having
+ * proved nothing, exactly as the Twilio one above would.
+ *
+ * INBOUND_EMAIL_ADDRESS is deliberately NOT set here. Setting it would put a
+ * `Reply-To: hello+<key>@...` on every outbound email the suite sends, which
+ * is a change to a surface dozens of other specs assert on - and the walk
+ * wants the From:-matching path anyway, since that is the one a stranger
+ * emailing us cold actually takes.
+ *
+ * Not a secret, and deliberately does not look like one.
+ */
+const TEST_INBOUND_EMAIL_SECRET = 'test-only-not-a-real-inbound-email-secret'
+process.env.INBOUND_EMAIL_SECRET ??= TEST_INBOUND_EMAIL_SECRET
+
 export default defineConfig({
   testDir: './e2e',
   fullyParallel: true,
@@ -158,6 +177,8 @@ export default defineConfig({
       TWILIO_AUTH_TOKEN: process.env.TWILIO_AUTH_TOKEN ?? TEST_TWILIO_AUTH_TOKEN,
       STRIPE_WEBHOOK_SECRET:
         process.env.STRIPE_WEBHOOK_SECRET ?? TEST_STRIPE_WEBHOOK_SECRET,
+      INBOUND_EMAIL_SECRET:
+        process.env.INBOUND_EMAIL_SECRET ?? TEST_INBOUND_EMAIL_SECRET,
     },
     url: baseURL,
     reuseExistingServer: !process.env.CI,
