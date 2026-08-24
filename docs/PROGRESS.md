@@ -3820,7 +3820,7 @@ Two defects of my own in the new spec, and the second is the same shape. The evi
 - **The replacement codes are shown once and nowhere else.** If the page is closed before they are read out, the only route back is revoking and re-issuing from the tenancy, which is a second pair of acts. A reveal path for `TenantLockCode` (the audited `accesscode.reveal` shape) does not exist yet.
 
 ## R-097 — Split during planning
-**Commit:** `pending`  ·  **Date:** 2026-08-24
+**Commit:** `ad0d349`  ·  **Date:** 2026-08-24
 
 **What it did.** Planning only, no code. R-097 was an XL bundle the backlog itself marked "split before starting". It became three rows and two cuts, recorded as **D-121**.
 
