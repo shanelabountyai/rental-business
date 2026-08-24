@@ -3664,7 +3664,7 @@ Two defects of my own in the new spec, and the second is the same shape. The evi
 - **Nothing stops a `DO_NOT_CONTACT` hold from being the tell.** R-084's holds render a banner on the lease page for anybody with `lease.read`. A case does not place one, deliberately, but an operator who places one by hand has disclosed that something is going on. Not fixable here — it is a property of the hold banner — and no item owns it.
 
 ## R-103 — The resource-less guard, swept and fenced
-**Commit:** `PENDING`  ·  **Date:** 2026-08-24
+**Commit:** `0166a7f`  ·  **Date:** 2026-08-24
 
 **What it built.** 21 call sites across 18 files moved from `requirePermission(p)` to `requireScope(p)`; a second block in `apps/web/app/route-guards.test.ts` that fails the build on any resource-less `requirePermission` under `app/` or `lib/` unless the file carries a written exemption; and an e2e in `route-boundaries.spec.ts` that signs in a property-scoped manager and opens all nine sections their role covers.
 
