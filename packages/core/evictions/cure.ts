@@ -12,6 +12,29 @@
 import { addBusinessDays, type BusinessDate } from '../scheduling/local-time.ts'
 
 /**
+ * The notice types that can start a cure period, and so the types an eviction
+ * case will accept (D-148).
+ *
+ * ONE LIST, READ BY BOTH SIDES, and that is the whole reason it is here
+ * rather than inline. `attachableNotices` offered a type the cure clock then
+ * ignored, so a case could be handed a served notice and still report
+ * "Notice not yet served" - on the same screen showing the notice. The demo
+ * walk found it holding exactly the notice Texas actually uses.
+ *
+ * `NOTICE_TO_VACATE` is on this list because Tex. Prop. Code 24.005 names the
+ * non-payment instrument that way: there is no separate "pay or quit" to
+ * serve in this product's own default jurisdiction, and the TX rule already
+ * models 24.005's three days as `payOrQuitDays`. An operator picking the type
+ * their statute names must not dead-end.
+ *
+ * It costs nothing where both types exist. The clock runs from the EARLIEST
+ * good service, so in a state that serves pay-or-quit first and a notice to
+ * vacate after the cure period lapses, the earlier PAY_OR_QUIT still sets the
+ * date and the later notice cannot move it.
+ */
+export const CURE_NOTICE_TYPES: readonly string[] = ['PAY_OR_QUIT', 'NOTICE_TO_VACATE']
+
+/**
  * One recorded service event, as R-051 stored it.
  *
  * `permittedByJurisdiction` is THREE-VALUED and the middle value is the whole
@@ -140,7 +163,7 @@ export function readyToFile(clock: CureClock, hasNotice: boolean): FilingReadine
 }
 
 export const FILING_REFUSAL_MESSAGES: Record<FilingRefusal, string> = {
-  no_case_notice: 'Attach the pay-or-quit notice to this case before recording a filing.',
+  no_case_notice: 'Attach the served notice to this case before recording a filing.',
   not_served: 'The notice has not been served yet. Record the service and its proof first.',
   defective_service:
     'Every recorded service used a method this state does not name for this notice. Serve again by a method it does name — filing on defective service is how a case gets dismissed and started over.',

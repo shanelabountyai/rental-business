@@ -51,6 +51,12 @@ export default async function DepositDispositionPage({
         >
           ← Lease
         </Link>
+        {/* A page with no h1 is a page a screen-reader user cannot orient in,
+            and this branch had none - the heading lived only in the branch
+            below it. Found by the Milestone 10 demo walk. */}
+        <h1 className="text-2xl font-semibold tracking-tight">
+          Deposit disposition — {lease.property.name} {lease.unit.name}
+        </h1>
         <p className="text-muted-foreground text-sm">
           This lease holds no deposit - there is nothing to dispose of.
         </p>

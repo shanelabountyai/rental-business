@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { cureClock, type ServiceEvent } from '@rental/core/evictions'
+import { CURE_NOTICE_TYPES, cureClock, type ServiceEvent } from '@rental/core/evictions'
 import { businessDate, utcToBusinessDate } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { rulesFor } from '@/lib/jurisdiction/queries.ts'
@@ -64,7 +64,7 @@ export async function getEvictionCase(id: string, scope: ResolvedScope) {
 export type EvictionCaseDetail = NonNullable<Awaited<ReturnType<typeof getEvictionCase>>>
 
 /**
- * The cure clock for a case, read from the pay-or-quit notices filed under
+ * The cure clock for a case, read from the cure-starting notices filed under
  * it and the jurisdiction's own configured period.
  *
  * The jurisdiction rule is resolved the same way every other legal lookup in
@@ -85,10 +85,12 @@ export async function cureClockFor(evictionCase: EvictionCaseDetail) {
     payOrQuitDays = null
   }
 
-  // Only PAY_OR_QUIT starts a cure period. A notice to vacate filed under the
-  // same case runs a different clock and must not be mistaken for this one.
+  // `CURE_NOTICE_TYPES` is the one list, shared with `attachableNotices`
+  // below (D-148). It used to read PAY_OR_QUIT alone while the picker offered
+  // both, so a case holding a served Texas notice to vacate reported "Notice
+  // not yet served" and could never be filed.
   const services: ServiceEvent[] = evictionCase.notices
-    .filter((notice) => notice.type === 'PAY_OR_QUIT')
+    .filter((notice) => CURE_NOTICE_TYPES.includes(notice.type))
     .flatMap((notice) =>
       notice.deliveries.map((delivery) => ({
         servedOn: utcToBusinessDate(delivery.servedAt),
@@ -96,19 +98,23 @@ export async function cureClockFor(evictionCase: EvictionCaseDetail) {
       })),
     )
 
-  const hasNotice = evictionCase.notices.some((notice) => notice.type === 'PAY_OR_QUIT')
+  const hasNotice = evictionCase.notices.some((notice) => CURE_NOTICE_TYPES.includes(notice.type))
   const today = businessDate(new Date(), evictionCase.property.timezone)
 
   return { clock: cureClock(services, payOrQuitDays, today), hasNotice }
 }
 
-/// Pay-or-quit notices on this lease that are not yet filed under any case -
-/// what the "attach a notice" picker offers. A notice already attached to
-/// another case is deliberately absent: one served notice belongs to one
+/// Notices on this lease that could start a cure period and are not yet filed
+/// under any case - what the "attach a notice" picker offers. The types come
+/// from `CURE_NOTICE_TYPES` rather than a literal, because a type this picker
+/// offers and the cure clock ignores is a case that can never be filed
+/// (D-148).
+///
+/// A notice already attached to another case is deliberately absent: one served notice belongs to one
 /// case, and the same notice supporting two filings is not evidence.
 export async function attachableNotices(leaseId: string) {
   return prisma.notice.findMany({
-    where: { leaseId, evictionCaseId: null, type: { in: ['PAY_OR_QUIT', 'NOTICE_TO_VACATE'] } },
+    where: { leaseId, evictionCaseId: null, type: { in: [...CURE_NOTICE_TYPES] } },
     orderBy: { generatedAt: 'desc' },
     select: { id: true, type: true, generatedAt: true, servedAt: true },
   })

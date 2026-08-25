@@ -3,10 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev -p ${PORT:-3100}",
     "build": "next build",
     "vercel-build": "npx prisma generate --schema ../../packages/db/prisma/schema.prisma && next build",
-    "start": "next start",
+    "start": "next start -p ${PORT:-3100}",
     "lint": "eslint",
     "typecheck": "tsc --noEmit"
   },

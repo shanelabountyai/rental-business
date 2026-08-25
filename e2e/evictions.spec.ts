@@ -76,13 +76,19 @@ async function seedTenancy() {
 /// (`permittedByJurisdiction`) - the fact this whole item consumes rather
 /// than recomputes.
 async function seedServedNotice(
-  args: { propertyId: string; leaseId: string; servedAt: Date; permitted: boolean | null },
+  args: {
+    propertyId: string
+    leaseId: string
+    servedAt: Date
+    permitted: boolean | null
+    type?: string
+  },
 ) {
   const notice = await prisma.notice.create({
     data: {
       propertyId: args.propertyId,
       leaseId: args.leaseId,
-      type: 'PAY_OR_QUIT',
+      type: args.type ?? 'PAY_OR_QUIT',
       addressOfRecord: '4 Courthouse Way, Houston, TX 77002',
       serviceMethod: 'PERSONAL',
       servedAt: args.servedAt,
@@ -159,6 +165,41 @@ test('THE GATE: a filing is refused while the cure period is still running', asy
   await expect(page.getByText(/cure period has not run out yet/i)).toBeVisible()
   // The control to record a filing is not offered at all while the clock runs.
   await expect(page.getByRole('button', { name: 'Record the filing' })).toHaveCount(0)
+})
+
+// D-148. Texas has no separate "pay or quit" to serve: Tex. Prop. Code 24.005
+// names the non-payment instrument a NOTICE TO VACATE, and the TX rule models
+// its three days as `payOrQuitDays`. The picker offered that type and the cure
+// clock counted only PAY_OR_QUIT, so a case holding the notice Texas actually
+// uses reported "Notice not yet served" - with the served notice listed on the
+// same screen - and could never be filed. Found by the Milestone 10 demo walk,
+// on the demo's own eviction case.
+test('a Texas notice to vacate runs the cure clock, and is offered to attach', async ({ page }) => {
+  const { property, unit, lease } = await seedTenancy()
+  const staff = await seedOwner()
+  const evictionCase = await openCaseFor(lease.id, staff.id, property.id, unit.id)
+  const notice = await seedServedNotice({
+    propertyId: property.id,
+    leaseId: lease.id,
+    servedAt: new Date(),
+    permitted: true,
+    type: 'NOTICE_TO_VACATE',
+  })
+
+  await signIn(page, staff.email)
+
+  // Unattached, it is what the picker offers - the half that used to agree.
+  // Counted rather than asserted VISIBLE: it is an <option> inside a closed
+  // <select>, which Playwright correctly reports as hidden.
+  await page.goto(`/evictions/${evictionCase.id}`)
+  await expect(page.locator('option', { hasText: 'Notice to vacate' })).toHaveCount(1)
+
+  await prisma.notice.update({ where: { id: notice.id }, data: { evictionCaseId: evictionCase.id } })
+  await page.goto(`/evictions/${evictionCase.id}`)
+
+  // Attached, the clock now runs from it rather than reporting no service.
+  await expect(page.getByText(/Cure period running/)).toBeVisible()
+  await expect(page.getByText(/Notice not yet served/)).toHaveCount(0)
 })
 
 test('THE GATE: defective service runs no clock and blocks filing however long ago it was', async ({ page }) => {

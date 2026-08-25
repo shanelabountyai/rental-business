@@ -1,7 +1,15 @@
-import { OPEN_TICKET_STATUSES } from '@rental/core/comms'
+import { OPEN_TICKET_STATUSES, unknownMergeFields } from '@rental/core/comms'
 import { OPEN_WORK_ORDER_STATUSES } from '@rental/core/workorders'
 import { describe, expect, it } from 'vitest'
-import { COMPLIANCE, LEASING, MAINTENANCE, MONEY, buildPlan } from './demo-seed.mts'
+import {
+  COMPLIANCE,
+  LEASING,
+  MAINTENANCE,
+  MESSAGE_TEMPLATE_BODY,
+  MESSAGE_TEMPLATE_SUBJECT,
+  MONEY,
+  buildPlan,
+} from './demo-seed.mts'
 
 // Importing this module must never touch a database - see the file's own
 // `pathToFileURL` guard. If that guard regresses, this test hangs or throws
@@ -341,5 +349,18 @@ describe('the money story is internally consistent', () => {
     for (const plan of inFlight) {
       expect(plan.inFlight!.amountCents).toBeGreaterThan(0)
     }
+  })
+})
+
+// ---- The reusable templates (Milestone 10 demo walk) ----
+
+describe('the demo message template can actually be sent', () => {
+  it('uses only merge fields core knows about', () => {
+    // `MERGE_FIELDS` is a CLOSED catalogue and `renderTemplate` refuses an
+    // unknown key AT SEND TIME - so a typo here seeds a template that looks
+    // right on `/messages/templates`, previews right, and fails the first
+    // time somebody sends from it in front of an audience.
+    expect(unknownMergeFields(MESSAGE_TEMPLATE_SUBJECT)).toEqual([])
+    expect(unknownMergeFields(MESSAGE_TEMPLATE_BODY)).toEqual([])
   })
 })

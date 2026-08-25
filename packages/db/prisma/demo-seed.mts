@@ -61,6 +61,33 @@ const VENDOR_NAMES = [
   'Ridgeway Handyman Services',
 ] as const
 
+/// The reusable checklist `/inspections/new` refuses to work without, and the
+/// message template `/messages/templates` opens empty without. Named here for
+/// the same reason `VENDOR_NAMES` is: `reset()` finds what it owns BY NAME.
+///
+/// Both screens were dead ends in the demo until the Milestone 10 walk opened
+/// them - the inspections one visibly so, since "New inspection" answers "No
+/// checklists yet. Build one first." while two walked inspections sit on the
+/// list behind it. The seed built those from inline item plans and never
+/// created the template a human would have had to build first.
+const INSPECTION_TEMPLATE_NAME = 'Standard interior walk'
+const MESSAGE_TEMPLATE_NAME = 'Rent reminder'
+
+/// Exported so `demo-seed.test.ts` can hold them against core's CLOSED
+/// merge-field catalogue. A `{{tenant.frist_name}}` here is refused at SEND
+/// time, not at seed time - so the demo would ship a template that looks
+/// perfect on the templates screen and fails in front of somebody.
+export const MESSAGE_TEMPLATE_SUBJECT = 'Rent for {{property.name}} is due {{balance.due_on}}'
+export const MESSAGE_TEMPLATE_BODY = [
+  'Hi {{tenant.first_name}},',
+  '',
+  'This is a reminder that {{lease.rent}} of rent for {{property.name}} {{unit.name}} is due on {{balance.due_on}}. You currently owe {{balance.total}}.',
+  '',
+  'You can pay from your portal, or call us on {{company.phone}} if something has changed.',
+  '',
+  '{{company.name}}',
+].join('\n')
+
 const PM_TEMPLATE_NAMES = [
   'HVAC filter replacement',
   'Gutter clearing',
@@ -228,6 +255,17 @@ async function reset() {
   await prisma.complianceItem.deleteMany({
     where: { OR: [{ propertyId: { in: propertyIds } }, { legalEntityId: { in: entityIds } }] },
   })
+
+  // ---- TASKS, also always deleted, on BOTH branches ----
+  //
+  // Same test as the compliance items above: a `Task` is machine bookkeeping,
+  // not evidence - D-9 draws that line itself, and none of the types this
+  // seed writes is in `AUDITED_TASK_TYPES`. It goes on the sticky branch too,
+  // deliberately: a retired property keeps its inspections and its notices
+  // because they are the record, but a task is a thing somebody is being
+  // asked to DO, and "chase the vendor at a property that no longer exists"
+  // is not something to leave on anybody's day.
+  await prisma.task.deleteMany({ where: { propertyId: { in: propertyIds } } })
 
   const stamp = new Date().toISOString().slice(0, 16)
 
@@ -445,11 +483,18 @@ async function reset() {
   // Attempted unconditionally and skipped on a foreign-key refusal would be
   // the shorter code and the wrong code: it would hide a real constraint
   // behind a swallowed error.
+  // The message template goes unconditionally: nothing in this seed sends
+  // from it, so no surviving row can be pointing at it. The CHECKLIST cannot -
+  // every seeded inspection names it, and a retired property keeps its
+  // inspections, so it belongs with the vendors below.
+  await prisma.messageTemplate.deleteMany({ where: { name: MESSAGE_TEMPLATE_NAME } })
+
   if (stickyProperties.length === 0) {
     await prisma.preventiveMaintenanceTemplate.deleteMany({
       where: { name: { in: [...PM_TEMPLATE_NAMES] } },
     })
     await prisma.vendor.deleteMany({ where: { name: { in: [...VENDOR_NAMES] } } })
+    await prisma.inspectionTemplate.deleteMany({ where: { name: INSPECTION_TEMPLATE_NAME } })
   } else {
     // RETIRED THE SAME WAY PROPERTIES ARE - deactivated AND RENAMED, and the
     // rename is the half that is easy to skip and wrong to skip. `reset()`
@@ -474,6 +519,18 @@ async function reset() {
       await prisma.preventiveMaintenanceTemplate.update({
         where: { id: template.id },
         data: { active: false, name: `${template.name} (retired ${stamp})` },
+      })
+    }
+    // Renamed as well as deactivated, and `defaultForType` cleared too - that
+    // column is UNIQUE, so a retired checklist still holding PERIODIC would
+    // refuse the next run's own template rather than the next run's delete.
+    for (const template of await prisma.inspectionTemplate.findMany({
+      where: { name: INSPECTION_TEMPLATE_NAME },
+      select: { id: true, name: true },
+    })) {
+      await prisma.inspectionTemplate.update({
+        where: { id: template.id },
+        data: { active: false, defaultForType: null, name: `${template.name} (retired ${stamp})` },
       })
     }
   }
@@ -1420,6 +1477,11 @@ interface SeedContext {
   staffId: string
   vendorRows: { id: string; name: string }[]
   pmTemplateRows: { id: string }[]
+  /// The reusable checklist every seeded inspection was walked from. Null is
+  /// a legal value on `Inspection.templateId` - a one-off walk needs no
+  /// template - but a demo where every inspection is a one-off never shows
+  /// what a checklist is for.
+  inspectionTemplateId: string
   vendorLinks: { vendor: string; scope: string; url: string }[]
 }
 
@@ -1659,6 +1721,7 @@ async function seedInspection(plan: InspectionPlan, context: SeedContext) {
       unitId: context.unitId,
       leaseId: context.leaseId,
       type: plan.type,
+      templateId: context.inspectionTemplateId,
       scheduledFor: when,
       performedAt: plan.performed ? when : null,
       performedByStaffId: plan.performed ? context.staffId : null,
@@ -1682,6 +1745,124 @@ async function seedInspection(plan: InspectionPlan, context: SeedContext) {
       order,
     })),
   })
+}
+
+/**
+ * The staff work queue (D-9), derived rather than written down.
+ *
+ * `/tasks` - "My day", the screen a PM opens first - was the emptiest screen
+ * in the whole demo when the Milestone 10 walk went looking: zero tasks, a
+ * portfolio roll-up of six properties by three columns of zeroes, and the one
+ * queue this product deliberately has only one of.
+ *
+ * DERIVED FROM WHAT THE OTHER STORIES ALREADY BUILT, never a fourth hand-
+ * written map. A task is a thing somebody has to DO about a row that exists,
+ * so inventing them beside the rows would let the two drift - a task naming a
+ * work order the maintenance story stopped seeding is exactly the kind of
+ * demo bug nobody finds until they are standing in front of somebody.
+ *
+ * Written with `prisma.task.create` rather than through `createTask()`, which
+ * is `server-only` and behind the same wall as the billing pipeline. The one
+ * thing that helper does which matters here is the date: `businessDate` is
+ * `@db.Date`, and `daysFrom()` already returns UTC midnight, which is what a
+ * calendar day has to be in that column (never a zone-converted instant).
+ */
+async function seedTasks(staffId: string, propertyIds: readonly string[]): Promise<number> {
+  const rows: {
+    propertyId: string
+    type: string
+    subjectType: string
+    subjectId: string
+    businessDate: Date
+    priority: 'EMERGENCY' | 'URGENT' | 'ROUTINE'
+    title: string
+  }[] = []
+
+  const workOrders = await prisma.workOrder.findMany({
+    where: { propertyId: { in: [...propertyIds] } },
+    select: { id: true, propertyId: true, status: true, priority: true, scope: true },
+  })
+  for (const workOrder of workOrders) {
+    // A short subject line, because `Task.title` is read in a list of a dozen
+    // and a work order's `scope` is a paragraph of instructions to a vendor.
+    const what = workOrder.scope.split(/[;.]/)[0]!.trim().slice(0, 60)
+    if (workOrder.status === 'ASSIGNED') {
+      rows.push({
+        propertyId: workOrder.propertyId,
+        type: 'workorder_schedule',
+        subjectType: 'WorkOrder',
+        subjectId: workOrder.id,
+        businessDate: daysFrom(0),
+        priority: workOrder.priority,
+        title: `Book a time with the vendor: ${what}`,
+      })
+    }
+    if (workOrder.status === 'WORK_COMPLETE') {
+      // Overdue on purpose. A queue with nothing late in it does not show
+      // what the overdue column is for, and this is the one screen where that
+      // column is the whole point.
+      rows.push({
+        propertyId: workOrder.propertyId,
+        type: 'workorder_ready_to_close',
+        subjectType: 'WorkOrder',
+        subjectId: workOrder.id,
+        businessDate: daysFrom(-2),
+        priority: 'ROUTINE',
+        title: `Verify and close: ${what}`,
+      })
+    }
+  }
+
+  for (const inspection of await prisma.inspection.findMany({
+    where: { propertyId: { in: [...propertyIds] }, performedAt: null },
+    select: { id: true, propertyId: true, type: true, scheduledFor: true },
+  })) {
+    rows.push({
+      propertyId: inspection.propertyId,
+      type: `inspection.${inspection.type.toLowerCase()}_scheduled`,
+      subjectType: 'Inspection',
+      subjectId: inspection.id,
+      // `scheduledFor` is nullable - an inspection can be raised before a
+      // date is agreed - and an undated one is due now, not never.
+      businessDate: inspection.scheduledFor ?? daysFrom(0),
+      priority: 'ROUTINE',
+      title: 'Walk the pre-move-out inspection',
+    })
+  }
+
+  // Renewal decisions, for the leases the dashboard is already counting as
+  // expiring. 90 days matches the dashboard tile, so the queue and the tile
+  // are talking about the same leases rather than two different windows.
+  for (const lease of await prisma.lease.findMany({
+    where: {
+      propertyId: { in: [...propertyIds] },
+      status: 'ACTIVE',
+      noticeGivenAt: null,
+      endsOn: { lte: daysFrom(90) },
+    },
+    select: { id: true, propertyId: true, endsOn: true },
+  })) {
+    // `lte` above already excludes the nulls a month-to-month tenancy has -
+    // there is no term to renew - but the column is nullable and TypeScript
+    // is right to ask.
+    if (!lease.endsOn) continue
+    rows.push({
+      propertyId: lease.propertyId,
+      type: 'lease_renewal',
+      subjectType: 'Lease',
+      subjectId: lease.id,
+      // Sixty days before the term ends, which for these leases is already
+      // behind us - a renewal nobody has decided on IS late by then.
+      businessDate: new Date(lease.endsOn.getTime() - 60 * 86_400_000),
+      priority: 'ROUTINE',
+      title: 'Decide whether to offer a renewal',
+    })
+  }
+
+  for (const row of rows) {
+    await prisma.task.create({ data: { ...row, assigneeStaffId: staffId } })
+  }
+  return rows.length
 }
 
 /**
@@ -2163,6 +2344,13 @@ let billingPipeline: Promise<{
   processStripeEvent: (
     event: StripeEventEnvelope,
   ) => Promise<{ outcome: string; detail?: string }>
+  /// The lifecycle sweep, run once per billed lease at the end of the money
+  /// story. Nothing else writes `LeasePayer.lastSyncedAt`, so without it the
+  /// Billing Runs panel on /money reports "Never synced" for every payer
+  /// whose subscription this seed just created - five amber rows on the one
+  /// screen that exists to say Stripe and the leases agree. Found by the
+  /// Milestone 10 demo walk.
+  syncLease: (leaseId: string) => Promise<{ outcome: string; reason: string; error?: string }[]>
   /// Only `cancelSubscription` is used, by `reset()`. Typed to that one
   /// method rather than to the whole `BillingProvider`, which lives behind
   /// the same `server-only` wall and so cannot be imported as a type here
@@ -2205,15 +2393,17 @@ function loadBillingPipeline() {
         return next(specifier, context)
       },
     })
-    const [provision, webhook, provider] = await Promise.all([
+    const [provision, webhook, provider, lifecycle] = await Promise.all([
       import(pathToFileURL(join(root, 'apps/web/lib/billing/provision.ts')).href),
       import(pathToFileURL(join(root, 'apps/web/lib/billing/webhook.ts')).href),
       import(pathToFileURL(join(root, 'apps/web/lib/billing/provider.ts')).href),
+      import(pathToFileURL(join(root, 'apps/web/lib/billing/lifecycle.ts')).href),
     ])
     return {
       provisionLeaseBilling: provision.provisionLeaseBilling,
       processStripeEvent: webhook.processStripeEvent,
       getBillingProvider: provider.getBillingProvider,
+      syncLease: lifecycle.syncLease,
     }
   })()
   return billingPipeline
@@ -2332,7 +2522,7 @@ async function seedMoney(targets: MoneyTarget[]): Promise<{ payers: number; even
   const planned = targets.filter((target) => MONEY[target.lifecycle])
   if (planned.length === 0) return { payers: 0, events: 0 }
 
-  const { provisionLeaseBilling, processStripeEvent, getBillingProvider } =
+  const { provisionLeaseBilling, processStripeEvent, getBillingProvider, syncLease } =
     await loadBillingPipeline()
   const push = (event: StripeEventEnvelope, expected: 'projected' | 'ignored', what: string) =>
     replay(processStripeEvent, event, expected, what)
@@ -2539,6 +2729,21 @@ async function seedMoney(targets: MoneyTarget[]): Promise<{ payers: number; even
       }
       events++
     }
+
+    // ---- THE SWEEP, ONCE, LAST ----
+    //
+    // The product's own lifecycle sweep, not a written-in breadcrumb: it asks
+    // Stripe, compares, and records what it did on the payer. Run after the
+    // replay rather than before, so what it reconciles against is the state
+    // every event above left behind. `in_sync` is the expected answer and a
+    // failure is not fatal here - the demo money story is already correct
+    // without it, and a sweep that could not reach the provider should not
+    // take the whole seed down with it.
+    for (const result of await syncLease(target.leaseId)) {
+      if (result.error) {
+        console.warn(`demo money: billing sweep on ${target.leaseId} said ${result.error}`)
+      }
+    }
   }
 
   return { payers, events }
@@ -2630,6 +2835,48 @@ async function seedDemoData() {
       }),
     ),
   )
+
+  // ---- The two reusable templates the screens above ask for ----
+  //
+  // Both are portfolio-level, like the vendors and PM schedules above.
+  //
+  // The checklist is `defaultForType: PERIODIC` rather than MOVE_OUT: only
+  // the auto-scheduled types read that column (INSP-04), it is UNIQUE, and
+  // MOVE_IN/MOVE_OUT/PRE_MOVE_OUT are lease-event-driven and never look it
+  // up. Its rooms are the ones the walked inspections below use, so a viewer
+  // opening "New inspection" is offered the list they have just seen filled
+  // in - which is what a reusable checklist is FOR (INSP-01: the same list
+  // walked at move-in and move-out is what makes the two comparable).
+  const inspectionTemplate = await prisma.inspectionTemplate.create({
+    data: {
+      name: INSPECTION_TEMPLATE_NAME,
+      defaultForType: 'PERIODIC',
+      createdByStaffId: staff.id,
+      items: [
+        { room: 'Kitchen', item: 'Countertops' },
+        { room: 'Kitchen', item: 'Appliances' },
+        { room: 'Living room', item: 'Walls and paint' },
+        { room: 'Primary bedroom', item: 'Flooring' },
+        { room: 'Hallway', item: 'Carpet' },
+        { room: 'Bathroom', item: 'Tub and surround' },
+      ],
+    },
+  })
+
+  // ROUTINE, not LEGAL - COMM-03 lets an unapproved translation be used for
+  // one and not the other, and a rent reminder is the routine case. Every
+  // `{{field}}` here is in core's closed catalogue (`MERGE_FIELDS`); a key
+  // that is not would be refused at send time, which is exactly the failure a
+  // demo template must not be carrying.
+  await prisma.messageTemplate.create({
+    data: {
+      name: MESSAGE_TEMPLATE_NAME,
+      kind: 'ROUTINE',
+      subject: MESSAGE_TEMPLATE_SUBJECT,
+      body: MESSAGE_TEMPLATE_BODY,
+      createdByStaffId: staff.id,
+    },
+  })
 
   let propertyCount = 0
   let unitCount = 0
@@ -2787,6 +3034,7 @@ async function seedDemoData() {
         staffId: staff.id,
         vendorRows,
         pmTemplateRows,
+        inspectionTemplateId: inspectionTemplate.id,
         vendorLinks,
       }
 
@@ -2838,6 +3086,7 @@ async function seedDemoData() {
         staffId: staff.id,
         vendorRows,
         pmTemplateRows,
+        inspectionTemplateId: inspectionTemplate.id,
         vendorLinks,
         propertyName: plan.name,
         unitName: unitPlan.name,
@@ -2855,6 +3104,17 @@ async function seedDemoData() {
   // `Charge` written above, and it is the only section here that can make a
   // property permanently undeletable - see `reset()`'s sticky set.
   const money = await seedMoney(moneyTargets)
+
+  // ---- The staff queue, LAST: it is derived from everything above ----
+  const taskCount = await seedTasks(
+    staff.id,
+    (
+      await prisma.property.findMany({
+        where: { legalEntityId: { in: entities.map((entity) => entity.id) } },
+        select: { id: true },
+      })
+    ).map((property) => property.id),
+  )
 
   // ---- Compliance items, which hang off a property or an entity ----
   for (const item of COMPLIANCE) {
@@ -2885,7 +3145,7 @@ async function seedDemoData() {
       `${pmTemplateRows.length} PM schedules, ${ticketCount} tickets, ` +
       `${workOrderCount} work orders, ${inspectionCount} inspections, ${messageCount} messages, ` +
       `${listingCount} listing, ${prospectCount} prospects, ${photoCount} photos, ` +
-      `${caseCount} cases, ${complianceCount} compliance items, ` +
+      `${caseCount} cases, ${complianceCount} compliance items, ${taskCount} tasks, ` +
       `${money.payers} billed payers, ${money.events} Stripe events replayed.`,
   )
 

@@ -150,6 +150,17 @@ export async function chargeMoveInProration(leaseId: string): Promise<ProrationC
     entityType: 'Charge',
     entityId: charge.id,
     propertyId: lease.propertyId,
+    // `ledger.adjusted` is on REASON_REQUIRED, and this call carried no
+    // reason - so `recordAudit` threw, the `.catch` below logged it, and
+    // EVERY move-in proration ever charged has no audit entry at all. The
+    // charge is on the tenant's ledger and nothing records who put it there
+    // or why, which is the one thing that set exists to prevent. Found by
+    // the Milestone 10 demo walk, four rows deep in a seed log.
+    //
+    // `proration.description` is the arithmetic in words - the same sentence
+    // PAY-08 puts on the tenant's own ledger - so the audit reason and what
+    // the tenant was told cannot drift apart.
+    reason: proration.description,
     after: {
       type: 'RENT',
       partMonth: true,

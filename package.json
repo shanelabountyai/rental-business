@@ -29,6 +29,8 @@
     "predev:test": "npm run preflight",
     "pretest:e2e": "npm run preflight",
     "dev:test": "dotenv -e .env.test -e .env.local -- npm run dev -w web",
+    "predev:demo": "npm run preflight",
+    "dev:demo": "dotenv -e .env.demo -e .env.local -- npm run dev -w web",
     "build:test": "dotenv -e .env.test -e .env.local -- npm run build -w web",
     "start:test": "dotenv -e .env.test -e .env.local -- npm run start -w web",
     "e2e:server": "npm run build:test && npm run start:test",

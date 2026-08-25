@@ -102,6 +102,18 @@ describe('chargeMoveInProration', () => {
     expect(charge.description).toContain('$1,500.00')
     // D-12: core decided the amount, Stripe was handed a finished number.
     expect(charge.stripeInvoiceItemId).not.toBeNull()
+
+    // AND IT IS AUDITED. `ledger.adjusted` is on REASON_REQUIRED, and this
+    // call passed no reason - so `recordAudit` threw, the caller's `.catch`
+    // logged it, and every part-month charge went on a tenant's ledger with
+    // nothing recording who put it there. Nothing went red: the audit is
+    // deliberately non-fatal, so the only symptom was a console line in a
+    // seed log. Asserting the ROW, not the absence of a throw, is the whole
+    // point - the throw was already being swallowed.
+    const audit = await prisma.auditLog.findFirstOrThrow({
+      where: { entityType: 'Charge', entityId: charge.id, action: 'ledger.adjusted' },
+    })
+    expect(audit.reason).toContain('12/31 days')
   }, 20_000)
 
   it('charges NOTHING when the lease starts on the rent due day', async () => {

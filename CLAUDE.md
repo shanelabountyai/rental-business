@@ -25,6 +25,12 @@ Multi-property single-family rental management platform (10–50 units, owner-op
 - Also update the same-day PRD when an item settles something the PRD left open, and append owner decisions to `07-decisions.md` with a new D-number rather than resolving them silently.
 - Commit after every completed item with a message like `R-012: work order lifecycle`.
 
+## Seeing the demo
+
+`npm run dev:demo` serves the app against `.env.demo` — a LOCAL `rental_demo`, loaded before `.env.local` so it overrides the database and inherits everything else (dotenv-cli, first file wins, exactly as `.env.test` does). Not the Neon dev branch, which is a round trip per query for a seed that replays 42 Stripe events; not `rental_test`, because demo rows in the suite's own database are the shared-database bug this file already warns about twice. Setup is `migrate deploy` → `db:seed` → `db:create-owner` → `db:seed:lease-templates` → `db:seed:demo`, all with `dotenv -e .env.demo -e .env.local`.
+
+**Walk it when a milestone closes (D-28), and walk it in a browser.** R-105 found seven defects across 88 routes that all returned 200 — an eviction case that could never be filed, an audit row that has never once been written, a dev server on the neighbouring project's port. None of them was reachable from a test, and three were only visible as a screen saying something quietly wrong.
+
 ## The gate
 
 Nothing is done until all four pass:
@@ -33,6 +39,7 @@ Nothing is done until all four pass:
 npm run lint && npm run typecheck && npm test && PORT=3100 npm run test:e2e
 ```
 
+- **`:3100` is now the default in the npm scripts too, not just Playwright's config.** `apps/web/package.json` runs `next dev -p ${PORT:-3100}` and `next start -p ${PORT:-3100}`. It used to be a bare `next dev`, so `npm run dev` served this repo on **3000** — the self-storage app's port, which is the one collision the port table exists to prevent. R-105 hit it on the first command of the demo walk and landed on 3001 because storage was already holding 3000.
 - **This repo owns `:3100`, and that is now the config default** — `PORT=3100` in the command above is belt-and-braces rather than load-bearing. It used to be mandatory because the default was 3000 and the sibling self-storage repo *hardcodes* `localhost:3000`: with `reuseExistingServer` on, forgetting the variable pointed this suite at that app, which fails in ways that make no sense. The default now removes the footgun instead of documenting it.
 - **e2e runs against a PRODUCTION BUILD, not `next dev`** (R-042). `playwright.config.ts` starts `npm run e2e:server`, which builds then serves. `E2E_DEV=1` restores the dev server when you want the error overlay or a stack trace against real sources. Two reasons, and the second is why it is not negotiable on a laptop running several projects:
   - **Speed.** The full sweep went from **16+ minutes to 4.1 minutes**, same 596 tests.
