@@ -4127,7 +4127,7 @@ So one tenancy is followed. She falls behind and is chased, lawfully and correct
 - **Nothing verifies the policy against a real browser console.** The suite proves pages work and the header is right; it does not prove no resource is being silently blocked in a way no assertion notices. A blocked request that nothing asserts on would pass here.
 
 ## The CSP was switching off the JavaScript on four pages
-**Commit:** _(recorded below)_  ·  **Date:** 2026-08-25
+**Commit:** `dcb8e75`  ·  **Date:** 2026-08-25
 
 **What it did.** Built the browser-behaviour check D-138 said was missing, and it immediately found that D-138 itself had broken four pages. Recorded as **D-139**.
 
