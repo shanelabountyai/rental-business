@@ -34,6 +34,9 @@
 // now decides that per property and RETIRES the sticky ones whole, rather
 // than deleting halfway down and failing on a trigger.
 
+import { randomUUID } from 'node:crypto'
+import { mkdir, writeFile } from 'node:fs/promises'
+import { dirname, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { mintToken } from '@rental/core/auth'
 import { threadKey } from '@rental/core/comms'
@@ -140,9 +143,56 @@ async function reset() {
     })
   ).map((row) => row.propertyId)
 
-  const sticky = new Set([...auditedPropertyIds, ...conversedPropertyIds])
+  // R-100b added the third source, exactly as D-143 said a later item would.
+  // `NoticeDelivery` is append-only too - the migration's trigger is BEFORE
+  // UPDATE OR DELETE, and `NoticeDelivery.noticeId` is onDelete: Restrict -
+  // so a notice that was actually SERVED can never be deleted, and neither
+  // can the notice or the lease under it. Proof of service is the strongest
+  // evidence this product holds; it would be strange if it were the one
+  // thing a reset could erase.
+  const servedPropertyIds = (
+    await prisma.notice.findMany({
+      where: { propertyId: { in: propertyIds }, deliveries: { some: {} } },
+      select: { propertyId: true },
+      distinct: ['propertyId'],
+    })
+  ).map((row) => row.propertyId)
+
+  const sticky = new Set([...auditedPropertyIds, ...conversedPropertyIds, ...servedPropertyIds])
   const deletableProperties = propertyIds.filter((id) => !sticky.has(id))
   const stickyProperties = propertyIds.filter((id) => sticky.has(id))
+
+  // ---- COMPLIANCE ITEMS, always deleted, on BOTH branches ----
+  //
+  // The only rows here that are cleaned up regardless of stickiness, and the
+  // reason is that they are the only ones carrying no evidence: the seed
+  // writes them uncompleted, so there is no `ComplianceCompletion`, no
+  // document and no proof of anything - just a due date somebody invented.
+  //
+  // Scoped by ENTITY as well as by property, which is what was missing:
+  // an entity-scoped item has `propertyId: null` and so matched no
+  // property-keyed delete at all. Three items per run were surviving every
+  // reset and the count only gave it away because it grew - 3, 6, 9 - while
+  // every other number held steady. A leak that grows linearly is the one
+  // kind you can still catch by looking.
+  //
+  // BEFORE EITHER BRANCH TOUCHES A PROPERTY, and that ordering is the whole
+  // of the second bug this block had. `ComplianceItem` carries a check
+  // constraint that exactly one of `propertyId`/`legalEntityId` is set, so
+  // the SET NULL a property delete cascades makes the row illegal and the
+  // DELETE fails - the same shape as the `JobRun` unique-key collision
+  // documented further down, and it fails at the property delete rather than
+  // here, which is what makes it read as an unrelated error.
+  await prisma.complianceCompletion.deleteMany({
+    where: {
+      complianceItem: {
+        OR: [{ propertyId: { in: propertyIds } }, { legalEntityId: { in: entityIds } }],
+      },
+    },
+  })
+  await prisma.complianceItem.deleteMany({
+    where: { OR: [{ propertyId: { in: propertyIds } }, { legalEntityId: { in: entityIds } }] },
+  })
 
   const stamp = new Date().toISOString().slice(0, 16)
 
@@ -224,6 +274,52 @@ async function reset() {
     // the properties whose threads hold NO messages - a thread with one is
     // what put its property in the other branch.
     await prisma.thread.deleteMany({ where: { propertyId: { in: deletableProperties } } })
+
+    // ---- Leasing and risk (R-100b), deepest first ----
+    //
+    // Notices before the cases they are filed under and before the leases
+    // they name, all three of which they reference. Safe to delete outright
+    // for the same reason threads are: a notice with a delivery row put its
+    // property in the other branch.
+    await prisma.accommodationRequest.deleteMany({
+      where: { propertyId: { in: deletableProperties } },
+    })
+    await prisma.notice.deleteMany({ where: { propertyId: { in: deletableProperties } } })
+    await prisma.violationObservation.deleteMany({
+      where: { case: { propertyId: { in: deletableProperties } } },
+    })
+    await prisma.violationCase.deleteMany({ where: { propertyId: { in: deletableProperties } } })
+    await prisma.evictionCase.deleteMany({ where: { propertyId: { in: deletableProperties } } })
+
+    // Envelope before lease (LeaseEnvelope.leaseId is onDelete: Restrict),
+    // signers before envelope.
+    await prisma.leaseSigner.deleteMany({
+      where: { envelope: { lease: { propertyId: { in: deletableProperties } } } },
+    })
+    await prisma.leaseEnvelope.deleteMany({
+      where: { lease: { propertyId: { in: deletableProperties } } },
+    })
+
+    // Applicants before applications, applications and leads before
+    // prospects and listings.
+    await prisma.applicant.deleteMany({
+      where: { application: { propertyId: { in: deletableProperties } } },
+    })
+    await prisma.application.deleteMany({ where: { propertyId: { in: deletableProperties } } })
+    await prisma.listingLead.deleteMany({
+      where: { listing: { propertyId: { in: deletableProperties } } },
+    })
+    await prisma.listingSyndication.deleteMany({
+      where: { listing: { propertyId: { in: deletableProperties } } },
+    })
+    await prisma.prospect.deleteMany({ where: { propertyId: { in: deletableProperties } } })
+    await prisma.listing.deleteMany({ where: { propertyId: { in: deletableProperties } } })
+
+    // Unit photos. The BYTES are deliberately left on disk: they live under
+    // `.data/documents`, they are placeholder tiles, and a seed script that
+    // deletes files by a path it reconstructed itself is a worse bug than a
+    // few stale kilobytes.
+    await prisma.document.deleteMany({ where: { propertyId: { in: deletableProperties } } })
 
     await prisma.inspectionItem.deleteMany({
       where: { inspection: { propertyId: { in: deletableProperties } } },
@@ -309,7 +405,7 @@ async function reset() {
 
   console.info(
     stickyProperties.length > 0
-      ? `Reset: removed ${deletableProperties.length} demo propert${deletableProperties.length === 1 ? 'y' : 'ies'} and retired ${stickyProperties.length} that already carry an audit trail or a conversation.`
+      ? `Reset: removed ${deletableProperties.length} demo propert${deletableProperties.length === 1 ? 'y' : 'ies'} and retired ${stickyProperties.length} that already carry an audit trail, a conversation or proof of service.`
       : 'Reset: removed previous demo data.',
   )
 }
@@ -447,6 +543,276 @@ interface PropertyPlan {
   acquiredOn?: Date
   units: UnitPlan[]
 }
+
+/**
+ * The leasing and risk story, keyed the same way as MAINTENANCE (R-100b).
+ *
+ * SEPARATE FROM THE MAINTENANCE MAP, not merged into it, because the two are
+ * seeded at different points and depend on different things: maintenance
+ * needs only a unit, while a prospect needs a listing and an envelope needs
+ * a lease. Keeping them apart is what lets the leasing pass run after the
+ * listing it hangs off exists, without either map having to know the other's
+ * ordering.
+ *
+ * EVERY STATUS HERE WAS CHECKED AGAINST THE LIST THAT RENDERS IT, which is
+ * R-100b's row's own warning and R-036b's lesson: a value existing in the
+ * enum says nothing about the screens that read it. `demo-seed.test.ts`
+ * asserts the two that actually filter - a listing must be PUBLISHED to be
+ * publicly reachable, and an accommodation request must be undecided to
+ * appear on the violation case beside it.
+ */
+interface ListingPlan {
+  headline: string
+  description: string
+  rentCents: number
+  depositCents: number
+  applicationFeeCents: number
+  availableInDays: number
+  requirements: string
+  petsAllowed: boolean
+  petPolicyText: string
+  /// Placeholder tiles, not photography. See `PLACEHOLDER_PHOTOS`.
+  photos: number
+}
+
+interface ProspectPlan {
+  firstName: string
+  lastName: string
+  email: string
+  status: 'INQUIRY' | 'PRE_SCREENED' | 'SHOWING' | 'APPLIED' | 'SCREENED' | 'APPROVED'
+  source: string
+  daysAgo: number
+  /// Written for anyone who got as far as applying. Below APPLIED there is
+  /// no Application row, which is the point - a funnel where every prospect
+  /// has an application is not a funnel.
+  application?: { completed: boolean; monthlyIncomeCents: number; employer: string }
+}
+
+interface EnvelopePlan {
+  /// The tenant taking the unit, created here rather than promoted from a
+  /// prospect: promotion is a real flow with its own screens (R-063), and a
+  /// seed that half-performs it would leave a prospect in a state the real
+  /// flow never produces.
+  tenant: { firstName: string; lastName: string; email: string; phone: string }
+  rentCents: number
+  depositCents: number
+  startsInDays: number
+  termMonths: number
+  /// PARTIALLY_SIGNED is the only interesting one: DRAFT has not gone out
+  /// and COMPLETED is just a lease. Mid-envelope is the state the chase
+  /// screens exist for.
+  signers: { name: string; role: 'TENANT' | 'GUARANTOR'; status: 'SIGNED' | 'SENT' | 'VIEWED' }[]
+}
+
+interface NoticePlan {
+  type: string
+  daysAgo: number
+  method: 'PERSONAL' | 'POSTED_WITH_PHOTO' | 'CERTIFIED_MAIL' | 'FIRST_CLASS_MAIL'
+  bodyText: string
+  /// Days the tenant has to cure, from service. What the eviction case's
+  /// clock counts down, and the whole reason the demo has one.
+  cureDays: number
+  trackingNumber?: string
+}
+
+interface ViolationPlan {
+  kind: 'UNAUTHORIZED_ANIMAL' | 'UNAUTHORIZED_OCCUPANT' | 'PREMISES_CONDITION'
+  status: 'OPEN'
+  summary: string
+  daysAgo: number
+  /// The accommodation request that arrived IN ANSWER to the violation, and
+  /// the reason this pair is seeded together rather than in two places. An
+  /// assistance-animal request against an unauthorized-animal case is the
+  /// canonical fair-housing scenario, and the violation page has a panel for
+  /// exactly the undecided ones.
+  accommodation?: {
+    kind: 'ASSISTANCE_ANIMAL' | 'SERVICE_ANIMAL' | 'POLICY_EXCEPTION'
+    status: 'RECEIVED' | 'INFO_REQUESTED'
+    requestText: string
+    daysAgo: number
+  }
+}
+
+interface LeasingPlan {
+  listing?: ListingPlan
+  prospects?: ProspectPlan[]
+  envelope?: EnvelopePlan
+  notice?: NoticePlan
+  /// Opened at the stage the notice put it in. NOTICE, not FILING - nothing
+  /// has been filed, the cure period is still running, and a demo that opens
+  /// on a courthouse step misrepresents what this product is for.
+  eviction?: { stage: 'NOTICE'; daysAgo: number }
+  violation?: ViolationPlan
+}
+
+export const LEASING: Record<string, LeasingPlan> = {
+  // THE VACANCY, END TO END: a published listing, a funnel with somebody at
+  // every stage of it, and a lease already out for signature on the one who
+  // got approved.
+  'Magnolia Drive House::ADU': {
+    listing: {
+      headline: 'Detached one-bedroom garden ADU',
+      description:
+        'Private entrance, full kitchen, in-unit laundry, and a fenced patio. Separately metered. Walking distance to the greenbelt trailhead.',
+      rentCents: 145_000,
+      depositCents: 145_000,
+      applicationFeeCents: 5_000,
+      availableInDays: 21,
+      requirements:
+        'Combined household income of three times the monthly rent, verifiable through pay stubs or bank statements. No prior lease-breaking judgments.',
+      petsAllowed: true,
+      petPolicyText: 'One cat or dog under 40lb with a refundable pet deposit. Breed restrictions apply.',
+      photos: 3,
+    },
+    prospects: [
+      {
+        firstName: 'Tomas',
+        lastName: 'Almeida',
+        email: 'tomas.almeida@example.test',
+        status: 'INQUIRY',
+        source: 'zillow',
+        daysAgo: 1,
+      },
+      {
+        firstName: 'Grace',
+        lastName: 'Whitfield',
+        email: 'grace.whitfield@example.test',
+        status: 'PRE_SCREENED',
+        source: 'apartments.com',
+        daysAgo: 4,
+      },
+      {
+        firstName: 'Elias',
+        lastName: 'Boateng',
+        email: 'elias.boateng@example.test',
+        status: 'SHOWING',
+        source: 'zillow',
+        daysAgo: 6,
+      },
+      {
+        firstName: 'Nadia',
+        lastName: 'Fournier',
+        email: 'nadia.fournier@example.test',
+        status: 'APPLIED',
+        source: 'referral',
+        daysAgo: 9,
+        application: { completed: true, monthlyIncomeCents: 616_000, employer: 'St. David\u2019s Medical Center' },
+      },
+      {
+        firstName: 'Reuben',
+        lastName: 'Castillo',
+        email: 'reuben.castillo@example.test',
+        status: 'SCREENED',
+        source: 'apartments.com',
+        daysAgo: 12,
+        application: { completed: true, monthlyIncomeCents: 508_000, employer: 'Travis County Schools' },
+      },
+      {
+        firstName: 'Imani',
+        lastName: 'Oyelaran',
+        email: 'imani.oyelaran@example.test',
+        status: 'APPROVED',
+        source: 'zillow',
+        daysAgo: 16,
+        application: { completed: true, monthlyIncomeCents: 733_000, employer: 'Osprey Analytics' },
+      },
+    ],
+    envelope: {
+      tenant: {
+        firstName: 'Imani',
+        lastName: 'Oyelaran',
+        email: 'imani.oyelaran@example.test',
+        phone: '+15125550188',
+      },
+      rentCents: 145_000,
+      depositCents: 145_000,
+      startsInDays: 21,
+      termMonths: 12,
+      // One signed, one still out - which is exactly what PARTIALLY_SIGNED
+      // means and the only state where the chase has anything to chase.
+      signers: [
+        { name: 'Imani Oyelaran', role: 'TENANT', status: 'SIGNED' },
+        { name: 'Adaeze Oyelaran', role: 'GUARANTOR', status: 'VIEWED' },
+      ],
+    },
+  },
+
+  // THE TENANT WHO IS BEHIND. `buildPlan()` already gives this unit the
+  // 'late' lifecycle and an overdue rent charge, so the notice and the case
+  // land on somebody the rest of the demo already shows as late - rather
+  // than on a tenant who looks current everywhere else.
+  'Riverside Court Duplex::Unit A': {
+    notice: {
+      type: 'NOTICE_TO_VACATE',
+      daysAgo: 3,
+      method: 'PERSONAL',
+      bodyText:
+        'You are hereby given notice to vacate the premises for non-payment of rent. You may avoid further action by paying the full amount past due within the period stated below. This notice is a draft prepared by the property manager and is not legal advice.',
+      cureDays: 3,
+    },
+    eviction: { stage: 'NOTICE', daysAgo: 3 },
+  },
+
+  // THE FAIR-HOUSING PAIR, and the most instructive thing in the seed. An
+  // unauthorized-animal case answered by an assistance-animal request that
+  // nobody has decided yet - which is precisely when the decision is still
+  // being made correctly or incorrectly, and precisely what the undecided
+  // panel on the violation page is for.
+  'Sunset Boulevard Townhouse::Main unit': {
+    violation: {
+      kind: 'UNAUTHORIZED_ANIMAL',
+      status: 'OPEN',
+      summary: 'A dog was observed in the unit during a scheduled drain repair. No pet is on the lease.',
+      daysAgo: 5,
+      accommodation: {
+        kind: 'ASSISTANCE_ANIMAL',
+        status: 'RECEIVED',
+        requestText:
+          'The dog is an emotional support animal prescribed by my therapist. I am requesting an exception to the no-pet term of my lease. I can provide a letter.',
+        daysAgo: 2,
+      },
+    },
+  },
+}
+
+/**
+ * Compliance items, which hang off a property or a legal entity rather than
+ * a unit - so they are a flat list rather than another keyed map.
+ *
+ * ONE OVERDUE AND ONE DUE SOON, deliberately. A compliance screen where
+ * everything is green demonstrates nothing, and one where everything is red
+ * looks like a broken seed rather than a portfolio.
+ */
+export const COMPLIANCE: {
+  type: string
+  label: string
+  dueInDays: number
+  scope: 'PROPERTY' | 'ENTITY'
+  propertyName?: string
+  entityIndex?: 0 | 1
+}[] = [
+  {
+    type: 'SMOKE_ALARM_INSPECTION',
+    label: 'Annual smoke and CO alarm certification',
+    dueInDays: -11,
+    scope: 'PROPERTY',
+    propertyName: 'Riverside Court Duplex',
+  },
+  {
+    type: 'POOL_PERMIT',
+    label: 'City pool enclosure permit renewal',
+    dueInDays: 19,
+    scope: 'PROPERTY',
+    propertyName: 'Magnolia Drive House',
+  },
+  {
+    type: 'ENTITY_FRANCHISE_TAX',
+    label: 'Texas franchise tax report',
+    dueInDays: 46,
+    scope: 'ENTITY',
+    entityIndex: 0,
+  },
+]
 
 /**
  * The maintenance story, keyed by "<property name>::<unit name>".
@@ -894,8 +1260,68 @@ export function buildPlan(): PropertyPlan[] {
   ]
 }
 
+/**
+ * Three 1x1 PNGs in muted colours, written as unit photos.
+ *
+ * ponytail: placeholder tiles, not photography - `object-cover` on a square
+ * renders a 1x1 as a clean solid block, which reads as a deliberate
+ * placeholder rather than a broken image. Swap for real images the day there
+ * are any; nothing else has to change, because they are ordinary
+ * `UNIT_PHOTO` Documents.
+ *
+ * Base64 constants rather than generated with `node:zlib`, because a CRC and
+ * a deflate stream is more code than the thing it produces.
+ */
+const PLACEHOLDER_PHOTOS = [
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+]
+
+// Matches `generateStorageKey` and `LocalDiskStorageAdapter` in
+// apps/web/lib/storage, which this script CANNOT import: that module is
+// `server-only`, and a plain node script is exactly what that marker exists
+// to keep out. Duplicated deliberately and narrowly - the key shape and the
+// root path, nothing else - and only ever used against local disk.
+const DOCUMENT_ROOT = process.env.DOCUMENT_STORAGE_PATH ?? join(process.cwd(), '.data', 'documents')
+
+/// True when uploads go to Vercel Blob rather than local disk. Photos are
+/// SKIPPED rather than seeded in that case: rows whose bytes do not exist
+/// render as broken images, which is worse than a listing with none, and
+/// this script has no business writing to a shared blob store.
+const storageIsRemote = Boolean(process.env.BLOB_READ_WRITE_TOKEN?.trim())
+
+async function writeUnitPhoto(
+  propertyId: string,
+  unitId: string,
+  index: number,
+): Promise<boolean> {
+  if (storageIsRemote) return false
+  const bytes = Buffer.from(PLACEHOLDER_PHOTOS[index % PLACEHOLDER_PHOTOS.length]!, 'base64')
+  const fileName = `demo-photo-${index + 1}.png`
+  const storageKey = `${propertyId}/${randomUUID()}-${fileName}`
+  const path = resolve(DOCUMENT_ROOT, storageKey)
+  await mkdir(dirname(path), { recursive: true })
+  await writeFile(path, bytes)
+
+  await prisma.document.create({
+    data: {
+      propertyId,
+      unitId,
+      type: 'UNIT_PHOTO',
+      fileName,
+      contentType: 'image/png',
+      sizeBytes: bytes.byteLength,
+      storageKey,
+      capturedAt: daysFrom(-30 + index),
+    },
+  })
+  return true
+}
+
 interface SeedContext {
   propertyId: string
+  addressOfRecord: string
   unitId: string
   leaseId: string | null
   tenantId: string | null
@@ -1166,6 +1592,283 @@ async function seedInspection(plan: InspectionPlan, context: SeedContext) {
   })
 }
 
+/**
+ * The leasing and risk story for one unit.
+ *
+ * Ordered so nothing points at a row that does not exist yet: listing, then
+ * the prospects on it, then the lease and envelope, then the notice and the
+ * case that files it, then the violation and the request answering it.
+ */
+async function seedLeasing(
+  plan: LeasingPlan,
+  context: SeedContext & { propertyName: string; unitName: string },
+): Promise<{ photos: number; prospects: number; cases: number }> {
+  let photos = 0
+  let prospects = 0
+  let cases = 0
+
+  let listingId: string | null = null
+  if (plan.listing) {
+    const listing = await prisma.listing.create({
+      data: {
+        propertyId: context.propertyId,
+        unitId: context.unitId,
+        // PUBLISHED, and it is the one status that matters here: the public
+        // listing page filters on it outright, so a DRAFT listing is a demo
+        // page that 404s.
+        status: 'PUBLISHED',
+        headline: plan.listing.headline,
+        description: plan.listing.description,
+        rentCents: plan.listing.rentCents,
+        depositCents: plan.listing.depositCents,
+        applicationFeeCents: plan.listing.applicationFeeCents,
+        availableOn: daysFrom(plan.listing.availableInDays),
+        requirements: plan.listing.requirements,
+        petsAllowed: plan.listing.petsAllowed,
+        petPolicyText: plan.listing.petPolicyText,
+        publishedAt: daysFrom(-24),
+        createdByStaffId: context.staffId,
+      },
+    })
+    listingId = listing.id
+
+    for (let index = 0; index < plan.listing.photos; index++) {
+      if (await writeUnitPhoto(context.propertyId, context.unitId, index)) photos++
+    }
+  }
+
+  if (listingId) {
+    for (const prospectPlan of plan.prospects ?? []) {
+      const enquiredAt = daysFrom(-prospectPlan.daysAgo)
+      const prospect = await prisma.prospect.create({
+        data: {
+          propertyId: context.propertyId,
+          listingId,
+          firstName: prospectPlan.firstName,
+          lastName: prospectPlan.lastName,
+          email: prospectPlan.email,
+          status: prospectPlan.status,
+          source: prospectPlan.source,
+          createdAt: enquiredAt,
+        },
+      })
+      prospects++
+
+      if (!prospectPlan.application) continue
+      const application = await prisma.application.create({
+        data: {
+          propertyId: context.propertyId,
+          listingId,
+          prospectId: prospect.id,
+          completedAt: prospectPlan.application.completed ? daysFrom(-prospectPlan.daysAgo + 1) : null,
+          createdAt: enquiredAt,
+        },
+      })
+      await prisma.applicant.create({
+        data: {
+          applicationId: application.id,
+          firstName: prospectPlan.firstName,
+          lastName: prospectPlan.lastName,
+          email: prospectPlan.email,
+          // The person staff invited, as opposed to a co-applicant they
+          // added themselves - which is what gives them the application's
+          // own link rather than one subject-typed to a co-applicant.
+          isLead: true,
+          employerName: prospectPlan.application.employer,
+          monthlyIncomeCents: prospectPlan.application.monthlyIncomeCents,
+          formSubmittedAt: daysFrom(-prospectPlan.daysAgo + 1),
+          completedAt: prospectPlan.application.completed
+            ? daysFrom(-prospectPlan.daysAgo + 1)
+            : null,
+        },
+      })
+    }
+  }
+
+  if (plan.envelope) {
+    // THE DATABASE INSISTS, and it is right to: a `LeaseEnvelope` of kind
+    // LEASE has a check constraint requiring a template
+    // (`LeaseEnvelope_lease_kind_needs_template`), because an envelope is a
+    // document somebody signs and a document with no template behind it is
+    // an envelope wrapping nothing. Found rather than created here for the
+    // same reason staff are - `db:seed:lease-templates` owns the wording,
+    // and a demo seed inventing lease text is a demo seed with an opinion
+    // about a legal document.
+    const template = await prisma.documentTemplate.findFirst({
+      where: { documentType: 'LEASE', addendumKey: null, state: null },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true },
+    })
+    if (!template) {
+      throw new Error(
+        'No lease template exists, so the e-signature envelope cannot be seeded.\n' +
+          'Run `npm run db:seed:lease-templates` first, then this again.',
+      )
+    }
+
+    const tenant = await prisma.tenant.create({
+      data: {
+        firstName: plan.envelope.tenant.firstName,
+        lastName: plan.envelope.tenant.lastName,
+        email: plan.envelope.tenant.email,
+        phone: plan.envelope.tenant.phone,
+        notes: 'Demo tenant - lifecycle state: signing.',
+      },
+    })
+    const startsOn = daysFrom(plan.envelope.startsInDays)
+    const endsOn = daysFrom(plan.envelope.startsInDays + plan.envelope.termMonths * 30)
+    const lease = await prisma.lease.create({
+      data: {
+        propertyId: context.propertyId,
+        unitId: context.unitId,
+        // PENDING_SIGNATURE, not DRAFT: the envelope has gone out, and a
+        // lease that says draft beside a partially-signed envelope is two
+        // screens disagreeing about the same tenancy.
+        status: 'PENDING_SIGNATURE',
+        startsOn,
+        endsOn,
+        rentCents: plan.envelope.rentCents,
+        depositCents: plan.envelope.depositCents,
+      },
+    })
+    await prisma.leaseTenant.create({
+      data: { leaseId: lease.id, tenantId: tenant.id, isPrimary: true },
+    })
+
+    const envelope = await prisma.leaseEnvelope.create({
+      data: {
+        leaseId: lease.id,
+        kind: 'LEASE',
+        templateId: template.id,
+        status: 'PARTIALLY_SIGNED',
+        addendumKeys: [],
+        sentAt: daysFrom(-4),
+      },
+    })
+    let order = 0
+    for (const signer of plan.envelope.signers) {
+      await prisma.leaseSigner.create({
+        data: {
+          envelopeId: envelope.id,
+          order: order++,
+          role: signer.role,
+          name: signer.name,
+          email: signer.role === 'TENANT' ? plan.envelope.tenant.email : null,
+          status: signer.status,
+          tenantId: signer.role === 'TENANT' ? tenant.id : null,
+          // Every status this plan admits is past SENT, so all of them have
+          // been looked at. A PENDING signer would need a null here, which
+          // is why the union deliberately does not include one - a signer
+          // who has not been sent the envelope is not mid-envelope.
+          viewedAt: daysFrom(-3),
+          signedAt: signer.status === 'SIGNED' ? daysFrom(-3) : null,
+          signedName: signer.status === 'SIGNED' ? signer.name : null,
+        },
+      })
+    }
+  }
+
+  // The notice, the case that files it, and the violation all need the
+  // SITTING tenancy, not the one being signed above.
+  if (!context.leaseId) return { photos, prospects, cases }
+
+  if (plan.notice) {
+    const servedAt = daysFrom(-plan.notice.daysAgo)
+    let evictionCaseId: string | null = null
+    if (plan.eviction) {
+      const evictionCase = await prisma.evictionCase.create({
+        data: {
+          propertyId: context.propertyId,
+          unitId: context.unitId,
+          leaseId: context.leaseId,
+          stage: plan.eviction.stage,
+          openedAt: daysFrom(-plan.eviction.daysAgo),
+          openedByStaffId: context.staffId,
+        },
+      })
+      evictionCaseId = evictionCase.id
+      cases++
+    }
+
+    const notice = await prisma.notice.create({
+      data: {
+        propertyId: context.propertyId,
+        leaseId: context.leaseId,
+        evictionCaseId,
+        type: plan.notice.type,
+        addressOfRecord: context.addressOfRecord,
+        bodyText: plan.notice.bodyText,
+        generatedAt: daysFrom(-plan.notice.daysAgo - 1),
+        // Denormalized from the delivery below, which is what actually
+        // carries the proof. `recordService()` owns writing both in
+        // production; this seed writes the same pair, in the same order.
+        servedAt,
+      },
+    })
+    await prisma.noticeDelivery.create({
+      data: {
+        noticeId: notice.id,
+        method: plan.notice.method,
+        servedAt,
+        servedByStaffId: context.staffId,
+        trackingNumber: plan.notice.trackingNumber ?? null,
+        note: `Served in person and photographed. Cure period ends ${
+          daysFrom(-plan.notice.daysAgo + plan.notice.cureDays).toISOString().slice(0, 10)
+        }.`,
+      },
+    })
+  }
+
+  if (plan.violation) {
+    const violation = await prisma.violationCase.create({
+      data: {
+        propertyId: context.propertyId,
+        unitId: context.unitId,
+        leaseId: context.leaseId,
+        kind: plan.violation.kind,
+        status: plan.violation.status,
+        openedAt: daysFrom(-plan.violation.daysAgo),
+        openedByStaffId: context.staffId,
+      },
+    })
+    cases++
+
+    // The narrative is an OBSERVATION, not a column on the case - which is
+    // the schema saying something worth listening to: what somebody saw, on
+    // a stated day, recorded by a named person, is evidence. A case carrying
+    // a free-text summary and no observation is an allegation with nobody
+    // behind it.
+    await prisma.violationObservation.create({
+      data: {
+        caseId: violation.id,
+        observedOn: daysFrom(-plan.violation.daysAgo),
+        note: plan.violation.summary,
+        recordedByStaffId: context.staffId,
+      },
+    })
+
+    if (plan.violation.accommodation) {
+      const request = plan.violation.accommodation
+      await prisma.accommodationRequest.create({
+        data: {
+          propertyId: context.propertyId,
+          leaseId: context.leaseId,
+          violationCaseId: violation.id,
+          kind: request.kind,
+          // UNDECIDED, and the violation page's own panel filters to exactly
+          // RECEIVED and INFO_REQUESTED - so an APPROVED or DENIED one here
+          // would be a request nobody can find from the case it answers.
+          status: request.status,
+          requestText: request.requestText,
+          receivedOn: daysFrom(-request.daysAgo),
+        },
+      })
+    }
+  }
+
+  return { photos, prospects, cases }
+}
+
 async function seedDemoData() {
   const existing = await prisma.legalEntity.findFirst({
     where: { name: ENTITY_NAMES[0] },
@@ -1260,6 +1963,11 @@ async function seedDemoData() {
   let workOrderCount = 0
   let inspectionCount = 0
   let messageCount = 0
+  let listingCount = 0
+  let prospectCount = 0
+  let photoCount = 0
+  let caseCount = 0
+  let complianceCount = 0
   /// Printed at the very end. The raw token exists only here - only its
   /// SHA-256 reaches the database - so a link not printed on this run is a
   /// link nobody can ever open.
@@ -1378,6 +2086,10 @@ async function seedDemoData() {
 
       const context = {
         propertyId: property.id,
+        // What a notice states as the address it was served at. Read from
+        // the property rather than composed at the notice, because a notice
+        // is evidence and the address on it has to be the address of record.
+        addressOfRecord: `${plan.addressLine1}, ${plan.city}, ${plan.state} ${plan.postalCode}`,
         unitId: unit.id,
         leaseId: lease?.id ?? null,
         tenantId: leaseTenant?.tenantId ?? null,
@@ -1405,14 +2117,85 @@ async function seedDemoData() {
         inspectionCount++
       }
     }
+
+    // ---- The leasing and risk story (R-100b) ----
+    for (const unitPlan of plan.units) {
+      const leasing = LEASING[`${plan.name}::${unitPlan.name}`]
+      if (!leasing) continue
+
+      const unit = await prisma.unit.findFirstOrThrow({
+        where: { propertyId: property.id, name: unitPlan.name },
+        select: { id: true },
+      })
+      const lease = await prisma.lease.findFirst({
+        where: { unitId: unit.id, status: { in: ['ACTIVE', 'MONTH_TO_MONTH'] } },
+        select: { id: true },
+      })
+      const leaseTenant = lease
+        ? await prisma.leaseTenant.findFirst({
+            where: { leaseId: lease.id, isPrimary: true },
+            select: { tenantId: true },
+          })
+        : null
+
+      const written = await seedLeasing(leasing, {
+        propertyId: property.id,
+        addressOfRecord: `${plan.addressLine1}, ${plan.city}, ${plan.state} ${plan.postalCode}`,
+        unitId: unit.id,
+        leaseId: lease?.id ?? null,
+        tenantId: leaseTenant?.tenantId ?? null,
+        staffId: staff.id,
+        vendorRows,
+        pmTemplateRows,
+        vendorLinks,
+        propertyName: plan.name,
+        unitName: unitPlan.name,
+      })
+      photoCount += written.photos
+      prospectCount += written.prospects
+      caseCount += written.cases
+      if (leasing.listing) listingCount++
+    }
+  }
+
+  // ---- Compliance items, which hang off a property or an entity ----
+  for (const item of COMPLIANCE) {
+    const propertyId =
+      item.scope === 'PROPERTY'
+        ? (
+            await prisma.property.findFirstOrThrow({
+              where: { name: item.propertyName, active: true },
+              select: { id: true },
+            })
+          ).id
+        : null
+    await prisma.complianceItem.create({
+      data: {
+        type: item.type,
+        label: item.label,
+        dueOn: daysFrom(item.dueInDays),
+        propertyId,
+        legalEntityId: item.scope === 'ENTITY' ? entities[item.entityIndex ?? 0]!.id : null,
+      },
+    })
+    complianceCount++
   }
 
   console.info(
     `Seeded demo data: ${entities.length} legal entities, ${propertyCount} properties, ` +
       `${unitCount} units, ${tenantCount} tenants, ${vendorRows.length} vendors, ` +
       `${pmTemplateRows.length} PM schedules, ${ticketCount} tickets, ` +
-      `${workOrderCount} work orders, ${inspectionCount} inspections, ${messageCount} messages.`,
+      `${workOrderCount} work orders, ${inspectionCount} inspections, ${messageCount} messages, ` +
+      `${listingCount} listing, ${prospectCount} prospects, ${photoCount} photos, ` +
+      `${caseCount} cases, ${complianceCount} compliance items.`,
   )
+
+  if (storageIsRemote) {
+    console.info(
+      '\nUnit photos were SKIPPED: BLOB_READ_WRITE_TOKEN is set, so uploads go to a shared\n' +
+        'blob store this script has no business writing to. The listing is seeded without them.',
+    )
+  }
 
   // LAST, ALONE, AND LOUD. This is the only output of the whole run that
   // cannot be recovered by looking at the database afterwards.

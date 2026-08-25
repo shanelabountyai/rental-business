@@ -1,7 +1,7 @@
 import { OPEN_TICKET_STATUSES } from '@rental/core/comms'
 import { OPEN_WORK_ORDER_STATUSES } from '@rental/core/workorders'
 import { describe, expect, it } from 'vitest'
-import { MAINTENANCE, buildPlan } from './demo-seed.mts'
+import { COMPLIANCE, LEASING, MAINTENANCE, buildPlan } from './demo-seed.mts'
 
 // Importing this module must never touch a database - see the file's own
 // `pathToFileURL` guard. If that guard regresses, this test hangs or throws
@@ -88,5 +88,111 @@ describe('the maintenance story points at units that exist', () => {
     // demo where the operator has to work out which link is which; none is a
     // vendor page nobody can open.
     expect(workOrderPlans.filter((plan) => plan.liveVendorLink)).toHaveLength(1)
+  })
+})
+
+// ---- The leasing and risk story (R-100b) ----
+//
+// Only two things in this half actually filter, and both were found by
+// reading the queries rather than by guessing - which is exactly why they
+// are asserted here instead of remembered.
+
+describe('the leasing story lands on screens that render it', () => {
+  it('publishes the listing, because the public page filters on PUBLISHED outright', () => {
+    // `listingForPublic` is `where: { id, status: 'PUBLISHED' }`. A DRAFT
+    // listing is not a quieter demo, it is a 404.
+    const listings = Object.values(LEASING).filter((plan) => plan.listing)
+    expect(listings.length).toBeGreaterThan(0)
+  })
+
+  it('keeps every seeded accommodation request UNDECIDED', () => {
+    // The violation page's own panel filters to RECEIVED and
+    // INFO_REQUESTED. An APPROVED or DENIED request would be seeded onto a
+    // case from which nobody can reach it - and the undecided ones are the
+    // point: a decision not yet made is where fair-housing goes right or
+    // wrong.
+    const undecided = ['RECEIVED', 'INFO_REQUESTED']
+    const requests = Object.values(LEASING)
+      .map((plan) => plan.violation?.accommodation)
+      .filter((request) => request != null)
+    expect(requests.length).toBeGreaterThan(0)
+    for (const request of requests) {
+      expect(undecided, request.requestText.slice(0, 40)).toContain(request.status)
+    }
+  })
+
+  it('opens the eviction at NOTICE and never past it', () => {
+    // A demo that opens on a courthouse step misrepresents what this
+    // product is for, and a case past NOTICE with a cure period still
+    // running is two screens disagreeing.
+    for (const plan of Object.values(LEASING)) {
+      if (plan.eviction) expect(plan.eviction.stage).toBe('NOTICE')
+    }
+  })
+
+  it('serves the notice before the cure period it counts could have expired', () => {
+    // Served three days ago with a three-day cure is a clock still running.
+    // Served three days ago with a one-day cure is a case that should
+    // already have moved on, and a demo frozen in an impossible state.
+    for (const plan of Object.values(LEASING)) {
+      if (!plan.notice) continue
+      expect(plan.notice.cureDays, plan.notice.type).toBeGreaterThanOrEqual(plan.notice.daysAgo)
+    }
+  })
+
+  it('every leasing key names a real property and unit', () => {
+    const real = new Set(
+      buildPlan().flatMap((property) =>
+        property.units.map((unit) => `${property.name}::${unit.name}`),
+      ),
+    )
+    expect(Object.keys(LEASING).filter((key) => !real.has(key))).toEqual([])
+  })
+
+  it('names a real property on every property-scoped compliance item', () => {
+    const names = new Set(buildPlan().map((property) => property.name))
+    const dangling = COMPLIANCE.filter(
+      (item) => item.scope === 'PROPERTY' && !names.has(item.propertyName ?? ''),
+    )
+    expect(dangling.map((item) => item.label)).toEqual([])
+  })
+
+  it('seeds compliance both overdue and upcoming, which is the whole point of it', () => {
+    // All green demonstrates nothing; all red looks like a broken seed
+    // rather than a portfolio.
+    expect(COMPLIANCE.some((item) => item.dueInDays < 0)).toBe(true)
+    expect(COMPLIANCE.some((item) => item.dueInDays > 0)).toBe(true)
+  })
+
+  it('leaves the envelope mid-signature, with someone still to sign', () => {
+    // PARTIALLY_SIGNED is the only interesting envelope state, and it is
+    // only true if at least one signer has signed and at least one has not.
+    for (const plan of Object.values(LEASING)) {
+      if (!plan.envelope) continue
+      const signed = plan.envelope.signers.filter((signer) => signer.status === 'SIGNED')
+      expect(signed.length).toBeGreaterThan(0)
+      expect(signed.length).toBeLessThan(plan.envelope.signers.length)
+    }
+  })
+
+  it('puts a prospect at every stage of the funnel', () => {
+    // A funnel with a gap in it reads as a bug in the product rather than a
+    // gap in the seed, because that is what it would look like on screen.
+    const seeded = new Set(
+      Object.values(LEASING).flatMap((plan) => (plan.prospects ?? []).map((p) => p.status)),
+    )
+    for (const stage of ['INQUIRY', 'PRE_SCREENED', 'SHOWING', 'APPLIED', 'SCREENED', 'APPROVED']) {
+      expect([...seeded], stage).toContain(stage)
+    }
+  })
+
+  it('writes an application for everyone past APPLIED and nobody before it', () => {
+    const before = ['INQUIRY', 'PRE_SCREENED', 'SHOWING']
+    for (const plan of Object.values(LEASING)) {
+      for (const prospect of plan.prospects ?? []) {
+        const shouldHaveOne = !before.includes(prospect.status)
+        expect(Boolean(prospect.application), prospect.email).toBe(shouldHaveOne)
+      }
+    }
   })
 })
