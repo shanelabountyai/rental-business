@@ -4285,7 +4285,7 @@ Eight messages ride on real `Thread` rows keyed with core's own `threadKey` rath
 ---
 
 ## R-100c: the money story, replayed rather than seeded
-**Commit:** _pending_  ·  **Date:** 2026-08-25
+**Commit:** fab46252eba3c7b56b05741aa4e69e495316b9b5  ·  **Date:** 2026-08-25
 
 **What it built.** The demo seed's third and last slice (PRD §8, D-11, D-145) — and the only one that writes no money rows of its own. D-11 makes `LedgerEntry` an append-only projection of Stripe, so balances, payment history, autopay state and a tenancy mid-chase were never a seeding problem: they are a *replay* problem. `seedMoney()` builds Stripe event envelopes and pushes them through `processStripeEvent`, the same function the live webhook route calls, and every ledger row, `Payment`, receipt and failed-payment notice in the demo comes out of that pipeline. The route was D-145's open choice and is recorded as **D-146**.
 
