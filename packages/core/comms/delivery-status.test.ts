@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   isOptOutErrorCode,
+  isPermanentFailure,
+  retryDelayMinutes,
   mapDeliveryStatus,
   mapResendEventStatus,
   shouldApplyStatus,
@@ -116,5 +118,45 @@ describe('isOptOutErrorCode', () => {
     expect(isOptOutErrorCode('21211')).toBe(false)
     expect(isOptOutErrorCode(null)).toBe(false)
     expect(isOptOutErrorCode(undefined)).toBe(false)
+  })
+})
+
+describe('isPermanentFailure', () => {
+  it('retries anything it does not recognise', () => {
+    // The defect R-106 closes is a rate limit and a dead address being
+    // treated identically. Of the two the rate limit is the common one, so
+    // an unrecognised code gets the benefit of the (bounded) doubt.
+    expect(isPermanentFailure('unknown')).toBe(false)
+    expect(isPermanentFailure('rate_limit_exceeded')).toBe(false)
+    expect(isPermanentFailure('http_500')).toBe(false)
+    expect(isPermanentFailure('http_429')).toBe(false)
+    expect(isPermanentFailure('http_408')).toBe(false)
+    expect(isPermanentFailure(null)).toBe(false)
+    expect(isPermanentFailure('')).toBe(false)
+  })
+
+  it('refuses to retry an opt-out or an unusable number', () => {
+    expect(isPermanentFailure('21610')).toBe(true)
+    expect(isPermanentFailure(' 21610 ')).toBe(true)
+    expect(isPermanentFailure('21211')).toBe(true)
+    expect(isPermanentFailure('30006')).toBe(true)
+    expect(isPermanentFailure('http_400')).toBe(true)
+  })
+
+  it('refuses to retry a send the provider already accepted', () => {
+    // The dangerous one: no_sid/no_id mean the message went out and we could
+    // not read the id back. A retry sends it twice.
+    expect(isPermanentFailure('no_sid')).toBe(true)
+    expect(isPermanentFailure('no_id')).toBe(true)
+  })
+})
+
+describe('retryDelayMinutes', () => {
+  it('backs off three times and then gives up', () => {
+    expect(retryDelayMinutes(1)).toBe(15)
+    expect(retryDelayMinutes(2)).toBe(60)
+    expect(retryDelayMinutes(3)).toBe(240)
+    expect(retryDelayMinutes(4)).toBeNull()
+    expect(retryDelayMinutes(40)).toBeNull()
   })
 })

@@ -1,7 +1,8 @@
 import 'server-only'
 
 import type { NotificationChannel } from '@rental/core/notifications'
-import { isOptedOut } from '@/lib/comms/opt-out-store.ts'
+import { isOptOutErrorCode } from '@rental/core/comms'
+import { isOptedOut, recordOptOut } from '@/lib/comms/opt-out-store.ts'
 import { notificationConfig, sandboxAddressFor } from './config.ts'
 import { notificationAdapter } from './provider.ts'
 
@@ -93,6 +94,39 @@ export async function deliverOverChannel(args: {
         ? String((error as { code: unknown }).code)
         : 'unknown'
     console.error(`[deliver] ${args.channel} send failed`, error)
+
+    // A SYNCHRONOUS OPT-OUT TEACHES THE LIST, NOT JUST THIS ROW (R-106).
+    //
+    // When Twilio refuses the API call outright because this number replied
+    // STOP, no message is ever created - so no MessageSid exists, no status
+    // callback is ever posted, and `/api/sms/status`, which is where the
+    // opt-out list learns about 21610 today, is never called at all. Without
+    // this branch the send just discovered a fact about the recipient and
+    // threw it away, and the next send discovers it again.
+    //
+    // HERE rather than in the Twilio driver, because `deliver.ts` is the one
+    // catch every channel's failure passes through: a driver-local fix would
+    // be correct for exactly one adapter and would leave the next one to
+    // rediscover the same hole.
+    //
+    // Against `to`, not `args.to`. `to` is the address the provider actually
+    // refused, which in a sandbox environment is the sandbox number - and
+    // recording an opt-out against the tenant we were only pretending to
+    // text would block a real person because a developer's test handset
+    // said STOP.
+    if (args.channel === 'SMS' && isOptOutErrorCode(failureCode)) {
+      await recordOptOut({
+        phone: to,
+        source: 'CARRIER_CALLBACK',
+        reason: `twilio:${failureCode}`,
+      }).catch((optOutError) => {
+        // The failure is already the return value below and is what the
+        // caller records. Losing that because the opt-out write failed would
+        // trade a known problem for a silent one.
+        console.error('[deliver] failed to record a synchronous opt-out', optOutError)
+      })
+    }
+
     return { status: 'FAILED', failureCode }
   }
 }

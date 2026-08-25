@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto'
 import { prisma } from '@rental/db'
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import { ChannelSendError } from './adapter.ts'
+import { notificationAdapter } from './provider.ts'
 import { dispatchPendingNotifications, notify } from './send.ts'
 
 // The engine's guarantees against a real database. None of these can be
@@ -564,6 +566,137 @@ describe('the kill switch', () => {
     } finally {
       if (previous === undefined) delete process.env.NOTIFICATIONS_ENABLED
       else process.env.NOTIFICATIONS_ENABLED = previous
+    }
+  })
+})
+
+// R-106a: A FAILED DELIVERY IS NOT A FINISHED DELIVERY.
+//
+// `failureCode` was written in four places and branched on in none, so a
+// Twilio 500 and a disconnected number were both permanent. These are about
+// the branch, and about what the row says while it waits - a retry that
+// erased the failure it was retrying would trade one silent record for
+// another.
+describe('retrying a failed delivery', () => {
+  const AT = new Date('2026-08-05T15:00:00Z')
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  async function dispatchOneFailing(code: string) {
+    const key = `test:retry:${randomUUID()}`
+    const outcomes = await notifyOnce({ idempotencyKey: key })
+    const deliveryIds = outcomes
+      .map((o) => o.deliveryId)
+      .filter((id): id is string => id !== undefined)
+
+    vi.spyOn(notificationAdapter, 'send').mockRejectedValue(
+      new ChannelSendError(code, `simulated ${code}`),
+    )
+    const result = await dispatchPendingNotifications(AT, 100, { deliveryIds })
+    const deliveries = await prisma.notificationDelivery.findMany({
+      where: { id: { in: deliveryIds } },
+    })
+    return { result, deliveries }
+  }
+
+  it('parks a transient failure on a backoff instead of burying it', async () => {
+    const { result, deliveries } = await dispatchOneFailing('http_500')
+
+    // NOT counted as failed: the sweep has not finished with it.
+    expect(result.failed).toBe(0)
+    for (const delivery of deliveries) {
+      expect(delivery.status).toBe('DEFERRED')
+      // 15 minutes, the first rung of the backoff.
+      expect(delivery.sendAfter).toEqual(new Date('2026-08-05T15:15:00Z'))
+      // The row still says what went wrong and when, while it waits. Without
+      // this a message that has been failing for four hours is
+      // indistinguishable from one merely held until morning.
+      expect(delivery.failureCode).toBe('http_500')
+      expect(delivery.failedAt).not.toBeNull()
+      expect(delivery.attempts).toBe(1)
+    }
+  })
+
+  it('does not retry a send the provider already accepted', async () => {
+    // no_id means Resend took the email and returned something we could not
+    // read an id out of. A retry sends it twice.
+    const { result, deliveries } = await dispatchOneFailing('no_id')
+
+    expect(result.failed).toBe(deliveries.length)
+    for (const delivery of deliveries) {
+      expect(delivery.status).toBe('FAILED')
+      expect(delivery.sendAfter).toBeNull()
+    }
+  })
+
+  it('gives up after three attempts rather than retrying for ever', async () => {
+    const key = `test:retry-exhausted:${randomUUID()}`
+    const outcomes = await notifyOnce({ idempotencyKey: key })
+    const deliveryIds = outcomes
+      .map((o) => o.deliveryId)
+      .filter((id): id is string => id !== undefined)
+    // Two attempts already spent; the claim in the sweep makes this the third
+    // and last.
+    await prisma.notificationDelivery.updateMany({
+      where: { id: { in: deliveryIds } },
+      data: { attempts: 2 },
+    })
+
+    vi.spyOn(notificationAdapter, 'send').mockRejectedValue(
+      new ChannelSendError('http_503', 'still down'),
+    )
+    await dispatchPendingNotifications(AT, 100, { deliveryIds })
+    const third = await prisma.notificationDelivery.findMany({
+      where: { id: { in: deliveryIds } },
+    })
+    // The last rung: four hours out, not given up on yet.
+    expect(third[0]?.status).toBe('DEFERRED')
+    expect(third[0]?.sendAfter).toEqual(new Date('2026-08-05T19:00:00Z'))
+
+    // And the one after that is terminal.
+    await dispatchPendingNotifications(new Date('2026-08-05T19:01:00Z'), 100, {
+      deliveryIds,
+    })
+    const fourth = await prisma.notificationDelivery.findMany({
+      where: { id: { in: deliveryIds } },
+    })
+    for (const delivery of fourth) {
+      expect(delivery.status).toBe('FAILED')
+      expect(delivery.attempts).toBe(4)
+    }
+  })
+
+  it('does not let a retry land inside quiet hours', async () => {
+    // A send that fails at 20:55 local backs off four hours. Without the
+    // quiet-hours push that is a text at one in the morning - NOTIF-05 does
+    // not stop applying because the first attempt failed.
+    const key = `test:retry-quiet:${randomUUID()}`
+    const outcomes = await notifyOnce({ idempotencyKey: key })
+    const deliveryIds = outcomes
+      .map((o) => o.deliveryId)
+      .filter((id): id is string => id !== undefined)
+    await prisma.notificationDelivery.updateMany({
+      where: { id: { in: deliveryIds } },
+      data: { attempts: 2 },
+    })
+
+    vi.spyOn(notificationAdapter, 'send').mockRejectedValue(
+      new ChannelSendError('http_503', 'still down'),
+    )
+    // 01:55Z on the 6th is 20:55 Chicago on the 5th; +4h is 00:55 local.
+    await dispatchPendingNotifications(new Date('2026-08-06T01:55:00Z'), 100, {
+      deliveryIds,
+    })
+    const deliveries = await prisma.notificationDelivery.findMany({
+      where: { id: { in: deliveryIds } },
+    })
+    for (const delivery of deliveries) {
+      expect(delivery.status).toBe('DEFERRED')
+      expect(delivery.sendAfter!.getTime()).toBeGreaterThan(
+        new Date('2026-08-06T05:55:00Z').getTime(),
+      )
     }
   })
 })

@@ -5065,6 +5065,12 @@ model NotificationDelivery {
   suppressedReason String?
   /// Set when status is DEFERRED: the earliest instant the drain job may send
   /// this. Quiet hours defer, they do not discard (NOTIF-05).
+  ///
+  /// R-106 gave it a second writer with the same meaning: a retryable send
+  /// failure parks the row here on a backoff instead of leaving it FAILED
+  /// forever. `failedAt`/`failureCode` stay set while it waits, so a row that
+  /// has been failing for hours is distinguishable from one merely held until
+  /// morning.
   sendAfter        DateTime?
   attempts         Int            @default(0)
   sentAt           DateTime?
@@ -6049,6 +6055,18 @@ enum SmsOptOutSource {
   /// The provider told us a send was blocked - Twilio error 21610 and its
   /// relatives. This is the one that catches an opt-out sent to a carrier
   /// that never forwarded the keyword to us, which is the common case.
+  ///
+  /// COVERS BOTH WAYS THE PROVIDER CAN TELL US, and R-106 decided that
+  /// deliberately rather than adding a third value. A status callback carries
+  /// 21610 after a message exists; a synchronous API rejection carries the
+  /// same code instead of ever creating one. The name says "callback" and one
+  /// of the two is not a callback - but the FACT this column records is which
+  /// side learned of the opt-out, us or them, and both of these are them.
+  /// A third value would split one fact across two rows, need a migration,
+  /// and need every list that reads this enum found and updated - CLAUDE.md's
+  /// "adding a value to a status enum is never one edit" cutting against the
+  /// change rather than for it. `reason` already carries `twilio:<code>` for
+  /// anyone who needs to tell the two apart.
   CARRIER_CALLBACK
 }
 

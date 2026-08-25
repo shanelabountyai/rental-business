@@ -10,6 +10,7 @@ import {
   isDigestEligible,
   isLockedCategory,
   isNotificationCategory,
+  mayAutoRetry,
   quietHoursEndAfter,
   renderTemplate,
   resolveChannels,
@@ -265,5 +266,24 @@ describe('templates', () => {
     // typically) had no subject to render.
     expect(rendered.body).toContain('2. No subject line for this one')
     expect(rendered.body).not.toContain('second line')
+  })
+})
+
+describe('mayAutoRetry', () => {
+  it('never re-sends a notice on its own', () => {
+    // Serving a notice starts a clock. A second copy carries a second
+    // timestamp, and nobody chose to send it.
+    expect(mayAutoRetry('legal_notice')).toBe(false)
+    expect(mayAutoRetry('entry_notice')).toBe(false)
+  })
+
+  it('is not the locked list', () => {
+    // Locked means "you may not switch this off"; this means "we may not
+    // repeat it without you". A failed gas-leak page is the one that most
+    // wants retrying, and it is locked.
+    expect(isLockedCategory('maintenance_emergency')).toBe(true)
+    expect(mayAutoRetry('maintenance_emergency')).toBe(true)
+    expect(mayAutoRetry('lease_signature')).toBe(true)
+    expect(mayAutoRetry('rent_reminder')).toBe(true)
   })
 })

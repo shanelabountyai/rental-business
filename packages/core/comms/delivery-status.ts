@@ -139,3 +139,80 @@ export function shouldApplyStatus(
   const currentRank = RANK[current as Exclude<MappedDeliveryStatus, null>] ?? 0
   return RANK[incoming] > currentRank
 }
+
+/**
+ * Failures that must never be retried (R-106).
+ *
+ * The default is the other way round - anything not named here is retried,
+ * bounded by `retryDelayMinutes` below - because the defect this closes was
+ * treating a rate limit and a dead address identically, and of the two it is
+ * the rate limit that is the common case. A timeout, a 5xx and an
+ * unrecognised code are all "try again in a bit"; three attempts and then
+ * stop is a cheap enough bet on any of them being wrong.
+ *
+ * These are the ones where trying again is not merely useless but WRONG:
+ *
+ *   21610 and its relatives - the recipient replied STOP. Retrying is
+ *   precisely the thing they told the carrier to stop. `isOptOutErrorCode`
+ *   above is the same set seen from the other side, and the send path records
+ *   the opt-out rather than only declining to retry it.
+ *
+ *   21211/21214/21612/21614 and 30005/30006 - the number is not a number, or
+ *   not a handset. No amount of waiting turns a landline into a mobile.
+ *
+ *   no_sid/no_id - THE DANGEROUS ONE. The provider ACCEPTED the message and
+ *   returned a response we could not read an id out of. The recipient may
+ *   well have it; a retry would send it twice, and this build's whole
+ *   idempotency design exists so that cannot happen.
+ *
+ *   Resend's validation names - the same bytes will fail the same validation.
+ */
+const PERMANENT_FAILURE_CODES = new Set([
+  '21610',
+  '21211',
+  '21214',
+  '21612',
+  '21614',
+  '30005',
+  '30006',
+  'no_sid',
+  'no_id',
+  'validation_error',
+  'invalid_parameter',
+  'invalid_from_address',
+])
+
+export function isPermanentFailure(code: string | null | undefined): boolean {
+  const trimmed = code?.trim()
+  if (!trimmed) return false
+  if (PERMANENT_FAILURE_CODES.has(trimmed)) return true
+  // A 4xx that is not a rate limit or a timeout is us sending something the
+  // provider will refuse identically next time. 429 and 408 are the two that
+  // say "later", which is what a retry is for.
+  const http = /^http_(\d{3})$/.exec(trimmed)
+  if (http) {
+    const status = Number(http[1])
+    return status >= 400 && status < 500 && status !== 429 && status !== 408
+  }
+  return false
+}
+
+/**
+ * How long to wait before attempt number `attempts` + 1, or null when the
+ * budget is spent.
+ *
+ * `attempts` is the delivery row's own counter, incremented when the sweep
+ * claims the row - so the first failure arrives here as 1.
+ *
+ * THE SCHEDULE IS COARSE ON PURPOSE. The drain is an hourly cron (D-3), so
+ * anything finer than an hour is rounded up to the next tick anyway and a
+ * precise exponential curve would be describing a resolution the system does
+ * not have. Three attempts across roughly five hours covers the outage and
+ * rate-limit cases this is actually for; a provider still refusing after that
+ * is not a blip and wants a human, not a fourth try.
+ */
+const RETRY_DELAYS_MINUTES = [15, 60, 240]
+
+export function retryDelayMinutes(attempts: number): number | null {
+  return RETRY_DELAYS_MINUTES[attempts - 1] ?? null
+}

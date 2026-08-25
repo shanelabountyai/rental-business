@@ -339,3 +339,34 @@ export const CATEGORY_LABELS: Record<NotificationCategory, string> = {
   prospect_showing: 'Showing bookings and reminders',
   inspection_signature: 'Inspection reports ready to review and sign',
 }
+
+/**
+ * Categories a failed delivery may NOT be re-sent for on its own (R-106).
+ *
+ * Serving a notice is a legally operative act. It starts a clock somebody is
+ * counting days against, and a second copy of it arriving hours later carries
+ * a second timestamp - so which service is the operative one becomes a
+ * question a court asks and this system cannot answer. A retry sweep deciding
+ * that on its own, at 3am, with nobody having chosen it, is the thing this
+ * set exists to refuse.
+ *
+ * NOT the same list as LOCKED_CATEGORIES, and the difference is the point.
+ * `maintenance_emergency` is locked BECAUSE it must reach somebody - a failed
+ * gas-leak page is the one that most wants retrying. `lease_signature` is a
+ * link to a page, re-sendable all day. Locked means "you may not switch this
+ * off"; this means "we may not repeat it without you". Two different
+ * questions that happen to share two members.
+ *
+ * What happens instead is not nothing: D-38's `serve_notice_offline` task is
+ * raised, exactly as it is for a notice we could not text at all. The answer
+ * to an undeliverable legal notice was already "put a human on it", and a
+ * provider failure is the same fact arriving one step later.
+ */
+export const NEVER_AUTO_RETRY_CATEGORIES: ReadonlySet<NotificationCategory> = new Set([
+  'legal_notice',
+  'entry_notice',
+])
+
+export function mayAutoRetry(category: NotificationCategory): boolean {
+  return !NEVER_AUTO_RETRY_CATEGORIES.has(category)
+}

@@ -7,6 +7,7 @@ import {
   bypassesQuietHours,
   isDigestEligible,
   isLockedCategory,
+  mayAutoRetry,
   isNotificationCategory,
   quietHoursEndAfter,
   renderTemplate,
@@ -14,6 +15,7 @@ import {
   templateFor,
   withinQuietHours,
 } from '@rental/core/notifications'
+import { isPermanentFailure, retryDelayMinutes } from '@rental/core/comms'
 import {
   type NotificationRecipientType,
   type Prisma,
@@ -316,14 +318,14 @@ export async function notify(
   // permits written notice, so posting on the door is a real answer - which
   // is why this raises work for a person rather than logging a warning.
   if (smsBlocked && isLockedCategory(input.category) && input.propertyId) {
-    await raiseBlockedNoticeTask({
+    await raiseNoticeTask({
       db,
       propertyId: input.propertyId,
       category: input.category,
-      recipient: input.recipient,
       timezone,
       now,
       idempotencyKey: input.idempotencyKey,
+      title: `Serve ${input.category.replace(/_/g, ' ')} another way - this tenant's phone is blocking our texts`,
     }).catch((error) => {
       // The notice went out on the other channels and those rows are already
       // written. A failure to raise the task must not lose them.
@@ -341,14 +343,18 @@ export async function notify(
  * T-1 reminder for the same entry notice on the same day does not raise a
  * second one - `createTask` already owns that guarantee (R-011).
  */
-async function raiseBlockedNoticeTask(args: {
+async function raiseNoticeTask(args: {
   db: Db
   propertyId: string
   category: NotificationCategory
-  recipient: NotificationRecipient
   timezone: string | undefined
   now: Date
   idempotencyKey: string
+  /// What went wrong, in the words the person picking this up needs. The two
+  /// callers describe different discoveries - a number that blocks our texts
+  /// before we tried, and a provider that refused after we did - and the
+  /// action is the same either way.
+  title: string
 }): Promise<void> {
   // The property's own calendar day (D-3). Falling back to UTC rather than
   // failing: a task raised on the wrong side of midnight is still a task
@@ -378,8 +384,51 @@ async function raiseBlockedNoticeTask(args: {
     // It is also not ROUTINE - the alternative to somebody acting on it is
     // entering a home without having served notice.
     priority: 'URGENT',
-    title: `Serve ${args.category.replace(/_/g, ' ')} another way - this tenant's phone is blocking our texts`,
+    title: args.title,
   })
+}
+
+/**
+ * The channel suffix `record()` appends, removed.
+ *
+ * A delivery row's key is `<caller's key>:<CHANNEL>`; the task is about the
+ * NOTICE, not about the channel it failed on, so both channels failing the
+ * same notice must land on one task rather than two identical ones a person
+ * has to work out are the same.
+ */
+function baseKeyOf(idempotencyKey: string): string {
+  return idempotencyKey.replace(/:(EMAIL|SMS|PORTAL)$/, '')
+}
+
+/**
+ * When may this retry actually go out (R-106)?
+ *
+ * Null when the attempt budget is spent. Otherwise the backoff instant,
+ * pushed past quiet hours if it would land inside them - a retry is still an
+ * automated outbound message, and NOTIF-05 does not stop applying because the
+ * first attempt failed. Without this a send that fails at 8:55pm comes back
+ * four hours later as a text at one in the morning.
+ */
+async function scheduleRetry(args: {
+  attempts: number
+  category: NotificationCategory
+  propertyId: string | null
+  now: Date
+}): Promise<Date | null> {
+  const delay = retryDelayMinutes(args.attempts)
+  if (delay === null) return null
+
+  const at = new Date(args.now.getTime() + delay * 60_000)
+  if (!args.propertyId || bypassesQuietHours(args.category)) return at
+
+  const timezone = (
+    await prisma.property.findUnique({
+      where: { id: args.propertyId },
+      select: { timezone: true },
+    })
+  )?.timezone
+  if (!timezone) return at
+  return withinQuietHours(at, timezone) ? quietHoursEndAfter(at, timezone) : at
 }
 
 interface RecordInput {
@@ -566,15 +615,65 @@ export async function dispatchPendingNotifications(
         },
       })
     } else {
+      const failureCode = outcome.failureCode ?? 'unknown'
+      const category = notification.category as NotificationCategory
+      // `delivery.attempts` is the count BEFORE the claim above incremented
+      // it, so this attempt is the one after it.
+      const retryAt =
+        !isPermanentFailure(failureCode) && mayAutoRetry(category)
+          ? await scheduleRetry({
+              attempts: delivery.attempts + 1,
+              category,
+              propertyId: notification.propertyId,
+              now,
+            })
+          : null
+
       await prisma.notificationDelivery.update({
         where: { id: delivery.id },
         data: {
-          status: 'FAILED',
+          // DEFERRED reuses the column quiet hours already parks a message
+          // in: both answer "the earliest instant the drain may send this",
+          // and the drain already picks up a DEFERRED row whose sendAfter has
+          // passed. A second status meaning the same thing would need a
+          // second branch in every screen that reads this one.
+          status: retryAt ? 'DEFERRED' : 'FAILED',
+          sendAfter: retryAt,
+          // WRITTEN EVEN WHEN WE ARE GOING TO RETRY. The row then says both
+          // things a reader needs - waiting until T, and the last provider
+          // refusal was this, at that time - where clearing them would hide
+          // a message that has been failing for four hours behind a status
+          // indistinguishable from a quiet-hours hold.
           failedAt: new Date(),
-          failureCode: outcome.failureCode ?? 'unknown',
+          failureCode,
         },
       })
+
+      if (retryAt) continue
+
       failed++
+
+      // D-38 AGAIN, ONE STEP LATER. A legal notice we could not text at all
+      // already raises a task; a legal notice the provider refused is the
+      // same obligation unmet, discovered at send time instead of at decide
+      // time. Both land on the same task - `createTask` is idempotent on
+      // (type, subjectId, businessDate) and the subject id is the
+      // notification's own idempotency key, so a blocked SMS and a failed
+      // email about the same notice are one piece of work for one person,
+      // not two.
+      if (isLockedCategory(category) && notification.propertyId) {
+        await raiseNoticeTask({
+          db: prisma,
+          propertyId: notification.propertyId,
+          category,
+          timezone: undefined,
+          now,
+          idempotencyKey: baseKeyOf(notification.idempotencyKey),
+          title: `Serve ${category.replace(/_/g, ' ')} another way - ${notification.channel.toLowerCase()} delivery failed (${failureCode})`,
+        }).catch((error) => {
+          console.error('[notifications] failed to raise an undelivered-notice task', error)
+        })
+      }
     }
   }
 

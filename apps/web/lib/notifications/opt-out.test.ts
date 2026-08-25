@@ -1,8 +1,11 @@
 import { randomUUID } from 'node:crypto'
 import { prisma } from '@rental/db'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { isOptedOut, recordOptIn, recordOptOut } from '../comms/opt-out-store.ts'
-import { notify } from './send.ts'
+import { ChannelSendError } from './adapter.ts'
+import { deliverOverChannel } from './deliver.ts'
+import { notificationAdapter } from './provider.ts'
+import { dispatchPendingNotifications, notify } from './send.ts'
 
 // A carrier STOP, and the notice it blocks (R-040e, D-38).
 //
@@ -257,5 +260,117 @@ describe('sending to a blocked number', () => {
       where: { propertyId, type: 'serve_notice_offline', subjectId: key },
     })
     expect(task).toBeNull()
+  })
+})
+
+// R-106b: THE OPT-OUT TWILIO TELLS US ABOUT WITHOUT EVER SENDING ANYTHING.
+//
+// Every test above learns about a STOP either from an inbound keyword or from
+// a status callback, and both of those describe a message that exists. 21610
+// on the API call itself is the third way, and it is the one with no message
+// and therefore no callback: nothing downstream is ever going to be told, so
+// if the send path does not record it here, nobody records it at all and the
+// next attempt rediscovers the same block.
+describe('a synchronous carrier rejection', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('records the opt-out that the failed send just discovered', async () => {
+    const phone = uniquePhone()
+    phones.push(phone)
+    expect(await isOptedOut(phone)).toBe(false)
+
+    vi.spyOn(notificationAdapter, 'send').mockRejectedValue(
+      new ChannelSendError('21610', 'The message From/To pair violates a blacklist rule.'),
+    )
+
+    const outcome = await deliverOverChannel({ channel: 'SMS', to: phone, body: 'hello' })
+
+    // Still FAILED, not SUPPRESSED: this send did fail, and the row has to say
+    // so. What changed is that the NEXT one will be suppressed before it is
+    // ever attempted.
+    expect(outcome).toEqual({ status: 'FAILED', failureCode: '21610' })
+    expect(await isOptedOut(phone)).toBe(true)
+  })
+
+  it('does not opt out a number for an ordinary failure', async () => {
+    // 30003 is a handset that was off. Unsubscribing somebody whose phone was
+    // merely flat is the false-record defect this whole area exists to close.
+    const phone = uniquePhone()
+    phones.push(phone)
+
+    vi.spyOn(notificationAdapter, 'send').mockRejectedValue(
+      new ChannelSendError('30003', 'Unreachable destination handset'),
+    )
+
+    const outcome = await deliverOverChannel({ channel: 'SMS', to: phone, body: 'hello' })
+    expect(outcome.status).toBe('FAILED')
+    expect(await isOptedOut(phone)).toBe(false)
+  })
+})
+
+// R-106a's other half: what happens to a notice we are NOT allowed to retry.
+describe('a notice the provider refused', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('never retries it, and puts a human on it instead', async () => {
+    const phone = uniquePhone()
+    phones.push(phone)
+
+    const key = `test:entry-failed:${randomUUID()}`
+    const outcomes = await notify({
+      category: 'entry_notice',
+      templateKey: 'entry.notice',
+      recipient: tenantRecipient(phone),
+      context: {
+        propertyName: 'Refused House',
+        unitName: 'A',
+        scheduledStart: '2026-08-20T15:00:00Z',
+        scheduledEnd: '2026-08-20T17:00:00Z',
+        timezone: 'America/Chicago',
+        reason: 'Annual inspection',
+      },
+      propertyId,
+      idempotencyKey: key,
+      now: new Date('2026-08-18T15:00:00Z'),
+    })
+    const rows = await prisma.notification.findMany({
+      where: { idempotencyKey: { startsWith: key } },
+    })
+    notificationIds.push(...rows.map((r) => r.id))
+
+    // A transient code - 500 would be retried for any other category. The
+    // refusal here is about the CATEGORY, so the failure code must be one
+    // that would otherwise come back.
+    vi.spyOn(notificationAdapter, 'send').mockRejectedValue(
+      new ChannelSendError('http_500', 'Twilio is having a moment'),
+    )
+
+    const deliveryIds = outcomes
+      .map((o) => o.deliveryId)
+      .filter((id): id is string => id !== undefined)
+    const result = await dispatchPendingNotifications(
+      new Date('2026-08-18T15:01:00Z'),
+      100,
+      { deliveryIds },
+    )
+    expect(result.failed).toBeGreaterThan(0)
+
+    const deliveries = await prisma.notificationDelivery.findMany({
+      where: { id: { in: deliveryIds } },
+    })
+    const sms = deliveries.find((d) => d.failureCode === 'http_500')
+    expect(sms?.status).toBe('FAILED')
+    expect(sms?.sendAfter).toBeNull()
+
+    const task = await prisma.task.findFirst({
+      where: { propertyId, type: 'serve_notice_offline', subjectId: key },
+    })
+    expect(task).not.toBeNull()
+    taskIds.push(task!.id)
+    expect(task!.title).toMatch(/delivery failed \(http_500\)/i)
   })
 })
