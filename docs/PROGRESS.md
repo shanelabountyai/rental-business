@@ -4438,7 +4438,7 @@ R-104's two leftovers, and they are one item because they meet in the same `catc
 ---
 
 ## R-037b: a surcharge you cannot prove is lawful
-**Commit:** _pending_  ·  **Date:** 2026-08-25
+**Commit:** 3c53e40  ·  **Date:** 2026-08-25
 
 R-037 shipped the card pass-through behind `JurisdictionRule.cardSurchargePermitted`, a boolean. Tex. Bus. & Com. Code §604A.003 permits a surcharge on a **credit** card and bars one on a **debit or stored-value** card. A boolean cannot say that, so the Texas row said `true` — and every debit card paying rent through this product was surcharged unlawfully. The gap was not undiscovered: R-037's own PROGRESS entry names it, and the seeded rule's `notes` field has apologised for it since. It was recorded, and it was still charging money.
 
