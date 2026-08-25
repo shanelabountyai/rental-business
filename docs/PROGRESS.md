@@ -4250,7 +4250,7 @@ Eight messages ride on real `Thread` rows keyed with core's own `threadKey` rath
 - **The seed still writes no `AuditLog`.** Matching `seed.mts`'s reference rows, and consistent with these not being real user actions. It means the audit trail on a freshly seeded demo is empty, which is a gap somebody will notice on the evidence-trail screens.
 
 ## R-100b: the leasing and risk story
-**Commit:** `pending`  ·  **Date:** 2026-08-25
+**Commit:** `a772cbf`  ·  **Date:** 2026-08-25
 
 **What it built.** The demo seed's second slice (PRD §8, D-140), following R-100a's shape exactly: a `LEASING` map keyed `"<property>::<unit>"`, merged in after the units it hangs off exist. Recorded as **D-144**.
 
