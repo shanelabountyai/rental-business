@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ChannelSendError } from './adapter.ts'
+import { sandboxAddressFor } from './config.ts'
 import { LiveChannelAdapter } from './live-adapter.ts'
 
 // R-104. The drivers are two HTTPS calls each, so what is worth testing is
@@ -156,5 +157,25 @@ describe('an unconfigured provider', () => {
     expect(adapter.supports('EMAIL')).toBe(true)
     // PORTAL has no provider anywhere and is always deliverable.
     expect(adapter.supports('PORTAL')).toBe(true)
+  })
+})
+
+describe('the sandbox redirect, once the drivers are real', () => {
+  it('picks the address that suits the channel, so one pass exercises both', () => {
+    const both = ['dev@example.test', '+15125550100']
+    expect(sandboxAddressFor('EMAIL', both)).toBe('dev@example.test')
+    expect(sandboxAddressFor('SMS', both)).toBe('+15125550100')
+  })
+
+  it('still redirects every channel to a single configured address', () => {
+    // Unchanged from before there were two. A mismatched address fails at the
+    // provider - visibly, on the delivery row - which is better than sending
+    // the message on to the real tenant it was meant to be kept from.
+    expect(sandboxAddressFor('SMS', ['dev@example.test'])).toBe('dev@example.test')
+    expect(sandboxAddressFor('EMAIL', ['+15125550100'])).toBe('+15125550100')
+  })
+
+  it('is off when nothing is configured', () => {
+    expect(sandboxAddressFor('EMAIL', [])).toBeNull()
   })
 })

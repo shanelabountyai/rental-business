@@ -2,7 +2,7 @@ import 'server-only'
 
 import type { NotificationChannel } from '@rental/core/notifications'
 import { isOptedOut } from '@/lib/comms/opt-out-store.ts'
-import { notificationConfig } from './config.ts'
+import { notificationConfig, sandboxAddressFor } from './config.ts'
 import { notificationAdapter } from './provider.ts'
 
 // The single place anything in this product hands a message to a provider.
@@ -74,10 +74,9 @@ export async function deliverOverChannel(args: {
     return { status: 'SUPPRESSED', suppressedReason: 'sms_opt_out' }
   }
 
-  const to = config.sandboxTo ?? args.to
-  const body = config.sandboxTo
-    ? `[sandbox: intended for ${args.to}]\n\n${args.body}`
-    : args.body
+  const sandboxTo = sandboxAddressFor(args.channel, config.sandboxTo)
+  const to = sandboxTo ?? args.to
+  const body = sandboxTo ? `[sandbox: intended for ${args.to}]\n\n${args.body}` : args.body
 
   try {
     const result = await notificationAdapter.send({

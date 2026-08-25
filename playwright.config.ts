@@ -174,6 +174,20 @@ export default defineConfig({
       // the e2e upload specs would write real objects into the production
       // Blob store. Dev and test are local disk by D-14.
       BLOB_READ_WRITE_TOKEN: '',
+      // And the third instance of the same hazard (R-104). The notification
+      // drivers select Resend and Twilio on the presence of their variables,
+      // so a key in .env.local would make this suite send REAL EMAIL AND REAL
+      // SMS - hundreds of them, at whatever NOTIFICATIONS_SANDBOX_TO names,
+      // or at the fixture's invented address when it names nothing.
+      // TWILIO_AUTH_TOKEN below is deliberately kept: it verifies the INBOUND
+      // webhook's signature (R-021), and emptying the other two is enough
+      // because the driver requires all three.
+      RESEND_API_KEY: '',
+      TWILIO_ACCOUNT_SID: '',
+      TWILIO_MESSAGING_SERVICE_SID: '',
+      // Redirecting the recipient would also break every spec that asserts on
+      // the address the log recorded.
+      NOTIFICATIONS_SANDBOX_TO: '',
       TWILIO_AUTH_TOKEN: process.env.TWILIO_AUTH_TOKEN ?? TEST_TWILIO_AUTH_TOKEN,
       STRIPE_WEBHOOK_SECRET:
         process.env.STRIPE_WEBHOOK_SECRET ?? TEST_STRIPE_WEBHOOK_SECRET,

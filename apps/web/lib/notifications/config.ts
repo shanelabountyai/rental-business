@@ -1,5 +1,7 @@
 import 'server-only'
 
+import type { NotificationChannel } from '@rental/core/notifications'
+
 // The two safety controls a notification engine is negligent without.
 //
 // KILL SWITCH. Something will eventually go wrong in a way that sends the
@@ -13,9 +15,16 @@ import 'server-only'
 // SANDBOX REDIRECT. The one that prevents the incident nobody recovers from:
 // texting real tenants from a developer's laptop because it was pointed at a
 // copy of production data. NOTIFICATIONS_SANDBOX_TO redirects every send to
-// one address while recording the address it WOULD have used, so a staging
-// environment can exercise the whole path against real-looking recipients and
-// reach nobody.
+// your own address while recording the address it WOULD have used, so a
+// staging environment can exercise the whole path against real-looking
+// recipients and reach nobody.
+//
+// IT TAKES ONE ADDRESS PER CHANNEL, comma-separated - an email address and a
+// phone number. One value still works and still redirects everything, which
+// is what it did before R-104: with the logging adapter wired, one string was
+// enough because nothing parsed it. Real drivers do parse it, and an email
+// address in Twilio's `To` is a rejected message rather than a redirected
+// one - so exercising both channels in one pass needed both here.
 //
 // Both are deliberately environment variables and not database rows: a kill
 // switch that needs a working database to read is a kill switch that does not
@@ -25,9 +34,11 @@ export interface NotificationConfig {
   /// False stops every send. Notifications are still recorded, as SUPPRESSED
   /// with reason `kill_switch`.
   enabled: boolean
-  /// When set, every send is redirected here regardless of recipient. The
-  /// intended address is preserved on the notification record.
-  sandboxTo: string | null
+  /// The addresses every send is redirected to, regardless of recipient -
+  /// empty when the redirect is off. Read it through `sandboxAddressFor`,
+  /// which picks the one that suits the channel. The intended address is
+  /// preserved on the notification record either way.
+  sandboxTo: readonly string[]
 }
 
 /**
@@ -42,9 +53,30 @@ export interface NotificationConfig {
  * environment, which is why the two are read together.
  */
 export function notificationConfig(): NotificationConfig {
-  const sandboxTo = process.env.NOTIFICATIONS_SANDBOX_TO?.trim()
   return {
     enabled: process.env.NOTIFICATIONS_ENABLED !== 'false',
-    sandboxTo: sandboxTo ? sandboxTo : null,
+    sandboxTo: (process.env.NOTIFICATIONS_SANDBOX_TO ?? '')
+      .split(',')
+      .map((address) => address.trim())
+      .filter(Boolean),
   }
+}
+
+/**
+ * The sandbox address to use for one channel, or null when the redirect is
+ * off.
+ *
+ * An '@' is the whole test, which is enough: these two shapes cannot be
+ * confused with each other, and the value is typed by whoever set the
+ * variable rather than by a stranger. A single configured address is used for
+ * EVERY channel - unchanged from before there were two - so a mismatched one
+ * still fails loudly at the provider rather than quietly reaching a real
+ * person, which is the direction to fail in.
+ */
+export function sandboxAddressFor(
+  channel: NotificationChannel,
+  addresses: readonly string[],
+): string | null {
+  const wantsEmail = channel === 'EMAIL'
+  return addresses.find((address) => address.includes('@') === wantsEmail) ?? addresses[0] ?? null
 }

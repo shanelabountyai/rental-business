@@ -51,8 +51,30 @@ export default defineConfig({
      * whichever laptop last ran `vercel env pull`. Emptied for the same reason
      * and by the same mechanism: D-14 chose local disk for dev and test
      * deliberately, and the test runner is where that gets enforced.
+     *
+     * THE NOTIFICATION PROVIDERS ARE THE THIRD INSTANCE, added by R-104 the
+     * hour before the keys existed. `LiveChannelAdapter` selects Resend and
+     * Twilio on the presence of their variables, exactly as the two seams
+     * above select their real drivers - so the moment a key lands in
+     * `.env.local`, this suite would start sending REAL EMAIL AND REAL SMS,
+     * hundreds of them, to whatever `NOTIFICATIONS_SANDBOX_TO` names. That is
+     * worse than the Blob case: it reaches a person's inbox and phone, and
+     * on a laptop with no sandbox address set it reaches whatever address the
+     * fixture invented. `TWILIO_AUTH_TOKEN` is deliberately NOT emptied - it
+     * verifies the signature on the INBOUND webhook (R-021) and the suite
+     * needs it - and emptying the other two Twilio values is enough, because
+     * the driver requires all three. `NOTIFICATIONS_SANDBOX_TO` goes too: it
+     * rewrites the recipient the log records, and specs assert on that
+     * address.
      */
-    env: { STRIPE_SECRET_KEY: '', BLOB_READ_WRITE_TOKEN: '' },
+    env: {
+      STRIPE_SECRET_KEY: '',
+      BLOB_READ_WRITE_TOKEN: '',
+      RESEND_API_KEY: '',
+      TWILIO_ACCOUNT_SID: '',
+      TWILIO_MESSAGING_SERVICE_SID: '',
+      NOTIFICATIONS_SANDBOX_TO: '',
+    },
     /**
      * 20s, not Vitest's 5s default.
      *
