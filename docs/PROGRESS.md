@@ -4156,7 +4156,7 @@ The prerender manifest named exactly seven routes, four of them real pages. Thos
 - **Stripe is still unexercised in the browser.** `autopay-panel.tsx` is the only third-party script and D-15 already excludes it from e2e, so `js.stripe.com`, `hooks.stripe.com` and `api.stripe.com` are admitted by the policy on inventory rather than on a passing test.
 
 ## The prerender guard D-139 left behind
-**Commit:** _(recorded below)_  ·  **Date:** 2026-08-25
+**Commit:** `543d515`  ·  **Date:** 2026-08-25
 
 **What it did.** Closed the one gap D-139 named: its tests watched the four routes already known to be broken, so a *fifth* prerendered page added later would have reintroduced the defect silently. No new decision — this is the guard that item said was missing.
 
