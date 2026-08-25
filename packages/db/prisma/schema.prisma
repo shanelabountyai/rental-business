@@ -3488,6 +3488,15 @@ model JobRun {
 // propertyScope() or checkMonetaryAuthority().
 // ---------------------------------------------------------------------------
 
+/// Whether a jurisdiction lets the processing cost be passed to the tenant,
+/// and on which cards (PAY-01, R-037b, D-149). CREDIT_ONLY is the commonest
+/// US shape and the one a boolean could not express.
+enum CardSurchargePolicy {
+  NONE
+  CREDIT_ONLY
+  ALL
+}
+
 model Role {
   id                           String   @id @default(cuid())
   /// Stable machine key: owner, manager, maintenance_tech, read_only,
@@ -5897,14 +5906,21 @@ model JurisdictionRule {
   /// (D-4). Texas caps a returned-check fee at 30 USD (Tex. Bus. & Com. Code
   /// §3.506); other states differ and several bar one entirely. Core
   /// computes and clamps it (D-12).
-  nsfFeePermitted         Boolean  @default(true)
+  nsfFeePermitted         Boolean             @default(true)
   nsfFeeMaxCents          Int?
-  cardSurchargePermitted  Boolean  @default(true)
+  /// THREE STATES, NOT A BOOLEAN (R-037b, D-149). Tex. Bus. & Com. Code
+  /// §604A.003 bars a surcharge on a DEBIT or stored-value card while
+  /// permitting one on credit, and a boolean could not say that - so this
+  /// column read `true` for Texas and the product surcharged debit cards.
+  /// Defaults to NONE: a rule row created without an answer must not be
+  /// read as permission, which is the same refusal-to-guess `graceDays`
+  /// and `retaliationWindowDays` already make.
+  cardSurchargePolicy     CardSurchargePolicy @default(NONE)
   /// A statutory ceiling on the surcharge, in basis points of the amount
   /// being paid. Null where the state sets none. Core clamps to it (D-12).
   cardSurchargeMaxBps     Int?
   applicationFeeCapCents  Int?
-  rubsPermitted           Boolean  @default(true)
+  rubsPermitted           Boolean             @default(true)
   /// LEASE-01 (R-056, D-4). Whether this jurisdiction makes source of income
   /// (housing vouchers, Section 8) a protected class - required disclosure
   /// on a listing where it applies. A THIRD state, not a boolean: null means

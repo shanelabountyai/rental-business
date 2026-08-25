@@ -183,24 +183,26 @@ export interface RailAvailability {
  * Retail cash is offered only where it has actually been configured, because
  * an option a tenant selects and then cannot complete is worse than one that
  * was never shown.
+ *
+ * THE CARD RAIL IS ALWAYS OFFERED, and it did not used to be (R-037b, D-149).
+ * This function took a `cardPermitted` flag, and its only caller fed it
+ * `cardSurchargePermitted` off the jurisdiction rule - so a state that
+ * forbids passing the processing cost to the tenant had card payments closed
+ * altogether, and the tenant was told "Card payments are not available for
+ * this property." Those are different facts: a surcharge ban means the OWNER
+ * absorbs the cost, which `cardFeeFor` has always returned correctly and this
+ * function then threw away. Nothing in the schema says a property does not
+ * take cards, so the flag had no honest source; it is gone rather than
+ * rewired. If an owner preference for that ever exists it arrives as a
+ * column, and this signature changes then.
  */
 export function railsFor(input: {
   method: CollectionMethod
-  cardPermitted: boolean
   retailCashConfigured: boolean
 }): RailAvailability[] {
   return [
     { rail: 'ACH', available: true },
-    {
-      rail: 'CARD',
-      available: input.cardPermitted,
-      ...(input.cardPermitted
-        ? {}
-        : {
-            unavailableReason:
-              'Card payments are not available for this property. Bank transfer is free.',
-          }),
-    },
+    { rail: 'CARD', available: true },
     {
       rail: 'RETAIL_CASH',
       available: input.retailCashConfigured,

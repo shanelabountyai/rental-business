@@ -13,13 +13,45 @@ import { uniquePhone, expectAnnouncedInPlace } from './fixtures.ts'
 // through the actual screen, because a correct rule rendered into the wrong
 // field is still a tenant paying twice.
 
+// A state code THIS FILE ALONE uses, so its jurisdiction rule cannot be
+// masked by another file's (CLAUDE.md: a magic fixture value is only isolated
+// if exactly one file uses it - two files both seeding 'ZZ' is how a cap went
+// missing for months). Everything else here stays in TX, because the point of
+// most of these tests is the rule the product actually ships.
+const SURCHARGING_STATE = 'XS'
+
+const ruleIds: string[] = []
 const entityIds: string[] = []
 const propertyIds: string[] = []
 const tenantIds: string[] = []
 const leaseIds: string[] = []
 
-async function seed(options: { collectionMethod?: 'charge_automatically' | 'send_invoice' } = {}) {
+async function seed(
+  options: {
+    collectionMethod?: 'charge_automatically' | 'send_invoice'
+    /// Put the property in a jurisdiction that permits a surcharge on EVERY
+    /// card (R-037b). Texas does not - it is CREDIT_ONLY per Tex. Bus. & Com.
+    /// Code 604A.003, and the funding type is unknown when the fee is quoted,
+    /// so no fee is charged there at all. The disclosure still has to be
+    /// exercised somewhere, and this is where.
+    surchargesEveryCard?: boolean
+  } = {},
+) {
   const stamp = randomUUID().slice(0, 8)
+  if (options.surchargesEveryCard) {
+    const rule = await prisma.jurisdictionRule.create({
+      data: {
+        state: SURCHARGING_STATE,
+        version: 1,
+        effectiveFrom: new Date('2020-01-01'),
+        graceDays: 0,
+        lateFeeType: 'NONE',
+        cardSurchargePolicy: 'ALL',
+        paymentAllocationOrder: [],
+      },
+    })
+    ruleIds.push(rule.id)
+  }
   const entity = await prisma.legalEntity.create({
     data: { name: `Pay LLC-${stamp}`, type: 'LLC' },
   })
@@ -30,7 +62,7 @@ async function seed(options: { collectionMethod?: 'charge_automatically' | 'send
       name: `Pay House-${stamp}`,
       addressLine1: '31 Payment Row',
       city: 'Houston',
-      state: 'TX',
+      state: options.surchargesEveryCard ? SURCHARGING_STATE : 'TX',
       postalCode: '77002',
       timezone: 'America/Chicago',
       propertyType: 'SINGLE_FAMILY',
@@ -115,6 +147,7 @@ test.afterAll(async () => {
     where: { id: { in: propertyIds } },
     data: { active: false },
   })
+  await prisma.jurisdictionRule.deleteMany({ where: { id: { in: ruleIds } } })
   await prisma.$disconnect()
 })
 
@@ -138,7 +171,10 @@ test.describe('the tenant pay screen', () => {
   test('leads with the FREE rail, and prices the card in money', async ({ page }) => {
     // PAY-01 requires the fee be disclosed before the choice, and a screen
     // that led with the card would quietly cost tenants money.
-    const { tenant } = await seed()
+    //
+    // Seeded into a jurisdiction that permits a surcharge on every card, so
+    // there IS a fee to disclose - Texas charges none (see the test below).
+    const { tenant } = await seed({ surchargesEveryCard: true })
     await page.goto(await magicLinkFor(tenant.id))
     await page.goto('/portal/pay')
 
@@ -162,6 +198,36 @@ test.describe('the tenant pay screen', () => {
     const disclosure = page.getByText(/processing fee/)
     await expect(disclosure).toBeVisible()
     await expect(disclosure).toContainText('$45.')
+  })
+
+  test('CHARGES NO CARD FEE IN TEXAS, AND STILL OFFERS THE CARD', async ({ page }) => {
+    // R-037b, and the two halves are one test because the second is what
+    // makes the first safe to ship.
+    //
+    // Tex. Bus. & Com. Code 604A.003 permits a surcharge on a credit card and
+    // bars one on debit or stored-value. Stripe reports the funding type only
+    // once a payment method exists, and PAY-01 wants the fee shown BEFORE the
+    // tenant picks a rail - so the quote cannot tell which kind of card this
+    // is, and a card it cannot show was credit must not be surcharged. Before
+    // this item the rule was a boolean reading `true` and every debit card
+    // paying Texas rent was surcharged unlawfully.
+    //
+    // AND THE CARD RAIL STAYS OPEN. `railsFor` used to be handed
+    // `cardSurchargePermitted` as its `cardPermitted` flag, so the moment the
+    // surcharge stopped being permitted the tenant was told "Card payments
+    // are not available for this property" - turning a fee question into a
+    // rail outage. Not surcharging means the owner absorbs the cost.
+    const { tenant } = await seed()
+    await page.goto(await magicLinkFor(tenant.id))
+    await page.goto('/portal/pay')
+
+    const card = page.getByRole('radio', { name: /Card/ })
+    await expect(card).toBeEnabled()
+    await card.check()
+
+    await expect(page.getByText(/processing fee/)).toHaveCount(0)
+    // The button still offers to charge the rent and nothing above it.
+    await expect(page.getByRole('button', { name: 'Pay $1,500.00' })).toBeVisible()
   })
 
   test('never offers retail cash, and says why', async ({ page }) => {
@@ -239,6 +305,58 @@ test.describe('the tenant pay screen', () => {
     // The fee is what somebody disputes later, so it is on the trail at the
     // moment it was quoted - not recomputed afterwards against a
     // jurisdiction rule that may since have been re-versioned.
+    //
+    // In a jurisdiction that surcharges every card, because Texas now
+    // surcharges none (R-037b). The Texas side is asserted below, and the
+    // reason it needs its own assertion is that a zero fee there is the
+    // CORRECT outcome rather than a missing one - so a trail that recorded
+    // only the amount could not tell the two apart.
+    const { tenant, payer } = await seed({
+      collectionMethod: 'send_invoice',
+      surchargesEveryCard: true,
+    })
+    await page.goto(await magicLinkFor(tenant.id))
+    await page.goto('/portal/pay')
+
+    await page.getByLabel('How much are you paying?').fill('500')
+    await page.getByRole('radio', { name: /Card/ }).check()
+    await page.getByRole('button', { name: /^Pay/ }).click()
+
+    await expect
+      .poll(
+        async () =>
+          prisma.auditLog.count({
+            where: { action: 'payment.intent_created', entityId: payer.id },
+          }),
+        { timeout: 15_000 },
+      )
+      .toBe(1)
+
+    const entry = await prisma.auditLog.findFirstOrThrow({
+      where: { action: 'payment.intent_created', entityId: payer.id },
+    })
+    const after = entry.after as {
+      amountCents: number
+      feeCents: number
+      totalCents: number
+      cardSurchargePolicy: string
+      cardFunding: string | null
+    }
+    expect(after.amountCents).toBe(50_000)
+    expect(after.feeCents).toBeGreaterThan(0)
+    expect(after.totalCents).toBe(after.amountCents + after.feeCents)
+    expect(after.cardSurchargePolicy).toBe('ALL')
+  })
+
+  test('records WHY a Texas card payment carried no fee, not just that it did not', async ({
+    page,
+  }) => {
+    // The other half of R-037b's trail. Under CREDIT_ONLY with a funding type
+    // nobody can read yet, zero is the right answer - and six months later
+    // "we charged you nothing because we could not prove your card was
+    // credit" and "we charged you nothing because this state forbids the fee"
+    // are different defences. Without the policy and the funding on the row
+    // they are the same silence.
     const { tenant, payer } = await seed({ collectionMethod: 'send_invoice' })
     await page.goto(await magicLinkFor(tenant.id))
     await page.goto('/portal/pay')
@@ -260,10 +378,18 @@ test.describe('the tenant pay screen', () => {
     const entry = await prisma.auditLog.findFirstOrThrow({
       where: { action: 'payment.intent_created', entityId: payer.id },
     })
-    const after = entry.after as { amountCents: number; feeCents: number; totalCents: number }
-    expect(after.amountCents).toBe(50_000)
-    expect(after.feeCents).toBeGreaterThan(0)
-    expect(after.totalCents).toBe(after.amountCents + after.feeCents)
+    const after = entry.after as {
+      amountCents: number
+      feeCents: number
+      totalCents: number
+      cardSurchargePolicy: string
+      cardFunding: string | null
+    }
+    expect(after.feeCents).toBe(0)
+    // The tenant is charged the rent and not a cent more.
+    expect(after.totalCents).toBe(50_000)
+    expect(after.cardSurchargePolicy).toBe('CREDIT_ONLY')
+    expect(after.cardFunding).toBe('unknown')
   })
 
   test('accessibility (§6.4, WCAG 2.1 AA)', async ({ page }) => {

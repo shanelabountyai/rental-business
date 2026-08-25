@@ -173,11 +173,18 @@ export async function paymentView(scope: TenantScope): Promise<PaymentView | nul
   // fact. A property with no rule configured is treated as NOT permitted -
   // charging a fee we cannot point at a rule for is the wrong way to be
   // wrong.
+  //
+  // `unknown` FUNDING IS THE HONEST ANSWER HERE, not a shortcut (R-037b).
+  // This is the quote, and PAY-01 wants the number before the tenant picks a
+  // rail - which is before any payment method exists, so Stripe has nothing
+  // to tell us about debit versus credit. Under a CREDIT_ONLY jurisdiction
+  // that means no fee, and the same `unknown` reaches `startPayment`, so the
+  // number quoted is the number charged.
   const cardRule = {
-    cardSurchargePermitted: rule?.cardSurchargePermitted ?? false,
+    cardSurchargePolicy: rule?.cardSurchargePolicy ?? 'NONE',
     cardSurchargeMaxBps: rule?.cardSurchargeMaxBps ?? null,
   }
-  const fee = cardFeeFor(cardRule, limits.maxCents)
+  const fee = cardFeeFor(cardRule, limits.maxCents, 'unknown')
 
   return {
     leaseId: payer.leaseId,
@@ -223,7 +230,6 @@ export async function paymentView(scope: TenantScope): Promise<PaymentView | nul
     // than that something has changed about their account.
     rails: railsFor({
       method,
-      cardPermitted: cardRule.cardSurchargePermitted,
       retailCashConfigured: RETAIL_CASH_CONFIGURED,
     }).map((rail) =>
       hold.blockOnline || hold.certifiedFundsOnly

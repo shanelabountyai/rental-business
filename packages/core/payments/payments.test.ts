@@ -137,13 +137,13 @@ describe('switchDecision', () => {
 })
 
 describe('cardFeeFor', () => {
-  const permitted = { cardSurchargePermitted: true, cardSurchargeMaxBps: null }
+  const permitted = { cardSurchargePolicy: 'ALL' as const, cardSurchargeMaxBps: null }
 
   it('GROSSES UP so the pass-through actually covers the cost', () => {
     // The arithmetic worth reading twice. A nominal fee (rate x rent + fixed)
     // leaves the owner short, because the processor takes its cut of the
     // total it charges, not of the rent underneath it.
-    const decision = cardFeeFor(permitted, 150_000)
+    const decision = cardFeeFor(permitted, 150_000, 'credit')
 
     const nominal = Math.round((150_000 * CARD_RATE_BPS) / 10_000) + CARD_FIXED_CENTS
     expect(decision.feeCents).toBeGreaterThan(nominal)
@@ -158,7 +158,7 @@ describe('cardFeeFor', () => {
     // Rounding down loses a fraction every time, and being generous on a fee
     // the tenant chose to incur - ACH is free - is the wrong direction.
     for (const amount of [1, 99, 100, 1_337, 150_000, 249_999]) {
-      const decision = cardFeeFor(permitted, amount)
+      const decision = cardFeeFor(permitted, amount, 'credit')
       const processorTakes =
         Math.floor((decision.totalCents * CARD_RATE_BPS) / 10_000) + CARD_FIXED_CENTS
       expect(decision.totalCents - processorTakes, `amount ${amount}`).toBeGreaterThanOrEqual(amount)
@@ -168,7 +168,7 @@ describe('cardFeeFor', () => {
   it('charges nothing, and says so, where surcharging is not permitted', () => {
     // D-4: several states restrict this. The owner absorbs the cost and the
     // tenant is shown no fee line at all.
-    const decision = cardFeeFor({ cardSurchargePermitted: false, cardSurchargeMaxBps: null }, 150_000)
+    const decision = cardFeeFor({ cardSurchargePolicy: 'NONE', cardSurchargeMaxBps: null }, 150_000, 'credit')
     expect(decision.feeCents).toBe(0)
     expect(decision.totalCents).toBe(150_000)
     expect(decision.permitted).toBe(false)
@@ -177,10 +177,55 @@ describe('cardFeeFor', () => {
     expect(decision.computedCents).toBeGreaterThan(0)
   })
 
+  it('REFUSES A CREDIT_ONLY SURCHARGE ON ANYTHING THAT IS NOT KNOWN CREDIT', () => {
+    // The whole of R-037b. Tex. Bus. & Com. Code §604A.003 permits the
+    // surcharge on credit and bars it on debit and stored-value, and the
+    // boolean this replaced said `true` - so every debit card paying rent in
+    // Texas was surcharged unlawfully.
+    const creditOnly = { cardSurchargePolicy: 'CREDIT_ONLY' as const, cardSurchargeMaxBps: null }
+
+    expect(cardFeeFor(creditOnly, 150_000, 'credit').permitted).toBe(true)
+    expect(cardFeeFor(creditOnly, 150_000, 'debit').permitted).toBe(false)
+    // Stored value. §604A.003 names it alongside debit, so it is barred too -
+    // and it would be silently allowed by any check that only tested 'debit'.
+    expect(cardFeeFor(creditOnly, 150_000, 'prepaid').permitted).toBe(false)
+    // THE ORDINARY CASE, not an edge one: the fee is quoted before a payment
+    // method exists, so nothing knows the funding type. Charging and hoping
+    // it was credit is the violation; forgoing the fee is a cost.
+    expect(cardFeeFor(creditOnly, 150_000, 'unknown').permitted).toBe(false)
+  })
+
+  it('still surcharges a debit card where the state permits every card', () => {
+    // CREDIT_ONLY must not quietly become the behaviour everywhere - a state
+    // with no debit restriction is entitled to the pass-through, and this is
+    // the assertion that fails if somebody "simplifies" the policy back to a
+    // boolean.
+    const all = { cardSurchargePolicy: 'ALL' as const, cardSurchargeMaxBps: null }
+    expect(cardFeeFor(all, 150_000, 'debit').permitted).toBe(true)
+    expect(cardFeeFor(all, 150_000, 'debit').feeCents).toBeGreaterThan(0)
+  })
+
+  it('never surcharges under NONE, whatever the card turns out to be', () => {
+    const none = { cardSurchargePolicy: 'NONE' as const, cardSurchargeMaxBps: null }
+    for (const funding of ['credit', 'debit', 'prepaid', 'unknown'] as const) {
+      expect(cardFeeFor(none, 150_000, funding).permitted, funding).toBe(false)
+      expect(cardFeeFor(none, 150_000, funding).feeCents, funding).toBe(0)
+    }
+  })
+
+  it('reports the funding type it decided against', () => {
+    // "Why was I not charged a fee" and "why was I" are the same question
+    // from two sides, and the audit row on a payment intent carries this.
+    const creditOnly = { cardSurchargePolicy: 'CREDIT_ONLY' as const, cardSurchargeMaxBps: null }
+    expect(cardFeeFor(creditOnly, 150_000, 'unknown').funding).toBe('unknown')
+    // Including on the zero-amount short circuit, which returns early.
+    expect(cardFeeFor(creditOnly, 0, 'debit').funding).toBe('debit')
+  })
+
   it('clamps to a statutory cap and says it clamped', () => {
     // 1% cap against a ~2.99% real cost: the owner absorbs the remainder,
     // and that is a fact worth being able to report on.
-    const decision = cardFeeFor({ cardSurchargePermitted: true, cardSurchargeMaxBps: 100 }, 150_000)
+    const decision = cardFeeFor({ cardSurchargePolicy: 'ALL', cardSurchargeMaxBps: 100 }, 150_000, 'credit')
     expect(decision.feeCents).toBe(1_500)
     expect(decision.cappedAtCents).toBe(1_500)
     expect(decision.computedCents).toBeGreaterThan(1_500)
@@ -188,8 +233,8 @@ describe('cardFeeFor', () => {
   })
 
   it('leaves a generous cap alone', () => {
-    const capped = cardFeeFor({ cardSurchargePermitted: true, cardSurchargeMaxBps: 500 }, 150_000)
-    const uncapped = cardFeeFor(permitted, 150_000)
+    const capped = cardFeeFor({ cardSurchargePolicy: 'ALL', cardSurchargeMaxBps: 500 }, 150_000, 'credit')
+    const uncapped = cardFeeFor(permitted, 150_000, 'credit')
     expect(capped.feeCents).toBe(uncapped.feeCents)
     expect(capped.cappedAtCents).toBeUndefined()
   })
@@ -197,13 +242,13 @@ describe('cardFeeFor', () => {
   it('handles a zero or negative amount without inventing a fee', () => {
     // A credit balance is a real state - the tenant owes nothing - and it
     // must not produce a fee to pay it.
-    expect(cardFeeFor(permitted, 0).feeCents).toBe(0)
-    expect(cardFeeFor(permitted, -5_000).feeCents).toBe(0)
+    expect(cardFeeFor(permitted, 0, 'credit').feeCents).toBe(0)
+    expect(cardFeeFor(permitted, -5_000, 'credit').feeCents).toBe(0)
   })
 
   it('returns whole cents for every amount it is given', () => {
     for (const amount of [1, 7, 33, 1_000, 99_999, 1_000_000]) {
-      const decision = cardFeeFor(permitted, amount)
+      const decision = cardFeeFor(permitted, amount, 'credit')
       expect(Number.isInteger(decision.feeCents), `amount ${amount}`).toBe(true)
       expect(Number.isInteger(decision.totalCents), `amount ${amount}`).toBe(true)
     }
@@ -214,7 +259,7 @@ describe('cardFeeDisclosure', () => {
   it('states the fee in money, and names the free alternative', () => {
     // PAY-01 requires disclosure BEFORE the choice. A percentage is a
     // calculation a tenant should not do while holding a phone.
-    const decision = cardFeeFor({ cardSurchargePermitted: true, cardSurchargeMaxBps: null }, 150_000)
+    const decision = cardFeeFor({ cardSurchargePolicy: 'ALL', cardSurchargeMaxBps: null }, 150_000, 'credit')
     const text = cardFeeDisclosure(decision, formatCents)!
     expect(text).toContain(formatCents(decision.feeCents))
     expect(text).toContain(formatCents(decision.totalCents))
@@ -224,7 +269,7 @@ describe('cardFeeDisclosure', () => {
   it('says nothing at all when there is no fee', () => {
     // Not "a fee of $0.00" - a line that always renders is a line tenants
     // learn to skip, which defeats the disclosure on the months it matters.
-    const decision = cardFeeFor({ cardSurchargePermitted: false, cardSurchargeMaxBps: null }, 150_000)
+    const decision = cardFeeFor({ cardSurchargePolicy: 'NONE', cardSurchargeMaxBps: null }, 150_000, 'credit')
     expect(cardFeeDisclosure(decision, formatCents)).toBeNull()
   })
 })
@@ -233,28 +278,38 @@ describe('railsFor', () => {
   it('offers ACH first, because it is the free one', () => {
     // Ordering is not cosmetic: a screen that leads with the card quietly
     // costs tenants money they did not have to spend.
-    const rails = railsFor({ method: 'send_invoice', cardPermitted: true, retailCashConfigured: true })
+    const rails = railsFor({ method: 'send_invoice', retailCashConfigured: true })
     expect(rails[0]!.rail).toBe('ACH')
     expect(rails.every((r) => r.available)).toBe(true)
+  })
+
+  it('KEEPS THE CARD RAIL OPEN WHERE THE SURCHARGE IS NOT PERMITTED', () => {
+    // R-037b. This function used to take a `cardPermitted` flag whose only
+    // caller fed it `cardSurchargePermitted`, so a state that forbids passing
+    // the processing cost on had card payments closed altogether and the
+    // tenant was told cards were unavailable for the property. Not
+    // surcharging means the OWNER absorbs the cost, which is a different
+    // fact - and the one that matters, now that Texas is CREDIT_ONLY and
+    // therefore charges no surcharge at all.
+    const rails = railsFor({ method: 'send_invoice', retailCashConfigured: false })
+    const card = rails.find((r) => r.rail === 'CARD')!
+    expect(card.available).toBe(true)
+    expect(card.unavailableReason).toBeUndefined()
   })
 
   it('explains an unavailable rail instead of hiding it silently', () => {
     const rails = railsFor({
       method: 'send_invoice',
-      cardPermitted: false,
       retailCashConfigured: false,
     })
-    const card = rails.find((r) => r.rail === 'CARD')!
     const cash = rails.find((r) => r.rail === 'RETAIL_CASH')!
-    expect(card.available).toBe(false)
-    expect(card.unavailableReason).toContain('free')
     expect(cash.available).toBe(false)
   })
 
   it('always offers ACH, on either collection method', () => {
     // A tenant on autopay can still want to pay early or pay off a balance.
     for (const method of ['charge_automatically', 'send_invoice'] as const) {
-      const rails = railsFor({ method, cardPermitted: true, retailCashConfigured: false })
+      const rails = railsFor({ method, retailCashConfigured: false })
       expect(rails.find((r) => r.rail === 'ACH')!.available, method).toBe(true)
     }
   })

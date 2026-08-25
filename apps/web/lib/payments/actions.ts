@@ -232,14 +232,20 @@ async function chargeResolvedPayer(
   // D-4: whether the card cost may be passed on is a jurisdiction fact, and
   // no rule means not permitted - charging a fee we cannot point at a rule
   // for is the wrong way to be wrong.
+  //
+  // `unknown` funding, for the same reason `paymentView` passes it (R-037b):
+  // the intent is created before a payment method is attached, so there is
+  // nothing to read a funding type off. It must MATCH what the quote used or
+  // a tenant is charged a fee the screen never showed them.
   const fee =
     rail === 'CARD'
       ? cardFeeFor(
           {
-            cardSurchargePermitted: rule?.cardSurchargePermitted ?? false,
+            cardSurchargePolicy: rule?.cardSurchargePolicy ?? 'NONE',
             cardSurchargeMaxBps: rule?.cardSurchargeMaxBps ?? null,
           },
           amountCents,
+          'unknown',
         )
       : null
   const totalCents = fee?.totalCents ?? amountCents
@@ -275,6 +281,12 @@ async function chargeResolvedPayer(
         feeCents: fee?.feeCents ?? 0,
         totalCents,
         feeCapped: fee?.cappedAtCents != null,
+        // WHY the fee was or was not charged, not just how much (R-037b).
+        // Under a CREDIT_ONLY jurisdiction a zero fee and an unknown funding
+        // type is the ordinary outcome, and a dispute six months later needs
+        // to be able to tell that from a rule that forbade the fee outright.
+        cardSurchargePolicy: rule?.cardSurchargePolicy ?? 'NONE',
+        cardFunding: fee?.funding ?? null,
         stripePaymentIntentId: intent.stripePaymentIntentId,
         // WHICH MESSAGE THIS PAYMENT CAME FROM (PAY-01, R-046). Null for a
         // payment started from a signed-in session, which is the honest

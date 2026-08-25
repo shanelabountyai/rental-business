@@ -237,17 +237,22 @@ async function seedJurisdictionRules() {
       // still a lease term first: a lease that is silent charges nothing.
       nsfFeePermitted: true,
       nsfFeeMaxCents: 3_000,
-      // PAY-01's card pass-through (R-037, D-4).
+      // PAY-01's card pass-through (R-037; narrowed by R-037b, D-149).
       //
-      // Texas permits a credit-card surcharge; Tex. Bus. & Com. Code §604A.003
-      // bars one on a DEBIT or stored-value card specifically. Stripe reports
-      // `us_bank_account` and `card` without distinguishing debit from credit
-      // at the point this product decides the fee, so a state whose rule turns
-      // on that distinction cannot be honoured by this column alone. Left
-      // permitted here because that is the law for the card type most tenants
-      // pay with, and flagged in `notes` because it is the kind of nuance an
-      // attorney review has to land on before this ships anywhere real.
-      cardSurchargePermitted: true,
+      // Tex. Bus. & Com. Code §604A.003: a surcharge is permitted on a CREDIT
+      // card and barred on a DEBIT or stored-value one. That is now sayable,
+      // where the boolean this replaced was not - it read `true`, and the
+      // product duly surcharged debit cards.
+      //
+      // WHAT THIS MEANS IN PRACTICE TODAY: no card surcharge is charged in
+      // Texas at all. Stripe reports the funding type only once a payment
+      // method exists, and PAY-01 requires the fee be disclosed BEFORE the
+      // tenant picks a rail, so every call site passes `unknown` - and
+      // `surchargePermittedFor` refuses to surcharge a card it cannot show
+      // was credit. The owner absorbs the cost. Getting the revenue back
+      // means knowing the funding type before quoting, which is a change to
+      // the payment flow and not to this row.
+      cardSurchargePolicy: 'CREDIT_ONLY',
       // No statutory basis-point cap in Texas. The card-network rules cap a
       // surcharge at the merchant's cost of acceptance, which `cardFeeFor`
       // already satisfies by grossing up rather than marking up.
@@ -266,7 +271,7 @@ async function seedJurisdictionRules() {
       citation: 'Tex. Prop. Code §§92.019, 92.103-.104, 24.005, 24.005(f), 91.001; Tex. Bus. & Com. Code §§604A.003, 3.506',
       reviewedBy: null,
       notes:
-        'Seeded defaults, not yet reviewed by an attorney - see decisions doc item 6. Entry-notice hours and rent-increase notice days reflect common practice, not a specific citation. cardSurchargePermitted does not distinguish debit from credit, which Tex. Bus. \u0026 Com. Code \u00a7604A.003 does - see the comment on that field.',
+        'Seeded defaults, not yet reviewed by an attorney - see decisions doc item 6. Entry-notice hours and rent-increase notice days reflect common practice, not a specific citation. cardSurchargePolicy is CREDIT_ONLY per Tex. Bus. \u0026 Com. Code \u00a7604A.003; because the card funding type is unknown when the fee is quoted, that currently means no card surcharge is charged at all - see the comment on that field.',
     },
   })
 
