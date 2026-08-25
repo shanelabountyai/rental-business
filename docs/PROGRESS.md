@@ -4154,3 +4154,14 @@ The prerender manifest named exactly seven routes, four of them real pages. Thos
 - **`/_not-found` and `/_global-error` are still prerendered**, so their scripts are still refused. Left deliberately: both are static error pages with no interactivity, and forcing framework error boundaries dynamic is a change with more risk than the defect it would fix. Named here so it is a decision rather than an oversight.
 - **A newly-added static page would reintroduce this silently.** The spec names the four routes the manifest listed rather than reading the manifest at runtime; a fifth prerendered page would not be covered. Reading `prerender-manifest.json` from the spec would close it and couples the suite to a Next internal — worth doing if it ever happens twice.
 - **Stripe is still unexercised in the browser.** `autopay-panel.tsx` is the only third-party script and D-15 already excludes it from e2e, so `js.stripe.com`, `hooks.stripe.com` and `api.stripe.com` are admitted by the policy on inventory rather than on a passing test.
+
+## The prerender guard D-139 left behind
+**Commit:** _(recorded below)_  ·  **Date:** 2026-08-25
+
+**What it did.** Closed the one gap D-139 named: its tests watched the four routes already known to be broken, so a *fifth* prerendered page added later would have reintroduced the defect silently. No new decision — this is the guard that item said was missing.
+
+**A build-time allowlist rather than a runtime check, which is the reversal.** D-139's note said this was worth doing "if it ever happens twice", because the version being declined read the prerender manifest at runtime and coupled the suite to a Next internal. The cheaper shape is to assert the manifest's route set equals an **accepted set**: `/_not-found`, `/_global-error` and `/manifest.webmanifest`, each a framework page with no interactivity. Anything else failing the check is a page that will lose every script, and the failure message says so and names the fix. It encodes the decision instead of re-testing the behaviour.
+
+**Proved in both directions, because a guard that cannot fail is the mistake this whole thread was about.** `/forgot-password` was temporarily reverted to static and the suite rebuilt: the guard failed and named it, and — independently — the behavioural test reported **66 blocked resources** on that page. Restored, and 18 CSP tests pass. Without that second run the guard would have been another assertion that is always true, which is the trap CLAUDE.md says has now been hit four times.
+
+**What it left behind.** The accepted set is a literal. If Next ever renames its internal routes the check fails loudly and correctly, which is the right direction for a guard to fail in.

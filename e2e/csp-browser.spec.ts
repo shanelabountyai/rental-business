@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { hashPassword } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
@@ -121,6 +123,53 @@ test.afterAll(async () => {
   await prisma.staffUser.updateMany({ where: { id: { in: staffIds } }, data: { active: false } })
   await prisma.property.updateMany({ where: { id: { in: propertyIds } }, data: { active: false } })
   await prisma.legalEntity.updateMany({ where: { id: { in: entityIds } }, data: { active: false } })
+})
+
+/**
+ * Routes allowed to be statically prerendered, and therefore allowed to
+ * serve script the CSP will refuse.
+ *
+ * Both are framework error pages with no interactivity: a 404 and the
+ * global error boundary. Forcing Next's own error boundaries to render per
+ * request is a change with more risk than the defect it would fix, so they
+ * are accepted rather than fixed - a decision, recorded, not an oversight.
+ * The webmanifest carries no script at all.
+ */
+const MAY_BE_PRERENDERED = new Set(['/_global-error', '/_not-found', '/manifest.webmanifest'])
+
+test('no NEW page is prerendered, because a prerendered page loses every script', async () => {
+  // THE GUARD FOR THE WHOLE CLASS, not for the four pages that happened to
+  // be caught. D-139 cost an item to find precisely because the symptom is
+  // silence: a prerendered page has no request, so it carries no nonce, so
+  // `'strict-dynamic'` leaves nothing to allow its script - and this product
+  // uses real `<form action>` everywhere, so the page still works and no
+  // assertion anywhere goes red.
+  //
+  // The tests above only watch the routes D-139 already knew about. A fifth
+  // prerendered page added next month would sail past them. This reads what
+  // the BUILD decided instead, so the check cannot go stale.
+  const manifestPath = resolve(process.cwd(), 'apps/web/.next/prerender-manifest.json')
+  let manifest: { routes?: Record<string, unknown> }
+  try {
+    manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as { routes?: Record<string, unknown> }
+  } catch {
+    // `E2E_DEV=1` serves from `next dev`, which writes no such manifest. The
+    // check belongs to the production build the sweep normally runs against.
+    test.skip(true, 'no production build present (E2E_DEV?)')
+    return
+  }
+
+  const unexpected = Object.keys(manifest.routes ?? {})
+    .filter((route) => !MAY_BE_PRERENDERED.has(route))
+    .sort()
+
+  expect(
+    unexpected,
+    'These routes are statically prerendered, so the CSP nonce cannot reach them and ' +
+      'the browser will refuse every script they serve - silently, because a real ' +
+      '<form action> still works without JavaScript. Add `export const dynamic = ' +
+      "'force-dynamic'` to each page, or add it to MAY_BE_PRERENDERED with the reason.",
+  ).toEqual([])
 })
 
 test('THE NEGATIVE CONTROL: the browser refuses an injected inline handler, and the detector sees it', async ({
