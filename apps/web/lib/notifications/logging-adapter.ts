@@ -3,22 +3,20 @@ import 'server-only'
 import { randomUUID } from 'node:crypto'
 import type { ChannelAdapter, OutboundMessage, SendResult } from './adapter.ts'
 
-// The adapter this build actually runs on. Every send is recorded in the
-// Notification log exactly as a real one would be, and then written to the
-// server console instead of being handed to a provider.
+// Every send is recorded in the Notification log exactly as a real one would
+// be, and then written to the server console instead of being handed to a
+// provider.
 //
-// This is NOT a stub standing in for work that was skipped. There is no
-// Resend API key, no verified sending domain, and no approved 10DLC campaign
-// - all three are external, human-lead-time workstreams (see this item's
-// PROGRESS entry), and until they exist a "real" driver could not be run even
-// once, let alone tested. What it would be is an untested HTTP call that
-// looks finished, which is worse than an honest seam.
+// STILL THE ADAPTER THAT RUNS ON A LAPTOP AND IN CI, after R-104 wired the
+// real drivers. `LiveChannelAdapter` delegates here for any channel whose
+// provider is not configured - which locally and in CI is every channel, and
+// always will be, because there is no API key on either. It also handles
+// PORTAL everywhere: that channel has no provider by design (R-018).
 //
-// Everything a real driver has to get right is already exercised against this
-// one: idempotency, preference resolution, quiet-hours deferral, the kill
-// switch, the sandbox redirect, failure recording, and the append-only log.
-// Swapping in Resend and Twilio is a change to `notificationAdapter` in
-// index.ts and nothing else.
+// It is NOT a stub for work that was skipped. Everything a real driver has to
+// get right is exercised against this one: idempotency, preference
+// resolution, quiet-hours deferral, the kill switch, the sandbox redirect,
+// failure recording, and the append-only log.
 export class LoggingChannelAdapter implements ChannelAdapter {
   supports(): boolean {
     return true
