@@ -1,7 +1,7 @@
 import { OPEN_TICKET_STATUSES } from '@rental/core/comms'
 import { OPEN_WORK_ORDER_STATUSES } from '@rental/core/workorders'
 import { describe, expect, it } from 'vitest'
-import { COMPLIANCE, LEASING, MAINTENANCE, buildPlan } from './demo-seed.mts'
+import { COMPLIANCE, LEASING, MAINTENANCE, MONEY, buildPlan } from './demo-seed.mts'
 
 // Importing this module must never touch a database - see the file's own
 // `pathToFileURL` guard. If that guard regresses, this test hangs or throws
@@ -193,6 +193,153 @@ describe('the leasing story lands on screens that render it', () => {
         const shouldHaveOne = !before.includes(prospect.status)
         expect(Boolean(prospect.application), prospect.email).toBe(shouldHaveOne)
       }
+    }
+  })
+})
+
+// ---- The money story (R-100c) ----
+//
+// A DIFFERENT KIND OF CHECK FROM THE TWO ABOVE, because this half writes no
+// rows: it replays Stripe events through the real pipeline, and every one of
+// its failure modes is silent. An event for a customer nobody knows is
+// `ignored` with a reason; a replayed id is a `duplicate`. Both leave the
+// seed reporting success over an empty rent roll.
+//
+// `seedMoney` guards the ones only a database can see - it states the
+// expected outcome at every call site and throws otherwise. What is asserted
+// here is the half that is wrong before the script ever runs: a plan that
+// describes a demo nobody would want to look at.
+
+/// What each tenancy still owes when the plan has finished, in cents.
+function owedCents(lifecycle: string, rentCents: number): number {
+  const plan = MONEY[lifecycle]
+  if (!plan) return 0
+  return plan.invoices.reduce((owed, invoice) => {
+    const paid =
+      invoice.paidCents === 'full'
+        ? rentCents
+        : invoice.paidCents.reduce((sum, part) => sum + part, 0)
+    return owed + rentCents - paid
+  }, 0)
+}
+
+/// The tenancies `buildPlan()` actually writes, paired with their rent.
+const tenancies = buildPlan().flatMap((property) =>
+  property.units.flatMap((unit) =>
+    unit.tenant ? [{ lifecycle: unit.tenant.lifecycle, lease: unit.tenant.lease }] : [],
+  ),
+)
+
+describe('the money story attaches to tenancies that exist', () => {
+  it('every key names a lifecycle some tenant actually has', () => {
+    // Keyed by lifecycle rather than by "<property>::<unit>", so the dangling
+    // key this guards against is a lifecycle nobody is in - which seeds
+    // nothing at all while the run still reports success.
+    const real = new Set(tenancies.map((tenancy) => tenancy.lifecycle))
+    expect(Object.keys(MONEY).filter((key) => !real.has(key))).toEqual([])
+  })
+
+  it('gives every occupied tenancy a money story', () => {
+    // A tenancy with no plan has no LeasePayer, no Stripe customer and no
+    // subscription - so it is missing from the rent roll entirely rather
+    // than showing a zero balance, and the demo looks like a product that
+    // lost a tenant.
+    const missing = tenancies.filter((tenancy) => !MONEY[tenancy.lifecycle])
+    expect(missing.map((tenancy) => tenancy.lifecycle)).toEqual([])
+  })
+})
+
+describe('the money story shows a portfolio, not a spreadsheet of zeroes', () => {
+  it('leaves somebody owing and somebody square', () => {
+    // All square demonstrates nothing - no chase, no notice with a number on
+    // it, no reason for the rent roll to exist. All behind reads as a broken
+    // seed rather than a portfolio. The same rule COMPLIANCE is held to.
+    const owed = tenancies.map((tenancy) => owedCents(tenancy.lifecycle, tenancy.lease.rentCents))
+    expect(owed.some((cents) => cents > 0)).toBe(true)
+    expect(owed.some((cents) => cents === 0)).toBe(true)
+  })
+
+  it('enrols at least one tenancy in autopay and leaves at least one off it', () => {
+    // D-29: collection is per payer and it switches. One mode across the
+    // whole demo hides the only decision this part of the product makes.
+    const plans = Object.values(MONEY)
+    expect(plans.some((plan) => plan.autopayDaysAgo != null)).toBe(true)
+    expect(plans.some((plan) => plan.autopayDaysAgo == null)).toBe(true)
+  })
+
+  it('bills one payer by invoice rather than by card', () => {
+    // Stripe cannot do autopay and part-payments on one subscription, which
+    // is exactly why `collectionMethod` is per payer. A demo entirely on
+    // `charge_automatically` cannot show the part-payment path at all.
+    expect(Object.values(MONEY).some((plan) => plan.collectionMethod === 'send_invoice')).toBe(true)
+  })
+
+  it('pays one invoice in instalments, which is the reason invoice.updated is subscribed to', () => {
+    // D-141: `amount_paid` is cumulative, so only a DELTA can be projected.
+    // A demo where every invoice is paid in one go never exercises the
+    // subtraction that decision is about.
+    const instalments = Object.values(MONEY).flatMap((plan) =>
+      plan.invoices.filter(
+        (invoice) => invoice.paidCents !== 'full' && invoice.paidCents.length > 1,
+      ),
+    )
+    expect(instalments.length).toBeGreaterThan(0)
+  })
+})
+
+describe('the money story is internally consistent', () => {
+  it('carries the overdue charge exactly where one is seeded', () => {
+    // THE TWO MONEY SCREENS DISAGREE OTHERWISE, and neither of them looks
+    // broken on its own: the balance is a sum over `LedgerEntry` while the
+    // tenant's pay screen derives what is outstanding from a charge's OWN
+    // entries. An unlinked charge shows as fully outstanding for ever; a
+    // `carriesOverdueCharge` naming a lifecycle with no charge silently
+    // sends an empty `chargeIds` and links nothing.
+    for (const tenancy of tenancies) {
+      const plan = MONEY[tenancy.lifecycle]
+      const carries = (plan?.invoices ?? []).some((invoice) => invoice.carriesOverdueCharge)
+      expect(carries, tenancy.lifecycle).toBe(Boolean(tenancy.lease.overdueCharge))
+    }
+  })
+
+  it('never pays an invoice more than it asked for', () => {
+    // Instalments are cumulative deltas against `amount_due`. Paying past it
+    // is not something Stripe would ever emit, and it would put the tenancy
+    // into credit on a bill that was never that big.
+    for (const tenancy of tenancies) {
+      for (const invoice of MONEY[tenancy.lifecycle]?.invoices ?? []) {
+        if (invoice.paidCents === 'full') continue
+        const paid = invoice.paidCents.reduce((sum, part) => sum + part, 0)
+        expect(paid, `${tenancy.lifecycle} @ ${invoice.daysAgo}d`).toBeLessThanOrEqual(
+          tenancy.lease.rentCents,
+        )
+      }
+    }
+  })
+
+  it('declines a payment before the invoice it was attempted against is history', () => {
+    // `declinedAfterDays` is measured forward from finalization, so anything
+    // at or past `daysAgo` is a decline dated in the future - which the
+    // pipeline would happily project, leaving a failed payment nobody can
+    // explain sitting at the top of the payment history.
+    for (const plan of Object.values(MONEY)) {
+      for (const invoice of plan.invoices) {
+        if (invoice.declinedAfterDays == null) continue
+        expect(invoice.declinedAfterDays).toBeLessThan(invoice.daysAgo)
+      }
+    }
+  })
+
+  it('keeps money in flight uncredited, which is the whole of PAY-02', () => {
+    // An ACH debit that has not cleared has not reduced what is owed.
+    // Asserted as a plan-level fact because the pipeline enforces it
+    // downstream: `payment_intent.processing` writes a PENDING Payment and
+    // no ledger row at all. What this guards is somebody "fixing" the demo
+    // by settling it to make a balance look tidier.
+    const inFlight = Object.values(MONEY).filter((plan) => plan.inFlight)
+    expect(inFlight.length).toBeGreaterThan(0)
+    for (const plan of inFlight) {
+      expect(plan.inFlight!.amountCents).toBeGreaterThan(0)
     }
   })
 })

@@ -39,6 +39,7 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { mintToken } from '@rental/core/auth'
+import type { StripeEventEnvelope } from '@rental/core/billing'
 import { threadKey } from '@rental/core/comms'
 import { prisma } from '../index.ts'
 
@@ -122,11 +123,12 @@ async function reset() {
   //                ticket- and work-order-attached ones too without a
   //                second query that could disagree with this one.
   //
-  // `LedgerEntry` and `Notification` are the other two append-only tables.
-  // Neither is seeded here - D-11 forbids the first outright (R-100c owns
-  // the money story) and nothing here sends - so neither is checked. If a
-  // later item seeds one, it belongs in this set, and that is the whole
-  // maintenance burden of this approach.
+  // `LedgerEntry` and `Notification` are checked below too, as of R-100c -
+  // which is the third time this set has grown by exactly one item, so treat
+  // the list as something to extend rather than something finished. THERE
+  // ARE SIX APPEND-ONLY TABLES, NOT THE FOUR CLAUDE.md NAMES: `AuditLog`,
+  // `LedgerEntry`, `Message`, `Notification`, plus `NoticeDelivery` and
+  // `TenantConsent`.
   const auditedPropertyIds = (
     await prisma.auditLog.findMany({
       where: { propertyId: { in: propertyIds } },
@@ -158,7 +160,40 @@ async function reset() {
     })
   ).map((row) => row.propertyId)
 
-  const sticky = new Set([...auditedPropertyIds, ...conversedPropertyIds, ...servedPropertyIds])
+  // R-100c added the fourth and fifth. `LedgerEntry` is the strongest of the
+  // lot: D-11 makes it a projection of Stripe, so a demo property that has
+  // ever been billed cannot be deleted without deleting money Stripe still
+  // knows about - which is the reconciliation bug D-11 exists to prevent,
+  // manufactured by a cleanup script.
+  //
+  // `Notification` is NOT redundant with it, and the case that proves it is
+  // narrow enough to be worth stating: a payment FAILURE writes a
+  // `payment.failed_fix` notification (R-045) and NO ledger entry at all,
+  // because nothing has changed about what is owed. A tenancy whose only
+  // money event was a decline is therefore notified and unbilled.
+  const billedPropertyIds = (
+    await prisma.ledgerEntry.findMany({
+      where: { propertyId: { in: propertyIds } },
+      select: { propertyId: true },
+      distinct: ['propertyId'],
+    })
+  ).map((row) => row.propertyId)
+
+  const notifiedPropertyIds = (
+    await prisma.notification.findMany({
+      where: { propertyId: { in: propertyIds } },
+      select: { propertyId: true },
+      distinct: ['propertyId'],
+    })
+  ).map((row) => row.propertyId!)
+
+  const sticky = new Set([
+    ...auditedPropertyIds,
+    ...conversedPropertyIds,
+    ...servedPropertyIds,
+    ...billedPropertyIds,
+    ...notifiedPropertyIds,
+  ])
   const deletableProperties = propertyIds.filter((id) => !sticky.has(id))
   const stickyProperties = propertyIds.filter((id) => sticky.has(id))
 
@@ -243,6 +278,51 @@ async function reset() {
       where: { id: { in: stickyTenantIds } },
       data: { active: false },
     })
+
+    // STOP BILLING THE RETIRED TENANCY (R-100c). Same reasoning as the
+    // vendor tokens above, one rung more serious: a retired demo lease still
+    // holding a live subscription goes on raising invoices against a
+    // customer nobody will look at again, and every reset would add five
+    // more. Against the simulator this is a log line; against a real
+    // test-mode key it is the difference between a tidy account and one
+    // quietly billing a dozen ghosts.
+    //
+    // Cancelled through the provider rather than by clearing the id, because
+    // clearing it would leave the subscription running with nothing pointing
+    // at it - an orphan in Stripe that our own reconciliation could no
+    // longer even name.
+    // UNPUBLISH THE RETIRED PROPERTY'S LISTINGS (R-100c), for the same
+    // reason the vendor tokens above are revoked: it is the only row under a
+    // retired property that a STRANGER can still reach. `listingForPublic`
+    // is `where: { id, status: 'PUBLISHED' }` - no scope, no active check -
+    // so a retired listing stays live on the public site while every
+    // internal screen has correctly forgotten it, because `currentScope`
+    // filters on `property.active`. That gap only opened when R-100c made
+    // this property sticky; before, its listing was deleted with it.
+    await prisma.listing.updateMany({
+      where: { propertyId: { in: stickyProperties }, status: 'PUBLISHED' },
+      data: { status: 'UNPUBLISHED' },
+    })
+
+    const retiringPayers = await prisma.leasePayer.findMany({
+      where: { propertyId: { in: stickyProperties }, active: true },
+      select: { id: true, stripeSubscriptionId: true },
+    })
+    if (retiringPayers.length > 0) {
+      const { getBillingProvider } = await loadBillingPipeline()
+      for (const payer of retiringPayers) {
+        if (!payer.stripeSubscriptionId) continue
+        await getBillingProvider()
+          .cancelSubscription({ stripeSubscriptionId: payer.stripeSubscriptionId })
+          .catch((error: unknown) => {
+            console.warn(`Reset: could not cancel ${payer.stripeSubscriptionId}`, error)
+          })
+      }
+      await prisma.leasePayer.updateMany({
+        where: { id: { in: retiringPayers.map((payer) => payer.id) } },
+        data: { active: false },
+      })
+    }
 
     for (const id of stickyProperties) {
       const property = await prisma.property.findUniqueOrThrow({ where: { id } })
@@ -330,6 +410,18 @@ async function reset() {
     // preventive-maintenance templates further down (WorkOrder.pmTemplateId).
     await prisma.workOrder.deleteMany({ where: { propertyId: { in: deletableProperties } } })
     await prisma.ticket.deleteMany({ where: { propertyId: { in: deletableProperties } } })
+
+    // Payers and their payments (R-100c), before the charges and leases they
+    // name. A property reaching this branch has no `LedgerEntry` by
+    // definition - that is what put the others in the sticky branch - but it
+    // can still hold a payer, because provisioning writes one before any
+    // money moves and a run interrupted between the two leaves exactly that.
+    // `PayerAllocation` first: it references `Charge`, which goes next.
+    await prisma.payerAllocation.deleteMany({
+      where: { charge: { leaseId: { in: leaseIds } } },
+    })
+    await prisma.payment.deleteMany({ where: { leaseId: { in: leaseIds } } })
+    await prisma.leasePayer.deleteMany({ where: { leaseId: { in: leaseIds } } })
 
     await prisma.charge.deleteMany({ where: { leaseId: { in: leaseIds } } })
     await prisma.leaseTenant.deleteMany({ where: { leaseId: { in: leaseIds } } })
@@ -1869,6 +1961,589 @@ async function seedLeasing(
   return { photos, prospects, cases }
 }
 
+// ==========================================================================
+// THE MONEY STORY (R-100c, D-11, D-12, D-145)
+//
+// EVERYTHING ABOVE THIS LINE WRITES ROWS. THIS DOES NOT, AND CANNOT.
+//
+// D-11 makes `LedgerEntry` an append-only PROJECTION of Stripe: "a row here
+// that Stripe does not know about is a reconciliation bug, not a shortcut."
+// So the demo's balances, payment history, autopay state and mid-chase
+// tenancy are not a seeding problem at all - they are a REPLAY problem. This
+// section builds Stripe event envelopes and pushes them through
+// `processStripeEvent`, the same function the live webhook route calls, and
+// every ledger row, Payment row, receipt and failed-payment notice in the
+// demo is produced by that pipeline rather than by an INSERT here.
+//
+// D-145 chose this over the cheaper alternative (a `Charge`-only demo whose
+// rent roll ages from open charges and whose payment history is honestly
+// empty), because the rent roll is the most demo-worthy screen in the
+// product and R-038a proved the webhook path is where the surprises live.
+//
+// ---- WHY THIS SCRIPT NOW RUNS UNDER `tsx` (D-146) ----
+//
+// `processStripeEvent` lives in `apps/web/lib/billing/webhook.ts`, which
+// begins `import 'server-only'` and reaches the rest of the app through the
+// `@/` alias. Neither resolves outside Next's bundler - `server-only` is not
+// even installed, so the failure is `Cannot find package` rather than the
+// guard's own error - and plain `node` additionally cannot strip some of the
+// TypeScript in the transitive graph (a constructor parameter property in
+// the screening simulator is enough to stop it).
+//
+// D-145 left three routes open and this is route (c): a `module.registerHooks`
+// resolver that maps `server-only` to the same empty stub `vitest.config.ts`
+// already points it at, and `@/` to `apps/web`, with `tsx` doing the
+// transform. Route (a) - POSTing signed bodies to the running app - was
+// rejected for two reasons: it makes a seed script depend on a server being
+// up and on `STRIPE_WEBHOOK_SECRET`, which is deliberately unset locally,
+// and more importantly THE SIMULATOR IS PER-PROCESS. Customers created by
+// this script live in this script's `SimulatedBillingProvider`, so an
+// autopay enrolment handled inside the app would be talking to a simulator
+// that has never heard of them.
+//
+// ---- WHAT IS REAL AND WHAT IS AUTHORED ----
+//
+// The CUSTOMERS AND SUBSCRIPTIONS are real: `provisionLeaseBilling` is the
+// product's own provisioning path, so with `STRIPE_SECRET_KEY` set these are
+// genuine test-mode objects, and without it they are the simulator's - the
+// same choice every other environment makes, made the same way.
+//
+// The EVENTS are authored here, and they have to be. A demo needs three
+// months of rent history on the day it is seeded; Stripe would take three
+// months to emit it. So the envelopes below are written in Stripe's shape
+// and interpreted by `interpretStripeEvent` exactly as delivered ones are.
+// This is what D-145's route (a) already assumed - it says "POST signed
+// event bodies", which is the same authored body with an HTTP hop in front.
+// ==========================================================================
+
+interface InvoicePlan {
+  /// Finalized this many days ago. Relative like every other date in this
+  /// file, so a demo seeded once still reads as current a month later.
+  daysAgo: number
+  /// What arrived against it, in cents, in the order it arrived. `'full'` is
+  /// the whole rent in one delta; an empty array is an invoice nobody paid.
+  /// A short array is a part-payment and the shortfall is what is still
+  /// owed. CENTS RATHER THAN A FRACTION OF THE RENT deliberately - a
+  /// fraction of a money amount is a rounding bug waiting to be found.
+  paidCents: number[] | 'full'
+  /// A declined attempt this many days after finalization. Writes a FAILED
+  /// Payment and NO ledger movement, which is exactly what a decline is:
+  /// nothing has changed about what is owed.
+  declinedAfterDays?: number
+  /// Carries the lease's seeded overdue `Charge` on its line metadata - the
+  /// same round trip R-040 stamps going out and `chargeIdsOf` reads coming
+  /// back. Without it the two money screens disagree: the balance is a sum
+  /// over `LedgerEntry`, while the tenant's pay screen derives what is
+  /// outstanding from a charge's OWN entries, so an unlinked charge shows
+  /// as fully outstanding for ever no matter what has been paid.
+  carriesOverdueCharge?: boolean
+}
+
+interface MoneyPlan {
+  invoices: InvoicePlan[]
+  /// A saved payment method, this many days ago (R-039a). Arrives as
+  /// `setup_intent.succeeded`, moves no money, and is the only thing that
+  /// makes autopay possible - so a demo without one shows the enrolment
+  /// prompt on every tenancy.
+  autopayDaysAgo?: number
+  /// D-29: collection is per payer, not per product. The subscription is
+  /// CREATED on this method, which is why the payer row exists before
+  /// provisioning rather than being switched afterwards - switching is
+  /// R-047's guarded flow and a seed half-performing it would leave a payer
+  /// in a state the real flow never produces.
+  collectionMethod?: 'send_invoice'
+  /// An ACH debit still in flight: a PENDING Payment and no ledger movement
+  /// at all. PAY-02's whole point - money in flight is not money received,
+  /// and crediting it early is how a tenant is told they are square days
+  /// before the return comes back.
+  inFlight?: { daysAgo: number; amountCents: number }
+}
+
+/**
+ * The money story per tenant, keyed by the lifecycle already on the plan.
+ *
+ * KEYED BY LIFECYCLE RATHER THAN BY UNIT, unlike `MAINTENANCE` and
+ * `LEASING`. Those two hang off a place; this hangs off a TENANCY, and
+ * `lifecycle` is the word `buildPlan()` already uses for what kind of
+ * tenancy each one is. A second key saying the same thing is a second thing
+ * to keep in sync.
+ *
+ * Between them these five cover every path the pipeline has: rent posted and
+ * paid, rent posted and not paid, a part-payment, a decline, an ACH still in
+ * flight, and an autopay enrolment. A demo where every tenancy is square
+ * demonstrates nothing.
+ */
+export const MONEY: Record<string, MoneyPlan> = {
+  /// Square, on autopay, three months of clean history. The contrast
+  /// everything else is read against.
+  current: {
+    invoices: [
+      { daysAgo: 90, paidCents: 'full' },
+      { daysAgo: 60, paidCents: 'full' },
+      { daysAgo: 30, paidCents: 'full' },
+    ],
+    autopayDaysAgo: 75,
+  },
+
+  /// MID-CHASE, and the one tenancy the rest of the demo already agrees is
+  /// late - R-100b hung its notice and its eviction case here for the same
+  /// reason. Two clean months, then an invoice that was declined and never
+  /// paid, carrying the overdue `Charge` the plan already seeds.
+  late: {
+    invoices: [
+      { daysAgo: 90, paidCents: 'full' },
+      { daysAgo: 60, paidCents: 'full' },
+      { daysAgo: 20, paidCents: [], declinedAfterDays: 5, carriesOverdueCharge: true },
+    ],
+  },
+
+  /// A PART-PAYMENT, which is the reason `invoice.updated` is the event this
+  /// pipeline subscribes to at all (D-141): `amount_paid` is cumulative, so
+  /// only a delta can be projected. Two instalments against $1,600 leaving
+  /// $200 owed - and on `send_invoice`, because Stripe cannot do autopay and
+  /// part-payments on one subscription (D-29).
+  'in-notice': {
+    invoices: [
+      { daysAgo: 90, paidCents: 'full' },
+      { daysAgo: 60, paidCents: 'full' },
+      { daysAgo: 30, paidCents: [80_000, 60_000] },
+    ],
+    collectionMethod: 'send_invoice',
+  },
+
+  /// AN ACH DEBIT STILL IN FLIGHT. Three to five days, and until it settles
+  /// the balance must not move.
+  'moving-out': {
+    invoices: [
+      { daysAgo: 90, paidCents: 'full' },
+      { daysAgo: 60, paidCents: 'full' },
+      { daysAgo: 30, paidCents: 'full' },
+    ],
+    inFlight: { daysAgo: 2, amountCents: 195_000 },
+  },
+
+  /// A CARD DECLINED, THEN PAID. The path R-045 built `payment.failed_fix`
+  /// for - before it, a tenant whose autopay card was simply declined heard
+  /// about it from a phone call, if at all.
+  'inherited-at-acquisition': {
+    invoices: [
+      { daysAgo: 90, paidCents: 'full' },
+      { daysAgo: 60, paidCents: 'full' },
+      { daysAgo: 30, paidCents: 'full', declinedAfterDays: 3 },
+    ],
+  },
+}
+
+/// One tenancy the money story attaches to, collected while the leases are
+/// being written and spent afterwards - the overdue `Charge` has to exist
+/// before the invoice that carries its id.
+interface MoneyTarget {
+  leaseId: string
+  propertyId: string
+  tenantId: string
+  lifecycle: string
+  rentCents: number
+  overdueChargeId: string | null
+}
+
+/**
+ * The app's billing modules, reached through a resolver. See the header
+ * above for why this cannot be a plain import.
+ *
+ * Memoised, and lazy: `demo-seed.test.ts` imports `MONEY` and `buildPlan()`
+ * from this file, and neither should drag in the entire app - or register a
+ * module hook - as a side effect.
+ */
+let billingPipeline: Promise<{
+  provisionLeaseBilling: (leaseId: string) => Promise<{
+    outcome: string
+    stripeCustomerId?: string
+    error?: string
+  }>
+  processStripeEvent: (
+    event: StripeEventEnvelope,
+  ) => Promise<{ outcome: string; detail?: string }>
+  /// Only `cancelSubscription` is used, by `reset()`. Typed to that one
+  /// method rather than to the whole `BillingProvider`, which lives behind
+  /// the same `server-only` wall and so cannot be imported as a type here
+  /// either.
+  getBillingProvider: () => {
+    cancelSubscription: (input: { stripeSubscriptionId: string }) => Promise<void>
+    createSetupIntent: (
+      stripeCustomerId: string,
+    ) => Promise<{ setupIntentId: string; clientSecret: string }>
+  }
+}> | null = null
+
+function loadBillingPipeline() {
+  billingPipeline ??= (async () => {
+    // Cast because the installed `@types/node` predates it. `registerHooks`
+    // is Node's synchronous, in-process hook API (22.15+/24+) - no loader
+    // thread, no `--import` flag, and it applies to every module resolved
+    // after the call, which is why the imports below are dynamic.
+    const { registerHooks } = (await import('node:module')) as unknown as {
+      registerHooks: (hooks: {
+        resolve: (
+          specifier: string,
+          context: unknown,
+          next: (s: string, c: unknown) => unknown,
+        ) => unknown
+      }) => void
+    }
+    const root = resolve(import.meta.dirname, '../../..')
+    registerHooks({
+      resolve(specifier: string, context: unknown, next: (s: string, c: unknown) => unknown) {
+        if (specifier === 'server-only') {
+          return {
+            url: pathToFileURL(join(root, 'packages/core/testing/empty.ts')).href,
+            shortCircuit: true,
+          }
+        }
+        if (specifier.startsWith('@/')) {
+          return next(pathToFileURL(join(root, 'apps/web', specifier.slice(2))).href, context)
+        }
+        return next(specifier, context)
+      },
+    })
+    const [provision, webhook, provider] = await Promise.all([
+      import(pathToFileURL(join(root, 'apps/web/lib/billing/provision.ts')).href),
+      import(pathToFileURL(join(root, 'apps/web/lib/billing/webhook.ts')).href),
+      import(pathToFileURL(join(root, 'apps/web/lib/billing/provider.ts')).href),
+    ])
+    return {
+      provisionLeaseBilling: provision.provisionLeaseBilling,
+      processStripeEvent: webhook.processStripeEvent,
+      getBillingProvider: provider.getBillingProvider,
+    }
+  })()
+  return billingPipeline
+}
+
+/**
+ * A saved payment method for this customer, ready for `setup_intent.succeeded`.
+ *
+ * THIS IS THE ONE PLACE THE SEED STANDS IN FOR A BROWSER, and it exists
+ * because the alternative is a demo where autopay is silently off.
+ * `createSetupIntent` is the product's own call (PAY-02: Stripe-hosted
+ * fields, no card number ever reaches us) - but nothing CONFIRMS it except
+ * the tenant tapping through those fields, and until something does, no
+ * PaymentMethod exists to enrol.
+ *
+ * Inventing a `pm_...` id instead is what the first version did, and against
+ * a real test-mode key Stripe refused it outright: "No such PaymentMethod".
+ * Worth keeping as the record of why this function is here rather than a
+ * one-line constant - the refusal is Stripe being right.
+ *
+ * `pm_card_visa` is Stripe's own always-available test PaymentMethod, and
+ * the `sk_test_` guard is belt-and-braces: `StripeBillingProvider` already
+ * refuses a live key at construction (D-26), so a live account cannot reach
+ * this line - but a demo seed touching real cards would be bad enough to
+ * check twice.
+ */
+async function savedPaymentMethod(
+  provider: { createSetupIntent: (id: string) => Promise<{ setupIntentId: string }> },
+  stripeCustomerId: string,
+): Promise<{ setupIntentId: string; paymentMethodId: string }> {
+  const { setupIntentId } = await provider.createSetupIntent(stripeCustomerId)
+
+  const key = process.env.STRIPE_SECRET_KEY?.trim()
+  if (!key?.startsWith('sk_test_')) {
+    // The simulator, which has no PaymentMethods to speak of.
+    return { setupIntentId, paymentMethodId: `pm_demo${randomUUID().replace(/-/g, '').slice(0, 16)}` }
+  }
+
+  const response = await fetch(`https://api.stripe.com/v1/setup_intents/${setupIntentId}/confirm`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${key}`,
+      'content-type': 'application/x-www-form-urlencoded',
+    },
+    body: new URLSearchParams({ payment_method: 'pm_card_visa' }),
+  })
+  const body = (await response.json()) as { payment_method?: string; error?: { message?: string } }
+  if (!response.ok || !body.payment_method) {
+    throw new Error(
+      `demo money: could not confirm setup intent ${setupIntentId} - ` +
+        `${body.error?.message ?? response.statusText}`,
+    )
+  }
+  return { setupIntentId, paymentMethodId: body.payment_method }
+}
+
+/// An event envelope in Stripe's own shape. `livemode: false` is not
+/// decoration - these describe test-mode objects and nothing here should
+/// ever be able to read as live money.
+function stripeEvent(
+  type: string,
+  at: Date,
+  object: Record<string, unknown>,
+  previous?: Record<string, unknown>,
+): StripeEventEnvelope {
+  return {
+    id: `evt_demo${randomUUID().replace(/-/g, '').slice(0, 20)}`,
+    type,
+    created: Math.floor(at.getTime() / 1000),
+    livemode: false,
+    data: previous ? { object, previous_attributes: previous } : { object },
+  }
+}
+
+/// Invoice lines carrying OUR charge ids, which is the whole linkage - see
+/// `InvoicePlan.carriesOverdueCharge`. An empty array is the normal case:
+/// subscription rent has no `Charge` row of its own.
+function invoiceLines(chargeIds: string[]) {
+  return { data: chargeIds.map((chargeId) => ({ metadata: { chargeId } })) }
+}
+
+/**
+ * Pushes one event through the real pipeline and REFUSES TO CONTINUE if it
+ * did not do what the plan said.
+ *
+ * The check is the point. Every failure mode of this section is silent: an
+ * event for a customer nobody knows is `ignored` with a reason, a replayed
+ * id is a `duplicate`, and both leave the seed reporting success over a
+ * demo with an empty rent roll. That is exactly the failure D-132 describes
+ * - "an unrouted message is what that queue is for" - and the only defence
+ * is to state the expected outcome at the call site.
+ */
+async function replay(
+  processStripeEvent: (e: StripeEventEnvelope) => Promise<{ outcome: string; detail?: string }>,
+  event: StripeEventEnvelope,
+  expected: 'projected' | 'ignored',
+  what: string,
+) {
+  const result = await processStripeEvent(event)
+  if (result.outcome !== expected) {
+    throw new Error(
+      `demo money: ${what} came back ${result.outcome} (${result.detail ?? 'no detail'}), ` +
+        `expected ${expected}. The pipeline is the product's own - a surprise here is a real one.`,
+    )
+  }
+  return result
+}
+
+/**
+ * The money story, once every lease and overdue charge it points at exists.
+ *
+ * Returns counts rather than logging its own line, so the seed's single
+ * summary stays the one place that says what was built.
+ */
+async function seedMoney(targets: MoneyTarget[]): Promise<{ payers: number; events: number }> {
+  const planned = targets.filter((target) => MONEY[target.lifecycle])
+  if (planned.length === 0) return { payers: 0, events: 0 }
+
+  const { provisionLeaseBilling, processStripeEvent, getBillingProvider } =
+    await loadBillingPipeline()
+  const push = (event: StripeEventEnvelope, expected: 'projected' | 'ignored', what: string) =>
+    replay(processStripeEvent, event, expected, what)
+
+  let payers = 0
+  let events = 0
+
+  for (const target of planned) {
+    const plan = MONEY[target.lifecycle]!
+
+    // D-29, and the ordering is the decision: `provisionLeaseBilling`
+    // creates the subscription with whatever collection method the payer row
+    // already carries, so a payer who must be on `send_invoice` has to exist
+    // BEFORE provisioning. Switching afterwards is R-047's guarded flow -
+    // and it would refuse this payer anyway, because they have an open
+    // invoice, which is precisely the guard working.
+    if (plan.collectionMethod) {
+      await prisma.leasePayer.create({
+        data: {
+          leaseId: target.leaseId,
+          propertyId: target.propertyId,
+          payerType: 'TENANT',
+          tenantId: target.tenantId,
+          // Null means "the remainder" - see the column's own comment.
+          portionCents: null,
+          collectionMethod: plan.collectionMethod,
+        },
+      })
+    }
+
+    const provisioned = await provisionLeaseBilling(target.leaseId)
+    if (provisioned.outcome !== 'provisioned' || !provisioned.stripeCustomerId) {
+      throw new Error(
+        `demo money: could not provision billing for lease ${target.leaseId} ` +
+          `(${provisioned.outcome}${provisioned.error ? `: ${provisioned.error}` : ''}).`,
+      )
+    }
+    payers++
+    const customer = provisioned.stripeCustomerId
+
+    // ---- THE PART MONTH AT MOVE-IN, if provisioning raised one ----
+    //
+    // `chargeMoveInProration` runs inside provisioning (R-042) for any lease
+    // that did not start on its own billing day, which is most of them here.
+    // It leaves a real `Charge` and nothing on the ledger - so without this
+    // every demo tenancy would carry a part-month rent charge showing as
+    // fully outstanding for ever on the pay screen, months after it was
+    // notionally settled. Billed and paid on the day the tenancy started,
+    // which is when it actually happened.
+    const partMonth = await prisma.charge.findFirst({
+      where: { leaseId: target.leaseId, type: 'RENT', description: { startsWith: 'Part month' } },
+      select: { id: true, amountCents: true },
+    })
+    if (partMonth) {
+      const lease = await prisma.lease.findUniqueOrThrow({
+        where: { id: target.leaseId },
+        select: { startsOn: true },
+      })
+      const invoiceId = `in_demo${randomUUID().replace(/-/g, '').slice(0, 16)}`
+      const lines = invoiceLines([partMonth.id])
+      await push(
+        stripeEvent('invoice.finalized', lease.startsOn, {
+          id: invoiceId,
+          customer,
+          amount_due: partMonth.amountCents,
+          amount_paid: 0,
+          description: 'Part month at move-in',
+          lines,
+        }),
+        'projected',
+        'the move-in part month',
+      )
+      await push(
+        stripeEvent(
+          'invoice.updated',
+          lease.startsOn,
+          {
+            id: invoiceId,
+            customer,
+            amount_paid: partMonth.amountCents,
+            description: 'Part month at move-in',
+            lines,
+          },
+          { amount_paid: 0 },
+        ),
+        'projected',
+        'the move-in part month payment',
+      )
+      events += 2
+    }
+
+    // ---- THE RENT MONTHS ----
+    for (const invoice of plan.invoices) {
+      const at = daysFrom(-invoice.daysAgo)
+      const invoiceId = `in_demo${randomUUID().replace(/-/g, '').slice(0, 16)}`
+      const chargeIds =
+        invoice.carriesOverdueCharge && target.overdueChargeId ? [target.overdueChargeId] : []
+      const lines = invoiceLines(chargeIds)
+
+      await push(
+        stripeEvent('invoice.finalized', at, {
+          id: invoiceId,
+          customer,
+          amount_due: target.rentCents,
+          amount_paid: 0,
+          description: 'Monthly rent',
+          lines,
+        }),
+        'projected',
+        `rent finalized ${invoice.daysAgo} days ago`,
+      )
+      events++
+
+      // The decline comes FIRST, before any money arrives, because that is
+      // the order it happens in: the card is tried, it fails, and whatever
+      // is paid afterwards is the tenant sorting it out. It also matters to
+      // the pipeline - a failure arriving after a settled payment on the
+      // same intent is read as an ACH RETURN and reverses it, which is a
+      // completely different story from a decline.
+      if (invoice.declinedAfterDays != null) {
+        await push(
+          stripeEvent('invoice.payment_failed', daysFrom(-invoice.daysAgo + invoice.declinedAfterDays), {
+            id: invoiceId,
+            customer,
+            amount_due: target.rentCents,
+            payment_intent: `pi_demo${randomUUID().replace(/-/g, '').slice(0, 16)}`,
+          }),
+          'projected',
+          `the declined attempt ${invoice.daysAgo - invoice.declinedAfterDays} days ago`,
+        )
+        events++
+      }
+
+      // THE DELTA, NEVER THE TOTAL. `amount_paid` is cumulative across
+      // instalments, so each event reports the running total and names the
+      // previous one in `previous_attributes` - which is the subtraction the
+      // interpreter does. Getting this wrong by sending the instalment
+      // amount as `amount_paid` would credit $800 of a $1,600 invoice twice.
+      const parts = invoice.paidCents === 'full' ? [target.rentCents] : invoice.paidCents
+      let paidSoFar = 0
+      for (const [index, part] of parts.entries()) {
+        const before = paidSoFar
+        paidSoFar += part
+        await push(
+          stripeEvent(
+            'invoice.updated',
+            // Instalments land days apart, not all at once - a part-payment
+            // arriving in the same second as the one before it is a story
+            // nobody would believe on a statement.
+            daysFrom(-invoice.daysAgo + 1 + index * 6),
+            {
+              id: invoiceId,
+              customer,
+              amount_paid: paidSoFar,
+              description: 'Rent payment',
+              lines,
+            },
+            { amount_paid: before },
+          ),
+          'projected',
+          `rent payment ${index + 1} of ${parts.length} on the invoice ${invoice.daysAgo} days ago`,
+        )
+        events++
+      }
+    }
+
+    // ---- AN ACH DEBIT STILL IN FLIGHT ----
+    //
+    // `payment_intent.processing` with NO invoice behind it: a tenant-
+    // initiated payment (R-037), which is the one PaymentIntent shape this
+    // pipeline projects rather than leaving to the invoice events.
+    if (plan.inFlight) {
+      await push(
+        stripeEvent('payment_intent.processing', daysFrom(-plan.inFlight.daysAgo), {
+          id: `pi_demo${randomUUID().replace(/-/g, '').slice(0, 16)}`,
+          customer,
+          amount: plan.inFlight.amountCents,
+          payment_method_types: ['us_bank_account'],
+        }),
+        'projected',
+        'the ACH debit in flight',
+      )
+      events++
+    }
+
+    // ---- AUTOPAY ----
+    //
+    // `ignored` is the CORRECT outcome here and not a failure: enrolment
+    // moves no cents, so it never touches the ledger. The detail is what
+    // says it worked, which is why it is checked rather than assumed.
+    if (plan.autopayDaysAgo != null) {
+      const saved = await savedPaymentMethod(getBillingProvider(), customer)
+      const result = await push(
+        stripeEvent('setup_intent.succeeded', daysFrom(-plan.autopayDaysAgo), {
+          id: saved.setupIntentId,
+          customer,
+          payment_method: saved.paymentMethodId,
+        }),
+        'ignored',
+        'the autopay enrolment',
+      )
+      if (!result.detail?.startsWith('autopay: enrolled')) {
+        throw new Error(`demo money: autopay enrolment did nothing (${result.detail}).`)
+      }
+      events++
+    }
+  }
+
+  return { payers, events }
+}
+
 async function seedDemoData() {
   const existing = await prisma.legalEntity.findFirst({
     where: { name: ENTITY_NAMES[0] },
@@ -1968,6 +2643,10 @@ async function seedDemoData() {
   let photoCount = 0
   let caseCount = 0
   let complianceCount = 0
+  /// The tenancies the money story attaches to (R-100c), collected here and
+  /// spent after every property is written: an invoice that carries the
+  /// overdue `Charge`'s id needs that charge to exist first.
+  const moneyTargets: MoneyTarget[] = []
   /// Printed at the very end. The raw token exists only here - only its
   /// SHA-256 reaches the database - so a link not printed on this run is a
   /// link nobody can ever open.
@@ -2050,18 +2729,30 @@ async function seedDemoData() {
         data: { leaseId: lease.id, tenantId: tenant.id, isPrimary: true },
       })
 
-      if (tenantPlan.lease.overdueCharge) {
-        await prisma.charge.create({
-          data: {
-            propertyId: property.id,
-            leaseId: lease.id,
-            type: 'RENT',
-            amountCents: tenantPlan.lease.rentCents,
-            description: 'Monthly rent',
-            dueOn: daysFrom(-20),
-          },
-        })
-      }
+      const overdueCharge = tenantPlan.lease.overdueCharge
+        ? await prisma.charge.create({
+            data: {
+              propertyId: property.id,
+              leaseId: lease.id,
+              type: 'RENT',
+              amountCents: tenantPlan.lease.rentCents,
+              description: 'Monthly rent',
+              // The same day `MONEY.late` finalizes the invoice that carries
+              // this charge's id. Two dates for one bill is two screens
+              // disagreeing about when the tenant fell behind.
+              dueOn: daysFrom(-20),
+            },
+          })
+        : null
+
+      moneyTargets.push({
+        leaseId: lease.id,
+        propertyId: property.id,
+        tenantId: tenant.id,
+        lifecycle: tenantPlan.lifecycle,
+        rentCents: tenantPlan.lease.rentCents,
+        overdueChargeId: overdueCharge?.id ?? null,
+      })
     }
 
     // ---- The operational story, once the units it points at exist ----
@@ -2158,6 +2849,13 @@ async function seedDemoData() {
     }
   }
 
+  // ---- The money story (R-100c), replayed through the real pipeline ----
+  //
+  // LAST OF THE THREE STORIES AND DELIBERATELY SO. It reads the overdue
+  // `Charge` written above, and it is the only section here that can make a
+  // property permanently undeletable - see `reset()`'s sticky set.
+  const money = await seedMoney(moneyTargets)
+
   // ---- Compliance items, which hang off a property or an entity ----
   for (const item of COMPLIANCE) {
     const propertyId =
@@ -2187,7 +2885,8 @@ async function seedDemoData() {
       `${pmTemplateRows.length} PM schedules, ${ticketCount} tickets, ` +
       `${workOrderCount} work orders, ${inspectionCount} inspections, ${messageCount} messages, ` +
       `${listingCount} listing, ${prospectCount} prospects, ${photoCount} photos, ` +
-      `${caseCount} cases, ${complianceCount} compliance items.`,
+      `${caseCount} cases, ${complianceCount} compliance items, ` +
+      `${money.payers} billed payers, ${money.events} Stripe events replayed.`,
   )
 
   if (storageIsRemote) {
