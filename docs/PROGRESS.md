@@ -4069,7 +4069,7 @@ So one tenancy is followed. She falls behind and is chased, lawfully and correct
 - **The re-ask itself is the transferable lesson.** OQ-2 carried "re-ask before Milestone 3 planning" and nothing made that happen. A deferred question with no owner and no trigger is a question that gets deferred again — which is the same failure as a checkpoint nobody defines until two milestones later.
 
 ## Security review of the unauthenticated surface
-**Commit:** _(recorded below)_  ·  **Date:** 2026-08-24
+**Commit:** `ccc006c`  ·  **Date:** 2026-08-24
 
 **What it did.** Swept every entry point that a person with no session can reach, found one real vulnerability, fixed it at its root, and confirmed the rest. Recorded as **D-137**.
 
