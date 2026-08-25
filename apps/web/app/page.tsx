@@ -1,5 +1,19 @@
 import { clampToStateCap, formatCents, prorateRent } from '@rental/core/money'
 
+// STATICALLY PRERENDERED UNTIL D-138, AND THAT SILENTLY BROKE EVERY SCRIPT
+// ON IT. The CSP carries a per-request nonce, and prerendered HTML is fixed
+// at build time - so there is no request for a nonce to come from, and Next
+// stamps none. `'strict-dynamic'` then makes `'self'` inert, so all fourteen
+// script tags on this page were refused by the browser. Nothing went red:
+// this product uses real `<form action>` rather than `onClick`, so the page
+// still worked server-side, which is exactly how it stayed invisible.
+//
+// Rendering per request is what lets the nonce exist. The cost is one
+// uncached render of a page nobody hits in a loop; the alternative is a
+// policy this page cannot satisfy.
+export const dynamic = 'force-dynamic'
+
+
 // Placeholder home route. R-007 replaces this with the admin shell; R-013
 // replaces that with the real owner dashboard. It exists now so the scaffold
 // has something to lint, build, axe-scan and measure - and so the money

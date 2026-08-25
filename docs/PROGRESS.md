@@ -4125,3 +4125,32 @@ So one tenancy is followed. She falls behind and is chased, lawfully and correct
 - **A per-request nonce means a page carrying one cannot be statically generated.** Nearly every page here is behind a session and already dynamic, so the loss is small — but it is real, and a future item that wants a page prerendered has to reckon with this file. Named in the middleware's own header rather than discovered later.
 - **`style-src 'unsafe-inline'` is the one soft spot** and could be closed by nonce-ing component styles. Not worth it against the current threat model; if it is ever done, it is a component-wide change, not a header edit.
 - **Nothing verifies the policy against a real browser console.** The suite proves pages work and the header is right; it does not prove no resource is being silently blocked in a way no assertion notices. A blocked request that nothing asserts on would pass here.
+
+## The CSP was switching off the JavaScript on four pages
+**Commit:** _(recorded below)_  ·  **Date:** 2026-08-25
+
+**What it did.** Built the browser-behaviour check D-138 said was missing, and it immediately found that D-138 itself had broken four pages. Recorded as **D-139**.
+
+**D-138 shipped green and wrong.** Its own "what it left behind" said the suite proved pages work and the header is correct, and that nothing proved no resource was being silently blocked. That was the exact defect sitting in it: `/`, `/forgot-password`, `/login/mfa` and `/portal/login` were serving **fourteen script tags each, every one refused by the browser**. The full sweep passed anyway — 1006 tests, zero failures.
+
+**Why it was invisible, and it is a compliment to the codebase.** CLAUDE.md's standing rule is that anything which must work on first paint is a real `<form action>` plus `useActionState`, never a button with an `onClick`. Because the product obeys that, all four pages kept working with their JavaScript entirely dead — sign-in, the MFA challenge, the tenant magic link and password reset all still functioned server-side. **A codebase that degraded worse would have failed loudly.**
+
+**The mechanism, measured rather than reasoned about.** The nonce is minted per request; statically prerendered HTML is fixed at build time, so there is no request for it to come from and Next stamps none. `'strict-dynamic'` then makes `'self'` inert, so nothing was left to allow the chunks. Confirmed by counting script tags against the running production build:
+
+| page | render mode | script tags | carrying a nonce |
+|---|---|---|---|
+| `/login` | dynamic | 14 | **14** |
+| `/` | prerendered | 14 | **0** |
+
+The prerender manifest named exactly seven routes, four of them real pages. Those four now carry `export const dynamic = 'force-dynamic'`, with the reason written beside each one.
+
+**What it decided.**
+- **`'strict-dynamic'` is kept, and the tempting conclusion — that it was too strict — is backwards.** It is what made a page with no nonce fail *completely* rather than partially, which is the only reason this was findable at all. Without it those pages would have loaded their chunks via `'self'` and lost only the inline hydration payload: a subtler breakage, in a suite that already could not see the loud one.
+- **The detector leads with a negative control**, because an empty violation list is equally the result of a correct policy and of a listener that was never registered — CLAUDE.md's most-repeated trap, and one this file would have walked straight into. `csp-browser.spec.ts` first makes the browser refuse an injected inline event handler and asserts both that it did not execute *and* that the detector saw it. That test is also the only thing in the repo proving the CSP stops a real injection rather than describing one.
+- **The payload is markup, not a DOM-API script.** The first negative control used `createElement('script')` + `textContent` and **failed — it executed.** That is `'strict-dynamic'` working as specified: trust propagates to what a trusted script loads, and an attacker who can already run script has nothing left to bypass. The injection a CSP defends against arrives as markup the parser inserts, so the test now uses an inline `onerror` handler. Written down next to the test so nobody "fixes" it back.
+- **`securitypolicyviolation` events, not console scraping.** A console filter has to match wording that varies by browser and version, and cannot tell a CSP refusal from any other red line.
+
+**What it left behind.**
+- **`/_not-found` and `/_global-error` are still prerendered**, so their scripts are still refused. Left deliberately: both are static error pages with no interactivity, and forcing framework error boundaries dynamic is a change with more risk than the defect it would fix. Named here so it is a decision rather than an oversight.
+- **A newly-added static page would reintroduce this silently.** The spec names the four routes the manifest listed rather than reading the manifest at runtime; a fifth prerendered page would not be covered. Reading `prerender-manifest.json` from the spec would close it and couples the suite to a Next internal — worth doing if it ever happens twice.
+- **Stripe is still unexercised in the browser.** `autopay-panel.tsx` is the only third-party script and D-15 already excludes it from e2e, so `js.stripe.com`, `hooks.stripe.com` and `api.stripe.com` are admitted by the policy on inventory rather than on a passing test.
