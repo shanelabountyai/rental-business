@@ -4103,7 +4103,7 @@ So one tenancy is followed. She falls behind and is chased, lawfully and correct
 - **No upload-side allowlist**, considered and declined above. If one is ever added it belongs beside `inbound-attachments.ts`'s, not instead of the serve-side guard.
 
 ## A nonce-based Content-Security-Policy
-**Commit:** _(recorded below)_  ·  **Date:** 2026-08-25
+**Commit:** `3fa98bd`  ·  **Date:** 2026-08-25
 
 **What it built.** `apps/web/middleware.ts`, a per-request nonce and an enforced CSP on every page, plus `e2e/csp.spec.ts` asserting the header actually exists and says what it should. Recorded as **D-138**.
 
