@@ -4363,7 +4363,7 @@ That fallback is a lie on a real deployment, and the lie is the specific one thi
 ---
 
 ## R-105: walk the demo in a browser
-**Commit:** _(recorded below)_  ·  **Date:** 2026-08-25
+**Commit:** 77bc17126ba1e2e9480c0dd8fa8e7fa5bb446827  ·  **Date:** 2026-08-25
 
 **The checkpoint Milestone 10 owed.** R-100a, R-100b and R-100c each end with the same sentence — nobody has opened these screens — and D-28's rule is that a walk is what catches what no test is looking for. It caught seven things. Three are in the product.
 
