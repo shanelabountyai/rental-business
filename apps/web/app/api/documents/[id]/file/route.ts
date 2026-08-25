@@ -4,6 +4,7 @@ import { auth } from '@/auth.ts'
 import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
 import { tenantScope } from '@/lib/portal/guard.ts'
 import { storage } from '@/lib/storage/index.ts'
+import { documentResponse } from '@/lib/documents/serve.ts'
 
 // Serves a Document's bytes (DOC-01, DOC-03). `redirect()` (inside
 // requirePermission) works from a Route Handler the same as a Server
@@ -77,25 +78,8 @@ async function serve(document: {
   fileName: string
 }) {
   const bytes = await storage.get(document.storageKey)
-  return new Response(new Uint8Array(bytes), {
-    headers: {
-      'Content-Type': document.contentType,
-      'Content-Disposition': `inline; filename="${document.fileName.replace(/"/g, '')}"`,
-      // From the bytes actually being sent, NOT from Document.sizeBytes. The
-      // two are the same for every file this product wrote, but the header is
-      // a promise about THIS response: if the stored object and the recorded
-      // size ever disagree - a half-written upload, a storage backend swapped
-      // under D-14 - a length taken from the row makes the response
-      // malformed, and the client aborts mid-download rather than showing
-      // anything. Found by a test whose fixture recorded a size it did not
-      // write.
-      'Content-Length': String(bytes.byteLength),
-      // Documents can be re-uploaded under a fresh id (no in-place edits), so
-      // caching an old id's bytes forever is safe - but each Document row is
-      // itself immutable, so this is never invalidated by a change.
-      // `private` matters more than usual here: a shared cache must never hold
-      // one tenant's lease where another request could be served it.
-      'Cache-Control': 'private, max-age=3600',
-    },
-  })
+  // No Cache-Control: this route answers for every document in the product,
+  // scoped per request by session and permission, so there is no one cache
+  // policy that is right for all of them.
+  return documentResponse(bytes, document)
 }

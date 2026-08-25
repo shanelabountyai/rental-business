@@ -1,6 +1,7 @@
 import { prisma } from '@rental/db'
 import { storage } from '@/lib/storage/index.ts'
 import { verifySignerLink } from '@/lib/leases/sign-link.ts'
+import { documentResponse } from '@/lib/documents/serve.ts'
 
 // Serves the lease PDF to a signer holding their own LEASE_SIGN link
 // (LEASE-06, R-063).
@@ -31,14 +32,7 @@ export async function GET(
   if (!document || document.deletedAt) return new Response('Not found', { status: 404 })
 
   const bytes = await storage.get(document.storageKey)
-  return new Response(new Uint8Array(bytes), {
-    headers: {
-      'Content-Type': document.contentType,
-      'Content-Disposition': `inline; filename="${document.fileName.replace(/"/g, '')}"`,
-      'Content-Length': String(bytes.byteLength),
-      // `private` and short - a signing link is a bearer credential, same
-      // as the vendor route's own reasoning.
-      'Cache-Control': 'private, max-age=300',
-    },
-  })
+  // `private` and short - a signing link is a bearer credential, same as the
+  // vendor route's own reasoning.
+  return documentResponse(bytes, document, { cacheControl: 'private, max-age=300' })
 }

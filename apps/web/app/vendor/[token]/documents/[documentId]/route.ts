@@ -1,6 +1,7 @@
 import { prisma } from '@rental/db'
 import { storage } from '@/lib/storage/index.ts'
 import { verifyVendorLink } from '@/lib/vendors/link.ts'
+import { documentResponse } from '@/lib/documents/serve.ts'
 
 // Serves a document's bytes to a vendor holding a magic link (D-6, R-025).
 //
@@ -48,17 +49,7 @@ export async function GET(
   if (!belongsToThisJob) return new Response('Not found', { status: 404 })
 
   const bytes = await storage.get(document.storageKey)
-  return new Response(new Uint8Array(bytes), {
-    headers: {
-      'Content-Type': document.contentType,
-      'Content-Disposition': `inline; filename="${document.fileName.replace(/"/g, '')}"`,
-      // From the bytes actually sent, not from the recorded size - see
-      // api/documents/[id]/file's own comment for the bug that taught this.
-      'Content-Length': String(bytes.byteLength),
-      // `private` and short: a vendor link is a bearer credential, and a
-      // shared cache holding these bytes would outlive the token that
-      // authorized them.
-      'Cache-Control': 'private, max-age=300',
-    },
-  })
+  // `private` and short: a vendor link is a bearer credential, and a shared
+  // cache holding these bytes would outlive the token that authorized them.
+  return documentResponse(bytes, document, { cacheControl: 'private, max-age=300' })
 }

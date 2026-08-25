@@ -1,5 +1,6 @@
 import { prisma } from '@rental/db'
 import { storage } from '@/lib/storage/index.ts'
+import { documentResponse } from '@/lib/documents/serve.ts'
 
 // Serves a unit photo for a PUBLISHED listing (LEASE-01, R-056).
 //
@@ -44,15 +45,8 @@ export async function GET(
   }
 
   const bytes = await storage.get(document.storageKey)
-  return new Response(new Uint8Array(bytes), {
-    headers: {
-      'Content-Type': document.contentType,
-      'Content-Disposition': `inline; filename="${document.fileName.replace(/"/g, '')}"`,
-      'Content-Length': String(bytes.byteLength),
-      // PUBLIC and long-lived, unlike the vendor route's private/short
-      // cache - anyone may see a published listing's photos, and a CDN
-      // caching them is exactly the behaviour a public listing page wants.
-      'Cache-Control': 'public, max-age=3600',
-    },
-  })
+  // PUBLIC and long-lived, unlike the vendor route's private/short cache -
+  // anyone may see a published listing's photos, and a CDN caching them is
+  // exactly the behaviour a public listing page wants.
+  return documentResponse(bytes, document, { cacheControl: 'public, max-age=3600' })
 }
