@@ -2,6 +2,14 @@
 // human (D-5, scoped to R-007).
 //
 //   npm run db:create-owner -- --email you@example.com --name "Your Name"
+//   npm run db:create-staff -- --email pm@example.com --name "Pat M" --role manager
+//
+// `--role` exists because there is NO in-app staff management: `grantAssignment`
+// in apps/web/lib/staff/assignments.ts has no caller, so `owner` was the only
+// role any human could ever hold and the other three were untestable. This is
+// the bootstrap path widened, not a replacement for that screen - the scope is
+// always all-properties, so ROLE-04's property-scoped manager still cannot be
+// made here.
 //
 // D-5: "No permission bypass. The `owner` role with an all-properties
 // assignment is the only super user." So this script does not create a
@@ -19,9 +27,15 @@ import { recordAudit } from '../../core/audit/index.ts'
 import { hashPassword, mintToken } from '../../core/auth/index.ts'
 import { prisma } from '../index.ts'
 
+/// `tenant` and `guarantor` are roles too (D-5), but they are held by Tenant
+/// actors rather than StaffUsers - granting one to a staff row would make a
+/// login that `requireStaff()` admits and every permission check then refuses.
+const STAFF_ROLE_KEYS = ['owner', 'manager', 'maintenance_tech', 'read_only']
+
 interface Args {
   email: string
   name: string
+  roleKey: string
   force: boolean
 }
 
@@ -33,11 +47,17 @@ function parseArgs(argv: string[]): Args {
 
   const email = get('--email')?.trim().toLowerCase()
   const name = get('--name')?.trim()
+  const roleKey = get('--role')?.trim() ?? 'owner'
 
   if (!email || !name) {
     console.error(
-      'Usage: npm run db:create-owner -- --email <address> --name "<full name>" [--force]',
+      'Usage: npm run db:create-owner -- --email <address> --name "<full name>"\n' +
+        `       [--role ${STAFF_ROLE_KEYS.join('|')}] [--force]`,
     )
+    process.exit(1)
+  }
+  if (!STAFF_ROLE_KEYS.includes(roleKey)) {
+    console.error(`--role must be one of: ${STAFF_ROLE_KEYS.join(', ')}`)
     process.exit(1)
   }
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -45,23 +65,27 @@ function parseArgs(argv: string[]): Args {
     process.exit(1)
   }
 
-  return { email, name, force: argv.includes('--force') }
+  return { email, name, roleKey, force: argv.includes('--force') }
 }
 
 async function main() {
   const args = parseArgs(process.argv.slice(2))
 
-  const ownerRole = await prisma.role.findUnique({ where: { key: 'owner' } })
-  if (!ownerRole) {
+  const role = await prisma.role.findUnique({ where: { key: args.roleKey } })
+  if (!role) {
     console.error(
-      'The `owner` role does not exist. Run `npm run db:seed` first - roles are data (D-5).',
+      `The \`${args.roleKey}\` role does not exist. Run \`npm run db:seed\` first - roles are data (D-5).`,
     )
     process.exit(1)
   }
 
-  const existingOwners = await prisma.staffAssignment.count({
-    where: { roleId: ownerRole.id, revokedAt: null },
-  })
+  // The duplicate guard is about OWNERS specifically - a second manager or
+  // tech is ordinary, and a bootstrap script that refused one would just be
+  // in the way.
+  const existingOwners =
+    args.roleKey === 'owner'
+      ? await prisma.staffAssignment.count({ where: { roleId: role.id, revokedAt: null } })
+      : 0
   if (existingOwners > 0 && !args.force) {
     console.error(
       `This deployment already has ${existingOwners} owner assignment(s).\n` +
@@ -77,8 +101,8 @@ async function main() {
   })
   if (existing) {
     console.error(
-      `A staff user already exists for ${args.email}. This script bootstraps a\n` +
-        'NEW deployment; grant an existing user the owner role in the app instead.',
+      `A staff user already exists for ${args.email}. This script creates a NEW\n` +
+        'one; use a different address, or grant the extra role in the app.',
     )
     process.exit(1)
   }
@@ -100,7 +124,7 @@ async function main() {
 
     // The whole point: a null scope on an ordinary assignment row.
     await tx.staffAssignment.create({
-      data: { staffUserId: created.id, roleId: ownerRole.id },
+      data: { staffUserId: created.id, roleId: role.id },
     })
 
     await tx.authToken.create({
@@ -122,7 +146,7 @@ async function main() {
       entityType: 'StaffUser',
       entityId: created.id,
       after: {
-        roleKey: 'owner',
+        roleKey: args.roleKey,
         scope: 'all properties',
         bootstrapped: true,
         forced: args.force,
@@ -132,14 +156,17 @@ async function main() {
     return created
   })
 
-  const baseUrl = process.env.AUTH_URL ?? 'http://localhost:3000'
+  // :3100, not :3000. This repo owns 3100 (CLAUDE.md's port table); the old
+  // default minted setup links into the sibling self-storage app, which is
+  // exactly the collision that table exists to prevent (R-105 found it).
+  const baseUrl = process.env.AUTH_URL ?? 'http://localhost:3100'
   const minutes = Math.round((setup.expiresAt.getTime() - Date.now()) / 60_000)
 
   console.info(
     [
       '',
-      `Created owner: ${staffUser.name} <${staffUser.email}>`,
-      'Role: owner, scoped to all properties (an ordinary assignment row - D-5).',
+      `Created staff user: ${staffUser.name} <${staffUser.email}>`,
+      `Role: ${args.roleKey}, scoped to all properties (an ordinary assignment row - D-5).`,
       '',
       'Single-use setup link - open it to set a password:',
       `  ${new URL(`/reset-password?token=${setup.token}`, baseUrl)}`,
