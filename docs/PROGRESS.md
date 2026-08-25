@@ -4167,7 +4167,7 @@ The prerender manifest named exactly seven routes, four of them real pages. Thos
 **What it left behind.** The accepted set is a literal. If Next ever renames its internal routes the check fails loudly and correctly, which is the right direction for a guard to fail in.
 
 ## R-038a: offline part-payments, and the shipped bug the probe found
-**Commit:** `pending`  ·  **Date:** 2026-08-25
+**Commit:** `b7a58ce`  ·  **Date:** 2026-08-25
 
 **What it built.** Offline part-payments (PAY-05's last refusal), and — found on the way to them — the fix for a money bug that had been live since R-038. Recorded as **D-141** (the projection change) and **D-142** (the offline change), two decisions because they are two different things that happen to share one fix.
 
