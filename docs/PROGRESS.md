@@ -4407,7 +4407,7 @@ That fallback is a lie on a real deployment, and the lie is the specific one thi
 ---
 
 ## R-106: a failed delivery is not a finished delivery
-**Commit:** _(recorded below)_  ·  **Date:** 2026-08-25
+**Commit:** 21f8a822ce20d302ac31447793957d39a1f60308  ·  **Date:** 2026-08-25
 
 R-104's two leftovers, and they are one item because they meet in the same `catch`. **(a)** A `FAILED` delivery stayed failed for ever and nothing re-queued it — `failureCode` was written in four places, rendered in three, and branched on in none, so a Twilio 500 and a disconnected handset were treated identically and both were permanent. **(b)** When Twilio refuses the API call outright because the recipient replied STOP, no message is created, no `MessageSid` exists and no status callback is ever posted — so `/api/sms/status`, which is where the carrier opt-out list (R-054) learns about 21610 today, is never called at all. The send discovered a fact about the recipient and threw it away, and the next send discovered it again.
 
