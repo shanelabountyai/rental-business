@@ -218,22 +218,45 @@ export interface BillingProvider {
    * computed (D-12). The provider does not add anything to it.
    */
   /**
-   * Marks an issued invoice paid OUTSIDE Stripe (PAY-05, R-038).
+   * Records money that arrived OUTSIDE Stripe against an issued invoice
+   * (PAY-05, R-038; part-payments R-038a).
    *
    * For a check, a money order or notes handed over at the office. Stripe
-   * records the amount as paid out of band and stops collecting - which is
-   * the point: a payment Stripe does not know about is a payer it goes on
-   * debiting, and a tenant who paid by check being charged again is the
-   * failure this call exists to prevent.
+   * stops collecting what has been paid - which is the point: a payment
+   * Stripe does not know about is a payer it goes on debiting, and a tenant
+   * who paid by check being charged again is the failure this call exists to
+   * prevent.
    *
-   * Settles the WHOLE invoice. Applying a part-payment this way would
-   * forgive the remainder silently, which is why the caller refuses one.
+   * WHOLE OR PART, and that is the R-038a change. It reports a PaymentRecord
+   * and attaches it to the invoice rather than calling `/pay` with
+   * `paid_out_of_band`, because the latter settles the ENTIRE invoice
+   * whatever arrived - half the rent in cash would have forgiven the other
+   * half silently. Measured against the real test account: attaching 50000
+   * to a 100000 invoice leaves it `open` with `amount_remaining` 50000, and
+   * attaching the rest closes it.
+   *
+   * IDEMPOTENT ON THE FACT. `idempotencyKey` is keyed on this payer, this
+   * instrument, this day by the caller, so a retried submission reports the
+   * SAME PaymentRecord - and Stripe then refuses to attach an already
+   * attached record a second time. Both halves matter: a partial applied
+   * twice is money the tenant never paid, and unlike the old whole-invoice
+   * call there is no "already paid" state to save us.
    */
-  markInvoicePaidOutOfBand(input: {
+  recordOutOfBandPayment(input: {
     stripeInvoiceId: string
+    stripeCustomerId: string
+    /// What actually arrived, in cents. May be less than what the invoice
+    /// still asks for.
+    amountCents: number
+    /// When the money changed hands, not when it was typed in.
+    receivedAt: Date
     /// Ours, for the audit trail on Stripe's side - the check number or
     /// "cash, received by <staff>". Stripe never validates it.
     reference: string
+    /// What it was, shown on Stripe's own payment record: "Check 4471",
+    /// "Money order", "Cash".
+    instrument: string
+    idempotencyKey: string
   }): Promise<void>
 
   /**

@@ -446,23 +446,76 @@ export class StripeBillingProvider implements BillingProvider {
     return data.reduce((total, invoice) => total + (invoice.amount_remaining ?? 0), 0)
   }
 
-  async markInvoicePaidOutOfBand(input: {
+  async recordOutOfBandPayment(input: {
     stripeInvoiceId: string
+    stripeCustomerId: string
+    amountCents: number
+    receivedAt: Date
     reference: string
+    instrument: string
+    idempotencyKey: string
   }): Promise<void> {
-    // `paid_out_of_band` tells Stripe the money arrived elsewhere. It marks
-    // the invoice paid and records the amount under the invoice's own
-    // `amount_paid_out_of_band`, distinct from `amount_paid` - so Stripe's
-    // books stay honest about what actually moved through Stripe.
+    const receivedAtEpoch = Math.floor(input.receivedAt.getTime() / 1000)
+
+    // STEP ONE: tell Stripe money arrived, without saying what it is for.
+    // A PaymentRecord is Stripe's object for a payment that happened
+    // somewhere else entirely - `processor_details[type]` must be `custom`,
+    // which is Stripe's way of saying "not one of my rails".
     //
-    // No idempotency key: this is an invoice state transition, and Stripe
-    // refuses to pay an already-paid invoice on its own. A stale key would
-    // silently return the first call's result for what might be a second,
-    // different instrument.
-    await this.#post(`/invoices/${input.stripeInvoiceId}/pay`, {
-      paid_out_of_band: 'true',
-      'metadata[offline_reference]': input.reference,
-    })
+    // `outcome=guaranteed` in the same call rather than a second
+    // `report_payment_attempt_guaranteed` round trip. A record that is not
+    // guaranteed contributes nothing when attached, and PAY-05's fifteen
+    // seconds is a real budget - two network calls here instead of three.
+    // A check in hand is guaranteed for the same reason the Payment row is
+    // written SETTLED (D-31): whether it later bounces is a separate event.
+    //
+    // KEYED ON THE FACT by the caller, so a double submission reports the
+    // same record rather than a second one. This is the only thing standing
+    // between a retried part-payment and money the tenant never handed over.
+    const record = await this.#post(
+      '/payment_records/report_payment',
+      {
+        'amount_requested[value]': input.amountCents,
+        'amount_requested[currency]': 'usd',
+        initiated_at: receivedAtEpoch,
+        outcome: 'guaranteed',
+        'guaranteed[guaranteed_at]': receivedAtEpoch,
+        'payment_method_details[type]': 'custom',
+        'payment_method_details[custom][display_name]': input.instrument,
+        'processor_details[type]': 'custom',
+        'processor_details[custom][payment_reference]': input.reference,
+        // Without this the attach below is refused - Stripe requires the
+        // record's customer to match the invoice's.
+        'customer_details[customer]': input.stripeCustomerId,
+      },
+      input.idempotencyKey,
+    )
+
+    // STEP TWO: point it at the invoice. This is what moves `amount_paid`
+    // and stops Stripe collecting that portion, and it is the call that
+    // leaves the invoice OPEN when part of the bill is still outstanding.
+    //
+    // No idempotency key, deliberately: Stripe refuses on its own to attach
+    // a record to a second invoice, and that refusal is a better guard than
+    // a key we might key wrong. `ALREADY_ATTACHED` below turns the retry
+    // case into the success it actually is.
+    try {
+      await this.#post(`/invoices/${input.stripeInvoiceId}/attach_payment`, {
+        payment_record: record.id as string,
+      })
+    } catch (error) {
+      if (
+        error instanceof StripeRequestError &&
+        error.message.includes('already attached to') &&
+        error.message.includes(input.stripeInvoiceId)
+      ) {
+        // The money is on the invoice, put there by the call this one is a
+        // retry of. Reporting a failure would tell the staff member to
+        // record it again, which is exactly the harm being avoided.
+        return
+      }
+      throw error
+    }
   }
 
   async addInvoiceItem(input: {

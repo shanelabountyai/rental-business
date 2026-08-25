@@ -389,7 +389,7 @@ describe('offline payments (PAY-05)', () => {
 })
 
 describe('offlinePaymentDecision', () => {
-  const owing = { balanceCents: 150_000, openInvoiceAmountCents: 150_000 }
+  const owing = { balanceCents: 150_000, openInvoiceAmountCents: 150_000, blockPartial: false }
 
   it('applies a payment that settles the open invoice', () => {
     expect(offlinePaymentDecision(owing, 150_000)).toEqual({ allowed: true })
@@ -408,16 +408,55 @@ describe('offlinePaymentDecision', () => {
     expect(offlinePaymentDecision(owing, 200_000).refusal).toBe('more_than_owed')
   })
 
-  it('REFUSES a part-payment rather than forgiving the remainder', () => {
-    // Stripe's out-of-band payment settles the WHOLE invoice. Applying half
-    // of one this way would mark the rest paid and write it off silently -
-    // the tenant would owe nothing and nobody would notice.
-    expect(offlinePaymentDecision(owing, 50_000).refusal).toBe('partial_not_supported')
+  it('ALLOWS a part-payment, which R-038 refused', () => {
+    // Somebody arriving at the counter with half the rent in cash is a real
+    // situation, and R-038 could only turn them away: its `paid_out_of_band`
+    // call settled the WHOLE invoice whatever arrived, so applying half
+    // would have written the other half off silently. R-038a attaches a
+    // PaymentRecord instead, which leaves the invoice open for the rest -
+    // measured against the real API, not assumed.
+    expect(offlinePaymentDecision(owing, 50_000)).toEqual({ allowed: true })
+  })
+
+  it('refuses MORE than the invoice in front of us still asks for', () => {
+    // Under the balance (so not `more_than_owed`) and over the open invoice.
+    // Stripe itself refuses to attach a payment larger than the remainder,
+    // and the surplus belongs to a period nobody has billed yet.
+    expect(
+      offlinePaymentDecision(
+        { balanceCents: 200_000, openInvoiceAmountCents: 150_000, blockPartial: false },
+        175_000,
+      ).refusal,
+    ).toBe('more_than_invoiced')
+  })
+
+  it('refuses a part-payment on a tenancy the operator has held (PAY-12)', () => {
+    // R-038 could not take a part-payment at all, so this switch was
+    // satisfied by accident. Making them possible at the counter without
+    // this check would reopen the hazard it exists for: in many states
+    // accepting a partial after serving notice can void the eviction.
+    const held = { ...owing, blockPartial: true }
+    expect(offlinePaymentDecision(held, 50_000).refusal).toBe('partial_blocked')
+    // The full balance is still recordable - the switch is "all or nothing",
+    // not "nothing".
+    expect(offlinePaymentDecision(held, 150_000)).toEqual({ allowed: true })
+  })
+
+  it('names the arithmetic problem before the policy one', () => {
+    // A staff member in the wrong tenant's record needs to hear that first;
+    // being told about a legal hold on a lease they did not mean to open is
+    // both unhelpful and a disclosure.
+    expect(
+      offlinePaymentDecision({ ...owing, blockPartial: true, balanceCents: 0 }, 50_000).refusal,
+    ).toBe('nothing_owed')
   })
 
   it('refuses when there is no issued invoice to mark', () => {
     expect(
-      offlinePaymentDecision({ balanceCents: 150_000, openInvoiceAmountCents: 0 }, 150_000).refusal,
+      offlinePaymentDecision(
+        { balanceCents: 150_000, openInvoiceAmountCents: 0, blockPartial: false },
+        150_000,
+      ).refusal,
     ).toBe('no_open_invoice')
   })
 
@@ -425,8 +464,10 @@ describe('offlinePaymentDecision', () => {
     // Null means "we have not asked", never "nothing owed" - the same rule
     // the collection-method switch follows.
     expect(
-      offlinePaymentDecision({ balanceCents: 150_000, openInvoiceAmountCents: null }, 150_000)
-        .refusal,
+      offlinePaymentDecision(
+        { balanceCents: 150_000, openInvoiceAmountCents: null, blockPartial: false },
+        150_000,
+      ).refusal,
     ).toBe('no_open_invoice')
   })
 })

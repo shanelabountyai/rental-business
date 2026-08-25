@@ -31,6 +31,15 @@ export type OfflineChannel = (typeof OFFLINE_CHANNELS)[number]
 
 const OFFLINE_SET: ReadonlySet<string> = new Set(OFFLINE_CHANNELS)
 
+/// What to call the instrument on Stripe's own payment record (R-038a).
+/// Stripe shows this to anybody reading the dashboard, so it is the human
+/// words rather than the enum - a check adds its number at the call site.
+export const OFFLINE_INSTRUMENTS: Record<OfflineChannel, string> = {
+  OFFLINE_CHECK: 'Check',
+  MONEY_ORDER: 'Money order',
+  OFFLINE_CASH: 'Cash',
+}
+
 export function isOfflineChannel(value: string): value is OfflineChannel {
   return OFFLINE_SET.has(value)
 }
@@ -112,18 +121,31 @@ export type OfflineRefusal =
   /// allocation order is jurisdiction configuration - the same reason the
   /// tenant-facing flow refuses an overpayment.
   | 'more_than_owed'
-  /// No issued invoice to mark paid. Stripe's out-of-band mechanism marks an
-  /// INVOICE settled; without one there is nothing to mark, and crediting the
-  /// customer balance instead applies to the NEXT invoice rather than the
-  /// debt in front of us.
+  /// No issued invoice to apply this to. Offline money is attached to an
+  /// INVOICE; without one there is nothing to attach it to, and crediting
+  /// the customer balance instead applies to the NEXT invoice rather than
+  /// the debt in front of us - measured, not assumed (R-038a): a credit
+  /// posted against an open invoice leaves `amount_remaining` untouched.
   | 'no_open_invoice'
-  /// Less than the open invoice. Stripe's out-of-band payment settles the
-  /// whole invoice, so applying a part-payment this way would forgive the
-  /// remainder silently. See the note on the refusal message.
-  | 'partial_not_supported'
+  /// More than the invoice in front of us still asks for. LESS is fine now
+  /// (R-038a) - a part-payment is attached and the invoice stays open. More
+  /// is not: Stripe itself refuses to attach a payment larger than the
+  /// remainder, and the surplus belongs to a period that has not been billed
+  /// yet, where allocation order is jurisdiction configuration.
+  | 'more_than_invoiced'
+  /// A part-payment on a tenancy the operator has put a hold on (PAY-12).
+  /// NEW WITH R-038a AND NOT OPTIONAL: R-038 could not take a part-payment
+  /// at all, so `blockPartial` was satisfied by accident. Making them
+  /// possible offline without checking the switch would reopen exactly the
+  /// hazard the switch exists for - in many states accepting a partial
+  /// after serving notice can void the eviction, and the counter is where
+  /// that happens.
+  | 'partial_blocked'
 
 export interface OfflineFacts {
   balanceCents: number
+  /// The operator's PAY-12 switch: take the full balance or nothing.
+  blockPartial: boolean
   /// What Stripe says is still owed on issued invoices. Null means we could
   /// not ask, which refuses - the same rule the collection-method switch
   /// follows, and for the same reason.
@@ -151,8 +173,18 @@ export function offlinePaymentDecision(
   if (facts.openInvoiceAmountCents == null || facts.openInvoiceAmountCents <= 0) {
     return { allowed: false, refusal: 'no_open_invoice' }
   }
-  if (amountCents < facts.openInvoiceAmountCents) {
-    return { allowed: false, refusal: 'partial_not_supported' }
+  if (amountCents > facts.openInvoiceAmountCents) {
+    return { allowed: false, refusal: 'more_than_invoiced' }
+  }
+  // LAST, because it is the only refusal that is a policy rather than an
+  // arithmetic fact, and a staff member should hear "that is the wrong
+  // tenant" or "that is more than is owed" first.
+  //
+  // Compared against the BALANCE, not the open invoice: `blockPartial`'s own
+  // words are "take the full balance or nothing", and a tenancy two periods
+  // behind can settle one invoice in full while still owing.
+  if (facts.blockPartial && amountCents < facts.balanceCents) {
+    return { allowed: false, refusal: 'partial_blocked' }
   }
   return { allowed: true }
 }
@@ -168,6 +200,11 @@ export const OFFLINE_REFUSALS: Record<OfflineRefusal, string> = {
     'That is more than the balance. Record what is owed, and handle any overpayment as a separate credit.',
   no_open_invoice:
     'There is no issued invoice to apply this to yet. Once this period is billed, record it against that.',
-  partial_not_supported:
-    'Part-payments cannot be recorded against an invoice yet — marking it paid outside Stripe settles the whole invoice, which would write off the rest. Take the money, hold the record, and see R-038a.',
+  more_than_invoiced:
+    'That is more than the current invoice still asks for. Record what this invoice covers; anything beyond it belongs to a period that has not been billed yet.',
+  // Says what to do, and does NOT say why - PAY-12's neutrality rule applies
+  // to the staff-facing sentence too, because this one gets read aloud to
+  // the person standing at the counter.
+  partial_blocked:
+    'This tenancy is set to accept the full balance or nothing. Record the full amount, or lift the hold first if that is the intention.',
 }

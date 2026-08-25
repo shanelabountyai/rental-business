@@ -4165,3 +4165,51 @@ The prerender manifest named exactly seven routes, four of them real pages. Thos
 **Proved in both directions, because a guard that cannot fail is the mistake this whole thread was about.** `/forgot-password` was temporarily reverted to static and the suite rebuilt: the guard failed and named it, and — independently — the behavioural test reported **66 blocked resources** on that page. Restored, and 18 CSP tests pass. Without that second run the guard would have been another assertion that is always true, which is the trap CLAUDE.md says has now been hit four times.
 
 **What it left behind.** The accepted set is a literal. If Next ever renames its internal routes the check fails loudly and correctly, which is the right direction for a guard to fail in.
+
+## R-038a: offline part-payments, and the shipped bug the probe found
+**Commit:** `pending`  ·  **Date:** 2026-08-25
+
+**What it built.** Offline part-payments (PAY-05's last refusal), and — found on the way to them — the fix for a money bug that had been live since R-038. Recorded as **D-141** (the projection change) and **D-142** (the offline change), two decisions because they are two different things that happen to share one fix.
+
+**The gate the row named was met, and the row was right to insist on it.** R-038a was gated on "a test Stripe key", because the mechanics turn on invoice/balance interactions the simulator cannot reproduce and D-15 forbids guessing at. A key was in `.env.local`, so the item opened with a probe against the real test account rather than a design.
+
+**The route the backlog proposed does not work, and that was measured rather than argued.** Credit $500 to the customer against an open $1000 invoice and `amount_remaining` stays `100000`. The credit parks on the customer and waits for the *next* finalization — so a tenant who paid half at the counter would go on being dunned for the whole thing. The row suspected this ("note 'next', which is the wrinkle"); the probe settled it.
+
+**What works is `attach_payment`.** Report a `PaymentRecord` (`processor_details[type]=custom`, `outcome=guaranteed` in the same call rather than a second round trip, because PAY-05's fifteen seconds is a real budget) and attach it to the invoice. Measured: 50000 against a 100000 invoice leaves it `open` with `amount_remaining` 50000 and nothing written off; attaching the rest closes it to `paid`. Works at the pinned `2024-06-20`, so no API-version change was needed — which was worth checking before designing around one.
+
+**Then the thing nobody was looking for.** Establishing which webhooks a partial attach fires meant enumerating every event Stripe emits per payment path. For an invoice paid the way R-038 pays it:
+
+```
+invoice.created → invoice.updated → invoice.finalized → invoice.updated → invoice.paid
+```
+
+Five events, and **`invoice.payment_succeeded` is not one of them — Stripe does not send it for `paid_out_of_band`.** The live endpoint subscribed to ten types; neither `invoice.paid` nor `invoice.updated` was among them, and neither was in `HANDLED_EVENTS`. So **every check, money order and cash payment ever recorded through R-038 pushed to Stripe correctly, wrote our `Payment` row, and never produced a `LedgerEntry`.** The charge posted at `invoice.finalized` stayed on the books; the tenant's balance never moved. Under D-11 that projection is what dunning, late fees, the rent roll and every notice read.
+
+**Why nothing caught it, which is the more useful half.** The simulator's `markInvoicePaidOutOfBand` was a `console.info`. It emitted no event, so against the simulator the ledger did not move either — and the test that would have failed was never written, because there was nothing to assert. This is not D-27's "the simulator agrees with us by construction"; it is the quieter version, **a simulator that skips the consequence entirely**, which leaves a hole shaped exactly like the consequence. The fix makes the simulator drive the same `processStripeEvent` the webhook route drives.
+
+**One rule fixes both, and that is why they are one item.** `invoice.updated` fires with `previous_attributes.amount_paid` on **every** money path — out-of-band, card, and a partial attach, all three measured — and carries the exact delta:
+
+```
+partial attach:  0     → 50000    (delta 50000, invoice still open)
+closing attach:  50000 → 100000   (delta 50000, invoice paid)
+card payment:    0     → 100000   (delta 100000)
+out-of-band:     0     → 100000   (delta 100000)
+```
+
+So money in is projected from that delta and `invoice.payment_succeeded` is no longer handled. It is a strict superset of the old signal, so this is one event replacing one event rather than a second one added — and adding rather than replacing would have credited every card payment twice.
+
+**What it decided.**
+- **The delta, never the total, and `previous_attributes` is why the interpreter stays pure.** `amount_paid` is cumulative: the instalment that closes a 100000 invoice reports 100000 having moved 50000. Projecting the reported figure would credit 150000 against a 100000 bill, into an append-only ledger where the only correction is a reversing entry somebody first has to notice is needed. Stripe puts the previous value on the event, so no database read is needed to subtract.
+- **The `previous_attributes.amount_paid` guard is what makes a high-volume event safe to handle.** An `invoice.updated` for finalization, a metadata edit or a rendering change does not list `amount_paid` as changed, and is ignored with a stated reason. The accepted cost: a `ProcessedStripeEvent` row per invoice edit. Deliberate — the alternative is a filter that has to be right about which edits matter.
+- **A negative delta is ignored.** Money going the other way is a refund or a reversal, and those arrive as their own events with their own linkage; projecting it here would post a second, unlinked correction on top of the real one.
+- **The webhook subscription was changed in the same breath as the code.** The code alone is inert: `invoice.updated` was not on the endpoint. Both halves are now in `docs/DEPLOYMENT.md` with the reason attached, because swapping them back would silently reintroduce the bug.
+- **Idempotency is load-bearing here in a way it was not for R-038.** The old call was protected by Stripe simply refusing to pay a paid invoice. A partial has no equivalent state, so a retried submission would be money the tenant never handed over. The key is on the FACT — payer, day, channel, check number, amount — so a retry reports the same `PaymentRecord`, and Stripe then refuses to attach that record twice. Both halves were tested against the real API.
+- **`blockPartialPayments` is checked at the counter, and it belongs to this item.** R-038 could not take a part-payment at all, so PAY-12's switch was satisfied by accident. Making them possible without checking it would reopen exactly the hazard the switch exists for: in many states accepting a partial after serving notice can void the eviction, and the counter is where that happens. Checked against the BALANCE, not the open invoice, because the switch's own words are "the full balance or nothing".
+- **The refusal was swapped, not removed.** `partial_not_supported` became `more_than_invoiced` — less is fine now, more is not, and Stripe itself refuses to attach a payment larger than the remainder (measured). A raw Stripe error at the counter is not a message anybody can act on.
+
+**What it left behind.**
+- **The payments already recorded with no ledger entry behind them are reported, not backfilled.** Owner's call, and the right one: a corrective write across historical money records has a larger blast radius than the fix itself and deserves its own item and an explicit go.
+- **Reconciliation cannot see this bug's shape, and now says so.** R-035 compares the projection against our own processed-event log. An event Stripe *never sent* leaves nothing on either side — no processed event missing a row, no row missing an event. Both sides agreed because both were empty. What would catch it is walking Stripe's own invoices for the window and comparing each `amount_paid` against the projection; that is external reconciliation done properly and belongs to its own item. Named in `reconcile.ts` rather than left to be discovered a second time.
+- **`certifiedFundsOnly` is still unchecked on the offline path.** Pre-existing — it predates this item and is not created by it — and deliberately not fixed while fixing something else: whether a personal check, a money order or cash counts as certified funds is a legal question for the review D-4 already requires.
+- **The simulator's emission is synchronous, and production's is not.** In production the projection lands after the action returns; here it has already landed. A caller reading the balance immediately after recording would look correct in tests and race in production. Stated in the simulator rather than left as a trap.
+- **The account's default API version is `2026-07-29.dahlia` while the adapter pins `2024-06-20`.** The webhook endpoint inherits the account default, and under dahlia the invoice object has no `payment_intent` field — so `stripePaymentIntentId` is already always null on projected invoice payments. Not a defect, but it is a mismatch nobody had written down, and it is the kind that makes a future field read return null for reasons that look like a bug.

@@ -2,6 +2,7 @@
 
 import { balanceCents } from '@rental/core/ledger'
 import {
+  OFFLINE_INSTRUMENTS,
   OFFLINE_REFUSALS,
   offlinePaymentDecision,
   validateOfflinePayment,
@@ -51,6 +52,13 @@ export async function recordOfflinePayment(
       leaseId: true,
       propertyId: true,
       stripeSubscriptionId: true,
+      // PAY-12's part-payment switch. Read here rather than left to the
+      // online path, because R-038a made a part-payment possible at the
+      // counter for the first time.
+      blockPartialPayments: true,
+      // Needed by the attach below: Stripe refuses to attach a payment
+      // record whose customer is not the invoice's customer.
+      stripeCustomerId: true,
       property: { select: { id: true, legalEntityId: true, timezone: true } },
     },
   })
@@ -104,11 +112,16 @@ export async function recordOfflinePayment(
         entries.map((row) => ({ ...row, type: '', occurredAt: new Date(0), description: '' })),
       ),
       openInvoiceAmountCents: invoice?.amountRemainingCents ?? null,
+      blockPartial: payer.blockPartialPayments,
     },
     input.amountCents,
   )
   if (!decision.allowed) {
     return { error: OFFLINE_REFUSALS[decision.refusal!] }
+  }
+
+  if (!payer.stripeCustomerId) {
+    return { error: 'Billing is not set up for this payer yet, so there is nothing to apply this to.' }
   }
 
   // What Stripe is told this was. Not free text a staff member types - it is
@@ -118,11 +131,26 @@ export async function recordOfflinePayment(
     input.channel === 'OFFLINE_CHECK'
       ? `check ${input.checkNumber} received by ${actor.id}`
       : `${input.channel.toLowerCase()} received by ${actor.id}`
+  const instrument =
+    input.channel === 'OFFLINE_CHECK' ? `Check ${input.checkNumber}` : OFFLINE_INSTRUMENTS[input.channel as OfflineChannel]
+
+  const receivedAt = new Date(`${input.receivedOn}T12:00:00Z`)
 
   try {
-    await provider.markInvoicePaidOutOfBand({
+    await provider.recordOutOfBandPayment({
       stripeInvoiceId: invoice!.stripeInvoiceId,
+      stripeCustomerId: payer.stripeCustomerId,
+      amountCents: input.amountCents,
+      receivedAt,
       reference,
+      instrument,
+      // KEYED ON THE FACT, not on the attempt: this payer, this instrument,
+      // this amount, this day. A part-payment has no "already paid" state to
+      // save it - R-038's whole-invoice call was protected by Stripe simply
+      // refusing to pay a paid invoice, and attaching half of one twice is
+      // money the tenant never handed over. A double submission now reports
+      // the SAME payment record, which Stripe then refuses to attach twice.
+      idempotencyKey: `offline:${payer.id}:${input.receivedOn}:${input.channel}:${input.checkNumber ?? ''}:${input.amountCents}`,
     })
   } catch (error) {
     console.error(`[payments] out-of-band push failed for ${payer.id}`, error)
@@ -149,7 +177,7 @@ export async function recordOfflinePayment(
         // the tenant's balance wrong for days after they paid.
         status: 'SETTLED',
         amountCents: input.amountCents,
-        receivedAt: new Date(`${input.receivedOn}T12:00:00Z`),
+        receivedAt,
         receivedByStaffId: actor.id,
         checkNumber: input.checkNumber,
         stripeInvoiceId: invoice!.stripeInvoiceId,

@@ -254,13 +254,68 @@ export class SimulatedBillingProvider implements BillingProvider {
     console.info(`[billing:simulated] subscription item ${input.stripeSubscriptionItemId} ended`)
   }
 
-  async markInvoicePaidOutOfBand(input: {
+  /**
+   * Records offline money AND EMITS THE EVENT REAL STRIPE WOULD EMIT.
+   *
+   * The previous version of this method logged a line and returned, and that
+   * omission is how R-038 shipped a bug that survived until R-038a probed
+   * the real API: **Stripe sends no `invoice.payment_succeeded` for an
+   * invoice paid out of band**, our webhook subscribed to neither of the two
+   * events it does send, and so not one offline payment ever reached the
+   * ledger. Nothing caught it because against the simulator the ledger did
+   * not move either - so the test that would have failed was never written,
+   * because there was nothing to assert.
+   *
+   * A simulator that skips the consequence is not a simpler simulator, it is
+   * a hole in the shape of the consequence. This one drives the SAME
+   * `processStripeEvent` the webhook route drives, with the same payload
+   * shape, so the interpretation under test here is the interpretation that
+   * runs in production.
+   *
+   * Two honest differences, stated rather than discovered:
+   *   - It is SYNCHRONOUS. In production the projection lands milliseconds
+   *     to seconds after this call returns; here it has already landed. A
+   *     caller that reads the balance immediately after recording would look
+   *     correct here and race in production.
+   *   - `amount_paid` is reported as the delta from zero rather than a true
+   *     cumulative total, because the synthetic invoice has no history to
+   *     accumulate. The interpreter reads only the DIFFERENCE, so the
+   *     projection is identical; a future reader of the absolute value would
+   *     be misled, and should not trust it.
+   */
+  async recordOutOfBandPayment(input: {
     stripeInvoiceId: string
+    stripeCustomerId: string
+    amountCents: number
+    receivedAt: Date
     reference: string
+    instrument: string
+    idempotencyKey: string
   }): Promise<void> {
     console.info(
-      `[billing:simulated] invoice ${input.stripeInvoiceId} marked paid out of band (${input.reference})`,
+      `[billing:simulated] ${input.amountCents}c recorded out of band against ` +
+        `invoice ${input.stripeInvoiceId} as ${input.instrument} (${input.reference})`,
     )
+
+    // Dynamic, because webhook.ts reaches back here through provider.ts and
+    // a static import would close the cycle.
+    const { processStripeEvent } = await import('./webhook.ts')
+    await processStripeEvent({
+      // Keyed on the caller's idempotency key, so a retried submission is
+      // caught by the pipeline's own duplicate guard exactly as a redelivered
+      // Stripe event would be.
+      id: `evt_sim${input.idempotencyKey.replace(/[^a-zA-Z0-9]/g, '').slice(0, 32)}`,
+      type: 'invoice.updated',
+      created: Math.floor(input.receivedAt.getTime() / 1000),
+      data: {
+        object: {
+          id: input.stripeInvoiceId,
+          customer: input.stripeCustomerId,
+          amount_paid: input.amountCents,
+        },
+        previous_attributes: { amount_paid: 0 },
+      },
+    })
   }
 
   /**

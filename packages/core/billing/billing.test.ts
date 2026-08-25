@@ -285,13 +285,26 @@ describe('firstPeriodIsPartial', () => {
 })
 
 describe('interpretStripeEvent', () => {
-  function event(type: string, object: Record<string, unknown>) {
-    return { id: 'evt_1', type, created: 1_800_000_000, data: { object } }
+  function event(
+    type: string,
+    object: Record<string, unknown>,
+    previous_attributes?: Record<string, unknown>,
+  ) {
+    return { id: 'evt_1', type, created: 1_800_000_000, data: { object, previous_attributes } }
+  }
+
+  /// Money arriving on an invoice, in the shape Stripe actually sends it
+  /// (R-038a). `amount_paid` is CUMULATIVE and the delta lives in
+  /// `previous_attributes` - measured against the real test account, where a
+  /// part-payment moved it 0 -> 50000 and the closing instalment moved it
+  /// 50000 -> 100000.
+  function moneyIn(object: Record<string, unknown>, paidBefore = 0) {
+    return event('invoice.updated', object, { amount_paid: paidBefore })
   }
 
   it('projects a successful invoice payment as money in', () => {
     const result = interpretStripeEvent(
-      event('invoice.payment_succeeded', {
+      moneyIn({
         id: 'in_123',
         customer: 'cus_123',
         amount_paid: 150_000,
@@ -315,7 +328,7 @@ describe('interpretStripeEvent', () => {
     // A partially-paid invoice reports what actually arrived. Projecting
     // the total would credit money nobody sent.
     const result = interpretStripeEvent(
-      event('invoice.payment_succeeded', {
+      moneyIn({
         id: 'in_1',
         customer: 'cus_1',
         total: 200_000,
@@ -323,6 +336,69 @@ describe('interpretStripeEvent', () => {
       }),
     )
     expect(result.outcome === 'project' && result.intent.amountCents).toBe(50_000)
+  })
+
+  // ---- Part-payments and the delta (R-038a) ----
+
+  it('projects the DELTA, so a second instalment is not counted twice', () => {
+    // THE ASSERTION THIS ITEM EXISTS FOR. `amount_paid` is cumulative: the
+    // instalment that closes a 100000 invoice reports 100000 having moved
+    // only 50000. Projecting the reported figure would credit 150000 against
+    // a 100000 bill, into an APPEND-ONLY ledger where the fix is a reversing
+    // entry somebody first has to notice is needed.
+    const first = interpretStripeEvent(
+      moneyIn({ id: 'in_1', customer: 'c', amount_paid: 50_000, amount_remaining: 50_000 }, 0),
+    )
+    const second = interpretStripeEvent(
+      moneyIn({ id: 'in_1', customer: 'c', amount_paid: 100_000, amount_remaining: 0 }, 50_000),
+    )
+    expect(first.outcome === 'project' && first.intent.amountCents).toBe(50_000)
+    expect(second.outcome === 'project' && second.intent.amountCents).toBe(50_000)
+  })
+
+  it('IGNORES an invoice.updated that did not move money', () => {
+    // The guard that lets a high-volume event be handled at all. Stripe
+    // emits `invoice.updated` for finalization, metadata edits and rendering
+    // changes; none of them list `amount_paid` as changed.
+    const result = interpretStripeEvent(
+      event(
+        'invoice.updated',
+        { id: 'in_1', customer: 'c', amount_paid: 0, status: 'open' },
+        { status: 'draft' },
+      ),
+    )
+    expect(result).toEqual({
+      outcome: 'ignore',
+      reason: 'invoice updated without moving money',
+    })
+  })
+
+  it('IGNORES an invoice.updated with no previous_attributes at all', () => {
+    const result = interpretStripeEvent(
+      event('invoice.updated', { id: 'in_1', customer: 'c', amount_paid: 100_000 }),
+    )
+    expect(result.outcome).toBe('ignore')
+  })
+
+  it('IGNORES amount_paid going DOWN', () => {
+    // Money going the other way is a refund or a reversal, and those arrive
+    // as their own events with their own linkage. A negative delta here
+    // would post a second, unlinked correction on top of the real one.
+    const result = interpretStripeEvent(
+      moneyIn({ id: 'in_1', customer: 'c', amount_paid: 0 }, 100_000),
+    )
+    expect(result.outcome).toBe('ignore')
+  })
+
+  it('does NOT handle the two events Stripe sends instead', () => {
+    // `invoice.payment_succeeded` is never sent for an invoice paid out of
+    // band - measured, and the reason R-038's offline payments never reached
+    // the ledger. `invoice.paid` is sent, but reports a cumulative total
+    // with no delta beside it. Handling either alongside `invoice.updated`
+    // would double-count every payment.
+    expect(isHandledEvent('invoice.payment_succeeded')).toBe(false)
+    expect(isHandledEvent('invoice.paid')).toBe(false)
+    expect(isHandledEvent('invoice.updated')).toBe(true)
   })
 
   it('projects a failed payment WITHOUT moving the balance', () => {
@@ -354,7 +430,7 @@ describe('interpretStripeEvent', () => {
   it('gets the SIGNS the right way round', () => {
     // Inverting these would tell somebody they owe rent they already paid.
     const paid = interpretStripeEvent(
-      event('invoice.payment_succeeded', { id: 'in_1', customer: 'c', amount_paid: 1000 }),
+      moneyIn({ id: 'in_1', customer: 'c', amount_paid: 1000 }),
     )
     const refund = interpretStripeEvent(
       event('charge.refunded', { id: 'ch_1', customer: 'c', amount_refunded: 1000 }),
@@ -368,11 +444,7 @@ describe('interpretStripeEvent', () => {
     // amount for its own reasons must not be able to flip a credit into a
     // charge.
     const result = interpretStripeEvent(
-      event('invoice.payment_succeeded', {
-        id: 'in_1',
-        customer: 'c',
-        amount_paid: -5000,
-      }),
+      moneyIn({ id: 'in_1', customer: 'c', amount_paid: -5000 }),
     )
     expect(result.outcome).toBe('ignore')
   })
@@ -387,14 +459,14 @@ describe('interpretStripeEvent', () => {
 
   it('does NOT project charge.* alongside invoice.* - that would double-count', () => {
     expect(isHandledEvent('charge.succeeded')).toBe(false)
-    expect(isHandledEvent('invoice.payment_succeeded')).toBe(true)
+    expect(isHandledEvent('invoice.updated')).toBe(true)
   })
 
   it('refuses rather than guessing when a piece is missing', () => {
     // A ledger row with an invented amount is worse than no row, because it
     // looks authoritative.
     const noCustomer = interpretStripeEvent(
-      event('invoice.payment_succeeded', { id: 'in_1', amount_paid: 1000 }),
+      moneyIn({ id: 'in_1', amount_paid: 1000 }),
     )
     expect(noCustomer).toEqual({
       outcome: 'ignore',
@@ -402,12 +474,12 @@ describe('interpretStripeEvent', () => {
     })
 
     const noId = interpretStripeEvent(
-      event('invoice.payment_succeeded', { customer: 'c', amount_paid: 1000 }),
+      moneyIn({ customer: 'c', amount_paid: 1000 }),
     )
     expect(noId.outcome).toBe('ignore')
 
     const noAmount = interpretStripeEvent(
-      event('invoice.payment_succeeded', { id: 'in_1', customer: 'c' }),
+      moneyIn({ id: 'in_1', customer: 'c' }),
     )
     expect(noAmount.outcome).toBe('ignore')
   })
@@ -416,7 +488,7 @@ describe('interpretStripeEvent', () => {
     expect(
       interpretStripeEvent({
         id: 'evt',
-        type: 'invoice.payment_succeeded',
+        type: 'invoice.updated',
         created: 1,
         data: { object: null as never },
       }).outcome,
@@ -427,7 +499,7 @@ describe('interpretStripeEvent', () => {
 
   it('REFUSES to project a payment_intent that belongs to an invoice', () => {
     // THE DOUBLE-COUNT GUARD, and the single most important assertion added
-    // by R-037. `invoice.payment_succeeded` already reports this money; if
+    // by R-037. The invoice's own money event already reports this; if
     // its PaymentIntent were projected too, every subscription payment would
     // credit the tenant twice - in an APPEND-ONLY ledger, where the fix is a
     // reversing entry somebody first has to notice is needed.

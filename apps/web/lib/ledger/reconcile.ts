@@ -36,9 +36,26 @@ import { billingIsLive } from '@/lib/billing/provider.ts'
 // And the gap that matters most: an event Stripe sent that we NEVER
 // RECEIVED is invisible to this check by construction, because a webhook
 // that never arrived leaves no trace on our side at all. Only asking Stripe
-// what it thinks it sent would find that, and there is no Stripe account yet
-// (D-23). `externalChecked` reports which of the two ran, on the record and
-// on screen, rather than leaving somebody to assume.
+// what it thinks it sent would find that. `externalChecked` reports which of
+// the two ran, on the record and on screen, rather than leaving somebody to
+// assume.
+//
+// R-038a FOUND THE WORSE CASE, and it is worth naming because this header
+// previously implied the external check would cover everything: an event
+// Stripe NEVER SENT AT ALL. Offline payments were pushed with
+// `paid_out_of_band`, for which Stripe emits no `invoice.payment_succeeded`
+// - the event the pipeline subscribed to - so money that genuinely arrived
+// left a Payment row, a paid invoice on Stripe, and no ledger entry. NEITHER
+// half of this reconciliation could see it: there was no processed event to
+// find a missing row for, and no ledger row to find a missing event for.
+// Both sides agreed, because both sides were empty.
+//
+// What would catch its shape is a comparison this check does not do and
+// deliberately does not pretend to: walking Stripe's OWN invoices for the
+// window and asking whether each `amount_paid` is reflected in the
+// projection. That is external reconciliation done properly and it belongs
+// to its own item, not to a bug fix. The defect itself is closed at source -
+// the pipeline now reads `invoice.updated`, which every money path emits.
 // ==========================================================================
 
 export interface ReconciliationReport {

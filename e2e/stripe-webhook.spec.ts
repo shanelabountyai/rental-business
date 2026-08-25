@@ -103,19 +103,35 @@ async function seedProvisionedLease() {
   return { lease, property, stripeCustomerId }
 }
 
-function paymentEvent(stripeCustomerId: string, amountPaid = 175_000) {
+/**
+ * Money arriving on an invoice, in the shape Stripe actually sends it.
+ *
+ * `invoice.updated`, not `invoice.payment_succeeded` (R-038a). Stripe sends
+ * no `payment_succeeded` at all for an invoice paid out of band, and
+ * `amount_paid` is CUMULATIVE - so the delta in `previous_attributes` is
+ * both the only signal every payment path shares and the only one a second
+ * instalment cannot double-count.
+ */
+function paymentEvent(
+  stripeCustomerId: string,
+  amountPaid = 175_000,
+  options: { paidBefore?: number; invoiceId?: string } = {},
+) {
   const id = `evt_${randomUUID().replace(/-/g, '')}`
+  const paidBefore = options.paidBefore ?? 0
   return {
     id,
-    type: 'invoice.payment_succeeded',
+    type: 'invoice.updated',
     created: Math.floor(Date.now() / 1000),
     data: {
       object: {
-        id: `in_${randomUUID().slice(0, 12)}`,
+        id: options.invoiceId ?? `in_${randomUUID().slice(0, 12)}`,
         customer: stripeCustomerId,
-        amount_paid: amountPaid,
+        amount_paid: paidBefore + amountPaid,
+        amount_remaining: 0,
         payment_intent: `pi_${randomUUID().slice(0, 12)}`,
       },
+      previous_attributes: { amount_paid: paidBefore },
     },
   }
 }
@@ -225,6 +241,62 @@ test.describe('the projection pipeline', () => {
     expect(await second.json()).toMatchObject({ outcome: 'duplicate' })
 
     expect(await prisma.ledgerEntry.count({ where: { leaseId: lease.id } })).toBe(1)
+  })
+
+  test('projects a PART-PAYMENT and its closing instalment ONCE EACH', async ({ request }) => {
+    // R-038a. Somebody pays half the rent in cash at the counter, then the
+    // rest a week later. `amount_paid` is cumulative, so the second event
+    // reports the FULL 175,000 having moved only 87,500 - projecting the
+    // reported figure would credit 262,500 against a 175,000 bill, in an
+    // append-only ledger where the only correction is a reversing entry
+    // somebody first has to notice is needed.
+    const { lease, stripeCustomerId } = await seedProvisionedLease()
+    const invoiceId = `in_${randomUUID().slice(0, 12)}`
+
+    const half = signedRequest(
+      paymentEvent(stripeCustomerId, 87_500, { invoiceId, paidBefore: 0 }),
+    )
+    const rest = signedRequest(
+      paymentEvent(stripeCustomerId, 87_500, { invoiceId, paidBefore: 87_500 }),
+    )
+
+    expect(await (await post(request, half.rawBody, half.header)).json()).toMatchObject({
+      outcome: 'projected',
+    })
+    expect(await (await post(request, rest.rawBody, rest.header)).json()).toMatchObject({
+      outcome: 'projected',
+    })
+
+    const entries = await prisma.ledgerEntry.findMany({ where: { leaseId: lease.id } })
+    expect(entries).toHaveLength(2)
+    expect(entries.map((row) => row.amountCents).sort()).toEqual([-87_500, -87_500])
+  })
+
+  test('IGNORES an invoice edit that moved no money', async ({ request }) => {
+    // The guard that makes a high-volume event safe to handle. Stripe emits
+    // `invoice.updated` for finalization, metadata edits and rendering
+    // changes; none of them list `amount_paid` as changed, and projecting
+    // one would credit the tenant for a typo.
+    const { lease, stripeCustomerId } = await seedProvisionedLease()
+    const { rawBody, header } = signedRequest({
+      id: `evt_${randomUUID().replace(/-/g, '')}`,
+      type: 'invoice.updated',
+      created: Math.floor(Date.now() / 1000),
+      data: {
+        object: {
+          id: `in_${randomUUID().slice(0, 12)}`,
+          customer: stripeCustomerId,
+          amount_paid: 0,
+          status: 'open',
+        },
+        previous_attributes: { status: 'draft' },
+      },
+    })
+
+    const response = await post(request, rawBody, header)
+    expect(response.status()).toBe(200)
+    expect(await response.json()).toMatchObject({ outcome: 'ignored' })
+    expect(await prisma.ledgerEntry.count({ where: { leaseId: lease.id } })).toBe(0)
   })
 
   test('acknowledges an event it deliberately ignores', async ({ request }) => {

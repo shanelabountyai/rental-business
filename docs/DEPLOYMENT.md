@@ -133,7 +133,7 @@ event types `packages/core/billing/events.ts` handles:
 
 ```
 invoice.finalized          payment_intent.succeeded
-invoice.payment_succeeded  payment_intent.processing
+invoice.updated            payment_intent.processing
 invoice.payment_failed     payment_intent.payment_failed
 invoice.voided             charge.refunded
 setup_intent.succeeded     charge.dispute.created
@@ -141,6 +141,16 @@ setup_intent.succeeded     charge.dispute.created
 
 `setup_intent.succeeded` was added with R-039a and is the only one that moves
 no money — it is how a tenant's saved card becomes working autopay.
+
+**`invoice.updated` replaced `invoice.payment_succeeded` on 2026-08-25
+(R-038a, D-141), and swapping them back would reintroduce a shipped bug.**
+Stripe sends no `invoice.payment_succeeded` at all for an invoice paid out
+of band, so every offline check, money order and cash payment recorded since
+R-038 pushed to Stripe correctly and never reached the ledger. `invoice.updated`
+is the one event every money path shares, and the only one carrying
+`previous_attributes` — which is what makes a part-payment projectable
+without double-counting the instalment that closes the invoice. Subscribing
+to both would double-count every card payment.
 
 **When the handled list grows, this subscription has to grow with it.** A
 handler nothing is subscribed to is dead code that looks live.

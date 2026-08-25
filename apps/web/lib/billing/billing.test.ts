@@ -101,9 +101,18 @@ function invoiceEvent(overrides: {
   invoiceId?: string
   paymentIntentId?: string
   created?: number
+  /// What the invoice had ALREADY been paid before this event. The projected
+  /// amount is the difference, so a second instalment is not counted twice.
+  paidBefore?: number
 }) {
-  const type = overrides.type ?? 'invoice.payment_succeeded'
+  // `invoice.updated` is how money arriving on an invoice reaches the
+  // projection (R-038a) - see events.ts for why it is not
+  // `invoice.payment_succeeded`, which Stripe never sends for an invoice
+  // paid out of band.
+  const type = overrides.type ?? 'invoice.updated'
   const id = overrides.id ?? `evt_${randomUUID().replace(/-/g, '')}`
+  const isMoneyIn = type === 'invoice.updated'
+  const paidBefore = overrides.paidBefore ?? 0
   return {
     id,
     type,
@@ -112,13 +121,14 @@ function invoiceEvent(overrides: {
       object: {
         id: overrides.invoiceId ?? `in_${randomUUID().slice(0, 12)}`,
         customer: overrides.customer,
-        ...(type === 'invoice.payment_failed' ||
-        type === 'invoice.finalized' ||
-        type === 'invoice.voided'
-          ? { amount_due: overrides.amountDue ?? 150_000 }
-          : { amount_paid: overrides.amountPaid ?? 150_000 }),
+        ...(isMoneyIn
+          ? { amount_paid: paidBefore + (overrides.amountPaid ?? 150_000) }
+          : { amount_due: overrides.amountDue ?? 150_000 }),
         payment_intent: overrides.paymentIntentId ?? `pi_${randomUUID().slice(0, 12)}`,
       },
+      // Only on the money event, and only ever the keys that changed - which
+      // is what makes the DELTA readable without a database round trip.
+      ...(isMoneyIn ? { previous_attributes: { amount_paid: paidBefore } } : {}),
     },
   }
 }

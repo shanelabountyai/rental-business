@@ -29,6 +29,9 @@
  *   - `charge.*` - the same money as the invoice events, one layer down.
  *     Projecting both would double-count every payment.
  *   - `customer.subscription.*` - R-036 owns the subscription lifecycle.
+ *   - `invoice.payment_succeeded` and `invoice.paid` - the same money as the
+ *     `invoice.updated` delta below, and each one blind to a path the other
+ *     sees. See that entry for what was measured.
  */
 export const HANDLED_EVENTS = [
   /**
@@ -63,9 +66,36 @@ export const HANDLED_EVENTS = [
    * entries, never edits or deletes.
    */
   'invoice.voided',
-  /// Money arrived and the invoice is settled. The single most important
-  /// event in the product.
-  'invoice.payment_succeeded',
+  /**
+   * MONEY ARRIVED ON AN INVOICE. The single most important event in the
+   * product, and it is `invoice.updated` rather than the obvious
+   * `invoice.payment_succeeded` for two measured reasons (R-038a, D-141).
+   *
+   * ONE: **Stripe does not emit `invoice.payment_succeeded` for an invoice
+   * paid out of band.** Measured against the real test account, not assumed:
+   * a `paid_out_of_band` invoice emits exactly `invoice.created`,
+   * `invoice.updated`, `invoice.finalized`, `invoice.updated`,
+   * `invoice.paid` - and nothing else. R-038 has recorded every check, money
+   * order and cash payment this way since it shipped, and not one of them
+   * ever reached the ledger: the charge posted at finalization stayed on the
+   * books for ever while the tenant's balance never moved. Subscribing to
+   * `invoice.paid` would fix that one path and leave the next one broken.
+   *
+   * TWO: **`amount_paid` is CUMULATIVE, so only a delta can be projected.**
+   * A part-payment moves it 0 -> 50000 and the instalment that closes the
+   * invoice moves it 50000 -> 100000; projecting `amount_paid` on each would
+   * credit 150000 against a 100000 bill. `invoice.updated` is the only
+   * invoice event that carries `previous_attributes`, which is exactly the
+   * subtraction we need and is why part-payments (R-038a) fall out of this
+   * change rather than needing one of their own.
+   *
+   * It fires with an `amount_paid` delta on EVERY money path - card,
+   * out-of-band, and a partial `attach_payment` - all three measured. The
+   * `previous_attributes.amount_paid` guard in the case below is what keeps
+   * a high-volume event narrow: an `invoice.updated` that did not move money
+   * does not carry that key, and is ignored.
+   */
+  'invoice.updated',
   /// A charge attempt failed - a declined card, a returned ACH. Records the
   /// failure; does NOT reverse anything, because the charge is still owed.
   'invoice.payment_failed',
@@ -121,7 +151,10 @@ export interface StripeEventEnvelope {
   id: string
   type: string
   created: number
-  data: { object: Record<string, unknown> }
+  /// `previous_attributes` holds ONLY the keys that changed, and only on
+  /// `*.updated` events. It is how the amount-paid DELTA is read without a
+  /// database round trip, which is what keeps this module pure.
+  data: { object: Record<string, unknown>; previous_attributes?: Record<string, unknown> }
   livemode?: boolean
 }
 
@@ -311,14 +344,34 @@ export function interpretStripeEvent(event: StripeEventEnvelope): InterpretResul
       }
     }
 
-    case 'invoice.payment_succeeded': {
-      // `amount_paid`, not `total`: a partially-paid invoice reports what
-      // actually arrived, and projecting the total would credit money
-      // nobody sent.
-      const amount = int(object, 'amount_paid')
-      if (amount == null || amount <= 0) {
+    case 'invoice.updated': {
+      // THE DELTA, NEVER THE TOTAL. `amount_paid` is cumulative across every
+      // instalment against the invoice, so the second half of a part-payment
+      // reports 100000 having only just moved 50000. What arrived is the
+      // difference, and `previous_attributes` is where Stripe puts it.
+      const previous = event.data?.previous_attributes
+      const before = previous ? int(previous, 'amount_paid') : null
+      if (before == null) {
+        // The overwhelmingly common case, and the reason this event can be
+        // handled at all without drowning the projection: an invoice edit
+        // that did not move money does not list `amount_paid` as changed.
+        return { outcome: 'ignore', reason: 'invoice updated without moving money' }
+      }
+
+      const now = int(object, 'amount_paid')
+      if (now == null) {
         return { outcome: 'ignore', reason: 'invoice reported no amount paid' }
       }
+
+      const delta = now - before
+      if (delta <= 0) {
+        // Money going the OTHER way is a refund or a reversal, and those
+        // arrive as their own events with their own linkage. Projecting a
+        // negative delta here would post a second, unlinked correction on
+        // top of the one `charge.refunded` already writes.
+        return { outcome: 'ignore', reason: 'invoice amount paid did not increase' }
+      }
+
       return {
         outcome: 'project',
         intent: {
@@ -326,6 +379,10 @@ export function interpretStripeEvent(event: StripeEventEnvelope): InterpretResul
           stripeObjectId,
           stripeCustomerId,
           stripeInvoiceId: stripeObjectId,
+          // Null under the account's own API version (2026-07-29.dahlia),
+          // which dropped `payment_intent` from the invoice object. Read
+          // rather than hardcoded so an older-versioned endpoint still
+          // carries it.
           stripePaymentIntentId: str(object, 'payment_intent'),
           rail: null,
           // The SAME linkage the finalized event carries. Without it a
@@ -334,7 +391,7 @@ export function interpretStripeEvent(event: StripeEventEnvelope): InterpretResul
           // ever - `outstandingCharges()` derives what is left from a
           // charge's own ledger entries, and there were none.
           chargeIds: chargeIdsOf(object),
-          amountCents: amount,
+          amountCents: delta,
           occurredAt,
           description: str(object, 'description') ?? 'Rent payment',
         },
