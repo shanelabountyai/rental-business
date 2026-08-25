@@ -4326,7 +4326,7 @@ Eight messages ride on real `Thread` rows keyed with core's own `threadKey` rath
 ---
 
 ## R-104: wire real email and SMS
-**Commit:** 88f00e09e47d498e9c5fc587b40759330893f164  ·  **Date:** 2026-08-25
+**Commits:** 88f00e09e47d498e9c5fc587b40759330893f164, bf69e16c8ca8628860335f13db64c7aed1bade58  ·  **Date:** 2026-08-25
 
 **Renumbered before it landed.** The Milestone 10 row was written as R-101, which R-101 (the live-region fix) has owned since it shipped - along with R-101b/c/d and R-102/R-103. The row took the sequence number for its ID without checking. It is **R-104** everywhere.
 
