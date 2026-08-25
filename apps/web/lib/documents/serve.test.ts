@@ -17,6 +17,7 @@ function headersOf(contentType: string, fileName = 'f.bin') {
     type: response.headers.get('content-type'),
     disposition: response.headers.get('content-disposition'),
     nosniff: response.headers.get('x-content-type-options'),
+    csp: response.headers.get('content-security-policy'),
     length: response.headers.get('content-length'),
   }
 }
@@ -74,6 +75,19 @@ describe('what may render in our own origin', () => {
     // sniffed and run, which hands back the hole the allowlist closes.
     expect(headersOf('image/png').nosniff).toBe('nosniff')
     expect(headersOf('image/svg+xml').nosniff).toBe('nosniff')
+  })
+})
+
+describe('the last fence on the untrusted path', () => {
+  it('tells an unvetted type to load nothing and run nothing', () => {
+    expect(headersOf('image/svg+xml').csp).toBe("default-src 'none'; sandbox")
+  })
+
+  it('leaves the renderable path alone, so a PDF still opens in the viewer', () => {
+    // `sandbox` here would risk the browser's own PDF viewer to guard types
+    // that cannot execute in the first place.
+    expect(headersOf('application/pdf').csp).toBeNull()
+    expect(headersOf('image/png').csp).toBeNull()
   })
 })
 

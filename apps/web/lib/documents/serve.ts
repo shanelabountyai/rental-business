@@ -130,6 +130,13 @@ export function documentResponse(
         document.fileName,
       )}"`,
       'Content-Length': String(bytes.byteLength),
+      // A LAST FENCE ON THE UNTRUSTED PATH ONLY. Anything off the allowlist
+      // is a type nobody vetted, so its response says "load nothing, run
+      // nothing" - if a future edit ever let one render, it still could not
+      // fetch, script or phone home. Deliberately NOT applied to the
+      // renderable path: those types cannot execute anyway, and `sandbox` on
+      // a PDF response risks the browser's own viewer for no gain.
+      ...(renderable ? {} : { 'Content-Security-Policy': "default-src 'none'; sandbox" }),
       // Belt and braces for the renderable list itself: without this a
       // browser may sniff a mislabelled `image/png` that is really HTML and
       // run it anyway, which would hand back the hole the allowlist closes.
