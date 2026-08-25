@@ -112,3 +112,42 @@ export function validateAssignment(input: AssignmentInput): Violation[] {
   }
   return []
 }
+
+/**
+ * The statuses a work order is still WORK for (MAINT-03).
+ *
+ * ==========================================================================
+ * IN CORE RATHER THAN BESIDE THE QUERY THAT FILTERS ON IT, because it had
+ * two readers and only one copy - and the second reader could not see it.
+ *
+ * R-100a seeded a demo work order in `INVOICED`, which is not here, so it
+ * was invisible on the only list that renders work orders. That is R-036b's
+ * lesson in its purest form: a status existing in the enum, and in the write
+ * that sets it, says nothing about the lists that READ it. The fix is not to
+ * remember harder - it is for the one list to be somewhere a test can reach.
+ *
+ * NOT the same question as "is it finished". INVOICED and CLOSED are both
+ * terminal for this purpose; VERIFIED is not, because somebody still has to
+ * pay the vendor.
+ * ==========================================================================
+ */
+export const OPEN_WORK_ORDER_STATUSES = [
+  'SUBMITTED',
+  'TRIAGED',
+  'PENDING_APPROVAL',
+  'APPROVED',
+  'ASSIGNED',
+  'SCHEDULED',
+  'IN_PROGRESS',
+  'WORK_COMPLETE',
+  'VERIFIED',
+  'ON_HOLD_WARRANTY',
+  'WAITING_ON_TENANT',
+] as const
+
+const OPEN_WORK_ORDER_STATUS_SET: ReadonlySet<string> = new Set(OPEN_WORK_ORDER_STATUSES)
+
+/// Whether a work order still appears on the open board.
+export function workOrderIsOpen(status: string): boolean {
+  return OPEN_WORK_ORDER_STATUS_SET.has(status)
+}

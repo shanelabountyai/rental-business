@@ -2,6 +2,7 @@ import 'server-only'
 
 import { resolvePolicy } from '@rental/core/approvals'
 import { fallbackVendorsForTrade } from '@rental/core/vendors'
+import { OPEN_WORK_ORDER_STATUSES } from '@rental/core/workorders'
 import { prisma } from '@rental/db'
 import type { ResolvedScope } from '@/lib/scope/current-scope.ts'
 import { getOperationalData } from '@/lib/operational/queries.ts'
@@ -40,19 +41,9 @@ export async function policyFor(propertyId: string) {
  * `closedJobCostsForProperty` which filters `CLOSED`, and reachable only by
  * typing its URL. The money still to be recorded went with it.
  */
-const OPEN_STATUSES = [
-  'SUBMITTED',
-  'TRIAGED',
-  'PENDING_APPROVAL',
-  'APPROVED',
-  'ASSIGNED',
-  'SCHEDULED',
-  'IN_PROGRESS',
-  'WORK_COMPLETE',
-  'VERIFIED',
-  'ON_HOLD_WARRANTY',
-  'WAITING_ON_TENANT',
-] as const
+// Moved to core by R-100a so the demo seed's own test can read the same
+// list. See OPEN_WORK_ORDER_STATUSES for why one copy mattered.
+const OPEN_STATUSES = OPEN_WORK_ORDER_STATUSES
 
 const workOrderInclude = {
   // state/county are here for R-027's entry-notice lookup (rulesFor()),
