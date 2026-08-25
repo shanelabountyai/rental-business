@@ -4215,7 +4215,7 @@ So money in is projected from that delta and `invoice.payment_succeeded` is no l
 - **The account's default API version is `2026-07-29.dahlia` while the adapter pins `2024-06-20`.** The webhook endpoint inherits the account default, and under dahlia the invoice object has no `payment_intent` field — so `stripePaymentIntentId` is already always null on projected invoice payments. Not a defect, but it is a mismatch nobody had written down, and it is the kind that makes a future field read return null for reasons that look like a bug.
 
 ## R-100a: the maintenance and vendor story, and a reset that survives it
-**Commit:** `pending`  ·  **Date:** 2026-08-25
+**Commit:** `28441eb`  ·  **Date:** 2026-08-25
 
 **What it built.** The demo seed's operational half (PRD §8, D-140's first slice) and the `--reset` rewrite that seeding it forced. Recorded as **D-143**.
 
