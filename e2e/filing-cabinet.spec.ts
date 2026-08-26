@@ -1,6 +1,5 @@
-import { expectFocusSurvived } from './fixtures.ts'
+import { axeScan, expectFocusSurvived } from './fixtures.ts'
 import { randomUUID } from 'node:crypto'
-import AxeBuilder from '@axe-core/playwright'
 import { hashPassword } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
@@ -331,9 +330,7 @@ test.describe('accessibility', () => {
     await signIn(page, staff.email)
 
     await page.goto(`/properties/${property.id}`)
-    const results = await new AxeBuilder({ page })
-      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-      .analyze()
+    const results = await axeScan(page)
     expect(results.violations).toEqual([])
   })
 })

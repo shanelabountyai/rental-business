@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { mintToken } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
-import { uniquePhone, expectAnnouncedInPlace } from './fixtures.ts'
+import { axeScan, expectAnnouncedInPlace, uniquePhone } from './fixtures.ts'
 
 // The tenant pays (PAY-01, R-037, D-29).
 //
@@ -398,10 +398,7 @@ test.describe('the tenant pay screen', () => {
     await page.goto('/portal/pay')
     await expect(page.getByRole('heading', { name: 'Pay rent' })).toBeVisible()
 
-    const { default: AxeBuilder } = await import('@axe-core/playwright')
-    const results = await new AxeBuilder({ page })
-      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-      .analyze()
+    const results = await axeScan(page)
     expect(results.violations).toEqual([])
   })
 })
@@ -490,10 +487,7 @@ test.describe('the tenant\'s own statement (R-043)', () => {
     await page.goto(await magicLinkFor(tenant.id))
     await page.goto('/portal/pay/history')
 
-    const { default: AxeBuilder } = await import('@axe-core/playwright')
-    const results = await new AxeBuilder({ page })
-      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-      .analyze()
+    const results = await axeScan(page)
     expect(results.violations).toEqual([])
   })
 })

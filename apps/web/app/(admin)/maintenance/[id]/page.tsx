@@ -69,7 +69,7 @@ export default async function StaffTicketDetailPage({
           {CATEGORY_LABELS[ticket.category as keyof typeof CATEGORY_LABELS] ??
             ticket.category}
           {ticket.habitabilityFlag && (
-            <span className="ml-2 rounded-full bg-red-100 px-2 py-0.5 align-middle text-xs font-medium text-red-800 dark:bg-red-950 dark:text-red-200">
+            <span className="ml-2 rounded-full bg-red-100 px-2 py-0.5 align-middle text-xs font-medium text-red-800">
               Habitability
             </span>
           )}

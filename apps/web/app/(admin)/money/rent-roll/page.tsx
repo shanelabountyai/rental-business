@@ -113,7 +113,7 @@ export default async function RentRollPage({
           // NOT SILENTLY TREATED AS ZERO GRACE (D-4). A state nobody has
           // configured is a real gap, and these tenancies can never be
           // selected for a chase until somebody closes it.
-          <p className="rounded-md border border-amber-300 px-3 py-2 text-sm dark:border-amber-900">
+          <p className="rounded-md border border-amber-300 px-3 py-2 text-sm">
             {unknownGrace} {unknownGrace === 1 ? 'tenancy is' : 'tenancies are'} at a
             property whose state has no jurisdiction rule configured, so
             whether they are past grace is unknown and they cannot be chased

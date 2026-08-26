@@ -82,7 +82,7 @@ export default async function MaintenanceTicketPage({
       {emergency === '1' && (
         <p
           role="status"
-          className="rounded-md border-2 border-red-600 bg-red-50 px-4 py-3 font-medium text-red-950 dark:bg-red-950 dark:text-red-50"
+          className="rounded-md border-2 border-red-600 bg-red-50 px-4 py-3 font-medium text-red-950"
         >
           We have paged someone now. If this is life-threatening, call 911. If
           you do not hear back shortly, call or text the number on your lease.

@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { mintToken } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
-import { expectFocusSurvived, uniquePhone } from './fixtures.ts'
+import { axeScan, expectFocusSurvived, uniquePhone } from './fixtures.ts'
 
 // The tenant answers without signing in (MAINT-07, COMM-02, R-032c).
 //
@@ -209,10 +209,7 @@ test.describe('answering without an account', () => {
     const { token } = await seedAnsweredJob()
     await page.goto(`/verify/${token}`)
 
-    const { default: AxeBuilder } = await import('@axe-core/playwright')
-    const results = await new AxeBuilder({ page })
-      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-      .analyze()
+    const results = await axeScan(page)
     expect(results.violations).toEqual([])
   })
 })

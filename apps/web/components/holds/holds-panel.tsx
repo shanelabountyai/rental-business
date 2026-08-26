@@ -138,7 +138,7 @@ export function HoldsPanel({
           Holds
         </h2>
         {active.length > 0 && (
-          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900 dark:bg-amber-950 dark:text-amber-100">
+          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900">
             {active.length} in force
           </span>
         )}

@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto'
-import AxeBuilder from '@axe-core/playwright'
 import { hashPassword } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
+import { axeScan } from './fixtures.ts'
 
 // Unit management (R-009, PROP-02). What matters beyond "the form works":
 //
@@ -326,15 +326,11 @@ test.describe('accessibility', () => {
     await signIn(page, staff.email)
 
     await page.goto(`/properties/${property.id}/units/new`)
-    let results = await new AxeBuilder({ page })
-      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-      .analyze()
+    let results = await axeScan(page)
     expect(results.violations).toEqual([])
 
     await page.goto(`/properties/${property.id}/units/${unit.id}`)
-    results = await new AxeBuilder({ page })
-      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-      .analyze()
+    results = await axeScan(page)
     expect(results.violations).toEqual([])
   })
 })

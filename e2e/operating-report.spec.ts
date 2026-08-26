@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto'
-import AxeBuilder from '@axe-core/playwright'
 import { hashPassword } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
+import { axeScan } from './fixtures.ts'
 
 // The per-property operating report (RPT-05, R-081a).
 //
@@ -329,9 +329,7 @@ test.describe('scoping and accessibility', () => {
     await signIn(page, staff.email)
     await page.goto(`/reports/operating?entity=${entity.id}&year=${YEAR}&basis=accrual`)
 
-    const results = await new AxeBuilder({ page })
-      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-      .analyze()
+    const results = await axeScan(page)
     expect(results.violations).toEqual([])
   })
 })

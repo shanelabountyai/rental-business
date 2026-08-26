@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto'
-import AxeBuilder from '@axe-core/playwright'
 import {
   createTotpEnrolment,
   hashPassword,
@@ -9,6 +8,7 @@ import {
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
 import { Secret, TOTP } from 'otpauth'
+import { axeScan } from './fixtures.ts'
 
 // Document attach/find/version/soft-delete (DOC-01, DOC-05, PROP-08, R-012).
 // Only Property and Unit are real attachment targets today - Lease, Tenant,
@@ -389,9 +389,7 @@ test.describe('accessibility', () => {
     await signIn(page, staff.email)
 
     await page.goto(`/properties/${property.id}`)
-    const results = await new AxeBuilder({ page })
-      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-      .analyze()
+    const results = await axeScan(page)
     expect(results.violations).toEqual([])
   })
 })

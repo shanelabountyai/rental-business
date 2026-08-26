@@ -135,12 +135,12 @@ export default async function DepositDispositionPage({
                       ` · ${deduction.evidence.length} file(s) attached`}
                   </span>
                   {unsupported && (
-                    <span className="text-sm text-amber-800 dark:text-amber-300">
+                    <span className="text-sm text-amber-800">
                       Unsupported — no work order, move-out photo, or attached invoice.
                     </span>
                   )}
                   {guidance?.exceedsGuidance && (
-                    <span className="text-sm text-amber-800 dark:text-amber-300">
+                    <span className="text-sm text-amber-800">
                       Age-based guidance suggests at most {formatCents(guidance.suggestedMaxCents)} on
                       an item this old — full replacement cost rarely holds up in a dispute.
                     </span>
@@ -182,7 +182,7 @@ export default async function DepositDispositionPage({
           {totals.additionalOwedCents > 0 && (
             <>
               <dt className="text-muted-foreground">Still owed after deposit</dt>
-              <dd className="text-amber-800 dark:text-amber-300">
+              <dd className="text-amber-800">
                 {formatCents(totals.additionalOwedCents)}
               </dd>
             </>

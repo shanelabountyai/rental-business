@@ -46,7 +46,7 @@ export default async function CompliancePage() {
                   <span className="font-medium">
                     {item.label}
                     {overdue && (
-                      <span className="ml-2 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800 dark:bg-red-950 dark:text-red-200">
+                      <span className="ml-2 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800">
                         Overdue
                       </span>
                     )}

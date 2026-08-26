@@ -128,7 +128,7 @@ export default async function TaskDetailPage({
         <dd className="col-span-1 sm:col-span-2">
           {STATUS_LABELS[task.status] ?? task.status}
           {unresolved && overdue && (
-            <span className="ml-2 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800 dark:bg-red-950 dark:text-red-200">
+            <span className="ml-2 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800">
               Overdue
             </span>
           )}

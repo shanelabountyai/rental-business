@@ -16,11 +16,11 @@ const SLA_BADGES: Record<SlaState, { label: string; className: string } | null> 
   on_track: null,
   approaching: {
     label: 'First response due soon',
-    className: 'bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200',
+    className: 'bg-amber-100 text-amber-900',
   },
   breached: {
     label: 'First response overdue',
-    className: 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200',
+    className: 'bg-red-100 text-red-800',
   },
   responded: null,
 }
@@ -116,7 +116,7 @@ export function TriagePanel({
         <span className="font-medium">{ticket.categoryLabel}</span>
         <span className="text-muted-foreground text-sm">· {ticket.source}</span>
         {ticket.habitabilityFlag && (
-          <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800 dark:bg-red-950 dark:text-red-200">
+          <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800">
             Habitability
           </span>
         )}

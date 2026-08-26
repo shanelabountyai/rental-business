@@ -85,7 +85,7 @@ export function ApprovalPanel({
         {workOrder.actualTotalCents != null && (
           <>
             <dt className="text-muted-foreground">Actually spent</dt>
-            <dd className={overrun ? 'font-medium text-red-700 dark:text-red-400' : undefined}>
+            <dd className={overrun ? 'font-medium text-red-700' : undefined}>
               {money(workOrder.actualTotalCents)}
             </dd>
           </>

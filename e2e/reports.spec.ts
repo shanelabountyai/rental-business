@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto'
-import AxeBuilder from '@axe-core/playwright'
 import { hashPassword } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
+import { axeScan } from './fixtures.ts'
 
 // The five weekly operating reports (RPT-04, R-076).
 //
@@ -125,9 +125,7 @@ test('the reports index links to all five, and cash summary + critical dates sho
   await expect(page.getByRole('link', { name: /Cash summary per entity/ })).toBeVisible()
   await expect(page.getByRole('link', { name: /Upcoming critical dates/ })).toBeVisible()
 
-  const a11y = await new AxeBuilder({ page })
-    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-    .analyze()
+  const a11y = await axeScan(page)
   expect(a11y.violations).toEqual([])
 
   await page.getByRole('link', { name: /Cash summary per entity/ }).click()
@@ -138,8 +136,6 @@ test('the reports index links to all five, and cash summary + critical dates sho
   await page.goto('/reports/dates')
   await expect(page.getByText(new RegExp(`Lease ends — ${unit.name}`))).toBeVisible()
 
-  const datesA11y = await new AxeBuilder({ page })
-    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-    .analyze()
+  const datesA11y = await axeScan(page)
   expect(datesA11y.violations).toEqual([])
 })

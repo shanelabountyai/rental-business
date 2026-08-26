@@ -20,10 +20,10 @@ function StatusPill({ status, underNotice }: { status: string; underNotice: bool
       <span
         className={`rounded-full px-2 py-0.5 text-xs font-medium ${
           running
-            ? 'bg-green-100 text-green-900 dark:bg-green-950 dark:text-green-100'
+            ? 'bg-green-100 text-green-900'
             : over
               ? 'bg-muted text-muted-foreground'
-              : 'bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-100'
+              : 'bg-amber-100 text-amber-900'
         }`}
       >
         {leaseStatusLabel(status)}
@@ -35,7 +35,7 @@ function StatusPill({ status, underNotice }: { status: string; underNotice: bool
         LeaseStatus's own schema comment.
       */}
       {underNotice && (
-        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900 dark:bg-amber-950 dark:text-amber-100">
+        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900">
           Notice given
         </span>
       )}

@@ -73,7 +73,7 @@ function ConfirmForm({ onDone }: { onDone: () => void }) {
       <PaymentElement />
 
       <LiveRegion assertive>
-        {error && <p className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-base text-red-900 dark:border-red-900 dark:bg-red-950 dark:text-red-100">{error}</p>}
+        {error && <p className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-base text-red-900">{error}</p>}
       </LiveRegion>
 
       <button
@@ -144,7 +144,7 @@ function DebitDayForm({
       </div>
       <LiveRegion assertive>
         {state.error && (
-          <p className="text-base text-red-700 dark:text-red-400">{state.error}</p>
+          <p className="text-base text-red-700">{state.error}</p>
         )}
       </LiveRegion>
       {/* The region persists; only the sentence inside it comes and goes
@@ -230,7 +230,7 @@ export function AutopayPanel({
       </p>
 
       <LiveRegion assertive>
-        {error && <p className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-base text-red-900 dark:border-red-900 dark:bg-red-950 dark:text-red-100">{error}</p>}
+        {error && <p className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-base text-red-900">{error}</p>}
       </LiveRegion>
 
       {clientSecret ? (

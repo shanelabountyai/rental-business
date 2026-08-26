@@ -1,9 +1,8 @@
 import { randomUUID } from 'node:crypto'
-import AxeBuilder from '@axe-core/playwright'
 import { hashPassword, mintToken } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
-import { uniquePhone } from './fixtures.ts'
+import { axeScan, uniquePhone } from './fixtures.ts'
 
 // The emergency intake path (MAINT-01's emergency criterion, PROP-03, R-020).
 //
@@ -472,23 +471,17 @@ test.describe('accessibility (§6.4, WCAG 2.1 AA)', () => {
     await page.goto(await magicLinkFor(tenant.id))
     await page.goto('/portal/maintenance/emergency')
 
-    let results = await new AxeBuilder({ page })
-      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-      .analyze()
+    let results = await axeScan(page)
     expect(results.violations, 'category screen').toEqual([])
 
     // The safety screen uses red heavily - exactly where a contrast failure
     // would be most costly, on the screen somebody reads under stress.
     await page.getByRole('link', { name: 'Water is flooding in right now' }).click()
-    results = await new AxeBuilder({ page })
-      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-      .analyze()
+    results = await axeScan(page)
     expect(results.violations, 'safety screen').toEqual([])
 
     await page.getByRole('link', { name: 'Continue' }).click()
-    results = await new AxeBuilder({ page })
-      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-      .analyze()
+    results = await axeScan(page)
     expect(results.violations, 'details screen').toEqual([])
   })
 })

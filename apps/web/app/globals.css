@@ -1,8 +1,14 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
-@custom-variant dark (&:is(.dark *));
-
+/* This product is LIGHT-ONLY, on purpose. There was a `@custom-variant dark`
+   here and a `.dark` palette below, and 243 `dark:` utilities across 76 files
+   that could never render, because nothing ever set the class or read
+   prefers-color-scheme - R-107a even measured and fixed a contrast bug in the
+   dark `--input`, on CSS no eye has ever seen. All of it deleted in R-113.
+   A theme nobody wired up is worse than no theme: it makes every reviewer
+   confident about a surface that does not exist. If dark mode is ever wanted,
+   it starts here - the toggle and the palette first, `dark:` classes after. */
 :root {
   --radius: 0.625rem;
   --background: oklch(1 0 0);
@@ -35,29 +41,6 @@
   --border: oklch(0.922 0 0);
   --input: oklch(0.72 0 0); /* 3.05:1 on white */
   --ring: oklch(0.55 0 0); /* 4.63:1 on white, and still reads on --primary */
-}
-
-.dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.985 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.75 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 15%);
-  /* 18% white over the dark background composites to 1.64:1 - the same
-     failure as the light value and easy to miss, because the ALPHA looks
-     unremarkable next to a solid colour. 40% reaches 3.1:1 over both
-     --background and --card. */
-  --input: oklch(1 0 0 / 40%);
-  --ring: oklch(0.556 0 0); /* 4.18:1 on the dark background - already fine */
 }
 
 @theme inline {

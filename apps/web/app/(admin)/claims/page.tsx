@@ -48,7 +48,7 @@ export default async function ClaimsPage() {
                 {claim.paidCents > 0 && ` · $${(claim.paidCents / 100).toLocaleString('en-US')} received`}
               </p>
               {claim.mitigationUrgent && (
-                <p className="mt-1 text-sm text-amber-800 dark:text-amber-300">
+                <p className="mt-1 text-sm text-amber-800">
                   Nothing recorded as mitigated on a water loss. Every hour of this is argued about
                   later.
                 </p>

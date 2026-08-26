@@ -148,7 +148,7 @@ export default async function EvictionCasePage({ params }: { params: Promise<{ i
           <p className="text-muted-foreground text-sm">Last day to cure is {clock.cureBy}.</p>
         ) : (
           clock.periodUnknown && (
-            <p className="text-sm text-amber-800 dark:text-amber-300">
+            <p className="text-sm text-amber-800">
               This state&rsquo;s cure period is not configured in this system, so no deadline is shown. Ask your
               attorney — a date guessed here is the one that gets a case dismissed.
             </p>
@@ -197,7 +197,7 @@ export default async function EvictionCasePage({ params }: { params: Promise<{ i
                       Served {delivery.method.toLowerCase().replace(/_/g, ' ')} on{' '}
                       {friendlyDate(delivery.servedAt, zone)}
                       {delivery.permittedByJurisdiction === false && (
-                        <span className="text-red-800 dark:text-red-300">
+                        <span className="text-red-800">
                           {' '}
                           — this state does not name that method for this notice
                         </span>
@@ -262,7 +262,7 @@ export default async function EvictionCasePage({ params }: { params: Promise<{ i
             Record what happened next
           </h2>
           {next && filingReadiness && !filingReadiness.ready ? (
-            <p className="text-sm text-amber-800 dark:text-amber-300">
+            <p className="text-sm text-amber-800">
               {FILING_REFUSAL_MESSAGES[filingReadiness.refusal!]}
             </p>
           ) : (

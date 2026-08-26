@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto'
-import AxeBuilder from '@axe-core/playwright'
 import {
   createTotpEnrolment,
   hashPassword,
@@ -11,6 +10,7 @@ import {
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
 import { Secret, TOTP } from 'otpauth'
+import { axeScan } from './fixtures.ts'
 
 // End-to-end coverage of R-003. Two things here cannot be tested any other
 // way, and both are load-bearing:
@@ -178,9 +178,7 @@ test.describe('accessibility', () => {
       page,
     }) => {
       await page.goto(path)
-      const results = await new AxeBuilder({ page })
-        .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-        .analyze()
+      const results = await axeScan(page)
       expect(results.violations).toEqual([])
     })
   }
@@ -462,9 +460,7 @@ test.describe('authorization (R-004)', () => {
     await signInAsStaff(page, staff.email)
     await page.goto('/account')
 
-    const results = await new AxeBuilder({ page })
-      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-      .analyze()
+    const results = await axeScan(page)
     expect(results.violations).toEqual([])
   })
 })

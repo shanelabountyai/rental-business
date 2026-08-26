@@ -37,13 +37,13 @@ export interface LookupRow {
 
 const RESULT_TONE: Record<ScraLookupResult, string> = {
   in_service:
-    'bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-100',
+    'bg-amber-100 text-amber-900',
   not_in_service:
-    'bg-green-100 text-green-900 dark:bg-green-950 dark:text-green-100',
+    'bg-green-100 text-green-900',
   // Deliberately NOT green. A no-match reads as "nothing found", which is the
   // exact misreading that gets a false affidavit signed.
   indeterminate:
-    'bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-100',
+    'bg-amber-100 text-amber-900',
 }
 
 function RecordLookupForm({
@@ -98,7 +98,7 @@ function RecordLookupForm({
 
       {result === 'in_service' && (
         <>
-          <p className="rounded-md border border-amber-500 bg-amber-50 p-3 text-sm text-amber-950 dark:border-amber-600 dark:bg-amber-950 dark:text-amber-50">
+          <p className="rounded-md border border-amber-500 bg-amber-50 p-3 text-sm text-amber-950">
             Recording this places an SCRA hold on the tenancy automatically —
             no late fees, no chase, no access changes, and a banner on every
             notice screen.
@@ -120,7 +120,7 @@ function RecordLookupForm({
       )}
 
       {result === 'indeterminate' && (
-        <p className="rounded-md border border-amber-500 bg-amber-50 p-3 text-sm text-amber-950 dark:border-amber-600 dark:bg-amber-950 dark:text-amber-50">
+        <p className="rounded-md border border-amber-500 bg-amber-50 p-3 text-sm text-amber-950">
           A no-match is not a negative. It will not support the §3931
           affidavit — re-run the search with a date of birth or SSN.
         </p>
@@ -201,7 +201,7 @@ export function ScraLookupsPanel({
       </p>
 
       {prompt && (
-        <p className="rounded-md border border-amber-500 bg-amber-50 p-3 text-sm text-amber-950 dark:border-amber-600 dark:bg-amber-950 dark:text-amber-50">
+        <p className="rounded-md border border-amber-500 bg-amber-50 p-3 text-sm text-amber-950">
           {prompt}
         </p>
       )}
@@ -239,7 +239,7 @@ export function ScraLookupsPanel({
                     {lookup.certificateFileName}
                   </a>
                 ) : (
-                  <span className="text-amber-800 dark:text-amber-300">
+                  <span className="text-amber-800">
                     No certificate attached — this is a claim, not evidence.
                   </span>
                 )}

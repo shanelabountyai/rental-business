@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto'
-import AxeBuilder from '@axe-core/playwright'
 import { hashPassword } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
+import { axeScan } from './fixtures.ts'
 
 // The jurisdiction-rules engine (R-010, D-4). Portfolio-wide, unlike every
 // other admin section built so far - a JurisdictionRule applies by state,
@@ -308,15 +308,11 @@ test.describe('accessibility', () => {
     await signIn(page, staff.email)
 
     await page.goto('/jurisdiction')
-    let results = await new AxeBuilder({ page })
-      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-      .analyze()
+    let results = await axeScan(page)
     expect(results.violations).toEqual([])
 
     await page.goto('/jurisdiction/new')
-    results = await new AxeBuilder({ page })
-      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-      .analyze()
+    results = await axeScan(page)
     expect(results.violations).toEqual([])
   })
 })

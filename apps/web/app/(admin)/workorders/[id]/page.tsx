@@ -291,7 +291,7 @@ export default async function WorkOrderDetailPage({
         <dd className="col-span-1 sm:col-span-2">
           {STATUS_LABELS[workOrder.status] ?? workOrder.status}
           {workOrder.warrantyClaim && (
-            <span className="ml-2 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800 dark:bg-blue-950 dark:text-blue-200">
+            <span className="ml-2 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800">
               Warranty claim
             </span>
           )}
@@ -315,12 +315,12 @@ export default async function WorkOrderDetailPage({
               {localTime(workOrder.scheduledStart)}
               {workOrder.scheduledEnd && ` to ${localTime(workOrder.scheduledEnd).slice(11)}`}
               {workOrder.entryOverrideReason && (
-                <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900 dark:bg-amber-950 dark:text-amber-200">
+                <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900">
                   Entry override logged
                 </span>
               )}
               {workOrder.tenantNoShowAt && (
-                <span className="ml-2 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800 dark:bg-red-950 dark:text-red-200">
+                <span className="ml-2 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800">
                   Tenant no-show
                 </span>
               )}
@@ -510,7 +510,7 @@ export default async function WorkOrderDetailPage({
               The tenant confirmed this was fixed.
             </p>
           ) : (
-            <p className="text-sm text-amber-800 dark:text-amber-200">
+            <p className="text-sm text-amber-800">
               The tenant never confirmed this one.
             </p>
           )}

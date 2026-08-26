@@ -1,9 +1,8 @@
 import { randomUUID } from 'node:crypto'
-import AxeBuilder from '@axe-core/playwright'
 import { hashPassword } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
-import { uniquePhone, expectFocusSurvived } from './fixtures.ts'
+import { axeScan, expectFocusSurvived, uniquePhone } from './fixtures.ts'
 
 // Comms threading through the UI (COMM-01, R-017): the inbox, a thread
 // transcript with staff attribution, replying, logging a call, and the
@@ -403,9 +402,7 @@ test.describe('accessibility', () => {
 
     for (const url of ['/messages', `/messages/${thread.id}`, '/messages/unrouted']) {
       await page.goto(url)
-      const results = await new AxeBuilder({ page })
-        .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-        .analyze()
+      const results = await axeScan(page)
       expect(results.violations, url).toEqual([])
     }
   })

@@ -23,9 +23,9 @@ export interface RenterInsurancePolicyView {
 function statusLabel(expiresOn: string | null): { text: string; className: string } {
   if (!expiresOn) return { text: 'No expiry on file', className: 'text-muted-foreground' }
   const days = Math.round((new Date(`${expiresOn}T00:00:00Z`).getTime() - Date.now()) / 86_400_000)
-  if (days < 0) return { text: `Lapsed ${Math.abs(days)}d ago`, className: 'text-red-700 dark:text-red-400' }
-  if (days <= 60) return { text: `Expires in ${days}d`, className: 'text-amber-800 dark:text-amber-300' }
-  return { text: `Current, expires ${expiresOn}`, className: 'text-green-800 dark:text-green-300' }
+  if (days < 0) return { text: `Lapsed ${Math.abs(days)}d ago`, className: 'text-red-700' }
+  if (days <= 60) return { text: `Expires in ${days}d`, className: 'text-amber-800' }
+  return { text: `Current, expires ${expiresOn}`, className: 'text-green-800' }
 }
 
 export function RenterInsurancePanel({

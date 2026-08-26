@@ -4629,3 +4629,30 @@ The assertion got *stronger* rather than looser. It was `/Created \d+ work order
 **What it left behind.**
 - **The debris already in the shared database is still there.** Every past run of this spec left work orders hanging off other specs' units, and the spec's own `afterAll` only deletes within its own properties. Those rows block deletion of units that are themselves abandoned debris, so nothing live is affected and no cleanup was written — a migration or script that deletes work orders in a test database is a bigger risk than the rows are.
 - **No other spec was audited for the same shape.** This one was found by a failing run, not a sweep. A batch or bulk action pressed by a portfolio-scoped actor is the pattern to grep for if it happens again; `scopeTo` is now in two files and is the answer both times.
+
+---
+
+## R-111: a theme nobody wired up, and a scanner told not to look
+**Commit:** TBD  ·  **Date:** 2026-08-25
+
+Audit angles ②, ㉑ and ㉒ — the shared-layer remainder after R-107a and R-107b. **This item was built in a previous session that never committed it or wrote this entry;** it was found uncommitted in the working tree at the start of R-112 and is recorded here from its own diff, verified rather than taken on trust.
+
+**What it built.**
+
+**(a) 243 `dark:` utilities across 76 files, deleted.** `@custom-variant dark (&:is(.dark *))` and a full `.dark` palette existed in `globals.css`, and nothing in the product ever set the class or read `prefers-color-scheme`. Counted from the diff: 243 utilities, 76 files. `globals.css` now opens with a comment saying the product is light-only and what it would take to change that — the palette and the toggle first, `dark:` classes after.
+
+**(b) One `axeScan()` replacing 60 hand-written `AxeBuilder` chains across 40 spec files.** Every one of the 60 wrote `.withTags(['wcag2a','wcag2aa','wcag21a','wcag21aa'])` by hand, and that set **excludes axe's `best-practice` rules** — among them `landmark-no-duplicate-main`. `/portal/pay/history` rendered a `<main>` inside the portal layout's `<main>`: two main landmarks and a skip link resolving to the wrong one, green on every scan. The helper turns `best-practice` on; the nested `<main>` is a `<div>`.
+
+**(c) The admin section nav was an `<aside>`,** which maps to `role="complementary"` — a landmark-navigating screen-reader user hears "complementary" and moves past the only way around the app. One element changed to a `<div>`; the `<nav aria-label="Sections">` inside was already carrying the semantics.
+
+**What it decided.**
+
+**Light-only is now a stated position, not an accident.** A theme nobody wired up is worse than no theme: it makes every reviewer confident about a surface that does not exist. R-107a had *measured and fixed* a 1.64:1 contrast bug in the dark `--input` — real work, on CSS no eye has ever seen.
+
+**The tag filter is itself a defect surface,** which is why the fix is one helper rather than 60 corrected call sites. "axe passes" is a statement about a configuration, not about a page, and 60 identical hand-written configurations is what copying a neighbour produces. A rule that ever has to be off goes in `disableRules` with its reason, never by narrowing the tags back.
+
+**Verified.** Its own audit annotation claims the nested `<main>` was proven by restoring it and watching three rules go red (`landmark-main-is-top-level`, `landmark-no-duplicate-main`, `landmark-unique` — the third one the audit had not named). Independently here: `lint` (0 errors, the same 14 pre-existing warnings), `typecheck`, the full unit suite at **2,744 passed + 4 skipped of 2,748**, and **533 e2e tests including every `accessibility` spec in that range passed with `best-practice` on** before an unrelated SIGKILL ended that sweep (no `JetsamEvent` file for the minute, so not the OS).
+
+**What it left behind.**
+- **No dark mode, deliberately.** If it is ever wanted it starts at `globals.css` with a palette and a toggle.
+- **The rest of the audit's 75 findings.** R-112 below takes the tenant-portal blockers; angle ㉓, four more repeated-name sites and the portal's 16px floor are unowned.

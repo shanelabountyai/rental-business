@@ -1,9 +1,8 @@
 import { randomUUID } from 'node:crypto'
-import AxeBuilder from '@axe-core/playwright'
 import { hashPassword } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
-import { uniquePhone } from './fixtures.ts'
+import { axeScan, uniquePhone } from './fixtures.ts'
 
 // After-hours routing through the browser (MAINT-12, NOTIF-05, R-029).
 //
@@ -277,15 +276,11 @@ test.describe('accessibility (§6.4, WCAG 2.1 AA)', () => {
     await signIn(page, seeded.staff.email)
 
     await page.goto('/account')
-    let results = await new AxeBuilder({ page })
-      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-      .analyze()
+    let results = await axeScan(page)
     expect(results.violations, 'account').toEqual([])
 
     await page.goto(`/maintenance/${ticket.id}`)
-    results = await new AxeBuilder({ page })
-      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-      .analyze()
+    results = await axeScan(page)
     expect(results.violations, 'emergency panel').toEqual([])
   })
 })

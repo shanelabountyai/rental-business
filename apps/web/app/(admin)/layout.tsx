@@ -83,9 +83,9 @@ export default async function AdminLayout({
           staff surfaces are desk-first but a PM checks them from a driveway
           (PRD §6.5), so the nav has to survive a narrow viewport.
         */}
-        <aside className="border-border shrink-0 overflow-x-auto border-b p-3 md:w-56 md:border-r md:border-b-0">
+        <div className="border-border shrink-0 overflow-x-auto border-b p-3 md:w-56 md:border-r md:border-b-0">
           <Nav items={visibleItems} />
-        </aside>
+        </div>
 
         <main id="main" className="flex-1 p-4 md:p-6">
           {children}

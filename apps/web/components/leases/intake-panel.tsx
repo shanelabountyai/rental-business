@@ -58,7 +58,7 @@ export function IntakePanel({
   return (
     <section
       aria-labelledby="intake"
-      className="flex flex-col gap-4 rounded-md border border-amber-300 p-4 dark:border-amber-900"
+      className="flex flex-col gap-4 rounded-md border border-amber-300 p-4"
     >
       <div className="flex flex-col gap-1">
         <h2 id="intake" ref={settledRef} tabIndex={-1} className="text-lg font-semibold">

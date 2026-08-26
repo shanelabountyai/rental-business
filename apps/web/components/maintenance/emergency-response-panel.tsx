@@ -60,7 +60,7 @@ export function EmergencyResponsePanel({
   return (
     <section
       aria-labelledby="emergency-response"
-      className="flex flex-col gap-4 rounded-md border border-red-300 p-4 dark:border-red-900"
+      className="flex flex-col gap-4 rounded-md border border-red-300 p-4"
     >
       <h2 id="emergency-response" className="text-lg font-semibold">
         Emergency response
@@ -122,7 +122,7 @@ export function EmergencyResponsePanel({
                     <span className="text-muted-foreground">no phone on file</span>
                   )}
                   {vendor.emergencyAvailable && (
-                    <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-900 dark:bg-green-950 dark:text-green-100">
+                    <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-900">
                       Answers after hours
                     </span>
                   )}
@@ -153,7 +153,7 @@ export function EmergencyResponsePanel({
       )}
 
       <LiveRegion assertive>
-        {error && <p className="text-sm text-red-700 dark:text-red-400">{error}</p>}
+        {error && <p className="text-sm text-red-700">{error}</p>}
       </LiveRegion>
     </section>
   )

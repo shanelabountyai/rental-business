@@ -149,15 +149,15 @@ export function VendorJob({
         <section
           role="note"
           aria-labelledby="restricted-party"
-          className="flex flex-col gap-1 rounded-md border-2 border-sky-600 bg-sky-50 p-4 dark:border-sky-500 dark:bg-sky-950"
+          className="flex flex-col gap-1 rounded-md border-2 border-sky-600 bg-sky-50 p-4"
         >
           <h2
             id="restricted-party"
-            className="text-sm font-semibold text-sky-900 dark:text-sky-100"
+            className="text-sm font-semibold text-sky-900"
           >
             Who may be given keys on this job
           </h2>
-          <p className="text-sm text-sky-900 dark:text-sky-100">{job.restrictedPartyNote}</p>
+          <p className="text-sm text-sky-900">{job.restrictedPartyNote}</p>
         </section>
       )}
 
@@ -176,12 +176,12 @@ export function VendorJob({
           // did. It still reads as a warning because the heading says so.
           role="note"
           aria-labelledby="pet-warning"
-          className="flex flex-col gap-1 rounded-md border-2 border-amber-500 bg-amber-50 p-4 dark:border-amber-500 dark:bg-amber-950"
+          className="flex flex-col gap-1 rounded-md border-2 border-amber-500 bg-amber-50 p-4"
         >
-          <h2 id="pet-warning" className="text-sm font-semibold text-amber-900 dark:text-amber-100">
+          <h2 id="pet-warning" className="text-sm font-semibold text-amber-900">
             There is a pet at this home
           </h2>
-          <p className="text-sm text-amber-900 dark:text-amber-100">
+          <p className="text-sm text-amber-900">
             The tenant told us to expect an animal.
             {job.entryPermission === true
               ? ' They have agreed we can come in when they are not home, so knock first and let them secure it if they are there.'
@@ -381,7 +381,7 @@ export function VendorJob({
               <h2 className="text-sm font-medium">Getting in</h2>
               <LiveRegion assertive>
                 {revealError && (
-                  <p className="text-sm text-red-700 dark:text-red-400">{revealError}</p>
+                  <p className="text-sm text-red-700">{revealError}</p>
                 )}
               </LiveRegion>
               {/* THE ONE ACTION THIS SURFACE EXISTS TO PERFORM, and until

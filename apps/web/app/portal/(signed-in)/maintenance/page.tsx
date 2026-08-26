@@ -40,7 +40,7 @@ export default async function PortalMaintenancePage() {
       */}
       <Link
         href="/portal/maintenance/emergency"
-        className="focus-visible:ring-ring flex min-h-14 items-center justify-center rounded-md border-2 border-red-600 bg-red-50 px-6 py-3 text-base font-semibold text-red-950 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none dark:bg-red-950 dark:text-red-50"
+        className="focus-visible:ring-ring flex min-h-14 items-center justify-center rounded-md border-2 border-red-600 bg-red-50 px-6 py-3 text-base font-semibold text-red-950 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
       >
         Emergency — gas, flooding, no heat, break-in
       </Link>

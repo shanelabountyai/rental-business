@@ -56,7 +56,7 @@ export default async function VendorPage({
           </dl>
         )}
         {requiresForm1099(totals.totalCents) && (
-          <p className="text-sm text-amber-800 dark:text-amber-300">
+          <p className="text-sm text-amber-800">
             $600 or more paid this year — a 1099-NEC candidate.
           </p>
         )}

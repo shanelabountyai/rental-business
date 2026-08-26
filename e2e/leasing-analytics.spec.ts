@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto'
-import AxeBuilder from '@axe-core/playwright'
 import { hashPassword } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
+import { axeScan } from './fixtures.ts'
 
 // The leasing funnel and maintenance analytics (RPT-06, MAINT-10, R-081c).
 //
@@ -582,9 +582,7 @@ test.describe('accessibility', () => {
 
     for (const path of ['/reports/leasing', '/reports/maintenance']) {
       await page.goto(`${path}?from=${FROM}&to=${TO}`)
-      const results = await new AxeBuilder({ page })
-        .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-        .analyze()
+      const results = await axeScan(page)
       expect(results.violations).toEqual([])
     }
   })

@@ -88,7 +88,7 @@ export default async function EmergencyPage({
           category's own instructions: somebody who lands here by accident,
           or whose situation is not on the list, still needs to read it.
         */}
-        <p className="rounded-md border-2 border-red-600 bg-red-50 px-4 py-3 font-medium text-red-950 dark:bg-red-950 dark:text-red-50">
+        <p className="rounded-md border-2 border-red-600 bg-red-50 px-4 py-3 font-medium text-red-950">
           If anyone is in danger, call 911 first. This page does not reach
           emergency services.
         </p>
@@ -106,7 +106,7 @@ export default async function EmergencyPage({
                     confirm step, and it works before any JavaScript runs. */}
                 <Link
                   href={`/portal/maintenance/emergency?c=${value}`}
-                  className="focus-visible:ring-ring flex min-h-14 w-full items-center rounded-md border-2 border-red-600 bg-red-50 px-4 py-3 text-left text-base font-medium text-red-950 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none dark:bg-red-950 dark:text-red-50"
+                  className="focus-visible:ring-ring flex min-h-14 w-full items-center rounded-md border-2 border-red-600 bg-red-50 px-4 py-3 text-left text-base font-medium text-red-950 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
                 >
                   {EMERGENCY_DEFINITIONS[value].label}
                 </Link>
@@ -118,12 +118,12 @@ export default async function EmergencyPage({
         <>
           <section
             aria-labelledby="do-now"
-            className="flex flex-col gap-3 rounded-md border-2 border-red-600 bg-red-50 p-4 dark:bg-red-950"
+            className="flex flex-col gap-3 rounded-md border-2 border-red-600 bg-red-50 p-4"
           >
-            <h2 id="do-now" className="text-lg font-semibold text-red-950 dark:text-red-50">
+            <h2 id="do-now" className="text-lg font-semibold text-red-950">
               Do this now
             </h2>
-            <ol className="flex list-decimal flex-col gap-2 pl-5 text-red-950 dark:text-red-50">
+            <ol className="flex list-decimal flex-col gap-2 pl-5 text-red-950">
               {EMERGENCY_DEFINITIONS[category].selfProtection.map((instruction) => (
                 <li key={instruction}>{instruction}</li>
               ))}

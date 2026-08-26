@@ -1,9 +1,8 @@
 import { randomUUID } from 'node:crypto'
-import AxeBuilder from '@axe-core/playwright'
 import { hashPassword, sealSecret } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
-import { uniquePhone } from './fixtures.ts'
+import { axeScan, uniquePhone } from './fixtures.ts'
 
 // The zero-login vendor journey, end to end (D-6, D-16, MAINT-03, R-025).
 //
@@ -505,9 +504,7 @@ test.describe('accessibility', () => {
     const vendorPage = await vendorContext.newPage()
     await vendorPage.goto(`/vendor/${token}`)
 
-    const results = await new AxeBuilder({ page: vendorPage })
-      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-      .analyze()
+    const results = await axeScan(vendorPage)
     expect(results.violations).toEqual([])
     await vendorContext.close()
   })

@@ -169,7 +169,7 @@ export function TemplateEditor({
             know it resolved without leaving the textarea. */}
         <LiveRegion>
           {missing.length > 0 && (
-            <p className="rounded-md border border-amber-300 px-3 py-2 text-sm dark:border-amber-900">
+            <p className="rounded-md border border-amber-300 px-3 py-2 text-sm">
               {/* NAMES THE FIELDS. This is the whole reason the preview is
                   here, and "some fields are empty" would send somebody
                   hunting through their own paragraph. */}

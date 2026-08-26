@@ -1,9 +1,8 @@
 import { randomUUID } from 'node:crypto'
-import AxeBuilder from '@axe-core/playwright'
 import { hashPassword } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
-import { uniquePhone } from './fixtures.ts'
+import { axeScan, uniquePhone } from './fixtures.ts'
 
 // Work order creation & assignment (MAINT-03, PROP-06, R-024): from a
 // ticket or standalone, scope/priority/estimate, assign to staff or vendor,
@@ -468,21 +467,15 @@ test.describe('accessibility', () => {
     await signIn(page, staff.email)
 
     await page.goto('/workorders')
-    let results = await new AxeBuilder({ page })
-      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-      .analyze()
+    let results = await axeScan(page)
     expect(results.violations).toEqual([])
 
     await page.goto('/workorders/new')
-    results = await new AxeBuilder({ page })
-      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-      .analyze()
+    results = await axeScan(page)
     expect(results.violations).toEqual([])
 
     await page.goto(`/workorders/${workOrder.id}`)
-    results = await new AxeBuilder({ page })
-      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-      .analyze()
+    results = await axeScan(page)
     expect(results.violations).toEqual([])
   })
 })

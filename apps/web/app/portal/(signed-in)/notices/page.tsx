@@ -44,7 +44,7 @@ export default async function PortalNoticesPage() {
                   <span className="flex flex-wrap items-center justify-between gap-2">
                     <span className="font-medium">About your home</span>
                     {unread && (
-                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900 dark:bg-amber-950 dark:text-amber-100">
+                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900">
                         New
                       </span>
                     )}

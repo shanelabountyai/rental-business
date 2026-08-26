@@ -1,10 +1,10 @@
 import { randomUUID } from 'node:crypto'
-import AxeBuilder from '@axe-core/playwright'
 import { hashPassword } from '@rental/core/auth'
 import { CATEGORY_LABELS } from '@rental/core/maintenance'
 import { businessDate, businessDateToUtc } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
+import { axeScan } from './fixtures.ts'
 
 // Triage queue as a Task view (MAINT-02, RISK-05, R-023): a new ticket
 // becomes a Task in the ONE staff queue (D-9), and the ticket-specific
@@ -391,9 +391,7 @@ test.describe('a ticket-triage Task', () => {
       await signIn(page, staff.email)
       await page.goto(`/tasks/${task.id}`)
 
-      const results = await new AxeBuilder({ page })
-        .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-        .analyze()
+      const results = await axeScan(page)
       expect(results.violations).toEqual([])
     })
   })

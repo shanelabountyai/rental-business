@@ -1,9 +1,8 @@
 import { randomUUID } from 'node:crypto'
-import AxeBuilder from '@axe-core/playwright'
 import { hashPassword } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
-import { uniquePhone, expectFocusSurvived } from './fixtures.ts'
+import { axeScan, expectFocusSurvived, uniquePhone } from './fixtures.ts'
 
 // Lease records through the browser (LEASE-06, RISK-08, R-033).
 //
@@ -825,9 +824,7 @@ test.describe('accessibility (§6.4, WCAG 2.1 AA)', () => {
       ['detail', `/leases/${lease.id}`],
     ] as const) {
       await page.goto(url)
-      const results = await new AxeBuilder({ page })
-        .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-        .analyze()
+      const results = await axeScan(page)
       expect(results.violations, name).toEqual([])
     }
   })

@@ -76,7 +76,7 @@ export function OnCallToggle({
 
       <LiveRegion assertive>
         {state.error && (
-          <p className="text-sm text-red-700 dark:text-red-400">{state.error}</p>
+          <p className="text-sm text-red-700">{state.error}</p>
         )}
       </LiveRegion>
     </div>

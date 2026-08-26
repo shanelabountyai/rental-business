@@ -1,9 +1,8 @@
 import { randomUUID } from 'node:crypto'
-import AxeBuilder from '@axe-core/playwright'
 import { hashPassword } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
-import { uniquePhone } from './fixtures.ts'
+import { axeScan, uniquePhone } from './fixtures.ts'
 
 // Staff-logged (phone-reported) maintenance requests (MAINT-01, D-10, R-022):
 // a tenant who calls instead of using the portal must land in the same
@@ -259,15 +258,11 @@ test.describe('logging a phone-reported request', () => {
       await signIn(page, staff.email)
 
       await page.goto('/maintenance')
-      let results = await new AxeBuilder({ page })
-        .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-        .analyze()
+      let results = await axeScan(page)
       expect(results.violations).toEqual([])
 
       await page.goto('/maintenance/new')
-      results = await new AxeBuilder({ page })
-        .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-        .analyze()
+      results = await axeScan(page)
       expect(results.violations).toEqual([])
     })
   })

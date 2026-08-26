@@ -66,11 +66,11 @@ export default async function NoticesPage() {
                       {notice.lease?.unit ? ` · ${notice.lease.unit.name}` : ''}
                     </span>
                     {notice.servedAt ? (
-                      <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-900 dark:bg-green-950 dark:text-green-100">
+                      <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-900">
                         Served {friendlyDate(notice.servedAt, notice.property.timezone)}
                       </span>
                     ) : (
-                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900 dark:bg-amber-950 dark:text-amber-100">
+                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900">
                         Not served
                       </span>
                     )}

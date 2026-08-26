@@ -39,15 +39,15 @@ const CHANNEL_LABELS: Record<string, string> = {
 
 function statusClasses(status: string): string {
   if (status === 'FAILED' || status === 'BOUNCED') {
-    return 'bg-red-100 text-red-900 dark:bg-red-950 dark:text-red-200'
+    return 'bg-red-100 text-red-900'
   }
   if (status === 'SUPPRESSED' || status === 'DEFERRED') {
-    return 'bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200'
+    return 'bg-amber-100 text-amber-900'
   }
   if (status === 'QUEUED') {
     return 'bg-muted text-muted-foreground'
   }
-  return 'bg-emerald-100 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-200'
+  return 'bg-emerald-100 text-emerald-900'
 }
 
 export default async function NotificationsPage() {

@@ -95,7 +95,7 @@ export function SmartLockPanel({
                         property, so it survives the re-render rather than
                         living in a toast. */}
                     {access.revoked.reachedDevice === false && (
-                      <p className="rounded-md border border-red-300 p-2 text-sm font-medium text-red-800 dark:border-red-900 dark:text-red-200">
+                      <p className="rounded-md border border-red-300 p-2 text-sm font-medium text-red-800">
                         The lock did not answer when this was pulled. Treat the code as still
                         working until somebody has confirmed it at the device or changed the
                         lock.

@@ -177,7 +177,7 @@ export default async function NoticePage({
                 {delivery.method === 'PORTAL' && (
                   <span className="text-sm">
                     {delivery.readAt ? (
-                      <span className="text-green-800 dark:text-green-300">
+                      <span className="text-green-800">
                         Read by the tenant{' '}
                         {friendlyDate(delivery.readAt, notice.property.timezone)}
                       </span>
@@ -192,7 +192,7 @@ export default async function NoticePage({
                 <span
                   className={
                     delivery.permittedByJurisdiction === false
-                      ? 'text-sm text-red-700 dark:text-red-400'
+                      ? 'text-sm text-red-700'
                       : 'text-muted-foreground text-xs'
                   }
                 >

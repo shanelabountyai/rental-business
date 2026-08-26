@@ -1,10 +1,10 @@
 import { randomUUID } from 'node:crypto'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
-import AxeBuilder from '@axe-core/playwright'
 import { hashPassword, mintToken } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
+import { axeScan } from './fixtures.ts'
 
 // The tenant portal shell (R-018, PRD §6.4, DOC-03, D-8, D-10).
 //
@@ -456,9 +456,7 @@ test.describe('accessibility (§6.4, WCAG 2.1 AA)', () => {
       `/portal/messages/${thread.id}`,
     ]) {
       await page.goto(url)
-      const results = await new AxeBuilder({ page })
-        .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-        .analyze()
+      const results = await axeScan(page)
       expect(results.violations, url).toEqual([])
     }
   })

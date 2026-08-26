@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto'
-import AxeBuilder from '@axe-core/playwright'
 import { hashPassword } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
+import { axeScan } from './fixtures.ts'
 
 // Vendor records themselves (MAINT-11, R-079) - no admin surface for
 // "manage vendor records" existed before this item. `vendor.write` is
@@ -72,9 +72,7 @@ test('a PM adds a vendor with no W-9, sees it flagged on the list, then fixes it
   const row = page.getByRole('link', { name: new RegExp(`Ace Plumbing ${stamp}`) })
   await expect(row.getByText(/no W-9/)).toBeVisible()
 
-  const a11y = await new AxeBuilder({ page })
-    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-    .analyze()
+  const a11y = await axeScan(page)
   expect(a11y.violations).toEqual([])
 
   // Fix it.

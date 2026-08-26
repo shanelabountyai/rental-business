@@ -57,7 +57,7 @@ function ConfirmForm({ onDone }: { onDone: () => void }) {
 
       <LiveRegion assertive>
         {error && (
-          <p className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-base text-red-900 dark:border-red-900 dark:bg-red-950 dark:text-red-100">
+          <p className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-base text-red-900">
             {error}
           </p>
         )}
@@ -96,7 +96,7 @@ export function FeePayment({
     <div className="flex flex-col gap-3">
       <LiveRegion assertive>
         {error && (
-          <p className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-base text-red-900 dark:border-red-900 dark:bg-red-950 dark:text-red-100">
+          <p className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-base text-red-900">
             {error}
           </p>
         )}

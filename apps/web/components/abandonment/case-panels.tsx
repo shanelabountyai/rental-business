@@ -233,7 +233,7 @@ export function DisposePanel({
 
   if (refusal) {
     return (
-      <p className="rounded-md border border-amber-500 bg-amber-50 p-3 text-sm text-amber-950 dark:border-amber-600 dark:bg-amber-950 dark:text-amber-50">
+      <p className="rounded-md border border-amber-500 bg-amber-50 p-3 text-sm text-amber-950">
         {refusal}
       </p>
     )
@@ -286,7 +286,7 @@ export function CloseCasePanel({
         onChange={(event) => setOutcome(event.target.value)}
       />
       {outcome === 'DECEASED' && (
-        <p className="rounded-md border border-amber-500 bg-amber-50 p-3 text-sm text-amber-950 dark:border-amber-600 dark:bg-amber-950 dark:text-amber-50">
+        <p className="rounded-md border border-amber-500 bg-amber-50 p-3 text-sm text-amber-950">
           {deceasedPrompt}
         </p>
       )}

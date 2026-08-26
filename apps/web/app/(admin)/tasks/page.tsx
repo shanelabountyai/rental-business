@@ -88,7 +88,7 @@ export default async function TasksPage({
               >
                 <span className="font-medium">
                   {task.priority === 'EMERGENCY' && (
-                    <span className="mr-2 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800 dark:bg-red-950 dark:text-red-200">
+                    <span className="mr-2 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800">
                       {PRIORITY_LABELS.EMERGENCY}
                     </span>
                   )}

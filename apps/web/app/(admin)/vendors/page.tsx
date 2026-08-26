@@ -44,10 +44,10 @@ export default async function VendorsPage() {
                   <span className="text-muted-foreground text-sm">
                     {vendor.trades.join(', ') || 'No trades on file'}
                     {!vendor.w9OnFile && (
-                      <span className="text-amber-800 dark:text-amber-300"> · no W-9</span>
+                      <span className="text-amber-800"> · no W-9</span>
                     )}
                     {coiExpired && (
-                      <span className="text-amber-800 dark:text-amber-300"> · COI expired</span>
+                      <span className="text-amber-800"> · COI expired</span>
                     )}
                   </span>
                 </Link>

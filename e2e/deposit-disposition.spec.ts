@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto'
-import AxeBuilder from '@axe-core/playwright'
 import {
   createTotpEnrolment,
   hashPassword,
@@ -9,6 +8,7 @@ import {
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
 import { Secret, TOTP } from 'otpauth'
+import { axeScan } from './fixtures.ts'
 
 // Deposit disposition (INSP-03, R-071): itemized deductions, each flagged
 // unsupported or not, running totals, and a finalize step that hands off
@@ -159,9 +159,7 @@ test('a PM itemizes deductions, sees the unsupported flag and depreciation guida
   await expect(totals).toContainText('$960.00')
   await expect(totals).toContainText('$1,040.00')
 
-  const a11y = await new AxeBuilder({ page })
-    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-    .analyze()
+  const a11y = await axeScan(page)
   expect(a11y.violations).toEqual([])
 
   await page.getByRole('button', { name: 'Finalize disposition' }).click()

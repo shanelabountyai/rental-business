@@ -48,7 +48,7 @@ export function BillingPanel({
           Billing
         </h2>
         {!live && (
-          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900 dark:bg-amber-950 dark:text-amber-100">
+          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900">
             {providerName} provider — not real Stripe
           </span>
         )}
@@ -79,7 +79,7 @@ export function BillingPanel({
                   {payer.stripeCustomerId} · {payer.stripeSubscriptionId}
                 </span>
               ) : (
-                <span className="text-sm text-amber-800 dark:text-amber-200">
+                <span className="text-sm text-amber-800">
                   No subscription yet — nothing will bill for this payer.
                 </span>
               )}

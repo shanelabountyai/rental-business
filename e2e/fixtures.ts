@@ -176,3 +176,33 @@ export function uniqueStateCode(): string {
   counter += 1
   return `Q${randomUUID().slice(0, 8)}${counter}`
 }
+
+/**
+ * The one axe configuration for the whole suite.
+ *
+ * IT EXISTS BECAUSE THE TAG FILTER IS ITSELF A DEFECT SURFACE. Sixty call
+ * sites across forty spec files each wrote
+ * `.withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])` by hand, and that
+ * set EXCLUDES axe's `best-practice` rules — among them
+ * `landmark-no-duplicate-main` and `landmark-main-is-top-level`. So
+ * `/portal/pay/history` rendered a `<main>` inside the portal layout's
+ * `<main>` — invalid HTML, two main landmarks, and the skip link's `#main`
+ * resolving to the wrong one — and sixty axe scans passed over it (R-113).
+ *
+ * "axe passes" is a statement about a configuration, not about a page. One
+ * helper means the next author cannot get the configuration wrong by copying
+ * a neighbour, which is how all sixty came to be identical in the first place.
+ *
+ * `best-practice` is on. What that tag set adds beyond WCAG is landmark and
+ * heading structure — exactly the class of defect this product was failing —
+ * so nothing here is disabled. If a rule ever has to be turned off, it goes
+ * in `disableRules` below WITH THE REASON, never by narrowing the tags back.
+ */
+export async function axeScan(
+  page: import('@playwright/test').Page,
+): Promise<import('axe-core').AxeResults> {
+  const { default: AxeBuilder } = await import('@axe-core/playwright')
+  return new AxeBuilder({ page })
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'best-practice'])
+    .analyze()
+}

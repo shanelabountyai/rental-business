@@ -78,7 +78,7 @@ export default async function MessagesPage() {
       {unrouted > 0 && (
         <Link
           href="/messages/unrouted"
-          className="focus-visible:ring-ring flex min-h-11 items-center justify-between gap-2 rounded-md border border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-900 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none dark:border-amber-900 dark:bg-amber-950 dark:text-amber-100"
+          className="focus-visible:ring-ring flex min-h-11 items-center justify-between gap-2 rounded-md border border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-900 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
         >
           <span>
             {unrouted} message{unrouted === 1 ? '' : 's'} arrived from a number

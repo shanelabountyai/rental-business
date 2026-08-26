@@ -1,10 +1,9 @@
 import { randomUUID } from 'node:crypto'
-import AxeBuilder from '@axe-core/playwright'
 import { hashPassword, mintToken } from '@rental/core/auth'
 import { threadKey } from '@rental/core/comms'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
-import { uniquePhone } from './fixtures.ts'
+import { axeScan, uniquePhone } from './fixtures.ts'
 
 // The merged work-order timeline through the browser (COMM-06, R-032).
 //
@@ -372,18 +371,14 @@ test.describe('accessibility (§6.4, WCAG 2.1 AA)', () => {
     const staff = await createStaff()
     await signIn(page, staff.email)
     await page.goto(`/workorders/${workOrder.id}`)
-    let results = await new AxeBuilder({ page })
-      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-      .analyze()
+    let results = await axeScan(page)
     expect(results.violations, 'work order timeline').toEqual([])
 
     const token = await mintVendorToken(workOrder.id, vendor.id)
     const vendorContext = await page.context().browser()!.newContext()
     const vendorPage = await vendorContext.newPage()
     await vendorPage.goto(`/vendor/${token}`)
-    results = await new AxeBuilder({ page: vendorPage })
-      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-      .analyze()
+    results = await axeScan(vendorPage)
     expect(results.violations, 'vendor message thread').toEqual([])
 
     await vendorContext.close()

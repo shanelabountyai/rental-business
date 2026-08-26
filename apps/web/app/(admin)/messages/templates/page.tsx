@@ -50,7 +50,7 @@ export default async function TemplatesPage() {
         // translation on a legal notice is not inert: it means tenants who
         // read that language are receiving the notice in English instead, and
         // nobody finds out unless the screen says so.
-        <p className="rounded-md border border-amber-300 px-3 py-2 text-sm dark:border-amber-900">
+        <p className="rounded-md border border-amber-300 px-3 py-2 text-sm">
           {needingApproval.length === 1
             ? 'One translation of a legal notice has not been approved, so it is not being used.'
             : `${needingApproval.length} translations of legal notices have not been approved, so they are not being used.`}{' '}

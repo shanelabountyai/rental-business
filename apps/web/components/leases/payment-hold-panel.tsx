@@ -55,7 +55,7 @@ function HoldForm({
         {payer.setAt && (
           // WHEN AND BY WHOM, on the screen rather than only in the audit
           // log. A hold nobody can attribute is one nobody will lift.
-          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900 dark:bg-amber-950 dark:text-amber-100">
+          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900">
             Held since {payer.setAt}
             {payer.setByName ? ` by ${payer.setByName}` : ''}
           </span>
@@ -164,7 +164,7 @@ export function PaymentHoldPanel({
           Legal-action payment controls
         </h2>
         {anyHeld && (
-          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900 dark:bg-amber-950 dark:text-amber-100">
+          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900">
             This tenancy is held
           </span>
         )}

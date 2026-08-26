@@ -69,7 +69,7 @@ export function DoorCodesPanel({
           <div key={row.tenantId} className="flex flex-col gap-2 border-t pt-3">
             <p className="text-sm font-medium">{row.name}</p>
             {row.strandedAt && (
-              <p className="rounded-md border border-red-300 p-2 text-sm font-medium text-red-800 dark:border-red-900 dark:text-red-200">
+              <p className="rounded-md border border-red-300 p-2 text-sm font-medium text-red-800">
                 Their code was revoked on {row.strandedAt} but the lock did not answer. Treat it
                 as still working until somebody has confirmed it at the device or changed the
                 lock.

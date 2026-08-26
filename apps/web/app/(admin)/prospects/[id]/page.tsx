@@ -215,7 +215,7 @@ export default async function ProspectDetailPage({
                   <p className="text-muted-foreground">No report ordered yet.</p>
                 )}
                 {a.reportStatus === 'FAILED' && (
-                  <p className="text-red-700 dark:text-red-400">
+                  <p className="text-red-700">
                     The report failed. Not evaluated against criteria.
                   </p>
                 )}
@@ -227,7 +227,7 @@ export default async function ProspectDetailPage({
                         <dd
                           className={
                             c.result === 'FAILS'
-                              ? 'text-red-700 dark:text-red-400'
+                              ? 'text-red-700'
                               : c.result === 'UNKNOWN'
                                 ? 'text-muted-foreground'
                                 : ''
@@ -249,15 +249,15 @@ export default async function ProspectDetailPage({
                   <p className="text-sm">
                     <span className="text-muted-foreground">Adverse-action notice: </span>
                     {a.adverseAction.sentAt ? (
-                      <span className="text-green-800 dark:text-green-300">
+                      <span className="text-green-800">
                         Sent {a.adverseAction.sentAt.toISOString().slice(0, 10)}
                       </span>
                     ) : a.adverseAction.overriddenAt ? (
-                      <span className="text-amber-800 dark:text-amber-300">
+                      <span className="text-amber-800">
                         Not sent — overridden {a.adverseAction.overriddenAt.toISOString().slice(0, 10)}
                       </span>
                     ) : (
-                      <span className="text-red-700 dark:text-red-400">Not sent yet</span>
+                      <span className="text-red-700">Not sent yet</span>
                     )}{' '}
                     <Link
                       href={`/notices/${a.adverseAction.noticeId}`}

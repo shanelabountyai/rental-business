@@ -48,13 +48,13 @@ export function ServeForm({
     <form action={formAction} className="flex flex-col gap-4" encType="multipart/form-data">
       <LiveRegion assertive>
         {state.error && (
-          <p className="rounded-md border border-red-300 px-3 py-2 text-sm text-red-700 dark:border-red-900 dark:text-red-400">
+          <p className="rounded-md border border-red-300 px-3 py-2 text-sm text-red-700">
             {state.error}
           </p>
         )}
       </LiveRegion>
       {state.notice && (
-        <p className="rounded-md border border-green-300 px-3 py-2 text-sm dark:border-green-900">
+        <p className="rounded-md border border-green-300 px-3 py-2 text-sm">
           {state.notice}
         </p>
       )}
@@ -89,7 +89,7 @@ export function ServeForm({
           // service may already have happened, and a product that refuses to
           // record what an operator actually did produces no evidence at all
           // — which is worse than evidence carrying an honest flag.
-          <p className="rounded-md border border-amber-300 px-3 py-2 text-sm dark:border-amber-900">
+          <p className="rounded-md border border-amber-300 px-3 py-2 text-sm">
             This state&apos;s configured rules do not list that method for this
             notice type. You can still record it — it will be flagged as not
             permitted on the record.

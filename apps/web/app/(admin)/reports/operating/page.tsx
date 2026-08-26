@@ -223,7 +223,7 @@ export default async function OperatingReportPage({
                             </td>
                             <td
                               className={`py-2 pr-4 text-right font-medium tabular-nums ${
-                                row.netCents < 0 ? 'text-red-700 dark:text-red-400' : ''
+                                row.netCents < 0 ? 'text-red-700' : ''
                               }`}
                             >
                               {formatCents(row.netCents)}
@@ -292,7 +292,7 @@ export default async function OperatingReportPage({
                             <td
                               key={cell.month}
                               className={`py-2 pr-3 text-right tabular-nums ${
-                                cell.netCents < 0 ? 'text-red-700 dark:text-red-400' : ''
+                                cell.netCents < 0 ? 'text-red-700' : ''
                               }`}
                             >
                               {cell.netCents === 0 ? '—' : formatCents(cell.netCents)}

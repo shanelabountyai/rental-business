@@ -41,11 +41,11 @@ export interface RequestRow {
 }
 
 const STATUS_TONE: Record<RequestStatus, string> = {
-  RECEIVED: 'bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-100',
-  INFO_REQUESTED: 'bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-100',
-  APPROVED: 'bg-green-100 text-green-900 dark:bg-green-950 dark:text-green-100',
-  DENIED: 'bg-neutral-200 text-neutral-900 dark:bg-neutral-800 dark:text-neutral-100',
-  WITHDRAWN: 'bg-neutral-200 text-neutral-900 dark:bg-neutral-800 dark:text-neutral-100',
+  RECEIVED: 'bg-amber-100 text-amber-900',
+  INFO_REQUESTED: 'bg-amber-100 text-amber-900',
+  APPROVED: 'bg-green-100 text-green-900',
+  DENIED: 'bg-neutral-200 text-neutral-900',
+  WITHDRAWN: 'bg-neutral-200 text-neutral-900',
 }
 
 function IntakeForm({
@@ -168,7 +168,7 @@ function DocumentationForm({
   // reaching for a workaround.
   if (!decision.requestable) {
     return (
-      <p className="rounded-md border border-amber-500 bg-amber-50 p-3 text-sm text-amber-950 dark:border-amber-600 dark:bg-amber-950 dark:text-amber-50">
+      <p className="rounded-md border border-amber-500 bg-amber-50 p-3 text-sm text-amber-950">
         {DOCUMENTATION_REFUSAL_MESSAGES[decision.refusal!]}
       </p>
     )
@@ -318,7 +318,7 @@ export function AccommodationsPanel({
           Accommodation requests
         </h2>
         {open.length > 0 && (
-          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900 dark:bg-amber-950 dark:text-amber-100">
+          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900">
             {open.length} awaiting a determination
           </span>
         )}
@@ -356,7 +356,7 @@ export function AccommodationsPanel({
                 <span
                   className={
                     clock.overdue
-                      ? 'text-sm font-medium text-red-800 dark:text-red-300'
+                      ? 'text-sm font-medium text-red-800'
                       : 'text-muted-foreground text-sm'
                   }
                 >

@@ -1,10 +1,9 @@
 import { randomUUID } from 'node:crypto'
-import AxeBuilder from '@axe-core/playwright'
 import { Secret, TOTP } from 'otpauth'
 import { createTotpEnrolment, hashPassword, sealSecret } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
-import { uniquePhone } from './fixtures.ts'
+import { axeScan, uniquePhone } from './fixtures.ts'
 
 // Approval thresholds end to end (MAINT-04, ROLE-02, R-026).
 //
@@ -427,9 +426,7 @@ test.describe('accessibility', () => {
     await signIn(page, owner)
     await page.goto(`/workorders/${workOrder.id}`)
 
-    const results = await new AxeBuilder({ page })
-      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-      .analyze()
+    const results = await axeScan(page)
     expect(results.violations).toEqual([])
   })
 })

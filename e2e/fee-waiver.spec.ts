@@ -3,7 +3,7 @@ import { createTotpEnrolment, hashPassword, sealSecret } from '@rental/core/auth
 import { Secret, TOTP } from 'otpauth'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
-import { expectFocusSurvived, uniquePhone } from './fixtures.ts'
+import { axeScan, expectFocusSurvived, uniquePhone } from './fixtures.ts'
 
 // Waiving a fee, and seeing who has been forgiven (PAY-04, D-34, R-041).
 //
@@ -257,10 +257,7 @@ test.describe('waiving a fee', () => {
     await page.getByText(/^Waive this late fee of /).click()
     await expect(page.getByLabel('Why is this being waived?')).toBeVisible()
 
-    const { default: AxeBuilder } = await import('@axe-core/playwright')
-    const results = await new AxeBuilder({ page })
-      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-      .analyze()
+    const results = await axeScan(page)
     expect(results.violations).toEqual([])
   })
 })

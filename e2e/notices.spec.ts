@@ -1,9 +1,8 @@
 import { randomUUID } from 'node:crypto'
-import AxeBuilder from '@axe-core/playwright'
 import { hashPassword, mintToken } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
-import { uniquePhone, uniqueClientHeaders } from './fixtures.ts'
+import { axeScan, uniqueClientHeaders, uniquePhone } from './fixtures.ts'
 
 // Notice delivery proof, end to end (COMM-02, R-051).
 //
@@ -419,15 +418,11 @@ test.describe('notice delivery proof (COMM-02)', () => {
     await signInStaff(page, staff.email)
 
     await page.goto('/notices')
-    const list = await new AxeBuilder({ page })
-      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-      .analyze()
+    const list = await axeScan(page)
     expect(list.violations).toEqual([])
 
     await page.goto(`/notices/${notice.id}`)
-    const detail = await new AxeBuilder({ page })
-      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-      .analyze()
+    const detail = await axeScan(page)
     expect(detail.violations).toEqual([])
   })
 })

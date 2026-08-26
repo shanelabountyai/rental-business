@@ -45,7 +45,7 @@ export function AddPhotoForm({ ticketId }: { ticketId: string }) {
       </label>
       <LiveRegion assertive>
         {status === 'error' && (
-          <p className="text-red-700 dark:text-red-400">
+          <p className="text-red-700">
             That photo could not be uploaded. Please try again.
           </p>
         )}

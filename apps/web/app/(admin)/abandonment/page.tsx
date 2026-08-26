@@ -62,8 +62,8 @@ export default async function AbandonmentPage() {
                   <span
                     className={
                       row.status === 'CLOSED'
-                        ? 'rounded-full bg-neutral-200 px-2 py-0.5 text-xs font-medium text-neutral-900 dark:bg-neutral-800 dark:text-neutral-100'
-                        : 'rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900 dark:bg-amber-950 dark:text-amber-100'
+                        ? 'rounded-full bg-neutral-200 px-2 py-0.5 text-xs font-medium text-neutral-900'
+                        : 'rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900'
                     }
                   >
                     {row.outcome

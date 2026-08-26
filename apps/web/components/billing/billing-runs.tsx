@@ -61,7 +61,7 @@ export function BillingRuns({
           Billing runs
         </h2>
         {!live && (
-          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900 dark:bg-amber-950 dark:text-amber-100">
+          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900">
             {providerName} provider — not real Stripe
           </span>
         )}
@@ -106,14 +106,14 @@ export function BillingRuns({
                     R-101 fix, applied to the caller that hand-rolled it. */}
                 <LiveRegion assertive>
                   {row.lastSyncError && (
-                    <span className="text-sm text-red-700 dark:text-red-400">
+                    <span className="text-sm text-red-700">
                       {row.lastSyncError}
                     </span>
                   )}
                 </LiveRegion>
                 {!row.lastSyncError &&
                   (!row.hasSubscription ? (
-                    <span className="text-sm text-amber-800 dark:text-amber-200">
+                    <span className="text-sm text-amber-800">
                       No subscription — nothing will bill for this payer.
                     </span>
                   ) : (

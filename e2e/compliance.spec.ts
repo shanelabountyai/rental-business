@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto'
-import AxeBuilder from '@axe-core/playwright'
 import { hashPassword } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
+import { axeScan } from './fixtures.ts'
 
 // The compliance calendar (PROP-05, R-077): a PM adds a recurring
 // obligation, sees it on the calendar, records that it was satisfied, and
@@ -91,9 +91,7 @@ test('a PM adds a recurring item, records completion, and the due date advances'
   await expect(page.getByText('recurs every 12mo')).toBeVisible()
   await expect(page.getByText('Never recorded as done.')).toBeVisible()
 
-  const a11y = await new AxeBuilder({ page })
-    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-    .analyze()
+  const a11y = await axeScan(page)
   expect(a11y.violations).toEqual([])
 
   await page.getByLabel('Completed on').fill('2026-08-20')

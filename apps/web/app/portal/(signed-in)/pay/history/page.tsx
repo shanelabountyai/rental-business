@@ -37,17 +37,17 @@ export default async function PaymentHistoryPage() {
 
   if (!view) {
     return (
-      <main className="mx-auto flex max-w-2xl flex-col gap-4 p-6">
+      <div className="mx-auto flex max-w-2xl flex-col gap-4 p-6">
         <h1 className="text-2xl font-semibold">Your payments</h1>
         <p>There is nothing on your account yet.</p>
-      </main>
+      </div>
     )
   }
 
   const owes = view.balanceCents > 0
 
   return (
-    <main className="mx-auto flex max-w-2xl flex-col gap-6 p-6">
+    <div className="mx-auto flex max-w-2xl flex-col gap-6 p-6">
       <header className="flex flex-col gap-1">
         <Link
           href="/portal/pay"
@@ -141,7 +141,7 @@ export default async function PaymentHistoryPage() {
                       </td>
                       <td
                         className={`py-2 pr-3 text-right whitespace-nowrap tabular-nums ${
-                          isPayment ? 'text-emerald-700 dark:text-emerald-400' : ''
+                          isPayment ? 'text-emerald-700' : ''
                         }`}
                       >
                         {/* A payment reduces what is owed, so it shows as a
@@ -167,6 +167,6 @@ export default async function PaymentHistoryPage() {
         If something here does not look right, message us from your portal — it
         is easier to sort out with the dates in front of us.
       </p>
-    </main>
+    </div>
   )
 }

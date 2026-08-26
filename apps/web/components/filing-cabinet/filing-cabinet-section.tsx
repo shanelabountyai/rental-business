@@ -72,7 +72,7 @@ function isoDate(date: Date): string {
 /// "report, not automated action" pattern documents/retention.ts established.
 function AlertBadge({ children }: { children: React.ReactNode }) {
   return (
-    <span className="rounded-md bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900 dark:bg-amber-950 dark:text-amber-200">
+    <span className="rounded-md bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900">
       {children}
     </span>
   )

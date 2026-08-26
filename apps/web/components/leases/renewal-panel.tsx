@@ -116,7 +116,7 @@ export function RenewalPanel({
           </div>
           <LiveRegion assertive>
             {state.capped && (
-              <p className="text-sm text-red-700 dark:text-red-400">
+              <p className="text-sm text-red-700">
                 The most this may legally increase to is{' '}
                 {centsToDollars(state.capped.maxAllowedCents)}/mo.
               </p>

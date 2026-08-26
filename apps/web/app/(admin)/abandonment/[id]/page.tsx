@@ -128,7 +128,7 @@ export default async function AbandonmentCasePage({
             was — it means the record looks like somebody tried.
           </p>
         ) : (
-          <ul className="flex flex-col gap-2 text-sm text-amber-800 dark:text-amber-300">
+          <ul className="flex flex-col gap-2 text-sm text-amber-800">
             {evidence.gaps.map((gap) => (
               <li key={gap}>{gap}</li>
             ))}

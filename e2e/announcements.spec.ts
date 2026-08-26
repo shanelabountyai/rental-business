@@ -1,9 +1,8 @@
 import { randomUUID } from 'node:crypto'
-import AxeBuilder from '@axe-core/playwright'
 import { hashPassword } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
-import { uniquePhone } from './fixtures.ts'
+import { axeScan, uniquePhone } from './fixtures.ts'
 
 // Segment announcements (COMM-04, R-053) — "the city is flushing hydrants
 // Tuesday". One message to a segment (all tenants / one property / one
@@ -307,9 +306,7 @@ test.describe('accessibility', () => {
     await signIn(page, staff)
     await page.goto('/messages/announcements')
 
-    const results = await new AxeBuilder({ page })
-      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-      .analyze()
+    const results = await axeScan(page)
     expect(results.violations).toEqual([])
   })
 
@@ -328,9 +325,7 @@ test.describe('accessibility', () => {
     await page.getByRole('button', { name: 'Send' }).click()
     await expect(page.getByText(/Sent to 1 tenant/)).toBeVisible()
 
-    const results = await new AxeBuilder({ page })
-      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-      .analyze()
+    const results = await axeScan(page)
     expect(results.violations).toEqual([])
   })
 })

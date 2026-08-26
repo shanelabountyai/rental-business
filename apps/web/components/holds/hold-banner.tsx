@@ -46,9 +46,9 @@ export function HoldBanner({
       // A labelled region a screen reader can land on is what a persistent
       // warning actually is.
       aria-labelledby="lease-holds"
-      className="flex flex-col gap-3 rounded-md border-2 border-amber-500 bg-amber-50 p-4 dark:border-amber-600 dark:bg-amber-950"
+      className="flex flex-col gap-3 rounded-md border-2 border-amber-500 bg-amber-50 p-4"
     >
-      <h2 id="lease-holds" className="text-sm font-semibold text-amber-950 dark:text-amber-50">
+      <h2 id="lease-holds" className="text-sm font-semibold text-amber-950">
         {holds.length === 1
           ? 'This tenancy is under a hold'
           : `This tenancy is under ${holds.length} holds`}
@@ -59,16 +59,16 @@ export function HoldBanner({
           const definition = HOLD_DEFINITIONS[hold.type]
           return (
             <li key={`${hold.type}-${hold.placedOn}`} className="flex flex-col gap-1">
-              <span className="text-sm font-medium text-amber-950 dark:text-amber-50">
+              <span className="text-sm font-medium text-amber-950">
                 {definition.label}
               </span>
-              <span className="text-sm text-amber-900 dark:text-amber-100">
+              <span className="text-sm text-amber-900">
                 {definition.banner}
               </span>
-              <span className="text-xs text-amber-800 dark:text-amber-200">
+              <span className="text-xs text-amber-800">
                 Placed {hold.placedOn} by {hold.placedByName} — “{hold.reason}”
               </span>
-              <span className="text-xs text-amber-800 dark:text-amber-200">
+              <span className="text-xs text-amber-800">
                 In force: {definition.effects.map((effect) => EFFECT_LABELS[effect]).join('; ')}.
               </span>
             </li>
@@ -76,7 +76,7 @@ export function HoldBanner({
         })}
       </ul>
 
-      <p className="text-xs text-amber-900 dark:text-amber-100">
+      <p className="text-xs text-amber-900">
         {context ?? 'Nothing here is blocked'} — this is a warning, not a
         refusal. The product does not decide whether the protection applies to
         what you are about to do. Check before you proceed, and record what

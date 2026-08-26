@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto'
-import AxeBuilder from '@axe-core/playwright'
 import {
   createTotpEnrolment,
   hashPassword,
@@ -9,6 +8,7 @@ import {
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
 import { Secret, TOTP } from 'otpauth'
+import { axeScan } from './fixtures.ts'
 
 // Keys and codes at move-in (INSP-01, R-069): a code stays withheld until
 // move-in funds clear, and every release is logged against the lease.
@@ -144,9 +144,7 @@ test('a code stays withheld until move-in funds clear, then can be issued and st
   await expect(page.getByRole('button', { name: 'Issue to tenant' })).toHaveCount(0)
   await expect(page.getByText('Not yet issued')).toBeVisible()
 
-  const a11y = await new AxeBuilder({ page })
-    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-    .analyze()
+  const a11y = await axeScan(page)
   expect(a11y.violations).toEqual([])
 
   // Move-in funds clear (deposit-clearing-job.test.ts proves this job's own
