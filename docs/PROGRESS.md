@@ -4709,7 +4709,7 @@ Every step is now a real `<form method="get">`: the controls carry the `name`s t
 ---
 
 ## R-113: the pipeline had been dead for nine days and 64 pushes
-**Commit:** TBD  ·  **Date:** 2026-08-26
+**Commit:** 3bf5488  ·  **Date:** 2026-08-26
 
 Found by doing the thing `CLAUDE.md` calls not optional — reading CI after a push.
 
