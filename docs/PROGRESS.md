@@ -4610,7 +4610,7 @@ Two conversions were more than a substitution, because the message was a `return
 ---
 
 ## R-110: one spec's batch, every other spec's units
-**Commit:** PENDING  ·  **Date:** 2026-08-25
+**Commit:** f8842a1  ·  **Date:** 2026-08-25
 
 Filed by R-107b, which found it as three e2e failures in one 341-test run and correctly refused to widen its own sweep into it. Not a product bug: `runPreventiveBatch` doing what MAINT-08 asks — "one action creates the batch across properties" — is the feature. The bug is a spec that asked for it portfolio-wide against a database it shares with 40 other files.
 
