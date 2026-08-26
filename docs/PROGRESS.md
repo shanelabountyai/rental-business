@@ -4656,3 +4656,50 @@ Audit angles ②, ㉑ and ㉒ — the shared-layer remainder after R-107a and R-
 **What it left behind.**
 - **No dark mode, deliberately.** If it is ever wanted it starts at `globals.css` with a palette and a toggle.
 - **The rest of the audit's 75 findings.** R-112 below takes the tenant-portal blockers; angle ㉓, four more repeated-name sites and the portal's 16px floor are unowned.
+
+---
+
+## R-112: the tenant's primary job, and the tap that ends a tenancy
+**Commit:** TBD  ·  **Date:** 2026-08-25
+
+Audit angles ④, ⑦ and ⑤, plus five findings that live in the same file as ④. Chosen by the owner over the two other remaining slices of the accessibility audit.
+
+**What it built.**
+
+**(a) The maintenance wizard works before it hydrates.** Seven steps of `onClick` over `useState`: before hydration — a cheap phone on a weak connection, which is most of this product's tenants — the radios rendered and were tappable and **Next did nothing at all, with no message**. Next door, the emergency path had been rebuilt URL-driven for exactly this reason (R-098) and carries a comment saying so; the ordinary path, the one with the volume, was left behind. Hardening is drawn to the scary path.
+
+Every step is now a real `<form method="get">`: the controls carry the `name`s their answers travel under, Next and Back are `<button type="submit" name="step" value="…">`, and everything answered so far rides along as hidden inputs. With no JavaScript the press is a navigation and the next step arrives as HTML. With JavaScript, `onClick` preventDefaults and the transition happens locally exactly as before — **a handler that only exists after hydration is precisely the test needed**, so there is no `isHydrated` flag anywhere. Submit is a `<form action={submitMaintenanceRequestForm}>`, the same shape `submitEmergencyForm` already uses, sitting alongside the imperative path that knows about photos still in flight.
+
+**`reachableStep` is what makes the URL safe to trust.** It clamps whatever arrives to the furthest step the answers actually support, so a hand-typed link, a stale bookmark, or a pre-hydration press of a Next that was not yet allowed all land on the first step still missing something — where that step's own "why you cannot continue" text is **already on screen**, because it is derived from the same seeded state and needs no round trip. It also absorbed the flow's own branching: `goToPromptsOrLater` and `afterPrompts` are gone, and the skip-troubleshooting-when-nothing-applies rule now exists once.
+
+**(b) Giving notice to vacate is no longer a single tap.** The most irreversible thing a tenant can do was two fields and a button, two taps from a "Papers" screen somebody might be browsing — while signing a lease and signing an inspection both already gate on an explicit agreement checkbox. It is now that same `agree` field, with the same server-side check.
+
+**(c) Twenty controls named "Condition" on one page.** A walkthrough is ~20 items, each rendering a "Condition", a "Notes", a "Save", an "Add a photo" and an "Upload". `id`s correctly disambiguated, accessible names identical — it passed every automated checker and was unusable by name alone. The room and item were on screen the whole time as a `<p>` associated with nothing; they are a `<legend>` on a `<fieldset>` per item. One change in the shared component, reaching the staff walkthrough and the tenant's own move-in screen.
+
+**Also in the wizard's file, because they are the same defect family:** focus moves to each new step's heading (the step that unmounts takes the focused button with it, and a screen reader said nothing about what arrived); the troubleshooting `<legend>` is now its fieldset's first child — two `<div>`s deep it named nothing, and **the file's own comment asserted it "was already correct"**; every "Remove" carries its photo's file name; the file-input focus ring is `focus-within` so it actually paints, the input being `sr-only` inside the label; and upload progress and failure are announced, a failed photo being evidence lost silently.
+
+**What it decided.**
+
+**The browser's `required` on the confirmation checkbox, as well as the server check — and the second one is why.** A purely server-side refusal costs the tenant everything they had typed: React resets an uncontrolled form's inputs on every action dispatch (R-008's `formVersion` remount is the standing workaround for exactly that), so the date and the forwarding address come back empty. The audit found that same defect on the vendor forms. The server check is the gate; `required` is what stops the gate being expensive to hit. `CheckboxField` gained an optional `required` prop for it. **Both layers are tested**, the server one by stripping the attribute and pressing again.
+
+**The choices style themselves from the DOM (`has-[:checked]`), not from React state.** A tap made before hydration has to look like it landed, and styling driven by `useState` cannot show it.
+
+**A known corner, left open deliberately.** The radios stay controlled, so a tap in the window between first paint and hydration can be reset when React takes over. Pressing Next in that same window is a navigation and always works, and after hydration everything behaves as it always did — the only casualty is a tap straddling the boundary, costing one repeat tap. Seeding React state from the DOM on mount would close it and is several times the code; the defect being fixed is a Next button that did nothing at all, for ever, with no message.
+
+**Photos are the one thing still needing JavaScript,** because a file cannot travel in a query string. They are optional, the step says so in a `<noscript>`, and `attachMaintenancePhoto` on the ticket page is the recovery path that already existed.
+
+**The no-JS submit sends a FLAG, not a message.** On failure `submitMaintenanceRequestForm` redirects back to the review step carrying the same answers and `err=1`; the wizard renders its own fixed sentence. A URL that renders arbitrary prose inside this product's own chrome is a link somebody can craft and post at a tenant.
+
+**`aria-disabled` on Next waits for hydration; the guidance does not.** Found by the no-JS test, which timed out at 60s twice: Playwright refuses to click a control marked `aria-disabled`, and so, more importantly, does assistive technology. Before hydration that button **works** — pressing it submits the step — so calling it unavailable was a lie about a functioning control, told by a server render that could not see the radio the tenant had just ticked. The reason text still renders, because "choose one to continue" is true either way; only the unavailable state waits until it is accurate. That is the single thing this file knows about hydration, via `useSyncExternalStore` with a server snapshot of `false` (setting state in an effect lints as a cascading render, correctly).
+
+**Proven, not assumed.** `maintenance.spec.ts` walks the **whole** flow with `javaScriptEnabled: false` and asserts the ticket that comes out carries the category, both prompt answers, the entry permission and the pet answer — because every step carries the earlier answers as hidden inputs and **it is the carrying that breaks first**: an assertion that step two renders would pass against a wizard that silently forgot the category by step five. A second test hits `?step=review&category=LOCKS` and asserts the clamp lands on the prompts step with its own reason showing. The `<noscript>` is asserted in the markup rather than as a visible node: `javaScriptEnabled: false` stops scripts running but does not flip the parser's scripting flag, so the element stays the inert raw text the UA stylesheet hides.
+
+
+**Verified:** `lint` (0 errors, the same 14 pre-existing warnings), `typecheck`, `npm run build` (the `'use server'` and Server→Client boundary check, which `typecheck` and vitest both miss — a new form action and a new page prop made it necessary), the full unit suite at **2,744 passed + 4 skipped of 2,748 across 204 files + 1 skipped**, reconciling exactly against R-107b's baseline, and the three specs this item touches run together: **30 passed in 26.7s**, reconciling against `playwright test --list` (Total: 30 tests in 3 files). A wider run over `maintenance`, `inspections`, `notice-to-vacate`, `emergency` and `portal` was green at **78 of 80** on the way here, the two failures being this item's own no-JS test before its last two fixes.
+
+**What it left behind.**
+- **Angle ㉓ is untouched and is not an accessibility fix.** The inherited-lease intake panel says "Upload the photos below" and there is no upload control below it, because `CONDITION_BASELINE_DOCUMENT_TYPE` **is written by no route and no action anywhere in the app** — it is read in one query and set in tests. That is a missing write path, and it needs a row of its own.
+- **Four more repeated-name sites** from the same audit finding: `delete-form.tsx` + `restore-button.tsx` per row, `run-batch-button.tsx` per template, `timeline-section.tsx`. Two of them are destructive actions. Staff-facing, so outside this item's scope.
+- **The portal's own 16px floor is still broken** on the money screens and, worst, on the full text of a served legal notice (`<pre … text-sm>`). The shared field library labels this item reuses are `text-sm` too — a systemic thing that belongs to that row, not a new violation introduced here.
+- **A tap that straddles hydration can still be reset.** See above; deliberate.
+- **Four lines of R-111's sweep are in this commit**, not its own: two `dark:` deletions in the wizard, one in `maintenance/new/page.tsx`, one in `field.tsx`, and two `AxeBuilder`→`axeScan` swaps in `maintenance.spec.ts`. R-111 was found uncommitted in the working tree with this item already layered on top of it, and those four files cannot be split by path.

@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto'
-import AxeBuilder from '@axe-core/playwright'
 import { mintToken } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
+import { axeScan, uniqueClientHeaders } from './fixtures.ts'
 
 // The tenant maintenance request flow (MAINT-01, R-019): category → 2-3
 // clarifying prompts → troubleshooting script (logging tried/declined) →
@@ -153,6 +153,82 @@ test.describe('submitting a request', () => {
       where: { entityType: 'Ticket', entityId: ticket.id, action: 'ticket.submitted' },
     })
     expect(entry).not.toBeNull()
+  })
+
+  test('walks the whole flow with NO JavaScript and creates a real ticket', async ({
+    browser,
+  }) => {
+    // THE REASON THIS WIZARD WAS REBUILT (R-112, audit angle ④). It was seven
+    // `onClick` handlers over `useState`: before hydration - a cheap phone on
+    // a weak connection - the radios rendered and were tappable and Next did
+    // nothing at all, with no message. Disabling JavaScript outright is how a
+    // test sees that window, exactly as `emergency.spec.ts` already does for
+    // the flow next door.
+    //
+    // It walks the WHOLE flow rather than asserting one step renders,
+    // because every step carries the earlier answers as hidden inputs and it
+    // is the carrying that breaks first: an assertion on step two would pass
+    // against a wizard that silently forgot the category by step five.
+    const context = await browser.newContext({
+      javaScriptEnabled: false,
+      ...uniqueClientHeaders(),
+    })
+    const page = await context.newPage()
+    const { tenant } = await seedTenancy('Nolan')
+    await page.goto(await magicLinkFor(tenant.id))
+    await page.goto('/portal/maintenance/new')
+
+    await page.getByRole('radio', { name: 'Locks & doors' }).check()
+    await page.getByRole('button', { name: 'Next', exact: true }).click()
+
+    await page.getByRole('radio', { name: "Won't lock" }).check()
+    await page.getByRole('radio', { name: 'Front door' }).check()
+    await page.getByRole('button', { name: 'Next', exact: true }).click()
+
+    // LOCKS has no troubleshooting script, so this is also the no-JS proof
+    // that the skip is computed from the answers rather than from a handler.
+    await expect(page.getByText('Add a photo (optional)')).toBeVisible()
+    // Asserted in the MARKUP, not as a visible node: `javaScriptEnabled:
+    // false` stops scripts running but does not flip the parser's scripting
+    // flag, so `<noscript>` stays the inert raw text the UA stylesheet hides.
+    // A real browser with JavaScript turned off renders it.
+    expect(await page.content()).toContain('Choosing photos needs JavaScript')
+    await page.getByRole('button', { name: 'Next', exact: true }).click()
+
+    await page.getByRole('radio', { name: 'Yes, you can enter if I am not home' }).check()
+    await page.getByRole('button', { name: 'Next', exact: true }).click()
+
+    await page.getByRole('radio', { name: 'No', exact: true }).check()
+    await page.getByRole('button', { name: 'Review' }).click()
+
+    await expect(page.getByText('Locks & doors')).toBeVisible()
+    await page.getByRole('button', { name: 'Send request' }).click()
+    await page.waitForURL(/\/portal\/maintenance\/[a-z0-9]+$/)
+
+    const ticket = await prisma.ticket.findFirstOrThrow({ where: { tenantId: tenant.id } })
+    ticketIds.push(ticket.id)
+    expect(ticket.category).toBe('LOCKS')
+    // The answers survived five navigations, which is the actual claim.
+    expect(ticket.description).toContain("Won't lock")
+    expect(ticket.description).toContain('Front door')
+    expect(ticket.entryPermission).toBe(true)
+    expect(ticket.petWarning).toBe(false)
+    await context.close()
+  })
+
+  test('refuses a step the answers do not reach, rather than rendering nothing', async ({
+    page,
+  }) => {
+    // A hand-typed or stale URL is now a real input (R-112). `reachableStep`
+    // clamps it to the first step still missing something, and that step's
+    // own "why you cannot continue" text is already on screen - derived from
+    // the same answers, so it needs no round trip.
+    const { tenant } = await seedTenancy('Ada')
+    await page.goto(await magicLinkFor(tenant.id))
+    await page.goto('/portal/maintenance/new?step=review&category=LOCKS')
+
+    await expect(page.getByText('A few questions about it')).toBeVisible()
+    await expect(page.getByText('Answer every question above to continue.')).toBeVisible()
   })
 
   test('THE GATE: cannot proceed past troubleshooting without tried/declined on every step', async ({
@@ -366,9 +442,7 @@ test.describe('accessibility (§6.4, WCAG 2.1 AA)', () => {
       `/portal/maintenance/${ticket.id}`,
     ]) {
       await page.goto(url)
-      const results = await new AxeBuilder({ page })
-        .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-        .analyze()
+      const results = await axeScan(page)
       expect(results.violations, url).toEqual([])
     }
   })

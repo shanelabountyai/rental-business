@@ -151,34 +151,54 @@ export function InspectionItemForm({
 
   return (
     <li className="rounded-lg border p-3">
-      <p className="font-medium">
-        {room} — {item}
-      </p>
-      {comparison}
-      <form action={formAction} className="mt-2 flex flex-col gap-2">
-        <FormAlerts state={state} />
-        <div className="grid gap-2 sm:grid-cols-[1fr_2fr_auto] sm:items-end">
-          <SelectField
-            label="Condition"
-            name="condition"
-            required
-            idPrefix={`item-${itemId}`}
-            defaultValue={condition ?? undefined}
-            error={state.fieldErrors?.condition}
-            options={CONDITION_OPTIONS}
-          />
-          <TextField
-            label="Notes"
-            name="notes"
-            idPrefix={`item-${itemId}`}
-            defaultValue={notes ?? ''}
-            error={state.fieldErrors?.notes}
-          />
-          <SubmitButton label="Save" />
-        </div>
-      </form>
-      {photoGallery}
-      {photoAction && <PhotoUploadForm action={photoAction} itemId={itemId} />}
+      {/*
+        A FIELDSET, BECAUSE THE ROOM NAME IS THE ONLY THING TELLING THESE
+        APART (R-112, audit angle ⑤).
+        ====================================================================
+        A walkthrough is ~20 of these. Every one renders a "Condition", a
+        "Notes", a "Save", an "Add a photo" and an "Upload" - correctly
+        disambiguated `id`s, and identical ACCESSIBLE NAMES. Tabbing the page
+        gave "Condition, combo box" twenty times with no way to tell the
+        kitchen sink from the bedroom window, and it passed every automated
+        checker: unique id is a correctness property, a distinguishable name
+        is a usability one, and linters check the first.
+
+        The room and item were on screen the whole time - as a `<p>`,
+        associated with nothing. As a `<legend>` they name the group, which
+        is what assistive technology announces on entering it. One change in
+        the shared component; the staff walkthrough and the tenant's own
+        move-in screen both render this.
+      */}
+      <fieldset>
+        <legend className="font-medium">
+          {room} — {item}
+        </legend>
+        {comparison}
+        <form action={formAction} className="mt-2 flex flex-col gap-2">
+          <FormAlerts state={state} />
+          <div className="grid gap-2 sm:grid-cols-[1fr_2fr_auto] sm:items-end">
+            <SelectField
+              label="Condition"
+              name="condition"
+              required
+              idPrefix={`item-${itemId}`}
+              defaultValue={condition ?? undefined}
+              error={state.fieldErrors?.condition}
+              options={CONDITION_OPTIONS}
+            />
+            <TextField
+              label="Notes"
+              name="notes"
+              idPrefix={`item-${itemId}`}
+              defaultValue={notes ?? ''}
+              error={state.fieldErrors?.notes}
+            />
+            <SubmitButton label="Save" />
+          </div>
+        </form>
+        {photoGallery}
+        {photoAction && <PhotoUploadForm action={photoAction} itemId={itemId} />}
+      </fieldset>
     </li>
   )
 }

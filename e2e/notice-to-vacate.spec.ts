@@ -218,6 +218,39 @@ test("a tenant gives their own notice to vacate from the portal", async ({ page 
   // 40 days out - clear of TX's 30-day noticeToVacateDays.
   await page.getByLabel('When do you plan to move out?').fill('2026-09-25')
   await page.getByLabel('Forwarding address').fill('12 Next Place, Dallas, TX 75201')
+
+  // R-112: the confirmation gate, BOTH LAYERS OF IT.
+  //
+  // The browser refuses first, on the checkbox's own `required`, so nothing
+  // is submitted and nothing typed is lost. That matters more than it looks:
+  // React resets an uncontrolled form's inputs on every action dispatch
+  // (R-008), so a purely server-side refusal would empty the date and the
+  // address a tenant had just filled in - the audit found that exact defect
+  // on the vendor forms.
+  await page.getByRole('button', { name: 'Give notice' }).click()
+  await expect(page.getByRole('heading', { name: 'Give notice to vacate' })).toBeVisible()
+  expect(
+    (await prisma.lease.findUniqueOrThrow({ where: { id: lease.id } })).noticeGivenAt,
+  ).toBeNull()
+
+  // Strip the attribute and press again: the server is the gate that actually
+  // holds, and a form posted without the box is what it has to refuse.
+  await page.evaluate(() =>
+    document.querySelector('#field-agree')?.removeAttribute('required'),
+  )
+  await page.getByRole('button', { name: 'Give notice' }).click()
+  await expect(
+    page.getByText('Tick the box to confirm you want to end your tenancy.'),
+  ).toBeVisible()
+  expect(
+    (await prisma.lease.findUniqueOrThrow({ where: { id: lease.id } })).noticeGivenAt,
+  ).toBeNull()
+
+  // That dispatch emptied the two fields - see above. Refilling them here is
+  // the behaviour being documented, not an incidental step.
+  await page.getByLabel('When do you plan to move out?').fill('2026-09-25')
+  await page.getByLabel('Forwarding address').fill('12 Next Place, Dallas, TX 75201')
+  await page.getByLabel('I understand this ends my tenancy').check()
   await page.getByRole('button', { name: 'Give notice' }).click()
 
   // A server action always triggers a refresh of the page that called it -

@@ -251,6 +251,61 @@ export async function submitMaintenanceRequest(
   return { ticketId: ticket.id }
 }
 
+/**
+ * The wizard's Submit as a plain `<form action>` (R-111).
+ *
+ * The same shape `submitEmergencyForm` above already uses, and for the same
+ * reason: a form action works with no client JavaScript, so the last step of
+ * the ordinary maintenance flow is reachable by every tenant the URL-driven
+ * steps made the earlier ones reachable for. With JavaScript the wizard's own
+ * `onSubmit` preventDefaults and calls `submitMaintenanceRequest` directly
+ * instead, because that path knows about photos still uploading; this one has
+ * none by construction - a file cannot travel in a query string, so a tenant
+ * who got here without JavaScript never picked one.
+ *
+ * On failure it redirects back to the review step carrying the same answers
+ * and a FLAG, not the message. Reflecting arbitrary text from a URL inside
+ * this product's own chrome is a link somebody can craft and post; the wizard
+ * renders its own fixed sentence for `err=1`. Nothing is lost by it: every
+ * violation `validateMaintenanceRequest` can raise is one `reachableStep`
+ * already refuses to walk past.
+ */
+export async function submitMaintenanceRequestForm(formData: FormData): Promise<void> {
+  const promptAnswers: Record<string, string> = {}
+  const troubleshooting: Record<string, string> = {}
+  for (const [key, value] of formData.entries()) {
+    if (typeof value !== 'string') continue
+    if (key.startsWith('p_')) promptAnswers[key.slice(2)] = value
+    else if (key.startsWith('t_')) troubleshooting[key.slice(2)] = value
+  }
+  const tri = (name: string): boolean | undefined => {
+    const value = formData.get(name)
+    return value === null ? undefined : value === 'yes'
+  }
+
+  const result = await submitMaintenanceRequest({
+    category: String(formData.get('category') ?? ''),
+    promptAnswers,
+    troubleshooting,
+    entryPermission: tri('entry'),
+    petWarning: tri('pet'),
+    petNote: String(formData.get('petNote') ?? ''),
+    photoDocumentIds: [],
+  })
+
+  if ('ticketId' in result) {
+    redirect(`/portal/maintenance/${result.ticketId}`)
+  }
+
+  const params = new URLSearchParams()
+  for (const [key, value] of formData.entries()) {
+    if (typeof value === 'string' && !key.startsWith('$')) params.set(key, value)
+  }
+  params.set('step', 'review')
+  params.set('err', '1')
+  redirect(`/portal/maintenance/new?${params}`)
+}
+
 // ---------------------------------------------------------------------------
 // The emergency intake path (MAINT-01's emergency criterion, R-020)
 // ---------------------------------------------------------------------------

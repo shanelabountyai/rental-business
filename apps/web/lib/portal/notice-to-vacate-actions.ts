@@ -40,6 +40,17 @@ export async function submitNoticeToVacate(
   const decision = canGiveNotice({ status: home.status, noticeGivenAt: home.noticeGivenAt })
   if (!decision.allowed) return { error: decision.message }
 
+  // The confirmation gate (R-111), the same `agree` field and the same
+  // server-side check the lease and inspection signatures use - checked
+  // BEFORE the date is even parsed, so an unchecked box is never reported as
+  // a date problem.
+  if (formData.get('agree') !== 'on') {
+    return {
+      error: 'Tick the box to confirm you want to end your tenancy.',
+      fieldErrors: { agree: 'Required.' },
+    }
+  }
+
   const effectiveOnRaw = String(formData.get('effectiveOn') ?? '').trim()
   const effectiveOn = parseLeaseDate(effectiveOnRaw)
   if (!effectiveOn) {

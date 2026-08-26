@@ -42,7 +42,7 @@ export function FieldError({ id, message }: { id: string; message?: string }) {
   return (
     <div role="alert" className="contents">
       {message && (
-        <p id={id} className="text-sm text-red-700 dark:text-red-400">
+        <p id={id} className="text-sm text-red-700">
           {message}
         </p>
       )}
@@ -200,6 +200,7 @@ export function CheckboxField({
   value,
   defaultChecked,
   hint,
+  required,
   onChange,
 }: {
   label: string
@@ -213,6 +214,14 @@ export function CheckboxField({
   value?: string
   defaultChecked?: boolean
   hint?: string
+  /// Refuses the submit in the BROWSER, before any round trip. Worth having
+  /// on a confirmation gate even though the server checks it too (R-112):
+  /// React resets an uncontrolled form's inputs on every action dispatch
+  /// (R-008's `formVersion` remount is the standing workaround), so a
+  /// server-side refusal costs the user everything they had typed. The
+  /// server check stays - it is the gate; this is what stops the gate from
+  /// being expensive to hit.
+  required?: boolean
   /// Same escape hatch as TextField's own `onChange` - something outside
   /// the form needs to react as the box is (un)checked. Stays UNCONTROLLED
   /// (`defaultChecked`, not `checked`) either way.
@@ -229,6 +238,7 @@ export function CheckboxField({
         type="checkbox"
         value={value}
         defaultChecked={defaultChecked}
+        required={required}
         onChange={onChange ? (event) => onChange(event.target.checked) : undefined}
         aria-describedby={hint ? hintId : undefined}
         // The only control in this file that set no focus classes, so its

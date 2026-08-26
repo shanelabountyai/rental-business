@@ -97,6 +97,9 @@ rule.
 
 ## ④ The tenant's primary job doesn't work without JavaScript, and says nothing
 
+**FIXED (R-112).** Every step of the wizard is a real `<form method="get">` with the answers in the URL, Next and Back are submit buttons, and `reachableStep` clamps whatever arrives to the furthest step the answers support. Photos are the one part still needing JavaScript — a file cannot travel in a query string — and say so in a `<noscript>`. **Proven by walking the whole flow with `javaScriptEnabled: false`** and asserting the ticket that comes out carries every answer: it is the carrying between steps that breaks first, not the rendering.
+
+
 A seven-step maintenance-request wizard, entirely `onClick`-driven. Before
 hydration: the category radios render and are tappable, "Next" is inert. The
 tenant taps, taps again, and **nothing happens, with no message**.
@@ -116,6 +119,9 @@ volume is.
 ---
 
 ## ⑤ Twenty controls named "Condition" on one page
+
+**FIXED (R-112).** The room and item are a `<legend>` on a `<fieldset>` per item, so assistive technology announces them on entering the group. One change in the shared component, reaching the staff walkthrough and the tenant's move-in screen.
+
 
 A move-in walkthrough is ~20 items. Each renders a select called "Condition", a
 field called "Notes", a button called "Save", a file input called "Add a photo",
@@ -160,6 +166,9 @@ component."
 ---
 
 ## ⑦ The most irreversible thing a tenant can do is a single tap
+
+**FIXED (R-112).** The same `agree` checkbox the lease and inspection signatures use, checked server-side — and `required` in the browser as well, because a server-side refusal empties every uncontrolled field the tenant just typed (R-008). Both layers are tested.
+
 
 Giving notice to vacate — terminating your own tenancy — is a two-field form and
 one button. No review step, no confirmation, no undo. It's two taps from a

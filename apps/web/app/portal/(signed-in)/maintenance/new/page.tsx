@@ -1,5 +1,8 @@
 import Link from 'next/link'
-import { MaintenanceWizard } from '@/components/portal/maintenance/maintenance-wizard.tsx'
+import {
+  MaintenanceWizard,
+  type WizardParams,
+} from '@/components/portal/maintenance/maintenance-wizard.tsx'
 import { requireTenantWithScope } from '@/lib/portal/guard.ts'
 import { getTenantCurrentHome } from '@/lib/maintenance/queries.ts'
 
@@ -10,7 +13,17 @@ export const metadata = { title: 'Report a problem' }
 // client JS loads - so a tenant with no lease on file sees a plain
 // explanation immediately rather than a wizard that would fail at the very
 // last step.
-export default async function NewMaintenanceRequestPage() {
+export default async function NewMaintenanceRequestPage({
+  searchParams,
+}: {
+  searchParams: Promise<WizardParams>
+}) {
+  // The wizard's answers live in the query string (R-111), so that pressing
+  // Next before the page has hydrated - or with no JavaScript at all - is an
+  // ordinary navigation rather than a tap that does nothing. Everything that
+  // arrives here is clamped by `reachableStep` in the wizard itself; nothing
+  // in this object is trusted.
+  const initial = await searchParams
   const { scope } = await requireTenantWithScope()
   const home = await getTenantCurrentHome(scope)
 
@@ -42,11 +55,11 @@ export default async function NewMaintenanceRequestPage() {
       */}
       <Link
         href="/portal/maintenance/emergency"
-        className="focus-visible:ring-ring flex min-h-12 items-center rounded-md border-2 border-red-600 bg-red-50 px-4 py-2 text-base font-medium text-red-950 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none dark:bg-red-950 dark:text-red-50"
+        className="focus-visible:ring-ring flex min-h-12 items-center rounded-md border-2 border-red-600 bg-red-50 px-4 py-2 text-base font-medium text-red-950 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
       >
         Is this an emergency? Gas, flooding, no heat, break-in →
       </Link>
-      <MaintenanceWizard />
+      <MaintenanceWizard initial={initial} />
     </div>
   )
 }
