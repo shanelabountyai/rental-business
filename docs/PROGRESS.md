@@ -4606,3 +4606,26 @@ Two conversions were more than a substitution, because the message was a `return
 - **Audit item 12 / angle ⑳ is unchanged.** Nobody has heard any of this work, R-101's included.
 - **Four of audit item 6's six sites** (`translations-panel.tsx`, `delete-form.tsx`, `timeline-section.tsx` ×2) still mark a field invalid without describing why. Not in this item's diff and not worth widening it for.
 - **`billing-runs.tsx` reads slightly differently now**: the sync error is its own region and the two non-error states render only when there is no error, rather than as branches of one ternary. That is what it takes for the error to be a change inside a region that was already there.
+
+---
+
+## R-110: one spec's batch, every other spec's units
+**Commit:** PENDING  ·  **Date:** 2026-08-25
+
+Filed by R-107b, which found it as three e2e failures in one 341-test run and correctly refused to widen its own sweep into it. Not a product bug: `runPreventiveBatch` doing what MAINT-08 asks — "one action creates the batch across properties" — is the feature. The bug is a spec that asked for it portfolio-wide against a database it shares with 40 other files.
+
+**What it built.** Both tests in `preventive-maintenance.spec.ts` now narrow the property switcher to their own property before pressing **Run batch**, through the same `scopeTo` helper `leasing-analytics.spec.ts` already carries for the same reason (a shared database letting other specs' rows into a portfolio-wide number). Three lines of helper, one call per test.
+
+The assertion got *stronger* rather than looser. It was `/Created \d+ work orders?/` with a comment explaining that an exact count was impossible; it is now `Created 1 work order`, because a brand-new template is due for every unit in scope and the scope is now exactly one unit — so **the count IS the scope**, and asserting it is what fails if this ever regresses to portfolio-wide.
+
+**What it decided.**
+
+**A narrower assignment cannot be the fix, and this is worth writing down because it is the obvious first idea.** The row proposed "a property-scoped operator" as one of two options. It does not work: `runPreventiveBatch` guards on `requirePermission('workorder.write')` with **no resource** — the deliberate coarse-permission-then-scope shape its own header comment describes — and `assignmentCovers` denies a scoped assignment outright when there is no `resource.propertyId` to match. A property- or entity-scoped owner gets redirected to `/no-access` before reaching the batch at all. Making that assignment work would mean changing the guard, which is a product change wearing a test fix's clothes. The switcher is the lever the product actually gives a PM, it is a filter intersected server-side with R-004 on every request, and it required no source change.
+
+**The timing symptom disappeared with the scope, exactly as the row predicted.** 16.2s/16.5s against a 15s deadline in mobile-chrome and 2.0s in desktop-chrome (the second project finding nothing left to do) became **1.6s in both projects, concurrently**. The 15s was never touched — raising it would have bought time the next thousand units take straight back (R-102's lesson).
+
+**Verified:** `lint` (0 errors, the same 14 pre-existing warnings), `typecheck`, and the three specs the defect actually involved run together in one sweep — `preventive-maintenance.spec.ts`, `workorders.spec.ts` and `vendor-invoice-splits.spec.ts`: **36 passed in 1.6m**, reconciling exactly against `playwright test --list` (Total: 36 tests in 3 files). Both neighbours' `afterAll` teardowns survived, which is the half of this defect a green preventive-maintenance run on its own would not have proven.
+
+**What it left behind.**
+- **The debris already in the shared database is still there.** Every past run of this spec left work orders hanging off other specs' units, and the spec's own `afterAll` only deletes within its own properties. Those rows block deletion of units that are themselves abandoned debris, so nothing live is affected and no cleanup was written — a migration or script that deletes work orders in a test database is a bigger risk than the rows are.
+- **No other spec was audited for the same shape.** This one was found by a failing run, not a sweep. A batch or bulk action pressed by a portfolio-scoped actor is the pattern to grep for if it happens again; `scopeTo` is now in two files and is the answer both times.

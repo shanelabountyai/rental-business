@@ -71,6 +71,24 @@ async function signIn(page: import('@playwright/test').Page, email: string) {
   await page.waitForURL('**/dashboard')
 }
 
+/// A batch run reaches every unit in the ACTOR'S CURRENT SCOPE, and a
+/// brand-new template is due for all of them - so an `owner` looking at the
+/// whole portfolio opens a work order on every unit in the shared test
+/// database (14,985 of them when R-110 was filed), hanging jobs off other
+/// specs' units until their afterAll cannot delete them, and making the
+/// "Created N" assertion race whichever project ran first. Scoping is not
+/// available as a narrower assignment: `runPreventiveBatch` guards on a
+/// resource-less `workorder.write`, which a property-scoped assignment fails
+/// outright (`assignmentCovers` has no propertyId to match). The switcher is
+/// the lever the product actually gives a PM, and it is a filter intersected
+/// server-side with what R-004 allows - same use, and same reason, as
+/// `leasing-analytics.spec.ts`'s own scopeTo.
+async function scopeTo(page: import('@playwright/test').Page, propertyId: string) {
+  await page.context().addCookies([
+    { name: 'rental_scope', value: `property:${propertyId}`, domain: 'localhost', path: '/' },
+  ])
+}
+
 test.afterAll(async () => {
   await prisma.workOrder.deleteMany({ where: { propertyId: { in: propertyIds } } })
   await prisma.preventiveMaintenanceTemplate.updateMany({ where: { id: { in: templateIds } }, data: { active: false } })
@@ -95,6 +113,7 @@ test('a PM creates a template and runs the batch, auto-assigning by territory', 
 
   const staff = await seedOwner()
   await signIn(page, staff.email)
+  await scopeTo(page, property.id)
 
   const templateName = `HVAC filter change ${randomUUID().slice(0, 6)}`
   await page.goto('/maintenance/preventive/new')
@@ -114,12 +133,12 @@ test('a PM creates a template and runs the batch, auto-assigning by territory', 
   // list can carry other tests' templates too when the full suite runs in
   // parallel, each with its own "Run batch" button.
   const row = page.locator('li', { hasText: templateName })
-  // Not an exact "(1 due)" either, for the same reason: a brand-new
-  // template with zero history is "due" for every unit currently in the
-  // owner's scope, not only this test's own unit. What this test actually
-  // owns is proven by querying for ITS OWN unit below, not the batch total.
+  // Exactly one, now that scopeTo has narrowed the batch to this test's own
+  // property: a brand-new template is due for every unit in scope, so the
+  // count IS the scope, and asserting it is what would catch the scoping
+  // regressing back to portfolio-wide.
   await row.getByRole('button', { name: /Run batch/ }).click()
-  await expect(row.getByText(/Created \d+ work orders?/)).toBeVisible()
+  await expect(row.getByText('Created 1 work order')).toBeVisible()
 
   const workOrder = await prisma.workOrder.findFirstOrThrow({
     where: { pmTemplateId: template.id, unitId: unit.id },
@@ -130,7 +149,7 @@ test('a PM creates a template and runs the batch, auto-assigning by territory', 
 })
 
 test('a batch run leaves a unit unassigned when no vendor works its trade', async ({ page }) => {
-  const { unit } = await seedPropertyAndUnit()
+  const { property, unit } = await seedPropertyAndUnit()
   // A trade unique to this test run and never assigned to any vendor -
   // guarantees zero matches regardless of what else the vendor pool holds
   // from other specs running concurrently (the same reasoning as the trade
@@ -139,6 +158,7 @@ test('a batch run leaves a unit unassigned when no vendor works its trade', asyn
 
   const staff = await seedOwner()
   await signIn(page, staff.email)
+  await scopeTo(page, property.id)
 
   const templateName = `Chimney sweep ${randomUUID().slice(0, 6)}`
   await page.goto('/maintenance/preventive/new')
@@ -155,7 +175,7 @@ test('a batch run leaves a unit unassigned when no vendor works its trade', asyn
 
   const row = page.locator('li', { hasText: templateName })
   await row.getByRole('button', { name: /Run batch/ }).click()
-  await expect(row.getByText(/Created \d+ work orders?/)).toBeVisible()
+  await expect(row.getByText('Created 1 work order')).toBeVisible()
 
   const workOrder = await prisma.workOrder.findFirstOrThrow({
     where: { pmTemplateId: template.id, unitId: unit.id },
