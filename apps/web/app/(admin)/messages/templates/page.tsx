@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { actorCan, requirePermission } from '@/lib/auth/guard.ts'
 import { listTemplates } from '@/lib/comms/templates.ts'
+import { PRIMARY_BUTTON_CLASSES } from '@/components/ui-classes.ts'
 
 export const metadata = { title: 'Message templates — Rental Operations' }
 
@@ -62,7 +63,7 @@ export default async function TemplatesPage() {
       <div className="flex flex-col gap-3">
         <Link
           href="/messages/templates/new"
-          className="bg-foreground text-background min-h-11 w-fit rounded-md px-4 py-2 text-sm font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+          className={`${PRIMARY_BUTTON_CLASSES} w-fit`}
         >
           New template
         </Link>

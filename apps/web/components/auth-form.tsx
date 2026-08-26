@@ -71,13 +71,42 @@ export function Field({
   )
 }
 
+/**
+ * The submit button behind ~108 forms, and the reason it is `aria-disabled`
+ * rather than `disabled` (R-107a).
+ *
+ * A FOCUSED ELEMENT THAT BECOMES `disabled` IS BLURRED BY THE BROWSER. Every
+ * one of those forms therefore threw keyboard focus to `<body>` the instant
+ * it was submitted: the keyboard user's next Tab restarted at the top of the
+ * document, and the screen-reader user's cursor was thrown to the start of
+ * the page — on every single press, on every form in the product.
+ *
+ * Worse, it was silent. `disabled` also removes the element from the
+ * accessibility tree, so the swap to "Working…" — the only feedback the press
+ * produced — was announced to nobody, and `FormAlerts` then announced the
+ * RESULT into a region the user was no longer anywhere near.
+ *
+ * `aria-disabled` keeps the button focused and in the tree, so the name
+ * change IS spoken, and `aria-busy` says what kind of change it is. The click
+ * guard is what actually prevents the second submit, which is the only thing
+ * `disabled` was doing for us that mattered.
+ *
+ * NO `opacity-60` EITHER. `bg-primary`/`text-primary-foreground` faded to 60%
+ * over white composites to about 2.2:1, so the pending label was the least
+ * readable thing on the screen at the exact moment it was the only thing
+ * worth reading. The label change and the cursor carry the state instead.
+ */
 export function SubmitButton({ label }: { label: string }) {
   const { pending } = useFormStatus()
   return (
     <button
       type="submit"
-      disabled={pending}
-      className="bg-primary text-primary-foreground focus-visible:ring-ring min-h-11 rounded-md px-4 py-2 text-base font-medium disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+      aria-disabled={pending || undefined}
+      aria-busy={pending || undefined}
+      onClick={(event) => {
+        if (pending) event.preventDefault()
+      }}
+      className="bg-primary text-primary-foreground focus-visible:ring-ring min-h-11 rounded-md px-4 py-2 text-base font-medium aria-disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
     >
       {pending ? 'Working…' : label}
     </button>

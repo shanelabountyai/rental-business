@@ -3,6 +3,7 @@ import { inspectionStatus, INSPECTION_STATUS_LABELS } from '@rental/core/inspect
 import { requireScope } from '@/lib/auth/guard.ts'
 import { inspectionsForScope } from '@/lib/inspections/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
+import { PRIMARY_BUTTON_CLASSES } from '@/components/ui-classes.ts'
 
 export const metadata = { title: 'Inspections — Rental Operations' }
 
@@ -23,13 +24,13 @@ export default async function InspectionsPage() {
       <div className="flex flex-wrap gap-3">
         <Link
           href="/inspections/new"
-          className="bg-foreground text-background min-h-11 rounded-md px-4 py-2 text-sm font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+          className={PRIMARY_BUTTON_CLASSES}
         >
           New inspection
         </Link>
         <Link
           href="/inspections/templates"
-          className="border-input hover:bg-accent flex min-h-11 items-center rounded-md border px-4 py-2 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+          className="focus-visible:ring-ring border-input hover:bg-accent flex min-h-11 items-center rounded-md border px-4 py-2 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
         >
           Checklists
         </Link>

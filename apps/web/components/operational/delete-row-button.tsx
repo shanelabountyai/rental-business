@@ -16,7 +16,7 @@ export function DeleteRowButton({
       <FormAlerts state={state} />
       <button
         type="submit"
-        className="text-muted-foreground hover:text-red-700 min-h-9 rounded-md px-2 text-sm underline underline-offset-2 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none dark:hover:text-red-400"
+        className="focus-visible:ring-ring text-muted-foreground hover:text-red-700 min-h-9 rounded-md px-2 text-sm underline underline-offset-2 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none dark:hover:text-red-400"
       >
         Remove
       </button>

@@ -2,6 +2,7 @@
 
 import { useActionState } from 'react'
 import type { MaintenanceFormState } from '@/lib/maintenance/actions.ts'
+import { PRIMARY_BUTTON_CLASSES } from '@/components/ui-classes.ts'
 
 // The 3am panel (MAINT-12, NOTIF-05, R-029).
 //
@@ -82,7 +83,7 @@ export function EmergencyResponsePanel({
             <button
               type="submit"
               disabled={ackPending}
-              className="bg-foreground text-background min-h-11 self-start rounded-md px-4 text-sm font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:opacity-60"
+              className={`${PRIMARY_BUTTON_CLASSES} self-start disabled:opacity-60`}
             >
               I have this
             </button>
@@ -128,7 +129,7 @@ export function EmergencyResponsePanel({
                       <button
                         type="submit"
                         disabled={vendorPending}
-                        className="text-muted-foreground min-h-11 text-xs underline underline-offset-4 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:opacity-60"
+                        className="focus-visible:ring-ring text-muted-foreground min-h-11 text-xs underline underline-offset-4 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:opacity-60"
                       >
                         {vendor.emergencyAvailable
                           ? `Mark ${vendor.name} as daytime only`

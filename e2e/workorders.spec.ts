@@ -439,6 +439,20 @@ test.describe('scoping (ROLE-01)', () => {
 
 test.describe('accessibility', () => {
   test('the list, new, and detail pages have no detectable violations', async ({ page }) => {
+    // THREE full axe scans in one test, and the third is the work-order detail
+    // page - a dozen panels contributed by a dozen items, and the heaviest
+    // page in the product. MEASURED AT 42.3s (desktop) and 42.5s (mobile) on
+    // an idle machine, against the config's 60s default: 70% of the deadline
+    // gone before any contention at all. It duly exceeded 60s under a full
+    // sweep with five workers, on both attempts, and reported as a failure in
+    // `page.evaluate` that reads like an axe problem rather than a budget one.
+    //
+    // CLAUDE.md's rule, and the fourth time this shape has been diagnosed
+    // here: a timeout set at the measured cost is a flake generator. The
+    // measurement is written here so the next person raising it knows what
+    // they are raising it from.
+    test.setTimeout(180_000)
+
     const { unit } = await seedPropertyAndUnit()
     const workOrder = await prisma.workOrder.create({
       data: {

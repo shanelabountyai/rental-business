@@ -4,6 +4,7 @@ import { RATING_MAX, RATING_MIN } from '@rental/core/workorders'
 import { useActionState, useState } from 'react'
 import { useFocusWhen } from '@/components/auth-form.tsx'
 import type { VerifyFormState } from '@/lib/portal/verify-actions.ts'
+import { PRIMARY_BUTTON_CLASSES } from '@/components/ui-classes.ts'
 
 // "Was this resolved?" (MAINT-07, R-030).
 //
@@ -98,7 +99,12 @@ export function VerifyPanel({
                 type="button"
                 aria-pressed={rating === value}
                 onClick={() => setRating(rating === value ? null : value)}
-                className={`min-h-11 min-w-11 rounded-md border text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none ${
+                // `focus-visible:ring-ring` is not optional here (R-107a):
+                // without it Tailwind v4 falls back to `currentcolor`, and on
+                // the SELECTED button the current colour is `--background` —
+                // so the focus ring on the rating a tenant had just chosen was
+                // white on white while every unselected one showed fine.
+                className={`focus-visible:ring-ring min-h-11 min-w-11 rounded-md border text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none ${
                   rating === value ? 'bg-foreground text-background' : 'border-input'
                 }`}
               >
@@ -132,7 +138,7 @@ export function VerifyPanel({
             name="resolved"
             value="yes"
             disabled={pending}
-            className="bg-foreground text-background min-h-11 flex-1 rounded-md px-4 text-sm font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:opacity-60"
+            className={`${PRIMARY_BUTTON_CLASSES} flex-1 disabled:opacity-60`}
           >
             Yes, it is fixed
           </button>
@@ -141,7 +147,7 @@ export function VerifyPanel({
             name="resolved"
             value="no"
             disabled={pending}
-            className="border-input min-h-11 flex-1 rounded-md border px-4 text-sm font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:opacity-60"
+            className="focus-visible:ring-ring border-input min-h-11 flex-1 rounded-md border px-4 text-sm font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:opacity-60"
           >
             No, it is not
           </button>

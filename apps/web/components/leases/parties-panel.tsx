@@ -85,7 +85,7 @@ export function PartiesPanel({
                     <input type="hidden" name="leaseTenantId" value={tenant.id} />
                     <button
                       type="submit"
-                      className="border-input min-h-11 rounded-md border px-3 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+                      className="focus-visible:ring-ring border-input min-h-11 rounded-md border px-3 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
                     >
                       Remove
                     </button>

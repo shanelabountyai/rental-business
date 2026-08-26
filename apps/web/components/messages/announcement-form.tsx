@@ -8,6 +8,7 @@ import type {
   AnnouncementRecipientResult,
 } from '@/lib/comms/announcement-actions.ts'
 import type { SegmentOptions, SegmentType } from '@/lib/comms/announcements.ts'
+import { PRIMARY_BUTTON_CLASSES } from '@/components/ui-classes.ts'
 
 // The composer for segment announcements (COMM-04, R-053).
 //
@@ -127,7 +128,7 @@ export function AnnouncementForm({
         <button
           type="submit"
           disabled={pending || templates.length === 0}
-          className="bg-foreground text-background min-h-11 self-start rounded-md px-4 text-sm font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:opacity-60"
+          className={`${PRIMARY_BUTTON_CLASSES} self-start disabled:opacity-60`}
         >
           Send
         </button>

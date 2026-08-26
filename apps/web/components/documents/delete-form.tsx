@@ -65,7 +65,7 @@ export function DeleteForm({
       </select>
       <button
         type="submit"
-        className="min-h-9 rounded-md border border-red-300 px-3 py-1 text-sm font-medium text-red-800 hover:bg-red-50 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none dark:border-red-900 dark:text-red-200 dark:hover:bg-red-950"
+        className="focus-visible:ring-ring min-h-9 rounded-md border border-red-300 px-3 py-1 text-sm font-medium text-red-800 hover:bg-red-50 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none dark:border-red-900 dark:text-red-200 dark:hover:bg-red-950"
       >
         Delete
       </button>

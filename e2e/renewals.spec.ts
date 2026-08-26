@@ -14,12 +14,33 @@ import { uniquePhone } from './fixtures.ts'
 // is here: that a PM can actually draft a renewal offer and see it land as
 // a real successor lease.
 //
-// A DEDICATED JURISDICTION STATE ('ZZ'), never used by any real property,
+// A DEDICATED JURISDICTION STATE per test, never used by any real property,
 // rather than touching the shared TX seed row every other spec's fixtures
 // also read - the same isolation renewal-check.test.ts already uses.
+//
+// PER TEST, AND THAT IS THE POINT. Both tests here seed a rent-increase cap,
+// and they seed DIFFERENT ones - 10% and 5% - because one asserts an increase
+// inside the cap and the other asserts one over it. Sharing a single state
+// code made them the same row: `@@unique([state, jurisdiction, version])`
+// means only one can exist, and `rulesFor` reads every rule for a state before
+// choosing, so whichever landed second decided the answer for both. The
+// within-the-cap test then submitted 6.7% against the other test's 5% cap, was
+// correctly refused, never redirected, and sat on `waitForURL` until the 60s
+// test timeout.
+//
+// It failed on EVERY full sweep and was invisible, because `retries: 1`
+// reports a test that fails once and passes as **flaky** and a run with flaky
+// tests still exits 0. Verified by running the test alone (passes) against the
+// file (fails, deterministically, in both browser projects).
+//
+// This is CLAUDE.md's "a magic fixture value is only isolated if exactly one
+// file uses it", one level down: exactly one TEST.
 
 const PASSWORD = 'correct-horse-battery-staple'
-const STATE = 'ZZ'
+/// Inside the cap. Nothing else in the repo uses either code.
+const STATE_UNDER_CAP = 'ZU'
+/// Over it.
+const STATE_OVER_CAP = 'ZO'
 
 const staffIds: string[] = []
 const propertyIds: string[] = []
@@ -44,12 +65,13 @@ async function createStaff() {
 }
 
 async function seedJurisdictionRule(overrides: {
+  state: string
   rentIncreaseCapPercentBps?: number | null
   rentIncreaseNoticeDays?: number | null
 }) {
   const rule = await prisma.jurisdictionRule.create({
     data: {
-      state: STATE,
+      state: overrides.state,
       version: 1,
       effectiveFrom: new Date('2020-01-01'),
       graceDays: 0,
@@ -63,7 +85,8 @@ async function seedJurisdictionRule(overrides: {
   return rule
 }
 
-async function seedRunningLease(overrides: { endsOn: string } = { endsOn: '2026-12-31' }) {
+async function seedRunningLease(overrides: { state: string; endsOn?: string }) {
+  const endsOn = overrides.endsOn ?? '2026-12-31'
   const unique = randomUUID().slice(0, 8)
   const entity = await prisma.legalEntity.create({ data: { name: `Renewal LLC-${unique}`, type: 'LLC' } })
   const property = await prisma.property.create({
@@ -72,7 +95,7 @@ async function seedRunningLease(overrides: { endsOn: string } = { endsOn: '2026-
       name: `Renewal House-${unique}`,
       addressLine1: '7 Renewal Way',
       city: 'Somewhere',
-      state: STATE,
+      state: overrides.state,
       postalCode: '00000',
       timezone: 'America/Chicago',
       propertyType: 'SINGLE_FAMILY',
@@ -93,7 +116,7 @@ async function seedRunningLease(overrides: { endsOn: string } = { endsOn: '2026-
       unitId: unit.id,
       status: 'ACTIVE',
       startsOn: new Date('2026-01-01'),
-      endsOn: new Date(`${overrides.endsOn}T00:00:00Z`),
+      endsOn: new Date(`${endsOn}T00:00:00Z`),
       rentCents: 150_000,
     },
   })
@@ -135,8 +158,12 @@ test.describe('renewals', () => {
   test('a PM offers a renewal within the statutory cap and it lands as a linked successor lease', async ({
     page,
   }) => {
-    await seedJurisdictionRule({ rentIncreaseCapPercentBps: 1000, rentIncreaseNoticeDays: null })
-    const { lease } = await seedRunningLease()
+    await seedJurisdictionRule({
+      state: STATE_UNDER_CAP,
+      rentIncreaseCapPercentBps: 1000,
+      rentIncreaseNoticeDays: null,
+    })
+    const { lease } = await seedRunningLease({ state: STATE_UNDER_CAP })
     const staff = await createStaff()
     await signIn(page, staff.email)
 
@@ -171,8 +198,12 @@ test.describe('renewals', () => {
   test('a rent increase over the statutory cap is blocked, with no successor lease created', async ({
     page,
   }) => {
-    await seedJurisdictionRule({ rentIncreaseCapPercentBps: 500, rentIncreaseNoticeDays: null })
-    const { lease } = await seedRunningLease()
+    await seedJurisdictionRule({
+      state: STATE_OVER_CAP,
+      rentIncreaseCapPercentBps: 500,
+      rentIncreaseNoticeDays: null,
+    })
+    const { lease } = await seedRunningLease({ state: STATE_OVER_CAP })
     const staff = await createStaff()
     await signIn(page, staff.email)
 

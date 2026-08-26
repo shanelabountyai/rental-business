@@ -5,6 +5,7 @@ import { MERGE_FIELDS, renderTemplate } from '@rental/core/comms'
 import { LiveRegion } from '@/components/auth-form.tsx'
 import { FieldError, TextField } from '@/components/form/field.tsx'
 import type { TemplateFormState } from '@/lib/comms/template-actions.ts'
+import { PRIMARY_BUTTON_CLASSES } from '@/components/ui-classes.ts'
 
 // Writing a template, and seeing what a tenant will get (COMM-03, R-049).
 //
@@ -140,7 +141,7 @@ export function TemplateEditor({
         <button
           type="submit"
           disabled={pending}
-          className="bg-foreground text-background min-h-11 self-start rounded-md px-4 text-sm font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:opacity-60"
+          className={`${PRIMARY_BUTTON_CLASSES} self-start disabled:opacity-60`}
         >
           Save template
         </button>

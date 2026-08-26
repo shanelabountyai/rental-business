@@ -3,6 +3,7 @@
 import { useActionState } from 'react'
 import { FieldError, TextField } from '@/components/form/field.tsx'
 import type { WorkOrderFormState } from '@/lib/workorders/actions.ts'
+import { PRIMARY_BUTTON_CLASSES } from '@/components/ui-classes.ts'
 
 // Verify & close (MAINT-07, R-030).
 //
@@ -151,7 +152,7 @@ export function ClosePanel({
         <button
           type="submit"
           disabled={pending}
-          className="bg-foreground text-background min-h-11 self-start rounded-md px-4 text-sm font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:opacity-60"
+          className={`${PRIMARY_BUTTON_CLASSES} self-start disabled:opacity-60`}
         >
           Close this work order
         </button>

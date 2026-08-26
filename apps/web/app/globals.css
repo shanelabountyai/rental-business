@@ -18,9 +18,23 @@
   --accent: oklch(0.97 0 0);
   --accent-foreground: oklch(0.205 0 0);
   --destructive: oklch(0.577 0.245 27.325);
+  /* WCAG 1.4.11 wants 3:1 for a UI boundary and a focus indicator, and the
+     shadcn defaults these replaced were nowhere near it (R-107a). Measured
+     against --background (#ffffff):
+
+       --border  0.922 -> 1.26:1   decorative hairlines, left soft on purpose
+       --input   0.922 -> 1.26:1   BROKEN: these fields have no fill, so the
+                                   border is the only thing saying "type here"
+       --ring    0.708 -> 2.59:1   BROKEN: every control also sets
+                                   focus-visible:outline-none, so this ring is
+                                   the ONLY focus indicator in the product
+
+     --border and --input are split for the first time here. 1.4.11 draws
+     exactly that distinction - a divider is decoration, a control boundary is
+     not - so the divider keeps the light grey and the input gets a real one. */
   --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  --input: oklch(0.72 0 0); /* 3.05:1 on white */
+  --ring: oklch(0.55 0 0); /* 4.63:1 on white, and still reads on --primary */
 }
 
 .dark {
@@ -38,8 +52,12 @@
   --accent-foreground: oklch(0.985 0 0);
   --destructive: oklch(0.704 0.191 22.216);
   --border: oklch(1 0 0 / 15%);
-  --input: oklch(1 0 0 / 18%);
-  --ring: oklch(0.556 0 0);
+  /* 18% white over the dark background composites to 1.64:1 - the same
+     failure as the light value and easy to miss, because the ALPHA looks
+     unremarkable next to a solid colour. 40% reaches 3.1:1 over both
+     --background and --card. */
+  --input: oklch(1 0 0 / 40%);
+  --ring: oklch(0.556 0 0); /* 4.18:1 on the dark background - already fine */
 }
 
 @theme inline {
@@ -66,7 +84,12 @@
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    /* NOT outline-ring/50. At 50% alpha over white --ring composites to
+       1.54:1, and this rule is the ONLY focus indicator on any control that
+       sets no focus-visible classes of its own - CheckboxField was one until
+       R-107a. A fallback that fails the criterion is worse than none, because
+       it looks handled. */
+    @apply border-border outline-ring;
   }
   body {
     @apply bg-background text-foreground;

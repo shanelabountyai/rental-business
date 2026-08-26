@@ -231,7 +231,11 @@ export function CheckboxField({
         defaultChecked={defaultChecked}
         onChange={onChange ? (event) => onChange(event.target.checked) : undefined}
         aria-describedby={hint ? hintId : undefined}
-        className="border-input mt-1 size-5 rounded"
+        // The only control in this file that set no focus classes, so its
+        // focus indicator was the base `* { outline-ring }` rule and nothing
+        // else - which was `outline-ring/50` until R-107a and computed to
+        // 1.54:1. Explicit now, like every sibling here.
+        className="border-input focus-visible:ring-ring mt-1 size-5 rounded focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
       />
       <label htmlFor={id} className="flex flex-col text-sm">
         <span className="font-medium">{label}</span>

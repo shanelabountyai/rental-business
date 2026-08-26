@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { requirePermission } from '@/lib/auth/guard.ts'
 import { listInspectionTemplates } from '@/lib/inspections/template-queries.ts'
+import { PRIMARY_BUTTON_CLASSES } from '@/components/ui-classes.ts'
 
 export const metadata = { title: 'Inspection checklists — Rental Operations' }
 
@@ -30,7 +31,7 @@ export default async function InspectionTemplatesPage() {
       <div className="flex flex-col gap-3">
         <Link
           href="/inspections/templates/new"
-          className="bg-foreground text-background min-h-11 w-fit rounded-md px-4 py-2 text-sm font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+          className={`${PRIMARY_BUTTON_CLASSES} w-fit`}
         >
           New checklist
         </Link>
