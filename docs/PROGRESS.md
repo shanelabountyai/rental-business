@@ -4776,7 +4776,7 @@ Milestone 11's third slice, chosen by the owner over the 3am-ops and money/leasi
 ---
 
 ## R-115: the screen somebody works from a driveway at 3am
-**Commit:** PENDING  ·  **Date:** 2026-08-26
+**Commit:** 6b30d84  ·  **Date:** 2026-08-26
 
 Milestone 11's fourth slice, chosen by the owner over the money/leasing one. Every finding is on the admin surface, where the reader is a PM with a phone in one hand and the connection is whatever the driveway has.
 
