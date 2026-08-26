@@ -44,6 +44,8 @@ export async function submitBid(
     return {
       error: 'Check the amount.',
       fieldErrors: Object.fromEntries(violations.map((v) => [v.field, v.message])),
+      // R-114: a refused price used to take the note with it.
+      values: { amountDollars, note },
     }
   }
 

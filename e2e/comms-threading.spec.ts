@@ -249,7 +249,7 @@ test.describe('the work order timeline', () => {
 
     await expect(vendorPage.getByRole('heading', { name: 'Messages' })).toBeVisible()
     await vendorPage.getByRole('textbox').last().fill('Running about 20 minutes late.')
-    await vendorPage.getByRole('button', { name: 'Send' }).click()
+    await vendorPage.getByRole('button', { name: 'Send this message' }).click()
     await expect(vendorPage.getByText('Running about 20 minutes late.')).toBeVisible()
     await expect(
       vendorPage.getByLabel('Messages').getByText('You', { exact: true }),

@@ -1,7 +1,7 @@
 'use client'
 
 import type { ReactNode } from 'react'
-import { useActionState, useEffect, useRef } from 'react'
+import { useActionState, useEffect, useRef, useState } from 'react'
 import { useFormStatus } from 'react-dom'
 
 // Shared chrome for every auth screen. Not a component library - R-007 brings
@@ -164,6 +164,42 @@ export function useFocusWhen<T extends HTMLElement>(when: boolean) {
     ref.current?.focus()
   }, [when])
   return ref
+}
+
+/**
+ * A `key` for an uncontrolled form that has to hand back what was typed
+ * (R-114, extracted from `property-form.tsx`'s R-008 fix).
+ *
+ * ==========================================================================
+ * REACT 19 RESETS AN UNCONTROLLED FORM'S FIELDS AFTER EVERY ACTION DISPATCH,
+ * success or refusal alike - so by the time a validation error comes back the
+ * DOM has already forgotten what the user typed, and a `defaultValue` handed
+ * back in the action's state lands on inputs React has no reason to re-mount.
+ * Bumping this and using it as the form's `key` throws those now-empty inputs
+ * away and mounts fresh ones whose `defaultValue` is the echoed value.
+ *
+ * Bumped during render (comparing against a stored previous `state`), not in
+ * an effect: React's own guidance for "adjust state when a prop changes" is
+ * this setState-during-render escape hatch, which - unlike an effect - applies
+ * before the browser paints, so there is no visible flash of empty fields.
+ * `react-hooks/set-state-in-effect` flags the effect-based version.
+ *
+ * MOUNT EVERY LIVE REGION OUTSIDE THE KEYED FORM. A `key` on a `<form>` throws
+ * its whole subtree away on every response, so a `FormAlerts` inside it is a
+ * brand-new node every time and announces nothing - which is precisely the
+ * defect R-101 fixed and this remount silently undid on `property-form.tsx`
+ * until R-107b caught it. A control that has to submit the form from outside
+ * reaches it with the native `form=` attribute and a `useId()` id.
+ * ==========================================================================
+ */
+export function useFormVersion(state: unknown): number {
+  const [previousState, setPreviousState] = useState(state)
+  const [version, setVersion] = useState(0)
+  if (state !== previousState) {
+    setPreviousState(state)
+    setVersion((current) => current + 1)
+  }
+  return version
 }
 
 export function LiveRegion({

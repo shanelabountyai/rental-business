@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { hashPassword, sealSecret } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
-import { axeScan, uniquePhone } from './fixtures.ts'
+import { axeScan, expectFocusSurvived, uniquePhone } from './fixtures.ts'
 
 // The zero-login vendor journey, end to end (D-6, D-16, MAINT-03, R-025).
 //
@@ -364,6 +364,56 @@ test.describe('the vendor journey', () => {
     await vendorContext.close()
   })
 
+  // R-114 (audit finding 3). The reveal was an `onClick` calling the action
+  // imperatively, so on the one screen written for a phone on mobile data the
+  // single most important control did nothing at all until the bundle arrived
+  // - no message, no pending state, no press. `javaScriptEnabled: false` is
+  // the only way to assert the R-098 standard this file's own comments claim:
+  // a real `<form action>` posts and re-renders with no bundle involved.
+  //
+  // Accepting the job is done the same way, which incidentally proves the same
+  // thing about the three response forms R-098 rebuilt.
+  test('the code reveals with no JavaScript at all', async ({ page, browser }) => {
+    const { workOrder } = await seedJob({ withAccessCode: true })
+    const token = await dispatchAndCaptureToken(page, workOrder.id, workOrder.propertyId)
+
+    const noScript = await browser.newContext({ javaScriptEnabled: false })
+    const vendorPage = await noScript.newPage()
+    await vendorPage.goto(`/vendor/${token}`)
+    await vendorPage.getByRole('button', { name: 'Accept this job' }).click()
+    await expect(
+      vendorPage.getByRole('heading', { name: 'You accepted this job' }),
+    ).toBeVisible()
+
+    await vendorPage.getByRole('button', { name: /^Show code for the / }).click()
+    await expect(vendorPage.getByText('4821')).toBeVisible()
+    await noScript.close()
+  })
+
+  // R-114 (audit finding 1). Answering flips `vendorResponse` on the server,
+  // so the section holding the form - and the region holding "Thanks, the
+  // office has been told" - unmounted in the same pass that produced the
+  // message. The notice rendered nowhere and the button that had focus was
+  // destroyed, so the highest-stakes press on this surface said nothing and
+  // returned the vendor to the top of the document.
+  test('accepting confirms, and focus lands on the confirmation', async ({ page, browser }) => {
+    const { workOrder } = await seedJob()
+    const token = await dispatchAndCaptureToken(page, workOrder.id, workOrder.propertyId)
+
+    const vendorContext = await browser.newContext()
+    const vendorPage = await vendorContext.newPage()
+    await vendorPage.goto(`/vendor/${token}`)
+    await vendorPage.getByRole('button', { name: 'Accept this job' }).click()
+
+    const heading = vendorPage.getByRole('heading', { name: 'You accepted this job' })
+    await expect(heading).toBeVisible()
+    await expect(heading).toBeFocused()
+    await expectFocusSurvived(vendorPage, 'accepting a vendor job')
+    await expect(vendorPage.getByRole('status')).toContainText('the office has been told')
+
+    await vendorContext.close()
+  })
+
   test('reveals an access code only after accepting, and logs every reveal', async ({ page }) => {
     const { workOrder, vendor } = await seedJob({ withAccessCode: true })
     const token = await dispatchAndCaptureToken(page, workOrder.id, workOrder.propertyId)
@@ -373,7 +423,7 @@ test.describe('the vendor journey', () => {
 
     // Before accepting there is no code on the page at all.
     await vendorPage.goto(`/vendor/${token}`)
-    await expect(vendorPage.getByRole('button', { name: /^Show the .* code$/ })).toHaveCount(0)
+    await expect(vendorPage.getByRole('button', { name: /^Show code for the / })).toHaveCount(0)
 
     await vendorPage.getByRole('button', { name: 'Accept this job' }).click()
     await expect
@@ -385,7 +435,7 @@ test.describe('the vendor journey', () => {
       .toBe('ACCEPTED')
 
     await vendorPage.goto(`/vendor/${token}`)
-    await vendorPage.getByRole('button', { name: /^Show the .* code$/ }).click()
+    await vendorPage.getByRole('button', { name: /^Show code for the / }).click()
     await expect(vendorPage.getByText('4821')).toBeVisible()
 
     const reveals = await prisma.auditLog.findMany({
@@ -459,7 +509,7 @@ test.describe('the link refuses', () => {
     const vendorPage = await vendorContext.newPage()
     await vendorPage.goto(`/vendor/${token}`)
     await expect(vendorPage.getByText(/reassigned/i)).toBeVisible()
-    await expect(vendorPage.getByRole('button', { name: /^Show the .* code$/ })).toHaveCount(0)
+    await expect(vendorPage.getByRole('button', { name: /^Show code for the / })).toHaveCount(0)
     await vendorContext.close()
   })
 

@@ -188,6 +188,8 @@ what is actually hardest to reverse.
 
 ## ⑧ The public front door is internal build notes
 
+**FIXED (R-114).** `/` is a signpost: the product name, a link to the tenant portal sign-in, a link to staff sign-in, and one sentence telling a vendor their texted link is the way in. The scaffold notes, the backlog path and both worked calculations are gone. A spec asserts both halves — the links resolve, and the words "scaffold" and "docs/prds" appear nowhere — because the absence is what stops the next person restoring a convenient debug panel on the one public URL.
+
 `/` renders "Scaffold only", names a backlog file path, and prints proration and
 late-fee-cap arithmetic. There is no link to `/login`. Anyone who bookmarks the
 domain or mistypes a vendor link lands there.
@@ -201,6 +203,8 @@ domain or mistypes a vendor link lands there.
 ---
 
 ## ⑨ A dead magic link lands on a pristine sign-in form
+
+**FIXED (R-114).** `/portal/login` reads the parameter that was already being passed, and answers `invalid` and `missing` separately: links only work once and expire, some email apps open them first, versus some email apps cut long links in half. `autoFocus` on the email field gives way when a message is present — this arrives as a full document load from a route handler, so there is no Next route announcer, and pulling focus into the field would skip the banner for the person who most needs it.
 
 The two commonest magic-link failures — an expired link, and one already burned
 by the tenant's own email prefetcher — redirect to `/portal/login?error=…`.
@@ -220,6 +224,8 @@ handling — and looks handled in code review.
 ---
 
 ## ⑩ The last-resort error page's only recovery needs the JS that just failed
+
+**FIXED (R-114).** `reset` stays — a transient render failure does recover — but it is no longer the only way out: a plain `<a href="/">` that needs no bundle, and `VendorHelpLine`'s `tel:` link, which needs no network. The `<h1>` takes focus, because this boundary also fires client-side with focus sitting on a control that has just ceased to exist. The `no-html-link-for-pages` lint rule is disabled on that one line with the reason written next to it: `next/link` needs the router, which is the thing that just failed.
 
 `global-error.tsx` fires when the root layout throws. Its sole control is
 `onClick={reset}`. If the failure is in the bundle, the button does nothing when
@@ -523,6 +529,7 @@ which number is which is the entire point of the table.
 ## Scope: vendor & public entry ✅
 
 ### 1. Four vendor/public forms announce nothing on success, and drop focus to `<body>`
+- **FIXED (R-114).** All five (the audit found four; `verify-link-form.tsx` is the fifth). Each replaced panel now opens with a heading carrying `tabIndex={-1}`, focused through `useFocusWhen` on client action state, and every `FormAlerts` was hoisted out of the branch whose render condition the action changes. **The real find**: R-107b's comment on `listing-inquiry-form.tsx` claimed the region was "mounted from first paint"; the early `return` replaces the whole form, so it never was.
 - **Where:** [vendor-job.tsx:279](apps/web/components/vendors/vendor-job.tsx#L279), [:500](apps/web/components/vendors/vendor-job.tsx#L500); [bid-form.tsx:47-53](apps/web/components/vendors/bid-form.tsx#L47-L53); [verify-link-form.tsx:39-49](apps/web/components/portal/verify-link-form.tsx#L39-L49); [listing-inquiry-form.tsx:23-29](apps/web/components/listings/listing-inquiry-form.tsx#L23-L29)
 - **Blocks:** screen-reader, keyboard-only · **WCAG:** 4.1.3, 2.4.3
 - The action changes the very condition its result region renders under. Accepting a job flips `job.vendorResponse`, so `{!answered && <FormAlerts/>}` unmounts and "Thanks — the office has been told." renders nowhere. Same for `markWorkComplete`, `submitBid`, and `submitInquiry`. The focused button unmounts, so focus falls to the top of the document.
@@ -534,38 +541,46 @@ which number is which is the entire point of the table.
 - **Fix:** darken `--input` to ≥3:1 (~`oklch(0.72)`); same for `--ring`.
 
 ### 3. Vendor gate-code reveal is `onClick` — see angle ③
+- **FIXED (R-114).** A real `<form action>` with the id in a hidden field, one `useActionState` for the whole section so revealing a second code does not blank the first, and `markWorkComplete` moved to the `(state, formData)` signature so it is a server action reference rather than an inline arrow. **Proven with `javaScriptEnabled: false`**: accept the job, reveal the code, both with no bundle.
 - **Where:** [vendor-job.tsx:417-424](apps/web/components/vendors/vendor-job.tsx#L417-L424), [:107-110](apps/web/components/vendors/vendor-job.tsx#L107-L110)
 - Also: wrapping the complete action in an inline arrow at `:107` means React cannot emit a form endpoint into the HTML, so "Mark the work finished" is also dead pre-hydration — the press submits a bare GET and is silently lost.
 - **Fix:** real `<form action>` with the id in a hidden field. Change `markWorkComplete` to the `(state, formData)` signature.
 
 ### 4. The reveal failure message is a live region inserted with its text
+- **FIXED (R-107b)**, and R-114 additionally rebuilt `bid-form.tsx`'s decline toggle, which the audit did not name: it was a `useState` `onClick`, so before hydration the only answer a vendor could give was a price. It is a `<details>` with its own form now, like the dispatch page's three.
 - **Where:** [vendor-job.tsx:382-386](apps/web/components/vendors/vendor-job.tsx#L382-L386) · **WCAG:** 4.1.3
 - A vendor refused a code (expired link, job not theirs) is told nothing.
 - **Fix:** mount unconditionally with `className="contents"`, like `FieldError`.
 
 ### 5. "Show code" is not contained in its own accessible name
+- **FIXED (R-114).** The visible text is `Show code for the {name}` and the `aria-label` is gone, so there is one name rather than two. Three assertions in `vendor-link.spec.ts` moved with it.
 - **Where:** [vendor-job.tsx:417-424](apps/web/components/vendors/vendor-job.tsx#L417-L424) · **WCAG:** 2.5.3
 - Visible text "Show code"; `aria-label` "Show the Front door code". Speech input matching "Show code" hits nothing.
 - **Fix:** reorder to `Show code for the ${name}`. Specs at `e2e/vendor-link.spec.ts:377,389,463` move with it.
 
 ### 6. Listing photos are marked decorative
+- **FIXED (R-114)**, as the interim the audit describes: `Photo N of M of {address}`. A caption field written by whoever uploads the photo is still the proper answer and belongs with the uploader.
 - **Where:** [listings/[id]/page.tsx:87-98](apps/web/app/listings/[id]/page.tsx#L87-L98) · **WCAG:** 1.1.1
 - `alt=""` on the primary content of a rental listing. A blind prospect gets rent, beds and disclosures, and no acknowledgement a gallery exists. `Document` has no caption column.
 - **Fix (interim):** `alt={`Photo ${i+1} of ${n} — ${addressLine1}`}`. A real caption field is the proper answer.
 
 ### 7. A validation error empties every field just typed
+- **FIXED (R-114)** at the root rather than per form. `VendorFormState` and `InquiryFormState` carry `values`, echoed on every refusal — including the ones that fire before parsing, which lose exactly as much typing. `defaultValue` alone does not survive React 19's post-dispatch reset, so `property-form.tsx`'s R-008 remount was extracted as `useFormVersion` and applied to all four; its comment carries the warning that live regions must stay outside the keyed form.
 - **Where:** [listing-inquiry-form.tsx:31-63](apps/web/components/listings/listing-inquiry-form.tsx#L31-L63); [bid-form.tsx:54-76](apps/web/components/vendors/bid-form.tsx#L54-L76); [vendor-job.tsx:448-490](apps/web/components/vendors/vendor-job.tsx#L448-L490). Root cause: `VendorFormState` and `InquiryFormState` carry no `values`.
 - React 19 resets uncontrolled fields after a form action. Submit the inquiry with neither email nor phone and all five fields come back blank. The repo already solved this — `state.values` echoed back — in `lease-form.tsx`, `renewal-panel.tsx`, `property-form.tsx`.
 
 ### 8. The bid dead end says "call the office" and gives no number
+- **FIXED (R-114).** `VendorHelpLine` on both the invalid-link page and the already-answered panel.
 - **Where:** [vendor/bid/[token]/page.tsx:36](apps/web/app/vendor/bid/[token]/page.tsx#L36); [bid-form.tsx:49](apps/web/components/vendors/bid-form.tsx#L49)
 - `VendorHelpLine` was built for exactly this and renders a `tel:` link. The bid surface, added by the same programme, still prints the sentence the component replaced.
 
 ### 9. Reveal has no pending state, and each repeat tap writes an audit row
+- **FIXED (R-114)** by the form conversion above: `SubmitButton` brings the pending label and the click guard with it.
 - **Where:** [vendor-job.tsx:122-127](apps/web/components/vendors/vendor-job.tsx#L122-L127)
 - On mobile data a vendor taps three or four times; the access log for a single door reads as four separate reveals.
 
 ### 10. Two controls share a name on one assembled page
+- **FIXED (R-114).** The inquiry button is "Send my question"; the vendor message button is "Send this message".
 - [listings/[id]/page.tsx:163](apps/web/app/listings/[id]/page.tsx#L163) `<h2>Ask about this listing` vs [listing-inquiry-form.tsx:63](apps/web/components/listings/listing-inquiry-form.tsx#L63) `SubmitButton label="Ask about this listing"` — announced twice with different roles.
 - [vendor-job.tsx:325](apps/web/components/vendors/vendor-job.tsx#L325) "Send this time" vs [:572](apps/web/components/vendors/vendor-job.tsx#L572) "Send" — substring collision, latent only because no spec does it yet.
 
@@ -574,6 +589,7 @@ which number is which is the entire point of the table.
 ### 13. Every `dark:` variant unreachable — see angle ②
 
 ### 14. Inline links on the phone-first vendor surface are ~20px tall
+- **FIXED (R-114).** `inline-flex min-h-11 items-center` on all three.
 - **Where:** [vendor-job.tsx:215-222](apps/web/components/vendors/vendor-job.tsx#L215-L222), [:250-252](apps/web/components/vendors/vendor-job.tsx#L250-L252), [:230](apps/web/components/vendors/vendor-job.tsx#L230) · **WCAG:** 2.5.8
 - The file's own standard is `min-h-11` on every control. These three text links get nothing, on the screen written for a gloved hand.
 

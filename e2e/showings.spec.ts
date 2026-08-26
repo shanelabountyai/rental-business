@@ -119,6 +119,18 @@ async function signIn(page: import('@playwright/test').Page, email: string) {
   await page.waitForURL((url) => !url.pathname.startsWith('/login'))
 }
 
+// R-114: THE STAFF SIGN-IN NEEDED ONE TOO, and only the anonymous contexts
+// below had one. R-003 limits staff sign-in to ten attempts per IP per five
+// minutes, and local e2e traffic carries no `x-forwarded-for` - so this spec's
+// `signIn` shared a single bucket with every other spec that forgot, including
+// `auth.spec.ts`, which burns attempts deliberately. The symptom is the one
+// CLAUDE.md warns about and it looks nothing like the cause: `waitForURL`
+// timing out sixty seconds after clicking "Sign in", in a spec that has
+// nothing to do with authentication, passing in isolation every time.
+test.beforeEach(async ({ page }) => {
+  await page.setExtraHTTPHeaders(uniqueClientHeaders())
+})
+
 test.beforeAll(async () => {
   // Same collision this spec's siblings already document: local e2e traffic
   // carries no x-forwarded-for, so every anonymous inquiry across every
@@ -147,7 +159,7 @@ test('a prospect self-books a vacant-unit showing, raising an escort task, and s
   await anonPage.getByLabel('First name').fill('Riley')
   await anonPage.getByLabel('Last name').fill(lastName)
   await anonPage.getByLabel('Email').fill(`riley-${randomUUID().slice(0, 8)}@example.test`)
-  await anonPage.getByRole('button', { name: 'Ask about this listing' }).click()
+  await anonPage.getByRole('button', { name: 'Send my question' }).click()
   await expect(anonPage.getByText(/check your email or phone/)).toBeVisible()
 
   const prospect = await prisma.prospect.findFirstOrThrow({ where: { listingId: listing.id } })

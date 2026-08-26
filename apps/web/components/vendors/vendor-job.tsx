@@ -1,10 +1,16 @@
 'use client'
 
 import { vendorMayMarkComplete } from '@rental/core/vendors'
-import { useActionState, useState } from 'react'
-import { FormAlerts, LiveRegion, SubmitButton } from '@/components/auth-form.tsx'
+import { useActionState } from 'react'
+import {
+  FormAlerts,
+  LiveRegion,
+  SubmitButton,
+  useFocusWhen,
+  useFormVersion,
+} from '@/components/auth-form.tsx'
 import { TextField } from '@/components/form/field.tsx'
-import type { VendorFormState } from '@/lib/vendors/actions.ts'
+import type { VendorFormState, VendorRevealState } from '@/lib/vendors/actions.ts'
 
 // The vendor's whole surface (D-6, MAINT-03, R-025). One screen, no account,
 // no navigation - a plumber holding a phone in a driveway.
@@ -72,8 +78,16 @@ export interface VendorJobProps {
   messages: readonly { id: string; body: string; sentAt: string; fromStaff: boolean }[]
   respondAction: (state: VendorFormState, formData: FormData) => Promise<VendorFormState>
   uploadAction: (state: VendorFormState, formData: FormData) => Promise<VendorFormState>
-  completeAction: () => Promise<VendorFormState>
-  revealAction: (accessCodeId: string) => Promise<{ code?: string; error?: string }>
+  /// `(state, formData)`, not `()` (R-114). Wrapping a bare `()` action in an
+  /// inline arrow to satisfy `useActionState` leaves React with no server
+  /// action to emit a form endpoint for, so the button was dead until the
+  /// bundle arrived - on the surface whose whole premise is that it works on
+  /// a phone in a driveway.
+  completeAction: (state: VendorFormState, formData: FormData) => Promise<VendorFormState>
+  revealAction: (
+    state: VendorRevealState,
+    formData: FormData,
+  ) => Promise<VendorRevealState>
   messageAction: (state: VendorFormState, formData: FormData) => Promise<VendorFormState>
 }
 
@@ -105,26 +119,46 @@ export function VendorJob({
     {},
   )
   const [completeState, completeFormAction] = useActionState<VendorFormState, FormData>(
-    () => completeAction(),
+    completeAction,
     {},
   )
   const [messageState, messageFormAction] = useActionState<VendorFormState, FormData>(
     messageAction,
     {},
   )
-  const [revealed, setRevealed] = useState<Record<string, string>>({})
-  const [revealError, setRevealError] = useState<string | null>(null)
+  const [revealState, revealFormAction] = useActionState<VendorRevealState, FormData>(
+    revealAction,
+    {},
+  )
+  const revealed = revealState.revealed ?? {}
 
   const answered = job.vendorResponse != null
   const working = job.vendorResponse === 'ACCEPTED' || job.vendorResponse === 'PROPOSED_TIME'
   const errors = respondState.fieldErrors ?? {}
+  // What was typed, handed back after a refusal - and the `key` that makes it
+  // stick, because React 19 empties an uncontrolled form after every dispatch
+  // (see `useFormVersion`). A vendor retyping two datetimes on a phone because
+  // one of them was wrong is the case this exists for.
+  const echoed = respondState.values ?? {}
+  const respondVersion = useFormVersion(respondState)
+  const uploadEchoed = uploadState.values ?? {}
+  const uploadVersion = useFormVersion(uploadState)
 
-  async function reveal(accessCodeId: string) {
-    setRevealError(null)
-    const result = await revealAction(accessCodeId)
-    if (result.error) setRevealError(result.error)
-    else if (result.code) setRevealed((prior) => ({ ...prior, [accessCodeId]: result.code! }))
-  }
+  // THE PRESS THAT MATTERS MOST WAS THE ONE THAT SAID LEAST (R-114).
+  //
+  // Answering the job flips `job.vendorResponse` on the server, so the whole
+  // "Can you take this job?" section - including the `FormAlerts` holding
+  // "Thanks - the office has been told" - unmounted in the same pass that
+  // produced the message. The notice rendered nowhere, and the button that
+  // had focus no longer existed, so a keyboard or screen-reader user was
+  // returned to the top of the document with nothing announced at all.
+  //
+  // Focusing the heading of the panel that REPLACED it announces the whole new
+  // context rather than one sentence of it. Driven by client action state, so
+  // an ordinary page load of a job answered yesterday does not yank anybody's
+  // cursor - the distinction `useFocusWhen` documents at length.
+  const respondDone = useFocusWhen<HTMLHeadingElement>(Boolean(respondState.notice))
+  const completeDone = useFocusWhen<HTMLHeadingElement>(Boolean(completeState.notice))
 
   return (
     <main className="mx-auto flex max-w-xl flex-col gap-6 p-4">
@@ -212,9 +246,13 @@ export function VendorJob({
           <br />
           {job.propertyName} — {job.unitName}
         </p>
+        {/* `min-h-11` like every other control on this page (2.5.8, R-114).
+            This file's own standard is a 44px target because the hand holding
+            the phone is often gloved; the three inline links were the only
+            things on it that got nothing. */}
         <a
           href={`https://maps.google.com/?q=${encodeURIComponent(job.address)}`}
-          className="text-sm underline underline-offset-4"
+          className="inline-flex min-h-11 items-center text-sm underline underline-offset-4"
           target="_blank"
           rel="noreferrer"
         >
@@ -227,7 +265,10 @@ export function VendorJob({
           <h2 className="text-sm font-medium">Who to call</h2>
           <p className="text-sm">
             {job.tenantFirstName ?? 'The tenant'} —{' '}
-            <a href={`tel:${job.tenantPhone}`} className="underline underline-offset-4">
+            <a
+              href={`tel:${job.tenantPhone}`}
+              className="inline-flex min-h-11 items-center underline underline-offset-4"
+            >
               {job.tenantPhone}
             </a>
           </p>
@@ -247,7 +288,12 @@ export function VendorJob({
           <ul className="flex flex-col gap-1 text-sm">
             {photos.map((photo) => (
               <li key={photo.id}>
-                <a href={photo.href} className="underline underline-offset-4" target="_blank" rel="noreferrer">
+                <a
+                  href={photo.href}
+                  className="inline-flex min-h-11 items-center underline underline-offset-4"
+                  target="_blank"
+                  rel="noreferrer"
+                >
                   {photo.fileName}
                 </a>
               </li>
@@ -273,10 +319,15 @@ export function VendorJob({
         </section>
       )}
 
+      {/* OUTSIDE the `{!answered && ...}` below, because answering is exactly
+          what unmounts it (R-044's rule, in CLAUDE.md). A refusal still needs
+          somewhere to land, and a live region that arrives with its text
+          already in it announces nothing. */}
+      <FormAlerts state={respondState} />
+
       {!answered && (
         <section className="flex flex-col gap-4 rounded-md border-2 p-4">
           <h2 className="text-base font-medium">Can you take this job?</h2>
-          <FormAlerts state={respondState} />
 
           {/* THREE FORMS, NOT ONE FORM AND A STATE MACHINE (H7/U9, R-098).
               This was `useState` with each trigger unmounting itself: tapping
@@ -304,7 +355,11 @@ export function VendorJob({
             <summary className="min-h-11 cursor-pointer text-sm underline underline-offset-4">
               Propose a different time
             </summary>
-            <form action={respondFormAction} className="flex flex-col gap-3 pt-3">
+            <form
+              key={respondVersion}
+              action={respondFormAction}
+              className="flex flex-col gap-3 pt-3"
+            >
               <input type="hidden" name="response" value="PROPOSED_TIME" />
               <TextField
                 label="I can start"
@@ -312,6 +367,7 @@ export function VendorJob({
                 idPrefix="vendor"
                 type="datetime-local"
                 required
+                defaultValue={echoed.proposedStart}
                 error={errors.proposedStart}
               />
               <TextField
@@ -320,6 +376,7 @@ export function VendorJob({
                 idPrefix="vendor"
                 type="datetime-local"
                 required
+                defaultValue={echoed.proposedEnd}
                 error={errors.proposedEnd}
               />
               <SubmitButton label="Send this time" />
@@ -330,13 +387,18 @@ export function VendorJob({
             <summary className="min-h-11 cursor-pointer text-sm underline underline-offset-4">
               I can&rsquo;t take this
             </summary>
-            <form action={respondFormAction} className="flex flex-col gap-3 pt-3">
+            <form
+              key={respondVersion}
+              action={respondFormAction}
+              className="flex flex-col gap-3 pt-3"
+            >
               <input type="hidden" name="response" value="DECLINED" />
               <TextField
                 label="Why not? (so we send the right person next)"
                 name="declineReason"
                 idPrefix="vendor"
                 required
+                defaultValue={echoed.declineReason}
                 error={errors.declineReason}
               />
               <SubmitButton label="Decline this job" />
@@ -345,9 +407,25 @@ export function VendorJob({
         </section>
       )}
 
-      {answered && !working && (
-        <section className="rounded-md border p-4 text-sm">
-          <p>You declined this job. Thanks for letting us know.</p>
+      {/* THE PANEL THAT REPLACED THE FORM, and it says what happened (R-114).
+          There was no confirmation of an ACCEPT anywhere on this page: the
+          form vanished, the schedule panel appeared, and the vendor was left
+          to infer that we had heard them. `respondDone` focuses this heading
+          only when the answer was just given. */}
+      {answered && (
+        <section className="flex flex-col gap-1 rounded-md border p-4">
+          <h2 ref={respondDone} tabIndex={-1} className="text-base font-medium">
+            {working
+              ? job.vendorResponse === 'ACCEPTED'
+                ? 'You accepted this job'
+                : 'You sent us a different time'
+              : 'You declined this job'}
+          </h2>
+          <p className="text-sm">
+            {working
+              ? 'Everything you need for the visit is below.'
+              : 'Thanks for letting us know \u2014 we will send this one to somebody else.'}
+          </p>
         </section>
       )}
 
@@ -380,8 +458,8 @@ export function VendorJob({
             <section className="flex flex-col gap-3 rounded-md border p-4">
               <h2 className="text-sm font-medium">Getting in</h2>
               <LiveRegion assertive>
-                {revealError && (
-                  <p className="text-sm text-red-700">{revealError}</p>
+                {revealState.error && (
+                  <p className="text-sm text-red-700">{revealState.error}</p>
                 )}
               </LiveRegion>
               {/* THE ONE ACTION THIS SURFACE EXISTS TO PERFORM, and until
@@ -396,7 +474,29 @@ export function VendorJob({
                   own content announces nothing, which is the mistake S2
                   catalogued in eleven places. `autoFocus` on the revealed
                   code moves focus onto the thing the vendor asked for; it
-                  fires on mount only, so it cannot re-steal focus later. */}
+                  fires on mount only, so it cannot re-steal focus later.
+
+                  AND IT IS A REAL FORM (R-114). The trigger was still an
+                  `onClick` calling the action imperatively, so on the one
+                  screen written for a phone on mobile data the single most
+                  important control did nothing at all until the bundle
+                  arrived - no message, no pending state, nothing. One
+                  `useActionState` for the whole section rather than one per
+                  code: the state carries every code revealed so far, so
+                  opening the lockbox does not blank the gate code somebody is
+                  halfway through keying in.
+
+                  `SubmitButton` brings the pending state and the double-press
+                  guard with it, and the second is not cosmetic: every reveal
+                  writes an audit row, and a vendor tapping four times on a bad
+                  signal made the access log for one door read as four separate
+                  reveals.
+
+                  THE VISIBLE TEXT NAMES THE CODE (2.5.3). It read "Show code"
+                  with an `aria-label` of "Show the Front door code", so
+                  nothing a speech-input user could say matched the control
+                  they could see. The longer wording is the better label
+                  anyway, and it is now the only one. */}
               {accessCodes.map((code) => {
                 const name = code.label ?? code.type
                 return (
@@ -414,14 +514,10 @@ export function VendorJob({
                       ) : null}
                     </output>
                     {!revealed[code.id] && (
-                      <button
-                        type="button"
-                        onClick={() => reveal(code.id)}
-                        aria-label={`Show the ${name} code`}
-                        className="border-input focus-visible:ring-ring min-h-11 rounded-md border px-3 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
-                      >
-                        Show code
-                      </button>
+                      <form action={revealFormAction}>
+                        <input type="hidden" name="accessCodeId" value={code.id} />
+                        <SubmitButton label={`Show code for the ${name}`} />
+                      </form>
                     )}
                   </div>
                 )
@@ -445,7 +541,16 @@ export function VendorJob({
           <section className="flex flex-col gap-4 rounded-md border p-4">
             <h2 className="text-sm font-medium">When you&rsquo;re done</h2>
             <FormAlerts state={uploadState} />
-            <form action={uploadFormAction} className="flex flex-col gap-3">
+            {/* And the completion action's, OUTSIDE the branch below - marking
+                the work finished is exactly what flips `vendorMayMarkComplete`
+                and unmounts that branch, so a result region living inside it
+                could never render the result. */}
+            <FormAlerts state={completeState} />
+            <form
+              key={uploadVersion}
+              action={uploadFormAction}
+              className="flex flex-col gap-3"
+            >
               <div className="flex flex-col gap-1.5">
                 <label htmlFor="field-vendor-kind" className="text-sm font-medium">
                   What is this?
@@ -454,7 +559,7 @@ export function VendorJob({
                   id="field-vendor-kind"
                   name="kind"
                   required
-                  defaultValue="COMPLETION_PHOTO"
+                  defaultValue={uploadEchoed.kind || 'COMPLETION_PHOTO'}
                   className="border-input bg-background min-h-11 rounded-md border px-3 py-2 text-base"
                 >
                   <option value="COMPLETION_PHOTO">A photo of the finished work</option>
@@ -485,6 +590,7 @@ export function VendorJob({
                 inputMode="decimal"
                 min={0}
                 step="0.01"
+                defaultValue={uploadEchoed.invoiceDollars}
               />
               <SubmitButton label="Upload" />
             </form>
@@ -498,7 +604,6 @@ export function VendorJob({
             {vendorMayMarkComplete(job.status) ? (
               job.completionPhotoUploaded ? (
                 <form action={completeFormAction} className="border-t pt-4">
-                  <FormAlerts state={completeState} />
                   <SubmitButton label="Mark the work finished" />
                 </form>
               ) : (
@@ -519,9 +624,17 @@ export function VendorJob({
                 </p>
               )
             ) : (
-              <p className="text-muted-foreground border-t pt-4 text-sm">
-                Marked finished. Thanks{job.invoiceUploaded ? '' : ' - send the invoice when you have it'}.
-              </p>
+              // The panel that replaced the button, focused when the press
+              // is what replaced it (R-114). A heading rather than a
+              // paragraph so focusing it announces the whole new context.
+              <div className="border-t pt-4">
+                <h3 ref={completeDone} tabIndex={-1} className="text-sm font-medium">
+                  Marked finished
+                </h3>
+                <p className="text-muted-foreground text-sm">
+                  Thanks{job.invoiceUploaded ? '' : ' - send the invoice when you have it'}.
+                </p>
+              </div>
             )}
           </section>
         </>
@@ -569,7 +682,12 @@ export function VendorJob({
             required
             className="border-input bg-background focus-visible:ring-ring min-h-11 rounded-md border px-3 py-2 text-base focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
           />
-          <SubmitButton label="Send" />
+          {/* NOT "Send" (R-114). "Send this time" sits on the same assembled
+              page while the job is unanswered, and `getByRole`'s name match -
+              like a speech-input user's - is a substring one, so by ear the
+              two controls were the same control. The longer wording is the
+              better label anyway. */}
+          <SubmitButton label="Send this message" />
         </form>
       </section>
     </main>

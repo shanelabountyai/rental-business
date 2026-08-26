@@ -84,13 +84,22 @@ export default async function PublicListingPage({
         </p>
       </header>
 
+      {/* NOT `alt=""` (1.1.1, R-114). These are the primary content of a
+          rental listing, and marking them decorative left a blind prospect
+          with rent, beds and disclosures and no acknowledgement that a gallery
+          exists at all - so "are there photos of this place?" had no answer on
+          the page. `Document` has no caption column, so this is the honest
+          interim: it says what the picture is OF and how many there are, which
+          is what tells somebody whether to ask for a description. A real
+          caption written by whoever uploads the photo is the proper fix and
+          belongs with the uploader, not here. */}
       {photos.length > 0 && (
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-          {photos.map((photo) => (
+          {photos.map((photo, index) => (
             <img
               key={photo.id}
               src={`/listings/${listing.id}/photos/${photo.id}`}
-              alt=""
+              alt={`Photo ${index + 1} of ${photos.length} of ${listing.property.addressLine1}`}
               className="aspect-square w-full rounded-md object-cover"
             />
           ))}

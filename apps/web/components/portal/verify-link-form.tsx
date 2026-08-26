@@ -1,7 +1,7 @@
 'use client'
 
 import { useActionState } from 'react'
-import { FormAlerts } from '@/components/auth-form.tsx'
+import { FormAlerts, useFocusWhen } from '@/components/auth-form.tsx'
 import type { VerifyLinkFormState } from '@/lib/portal/verify-link-actions.ts'
 
 // The two taps that close a work order (MAINT-07, R-032c).
@@ -33,12 +33,23 @@ export function VerifyLinkForm({
   ) => Promise<VerifyLinkFormState>
 }) {
   const [state, formAction] = useActionState<VerifyLinkFormState, FormData>(action, {})
+  // The panel replaces itself on success, so the `FormAlerts` below is a
+  // brand-new node carrying its own text and announces nothing, and the button
+  // that had focus is gone - a tenant answering with a keyboard or a screen
+  // reader was returned to the top of the document in silence (R-114).
+  // Focusing the heading of what replaced it announces the whole new context;
+  // this is one of the three panels `useFocusWhen` was written for and it was
+  // still not using it.
+  const answeredHeading = useFocusWhen<HTMLHeadingElement>(Boolean(state.answered))
 
   // Once answered, the buttons go. Leaving them would invite a second tap
   // that can only ever be refused.
   if (state.answered) {
     return (
       <div className="flex flex-col gap-3">
+        <h2 ref={answeredHeading} tabIndex={-1} className="text-base font-medium">
+          Your answer is recorded
+        </h2>
         <FormAlerts state={state} />
         <p className="text-muted-foreground text-sm">
           You can close this page. If anything changes, message us from your

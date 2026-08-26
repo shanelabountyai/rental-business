@@ -564,9 +564,24 @@ test.describe('tenant magic link', () => {
     await fresh.close()
   })
 
-  test('refuses a token that was never issued', async ({ page }) => {
+  test('refuses a token that was never issued, and says so', async ({ page }) => {
     await page.goto('/portal/verify?token=not-a-real-token')
     await expect(page).toHaveURL(/\/portal\/login/)
+    // R-114 (audit angle 9). The redirect has carried `?error=` since the
+    // route was written; the page it redirects TO never read it, so the two
+    // commonest magic-link failures - an expired link, and one the tenant's
+    // own email provider prefetched and burned - both landed on a pristine
+    // sign-in form with no indication anything had happened.
+    // Matched by TEXT, not `getByRole('alert')`: Next's own route announcer
+    // is an empty `role="alert"` on every page, so the role alone is always
+    // ambiguous here.
+    await expect(page.getByText('That sign-in link has stopped working')).toBeVisible()
+  })
+
+  test('says so when the link had no token at all', async ({ page }) => {
+    await page.goto('/portal/verify')
+    await expect(page).toHaveURL(/\/portal\/login/)
+    await expect(page.getByText('That sign-in link was incomplete')).toBeVisible()
   })
 
   test('does not reveal whether an address is on a lease', async ({ page }) => {

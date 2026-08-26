@@ -43,6 +43,17 @@ export interface VendorFormState {
   error?: string
   fieldErrors?: Record<string, string>
   notice?: string
+  /// WHAT THEY TYPED, HANDED BACK (R-114).
+  ///
+  /// React 19 resets uncontrolled fields after a form action, so a refusal
+  /// used to empty every box on the screen - a vendor who mistyped one of two
+  /// datetimes retyped both, on a phone, in a driveway. `lease-form.tsx` and
+  /// `property-form.tsx` already solved this by echoing the submitted values;
+  /// this is the same fix on the surface where retyping is most expensive.
+  ///
+  /// Only ever set alongside a refusal. Echoing on success would repopulate a
+  /// form the vendor has finished with.
+  values?: Record<string, string>
 }
 
 const MAX_UPLOAD_BYTES = 15 * 1024 * 1024
@@ -84,6 +95,11 @@ export async function respondToWorkOrder(
     return {
       error: 'A couple of things still need an answer.',
       fieldErrors: Object.fromEntries(violations.map((v) => [v.field, v.message])),
+      values: {
+        declineReason: input.declineReason ?? '',
+        proposedStart: input.proposedStart ?? '',
+        proposedEnd: input.proposedEnd ?? '',
+      },
     }
   }
   const response = input.response as VendorResponseValue
@@ -152,6 +168,15 @@ export async function respondToWorkOrder(
   return { notice: 'Thanks - the office has been told.' }
 }
 
+export interface VendorRevealState {
+  error?: string
+  /// EVERY code revealed so far, keyed by AccessCode id, carried forward from
+  /// the previous state. A job can carry a gate code and a lockbox code, and
+  /// revealing the second must not blank the first while the vendor is still
+  /// keying it into a panel.
+  revealed?: Record<string, string>
+}
+
 /**
  * Reveals one access code to the vendor, and logs it (PROP-03: "codes are
  * revealed per-work-order only and each reveal is logged").
@@ -165,29 +190,34 @@ export async function respondToWorkOrder(
  */
 export async function revealCodeForVendor(
   token: string,
-  accessCodeId: string,
-): Promise<{ code?: string; error?: string }> {
+  previous: VendorRevealState,
+  formData: FormData,
+): Promise<VendorRevealState> {
+  const accessCodeId = str(formData, 'accessCodeId')
+  const keep = previous.revealed ?? {}
   const link = await verifyVendorLink(token)
-  if (!link.ok) return { error: vendorRejectionMessage(link.reason) }
+  if (!link.ok) {
+    return { revealed: keep, error: vendorRejectionMessage(link.reason) }
+  }
 
   const { workOrder, vendorId } = link
   // Accepted vendors only. Somebody who has not answered, or who declined,
   // has no business holding a gate code - and this is exactly the case where
   // "the link is still technically live" is not a good enough reason.
   if (!vendorMayUpload(workOrder.vendorResponse)) {
-    return { error: 'Accept the job first and the access details will appear here.' }
+    return { revealed: keep, error: 'Accept the job first and the access details will appear here.' }
   }
 
   const accessCode = await prisma.accessCode.findUnique({ where: { id: accessCodeId } })
   // Scoped to the work order's OWN unit. Without this the vendor could pass
   // any AccessCode id and read a code for a unit they were never sent to.
   if (!accessCode || accessCode.unitId !== workOrder.unitId || accessCode.effectiveTo !== null) {
-    return { error: 'That access code is not available for this job.' }
+    return { revealed: keep, error: 'That access code is not available for this job.' }
   }
 
   const code = openSecret(accessCode.sealedCode, 'access-code')
   if (code == null) {
-    return { error: 'This code could not be read. Please call the office.' }
+    return { revealed: keep, error: 'This code could not be read. Please call the office.' }
   }
 
   await auditAsVendor(vendorId, {
@@ -203,7 +233,10 @@ export async function revealCodeForVendor(
     },
   })
 
-  return { code }
+  // Focus is the PAGE's job, not this state's: the revealed `<code>` carries
+  // `autoFocus`, which fires on mount and so lands on whichever code was just
+  // added here without ever re-stealing the cursor afterwards.
+  return { revealed: { ...keep, [accessCode.id]: code } }
 }
 
 /**
@@ -229,26 +262,35 @@ export async function uploadVendorDocument(
   }
 
   const kind = str(formData, 'kind')
+  const invoiceDollars = str(formData, 'invoiceDollars')
+  // Read before the first refusal, not next to the arithmetic that needs it,
+  // so EVERY refusal below can hand it back (R-114). The file input is not
+  // echoable - a browser will not let us refill one - so the amount a vendor
+  // typed is the only thing here worth saving, and a rejected file was the
+  // commonest way to lose it.
+  const typed = { kind, invoiceDollars }
   if (kind !== 'COMPLETION_PHOTO' && kind !== 'INVOICE') {
-    return { error: 'Choose whether this is a completion photo or the invoice.' }
+    return {
+      error: 'Choose whether this is a completion photo or the invoice.',
+      values: typed,
+    }
   }
 
   const file = formData.get('file')
   if (!(file instanceof File) || file.size === 0) {
-    return { error: 'Choose a file to upload.' }
+    return { error: 'Choose a file to upload.', values: typed }
   }
   if (file.size > MAX_UPLOAD_BYTES) {
-    return { error: 'That file is too large. Please keep it under 15MB.' }
+    return { error: 'That file is too large. Please keep it under 15MB.', values: typed }
   }
   const isImage = file.type.startsWith('image/')
   if (kind === 'COMPLETION_PHOTO' && !isImage) {
-    return { error: 'A completion photo has to be an image.' }
+    return { error: 'A completion photo has to be an image.', values: typed }
   }
   if (kind === 'INVOICE' && !isImage && file.type !== 'application/pdf') {
-    return { error: 'An invoice has to be a photo or a PDF.' }
+    return { error: 'An invoice has to be a photo or a PDF.', values: typed }
   }
 
-  const invoiceDollars = str(formData, 'invoiceDollars')
   const invoiceCents = invoiceDollars ? Math.round(Number(invoiceDollars) * 100) : null
   if (kind === 'INVOICE') {
     const violations = validateVendorInvoice({ invoiceCents })
@@ -256,6 +298,10 @@ export async function uploadVendorDocument(
       return {
         error: 'Check the amount.',
         fieldErrors: Object.fromEntries(violations.map((v) => [v.field, v.message])),
+        // The file input is not echoable - a browser will not let us refill
+        // one - so the amount is what there is to save, and it is the field
+        // this refusal is about.
+        values: typed,
       }
     }
   }
@@ -418,7 +464,17 @@ async function raiseInvoiceApprovalTask(
  * saying they are finished and the job actually being finished are two
  * different claims, and only one of them is the vendor's to make.
  */
-export async function markWorkComplete(token: string): Promise<VendorFormState> {
+/// `(state, formData)` rather than a bare `(token)` (R-114). The page wrapped
+/// the old signature in an inline arrow to satisfy `useActionState`, and an
+/// arrow is not a server-action reference - so React could emit no form
+/// endpoint into the HTML, and "Mark the work finished" submitted a bare GET
+/// that went nowhere until the bundle arrived. `formData` is genuinely unused:
+/// the token is the whole input, and it is bound server-side.
+export async function markWorkComplete(
+  token: string,
+  _previous: VendorFormState,
+  _formData: FormData,
+): Promise<VendorFormState> {
   const link = await verifyVendorLink(token)
   if (!link.ok) return { error: vendorRejectionMessage(link.reason) }
 

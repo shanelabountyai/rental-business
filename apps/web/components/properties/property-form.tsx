@@ -1,10 +1,10 @@
 'use client'
 
 import { COMMON_US_TIMEZONES, US_STATE_OPTIONS } from '@rental/core/property'
-import { useActionState, useId, useState } from 'react'
+import { useActionState, useId } from 'react'
 import { FormAlerts } from '@/components/auth-form.tsx'
 import { CheckboxField, SelectField, TextareaField, TextField } from '@/components/form/field.tsx'
-import { LiveRegion, SubmitButton } from '@/components/auth-form.tsx'
+import { LiveRegion, SubmitButton, useFormVersion } from '@/components/auth-form.tsx'
 import type { PropertyFormState } from '@/lib/properties/actions.ts'
 
 const PROPERTY_TYPE_OPTIONS = [
@@ -80,18 +80,13 @@ function defaultsFromSubmitted(
  * THE REMOUNT: React resets an uncontrolled <form>'s fields after any action
  * dispatch, success or not - so by the time a validation error or the
  * duplicate warning comes back, the DOM has already forgotten what the user
- * typed. `formVersion` bumps once per response and is used as the form's
+ * typed. `useFormVersion` bumps once per response and is used as the form's
  * `key`, forcing React to throw away those now-empty inputs and mount fresh
  * ones whose `defaultValue` comes from `values` below - which is state's
- * echoed-back `submitted`, not the stale DOM.
- *
- * Bumped during render (comparing against a stored previous `state`), not in
- * a useEffect: React's own guidance for "adjust state when a prop/state
- * changes" is to do it inline with this same setState-during-render escape
- * hatch, which - unlike an effect - applies before the browser paints, so
- * there is no visible flash of empty fields between the reset and the
- * repopulation. react-hooks/set-state-in-effect flags the effect-based
- * version for exactly this reason.
+ * echoed-back `submitted`, not the stale DOM. The hook was this file's own
+ * six lines until R-114 needed the same thing on four stranger-facing forms;
+ * its comment in `auth-form.tsx` carries the rest of the reasoning, including
+ * why every live region must stay OUTSIDE the keyed form.
  */
 export function PropertyForm({
   action,
@@ -127,12 +122,7 @@ export function PropertyForm({
   // these on one page would otherwise share a DOM id.
   const formId = useId()
 
-  const [previousState, setPreviousState] = useState(state)
-  const [formVersion, setFormVersion] = useState(0)
-  if (state !== previousState) {
-    setPreviousState(state)
-    setFormVersion((version) => version + 1)
-  }
+  const formVersion = useFormVersion(state)
 
   return (
     <div className="flex max-w-2xl flex-col gap-5">

@@ -1,4 +1,5 @@
 import { BidForm } from '@/components/vendors/bid-form.tsx'
+import { VendorHelpLine } from '@/components/vendors/vendor-help-line.tsx'
 import { submitBid } from '@/lib/vendors/bid-actions.ts'
 import { verifyBidLink } from '@/lib/vendors/bids.ts'
 
@@ -30,11 +31,15 @@ export default async function VendorBidPage({
     return (
       <main className="mx-auto flex max-w-xl flex-col gap-4 p-6">
         <h1 className="text-xl font-semibold">This link isn&rsquo;t working</h1>
-        <p className="text-sm">
+        <p className="text-base">
           {link.reason === 'not_actionable'
             ? 'This job has already been assigned. Thanks for looking.'
-            : 'This link is not valid. Check for a newer message from us, or call the office.'}
+            : 'This link is not valid. Check for a newer message from us.'}
         </p>
+        {/* The dispatch page's dead end has offered a number since R-098; this
+            one, added by the same programme, still printed the sentence that
+            component was written to replace (R-114). */}
+        <VendorHelpLine />
       </main>
     )
   }

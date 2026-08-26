@@ -80,6 +80,18 @@ async function signIn(page: import('@playwright/test').Page, email: string) {
   await page.waitForURL((url) => !url.pathname.startsWith('/login'))
 }
 
+// R-114: THE STAFF SIGN-IN NEEDED ONE TOO, and only the anonymous contexts
+// below had one. R-003 limits staff sign-in to ten attempts per IP per five
+// minutes, and local e2e traffic carries no `x-forwarded-for` - so this spec's
+// `signIn` shared a single bucket with every other spec that forgot, including
+// `auth.spec.ts`, which burns attempts deliberately. The symptom is the one
+// CLAUDE.md warns about and it looks nothing like the cause: `waitForURL`
+// timing out sixty seconds after clicking "Sign in", in a spec that has
+// nothing to do with authentication, passing in isolation every time.
+test.beforeEach(async ({ page }) => {
+  await page.setExtraHTTPHeaders(uniqueClientHeaders())
+})
+
 test.beforeAll(async () => {
   // Local e2e traffic carries no x-forwarded-for header, so
   // clientIp() in lib/prospects/actions.ts falls back to the loopback
@@ -105,6 +117,39 @@ test.afterAll(async () => {
   await prisma.staffUser.updateMany({ where: { id: { in: staffIds } }, data: { active: false } })
 })
 
+// R-114 (audit finding 7): React 19 empties an uncontrolled form after every
+// action dispatch, so the commonest refusal on this form - the one the hint
+// under the Email field exists to prevent - used to take the visitor's name
+// and message with it. A prospect who has just lost everything they typed does
+// not type it again, which makes this a lost lead rather than a papercut.
+//
+// The refusal has to be a SERVER one. Leaving out both email and phone passes
+// the browser's own validation (neither field is `required` - either will do),
+// which is exactly why this is the refusal that reaches the action.
+test('a refused inquiry hands back what the visitor typed', async ({ browser }) => {
+  const { listing } = await seedPublishedListing()
+
+  const anon = await browser.newContext({ extraHTTPHeaders: uniqueClientHeaders() })
+  const anonPage = await anon.newPage()
+  await anonPage.goto(`/listings/${listing.id}`)
+  await anonPage.getByLabel('First name').fill('Priya')
+  await anonPage.getByLabel('Last name').fill('Patel')
+  await anonPage
+    .getByLabel(/Anything you.d like us to know/)
+    .fill('Is the garage included?')
+  await anonPage.getByRole('button', { name: 'Send my question' }).click()
+
+  // By text: `getByRole('alert')` also matches the per-field `FieldError` and
+  // Next's always-present empty route announcer.
+  await expect(anonPage.getByText('Fix the highlighted fields')).toBeVisible()
+  await expect(anonPage.getByLabel('First name')).toHaveValue('Priya')
+  await expect(anonPage.getByLabel('Last name')).toHaveValue('Patel')
+  await expect(anonPage.getByLabel(/Anything you.d like us to know/)).toHaveValue(
+    'Is the garage included?',
+  )
+  await anon.close()
+})
+
 test('an anonymous visitor inquires, and the pipeline shows the inquiry', async ({
   page,
   browser,
@@ -123,7 +168,7 @@ test('an anonymous visitor inquires, and the pipeline shows the inquiry', async 
   await anonPage.getByLabel('First name').fill('Priya')
   await anonPage.getByLabel('Last name').fill(lastName)
   await anonPage.getByLabel('Email').fill(`priya-${randomUUID().slice(0, 8)}@example.test`)
-  await anonPage.getByRole('button', { name: 'Ask about this listing' }).click()
+  await anonPage.getByRole('button', { name: 'Send my question' }).click()
   await expect(anonPage.getByText(/check your email or phone/)).toBeVisible()
   await anon.close()
 

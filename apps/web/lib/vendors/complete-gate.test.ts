@@ -108,7 +108,7 @@ describe('markWorkComplete', () => {
   it('REFUSES without a completion photo, and says which thing is missing', async () => {
     const { workOrder, token } = await seedAcceptedJob()
 
-    const result = await markWorkComplete(token)
+    const result = await markWorkComplete(token, {}, new FormData())
 
     expect(result.error).toMatch(/photo of the finished work/i)
     const after = await prisma.workOrder.findUniqueOrThrow({ where: { id: workOrder.id } })
@@ -121,7 +121,7 @@ describe('markWorkComplete', () => {
     const { workOrder, token } = await seedAcceptedJob()
     await addCompletionPhoto(workOrder.id)
 
-    const result = await markWorkComplete(token)
+    const result = await markWorkComplete(token, {}, new FormData())
 
     expect(result.error).toBeUndefined()
     const after = await prisma.workOrder.findUniqueOrThrow({ where: { id: workOrder.id } })
@@ -148,7 +148,7 @@ describe('markWorkComplete', () => {
     })
     documentIds.push(invoice.id)
 
-    const result = await markWorkComplete(token)
+    const result = await markWorkComplete(token, {}, new FormData())
     expect(result.error).toMatch(/photo of the finished work/i)
   }, 20_000)
 
@@ -162,7 +162,7 @@ describe('markWorkComplete', () => {
       data: { deletedAt: new Date() },
     })
 
-    const result = await markWorkComplete(token)
+    const result = await markWorkComplete(token, {}, new FormData())
     expect(result.error).toMatch(/photo of the finished work/i)
   }, 20_000)
 
@@ -171,7 +171,7 @@ describe('markWorkComplete', () => {
     const theirs = await seedAcceptedJob()
     await addCompletionPhoto(theirs.workOrder.id)
 
-    const result = await markWorkComplete(mine.token)
+    const result = await markWorkComplete(mine.token, {}, new FormData())
     expect(result.error).toMatch(/photo of the finished work/i)
   }, 20_000)
 })

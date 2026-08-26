@@ -27,6 +27,13 @@ export interface InquiryFormState {
   error?: string
   fieldErrors?: Record<string, string>
   notice?: string
+  /// WHAT THEY TYPED, HANDED BACK (R-114). React 19 resets uncontrolled fields
+  /// after a form action, so submitting the inquiry with neither an email nor
+  /// a phone - the commonest refusal, and the one the hint under the field is
+  /// there to prevent - emptied all five boxes. A prospect who has just lost
+  /// their name, their message and their number does not type them again.
+  /// Same fix as `lease-form.tsx`, on the form a stranger fills in.
+  values?: Record<string, string>
 }
 
 const GENERIC_RATE_LIMIT_ERROR = 'Too many attempts. Wait a few minutes and try again.'
@@ -45,12 +52,27 @@ function str(formData: FormData, name: string): string {
   return typeof value === 'string' ? value.trim() : ''
 }
 
+/// The five fields the visitor typed, for handing back with a refusal. Read
+/// straight off the FormData because the two earliest refusals - the rate
+/// limit and an unpublished listing - happen before anything is parsed, and
+/// those lose exactly as much typing as a validation failure does.
+function typed(formData: FormData): Record<string, string> {
+  return Object.fromEntries(
+    ['firstName', 'lastName', 'email', 'phone', 'message'].map((name) => [
+      name,
+      str(formData, name),
+    ]),
+  )
+}
+
 function violationsToState(
   violations: readonly { field: string; message: string }[],
+  values: Record<string, string>,
 ): InquiryFormState {
   return {
     error: 'Fix the highlighted fields.',
     fieldErrors: Object.fromEntries(violations.map((v) => [v.field, v.message])),
+    values,
   }
 }
 
@@ -70,7 +92,7 @@ export async function submitInquiry(
 ): Promise<InquiryFormState> {
   const ip = await clientIp()
   const limit = await consumeRateLimit(`prospect-inquiry:${ip}`, RATE_LIMITS.prospectInquiry)
-  if (!limit.allowed) return { error: GENERIC_RATE_LIMIT_ERROR }
+  if (!limit.allowed) return { error: GENERIC_RATE_LIMIT_ERROR, values: typed(formData) }
 
   const listing = await prisma.listing.findFirst({
     where: { id: listingId, status: 'PUBLISHED' },
@@ -79,7 +101,9 @@ export async function submitInquiry(
   // anonymous caller everywhere else in this product (ROLE-01) - a form
   // posted against a stale or unpublished listing gets a plain refusal,
   // not confirmation the id was ever real.
-  if (!listing) return { error: 'That listing is no longer available.' }
+  if (!listing) {
+    return { error: 'That listing is no longer available.', values: typed(formData) }
+  }
 
   const input = {
     listingId,
@@ -90,7 +114,15 @@ export async function submitInquiry(
     message: str(formData, 'message') || null,
   }
   const violations = validateProspectInquiry(input)
-  if (violations.length > 0) return violationsToState(violations)
+  if (violations.length > 0) {
+    return violationsToState(violations, {
+      firstName: input.firstName,
+      lastName: input.lastName,
+      email: input.email ?? '',
+      phone: input.phone ?? '',
+      message: input.message ?? '',
+    })
+  }
 
   const source = str(formData, 'source') || 'direct'
 

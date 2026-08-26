@@ -4735,3 +4735,40 @@ Found by doing the thing `CLAUDE.md` calls not optional — reading CI after a p
 - **The billing limit itself.** Blocking, owner-only, and CI stays dark until it is cleared. Nothing was pushed to work around it.
 - **`npm audit`: 18 findings (2 low, 2 moderate, 14 high)**, unseen for nine days because CI runs it `continue-on-error` by design. Almost all are dev-only toolchain (`@lhci/cli`, `lighthouse`, `puppeteer-core`, `prisma`, `tmp`, `inquirer`). The two worth a decision are `next` → `postcss` (build-time XSS in the CSS stringifier) and `sharp` → libvips CVEs. Not triaged here — it is a report-only check and a separate decision about upgrades.
 - **Lighthouse never ran.** CI's e2e job ends with `npx lhci autorun`; only the Playwright and axe half was reproduced locally, so the performance and best-practice budgets are still nine days unverified.
+
+---
+
+## R-114: the stranger-facing front door
+**Commit:** _pending_  ·  **Date:** 2026-08-26
+
+Milestone 11's third slice, chosen by the owner over the 3am-ops and money/leasing ones. Everything in it is seen by somebody who does not work here — a tenant, a prospect, a plumber in a driveway — and three of the ten findings were dead ends with no way onward.
+
+**What it built.**
+
+- **`/` is a front door instead of build notes.** It rendered "Scaffold only", named `docs/prds/06-backlog.md`, and printed worked proration and late-fee-cap arithmetic, with no link to either sign-in. It is now the product name, a link to the tenant portal, a link to staff sign-in, and one sentence telling a vendor their texted link is the way in.
+- **A dead magic link says what happened.** `/portal/verify` has redirected to `/portal/login?error=…` since it was written and even carries a comment anticipating the email-prefetcher case; the page it redirects to took no `searchParams`. `invalid` and `missing` now answer separately.
+- **`global-error.tsx` has a recovery that does not need the bundle** — a plain `<a href="/">` and `VendorHelpLine`'s `tel:` link alongside `reset`, and the `<h1>` takes focus.
+- **The gate-code reveal is a real form.** The one action the vendor surface exists to perform was still an `onClick`, so on a phone on bad signal it did nothing until the bundle arrived, with no pending state — and every tap writes an audit row, so four taps made one door read as four reveals. `markWorkComplete` was the same defect one line up: wrapped in an inline arrow for `useActionState`, which is not a server-action reference, so React emitted no form endpoint and the press was a bare GET that went nowhere.
+- **Five panels that replace themselves now announce and keep focus.** Accepting a job, marking it finished, pricing a bid, answering "was this fixed?" and sending an inquiry each destroyed the message they had just produced along with the button holding focus, because the action changes the very condition its result region renders under. `useFocusWhen` was written for exactly this and none of the five used it.
+- **A refusal no longer empties every field.** `values` on `VendorFormState` and `InquiryFormState`, echoed on every refusal including the ones that fire before parsing.
+- **Three accessible-name collisions**, two of them a substring away from a strict-mode failure nobody had hit yet: "Show code" against an `aria-label` of "Show the Front door code", "Send" inside "Send this time", and "Ask about this listing" being verbatim the `<h2>` above the button.
+- Listing photos carry `Photo N of M of {address}` instead of `alt=""`; the bid dead end has a phone number; three inline links on the phone-first surface got `min-h-11`.
+
+**What it decided.**
+
+**`useFormVersion`, extracted rather than copied.** `defaultValue` alone does not survive React 19's post-dispatch reset — `property-form.tsx` established that in R-008 and solved it by bumping a `key`. Four more forms needed the same thing, so the six lines are a hook in `auth-form.tsx` next to `useFocusWhen`, and `property-form.tsx` now calls it. Its comment carries the warning R-107b paid for: **a `key` on a `<form>` throws its live regions away**, so every region must be mounted outside the keyed form.
+
+**The pre-hydration claim is proved, not asserted.** `javaScriptEnabled: false` accepts the job and reveals the code. This file's comments have claimed the R-098 standard for several items; this is the first vendor test that would fail if it stopped being true.
+
+**Two headings were reworded before they shipped.** "Thanks — we have your answer" is a substring of the notice rendered directly beneath it in the same panel. Both are "Your answer is recorded" instead. Grepping the neighbouring text for the words you are about to use is cheaper than the strict-mode failure three items later.
+
+**The real bug found on the way — and it is not this item's.** `prospects.spec.ts` and `showings.spec.ts` give their **anonymous** contexts a unique client IP and their **staff sign-in** none, so both shared the default R-003 bucket with `auth.spec.ts`, which burns login attempts deliberately. Running the touched specs three times in five minutes was enough: five failures, every one a `waitForURL` timing out sixty seconds after clicking "Sign in", in specs that have nothing to do with authentication — verbatim the symptom `CLAUDE.md` describes and, as it warns, nothing like the cause. The confirming sweep went from **3.4 minutes to 38.8 seconds** once both had `test.beforeEach(page.setExtraHTTPHeaders(uniqueClientHeaders()))`. **The gap is exactly the one Golden Path 3 found in nine specs**: `uniqueClientHeaders()` reached the `browser.newContext()` calls and not the default `page` fixture.
+
+**Also corrected in place**: `listing-inquiry-form.tsx`'s R-107b comment claimed its live region was "mounted from first paint". The early `return` replaces the whole form, so it never was — a live region cannot help with a panel that replaces itself, which is what `useFocusWhen` exists to say.
+
+**Verified.** `lint` (0 errors, the same 14 pre-existing warnings), `typecheck`, `npm run build`, unit **2,744 passed + 4 skipped of 2,748**, and the seven touched e2e specs at **112 passed of 112**, reconciling exactly against `npx playwright test --list`.
+
+**What it left behind.**
+- **The full sweep was not run locally** — the seven touched specs were. CI owns the 1,038, and CI is still dark on R-113's billing limit, so nothing here has been through it.
+- **A real caption field for listing photos.** `Document` has no caption column; `Photo N of M of {address}` says a gallery exists and how big it is, which is what tells somebody whether to ask. The proper fix is a field filled in by whoever uploads, and it belongs with the uploader.
+- **Twelve audit angles still open** — ⑪ and ⑭–⑱ (the 3am ops surface), ㉓–㉗ (money, leasing and plain language), and ⑳, the one the auditor refused to call a defect because it cannot be settled without a screen reader.
