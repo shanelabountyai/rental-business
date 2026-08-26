@@ -4539,7 +4539,7 @@ So a repeat draw does not collide — it creates a **second** statewide rule. `r
 - **`docs/PROGRESS.md`'s R-107a entry describes the `renewals.spec.ts` mechanism as "only one row can exist"**, which is the same wrong belief. Its fix — a state code per test — was right for the wrong reason. Left as written; this entry is the correction.
 
 ## R-109: two tests that only passed on a quiet database
-**Commit:** PENDING  ·  **Date:** 2026-08-25
+**Commit:** 1ba0ff3  ·  **Date:** 2026-08-25
 
 Both were diagnosed in R-108 and deliberately left unfixed there. Neither is a product bug; both are the same class of defect — a test whose correctness depends on what else happens to be in the shared database — and one of them was a *fix* for that class that did not work.
 
