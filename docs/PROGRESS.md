@@ -4633,7 +4633,7 @@ The assertion got *stronger* rather than looser. It was `/Created \d+ work order
 ---
 
 ## R-111: a theme nobody wired up, and a scanner told not to look
-**Commit:** TBD  ·  **Date:** 2026-08-25
+**Commit:** 155fc03  ·  **Date:** 2026-08-25
 
 Audit angles ②, ㉑ and ㉒ — the shared-layer remainder after R-107a and R-107b. **This item was built in a previous session that never committed it or wrote this entry;** it was found uncommitted in the working tree at the start of R-112 and is recorded here from its own diff, verified rather than taken on trust.
 
