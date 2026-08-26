@@ -4573,7 +4573,7 @@ Nothing was sent. The immediately preceding run under the old predicate did the 
 - **Three `afterAll` hooks timed out at 10s in the first full run of this session** (`sms-intake`, `triage-consumer`, `job-consumer`) — all three `deleteMany` calls with nested relation filters, all three green alone and green in the clean re-run. The cause was mine and not the code's: `lint` and `typecheck` were running against the same laptop at the same time, which is the load the conventions warn about. Recorded because the symptom — three unrelated files failing in teardown with zero test failures — reads like a code defect and is not one.
 
 ## R-107b: the live regions that announce nothing
-**Commit:** TBD  ·  **Date:** 2026-08-25
+**Commit:** 785270f  ·  **Date:** 2026-08-25
 
 Audit item 4, the largest single count in `docs/audits/2026-08-25-accessibility-ux.md`. `{state.error && <p role="alert">…}` inserts the region and its text as one new node, and a live region announces CHANGES TO ITSELF — so a node that arrives already-populated is not a change and assistive technology routinely says nothing. R-101 fixed this in `FormAlerts` and R-031 fixed it in `FieldError`; these were the callers that hand-rolled the broken shape instead of importing the fix.
 
