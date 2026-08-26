@@ -5,7 +5,7 @@
    here and a `.dark` palette below, and 243 `dark:` utilities across 76 files
    that could never render, because nothing ever set the class or read
    prefers-color-scheme - R-107a even measured and fixed a contrast bug in the
-   dark `--input`, on CSS no eye has ever seen. All of it deleted in R-113.
+   dark `--input`, on CSS no eye has ever seen. All of it deleted in R-111.
    A theme nobody wired up is worse than no theme: it makes every reviewer
    confident about a surface that does not exist. If dark mode is ever wanted,
    it starts here - the toggle and the palette first, `dark:` classes after. */

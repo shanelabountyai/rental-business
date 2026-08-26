@@ -57,7 +57,7 @@ broke them.
 
 ## ② Every `dark:` class in the codebase is dead CSS
 
-**FIXED (R-113).** All 243 `dark:` utilities across 76 files deleted, along with `@custom-variant dark` and the `.dark` palette. `globals.css` now opens with a comment saying the product is light-only and what it would take to change that. The audit understated it: R-107a had already *measured and fixed* a 1.64:1 contrast bug in the dark `--input` — real work, on CSS that could not render.
+**FIXED (R-111).** All 243 `dark:` utilities across 76 files deleted, along with `@custom-variant dark` and the `.dark` palette. `globals.css` now opens with a comment saying the product is light-only and what it would take to change that. The audit understated it: R-107a had already *measured and fixed* a 1.64:1 contrast bug in the dark `--input` — real work, on CSS that could not render.
 
 
 `@custom-variant dark (&:is(.dark *))` — and nothing in the app ever sets a
@@ -396,7 +396,7 @@ when someone has heard it work.
 
 ## ㉑ The automated a11y tests are configured not to report it
 
-**FIXED (R-113).** One `axeScan()` in [e2e/fixtures.ts](../../e2e/fixtures.ts) replaces 60 hand-written `AxeBuilder` chains across 40 spec files, with `best-practice` in the tag set. **Proven by making it fail**: restoring the nested `<main>` turned the scan red on THREE rules the old filter hid — `landmark-main-is-top-level`, `landmark-no-duplicate-main`, and `landmark-unique`, which the audit did not name. The nested `<main>` itself is gone from `/portal/pay/history`.
+**FIXED (R-111).** One `axeScan()` in [e2e/fixtures.ts](../../e2e/fixtures.ts) replaces 60 hand-written `AxeBuilder` chains across 40 spec files, with `best-practice` in the tag set. **Proven by making it fail**: restoring the nested `<main>` turned the scan red on THREE rules the old filter hid — `landmark-main-is-top-level`, `landmark-no-duplicate-main`, and `landmark-unique`, which the audit did not name. The nested `<main>` itself is gone from `/portal/pay/history`.
 
 
 A page renders `<main>` nested inside `<main>`. Invalid HTML, two main landmarks,
@@ -416,7 +416,7 @@ statement about a configuration, not about a page.
 
 ## ㉒ The primary navigation is announced as supplementary content
 
-**FIXED (R-113).** The `<aside>` in `app/(admin)/layout.tsx` is a `<div>`. The `<nav aria-label="Sections">` inside it was already carrying the semantics, so nothing was added.
+**FIXED (R-111).** The `<aside>` in `app/(admin)/layout.tsx` is a `<div>`. The `<nav aria-label="Sections">` inside it was already carrying the semantics, so nothing was added.
 
 
 The admin section nav lives in an `<aside>`, which maps to

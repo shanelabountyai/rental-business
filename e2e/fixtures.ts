@@ -187,7 +187,7 @@ export function uniqueStateCode(): string {
  * `landmark-no-duplicate-main` and `landmark-main-is-top-level`. So
  * `/portal/pay/history` rendered a `<main>` inside the portal layout's
  * `<main>` — invalid HTML, two main landmarks, and the skip link's `#main`
- * resolving to the wrong one — and sixty axe scans passed over it (R-113).
+ * resolving to the wrong one — and sixty axe scans passed over it (R-111).
  *
  * "axe passes" is a statement about a configuration, not about a page. One
  * helper means the next author cannot get the configuration wrong by copying
