@@ -1,5 +1,7 @@
 // Shared fixture helpers for the end-to-end suite.
 
+import { randomUUID } from 'node:crypto'
+
 let counter = 0
 
 /**
@@ -142,4 +144,35 @@ export async function expectAnnouncedInPlace(
 export function uniqueClientHeaders(): Record<string, string> {
   const octet = () => Math.floor(Math.random() * 254) + 1
   return { 'x-forwarded-for': `10.${octet()}.${octet()}.${octet()}` }
+}
+
+/**
+ * A jurisdiction state code no other fixture, run or browser project is
+ * holding.
+ *
+ * ==========================================================================
+ * THE UNIQUE CONSTRAINT DOES NOT CATCH A REPEATED CODE (R-108).
+ * `@@unique([state, jurisdiction, version])` looks like it makes a repeat
+ * loud, and it does not: every fixture rule is statewide, so `jurisdiction`
+ * is NULL, and Postgres treats NULLs as DISTINCT - two identical statewide
+ * v1 rows insert without complaint. `rulesFor` then fetches BOTH and
+ * `selectApplicableRule` breaks the effectiveFrom tie by keeping whichever
+ * row came back first, so a test silently reads a different test's statute.
+ *
+ * THE SYMPTOM LOOKS NOTHING LIKE THE CAUSE. Nothing throws. The page renders
+ * the other branch perfectly, and the failure is a 60s timeout on an
+ * assertion in a feature nobody touched - `abandonment.spec.ts` drew its code
+ * from 26 letters and lost roughly one run in twenty-four, a different test
+ * each time.
+ *
+ * Genuinely unique rather than sequential, which is the opposite of
+ * `uniquePhone` above and for a reason: a phone number has a format to fit
+ * inside, and a state code has no length constraint anywhere in the repo. So
+ * there is no need to gamble at all - not across workers, and not against the
+ * rows a crashed run left behind.
+ * ==========================================================================
+ */
+export function uniqueStateCode(): string {
+  counter += 1
+  return `Q${randomUUID().slice(0, 8)}${counter}`
 }

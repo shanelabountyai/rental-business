@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { hashPassword } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
+import { uniqueClientHeaders, uniqueStateCode } from './fixtures.ts'
 
 // Tenant goes dark / abandonment (RISK-01, R-087).
 //
@@ -31,20 +32,12 @@ const tenantIds: string[] = []
 const caseIds: string[] = []
 const ruleIds: string[] = []
 
-/// Its own state code per run, so this file's jurisdiction rows can never be
-/// confused with another spec's — the lesson R-087 learned from two unit
-/// tests quietly sharing 'ZZ'.
-function stateCode(): string {
-  const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
-  return `Q${letters[Math.floor(Math.random() * 26)]}`
-}
-
 async function seedTenancy(options: {
   belongingsStorageDays?: number | null
   belongingsNoticeDays?: number | null
 } = {}) {
   const stamp = randomUUID().slice(0, 8)
-  const state = stateCode()
+  const state = uniqueStateCode()
   const rule = await prisma.jurisdictionRule.create({
     data: {
       state,
@@ -150,8 +143,7 @@ async function signIn(page: import('@playwright/test').Page, email: string) {
 }
 
 test.beforeEach(async ({ page }) => {
-  const octet = () => Math.floor(Math.random() * 254) + 1
-  await page.setExtraHTTPHeaders({ 'x-forwarded-for': `10.${octet()}.${octet()}.${octet()}` })
+  await page.setExtraHTTPHeaders(uniqueClientHeaders())
 })
 
 test.afterAll(async () => {

@@ -4504,3 +4504,36 @@ The first spend of the 2026-08-25 accessibility audit (`docs/audits/2026-08-25-a
 - **Nine components hand-roll their own `disabled={pending}` button** and still blur focus on submit, keeping `disabled:opacity-60` with it. They share the defect `SubmitButton` just shed but not its code; rewiring each one's pending logic is its own change.
 - **`--border` stays at 1.26:1** as a decorative hairline. Permitted by 1.4.11, and a judgement a designer may want to revisit rather than one a test should freeze.
 - **R-108 records an undiagnosed flake in `abandonment.spec.ts`** — a 26-value random state code on a unique key, reproducing 1 in 24 with retries off. What is proven and what is not are written down separately, because the symptom is a timeout rather than the constraint violation a collision should produce, and that gap has to be explained before anything is changed.
+
+## R-108: the constraint that was never going to fire
+**Commit:** _pending_  ·  **Date:** 2026-08-25
+
+The row was filed undiagnosed on purpose — *"a fix aimed at a guessed cause is the thing this repo's own notes warn against"* — with what was proven and what was not written down separately. The diagnosis is that **the row's own premise was wrong**, and so was R-107a's when it fixed the same shape in `renewals.spec.ts`.
+
+**What it decided, because everything else follows from it.**
+
+`@@unique([state, jurisdiction, version])` does not refuse a repeated state code, and never did. Every fixture rule is statewide, so `jurisdiction` is NULL, and **Postgres treats NULLs as DISTINCT** in a unique index. Proven with SQL rather than reasoned about: two `('QQ', NULL, 1)` rows insert into `rental_test` inside one transaction, `INSERT 0 2`, no error.
+
+So a repeat draw does not collide — it creates a **second** statewide rule. `rulesFor` fetches every rule for the state and `selectApplicableRule` breaks the `effectiveFrom` tie with `if (!best || rule.effectiveFrom > best.effectiveFrom)`, which keeps whichever row `findMany` returned first. There is no `orderBy`, so which test's statute governs is a race. Nothing throws anywhere.
+
+**That closes the gap the row demanded be explained.** A collision does not produce a constraint violation; it produces a page rendering the *other* branch, correctly, from another test's numbers:
+
+- `belongingsStorageDays: null` inherited as `30` → the case is disposable, so `period_unknown`'s "is not configured in this system" never appears → **15s** `expect` timeout.
+- `30` inherited as `null` → `period_unknown` → the disposal form never renders → `fill('What was done with it')` waits out the whole **60s test timeout**. That is the exact symptom the row recorded.
+- The fourth test reads no storage period at all, which is why it never failed and why "a different test each time" was as far as anyone got.
+
+**Proven by making it fail** (the R-099 standard). `stateCode()` pinned to a constant, full spec, `--retries=0`: **3 failed, 5 passed, zero unique-constraint errors** — two of the failures at 1.0m on `disposal is allowed once the period has run`, one at 17.1s on `THE OTHER GATE`. Both gates passed in the other browser project in the same run, which is the race showing itself.
+
+**What it built.** `uniqueStateCode()` in `e2e/fixtures.ts`, beside `uniquePhone()` and for the same reason. Genuinely unique rather than sequential — deliberately the opposite of `uniquePhone`'s own rule, and the comment says why: a phone number has a format to fit inside, a state code has no length constraint anywhere in the repo, so there is nothing to gain by gambling at all. It is unique across workers, across browser projects and against rows a crashed run left behind. `abandonment.spec.ts` also picked up `uniqueClientHeaders()`, which it had hand-rolled.
+
+**Verified:** `lint` (0 errors, same 14 pre-existing warnings), `typecheck`, unit suite **2,744 passed + 4 skipped of 2,748, exit 0**, and `abandonment.spec.ts` at `--repeat-each=3 --retries=0` — **24 listed, 24 passed, 0 flaky**, the same multiplier that surfaced the flake in the first place.
+
+**Two unit failures found on the way, both the shared database and neither this change** (nothing here is loaded by vitest). Filed as **R-109**; diagnosed rather than guessed at, because that is what this item was about.
+
+- **`reissue.test.ts` counts `authToken` rows globally.** `prisma.authToken.count({ where: { purpose: 'VENDOR_WORK_ORDER' } })` before and after, asserting nothing new was minted — red the moment any other file mints a vendor token between the two reads, which is what happened (1842 against an expected 1841). It passes alone every time. This is the exact rule CLAUDE.md already carries from `inbound-email.test.ts`.
+- **`notifications.test.ts`'s global-sweep test fails after any recent suite run.** R-102 gave it a `beforeAll` retiring QUEUED rows **older than an hour**, and an hour is longer than it takes one suite run to leave 4,044 fresh ones. Measured: 4,044 QUEUED deliveries, **every one under an hour old**, so the retirement matched nothing and the sweep could not reach its own rows. Draining them by hand and re-running the file alone: 21 passed. Then the full suite, green. So the fix R-102 shipped works only on the first run in any hour, which is not a condition anybody can be expected to keep.
+
+**What it left behind.**
+- **`notice-to-vacate.spec.ts` (`YY`), `pay.spec.ts` (`XS`), `renewals.spec.ts` (`ZU`/`ZO`) still use fixed codes and still create duplicate rows** — one per test per browser project. They are safe today only because each file always seeds the *same* rule body under a given code, so the arbitrary tie-break picks between identical rows. One edit that varies a number under an existing code re-creates this bug exactly, which is what happened to `renewals.spec.ts`. Not swept here: they are green, and widening a diagnosis item into four working specs is how a fix breaks something it was not asked to touch. The guard is the helper plus the CLAUDE.md rule.
+- **The database still permits two statewide rules in force on the same day**, and `selectApplicableRule` still resolves that silently. `createRuleVersion` cannot produce it (version arithmetic, and a new `effectiveFrom` must be later than the one it supersedes), so this is a test-fixture hazard rather than a live one. Closing it at the database — `UNIQUE NULLS NOT DISTINCT`, Postgres 15+ — would break the three specs above on their next run and would report schema drift, since Prisma cannot express it. That is a real item, not a footnote to this one.
+- **`docs/PROGRESS.md`'s R-107a entry describes the `renewals.spec.ts` mechanism as "only one row can exist"**, which is the same wrong belief. Its fix — a state code per test — was right for the wrong reason. Left as written; this entry is the correction.
