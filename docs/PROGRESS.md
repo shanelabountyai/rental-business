@@ -4660,7 +4660,7 @@ Audit angles ②, ㉑ and ㉒ — the shared-layer remainder after R-107a and R-
 ---
 
 ## R-112: the tenant's primary job, and the tap that ends a tenancy
-**Commit:** TBD  ·  **Date:** 2026-08-25
+**Commit:** 33cc964  ·  **Date:** 2026-08-25
 
 Audit angles ④, ⑦ and ⑤, plus five findings that live in the same file as ④. Chosen by the owner over the two other remaining slices of the accessibility audit.
 
