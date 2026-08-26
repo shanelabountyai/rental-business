@@ -4739,7 +4739,7 @@ Found by doing the thing `CLAUDE.md` calls not optional — reading CI after a p
 ---
 
 ## R-114: the stranger-facing front door
-**Commit:** _pending_  ·  **Date:** 2026-08-26
+**Commit:** 41c62a1  ·  **Date:** 2026-08-26
 
 Milestone 11's third slice, chosen by the owner over the 3am-ops and money/leasing ones. Everything in it is seen by somebody who does not work here — a tenant, a prospect, a plumber in a driveway — and three of the ten findings were dead ends with no way onward.
 
