@@ -115,9 +115,11 @@ jobs:
 
       # Catches a schema.prisma edit that was never turned into a migration:
       # exit code 2 means the migrated database and the datamodel disagree.
-      # This check CANNOT run locally in any meaningful way - migrations are
-      # only ever applied incrementally to a branch that already has data - so
-      # losing it would make a whole class of defect invisible until deploy.
+      # `npm run db:ci` is the same check against a throwaway local database,
+      # added after this pipeline sat dead for nine days behind a billing
+      # error while a comment here claimed the check was CI-only. It is not:
+      # what does not work locally is running it against a database that
+      # already has data and incremental migrations.
       - name: Check for schema drift
         run: |
           npx dotenv -e .env.local -- npx prisma migrate diff \

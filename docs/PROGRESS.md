@@ -4705,3 +4705,33 @@ Every step is now a real `<form method="get">`: the controls carry the `name`s t
 - **The portal's own 16px floor is still broken** on the money screens and, worst, on the full text of a served legal notice (`<pre … text-sm>`). The shared field library labels this item reuses are `text-sm` too — a systemic thing that belongs to that row, not a new violation introduced here.
 - **A tap that straddles hydration can still be reset.** See above; deliberate.
 - **Four lines of R-111's sweep are in this commit**, not its own: two `dark:` deletions in the wizard, one in `maintenance/new/page.tsx`, one in `field.tsx`, and two `AxeBuilder`→`axeScan` swaps in `maintenance.spec.ts`. R-111 was found uncommitted in the working tree with this item already layered on top of it, and those four files cannot be split by path.
+
+---
+
+## R-113: the pipeline had been dead for nine days and 64 pushes
+**Commit:** TBD  ·  **Date:** 2026-08-26
+
+Found by doing the thing `CLAUDE.md` calls not optional — reading CI after a push.
+
+**What it found.** GitHub Actions has not started a job for this repo since **2026-08-17**. Last green run: **R-053**. Every push since — **64 of them**, failing in **3–7 seconds** — carried the annotation *"The job was not started because recent account payments have failed or your spending limit needs to be increased."* Roughly sixty backlog items, R-054 through R-112, went in with no CI at all.
+
+**The cause was already written down, by whoever fixed it.** `ci.yml`'s `timeout-minutes: 20` carries a comment explaining itself: a job without one inherits GitHub's 6-hour maximum, "on a private repo those minutes come out of the account's allowance, so a single hung run costs more than a dozen healthy ones and can exhaust the plan; **every push after it then refuses to start with a billing error that looks nothing like the cause**." The run history bears it out — **360 minutes on 2026-08-12**, with a 207m and a 146m nearby. The guard is in place, so it cannot recur; the exhausted allowance is the owner's to clear and nothing in this repo can do it.
+
+**What it built, and why that is the real item.** Nine days is a long time for a dead pipeline to go unread, and the reason is in this repo's own documentation. `CLAUDE.md` said the from-scratch migration apply and the drift check "CANNOT run locally in any meaningful way", and `ci.yml` repeated it. **That is false.** What cannot run locally is doing those checks against `rental_test` or the dev branch, because both already carry data and incremental migrations. Against a *throwaway* database it is the same check, and it takes thirty seconds.
+
+- **`npm run db:ci`** — derives `.env.ci` from `.env.test` by substitution (so no second set of credentials is ever written), drops and recreates `rental_ci`, applies every migration with `migrate deploy`, seeds reference data, and runs `prisma migrate diff --exit-code`. It never touches the database the suite is using, which is why it is not `db:reset:test`.
+- **`npm run ci:local`** — that, then `lint`, `typecheck`, `test` and `build`: CI's entire `verify` job.
+- Both false claims corrected where they were written, with the outage as the reason.
+
+**What it decided.**
+
+**A check that has never failed proves nothing, so the drift check was made to fail on purpose.** A `driftProbe String?` column added to `Property` in `schema.prisma` with no migration: exit code **2**, naming the column. Restored, and clean again. Without that step this item would have shipped a green light of unknown wiring, which is the same defect as the tag filter R-111 removed.
+
+**Deriving `.env.ci` rather than adding one.** A second env file is a second place for a credential to drift; `sed 's/rental_test/rental_ci/g' .env.test` means the CI database is by construction the test database's settings pointed somewhere else, and it stays gitignored under the existing `.env*` rule.
+
+**Verified — the whole of CI, locally.** Migrations apply to an empty Postgres from scratch (exit 0), **drift: no difference detected**, seed clean (6 roles, 1 jurisdiction rule, 1 criteria version), `lint` (0 errors, the same 14 pre-existing warnings), `typecheck`, unit **2,744 passed + 4 skipped of 2,748**, `npm run build`, and the **full e2e sweep: 1030 passed + 8 skipped, 0 failed, 0 flaky, in 5.6 minutes**, reconciling exactly against `npx playwright test --list` (Total: 1038 — the four above R-112's earlier count are R-112's own two new tests across two projects). **Nine days of unverified pushes hid nothing.**
+
+**What it left behind.**
+- **The billing limit itself.** Blocking, owner-only, and CI stays dark until it is cleared. Nothing was pushed to work around it.
+- **`npm audit`: 18 findings (2 low, 2 moderate, 14 high)**, unseen for nine days because CI runs it `continue-on-error` by design. Almost all are dev-only toolchain (`@lhci/cli`, `lighthouse`, `puppeteer-core`, `prisma`, `tmp`, `inquirer`). The two worth a decision are `next` → `postcss` (build-time XSS in the CSS stringifier) and `sharp` → libvips CVEs. Not triaged here — it is a report-only check and a separate decision about upgrades.
+- **Lighthouse never ran.** CI's e2e job ends with `npx lhci autorun`; only the Playwright and axe half was reproduced locally, so the performance and best-practice budgets are still nine days unverified.

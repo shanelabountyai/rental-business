@@ -41,7 +41,12 @@
     "db:status:test": "dotenv -e .env.test -e .env.local -- prisma migrate status --schema packages/db/prisma/schema.prisma",
     "db:status:dev": "dotenv -e .env.local -- prisma migrate status --schema packages/db/prisma/schema.prisma",
     "db:drift": "dotenv -e .env.test -e .env.local -- prisma migrate diff --from-schema-datasource packages/db/prisma/schema.prisma --to-schema-datamodel packages/db/prisma/schema.prisma --exit-code",
-    "db:reset:test": "dropdb --if-exists rental_test && createdb rental_test && npm run db:migrate:test && npm run db:seed:test"
+    "db:reset:test": "dropdb --if-exists rental_test && createdb rental_test && npm run db:migrate:test && npm run db:seed:test",
+    "ci:local": "npm run db:ci && npm run lint && npm run typecheck && npm test && npm run build",
+    "db:ci": "sed 's/rental_test/rental_ci/g' .env.test > .env.ci && dropdb --if-exists rental_ci && createdb rental_ci && npm run db:ci:migrate && npm run db:ci:seed && npm run db:ci:drift",
+    "db:ci:migrate": "dotenv -e .env.ci -e .env.local -- prisma migrate deploy --schema packages/db/prisma/schema.prisma",
+    "db:ci:seed": "dotenv -e .env.ci -e .env.local -- node packages/db/prisma/seed.mts",
+    "db:ci:drift": "dotenv -e .env.ci -e .env.local -- prisma migrate diff --from-schema-datasource packages/db/prisma/schema.prisma --to-schema-datamodel packages/db/prisma/schema.prisma --exit-code"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.10.2",
