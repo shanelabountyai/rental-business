@@ -10,6 +10,7 @@ import { useActionState } from 'react'
 import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
 import {
   CheckboxField,
+  FieldError,
   SelectField,
   TextField,
 } from '@/components/form/field.tsx'
@@ -378,11 +379,10 @@ export function RuleForm({
           <p className="text-muted-foreground text-sm">
             Which charge types a partial payment pays down, in this order.
           </p>
-          {errors.paymentAllocationOrder && (
-            <p role="alert" className="text-sm text-red-700 dark:text-red-400">
-              {errors.paymentAllocationOrder}
-            </p>
-          )}
+          <FieldError
+            id="field-payment-allocation-order-error"
+            message={errors.paymentAllocationOrder}
+          />
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
             {PAYMENT_ALLOCATION_CHARGE_TYPES.map((chargeType) => (
               <CheckboxField
@@ -485,11 +485,10 @@ export function RuleForm({
             Leaving all of these unticked does not mean the state accepts none — it means
             nobody has itemised them, and any class actually recorded will be taken.
           </p>
-          {errors.earlyTerminationDocumentationTypes && (
-            <p role="alert" className="text-sm text-red-700 dark:text-red-400">
-              {errors.earlyTerminationDocumentationTypes}
-            </p>
-          )}
+          <FieldError
+            id="field-early-termination-documentation-types-error"
+            message={errors.earlyTerminationDocumentationTypes}
+          />
           <div className="flex flex-col gap-2">
             {DOCUMENTATION_TYPES.map((documentationType) => (
               <CheckboxField

@@ -1,6 +1,7 @@
 'use client'
 
 import { useActionState } from 'react'
+import { LiveRegion } from '@/components/auth-form.tsx'
 import type { MaintenanceFormState } from '@/lib/maintenance/actions.ts'
 import { PRIMARY_BUTTON_CLASSES } from '@/components/ui-classes.ts'
 
@@ -65,13 +66,20 @@ export function EmergencyResponsePanel({
         Emergency response
       </h2>
 
-      {acknowledged ? (
-        <p className="text-sm" role="status">
-          Acknowledged {acknowledged.at}
-          {acknowledged.by ? ` by ${acknowledged.by}` : ''}. The escalation
-          chain has stopped.
-        </p>
-      ) : (
+      {/* The confirmation is a CHANGE inside a region that was already
+          there, not a paragraph arriving with its text in it - otherwise the
+          press that stopped the escalation chain announced nothing at all
+          (R-101's defect, swept in R-107b). */}
+      <LiveRegion>
+        {acknowledged && (
+          <p className="text-sm">
+            Acknowledged {acknowledged.at}
+            {acknowledged.by ? ` by ${acknowledged.by}` : ''}. The escalation
+            chain has stopped.
+          </p>
+        )}
+      </LiveRegion>
+      {!acknowledged && (
         <div className="flex flex-col gap-2">
           <p className="text-sm">
             Nobody has acknowledged this yet. If it is still unacknowledged 15
@@ -144,11 +152,9 @@ export function EmergencyResponsePanel({
         </div>
       )}
 
-      {error && (
-        <p role="alert" className="text-sm text-red-700 dark:text-red-400">
-          {error}
-        </p>
-      )}
+      <LiveRegion assertive>
+        {error && <p className="text-sm text-red-700 dark:text-red-400">{error}</p>}
+      </LiveRegion>
     </section>
   )
 }

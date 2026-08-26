@@ -1,7 +1,7 @@
 'use client'
 
 import { useActionState } from 'react'
-import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
+import { FormAlerts, LiveRegion, SubmitButton } from '@/components/auth-form.tsx'
 import { TextField } from '@/components/form/field.tsx'
 import type { FormState } from '@/lib/reserves/actions.ts'
 
@@ -30,11 +30,9 @@ export function SetReserveForm({
   return (
     <form action={formAction} className="flex flex-col gap-3">
       <FormAlerts state={state} />
-      {state.saved ? (
-        <p role="status" className="text-muted-foreground text-sm">
-          Saved.
-        </p>
-      ) : null}
+      <LiveRegion>
+        {state.saved && <p className="text-muted-foreground text-sm">Saved.</p>}
+      </LiveRegion>
       <div className="grid gap-3 sm:grid-cols-3">
         <TextField
           label="Target"

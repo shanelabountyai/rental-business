@@ -2,6 +2,7 @@
 
 import { ON_CALL_SHIFT_HOURS } from '@rental/core/oncall'
 import { useActionState } from 'react'
+import { LiveRegion } from '@/components/auth-form.tsx'
 import type { OnCallFormState } from '@/lib/oncall/actions.ts'
 
 // The on-call toggle (MAINT-12, R-029).
@@ -73,11 +74,11 @@ export function OnCallToggle({
         )}
       </form>
 
-      {state.error && (
-        <p role="alert" className="text-sm text-red-700 dark:text-red-400">
-          {state.error}
-        </p>
-      )}
+      <LiveRegion assertive>
+        {state.error && (
+          <p className="text-sm text-red-700 dark:text-red-400">{state.error}</p>
+        )}
+      </LiveRegion>
     </div>
   )
 }

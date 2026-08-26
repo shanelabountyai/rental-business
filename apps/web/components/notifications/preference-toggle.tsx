@@ -1,6 +1,7 @@
 'use client'
 
 import { useActionState } from 'react'
+import { FieldError } from '@/components/form/field.tsx'
 import type { FormState } from '@/lib/notifications/actions.ts'
 
 // One channel toggle for one category. A form per toggle rather than one big
@@ -47,11 +48,7 @@ export function PreferenceToggle({
         />
         <span>{label}</span>
       </label>
-      {state.error && (
-        <p role="alert" className="text-sm text-red-700 dark:text-red-400">
-          {state.error}
-        </p>
-      )}
+      <FieldError id={`${id}-error`} message={state.error} />
     </form>
   )
 }

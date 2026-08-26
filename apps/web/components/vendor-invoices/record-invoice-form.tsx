@@ -4,7 +4,7 @@ import { INVOICE_SPLIT_CATEGORIES, invoiceSplitCategoryLabel } from '@rental/cor
 import { useState } from 'react'
 import { useActionState } from 'react'
 import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
-import { SelectField, TextField } from '@/components/form/field.tsx'
+import { FieldError, SelectField, TextField } from '@/components/form/field.tsx'
 import type { FormState } from '@/lib/vendor-invoices/actions.ts'
 
 const STARTING_LINES = 3
@@ -114,11 +114,7 @@ export function RecordInvoiceForm({
           One line per property and category. Each category is a Schedule E line, so the split is
           the export mapping — there is nothing else to classify later.
         </p>
-        {errors.splits ? (
-          <p role="alert" className="text-destructive text-sm">
-            {errors.splits}
-          </p>
-        ) : null}
+        <FieldError id="field-invoice-splits-error" message={errors.splits} />
 
         {Array.from({ length: lineCount }, (_, index) => (
           <div key={index} className="flex flex-col gap-3 rounded-md border p-3">

@@ -9,6 +9,7 @@ import {
 } from '@rental/core/maintenance'
 import { useRouter } from 'next/navigation'
 import { useRef, useState, useTransition } from 'react'
+import { LiveRegion } from '@/components/auth-form.tsx'
 import { submitMaintenanceRequest, uploadMaintenancePhoto } from '@/lib/maintenance/actions.ts'
 import { TroubleshootingIllustration } from './troubleshooting-illustration.tsx'
 
@@ -285,14 +286,9 @@ export function MaintenanceWizard() {
 
   return (
     <div className="flex flex-col gap-6">
-      {error && (
-        <p
-          role="alert"
-          className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-base text-red-900 dark:border-red-900 dark:bg-red-950 dark:text-red-100"
-        >
-          {error}
-        </p>
-      )}
+      <LiveRegion assertive>
+        {error && <p className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-base text-red-900 dark:border-red-900 dark:bg-red-950 dark:text-red-100">{error}</p>}
+      </LiveRegion>
 
       {step === 'category' && (
         <fieldset className="flex flex-col gap-3">

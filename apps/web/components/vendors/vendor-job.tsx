@@ -2,7 +2,7 @@
 
 import { vendorMayMarkComplete } from '@rental/core/vendors'
 import { useActionState, useState } from 'react'
-import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
+import { FormAlerts, LiveRegion, SubmitButton } from '@/components/auth-form.tsx'
 import { TextField } from '@/components/form/field.tsx'
 import type { VendorFormState } from '@/lib/vendors/actions.ts'
 
@@ -379,11 +379,11 @@ export function VendorJob({
           {(accessCodes.length > 0 || shutoffs.length > 0) && (
             <section className="flex flex-col gap-3 rounded-md border p-4">
               <h2 className="text-sm font-medium">Getting in</h2>
-              {revealError && (
-                <p role="alert" className="text-sm text-red-700 dark:text-red-400">
-                  {revealError}
-                </p>
-              )}
+              <LiveRegion assertive>
+                {revealError && (
+                  <p className="text-sm text-red-700 dark:text-red-400">{revealError}</p>
+                )}
+              </LiveRegion>
               {/* THE ONE ACTION THIS SURFACE EXISTS TO PERFORM, and until
                   R-098 it did three things wrong at once: every trigger was
                   named "Show code" with nothing to tell them apart, the

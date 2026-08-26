@@ -3,7 +3,7 @@
 import { OUTBOUND_CHANNELS } from '@rental/core/comms'
 import { useActionState } from 'react'
 import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
-import { SelectField } from '@/components/form/field.tsx'
+import { FieldError, SelectField } from '@/components/form/field.tsx'
 import type { FormState } from '@/lib/comms/actions.ts'
 
 const CHANNEL_LABELS: Record<string, string> = {
@@ -55,15 +55,7 @@ export function ReplyForm({
           aria-describedby={errors.body ? 'field-reply-body-error' : undefined}
           className="border-input bg-background focus-visible:ring-ring min-h-11 rounded-md border px-3 py-2 text-base focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none aria-invalid:border-red-500"
         />
-        {errors.body && (
-          <p
-            id="field-reply-body-error"
-            role="alert"
-            className="text-sm text-red-700 dark:text-red-400"
-          >
-            {errors.body}
-          </p>
-        )}
+        <FieldError id="field-reply-body-error" message={errors.body} />
       </div>
       <div className="flex flex-wrap items-end gap-3">
         <div className="min-w-40">

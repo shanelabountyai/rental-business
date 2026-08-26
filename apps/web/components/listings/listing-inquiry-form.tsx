@@ -1,7 +1,7 @@
 'use client'
 
 import { useActionState } from 'react'
-import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
+import { FormAlerts, LiveRegion, SubmitButton } from '@/components/auth-form.tsx'
 import { TextField, TextareaField } from '@/components/form/field.tsx'
 import type { InquiryFormState } from '@/lib/prospects/actions.ts'
 
@@ -20,11 +20,14 @@ export function ListingInquiryForm({
   const [state, formAction] = useActionState<InquiryFormState, FormData>(action, {})
   const errors = state.fieldErrors ?? {}
 
+  // The confirmation used to be an early `return` that replaced the form with
+  // an already-populated `role="status"`, which announces nothing (R-101). The
+  // region is mounted from first paint and the form hides under it instead.
   if (state.notice) {
     return (
-      <div role="status" className="rounded-md border p-4 text-sm">
-        {state.notice}
-      </div>
+      <LiveRegion>
+        <div className="rounded-md border p-4 text-sm">{state.notice}</div>
+      </LiveRegion>
     )
   }
 

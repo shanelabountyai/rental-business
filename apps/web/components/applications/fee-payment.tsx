@@ -3,6 +3,7 @@
 import { Elements, PaymentElement, useElements, useStripe } from '@stripe/react-stripe-js'
 import { type Stripe, loadStripe } from '@stripe/stripe-js'
 import { useState } from 'react'
+import { LiveRegion } from '@/components/auth-form.tsx'
 import type { FeePaymentState } from '@/lib/applications/actions.ts'
 
 // The application fee (LEASE-03, R-059) - same Stripe-hosted-fields shape
@@ -54,14 +55,13 @@ function ConfirmForm({ onDone }: { onDone: () => void }) {
     >
       <PaymentElement />
 
-      {error && (
-        <p
-          role="alert"
-          className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-base text-red-900 dark:border-red-900 dark:bg-red-950 dark:text-red-100"
-        >
-          {error}
-        </p>
-      )}
+      <LiveRegion assertive>
+        {error && (
+          <p className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-base text-red-900 dark:border-red-900 dark:bg-red-950 dark:text-red-100">
+            {error}
+          </p>
+        )}
+      </LiveRegion>
 
       <button
         type="submit"
@@ -88,26 +88,28 @@ export function FeePayment({
 
   if (!publishableKey) return null
 
-  if (submitted) {
-    return (
-      <p role="status" className="text-base">
-        Payment submitted - this page will update once it clears.
-      </p>
-    )
-  }
-
+  // Both regions stay mounted across the whole flow - the confirmation used
+  // to be an early `return`, which replaced the form with an already-populated
+  // `role="status"` and announced nothing to the applicant who had just paid
+  // (R-101's defect, R-107b's sweep).
   return (
     <div className="flex flex-col gap-3">
-      {error && (
-        <p
-          role="alert"
-          className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-base text-red-900 dark:border-red-900 dark:bg-red-950 dark:text-red-100"
-        >
-          {error}
-        </p>
-      )}
+      <LiveRegion assertive>
+        {error && (
+          <p className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-base text-red-900 dark:border-red-900 dark:bg-red-950 dark:text-red-100">
+            {error}
+          </p>
+        )}
+      </LiveRegion>
+      <LiveRegion>
+        {submitted && (
+          <p className="text-base">
+            Payment submitted - this page will update once it clears.
+          </p>
+        )}
+      </LiveRegion>
 
-      {clientSecret ? (
+      {submitted ? null : clientSecret ? (
         <Elements
           stripe={stripe(publishableKey)}
           options={{ clientSecret, appearance: { theme: 'stripe' } }}

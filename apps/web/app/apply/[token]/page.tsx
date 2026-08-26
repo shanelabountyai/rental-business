@@ -1,3 +1,4 @@
+import { LiveRegion } from '@/components/auth-form.tsx'
 import { ApplicantForm } from '@/components/applications/applicant-form.tsx'
 import { CoApplicantInviteForm } from '@/components/applications/coapplicant-invite-form.tsx'
 import { DocumentUploadForm } from '@/components/applications/document-upload-form.tsx'
@@ -89,11 +90,21 @@ export default async function ApplyPage({ params }: { params: Promise<{ token: s
         </section>
       )}
 
-      {applicant.completedAt ? (
-        <p role="status" className="rounded-md border p-4 text-base">
-          Thanks - your section is complete. We’ll be in touch.
-        </p>
-      ) : (
+      {/* The region is on the page from first paint, so the confirmation is a
+          change inside it rather than a new node arriving already-populated -
+          which announces nothing (R-101, swept in R-107b). Submitting the
+          form revalidates THIS route, so the region survives the re-render;
+          the five other `?param` banners in the product arrive from a
+          different route, where there is no earlier region to change and
+          Next's route announcer is what speaks. */}
+      <LiveRegion>
+        {applicant.completedAt && (
+          <p className="rounded-md border p-4 text-base">
+            Thanks - your section is complete. We’ll be in touch.
+          </p>
+        )}
+      </LiveRegion>
+      {applicant.completedAt ? null : (
         <>
           <section aria-labelledby="applicant-form">
             <h2 id="applicant-form" className="sr-only">

@@ -1,6 +1,7 @@
 'use client'
 
 import { useActionState } from 'react'
+import { LiveRegion } from '@/components/auth-form.tsx'
 import type { FormState } from '@/lib/portal/actions.ts'
 
 // A tenant's reply box.
@@ -18,14 +19,9 @@ export function PortalReplyForm({
 
   return (
     <form action={formAction} className="flex flex-col gap-3">
-      {state.error && (
-        <p
-          role="alert"
-          className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-base text-red-900 dark:border-red-900 dark:bg-red-950 dark:text-red-100"
-        >
-          {state.error}
-        </p>
-      )}
+      <LiveRegion assertive>
+        {state.error && <p className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-base text-red-900 dark:border-red-900 dark:bg-red-950 dark:text-red-100">{state.error}</p>}
+      </LiveRegion>
       <div className="flex flex-col gap-1.5">
         <label htmlFor="portal-reply" className="font-medium">
           Write a message

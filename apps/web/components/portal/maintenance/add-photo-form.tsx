@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
+import { LiveRegion } from '@/components/auth-form.tsx'
 import { attachMaintenancePhoto, uploadMaintenancePhoto } from '@/lib/maintenance/actions.ts'
 
 // The recovery path for a photo dropped mid-upload during submission (see
@@ -42,11 +43,13 @@ export function AddPhotoForm({ ticketId }: { ticketId: string }) {
           }}
         />
       </label>
-      {status === 'error' && (
-        <p role="alert" className="text-red-700 dark:text-red-400">
-          That photo could not be uploaded. Please try again.
-        </p>
-      )}
+      <LiveRegion assertive>
+        {status === 'error' && (
+          <p className="text-red-700 dark:text-red-400">
+            That photo could not be uploaded. Please try again.
+          </p>
+        )}
+      </LiveRegion>
     </div>
   )
 }

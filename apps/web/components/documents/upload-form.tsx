@@ -3,7 +3,7 @@
 import { DOCUMENT_TYPES } from '@rental/core/documents'
 import { useActionState } from 'react'
 import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
-import { SelectField } from '@/components/form/field.tsx'
+import { FieldError, SelectField } from '@/components/form/field.tsx'
 import type { FormState } from '@/lib/documents/actions.ts'
 
 const TYPE_LABELS: Record<string, string> = {
@@ -56,13 +56,10 @@ export function UploadForm({
           type="file"
           required
           aria-invalid={Boolean(errors.file) || undefined}
+          aria-describedby={errors.file ? 'field-file-error' : undefined}
           className="border-input bg-background focus-visible:ring-ring min-h-11 rounded-md border px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
         />
-        {errors.file && (
-          <p role="alert" className="text-sm text-red-700 dark:text-red-400">
-            {errors.file}
-          </p>
-        )}
+        <FieldError id="field-file-error" message={errors.file} />
       </div>
       <SubmitButton label="Upload" />
     </form>

@@ -72,14 +72,9 @@ function ConfirmForm({ onDone }: { onDone: () => void }) {
     >
       <PaymentElement />
 
-      {error && (
-        <p
-          role="alert"
-          className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-base text-red-900 dark:border-red-900 dark:bg-red-950 dark:text-red-100"
-        >
-          {error}
-        </p>
-      )}
+      <LiveRegion assertive>
+        {error && <p className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-base text-red-900 dark:border-red-900 dark:bg-red-950 dark:text-red-100">{error}</p>}
+      </LiveRegion>
 
       <button
         type="submit"
@@ -147,11 +142,11 @@ function DebitDayForm({
           Save
         </button>
       </div>
-      {state.error && (
-        <p role="alert" className="text-base text-red-700 dark:text-red-400">
-          {state.error}
-        </p>
-      )}
+      <LiveRegion assertive>
+        {state.error && (
+          <p className="text-base text-red-700 dark:text-red-400">{state.error}</p>
+        )}
+      </LiveRegion>
       {/* The region persists; only the sentence inside it comes and goes
           (R-101). Rendered together, a tenant using a screen reader got no
           confirmation that their debit day had changed at all. */}
@@ -234,14 +229,9 @@ export function AutopayPanel({
         bank details are held by our payment provider, never by us.
       </p>
 
-      {error && (
-        <p
-          role="alert"
-          className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-base text-red-900 dark:border-red-900 dark:bg-red-950 dark:text-red-100"
-        >
-          {error}
-        </p>
-      )}
+      <LiveRegion assertive>
+        {error && <p className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-base text-red-900 dark:border-red-900 dark:bg-red-950 dark:text-red-100">{error}</p>}
+      </LiveRegion>
 
       {clientSecret ? (
         <Elements

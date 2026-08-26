@@ -2,6 +2,7 @@
 
 import type { EmergencyCategory } from '@rental/core/maintenance'
 import { useActionState } from 'react'
+import { LiveRegion } from '@/components/auth-form.tsx'
 import type { EmergencyFormState } from '@/lib/maintenance/actions.ts'
 
 // The last step of the emergency path (MAINT-01, R-020, R-098).
@@ -68,14 +69,9 @@ export function EmergencyDetailsForm({
     <form action={formAction} className="flex flex-col gap-6">
       <input type="hidden" name="category" value={category} />
 
-      {state.error && (
-        <p
-          role="alert"
-          className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-base text-red-900 dark:border-red-900 dark:bg-red-950 dark:text-red-100"
-        >
-          {state.error}
-        </p>
-      )}
+      <LiveRegion assertive>
+        {state.error && <p className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-base text-red-900 dark:border-red-900 dark:bg-red-950 dark:text-red-100">{state.error}</p>}
+      </LiveRegion>
 
       <h2 className="text-lg font-semibold">{categoryLabel}</h2>
 

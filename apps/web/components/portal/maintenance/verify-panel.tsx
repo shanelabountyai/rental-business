@@ -2,7 +2,7 @@
 
 import { RATING_MAX, RATING_MIN } from '@rental/core/workorders'
 import { useActionState, useState } from 'react'
-import { useFocusWhen } from '@/components/auth-form.tsx'
+import { LiveRegion, useFocusWhen } from '@/components/auth-form.tsx'
 import type { VerifyFormState } from '@/lib/portal/verify-actions.ts'
 import { PRIMARY_BUTTON_CLASSES } from '@/components/ui-classes.ts'
 
@@ -158,11 +158,11 @@ export function VerifyPanel({
           again.
         </p>
 
-        {state.error && (
-          <p role="alert" className="text-sm text-red-700 dark:text-red-400">
-            {state.error}
-          </p>
-        )}
+        <LiveRegion assertive>
+          {state.error && (
+            <p className="text-sm text-red-700 dark:text-red-400">{state.error}</p>
+          )}
+        </LiveRegion>
       </form>
     </section>
   )

@@ -1,7 +1,7 @@
 'use client'
 
 import { useActionState } from 'react'
-import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
+import { FormAlerts, LiveRegion, SubmitButton } from '@/components/auth-form.tsx'
 import { TextField, TextareaField } from '@/components/form/field.tsx'
 import type { RenewalFormState } from '@/lib/leases/renewal-actions.ts'
 
@@ -114,11 +114,14 @@ export function RenewalPanel({
               error={errors.rentDollars}
             />
           </div>
-          {state.capped && (
-            <p className="text-sm text-red-700 dark:text-red-400" role="alert">
-              The most this may legally increase to is {centsToDollars(state.capped.maxAllowedCents)}/mo.
-            </p>
-          )}
+          <LiveRegion assertive>
+            {state.capped && (
+              <p className="text-sm text-red-700 dark:text-red-400">
+                The most this may legally increase to is{' '}
+                {centsToDollars(state.capped.maxAllowedCents)}/mo.
+              </p>
+            )}
+          </LiveRegion>
           {state.needsOverride && (
             <TextareaField
               label="Why proceed with less than the required notice?"

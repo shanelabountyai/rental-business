@@ -2,7 +2,7 @@
 
 import { useActionState, useState } from 'react'
 import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
-import { SelectField, TextField, TextareaField } from '@/components/form/field.tsx'
+import { FieldError, SelectField, TextField, TextareaField } from '@/components/form/field.tsx'
 import type { PrescreenFormState } from '@/lib/prospects/prescreen-actions.ts'
 
 // The five fixed pre-screening questions (LEASE-07, R-058) - identical for
@@ -92,11 +92,7 @@ export function PrescreenForm({
             Yes
           </label>
         </div>
-        {errors.priorEvictions && (
-          <p role="alert" className="text-sm text-red-700 dark:text-red-400">
-            {errors.priorEvictions}
-          </p>
-        )}
+        <FieldError id="field-prior-evictions-error" message={errors.priorEvictions} />
         {priorEvictions === 'yes' && (
           <TextareaField
             label="Briefly, what happened?"

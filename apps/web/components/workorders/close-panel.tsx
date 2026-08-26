@@ -1,6 +1,7 @@
 'use client'
 
 import { useActionState } from 'react'
+import { LiveRegion } from '@/components/auth-form.tsx'
 import { FieldError, TextField } from '@/components/form/field.tsx'
 import type { WorkOrderFormState } from '@/lib/workorders/actions.ts'
 import { PRIMARY_BUTTON_CLASSES } from '@/components/ui-classes.ts'
@@ -143,11 +144,9 @@ export function ClosePanel({
         </fieldset>
 
         <FieldError id="close-error" message={state.error} />
-        {state.notice && (
-          <p role="status" className="text-sm">
-            {state.notice}
-          </p>
-        )}
+        <LiveRegion>
+          {state.notice && <p className="text-sm">{state.notice}</p>}
+        </LiveRegion>
 
         <button
           type="submit"

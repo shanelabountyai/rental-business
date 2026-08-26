@@ -2,7 +2,7 @@
 
 import { useActionState } from 'react'
 import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
-import { SelectField, TextField } from '@/components/form/field.tsx'
+import { FieldError, SelectField, TextField } from '@/components/form/field.tsx'
 import type { InspectionTemplateFormState } from '@/lib/inspections/template-actions.ts'
 
 const DEFAULT_FOR_TYPE_OPTIONS = [
@@ -62,11 +62,7 @@ export function InspectionTemplateForm({
           One room and item per row. Leave a row blank to skip it - extra blank rows below
           are there for whatever you add later.
         </p>
-        {errors.items && (
-          <p role="alert" className="text-sm text-red-700 dark:text-red-400">
-            {errors.items}
-          </p>
-        )}
+        <FieldError id="field-template-items-error" message={errors.items} />
         {rows.map((row, index) => (
           <div key={index} className="flex flex-col gap-2 rounded-md border p-3">
             <TextField

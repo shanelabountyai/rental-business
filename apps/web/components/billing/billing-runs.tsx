@@ -2,7 +2,7 @@
 
 import { formatCents } from '@rental/core/money'
 import { useActionState } from 'react'
-import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
+import { FormAlerts, LiveRegion, SubmitButton } from '@/components/auth-form.tsx'
 import type { BillingFormState } from '@/lib/billing/actions.ts'
 
 // Billing Runs (PAY-03, D-11, R-036).
@@ -100,21 +100,29 @@ export function BillingRuns({
                   {row.leaseStatus.toLowerCase().replace('_', '-')}
                   {row.collectionPaused && ' · collection on hold'}
                 </span>
-                {row.lastSyncError ? (
-                  <span role="alert" className="text-sm text-red-700 dark:text-red-400">
-                    {row.lastSyncError}
-                  </span>
-                ) : !row.hasSubscription ? (
-                  <span className="text-sm text-amber-800 dark:text-amber-200">
-                    No subscription — nothing will bill for this payer.
-                  </span>
-                ) : (
-                  <span className="text-muted-foreground text-xs">
-                    {row.lastSyncedAt
-                      ? `${ACTION_LABELS[row.lastSyncAction ?? ''] ?? row.lastSyncAction} · ${row.lastSyncedAt}`
-                      : 'Never synced'}
-                  </span>
-                )}
+                {/* The region is mounted whether or not this payer failed,
+                    so the error of a re-sync the operator just pressed is a
+                    CHANGE to an existing region rather than a new node - the
+                    R-101 fix, applied to the caller that hand-rolled it. */}
+                <LiveRegion assertive>
+                  {row.lastSyncError && (
+                    <span className="text-sm text-red-700 dark:text-red-400">
+                      {row.lastSyncError}
+                    </span>
+                  )}
+                </LiveRegion>
+                {!row.lastSyncError &&
+                  (!row.hasSubscription ? (
+                    <span className="text-sm text-amber-800 dark:text-amber-200">
+                      No subscription — nothing will bill for this payer.
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground text-xs">
+                      {row.lastSyncedAt
+                        ? `${ACTION_LABELS[row.lastSyncAction ?? ''] ?? row.lastSyncAction} · ${row.lastSyncedAt}`
+                        : 'Never synced'}
+                    </span>
+                  ))}
               </span>
 
               <form action={action}>

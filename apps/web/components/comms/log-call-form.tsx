@@ -2,7 +2,7 @@
 
 import { useActionState } from 'react'
 import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
-import { TextField } from '@/components/form/field.tsx'
+import { FieldError, TextField } from '@/components/form/field.tsx'
 import type { FormState } from '@/lib/comms/actions.ts'
 
 // COMM-01: "staff phone calls are logged as timestamped call notes in the
@@ -41,15 +41,7 @@ export function LogCallForm({
           aria-describedby={errors.body ? 'field-call-body-error' : undefined}
           className="border-input bg-background focus-visible:ring-ring min-h-11 rounded-md border px-3 py-2 text-base focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none aria-invalid:border-red-500"
         />
-        {errors.body && (
-          <p
-            id="field-call-body-error"
-            role="alert"
-            className="text-sm text-red-700 dark:text-red-400"
-          >
-            {errors.body}
-          </p>
-        )}
+        <FieldError id="field-call-body-error" message={errors.body} />
       </div>
       <TextField
         label="When the call happened"

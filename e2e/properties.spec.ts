@@ -375,10 +375,37 @@ test.describe('creating a property', () => {
     await page.getByLabel('State').selectOption('TX')
     await page.getByLabel('ZIP').fill('77002')
     await page.getByLabel('Timezone').fill('America/Chicago')
+
+    // R-107b: the warning has to arrive INSIDE a region that was already on
+    // the page. A `role="alert"` that is inserted together with its text is a
+    // new node rather than a change to an existing one, and assistive
+    // technology routinely says nothing at all - which is what this form did
+    // twice over, once by rendering the region conditionally and again by
+    // sitting inside a `key={formVersion}` remount that threw the region away
+    // on every response.
+    //
+    // Tagging the empty region and then asserting the text turned up in the
+    // SAME node is what tests that; asserting on `getByRole('alert')` alone
+    // would pass just as happily against a freshly-minted one.
+    //
+    // The two are FormAlerts' error region and the duplicate warning's, both
+    // siblings of the <form> rather than children of it. Every FieldError in
+    // the form is also a `role="alert"`, which is why this walks the form's
+    // PARENT rather than matching alerts across the page - and why it does
+    // not use a bare getByRole('alert'), which Next's own route announcer
+    // matches too (see auth.spec.ts).
+    const regions = page
+      .getByRole('button', { name: 'Create property' })
+      .locator('xpath=ancestor::form/../div[@role="alert"]')
+    await expect(regions).toHaveCount(2)
+    await regions
+      .last()
+      .evaluate((el) => el.setAttribute('data-region-probe', 'duplicate'))
+
     await page.getByRole('button', { name: 'Create property' }).click()
 
     await expect(page).toHaveURL(/\/properties\/new/)
-    await expect(page.locator('form').getByRole('alert')).toContainText(
+    await expect(page.locator('[data-region-probe="duplicate"]')).toContainText(
       originalName,
     )
 

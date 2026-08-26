@@ -2,6 +2,7 @@
 
 import { useActionState } from 'react'
 import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
+import { FieldError } from '@/components/form/field.tsx'
 import type { ApplicantFormState } from '@/lib/applications/actions.ts'
 
 // An ID scan or an income document (LEASE-03, R-059). One file per submit -
@@ -31,13 +32,10 @@ export function DocumentUploadForm({
           type="file"
           required
           aria-invalid={Boolean(errors.file) || undefined}
+          aria-describedby={errors.file ? 'applicant-upload-file-error' : undefined}
           className="border-input bg-background focus-visible:ring-ring min-h-11 rounded-md border px-3 py-2 text-base focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
         />
-        {errors.file && (
-          <p role="alert" className="text-sm text-red-700 dark:text-red-400">
-            {errors.file}
-          </p>
-        )}
+        <FieldError id="applicant-upload-file-error" message={errors.file} />
       </div>
       <SubmitButton label="Upload" />
     </form>
