@@ -1,6 +1,7 @@
+import { friendlyTimestamp } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import Link from 'next/link'
-import { requireScope } from '@/lib/auth/guard.ts'
+import { propertyWhere, requireScope } from '@/lib/auth/guard.ts'
 import { announcementHistory } from '@/lib/comms/announcement-history.ts'
 
 export const metadata = { title: 'Announcement history — Rental Operations' }
@@ -23,6 +24,21 @@ export default async function AnnouncementHistoryPage() {
       })
     : []
   const staffNames = new Map(staff.map((s) => [s.id, s.name]))
+
+  // A NAMED ZONE, because `toLocaleString()` with no arguments used the
+  // server's - UTC on Vercel - and said so nowhere (R-115). An announcement is
+  // portfolio-wide and hangs off no single property, so there is no perfectly
+  // right zone; the first property in scope is the closest available answer
+  // and `friendlyTimestamp` prints the abbreviation beside it, which is what
+  // makes the choice legible rather than a second silent guess.
+  const zone =
+    (
+      await prisma.property.findFirst({
+        where: propertyWhere(scope) ?? { id: '' },
+        orderBy: { name: 'asc' },
+        select: { timezone: true },
+      })
+    )?.timezone ?? 'UTC'
 
   return (
     <div className="flex flex-col gap-6">
@@ -75,7 +91,7 @@ export default async function AnnouncementHistoryPage() {
               {entries.map((entry) => (
                 <tr key={entry.id} className="border-b last:border-0">
                   <td className="px-3 py-2 whitespace-nowrap">
-                    {entry.occurredAt.toLocaleString()}
+                    {friendlyTimestamp(entry.occurredAt, zone)}
                   </td>
                   <td className="px-3 py-2">{entry.templateName ?? '—'}</td>
                   <td className="px-3 py-2">

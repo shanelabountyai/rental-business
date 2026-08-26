@@ -155,7 +155,7 @@ export default async function ThreadPage({
             channels={channels}
           />
           <details>
-            <summary className="cursor-pointer text-sm font-medium">
+            <summary className="min-h-11 cursor-pointer text-sm font-medium">
               Log a phone call
             </summary>
             <div className="pt-3">
@@ -177,7 +177,7 @@ export default async function ThreadPage({
           history leaves as a file, and that is recorded in the audit trail
           rather than gated behind a permission no role has yet. */}
       <details>
-        <summary className="cursor-pointer text-sm font-medium">
+        <summary className="min-h-11 cursor-pointer text-sm font-medium">
           Export this conversation
         </summary>
         <div className="pt-3">

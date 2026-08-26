@@ -220,7 +220,27 @@ export default async function TaskDetailPage({
             <TaskActionButton action={claimTask.bind(null, task.id)} label="Claim this task" />
           )}
           {!ticket && <CompleteForm action={completeTask.bind(null, task.id)} />}
-          <TaskActionButton action={cancelTask.bind(null, task.id)} label="Cancel task" />
+          {/*
+            BEHIND A DISCLOSURE, because it sat directly under "Mark
+            complete" and fired on one press with no undo (R-115). A
+            mis-aimed thumb on a phone cancelled the task, and cancelling is
+            not something this product can walk back. `<details>` is the
+            acknowledgement step the deposit and party-change panels already
+            use for comparable acts: it needs no JavaScript, it survives its
+            own activation, and it moves the destructive control off the line
+            below the one somebody was aiming at.
+          */}
+          <details>
+            <summary className="text-muted-foreground min-h-11 w-fit cursor-pointer text-sm">
+              Cancel this task instead
+            </summary>
+            <div className="pt-2">
+              <TaskActionButton
+                action={cancelTask.bind(null, task.id)}
+                label="Cancel task"
+              />
+            </div>
+          </details>
         </div>
       )}
     </div>

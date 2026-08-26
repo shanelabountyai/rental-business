@@ -1,4 +1,5 @@
 import { CATEGORY_LABELS, emergencyDefinition } from '@rental/core/maintenance'
+import { friendlyTimestamp } from '@rental/core/scheduling'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { EmergencyResponsePanel } from '@/components/maintenance/emergency-response-panel.tsx'
@@ -19,6 +20,15 @@ const SOURCE_LABELS: Record<string, string> = {
   EMAIL: 'Email',
   PHONE_LOGGED: 'Phone',
   STAFF: 'Staff',
+}
+/// The one screen that exists to confirm a logged request landed with the
+/// right fields, and priority was the field it did not print (R-115) - an
+/// URGENT ticket was visually identical to a ROUTINE one, on a page that
+/// branches on `priority === 'EMERGENCY'` twenty lines above the list.
+const PRIORITY_LABELS: Record<string, string> = {
+  EMERGENCY: 'Emergency',
+  URGENT: 'Urgent',
+  ROUTINE: 'Routine',
 }
 const STATUS_LABELS: Record<string, string> = {
   NEW: 'New',
@@ -77,6 +87,10 @@ export default async function StaffTicketDetailPage({
       </header>
 
       <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm sm:grid-cols-3">
+        <dt className="text-muted-foreground">Priority</dt>
+        <dd className="col-span-1 sm:col-span-2">
+          {PRIORITY_LABELS[ticket.priority] ?? ticket.priority}
+        </dd>
         <dt className="text-muted-foreground">Status</dt>
         <dd className="col-span-1 sm:col-span-2">
           {STATUS_LABELS[ticket.status] ?? ticket.status}
@@ -107,12 +121,12 @@ export default async function StaffTicketDetailPage({
           acknowledged={
             ticket.acknowledgedAt
               ? {
-                  at: ticket.acknowledgedAt.toLocaleString('en-US', {
-                    month: 'short',
-                    day: 'numeric',
-                    hour: 'numeric',
-                    minute: '2-digit',
-                  }),
+                  // `friendlyTimestamp`, not a bare `toLocaleString` (R-115).
+                  // With no `timeZone` the server's own zone wins, which on
+                  // Vercel is UTC - so the one stamp that says when somebody
+                  // picked up an emergency was printed in a timezone nobody
+                  // involved was standing in.
+                  at: friendlyTimestamp(ticket.acknowledgedAt, ticket.property.timezone),
                   by: ticket.acknowledgedBy?.name ?? null,
                 }
               : null

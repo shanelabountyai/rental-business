@@ -1,5 +1,6 @@
-import Link from 'next/link'
 import { propertyScope, scopeIsEmpty } from '@rental/core/rbac'
+import { friendlyTimestamp } from '@rental/core/scheduling'
+import Link from 'next/link'
 import { actorCan, requireScope } from '@/lib/auth/guard.ts'
 import { listThreads, unroutedCount } from '@/lib/comms/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
@@ -111,7 +112,7 @@ export default async function MessagesPage() {
                     <span className="text-muted-foreground text-xs">
                       {thread.property.name}
                       {latest &&
-                        ` · ${CHANNEL_LABELS[latest.channel] ?? latest.channel} · ${latest.sentAt.toISOString().slice(0, 16).replace('T', ' ')} UTC`}
+                        ` · ${CHANNEL_LABELS[latest.channel] ?? latest.channel} · ${friendlyTimestamp(latest.sentAt, thread.property.timezone)}`}
                     </span>
                   </div>
                   {latest ? (

@@ -37,10 +37,14 @@ export function JobPanel({
     <div className="flex flex-col gap-6 rounded-md border p-4">
       <p className="whitespace-pre-wrap text-sm">{workOrder.scope}</p>
 
-      <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm sm:grid-cols-3">
+      {/* A `<dl>`, not a `<div>` (R-115). `<dt>`/`<dd>` outside a list are
+          not a definition of anything, so the tech reading this job on a
+          phone heard a bare phone number with no label - every sibling panel
+          in the product gets this right and this one instance was missed. */}
+      <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm sm:grid-cols-3">
         <dt className="text-muted-foreground">Tenant phone</dt>
         <dd className="col-span-1 sm:col-span-2">{context.tenantPhone ?? 'None on file'}</dd>
-      </div>
+      </dl>
 
       {context.photos.length > 0 && (
         <div className="flex flex-col gap-2">

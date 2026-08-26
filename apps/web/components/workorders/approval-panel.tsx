@@ -1,6 +1,6 @@
 'use client'
 
-import { useActionState, useState } from 'react'
+import { useActionState } from 'react'
 import Link from 'next/link'
 import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
 import { TextField } from '@/components/form/field.tsx'
@@ -56,7 +56,6 @@ export function ApprovalPanel({
   needsMfa?: boolean
 }) {
   const [state, formAction] = useActionState<WorkOrderFormState, FormData>(decideAction, {})
-  const [mode, setMode] = useState<'idle' | 'deny' | 'ask'>('idle')
   const errors = state.fieldErrors ?? {}
 
   // The re-approval case reads differently from a first approval, and saying
@@ -134,15 +133,34 @@ export function ApprovalPanel({
         <>
           <FormAlerts state={state} />
 
-          {mode === 'idle' && (
-            <form action={formAction} className="flex flex-col gap-3">
-              <input type="hidden" name="decision" value="APPROVE" />
-              <SubmitButton label={overrun ? 'Approve the higher amount' : 'Approve'} />
-            </form>
-          )}
+          <form action={formAction} className="flex flex-col gap-3">
+            <input type="hidden" name="decision" value="APPROVE" />
+            <SubmitButton label={overrun ? 'Approve the higher amount' : 'Approve'} />
+          </form>
 
-          {mode === 'deny' && (
-            <form action={formAction} className="flex flex-col gap-3">
+          {/*
+            `<details>` rather than the `useState` mode switch this used to
+            be (R-115), for the three reasons `fees-panel.tsx` already
+            documents. The toggles were `type="button"` `onClick` handlers on
+            a panel whose stated requirement is "approve from a phone in <=2
+            taps": dead until React had hydrated, on the same bad connection
+            the rest of this file is written for. Each one also unmounted
+            ITSELF on activation, so the press destroyed the button holding
+            focus and the required field it revealed rendered above where that
+            button had been, with no focus move and nothing announced. A
+            `<summary>` survives its own activation, works with no JS, and
+            closing it is what the summary already does — so the "Back" button
+            went with the state.
+
+            The names are deliberately not "Deny" and "Deny": the summary and
+            the submit inside it are two controls on one assembled page, which
+            is the collision CLAUDE.md keeps a list of.
+          */}
+          <details open={Boolean(errors.denialReason)} className="text-sm">
+            <summary className="min-h-11 cursor-pointer underline underline-offset-4">
+              Deny, and say why
+            </summary>
+            <form action={formAction} className="flex flex-col gap-3 pt-3">
               <input type="hidden" name="decision" value="DENY" />
               <TextField
                 label="Why not?"
@@ -152,12 +170,15 @@ export function ApprovalPanel({
                 error={errors.denialReason}
                 hint="The PM needs to know whether to re-scope it or drop it."
               />
-              <SubmitButton label="Deny" />
+              <SubmitButton label="Send this denial" />
             </form>
-          )}
+          </details>
 
-          {mode === 'ask' && (
-            <form action={formAction} className="flex flex-col gap-3">
+          <details open={Boolean(errors.question)} className="text-sm">
+            <summary className="min-h-11 cursor-pointer underline underline-offset-4">
+              Ask a question
+            </summary>
+            <form action={formAction} className="flex flex-col gap-3 pt-3">
               <input type="hidden" name="decision" value="ASK" />
               <TextField
                 label="What do you want to know?"
@@ -168,37 +189,7 @@ export function ApprovalPanel({
               />
               <SubmitButton label="Send question" />
             </form>
-          )}
-
-          <div className="flex flex-wrap gap-4 text-sm">
-            {mode !== 'deny' && (
-              <button
-                type="button"
-                onClick={() => setMode('deny')}
-                className="min-h-11 underline underline-offset-4"
-              >
-                Deny
-              </button>
-            )}
-            {mode !== 'ask' && (
-              <button
-                type="button"
-                onClick={() => setMode('ask')}
-                className="min-h-11 underline underline-offset-4"
-              >
-                Ask a question
-              </button>
-            )}
-            {mode !== 'idle' && (
-              <button
-                type="button"
-                onClick={() => setMode('idle')}
-                className="min-h-11 underline underline-offset-4"
-              >
-                Back
-              </button>
-            )}
-          </div>
+          </details>
         </>
       )}
     </div>

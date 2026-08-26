@@ -4,6 +4,7 @@ import { useActionState } from 'react'
 import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
 import { FieldError, SelectField } from '@/components/form/field.tsx'
 import type { MaintenanceFormState } from '@/lib/maintenance/actions.ts'
+import { INPUT_CLASSES } from '@/components/ui-classes.ts'
 
 const YES_NO_OPTIONS = [
   { value: 'true', label: 'Yes' },
@@ -66,7 +67,7 @@ export function LogPhoneRequestForm({
           required
           aria-invalid={Boolean(errors.notes) || undefined}
           aria-describedby={errors.notes ? 'field-phone-notes-error' : undefined}
-          className="border-input bg-background focus-visible:ring-ring min-h-11 rounded-md border px-3 py-2 text-base focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none aria-invalid:border-red-500"
+          className={INPUT_CLASSES}
         />
         <FieldError id="field-phone-notes-error" message={errors.notes} />
       </div>

@@ -85,6 +85,7 @@ export async function DocumentsSection({
                 <DeleteForm
                   action={deleteDocument.bind(null, document.id)}
                   rowId={document.id}
+                  fileName={document.fileName}
                 />
               )}
             </li>
@@ -94,7 +95,7 @@ export async function DocumentsSection({
 
       {canDelete && deletedDocuments.length > 0 && (
         <details className="flex flex-col gap-2">
-          <summary className="cursor-pointer text-sm font-medium">
+          <summary className="min-h-11 cursor-pointer text-sm font-medium">
             Recently deleted ({deletedDocuments.length})
           </summary>
           <ul className="flex flex-col divide-y">
@@ -107,7 +108,10 @@ export async function DocumentsSection({
                   {document.fileName} · deleted{' '}
                   {document.deletedAt?.toISOString().slice(0, 10)}
                 </span>
-                <RestoreButton action={restoreDocument.bind(null, document.id)} />
+                <RestoreButton
+                  action={restoreDocument.bind(null, document.id)}
+                  fileName={document.fileName}
+                />
               </li>
             ))}
           </ul>

@@ -2,7 +2,7 @@
 
 import { useActionState } from 'react'
 import { useFormStatus } from 'react-dom'
-import { FormAlerts } from '@/components/auth-form.tsx'
+import { FormAlerts, pendingButtonProps } from '@/components/auth-form.tsx'
 import { TextField } from '@/components/form/field.tsx'
 import type { ApplicantFormState } from '@/lib/applications/actions.ts'
 
@@ -20,8 +20,8 @@ function FormButtons() {
         type="submit"
         name="intent"
         value="save"
-        disabled={pending}
-        className="border-input hover:bg-accent focus-visible:ring-ring min-h-11 rounded-md border px-4 py-2 text-base font-medium disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+        {...pendingButtonProps(pending)}
+        className="border-input hover:bg-accent focus-visible:ring-ring min-h-11 rounded-md border px-4 py-2 text-base font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
       >
         {pending ? 'Working…' : 'Save progress'}
       </button>
@@ -29,8 +29,8 @@ function FormButtons() {
         type="submit"
         name="intent"
         value="submit"
-        disabled={pending}
-        className="bg-primary text-primary-foreground focus-visible:ring-ring min-h-11 rounded-md px-4 py-2 text-base font-medium disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+        {...pendingButtonProps(pending)}
+        className="bg-primary text-primary-foreground focus-visible:ring-ring min-h-11 rounded-md px-4 py-2 text-base font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
       >
         {pending ? 'Working…' : 'Submit'}
       </button>

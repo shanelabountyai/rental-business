@@ -167,7 +167,7 @@ export default async function ReservesPage() {
                 </p>
 
                 <details className="text-sm">
-                  <summary className="cursor-pointer font-medium">
+                  <summary className="min-h-11 cursor-pointer font-medium">
                     The plan behind that number
                   </summary>
                   <div className="overflow-x-auto">

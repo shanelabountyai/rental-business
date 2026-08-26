@@ -402,7 +402,21 @@ export default async function WorkOrderDetailPage({
       )}
 
       {canWrite && !resolved && (
-        <div className="flex flex-col gap-6 border-t pt-4">
+        /*
+          A LABELLED SECTION, not an unnamed `<div>` (R-115). This block holds
+          eight buttons and three forms - assign, send for approval, schedule
+          entry, record actuals, mark complete, dispatch, warranty hold - and
+          sat between "Bids" and "Closed" with no heading at all, so anybody
+          navigating this page by heading went straight past every control
+          that changes the job's state.
+        */
+        <section
+          aria-labelledby="move-this-job-on"
+          className="flex flex-col gap-6 border-t pt-4"
+        >
+          <h2 id="move-this-job-on" className="text-lg font-semibold">
+            Move this job on
+          </h2>
           {unassigned && (staff.length > 0 || vendors.length > 0) && !onHold && (
             <AssignForm
               action={assignWorkOrder.bind(null, workOrder.id)}
@@ -483,7 +497,7 @@ export default async function WorkOrderDetailPage({
               label="Put on hold for warranty claim"
             />
           )}
-        </div>
+        </section>
       )}
 
       {/*

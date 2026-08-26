@@ -1,3 +1,5 @@
+import { INPUT_CLASSES } from '@/components/ui-classes.ts'
+
 // Form fields for the admin shell's data-entry screens (R-008 onward).
 //
 // Separate from components/auth-form.tsx on purpose: auth screens are one or
@@ -50,8 +52,6 @@ export function FieldError({ id, message }: { id: string; message?: string }) {
   )
 }
 
-const INPUT_CLASSES =
-  'border-input bg-background focus-visible:ring-ring min-h-11 rounded-md border px-3 py-2 text-base focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none aria-invalid:border-red-500'
 
 export function TextField({
   label,

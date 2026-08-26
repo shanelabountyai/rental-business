@@ -5,6 +5,7 @@ import { useActionState } from 'react'
 import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
 import { ReplyForm } from '@/components/comms/reply-form.tsx'
 import type { WorkOrderFormState } from '@/lib/workorders/actions.ts'
+import { INPUT_CLASSES } from '@/components/ui-classes.ts'
 
 // The merged timeline (COMM-06, R-032): tenant thread, vendor thread and
 // staff notes, one chronological view. "Reconstructing an incident from
@@ -107,7 +108,7 @@ export function TimelineSection({
           {tenantChannels.length > 0 && (
             <div className="flex flex-col gap-1.5">
               <h3 className="text-sm font-medium">Message the tenant</h3>
-              <ReplyForm action={replyToTenant} channels={tenantChannels} />
+              <ReplyForm action={replyToTenant} channels={tenantChannels} recipient="the tenant" />
             </div>
           )}
           {hasVendor && (
@@ -144,9 +145,11 @@ function VendorReplyForm({ action }: { action: Action }) {
         rows={3}
         required
         aria-invalid={Boolean(errors.body) || undefined}
-        className="border-input bg-background focus-visible:ring-ring min-h-11 rounded-md border px-3 py-2 text-base focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none aria-invalid:border-red-500"
+        className={INPUT_CLASSES}
       />
-      <SubmitButton label="Send" />
+      {/* Not "Send": the tenant reply form above it on this same assembled
+          page said exactly that, and one of them texts the tenant (R-115). */}
+      <SubmitButton label="Send to the vendor" />
     </form>
   )
 }
@@ -166,7 +169,7 @@ function NoteForm({ action }: { action: Action }) {
         rows={3}
         required
         aria-invalid={Boolean(errors.body) || undefined}
-        className="border-input bg-background focus-visible:ring-ring min-h-11 rounded-md border px-3 py-2 text-base focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none aria-invalid:border-red-500"
+        className={INPUT_CLASSES}
       />
       <SubmitButton label="Add note" />
     </form>
@@ -212,11 +215,16 @@ function AttachSection({
             </span>
             <form action={formAction}>
               <input type="hidden" name="messageId" value={message.id} />
+              {/* Not "Attach" (R-115). Every row rendered that same word, so
+                  a screen-reader user listing this panel's controls heard
+                  "Attach" N times with nothing to tell them apart - and each
+                  one tags a DIFFERENT message to this job. The timestamp is
+                  what distinguishes the rows on screen too. */}
               <button
                 type="submit"
                 className="focus-visible:ring-ring border-input min-h-11 rounded-md border px-3 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
               >
-                Attach
+                Attach<span className="sr-only"> the {message.sentAt} message</span>
               </button>
             </form>
           </li>

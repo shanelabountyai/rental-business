@@ -158,7 +158,7 @@ export function FilingCabinetSection({
                   )}
                   {canWrite && (
                     <details>
-                      <summary className="cursor-pointer text-xs font-medium">Record a 1098</summary>
+                      <summary className="min-h-11 cursor-pointer text-xs font-medium">Record a 1098</summary>
                       <div className="pt-2">
                         <MortgageStatementForm
                           action={recordMortgageStatement.bind(null, propertyId, mortgage.id)}
@@ -185,7 +185,7 @@ export function FilingCabinetSection({
         )}
         {canWrite && (
           <details>
-            <summary className="cursor-pointer text-sm font-medium">Add a mortgage</summary>
+            <summary className="min-h-11 cursor-pointer text-sm font-medium">Add a mortgage</summary>
             <div className="pt-2">
               <AddMortgageForm action={addMortgage.bind(null, propertyId)} />
             </div>
@@ -221,7 +221,7 @@ export function FilingCabinetSection({
         )}
         {canWrite && (
           <details>
-            <summary className="cursor-pointer text-sm font-medium">Add a policy</summary>
+            <summary className="min-h-11 cursor-pointer text-sm font-medium">Add a policy</summary>
             <div className="pt-2">
               <AddInsurancePolicyForm action={addInsurancePolicy.bind(null, propertyId)} />
             </div>
@@ -241,7 +241,7 @@ export function FilingCabinetSection({
         )}
         {canWrite && (
           <details>
-            <summary className="cursor-pointer text-sm font-medium">
+            <summary className="min-h-11 cursor-pointer text-sm font-medium">
               {hoaInfo ? 'Edit HOA info' : 'Add HOA info'}
             </summary>
             <div className="pt-2">
@@ -273,7 +273,7 @@ export function FilingCabinetSection({
         )}
         {canWrite && (
           <details>
-            <summary className="cursor-pointer text-sm font-medium">Add a warranty</summary>
+            <summary className="min-h-11 cursor-pointer text-sm font-medium">Add a warranty</summary>
             <div className="pt-2">
               <AddWarrantyForm action={addWarranty.bind(null, propertyId)} />
             </div>
@@ -317,7 +317,7 @@ export function FilingCabinetSection({
         )}
         {canWrite && (
           <details>
-            <summary className="cursor-pointer text-sm font-medium">Add an improvement</summary>
+            <summary className="min-h-11 cursor-pointer text-sm font-medium">Add an improvement</summary>
             <div className="pt-2">
               <AddCapitalImprovementForm action={addCapitalImprovement.bind(null, propertyId)} />
             </div>

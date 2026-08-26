@@ -137,7 +137,7 @@ test('a PM creates a template and runs the batch, auto-assigning by territory', 
   // property: a brand-new template is due for every unit in scope, so the
   // count IS the scope, and asserting it is what would catch the scoping
   // regressing back to portfolio-wide.
-  await row.getByRole('button', { name: /Run batch/ }).click()
+  await row.getByRole('button', { name: /^Run .* batch \(/ }).click()
   await expect(row.getByText('Created 1 work order')).toBeVisible()
 
   const workOrder = await prisma.workOrder.findFirstOrThrow({
@@ -174,7 +174,7 @@ test('a batch run leaves a unit unassigned when no vendor works its trade', asyn
   templateIds.push(template.id)
 
   const row = page.locator('li', { hasText: templateName })
-  await row.getByRole('button', { name: /Run batch/ }).click()
+  await row.getByRole('button', { name: /^Run .* batch \(/ }).click()
   await expect(row.getByText('Created 1 work order')).toBeVisible()
 
   const workOrder = await prisma.workOrder.findFirstOrThrow({

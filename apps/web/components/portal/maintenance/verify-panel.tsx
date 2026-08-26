@@ -2,7 +2,7 @@
 
 import { RATING_MAX, RATING_MIN } from '@rental/core/workorders'
 import { useActionState, useState } from 'react'
-import { LiveRegion, useFocusWhen } from '@/components/auth-form.tsx'
+import { LiveRegion, useFocusWhen, pendingButtonProps } from '@/components/auth-form.tsx'
 import type { VerifyFormState } from '@/lib/portal/verify-actions.ts'
 import { PRIMARY_BUTTON_CLASSES } from '@/components/ui-classes.ts'
 
@@ -137,8 +137,8 @@ export function VerifyPanel({
             type="submit"
             name="resolved"
             value="yes"
-            disabled={pending}
-            className={`${PRIMARY_BUTTON_CLASSES} flex-1 disabled:opacity-60`}
+            {...pendingButtonProps(pending)}
+            className={`${PRIMARY_BUTTON_CLASSES} flex-1`}
           >
             Yes, it is fixed
           </button>
@@ -146,8 +146,8 @@ export function VerifyPanel({
             type="submit"
             name="resolved"
             value="no"
-            disabled={pending}
-            className="focus-visible:ring-ring border-input min-h-11 flex-1 rounded-md border px-4 text-sm font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:opacity-60"
+            {...pendingButtonProps(pending)}
+            className="focus-visible:ring-ring border-input min-h-11 flex-1 rounded-md border px-4 text-sm font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
           >
             No, it is not
           </button>

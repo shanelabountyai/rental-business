@@ -1,7 +1,7 @@
 'use client'
 
-import { useActionState } from 'react'
-import { LiveRegion } from '@/components/auth-form.tsx'
+import { useActionState, useState } from 'react'
+import { LiveRegion, pendingButtonProps, useFocusWhen } from '@/components/auth-form.tsx'
 import type { MaintenanceFormState } from '@/lib/maintenance/actions.ts'
 import { PRIMARY_BUTTON_CLASSES } from '@/components/ui-classes.ts'
 
@@ -57,12 +57,27 @@ export function EmergencyResponsePanel({
   >(setEmergencyAvailability, {})
   const error = ackState.error ?? vendorState.error
 
+  // R-115. The press that stops the escalation chain unmounts the button that
+  // had focus, so focus fell to <body> - the operator was returned to the top
+  // of the document with no confirmation they had heard.
+  //
+  // `acknowledged` is a SERVER prop and is equally true on an ordinary page
+  // load of a ticket somebody acknowledged an hour ago, so it cannot be the
+  // trigger (`useFocusWhen`'s own rule). `useActionState` hands back a fresh
+  // object per dispatch, so its identity changing IS "the press just landed".
+  // Focus goes to the heading rather than the confirmation itself: the
+  // confirmation is inside the live region, which announces it already, and
+  // the heading announces the whole section around it instead of saying the
+  // same sentence twice.
+  const [ackStateOnMount] = useState(ackState)
+  const headingRef = useFocusWhen<HTMLHeadingElement>(ackState !== ackStateOnMount)
+
   return (
     <section
       aria-labelledby="emergency-response"
       className="flex flex-col gap-4 rounded-md border border-red-300 p-4"
     >
-      <h2 id="emergency-response" className="text-lg font-semibold">
+      <h2 id="emergency-response" ref={headingRef} tabIndex={-1} className="text-lg font-semibold">
         Emergency response
       </h2>
 
@@ -90,8 +105,8 @@ export function EmergencyResponsePanel({
             <input type="hidden" name="ticketId" value={ticketId} />
             <button
               type="submit"
-              disabled={ackPending}
-              className={`${PRIMARY_BUTTON_CLASSES} self-start disabled:opacity-60`}
+              {...pendingButtonProps(ackPending)}
+              className={`${PRIMARY_BUTTON_CLASSES} self-start`}
             >
               I have this
             </button>
@@ -136,8 +151,8 @@ export function EmergencyResponsePanel({
                       />
                       <button
                         type="submit"
-                        disabled={vendorPending}
-                        className="focus-visible:ring-ring text-muted-foreground min-h-11 text-xs underline underline-offset-4 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:opacity-60"
+                        {...pendingButtonProps(vendorPending)}
+                        className="focus-visible:ring-ring text-muted-foreground min-h-11 text-xs underline underline-offset-4 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
                       >
                         {vendor.emergencyAvailable
                           ? `Mark ${vendor.name} as daytime only`

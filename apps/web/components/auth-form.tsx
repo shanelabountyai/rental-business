@@ -96,21 +96,49 @@ export function Field({
  * readable thing on the screen at the exact moment it was the only thing
  * worth reading. The label change and the cursor carry the state instead.
  */
-export function SubmitButton({ label }: { label: string }) {
+/// `label` is a `ReactNode` so a caller can hide the disambiguating half of a
+/// name from the eye without hiding it from the ear (R-115): a per-row
+/// "Delete" that must be "Delete {fileName}" to assistive technology, in a row
+/// already printing that filename, is `Delete<span className="sr-only">
+/// {fileName}</span>`. 2.5.3 wants the visible label CONTAINED in the
+/// accessible name, which that is.
+export function SubmitButton({ label }: { label: ReactNode }) {
   const { pending } = useFormStatus()
   return (
     <button
       type="submit"
-      aria-disabled={pending || undefined}
-      aria-busy={pending || undefined}
-      onClick={(event) => {
-        if (pending) event.preventDefault()
-      }}
+      {...pendingButtonProps(pending)}
       className="bg-primary text-primary-foreground focus-visible:ring-ring min-h-11 rounded-md px-4 py-2 text-base font-medium aria-disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
     >
       {pending ? 'Working…' : label}
     </button>
   )
+}
+
+/**
+ * The same contract for a submit button that cannot be `SubmitButton` (R-115).
+ *
+ * `SubmitButton` hard-codes its label and its `bg-primary` styling, so a
+ * dozen buttons across the product are hand-rolled: the `PRIMARY_BUTTON_CLASSES`
+ * ones, and the on-call rota's row of `name="hours"` submits where the whole
+ * point is WHICH button was pressed. Every one of them had hand-copied
+ * `disabled={pending}` — the exact defect R-107a fixed in `SubmitButton` and
+ * documented above — so the audit found the fix undone at eight call sites the
+ * day after it landed.
+ *
+ * Spread this instead. It is the three attributes and nothing else: no label,
+ * no classes, no layout, so a caller keeps the parts that are genuinely its
+ * own. Drop `disabled:opacity-60` with it — see the "NO opacity-60" paragraph
+ * above.
+ */
+export function pendingButtonProps(pending: boolean) {
+  return {
+    'aria-disabled': pending || undefined,
+    'aria-busy': pending || undefined,
+    onClick: (event: { preventDefault: () => void }) => {
+      if (pending) event.preventDefault()
+    },
+  }
 }
 
 /**

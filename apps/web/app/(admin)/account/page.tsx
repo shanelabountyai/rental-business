@@ -1,4 +1,5 @@
 import { formatCents } from '@rental/core/money'
+import { friendlyTimestamp } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { auth } from '@/auth.ts'
 import { MfaEnrolment } from '@/components/mfa-enrolment.tsx'
@@ -41,7 +42,7 @@ export default async function AccountPage({
       select: {
         id: true,
         role: { select: { name: true } },
-        property: { select: { name: true } },
+        property: { select: { name: true, timezone: true } },
         legalEntity: { select: { name: true } },
       },
     }),
@@ -67,13 +68,26 @@ export default async function AccountPage({
   // Lapsed windows read as "not on call" here, exactly as the rota reads them
   // (packages/core/oncall) - a stale end date shown as if it were live would
   // tell somebody they are covered when nothing would page them.
+  // ==========================================================================
+  // NAMED ZONE, NOT THE SERVER'S (R-115). `toLocaleString` with no `timeZone`
+  // uses whatever the process is running in, which on Vercel is UTC - so "you
+  // are on call until Fri 11:00" was a materially wrong statement on the one
+  // screen where being wrong about the hour means somebody is not answering
+  // the phone at 3am.
+  //
+  // A staff user's on-call window is portfolio-wide and hangs off no single
+  // property, so there is no perfectly right zone to render it in. The
+  // FIRST ASSIGNED PROPERTY'S is the closest available answer, and
+  // `friendlyTimestamp` prints the abbreviation next to it - so somebody
+  // covering two zones can see which one they are being told about instead of
+  // guessing. `??` on the whole lookup rather than on a field: an actor with a
+  // portfolio-wide grant and no property row falls back to UTC, and says so.
+  // ==========================================================================
+  const onCallZone =
+    assignments.find((assignment) => assignment.property?.timezone)?.property?.timezone ?? 'UTC'
   const onCallUntil =
     onCall?.onCallUntil && onCall.onCallUntil > new Date()
-      ? onCall.onCallUntil.toLocaleString('en-US', {
-          weekday: 'short',
-          hour: 'numeric',
-          minute: '2-digit',
-        })
+      ? friendlyTimestamp(onCall.onCallUntil, onCallZone)
       : null
 
   const ceiling = (cents: number | null) =>

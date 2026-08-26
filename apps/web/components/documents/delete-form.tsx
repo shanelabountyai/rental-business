@@ -29,12 +29,22 @@ const REASON_LABELS: Record<string, string> = {
 /// collided across rows the moment a unit or property had two or more
 /// documents, the same duplicate-id class of bug CheckboxField's `value`
 /// param and TextField/SelectField's `idPrefix` param both exist to avoid.
+///
+/// `fileName` is in the button's own name and the select's own label, and that
+/// is a different bug from the id one above (R-115). Every row rendered
+/// "Reason for deleting" and "Delete", so a screen-reader user listing this
+/// panel's controls heard "Delete" once per document with nothing to tell them
+/// apart - on the destructive control, where being one row out is the whole
+/// cost. A unique id is a correctness property and a distinguishable name is a
+/// usability one; the `rowId` machinery solved the first and stopped there.
 export function DeleteForm({
   action,
   rowId,
+  fileName,
 }: {
   action: (state: FormState, formData: FormData) => Promise<FormState>
   rowId: string
+  fileName: string
 }) {
   const [state, formAction] = useActionState<FormState, FormData>(action, {})
   const errors = state.fieldErrors ?? {}
@@ -44,7 +54,7 @@ export function DeleteForm({
     <form action={formAction} className="flex items-center gap-2">
       <FormAlerts state={state} />
       <label className="sr-only" htmlFor={selectId}>
-        Reason for deleting
+        Reason for deleting {fileName}
       </label>
       <select
         id={selectId}
@@ -67,7 +77,12 @@ export function DeleteForm({
         type="submit"
         className="focus-visible:ring-ring min-h-9 rounded-md border border-red-300 px-3 py-1 text-sm font-medium text-red-800 hover:bg-red-50 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
       >
-        Delete
+        {/* VISIBLE "Delete", accessible name "Delete {fileName}". The
+            filename in the visible label would print it three times in a row
+            that is already showing it, and a list of twenty documents is the
+            case this panel is for. 2.5.3 wants the visible label CONTAINED in
+            the accessible name, which this is. */}
+        Delete<span className="sr-only"> {fileName}</span>
       </button>
     </form>
   )

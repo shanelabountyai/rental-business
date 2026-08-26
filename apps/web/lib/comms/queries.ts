@@ -21,7 +21,11 @@ export async function listThreads(scope: ResolvedScope, limit = 100) {
   return prisma.thread.findMany({
     where: { propertyId: { in: scope.propertyIds } },
     include: {
-      property: { select: { id: true, name: true } },
+      // `timezone` because the inbox stamps each row's latest message, and
+      // it used to do it in UTC while the thread page next door rendered the
+      // SAME message property-local - opening a conversation changed the time
+      // on it (R-115).
+      property: { select: { id: true, name: true, timezone: true } },
       tenant: { select: { id: true, firstName: true, lastName: true } },
       vendor: { select: { id: true, name: true } },
       messages: {

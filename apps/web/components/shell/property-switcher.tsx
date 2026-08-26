@@ -1,7 +1,7 @@
 'use client'
 
-import { useRouter } from 'next/navigation'
-import { useTransition } from 'react'
+import { useFormStatus } from 'react-dom'
+import { pendingButtonProps } from '@/components/auth-form.tsx'
 import type { ResolvedScope } from '@/lib/scope/types.ts'
 
 // The property switcher (RPT-01: "filterable by entity", ROLE-04).
@@ -11,17 +11,31 @@ import type { ResolvedScope } from '@/lib/scope/types.ts'
 // and a portfolio of 10-50 units does not need type-ahead. shadcn's Select
 // would be prettier and would need roving focus, escape handling and an aria
 // pattern to match what the browser already does correctly.
+//
+// ==========================================================================
+// A REAL FORM WITH A REAL BUTTON (R-115), not `onChange` + `router.refresh()`.
+//
+// This sits in the header of EVERY admin page, and it did its whole job in an
+// `onChange` handler - so on the first paint of every one of those pages,
+// changing the scope did nothing at all, silently, until React had hydrated
+// the shell. It also set `disabled={pending}` on the `<select>` the user was
+// interacting with, and a focused element that becomes `disabled` is blurred
+// by the browser: choosing an option threw the keyboard user back to the top
+// of the document (R-107a's defect, hand-copied here).
+//
+// The visible "Apply" button is the price of working before hydration, and it
+// is the same trade R-112 took for the tenant's maintenance wizard. `onChange`
+// still submits the form for anyone who has JavaScript, so the button is a
+// fallback for almost everybody rather than a step.
+// ==========================================================================
 
 export function PropertySwitcher({
   scope,
   onSelect,
 }: {
   scope: ResolvedScope
-  onSelect: (value: string) => Promise<void>
+  onSelect: (formData: FormData) => Promise<void>
 }) {
-  const router = useRouter()
-  const [pending, startTransition] = useTransition()
-
   const value =
     scope.selection.kind === 'all'
       ? 'all'
@@ -34,7 +48,7 @@ export function PropertySwitcher({
   if (!scope.switchable) return null
 
   return (
-    <div className="flex items-center gap-2">
+    <form action={onSelect} className="flex items-center gap-2">
       <label htmlFor="property-scope" className="sr-only">
         Filter by property or entity
       </label>
@@ -42,17 +56,8 @@ export function PropertySwitcher({
         id="property-scope"
         name="scope"
         defaultValue={value}
-        disabled={pending}
-        onChange={(event) => {
-          const next = event.target.value
-          startTransition(async () => {
-            await onSelect(next)
-            // The selection changes what every scoped query below returns, so
-            // the whole tree has to re-render rather than just this control.
-            router.refresh()
-          })
-        }}
-        className="border-input bg-background focus-visible:ring-ring min-h-11 rounded-md border px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:opacity-60"
+        onChange={(event) => event.currentTarget.form?.requestSubmit()}
+        className="border-input bg-background focus-visible:ring-ring min-h-11 rounded-md border px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
       >
         <option value="all">All properties</option>
 
@@ -74,6 +79,20 @@ export function PropertySwitcher({
           ))}
         </optgroup>
       </select>
-    </div>
+      <ApplyButton />
+    </form>
+  )
+}
+
+function ApplyButton() {
+  const { pending } = useFormStatus()
+  return (
+    <button
+      type="submit"
+      {...pendingButtonProps(pending)}
+      className="border-input focus-visible:ring-ring min-h-11 rounded-md border px-3 text-sm aria-disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+    >
+      {pending ? 'Working…' : 'Apply filter'}
+    </button>
   )
 }

@@ -257,6 +257,10 @@ test.describe('working a task', () => {
     await signIn(page, staff.email)
 
     await page.goto(`/tasks/${task.id}`)
+    // Behind a `<details>` now (R-115) - it used to sit directly under "Mark
+    // complete" and fire on one press. A `<summary>` is reached with
+    // `getByText`, not `getByRole('button')`: no portable role mapping.
+    await page.getByText('Cancel this task instead').click()
     await page.getByRole('button', { name: 'Cancel task' }).click()
     await page.waitForURL('**/tasks')
 

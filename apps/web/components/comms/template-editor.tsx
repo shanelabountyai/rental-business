@@ -2,7 +2,7 @@
 
 import { useActionState, useState } from 'react'
 import { MERGE_FIELDS, renderTemplate } from '@rental/core/comms'
-import { LiveRegion } from '@/components/auth-form.tsx'
+import { LiveRegion, pendingButtonProps } from '@/components/auth-form.tsx'
 import { FieldError, TextField } from '@/components/form/field.tsx'
 import type { TemplateFormState } from '@/lib/comms/template-actions.ts'
 import { PRIMARY_BUTTON_CLASSES } from '@/components/ui-classes.ts'
@@ -140,8 +140,8 @@ export function TemplateEditor({
 
         <button
           type="submit"
-          disabled={pending}
-          className={`${PRIMARY_BUTTON_CLASSES} self-start disabled:opacity-60`}
+          {...pendingButtonProps(pending)}
+          className={`${PRIMARY_BUTTON_CLASSES} self-start`}
         >
           Save template
         </button>

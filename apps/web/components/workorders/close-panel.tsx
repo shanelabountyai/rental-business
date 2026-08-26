@@ -1,7 +1,7 @@
 'use client'
 
 import { useActionState } from 'react'
-import { LiveRegion } from '@/components/auth-form.tsx'
+import { LiveRegion, pendingButtonProps } from '@/components/auth-form.tsx'
 import { FieldError, TextField } from '@/components/form/field.tsx'
 import type { WorkOrderFormState } from '@/lib/workorders/actions.ts'
 import { PRIMARY_BUTTON_CLASSES } from '@/components/ui-classes.ts'
@@ -150,8 +150,8 @@ export function ClosePanel({
 
         <button
           type="submit"
-          disabled={pending}
-          className={`${PRIMARY_BUTTON_CLASSES} self-start disabled:opacity-60`}
+          {...pendingButtonProps(pending)}
+          className={`${PRIMARY_BUTTON_CLASSES} self-start`}
         >
           Close this work order
         </button>

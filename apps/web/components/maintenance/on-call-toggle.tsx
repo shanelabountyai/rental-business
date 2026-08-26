@@ -2,7 +2,7 @@
 
 import { ON_CALL_SHIFT_HOURS } from '@rental/core/oncall'
 import { useActionState } from 'react'
-import { LiveRegion } from '@/components/auth-form.tsx'
+import { LiveRegion, pendingButtonProps } from '@/components/auth-form.tsx'
 import type { OnCallFormState } from '@/lib/oncall/actions.ts'
 
 // The on-call toggle (MAINT-12, R-029).
@@ -55,8 +55,8 @@ export function OnCallToggle({
             type="submit"
             name="hours"
             value={String(hours)}
-            disabled={pending}
-            className="focus-visible:ring-ring border-input min-h-11 rounded-md border px-3 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:opacity-60"
+            {...pendingButtonProps(pending)}
+            className="focus-visible:ring-ring border-input min-h-11 rounded-md border px-3 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
           >
             {onCallUntil ? 'Extend' : 'Go on call'} for {hours}h
           </button>
@@ -66,8 +66,8 @@ export function OnCallToggle({
             type="submit"
             name="hours"
             value="off"
-            disabled={pending}
-            className="focus-visible:ring-ring border-input min-h-11 rounded-md border px-3 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:opacity-60"
+            {...pendingButtonProps(pending)}
+            className="focus-visible:ring-ring border-input min-h-11 rounded-md border px-3 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
           >
             Come off call
           </button>

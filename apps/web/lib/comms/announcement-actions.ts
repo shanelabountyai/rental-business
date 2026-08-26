@@ -6,7 +6,7 @@ import { revalidatePath } from 'next/cache'
 import { audit } from '@/lib/audit/index.ts'
 import { propertyWhere, requireScope } from '@/lib/auth/guard.ts'
 import { getTemplate, renderForRecipient } from '@/lib/comms/templates.ts'
-import { isSegmentType, segmentWhere } from '@/lib/comms/announcements.ts'
+import { parseSegment, segmentWhere } from '@/lib/comms/announcements.ts'
 import { leasesHalted } from '@/lib/holds/queries.ts'
 import { dispatchPendingNotifications, notify } from '@/lib/notifications/send.ts'
 
@@ -49,15 +49,18 @@ export async function sendAnnouncement(
   const { actor, scope } = await requireScope('message.send')
 
   const templateId = String(formData.get('templateId') ?? '')
-  const segmentTypeRaw = String(formData.get('segmentType') ?? '')
-  const segmentValue = String(formData.get('segmentValue') ?? '')
+  // ONE control, not a type plus a conditionally-rendered value (R-115). The
+  // second control only existed while client state said so, so before the page
+  // hydrated the only segment anybody could actually send to was the default,
+  // "All tenants" - the widest one.
+  const segment = parseSegment(String(formData.get('segment') ?? ''))
 
   if (!templateId) return { error: 'Choose a template to send.' }
-  if (!isSegmentType(segmentTypeRaw)) {
+  if (!segment) {
     return { error: 'Choose who this goes to.' }
   }
 
-  const segmentFilter = segmentWhere(segmentTypeRaw, segmentValue)
+  const segmentFilter = segmentWhere(segment.type, segment.value)
   if (segmentFilter === null) {
     return { error: 'Choose a property, metro or tag to send to.' }
   }
@@ -221,8 +224,8 @@ export async function sendAnnouncement(
     entityId: templateId,
     after: {
       templateName: template.name,
-      segmentType: segmentTypeRaw,
-      segmentValue: segmentValue || null,
+      segmentType: segment.type,
+      segmentValue: segment.value || null,
       requested: leases.length,
       sent: results.length,
       // THE SKIPS ARE RECORDED, not just counted — same reasoning as

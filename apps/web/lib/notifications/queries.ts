@@ -47,7 +47,10 @@ export async function listNotifications(
     },
     include: {
       delivery: true,
-      property: { select: { id: true, name: true } },
+      // `timezone` so the log stamps each row in the zone of the property
+      // it belongs to rather than the server's, which on Vercel is UTC
+      // (R-115).
+      property: { select: { id: true, name: true, timezone: true } },
     },
     orderBy: { createdAt: 'desc' },
     take: limit,

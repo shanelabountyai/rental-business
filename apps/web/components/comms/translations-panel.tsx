@@ -1,7 +1,7 @@
 'use client'
 
 import { useActionState } from 'react'
-import { LiveRegion } from '@/components/auth-form.tsx'
+import { LiveRegion, pendingButtonProps } from '@/components/auth-form.tsx'
 import { FieldError, TextField } from '@/components/form/field.tsx'
 import type { TemplateFormState } from '@/lib/comms/template-actions.ts'
 import { PRIMARY_BUTTON_CLASSES } from '@/components/ui-classes.ts'
@@ -57,8 +57,8 @@ function ApproveForm({
       <LiveRegion>{state.notice && <p className="text-sm">{state.notice}</p>}</LiveRegion>
       <button
         type="submit"
-        disabled={pending}
-        className={`${PRIMARY_BUTTON_CLASSES} self-start disabled:opacity-60`}
+        {...pendingButtonProps(pending)}
+        className={`${PRIMARY_BUTTON_CLASSES} self-start`}
       >
         Approve this translation
       </button>
@@ -197,7 +197,7 @@ export function TranslationsPanel({
           <button
             type="submit"
             disabled={addPending}
-            className={`${PRIMARY_BUTTON_CLASSES} self-start disabled:opacity-60`}
+            className={`${PRIMARY_BUTTON_CLASSES} self-start`}
           >
             Save translation
           </button>
@@ -219,7 +219,7 @@ export function TranslationsPanel({
         <button
           type="submit"
           disabled={retirePending}
-          className="focus-visible:ring-ring border-input min-h-11 self-start rounded-md border px-4 text-sm font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:opacity-60"
+          className="focus-visible:ring-ring border-input min-h-11 self-start rounded-md border px-4 text-sm font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
         >
           {active ? 'Retire this template' : 'Put it back in use'}
         </button>

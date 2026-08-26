@@ -3,7 +3,7 @@
 import { SERVICE_METHOD_LABELS, NOTICE_SERVICE_METHODS } from '@rental/core/notices'
 import type { NoticeServiceMethodName } from '@rental/core/notices'
 import { useActionState, useState } from 'react'
-import { LiveRegion } from '@/components/auth-form.tsx'
+import { LiveRegion, pendingButtonProps } from '@/components/auth-form.tsx'
 import { FieldError } from '@/components/form/field.tsx'
 import type { FormState } from '@/lib/notices/actions.ts'
 
@@ -191,8 +191,8 @@ export function ServeForm({
 
       <button
         type="submit"
-        disabled={pending}
-        className="bg-primary text-primary-foreground focus-visible:ring-ring min-h-11 rounded-md px-4 text-sm font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:opacity-60"
+        {...pendingButtonProps(pending)}
+        className="bg-primary text-primary-foreground focus-visible:ring-ring min-h-11 rounded-md px-4 text-sm font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
       >
         {pending ? 'Recording…' : 'Record service'}
       </button>

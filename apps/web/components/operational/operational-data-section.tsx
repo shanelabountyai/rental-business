@@ -97,7 +97,7 @@ export async function OperationalDataSection({
         )}
         {canWrite && (
           <details>
-            <summary className="cursor-pointer text-sm font-medium">
+            <summary className="min-h-11 cursor-pointer text-sm font-medium">
               Add or replace a code
             </summary>
             <div className="pt-2">
@@ -133,7 +133,7 @@ export async function OperationalDataSection({
         )}
         {canWrite && (
           <details>
-            <summary className="cursor-pointer text-sm font-medium">Add an appliance</summary>
+            <summary className="min-h-11 cursor-pointer text-sm font-medium">Add an appliance</summary>
             <div className="pt-2">
               <AddApplianceForm action={addAppliance.bind(null, unitId)} />
             </div>
@@ -162,7 +162,7 @@ export async function OperationalDataSection({
         )}
         {canWrite && (
           <details>
-            <summary className="cursor-pointer text-sm font-medium">Add a utility account</summary>
+            <summary className="min-h-11 cursor-pointer text-sm font-medium">Add a utility account</summary>
             <div className="pt-2">
               <AddUtilityAccountForm action={addUtilityAccount.bind(null, unitId)} />
             </div>
@@ -191,7 +191,7 @@ export async function OperationalDataSection({
         )}
         {canWrite && (
           <details>
-            <summary className="cursor-pointer text-sm font-medium">
+            <summary className="min-h-11 cursor-pointer text-sm font-medium">
               Set a shutoff location
             </summary>
             <div className="pt-2">

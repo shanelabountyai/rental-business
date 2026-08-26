@@ -306,9 +306,15 @@ test.describe('the approval decision', () => {
     await signIn(page, owner)
 
     await page.goto(`/workorders/${workOrder.id}`)
-    await page.getByRole('button', { name: 'Deny', exact: true }).click()
+    // The disclosure and the submit inside it are two controls on one page,
+    // so they carry two names (R-115). `<details>`/`<summary>` replaced the
+    // `useState` toggle that used to unmount the button holding focus - and
+    // a `<summary>` is reached with `getByText`, not `getByRole('button')`,
+    // because it has no portable role mapping (the convention
+    // `fee-waiver.spec.ts` already documents).
+    await page.getByText('Deny, and say why').click()
     await page.getByLabel('Why not?').fill('Get a second quote first')
-    await page.getByRole('button', { name: 'Deny', exact: true }).click()
+    await page.getByRole('button', { name: 'Send this denial' }).click()
 
     await expect
       .poll(
@@ -338,7 +344,7 @@ test.describe('the approval decision', () => {
     await signIn(page, owner)
 
     await page.goto(`/workorders/${workOrder.id}`)
-    await page.getByRole('button', { name: 'Ask a question' }).click()
+    await page.getByText('Ask a question').click()
     await page.getByLabel('What do you want to know?').fill('Is it under warranty?')
     await page.getByRole('button', { name: 'Send question' }).click()
 

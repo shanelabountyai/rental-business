@@ -59,7 +59,11 @@ export default async function PreventiveMaintenancePage() {
                   {scope.propertyIds.length === 1 ? 'y' : 'ies'} in scope
                 </span>
               </Link>
-              {template.active && <RunBatchButton action={runPreventiveBatch.bind(null, template.id)} dueCount={dueCount} />}
+              {template.active && <RunBatchButton
+                  action={runPreventiveBatch.bind(null, template.id)}
+                  templateName={template.name}
+                  dueCount={dueCount}
+                />}
             </li>
           ))}
         </ul>

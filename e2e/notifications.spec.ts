@@ -274,14 +274,14 @@ test.describe('notification preferences (NOTIF-02)', () => {
     // its own. The ids are deliberately constructed as
     // `pref-${category}-${channel}`, so this names exactly one control.
     const emailToggle = page.locator('#pref-rent_reminder-EMAIL')
-    await expect(emailToggle).toBeChecked()
+    await expect(emailToggle).toHaveAttribute('aria-pressed', 'true')
 
-    // A Server Action form ships a placeholder action until hydration
-    // attaches the real handler - the same race documented in
-    // e2e/documents.spec.ts's restore test, and this form auto-submits on
-    // change rather than waiting for a button press.
-    await page.waitForTimeout(500)
-    await emailToggle.uncheck()
+    // No hydration wait any more (R-115). This used to be a checkbox that
+    // called `requestSubmit()` from `onChange`, so the spec had to sleep 500ms
+    // for React to attach the real handler - which is the tell that a real
+    // user on a slow connection was flipping a box that saved nothing. It is
+    // now a `<button type="submit">`, which the browser posts on its own.
+    await emailToggle.click()
 
     // expect.poll(), not a single read: the test's Prisma connection is not
     // the server's, and Neon's pooler does not guarantee it observes a

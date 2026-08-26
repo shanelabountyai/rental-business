@@ -22,4 +22,14 @@
 /// The dark, high-emphasis button — "Send", "Record", "New template". Distinct
 /// from `SubmitButton`, which is the `bg-primary` one inside a form.
 export const PRIMARY_BUTTON_CLASSES =
-  'bg-foreground text-background focus-visible:ring-ring min-h-11 rounded-md px-4 py-2 text-sm font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none'
+  'bg-foreground text-background focus-visible:ring-ring min-h-11 rounded-md px-4 py-2 text-sm font-medium aria-disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none'
+
+/// The text input / textarea / select boundary and focus ring (R-115).
+///
+/// `components/form/field.tsx` owns the labelled primitives, and five forms
+/// that need their own layout had hand-copied its private `INPUT_CLASSES`
+/// verbatim instead. Five copies of a class list carrying a contrast fix is
+/// four places for the next one to be missed - which is the argument this
+/// file was created to make about the button.
+export const INPUT_CLASSES =
+  'border-input bg-background focus-visible:ring-ring min-h-11 rounded-md border px-3 py-2 text-base focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none aria-invalid:border-red-500'

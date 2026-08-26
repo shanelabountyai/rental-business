@@ -195,13 +195,11 @@ test.describe('segment announcements (COMM-04)', () => {
     await signIn(page, staff)
     await page.goto('/messages/announcements')
 
-    await page.getByLabel('Send to').selectOption('PROPERTY')
-    // Anchored regex, not { exact: true } — SelectField renders a required
-    // field's label as "Property *", so an exact match against "Property"
-    // never matches anything. Anchoring to the start still rules out the
-    // global property/entity switcher, whose label ("Filter by property or
-    // entity") does not start with "Property".
-    await page.getByLabel(/^Property\b/).selectOption(a.property.id)
+    // ONE control now (R-115): the segment type and its value are a single
+    // `TYPE:value` option, because the value dropdown used to exist only
+    // while client state said so - so before hydration the only segment
+    // anybody could send to was the default, "All tenants".
+    await page.getByLabel('Send to').selectOption(`PROPERTY:${a.property.id}`)
     await page.getByLabel('Template').selectOption(template.id)
     await page.getByRole('button', { name: 'Send' }).click()
 
@@ -230,8 +228,7 @@ test.describe('segment announcements (COMM-04)', () => {
     await signIn(page, staff)
     await page.goto('/messages/announcements')
 
-    await page.getByLabel('Send to').selectOption('METRO')
-    await page.getByLabel(/^Metro\b/).selectOption(a.property.metro!)
+    await page.getByLabel('Send to').selectOption(`METRO:${a.property.metro!}`)
     await page.getByLabel('Template').selectOption(template.id)
     await page.getByRole('button', { name: 'Send' }).click()
 
@@ -252,8 +249,7 @@ test.describe('segment announcements (COMM-04)', () => {
     await signIn(page, staff)
     await page.goto('/messages/announcements')
 
-    await page.getByLabel('Send to').selectOption('TAG')
-    await page.getByLabel(/^Tag\b/).selectOption(a.property.tags[0])
+    await page.getByLabel('Send to').selectOption(`TAG:${a.property.tags[0]}`)
     await page.getByLabel('Template').selectOption(template.id)
     await page.getByRole('button', { name: 'Send' }).click()
 
@@ -273,8 +269,7 @@ test.describe('segment announcements (COMM-04)', () => {
 
     await signIn(page, staff)
     await page.goto('/messages/announcements')
-    await page.getByLabel('Send to').selectOption('PROPERTY')
-    await page.getByLabel(/^Property\b/).selectOption(a.property.id)
+    await page.getByLabel('Send to').selectOption(`PROPERTY:${a.property.id}`)
     await page.getByLabel('Template').selectOption(template.id)
 
     const countRows = () =>
@@ -319,8 +314,7 @@ test.describe('accessibility', () => {
 
     await signIn(page, staff)
     await page.goto('/messages/announcements')
-    await page.getByLabel('Send to').selectOption('PROPERTY')
-    await page.getByLabel(/^Property\b/).selectOption(a.property.id)
+    await page.getByLabel('Send to').selectOption(`PROPERTY:${a.property.id}`)
     await page.getByLabel('Template').selectOption(template.id)
     await page.getByRole('button', { name: 'Send' }).click()
     await expect(page.getByText(/Sent to 1 tenant/)).toBeVisible()

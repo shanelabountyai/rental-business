@@ -1,3 +1,4 @@
+import { friendlyTimestamp } from '@rental/core/scheduling'
 import { requireScope } from '@/lib/auth/guard.ts'
 import { listNotifications } from '@/lib/notifications/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
@@ -99,7 +100,14 @@ export default async function NotificationsPage() {
                   to {notification.toAddress}
                   {notification.property ? ` · ${notification.property.name}` : ''}
                   {' · '}
-                  {notification.createdAt.toISOString().slice(0, 16).replace('T', ' ')} UTC
+                  {friendlyTimestamp(
+                    notification.createdAt,
+                    // A notification with no property is a portfolio-wide one
+                    // (a digest, an account email); UTC is then the honest
+                    // answer rather than a guess, and `friendlyTimestamp`
+                    // prints the abbreviation so it says which it is.
+                    notification.property?.timezone ?? 'UTC',
+                  )}
                 </p>
               </li>
             )

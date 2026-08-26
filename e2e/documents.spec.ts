@@ -198,7 +198,7 @@ test.describe('uploading and downloading', () => {
       .getByLabel('File')
       .setInputFiles({ name: 'coi.txt', mimeType: 'text/plain', buffer: Buffer.from('proof of insurance') })
     await page.getByRole('button', { name: 'Upload' }).click()
-    await expect(page.getByText('coi.txt')).toBeVisible()
+    await expect(page.getByRole('link', { name: 'coi.txt' })).toBeVisible()
 
     const created = await prisma.document.findFirstOrThrow({
       where: { propertyId: property.id, fileName: 'coi.txt' },
@@ -231,7 +231,7 @@ test.describe('uploading and downloading', () => {
       .getByLabel('File', { exact: true })
       .setInputFiles({ name: 'kitchen.jpg', mimeType: 'image/jpeg', buffer: Buffer.from([0xff, 0xd8, 0xff]) })
     await page.getByRole('button', { name: 'Upload' }).click()
-    await expect(page.getByText('kitchen.jpg')).toBeVisible()
+    await expect(page.getByRole('link', { name: 'kitchen.jpg' })).toBeVisible()
 
     const created = await prisma.document.findFirstOrThrow({
       where: { unitId: unit.id, fileName: 'kitchen.jpg' },
@@ -242,7 +242,7 @@ test.describe('uploading and downloading', () => {
     // Does not appear on the property-level list - a unit photo lives in the
     // unit's own section, not mixed into the property's general documents.
     await page.goto(`/properties/${property.id}`)
-    await expect(page.getByText('kitchen.jpg')).toHaveCount(0)
+    await expect(page.getByRole('link', { name: 'kitchen.jpg' })).toHaveCount(0)
   })
 
   test('refuses an unauthenticated download', async ({ page }) => {
@@ -255,7 +255,7 @@ test.describe('uploading and downloading', () => {
       .getByLabel('File')
       .setInputFiles({ name: 'note.txt', mimeType: 'text/plain', buffer: Buffer.from('x') })
     await page.getByRole('button', { name: 'Upload' }).click()
-    await expect(page.getByText('note.txt')).toBeVisible()
+    await expect(page.getByRole('link', { name: 'note.txt' })).toBeVisible()
     const created = await prisma.document.findFirstOrThrow({
       where: { propertyId: property.id, fileName: 'note.txt' },
     })
@@ -280,7 +280,7 @@ test.describe('soft delete and restore', () => {
       .getByLabel('File')
       .setInputFiles({ name: 'scratch.txt', mimeType: 'text/plain', buffer: Buffer.from('x') })
     await page.getByRole('button', { name: 'Upload' }).click()
-    await expect(page.getByText('scratch.txt')).toBeVisible()
+    await expect(page.getByRole('link', { name: 'scratch.txt' })).toBeVisible()
 
     const created = await prisma.document.findFirstOrThrow({
       where: { propertyId: property.id, fileName: 'scratch.txt' },
@@ -289,9 +289,18 @@ test.describe('soft delete and restore', () => {
 
     await page.getByLabel('Reason for deleting').selectOption('duplicate')
     await page.getByRole('button', { name: 'Delete' }).click()
-    // Moves to the (closed) "Recently deleted" details, not out of the DOM -
-    // it is still there, just not rendered while collapsed.
-    await expect(page.getByText('scratch.txt')).not.toBeVisible()
+    // BY ITS LINK, not by its text (R-115). The row's own controls now carry
+    // the filename in their accessible names - "Delete {fileName}", "Reason
+    // for deleting {fileName}" - because a list of documents rendered N
+    // buttons all called "Delete", on the destructive control. The visible
+    // half stays "Delete" and the filename is `sr-only`, which is still text
+    // in the DOM: `getByText` matches all three and trips strict mode. The
+    // `<a>` is the one thing on the row that IS the document.
+    //
+    // toHaveCount(0), not not.toBeVisible(): the deleted row moves into the
+    // collapsed "Recently deleted" details, and renders there as a `<span>`
+    // rather than a link, so the link is genuinely gone.
+    await expect(page.getByRole('link', { name: 'scratch.txt' })).toHaveCount(0)
 
     const deletedRow = await prisma.document.findUniqueOrThrow({ where: { id: created.id } })
     expect(deletedRow.deletedAt).not.toBeNull()
@@ -366,7 +375,7 @@ test.describe('scoping (ROLE-01)', () => {
       .getByLabel('File')
       .setInputFiles({ name: 'private.txt', mimeType: 'text/plain', buffer: Buffer.from('x') })
     await page.getByRole('button', { name: 'Upload' }).click()
-    await expect(page.getByText('private.txt')).toBeVisible()
+    await expect(page.getByRole('link', { name: 'private.txt' })).toBeVisible()
     const document = await prisma.document.findFirstOrThrow({
       where: { propertyId: theirs.id, fileName: 'private.txt' },
     })

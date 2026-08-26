@@ -1,38 +1,46 @@
 'use client'
 
-import { useActionState, useState } from 'react'
-import { LiveRegion } from '@/components/auth-form.tsx'
+import { useActionState } from 'react'
+import { LiveRegion, pendingButtonProps } from '@/components/auth-form.tsx'
 import { FieldError, SelectField } from '@/components/form/field.tsx'
 import type {
   AnnouncementFormState,
   AnnouncementRecipientResult,
 } from '@/lib/comms/announcement-actions.ts'
-import type { SegmentOptions, SegmentType } from '@/lib/comms/announcements.ts'
+import type { SegmentOptions } from '@/lib/comms/announcements.ts'
 import { PRIMARY_BUTTON_CLASSES } from '@/components/ui-classes.ts'
 
 // The composer for segment announcements (COMM-04, R-053).
 //
-// One dropdown decides WHICH segment control shows, not four always-visible
-// fields that could disagree about which one wins. "All tenants" needs no
-// second value at all — the empty state for that case is simply not
-// rendering the second control, same reasoning as the rent-roll table's "no
-// control at all, not a disabled one".
+// ==========================================================================
+// ONE SELECT, WITH THE BLAST RADIUS IN EVERY OPTION (R-115).
+//
+// It was two controls: a segment TYPE dropdown held in `useState`, and a
+// value dropdown that rendered only when that state said so. Two consequences
+// the audit found together. Before hydration the second control did not
+// exist, so the only segment reachable on a first paint was the default -
+// "All tenants", the widest one. And nothing anywhere said how many people
+// any of it reached; the per-recipient results table renders only after the
+// send.
+//
+// Collapsing the pair into one `<select>` of `TYPE:value` options answers
+// both, and deletes the state, the conditional, and the two "nothing in
+// scope" empty states with it - an optgroup with no options simply does not
+// render. `segmentOptions` puts the count in each label, so the number is in
+// front of the person BEFORE they choose rather than after they have sent.
 //
 // The value/template pickers use `SelectField` (`components/form/field.tsx`)
 // rather than a hand-rolled `<label>` wrapping a `<select>`, and that is not
 // cosmetic: a label that WRAPS its control gets an accessible name built from
 // the control's own rendered content, so a select whose options include the
-// word "property" (this page's own "One property" segment) collided with the
-// global property/entity switcher's "Property" label under `getByLabel` —
-// caught by this form's own e2e spec. `SelectField` keeps the label a
-// SIBLING, associated by `htmlFor`/`id`, whose accessible name is its own
-// text and nothing the control renders.
+// word "property" collided with the global property/entity switcher's
+// "Property" label under `getByLabel` - caught by this form's own e2e spec.
+// `SelectField` keeps the label a SIBLING, associated by `htmlFor`/`id`,
+// whose accessible name is its own text and nothing the control renders.
+// ==========================================================================
 
-const SEGMENT_LABELS: Record<SegmentType, string> = {
-  ALL: 'All tenants',
-  PROPERTY: 'One property',
-  METRO: 'One metro',
-  TAG: 'One tag',
+function withCount(choice: { label: string; count: number }): string {
+  return `${choice.label} — ${choice.count} ${choice.count === 1 ? 'tenant' : 'tenants'}`
 }
 
 export function AnnouncementForm({
@@ -51,16 +59,12 @@ export function AnnouncementForm({
     sendAction,
     {},
   )
-  const [segmentType, setSegmentType] = useState<SegmentType>('ALL')
 
-  const valueOptions =
-    segmentType === 'PROPERTY'
-      ? options.properties.map((p) => ({ value: p.id, label: p.name }))
-      : segmentType === 'METRO'
-        ? options.metros.map((m) => ({ value: m, label: m }))
-        : segmentType === 'TAG'
-          ? options.tags.map((t) => ({ value: t, label: t }))
-          : []
+  const groups = [
+    { label: 'One property', choices: options.properties },
+    { label: 'One metro', choices: options.metros },
+    { label: 'One tag', choices: options.tags },
+  ].filter((group) => group.choices.length > 0)
 
   return (
     <form action={action} className="flex flex-col gap-6">
@@ -68,43 +72,33 @@ export function AnnouncementForm({
         <h2 className="text-sm font-medium">Send an announcement</h2>
 
         <div className="flex flex-col gap-1.5">
-          <label htmlFor="segment-type" className="text-sm font-medium">
+          <label htmlFor="segment" className="text-sm font-medium">
             Send to
           </label>
           <select
-            id="segment-type"
-            name="segmentType"
-            value={segmentType}
-            onChange={(e) => setSegmentType(e.target.value as SegmentType)}
+            id="segment"
+            name="segment"
+            defaultValue="ALL"
+            aria-describedby="segment-hint"
             className="border-input bg-background focus-visible:ring-ring min-h-11 rounded-md border px-3 py-2 text-base focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
           >
-            {(Object.keys(SEGMENT_LABELS) as SegmentType[]).map((type) => (
-              <option key={type} value={type}>
-                {SEGMENT_LABELS[type]}
-              </option>
+            <option value={options.all.value}>{withCount(options.all)}</option>
+            {groups.map((group) => (
+              <optgroup key={group.label} label={group.label}>
+                {group.choices.map((choice) => (
+                  <option key={choice.value} value={choice.value}>
+                    {withCount(choice)}
+                  </option>
+                ))}
+              </optgroup>
             ))}
           </select>
+          <p id="segment-hint" className="text-muted-foreground text-sm">
+            Counts are current tenancies. A lease on a marketing hold, or a
+            tenant whose merge fields cannot be filled, is dropped at send time
+            and named in the results below.
+          </p>
         </div>
-
-        {segmentType !== 'ALL' && (
-          <>
-            <SelectField
-              label={
-                segmentType === 'PROPERTY' ? 'Property' : segmentType === 'METRO' ? 'Metro' : 'Tag'
-              }
-              name="segmentValue"
-              required
-              options={valueOptions}
-            />
-            {valueOptions.length === 0 && (
-              <p className="text-muted-foreground text-sm">
-                {segmentType === 'PROPERTY'
-                  ? 'No properties in scope.'
-                  : `No property has a ${segmentType === 'METRO' ? 'metro' : 'tag'} set yet — add one on the property record.`}
-              </p>
-            )}
-          </>
-        )}
 
         <SelectField
           label="Template"
@@ -127,8 +121,9 @@ export function AnnouncementForm({
 
         <button
           type="submit"
-          disabled={pending || templates.length === 0}
-          className={`${PRIMARY_BUTTON_CLASSES} self-start disabled:opacity-60`}
+          disabled={templates.length === 0}
+          {...pendingButtonProps(pending)}
+          className={`${PRIMARY_BUTTON_CLASSES} self-start`}
         >
           Send
         </button>

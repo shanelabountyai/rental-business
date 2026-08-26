@@ -5,6 +5,7 @@ import { useActionState } from 'react'
 import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
 import { FieldError, SelectField } from '@/components/form/field.tsx'
 import type { FormState } from '@/lib/comms/actions.ts'
+import { INPUT_CLASSES } from '@/components/ui-classes.ts'
 
 const CHANNEL_LABELS: Record<string, string> = {
   SMS: 'Text',
@@ -25,12 +26,22 @@ const CHANNEL_LABELS: Record<string, string> = {
 export function ReplyForm({
   action,
   channels,
+  recipient,
 }: {
   action: (state: FormState, formData: FormData) => Promise<FormState>
   /// Only the channels this participant can actually be reached on - a
   /// tenant with no phone gets no SMS option rather than an error after
   /// typing.
   channels: readonly string[]
+  /// Who this reaches, folded into the field label and the button (R-115).
+  ///
+  /// A work order with both parties renders this form AND the vendor one on
+  /// the same assembled page, and both buttons said "Send": by ear they were
+  /// the same control, and one texts the tenant while the other texts the
+  /// vendor. The `<h3>` above each is not part of either button's accessible
+  /// name. Omitted on a message thread, where there is one participant and
+  /// nothing to confuse it with.
+  recipient?: string
 }) {
   const [state, formAction] = useActionState<FormState, FormData>(action, {})
   const errors = state.fieldErrors ?? {}
@@ -44,7 +55,7 @@ export function ReplyForm({
       <FormAlerts state={state} />
       <div className="flex flex-col gap-1.5">
         <label htmlFor="field-reply-body" className="text-sm font-medium">
-          Reply
+          {recipient ? `Reply to ${recipient}` : 'Reply'}
         </label>
         <textarea
           id="field-reply-body"
@@ -53,7 +64,7 @@ export function ReplyForm({
           required
           aria-invalid={Boolean(errors.body) || undefined}
           aria-describedby={errors.body ? 'field-reply-body-error' : undefined}
-          className="border-input bg-background focus-visible:ring-ring min-h-11 rounded-md border px-3 py-2 text-base focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none aria-invalid:border-red-500"
+          className={INPUT_CLASSES}
         />
         <FieldError id="field-reply-body-error" message={errors.body} />
       </div>
@@ -73,7 +84,7 @@ export function ReplyForm({
             }))}
           />
         </div>
-        <SubmitButton label="Send" />
+        <SubmitButton label={recipient ? `Send to ${recipient}` : 'Send'} />
       </div>
     </form>
   )

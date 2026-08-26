@@ -4,6 +4,7 @@ import { useActionState } from 'react'
 import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
 import { FieldError, SelectField, TextField } from '@/components/form/field.tsx'
 import type { WorkOrderFormState } from '@/lib/workorders/actions.ts'
+import { INPUT_CLASSES } from '@/components/ui-classes.ts'
 
 const PRIORITY_OPTIONS = [
   { value: 'URGENT', label: 'Urgent' },
@@ -83,7 +84,7 @@ export function CreateWorkOrderForm({
           required
           aria-invalid={Boolean(errors.scope) || undefined}
           aria-describedby={errors.scope ? 'field-wo-scope-error' : undefined}
-          className="border-input bg-background focus-visible:ring-ring min-h-11 rounded-md border px-3 py-2 text-base focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none aria-invalid:border-red-500"
+          className={INPUT_CLASSES}
         />
         <FieldError id="field-wo-scope-error" message={errors.scope} />
       </div>
