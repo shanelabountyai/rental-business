@@ -4472,7 +4472,7 @@ R-037 shipped the card pass-through behind `JurisdictionRule.cardSurchargePermit
 ---
 
 ## R-107a: focus you can see, and focus that survives a submit
-**Commit:** _pending_  ·  **Date:** 2026-08-25
+**Commit:** 564107c  ·  **Date:** 2026-08-25
 
 The first spend of the 2026-08-25 accessibility audit (`docs/audits/2026-08-25-accessibility-ux.md`, 75 findings across all 88 routes). This is the shared-layer half: three defects that each live in one place and reach every screen. The 37-caller live-region sweep is R-107b.
 
