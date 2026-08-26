@@ -31,18 +31,38 @@ const notificationIds: string[] = []
  * by id and a fresh cuid sorts last), so it then SENDS the entire backlog -
  * two round trips per row, sequentially - and it outgrew its 60s timeout.
  *
- * An hour old, so nothing a concurrently-running spec is asserting on can be
- * touched: every fixture in this suite is created within its own test.
+ * BY OWNERSHIP, NOT BY AGE (R-109). The first version retired rows older
+ * than an hour, on the argument that nothing a concurrently-running spec is
+ * asserting on could be that old. True, and useless: one suite run leaves
+ * thousands of rows behind and finishes in minutes, so inside the hour the
+ * predicate matched NOTHING and the sweep below paid for the whole backlog
+ * anyway - measured at 4,044 QUEUED deliveries, every one under an hour old.
+ * It only ever worked on the first run in any hour, which is the shape of a
+ * test that passes when you ask it to and fails when nobody is looking.
+ *
+ * Lowering the number is not the fix, because the number was never the
+ * point: it was standing in for "nobody is still using this row". The
+ * database already records that directly. Every spec here deactivates its
+ * property in `afterAll` - it cannot DELETE it, because `Notification` is
+ * append-only and the FK is ON DELETE SET NULL, which is an UPDATE the
+ * trigger refuses - so an INACTIVE property is a spec that has finished, and
+ * an ACTIVE one is a spec that may still be running. Retiring only the
+ * former cannot touch a live fixture at any age, which is a stronger
+ * guarantee than the hour gave, and it fires on debris the moment it is
+ * debris. Checked against this database: all 235,013 notifications written
+ * in the last two days hang off an inactive property, and none off an active
+ * one.
+ *
+ * A notification with no property at all (a portfolio-wide digest) has no
+ * ownership signal and is deliberately left alone.
+ *
  * `NotificationDelivery` is not one of the append-only tables, so this is an
  * ordinary UPDATE - `Notification` is, and is deliberately left alone.
  */
 async function retireStaleDeliveries() {
-  const anHourAgo = new Date(Date.now() - 3_600_000)
   await prisma.notificationDelivery.updateMany({
     where: {
-      // `NotificationDelivery` carries no createdAt of its own; the age that
-      // matters is the notification's, which is one-to-one with it anyway.
-      notification: { createdAt: { lt: anHourAgo } },
+      notification: { property: { active: false } },
       OR: [{ status: 'QUEUED' }, { status: 'DEFERRED' }],
     },
     data: { status: 'SUPPRESSED', suppressedReason: 'stale_test_fixture' },

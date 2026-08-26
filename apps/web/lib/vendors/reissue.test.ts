@@ -58,8 +58,11 @@ afterAll(async () => {
   await prisma.legalEntity.updateMany({ where: { id: entityId }, data: { active: false } })
 })
 
+/// Every work order this file creates, so a count can be scoped to them.
+const seededJobIds: string[] = []
+
 async function seedJob(priority: 'EMERGENCY' | 'URGENT' | 'ROUTINE' = 'ROUTINE') {
-  return prisma.workOrder.create({
+  const job = await prisma.workOrder.create({
     data: {
       propertyId,
       unitId,
@@ -70,6 +73,8 @@ async function seedJob(priority: 'EMERGENCY' | 'URGENT' | 'ROUTINE' = 'ROUTINE')
       dispatchedAt: new Date(),
     },
   })
+  seededJobIds.push(job.id)
+  return job
 }
 
 /// Ages a link past its expiry without waiting for real time.
@@ -180,14 +185,29 @@ describe('reissueOnExpiry', () => {
 
   it('REFUSES a forged token, minting nothing', async () => {
     // The one thing this must never do: mint a link for a guessed id.
-    const before = await prisma.authToken.count({ where: { purpose: 'VENDOR_WORK_ORDER' } })
+    //
+    // SCOPED TO THIS FILE'S OWN JOBS (R-109). Counting every
+    // VENDOR_WORK_ORDER token in the database is red the moment any other
+    // file mints one between the two reads, and vitest runs files in
+    // parallel: it lost at 1842 against an expected 1841, having passed
+    // alone every time. Scoping is not quite the usual substitution here
+    // because the assertion is about the ABSENCE of a row rather than the
+    // presence of one - but the only mint path in `reissueOnExpiry` is
+    // `issueVendorLink(workOrder.id, ...)` for a work order resolved from
+    // the token, and the only work orders a token in this database could
+    // resolve to and this file could have been the cause of are its own.
+    const before = await prisma.authToken.count({
+      where: { purpose: 'VENDOR_WORK_ORDER', subjectId: { in: seededJobIds } },
+    })
     expect(await reissueOnExpiry('not-a-real-token')).toEqual({
       reissued: false,
       reason: 'unknown',
     })
-    expect(await prisma.authToken.count({ where: { purpose: 'VENDOR_WORK_ORDER' } })).toBe(
-      before,
-    )
+    expect(
+      await prisma.authToken.count({
+        where: { purpose: 'VENDOR_WORK_ORDER', subjectId: { in: seededJobIds } },
+      }),
+    ).toBe(before)
   }, 20_000)
 
   it('sends ONE message however many times the dead link is tapped', async () => {

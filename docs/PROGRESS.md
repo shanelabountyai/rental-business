@@ -4537,3 +4537,37 @@ So a repeat draw does not collide — it creates a **second** statewide rule. `r
 - **`notice-to-vacate.spec.ts` (`YY`), `pay.spec.ts` (`XS`), `renewals.spec.ts` (`ZU`/`ZO`) still use fixed codes and still create duplicate rows** — one per test per browser project. They are safe today only because each file always seeds the *same* rule body under a given code, so the arbitrary tie-break picks between identical rows. One edit that varies a number under an existing code re-creates this bug exactly, which is what happened to `renewals.spec.ts`. Not swept here: they are green, and widening a diagnosis item into four working specs is how a fix breaks something it was not asked to touch. The guard is the helper plus the CLAUDE.md rule.
 - **The database still permits two statewide rules in force on the same day**, and `selectApplicableRule` still resolves that silently. `createRuleVersion` cannot produce it (version arithmetic, and a new `effectiveFrom` must be later than the one it supersedes), so this is a test-fixture hazard rather than a live one. Closing it at the database — `UNIQUE NULLS NOT DISTINCT`, Postgres 15+ — would break the three specs above on their next run and would report schema drift, since Prisma cannot express it. That is a real item, not a footnote to this one.
 - **`docs/PROGRESS.md`'s R-107a entry describes the `renewals.spec.ts` mechanism as "only one row can exist"**, which is the same wrong belief. Its fix — a state code per test — was right for the wrong reason. Left as written; this entry is the correction.
+
+## R-109: two tests that only passed on a quiet database
+**Commit:** PENDING  ·  **Date:** 2026-08-25
+
+Both were diagnosed in R-108 and deliberately left unfixed there. Neither is a product bug; both are the same class of defect — a test whose correctness depends on what else happens to be in the shared database — and one of them was a *fix* for that class that did not work.
+
+**What it built.**
+
+**(a) `reissue.test.ts` counts its own tokens.** `prisma.authToken.count({ where: { purpose: 'VENDOR_WORK_ORDER' } })` before and after, asserting nothing was minted, is red the moment any other file mints a vendor token between the two reads — 1842 against an expected 1841, and green alone every time. `seedJob` now records the work orders it creates and the count is scoped to them. This is not quite the usual substitution, because the assertion is about the ABSENCE of a row rather than the presence of one, and the comment says why the scope is still sound: the only mint path in `reissueOnExpiry` is `issueVendorLink(workOrder.id, …)` for a work order resolved from the token.
+
+**(b) `notifications.test.ts` retires debris by OWNERSHIP, not by age.** R-102 gave the one deliberately-global sweep a `beforeAll` that suppressed QUEUED deliveries older than an hour. The argument was sound — nothing a concurrently-running spec is asserting on can be an hour old — and the result was useless: one suite run leaves thousands of rows and finishes in minutes, so inside the hour the predicate matched **nothing** and the sweep paid for the whole backlog anyway.
+
+**What it decided.** The hour was standing in for *"nobody is still using this row"*, and the database already records that directly. Every spec here **deactivates** its property in `afterAll` — it cannot delete it, because `Notification` is append-only and the FK is `ON DELETE SET NULL`, which is an UPDATE the trigger refuses — so an inactive property is a spec that has finished and an active one is a spec that may still be running. The predicate is now `notification: { property: { active: false } }`. That is a **stronger** guarantee than the hour gave, not a weaker one: it cannot touch a live fixture at any age, and it fires on debris the moment the debris exists. Lowering the number was the wrong move and is the reason the row said this was a decision.
+
+Checked before relying on it: **all 235,013 notifications written to `rental_test` in the last two days hang off an inactive property, and none off an active one**; only 133 of 19,150 properties are still active, all of them wreckage from crashed runs. The three files that deactivate a property inside a test rather than in `afterAll` (`rubs.test.ts` ×2, `punch-list.test.ts`'s `afterEach`) all do it *after* that test's assertions, so none of them can retire a row it is about to read.
+
+A notification with no property at all — a portfolio-wide digest — has no ownership signal and is deliberately left alone.
+
+**Proven by making it fire** (the R-099 standard), against 3,109 rows of real debris left by the preceding full run:
+
+| | QUEUED | SENT | SUPPRESSED | file duration |
+|---|---|---|---|---|
+| before the run | 3,109 | 167,929 | 144,430 | — |
+| after the run | **0** | **167,929 — unchanged** | 147,539 (+3,109, reason `stale_test_fixture`) | **1.47s** |
+
+Nothing was sent. The immediately preceding run under the old predicate did the opposite: it sent its 1,302-row backlog (SENT 165,061 → 166,363) and spent 4.40s doing it, with the global-sweep test alone taking 2.59s.
+
+**Verified:** `lint` (0 errors, the same 14 pre-existing warnings), `typecheck`, and the full unit suite — **2,744 passed + 4 skipped of 2,748 across 204 files + 1 skipped, exit 0**, reconciling against R-108's baseline. No e2e spec was touched, so the 596 are left to CI per CLAUDE.md.
+
+**What it left behind.**
+- **The drain runs in one file's `beforeAll`, so it only clears what existed when `notifications.test.ts` started.** Rows left by files that finish later in the same run survive to the next run. That is hygiene, not correctness — the sweep test's cost is now bounded by one run's output rather than by the age of the database, which is what R-102 wanted.
+- **`e2e/cron.spec.ts` is the second global sweep and has no drain of its own.** It hits `/api/cron` over HTTP, which sweeps unfiltered, so it pays for whatever the e2e run itself has queued. It is affordable today because `npm test` runs first in the gate and now genuinely empties the table; if the e2e sweep ever times out, this is where to look and the same ownership predicate is the fix.
+- **A notification with a null `propertyId` can never be retired.** None exist in this database today. If portfolio-wide digests start queueing in tests, they will accumulate.
+- **Three `afterAll` hooks timed out at 10s in the first full run of this session** (`sms-intake`, `triage-consumer`, `job-consumer`) — all three `deleteMany` calls with nested relation filters, all three green alone and green in the clean re-run. The cause was mine and not the code's: `lint` and `typecheck` were running against the same laptop at the same time, which is the load the conventions warn about. Recorded because the symptom — three unrelated files failing in teardown with zero test failures — reads like a code defect and is not one.
