@@ -4506,7 +4506,7 @@ The first spend of the 2026-08-25 accessibility audit (`docs/audits/2026-08-25-a
 - **R-108 records an undiagnosed flake in `abandonment.spec.ts`** — a 26-value random state code on a unique key, reproducing 1 in 24 with retries off. What is proven and what is not are written down separately, because the symptom is a timeout rather than the constraint violation a collision should produce, and that gap has to be explained before anything is changed.
 
 ## R-108: the constraint that was never going to fire
-**Commit:** _pending_  ·  **Date:** 2026-08-25
+**Commit:** 46e4268  ·  **Date:** 2026-08-25
 
 The row was filed undiagnosed on purpose — *"a fix aimed at a guessed cause is the thing this repo's own notes warn against"* — with what was proven and what was not written down separately. The diagnosis is that **the row's own premise was wrong**, and so was R-107a's when it fixed the same shape in `renewals.spec.ts`.
 
