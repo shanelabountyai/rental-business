@@ -1,0 +1,29 @@
+{
+  // What `next build` typechecks: everything tsconfig.json does, MINUS the
+  // e2e suite (R-120).
+  //
+  // The base config deliberately includes `../../e2e/**/*.ts`, because tsc
+  // only follows the import graph and nothing in apps/web imports a spec - so
+  // without that line the suite had no typechecking at all. Keeping it is
+  // right for `npm run typecheck`, which is the gate. It is wrong for a
+  // production build, and that cost two days of red deploys:
+  //
+  // Vercel installs with devDependencies OMITTED. `e2e/fixtures.ts` imports
+  // `@axe-core/playwright`, a devDependency, from R-111 onward - so every
+  // deploy since 2026-08-25 failed with `Cannot find module
+  // '@axe-core/playwright'` while lint, typecheck and the local build all
+  // passed, because locally the package is installed. Test-only code must not
+  // be able to stop a deploy of code it does not ship with.
+  //
+  // `exclude` replaces rather than merges, so the base config's exclusions are
+  // repeated here. If you add one there, add it here too.
+  "extends": "./tsconfig.json",
+  "exclude": [
+    "node_modules",
+    "../../packages/db/generated",
+    "../../e2e",
+    "**/* ?.ts",
+    "**/* ?.tsx",
+    "**/* ?.d.ts"
+  ]
+}

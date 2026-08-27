@@ -4925,7 +4925,7 @@ Allocation **strictly dominates the deletion**: it gives the same answer whereve
 - **Gate run:** `lint` (0 errors, the same 14 pre-existing warnings), `typecheck`, unit **2,752 passed + 4 skipped of 2,756**, and the e2e specs this touches — `rent-roll` **14/14**, plus `golden-path-5`, `dashboard` and `reports` at **26/26** against `--list`'s `Total: 26`. The full 1,050-test sweep belongs to CI, which is still dark on R-113's billing limit.
 
 ## R-119: the leftovers four items filed, and the defect the first one was hiding
-**Commit:** PENDING  ·  **Date:** 2026-08-27
+**Commit:** addf867  ·  **Date:** 2026-08-27
 
 **The backlog ran out of ungated rows.** R-118 was the last one; R-037a, R-093 and R-097b are each blocked on a vendor decision and all three forbid a simulated driver under D-15, so there was nothing buildable left. The owner chose the leftover sweep — the four things R-115 through R-118 deliberately did not fix, each already diagnosed in a PROGRESS entry and owned by nobody.
 
@@ -4966,3 +4966,24 @@ Five more passed `'UTC'` explicitly. Those are right — a UTC-midnight value fo
 - **The demo owner's MFA is still not re-enrolled** (R-117's leftover, unchanged — this item did not walk the demo).
 - **Gate run:** `lint` (0 errors, the same 14 pre-existing warnings), `typecheck`, `npm run build`, unit **2,755 passed + 4 skipped of 2,759**, and the ten e2e specs covering every screen touched — `leases`, `access-codes-move-in`, `documents`, `compliance`, `renewals`, `evictions`, `deposit-disposition`, `portal`, `reports`, `violations` — at **108 passed** against `--list`'s `Total: 108`, no flaky, no skipped. The first run of those ten was **104 passed / 4 failed**, and both failing tests were this item's own defects (the sliced `Issued` string and the Sep/Sept disagreement); the 108 is after fixing them. The full 1,050-test sweep belongs to CI, which is still dark on R-113's billing limit.
 
+## R-120: the deploy had been red for two days, and the gate could not see it
+**Commit:** PENDING  ·  **Date:** 2026-08-27
+
+**Found by being asked.** R-119 was mid-sweep when the owner asked whether Vercel failing was fixable. Seven consecutive production deploys were in `● Error`, each after about a minute, going back two days — and nothing local had noticed, because nothing local could.
+
+**Vercel installs with devDependencies omitted.** `apps/web/tsconfig.json` deliberately includes `../../e2e/**/*.ts`: tsc only follows the import graph and nothing in `apps/web` imports a Playwright spec, so before that line the suite had no typechecking at all (R-032 shipped two references to an undefined variable that lint and typecheck both passed). `next build` typechecks whatever that config includes. R-111 imported `@axe-core/playwright` into `e2e/fixtures.ts` on 2026-08-25, and **every deploy from that commit onward failed with `Type error: Cannot find module '@axe-core/playwright'`** — the date the deploys turned red, exactly.
+
+**Why the local gate stayed green through all of it:** locally the package is installed, so `lint`, `typecheck`, `npm test` and `npm run build` all pass and always would have. The asymmetry is the whole defect. `@playwright/test` — the other devDependency `e2e/fixtures.ts` imports — resolves on Vercel only by accident: something in the production tree depends on it, so `package-lock.json` does not mark it `dev`. One dev-only import away from the same failure at any time.
+
+### What it built
+
+`next.config.ts` sets `typescript.tsconfigPath` to a new `apps/web/tsconfig.build.json`, which extends the base config and excludes `e2e` and nothing else. `npm run typecheck` keeps pointing at the full `tsconfig.json`, so the suite is still typechecked by the gate — it just cannot stop a deploy of code it does not ship with. The `exclude` list is repeated rather than merged because TypeScript replaces it, and the file says so next to the copy.
+
+**Verified in both directions rather than reasoned about.** `@axe-core` was physically moved out of `node_modules` — Vercel's exact condition — and `npm run build` passed (`✓ Compiled successfully`, exit 0). Then a deliberate type error was appended to `e2e/fixtures.ts` and `npm run typecheck` failed on it (`error TS2322` at `fixtures.ts(210,7)`). Both were reverted.
+
+### What it left behind
+
+- **This is a SECOND dead pipeline, not the same one.** R-113 found GitHub Actions dark on a billing limit and it still is; this is Vercel, and it is code. Having both dark at once is part of why neither got noticed — a red check next to a red check reads as one known problem.
+- **Nothing checks that a deploy still builds.** The fix removes today's cause, not the class: the local gate and the deploy build different things from the same tree, and only the deploy knows it. Until CI is alive the cheapest guard is reading the deploy list, which is what found this.
+- **`@playwright/test`'s misplacement is left as-is** (R-119's leftover records it). It is a devDependency the lockfile does not mark `dev`, and correcting it would have been load-bearing before this item and is inert after it.
+- **Gate run:** shares R-119's, plus the two build verifications above.

@@ -3,6 +3,10 @@ import type { NextConfig } from 'next'
 const nextConfig: NextConfig = {
   // Workspace packages ship TypeScript source, not a build step.
   transpilePackages: ['@rental/db', '@rental/core'],
+  // A build typechecks the app, not the test suite that exercises it
+  // (R-120). tsconfig.build.json says why, and the reason is a two-day
+  // outage rather than a preference.
+  typescript: { tsconfigPath: 'tsconfig.build.json' },
   experimental: {
     // Next caps a Server Action body at 1 MB by default, and every photo
     // upload in this product goes through one - inspections, notice service,
