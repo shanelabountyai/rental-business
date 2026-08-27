@@ -3,14 +3,15 @@ import { agingTotals, bucketFor, delinquencyFor } from './aging.ts'
 import type { DelinquencyFacts } from './aging.ts'
 
 const owing: DelinquencyFacts = {
-  openCharges: [{ dueOn: '2026-08-01', amountCents: 150_000 }],
+  // No dated charge rows, which is the ORDINARY tenancy: D-11/D-40 mint no
+  // monthly `Charge` for the subscription's own rent line, so a lease behind
+  // on rent alone has none. The charge cases get their own blocks below.
+  charges: [],
   balanceCents: 150_000,
   asOf: '2026-08-10',
   graceDays: 5,
-  // Set to the SAME date the one open charge already carries, so these
-  // fixtures exercise ordinary aging without also exercising the
-  // two-candidates comparison — that gets its own describe block below.
   nearestRentDueOn: '2026-08-01',
+  monthlyRentCents: 150_000,
 }
 
 describe('bucketFor', () => {
@@ -44,17 +45,14 @@ describe('delinquencyFor', () => {
     })
   })
 
-  it('AGES FROM THE OLDEST UNPAID CHARGE, not the newest', () => {
-    // A tenant who paid this month while March is still outstanding is five
-    // months late, not current. Taking the newest charge reports the exact
-    // opposite, and it is the shape of error that makes a delinquency report
-    // worse than no report.
+  it('AGES FROM THE OLDEST DEBT THE BALANCE STILL REACHES, not the newest', () => {
+    // Two months of arrears: this month's rent plus a utility charge from
+    // March that the balance can only be explained by. Taking the newest
+    // debt reports the exact opposite, and it is the shape of error that
+    // makes a delinquency report worse than no report.
     const result = delinquencyFor({
       ...owing,
-      openCharges: [
-        { dueOn: '2026-08-01', amountCents: 150_000 },
-        { dueOn: '2026-03-01', amountCents: 150_000 },
-      ],
+      charges: [{ dueOn: '2026-03-01', amountCents: 150_000 }],
       balanceCents: 300_000,
     })
     expect(result.oldestDueOn).toBe('2026-03-01')
@@ -121,7 +119,7 @@ describe('delinquencyFor', () => {
       // Real: a manual adjustment with no charge and no lease behind it. It
       // cannot be aged, and pretending it is current-by-age would hide money
       // owed.
-      const result = delinquencyFor({ ...owing, openCharges: [], nearestRentDueOn: null })
+      const result = delinquencyFor({ ...owing, charges: [], nearestRentDueOn: null })
       expect(result.balanceCents).toBe(150_000)
       expect(result.oldestDueOn).toBeNull()
       expect(result.pastGrace).toBe(false)
@@ -129,50 +127,34 @@ describe('delinquencyFor', () => {
   })
 
   describe('ordinary rent has no Charge row — the gap R-045 found', () => {
-    it('AGES FROM `nearestRentDueOn` WHEN THERE IS NO OPEN CHARGE AT ALL', () => {
+    it('AGES FROM `nearestRentDueOn` WHEN THERE IS NO DATED CHARGE AT ALL', () => {
       // D-11/D-40 mint no monthly Charge for the subscription's own rent
       // line. Before this fix, a lease with a positive balance and no dated
       // charge reported `current` — silently hiding the single most common
       // form of delinquency in the product.
-      const result = delinquencyFor({
-        ...owing,
-        openCharges: [],
-        nearestRentDueOn: '2026-07-15',
-        asOf: '2026-08-10',
-      })
+      const result = delinquencyFor({ ...owing, nearestRentDueOn: '2026-07-15' })
       expect(result.oldestDueOn).toBe('2026-07-15')
       expect(result.daysLate).toBe(26)
       expect(result.bucket).toBe('16-30')
     })
 
-    it('TAKES THE EARLIER OF A LATE FEE AND THE RENT IT WAS ASSESSED ON', () => {
-      // The exact tenancy this fix exists for: rent has been overdue for a
-      // month, a late fee posted THIS MORNING (Charge.dueOn = assessment
-      // date, always today or later than the rent it followed). Reading
-      // openCharges alone would find only the fee and report zero days
-      // late, on the very day the tenancy is accruing fees for being late.
+    it('A LATE FEE POSTED THIS MORNING DOES NOT RESET THE CLOCK', () => {
+      // The exact tenancy R-045 exists for, and it survives R-118's rewrite.
+      // Rent has been overdue for a month and a late fee posted TODAY
+      // (`Charge.dueOn` is the assessment date, always today or later than
+      // the rent it followed). The fee absorbs its own $50 of the balance
+      // and the rent underneath takes the rest, so the anchor is the rent
+      // due date — not this morning, on the very day the tenancy is
+      // accruing fees for being late.
       const result = delinquencyFor({
         ...owing,
-        openCharges: [{ dueOn: '2026-08-10', amountCents: 5_000 }], // the fee, dated today
+        charges: [{ dueOn: '2026-08-10', amountCents: 5_000 }], // the fee, dated today
         nearestRentDueOn: '2026-07-01', // the rent it was assessed on
-        asOf: '2026-08-10',
+        balanceCents: 155_000,
       })
       expect(result.oldestDueOn).toBe('2026-07-01')
       expect(result.daysLate).toBe(40)
       expect(result.bucket).toBe('30+')
-    })
-
-    it('still prefers a dated charge that is OLDER than the nearest rent date', () => {
-      // An old, unwaived late fee predating this month's rent cycle - the
-      // charge is the true anchor here, and nearestRentDueOn must not
-      // override a candidate that is already earlier.
-      const result = delinquencyFor({
-        ...owing,
-        openCharges: [{ dueOn: '2026-06-01', amountCents: 5_000 }],
-        nearestRentDueOn: '2026-08-01',
-        asOf: '2026-08-10',
-      })
-      expect(result.oldestDueOn).toBe('2026-06-01')
     })
 
     it('UNDERSTATES rather than fabricates when more than one month is owed', () => {
@@ -184,12 +166,57 @@ describe('delinquencyFor', () => {
       // rather than left to look more precise than it is.
       const result = delinquencyFor({
         ...owing,
-        openCharges: [],
         nearestRentDueOn: '2026-07-01', // the MOST RECENT due date only
-        asOf: '2026-08-10',
         balanceCents: 300_000, // two months owed
       })
       expect(result.daysLate).toBe(40) // dated from July, not June
+    })
+  })
+
+  describe('a charge row is not evidence the charge is still owed — R-118', () => {
+    // `Charge` has no paid marker, so the anchor is ALLOCATED from the
+    // balance: payments settle the oldest debt first (D-11), which means
+    // whatever is still owed sits on the newest debts.
+    const derrick: DelinquencyFacts = {
+      // A move-in proration due on 2025-07-03 and paid on time.
+      charges: [{ dueOn: '2025-07-03', amountCents: 80_000 }],
+      balanceCents: 165_000, // exactly this month's rent
+      asOf: '2026-08-27',
+      graceDays: 5,
+      nearestRentDueOn: '2026-08-07',
+      monthlyRentCents: 165_000,
+    }
+
+    it('DOES NOT AGE A TENANCY FROM A CHARGE IT PAID A YEAR AGO', () => {
+      // Found on R-117's demo walk: this tenant owes exactly one month and
+      // the rent roll reported him OVER 30 DAYS, aged from the proration.
+      const result = delinquencyFor(derrick)
+      expect(result.oldestDueOn).toBe('2026-08-07')
+      expect(result.daysLate).toBe(20)
+      expect(result.bucket).toBe('16-30')
+    })
+
+    it('CANNOT MAKE A TENANT PAST GRACE ON DAY ONE', () => {
+      // The consequence that is not cosmetic. `pastGrace` gates who may be
+      // chased, and an older anchor can only make it true EARLIER — so
+      // under the old reading any tenant with any paid charge on file was
+      // chaseable the day after rent was due, whatever the statute allows.
+      const result = delinquencyFor({ ...derrick, asOf: '2026-08-08' })
+      expect(result.daysLate).toBe(1)
+      expect(result.pastGrace).toBe(false)
+    })
+
+    it('STILL ANCHORS TO AN OLD CHARGE THE BALANCE CANNOT BE EXPLAINED WITHOUT', () => {
+      // The other direction, and the reason this is an allocation and not a
+      // deletion: $200 more is owed than this month's rent, and the only
+      // debt on file that accounts for it is a utility charge from May.
+      const result = delinquencyFor({
+        ...derrick,
+        charges: [{ dueOn: '2026-05-15', amountCents: 20_000 }],
+        balanceCents: 185_000,
+      })
+      expect(result.oldestDueOn).toBe('2026-05-15')
+      expect(result.bucket).toBe('30+')
     })
   })
 })

@@ -339,11 +339,14 @@ export async function assessLateFees(
     // fires on and the rent-roll screen showing it "past grace" can never
     // silently disagree.
     const delinquency = delinquencyFor({
-      openCharges: [],
+      // This pass is the UNLINKED balance only - no charge rows by
+      // construction, which is why R-118's allocation changes nothing here.
+      charges: [],
       balanceCents: balance,
       asOf: today,
       graceDays: rule.graceDays,
       nearestRentDueOn,
+      monthlyRentCents: lease.rentCents,
     })
     if (!delinquency.pastGrace || delinquency.balanceCents <= 0 || !delinquency.oldestDueOn) continue
 

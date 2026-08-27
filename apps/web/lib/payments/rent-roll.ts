@@ -176,7 +176,7 @@ export async function rentRoll(scope: ResolvedScope, asOfDate?: Date): Promise<R
     const rentDueDay = lease.leasePayers[0]?.debitDay ?? lease.rentDueDay
 
     const delinquency = delinquencyFor({
-      openCharges: (chargesByLease.get(lease.id) ?? []).map((charge) => ({
+      charges: (chargesByLease.get(lease.id) ?? []).map((charge) => ({
         // `@db.Date`. `utcToBusinessDate` is the reader for a calendar day;
         // putting one through a timezone is the R-042 bug in a new place.
         dueOn: utcToBusinessDate(charge.dueOn),
@@ -189,6 +189,10 @@ export async function rentRoll(scope: ResolvedScope, asOfDate?: Date): Promise<R
       asOf: today,
       graceDays: rule?.graceDays ?? null,
       nearestRentDueOn: dueDateOnOrBefore(today, rentDueDay),
+      // The size of the rent debt those charges sit behind (R-118). Without
+      // it every balance is attributed to the oldest charge row on file,
+      // paid or not.
+      monthlyRentCents: lease.rentCents,
     })
 
     const tenant = lease.leaseTenants[0]?.tenant ?? null
@@ -291,6 +295,9 @@ export async function pastGraceLeaseIds(
     select: {
       id: true,
       rentDueDay: true,
+      // R-118: the anchor is allocated from the balance, so the rent figure
+      // is part of the re-check and not only of the screen.
+      rentCents: true,
       property: { select: { state: true, county: true, timezone: true } },
       leasePayers: { where: { active: true }, select: { debitDay: true } },
     },
@@ -331,7 +338,7 @@ export async function pastGraceLeaseIds(
     const today = businessDate(asOf, lease.property.timezone)
     const rentDueDay = lease.leasePayers[0]?.debitDay ?? lease.rentDueDay
     const delinquency = delinquencyFor({
-      openCharges: (chargesByLease.get(lease.id) ?? []).map((charge) => ({
+      charges: (chargesByLease.get(lease.id) ?? []).map((charge) => ({
         dueOn: utcToBusinessDate(charge.dueOn),
         amountCents: charge.amountCents,
       })),
@@ -339,6 +346,7 @@ export async function pastGraceLeaseIds(
       asOf: today,
       graceDays: rule?.graceDays ?? null,
       nearestRentDueOn: dueDateOnOrBefore(today, rentDueDay),
+      monthlyRentCents: lease.rentCents,
     })
     if (delinquency.pastGrace) allowed.add(lease.id)
   }

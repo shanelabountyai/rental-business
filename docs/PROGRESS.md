@@ -4883,3 +4883,43 @@ Milestone 11's fifth and last slice: audit angles ⑪ ㉓ ㉔ ㉕ ㉖ ㉗ and th
 - **The demo owner's MFA was cleared to walk the screens** and was not re-enrolled. `db:create-owner` prints a setup link; a walk driving a browser has no authenticator. Worth a seeded TOTP secret in `DEMO-LOGINS.md` if the next walk wants `/login/mfa` covered — it is one of the two routes this walk did not reach.
 - **`rental_demo` carries three generations of retired properties** (8 inactive against 6 active before this walk's re-seeds). `--reset` retires rather than deletes, correctly — an append-only table references those rows — so the count grows by six per reset. Harmless to the screens, and it makes any global query against that database misleading.
 - **The lease page still prints ISO dates**, as R-116 recorded. Unchanged here.
+
+---
+
+## R-118: a tenancy is aged from charges it paid a year ago
+**Commit:** TBD  ·  **Date:** 2026-08-27
+
+**The defect R-117's demo walk found and deliberately did not fix.** `rentRoll()` fed `delinquencyFor` every `waivedAt: null` `Charge` on the lease as its `openCharges`, a field whose own contract says *"every charge still contributing to the balance"*. **`Charge` has no paid marker to filter by.** Under D-11 a `Charge` is the instruction pushed to Stripe and settlement comes back as one aggregate balance with no per-charge allocation record — so the query silently meant *every charge ever billed*, `oldestDueOn` took the oldest of them, and `daysLate`, `bucket` and **`pastGrace` all descend from it**.
+
+**What it looked like on the demo.** Derrick Holt owes exactly this month's $1,650, due 20 days ago, and the rent roll reported him **Over 30 days** — aged from a move-in proration due 2025-07-03 and paid on time. Priya Nair, $200 down on a $1,600 rent, read the same way from an August 2025 charge. Both were confirmed against `rental_demo` before and after the change.
+
+**The consequence was never cosmetic.** `pastGrace` gates who may be chased, and an older anchor can only make it true **earlier** — so a tenant one day past due with any paid charge on file was past grace on day one, whatever the statute allows. That is the precise failure `aging.ts`'s own header says the module exists to prevent: *"chasing somebody who is not yet late by the only definition that matters, which is how a rent-roll screen turns into a fair-housing complaint."*
+
+### What it built
+
+**The anchor is allocated, not looked up.** `delinquencyFor` builds a debt list — the charges plus **one debt for the current period's rent** (`rentCents` dated `nearestRentDueOn`, because ordinary rent mints no `Charge` row under D-11/D-40 and is otherwise invisible) — sorts it newest-first, and consumes the balance across it. The debt the balance runs out on is `oldestDueOn`. Payments settle the oldest debt first (D-11's stated allocation order), so whatever is still owed sits on the **newest** debts, and that is the only assumption the arithmetic makes.
+
+**`openCharges` is renamed `charges`, with the opposite contract** — every unwaived charge, paid or not — so a future caller cannot quietly re-make the assumption the old name invited. **`monthlyRentCents` is required and not optional-with-a-default**: a caller that omitted it would leave the rent debt absorbing nothing, every balance would outrun the known debts, and the fallthrough would restore this exact defect through a missing argument.
+
+Both real callers are in `rent-roll.ts` — the screen and `pastGraceLeaseIds`, the server-side re-check immediately before a chase is sent — and both now pass `lease.rentCents`; the re-check's `select` gained the column. `late-fees.ts` was never affected and still is not: it passes `charges: []` by construction, ages from `nearestRentDueOn` alone, and has therefore never assessed a fee early.
+
+### What it decided
+
+**D-151: allocation, chosen by the owner over the two alternatives.** Recorded there in full; the short version is that both rejected options were defensible.
+
+- **Deleting `charges` and aging from `nearestRentDueOn` alone** — what `late-fees.ts` already does — is the smaller diff and provably never chases early. It was rejected because it makes a genuinely unpaid year-old utility read as at most one month late, and the module's own doc argues against it.
+- **Persisting per-charge settlement** (a `settledCents` column fed from Stripe webhooks through the existing, production-dead `allocatePayment`) is the only fully correct answer, and it is a migration, a webhook change and a backfill — out of scale for an S, and D-11 says settlement lives in Stripe.
+
+Allocation **strictly dominates the deletion**: it gives the same answer wherever the deletion is right, and keeps real arrears visible where it is not.
+
+**Which direction it can still be wrong in, and why that is the acceptable one.** Only towards reporting a tenancy **newer** than it is. Running out of debts before the balance is covered means unlinked rent from a period this schema does not record — the limitation `nearestRentDueOn` already documents — and the oldest *known* debt is then the anchor. It can never age a tenancy from a debt the balance cannot account for, so it can never chase somebody early. That is the same asymmetry `graceUnknown` and D-149's `unknown` funding type already choose: under-chasing is a cost, chasing early is a complaint.
+
+**The e2e test was confirmed to fail against the old anchor before being trusted.** A tenancy one day late on unlinked rent, carrying a proration billed and paid 400 days ago whose two ledger entries net to zero, now reads *"1–5 days / still within grace"* with no chase control at all. Reverting `delinquencyFor` to the old `min(candidates)` and running only that test failed both projects on both retries; restoring it passed. Writing the fixture that way is the point: a paid charge and an unpaid one are the same row, and only the balance tells them apart.
+
+### What it left behind
+
+- **`allocatePayment` is still production-dead.** It has a full test file and no caller — this item computes an anchor from the balance rather than allocating payments to charge rows, which is the cheap half of what that module was written for. Whoever adds per-charge settlement is its first real caller.
+- **Multi-month unlinked rent still understates.** Unchanged by this item and documented on `nearestRentDueOn` since R-045: `dueDateOnOrBefore` can only anchor to the most recent occurrence of a day-of-month, so two months owed still reports as about one month late.
+- **A tenancy current on rent but owing only a fee posted today still ages from the rent due date**, because the rent debt sits under the fee in the sort and absorbs the remainder. Pre-existing, R-045's deliberate trade, and unchanged here.
+- **The local `rental_demo` holds five generations of seeded leases**, all `ACTIVE` — every `db:seed:demo` without `--reset` adds another set. Noticed while confirming Derrick's numbers; it inflates the demo rent roll and belongs to whoever next walks the demo, not to this item.
+- **Gate run:** `lint` (0 errors, the same 14 pre-existing warnings), `typecheck`, unit **2,752 passed + 4 skipped of 2,756**, and the e2e specs this touches — `rent-roll` **14/14**, plus `golden-path-5`, `dashboard` and `reports` at **26/26** against `--list`'s `Total: 26`. The full 1,050-test sweep belongs to CI, which is still dark on R-113's billing limit.

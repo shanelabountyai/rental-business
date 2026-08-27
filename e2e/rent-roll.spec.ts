@@ -54,7 +54,7 @@ function daysAgo(n: number): Date {
 }
 
 async function seedPropertyWithTenancies(
-  options: { includeUnlinkedRent?: boolean } = {},
+  options: { includeUnlinkedRent?: boolean; includeStalePaidCharge?: boolean } = {},
 ) {
   const stamp = randomUUID().slice(0, 8)
   const entity = await prisma.legalEntity.create({
@@ -166,7 +166,14 @@ async function seedPropertyWithTenancies(
    * mis-reporting as `current`, and it is the one every OTHER tenancy in
    * this file, seeded with a Charge row above, does not exercise.
    */
-  async function unlinkedRentTenancy(label: string, dueDaysAgo: number) {
+  async function unlinkedRentTenancy(
+    label: string,
+    dueDaysAgo: number,
+    /// R-118: a charge from a previous tenancy year that was PAID - its
+    /// CHARGE and PAYMENT entries net to nothing, so it contributes to the
+    /// balance not at all and to the `Charge` table permanently.
+    stalePaidChargeDaysAgo?: number,
+  ) {
     const unit = await prisma.unit.create({
       data: { propertyId: property.id, name: `${label}-${stamp}`, status: 'OCCUPIED' },
     })
@@ -223,6 +230,45 @@ async function seedPropertyWithTenancies(
         description: 'Rent',
       },
     })
+
+    if (stalePaidChargeDaysAgo != null) {
+      const staleDate = daysAgo(stalePaidChargeDaysAgo)
+      const stale = await prisma.charge.create({
+        data: {
+          propertyId: property.id,
+          leaseId: lease.id,
+          type: 'RENT',
+          amountCents: 80_000,
+          description: 'Move-in proration',
+          dueOn: staleDate,
+        },
+      })
+      // Billed and PAID, on time, over a year ago. Two entries that net to
+      // zero - which is the whole difficulty: the `Charge` row survives with
+      // no mark on it, and `waivedAt: null` cannot tell it from a debt.
+      await prisma.ledgerEntry.create({
+        data: {
+          propertyId: property.id,
+          leaseId: lease.id,
+          chargeId: stale.id,
+          type: 'CHARGE',
+          amountCents: 80_000,
+          occurredAt: staleDate,
+          description: 'Move-in proration',
+        },
+      })
+      await prisma.ledgerEntry.create({
+        data: {
+          propertyId: property.id,
+          leaseId: lease.id,
+          chargeId: stale.id,
+          type: 'PAYMENT',
+          amountCents: -80_000,
+          occurredAt: staleDate,
+          description: 'Move-in proration paid',
+        },
+      })
+    }
     return { tenant, lease, unit }
   }
 
@@ -241,8 +287,14 @@ async function seedPropertyWithTenancies(
   const unlinkedRent = options.includeUnlinkedRent
     ? await unlinkedRentTenancy('Unlinked', 25)
     : null
+  // ONE DAY LATE on this month's rent, carrying a proration paid over a year
+  // ago (R-118). Opt-in for the same reason `unlinkedRent` is: it is a
+  // second tenancy, and the send tests count rows.
+  const stalePaid = options.includeStalePaidCharge
+    ? await unlinkedRentTenancy('Stale', 1, 400)
+    : null
 
-  return { property, within, past, unlinkedRent }
+  return { property, within, past, unlinkedRent, stalePaid }
 }
 
 /// A manager SCOPED TO ONE PROPERTY.
@@ -331,6 +383,34 @@ test.describe('rent roll and delinquency aging (PAY-06)', () => {
       withinRow.getByRole('checkbox', {
         name: new RegExp(`Chase ${within.tenant.firstName}`),
       }),
+    ).toHaveCount(0)
+  })
+
+  test('A CHARGE PAID A YEAR AGO DOES NOT MAKE A TENANT CHASEABLE ON DAY ONE', async ({
+    page,
+  }) => {
+    // R-118, found on R-117's demo walk. `Charge` has no paid marker, so the
+    // rent roll fed `delinquencyFor` every unwaived charge the lease had
+    // ever had and aged the tenancy from the OLDEST of them - a move-in
+    // proration billed and paid over a year ago. `pastGrace` descends from
+    // the same anchor, so this tenant, one day late on this month's rent,
+    // was reported over 30 days late AND offered as chaseable on a screen
+    // whose entire purpose is the opposite distinction.
+    const { property, stalePaid } = await seedPropertyWithTenancies({
+      includeStalePaidCharge: true,
+    })
+    if (!stalePaid) throw new Error('seeded with includeStalePaidCharge: true')
+    const staff = await seedScopedManager(property.id)
+    await signIn(page, staff)
+    await page.goto('/money/rent-roll')
+
+    const row = page.getByRole('row', { name: new RegExp(stalePaid.tenant.firstName) })
+    // Aged from this month's rent, not from the paid proration.
+    await expect(row.getByText('1–5 days')).toBeVisible()
+    await expect(row.getByText('still within grace')).toBeVisible()
+    // And the consequence that is not cosmetic: no chase control at all.
+    await expect(
+      row.getByRole('checkbox', { name: new RegExp(`Chase ${stalePaid.tenant.firstName}`) }),
     ).toHaveCount(0)
   })
 
