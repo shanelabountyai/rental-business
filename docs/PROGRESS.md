@@ -4854,7 +4854,7 @@ Milestone 11's fifth and last slice: audit angles ⑪ ㉓ ㉔ ㉕ ㉖ ㉗ and th
 ---
 
 ## R-117: walk the demo in a browser
-**Commit:** (pending)  ·  **Date:** 2026-08-27
+**Commit:** 2c0b5cb  ·  **Date:** 2026-08-27
 
 **The checkpoint Milestone 11 owed (D-28).** R-107a through R-116 closed the accessibility audit over eleven items, and the last two each changed dozens of screens without anybody opening one. Signed in as a real owner against the local `rental_demo`: 79 staff routes at 1280px **and again at 390px**, the ten portal routes, the public listing page and the vendor magic link, with axe on every one, recording status, `h1`, console and page errors.
 
