@@ -221,6 +221,7 @@ export default async function UnitDetailPage({
           deletedDocuments={deletedDocuments}
           canWrite={canWriteDocuments}
           canDelete={canDeleteDocuments}
+          timeZone={unit.property.timezone}
         />
         {operationalData && (
           <OperationalDataSection
@@ -242,6 +243,7 @@ export default async function UnitDetailPage({
         {turnover && (
           <TurnoverPanel
             unitId={unitId}
+            timeZone={unit.property.timezone}
             canWrite={canWrite}
             turnover={{
               id: turnover.id,

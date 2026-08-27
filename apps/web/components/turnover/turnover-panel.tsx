@@ -1,5 +1,6 @@
 'use client'
 
+import { friendlyBusinessDate, friendlyDate } from '@rental/core/scheduling'
 import { useActionState } from 'react'
 import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
 import { SelectField, TextField } from '@/components/form/field.tsx'
@@ -73,6 +74,7 @@ export interface TurnoverDetailView {
 export function TurnoverPanel({
   unitId,
   turnover,
+  timeZone,
   canWrite,
   setTargetDateAction,
   markRentReadyAction,
@@ -80,6 +82,9 @@ export function TurnoverPanel({
 }: {
   unitId: string
   turnover: TurnoverDetailView
+  /// `rentReadyAt` is an instant and reads in the property's zone;
+  /// `moveOutDate` is a calendar day and must not touch one.
+  timeZone: string
   canWrite: boolean
   setTargetDateAction: (state: TurnoverFormState, formData: FormData) => Promise<TurnoverFormState>
   markRentReadyAction: (state: TurnoverFormState, formData: FormData) => Promise<TurnoverFormState>
@@ -104,7 +109,7 @@ export function TurnoverPanel({
 
       <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
         <dt className="text-muted-foreground">Move-out</dt>
-        <dd>{turnover.moveOutDate}</dd>
+        <dd>{friendlyBusinessDate(turnover.moveOutDate)}</dd>
         <dt className="text-muted-foreground">Days vacant</dt>
         <dd>
           {turnover.daysVacant} {turnover.daysVacantIsFinal ? '(final — tenant moved in)' : '(so far)'}
@@ -114,7 +119,7 @@ export function TurnoverPanel({
         <dt className="text-muted-foreground">Status</dt>
         <dd>
           {turnover.rentReadyAt
-            ? `Rent-ready ${new Date(turnover.rentReadyAt).toISOString().slice(0, 10)}`
+            ? `Rent-ready ${friendlyDate(new Date(turnover.rentReadyAt), timeZone)}`
             : 'In progress'}
         </dd>
       </dl>

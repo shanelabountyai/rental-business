@@ -1,4 +1,5 @@
 import { formatCents } from '@rental/core/money'
+import { friendlyDate } from '@rental/core/scheduling'
 import Link from 'next/link'
 
 // What maintenance has cost at this property (MAINT-07, R-030).
@@ -22,7 +23,15 @@ export interface ClosedJob {
   unitName: string
 }
 
-export function MaintenanceSpendSection({ jobs }: { jobs: ClosedJob[] }) {
+export function MaintenanceSpendSection({
+  jobs,
+  timeZone,
+}: {
+  jobs: ClosedJob[]
+  /// `closedAt` is an instant, so it reads in the PROPERTY's zone - a job
+  /// closed at 7pm in Houston is not a next-day job.
+  timeZone: string
+}) {
   const total = jobs.reduce((sum, job) => sum + job.totalCents, 0)
   // Split out because it is the number that answers a different question:
   // what the property cost to run, versus what should be billed back to a
@@ -86,7 +95,7 @@ export function MaintenanceSpendSection({ jobs }: { jobs: ClosedJob[] }) {
                     <span className="text-muted-foreground text-xs">
                       {job.unitName}
                       {job.vendorName && ` · ${job.vendorName}`}
-                      {job.closedAt && ` · ${job.closedAt.toISOString().slice(0, 10)}`}
+                      {job.closedAt && ` · ${friendlyDate(job.closedAt, timeZone)}`}
                       {job.tenantCaused && ' · tenant-caused'}
                     </span>
                   </span>

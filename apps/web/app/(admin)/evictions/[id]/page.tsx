@@ -149,9 +149,9 @@ export default async function EvictionCasePage({ params }: { params: Promise<{ i
           Service and the cure period
         </h2>
         <p className="text-sm">{CURE_STATE_LABELS[clock.state]}</p>
-        {clock.runsFrom && <p className="text-muted-foreground text-sm">Runs from {clock.runsFrom}.</p>}
+        {clock.runsFrom && <p className="text-muted-foreground text-sm">Runs from {friendlyBusinessDate(clock.runsFrom)}.</p>}
         {clock.cureBy ? (
-          <p className="text-muted-foreground text-sm">Last day to cure is {clock.cureBy}.</p>
+          <p className="text-muted-foreground text-sm">Last day to cure is {friendlyBusinessDate(clock.cureBy)}.</p>
         ) : (
           clock.periodUnknown && (
             <p className="text-sm text-amber-800">

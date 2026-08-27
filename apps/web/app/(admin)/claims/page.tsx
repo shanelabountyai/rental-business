@@ -1,4 +1,5 @@
 import { CAUSE_OF_LOSS_LABELS, CLAIM_OUTCOME_LABELS } from '@rental/core/insurance'
+import { friendlyDate } from '@rental/core/scheduling'
 import Link from 'next/link'
 import { requirePermission, requireScope } from '@/lib/auth/guard.ts'
 import { listClaims } from '@/lib/insurance/queries.ts'
@@ -42,7 +43,7 @@ export default async function ClaimsPage() {
                 {CAUSE_OF_LOSS_LABELS[claim.cause].split(' — ')[0]} at {claim.propertyName}
               </Link>
               <p className="text-muted-foreground mt-1 text-sm">
-                Loss on {claim.incidentAt.toISOString().slice(0, 10)} ·{' '}
+                Loss on {friendlyDate(claim.incidentAt, claim.timezone)} ·{' '}
                 {claim.claimNumber ? `claim ${claim.claimNumber}` : 'no claim number yet'} ·{' '}
                 {claim.status === 'OPEN' ? 'open' : CLAIM_OUTCOME_LABELS[claim.outcome!]}
                 {claim.paidCents > 0 && ` · $${(claim.paidCents / 100).toLocaleString('en-US')} received`}

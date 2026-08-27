@@ -12,6 +12,7 @@ import {
   RENT_SOURCE_LABELS,
   mitigationSummary,
 } from '@rental/core/insurance'
+import { friendlyDate } from '@rental/core/scheduling'
 import { useActionState } from 'react'
 import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
 import { FieldError, SelectField, TextField, TextareaField } from '@/components/form/field.tsx'
@@ -26,7 +27,11 @@ function money(cents: number): string {
   return `$${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
-const day = (value: Date) => value.toISOString().slice(0, 10)
+// Every date on a claim is an INSTANT - the loss, the payment, the event log
+// - and reads on the PROPERTY's clock, not the reader's and not UTC's. A
+// water loss at 8pm in Houston is the next day in UTC, and an adjuster
+// reading the timeline off this page would see the wrong day of loss.
+// `claim.timezone` is on `ClaimView` for exactly this.
 
 /**
  * The mitigation clock, and it is the first thing on the page.
@@ -86,7 +91,7 @@ export function LossPhotosPanel({ claim, action }: { claim: ClaimView; action: A
               </a>{' '}
               <span className="text-muted-foreground">
                 {document.capturedAt
-                  ? `— taken ${day(document.capturedAt)}`
+                  ? `— taken ${friendlyDate(document.capturedAt, claim.timezone)}`
                   : '— no capture timestamp in the file'}
               </span>
             </li>
@@ -407,7 +412,7 @@ export function TimelinePanel({ claim, action }: { claim: ClaimView; action: Act
           {claim.events.map((event) => (
             <li key={event.id}>
               <span className="font-medium">
-                {day(event.occurredAt)} — {CLAIM_EVENT_KIND_LABELS[event.kind]}
+                {friendlyDate(event.occurredAt, claim.timezone)} — {CLAIM_EVENT_KIND_LABELS[event.kind]}
               </span>
               <p className="whitespace-pre-wrap">{event.note}</p>
               {event.documentId && (
@@ -595,10 +600,10 @@ export function ClaimHeader({ claim }: { claim: ClaimView }) {
         {CAUSE_OF_LOSS_LABELS[claim.cause].split(' — ')[0]} at {claim.propertyName}
       </h1>
       <p className="text-muted-foreground text-sm">
-        Loss on {day(claim.incidentAt)} ·{' '}
+        Loss on {friendlyDate(claim.incidentAt, claim.timezone)} ·{' '}
         {claim.claimNumber ? `claim ${claim.claimNumber}` : 'no claim number yet'} ·{' '}
         {claim.status === 'OPEN'
-          ? `open since ${day(claim.openedAt)}`
+          ? `open since ${friendlyDate(claim.openedAt, claim.timezone)}`
           : CLAIM_OUTCOME_LABELS[claim.outcome!]}
       </p>
       <p className="text-sm whitespace-pre-wrap">{claim.description}</p>

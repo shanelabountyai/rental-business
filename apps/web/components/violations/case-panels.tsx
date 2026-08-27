@@ -12,6 +12,7 @@ import {
   animalCaseFork,
   type ViolationOutcome,
 } from '@rental/core/violations'
+import { friendlyBusinessDate, friendlyDate } from '@rental/core/scheduling'
 import { useActionState, useState } from 'react'
 import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
 import { FieldError, SelectField, TextField, TextareaField } from '@/components/form/field.tsx'
@@ -68,7 +69,7 @@ export function ObservationsPanel({
           {caseFile.observations.map((observation) => (
             <li key={observation.id} className="rounded-md border p-3 text-sm">
               <p className="font-medium">
-                {observation.observedOn}
+                {friendlyBusinessDate(observation.observedOn)}
                 {observation.ground ? ` · ${VIOLATION_GROUND_LABELS[observation.ground]}` : ''}
               </p>
               <p className="mt-1 whitespace-pre-wrap">{observation.note}</p>
@@ -84,7 +85,7 @@ export function ObservationsPanel({
                     <li key={photo.id}>
                       {photo.fileName}
                       {photo.capturedAt
-                        ? ` — taken ${photo.capturedAt.toISOString().slice(0, 10)}`
+                        ? ` — taken ${friendlyDate(photo.capturedAt, caseFile.timezone)}`
                         : ' — no timestamp in the file'}
                     </li>
                   ))}
@@ -188,7 +189,7 @@ export function AccommodationLinkPanel({
         <ul className="flex flex-col gap-1 text-sm">
           {caseFile.accommodationRequests.map((request) => (
             <li key={request.id}>
-              {request.kind} · {request.status} · received {request.receivedOn}
+              {request.kind} · {request.status} · received {friendlyBusinessDate(request.receivedOn)}
             </li>
           ))}
         </ul>
@@ -344,7 +345,7 @@ export function CaseHeader({ caseFile }: { caseFile: CaseView }) {
       </p>
       <p className="text-sm">
         {caseFile.status === 'OPEN'
-          ? `Open since ${caseFile.openedAt.toISOString().slice(0, 10)}, opened by ${caseFile.openedByName}.`
+          ? `Open since ${friendlyDate(caseFile.openedAt, caseFile.timezone)}, opened by ${caseFile.openedByName}.`
           : `Closed — ${VIOLATION_OUTCOME_LABELS[caseFile.outcome!]}.`}
       </p>
       {caseFile.status === 'CLOSED' && caseFile.outcomeNote && (
@@ -364,6 +365,12 @@ export function CaseHeader({ caseFile }: { caseFile: CaseView }) {
  */
 export function NoticeSeriesPanel({ caseFile }: { caseFile: CaseView }) {
   const { cure } = caseFile
+  // `runsFrom` and `cureBy` are typed nullable because they ARE null in the
+  // two states below that never print them; `cureClock` always sets them for
+  // `running` and `expired`. Hoisted rather than guarded inline so the
+  // sentences stay one string each.
+  const runsFrom = cure.runsFrom && friendlyBusinessDate(cure.runsFrom)
+  const cureBy = cure.cureBy && friendlyBusinessDate(cure.cureBy)
   return (
     <section aria-labelledby="notice-series" className="flex flex-col gap-3">
       <h2 id="notice-series" className="text-lg font-semibold">
@@ -380,8 +387,8 @@ export function NoticeSeriesPanel({ caseFile }: { caseFile: CaseView }) {
                 {notice.type}
               </a>{' '}
               <span className="text-muted-foreground">
-                · generated {notice.generatedAt.toISOString().slice(0, 10)}
-                {notice.servedAt ? ` · served ${notice.servedAt.toISOString().slice(0, 10)}` : ' · not served'}
+                · generated {friendlyDate(notice.generatedAt, caseFile.timezone)}
+                {notice.servedAt ? ` · served ${friendlyDate(notice.servedAt, caseFile.timezone)}` : ' · not served'}
               </span>
             </li>
           ))}
@@ -394,10 +401,10 @@ export function NoticeSeriesPanel({ caseFile }: { caseFile: CaseView }) {
           'Every service recorded so far was marked impermissible for this jurisdiction, so no cure period is running.'}
         {cure.state === 'running' &&
           (cure.periodUnknown
-            ? `Running from ${cure.runsFrom}. This product has not been taught this state's cure period for a non-monetary breach, so it will not name a deadline — that number is in JurisdictionRule and is deliberately not guessed.`
-            : `Running from ${cure.runsFrom}. Last day to cure is ${cure.cureBy}.`)}
+            ? `Running from ${runsFrom}. This product has not been taught this state's cure period for a non-monetary breach, so it will not name a deadline — that number is in JurisdictionRule and is deliberately not guessed.`
+            : `Running from ${runsFrom}. Last day to cure is ${cureBy}.`)}
         {cure.state === 'expired' &&
-          `The cure period ran from ${cure.runsFrom} and expired on ${cure.cureBy}.`}
+          `The cure period ran from ${runsFrom} and expired on ${cureBy}.`}
       </p>
     </section>
   )

@@ -154,7 +154,7 @@ test('THE POINT: a condition case is enforced on a lease term, and the vocabular
   // substring-collision trap in CLAUDE.md, arriving inside a spec rather than
   // between two panels.
   await expect(
-    page.getByText('2026-08-20 · A required exit, window or corridor is obstructed'),
+    page.getByText('20 Aug 2026 · A required exit, window or corridor is obstructed'),
   ).toBeVisible()
 
   // No notice served, so no cure clock is running — and the page says so

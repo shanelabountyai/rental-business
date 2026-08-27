@@ -8,12 +8,28 @@
   // right for `npm run typecheck`, which is the gate. It is wrong for a
   // production build, and that cost two days of red deploys:
   //
-  // Vercel installs with devDependencies OMITTED. `e2e/fixtures.ts` imports
-  // `@axe-core/playwright`, a devDependency, from R-111 onward - so every
-  // deploy since 2026-08-25 failed with `Cannot find module
+  // `e2e/fixtures.ts` imports `@axe-core/playwright` from R-111 onward, and
+  // every deploy since 2026-08-25 failed with `Cannot find module
   // '@axe-core/playwright'` while lint, typecheck and the local build all
-  // passed, because locally the package is installed. Test-only code must not
-  // be able to stop a deploy of code it does not ship with.
+  // passed. Test-only code must not be able to stop a deploy of code it does
+  // not ship with.
+  //
+  // R-120 SAID THE CAUSE WAS "Vercel installs with devDependencies omitted",
+  // AND THAT IS WRONG - corrected here at R-121 rather than left to mislead
+  // the next reader. The green deploy of R-120's own fc95653 disproves it:
+  // that commit still had `apps/web/**/*.test.ts` and `packages/**/*.test.ts`
+  // inside this config, all hundred-odd of them importing `vitest`, which
+  // `package-lock.json` marks `dev: true` exactly as it marks
+  // `@axe-core/playwright`. A build with devDependencies omitted could not
+  // have passed. **Why that one package did not resolve on Vercel while
+  // `vitest` did is unknown**, and it is left as unknown on purpose - a
+  // guessed cause here is worse than none.
+  //
+  // What follows from the evidence rather than the guess: whatever made one
+  // dev-marked package unresolvable can make another, and the exclusions
+  // below plus `npm run check:ship-deps` hold whichever mechanism it was.
+  // So the `*.test.*` exclusions below are R-121's: R-120 excluded `e2e`,
+  // which fixed the instance and left the class one directory over.
   //
   // `exclude` replaces rather than merges, so the base config's exclusions are
   // repeated here. If you add one there, add it here too.
@@ -22,6 +38,10 @@
     "node_modules",
     "../../packages/db/generated",
     "../../e2e",
+    "../../scripts",
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "../../packages/**/*.test.ts",
     "**/* ?.ts",
     "**/* ?.tsx",
     "**/* ?.d.ts"

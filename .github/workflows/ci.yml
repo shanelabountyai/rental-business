@@ -129,6 +129,13 @@ jobs:
 
       - run: npm run lint
       - run: npm run typecheck
+
+      # R-121. CI installs everything, so a build here can never reproduce the
+      # deploy's install - which is how a devDependency import sat in the build
+      # config for two days and seven red production deploys while this job
+      # stayed green (R-120). This asks the question the build cannot.
+      - run: npm run check:ship-deps
+
       - run: npm run test
 
       # A DISTINCT CHECK, not a formality. `typecheck` and vitest both miss the

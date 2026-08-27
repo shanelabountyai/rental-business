@@ -1,6 +1,7 @@
 import { axeScan, expectFocusSurvived } from './fixtures.ts'
 import { randomUUID } from 'node:crypto'
 import { hashPassword } from '@rental/core/auth'
+import { friendlyBusinessDate } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
 
@@ -240,6 +241,8 @@ test.describe('insurance', () => {
     const { property } = await seedProperty()
     const renewsOn = new Date()
     renewsOn.setDate(renewsOn.getDate() + 30)
+    // Two forms of the same day, and the difference is the point: the date
+    // input takes ISO, the screen prints plain language (R-121).
     const isoRenewsOn = renewsOn.toISOString().slice(0, 10)
 
     const staff = await createStaff('owner')
@@ -250,7 +253,9 @@ test.describe('insurance', () => {
     await page.getByLabel('Carrier').fill('State Farm')
     await page.getByLabel('Renews on').fill(isoRenewsOn)
     await page.getByRole('button', { name: 'Add policy' }).click()
-    await expect(page.getByText(`State Farm · renews ${isoRenewsOn}`)).toBeVisible()
+    await expect(
+      page.getByText(`State Farm · renews ${friendlyBusinessDate(isoRenewsOn)}`),
+    ).toBeVisible()
     await expect(page.getByText('Renewal shopping window open')).toBeVisible()
   })
 })
@@ -350,7 +355,7 @@ test.describe('capital improvements (PROP-07)', () => {
     await page.getByRole('button', { name: 'Add improvement' }).click()
 
     await expect(page.getByText('Roof — Full tear-off, architectural shingle')).toBeVisible()
-    await expect(page.getByText('In service 2026-05-02')).toBeVisible()
+    await expect(page.getByText('In service 2 May 2026')).toBeVisible()
 
     // The second one has no date, so the export could not depreciate it -
     // said on the record itself rather than only in the export, because this

@@ -40,7 +40,10 @@
     // spec - so this whole directory had no typechecking at all. R-032's
     // fixture tidy-up shipped two references to an undefined variable that
     // lint and typecheck both passed and only a test run caught.
-    "../../e2e/**/*.ts"
+    "../../e2e/**/*.ts",
+    // Same argument again for the repo's own scripts (R-121's ship-deps
+    // check). Nothing imports them either, so they had no typechecking.
+    "../../scripts/**/*.mts"
   ],
   "exclude": [
     "node_modules",

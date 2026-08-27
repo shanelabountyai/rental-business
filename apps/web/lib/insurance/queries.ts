@@ -240,6 +240,9 @@ export async function getClaim(id: string, scope: ResolvedScope): Promise<ClaimV
 export interface ClaimSummary {
   id: string
   propertyName: string
+  /// The property's own zone. The register spans properties in different
+  /// states, so a single zone for the page would misdate half the rows.
+  timezone: string
   claimNumber: string | null
   cause: CauseOfLoss
   status: 'OPEN' | 'CLOSED'
@@ -273,7 +276,7 @@ export async function listClaims(scope: ResolvedScope): Promise<ClaimSummary[]> 
       outcome: true,
       incidentAt: true,
       mitigationStartedAt: true,
-      property: { select: { name: true } },
+      property: { select: { name: true, timezone: true } },
       payments: { select: { amountCents: true } },
     },
   })
@@ -281,6 +284,7 @@ export async function listClaims(scope: ResolvedScope): Promise<ClaimSummary[]> 
   const summaries = rows.map((row) => ({
     id: row.id,
     propertyName: row.property.name,
+    timezone: row.property.timezone,
     claimNumber: row.claimNumber,
     cause: row.cause as CauseOfLoss,
     status: row.status as 'OPEN' | 'CLOSED',

@@ -4987,3 +4987,40 @@ Five more passed `'UTC'` explicitly. Those are right — a UTC-midnight value fo
 - **Nothing checks that a deploy still builds.** The fix removes today's cause, not the class: the local gate and the deploy build different things from the same tree, and only the deploy knows it. Until CI is alive the cheapest guard is reading the deploy list, which is what found this.
 - **`@playwright/test`'s misplacement is left as-is** (R-119's leftover records it). It is a devDependency the lockfile does not mark `dev`, and correcting it would have been load-bearing before this item and is inert after it.
 - **Gate run:** shares R-119's, plus the two build verifications above.
+
+---
+
+## R-121: the leftovers, and the deploy fix that had closed half its own hole
+**Commit:** PENDING  ·  **Date:** 2026-08-27
+
+**Chosen because the backlog ran out.** Every row is ✅ except four that are gated on an owner or vendor decision — R-028 (deferred, D-17), R-037a (no US retail-cash rail), R-093 (partner agreements), R-097b (furnisher obligations plus the D-4 review). The owner picked the filed leftovers of R-119 and R-120 over ungating one.
+
+### What it built
+
+**(a) Twelve instants read in UTC, and five calendar days read as ISO.** R-119 filed seven components still printing `toISOString().slice(0, 10)` at a human and called them "timestamps printed in UTC rather than property-local, a plain-language defect". Half of that was right. `filing-cabinet-section.tsx`'s five sites — ARM adjustment, balloon maturity, policy renewal, warranty expiry, in-service date — are all `@db.Date` columns, so they take `friendlyBusinessDate`, which has **no zone parameter and must never acquire one**. The other twelve are genuine instants and were genuinely being read in UTC: a photo captured at 8pm in Houston was dated the next day on the documents list, the claim timeline, the violation case file and the turnover panel.
+
+Threading the zone cost almost nothing, because it was already there and unused: `ClaimView` and `CaseView` both carry `timezone` and no panel had ever read it. `ClaimSummary` did not, and gained it rather than taking a page-level prop — the claims register lists claims **across states**, so one zone for the page would misdate half the rows. `DocumentsSection`, `MaintenanceSpendSection` and `TurnoverPanel` take a `timeZone` prop from the two property pages that render them.
+
+**Four more sites surfaced that R-119's grep could not have found**, because they are not `friendlyDate` calls at all — they are `BusinessDate` strings interpolated raw: an observation date and an accommodation received date on the violation case file, and the cure clock's `runsFrom`/`cureBy` on **both** the violation case and the eviction case file. The eviction one is the same clock rendered by a different screen, which is why fixing one without grepping for the other would have left the pair disagreeing.
+
+**(b) `/login/mfa` is walkable without a phone.** R-117 cleared the demo owner's MFA to get through the screens and left it off, so that route has never been walked. The filed suggestion was a seeded TOTP secret in `DEMO-LOGINS.md`; that was **declined** — it is exactly the fixed credential the file's own first paragraph says does not exist here. The enrolment screen already prints the base32 secret as text beside the QR code, so the documented recipe is enrol, copy, and run the same one-line `otpauth` call that fourteen e2e specs already make. Verified by running it.
+
+**(c) R-120 fixed the instance and left the class, and its stated cause is wrong.** `tsconfig.build.json` excluded `e2e` and nothing else — so **205 imports of `vitest` across a hundred-odd `*.test.ts` files under `apps/web` and `packages` were still inside the config `next build` typechecks**, `vitest` being marked `dev: true` in `package-lock.json` in exactly the way `@axe-core/playwright` is. R-120's own principle, written in its own commit, is that test-only code must not be able to stop a deploy of code it does not ship with; a hundred files still could.
+
+`npm run check:ship-deps` (`scripts/ship-deps.mts`) is the guard for the class rather than the instance. Both its inputs are authoritative rather than guessed: the file list comes from `tsc --listFilesOnly` on the **build** config, so it is literally what the deploy typechecks and cannot drift from it, and the dev set comes from the lockfile's own `dev: true` markers rather than from which package.json stanza a package sits in — which is why it correctly stays silent about `@playwright/test`, in `devDependencies` but not dev-marked because something in the production tree depends on it. It names the file *and* the package, which a build cannot: a build names only the first import that happened to fail. Wired into `ci:local` and into CI's `verify` job.
+
+### What it decided
+
+- **A calendar day never touches a zone; an instant always does.** The seven filed components split on that line, not on the file they live in. `friendlyBusinessDate` for `@db.Date`, `friendlyDate(instant, propertyZone)` for everything else. The property's zone, never the reader's — an owner in Denver reading a Houston work order wants Houston's clock.
+- **`ClaimSummary` carries its own `timezone` rather than the page passing one.** A register that spans states has no single correct page-level zone. Any future cross-property list is the same shape.
+- **No seeded TOTP secret, and the reason is recorded so it is not re-proposed.** A fixed secret in the repo is a credential in the repo. The enrolment screen printing the secret as text is sufficient and already exists.
+- **R-120's mechanism claim is retracted, and nothing is put in its place.** "Vercel installs with devDependencies omitted" is disproved by R-120's own `fc95653`, which deployed **green** with all 205 `vitest` imports inside the build config — an install without devDependencies could not have passed it. **Why `@axe-core/playwright` alone failed to resolve on Vercel is unknown, and is recorded as unknown** in `tsconfig.build.json`, CLAUDE.md and here. A second guess would have read as an explanation and been no better than the first. The fix and the guard hold under either mechanism, which is the argument for shipping them without the answer.
+- **The check was confirmed to fail before it was trusted**: 205 offences against the pre-fix `tsconfig.build.json`, exit 1; zero and exit 0 after. The same discipline R-118 and R-119 used on their own tests.
+
+### What it left behind
+
+- **The real cause of the `@axe-core/playwright` resolution failure.** Deliberately unresolved, above. Anyone who finds it should replace the "unknown" paragraph in `tsconfig.build.json` and CLAUDE.md, not add to it.
+- **`check:ship-deps` reads import specifiers with one regex, not a resolver.** It catches a literal package name in a static or dynamic import, which is the thing that has actually gone wrong twice. A specifier built from a variable would slip past it; nothing in this repo does that, and a real module graph is a great deal of machinery for a case that has never occurred.
+- **ISO dates outside the seven components R-119 named.** `prospects/[id]`, `tasks/[id]`, `jurisdiction`, `workorders/[id]` and `reports/maintenance` still print `toISOString().slice(0, 10)`. All are the same defect and none was in this item's scope; the pattern to copy is in the five files above.
+- **The demo owner's MFA is still not enrolled** — this item made it walkable and did not walk it. The next demo walk (D-28) is what closes that.
+- **`@playwright/test`'s misplacement is still as-is**, now with a check that explains why it is safe rather than a comment claiming it.

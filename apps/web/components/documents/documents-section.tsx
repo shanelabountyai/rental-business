@@ -1,4 +1,5 @@
 import { DOCUMENT_TYPE_LABELS, type DocumentTypeValue } from '@rental/core/documents'
+import { friendlyDate } from '@rental/core/scheduling'
 import type { Document } from '@rental/db'
 import { DeleteForm } from '@/components/documents/delete-form.tsx'
 import { RestoreButton } from '@/components/documents/restore-button.tsx'
@@ -24,6 +25,7 @@ export async function DocumentsSection({
   deletedDocuments,
   canWrite,
   canDelete,
+  timeZone,
 }: {
   propertyId: string
   unitId?: string
@@ -31,6 +33,10 @@ export async function DocumentsSection({
   deletedDocuments: readonly Document[]
   canWrite: boolean
   canDelete: boolean
+  /// The PROPERTY's zone, not the reader's. `createdAt`, `capturedAt` and
+  /// `deletedAt` are instants, and a photo taken at 8pm in Houston read in
+  /// UTC is dated the next day.
+  timeZone: string
 }) {
   const boundUpload = uploadDocument.bind(null, propertyId, unitId ?? null)
 
@@ -61,9 +67,8 @@ export async function DocumentsSection({
                 <span className="text-muted-foreground text-xs">
                   {DOCUMENT_TYPE_LABELS[document.type as DocumentTypeValue] ?? document.type} ·{' '}
                   {formatBytes(document.sizeBytes)} ·{' '}
-                  {document.createdAt.toISOString().slice(0, 10)}
-                  {document.capturedAt &&
-                    ` · taken ${document.capturedAt.toISOString().slice(0, 10)}`}
+                  {friendlyDate(document.createdAt, timeZone)}
+                  {document.capturedAt && ` · taken ${friendlyDate(document.capturedAt, timeZone)}`}
                 </span>
               </div>
               {canDelete && (
@@ -91,7 +96,7 @@ export async function DocumentsSection({
               >
                 <span className="text-muted-foreground">
                   {document.fileName} · deleted{' '}
-                  {document.deletedAt?.toISOString().slice(0, 10)}
+                  {document.deletedAt && friendlyDate(document.deletedAt, timeZone)}
                 </span>
                 <RestoreButton
                   action={restoreDocument.bind(null, document.id)}

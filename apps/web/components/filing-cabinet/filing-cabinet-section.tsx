@@ -11,6 +11,7 @@ import {
   mortgageArmAdjustmentDue,
   mortgageBalloonMaturityDue,
 } from '@rental/core/filing-cabinet'
+import { friendlyBusinessDate, utcToBusinessDate } from '@rental/core/scheduling'
 import { AddCapitalImprovementForm } from '@/components/filing-cabinet/add-capital-improvement-form.tsx'
 import { AddInsurancePolicyForm } from '@/components/filing-cabinet/add-insurance-policy-form.tsx'
 import { AddMortgageForm } from '@/components/filing-cabinet/add-mortgage-form.tsx'
@@ -62,8 +63,12 @@ function dollars(cents: number | null): string {
   return cents == null ? '—' : `$${(cents / 100).toLocaleString()}`
 }
 
-function isoDate(date: Date): string {
-  return date.toISOString().slice(0, 10)
+// Every date on this panel is a `@db.Date` column - an ARM adjustment date, a
+// balloon maturity, a policy renewal, a warranty expiry, an in-service date.
+// So this is `friendlyBusinessDate`, which takes no zone, and never
+// `friendlyDate`, which would move a calendar day west of UTC (R-042).
+function day(date: Date): string {
+  return friendlyBusinessDate(utcToBusinessDate(date))
 }
 
 /// A small inline flag, not a notification - the real delivery of these
@@ -170,12 +175,12 @@ export function FilingCabinetSection({
                 <div className="flex flex-wrap gap-2">
                   {mortgageArmAdjustmentDue(mortgage, asOf) && (
                     <AlertBadge>
-                      ARM adjusts {mortgage.armAdjustmentDate && isoDate(mortgage.armAdjustmentDate)}
+                      ARM adjusts {mortgage.armAdjustmentDate && day(mortgage.armAdjustmentDate)}
                     </AlertBadge>
                   )}
                   {mortgageBalloonMaturityDue(mortgage, asOf) && (
                     <AlertBadge>
-                      Balloon matures {mortgage.maturityDate && isoDate(mortgage.maturityDate)}
+                      Balloon matures {mortgage.maturityDate && day(mortgage.maturityDate)}
                     </AlertBadge>
                   )}
                 </div>
@@ -203,7 +208,7 @@ export function FilingCabinetSection({
               <li key={policy.id} className="flex flex-col gap-1 py-2 text-sm">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span>
-                    {policy.carrier} · renews {isoDate(policy.renewsOn)}
+                    {policy.carrier} · renews {day(policy.renewsOn)}
                     {policy.lossOfRents && ' · loss-of-rents'}
                   </span>
                   {canWrite && (
@@ -262,7 +267,7 @@ export function FilingCabinetSection({
                 <span>
                   {WARRANTY_CATEGORY_LABELS[warranty.category] ?? warranty.category} —{' '}
                   {warranty.provider}
-                  {warranty.expiresOn && ` · expires ${isoDate(warranty.expiresOn)}`}
+                  {warranty.expiresOn && ` · expires ${day(warranty.expiresOn)}`}
                 </span>
                 {canWrite && (
                   <DeleteRowButton action={deleteWarranty.bind(null, propertyId, warranty.id)} />
@@ -306,7 +311,7 @@ export function FilingCabinetSection({
                 </div>
                 {improvement.inServiceOn ? (
                   <span className="text-muted-foreground text-xs">
-                    In service {isoDate(improvement.inServiceOn)}
+                    In service {day(improvement.inServiceOn)}
                   </span>
                 ) : (
                   <AlertBadge>No in-service date — cannot be depreciated</AlertBadge>

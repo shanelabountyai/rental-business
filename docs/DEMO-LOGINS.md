@@ -83,8 +83,31 @@ Single-use setup link - open it to set a password:
 
 Open it, set a password, and that account can sign in at `/login`. Re-run the
 script if the link lapses. Two-factor is **optional** — `/login` only demands a
-code from an account that has enrolled — so a demo account can skip it, and an
-account that enrols needs an authenticator app.
+code from an account that has enrolled — so a demo account can skip it.
+
+### Walking `/login/mfa` without a phone
+
+R-117's walk cleared the demo owner's MFA to get through the screens and left
+it off, so `/login/mfa` was one of two routes that walk never saw. You do not
+need an authenticator app to cover it, and **no TOTP secret is seeded or
+written down here** — that would be the fixed credential the top of this file
+says does not exist.
+
+1. Sign in, go to `/account`, and start enrolment. The screen prints the
+   base32 secret as text beside the QR code, for exactly this reason.
+2. Generate the current code from that secret:
+
+   ```bash
+   # One line: the assignment must be a prefix, or the subprocess never sees it.
+   SECRET=<the base32 the screen printed> npx tsx -e "import {Secret,TOTP} from 'otpauth';console.log(new TOTP({secret:Secret.fromBase32(process.env.SECRET)}).generate())"
+   ```
+
+   Same call the e2e suite makes (`e2e/auth.spec.ts`), and `otpauth` is already
+   a dependency — there is nothing to install.
+3. Paste it to confirm enrolment, **write down the recovery codes it shows**,
+   and re-run the command whenever `/login` asks. Codes last 30 seconds.
+
+To clear MFA again for a later walk, re-run `create-owner.mts --force`.
 
 ### The gap this papers over
 

@@ -1,6 +1,7 @@
 'use client'
 
 import { CAUSE_OF_LOSS_LABELS, CAUSES_OF_LOSS, CLAIM_OUTCOME_LABELS } from '@rental/core/insurance'
+import { friendlyDate } from '@rental/core/scheduling'
 import { useActionState } from 'react'
 import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
 import { SelectField, TextField, TextareaField } from '@/components/form/field.tsx'
@@ -40,7 +41,7 @@ export function OpenClaimPanel({
             <li key={claim.id}>
               <a href={`/claims/${claim.id}`} className="underline underline-offset-2">
                 {CAUSE_OF_LOSS_LABELS[claim.cause].split(' — ')[0]} ·{' '}
-                {claim.incidentAt.toISOString().slice(0, 10)}
+                {friendlyDate(claim.incidentAt, claim.timezone)}
               </a>{' '}
               <span className="text-muted-foreground">
                 {claim.status === 'OPEN' ? 'open' : CLAIM_OUTCOME_LABELS[claim.outcome!]}

@@ -266,7 +266,7 @@ export default async function PropertyDetailPage({
           ownedBy="R-022"
           description="Tickets and work orders for this property."
         />
-        <MaintenanceSpendSection jobs={maintenanceSpend} />
+        <MaintenanceSpendSection jobs={maintenanceSpend} timeZone={property.timezone} />
         <section className="flex flex-col gap-1 rounded-md border p-4">
           <h2 className="text-sm font-semibold">Utility bills</h2>
           <p className="text-muted-foreground text-sm">
@@ -286,6 +286,7 @@ export default async function PropertyDetailPage({
           deletedDocuments={deletedDocuments}
           canWrite={canWriteDocuments}
           canDelete={canDeleteDocuments}
+          timeZone={property.timezone}
         />
         <FilingCabinetSection
           propertyId={id}
