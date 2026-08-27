@@ -1,4 +1,4 @@
-import { friendlyDate } from '@rental/core/scheduling'
+import { friendlyBusinessDate, utcToBusinessDate } from '@rental/core/scheduling'
 import Link from 'next/link'
 import { requireScope } from '@/lib/auth/guard.ts'
 import { upcomingCriticalDates } from '@/lib/reports/queries.ts'
@@ -49,7 +49,7 @@ export default async function CriticalDatesPage() {
                     UTC midnight (CLAUDE.md's own warning on this column
                     type). Reading it through a real zone is the exact
                     off-by-one bug that warning names, not a fix for one. */}
-                {friendlyDate(date.dueOn, 'UTC')}
+                {friendlyBusinessDate(utcToBusinessDate(date.dueOn))}
               </span>
             </li>
           ))}

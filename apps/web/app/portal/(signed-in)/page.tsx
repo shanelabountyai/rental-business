@@ -1,4 +1,4 @@
-import { friendlyDate } from '@rental/core/scheduling'
+import { friendlyBusinessDate, friendlyDate, utcToBusinessDate } from '@rental/core/scheduling'
 import { formatCents } from '@rental/core/money'
 import Link from 'next/link'
 import { requireTenantWithScope } from '@/lib/portal/guard.ts'
@@ -64,8 +64,8 @@ export default async function PortalHomePage() {
             </p>
             <p className="text-muted-foreground">
               {home.endsOn
-                ? `Started ${friendlyDate(home.startsOn, timeZone)}. Ends ${friendlyDate(home.endsOn, timeZone)}.`
-                : `Started ${friendlyDate(home.startsOn, timeZone)}.`}
+                ? `Started ${friendlyBusinessDate(utcToBusinessDate(home.startsOn))}. Ends ${friendlyBusinessDate(utcToBusinessDate(home.endsOn))}.`
+                : `Started ${friendlyBusinessDate(utcToBusinessDate(home.startsOn))}.`}
             </p>
           </div>
         ) : (

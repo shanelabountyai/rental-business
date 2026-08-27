@@ -1,4 +1,4 @@
-import { friendlyDate } from '@rental/core/scheduling'
+import { friendlyBusinessDate, utcToBusinessDate } from '@rental/core/scheduling'
 import Link from 'next/link'
 import { requireScope } from '@/lib/auth/guard.ts'
 import { filingCabinetAlertsDue } from '@/lib/filing-cabinet/queries.ts'
@@ -59,7 +59,7 @@ export default async function RenewalsPage() {
                   {alert.insurancePolicy && ` (${alert.insurancePolicy.carrier})`}
                 </span>
                 <span className="text-muted-foreground text-sm tabular-nums">
-                  Due {friendlyDate(alert.dueOn, 'UTC')}
+                  Due {friendlyBusinessDate(utcToBusinessDate(alert.dueOn))}
                 </span>
               </Link>
             </li>

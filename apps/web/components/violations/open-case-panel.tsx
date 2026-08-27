@@ -30,7 +30,9 @@ export interface LeaseCaseRow {
   kind: ViolationKind
   status: ViolationStatus
   outcome: ViolationOutcome | null
-  openedAt: Date
+  /// Formatted by the caller, which is where the property timezone lives -
+  /// same as every other lease-page panel that shows a date.
+  openedOn: string
   observationCount: number
 }
 
@@ -61,7 +63,7 @@ export function OpenViolationCasePanel({
               <span className="text-muted-foreground">
                 · {row.status === 'OPEN' ? 'open' : VIOLATION_OUTCOME_LABELS[row.outcome!]} ·{' '}
                 {row.observationCount} observation{row.observationCount === 1 ? '' : 's'} · opened{' '}
-                {row.openedAt.toISOString().slice(0, 10)}
+                {row.openedOn}
               </span>
             </li>
           ))}

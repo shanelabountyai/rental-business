@@ -340,6 +340,25 @@ async function reset() {
       data: { active: false },
     })
 
+    // END THE RETIRED TENANCY (R-119), for exactly the reason its tenant is
+    // deactivated one line above. Every other live thing under a sticky
+    // property is stood down here - the vendor tokens, the listings, the
+    // subscriptions - and the lease itself was the one that was not, so each
+    // reset left a whole generation of leases reading ACTIVE against a
+    // property nobody can reach. `rental_demo` had five of them stacked up by
+    // R-118, inflating any count that reaches leases without going through
+    // `currentScope`'s `property.active` filter.
+    //
+    // ENDED, not TERMINATED: `terminationReason` is required for the latter
+    // and there was no termination - the demo was rebuilt.
+    await prisma.lease.updateMany({
+      where: {
+        id: { in: stickyLeases.map((l) => l.id) },
+        status: { in: ['ACTIVE', 'MONTH_TO_MONTH', 'DRAFT', 'PENDING_SIGNATURE'] },
+      },
+      data: { status: 'ENDED' },
+    })
+
     // STOP BILLING THE RETIRED TENANCY (R-100c). Same reasoning as the
     // vendor tokens above, one rung more serious: a retired demo lease still
     // holding a live subscription goes on raising invoices against a

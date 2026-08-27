@@ -172,5 +172,5 @@ test('a code stays withheld until move-in funds clear, then can be issued and st
 
   await page.goto(`/leases/${lease.id}`)
   await expect(page.getByRole('button', { name: 'Issue to tenant' })).toHaveCount(0)
-  await expect(page.getByText(/Issued \d{4}-\d{2}-\d{2}/)).toBeVisible()
+  await expect(page.getByText(/Issued \d{1,2} \w{3} \d{4}/)).toBeVisible()
 })

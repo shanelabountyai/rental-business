@@ -218,7 +218,12 @@ const MONTH_WORDS = [
   'Jun',
   'Jul',
   'Aug',
-  'Sep',
+  // 'Sept', not 'Sep' - en-GB's own abbreviation for the one month whose
+  // short form is four letters, and `friendlyDate` renders it through Intl
+  // with that locale. The two readers have to agree or the same day reads
+  // differently depending on which screen you are on, which is what R-119
+  // hit the moment date-only screens moved off `friendlyDate`.
+  'Sept',
   'Oct',
   'Nov',
   'Dec',

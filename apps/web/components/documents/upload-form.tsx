@@ -1,27 +1,10 @@
 'use client'
 
-import { DOCUMENT_TYPES } from '@rental/core/documents'
+import { DOCUMENT_TYPE_LABELS, UPLOADABLE_DOCUMENT_TYPES } from '@rental/core/documents'
 import { useActionState } from 'react'
 import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
 import { FieldError, SelectField } from '@/components/form/field.tsx'
 import type { FormState } from '@/lib/documents/actions.ts'
-
-const TYPE_LABELS: Record<string, string> = {
-  LEASE: 'Lease',
-  ADDENDUM: 'Addendum',
-  NOTICE: 'Notice',
-  INVOICE: 'Invoice',
-  INSURANCE_COI: 'Insurance (COI)',
-  W9: 'W-9',
-  INSPECTION_REPORT: 'Inspection report',
-  CONDITION_BASELINE: 'Condition as found',
-  UNIT_PHOTO: 'Unit photo',
-  PROPERTY_PHOTO: 'Property photo',
-  SHUTOFF_PHOTO: 'Shutoff photo',
-  SCREENING_REPORT: 'Screening report',
-  APPLICATION: 'Application',
-  OTHER: 'Other',
-}
 
 export function UploadForm({
   action,
@@ -41,9 +24,9 @@ export function UploadForm({
           idPrefix="doc"
           required
           error={errors.type}
-          options={DOCUMENT_TYPES.map((type) => ({
+          options={UPLOADABLE_DOCUMENT_TYPES.map((type) => ({
             value: type,
-            label: TYPE_LABELS[type] ?? type,
+            label: DOCUMENT_TYPE_LABELS[type],
           }))}
         />
       </div>

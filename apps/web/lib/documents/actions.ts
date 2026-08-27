@@ -1,7 +1,12 @@
 'use server'
 
 import { createHash } from 'node:crypto'
-import { type DocumentInput, validateDocument } from '@rental/core/documents'
+import {
+  type DocumentInput,
+  type DocumentTypeValue,
+  UNUPLOADABLE_DOCUMENT_TYPES,
+  validateDocument,
+} from '@rental/core/documents'
 import { type ReasonCode, isReasonCode } from '@rental/core/audit'
 import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
@@ -72,6 +77,18 @@ export async function uploadDocument(
   }
   const violations = validateDocument(input)
   if (violations.length > 0) return violationsToState(violations)
+  // Server-side too, not only absent from the dropdown (R-119): the five
+  // packet and transcript types are minted by the flows that own them, and
+  // CONDITION_BASELINE needs a lease this action does not have. A hand-picked
+  // value in a POST is the only way left to reach them from here.
+  if (UNUPLOADABLE_DOCUMENT_TYPES.includes(input.type as DocumentTypeValue)) {
+    return violationsToState([
+      {
+        field: 'type',
+        message: 'That type is created by the process that owns it, not uploaded here.',
+      },
+    ])
+  }
 
   const buffer = Buffer.from(await file.arrayBuffer())
   const sha256 = createHash('sha256').update(buffer).digest('hex')

@@ -20,7 +20,13 @@ import {
   affidavitReadiness,
   staleLookupWarning,
 } from '@rental/core/scra'
-import { businessDate, friendlyDate, friendlyTimestamp } from '@rental/core/scheduling'
+import {
+  businessDate,
+  friendlyBusinessDate,
+  friendlyDate,
+  friendlyTimestamp,
+  utcToBusinessDate,
+} from '@rental/core/scheduling'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { Fragment } from 'react'
@@ -229,11 +235,14 @@ export default async function EvictionCasePage({ params }: { params: Promise<{ i
         <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
           {(
             [
-              ['Filed', evictionCase.filedOn ? friendlyDate(evictionCase.filedOn, zone) : null],
+              ['Filed', evictionCase.filedOn ? friendlyBusinessDate(utcToBusinessDate(evictionCase.filedOn)) : null],
               ['Court date', evictionCase.courtDate ? friendlyTimestamp(evictionCase.courtDate, zone) : null],
-              ['Judgment', evictionCase.judgmentOn ? friendlyDate(evictionCase.judgmentOn, zone) : null],
-              ['Writ of possession', evictionCase.writOn ? friendlyDate(evictionCase.writOn, zone) : null],
-              ['Lockout', evictionCase.lockoutOn ? friendlyDate(evictionCase.lockoutOn, zone) : null],
+              ['Judgment', evictionCase.judgmentOn ? friendlyBusinessDate(utcToBusinessDate(evictionCase.judgmentOn)) : null],
+              [
+                'Writ of possession',
+                evictionCase.writOn ? friendlyBusinessDate(utcToBusinessDate(evictionCase.writOn)) : null,
+              ],
+              ['Lockout', evictionCase.lockoutOn ? friendlyBusinessDate(utcToBusinessDate(evictionCase.lockoutOn)) : null],
             ] as const
           )
             .filter(([, value]) => value !== null)

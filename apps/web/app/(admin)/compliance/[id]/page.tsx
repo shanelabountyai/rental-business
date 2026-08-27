@@ -1,5 +1,5 @@
 import { complianceItemTypeLabel } from '@rental/core/compliance'
-import { friendlyDate } from '@rental/core/scheduling'
+import { friendlyBusinessDate, utcToBusinessDate } from '@rental/core/scheduling'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { RecordCompletionForm } from '@/components/compliance/record-completion-form.tsx'
@@ -36,7 +36,7 @@ export default async function ComplianceItemPage({
         <h1 className="text-2xl font-semibold tracking-tight">{item.label}</h1>
         <p className="text-muted-foreground text-sm">
           {complianceItemTypeLabel(item.type)} · {item.property?.name ?? item.legalEntity?.name} · due{' '}
-          {friendlyDate(item.dueOn, 'UTC')}
+          {friendlyBusinessDate(utcToBusinessDate(item.dueOn))}
           {item.recurrenceMonths != null && ` · recurs every ${item.recurrenceMonths}mo`}
         </p>
       </header>
@@ -59,7 +59,7 @@ export default async function ComplianceItemPage({
             {item.completions.map((completion) => (
               <li key={completion.id} className="flex flex-col gap-1 px-4 py-3">
                 <span className="flex flex-wrap items-baseline justify-between gap-2">
-                  <span className="font-medium">{friendlyDate(completion.completedOn, 'UTC')}</span>
+                  <span className="font-medium">{friendlyBusinessDate(utcToBusinessDate(completion.completedOn))}</span>
                   <span className="text-muted-foreground text-sm">
                     {completion.completedBy ? `Recorded by ${completion.completedBy.name}` : 'Recorded by the system'}
                   </span>

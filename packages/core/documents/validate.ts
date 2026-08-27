@@ -138,6 +138,76 @@ export const DOCUMENT_TYPES = [
 ] as const
 export type DocumentTypeValue = (typeof DOCUMENT_TYPES)[number]
 
+/// Every type in plain language, in one place, because there were two partial
+/// copies of this map and they had both drifted (R-119): the generic
+/// uploader's offered thirteen labels for thirty-four options, so twenty-one
+/// choices in a required dropdown read `MORTGAGE_DOC` and `COMMS_TRANSCRIPT`
+/// to whoever had to pick one. Keyed by the vocabulary type so a new document
+/// class cannot ship without a word for it.
+export const DOCUMENT_TYPE_LABELS: Record<DocumentTypeValue, string> = {
+  LEASE: 'Lease',
+  ADDENDUM: 'Addendum',
+  NOTICE: 'Notice',
+  INVOICE: 'Invoice',
+  INSURANCE_COI: 'Insurance (COI)',
+  W9: 'W-9',
+  INSPECTION_REPORT: 'Inspection report',
+  UNIT_PHOTO: 'Unit photo',
+  PROPERTY_PHOTO: 'Property photo',
+  SHUTOFF_PHOTO: 'Shutoff photo',
+  SCREENING_REPORT: 'Screening report',
+  APPLICATION: 'Application',
+  DEED: 'Deed',
+  MORTGAGE_DOC: 'Mortgage document',
+  INSURANCE_DECLARATION: 'Insurance declaration page',
+  HOA_DOC: 'HOA document',
+  WARRANTY_DOC: 'Warranty',
+  MAINTENANCE_PHOTO: 'Maintenance photo',
+  COMPLETION_PHOTO: 'Completion photo',
+  NOTICE_PROOF: 'Proof of service',
+  COMMS_TRANSCRIPT: 'Message transcript',
+  LEDGER_STATEMENT: 'Ledger statement',
+  LETTER: 'Letter',
+  ESTOPPEL_CERTIFICATE: 'Estoppel certificate',
+  RENTER_INSURANCE_COI: "Renter's insurance (COI)",
+  INSPECTION_PHOTO: 'Inspection photo',
+  ATTORNEY_PACKET: 'Attorney packet',
+  TAX_PACKET: 'Tax packet',
+  HANDOFF_PACKET: 'Handoff packet',
+  MILITARY_ORDERS: 'Military orders',
+  SCRA_CERTIFICATE: 'SCRA certificate',
+  LEASE_AMENDMENT: 'Lease amendment',
+  CONDITION_BASELINE: 'Condition as found',
+  OTHER: 'Other',
+}
+
+/// Types the generic property/unit uploader must NOT offer, and the two
+/// reasons are different (R-119).
+///
+/// The five packets and transcripts are MINTED BY THE PRODUCT - the eviction
+/// export, the tax archive, the handoff, a comms transcript, a ledger
+/// statement - each with its own audit row and its own retention clock. A
+/// hand-uploaded file wearing that type is an artifact nothing generated,
+/// sitting in the same list as the ones that were.
+///
+/// `CONDITION_BASELINE` is the other reason: it is LEASE-scoped, and this
+/// uploader carries a property and a unit and no lease. Choosing it here
+/// writes a baseline attached to no tenancy - invisible to the intake gap
+/// check that counts it, which is the only thing that ever reads it. Its
+/// real upload lives on the inherited-lease intake panel.
+export const UNUPLOADABLE_DOCUMENT_TYPES: readonly DocumentTypeValue[] = [
+  'ATTORNEY_PACKET',
+  'TAX_PACKET',
+  'HANDOFF_PACKET',
+  'COMMS_TRANSCRIPT',
+  'LEDGER_STATEMENT',
+  'CONDITION_BASELINE',
+]
+
+export const UPLOADABLE_DOCUMENT_TYPES: readonly DocumentTypeValue[] = DOCUMENT_TYPES.filter(
+  (type) => !UNUPLOADABLE_DOCUMENT_TYPES.includes(type),
+)
+
 /// Only the two entities that exist today (R-008, R-009). Lease, Tenant,
 /// Vendor, Ticket and WorkOrder are all real columns on Document already -
 /// R-002 modeled the whole shape up front - but attaching to one of them is

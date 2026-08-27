@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import {
+  DOCUMENT_TYPE_LABELS,
   DOCUMENT_TYPES,
   type DocumentInput,
   RETENTION_RULES,
   retentionCutoff,
+  UNUPLOADABLE_DOCUMENT_TYPES,
+  UPLOADABLE_DOCUMENT_TYPES,
   validateDocument,
 } from './index.ts'
 
@@ -68,5 +71,27 @@ describe('retentionCutoff', () => {
   it('returns null for a type with no automatic window', () => {
     expect(retentionCutoff('UNIT_PHOTO', new Date())).toBeNull()
     expect(retentionCutoff('APPLICATION', new Date())).toBeNull()
+  })
+})
+
+describe('the document vocabulary reads as words (R-119)', () => {
+  it('has a label for every type, and no SCREAMING_SNAKE left in one', () => {
+    for (const type of DOCUMENT_TYPES) {
+      const label = DOCUMENT_TYPE_LABELS[type]
+      expect(label, type).toBeTruthy()
+      expect(label, type).not.toMatch(/_/)
+    }
+  })
+
+  it('offers every type for upload except the ones a flow mints or a lease owns', () => {
+    expect(UPLOADABLE_DOCUMENT_TYPES).toHaveLength(
+      DOCUMENT_TYPES.length - UNUPLOADABLE_DOCUMENT_TYPES.length,
+    )
+    for (const type of UNUPLOADABLE_DOCUMENT_TYPES) {
+      expect(UPLOADABLE_DOCUMENT_TYPES, type).not.toContain(type)
+      // Still a valid type — the flow that owns it writes it through the same
+      // validator, so excluding it from the picker must not refuse the write.
+      expect(validateDocument(baseInput({ type }))).toEqual([])
+    }
   })
 })

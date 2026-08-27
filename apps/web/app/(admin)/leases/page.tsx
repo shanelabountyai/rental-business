@@ -1,6 +1,6 @@
 import { formatCents } from '@rental/core/money'
 import { daysUntilExpiry, expiryWindow, leaseStatusLabel } from '@rental/core/leases'
-import { businessDate, utcToBusinessDate } from '@rental/core/scheduling'
+import { businessDate, friendlyBusinessDate, utcToBusinessDate } from '@rental/core/scheduling'
 import Link from 'next/link'
 import { actorCan, requireScope } from '@/lib/auth/guard.ts'
 import { listLeases } from '@/lib/leases/queries.ts'
@@ -129,8 +129,10 @@ export default async function LeasesPage({
                     {' · '}
                     {formatCents(lease.rentCents)}/mo
                     {' · '}
-                    {lease.startsOn.toISOString().slice(0, 10)}
-                    {lease.endsOn ? ` to ${lease.endsOn.toISOString().slice(0, 10)}` : ' (month-to-month)'}
+                    {friendlyBusinessDate(utcToBusinessDate(lease.startsOn))}
+                    {lease.endsOn
+                      ? ` to ${friendlyBusinessDate(utcToBusinessDate(lease.endsOn))}`
+                      : ' (month-to-month)'}
                     {lease.origin === 'INHERITED' && ' · inherited'}
                   </span>
                 </Link>

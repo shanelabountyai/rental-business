@@ -9,7 +9,12 @@ import {
 } from '@rental/core/leases'
 import { depositObligations } from '@rental/core/ledger'
 import { formatCents } from '@rental/core/money'
-import { businessDate, friendlyDate, utcToBusinessDate } from '@rental/core/scheduling'
+import {
+  businessDate,
+  friendlyBusinessDate,
+  friendlyDate,
+  utcToBusinessDate,
+} from '@rental/core/scheduling'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { AccessCodesPanel } from '@/components/leases/access-codes-panel.tsx'
@@ -340,9 +345,9 @@ export default async function LeaseDetailPage({
       <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm sm:grid-cols-3">
         <dt className="text-muted-foreground">Term</dt>
         <dd className="col-span-1 sm:col-span-2">
-          {lease.startsOn.toISOString().slice(0, 10)}
+          {friendlyBusinessDate(utcToBusinessDate(lease.startsOn))}
           {lease.endsOn
-            ? ` to ${lease.endsOn.toISOString().slice(0, 10)}`
+            ? ` to ${friendlyBusinessDate(utcToBusinessDate(lease.endsOn))}`
             : ' — month-to-month, no end date'}
         </dd>
         <dt className="text-muted-foreground">Rent</dt>
@@ -591,7 +596,10 @@ export default async function LeaseDetailPage({
       {canWrite && (
         <OpenViolationCasePanel
           action={openViolationCase.bind(null, lease.id)}
-          cases={violationCases}
+          cases={violationCases.map((row) => ({
+            ...row,
+            openedOn: friendlyDate(row.openedAt, lease.property.timezone),
+          }))}
         />
       )}
 
@@ -643,7 +651,7 @@ export default async function LeaseDetailPage({
           type: fee.type,
           amountCents: fee.amountCents,
           description: fee.description,
-          dueOn: fee.dueOn.toISOString().slice(0, 10),
+          dueOn: friendlyBusinessDate(utcToBusinessDate(fee.dueOn)),
           waivedAt: fee.waivedAt ? businessDate(fee.waivedAt, lease.property.timezone) : null,
           waiveReason: fee.waiveReason,
           waivedByName: fee.waivedBy?.name ?? null,
@@ -838,7 +846,7 @@ export default async function LeaseDetailPage({
         successors={lease.renewalLeases.map((r) => ({
           id: r.id,
           status: r.status,
-          startsOn: r.startsOn.toISOString().slice(0, 10),
+          startsOn: friendlyBusinessDate(utcToBusinessDate(r.startsOn)),
           rentCents: r.rentCents,
         }))}
         action={offerRenewal.bind(null, lease.id)}
@@ -873,7 +881,7 @@ export default async function LeaseDetailPage({
           id: code.id,
           type: code.type,
           label: code.label,
-          issuedAt: code.issuedAt?.toISOString() ?? null,
+          issuedOn: code.issuedAt ? friendlyDate(code.issuedAt, lease.property.timezone) : null,
         }))}
       />
 

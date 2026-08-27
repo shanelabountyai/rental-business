@@ -18,9 +18,10 @@ export interface AccessCodeRow {
   id: string
   type: string
   label: string | null
-  /// ISO string, formatted by the caller from the query's `Date | null` -
-  /// same as every other lease-page panel that takes a timestamp prop.
-  issuedAt: string | null
+  /// Formatted by the caller from the query's `Date | null` - same as every
+  /// other lease-page panel that takes a timestamp prop, and formatted rather
+  /// than ISO because the caller is where the property timezone lives (R-119).
+  issuedOn: string | null
 }
 
 export function AccessCodesPanel({
@@ -59,9 +60,9 @@ export function AccessCodesPanel({
             return (
               <li key={code.id} className="flex items-center justify-between gap-2 text-sm">
                 <span>{codeLabel}</span>
-                {code.issuedAt ? (
+                {code.issuedOn ? (
                   <span className="text-muted-foreground">
-                    Issued {code.issuedAt.slice(0, 10)}
+                    Issued {code.issuedOn}
                   </span>
                 ) : canIssue && depositCleared ? (
                   <IssueCodeButton

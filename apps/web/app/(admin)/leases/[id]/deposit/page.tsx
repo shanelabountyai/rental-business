@@ -1,6 +1,6 @@
 import { computeDisposition, depreciationGuidance, isUnsupportedDeduction } from '@rental/core/ledger'
 import { formatCents } from '@rental/core/money'
-import { friendlyDate } from '@rental/core/scheduling'
+import { friendlyBusinessDate, utcToBusinessDate } from '@rental/core/scheduling'
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { AddDeductionForm } from '@/components/deposits/add-deduction-form.tsx'
@@ -95,7 +95,7 @@ export default async function DepositDispositionPage({
         <p className="text-muted-foreground text-sm">
           {tenantName} · held {formatCents(deposit.heldCents)}
           {deposit.dispositionDueOn &&
-            ` · due ${friendlyDate(deposit.dispositionDueOn, lease.property.timezone)}`}
+            ` · due ${friendlyBusinessDate(utcToBusinessDate(deposit.dispositionDueOn))}`}
         </p>
       </header>
 

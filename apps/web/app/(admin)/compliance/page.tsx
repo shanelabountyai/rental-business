@@ -1,5 +1,5 @@
 import { complianceItemTypeLabel } from '@rental/core/compliance'
-import { friendlyDate } from '@rental/core/scheduling'
+import { friendlyBusinessDate, utcToBusinessDate } from '@rental/core/scheduling'
 import Link from 'next/link'
 import { requireScope } from '@/lib/auth/guard.ts'
 import { listComplianceItems } from '@/lib/compliance/queries.ts'
@@ -53,8 +53,8 @@ export default async function CompliancePage() {
                   </span>
                   <span className="text-muted-foreground text-sm">
                     {complianceItemTypeLabel(item.type)} · {item.property?.name ?? item.legalEntity?.name} ·{' '}
-                    due {friendlyDate(item.dueOn, 'UTC')}
-                    {lastCompleted && <> · last done {friendlyDate(lastCompleted, 'UTC')}</>}
+                    due {friendlyBusinessDate(utcToBusinessDate(item.dueOn))}
+                    {lastCompleted && <> · last done {friendlyBusinessDate(utcToBusinessDate(lastCompleted))}</>}
                   </span>
                 </Link>
               </li>

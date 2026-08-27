@@ -1,24 +1,9 @@
+import { DOCUMENT_TYPE_LABELS, type DocumentTypeValue } from '@rental/core/documents'
 import type { Document } from '@rental/db'
 import { DeleteForm } from '@/components/documents/delete-form.tsx'
 import { RestoreButton } from '@/components/documents/restore-button.tsx'
 import { UploadForm } from '@/components/documents/upload-form.tsx'
 import { deleteDocument, restoreDocument, uploadDocument } from '@/lib/documents/actions.ts'
-
-const TYPE_LABELS: Record<string, string> = {
-  LEASE: 'Lease',
-  ADDENDUM: 'Addendum',
-  NOTICE: 'Notice',
-  INVOICE: 'Invoice',
-  INSURANCE_COI: 'Insurance (COI)',
-  W9: 'W-9',
-  INSPECTION_REPORT: 'Inspection report',
-  UNIT_PHOTO: 'Unit photo',
-  PROPERTY_PHOTO: 'Property photo',
-  SHUTOFF_PHOTO: 'Shutoff photo',
-  SCREENING_REPORT: 'Screening report',
-  APPLICATION: 'Application',
-  OTHER: 'Other',
-}
 
 function formatBytes(bytes: number): string {
   return bytes < 1024 * 1024
@@ -74,7 +59,7 @@ export async function DocumentsSection({
                   {document.fileName}
                 </a>
                 <span className="text-muted-foreground text-xs">
-                  {TYPE_LABELS[document.type] ?? document.type} ·{' '}
+                  {DOCUMENT_TYPE_LABELS[document.type as DocumentTypeValue] ?? document.type} ·{' '}
                   {formatBytes(document.sizeBytes)} ·{' '}
                   {document.createdAt.toISOString().slice(0, 10)}
                   {document.capturedAt &&

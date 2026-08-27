@@ -9,6 +9,7 @@ import {
   dueDateOnOrAfter,
   dueDateOnOrBefore,
   friendlyBusinessDate,
+  friendlyDate,
   isDue,
   utcToWallClock,
   wallClockToUtc,
@@ -232,8 +233,23 @@ describe('business dates at the storage boundary', () => {
 })
 
 describe('friendlyBusinessDate — a calendar day in plain language (R-116)', () => {
+  // The check that keeps the two readers from drifting (R-119). September is
+  // the only month en-GB abbreviates to four letters, and the hand-rolled
+  // array said 'Sep' - so a compliance due date read '1 Sept 2026' and a
+  // lease term read '1 Sep 2026' the moment date-only screens stopped going
+  // through `friendlyDate`. Reading the same day two ways is the defect;
+  // which spelling wins is not.
+  it('agrees with friendlyDate on every month of the year', () => {
+    for (let month = 1; month <= 12; month += 1) {
+      const day = `2026-${String(month).padStart(2, '0')}-15` as const
+      expect(friendlyBusinessDate(day), day).toBe(
+        friendlyDate(new Date(`${day}T00:00:00.000Z`), 'UTC'),
+      )
+    }
+  })
+
   it('reads like a sentence, not like a column', () => {
-    expect(friendlyBusinessDate('2026-09-01')).toBe('1 Sep 2026')
+    expect(friendlyBusinessDate('2026-09-01')).toBe('1 Sept 2026')
     expect(friendlyBusinessDate('2026-12-25')).toBe('25 Dec 2026')
   })
 
