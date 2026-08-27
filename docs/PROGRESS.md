@@ -4967,7 +4967,7 @@ Five more passed `'UTC'` explicitly. Those are right — a UTC-midnight value fo
 - **Gate run:** `lint` (0 errors, the same 14 pre-existing warnings), `typecheck`, `npm run build`, unit **2,755 passed + 4 skipped of 2,759**, and the ten e2e specs covering every screen touched — `leases`, `access-codes-move-in`, `documents`, `compliance`, `renewals`, `evictions`, `deposit-disposition`, `portal`, `reports`, `violations` — at **108 passed** against `--list`'s `Total: 108`, no flaky, no skipped. The first run of those ten was **104 passed / 4 failed**, and both failing tests were this item's own defects (the sliced `Issued` string and the Sep/Sept disagreement); the 108 is after fixing them. The full 1,050-test sweep belongs to CI, which is still dark on R-113's billing limit.
 
 ## R-120: the deploy had been red for two days, and the gate could not see it
-**Commit:** PENDING  ·  **Date:** 2026-08-27
+**Commit:** 02c1240  ·  **Date:** 2026-08-27
 
 **Found by being asked.** R-119 was mid-sweep when the owner asked whether Vercel failing was fixable. Seven consecutive production deploys were in `● Error`, each after about a minute, going back two days — and nothing local had noticed, because nothing local could.
 
