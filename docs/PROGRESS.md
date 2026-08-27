@@ -5028,7 +5028,7 @@ Threading the zone cost almost nothing, because it was already there and unused:
 ---
 
 ## R-122: a demo anybody can drive, with credentials that exist
-**Commit:** R122SHA  ·  **Date:** 2026-08-27
+**Commit:** 782d122  ·  **Date:** 2026-08-27
 
 **Asked for directly** — whether the product is in a state to demo, and a script with logins. It was, except that no logins existed: `db:create-owner` mints a single-use setup link and deliberately never prints a password, and the demo database held exactly one staff account whose password was set by hand during R-117's walk.
 
