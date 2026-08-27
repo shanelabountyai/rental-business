@@ -5054,7 +5054,7 @@ Threading the zone cost almost nothing, because it was already there and unused:
 ---
 
 ## R-123: a scoped staff member's left nav was empty
-**Commit:** PENDING  ·  **Date:** 2026-08-27
+**Commit:** 259fc55  ·  **Date:** 2026-08-27
 
 **Found by driving R-122's own demo script.** Signing in as the property-scoped manager it seeds produced a dashboard reading *"In scope right now: 1 property"* above a left nav with **nothing in it at all**.
 
