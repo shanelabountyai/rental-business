@@ -4887,7 +4887,7 @@ Milestone 11's fifth and last slice: audit angles ⑪ ㉓ ㉔ ㉕ ㉖ ㉗ and th
 ---
 
 ## R-118: a tenancy is aged from charges it paid a year ago
-**Commit:** TBD  ·  **Date:** 2026-08-27
+**Commit:** 25367e4  ·  **Date:** 2026-08-27
 
 **The defect R-117's demo walk found and deliberately did not fix.** `rentRoll()` fed `delinquencyFor` every `waivedAt: null` `Charge` on the lease as its `openCharges`, a field whose own contract says *"every charge still contributing to the balance"*. **`Charge` has no paid marker to filter by.** Under D-11 a `Charge` is the instruction pushed to Stripe and settlement comes back as one aggregate balance with no per-charge allocation record — so the query silently meant *every charge ever billed*, `oldestDueOn` took the oldest of them, and `daysLate`, `bucket` and **`pastGrace` all descend from it**.
 
