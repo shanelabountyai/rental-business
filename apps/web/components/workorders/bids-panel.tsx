@@ -5,6 +5,7 @@ import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
 import { CheckboxField } from '@/components/form/field.tsx'
 import type { BidComparison } from '@rental/core/approvals'
 import type { WorkOrderFormState } from '@/lib/workorders/actions.ts'
+import { scrollableRegionProps } from '@/components/ui-classes.ts'
 
 // "Compares responses in one view" (MAINT-04, R-026). One table, cheapest
 // first, with the vendors who never answered still on it - a comparison that
@@ -33,7 +34,7 @@ export function BidsPanel({
 
       {comparison && comparison.bids.length > 0 && (
         <>
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto" {...scrollableRegionProps('Vendor bids, scrolls sideways')}>
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left">

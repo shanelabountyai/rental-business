@@ -1,5 +1,11 @@
-import { describe, expect, it } from 'vitest'
-import { documentResponse } from './serve.ts'
+import { describe, expect, it, vi } from 'vitest'
+import { MissingStoredObjectError } from '@/lib/storage/adapter.ts'
+import { documentFileResponse, documentResponse } from './serve.ts'
+
+// `documentFileResponse` fetches through the storage seam, so the seam is the
+// thing to stand in for - there is no disk and no Blob store in a unit test.
+const get = vi.fn()
+vi.mock('@/lib/storage/index.ts', () => ({ storage: { get: (key: string) => get(key) } }))
 
 // The response every document byte in this product leaves through.
 //
@@ -108,5 +114,38 @@ describe('the filename in the header', () => {
 describe('content length', () => {
   it('comes from the bytes, never from a recorded size', () => {
     expect(headersOf('application/pdf').length).toBe(String(BYTES.byteLength))
+  })
+})
+
+describe('a row that points at bytes which are not there', () => {
+  const DOCUMENT = { storageKey: 'p/abc-f.pdf', contentType: 'application/pdf', fileName: 'f.pdf' }
+
+  // WHY THIS IS 404 AND NOT 500. All four byte-serving routes awaited
+  // `storage.get` bare, so a missing object was an unhandled throw. Milestone
+  // 11's demo walk hit it on `/listings/[id]` - the one page a prospective
+  // renter sees - which rendered three broken images and logged three
+  // exceptions per view. Every other refusal these routes make is already a
+  // 404 on purpose, and "the bytes are gone" belongs with them.
+  it('answers 404 rather than throwing', async () => {
+    get.mockRejectedValueOnce(new MissingStoredObjectError(DOCUMENT.storageKey))
+    const response = await documentFileResponse(DOCUMENT)
+    expect(response.status).toBe(404)
+  })
+
+  // The half that makes the 404 safe. A Blob outage answered as 404 would
+  // tell a CDN to remember that a published listing has no photos - the
+  // listing route caches success for an hour - so only the missing-object
+  // type is translated and everything else stays a 500.
+  it('lets a real storage failure through', async () => {
+    get.mockRejectedValueOnce(new Error('EACCES: permission denied'))
+    await expect(documentFileResponse(DOCUMENT)).rejects.toThrow('EACCES')
+  })
+
+  it('serves the bytes when they are there', async () => {
+    get.mockResolvedValueOnce(BYTES)
+    const response = await documentFileResponse(DOCUMENT, { cacheControl: 'public, max-age=3600' })
+    expect(response.status).toBe(200)
+    expect(response.headers.get('cache-control')).toBe('public, max-age=3600')
+    expect(response.headers.get('content-type')).toBe('application/pdf')
   })
 })

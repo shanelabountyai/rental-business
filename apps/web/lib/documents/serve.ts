@@ -1,5 +1,8 @@
 import 'server-only'
 
+import { MissingStoredObjectError } from '@/lib/storage/adapter.ts'
+import { storage } from '@/lib/storage/index.ts'
+
 // Handing stored bytes to a browser (R-security-1).
 //
 // ==========================================================================
@@ -143,4 +146,48 @@ export function documentResponse(
       'X-Content-Type-Options': 'nosniff',
     },
   })
+}
+
+/**
+ * Fetch a stored document's bytes and answer with them - or 404 when the row
+ * points at bytes that are not there.
+ *
+ * ==========================================================================
+ * ALL FOUR BYTE-SERVING ROUTES AWAITED `storage.get` BARE, SO A MISSING FILE
+ * WAS AN UNHANDLED THROW AND A 500.
+ *
+ * Found on Milestone 11's demo walk, on the one page in this product a
+ * STRANGER sees: `/listings/[id]` rendered its three photos as three broken
+ * images and logged three exceptions per view, because the demo seed had
+ * written the bytes under a different working directory. The seed's bug; the
+ * 500 is ours. Every other "you cannot have this" answer on these routes is
+ * already a deliberate 404 - an unpublished listing, a deleted document, a
+ * document belonging to another job - and "the bytes are gone" belongs with
+ * them rather than reading to the caller as "this server is broken".
+ *
+ * HERE RATHER THAN AT THE FOUR CALL SITES, for the same reason this file
+ * exists at all: four hand-written copies of the same response is how all
+ * four got the content type wrong (D-137), and a fifth route nobody has
+ * written yet inherits the fix instead of the hole. The bytes are fetched
+ * here so there is no bare `storage.get` left in a route to copy.
+ *
+ * ONLY `MissingStoredObjectError`. A Blob outage or a permissions error is
+ * still a 500, because answering 404 would tell a CDN to remember that a
+ * published listing has no photos.
+ * ==========================================================================
+ */
+export async function documentFileResponse(
+  document: { storageKey: string; contentType: string; fileName: string },
+  options: { cacheControl?: string } = {},
+): Promise<Response> {
+  let bytes: Buffer
+  try {
+    bytes = await storage.get(document.storageKey)
+  } catch (error) {
+    if (error instanceof MissingStoredObjectError) {
+      return new Response('Not found', { status: 404 })
+    }
+    throw error
+  }
+  return documentResponse(bytes, document, options)
 }

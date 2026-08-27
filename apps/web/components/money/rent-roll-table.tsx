@@ -7,7 +7,7 @@ import { formatCents } from '@rental/core/money'
 import { LiveRegion } from '@/components/auth-form.tsx'
 import { FieldError } from '@/components/form/field.tsx'
 import type { ReminderFormState } from '@/lib/payments/reminders.ts'
-import { PRIMARY_BUTTON_CLASSES } from '@/components/ui-classes.ts'
+import { PRIMARY_BUTTON_CLASSES, scrollableRegionProps } from '@/components/ui-classes.ts'
 
 // The rent roll, and the one action that chases everybody on it (PAY-06,
 // R-044).
@@ -164,7 +164,7 @@ export function RentRollTable({
         </div>
       )}
 
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto" {...scrollableRegionProps('Rent roll, scrolls sideways')}>
         <table className="w-full text-sm">
           <caption className="sr-only">
             Every live tenancy with rent, balance, how late it is, autopay

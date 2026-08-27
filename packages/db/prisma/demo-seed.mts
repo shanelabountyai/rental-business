@@ -37,10 +37,11 @@
 import { randomUUID } from 'node:crypto'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
-import { pathToFileURL } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { mintToken } from '@rental/core/auth'
 import type { StripeEventEnvelope } from '@rental/core/billing'
 import { threadKey } from '@rental/core/comms'
+import { wallClockToUtc } from '@rental/core/scheduling'
 import { prisma } from '../index.ts'
 
 // Deliberately avoid generic UI words in these names ("Properties", nav
@@ -99,6 +100,28 @@ function daysFrom(offset: number): Date {
   date.setUTCHours(0, 0, 0, 0)
   date.setUTCDate(date.getUTCDate() + offset)
   return date
+}
+
+/// Every demo property is in one zone, named once so a second zone cannot be
+/// added without the times below being reconsidered.
+const DEMO_ZONE = 'America/Chicago'
+
+/**
+ * An instant at a given wall-clock time on the property's own calendar day.
+ *
+ * `daysFrom` sets UTC MIDNIGHT, which is the right answer for a `@db.Date`
+ * column and the wrong one for an appointment. Milestone 11's walk read
+ * "Scheduled 2026-08-28 19:00 to 22:00" on a work order - the page is
+ * correct, it renders `utcToWallClock(value, zone)` and says so in a comment
+ * - so every vendor visit this seed had ever written was a 7pm-to-10pm
+ * evening call, five hours off the business day, sitting directly above the
+ * entry-notice line that DOES compute in property-local time ("the soonest
+ * compliant start is 09:26"). Two clocks on one screen, and the demo's answer
+ * to "when do you send somebody" was after dinner.
+ */
+function atLocalTime(offsetDays: number, wallClock: string): Date {
+  const day = daysFrom(offsetDays).toISOString().slice(0, 10)
+  return wallClockToUtc(`${day}T${wallClock}`, DEMO_ZONE)
 }
 
 /**
@@ -1204,7 +1227,7 @@ export function buildPlan(): PropertyPlan[] {
       city: 'Austin',
       state: 'TX',
       postalCode: '78704',
-      timezone: 'America/Chicago',
+      timezone: DEMO_ZONE,
       propertyType: 'SINGLE_FAMILY',
       units: [
         {
@@ -1237,7 +1260,7 @@ export function buildPlan(): PropertyPlan[] {
       city: 'Houston',
       state: 'TX',
       postalCode: '77002',
-      timezone: 'America/Chicago',
+      timezone: DEMO_ZONE,
       propertyType: 'DUPLEX',
       units: [
         {
@@ -1297,7 +1320,7 @@ export function buildPlan(): PropertyPlan[] {
       city: 'San Antonio',
       state: 'TX',
       postalCode: '78201',
-      timezone: 'America/Chicago',
+      timezone: DEMO_ZONE,
       propertyType: 'SINGLE_FAMILY',
       units: [
         {
@@ -1338,7 +1361,7 @@ export function buildPlan(): PropertyPlan[] {
       city: 'Dallas',
       state: 'TX',
       postalCode: '75201',
-      timezone: 'America/Chicago',
+      timezone: DEMO_ZONE,
       propertyType: 'TOWNHOUSE',
       acquiredOn: daysFrom(-45),
       units: [
@@ -1432,7 +1455,22 @@ const PLACEHOLDER_PHOTOS = [
 // `server-only`, and a plain node script is exactly what that marker exists
 // to keep out. Duplicated deliberately and narrowly - the key shape and the
 // root path, nothing else - and only ever used against local disk.
-const DOCUMENT_ROOT = process.env.DOCUMENT_STORAGE_PATH ?? join(process.cwd(), '.data', 'documents')
+//
+// RESOLVED FROM THIS FILE, NEVER FROM `process.cwd()`, and that is the whole
+// bug Milestone 11's demo walk found. `LocalDiskStorageAdapter`'s default is
+// `join(process.cwd(), '.data', 'documents')` - and the Next server's cwd is
+// `apps/web` while this script is run from the repo root, so the identical
+// expression names two different directories. Every demo listing photo was
+// written to `<repo>/.data/documents` and read from
+// `<repo>/apps/web/.data/documents`: three broken images and three logged
+// exceptions on `/listings/[id]`, the one page in this product a prospective
+// renter sees. `e2e/portal.spec.ts` carries a comment about hitting exactly
+// this - "a 500 that looked like an authorization failure until both `.data`
+// directories turned up on disk" - and this file reintroduced it, so the fix
+// here does not depend on where it is run from at all.
+const DOCUMENT_ROOT =
+  process.env.DOCUMENT_STORAGE_PATH ??
+  fileURLToPath(new URL('../../../apps/web/.data/documents', import.meta.url))
 
 /// True when uploads go to Vercel Blob rather than local disk. Photos are
 /// SKIPPED rather than seeded in that case: rows whose bytes do not exist
@@ -1647,11 +1685,13 @@ async function seedWorkOrder(
       dispatchedAt,
       vendorResponse: plan.vendorResponse ?? null,
       vendorRespondedAt: plan.vendorResponse ? daysFrom(-3) : null,
-      scheduledStart: plan.scheduledInDays == null ? null : daysFrom(plan.scheduledInDays),
+      // A 9am-to-noon window on the property's own clock, not UTC midnight.
+      scheduledStart:
+        plan.scheduledInDays == null ? null : atLocalTime(plan.scheduledInDays, '09:00'),
       scheduledEnd:
         plan.scheduledInDays == null
           ? null
-          : minutesFrom(daysFrom(plan.scheduledInDays), 3 * 60),
+          : minutesFrom(atLocalTime(plan.scheduledInDays, '09:00'), 3 * 60),
       invoiceCents: plan.invoiceCents ?? null,
       pmTemplateId:
         plan.pmTemplateIndex == null ? null : context.pmTemplateRows[plan.pmTemplateIndex]!.id,
@@ -2254,6 +2294,33 @@ interface MoneyPlan {
  * flight, and an autopay enrolment. A demo where every tenancy is square
  * demonstrates nothing.
  */
+/**
+ * Days back to the 1st of THIS calendar month, so the newest rent invoice in
+ * every plan lands inside the month the dashboard is reporting on.
+ *
+ * ==========================================================================
+ * FOUND ON MILESTONE 11'S DEMO WALK, and it was structural rather than
+ * stale. Every plan's newest invoice was `daysAgo: 20`-`30`, so the most
+ * recent rent this seed had ever billed was always about a month back - and
+ * `collectedVsBilled` on the owner's landing screen is a CALENDAR-MONTH tile
+ * whose billed side is the sum of `rentCents` across live leases, by design
+ * (D-11/D-40: a subscription mints no monthly `Charge` row). The two never
+ * met. On 27 August the first screen of any demo read **"Collected vs billed
+ * $600.00 / $9,400.00"** - a portfolio that has collected 6% of its rent -
+ * while the rent roll one click away said only $1,850 was outstanding and
+ * three of five tenants were current. Both numbers were right; together they
+ * described a business in collapse that did not exist.
+ *
+ * FLOORED AT 8 DAYS so the stories that hang off the newest invoice still
+ * fit inside it: a decline lands `declinedAfterDays` later and the
+ * part-payment's second instalment `+7`, and neither may be dated in the
+ * future. Seeded in the first week of a month, the newest invoice is last
+ * month's - which is the truth about a portfolio in the first week of a
+ * month, not a workaround.
+ * ==========================================================================
+ */
+const SINCE_MONTH_START = Math.max(new Date().getUTCDate() - 1, 8)
+
 export const MONEY: Record<string, MoneyPlan> = {
   /// Square, on autopay, three months of clean history. The contrast
   /// everything else is read against.
@@ -2261,7 +2328,7 @@ export const MONEY: Record<string, MoneyPlan> = {
     invoices: [
       { daysAgo: 90, paidCents: 'full' },
       { daysAgo: 60, paidCents: 'full' },
-      { daysAgo: 30, paidCents: 'full' },
+      { daysAgo: SINCE_MONTH_START, paidCents: 'full' },
     ],
     autopayDaysAgo: 75,
   },
@@ -2274,7 +2341,12 @@ export const MONEY: Record<string, MoneyPlan> = {
     invoices: [
       { daysAgo: 90, paidCents: 'full' },
       { daysAgo: 60, paidCents: 'full' },
-      { daysAgo: 20, paidCents: [], declinedAfterDays: 5, carriesOverdueCharge: true },
+      {
+        daysAgo: SINCE_MONTH_START,
+        paidCents: [],
+        declinedAfterDays: 5,
+        carriesOverdueCharge: true,
+      },
     ],
   },
 
@@ -2287,7 +2359,7 @@ export const MONEY: Record<string, MoneyPlan> = {
     invoices: [
       { daysAgo: 90, paidCents: 'full' },
       { daysAgo: 60, paidCents: 'full' },
-      { daysAgo: 30, paidCents: [80_000, 60_000] },
+      { daysAgo: SINCE_MONTH_START, paidCents: [80_000, 60_000] },
     ],
     collectionMethod: 'send_invoice',
   },
@@ -2298,7 +2370,7 @@ export const MONEY: Record<string, MoneyPlan> = {
     invoices: [
       { daysAgo: 90, paidCents: 'full' },
       { daysAgo: 60, paidCents: 'full' },
-      { daysAgo: 30, paidCents: 'full' },
+      { daysAgo: SINCE_MONTH_START, paidCents: 'full' },
     ],
     inFlight: { daysAgo: 2, amountCents: 195_000 },
   },
@@ -2310,7 +2382,7 @@ export const MONEY: Record<string, MoneyPlan> = {
     invoices: [
       { daysAgo: 90, paidCents: 'full' },
       { daysAgo: 60, paidCents: 'full' },
-      { daysAgo: 30, paidCents: 'full', declinedAfterDays: 3 },
+      { daysAgo: SINCE_MONTH_START, paidCents: 'full', declinedAfterDays: 3 },
     ],
   },
 }

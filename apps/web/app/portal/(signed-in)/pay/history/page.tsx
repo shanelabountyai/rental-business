@@ -3,6 +3,7 @@ import { friendlyDate } from '@rental/core/scheduling'
 import Link from 'next/link'
 import { tenantStatement } from '@/lib/payments/queries.ts'
 import { requireTenantWithScope } from '@/lib/portal/guard.ts'
+import { scrollableRegionProps } from '@/components/ui-classes.ts'
 
 export const metadata = { title: 'Your payments' }
 
@@ -90,7 +91,7 @@ export default async function PaymentHistoryPage() {
           // after that line, whichever order it is displayed in. A tenant
           // opens this to check the most recent thing, not to read a year
           // from the beginning.
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto" {...scrollableRegionProps('Your payments, scrolls sideways')}>
             <table className="w-full text-sm">
               <caption className="sr-only">
                 Every charge and payment on your account, newest first, with

@@ -33,3 +33,36 @@ export const PRIMARY_BUTTON_CLASSES =
 /// file was created to make about the button.
 export const INPUT_CLASSES =
   'border-input bg-background focus-visible:ring-ring min-h-11 rounded-md border px-3 py-2 text-base focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none aria-invalid:border-red-500'
+
+/**
+ * A sideways-scrolling wrapper a keyboard can actually scroll (WCAG 2.1.1).
+ *
+ * ==========================================================================
+ * A `div.overflow-x-auto` HOLDING ONLY A TABLE IS A SCROLLABLE REGION WITH NO
+ * FOCUSABLE CHILD, so there is no way to reach its scrollbar without a mouse
+ * or a trackpad: everything to the right of the fold is simply unreachable.
+ * A table is exactly the content that has no links or buttons in it, which is
+ * why tables are where this always happens.
+ *
+ * FOUND ON MILESTONE 11'S DEMO WALK, at a phone viewport, on `/portal/pay/
+ * history` — a tenant's own payment record. Nine wrappers had it and five did
+ * not, because `reports/operating` fixed the two it owned and its own comment
+ * says why the rest stayed invisible: *the defect does not exist at a desktop
+ * width where the table happens to fit*. axe only fires when the region
+ * ACTUALLY overflows, so a walk at 1280px reports nothing and the same page
+ * on a phone is a serious violation. Do not trust a green scan at one width.
+ *
+ * Three attributes and nothing else, spread beside the caller's own
+ * `className`, on the pattern `pendingButtonProps` set (R-115). `role="group"`
+ * rather than `region`: a landmark per table would put a dozen of them in the
+ * landmark list of a page like `/leases/[id]`, which is noise where this is
+ * navigation of one control.
+ *
+ * The label is the caller's because it is the only part that differs, and it
+ * is usually the table's own `sr-only` caption — say the same thing, so the
+ * region and the table it contains do not appear to be two different things.
+ * ==========================================================================
+ */
+export function scrollableRegionProps(label: string) {
+  return { tabIndex: 0, role: 'group', 'aria-label': label } as const
+}

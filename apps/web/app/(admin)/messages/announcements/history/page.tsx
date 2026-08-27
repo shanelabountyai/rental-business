@@ -3,6 +3,7 @@ import { prisma } from '@rental/db'
 import Link from 'next/link'
 import { propertyWhere, requireScope } from '@/lib/auth/guard.ts'
 import { announcementHistory } from '@/lib/comms/announcement-history.ts'
+import { scrollableRegionProps } from '@/components/ui-classes.ts'
 
 export const metadata = { title: 'Announcement history — Rental Operations' }
 
@@ -63,7 +64,10 @@ export default async function AnnouncementHistoryPage() {
       ) : entries.length === 0 ? (
         <p className="text-muted-foreground text-sm">No announcements sent yet.</p>
       ) : (
-        <div className="overflow-x-auto rounded-md border">
+        <div
+          className="overflow-x-auto rounded-md border"
+          {...scrollableRegionProps('Announcements sent, scrolls sideways')}
+        >
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b text-left">

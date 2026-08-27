@@ -2,7 +2,7 @@ import 'server-only'
 
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
-import type { StorageAdapter } from './adapter.ts'
+import { MissingStoredObjectError, type StorageAdapter } from './adapter.ts'
 
 /**
  * Disk-backed storage (D-14): dev/test today, real infrastructure behind the
@@ -38,7 +38,16 @@ export class LocalDiskStorageAdapter implements StorageAdapter {
   }
 
   async get(key: string): Promise<Buffer> {
-    return readFile(this.pathFor(key))
+    try {
+      return await readFile(this.pathFor(key))
+    } catch (error) {
+      // ENOENT only. A permissions error or a full disk is a real failure and
+      // must not be reported to a caller as "there is no such file".
+      if ((error as NodeJS.ErrnoException)?.code === 'ENOENT') {
+        throw new MissingStoredObjectError(key)
+      }
+      throw error
+    }
   }
 
   async delete(key: string): Promise<void> {

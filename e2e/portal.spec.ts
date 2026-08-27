@@ -449,8 +449,21 @@ test.describe('accessibility (§6.4, WCAG 2.1 AA)', () => {
 
     await page.goto(await magicLinkFor(mine.tenant.id))
 
+    // THE MONEY SCREENS WERE MISSING FROM THIS LIST, AND THAT IS WHY
+    // MILESTONE 11'S WALK FOUND A SERIOUS VIOLATION ON `/portal/pay/history`
+    // rather than the suite doing it. Paying rent is the tenant's primary job
+    // (R-112's own words) and `/portal/pay/history` carries the widest table
+    // in the portal - which is exactly the content that scrolls sideways on a
+    // phone, and exactly the content with no link or button in it to focus.
+    //
+    // `scrollable-region-focusable` only fires when the region ACTUALLY
+    // overflows, so this guard is worth having and is not worth trusting on
+    // its own: a fixture with two short rows will not trip it at any width.
+    // The fix it guards lives in `scrollableRegionProps`.
     for (const url of [
       '/portal',
+      '/portal/pay',
+      '/portal/pay/history',
       '/portal/papers',
       '/portal/messages',
       `/portal/messages/${thread.id}`,

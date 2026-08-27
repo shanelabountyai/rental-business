@@ -1,7 +1,6 @@
 import { prisma } from '@rental/db'
-import { storage } from '@/lib/storage/index.ts'
 import { verifyVendorLink } from '@/lib/vendors/link.ts'
-import { documentResponse } from '@/lib/documents/serve.ts'
+import { documentFileResponse } from '@/lib/documents/serve.ts'
 
 // Serves a document's bytes to a vendor holding a magic link (D-6, R-025).
 //
@@ -48,8 +47,7 @@ export async function GET(
     (link.workOrder.ticketId != null && document.ticketId === link.workOrder.ticketId)
   if (!belongsToThisJob) return new Response('Not found', { status: 404 })
 
-  const bytes = await storage.get(document.storageKey)
   // `private` and short: a vendor link is a bearer credential, and a shared
   // cache holding these bytes would outlive the token that authorized them.
-  return documentResponse(bytes, document, { cacheControl: 'private, max-age=300' })
+  return documentFileResponse(document, { cacheControl: 'private, max-age=300' })
 }

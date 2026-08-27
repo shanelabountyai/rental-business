@@ -1,5 +1,6 @@
 import { formatCents } from '@rental/core/money'
 import type { WaiverPatternRow } from '@/lib/ledger/waiver-report.ts'
+import { scrollableRegionProps } from '@/components/ui-classes.ts'
 
 // PAY-04's waiver-pattern report (D-34, R-041).
 //
@@ -38,7 +39,7 @@ export function WaiverPattern({ rows }: { rows: readonly WaiverPatternRow[] }) {
           No fees have been charged yet, so there is no pattern to show.
         </p>
       ) : (
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto" {...scrollableRegionProps('Fee waivers by tenant, scrolls sideways')}>
           <table className="w-full text-sm">
             <caption className="sr-only">
               Per tenant: how many fees were waived of how many charged, the

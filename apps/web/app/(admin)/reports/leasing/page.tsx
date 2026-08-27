@@ -3,6 +3,7 @@ import { requireScope } from '@/lib/auth/guard.ts'
 import { leasingFunnel } from '@/lib/reports/funnel.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 import type { BusinessDate } from '@rental/core/scheduling'
+import { scrollableRegionProps } from '@/components/ui-classes.ts'
 
 export const metadata = { title: 'Leasing funnel — Rental Operations' }
 
@@ -147,7 +148,7 @@ export default async function LeasingFunnelPage({
         {report.sources.length === 0 ? (
           <p className="text-muted-foreground text-sm">No inquiries in this window.</p>
         ) : (
-          <div tabIndex={0} aria-label="Channel quality table" className="overflow-x-auto">
+          <div className="overflow-x-auto" {...scrollableRegionProps('Channel quality table')}>
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b text-left">

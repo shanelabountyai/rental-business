@@ -1,4 +1,5 @@
 import { formatCents } from '@rental/core/money'
+import { scrollableRegionProps } from '@/components/ui-classes.ts'
 
 // The tenant ledger (PAY-03, PAY-09, D-11).
 //
@@ -66,7 +67,7 @@ export function LedgerPanel({
           them.
         </p>
       ) : (
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto" {...scrollableRegionProps('Tenancy ledger, scrolls sideways')}>
           <table className="w-full text-sm">
             <caption className="sr-only">
               Every charge and payment on this tenancy, oldest first, with the

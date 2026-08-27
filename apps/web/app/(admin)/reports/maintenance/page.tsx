@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { requireScope } from '@/lib/auth/guard.ts'
 import { maintenanceAnalytics } from '@/lib/reports/maintenance.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
+import { scrollableRegionProps } from '@/components/ui-classes.ts'
 
 export const metadata = { title: 'Maintenance analytics — Rental Operations' }
 
@@ -200,7 +201,7 @@ export default async function MaintenanceAnalyticsPage({
         {report.vendors.length === 0 ? (
           <p className="text-muted-foreground text-sm">No vendor jobs closed in this window.</p>
         ) : (
-          <div tabIndex={0} aria-label="Vendor cost table" className="overflow-x-auto">
+          <div className="overflow-x-auto" {...scrollableRegionProps('Vendor cost table')}>
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b text-left">

@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { currentScope as writeScope, requireScope } from '@/lib/auth/guard.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 import { myDayTasks, pendingApprovals, rollupByProperty } from '@/lib/tasks/queries.ts'
+import { scrollableRegionProps } from '@/components/ui-classes.ts'
 
 export const metadata = { title: 'Tasks — Rental Operations' }
 
@@ -111,9 +112,7 @@ export default async function TasksPage({
           </h2>
           <div
             className="overflow-x-auto rounded-md border"
-            role="region"
-            aria-label="Portfolio roll-up"
-            tabIndex={0}
+            {...scrollableRegionProps('Portfolio roll-up')}
           >
             <table className="w-full text-left text-sm">
               <thead className="border-b bg-muted/50">

@@ -5,6 +5,7 @@ import { requireScope } from '@/lib/auth/guard.ts'
 import { setPropertyReserve } from '@/lib/reserves/actions.ts'
 import { RESERVE_HORIZON_YEARS, reserveReport } from '@/lib/reserves/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
+import { scrollableRegionProps } from '@/components/ui-classes.ts'
 
 export const metadata = { title: 'Reserves & capital plan — Rental Operations' }
 
@@ -170,7 +171,12 @@ export default async function ReservesPage() {
                   <summary className="min-h-11 cursor-pointer font-medium">
                     The plan behind that number
                   </summary>
-                  <div className="overflow-x-auto">
+                  <div
+                    className="overflow-x-auto"
+                    {...scrollableRegionProps(
+                      `Reserve plan for ${property.propertyName}, scrolls sideways`,
+                    )}
+                  >
                     <table className="mt-2 w-full text-left text-sm">
                       <caption className="sr-only">
                         Projected component replacements for {property.propertyName}

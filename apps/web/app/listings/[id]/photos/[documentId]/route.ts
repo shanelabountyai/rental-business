@@ -1,6 +1,5 @@
 import { prisma } from '@rental/db'
-import { storage } from '@/lib/storage/index.ts'
-import { documentResponse } from '@/lib/documents/serve.ts'
+import { documentFileResponse } from '@/lib/documents/serve.ts'
 
 // Serves a unit photo for a PUBLISHED listing (LEASE-01, R-056).
 //
@@ -44,9 +43,8 @@ export async function GET(
     return new Response('Not found', { status: 404 })
   }
 
-  const bytes = await storage.get(document.storageKey)
   // PUBLIC and long-lived, unlike the vendor route's private/short cache -
   // anyone may see a published listing's photos, and a CDN caching them is
   // exactly the behaviour a public listing page wants.
-  return documentResponse(bytes, document, { cacheControl: 'public, max-age=3600' })
+  return documentFileResponse(document, { cacheControl: 'public, max-age=3600' })
 }

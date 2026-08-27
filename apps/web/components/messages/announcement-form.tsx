@@ -8,7 +8,7 @@ import type {
   AnnouncementRecipientResult,
 } from '@/lib/comms/announcement-actions.ts'
 import type { SegmentOptions } from '@/lib/comms/announcements.ts'
-import { PRIMARY_BUTTON_CLASSES } from '@/components/ui-classes.ts'
+import { PRIMARY_BUTTON_CLASSES, scrollableRegionProps } from '@/components/ui-classes.ts'
 
 // The composer for segment announcements (COMM-04, R-053).
 //
@@ -136,7 +136,7 @@ export function AnnouncementForm({
 
 function ResultsTable({ results }: { results: AnnouncementRecipientResult[] }) {
   return (
-    <div className="overflow-x-auto">
+    <div className="overflow-x-auto" {...scrollableRegionProps('Per-recipient delivery status, scrolls sideways')}>
       <table className="w-full text-sm">
         <caption className="sr-only">Per-recipient delivery status for this send.</caption>
         <thead>

@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { del, get, put } from '@vercel/blob'
-import type { StorageAdapter } from './adapter.ts'
+import { MissingStoredObjectError, type StorageAdapter } from './adapter.ts'
 
 /**
  * Vercel Blob storage — D-14's swap, taken when it became due (R-100).
@@ -57,11 +57,11 @@ export class VercelBlobStorageAdapter implements StorageAdapter {
 
   async get(key: string): Promise<Buffer> {
     const result = await get(key, { access: 'private', token: this.token })
-    // Null is "no such blob". The local adapter throws ENOENT for the same
-    // case and both callers already treat a throw as "the file is gone", so
-    // this keeps one behaviour across the seam rather than two.
+    // Null is "no such blob" - the same case the local adapter raises for
+    // ENOENT, and it raises the same type, so a caller can tell a missing
+    // object from a storage failure without knowing which adapter it has.
     if (!result?.stream) {
-      throw new Error(`No stored object for key: ${key}`)
+      throw new MissingStoredObjectError(key)
     }
     return Buffer.from(await new Response(result.stream).arrayBuffer())
   }

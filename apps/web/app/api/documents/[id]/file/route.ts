@@ -3,8 +3,7 @@ import { prisma } from '@rental/db'
 import { auth } from '@/auth.ts'
 import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
 import { tenantScope } from '@/lib/portal/guard.ts'
-import { storage } from '@/lib/storage/index.ts'
-import { documentResponse } from '@/lib/documents/serve.ts'
+import { documentFileResponse } from '@/lib/documents/serve.ts'
 
 // Serves a Document's bytes (DOC-01, DOC-03). `redirect()` (inside
 // requirePermission) works from a Route Handler the same as a Server
@@ -77,9 +76,8 @@ async function serve(document: {
   contentType: string
   fileName: string
 }) {
-  const bytes = await storage.get(document.storageKey)
   // No Cache-Control: this route answers for every document in the product,
   // scoped per request by session and permission, so there is no one cache
   // policy that is right for all of them.
-  return documentResponse(bytes, document)
+  return documentFileResponse(document)
 }

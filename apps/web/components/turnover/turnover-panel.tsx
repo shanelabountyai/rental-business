@@ -5,6 +5,7 @@ import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
 import { SelectField, TextField } from '@/components/form/field.tsx'
 import type { TurnoverFormState } from '@/lib/turnover/actions.ts'
 import type { WorkOrderFormState } from '@/lib/workorders/actions.ts'
+import { scrollableRegionProps } from '@/components/ui-classes.ts'
 
 // The turnover / make-ready panel (LEASE-12, INSP-06, R-072). The punch
 // list is not a bespoke list here - each row is an ordinary WorkOrder
@@ -119,7 +120,7 @@ export function TurnoverPanel({
       </dl>
 
       {turnover.items.length > 0 ? (
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto" {...scrollableRegionProps('Turnover items, scrolls sideways')}>
           <table className="w-full text-sm">
             <thead>
               <tr className="text-muted-foreground text-left">

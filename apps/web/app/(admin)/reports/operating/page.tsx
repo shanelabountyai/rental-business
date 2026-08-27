@@ -6,6 +6,7 @@ import { requireScope } from '@/lib/auth/guard.ts'
 import { operatingReport } from '@/lib/reports/operating.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 import { exportableEntities } from '@/lib/tax/queries.ts'
+import { scrollableRegionProps } from '@/components/ui-classes.ts'
 
 export const metadata = { title: 'Operating report — Rental Operations' }
 
@@ -157,15 +158,13 @@ export default async function OperatingReportPage({
                     column ("Cedar Row, vacant days"). `<th scope>` is how a
                     screen reader announces that pairing, and no arrangement of
                     <ul> can express it. */}
-                {/* FOCUSABLE, because it scrolls. A keyboard user cannot
-                    reach a horizontal scrollbar that no element owns, and the
-                    defect is invisible at a desktop width where the table
-                    happens to fit. */}
+                {/* FOCUSABLE, because it scrolls - see
+                    `scrollableRegionProps`, which this page's own version of
+                    this fix became after Milestone 11's walk found the other
+                    nine wrappers that never got it. */}
                 <div
                   className="overflow-x-auto"
-                  tabIndex={0}
-                  role="group"
-                  aria-label="Per-property operating snapshot, scrolls sideways"
+                  {...scrollableRegionProps('Per-property operating snapshot, scrolls sideways')}
                 >
                   <table className="w-full min-w-3xl border-collapse text-sm">
                     <caption className="sr-only">
@@ -259,9 +258,7 @@ export default async function OperatingReportPage({
                 </p>
                 <div
                   className="overflow-x-auto"
-                  tabIndex={0}
-                  role="group"
-                  aria-label="Monthly net per property, scrolls sideways"
+                  {...scrollableRegionProps('Monthly net per property, scrolls sideways')}
                 >
                   <table className="w-full min-w-3xl border-collapse text-sm">
                     <caption className="sr-only">
