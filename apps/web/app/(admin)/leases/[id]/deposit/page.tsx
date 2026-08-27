@@ -145,7 +145,16 @@ export default async function DepositDispositionPage({
                       an item this old — full replacement cost rarely holds up in a dispute.
                     </span>
                   )}
-                  <TaskActionButton action={removeDeduction.bind(null, deduction.id)} label="Remove" />
+                  {/* Names the deduction (R-116): one per row, and pressing
+                      the wrong "Remove" takes money off the letter. */}
+                  <TaskActionButton
+                    action={removeDeduction.bind(null, deduction.id)}
+                    label={
+                      <>
+                        Remove<span className="sr-only"> the {deduction.description} deduction</span>
+                      </>
+                    }
+                  />
                 </li>
               )
             })}

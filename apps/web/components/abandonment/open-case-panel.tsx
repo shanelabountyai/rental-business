@@ -7,6 +7,13 @@ import type { AbandonmentFormState } from '@/lib/abandonment/actions.ts'
 
 // Opening a gone-dark case from the tenancy it is about (RISK-01, R-087).
 //
+// THE SUBMIT NAMES THE CASE, not just "Open the case" (R-116). Three panels
+// on `/leases/[id]` — gone-dark, confidential, violation — all had a submit
+// reading exactly "Open the case": three very different legal acts, one
+// accessible name, on a page whose house rules document this collision class
+// at length. Each is worded off the `<summary>` above it without repeating it,
+// which is what `fees-panel.tsx` already does with its own disclosure.
+//
 // Behind a `<details>`, closed by default, and that is not just tidiness: on
 // a lease page full of ordinary controls this is the one that starts a path
 // ending in somebody's home being entered. It should take a deliberate click
@@ -68,7 +75,7 @@ export function OpenAbandonmentCasePanel({
                 error={errors.lastContactOn}
                 hint="A payment, a message, a sighting. The silence clock measures from it."
               />
-              <SubmitButton label="Open the case" />
+              <SubmitButton label="Open the gone-dark case" />
             </form>
           </div>
         </details>

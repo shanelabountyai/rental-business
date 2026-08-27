@@ -83,11 +83,16 @@ export function PartiesPanel({
                 {canWrite && (
                   <form action={removeAction}>
                     <input type="hidden" name="leaseTenantId" value={tenant.id} />
+                    {/* NAMES WHO (R-116). One renders per occupant, so a
+                        screen-reader user heard "Remove, Remove, Remove" with
+                        no way to tell which press took somebody off the
+                        tenancy. `sr-only`, because the row prints the name
+                        already. */}
                     <button
                       type="submit"
                       className="focus-visible:ring-ring border-input min-h-11 rounded-md border px-3 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
                     >
-                      Remove
+                      Remove<span className="sr-only"> {tenant.name} from the lease</span>
                     </button>
                   </form>
                 )}
@@ -107,7 +112,11 @@ export function PartiesPanel({
                 options={selectableTenants.map((t) => ({ value: t.id, label: t.label }))}
               />
             </div>
-            <SubmitButton label="Add" />
+            {/* NOT A BARE "Add" (R-116). `/leases/[id]` also carries "Add
+                guarantor" and "Add this charge", and a one-word name that is
+                a substring of two others identifies nothing - by ear or to a
+                locator. */}
+            <SubmitButton label="Add to the lease" />
           </form>
         )}
       </div>

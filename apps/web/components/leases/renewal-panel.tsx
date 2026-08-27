@@ -101,6 +101,13 @@ export function RenewalPanel({
               defaultValue={state.values?.endsOn || defaultEndsOn}
               error={errors.endsOn}
             />
+            {/* THE CAP REFUSAL IS THE RENT FIELD'S ERROR, not a paragraph
+                below the grid (R-116). R-107b put it in a live region so it
+                was spoken; it was still ASSOCIATED with nothing, so somebody
+                who moved back to the rent box to fix it heard "Proposed rent,
+                invalid" and no number. `error` gives `aria-invalid`,
+                `aria-describedby` and the same always-mounted region, and puts
+                the sentence under the field it is about. */}
             <TextField
               label="Proposed rent ($/mo)"
               name="rentDollars"
@@ -111,27 +118,30 @@ export function RenewalPanel({
               required
               idPrefix="renewal"
               defaultValue={state.values?.rentDollars || centsToDollars(currentRentCents)}
-              error={errors.rentDollars}
+              error={
+                errors.rentDollars ??
+                (state.capped
+                  ? `The most this may legally increase to is ${centsToDollars(
+                      state.capped.maxAllowedCents,
+                    )}/mo.`
+                  : undefined)
+              }
             />
           </div>
-          <LiveRegion assertive>
-            {state.capped && (
-              <p className="text-sm text-red-700">
-                The most this may legally increase to is{' '}
-                {centsToDollars(state.capped.maxAllowedCents)}/mo.
-              </p>
+          {/* The override field appears when the notice period is short, and
+              said nothing when it did (R-116). */}
+          <LiveRegion>
+            {state.needsOverride && (
+              <TextareaField
+                label="Why proceed with less than the required notice?"
+                name="overrideReason"
+                required
+                idPrefix="renewal"
+                error={errors.overrideReason}
+                rows={2}
+              />
             )}
           </LiveRegion>
-          {state.needsOverride && (
-            <TextareaField
-              label="Why proceed with less than the required notice?"
-              name="overrideReason"
-              required
-              idPrefix="renewal"
-              error={errors.overrideReason}
-              rows={2}
-            />
-          )}
           <SubmitButton label="Create renewal offer" />
         </form>
       )}

@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { formatCents } from '@rental/core/money'
 import { CARD_FIXED_CENTS, CARD_RATE_BPS } from '@rental/core/payments'
+import { friendlyBusinessDate, utcToBusinessDate } from '@rental/core/scheduling'
 import { AutopayPanel } from '@/components/payments/autopay-panel.tsx'
 import { PayForm } from '@/components/payments/pay-form.tsx'
 import { startPayment } from '@/lib/payments/actions.ts'
@@ -124,8 +125,15 @@ export default async function PayPage() {
                 <span className="flex flex-col">
                   <span>{CHARGE_WORDS[charge.type] ?? charge.description}</span>
                   {charge.dueOn && (
+                    // "Due 1 Sep 2026", not "Due 2026-09-01" (R-116). This
+                    // file's own header says plain language governs every word
+                    // here, and every other tenant screen reads like a
+                    // sentence. `utcToBusinessDate` is the correct reader for
+                    // a `@db.Date` column and stays; what was missing was a
+                    // formatter for a calendar day, since `friendlyDate` takes
+                    // an instant and must never see one.
                     <span className="text-muted-foreground text-xs">
-                      Due {charge.dueOn.toISOString().slice(0, 10)}
+                      Due {friendlyBusinessDate(utcToBusinessDate(charge.dueOn))}
                     </span>
                   )}
                 </span>

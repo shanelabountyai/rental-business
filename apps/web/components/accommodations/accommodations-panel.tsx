@@ -14,7 +14,7 @@ import {
   responseClock,
 } from '@rental/core/accommodations'
 import { useActionState, useState } from 'react'
-import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
+import { FormAlerts, LiveRegion, SubmitButton } from '@/components/auth-form.tsx'
 import { FieldError, SelectField, TextField, TextareaField } from '@/components/form/field.tsx'
 import type { AccommodationFormState } from '@/lib/accommodations/actions.ts'
 
@@ -174,17 +174,32 @@ function DocumentationForm({
     )
   }
 
+  // EVERY CONTROL IN HERE RENDERS ONCE PER REQUEST ON THE SAME PAGE (R-116).
+  // The `sr-only` legend tells somebody listening WHOSE request they are in -
+  // `payment-hold-panel.tsx` does this for its per-payer rows - and the button
+  // carries the name too, because a screen-reader user reading a list of
+  // buttons never enters the group.
   return (
-    <form action={formAction} className="flex flex-col gap-2">
-      <input type="hidden" name="requestId" value={request.id} />
-      <TextField
-        label="What you asked for"
-        name="note"
-        idPrefix={`doc-${request.id}`}
-        hint="Reliable documentation of the disability-related need — never the diagnosis, never records."
-      />
-      <FormAlerts state={state} />
-      <SubmitButton label="Record that documentation was requested" />
+    <form action={formAction}>
+      <fieldset className="flex flex-col gap-2">
+        <legend className="sr-only">Documentation for {request.requesterName}</legend>
+        <TextField
+          label="What you asked for"
+          name="note"
+          idPrefix={`doc-${request.id}`}
+          hint="Reliable documentation of the disability-related need — never the diagnosis, never records."
+        />
+        <input type="hidden" name="requestId" value={request.id} />
+        <FormAlerts state={state} />
+        <SubmitButton
+          label={
+            <>
+              Record that documentation was requested
+              <span className="sr-only"> from {request.requesterName}</span>
+            </>
+          }
+        />
+      </fieldset>
     </form>
   )
 }
@@ -200,86 +215,108 @@ function DecisionForm({ request, action }: { request: RequestRow; action: Action
   const currentOutcome = submitted?.outcome ?? outcome
 
   return (
-    <form action={formAction} className="flex flex-col gap-3 border-t pt-3">
-      <input type="hidden" name="requestId" value={request.id} />
-      {/* NOT "Determination", which is a substring of "The written
-          determination" further down this same form — two controls whose
-          accessible names contain one another are ambiguous to a locator and
-          to anyone listening to them read out. */}
-      <SelectField
-        label="Approve or deny"
-        name="outcome"
-        required
-        idPrefix={`dec-${request.id}`}
-        error={errors.outcome}
-        defaultValue={currentOutcome}
-        options={[
-          { value: 'APPROVED', label: 'Approve' },
-          { value: 'DENIED', label: 'Deny' },
-        ]}
-        onChange={(event) => setOutcome(event.target.value)}
-      />
+    <form action={formAction} className="border-t pt-3">
+      {/* The `sr-only` legend names WHOSE request this decides - every control
+          below renders once per open request on this page (R-116). */}
+      <fieldset className="flex flex-col gap-3">
+        <legend className="sr-only">Decision on {request.requesterName}&rsquo;s request</legend>
+        <input type="hidden" name="requestId" value={request.id} />
+        {/* NOT "Determination", which is a substring of "The written
+            determination" further down this same form — two controls whose
+            accessible names contain one another are ambiguous to a locator and
+            to anyone listening to them read out. */}
+        <SelectField
+          label="Approve or deny"
+          name="outcome"
+          required
+          idPrefix={`dec-${request.id}`}
+          error={errors.outcome}
+          defaultValue={currentOutcome}
+          options={[
+            { value: 'APPROVED', label: 'Approve' },
+            { value: 'DENIED', label: 'Deny' },
+          ]}
+          onChange={(event) => setOutcome(event.target.value)}
+        />
 
-      {currentOutcome === 'APPROVED' && (
-        <>
-          {isAnimalKind(request.kind) ? (
-            <TextField
-              label="Which animal"
-              name="subjectDescription"
-              required
-              idPrefix={`dec-${request.id}`}
-              error={errors.subjectDescription}
-              defaultValue={submitted?.subjectDescription ?? request.subjectDescription ?? ''}
-              hint="Species, and a name if there is one. A dispute two years later is about which animal."
-            />
-          ) : (
-            <TextField
-              label="The exception being granted"
-              name="subjectDescription"
-              required
-              idPrefix={`dec-${request.id}`}
-              error={errors.subjectDescription}
-              defaultValue={submitted?.subjectDescription ?? request.subjectDescription ?? ''}
-              hint="Exactly what is being changed, and for how long. An approval against an unrecorded scope is what the disagreement two years from now is about."
-            />
+        {/* BOTH BRANCHES APPEAR WHEN THE OUTCOME IS CHOSEN AND ANNOUNCED
+            NOTHING (R-116). One reveals a required field and the sentence
+            saying an approval stops pet money on the tenancy; the other lists
+            the only grounds the FHA permits a denial on. Mounted from first
+            paint whatever is chosen, because a region that arrives already
+            holding its text is a new node rather than a change. */}
+        <LiveRegion>
+          {currentOutcome === 'APPROVED' && (
+            <>
+              {isAnimalKind(request.kind) ? (
+                <TextField
+                  label="Which animal"
+                  name="subjectDescription"
+                  required
+                  idPrefix={`dec-${request.id}`}
+                  error={errors.subjectDescription}
+                  defaultValue={submitted?.subjectDescription ?? request.subjectDescription ?? ''}
+                  hint="Species, and a name if there is one. A dispute two years later is about which animal."
+                />
+              ) : (
+                <TextField
+                  label="The exception being granted"
+                  name="subjectDescription"
+                  required
+                  idPrefix={`dec-${request.id}`}
+                  error={errors.subjectDescription}
+                  defaultValue={submitted?.subjectDescription ?? request.subjectDescription ?? ''}
+                  hint="Exactly what is being changed, and for how long. An approval against an unrecorded scope is what the disagreement two years from now is about."
+                />
+              )}
+              {isAnimalKind(request.kind) && (
+                <p className="text-muted-foreground text-sm">
+                  Approving stops pet rent, pet fees and pet deposits on this
+                  tenancy — the product will refuse them.
+                </p>
+              )}
+            </>
           )}
-          {isAnimalKind(request.kind) && (
-            <p className="text-muted-foreground text-sm">
-              Approving stops pet rent, pet fees and pet deposits on this
-              tenancy — the product will refuse them.
-            </p>
+        </LiveRegion>
+
+        <LiveRegion>
+          {currentOutcome === 'DENIED' && (
+            <div className="rounded-md border p-3">
+              <p className="text-sm font-medium">The grounds the FHA actually permits</p>
+              <ul className="text-muted-foreground mt-1 list-disc pl-5 text-sm">
+                {LAWFUL_DENIAL_GROUNDS.map((ground) => (
+                  <li key={ground}>{ground}</li>
+                ))}
+              </ul>
+              <p className="text-muted-foreground mt-2 text-xs">
+                Write what actually happened rather than picking the nearest of
+                these. They are a reminder, not a menu.
+              </p>
+            </div>
           )}
-        </>
-      )}
+        </LiveRegion>
 
-      {currentOutcome === 'DENIED' && (
-        <div className="rounded-md border p-3">
-          <p className="text-sm font-medium">The grounds the FHA actually permits</p>
-          <ul className="text-muted-foreground mt-1 list-disc pl-5 text-sm">
-            {LAWFUL_DENIAL_GROUNDS.map((ground) => (
-              <li key={ground}>{ground}</li>
-            ))}
-          </ul>
-          <p className="text-muted-foreground mt-2 text-xs">
-            Write what actually happened rather than picking the nearest of
-            these. They are a reminder, not a menu.
-          </p>
-        </div>
-      )}
+        <TextareaField
+          label="The written determination"
+          name="determinationText"
+          required
+          rows={4}
+          idPrefix={`dec-${request.id}`}
+          error={errors.determinationText}
+          defaultValue={submitted?.determinationText ?? ''}
+          hint="Sent to the requester as written. This is the record."
+        />
 
-      <TextareaField
-        label="The written determination"
-        name="determinationText"
-        required
-        rows={4}
-        idPrefix={`dec-${request.id}`}
-        error={errors.determinationText}
-        defaultValue={submitted?.determinationText ?? ''}
-        hint="Sent to the requester as written. This is the record."
-      />
-
-      <FormAlerts state={state} />
-      <SubmitButton label="Record the determination" />
+        <FormAlerts state={state} />
+        <SubmitButton
+          label={
+            <>
+              Record the determination
+              <span className="sr-only"> for {request.requesterName}</span>
+            </>
+          }
+        />
+      </fieldset>
     </form>
   )
 }

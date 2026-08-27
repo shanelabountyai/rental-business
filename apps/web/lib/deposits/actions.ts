@@ -219,6 +219,12 @@ export async function finalizeDisposition(
   if (!deposit.lease.moveOutAt) {
     return { error: 'No move-out date is on record for this tenancy yet.' }
   }
+  // The form's own checkbox is `required`, so this only fires for a submit
+  // that did not come from it. It stays because the browser check is a
+  // convenience and this is the gate (R-116).
+  if (!formData.get('acknowledgeFinal')) {
+    return { error: 'Confirm you understand the letter cannot be undone.' }
+  }
 
   const forwardingAddress = str(formData, 'forwardingAddress') || deposit.forwardingAddress
   if (!forwardingAddress) {

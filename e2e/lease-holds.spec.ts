@@ -214,7 +214,7 @@ test('placing a hold puts a persistent banner on the tenancy, naming what it swi
   // The effects are shown BEFORE the hold is placed, because the type is
   // what somebody chooses and the consequences follow from it.
   await expect(page.getByText(/no late fees accrue/i)).toBeVisible()
-  await page.getByLabel(/^Why \(required\)/).fill('Chapter 7 filed 2026-08-01, case no. 26-31234.')
+  await page.getByLabel(/^Why this hold is being placed/).fill('Chapter 7 filed 2026-08-01, case no. 26-31234.')
   await page.getByRole('button', { name: 'Place hold' }).click()
 
   await expect(page.getByRole('heading', { name: /under a hold/i })).toBeVisible()

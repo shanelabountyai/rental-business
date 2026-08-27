@@ -188,7 +188,14 @@ export function RentRollTable({
                 {canSend && (
                   <td className="py-2 pr-2">
                     {row.pastGrace && !row.chaseHeld ? (
-                      <>
+                      // WRAPPED FOR THE TARGET SIZE (R-116, 2.5.8). A bare
+                      // `size-5` checkbox is a 20px target, and this is the
+                      // box that decides whether a tenant gets a collection
+                      // reminder. The "select all" directly above it was
+                      // already inside a `min-h-11` label; the per-row ones
+                      // were missed. The `aria-label` still wins over the
+                      // (empty) label text for the accessible name.
+                      <label className="flex min-h-11 min-w-11 items-center justify-center">
                         <input
                           type="checkbox"
                           name="leaseIds"
@@ -198,7 +205,7 @@ export function RentRollTable({
                           className="size-5"
                           aria-label={`Chase ${row.tenantName}`}
                         />
-                      </>
+                      </label>
                     ) : (
                       // No control at all, not a disabled one. Nothing the
                       // user can do would make this selectable — and for a

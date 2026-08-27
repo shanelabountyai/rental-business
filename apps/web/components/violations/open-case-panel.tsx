@@ -12,7 +12,7 @@ import {
   type ViolationStatus,
 } from '@rental/core/violations'
 import { useActionState, useState } from 'react'
-import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
+import { FormAlerts, LiveRegion, SubmitButton } from '@/components/auth-form.tsx'
 import { SelectField, TextField, TextareaField } from '@/components/form/field.tsx'
 import type { ViolationFormState } from '@/lib/violations/actions.ts'
 
@@ -94,32 +94,47 @@ export function OpenViolationCasePanel({
               onChange={(event) => setKind(event.target.value)}
             />
 
-            {kind === 'UNAUTHORIZED_ANIMAL' && (
-              <p className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
-                Ask first whether it is a service or assistance animal. A tenant
-                is not required to volunteer that, and a notice served on an
-                assistance animal is a fair-housing complaint whether or not
-                anybody had been told. If the answer is yes, log an
-                accommodation request instead of opening this.
-              </p>
-            )}
+            {/* THE FAIR-HOUSING WARNING IS THE ONE SENTENCE ON THIS SCREEN
+                NOBODY MAY MISS, and it was inserted into the DOM with no live
+                region at all (R-116): choosing "Unauthorized animal" told a
+                screen-reader user nothing. `assertive` for the reason
+                `LiveRegion` reserves it - serving this notice on an assistance
+                animal is a fair-housing complaint, so the choice should not be
+                carried on past without reading it. Mounted from first paint
+                whatever the chosen kind, because a region that ARRIVES holding
+                its text is a new node rather than a change. */}
+            <LiveRegion assertive>
+              {kind === 'UNAUTHORIZED_ANIMAL' && (
+                <p className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+                  Ask first whether it is a service or assistance animal. A tenant
+                  is not required to volunteer that, and a notice served on an
+                  assistance animal is a fair-housing complaint whether or not
+                  anybody had been told. If the answer is yes, log an
+                  accommodation request instead of opening this.
+                </p>
+              )}
+            </LiveRegion>
 
-            {kind === 'PREMISES_CONDITION' && (
-              <>
-                <SelectField
-                  label="Which lease or safety term"
-                  name="ground"
-                  required
-                  idPrefix="viol"
-                  error={errors.ground}
-                  options={VIOLATION_GROUNDS.map((value) => ({
-                    value,
-                    label: VIOLATION_GROUND_LABELS[value],
-                  }))}
-                />
-                <p className="text-muted-foreground text-sm">{NOTICE_LANGUAGE_RULE}</p>
-              </>
-            )}
+            {/* Polite: a required field appearing is worth knowing about, but
+                it is below the cursor and the submit refuses without it. */}
+            <LiveRegion>
+              {kind === 'PREMISES_CONDITION' && (
+                <>
+                  <SelectField
+                    label="Which lease or safety term"
+                    name="ground"
+                    required
+                    idPrefix="viol"
+                    error={errors.ground}
+                    options={VIOLATION_GROUNDS.map((value) => ({
+                      value,
+                      label: VIOLATION_GROUND_LABELS[value],
+                    }))}
+                  />
+                  <p className="text-muted-foreground text-sm">{NOTICE_LANGUAGE_RULE}</p>
+                </>
+              )}
+            </LiveRegion>
 
             <TextField
               label="Date it was seen"
@@ -137,7 +152,7 @@ export function OpenViolationCasePanel({
               error={errors.note}
               hint="The room, and what about it breaches the term. Photographs show a state; only this says which room and why it matters."
             />
-            <SubmitButton label="Open the case" />
+            <SubmitButton label="Open the violation case" />
           </form>
         </div>
       </details>

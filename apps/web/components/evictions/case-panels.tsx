@@ -2,10 +2,14 @@
 
 import { useActionState } from 'react'
 import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
-import { SelectField, TextField } from '@/components/form/field.tsx'
+import { FieldError, SelectField, TextField } from '@/components/form/field.tsx'
 import type { EvictionFormState } from '@/lib/evictions/actions.ts'
 
 type Action = (state: EvictionFormState, formData: FormData) => Promise<EvictionFormState>
+
+/// The §3931 radio group is hand-rolled (it is three-state on purpose), so it
+/// carries its own error id rather than getting one from `TextField`.
+const APPEARED_ERROR_ID = 'field-advance-tenantAppeared-error'
 
 /// Advancing a stage. The date field is what the stage actually records - a
 /// filing date, a judgment date - so it is labelled per stage rather than
@@ -41,9 +45,19 @@ export function AdvanceStagePanel({
           affidavit and a default judgment does. Radios rather than a
           checkbox: an unticked box means "no" and this question genuinely
           has three states, of which "nobody said" must not silently become
-          one of the answers. */}
+          one of the answers.
+
+          `role="radiogroup"` so the invalid state and the error live on the
+          GROUP (R-116): `aria-invalid` is not supported on an individual
+          radio, and the refusal is about the question rather than about one
+          of the two answers. The `<legend>` names the group. */}
       {nextStage === 'JUDGMENT' && (
-        <fieldset className="flex flex-col gap-2">
+        <fieldset
+          className="flex flex-col gap-2"
+          role="radiogroup"
+          aria-invalid={Boolean(errors.tenantAppeared) || undefined}
+          aria-describedby={errors.tenantAppeared ? APPEARED_ERROR_ID : undefined}
+        >
           <legend className="text-sm font-medium">Did the tenant appear?</legend>
           <p className="text-muted-foreground text-xs">
             A default judgment needs the §3931 military-service affidavit, and
@@ -57,9 +71,12 @@ export function AdvanceStagePanel({
             <input type="radio" name="tenantAppeared" value="no" className="size-5" />
             <span>No — this is a default judgment</span>
           </label>
-          {errors.tenantAppeared && (
-            <p className="text-destructive text-sm">{errors.tenantAppeared}</p>
-          )}
+          {/* WAS RED TEXT AND NOTHING ELSE (R-116): no role, no id, no
+              `aria-describedby`, so the one refusal on the §3931 question was
+              neither announced nor reachable from the radios it is about.
+              `FieldError` is the always-mounted region every other field in
+              the product uses. */}
+          <FieldError id={APPEARED_ERROR_ID} message={errors.tenantAppeared} />
         </fieldset>
       )}
 

@@ -64,6 +64,7 @@ export function TextField({
   inputMode,
   min,
   max,
+  minLength,
   step,
   autoFocus,
   list,
@@ -80,6 +81,12 @@ export function TextField({
   inputMode?: 'numeric' | 'decimal' | 'text'
   min?: number | string
   max?: number | string
+  /// Refuses a too-short answer in the BROWSER, for the same reason
+  /// `CheckboxField.required` does (R-116): React 19 resets an uncontrolled
+  /// form on every action dispatch, so a server-side refusal costs the user
+  /// everything else they had set. The server check stays - it is the gate;
+  /// this is what stops the gate from being expensive to hit.
+  minLength?: number
   step?: number | string
   autoFocus?: boolean
   list?: string
@@ -125,6 +132,7 @@ export function TextField({
         inputMode={inputMode}
         min={min}
         max={max}
+        minLength={minLength}
         step={step}
         list={list}
         autoFocus={autoFocus}

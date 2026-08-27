@@ -3,7 +3,7 @@
 import { formatCents } from '@rental/core/money'
 import { useActionState } from 'react'
 import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
-import { FieldError } from '@/components/form/field.tsx'
+import { TextField } from '@/components/form/field.tsx'
 import type { WaiverFormState } from '@/lib/ledger/waivers.ts'
 
 // Fees, and forgiving one (PAY-04, R-041).
@@ -71,24 +71,26 @@ function WaiveForm({
       <form action={formAction} className="flex flex-col gap-2 pt-2">
         <input type="hidden" name="chargeId" value={fee.id} />
         <FormAlerts state={state} />
-        <label htmlFor={`reason-${fee.id}`} className="text-sm font-medium">
-          Why is this being waived?
-        </label>
         {/* REQUIRED, and the action refuses without it. "Why" is the first
             question in a fair-housing review, and a hundred waivers with an
             empty reason column are indistinguishable from an arbitrary
-            pattern. */}
-        <input
-          id={`reason-${fee.id}`}
+            pattern.
+
+            IT SAID SO NOWHERE UNTIL R-116. The hand-rolled input carried
+            neither `required` nor `aria-required`, and the only hint was a
+            placeholder - which disappears on focus, so the way to find out
+            was to be refused. `TextField` is what every other form in the
+            product uses: it marks the field required, ties the error to the
+            input, turns the placeholder into a hint that stays, and brings
+            back the `min-h-11` target the hand-rolled classes had dropped. */}
+        <TextField
+          label="Why is this being waived?"
           name="reason"
-          type="text"
-          placeholder="First late payment in two years"
-          className="border-input focus-visible:ring-ring rounded-md border px-2 py-1.5 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
-          aria-describedby={state.fieldErrors?.reason ? `reason-error-${fee.id}` : undefined}
+          required
+          idPrefix={`fee-${fee.id}`}
+          error={state.fieldErrors?.reason}
+          hint="First late payment in two years."
         />
-        {/* `FieldError` carries role="alert"; the bare <p> this replaces
-            announced nothing when the server rejected the reason. */}
-        <FieldError id={`reason-error-${fee.id}`} message={state.fieldErrors?.reason} />
         <SubmitButton label={`Waive ${formatCents(fee.amountCents)}`} />
       </form>
     </details>

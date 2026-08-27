@@ -8,6 +8,7 @@ import {
   dueDateInMonth,
   dueDateOnOrAfter,
   dueDateOnOrBefore,
+  friendlyBusinessDate,
   isDue,
   utcToWallClock,
   wallClockToUtc,
@@ -227,6 +228,32 @@ describe('business dates at the storage boundary', () => {
   it('rejects a malformed business date', () => {
     expect(() => businessDateToUtc('4 August 2026')).toThrow(RangeError)
     expect(() => businessDateToUtc('2026-8-4')).toThrow(RangeError)
+  })
+})
+
+describe('friendlyBusinessDate — a calendar day in plain language (R-116)', () => {
+  it('reads like a sentence, not like a column', () => {
+    expect(friendlyBusinessDate('2026-09-01')).toBe('1 Sep 2026')
+    expect(friendlyBusinessDate('2026-12-25')).toBe('25 Dec 2026')
+  })
+
+  // THE POINT OF THE FUNCTION. `friendlyDate` takes an instant and a zone,
+  // and a calendar day put through a zone moves a day west of UTC (R-042).
+  // This one never touches a Date, so there is nothing for a zone to move:
+  // the same string in Honolulu and in Berlin.
+  it('is the same day whatever the runtime zone is', () => {
+    const original = process.env.TZ
+    for (const zone of [HONOLULU, CHICAGO, 'Europe/Berlin']) {
+      process.env.TZ = zone
+      expect(friendlyBusinessDate('2026-01-01')).toBe('1 Jan 2026')
+      expect(friendlyBusinessDate('2026-12-31')).toBe('31 Dec 2026')
+    }
+    process.env.TZ = original
+  })
+
+  it('rejects anything that is not a business date', () => {
+    expect(() => friendlyBusinessDate('2026-9-1')).toThrow(RangeError)
+    expect(() => friendlyBusinessDate('2026-09-01T00:00:00Z')).toThrow(RangeError)
   })
 })
 

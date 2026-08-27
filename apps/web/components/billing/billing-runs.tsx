@@ -127,7 +127,18 @@ export function BillingRuns({
 
               <form action={action}>
                 <input type="hidden" name="leasePayerId" value={row.id} />
-                <SubmitButton label="Re-sync" />
+                {/* One per payer, so the name says which (R-116). */}
+                <SubmitButton
+                  label={
+                    <>
+                      Re-sync
+                      <span className="sr-only">
+                        {' '}
+                        {row.payerName} at {row.where}
+                      </span>
+                    </>
+                  }
+                />
               </form>
             </li>
           ))}

@@ -36,6 +36,10 @@ export const RETENTION_RULES: Record<DocumentTypeValue, RetentionRule> = {
   RENTER_INSURANCE_COI: { years: null, note: 'Kept indefinitely; superseded by a newer certificate, not purged.' },
   W9: { years: null, note: 'Kept indefinitely; a tax record.' },
   INSPECTION_REPORT: { years: null, note: 'PROP-08/deposit-defense evidence - kept indefinitely.' },
+  CONDITION_BASELINE: {
+    years: null,
+    note: 'RISK-08: the only record of how an inherited tenancy was handed over - kept indefinitely, for the same reason as an inspection report.',
+  },
   UNIT_PHOTO: { years: null, note: 'PROP-08: persists across turns, permanently.' },
   PROPERTY_PHOTO: { years: null, note: 'Kept indefinitely.' },
   SHUTOFF_PHOTO: { years: null, note: 'Safety-critical reference photo - kept indefinitely.' },

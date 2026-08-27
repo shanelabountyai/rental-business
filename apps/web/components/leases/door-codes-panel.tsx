@@ -1,7 +1,7 @@
 'use client'
 
 import { useActionState } from 'react'
-import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
+import { FormAlerts, SubmitButton, useFocusWhen } from '@/components/auth-form.tsx'
 import { TextField } from '@/components/form/field.tsx'
 import type { TenantLockCodeState } from '@/lib/leases/access-code-actions.ts'
 
@@ -80,7 +80,13 @@ export function DoorCodesPanel({
                 <p className="text-muted-foreground text-sm">
                   Holds a code, given {row.live.issuedOn} by {row.live.issuedBy}.
                 </p>
-                {canRevoke && <RevokeForm action={row.revokeAction} />}
+                {canRevoke && (
+                  <RevokeForm
+                    tenantId={row.tenantId}
+                    name={row.name}
+                    action={row.revokeAction}
+                  />
+                )}
               </>
             ) : (
               canIssue && <IssueForm name={row.name} action={row.issueAction} />
@@ -93,6 +99,11 @@ export function DoorCodesPanel({
 
 function IssueForm({ name, action }: { name: string; action: () => Promise<TenantLockCodeState> }) {
   const [state, submit] = useActionState<TenantLockCodeState, FormData>(async () => action(), {})
+  // The revealed code REPLACES the button that revealed it, so focus is
+  // otherwise dropped to <body> and the one-time code announced to nobody
+  // (R-116). Focusing its heading reads the whole block: whose code, the
+  // digits, and the sentence saying it is shown once.
+  const revealed = useFocusWhen<HTMLParagraphElement>(Boolean(state.code))
   return (
     <form action={submit} className="flex flex-col gap-2">
       <FormAlerts state={state} />
@@ -102,32 +113,62 @@ function IssueForm({ name, action }: { name: string; action: () => Promise<Tenan
           R-069's static path documents the same trap. */}
       {state.code && (
         <div className="flex flex-col gap-1 rounded-md border p-3">
-          <p className="text-sm font-medium">{name}&rsquo;s door code</p>
+          <p ref={revealed} tabIndex={-1} className="text-sm font-medium">
+            {name}&rsquo;s door code
+          </p>
           <p className="font-mono text-3xl tracking-[0.3em]">{state.code}</p>
           <p className="text-muted-foreground text-sm">
             Shown once. Give it to them now — reading it back later is a separate, logged act.
           </p>
         </div>
       )}
-      {!state.code && <SubmitButton label="Give them a door code" />}
+      {!state.code && (
+        <SubmitButton
+          label={
+            <>
+              Give a door code<span className="sr-only"> to {name}</span>
+            </>
+          }
+        />
+      )}
     </form>
   )
 }
 
-function RevokeForm({ action }: { action: Action }) {
+// EVERY PROP HERE EXISTS TO KEEP TWO TENANTS' CONTROLS APART (R-116). The
+// `idPrefix` below was the constant "door-code", so both reason fields were
+// `id="field-door-code-reason"`, `<label htmlFor>` resolved to the first one
+// only, and clicking the second tenant's label focused the first tenant's
+// input. `holds-panel.tsx` already interpolates its row id; this one never
+// got it.
+function RevokeForm({
+  tenantId,
+  name,
+  action,
+}: {
+  tenantId: string
+  name: string
+  action: Action
+}) {
   const [state, submit] = useActionState<TenantLockCodeState, FormData>(action, {})
   return (
     <form action={submit} className="flex flex-col gap-2">
       <FormAlerts state={state} />
       <TextField
-        label="Why this door code is being revoked"
+        label={`Why ${name}’s door code is being revoked`}
         name="reason"
         required
-        idPrefix="door-code"
+        idPrefix={`door-code-${tenantId}`}
         error={state.fieldErrors?.reason}
         hint="Recorded on the tenancy. A code that stopped working for no recorded reason is the one somebody rings about at 9pm."
       />
-      <SubmitButton label="Revoke this door code" />
+      <SubmitButton
+        label={
+          <>
+            Revoke this door code<span className="sr-only"> for {name}</span>
+          </>
+        }
+      />
     </form>
   )
 }

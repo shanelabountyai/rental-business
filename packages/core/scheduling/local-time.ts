@@ -191,6 +191,48 @@ export function utcToBusinessDate(value: Date): BusinessDate {
 }
 
 /**
+ * A calendar day in plain language: `1 Sep 2026`.
+ *
+ * ==========================================================================
+ * THE DATE-ONLY TWIN OF `friendlyDate`, AND IT TAKES NO TIMEZONE (R-116).
+ *
+ * `friendlyDate` formats an INSTANT and requires a zone; a `@db.Date` value
+ * must never go through it, because putting a calendar day through a timezone
+ * moves it a day west of UTC (R-042's bug). So every screen holding a due
+ * date, a lease start or a notice deadline had nowhere to go and printed the
+ * ISO string — `Due 2026-09-01` on the tenant pay screen, whose own file
+ * header says plain language governs every word here.
+ *
+ * There is no zone parameter and there must never be one: this value is
+ * already the day everybody involved means, and a zone could only move it.
+ * The parts are read off the string rather than out of a `Date`, so nothing
+ * in here can drift.
+ * ==========================================================================
+ */
+const MONTH_WORDS = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
+]
+
+export function friendlyBusinessDate(date: BusinessDate): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    throw new RangeError(`Expected a YYYY-MM-DD business date, got "${date}"`)
+  }
+  const [year, month, day] = date.split('-')
+  return `${Number(day)} ${MONTH_WORDS[Number(month) - 1]} ${year}`
+}
+
+/**
  * A property-local wall-clock time ("2026-08-05T14:30", as an
  * `<input type="datetime-local">` submits it) as the UTC instant it names.
  *

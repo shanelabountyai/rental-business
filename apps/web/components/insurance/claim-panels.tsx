@@ -204,11 +204,13 @@ export function PositionPanel({
                   <form action={unlinkFormAction}>
                     <input type="hidden" name="claimId" value={claim.id} />
                     <input type="hidden" name="workOrderId" value={job.id} />
+                    {/* Names the job (R-116): one per linked work order, and
+                        the row prints the scope already. */}
                     <button
                       type="submit"
                       className="text-muted-foreground hover:text-foreground min-h-11 text-sm underline underline-offset-2"
                     >
-                      Remove
+                      Remove<span className="sr-only"> {job.scope} from this claim</span>
                     </button>
                   </form>
                 )}

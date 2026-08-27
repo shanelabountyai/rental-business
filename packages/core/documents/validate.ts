@@ -127,6 +127,13 @@ export const DOCUMENT_TYPES = [
   /// later agreement between the same parties about the lease that already
   /// exists, and its text comes from the change itself.
   'LEASE_AMENDMENT',
+  /// R-116 (RISK-08): the condition-as-found photographs of a lease the owner
+  /// INHERITED at acquisition, which is the only baseline that tenancy will
+  /// ever have. Distinct from INSPECTION_PHOTO, which belongs to a checklist
+  /// row somebody walked, and from UNIT_PHOTO, which is the condition-over-
+  /// time library - this is evidence of the state a house was handed over in,
+  /// and the intake panel's own gap check counts it.
+  'CONDITION_BASELINE',
   'OTHER',
 ] as const
 export type DocumentTypeValue = (typeof DOCUMENT_TYPES)[number]

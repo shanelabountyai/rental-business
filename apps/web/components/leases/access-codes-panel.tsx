@@ -54,22 +54,26 @@ export function AccessCodesPanel({
         </p>
       ) : (
         <ul className="flex flex-col gap-2">
-          {codes.map((code) => (
-            <li key={code.id} className="flex items-center justify-between gap-2 text-sm">
-              <span>
-                {code.label ?? ACCESS_CODE_TYPE_LABELS[code.type] ?? code.type}
-              </span>
-              {code.issuedAt ? (
-                <span className="text-muted-foreground">
-                  Issued {code.issuedAt.slice(0, 10)}
-                </span>
-              ) : canIssue && depositCleared ? (
-                <IssueCodeButton action={issueAccessCodeToTenant.bind(null, leaseId, code.id)} />
-              ) : (
-                <span className="text-muted-foreground">Not yet issued</span>
-              )}
-            </li>
-          ))}
+          {codes.map((code) => {
+            const codeLabel = code.label ?? ACCESS_CODE_TYPE_LABELS[code.type] ?? code.type
+            return (
+              <li key={code.id} className="flex items-center justify-between gap-2 text-sm">
+                <span>{codeLabel}</span>
+                {code.issuedAt ? (
+                  <span className="text-muted-foreground">
+                    Issued {code.issuedAt.slice(0, 10)}
+                  </span>
+                ) : canIssue && depositCleared ? (
+                  <IssueCodeButton
+                    codeLabel={codeLabel}
+                    action={issueAccessCodeToTenant.bind(null, leaseId, code.id)}
+                  />
+                ) : (
+                  <span className="text-muted-foreground">Not yet issued</span>
+                )}
+              </li>
+            )
+          })}
         </ul>
       )}
     </section>

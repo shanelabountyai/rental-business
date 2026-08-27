@@ -128,7 +128,7 @@ export function OpenConfidentialCasePanel({
             </div>
           </fieldset>
 
-          <SubmitButton label="Open the case" />
+          <SubmitButton label="Open the confidential case" />
         </form>
       </details>
     </section>

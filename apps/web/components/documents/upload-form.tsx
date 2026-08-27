@@ -14,6 +14,7 @@ const TYPE_LABELS: Record<string, string> = {
   INSURANCE_COI: 'Insurance (COI)',
   W9: 'W-9',
   INSPECTION_REPORT: 'Inspection report',
+  CONDITION_BASELINE: 'Condition as found',
   UNIT_PHOTO: 'Unit photo',
   PROPERTY_PHOTO: 'Property photo',
   SHUTOFF_PHOTO: 'Shutoff photo',

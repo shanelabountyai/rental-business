@@ -1,5 +1,6 @@
 'use client'
 
+import type { ReactNode } from 'react'
 import { useActionState } from 'react'
 import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
 import type { FormState } from '@/lib/tasks/actions.ts'
@@ -13,7 +14,10 @@ export function TaskActionButton({
   label,
 }: {
   action: (state: FormState, formData: FormData) => Promise<FormState>
-  label: string
+  /// `ReactNode`, not `string`, for the same reason `SubmitButton`'s own is
+  /// (R-115): a per-row "Cancel"/"Remove" has to say WHICH row to assistive
+  /// technology without printing the row's name a second time on screen.
+  label: ReactNode
 }) {
   const [state, formAction] = useActionState<FormState, FormData>(action, {})
 

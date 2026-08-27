@@ -2,7 +2,7 @@
 
 import { EFFECT_LABELS, HOLD_DEFINITIONS, HOLD_TYPES, type HoldType } from '@rental/core/holds'
 import { useActionState, useState } from 'react'
-import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
+import { FormAlerts, LiveRegion, SubmitButton } from '@/components/auth-form.tsx'
 import { SelectField, TextField } from '@/components/form/field.tsx'
 import type { HoldFormState } from '@/lib/holds/actions.ts'
 
@@ -63,17 +63,29 @@ function PlaceForm({
       {/* WHAT IT WILL ACTUALLY DO, before it is placed. The effects follow
           from the type rather than being ticked, so the person choosing has
           to be able to see what they are choosing — otherwise the config
-          that makes this safe is also what makes it opaque. */}
-      {type && (
-        <p className="text-muted-foreground text-sm">
-          Switches on: {HOLD_DEFINITIONS[type].effects.map((e) => EFFECT_LABELS[e]).join('; ')}.
-          {HOLD_DEFINITIONS[type].liftIsPrivileged &&
-            ' Lifting it later needs the protected-hold permission and a second factor.'}
-        </p>
-      )}
+          that makes this safe is also what makes it opaque.
 
+          IN A LIVE REGION MOUNTED FROM FIRST PAINT (R-116). The sentence
+          appears when the type is chosen and says which powers are about to
+          be switched off for a tenancy - a screen-reader user picking a type
+          was told nothing at all. The region has to be in the tree BEFORE
+          the text lands in it, which is R-101's rule for every form error. */}
+      <LiveRegion>
+        {type && (
+          <p className="text-muted-foreground text-sm">
+            Switches on: {HOLD_DEFINITIONS[type].effects.map((e) => EFFECT_LABELS[e]).join('; ')}.
+            {HOLD_DEFINITIONS[type].liftIsPrivileged &&
+              ' Lifting it later needs the protected-hold permission and a second factor.'}
+          </p>
+        )}
+      </LiveRegion>
+
+      {/* NOT "Why (required)" - `payment-hold-panel.tsx` has a field by that
+          exact name on this same assembled page (R-116). It now reads like
+          the sibling "Why this is being lifted (required)" below, which is
+          the wording that already told this file's two forms apart. */}
       <TextField
-        label="Why (required)"
+        label="Why this hold is being placed (required)"
         name="reason"
         required
         hint="Recorded on the audit trail, and shown on the banner to whoever opens this tenancy next. A hold nobody can explain is one nobody will trust."

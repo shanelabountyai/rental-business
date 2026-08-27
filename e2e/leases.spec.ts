@@ -153,6 +153,11 @@ test.afterAll(async () => {
   })
   const allLeaseIds = [...new Set([...leaseIds, ...strayLeases.map((l) => l.id)])]
   await prisma.task.deleteMany({ where: { subjectId: { in: allLeaseIds } } })
+  // R-116's condition baseline attaches Documents to the lease, and
+  // `Document.leaseId` defaults to SetNull - which would leave a stray row
+  // pointing at a property this file is about to deactivate. Deleted, not
+  // orphaned: nothing append-only references a Document.
+  await prisma.document.deleteMany({ where: { leaseId: { in: allLeaseIds } } })
   await prisma.guarantor.deleteMany({ where: { leaseId: { in: allLeaseIds } } })
   await prisma.leaseTenant.deleteMany({ where: { leaseId: { in: allLeaseIds } } })
   // Activating a lease opens billing (R-034), so a LeasePayer pins the lease
@@ -257,7 +262,7 @@ test.describe('creating a tenancy', () => {
     await page
       .getByLabel('Add somebody to the lease')
       .selectOption({ label: `Rosa ${seed.tenant.lastName} (${seed.tenant.email})` })
-    await page.getByRole('button', { name: 'Add', exact: true }).click()
+    await page.getByRole('button', { name: 'Add to the lease' }).click()
     await expect(page.getByText(/· primary/)).toBeVisible()
 
     await page.getByRole('button', { name: 'Make this lease active' }).click()
@@ -483,6 +488,40 @@ test.describe('inherited at acquisition (RISK-08)', () => {
     const after = await prisma.lease.findUniqueOrThrow({ where: { id: lease.id } })
     expect(after.depositTransferStatus).toBe('NOT_TRANSFERRED')
     expect(after.depositTransferNote).toContain('settlement statement')
+  })
+
+  // R-116, audit angle 23. The panel said "Upload the photos below" and there
+  // was no below: `CONDITION_BASELINE_DOCUMENT_TYPE` was read by one query,
+  // set by two tests, and written by no route and no action in the product.
+  // What this proves is the whole round trip - the control exists, it takes
+  // more than one file in a press, the rows land on the LEASE, and the gap
+  // the panel is complaining about actually closes.
+  test('attaches the condition baseline, and that closes the gap', async ({ page }) => {
+    const seed = await seedUnit()
+    const lease = await seedLease(seed, { status: 'MONTH_TO_MONTH', origin: 'INHERITED' })
+    const staff = await createStaff()
+    await signIn(page, staff.email)
+
+    await page.goto(`/leases/${lease.id}`)
+    await expect(page.getByText(/3 things outstanding/)).toBeVisible()
+
+    await page.getByLabel('Condition-as-found photographs').setInputFiles([
+      { name: 'kitchen.jpg', mimeType: 'image/jpeg', buffer: Buffer.from([0xff, 0xd8, 0xff]) },
+      { name: 'bathroom.jpg', mimeType: 'image/jpeg', buffer: Buffer.from([0xff, 0xd8, 0xff, 0x00]) },
+    ])
+    await page.getByRole('button', { name: 'Attach these photographs' }).click()
+
+    // Polled on the fact the next assertion depends on, not on a UI signal
+    // that was already true before the press.
+    await expect
+      .poll(() =>
+        prisma.document.count({ where: { leaseId: lease.id, type: 'CONDITION_BASELINE' } }),
+      )
+      .toBe(2)
+
+    await expect(page.getByText(/2 things outstanding/)).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Condition as found' })).toBeVisible()
+    await expect(page.getByRole('link', { name: 'kitchen.jpg' })).toBeVisible()
   })
 
   test('shows no intake panel at all on an ordinary lease', async ({ page }) => {

@@ -41,14 +41,24 @@ export function WaiverPattern({ rows }: { rows: readonly WaiverPatternRow[] }) {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <caption className="sr-only">
-              Fees assessed and waived per tenant, most-forgiven first.
+              Per tenant: how many fees were waived of how many charged, the
+              amount charged, the amount waived, and the share that is.
+              Most-forgiven first.
             </caption>
             <thead>
               <tr className="text-muted-foreground text-left text-xs">
+                {/* NO TWO OF THESE MAY SOUND ALIKE (R-116). They were "Fees
+                    charged" (a COUNT - "2 of 5") beside "Charged" (a SUM -
+                    "$150.00"), and a screen reader repeats the header with
+                    every cell: "Fees charged, 2 of 5" then "Charged,
+                    $150.00". "Charged" was also a substring of "Fees
+                    charged", so neither name identified its own column - on
+                    the one table where misreading which number is which is
+                    the entire point of the table. */}
                 <th scope="col" className="py-1 pr-3 font-medium">Tenant</th>
-                <th scope="col" className="py-1 pr-3 text-right font-medium">Fees charged</th>
-                <th scope="col" className="py-1 pr-3 text-right font-medium">Charged</th>
-                <th scope="col" className="py-1 pr-3 text-right font-medium">Waived</th>
+                <th scope="col" className="py-1 pr-3 text-right font-medium">Fees waived of charged</th>
+                <th scope="col" className="py-1 pr-3 text-right font-medium">Amount charged</th>
+                <th scope="col" className="py-1 pr-3 text-right font-medium">Amount waived</th>
                 <th scope="col" className="py-1 text-right font-medium">Share waived</th>
               </tr>
             </thead>

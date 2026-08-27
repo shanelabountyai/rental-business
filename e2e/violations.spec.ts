@@ -143,7 +143,7 @@ test('THE POINT: a condition case is enforced on a lease term, and the vocabular
   await page
     .getByLabel('What was seen, and where')
     .fill('Rear bedroom window blocked to the sill by stacked boxes; the sash cannot open.')
-  await page.getByRole('button', { name: 'Open the case' }).click()
+  await page.getByRole('button', { name: 'Open the violation case' }).click()
 
   await page.waitForURL(/\/violations\/[a-z0-9]+$/)
   await expect(
@@ -218,7 +218,7 @@ test('legitimizing an occupant is refused against an application with no screeni
   await page
     .getByLabel('What was seen, and where')
     .fill('A second adult answering the door on three visits, with post addressed to them.')
-  await page.getByRole('button', { name: 'Open the case' }).click()
+  await page.getByRole('button', { name: 'Open the violation case' }).click()
   await page.waitForURL(/\/violations\/[a-z0-9]+$/)
 
   await page.getByLabel('How did this end?').selectOption('LEGITIMIZED')
@@ -253,7 +253,7 @@ test('an animal case will not close as an authorized pet while an accommodation 
   await page
     .getByLabel('What was seen, and where')
     .fill('A dog in the rear garden on two visits; the lease permits no animals.')
-  await page.getByRole('button', { name: 'Open the case' }).click()
+  await page.getByRole('button', { name: 'Open the violation case' }).click()
   await page.waitForURL(/\/violations\/[a-z0-9]+$/)
 
   // Now the tenant asks. Undecided — which is exactly the state in which

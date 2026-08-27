@@ -90,11 +90,20 @@ export function inheritedGaps(facts: InheritedFacts): GapDetail[] {
   return gaps.map((gap) => ({ gap, ...DETAILS[gap] }))
 }
 
-/// The Document.type a condition-as-found photo carries. A plain string
-/// because Document.type is deliberately free-form (see its schema
-/// comment), but named once here so the uploader and the gap check cannot
-/// disagree about the spelling.
-export const CONDITION_BASELINE_DOCUMENT_TYPE = 'condition_as_found'
+/// The Document.type a condition-as-found photo carries.
+///
+/// IT USED TO BE `'condition_as_found'`, AND THAT VALUE COULD NEVER HAVE BEEN
+/// WRITTEN (R-116). The comment here said Document.type is "deliberately
+/// free-form" - the SCHEMA's column is, but `validateDocument` checks every
+/// upload against the closed `DOCUMENT_TYPES` vocabulary, so a lowercase
+/// value outside that list would have been refused by the only code path that
+/// creates a Document. It never surfaced because the write path did not
+/// exist: the type was read in one query, set in two tests, and written by no
+/// route and no action anywhere in the app, while the intake panel told the
+/// owner to "upload the photos below". A member of the vocabulary now, with
+/// its own retention rule, and R-116 built the uploader the old comment
+/// already assumed.
+export const CONDITION_BASELINE_DOCUMENT_TYPE = 'CONDITION_BASELINE'
 
 export const DEPOSIT_TRANSFER_STATUSES = [
   'NOT_APPLICABLE',

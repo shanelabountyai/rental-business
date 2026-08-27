@@ -193,7 +193,7 @@ test('the re-key kills the door codes and hands the survivor a new one (R-091c)'
   await page.getByText('Open a confidential case').click()
   await page.getByLabel('What is going on').fill('Locks need changing today.')
   await page.getByLabel('Name of the restricted party').fill(`Sam Ex-${unique}`)
-  await page.getByRole('button', { name: 'Open the case' }).click()
+  await page.getByRole('button', { name: 'Open the confidential case' }).click()
   await page.waitForURL(/\/confidential\/[a-z0-9]+$/)
   await page.getByLabel('Are they on this tenancy?').selectOption(coTenant!.id)
   await page.getByRole('button', { name: 'Save this case' }).click()
@@ -267,7 +267,7 @@ test('opens a case, orders the re-key, and retires the codes on file', async ({ 
   await page.getByLabel('Name of the restricted party').fill(`Sam Ex-${unique}`)
   await page.getByLabel('What you were shown').selectOption('PROTECTIVE_ORDER')
   await page.getByLabel('Date you were shown it').fill('2026-08-20')
-  await page.getByRole('button', { name: 'Open the case' }).click()
+  await page.getByRole('button', { name: 'Open the confidential case' }).click()
 
   await page.waitForURL(/\/confidential\/[a-z0-9]+$/)
   // `toHaveValue` on the field, NOT `getByText` on the summary. React
@@ -346,7 +346,7 @@ test('a manager cannot see the case anywhere, but can see the job it created', a
   await page.getByText('Open a confidential case').click()
   await page.getByLabel('What is going on').fill('Restricted. Nobody else should read this.')
   await page.getByLabel('Name of the restricted party').fill(`Sam Ex-${unique}`)
-  await page.getByRole('button', { name: 'Open the case' }).click()
+  await page.getByRole('button', { name: 'Open the confidential case' }).click()
   await page.waitForURL(/\/confidential\/[a-z0-9]+$/)
   const caseUrl = page.url()
   await page
@@ -411,7 +411,7 @@ test('an owner outside the property gets a 404 on the case, never a 403', async 
   await page.goto(`/leases/${lease.id}`)
   await page.getByText('Open a confidential case').click()
   await page.getByLabel('What is going on').fill(`Scoping check ${unique}.`)
-  await page.getByRole('button', { name: 'Open the case' }).click()
+  await page.getByRole('button', { name: 'Open the confidential case' }).click()
   await page.waitForURL(/\/confidential\/[a-z0-9]+$/)
   const caseId = page.url().split('/').pop()!
 
@@ -461,7 +461,7 @@ test('records the statutory early termination, and the tenancy shows only a tena
     .getByLabel('What is going on')
     .fill('Tenant asked what their options are for leaving before the term ends.')
   await page.getByLabel('Name of the restricted party').fill(`Sam Ex-${unique}`)
-  await page.getByRole('button', { name: 'Open the case' }).click()
+  await page.getByRole('button', { name: 'Open the confidential case' }).click()
   await page.waitForURL(/\/confidential\/[a-z0-9]+$/)
   const caseUrl = page.url()
 
@@ -557,7 +557,7 @@ test('removes the restricted party without their signature, and the amendment sa
     .getByLabel('What is going on')
     .fill('The other occupant needs to come off the tenancy and will not be signing.')
   await page.getByLabel('Name of the restricted party').fill(`Sam Ex-${unique}`)
-  await page.getByRole('button', { name: 'Open the case' }).click()
+  await page.getByRole('button', { name: 'Open the confidential case' }).click()
   await page.waitForURL(/\/confidential\/[a-z0-9]+$/)
 
   const panel = page.getByRole('region', { name: 'Taking the restricted party off the tenancy' })

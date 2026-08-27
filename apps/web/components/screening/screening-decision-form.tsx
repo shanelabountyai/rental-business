@@ -19,10 +19,16 @@ const DECISION_OPTIONS = [
 export function ScreeningDecisionForm({
   action,
   applicantId,
+  applicantName,
   outOfOrder,
 }: {
   action: (state: DecisionFormState, formData: FormData) => Promise<DecisionFormState>
   applicantId: string
+  /// One of these renders per applicant on the prospect page, so "Decision",
+  /// "Individualized-assessment notes" and "Record decision" were the same
+  /// three names two and three times over (R-116). The legend names the group
+  /// and the button names the person.
+  applicantName: string
   /// True when an earlier-completed application for this listing has no
   /// decision yet - shows the deviation-reason field up front instead of
   /// making staff guess why the form rejected a first attempt.
@@ -31,32 +37,41 @@ export function ScreeningDecisionForm({
   const [state, formAction] = useActionState<DecisionFormState, FormData>(action, {})
 
   return (
-    <form action={formAction} className="flex flex-col gap-2 rounded border p-3">
-      <input type="hidden" name="applicantId" value={applicantId} />
-      <FormAlerts state={state} />
-      <SelectField
-        label="Decision"
-        name="decision"
-        idPrefix={`screen-${applicantId}`}
-        required
-        options={DECISION_OPTIONS}
-      />
-      <TextareaField
-        label="Individualized-assessment notes"
-        name="notes"
-        idPrefix={`screen-${applicantId}`}
-        hint="Required for a decline or a conditional approval - why, considering the nature and age of anything found."
-      />
-      {outOfOrder && (
-        <TextareaField
-          label="Why decide this one out of order"
-          name="deviationReason"
+    <form action={formAction} className="rounded border p-3">
+      <fieldset className="flex flex-col gap-2">
+        <legend className="sr-only">Screening decision for {applicantName}</legend>
+        <input type="hidden" name="applicantId" value={applicantId} />
+        <FormAlerts state={state} />
+        <SelectField
+          label="Decision"
+          name="decision"
           idPrefix={`screen-${applicantId}`}
-          hint="Another application for this listing completed earlier and has not been decided yet."
-          rows={2}
+          required
+          options={DECISION_OPTIONS}
         />
-      )}
-      <SubmitButton label="Record decision" />
+        <TextareaField
+          label="Individualized-assessment notes"
+          name="notes"
+          idPrefix={`screen-${applicantId}`}
+          hint="Required for a decline or a conditional approval - why, considering the nature and age of anything found."
+        />
+        {outOfOrder && (
+          <TextareaField
+            label="Why decide this one out of order"
+            name="deviationReason"
+            idPrefix={`screen-${applicantId}`}
+            hint="Another application for this listing completed earlier and has not been decided yet."
+            rows={2}
+          />
+        )}
+        <SubmitButton
+          label={
+            <>
+              Record decision<span className="sr-only"> for {applicantName}</span>
+            </>
+          }
+        />
+      </fieldset>
     </form>
   )
 }

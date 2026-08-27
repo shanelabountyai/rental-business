@@ -142,7 +142,11 @@ test('a PM itemizes deductions, sees the unsupported flag and depreciation guida
   await page.getByLabel('Description').fill('Missing blinds')
   await page.getByLabel('Amount ($)').fill('60')
   await page.getByRole('button', { name: 'Add deduction' }).click()
-  await expect(page.getByText('Missing blinds')).toBeVisible()
+  // `exact`, because R-116 put the deduction's description into the Remove
+  // button's accessible name so one row's control can be told from another's
+  // - and `sr-only` text is still text in the DOM, so a substring match now
+  // finds two (R-115 learned this the same way).
+  await expect(page.getByText('Missing blinds', { exact: true })).toBeVisible()
   await expect(page.getByText(/Unsupported/)).toBeVisible()
 
   // A deduction old enough to trigger the depreciation warning.
@@ -151,7 +155,7 @@ test('a PM itemizes deductions, sees the unsupported flag and depreciation guida
   await page.getByLabel('Estimated age (years, optional)').fill('9')
   await page.getByLabel('Useful life (years, optional)').fill('7')
   await page.getByRole('button', { name: 'Add deduction' }).click()
-  await expect(page.getByText('Carpet replacement')).toBeVisible()
+  await expect(page.getByText('Carpet replacement', { exact: true })).toBeVisible()
   await expect(page.getByText(/Age-based guidance suggests/)).toBeVisible()
 
   // Totals: $2000 held, $960 deducted, $1040 refund due.
@@ -162,6 +166,15 @@ test('a PM itemizes deductions, sees the unsupported flag and depreciation guida
   const a11y = await axeScan(page)
   expect(a11y.violations).toEqual([])
 
+  // R-116: the press that mints the letter is gated on an acknowledgement,
+  // because the sentence right above it says it cannot be undone.
+  await page.getByRole('button', { name: 'Finalize disposition' }).click()
+  // The browser refuses the submit outright and focuses the box - so the
+  // press costs nothing and nothing was written. (Asserting the URL here
+  // would assert something that was already true before the click.)
+  const acknowledge = page.getByLabel('I understand the letter is sent and cannot be undone')
+  await expect(acknowledge).toBeFocused()
+  await acknowledge.check()
   await page.getByRole('button', { name: 'Finalize disposition' }).click()
   await page.waitForURL(/\/notices\/[a-z0-9]+$/)
 

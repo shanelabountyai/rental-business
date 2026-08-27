@@ -359,7 +359,7 @@ test('Golden Path 4: what a stranger is allowed to cause', async ({ page, browse
   // ==================================================================
   await page.goto(`/leases/${lease.id}`)
   const doorPanel = page.getByRole('region', { name: 'Door codes' })
-  await doorPanel.getByRole('button', { name: 'Give them a door code' }).click()
+  await doorPanel.getByRole('button', { name: 'Give a door code' }).click()
   await expect(doorPanel.getByText('Shown once')).toBeVisible()
 
   const doorCode = await prisma.tenantLockCode.findFirstOrThrow({ where: { leaseId: lease.id } })

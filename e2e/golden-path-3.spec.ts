@@ -191,7 +191,7 @@ test('Golden Path 3: what the other surfaces show', async ({ page, browser }) =>
   await page.getByLabel('Name of the restricted party').fill(`Sam Ex-${unique}`)
   await page.getByLabel('What you were shown').selectOption('PROTECTIVE_ORDER')
   await page.getByLabel('Date you were shown it').fill('2026-08-20')
-  await page.getByRole('button', { name: 'Open the case' }).click()
+  await page.getByRole('button', { name: 'Open the confidential case' }).click()
   await page.waitForURL(/\/confidential\/[a-z0-9]+$/)
   const caseUrl = page.url()
 

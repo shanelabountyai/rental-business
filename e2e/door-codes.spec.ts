@@ -137,7 +137,7 @@ test('a door code is given once, and the tenancy ending takes it back', async ({
 
   const panel = page.getByRole('region', { name: 'Door codes' })
   await expect(panel.getByText('stop working on their own')).toBeVisible()
-  await panel.getByRole('button', { name: 'Give them a door code' }).click()
+  await panel.getByRole('button', { name: 'Give a door code' }).click()
 
   // Shown once, in this component's own local state - the action deliberately
   // does not revalidate, or the form would be unmounted by its own response
@@ -187,5 +187,5 @@ test('a unit with no smart lock says so instead of hiding the panel', async ({ p
   // twice: handing over a code changes no lock.
   await expect(panel.getByText('no smart lock on file')).toBeVisible()
   await expect(panel.getByText('changes no lock')).toBeVisible()
-  await expect(panel.getByRole('button', { name: 'Give them a door code' })).toHaveCount(0)
+  await expect(panel.getByRole('button', { name: 'Give a door code' })).toHaveCount(0)
 })

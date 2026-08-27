@@ -148,7 +148,14 @@ export default async function ProspectDetailPage({
                   {showing.status === 'CANCELED' && ' (cancelled)'}
                 </span>
                 {showing.status === 'BOOKED' && (
-                  <TaskActionButton action={cancelShowing.bind(null, showing.id)} label="Cancel" />
+                  <TaskActionButton
+                    action={cancelShowing.bind(null, showing.id)}
+                    label={
+                      <>
+                        Cancel<span className="sr-only"> the {showing.unit.name} showing</span>
+                      </>
+                    }
+                  />
                 )}
               </li>
             ))}
@@ -272,6 +279,7 @@ export default async function ProspectDetailPage({
                     <ScreeningDecisionForm
                       action={recordScreeningDecision}
                       applicantId={a.applicantId}
+                      applicantName={`${a.firstName} ${a.lastName}`}
                       outOfOrder={screening.outOfOrder}
                     />
                   )

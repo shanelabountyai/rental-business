@@ -47,6 +47,32 @@ async function createStaff() {
   return staff
 }
 
+/**
+ * A date `days` from today, as the `<input type="date">` value.
+ *
+ * ==========================================================================
+ * DERIVED, NOT PINNED (R-116). The two notice tests below filled the literals
+ * '2026-08-17' and '2026-09-20' while `habitabilityDaysAgo` seeds the
+ * complaint RELATIVE TO NOW - so as the calendar moved, the notice date
+ * walked backwards towards the complaint, and on 2026-08-27 the two landed on
+ * the same day. The complaint was no longer BEFORE the notice, the retaliation
+ * guard correctly did not fire, and the test read as a regression in code
+ * nobody had touched.
+ *
+ * The tenant-side test next door had rotted the other way and would never have
+ * said so: its assertion is that NO warning appears, which had quietly become
+ * true for the wrong reason.
+ *
+ * A relative seed compared against an absolute literal is a fixture with an
+ * expiry date on it. Both halves move together now.
+ * ==========================================================================
+ */
+function isoDaysFromToday(days: number): string {
+  const date = new Date()
+  date.setUTCDate(date.getUTCDate() + days)
+  return date.toISOString().slice(0, 10)
+}
+
 async function seedActiveLease(options: { habitabilityDaysAgo?: number } = {}) {
   const unique = randomUUID().slice(0, 8)
   const entity = await prisma.legalEntity.create({
@@ -210,10 +236,10 @@ test('the landlord giving notice inside the window is blocked and requires a rea
 
   await page.getByText('Record notice to end the tenancy').click()
   await page.getByLabel('Who gave notice').selectOption('LANDLORD')
-  await page.getByLabel('Date notice was given').fill('2026-08-17')
+  await page.getByLabel('Date notice was given').fill(isoDaysFromToday(0))
   // 34 days out - clear of TX's 30-day noticeToVacateDays (R-066), so only
   // the retaliation guard is under test here.
-  await page.getByLabel('Date the tenancy actually ends').fill('2026-09-20')
+  await page.getByLabel('Date the tenancy actually ends').fill(isoDaysFromToday(34))
   await page.getByRole('button', { name: 'Record notice' }).click()
 
   // NOT a pinned day count: `givenOn` is a fixed UTC-midnight calendar date
@@ -249,8 +275,8 @@ test('the tenant giving their own notice is never a retaliation claim', async ({
 
   await page.getByText('Record notice to end the tenancy').click()
   await page.getByLabel('Who gave notice').selectOption('TENANT')
-  await page.getByLabel('Date notice was given').fill('2026-08-17')
-  await page.getByLabel('Date the tenancy actually ends').fill('2026-09-20')
+  await page.getByLabel('Date notice was given').fill(isoDaysFromToday(0))
+  await page.getByLabel('Date the tenancy actually ends').fill(isoDaysFromToday(34))
   await page.getByRole('button', { name: 'Record notice' }).click()
 
   // A successful notice swaps the whole form for the "still running" summary

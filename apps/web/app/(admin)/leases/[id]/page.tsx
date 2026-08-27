@@ -22,6 +22,7 @@ import { BillingPanel } from '@/components/leases/billing-panel.tsx'
 import { PaymentHoldPanel } from '@/components/leases/payment-hold-panel.tsx'
 import { EsignPanel } from '@/components/leases/esign-panel.tsx'
 import { IntakePanel } from '@/components/leases/intake-panel.tsx'
+import { uploadConditionBaseline } from '@/lib/leases/condition-baseline-actions.ts'
 import { LedgerPanel } from '@/components/leases/ledger-panel.tsx'
 import { ExportStatementForm } from '@/components/ledger/export-statement-form.tsx'
 import { LeaseForm } from '@/components/leases/lease-form.tsx'
@@ -444,6 +445,7 @@ export default async function LeaseDetailPage({
           gaps={gaps}
           canWrite={canWrite}
           resolveAction={resolveIntakeItem.bind(null, lease.id)}
+          baselineAction={uploadConditionBaseline.bind(null, lease.id)}
         />
       )}
 

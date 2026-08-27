@@ -117,8 +117,15 @@ export function RecordInvoiceForm({
         <FieldError id="field-invoice-splits-error" message={errors.splits} />
 
         {Array.from({ length: lineCount }, (_, index) => (
-          <div key={index} className="flex flex-col gap-3 rounded-md border p-3">
-            <h3 className="text-sm font-medium">Line {index + 1}</h3>
+          // A FIELDSET, NOT A DIV WITH AN <h3> (R-116). Five field names -
+          // "Property", "Category", "Amount", "What this line was for",
+          // "Work order ID" - repeat once per line, and a heading inside a
+          // plain div conveys nothing programmatically about which line a
+          // field belongs to. Splitting a $900 bill onto the wrong property
+          // is a Schedule E error nobody notices until January. Nested
+          // fieldsets are valid; the outer "How it splits" one exists already.
+          <fieldset key={index} className="flex flex-col gap-3 rounded-md border p-3">
+            <legend className="text-sm font-medium">Line {index + 1}</legend>
             <SelectField
               label="Property"
               name={`splits.${index}.propertyId`}
@@ -159,7 +166,7 @@ export function RecordInvoiceForm({
               error={errors[`splits.${index}.workOrderId`]}
               hint="Optional. Linking the job stops its own invoice amount being deducted as well."
             />
-          </div>
+          </fieldset>
         ))}
 
         <button

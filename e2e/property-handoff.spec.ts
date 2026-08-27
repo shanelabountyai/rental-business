@@ -297,7 +297,7 @@ test('a confidential case’s re-key job is in the vendor history, because it ha
   await page.getByText('Open a confidential case').click()
   await page.getByLabel('What is going on').fill('Locks need changing today.')
   await page.getByLabel('Name of the restricted party').fill(`Sam Ex-${seed.unique}`)
-  await page.getByRole('button', { name: 'Open the case' }).click()
+  await page.getByRole('button', { name: 'Open the confidential case' }).click()
   await page.waitForURL(/\/confidential\/[a-z0-9]+$/)
   await page
     .getByLabel('Who the locksmith should ring if anybody else asks')

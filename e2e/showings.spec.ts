@@ -222,8 +222,13 @@ test('a prospect self-books a vacant-unit showing, raising an escort task, and s
 
   await signIn(page, staff.email)
   await page.goto(`/prospects/${prospect.id}`)
-  await expect(page.getByText(new RegExp(unit.name))).toBeVisible()
-  await page.getByRole('button', { name: 'Cancel' }).click()
+  // R-116 put the unit name into the Cancel button's accessible name, so one
+  // showing's control can be told from another's - and `sr-only` text is
+  // still text in the DOM, so an unscoped name match now finds the row AND
+  // the button. Anchored to the row's own wording.
+  const showings = page.getByRole('region', { name: 'Showing' })
+  await expect(showings.getByText(new RegExp(`^${unit.name} — `))).toBeVisible()
+  await showings.getByRole('button', { name: 'Cancel' }).click()
 
   await expect
     .poll(async () => (await prisma.showing.findUniqueOrThrow({ where: { id: showing.id } })).status)

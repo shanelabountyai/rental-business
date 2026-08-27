@@ -1,6 +1,6 @@
 'use client'
 
-import { useActionState, useState } from 'react'
+import { useActionState } from 'react'
 import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
 import { TextField } from '@/components/form/field.tsx'
 import type { BillingFormState } from '@/lib/billing/actions.ts'
@@ -40,11 +40,6 @@ function HoldForm({
   action: (state: BillingFormState, formData: FormData) => Promise<BillingFormState>
 }) {
   const [state, formAction] = useActionState<BillingFormState, FormData>(action, {})
-  const [blockOnline, setBlockOnline] = useState(payer.blockOnline)
-  const [blockPartial, setBlockPartial] = useState(payer.blockPartial)
-  const [certifiedFundsOnly, setCertifiedFundsOnly] = useState(payer.certifiedFundsOnly)
-
-  const held = blockOnline || blockPartial || certifiedFundsOnly
 
   return (
     <form action={formAction} className="flex flex-col gap-3 py-3">
@@ -70,8 +65,7 @@ function HoldForm({
             type="checkbox"
             name="blockOnline"
             className="mt-1 size-5"
-            checked={blockOnline}
-            onChange={(event) => setBlockOnline(event.target.checked)}
+            defaultChecked={payer.blockOnline}
           />
           <span>
             <span className="font-medium">Block online payments</span>
@@ -88,8 +82,7 @@ function HoldForm({
             type="checkbox"
             name="blockPartial"
             className="mt-1 size-5"
-            checked={blockPartial}
-            onChange={(event) => setBlockPartial(event.target.checked)}
+            defaultChecked={payer.blockPartial}
           />
           <span>
             <span className="font-medium">Block part payments</span>
@@ -108,8 +101,7 @@ function HoldForm({
             type="checkbox"
             name="certifiedFundsOnly"
             className="mt-1 size-5"
-            checked={certifiedFundsOnly}
-            onChange={(event) => setCertifiedFundsOnly(event.target.checked)}
+            defaultChecked={payer.certifiedFundsOnly}
           />
           <span>
             <span className="font-medium">Certified funds only</span>
@@ -120,20 +112,42 @@ function HoldForm({
             </span>
           </span>
         </label>
+
+        {/* INSIDE THE FIELDSET, so the legend names these too (R-116). It
+            used to close two elements above, which left the reason field and
+            the submit outside the only thing distinguishing one payer's row
+            from another's: on a two-payer tenancy every row offered a field
+            called "Why" and a button that sounded identical, and pressing one
+            stops somebody's rent. */}
+        {/* `minLength` matches the SERVER's own floor of ten characters
+            (`applyPaymentHold` refuses anything shorter). It is here because
+            the three checkboxes above are uncontrolled now: React 19 resets an
+            uncontrolled form on every action dispatch, so a server-side
+            refusal would silently untick everything the operator had just
+            set. Refusing in the browser makes that refusal unreachable from
+            this form. The server check stays - it is the gate. */}
+        <TextField
+          label="Why this is changing (required)"
+          name="reason"
+          required
+          minLength={10}
+          defaultValue={payer.reason ?? ''}
+          hint="Recorded on the audit trail. This is what an eviction is argued from, and lifting a hold needs a reason as much as placing one does."
+          idPrefix={`hold-${payer.id}`}
+        />
+
+        <FormAlerts state={state} />
+
+        {/* NEITHER THE FIELD NOR THE BUTTON RENAMES ITSELF ANY MORE (R-116).
+            Ticking a box turned "Why this is changing (required)" into "Why
+            (required)" and "Lift all controls" into "Apply these controls",
+            announcing nothing - the control somebody was sitting on changed
+            identity underneath them. One stable name each says the same thing
+            in both directions, and the three checkboxes go back to being
+            uncontrolled, which is also what makes them work before this page
+            has hydrated. */}
+        <SubmitButton label="Save these payment controls" />
       </fieldset>
-
-      <TextField
-        label={held ? 'Why (required)' : 'Why this is changing (required)'}
-        name="reason"
-        required
-        defaultValue={payer.reason ?? ''}
-        hint="Recorded on the audit trail. This is what an eviction is argued from, and lifting a hold needs a reason as much as placing one does."
-        idPrefix={`hold-${payer.id}`}
-      />
-
-      <FormAlerts state={state} />
-
-      <SubmitButton label={held ? 'Apply these controls' : 'Lift all controls'} />
     </form>
   )
 }

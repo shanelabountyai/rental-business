@@ -161,6 +161,21 @@ test.describe('waiving a fee', () => {
     await page.goto(`/leases/${lease.id}`)
 
     await page.getByText(/^Waive this late fee of /).click()
+
+    // THE BROWSER REFUSES FIRST SINCE R-116. The reason field was `required`
+    // on the server and marked required nowhere - the only hint was a
+    // placeholder, which disappears on focus, so the way to find out was to
+    // be refused. It is a `TextField` now, which marks it.
+    await page.getByRole('button', { name: /^Waive \$/ }).click()
+    await expect(page.getByLabel('Why is this being waived?')).toBeFocused()
+
+    // AND THE SERVER IS STILL THE GATE. `required` is a convenience - it
+    // stops the refusal from costing whoever hits it what they had typed -
+    // so the check that actually protects the fair-housing record is proved
+    // by taking the attribute off and submitting anyway.
+    await page
+      .getByLabel('Why is this being waived?')
+      .evaluate((el) => el.removeAttribute('required'))
     await page.getByRole('button', { name: /^Waive \$/ }).click()
 
     await expect(page.getByText('Say why this is being waived')).toBeVisible()
