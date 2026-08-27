@@ -1,0 +1,177 @@
+# Demo script
+
+A driveable walkthrough of the product, one act per persona, against the local
+`rental_demo` database. Written 2026-08-27 (R-122).
+
+`DEMO-LOGINS.md` is the reference for how accounts and roles work and why.
+**This file is the running order** — what to open, in what order, and what to
+point at when you get there.
+
+---
+
+## 0. Bring it up (about two minutes)
+
+```bash
+npm run db:seed:demo-access      # staff passwords + fresh tenant/vendor links
+npm run dev:demo                 # http://localhost:3100
+```
+
+If the database is empty or you want a clean slate first, run the five setup
+commands in `DEMO-LOGINS.md` §1, then the two above.
+
+`db:seed:demo-access` prints everything you need and is **safe to re-run** —
+it resets the passwords and mints fresh links, which is what you want five
+minutes before a demo. It **refuses to run against any database but the local
+`rental_demo`**, checked on `DATABASE_URL` rather than `NODE_ENV`, because it
+writes known passwords.
+
+### The accounts it makes
+
+Sign in at `http://localhost:3100/login`. **Password for all five:
+`demo-rental-2026`.**
+
+| Email | Role | Scope | What it is for |
+|---|---|---|---|
+| `owner@demo.test` | owner | all properties | The full product. Dana Reyes, the owner-operator. |
+| `manager@demo.test` | manager | all properties | Runs the portfolio; **cannot** see Confidential or change access. |
+| `tech@demo.test` | maintenance_tech | all properties | Jobs and inspections only. No money, no leases. |
+| `partner@demo.test` | read_only | all properties | The bookkeeper or investor view. Sees, writes nothing. |
+| `scoped@demo.test` | manager | **Riverside Court Duplex only** | ROLE-04. See the caveat in Act 5. |
+
+**Tenants have no password and that is the product working correctly.** The
+only tenant provider wired in `auth.ts` is `tenant-magic-link`; the
+`TenantCredential.passwordHash` column is schema-only today. The script prints
+a single-use magic link per tenant — paste one into the address bar. They are
+short-lived, so re-run the script if a link has gone stale mid-demo.
+
+**Vendors never get an account at all, ever (D-6).** The script prints one
+signed, expiring, single-work-order link. That *is* the vendor experience.
+
+Two-factor is off on all five accounts deliberately, so nothing asks for a
+code from an authenticator nobody in the room is holding. To demo MFA on
+purpose, `DEMO-LOGINS.md` → *Walking `/login/mfa` without a phone*.
+
+---
+
+## Act 1 — the owner opens the business (`owner@demo.test`)
+
+**`/dashboard`.** Open on the numbers, because this is the screen that answers
+"how is the portfolio doing" in one look.
+
+- **Collected vs billed** for the current calendar month, and **aged
+  delinquency** beside it. Point out that these reconcile against the rent
+  roll one click away — that was a real defect found on a demo walk (R-117)
+  and fixed, and it is the kind of thing only a walk catches.
+- **Open tickets**, flagged against the emergency/urgent 48-hour mark.
+- **Leases expiring ≤90 days**, renewal rate, pending approvals.
+
+**`/properties`.** Six houses across **two LLCs** — Bluebonnet Holdings and
+Sunshine Coast Holdings — in Texas. Open **Riverside Court Duplex**: a duplex
+with two units, so it shows the multi-unit case without needing an apartment
+building.
+
+On a property page, the things worth naming:
+- **The filing cabinet** — mortgages with ARM-adjustment and balloon alerts,
+  insurance renewals, warranties, capital improvements. Every date here reads
+  as `2 May 2026`, not `2026-05-02`, and a calendar day never passes through a
+  timezone (R-121).
+- **Maintenance spend** read straight off the work orders. There is no
+  second store of the same money.
+- **Claims** sit below the filing cabinet on purpose: a claim is opened
+  against a policy that lives up there.
+
+**`/money`.** Stripe is the system of record; `LedgerEntry` is an append-only
+projection built from webhooks (D-11). Corrections are reversing entries —
+there is no edit and no delete, enforced by a database trigger rather than by
+application code.
+
+**`/confidential`.** Sign out and back in as `manager@demo.test` to show this
+link is simply **not in their nav** — filtered server-side, so the markup is
+never sent. That is the RBAC point made in one move.
+
+---
+
+## Act 2 — a tenant reports a leak (a tenant magic link)
+
+Paste **Maria Alvarez's** link. She lands on `/portal` — "Hello, Maria".
+
+- **`/portal/maintenance`** — the seven-step wizard. Worth pointing at because
+  it works **before hydration**: it is a real `<form action>`, not an
+  `onClick`, so it functions on the first paint on a bad phone connection
+  (R-112 fixed the opposite).
+- **`/portal/pay`** — what is owed and why, in plain language, with the due
+  date as a calendar day.
+- **`/portal/notices`** — anything served on them, with proof of delivery.
+
+Use **Derrick Holt's** link for the delinquency story instead: he owes exactly
+this month's rent. Point out he reads as **1–5 days late, still within grace**
+— he used to read *"Over 30 days"* because the system aged him from a move-in
+proration he had paid on time in 2025. That defect also gated who could be
+chased, so a tenant one day late was chaseable on day one whatever the statute
+said (R-118, D-151).
+
+---
+
+## Act 3 — the vendor gets a text (the vendor link)
+
+Paste the vendor link. It opens **one job** — "Quarterly HVAC filter
+replacement" for Lone Star Heating & Air.
+
+- **No account, no password, no sign-up.** The link is signed, expiring, and
+  scoped to that one work order.
+- Its lifetime tracks **the job's priority**, not a fixed number — a routine
+  job booked a week out does not get an emergency's fuse.
+- Reassigning the job or resending the link **kills the old one** in the same
+  transaction, so "resend" is also "revoke the one I texted to the wrong
+  number".
+- The entry-notice line computes in the **property's** timezone, not the
+  server's.
+
+---
+
+## Act 4 — the narrow roles (`tech@demo.test`, `partner@demo.test`)
+
+Sign in as **`tech@demo.test`**. The nav is visibly shorter: Properties,
+Maintenance, Work orders, Tasks, Messages, Inspections, Reports. **No Leases,
+no Money, no Notices.** The tech is the "phone in one hand in a driveway at
+3am" reader, and R-115 was a whole item spent on that surface.
+
+Sign in as **`partner@demo.test`** — the read-only bookkeeper or investor.
+Same reach as a manager, no write controls anywhere.
+
+---
+
+## Act 5 — the property-scoped manager (`scoped@demo.test`)
+
+Riley Chen manages **Riverside Court Duplex and nothing else**. This is
+ROLE-04, and it is the most interesting thing the permission model does.
+
+> **Caveat, read before demoing this one.** Riley's **left nav renders empty**.
+> Every page works and is correctly scoped — navigate by URL and it is a good
+> demo — but the nav filter asks `can(actor, permission)` with no resource,
+> and a property-scoped assignment can never satisfy that. Found 2026-08-27
+> while building this script; see the open item in `06-backlog.md`.
+
+Type the URLs directly:
+
+- **`/dashboard`** — *"In scope right now: 1 property."* Every tile is that
+  one property's numbers.
+- **`/properties`** — *"1 property in your scope."* Riverside Court Duplex
+  only. The other five are not hidden in the markup; they were never queried.
+- **`/leases`**, **`/money`**, **`/workorders`** — all scoped the same way.
+
+Then say the part that matters: a record outside your scope answers **404, not
+403** (ROLE-01), deliberately, so "forbidden" cannot be used to confirm that a
+record exists.
+
+---
+
+## If something looks wrong
+
+- **Landed on `:3001`?** Something else holds `:3100`. `lsof -ti :3100`.
+- **A tenant link says expired?** Re-run `npm run db:seed:demo-access`.
+- **A sign-in hangs after "Sign in"?** Staff login is rate-limited to ten
+  attempts per IP per five minutes (R-003). Wait it out.
+- **The demo database drifts** — `--reset` retires rather than deletes,
+  because append-only tables reference those rows, so retired properties and
+  entities accumulate. Harmless; they are filtered out of every screen.

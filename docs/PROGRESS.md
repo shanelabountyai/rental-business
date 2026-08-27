@@ -5024,3 +5024,29 @@ Threading the zone cost almost nothing, because it was already there and unused:
 - **ISO dates outside the seven components R-119 named.** `prospects/[id]`, `tasks/[id]`, `jurisdiction`, `workorders/[id]` and `reports/maintenance` still print `toISOString().slice(0, 10)`. All are the same defect and none was in this item's scope; the pattern to copy is in the five files above.
 - **The demo owner's MFA is still not enrolled** — this item made it walkable and did not walk it. The next demo walk (D-28) is what closes that.
 - **`@playwright/test`'s misplacement is still as-is**, now with a check that explains why it is safe rather than a comment claiming it.
+
+---
+
+## R-122: a demo anybody can drive, with credentials that exist
+**Commit:** R122SHA  ·  **Date:** 2026-08-27
+
+**Asked for directly** — whether the product is in a state to demo, and a script with logins. It was, except that no logins existed: `db:create-owner` mints a single-use setup link and deliberately never prints a password, and the demo database held exactly one staff account whose password was set by hand during R-117's walk.
+
+### What it built
+
+`packages/db/prisma/seed-demo-access.mts` (`npm run db:seed:demo-access`) seeds five staff accounts — owner, manager, maintenance_tech, read_only, and the **property-scoped manager `db:create-owner`'s own header says it cannot make** — at one documented password, and prints tenant magic links and a vendor work-order link.
+
+`docs/DEMO-SCRIPT.md` is the running order: setup, then five acts, one per persona, naming what to open and what to point at.
+
+### What it decided
+
+- **Known demo passwords are allowed here, and the guard is what makes that true.** The global convention permits them "when the seed that uses them refuses to run in production, and the file should say so". It refuses on `DATABASE_URL` — local host *and* `rental_demo` — rather than on `NODE_ENV`, which is unset in half the ways this could be run. Verified by pointing it at `rental_test`: it exits 1 and prints why.
+- **Tenants and vendors get links, not passwords, and that is not a gap.** `auth.ts` wires one tenant provider, `tenant-magic-link`; `TenantCredential.passwordHash` is schema-only and no password provider exists. A vendor never has an account at all (D-6). Giving either a password would have meant building a login that does not exist — a product change wearing a demo script's clothes. The script mints links the way the sign-in action and `issueVendorLink` do, including revoke-then-issue for the vendor link so a re-run does not widen the set of live credentials.
+- **Re-runnable, and it resets rather than preserves.** Passwords are reset, MFA is cleared, and assignments are revoked-then-regranted on every run. A demo script's real failure mode is being run twice five minutes beforehand, and an account somebody half-changed mid-demo is worse than one recreated.
+- **MFA is off on the demo accounts on purpose.** A demo account demanding a code from an authenticator nobody in the room holds is a locked door. R-121's recipe covers enrolling one deliberately.
+
+### What it left behind
+
+- **R-123: a scoped staff member's left nav renders empty.** Found by driving this script. Nav-only — all eight top-level pages return 200 and scope correctly — but it needs an owner decision before it can be fixed, because the honest fix touches what a property-scoped manager may reach. Written up in the backlog row; `DEMO-SCRIPT.md`'s Act 5 carries the caveat so a demo does not walk into it.
+- **The demo database still accumulates retired properties and entities** on every `--reset` (R-117's leftover, unchanged). Harmless — they are filtered from every screen — and it now shows up as six retired `Bluebonnet Holdings LLC` rows in a raw entity query.
+- **Verified by driving it, not by reasoning**: five staff sign-ins landing on `/dashboard` with visibly different navs (owner has Confidential, manager does not; the tech has no Leases, Money or Notices), a tenant magic link reaching "Hello, Maria", and the vendor link opening its one job. Gate: lint (0 errors, the same 14 warnings), typecheck, `check:ship-deps`.

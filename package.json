@@ -19,6 +19,7 @@
     "db:migrate": "dotenv -e .env.local -- prisma migrate dev --schema packages/db/prisma/schema.prisma",
     "db:seed": "dotenv -e .env.local -- node packages/db/prisma/seed.mts",
     "db:seed:demo": "dotenv -e .env.local -- tsx packages/db/prisma/demo-seed.mts",
+    "db:seed:demo-access": "dotenv -e .env.demo -e .env.local -- tsx packages/db/prisma/seed-demo-access.mts",
     "db:create-owner": "dotenv -e .env.local -- node packages/db/prisma/create-owner.mts",
     "db:create-staff": "dotenv -e .env.local -- node packages/db/prisma/create-owner.mts",
     "db:seed:lease-templates": "dotenv -e .env.local -- node packages/db/prisma/seed-lease-templates.mts",
