@@ -4991,7 +4991,7 @@ Five more passed `'UTC'` explicitly. Those are right — a UTC-midnight value fo
 ---
 
 ## R-121: the leftovers, and the deploy fix that had closed half its own hole
-**Commit:** PENDING  ·  **Date:** 2026-08-27
+**Commit:** b450776  ·  **Date:** 2026-08-27
 
 **Chosen because the backlog ran out.** Every row is ✅ except four that are gated on an owner or vendor decision — R-028 (deferred, D-17), R-037a (no US retail-cash rail), R-093 (partner agreements), R-097b (furnisher obligations plus the D-4 review). The owner picked the filed leftovers of R-119 and R-120 over ungating one.
 
