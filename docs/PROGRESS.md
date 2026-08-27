@@ -4814,7 +4814,7 @@ Milestone 11's fourth slice, chosen by the owner over the money/leasing one. Eve
 ---
 
 ## R-116: the screens where money moves and a tenancy is decided
-**Commit:** TBD  ·  **Date:** 2026-08-27
+**Commit:** b2828d4  ·  **Date:** 2026-08-27
 
 Milestone 11's fifth and last slice: audit angles ⑪ ㉓ ㉔ ㉕ ㉖ ㉗ and the money & leasing scope's sixteen findings. Four of the sixteen were already closed by R-107a and R-111 — the `--ring` and `--input` contrast, the dead `dark:` variants, and `SubmitButton`'s `disabled={pending}` — because the audit's line numbers predate those items by a day.
 
