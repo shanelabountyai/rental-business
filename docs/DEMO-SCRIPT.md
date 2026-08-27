@@ -146,13 +146,18 @@ Same reach as a manager, no write controls anywhere.
 Riley Chen manages **Riverside Court Duplex and nothing else**. This is
 ROLE-04, and it is the most interesting thing the permission model does.
 
-> **Caveat, read before demoing this one.** Riley's **left nav renders empty**.
-> Every page works and is correctly scoped — navigate by URL and it is a good
-> demo — but the nav filter asks `can(actor, permission)` with no resource,
-> and a property-scoped assignment can never satisfy that. Found 2026-08-27
-> while building this script; see the open item in `06-backlog.md`.
+> **This used to be the caveat in this file**, and it is worth saying out loud
+> during a demo. Riley's left nav rendered **completely empty** until R-123:
+> the filter asked `can(actor, permission)` with no resource, which only a
+> portfolio-wide assignment can ever satisfy. Every page worked and scoped
+> correctly the whole time — it was the way in that was missing, and no test
+> saw it because every nav test signed in an owner. Found by driving this
+> script.
 
-Type the URLs directly:
+Use the nav, and point at what is *not* in it — no Vendors, no Jurisdiction
+rules, no Document templates. Those three are portfolio-wide by nature and
+guard themselves with a resource-less check a scoped actor cannot pass, so
+they stay hidden rather than dead-ending.
 
 - **`/dashboard`** — *"In scope right now: 1 property."* Every tile is that
   one property's numbers.

@@ -6,7 +6,7 @@ import { requireStaff } from '@/lib/auth/guard.ts'
 import { currentActor } from '@/lib/auth/actor.ts'
 import { selectScope } from '@/lib/scope/actions.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
-import { can } from '@rental/core/rbac'
+import { can, holdsAnywhere } from '@rental/core/rbac'
 
 // The admin shell. Everything under (admin) renders inside it.
 //
@@ -29,8 +29,18 @@ export default async function AdminLayout({
 
   // Filtered on the server: a maintenance tech is never sent the markup for a
   // financial section, so there is nothing to reveal in the DOM.
-  const visibleItems = NAV_ITEMS.filter(
-    (item) => can(actor, item.permission).allowed,
+  //
+  // `holdsAnywhere`, not a resource-less `can()` - that was R-123. A
+  // resource-less `can()` is satisfied only by a PORTFOLIO-WIDE assignment,
+  // so every property- and entity-scoped staff member got an entirely empty
+  // nav while all of their pages worked and scoped correctly. The exception
+  // is the handful of destinations that are portfolio-wide by nature and
+  // guard themselves with a resource-less `requirePermission`: showing those
+  // to a scoped actor would only dead-end, so they keep the stricter check.
+  const visibleItems = NAV_ITEMS.filter((item) =>
+    item.portfolioOnly
+      ? can(actor, item.permission).allowed
+      : holdsAnywhere(actor, item.permission).allowed,
   )
 
   return (

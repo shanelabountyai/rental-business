@@ -5,6 +5,7 @@ import {
   type Actor,
   type Assignment,
   can,
+  holdsAnywhere,
   propertyScope,
   scopeIsEmpty,
 } from './can.ts'
@@ -44,6 +45,78 @@ function actor(overrides: Partial<Actor> = {}): Actor {
     ...overrides,
   }
 }
+
+describe('holdsAnywhere — nav visibility, not authorization (R-123)', () => {
+  // THE REGRESSION, stated as the two calls disagreeing. A property-scoped
+  // manager holds lease.read over their own house, so the Leases link must be
+  // visible - but a resource-less can() is satisfied only by a portfolio-wide
+  // assignment, so it says no. The admin nav filtered on that call and every
+  // scoped staff member got a completely empty left nav.
+  it('is true for a scoped assignment where a resource-less can() is false', () => {
+    const scoped = actor({
+      assignments: [assignment('manager', { propertyId: PROPERTY_A })],
+    })
+
+    expect(holdsAnywhere(scoped, 'lease.read')).toEqual({ allowed: true })
+    expect(can(scoped, 'lease.read')).toEqual({
+      allowed: false,
+      reason: 'out_of_scope',
+    })
+    // ...and the scoped check itself is untouched: it still answers yes for
+    // the property they hold and no for the one they do not.
+    expect(can(scoped, 'lease.read', { propertyId: PROPERTY_A })).toEqual({
+      allowed: true,
+    })
+    expect(can(scoped, 'lease.read', { propertyId: PROPERTY_B })).toEqual({
+      allowed: false,
+      reason: 'out_of_scope',
+    })
+  })
+
+  it('is true for an entity-scoped assignment too', () => {
+    const scoped = actor({
+      assignments: [assignment('read_only', { legalEntityId: ENTITY_1 })],
+    })
+    expect(holdsAnywhere(scoped, 'property.read')).toEqual({ allowed: true })
+    expect(can(scoped, 'property.read')).toEqual({
+      allowed: false,
+      reason: 'out_of_scope',
+    })
+  })
+
+  it('still refuses a permission the actor does not hold at all', () => {
+    const tech = actor({
+      assignments: [assignment('maintenance_tech', { propertyId: PROPERTY_A })],
+    })
+    expect(holdsAnywhere(tech, 'ledger.read')).toEqual({
+      allowed: false,
+      reason: 'no_permission',
+    })
+  })
+
+  it('still refuses a deactivated actor, whatever they hold', () => {
+    const gone = actor({ active: false, assignments: [assignment('owner')] })
+    expect(holdsAnywhere(gone, 'property.read')).toEqual({
+      allowed: false,
+      reason: 'inactive',
+    })
+  })
+
+  // MFA stays last for the same reason it is last in can(): somebody who
+  // lacks the permission outright is told that, not sent to set up an
+  // authenticator that would not have helped.
+  it('still hides a privileged section from an actor who has not passed MFA', () => {
+    const unverified = actor({
+      mfaVerified: false,
+      assignments: [assignment('owner')],
+    })
+    const privileged = [...PRIVILEGED_PERMISSIONS][0]!
+    expect(holdsAnywhere(unverified, privileged)).toEqual({
+      allowed: false,
+      reason: 'mfa_required',
+    })
+  })
+})
 
 describe('can — deny by default', () => {
   it('denies an actor with no assignments at all', () => {

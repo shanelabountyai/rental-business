@@ -12,8 +12,24 @@ import type { Permission } from '@rental/core/rbac'
 export interface NavItem {
   href: string
   label: string
-  /// Shown only to an actor holding this permission somewhere in scope.
+  /// Shown to an actor who holds this permission over ANYTHING
+  /// (`holdsAnywhere`), not one who holds it portfolio-wide. A manager scoped
+  /// to one house still runs that house's leases and money, so hiding those
+  /// links from them was never right - it was R-123's bug.
   permission: Permission
+  /// A destination that is portfolio-wide by nature and guards itself with a
+  /// RESOURCE-LESS `requirePermission` - which `permissions.ts` calls "the
+  /// correct guard, not a bug" for `jurisdiction.write`, because a
+  /// JurisdictionRule applies by state and has no scoped resource to check
+  /// against. A scoped actor cannot pass that guard, so showing them the link
+  /// would only dead-end. These three are checked with `can()` and no
+  /// resource, which is precisely "holds it portfolio-wide".
+  ///
+  /// Whether a property-scoped manager SHOULD reach the vendor directory is a
+  /// real operational question - a PM who cannot see vendors cannot dispatch
+  /// one - and it is a permissions decision, deliberately not made here
+  /// (R-123).
+  portfolioOnly?: true
   /// Which backlog item fills the section in. Rendered on the placeholder, so
   /// a half-built shell explains itself instead of looking broken.
   ownedBy: string
@@ -98,6 +114,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
     href: '/jurisdiction',
     label: 'Jurisdiction rules',
     permission: 'jurisdiction.read',
+    portfolioOnly: true,
     ownedBy: 'R-010',
   },
   {
@@ -110,6 +127,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
     href: '/documents/templates',
     label: 'Document templates',
     permission: 'template.write',
+    portfolioOnly: true,
     ownedBy: 'R-062',
   },
   {
@@ -134,6 +152,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
     href: '/vendors',
     label: 'Vendors',
     permission: 'vendor.read',
+    portfolioOnly: true,
     ownedBy: 'R-079',
   },
   {

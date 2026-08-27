@@ -42,9 +42,15 @@ export interface Actor {
   }
 }
 
-/// What is being acted on. Omitting both means "does this actor hold this
-/// permission anywhere at all" - useful for deciding whether to show a nav
-/// item, never sufficient for authorizing a write.
+/// What is being acted on.
+///
+/// OMITTING EVERYTHING DOES NOT MEAN "anywhere at all", however much it reads
+/// that way - this comment used to claim it did and the admin nav believed it
+/// (R-123). An omitted field compares `undefined` against a scoped
+/// assignment's id, so a resource-less `can()` is satisfied ONLY by a
+/// portfolio-wide assignment. That is the right guard for a portfolio-wide
+/// concept like a JurisdictionRule, and the wrong one for "should this link
+/// be visible" - use `holdsAnywhere()` for that.
 export interface Resource {
   propertyId?: string | null
   legalEntityId?: string | null
@@ -148,6 +154,58 @@ function assignmentCovers(
 export type PropertyScope =
   | { everything: true }
   | { everything: false; legalEntityIds: string[]; propertyIds: string[] }
+
+/**
+ * "Does this actor hold this permission over ANYTHING?" - for deciding
+ * whether to show a nav link, and for nothing else.
+ *
+ * ==========================================================================
+ * THIS IS NOT AUTHORIZATION. It deliberately skips the scope check, so it
+ * answers true for a property-scoped manager who may only ever exercise the
+ * permission over one house. Every destination still guards itself with
+ * `can()` and a real resource - hiding a link was never the control (ROLE-01:
+ * "server-side per role AND record scope, not just hidden UI").
+ * ==========================================================================
+ *
+ * It exists because `can(actor, permission)` with no resource does NOT mean
+ * this, despite `Resource`'s own comment having claimed it did.
+ * `assignmentCovers` compares `resource.propertyId === assignment.propertyId`,
+ * so an omitted resource is `undefined === '<id>'` - false for every scoped
+ * assignment. The admin nav filtered on exactly that call, and every
+ * property- or entity-scoped staff member therefore got a COMPLETELY EMPTY
+ * left nav while all their pages worked and scoped correctly (R-123, found
+ * 2026-08-27 by signing a scoped manager in during a demo). No spec caught it
+ * because none signed a scoped user in and read the nav.
+ *
+ * `can()` is left exactly as it was rather than taught the documented
+ * meaning, and that is deliberate twice over. A resource-less `can()` is the
+ * CORRECT guard for a portfolio-wide concept - `permissions.ts` says so of
+ * `jurisdiction.write`, because a JurisdictionRule applies by state and there
+ * is no scoped resource to check it against. And relaxing it would have
+ * handed a property-scoped manager `template.write` over portfolio-wide
+ * message templates, which is a permissions decision and not a nav fix.
+ *
+ * The check order below is `can()`'s minus the scope step, and the MFA check
+ * stays last for the same reason it is last there: so someone who lacks the
+ * permission outright is told so, rather than being sent to set up an
+ * authenticator that would not have helped. Written out rather than shared
+ * with `can()` because threading a "skip scope" flag through the one function
+ * D-5 forbids putting a bypass in is exactly the shape of a bypass.
+ */
+export function holdsAnywhere(actor: Actor, permission: Permission): Decision {
+  if (!actor.active) return { allowed: false, reason: 'inactive' }
+
+  const granting = actor.assignments.some((assignment) =>
+    assignment.permissions.includes(permission),
+  )
+  if (!granting) return { allowed: false, reason: 'no_permission' }
+
+  if (requiresMfa(permission) && !actor.mfaVerified) {
+    return { allowed: false, reason: 'mfa_required' }
+  }
+
+  return ALLOWED
+}
 
 /// Denies everything. Named so the intent is obvious at call sites.
 export const SCOPE_NONE: PropertyScope = {

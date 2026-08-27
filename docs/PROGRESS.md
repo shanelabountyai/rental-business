@@ -5050,3 +5050,30 @@ Threading the zone cost almost nothing, because it was already there and unused:
 - **R-123: a scoped staff member's left nav renders empty.** Found by driving this script. Nav-only — all eight top-level pages return 200 and scope correctly — but it needs an owner decision before it can be fixed, because the honest fix touches what a property-scoped manager may reach. Written up in the backlog row; `DEMO-SCRIPT.md`'s Act 5 carries the caveat so a demo does not walk into it.
 - **The demo database still accumulates retired properties and entities** on every `--reset` (R-117's leftover, unchanged). Harmless — they are filtered from every screen — and it now shows up as six retired `Bluebonnet Holdings LLC` rows in a raw entity query.
 - **Verified by driving it, not by reasoning**: five staff sign-ins landing on `/dashboard` with visibly different navs (owner has Confidential, manager does not; the tech has no Leases, Money or Notices), a tenant magic link reaching "Hello, Maria", and the vendor link opening its one job. Gate: lint (0 errors, the same 14 warnings), typecheck, `check:ship-deps`.
+
+---
+
+## R-123: a scoped staff member's left nav was empty
+**Commit:** PENDING  ·  **Date:** 2026-08-27
+
+**Found by driving R-122's own demo script.** Signing in as the property-scoped manager it seeds produced a dashboard reading *"In scope right now: 1 property"* above a left nav with **nothing in it at all**.
+
+**A comment that promised something the code never did.** `(admin)/layout.tsx` filtered `NAV_ITEMS` with `can(actor, item.permission)` and no resource, on the strength of `Resource`'s own doc: *"Omitting both means 'does this actor hold this permission anywhere at all' - useful for deciding whether to show a nav item."* `assignmentCovers` does not implement that. For a scoped assignment it compares `resource.propertyId === assignment.propertyId`, and an omitted resource makes that `undefined === '<id>'` — false, every time, for every item. Only a portfolio-wide assignment (both scope columns null) ever satisfied it.
+
+**Nav-only, and that is what made it survivable.** All eight top-level destinations return 200 for a property-scoped manager and scope their queries correctly — `/properties` says "1 property in your scope" and lists exactly one. So nothing was broken except the way in, and **every existing nav test signs in a portfolio-wide actor**, so the entire scoped half of the permission model was never rendered by the suite.
+
+### What it built
+
+`holdsAnywhere(actor, permission)` in `packages/core/rbac/can.ts`: `can()`'s checks minus the scope step, with MFA still last for the same reason it is last there. The admin nav uses it, and `Resource`'s comment now says what is actually true and points at the new function.
+
+### What it decided
+
+- **`can()` is left exactly as it was, and that is the load-bearing decision.** A resource-less `can()` is the *correct* guard for a portfolio-wide concept — `permissions.ts` says so of `jurisdiction.write` in as many words, because a `JurisdictionRule` applies by state and has no scoped resource to check against. Teaching `can()` the documented meaning would also have handed a property-scoped manager `template.write` over portfolio-wide message templates. That is a permissions decision; this was a nav fix, and conflating them is how a UI bug becomes an authorization change.
+- **`holdsAnywhere` is written out rather than sharing a parameterized core with `can()`.** Threading a "skip the scope check" flag through the one function D-5 forbids putting a bypass in is precisely the shape of a bypass. Four duplicated lines is the cheaper risk.
+- **Three nav items carry `portfolioOnly` and keep the stricter check** — Vendors, Jurisdiction rules, Document templates — because each guards itself with a resource-less `requirePermission` that a scoped actor cannot pass. A visible link there would dead-end, which is worse than an absent one. The owner chose this over widening reads (2026-08-27).
+- **The e2e test was confirmed to fail before it was trusted**: against the old filter it fails on `Leases` not being visible, in both browser projects and both retries. The unit tests state the defect as the two calls disagreeing — `holdsAnywhere` true where a resource-less `can()` is false — so the pairing is what a future reader sees.
+
+### What it left behind
+
+- **Whether a property-scoped manager should reach the vendor directory at all.** Deliberately open. A PM who cannot see vendors cannot dispatch one, so the operational answer is probably yes, but it changes what a scope means and belongs in `07-decisions.md` with a D-number rather than in a nav filter.
+- **Nothing asserts the portfolio-only items stay reachable for an owner** beyond the existing full-nav test, which does cover it incidentally.

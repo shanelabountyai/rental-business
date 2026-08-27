@@ -19,7 +19,7 @@ const staffIds: string[] = []
 const entityIds: string[] = []
 const propertyIds: string[] = []
 
-async function createStaff(roleKey: string | null) {
+async function createStaff(roleKey: string | null, scopedToPropertyId?: string) {
   const email = `shell-${randomUUID()}@example.test`
   const staff = await prisma.staffUser.create({
     data: {
@@ -33,7 +33,11 @@ async function createStaff(roleKey: string | null) {
   if (roleKey) {
     const role = await prisma.role.findUniqueOrThrow({ where: { key: roleKey } })
     await prisma.staffAssignment.create({
-      data: { staffUserId: staff.id, roleId: role.id },
+      data: {
+        staffUserId: staff.id,
+        roleId: role.id,
+        propertyId: scopedToPropertyId ?? null,
+      },
     })
   }
   return { ...staff, password: PASSWORD }
@@ -161,6 +165,43 @@ test.describe('the shell', () => {
     // No financials, no leases - the tech role carries neither permission.
     await expect(nav.getByRole('link', { name: 'Money', exact: true })).toHaveCount(0)
     await expect(nav.getByRole('link', { name: 'Leases', exact: true })).toHaveCount(0)
+  })
+
+  // R-123, AND THE ONLY REASON IT SURVIVED IS THAT NOTHING LOOKED. Every nav
+  // test above signs in a PORTFOLIO-WIDE actor, so the whole scoped half of
+  // the permission model was never rendered. A property-scoped manager got a
+  // COMPLETELY EMPTY left nav - not a wrong link, none at all - while all of
+  // their pages worked and scoped correctly, which is exactly why no page
+  // test noticed either.
+  //
+  // The cause was `can(actor, permission)` with no resource: an omitted
+  // propertyId compares `undefined === '<id>'`, so a resource-less check is
+  // satisfied ONLY by a portfolio-wide assignment. `holdsAnywhere` is the
+  // question the nav actually meant to ask.
+  test('shows a property-scoped manager the sections they can use', async ({
+    page,
+  }) => {
+    const { property } = await createProperty('Scoped Co', 'Scoped House')
+    const staff = await createStaff('manager', property.id)
+    await signIn(page, staff.email)
+
+    const nav = page.getByRole('navigation', { name: 'Sections' })
+    // A manager scoped to one house still runs that house's leases and money.
+    await expect(nav.getByRole('link', { name: 'Leases', exact: true })).toBeVisible()
+    await expect(nav.getByRole('link', { name: 'Money', exact: true })).toBeVisible()
+    await expect(nav.getByRole('link', { name: 'Properties', exact: true })).toBeVisible()
+
+    // ...and the destination is real, not a link into a refusal.
+    await nav.getByRole('link', { name: 'Money', exact: true }).click()
+    await expect(page).not.toHaveURL(/\/no-access/)
+
+    // The portfolio-wide destinations stay hidden, because they guard
+    // themselves with a resource-less requirePermission a scoped actor cannot
+    // pass - a visible link there would only dead-end.
+    await expect(nav.getByRole('link', { name: 'Vendors', exact: true })).toHaveCount(0)
+    await expect(
+      nav.getByRole('link', { name: 'Jurisdiction rules', exact: true }),
+    ).toHaveCount(0)
   })
 
   // ROLE-01: "not just hidden UI". The link being absent proves nothing; the
