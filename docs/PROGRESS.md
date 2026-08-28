@@ -5165,3 +5165,37 @@ Threading the zone cost almost nothing, because it was already there and unused:
 - **`npm audit` (18 findings) and Lighthouse remain untriaged and unrun** — both R-113's leftovers, unchanged. Lighthouse is CI's e2e job only; nothing local reproduces it.
 - **The demo owner's MFA is still not enrolled** (R-117's leftover, carried unchanged by five items now — this item did not walk the demo).
 - **Gate run:** the whole of it, and this is the entry to point at for the R-054-onward window — `db:ci`, `lint`, `typecheck`, `check:ship-deps`, unit **2,763 + 4 skipped**, `build`, and the **full e2e sweep at 1,046 passed + 8 skipped of 1,054, 0 failed, 0 flaky**.
+
+---
+
+## R-127: eighteen audit findings nobody had triaged, and only two of them reached a shipping tree
+**Commit:** <sha>  ·  **Date:** 2026-08-28
+
+**Chosen by the owner** from a backlog whose every row is ✅ — the oldest open leftover, filed by R-113 on 2026-08-26 and carried unchanged by six items since. `npm audit` had read **18 findings, 14 of them high**, behind a CI step that is deliberately `continue-on-error: true`, so nothing ever failed and nobody ever read it.
+
+### What it built
+
+**1. The triage, by reachability rather than by severity (D-152).** Two of the eighteen reach a tree that ships, and both are cleared by a MINOR framework bump: `next` **16.2.12 → 16.3.3** carries `sharp` 0.34.5 → **0.35.4** (four libvips CVEs, in the decoder that reads applicant, tenant and vendor uploads — the one place in the list where a stranger controls the input) and `postcss` 8.4.31 → **8.5.23** (the sourceMappingURL path-traversal chain). Two `overrides` in the root `package.json`, both in-range patches of what their parents already ask for, clear four more: `nanoid ^3.3.18` and `hono ^4.13.5`.
+
+**2. The thirteen that stay, with the argument written down.** Ten are `@lhci/cli`'s transitive tree and three are the `prisma` CLI's. **Neither has a fix that is not a downgrade**: `npm audit fix --force` offers `@lhci/cli@0.1.0` — from 0.15.1, which is the latest published — and `prisma@6.12.0`. `@lhci/cli` pins `lighthouse` at an exact `12.6.1` and asks for `tmp ^0.1.0`, `uuid ^8.3.1`, `inquirer ^6.3.1`, so no in-range override reaches a patched version, and forcing `lighthouse@13.4.1` across that exact pin was rejected as untestable here — `lhci autorun` runs only in CI's e2e job.
+
+**3. Four e2e tests the bump turned red, in three files, every one an ambiguous locator that had been latent for months.** `maintenance-phone-log.spec.ts`'s `getByText('Habitability')` and `violations.spec.ts`'s heading match now also match Next's own `#__next-route-announcer__`, which on 16.3.3 holds the new page's heading text; `retaliation-guard.spec.ts`'s two `…after this tenant.s no heat complaint` matches also match the form-level error alert that repeats the panel's own sentence. Fixed with `exact: true`, `getByRole('heading')`, and the `(date)` parenthetical only the panel carries — the more specific assertion in every case, never a relaxed one. The trap is now a bullet in `CLAUDE.md`'s test-suite rules.
+
+**4. One real flake, diagnosed rather than retried.** `golden-path-4.spec.ts` read the entry notice with a bare `findFirstOrThrow` straight after polling the work order's status to `SCHEDULED`. The status update and the notification are the same action but not the same statement, so the poll can pass before the row exists; it lost at test 691 of the confirming sweep. It now polls for the notification **and its delivery row**, scoped to the spec's own tenant.
+
+### What it decided
+
+- **Severity is the wrong axis when 14 of 18 highs are a CLI's transitive tree.** What matters is whether a shipping path reaches the code. Recorded as **D-152**, with the per-tree argument, so the next reader re-triages against it rather than from zero.
+- **The `prisma` finding is in the PRODUCTION tree, and that is worth not re-deriving.** The lockfile does not mark `prisma`, `@prisma/config` or `deepmerge-ts` as `dev` even though our only declaration is a root devDependency — `@prisma/client` declares `prisma` as an **optional peer**, and `npm ls --omit=dev` confirms it survives a production install. It is still unreachable: nothing under `apps/`, `packages/` or `scripts/` imports the `prisma` package, only `@prisma/client`.
+- **No CI gate was added.** An `npm audit --omit=dev --audit-level=high` step would be red on its first run over exactly the finding this item accepts, and a gate that is red on day one is a gate nobody reads — the same failure mode as the `continue-on-error` output that produced this row.
+- **A framework bump is a race-condition detector, so the sweep is not optional on one.** Every one of the four regressions was two elements matching one locator; Playwright's strict mode only fires when both are in the DOM at the same instant, and on 16.2.12 they landed in different paints. An `allTextContents()` probe on 16.2.12 returns `[]` at the moment of the call and one element after the retry — the assertion was passing on timing, not on truth.
+- **The third sweep was allowed to finish rather than killed.** The convention is to kill a doomed run, and it exists so a session does not wait out a sweep that has nothing left to say. Here the cause was already known and identical across failures, so the run's remaining value was enumeration: one 5-minute pass listing every surviving collision beats a kill-fix-rerun cycle per test.
+
+### What it left behind
+
+- **Thirteen advisories remain and are accepted, not fixed** (D-152). The `@lhci/cli` tree needs an upstream release; the `prisma` tree needs a 6 → 8 major upgrade, whose stable line is still `8.0.0-rc`. That is a migration item, not an audit line, and nothing owns it yet.
+- **`lhci autorun` is still unrun** (R-113's leftover, unchanged). It only executes in CI's e2e job, so nothing here can say whether Lighthouse works at all — which is also why its tree's advisories could not be tested against.
+- **The GitHub Actions billing block is still unresolved** — 12 days and ~70 pushes, owner-only, exactly as R-126 left it. This item verified the tree by hand for the same reason.
+- **The demo owner's MFA is still not enrolled** (R-117's leftover, carried by seven items now — this item did not walk the demo).
+- **The demo-gate commit `58e9dd1` has no PROGRESS entry.** It landed outside the backlog and is recorded here only as a pointer.
+- **Gate run:** `npm run ci:local` in full — `db:ci` migrations from scratch with **no difference detected**, `lint` (0 errors, the same 14 pre-existing warnings), `typecheck`, `check:ship-deps` clean (755 dev packages), unit **2,774 passed + 4 skipped of 2,778**, `build` compiled — plus the **full e2e sweep at 1,046 passed + 8 skipped of 1,054, 0 failed, 0 flaky**, 4.1 minutes, reconciled against `npx playwright test --list`'s `Total: 1054 tests in 85 files`. It took five sweeps to get there: three were killed on the first real failure, the fourth surfaced the golden-path-4 race as a flake, and this one is the confirming run.

@@ -189,7 +189,13 @@ test('a rent increase inside the window is blocked, warns with the specific comp
 
   // The specific complaint and date, not a generic refusal (RISK-06's own
   // wording: "warns... with the specific complaint and date").
-  await expect(page.getByText(/30 days after this tenant.s no heat complaint/)).toBeVisible()
+  // The `(date)` is what makes this the PANEL's own wording and not the
+  // form-level error alert, which repeats the same sentence without it -
+  // two elements matching a bare substring is a strict-mode violation. It
+  // passed until the 16.2.12 -> 16.3.3 bump only because the two used to
+  // land in different paints and the assertion caught the first alone;
+  // RISK-06 asks for the complaint AND the date, so this asserts more.
+  await expect(page.getByText(/30 days after this tenant.s no heat complaint \(/)).toBeVisible()
   await expect(page.getByLabel('Why are you raising rent now?')).toBeVisible()
 
   // NOTHING was written yet.
@@ -249,7 +255,13 @@ test('the landlord giving notice inside the window is blocked and requires a rea
   // packages/core/leases/retaliation.test.ts. What matters here is that the
   // SPECIFIC complaint and its category actually appear (RISK-06's own
   // wording), not the exact day count.
-  await expect(page.getByText(/\d+ days? after this tenant.s no heat complaint/)).toBeVisible()
+  // The `(date)` is what makes this the PANEL's own wording and not the
+  // form-level error alert, which repeats the same sentence without it -
+  // two elements matching a bare substring is a strict-mode violation. It
+  // passed until the 16.2.12 -> 16.3.3 bump only because the two used to
+  // land in different paints and the assertion caught the first alone;
+  // RISK-06 asks for the complaint AND the date, so this asserts more.
+  await expect(page.getByText(/\d+ days? after this tenant.s no heat complaint \(/)).toBeVisible()
 
   await expect.poll(async () => (await prisma.lease.findUniqueOrThrow({ where: { id: lease.id } })).noticeGivenAt).toBeNull()
 

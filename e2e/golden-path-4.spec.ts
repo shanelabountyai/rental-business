@@ -504,8 +504,25 @@ test('Golden Path 4: what a stranger is allowed to cause', async ({ page, browse
   // An entry notice is an obligation of OURS, not a subscription of hers. She
   // asked for no email and this one still goes, because the alternative is a
   // tenant who finds somebody in her home having been misled by us.
+  // Poll for the notice AND its delivery row, not just the work order's
+  // status above: the status update and the notification are the same
+  // action but not the same statement, so a SCHEDULED work order does not
+  // mean the row this reads exists yet. Lost once at test 691 of a full
+  // sweep, as a bare `findFirstOrThrow` that found nothing. Scoped to this
+  // spec's own tenant, so it is not the global-read trap either.
+  const entryNoticeWhere = {
+    recipientId: tenant.id,
+    category: 'entry_notice',
+    channel: 'EMAIL' as const,
+    delivery: { isNot: null },
+  }
+  await expect
+    .poll(async () => prisma.notification.count({ where: entryNoticeWhere }), {
+      timeout: 20_000,
+    })
+    .toBeGreaterThan(0)
   const entryNotice = await prisma.notification.findFirstOrThrow({
-    where: { recipientId: tenant.id, category: 'entry_notice', channel: 'EMAIL' },
+    where: entryNoticeWhere,
     include: { delivery: true },
   })
   expect(entryNotice.delivery?.status, 'a locked category outranks any opt-out').not.toBe(

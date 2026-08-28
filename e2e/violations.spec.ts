@@ -146,8 +146,14 @@ test('THE POINT: a condition case is enforced on a lease term, and the vocabular
   await page.getByRole('button', { name: 'Open the violation case' }).click()
 
   await page.waitForURL(/\/violations\/[a-z0-9]+$/)
+  // By ROLE, not by text: this string is the page's <h1>, so Next's own
+  // #__next-route-announcer__ carries a copy of it after the redirect and a
+  // text match resolves to two elements. Went red on the 16.2.12 -> 16.3.3
+  // bump, which is when that announcer started holding the heading.
   await expect(
-    page.getByText('The state of the premises breaches a lease or safety term'),
+    page.getByRole('heading', {
+      name: 'The state of the premises breaches a lease or safety term',
+    }),
   ).toBeVisible()
   // Dated, so the locator cannot also match the identical string sitting in
   // the ground picker of the "record another visit" form below it — the

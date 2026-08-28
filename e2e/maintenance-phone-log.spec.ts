@@ -211,7 +211,12 @@ test.describe('logging a phone-reported request', () => {
     const ticket = await prisma.ticket.findFirstOrThrow({ where: { propertyId: property.id } })
     ticketIds.push(ticket.id)
     expect(ticket.habitabilityFlag).toBe(true)
-    await expect(page.getByText('Habitability')).toBeVisible()
+    // `exact` because Next's own #__next-route-announcer__ carries the new
+    // page's heading text - "PlumbingHabitability" - so a substring match
+    // resolves to two elements and fails strict mode. This went red on the
+    // 16.2.12 -> 16.3.3 bump with nothing else on this page changed, so what
+    // moved is what Next puts in that announcer.
+    await expect(page.getByText('Habitability', { exact: true })).toBeVisible()
   })
 
   test('rejects whitespace-only notes without creating a ticket', async ({ page }) => {
