@@ -1,5 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server'
 
+import { demoGate } from '@/lib/demo-gate'
+
 // The Content-Security-Policy (security review follow-on to D-137).
 //
 // ==========================================================================
@@ -82,6 +84,13 @@ function policy(nonce: string): string {
 }
 
 export function middleware(request: NextRequest) {
+  // Before the nonce work: a visitor who is not past the demo gate should cost
+  // a 401 and nothing else, not a minted nonce and a policy they never see.
+  // Only active when DEMO_ACCESS_PASSWORD is set, so local dev, CI and the e2e
+  // suite are untouched.
+  const locked = demoGate(request)
+  if (locked) return locked
+
   const nonce = crypto.randomUUID().replace(/-/g, '')
   const csp = policy(nonce)
 
