@@ -1,5 +1,7 @@
 import 'server-only'
 
+import { complianceToday } from '@rental/core/compliance'
+import { utcToBusinessDate } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import type { ResolvedScope } from '@/lib/scope/current-scope.ts'
 
@@ -28,15 +30,37 @@ export async function listComplianceItems(scope: ResolvedScope) {
   const entityIds = entityIdsInScope(scope)
   if (scope.propertyIds.length === 0 && entityIds.length === 0) return []
 
-  return prisma.complianceItem.findMany({
-    where: {
-      OR: [
-        { propertyId: { in: scope.propertyIds } },
-        { legalEntityId: { in: entityIds } },
-      ],
-    },
-    orderBy: { dueOn: 'asc' },
-    include: complianceItemInclude,
+  // Overdue is resolved HERE, per row, against the row's own clock - the
+  // same per-property resolution `rollupByProperty` does for tasks. The page
+  // used to compare every due date against one UTC "today", which turns a
+  // Houston filing overdue from 19:00 the evening before. See
+  // `complianceToday` for what an entity-level item is judged against.
+  const [items, zones] = await Promise.all([
+    prisma.complianceItem.findMany({
+      where: {
+        OR: [
+          { propertyId: { in: scope.propertyIds } },
+          { legalEntityId: { in: entityIds } },
+        ],
+      },
+      orderBy: { dueOn: 'asc' },
+      include: complianceItemInclude,
+    }),
+    prisma.property.findMany({
+      where: {
+        OR: [{ id: { in: scope.propertyIds } }, { legalEntityId: { in: entityIds } }],
+      },
+      select: { id: true, legalEntityId: true, timezone: true },
+    }),
+  ])
+
+  const now = new Date()
+  return items.map((item) => {
+    const forItem = item.propertyId
+      ? zones.filter((p) => p.id === item.propertyId)
+      : zones.filter((p) => p.legalEntityId === item.legalEntityId)
+    const today = complianceToday(now, forItem.map((p) => p.timezone))
+    return { ...item, overdue: today != null && utcToBusinessDate(item.dueOn) < today }
   })
 }
 

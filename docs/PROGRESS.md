@@ -5110,3 +5110,30 @@ Threading the zone cost almost nothing, because it was already there and unused:
 - **Nothing asserts the money page's last-synced stamp or the claim form's two defaults**; no e2e spec reaches either. The claim-panel change is the one with a real behavioural consequence and it is covered only by typecheck and by reading the action that parses the field back.
 - **The demo owner's MFA is still not enrolled** (R-117's leftover, unchanged — this item did not walk the demo).
 - **Gate run:** `lint` (0 errors, the same 14 pre-existing warnings), `typecheck`, `npm run build`, `check:ship-deps` clean, unit **2,760 passed + 4 skipped of 2,764**, and the ten specs covering every screen touched — `listings`, `jurisdiction`, `prospects`, `properties`, `insurance-claims`, `leases`, `workorders`, `tasks`, `maintenance`, `screening` — at **178 passed + 2 failed of `--list`'s 180**, both failures the Sep/Sept assertion above; **26 passed of 26** on `listings` + `leasing-analytics` after correcting it. The full sweep belongs to CI.
+
+---
+
+## R-125: the compliance calendar's Overdue badge was reading a UTC clock
+**Commit:** _pending_  ·  **Date:** 2026-08-28
+
+**Chosen because it is the only unowned defect left on the board.** Every backlog row is ✅ or gated on a vendor decision (R-028 deferred; R-037a, R-093, R-097b). R-124 filed this one by name in its own "what it left behind" — deliberately, because R-124's predicate was *display* and this is a *comparison*, and because it needed a decision R-124 was not going to take on the way past.
+
+### What it built
+
+**1. Overdue is now resolved per row, against the row's own clock.** `apps/web/app/(admin)/compliance/page.tsx` compared every due date against `new Date().toISOString().slice(0, 10)`. On a Texas portfolio that turns over at 19:00 local, so a filing due today wore an **Overdue** badge all evening on the day before it was due — a compliance screen telling an operator they had missed a statutory deadline they had not missed. `listComplianceItems` now returns `overdue` on each row, resolved from the item's property timezone, and the page renders the flag rather than deriving one.
+
+**2. `complianceToday(now, timezones)` in `packages/core/compliance`, for the entity-level filing that has no property.** An entity-scoped item (a franchise tax filing, an annual report) has no single clock. It takes the **earliest** local day across its entity's properties: late everywhere before it is called late. That is the conservative direction on purpose — the failure this item exists to fix is a false *Overdue*, and the same rule cannot reintroduce one.
+
+**3. The sweep, and it came back nearly empty.** `new Date().toISOString().slice(0, 10)` appears in exactly two places in `apps/web`: this page and the rent-roll export's **filename stamp**, which R-124 already classified as correctly ISO. Everything else in the product that needs "today" already writes `businessDate(new Date(), property.timezone)` — nineteen call sites — and `lib/compliance/alert-job.ts` is *handed* a per-property `businessDate` rather than deriving one. The page was the outlier, not the first of a family.
+
+### What it decided
+
+- **The zone lives in the query, not in the page.** `rollupByProperty` in `lib/tasks/queries.ts` already resolves a per-property overdue count exactly this way, and following it kept the page from needing a second query for timezones. `ResolvedScope.availableProperties` was deliberately **not** widened to carry `timezone`: it is the property switcher's own shape and is read on every request in the layout.
+- **The check is a unit test, because no e2e assertion can pin this.** The badge only differs from the old behaviour during the hours when UTC's date is ahead of the property's — for `America/Chicago`, 00:00–05:00 UTC. A Playwright assertion would be correct for five hours a day and vacuous for nineteen. `complianceToday` takes `now` as an argument for that reason, and `schedule.test.ts` pins `2026-08-29T01:14:00Z` (20:14 on the 28th in Houston) and asserts the UTC date alongside it, so the test states the defect rather than just covering the function.
+- **The earliest-zone rule applies only to entity items.** A property item resolves against a single zone, so the min is a no-op there; nothing about a per-property row changed except which clock it reads.
+
+### What it left behind
+
+- **`complianceToday` returns `null` for an item with no property behind it at all**, and a null today never flags overdue. That is a clock we do not have rather than a day that has arrived, but it means an entity whose every property has been deactivated silently stops flagging its filings. No screen reaches that state today (`currentScope` only lists active properties, so such an item is out of scope entirely) and it is written down rather than guarded.
+- **The demo owner's MFA is still not enrolled** (R-117's leftover, unchanged — this item did not walk the demo).
+- **Gate run:** `lint` (0 errors, the same 14 pre-existing warnings), `typecheck`, `npm run build`, `check:ship-deps` clean (755 dev packages, no shipping file imports one), unit **2,763 passed + 4 skipped of 2,767**, and `compliance.spec.ts` at **2 passed of 2**. The full sweep belongs to CI.

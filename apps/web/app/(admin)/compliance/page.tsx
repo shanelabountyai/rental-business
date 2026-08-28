@@ -15,7 +15,6 @@ export default async function CompliancePage() {
   const { actor } = await requireScope('property.read')
   const scope = await currentScope(actor)
   const items = await listComplianceItems(scope)
-  const today = new Date().toISOString().slice(0, 10)
 
   return (
     <div className="flex max-w-3xl flex-col gap-6">
@@ -34,8 +33,6 @@ export default async function CompliancePage() {
       ) : (
         <ul className="flex flex-col divide-y rounded-md border">
           {items.map((item) => {
-            const dueOn = item.dueOn.toISOString().slice(0, 10)
-            const overdue = dueOn < today
             const lastCompleted = item.completions[0]?.completedOn ?? null
             return (
               <li key={item.id}>
@@ -45,7 +42,7 @@ export default async function CompliancePage() {
                 >
                   <span className="font-medium">
                     {item.label}
-                    {overdue && (
+                    {item.overdue && (
                       <span className="ml-2 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800">
                         Overdue
                       </span>

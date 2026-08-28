@@ -9,7 +9,7 @@
 // domains for a slightly different caller is churn with a real regression
 // risk, for a ten-line function, not a fix.
 
-import type { BusinessDate } from '../scheduling/local-time.ts'
+import { type BusinessDate, businessDate } from '../scheduling/local-time.ts'
 
 /**
  * `completedOn` plus `recurrenceMonths`, clamped to the target month's real
@@ -25,4 +25,22 @@ export function nextComplianceDueDate(completedOn: BusinessDate, recurrenceMonth
   const daysInTargetMonth = new Date(Date.UTC(targetYear, targetMonth + 1, 0)).getUTCDate()
   const targetDay = Math.min(day, daysInTargetMonth)
   return new Date(Date.UTC(targetYear, targetMonth, targetDay)).toISOString().slice(0, 10)
+}
+
+/**
+ * The calendar day an obligation is judged late against.
+ *
+ * "Overdue" compares two calendar days, so it needs a clock - and on a
+ * portfolio list the clock belongs to the ROW, not to the request. A UTC
+ * "today" reads overdue from around 18:00 local on every property west of
+ * UTC. A property-level item takes its own property's zone; an entity-level
+ * filing has no single property, so it takes the EARLIEST local day across
+ * the entity's properties - late everywhere before it is called late.
+ *
+ * Returns null for an item with no property behind it at all, which is a
+ * clock we do not have rather than a day that has arrived.
+ */
+export function complianceToday(now: Date, timezones: readonly string[]): BusinessDate | null {
+  const days = timezones.map((zone) => businessDate(now, zone)).sort()
+  return days[0] ?? null
 }
