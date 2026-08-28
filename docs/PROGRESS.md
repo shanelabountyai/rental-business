@@ -5081,7 +5081,7 @@ Threading the zone cost almost nothing, because it was already there and unused:
 ---
 
 ## R-124: the ISO-date sweep, and two sites where it was the wrong value not just the wrong shape
-**Commit:** PENDING  ·  **Date:** 2026-08-28
+**Commit:** 3d70a7d  ·  **Date:** 2026-08-28
 
 **Chosen because it was the only buildable row left.** Every backlog row is ✅ or gated (R-028 deferred; R-037a, R-093, R-097b each on a vendor decision). R-121 filed the remainder of R-119's date sweep by name — `prospects/[id]`, `tasks/[id]`, `jurisdiction`, `workorders/[id]` and `reports/maintenance` — and nobody owned it.
 
