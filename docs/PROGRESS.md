@@ -5141,7 +5141,7 @@ Threading the zone cost almost nothing, because it was already there and unused:
 ---
 
 ## R-126: the first full sweep since the pipeline died, and the spec R-124 could not have known to run
-**Commit:** _pending_  ·  **Date:** 2026-08-28
+**Commit:** e5979d5  ·  **Date:** 2026-08-28
 
 **Chosen because the backlog ran out of buildable rows again and everything else would have landed on an unverified tree.** Every row is ✅, gated on a vendor decision (R-037a, R-093, R-097b) or deferred (R-028); R-125 closed the last unowned defect. The owner picked verification over the three remaining leftovers.
 
