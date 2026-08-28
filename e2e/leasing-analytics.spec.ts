@@ -394,8 +394,17 @@ test.describe('maintenance analytics (MAINT-10)', () => {
 
     // Three leaks eighty days apart: one chronic problem spanning 160 days,
     // not two unrelated pairs.
-    for (const day of ['2026-01-05', '2026-03-26', '2026-06-14']) {
-      await seedTicket(property.id, unit.id, 'PLUMBING', at(day))
+    //
+    // The first is 02:00 UTC, which is 20:00 the PREVIOUS EVENING in this
+    // property's America/Chicago. `firstAt`/`lastAt` are instants, so the
+    // row has to carry the property's zone to print "5 Jan"; rendering the
+    // raw UTC instant reads "6 Jan" and fails the range below.
+    for (const when of [
+      new Date('2026-01-06T02:00:00.000Z'),
+      at('2026-03-26'),
+      at('2026-06-14'),
+    ]) {
+      await seedTicket(property.id, unit.id, 'PLUMBING', when)
     }
 
     await signIn(page, staff.email)
@@ -404,6 +413,7 @@ test.describe('maintenance analytics (MAINT-10)', () => {
 
     const repeats = page.getByRole('region', { name: /Repeat issues/ })
     await expect(repeats.getByText('3 reports')).toBeVisible()
+    await expect(repeats.getByText('5 Jan 2026 to 14 Jun 2026')).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Repeat issues — 1 chain' })).toBeVisible()
   })
 

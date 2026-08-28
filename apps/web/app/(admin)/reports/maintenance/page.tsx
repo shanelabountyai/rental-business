@@ -1,5 +1,5 @@
 import { formatCents } from '@rental/core/money'
-import type { BusinessDate } from '@rental/core/scheduling'
+import { type BusinessDate, friendlyDate } from '@rental/core/scheduling'
 import Link from 'next/link'
 import { requireScope } from '@/lib/auth/guard.ts'
 import { maintenanceAnalytics } from '@/lib/reports/maintenance.ts'
@@ -150,8 +150,8 @@ export default async function MaintenanceAnalyticsPage({
                 <span>
                   {issue.propertyName} · {issue.unitName} · {categoryLabel(issue.category)}
                   <span className="text-muted-foreground block text-xs">
-                    {issue.firstAt.toISOString().slice(0, 10)} to{' '}
-                    {issue.lastAt.toISOString().slice(0, 10)}
+                    {friendlyDate(issue.firstAt, issue.timezone)} to{' '}
+                    {friendlyDate(issue.lastAt, issue.timezone)}
                   </span>
                 </span>
                 <span className="tabular-nums">{issue.count} reports</span>

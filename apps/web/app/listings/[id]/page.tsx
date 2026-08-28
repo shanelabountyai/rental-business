@@ -1,4 +1,5 @@
 import { listingDisclosures } from '@rental/core/listings'
+import { friendlyBusinessDate, utcToBusinessDate } from '@rental/core/scheduling'
 import { formatCents } from '@rental/core/money'
 import { notFound } from 'next/navigation'
 import { ListingInquiryForm } from '@/components/listings/listing-inquiry-form.tsx'
@@ -120,7 +121,7 @@ export default async function PublicListingPage({
             through a timezone converter here is the exact bug CLAUDE.md
             documents for @db.Date fields (utcToBusinessDate/toISOString
             only, never friendlyDate/businessDate). */}
-        <dd>{listing.availableOn.toISOString().slice(0, 10)}</dd>
+        <dd>{friendlyBusinessDate(utcToBusinessDate(listing.availableOn))}</dd>
         {(listing.unit.bedrooms != null || listing.unit.bathrooms != null) && (
           <>
             <dt className="text-muted-foreground">Beds / baths</dt>

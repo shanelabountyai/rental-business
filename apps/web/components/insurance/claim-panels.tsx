@@ -12,7 +12,7 @@ import {
   RENT_SOURCE_LABELS,
   mitigationSummary,
 } from '@rental/core/insurance'
-import { friendlyDate } from '@rental/core/scheduling'
+import { friendlyDate, utcToWallClock } from '@rental/core/scheduling'
 import { useActionState } from 'react'
 import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
 import { FieldError, SelectField, TextField, TextareaField } from '@/components/form/field.tsx'
@@ -481,7 +481,12 @@ export function TimelinePanel({ claim, action }: { claim: ClaimView; action: Act
 export function ClaimDetailsPanel({ claim, action }: { claim: ClaimView; action: Action }) {
   const [state, formAction] = useActionState<ClaimFormState, FormData>(action, {})
   const errors = state.fieldErrors ?? {}
-  const localValue = (value: Date | null) => (value ? value.toISOString().slice(0, 16) : '')
+  // `datetime-local` submits a zone-less wall clock and `wallClockToUtc`
+  // reads it back in the property's zone, so the default has to go OUT the
+  // same way. The raw UTC instant showed a Houston adjuster their 21:14
+  // report as 02:14 the next day, and saving the form unchanged moved it.
+  const localValue = (value: Date | null) =>
+    value ? utcToWallClock(value, claim.timezone) : ''
 
   return (
     <section aria-labelledby="claim-details" className="flex flex-col gap-3 rounded-md border p-4">

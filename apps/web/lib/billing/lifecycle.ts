@@ -305,7 +305,7 @@ export async function billingRunRows(propertyIds: readonly string[]) {
         select: {
           status: true,
           rentCents: true,
-          property: { select: { name: true } },
+          property: { select: { name: true, timezone: true } },
           unit: { select: { name: true } },
         },
       },

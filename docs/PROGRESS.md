@@ -5077,3 +5077,36 @@ Threading the zone cost almost nothing, because it was already there and unused:
 
 - **Whether a property-scoped manager should reach the vendor directory at all.** Deliberately open. A PM who cannot see vendors cannot dispatch one, so the operational answer is probably yes, but it changes what a scope means and belongs in `07-decisions.md` with a D-number rather than in a nav filter.
 - **Nothing asserts the portfolio-only items stay reachable for an owner** beyond the existing full-nav test, which does cover it incidentally.
+
+---
+
+## R-124: the ISO-date sweep, and two sites where it was the wrong value not just the wrong shape
+**Commit:** PENDING  ·  **Date:** 2026-08-28
+
+**Chosen because it was the only buildable row left.** Every backlog row is ✅ or gated (R-028 deferred; R-037a, R-093, R-097b each on a vendor decision). R-121 filed the remainder of R-119's date sweep by name — `prospects/[id]`, `tasks/[id]`, `jurisdiction`, `workorders/[id]` and `reports/maintenance` — and nobody owned it.
+
+**The filed list was five pages. The audit found sixteen display sites across fifteen files.** Running R-119's own grep (`toISOString().slice(0, 1[06])` over `apps/web`) and classifying every hit as *display*, *form default*, *filename stamp* or *internal comparison* turned up five more screens the two previous items had not looked at: the **public** listing page's Available date, the property detail's Acquired date, `leases/new`'s *occupied until* label, the money page's last-synced stamp, and `jurisdiction/actions.ts`'s own validation message (*"Must be later than 2026-08-01"* — a sentence shown to a person).
+
+### What it built
+
+**1. The right reader at every display site.** `friendlyBusinessDate(utcToBusinessDate(v))` for a `@db.Date` calendar day; `friendlyDate(instant, zone)` / `friendlyTimestamp(instant, zone)` for a real timestamp. Each site was classified against `schema.prisma`, not against the column's name — `preScreenSentAt`, `completedAt`, `sentAt` and `overriddenAt` are instants; `moveDate`, `effectiveFrom`, `expiresOn`, `acquiredOn`, `availableOn` and `Task.businessDate` are `@db.Date`.
+
+**2. Two of them were a wrong VALUE, not a wrong shape.**
+
+- **`reports/maintenance`'s repeat-issue range printed raw UTC across a portfolio that spans zones.** `firstAt`/`lastAt` are instants and the row had no clock, so `RepeatIssueRow` now carries the property's `timezone` — the row is the only thing that knows which zone its own dates belong to, exactly as it already carries its own `propertyName`.
+- **`ClaimDetailsPanel`'s two `datetime-local` defaults fed the raw UTC instant into a field the action reads back with `wallClockToUtc` in the property's zone.** A Houston adjuster's 21:14 report showed as 02:14 the next day, and **saving the form unchanged moved the stored value by the offset**. `utcToWallClock(value, claim.timezone)` closes the round trip; `claim.timezone` was already on `ClaimView` for the display dates beside it.
+
+**3. Where the zone came from, twice, without widening a shared query.** `prospects/[id]` fetches the property's timezone in the page (`prospectForWrite` returns a bare `Prospect` and has other callers) — the same shape `tasks/[id]` already used. `money`'s `billingRunRows` added `timezone` to a `property` select it already had.
+
+### What it decided
+
+- **Form-input defaults, filename stamps and internal comparisons were deliberately left as ISO.** `<input type="date">` submits and expects `YYYY-MM-DD`, and putting a zone anywhere near one is the R-042 bug. Nineteen `slice(0, 10)` calls survive the sweep on that basis and the audit grep is no longer expected to come back empty — *display* is the predicate, not the string.
+- **The maintenance-report check was confirmed to fail first, and it is the only new test.** The chain's first ticket is seeded at **02:00 UTC**, which is 20:00 the previous evening in the property's America/Chicago, so the rendered range is `5 Jan 2026 to 14 Jun 2026` with the zone and `6 Jan` without it. Pinning the page to `'UTC'` fails it in both browser projects; the noon-UTC fixtures the test used before could not have caught this in either direction. Everything else in the sweep is a formatting change with an existing spec over it.
+- **`getByText` is a substring match and "Sept" is not "Sep".** `listings.spec.ts` asserted the raw `2026-09-01`; updating it to `1 Sep 2026` failed against a page correctly rendering `1 Sept 2026`. R-119 wrote the four-letter September down and this is the first thing to trip over it since.
+
+### What it left behind
+
+- **`compliance/page.tsx` compares against UTC "today", not property-local.** `const today = new Date().toISOString().slice(0, 10)` decides the Overdue badge, so on a portfolio list every property reads overdue from ~18:00 local. It is a comparison rather than a print, so it is outside this item's predicate, and fixing it needs a decision about whose clock a portfolio-wide list uses.
+- **Nothing asserts the money page's last-synced stamp or the claim form's two defaults**; no e2e spec reaches either. The claim-panel change is the one with a real behavioural consequence and it is covered only by typecheck and by reading the action that parses the field back.
+- **The demo owner's MFA is still not enrolled** (R-117's leftover, unchanged — this item did not walk the demo).
+- **Gate run:** `lint` (0 errors, the same 14 pre-existing warnings), `typecheck`, `npm run build`, `check:ship-deps` clean, unit **2,760 passed + 4 skipped of 2,764**, and the ten specs covering every screen touched — `listings`, `jurisdiction`, `prospects`, `properties`, `insurance-claims`, `leases`, `workorders`, `tasks`, `maintenance`, `screening` — at **178 passed + 2 failed of `--list`'s 180**, both failures the Sep/Sept assertion above; **26 passed of 26** on `listings` + `leasing-analytics` after correcting it. The full sweep belongs to CI.

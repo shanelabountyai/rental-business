@@ -1,3 +1,4 @@
+import { friendlyBusinessDate, utcToBusinessDate } from '@rental/core/scheduling'
 import Link from 'next/link'
 import { actorCan, requirePermission } from '@/lib/auth/guard.ts'
 import { listCurrentRules } from '@/lib/jurisdiction/queries.ts'
@@ -98,7 +99,7 @@ export default async function JurisdictionRulesPage({
                 </span>
                 <span className="text-muted-foreground text-sm">
                   v{rule.version} · effective{' '}
-                  {rule.effectiveFrom.toISOString().slice(0, 10)}
+                  {friendlyBusinessDate(utcToBusinessDate(rule.effectiveFrom))}
                   {!rule.reviewedBy && ' · unreviewed'}
                 </span>
               </div>

@@ -1,5 +1,6 @@
 'use server'
 
+import { friendlyBusinessDate, utcToBusinessDate } from '@rental/core/scheduling'
 import {
   type JurisdictionRuleInput,
   validateJurisdictionRule,
@@ -133,7 +134,7 @@ export async function createRuleVersion(
     return {
       error: 'The new version must take effect after the version it replaces.',
       fieldErrors: {
-        effectiveFrom: `Must be later than ${previous.effectiveFrom.toISOString().slice(0, 10)}, when the current version took effect.`,
+        effectiveFrom: `Must be later than ${friendlyBusinessDate(utcToBusinessDate(previous.effectiveFrom))}, when the current version took effect.`,
       },
     }
   }

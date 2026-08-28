@@ -32,6 +32,9 @@ export interface RepeatIssueRow {
   unitId: string
   unitName: string
   propertyName: string
+  /// The property's zone. `firstAt`/`lastAt` are instants, and this report
+  /// spans a portfolio, so the row has to carry its own clock.
+  timezone: string
   category: string
   count: number
   firstAt: Date
@@ -106,7 +109,9 @@ export async function maintenanceAnalytics(
         priority: true,
         createdAt: true,
         closedAt: true,
-        unit: { select: { name: true, property: { select: { name: true } } } },
+        unit: {
+          select: { name: true, property: { select: { name: true, timezone: true } } },
+        },
       },
     }),
     // Closed inside the window, which is when a job's cost is knowable and
@@ -151,7 +156,11 @@ export async function maintenanceAnalytics(
   const unitLabels = new Map(
     tickets.map((ticket) => [
       ticket.unitId,
-      { unitName: ticket.unit.name, propertyName: ticket.unit.property.name },
+      {
+        unitName: ticket.unit.name,
+        propertyName: ticket.unit.property.name,
+        timezone: ticket.unit.property.timezone,
+      },
     ]),
   )
 
@@ -177,6 +186,7 @@ export async function maintenanceAnalytics(
       ...issue,
       unitName: unitLabels.get(issue.unitId)?.unitName ?? issue.unitId,
       propertyName: unitLabels.get(issue.unitId)?.propertyName ?? '',
+      timezone: unitLabels.get(issue.unitId)?.timezone ?? 'UTC',
     })),
     reopen: reopenRate(jobs),
     vendors: costsByVendor.map((row) => ({

@@ -152,7 +152,7 @@ test('a PM creates a listing, publishes it, and an anonymous visitor reads the h
   expect(response?.status()).toBe(200)
 
   await expect(publicPage.getByText('$1,750.00/mo')).toBeVisible()
-  await expect(publicPage.getByText('2026-09-01')).toBeVisible()
+  await expect(publicPage.getByText('1 Sept 2026')).toBeVisible()
   await expect(publicPage.getByText(/Income at least 3x rent/)).toBeVisible()
   // Disclosures (RISK-06's own row text: "warn with the specific complaint
   // and date" was R-055's; this is LEASE-01's own "deposit amount, fee

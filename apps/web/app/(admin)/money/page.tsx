@@ -1,3 +1,4 @@
+import { friendlyTimestamp } from '@rental/core/scheduling'
 import Link from 'next/link'
 import { BillingRuns } from '@/components/billing/billing-runs.tsx'
 import { WaiverPattern } from '@/components/money/waiver-pattern.tsx'
@@ -69,7 +70,12 @@ export default async function MoneyPage() {
           rentCents: row.lease.rentCents,
           hasSubscription: row.stripeSubscriptionId != null,
           collectionPaused: row.collectionPaused,
-          lastSyncedAt: row.lastSyncedAt?.toISOString().slice(0, 16).replace('T', ' ') ?? null,
+          // A real timestamp, so it is read in the PROPERTY's zone. It used
+          // to print the raw UTC instant, which is the wrong clock for
+          // every US property and the wrong day for half the evening.
+          lastSyncedAt: row.lastSyncedAt
+            ? friendlyTimestamp(row.lastSyncedAt, row.lease.property.timezone)
+            : null,
           lastSyncAction: row.lastSyncAction,
           lastSyncError: row.lastSyncError,
         }))}

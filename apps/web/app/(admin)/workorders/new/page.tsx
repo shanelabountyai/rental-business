@@ -1,4 +1,5 @@
 import { CATEGORY_LABELS } from '@rental/core/maintenance'
+import { friendlyBusinessDate, utcToBusinessDate } from '@rental/core/scheduling'
 import { activeWarranties, likelyMatchingWarranty } from '@rental/core/workorders'
 import { notFound } from 'next/navigation'
 import { CreateWorkOrderForm } from '@/components/workorders/create-work-order-form.tsx'
@@ -63,7 +64,7 @@ export default async function NewWorkOrderPage({
         units={units}
         warranties={warranties.map((w) => ({
           id: w.id,
-          label: `${w.category} — ${w.provider}${w.expiresOn ? ` (expires ${w.expiresOn.toISOString().slice(0, 10)})` : ''}`,
+          label: `${w.category} — ${w.provider}${w.expiresOn ? ` (expires ${friendlyBusinessDate(utcToBusinessDate(w.expiresOn))})` : ''}`,
           isLikelyMatch: likely?.id === w.id,
         }))}
       />

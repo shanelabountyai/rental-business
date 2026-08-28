@@ -1,3 +1,4 @@
+import { friendlyBusinessDate, utcToBusinessDate } from '@rental/core/scheduling'
 import Link from 'next/link'
 import { LeaseForm } from '@/components/leases/lease-form.tsx'
 import { requireScope } from '@/lib/auth/guard.ts'
@@ -49,7 +50,9 @@ export default async function NewLeasePage() {
             status: unit.status,
             marketRentCents: unit.marketRentCents,
             occupiedUntil: unit.leases[0]
-              ? (unit.leases[0].endsOn?.toISOString().slice(0, 10) ?? 'month-to-month')
+              ? (unit.leases[0].endsOn
+                  ? friendlyBusinessDate(utcToBusinessDate(unit.leases[0].endsOn))
+                  : 'month-to-month')
               : null,
           }))}
         />

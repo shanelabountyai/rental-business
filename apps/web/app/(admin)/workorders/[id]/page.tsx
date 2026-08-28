@@ -1,6 +1,11 @@
 import { actualTotalCents, compareBids, reapprovalCheck } from '@rental/core/approvals'
 import { earliestCompliantStart } from '@rental/core/entry'
-import { utcToWallClock, businessDate } from '@rental/core/scheduling'
+import {
+  businessDate,
+  friendlyBusinessDate,
+  utcToBusinessDate,
+  utcToWallClock,
+} from '@rental/core/scheduling'
 import { formatCents } from '@rental/core/money'
 import {
   activeWarranties,
@@ -275,7 +280,7 @@ export default async function WorkOrderDetailPage({
               className={w.id === likely?.id ? 'font-medium' : 'text-muted-foreground'}
             >
               {w.category} — {w.provider}
-              {w.expiresOn && ` (expires ${w.expiresOn.toISOString().slice(0, 10)})`}
+              {w.expiresOn && ` (expires ${friendlyBusinessDate(utcToBusinessDate(w.expiresOn))})`}
               {w.id === likely?.id && ' — likely covers this'}
             </p>
           ))}

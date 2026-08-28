@@ -1,3 +1,4 @@
+import { friendlyBusinessDate, utcToBusinessDate } from '@rental/core/scheduling'
 import Link from 'next/link'
 import { jobCostCents } from '@rental/core/workorders'
 import { MaintenanceSpendSection } from '@/components/workorders/maintenance-spend.tsx'
@@ -200,7 +201,7 @@ export default async function PropertyDetailPage({
           <>
             <dt className="text-muted-foreground">Acquired</dt>
             <dd className="col-span-1 sm:col-span-2">
-              {property.acquiredOn.toISOString().slice(0, 10)}
+              {friendlyBusinessDate(utcToBusinessDate(property.acquiredOn))}
             </dd>
           </>
         )}

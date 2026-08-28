@@ -1,4 +1,10 @@
-import { friendlyTimestamp } from '@rental/core/scheduling'
+import {
+  friendlyBusinessDate,
+  friendlyDate,
+  friendlyTimestamp,
+  utcToBusinessDate,
+} from '@rental/core/scheduling'
+import { prisma } from '@rental/db'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { InviteToApplyForm } from '@/components/applications/invite-to-apply-form.tsx'
@@ -60,6 +66,15 @@ export default async function ProspectDetailPage({
   const prospect = await prospectForWrite(id, scope)
   if (!prospect) notFound()
 
+  // The zone every timestamp on this page is read in. `prospectForWrite`
+  // returns a bare `Prospect`, so it is fetched here rather than widening
+  // that query's return type for its other callers - the same shape
+  // `tasks/[id]` uses.
+  const property = await prisma.property.findUniqueOrThrow({
+    where: { id: prospect.propertyId },
+    select: { timezone: true },
+  })
+
   const answered = prospect.preScreenRespondedAt != null
   const showings = await showingsForProspect(id)
   const application = await applicationForProspect(id, scope)
@@ -104,7 +119,7 @@ export default async function ProspectDetailPage({
         {!answered ? (
           prospect.preScreenSentAt ? (
             <p className="text-muted-foreground text-sm">
-              Sent {prospect.preScreenSentAt.toISOString().slice(0, 10)} - no answer yet.
+              Sent {friendlyDate(prospect.preScreenSentAt, property.timezone)} - no answer yet.
             </p>
           ) : (
             <p className="text-muted-foreground text-sm">Not sent yet.</p>
@@ -112,7 +127,11 @@ export default async function ProspectDetailPage({
         ) : (
           <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
             <dt className="text-muted-foreground">Move date</dt>
-            <dd>{prospect.moveDate?.toISOString().slice(0, 10) ?? '—'}</dd>
+            <dd>
+              {prospect.moveDate
+                ? friendlyBusinessDate(utcToBusinessDate(prospect.moveDate))
+                : '—'}
+            </dd>
             <dt className="text-muted-foreground">Occupants</dt>
             <dd>{prospect.occupants ?? '—'}</dd>
             <dt className="text-muted-foreground">Pets</dt>
@@ -177,7 +196,7 @@ export default async function ProspectDetailPage({
             <>
               <p className="text-muted-foreground text-sm">
                 {application.completedAt
-                  ? `Complete ${application.completedAt.toISOString().slice(0, 10)}.`
+                  ? `Complete ${friendlyDate(application.completedAt, property.timezone)}.`
                   : 'In progress.'}
               </p>
               <ul className="flex flex-col gap-2 text-sm">
@@ -257,11 +276,12 @@ export default async function ProspectDetailPage({
                     <span className="text-muted-foreground">Adverse-action notice: </span>
                     {a.adverseAction.sentAt ? (
                       <span className="text-green-800">
-                        Sent {a.adverseAction.sentAt.toISOString().slice(0, 10)}
+                        Sent {friendlyDate(a.adverseAction.sentAt, property.timezone)}
                       </span>
                     ) : a.adverseAction.overriddenAt ? (
                       <span className="text-amber-800">
-                        Not sent — overridden {a.adverseAction.overriddenAt.toISOString().slice(0, 10)}
+                        Not sent — overridden{' '}
+                        {friendlyDate(a.adverseAction.overriddenAt, property.timezone)}
                       </span>
                     ) : (
                       <span className="text-red-700">Not sent yet</span>

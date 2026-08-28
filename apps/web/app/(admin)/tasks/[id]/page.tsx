@@ -3,7 +3,13 @@ import {
   firstResponseSlaState,
   isTicketTriageResolved,
 } from '@rental/core/maintenance'
-import { businessDate, businessDateToUtc } from '@rental/core/scheduling'
+import {
+  businessDate,
+  businessDateToUtc,
+  friendlyBusinessDate,
+  friendlyDate,
+  utcToBusinessDate,
+} from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
@@ -135,7 +141,7 @@ export default async function TaskDetailPage({
         </dd>
         <dt className="text-muted-foreground">Due</dt>
         <dd className="col-span-1 sm:col-span-2">
-          {task.businessDate.toISOString().slice(0, 10)}
+          {friendlyBusinessDate(utcToBusinessDate(task.businessDate))}
         </dd>
         <dt className="text-muted-foreground">Assigned to</dt>
         <dd className="col-span-1 sm:col-span-2">
@@ -148,7 +154,7 @@ export default async function TaskDetailPage({
             </dt>
             <dd className="col-span-1 sm:col-span-2">
               {task.completedBy?.name ?? '—'}
-              {task.completedAt && ` on ${task.completedAt.toISOString().slice(0, 10)}`}
+              {task.completedAt && ` on ${friendlyDate(task.completedAt, property.timezone)}`}
             </dd>
           </>
         )}

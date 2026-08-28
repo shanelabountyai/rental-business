@@ -1,3 +1,4 @@
+import { friendlyBusinessDate, utcToBusinessDate } from '@rental/core/scheduling'
 import { RuleForm } from '@/components/jurisdiction/rule-form.tsx'
 import { requirePermission } from '@/lib/auth/guard.ts'
 import { createRuleVersion } from '@/lib/jurisdiction/actions.ts'
@@ -30,7 +31,7 @@ export default async function NewJurisdictionRulePage({
       </h1>
       <p className="text-muted-foreground max-w-prose text-sm">
         {previous
-          ? `Supersedes v${previous.version}, in effect since ${previous.effectiveFrom.toISOString().slice(0, 10)}. The prior version stays on record (D-4) - nothing is edited or deleted.`
+          ? `Supersedes v${previous.version}, in effect since ${friendlyBusinessDate(utcToBusinessDate(previous.effectiveFrom))}. The prior version stays on record (D-4) - nothing is edited or deleted.`
           : 'Adding a jurisdiction is adding a reviewed config record, not a release (D-4).'}
       </p>
       <RuleForm
