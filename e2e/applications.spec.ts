@@ -204,7 +204,7 @@ test('staff invites a prospect, the lead adds a co-applicant, and the household 
     .toBe('SCREENED')
 
   await page.goto(`/prospects/${prospect.id}`)
-  await expect(page.getByText(/^Complete \d{4}-\d{2}-\d{2}\.$/)).toBeVisible()
+  await expect(page.getByText(/^Complete \d{1,2} \w+ \d{4}\.$/)).toBeVisible()
   await expect(page.getByText(/Morgan.*\(lead\).*done/)).toBeVisible()
   await expect(page.getByText(/Riley.*done/)).toBeVisible()
 })
@@ -263,6 +263,6 @@ test('an application fee is required, and paying it is what completes the applic
   ])
 
   await page.goto(`/prospects/${prospect.id}`)
-  await expect(page.getByText(/^Complete \d{4}-\d{2}-\d{2}\.$/)).toBeVisible()
+  await expect(page.getByText(/^Complete \d{1,2} \w+ \d{4}\.$/)).toBeVisible()
   await expect(page.getByText(/Morgan.*\(lead\).*done/)).toBeVisible()
 })

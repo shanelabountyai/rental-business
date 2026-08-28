@@ -5137,3 +5137,31 @@ Threading the zone cost almost nothing, because it was already there and unused:
 - **`complianceToday` returns `null` for an item with no property behind it at all**, and a null today never flags overdue. That is a clock we do not have rather than a day that has arrived, but it means an entity whose every property has been deactivated silently stops flagging its filings. No screen reaches that state today (`currentScope` only lists active properties, so such an item is out of scope entirely) and it is written down rather than guarded.
 - **The demo owner's MFA is still not enrolled** (R-117's leftover, unchanged — this item did not walk the demo).
 - **Gate run:** `lint` (0 errors, the same 14 pre-existing warnings), `typecheck`, `npm run build`, `check:ship-deps` clean (755 dev packages, no shipping file imports one), unit **2,763 passed + 4 skipped of 2,767**, and `compliance.spec.ts` at **2 passed of 2**. The full sweep belongs to CI.
+
+---
+
+## R-126: the first full sweep since the pipeline died, and the spec R-124 could not have known to run
+**Commit:** _pending_  ·  **Date:** 2026-08-28
+
+**Chosen because the backlog ran out of buildable rows again and everything else would have landed on an unverified tree.** Every row is ✅, gated on a vendor decision (R-037a, R-093, R-097b) or deferred (R-028); R-125 closed the last unowned defect. The owner picked verification over the three remaining leftovers.
+
+### What it built
+
+**1. The verification itself, which is the item.** `npm run ci:local` — CI's entire `verify` job — came back green: migrations applied to a throwaway `rental_ci` from scratch, **drift: no difference detected**, seed clean (6 roles, 1 jurisdiction rule, 1 screening criteria version), `lint` (0 errors, the same 14 pre-existing warnings), `typecheck`, `check:ship-deps` clean (755 dev packages, no shipping file imports one), unit **2,763 passed + 4 skipped of 2,767**, `npm run build` compiled.
+
+**2. One real regression, shipped two items ago.** The sweep failed twice in `applications.spec.ts` — and **failed again on retry**, which is what separated it from a flake before anything was diagnosed. R-124 changed `prospects/[id]/page.tsx` to `friendlyDate(application.completedAt, property.timezone)`, so the page prints `Complete 28 Aug 2026.`; lines 207 and 266 of `applications.spec.ts` still asserted `/^Complete \d{4}-\d{2}-\d{2}\.$/`. Both are now `/^Complete \d{1,2} \w+ \d{4}\.$/` — `\w+` rather than a three-letter month, because R-119 already wrote down that `en-GB` spells September **Sept**.
+
+**3. The sweep, reconciled.** **1,046 passed + 8 skipped = 1,054**, against `npx playwright test --list`'s `Total: 1054 tests in 85 files`. **0 failed, 0 flaky**, 4.6 minutes.
+
+### What it decided
+
+- **A display change is not covered by the spec that shares its filename.** R-124 ran the ten specs named after the pages it touched, and `prospects.spec.ts` was one of them — the assertion that broke lives in `applications.spec.ts`, because the application pipeline's own spec ends by reading the prospect page. That is the general lesson and it is why this row exists rather than being folded into a note: the defensible sweep after a display change is a grep of `e2e/` for the format being replaced, not a list of specs named after the changed routes.
+- **The four remaining literal ISO assertions in `e2e/` are correct and were left alone.** `golden-path-3.spec.ts`, `confidential.spec.ts` (×2) and `recurring-and-rubs.spec.ts` assert `2026-09-19` and a RUBS memo line. Those are `BusinessDate` *values* and a core-generated string, which is exactly the class R-124 deliberately excluded from its predicate — changing them would have been re-opening a settled decision to make a grep come back empty.
+- **The sweep was killed the moment the alarm fired, not left to finish.** Two failures in one file at 18s each, both retried and both red again; a doomed 1,054-test run had nothing left to tell us. The failure detail only prints at the end, so the diagnosis came from re-running that one spec file on the failing project.
+
+### What it left behind
+
+- **The GitHub Actions billing block is still unresolved, and it is now 11 days and ~70 pushes.** R-113 found it on 2026-08-26 and left it as owner-only; every run since — including R-125's and the `.nvmrc` chore's — still carries *"The job was not started because recent account payments have failed or your spending limit needs to be increased."* This item verified the tree by hand precisely because that is the only thing that can be done from here. **The `.nvmrc` chore itself has never been executed by CI**: `.nvmrc` is tracked and `node-version-file` resolves, but whether Node 26 builds on `ubuntu-latest` is still unknown.
+- **`npm audit` (18 findings) and Lighthouse remain untriaged and unrun** — both R-113's leftovers, unchanged. Lighthouse is CI's e2e job only; nothing local reproduces it.
+- **The demo owner's MFA is still not enrolled** (R-117's leftover, carried unchanged by five items now — this item did not walk the demo).
+- **Gate run:** the whole of it, and this is the entry to point at for the R-054-onward window — `db:ci`, `lint`, `typecheck`, `check:ship-deps`, unit **2,763 + 4 skipped**, `build`, and the **full e2e sweep at 1,046 passed + 8 skipped of 1,054, 0 failed, 0 flaky**.
