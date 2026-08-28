@@ -5114,7 +5114,7 @@ Threading the zone cost almost nothing, because it was already there and unused:
 ---
 
 ## R-125: the compliance calendar's Overdue badge was reading a UTC clock
-**Commit:** _pending_  ·  **Date:** 2026-08-28
+**Commit:** 67cdd7e  ·  **Date:** 2026-08-28
 
 **Chosen because it is the only unowned defect left on the board.** Every backlog row is ✅ or gated on a vendor decision (R-028 deferred; R-037a, R-093, R-097b). R-124 filed this one by name in its own "what it left behind" — deliberately, because R-124's predicate was *display* and this is a *comparison*, and because it needed a decision R-124 was not going to take on the way past.
 
