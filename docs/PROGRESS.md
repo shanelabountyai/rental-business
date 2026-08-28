@@ -5169,7 +5169,7 @@ Threading the zone cost almost nothing, because it was already there and unused:
 ---
 
 ## R-127: eighteen audit findings nobody had triaged, and only two of them reached a shipping tree
-**Commit:** <sha>  ·  **Date:** 2026-08-28
+**Commit:** 2857b42  ·  **Date:** 2026-08-28
 
 **Chosen by the owner** from a backlog whose every row is ✅ — the oldest open leftover, filed by R-113 on 2026-08-26 and carried unchanged by six items since. `npm audit` had read **18 findings, 14 of them high**, behind a CI step that is deliberately `continue-on-error: true`, so nothing ever failed and nobody ever read it.
 
