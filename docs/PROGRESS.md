@@ -5574,7 +5574,7 @@ reason: it carries no script, so there is no nonce to lose.
   against `npx playwright test --list`. Not a full sweep.
 
 ## R-133: the cron authorization had never been executed, and its spec passed against `return false`
-**Commit:** PENDING  ·  **Date:** 2026-08-29
+**Commit:** 7b6fd76  ·  **Date:** 2026-08-29
 
 Owner-chosen after the backlog ran out of buildable rows for the fifth item
 running. The same class R-132 closed — an assertion that has never been
