@@ -5484,3 +5484,91 @@ statewide `'YY'` rule. All three now mint their own code per run.
   `npm run test:e2e` carries, so every spec died on a missing `DATABASE_URL`.
   Memory was at 74% available with zero pressure. **Run the npm script, never
   the binary.**
+
+## R-132: the Core Web Vitals budgets had never once been evaluated
+**Commit:** _(recorded below)_  ·  **Date:** 2026-08-29
+
+Owner-chosen over a full sweep, the chargeback clock and a demo walk, on the
+grounds that a check nobody has ever seen run is this repo's most expensive
+recurring failure — R-113 was nine days of dead CI, R-120 was seven dead
+deploys, and both were invisible for the same reason.
+
+### What it built
+
+**1. `npm run lighthouse`** — `build:test` then `npx lhci autorun`. About two
+minutes. The build is part of the script because `lhci`'s `startServerCommand`
+is a bare `next start`, which assumes a build already exists.
+
+**2. `lighthouserc.json`, three changes.** `startServerCommand`
+`npm run start` → **`npm run start:test`**, so a local run cannot point at the
+Neon dev branch. The `url` list from **one page to three** — `/`, `/login`,
+`/forgot-password`, every page a stranger reaches without a token. And
+**`errors-in-console` asserted at `error`**.
+
+**3. `apps/web/app/icon.svg`.** The first run's only finding was
+`GET /favicon.ico 404` on every page load — the sole failing best-practices
+audit. There has never been a favicon. The new one is the **same mark
+`manifest.webmanifest/route.ts` has inlined since D-8**: same `#1f2937` tile,
+same white house path. That route's comment now names the third file whoever
+adds real branding has to replace.
+
+**4. `/icon.svg` excluded from the proxy matcher and allowed in the prerender
+guard.** The matcher had excluded `favicon.ico` by name since it was written —
+an exclusion for a file that did not exist, which is a large part of why the
+404 went unseen. `csp-browser.spec.ts`'s `MAY_BE_PRERENDERED` gains
+`/icon.svg` next to `/manifest.webmanifest`, on that entry's own stated
+reason: it carries no script, so there is no nonce to lose.
+
+### What it decided
+
+- **The check was green, and that is the finding** (**D-156**). `lhci` lives
+  only in CI's e2e job; CI has not started a job since 2026-08-17. Months of
+  `categories:accessibility: minScore 1`, an LCP ceiling and a CLS ceiling
+  against a single URL had produced exactly zero evaluations.
+- **D-152's "cannot be exercised on this laptop" was wrong, and the decision
+  it supported was still right.** That claim justified not forcing a
+  `lighthouse` upgrade across `@lhci/cli`'s exact pin. The refusal stands on
+  its own merits; the reason given was false. **Third time in this repo a
+  check has been called CI-only and turned out not to be** — `db:ci` was the
+  second.
+- **`errors-in-console` earns its place because the run's one finding was
+  invisible to every assertion already in the file.** Accessibility,
+  performance, SEO, LCP and CLS were all green over a 404 on every page.
+- **The favicon is copied, not designed.** A third, different-looking house
+  would have been the defect.
+- **`start:test` is safe in CI even though CI has no `.env.test`.**
+  `dotenv-cli` skips a missing file, which is already load-bearing there:
+  `test:e2e` → `e2e:server` → `build:test` names the same file, and CI was
+  green on it before the billing block.
+
+### What it left behind
+
+- **The budgets still cannot see a signed-in page.** Lighthouse has no
+  session, so the tenant portal, the vendor magic link and every admin screen
+  are audited by axe in the e2e suite and by nothing else. The two are not
+  substitutes and neither covers the other. `/listings/[id]` is the one
+  stranger-facing page left out, and only because its URL needs a seeded id
+  that a static config cannot express.
+- **The CI step's ordering dependency is named, not fixed.** `lhci autorun`
+  there still assumes the build `test:e2e` left behind. Making the CI step
+  build again would compile the app twice, which is the same trade the
+  workflow's own comment already refuses for e2e. `npm run lighthouse` carries
+  the build so a human cannot get it wrong.
+- **`/login` scores 0.95 performance against a 0.9 `warn` floor**, the lowest
+  of the three and the first number anyone has for it. Nothing to do today;
+  it is a baseline rather than a defect.
+- **`chargeback-actions.ts` still has no unit test** — R-130's leftover,
+  carried unchanged by R-131 and this item.
+- **The GitHub Actions billing block is still unresolved** — 13 days,
+  owner-only. Everything above is a local verification of a CI step that has
+  still never run on GitHub.
+- **Gate run:** `typecheck`, `lint` (0 errors, the same 14 pre-existing
+  warnings), `check:ship-deps` clean, `npm run build` (inside
+  `npm run lighthouse`), unit **2,780 passed + 4 skipped of 2,784** —
+  unchanged from R-131, as expected for an item that touches no application
+  logic — **`npm run lighthouse` green across 3 URLs and 9 runs** (perf
+  0.99/0.99/0.95, accessibility 1, best-practices 1, SEO 1, LCP 2.06–2.26s
+  against a 3.0s ceiling, CLS 0, no console errors), and the two specs
+  covering the changed proxy matcher and prerender guard — `csp`,
+  `csp-browser` — at **18 passed of 18 listed, 0 failed, 0 flaky**, reconciled
+  against `npx playwright test --list`. Not a full sweep.

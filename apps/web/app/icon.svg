@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" role="img" aria-label="Rental Operations">
+  <!-- THE SAME MARK the PWA manifest already carries, deliberately copied
+       rather than invented: app/manifest.webmanifest/route.ts inlines this
+       exact rect and path as its 192 and 512 icons, and its comment says
+       whoever adds real branding replaces those two entries. This is the
+       third entry they now have to replace, and it looking different would
+       be the defect. Filled tile rather than a bare glyph because --primary
+       is near-black and disappears into a dark tab strip. -->
+  <rect width="192" height="192" rx="32" fill="#1f2937"/>
+  <path d="M96 44 36 96h18v52h34v-32h16v32h34V96h18z" fill="#fff"/>
+</svg>

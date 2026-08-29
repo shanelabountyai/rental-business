@@ -44,6 +44,7 @@
     "db:status:dev": "dotenv -e .env.local -- prisma migrate status --schema packages/db/prisma/schema.prisma",
     "db:drift": "dotenv -e .env.test -e .env.local -- prisma migrate diff --from-schema-datasource packages/db/prisma/schema.prisma --to-schema-datamodel packages/db/prisma/schema.prisma --exit-code",
     "db:reset:test": "dropdb --if-exists rental_test && createdb rental_test && npm run db:migrate:test && npm run db:seed:test",
+    "lighthouse": "npm run build:test && npx lhci autorun",
     "check:ship-deps": "tsx scripts/ship-deps.mts",
     "ci:local": "npm run db:ci && npm run lint && npm run typecheck && npm run check:ship-deps && npm test && npm run build",
     "db:ci": "sed 's/rental_test/rental_ci/g' .env.test > .env.ci && dropdb --if-exists rental_ci && createdb rental_ci && npm run db:ci:migrate && npm run db:ci:seed && npm run db:ci:drift",

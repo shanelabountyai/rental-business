@@ -30,7 +30,9 @@ export function GET() {
       // Inline SVG data URI rather than PNG files: this build has no brand
       // assets yet, and a manifest pointing at icons that 404 is worse than
       // one carrying a plain placeholder. Whoever adds real branding replaces
-      // these two entries and nothing else.
+      // these two entries AND `app/icon.svg`, which R-132 gave the same mark
+      // on purpose - the favicon and the installed icon looking different
+      // would be the defect.
       {
         src:
           'data:image/svg+xml,' +

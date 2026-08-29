@@ -124,14 +124,16 @@ export const config = {
      * up. The three non-`api` routes that also serve document bytes are
      * excluded by name for exactly the same reason.
      *
-     * `_next/static` and `_next/image` are build output and image
-     * optimisation; running the proxy on them costs a function invocation
-     * per asset and buys nothing, since neither is a document a script can
-     * live in.
+     * `_next/static`, `_next/image` and `icon.svg` are build output, image
+     * optimisation and the favicon; running the proxy on them costs a
+     * function invocation per asset and buys nothing, since none of them is a
+     * document a script can live in. `icon.svg` replaced a `favicon.ico`
+     * entry that had excluded a file this app never had - which is why every
+     * page load logged a 404 to the console until R-132 added the icon.
      */
     {
       source:
-        '/((?!api/|_next/static|_next/image|favicon.ico|listings/[^/]+/photos/|sign/[^/]+/document|vendor/[^/]+/documents/).*)',
+        '/((?!api/|_next/static|_next/image|icon.svg|listings/[^/]+/photos/|sign/[^/]+/document|vendor/[^/]+/documents/).*)',
       missing: [
         // Not on prefetches and client-side navigations: those return RSC
         // payloads rather than a document, so there is nothing to nonce.

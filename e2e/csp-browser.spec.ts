@@ -129,13 +129,20 @@ test.afterAll(async () => {
  * Routes allowed to be statically prerendered, and therefore allowed to
  * serve script the CSP will refuse.
  *
- * Both are framework error pages with no interactivity: a 404 and the
+ * Two are framework error pages with no interactivity: a 404 and the
  * global error boundary. Forcing Next's own error boundaries to render per
  * request is a change with more risk than the defect it would fix, so they
  * are accepted rather than fixed - a decision, recorded, not an oversight.
- * The webmanifest carries no script at all.
+ * The webmanifest and `/icon.svg` carry no script at all - the nonce this
+ * guard exists to protect has nothing to protect on either, and the icon is
+ * excluded from the proxy's matcher for the same reason.
  */
-const MAY_BE_PRERENDERED = new Set(['/_global-error', '/_not-found', '/manifest.webmanifest'])
+const MAY_BE_PRERENDERED = new Set([
+  '/_global-error',
+  '/_not-found',
+  '/icon.svg',
+  '/manifest.webmanifest',
+])
 
 test('no NEW page is prerendered, because a prerendered page loses every script', async () => {
   // THE GUARD FOR THE WHOLE CLASS, not for the four pages that happened to
