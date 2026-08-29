@@ -15,11 +15,7 @@ const staffIds: string[] = []
 const entityIds: string[] = []
 const propertyIds: string[] = []
 const tenantIds: string[] = []
-const ticketIds: string[] = []
-const workOrderIds: string[] = []
-const taskIds: string[] = []
 const vendorIds: string[] = []
-const applianceIds: string[] = []
 
 async function createStaff(
   roleKey: string,
@@ -104,7 +100,6 @@ async function seedConvertedTicket(propertyId: string, unitId: string, category 
       status: 'NEW',
     },
   })
-  ticketIds.push(ticket.id)
 
   // The triage task R-023's own consumer would create - seeded directly
   // (that wiring is R-023's own coverage), so this spec can prove the
@@ -121,7 +116,6 @@ async function seedConvertedTicket(propertyId: string, unitId: string, category 
       title: `Triage: HVAC — test`,
     },
   })
-  taskIds.push(task.id)
 
   return { ticket, tenant }
 }
@@ -144,10 +138,18 @@ test.beforeEach(async ({ page }) => {
 test.afterAll(async () => {
   await prisma.eventConsumption.deleteMany({ where: { event: { propertyId: { in: propertyIds } } } })
   await prisma.outboxEvent.deleteMany({ where: { propertyId: { in: propertyIds } } })
-  await prisma.task.deleteMany({ where: { id: { in: taskIds } } })
-  await prisma.appliance.deleteMany({ where: { id: { in: applianceIds } } })
-  await prisma.workOrder.deleteMany({ where: { id: { in: workOrderIds } } })
-  await prisma.ticket.deleteMany({ where: { id: { in: ticketIds } } })
+  // BY OWNERSHIP, NOT BY COLLECTED ID (R-109's rule, applied to cleanup).
+  // A collected-id list only holds what a test lived long enough to push, so
+  // the first failing assertion orphans every row created after it - and the
+  // `unit.deleteMany` below then dies on `WorkOrder_unitId_fkey`, turning one
+  // red test into a second, more confusing error and leaving an ACTIVE
+  // property behind for `notifications.test.ts` to mistake for a live fixture.
+  // It also missed every row the APP created, which is most of them. The
+  // property is the ownership marker the database already carries.
+  await prisma.task.deleteMany({ where: { propertyId: { in: propertyIds } } })
+  await prisma.appliance.deleteMany({ where: { unit: { propertyId: { in: propertyIds } } } })
+  await prisma.workOrder.deleteMany({ where: { propertyId: { in: propertyIds } } })
+  await prisma.ticket.deleteMany({ where: { propertyId: { in: propertyIds } } })
   await prisma.leaseTenant.deleteMany({ where: { tenantId: { in: tenantIds } } })
   await prisma.lease.deleteMany({ where: { propertyId: { in: propertyIds } } })
   await prisma.unit.deleteMany({ where: { propertyId: { in: propertyIds } } })
@@ -191,10 +193,16 @@ test.describe('creating a work order', () => {
     await page.getByRole('button', { name: 'Create work order' }).click()
 
     await page.waitForURL(/\/workorders\/(?!new$)[a-z0-9]+$/)
-    await expect(page.getByText('Turn the unit', { exact: false })).toBeVisible()
+    // By ROLE, not by text: the scope is this page's <h1>, and Next copies
+    // every heading verbatim into `#__next-route-announcer__` on a client-side
+    // navigation, so `getByText` resolves to two elements whenever both land
+    // in the same paint. That is a race this assertion lost for the first time
+    // when R-135's pool cap took the sweep from 14.2m to 8.7m - the fifth
+    // instance of the trap R-127 documented, and the same fix: the announcer
+    // is a role="alert" div, so a heading match cannot collide with it.
+    await expect(page.getByRole('heading', { name: 'Turn the unit' })).toBeVisible()
 
     const workOrder = await prisma.workOrder.findFirstOrThrow({ where: { unitId: unit.id } })
-    workOrderIds.push(workOrder.id)
     expect(workOrder.status).toBe('SUBMITTED')
     expect(workOrder.estimateCents).toBe(45_000)
     expect(workOrder.ticketId).toBeNull()
@@ -220,7 +228,6 @@ test.describe('creating a work order', () => {
     await page.waitForURL(/\/workorders\/(?!new$)[a-z0-9]+$/)
 
     const workOrder = await prisma.workOrder.findFirstOrThrow({ where: { ticketId: ticket.id } })
-    workOrderIds.push(workOrder.id)
 
     await expect
       .poll(async () => (await prisma.ticket.findUnique({ where: { id: ticket.id } }))?.status, {
@@ -269,7 +276,6 @@ test.describe('assigning a work order', () => {
         priority: 'URGENT',
       },
     })
-    workOrderIds.push(workOrder.id)
 
     const owner = await createStaff('owner')
     const tech = await createStaff('maintenance_tech', { propertyId: property.id })
@@ -300,7 +306,6 @@ test.describe('assigning a work order', () => {
     const appliance = await prisma.appliance.create({
       data: { unitId: unit.id, category: 'HVAC', make: 'Carrier', model: 'X200', filterSize: '16x25x1' },
     })
-    applianceIds.push(appliance.id)
 
     const workOrder = await prisma.workOrder.create({
       data: {
@@ -312,7 +317,6 @@ test.describe('assigning a work order', () => {
         status: 'ASSIGNED',
       },
     })
-    workOrderIds.push(workOrder.id)
 
     const tech = await createStaff('maintenance_tech', { propertyId: property.id })
     const jobTask = await prisma.task.create({
@@ -327,7 +331,6 @@ test.describe('assigning a work order', () => {
         title: `Job: ${workOrder.scope} — ${unit.name}`,
       },
     })
-    taskIds.push(jobTask.id)
 
     await signIn(page, tech.email)
     await page.goto(`/tasks/${jobTask.id}`)
@@ -353,7 +356,6 @@ test.describe('assigning a work order', () => {
         priority: 'URGENT',
       },
     })
-    workOrderIds.push(workOrder.id)
 
     const staff = await createStaff('owner')
     await signIn(page, staff.email)
@@ -392,7 +394,6 @@ test.describe('warranty hold', () => {
         warrantyClaim: true,
       },
     })
-    workOrderIds.push(workOrder.id)
 
     const staff = await createStaff('owner')
     await signIn(page, staff.email)
@@ -461,7 +462,6 @@ test.describe('accessibility', () => {
         priority: 'ROUTINE',
       },
     })
-    workOrderIds.push(workOrder.id)
 
     const staff = await createStaff('owner')
     await signIn(page, staff.email)

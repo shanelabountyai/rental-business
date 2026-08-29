@@ -163,7 +163,10 @@ test('a code stays withheld until move-in funds clear, then can be issued and st
   await page.goto(`/leases/${lease.id}`)
   await expect(page.getByText('Move-in funds have not cleared yet')).toHaveCount(0)
   await page.getByRole('button', { name: 'Issue to tenant' }).click()
-  await expect(page.getByText('7392')).toBeVisible()
+  // EXACT: `getByText` matches substrings, and an all-digit code is valid
+  // hex, so it can collide with a fixture's random `-<8 hex>` suffix. See
+  // operational.spec.ts's access-code test for the run where that happened.
+  await expect(page.getByText('7392', { exact: true })).toBeVisible()
 
   const audited = await prisma.auditLog.findFirst({
     where: { entityType: 'Lease', entityId: lease.id, action: 'accesscode.issued' },

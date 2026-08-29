@@ -386,7 +386,10 @@ test.describe('the vendor journey', () => {
     ).toBeVisible()
 
     await vendorPage.getByRole('button', { name: /^Show code for the / }).click()
-    await expect(vendorPage.getByText('4821')).toBeVisible()
+    // EXACT: `getByText` matches substrings, and an all-digit code is valid
+    // hex, so it can collide with a fixture's random `-<8 hex>` suffix. See
+    // operational.spec.ts's access-code test for the run where that happened.
+    await expect(vendorPage.getByText('4821', { exact: true })).toBeVisible()
     await noScript.close()
   })
 
@@ -436,7 +439,10 @@ test.describe('the vendor journey', () => {
 
     await vendorPage.goto(`/vendor/${token}`)
     await vendorPage.getByRole('button', { name: /^Show code for the / }).click()
-    await expect(vendorPage.getByText('4821')).toBeVisible()
+    // EXACT: `getByText` matches substrings, and an all-digit code is valid
+    // hex, so it can collide with a fixture's random `-<8 hex>` suffix. See
+    // operational.spec.ts's access-code test for the run where that happened.
+    await expect(vendorPage.getByText('4821', { exact: true })).toBeVisible()
 
     const reveals = await prisma.auditLog.findMany({
       where: { action: 'accesscode.revealed', propertyId: workOrder.propertyId },

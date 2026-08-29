@@ -5759,3 +5759,104 @@ and a browser spec in e2e, and by nothing in between.
   **2,794 passed + 4 skipped of 2,798** — reconciling against R-133's 2,792
   plus this item's 6 new tests exactly. No e2e: no production file changed, so
   there is no spec this item touched.
+
+## R-135: 189 database connections against a server that allows 100, reported as flaky tests
+
+**Commit:** PENDING  ·  **Date:** 2026-08-29
+
+Owner-chosen after the backlog ran out of buildable rows for the seventh item
+running. Two sweeps had ended with tests marked **flaky** — which still exits
+0 — and the cause was not randomness. It was arithmetic.
+
+### What it built
+
+- **`localPoolCap(url)` in `packages/db/index.ts`**, applied at the one
+  `new PrismaClient` site the whole repo has. It sets `connection_limit=8`
+  when the host is `localhost` or `127.0.0.1`, preserves every other query
+  parameter, and returns the URL untouched when the host is remote, when a
+  `connection_limit` is already present, or when the URL is unset or
+  unparseable.
+- **`packages/db/pool-cap.test.ts`, six tests**, one per branch. A wrong
+  branch here is invisible until a sweep dies 766 tests in with somebody
+  else's stack trace, which is the whole argument for testing a URL rewriter.
+- **The arithmetic, written into the code rather than into a commit message.**
+  Prisma's default `connection_limit` is `physical_cpus * 2 + 1` — measured
+  here, **21 backends from a single client**. Nothing shares them: there is
+  one `PrismaClient` per PROCESS and both runners are process-parallel. e2e
+  is 5 Playwright workers plus the `next start` server under test, 6 × 21 =
+  **126**. vitest's forks pool is up to 9, 9 × 21 = **189**. `max_connections`
+  is **100**, three of them reserved for superusers.
+
+### What it decided
+
+- **The ceiling was exceeded by arithmetic, not by chance** (D-157). The pools
+  open lazily, which is the only reason a run gets most of the way through
+  before it bites — and the only reason this presented as intermittency.
+- **The error names the wrong culprit.** `FATAL: sorry, too many clients
+  already` is raised inside whichever fixture happened to be seeding at peak,
+  so it reads as a broken test rather than an exhausted server: five unit
+  tests across three files after R-129's sweep, and three e2e tests in
+  `maintenance.spec.ts` at test 766 of 1,054.
+- **8 is deliberately one number, not one per runner.** The worker count is
+  not knowable from inside `packages/db`, and a single value that fits the
+  worse of the two shapes (48 and 72 backends) is the whole fix. Marked
+  `ponytail:` as a constant sized against a 100-connection server.
+- **Remote is left alone; CI is not.** Neon is reached through its own pooler,
+  sized on the far side of the connection. CI's `postgres:17` service IS
+  localhost and gets the cap deliberately, so local and CI fail and pass for
+  the same reasons.
+- **A faster sweep is a race detector, exactly as D-152 said a framework bump
+  is.** The cap took the sweep from 14.2m to 8.7m, and a locator that had only
+  ever passed by landing in a different paint immediately lost.
+
+### What it found along the way
+
+- **A real defect, and it is the fifth instance of R-127's trap.**
+  `workorders.spec.ts`'s `getByText('Turn the unit')` matched both the page's
+  `<h1>` and Next's `#__next-route-announcer__` copy of it. Fixed with
+  `getByRole('heading')` — a `role="alert"` div cannot match a heading role —
+  never by relaxing the assertion.
+- **That failure exposed a second defect in the same file's cleanup.**
+  `afterAll` deleted work orders by a collected-id list, so a test failing
+  before its `push` orphaned the row, `unit.deleteMany` then died on
+  `WorkOrder_unitId_fkey`, and the property was left **active** — which is
+  precisely the marker `notifications.test.ts` reads as *a spec that may still
+  be running* (R-109). Cleanup is now scoped by `propertyId`, the ownership
+  marker the database already carries, which also catches the rows the APP
+  created and the id list never held. The four now-dead id arrays and their 11
+  pushes are deleted rather than left as reassurance.
+- **The two properties the failed run had already stranded were retired by
+  hand**, by the same ownership-scoped sequence, so the debris does not
+  outlive the fix.
+- **A second, unrelated flake fired on the confirming sweep.**
+  `getByText('7392')` — a hard-coded access code — collided with
+  `<option>Axe House-e7392d7f</option>` in the property switcher: `getByText`
+  is a case-insensitive SUBSTRING match, an all-digit code is also valid hex,
+  and every staff page lists every in-scope property as `<Name>-<8 hex>`. Four
+  sites across three specs now assert `{ exact: true }`.
+
+### What it left behind
+
+- **The 15 other short-literal `getByText` calls are candidates, not defects,
+  and are deliberately not swept** — `active`, `ACTIVE`, `New`, `Gate`,
+  `Vacant`, `Down`, `Good`, `Urgent`, `ADU`, `Saved.`, `$0.00`. None can
+  collide via a property's hex suffix the way an all-digit code can; they
+  could only collide via a property's NAME, which needs each page read to
+  judge. That is D-154's rule — a grep lists places to look — applied to
+  locators instead of dates.
+- **`connection_limit=8` is a fixed constant.** If `max_connections` moves, or
+  the worker count does, this number moves with it. Deriving it from
+  `TEST_PARALLEL_INDEX` / `VITEST_POOL_ID` is the upgrade path, and is not
+  worth building until one of those stops being true.
+- **The 14.2m → 8.7m speedup is not claimed as a clean benchmark.** Some of it
+  is simply not stalling on an exhausted server; the two runs differ in more
+  than the cap.
+- **The GitHub Actions billing block is still unresolved** — 14 days,
+  owner-only.
+- **Gate run:** `typecheck` clean, `lint` 0 errors and the same 14 pre-existing
+  warnings, `check:ship-deps` clean (755 dev packages), unit **2,800 passed +
+  4 skipped of 2,804** — R-134's 2,794 plus this item's 6 — and a full e2e
+  sweep of **1,051 passed + 1 flaky + 2 skipped = 1,054**, reconciling exactly
+  against `playwright test --list`. That one flaky is the `7392` collision;
+  the four locators were fixed after the sweep and the three specs holding
+  them re-ran **42/42**. Peak Postgres backends during the sweep: **42**.

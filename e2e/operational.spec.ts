@@ -202,7 +202,15 @@ test.describe('access codes', () => {
     expect(stored.sealedCode).not.toContain('7392')
 
     await page.getByRole('button', { name: 'Reveal' }).click()
-    await expect(page.getByText('7392')).toBeVisible()
+    // EXACT, because `getByText` is a case-insensitive SUBSTRING match and
+    // this page carries the property switcher - one <option> per property in
+    // scope, each named `<Name>-<8 hex chars>`. A code of pure digits is also
+    // valid hex, so any run in which some other spec's random suffix happens
+    // to contain it resolves to two elements and dies in strict mode. That is
+    // not hypothetical: `Axe House-e7392d7f` did it on R-135's sweep. The
+    // revealed code is its own <span>, so an exact match cannot collide with
+    // a name that merely contains it.
+    await expect(page.getByText('7392', { exact: true })).toBeVisible()
 
     const entry = await prisma.auditLog.findFirst({
       where: { entityType: 'AccessCode', entityId: stored.id, action: 'accesscode.revealed' },
