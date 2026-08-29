@@ -5385,7 +5385,7 @@ on 30 Sept 2026.`
   same day against a tree this one changes in three files.
 
 ## R-131: a report's "today" is the latest local day, and the proxy rename nobody owned
-**Commit:** _(recorded below)_  ·  **Date:** 2026-08-29
+**Commit:** 4846451  ·  **Date:** 2026-08-29
 
 Owner-chosen as one row over two, the backlog having had no buildable row of
 its own since R-125. Two unrelated leftovers — R-130's three portfolio-wide
