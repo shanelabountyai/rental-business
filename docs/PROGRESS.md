@@ -5664,7 +5664,7 @@ and a silent skip on a security test is the defect this item is about.
   `npx playwright test --list`. Not a full sweep.
 
 ## R-134: `postChargeback` had no unit test, and its promises are the ones a browser cannot test
-**Commit:** _pending_  ·  **Date:** 2026-08-29
+**Commit:** 1a3dede  ·  **Date:** 2026-08-29
 
 Owner-chosen after the backlog ran out of buildable rows for the sixth item
 running. R-130's leftover, carried unchanged by R-131, R-132 and R-133: 287
