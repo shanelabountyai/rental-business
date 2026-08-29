@@ -87,11 +87,22 @@ code from an account that has enrolled — so a demo account can skip it.
 
 ### Walking `/login/mfa` without a phone
 
-R-117's walk cleared the demo owner's MFA to get through the screens and left
-it off, so `/login/mfa` was one of two routes that walk never saw. You do not
-need an authenticator app to cover it, and **no TOTP secret is seeded or
-written down here** — that would be the fixed credential the top of this file
-says does not exist.
+**R-128 walked it, and left MFA ON for `owner@demo.test`.** R-117 had cleared
+it to get through the screens, so `/login/mfa` was one of two routes no walk
+had ever seen; it has now been signed in through end to end. Two consequences
+you will meet immediately:
+
+- **Signing in as the demo owner now asks for a code.** The secret is not
+  written down (see below), so if you do not hold it, clear MFA first — the
+  next subsection says how, and the way this file used to say does not work.
+- **A scripted walk needs the TOTP step too.** Anything driving the browser
+  has to fill `/login/mfa` before it reaches `/dashboard`; a script that
+  waits for a URL outside `/login` will hang for its full timeout on
+  `/login/mfa`, which starts with `/login`.
+
+You do not need an authenticator app to cover this route, and **no TOTP secret
+is seeded or written down here** — that would be the fixed credential the top
+of this file says does not exist.
 
 1. Sign in, go to `/account`, and start enrolment. The screen prints the
    base32 secret as text beside the QR code, for exactly this reason.
@@ -107,7 +118,24 @@ says does not exist.
 3. Paste it to confirm enrolment, **write down the recovery codes it shows**,
    and re-run the command whenever `/login` asks. Codes last 30 seconds.
 
-To clear MFA again for a later walk, re-run `create-owner.mts --force`.
+To clear MFA again for a later walk:
+
+```bash
+npm run db:seed:demo-access
+```
+
+It already carries `-e .env.demo -e .env.local`, and it resets the password and
+clears `mfaSecret` / `mfaEnrolledAt` / `mfaRecoveryCodes` for every demo
+persona — the comment in `seed-demo-access.mts` says why: *"a demo account that
+demands a code from an authenticator nobody in the room holds is a locked
+door."*
+
+**This file used to say `create-owner.mts --force`, and that does not work**
+(found by R-128's walk). `--force` only bypasses the *second owner* guard; the
+script refuses an address that already exists no matter what, with *"A staff
+user already exists for … This script creates a NEW one"*. There is also **no
+in-app way to turn two-factor off** — `/account` offers enrolment and
+re-enrolment, never removal — so the seed script is the only route.
 
 ### The gap this papers over
 

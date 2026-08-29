@@ -1,4 +1,5 @@
 import { mergeFieldsUsed, renderTemplate } from '../comms/merge-fields.ts'
+import { friendlyBusinessDate } from '../scheduling/local-time.ts'
 import type { DocumentBlock } from '../documents/blocks.ts'
 import { padColumns } from '../documents/blocks.ts'
 import { ADDENDUM_LABELS, type AddendumKey } from './addenda.ts'
@@ -146,12 +147,14 @@ export interface LeaseDocumentFacts {
 export function leaseDocumentBlocks(facts: LeaseDocumentFacts): DocumentBlock[] {
   const blocks: DocumentBlock[] = [{ kind: 'heading', text: 'Residential Lease Agreement' }]
 
-  blocks.push({ kind: 'meta', text: `Date prepared: ${facts.generatedOn}` })
+  blocks.push({ kind: 'meta', text: `Date prepared: ${friendlyBusinessDate(facts.generatedOn)}` })
   blocks.push({ kind: 'meta', text: `Property: ${facts.propertyName} — ${facts.unitName}` })
   blocks.push({ kind: 'meta', text: `Address: ${facts.propertyAddress}` })
   blocks.push({
     kind: 'meta',
-    text: `Term: ${facts.startsOn} to ${facts.endsOn ?? 'month-to-month'}`,
+    text: `Term: ${friendlyBusinessDate(facts.startsOn)} to ${
+      facts.endsOn ? friendlyBusinessDate(facts.endsOn) : 'month-to-month'
+    }`,
   })
   blocks.push({ kind: 'meta', text: `Rent: ${facts.rentAmount}` })
   blocks.push({ kind: 'meta', text: `Security deposit: ${facts.depositAmount}` })

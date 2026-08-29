@@ -18,6 +18,8 @@
 // appear in one. `renderTemplate` cannot enforce that; review does.
 
 import { formatCents } from '../money/money.ts'
+import { friendlyBusinessDate } from '../scheduling/local-time.ts'
+import type { BusinessDate } from '../scheduling/local-time.ts'
 import type { NotificationCategory, NotificationChannel } from './categories.ts'
 
 export interface RenderedMessage {
@@ -470,7 +472,7 @@ export interface PaymentReceiptContext {
   /// sentence tenants actually want, so it is said in words rather than
   /// left to be inferred from its absence.
   remaining: string
-  paidOn: string
+  paidOn: BusinessDate
 }
 
 /**
@@ -495,7 +497,7 @@ export const paymentReceiptTemplate: NotificationTemplate<PaymentReceiptContext>
     if (channel === 'SMS') {
       return {
         body: [
-          `We received ${context.total} for ${context.addressLine1} on ${context.paidOn}.`,
+          `We received ${context.total} for ${context.addressLine1} on ${friendlyBusinessDate(context.paidOn)}.`,
           `Balance now: ${context.remaining}.`,
         ].join(' '),
       }
@@ -505,7 +507,7 @@ export const paymentReceiptTemplate: NotificationTemplate<PaymentReceiptContext>
       body: [
         `Hello ${context.tenantName},`,
         '',
-        `We received your payment for ${context.addressLine1} on ${context.paidOn}.`,
+        `We received your payment for ${context.addressLine1} on ${friendlyBusinessDate(context.paidOn)}.`,
         '',
         context.feeAmount
           ? `Payment: ${context.amount}\nCard processing fee: ${context.feeAmount}\nTotal charged: ${context.total}`
@@ -597,7 +599,7 @@ export interface AutopayPredebitContext {
   /// collect, not a guess at the final invoice.
   amount: string
   /// Property-local calendar date the debit is expected.
-  debitOn: string
+  debitOn: BusinessDate
 }
 
 /**
@@ -630,17 +632,17 @@ export const autopayPredebitTemplate: NotificationTemplate<AutopayPredebitContex
     if (channel === 'SMS') {
       return {
         body: [
-          `Heads up: we will collect ${context.amount} rent for ${context.addressLine1} on ${context.debitOn}.`,
+          `Heads up: we will collect ${context.amount} rent for ${context.addressLine1} on ${friendlyBusinessDate(context.debitOn)}.`,
           'Nothing to do if that works for you.',
         ].join(' '),
       }
     }
     return {
-      subject: `Rent of ${context.amount} will be collected on ${context.debitOn}`,
+      subject: `Rent of ${context.amount} will be collected on ${friendlyBusinessDate(context.debitOn)}`,
       body: [
         `Hello ${context.tenantName},`,
         '',
-        `This is a heads up that we will collect ${context.amount} for ${context.addressLine1} on ${context.debitOn}, using the payment method you saved.`,
+        `This is a heads up that we will collect ${context.amount} for ${context.addressLine1} on ${friendlyBusinessDate(context.debitOn)}, using the payment method you saved.`,
         '',
         // Honest about what it does not know. See the note above.
         'If anything else is outstanding it may be collected at the same time, and the receipt will show the exact amount.',
@@ -834,7 +836,7 @@ export const chargebackPostedTemplate: NotificationTemplate<ChargebackPostedCont
 export interface NonRenewalContext {
   tenantName: string
   addressLine1: string
-  effectiveOn: string
+  effectiveOn: BusinessDate
   /// Deep link to the served notice in the tenant's own portal.
   url: string
 }
@@ -854,7 +856,7 @@ export const nonRenewalTemplate: NotificationTemplate<NonRenewalContext> = {
     if (channel === 'SMS') {
       return {
         body: [
-          `Notice: your tenancy at ${context.addressLine1} will not be renewed - ends ${context.effectiveOn}.`,
+          `Notice: your tenancy at ${context.addressLine1} will not be renewed - ends ${friendlyBusinessDate(context.effectiveOn)}.`,
           `Full notice: ${context.url}`,
         ].join('\n'),
       }
@@ -864,7 +866,7 @@ export const nonRenewalTemplate: NotificationTemplate<NonRenewalContext> = {
       body: [
         `Hello ${context.tenantName},`,
         '',
-        `This is to let you know your tenancy at ${context.addressLine1} will not be renewed. It will end on ${context.effectiveOn}.`,
+        `This is to let you know your tenancy at ${context.addressLine1} will not be renewed. It will end on ${friendlyBusinessDate(context.effectiveOn)}.`,
         '',
         `The full notice is here: ${context.url}`,
         '',
@@ -1069,7 +1071,7 @@ export interface DueContext {
   addressLine1: string
   amount: string
   /// Property-local calendar date (D-3).
-  dueOn: string
+  dueOn: BusinessDate
   /// True on the due date itself; false three days out.
   isDueToday: boolean
   /// A pay-now link (R-046), when one could be minted. Null when the payer
@@ -1103,7 +1105,7 @@ export const rentDueTemplate: NotificationTemplate<DueContext> = {
   render: (context, channel) => {
     const lead = context.isDueToday
       ? `Rent of ${context.amount} for ${context.addressLine1} is due today.`
-      : `Rent of ${context.amount} for ${context.addressLine1} is due ${context.dueOn}.`
+      : `Rent of ${context.amount} for ${context.addressLine1} is due ${friendlyBusinessDate(context.dueOn)}.`
 
     if (channel === 'SMS') {
       // THE LINK IS THE WHOLE POINT OF THE SMS (R-046). A text saying "rent
@@ -1115,7 +1117,7 @@ export const rentDueTemplate: NotificationTemplate<DueContext> = {
     return {
       subject: context.isDueToday
         ? `Rent is due today — ${context.amount}`
-        : `Rent is due ${context.dueOn} — ${context.amount}`,
+        : `Rent is due ${friendlyBusinessDate(context.dueOn)} — ${context.amount}`,
       body: [
         `Hello ${context.tenantName},`,
         '',
@@ -1200,6 +1202,11 @@ export interface CardExpiringContext {
   /// "12/2026" - month/year only, never a full card number. This is the one
   /// piece of card metadata this product ever surfaces, read live from the
   /// provider and never stored.
+  ///
+  /// DELIBERATELY NOT a `BusinessDate`, and deliberately not passed through
+  /// `friendlyBusinessDate` the way every other date in this file now is: a
+  /// card expiry is a month, not a calendar day, and there is no day to
+  /// print. `friendlyBusinessDate` would throw on it.
   expiresOn: string
   url: string
 }
@@ -1425,7 +1432,7 @@ export interface LeaseAmendmentSignInviteContext {
   /// message goes to a departing roommate who may already have one foot out
   /// of the relationship.
   summary: string
-  effectiveOn: string
+  effectiveOn: BusinessDate
   url: string
 }
 
@@ -1447,7 +1454,7 @@ export const leaseAmendmentSignInviteTemplate: NotificationTemplate<LeaseAmendme
       if (channel === 'SMS') {
         return {
           body: [
-            `A change to who is on the lease at ${context.addressLine1} needs your signature (${context.summary}, from ${context.effectiveOn}):`,
+            `A change to who is on the lease at ${context.addressLine1} needs your signature (${context.summary}, from ${friendlyBusinessDate(context.effectiveOn)}):`,
             context.url,
           ].join('\n'),
         }
@@ -1457,7 +1464,7 @@ export const leaseAmendmentSignInviteTemplate: NotificationTemplate<LeaseAmendme
         body: [
           `Hi ${context.name},`,
           '',
-          `A change to who is on the lease at ${context.addressLine1} needs your signature: ${context.summary}, effective ${context.effectiveOn}.`,
+          `A change to who is on the lease at ${context.addressLine1} needs your signature: ${context.summary}, effective ${friendlyBusinessDate(context.effectiveOn)}.`,
           '',
           'The rent, the term and the deposit held are unchanged. Read the amendment in full and sign here:',
           '',

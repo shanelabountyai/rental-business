@@ -124,7 +124,9 @@ describe('the estoppel certificate', () => {
   })
 
   it('names notice already given, and says so where there is none', () => {
-    expect(build({ noticeEffectiveOn: '2026-09-19' })).toContain('the tenancy ends 2026-09-19')
+    expect(build({ noticeEffectiveOn: '2026-09-19' })).toContain(
+      'the tenancy ends 19 Sept 2026',
+    )
     expect(build()).toContain('None on file')
   })
 
@@ -165,7 +167,7 @@ describe('the handoff packet', () => {
     // A buyer inheriting a tenancy that ends in three weeks is inheriting a
     // vacancy, and a packet that did not say so is the misrepresentation.
     expect(text).toContain('NOTICE GIVEN')
-    expect(text).toContain('2026-09-19')
+    expect(text).toContain('19 Sept 2026')
   })
 
   it('totals the deposits and says whose money it is', () => {

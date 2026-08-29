@@ -32,6 +32,7 @@ import type { DocumentBlock, PacketExhibit } from '../documents/index.ts'
 import { exhibitIndexBlocks, padColumns, wrapMono } from '../documents/index.ts'
 import { formatCents } from '../money/index.ts'
 import type { BusinessDate } from '../scheduling/local-time.ts'
+import { friendlyBusinessDate } from '../scheduling/local-time.ts'
 
 export interface HandoffUnit {
   name: string
@@ -193,7 +194,9 @@ export function estoppelCertificateBlocks(input: {
   const { lease } = input
   const term = lease.isMonthToMonth
     ? 'Month-to-month'
-    : `${lease.startsOn} to ${lease.endsOn ?? 'no end date recorded'}`
+    : `${friendlyBusinessDate(lease.startsOn)} to ${
+        lease.endsOn ? friendlyBusinessDate(lease.endsOn) : 'no end date recorded'
+      }`
 
   const blocks: DocumentBlock[] = [
     { kind: 'heading', text: 'Tenant estoppel certificate' },
@@ -225,7 +228,7 @@ export function estoppelCertificateBlocks(input: {
     [
       'Notice to end the tenancy',
       lease.noticeEffectiveOn
-        ? `Given — the tenancy ends ${lease.noticeEffectiveOn}`
+        ? `Given — the tenancy ends ${friendlyBusinessDate(lease.noticeEffectiveOn)}`
         : 'None on file',
     ],
   ]
@@ -326,12 +329,18 @@ export function handoffPacketBlocks(file: HandoffFile): DocumentBlock[] {
       { kind: 'mono', text: `${lease.unitName} — ${lease.tenantNames.join(', ')}` },
       ...wrapMono(
         [
-          `Term: ${lease.isMonthToMonth ? 'month-to-month' : `${lease.startsOn} to ${lease.endsOn ?? 'no end date recorded'}`}`,
+          `Term: ${
+            lease.isMonthToMonth
+              ? 'month-to-month'
+              : `${friendlyBusinessDate(lease.startsOn)} to ${
+                  lease.endsOn ? friendlyBusinessDate(lease.endsOn) : 'no end date recorded'
+                }`
+          }`,
           `Rent: ${formatCents(lease.rentCents)} on day ${lease.rentDueDay}`,
           `Deposit held: ${formatCents(lease.depositHeldCents)}`,
           `Account balance: ${lease.balanceCents === 0 ? 'nil' : lease.balanceCents > 0 ? `${formatCents(lease.balanceCents)} owed` : `${formatCents(-lease.balanceCents)} in credit`}`,
           lease.noticeEffectiveOn
-            ? `NOTICE GIVEN — the tenancy ends ${lease.noticeEffectiveOn}`
+            ? `NOTICE GIVEN — the tenancy ends ${friendlyBusinessDate(lease.noticeEffectiveOn)}`
             : 'No notice given',
         ].join(' · '),
         WIDTH,
@@ -401,7 +410,11 @@ export function handoffPacketBlocks(file: HandoffFile): DocumentBlock[] {
     for (const warranty of file.warranties) {
       blocks.push({
         kind: 'mono',
-        text: `${warranty.category} — ${warranty.provider}${warranty.expiresOn ? ` · expires ${warranty.expiresOn}` : ' · no expiry recorded'}`,
+        text: `${warranty.category} — ${warranty.provider}${
+          warranty.expiresOn
+            ? ` · expires ${friendlyBusinessDate(warranty.expiresOn)}`
+            : ' · no expiry recorded'
+        }`,
       })
       if (warranty.coverageSummary) {
         blocks.push(

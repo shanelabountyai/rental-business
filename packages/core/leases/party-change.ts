@@ -1,4 +1,5 @@
 import type { DocumentBlock } from '../documents/blocks.ts'
+import { friendlyBusinessDate } from '../scheduling/local-time.ts'
 import { LEASE_DISCLAIMER, type LeaseSignatureFact } from './generation.ts'
 import { leaseIsInForce } from './status.ts'
 
@@ -250,21 +251,23 @@ export function amendmentDocumentBlocks(facts: AmendmentDocumentFacts): Document
     { kind: 'heading', text: 'Amendment to Residential Lease — Change of Occupants' },
   ]
 
-  blocks.push({ kind: 'meta', text: `Date prepared: ${facts.generatedOn}` })
-  blocks.push({ kind: 'meta', text: `Effective: ${facts.effectiveOn}` })
+  blocks.push({ kind: 'meta', text: `Date prepared: ${friendlyBusinessDate(facts.generatedOn)}` })
+  blocks.push({ kind: 'meta', text: `Effective: ${friendlyBusinessDate(facts.effectiveOn)}` })
   blocks.push({ kind: 'meta', text: `Property: ${facts.propertyName} — ${facts.unitName}` })
   blocks.push({ kind: 'meta', text: `Address: ${facts.propertyAddress}` })
   blocks.push({ kind: 'meta', text: `Landlord: ${facts.entityName}` })
   blocks.push({
     kind: 'meta',
-    text: `Lease term: ${facts.termStartsOn} to ${facts.termEndsOn ?? 'month-to-month'}`,
+    text: `Lease term: ${friendlyBusinessDate(facts.termStartsOn)} to ${
+      facts.termEndsOn ? friendlyBusinessDate(facts.termEndsOn) : 'month-to-month'
+    }`,
   })
   blocks.push({ kind: 'meta', text: `Rent (unchanged): ${facts.rentAmount}` })
   blocks.push({ kind: 'meta', text: `Security deposit held (unchanged): ${facts.depositAmount}` })
 
   blocks.push({
     kind: 'paragraph',
-    text: `The parties to the lease described above agree to amend it as set out below, effective ${facts.effectiveOn}. Reason recorded: ${facts.reason}`,
+    text: `The parties to the lease described above agree to amend it as set out below, effective ${friendlyBusinessDate(facts.effectiveOn)}. Reason recorded: ${facts.reason}`,
   })
 
   if (facts.outgoingNames.length > 0) {

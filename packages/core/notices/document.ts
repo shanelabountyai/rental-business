@@ -1,4 +1,5 @@
 import type { DocumentBlock } from '../documents/blocks.ts'
+import { friendlyBusinessDate } from '../scheduling/local-time.ts'
 import { noticeTypeLabel } from './service-methods.ts'
 
 // The CONTENT of a served notice, as structured blocks (R-051, COMM-02).
@@ -61,7 +62,7 @@ export function noticeDocumentBlocks(
     ? `${facts.propertyName} — ${facts.unitName}`
     : facts.propertyName
 
-  blocks.push({ kind: 'meta', text: `Date: ${facts.generatedOn}` })
+  blocks.push({ kind: 'meta', text: `Date: ${friendlyBusinessDate(facts.generatedOn)}` })
   blocks.push({ kind: 'meta', text: `Property: ${where}` })
   blocks.push({ kind: 'meta', text: `Address of record: ${facts.addressOfRecord}` })
   // NAMED, and every name on the tenancy. A notice addressed to one of two

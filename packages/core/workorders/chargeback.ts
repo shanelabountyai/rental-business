@@ -1,4 +1,5 @@
 import { formatCents } from '../money/index.ts'
+import { friendlyBusinessDate } from '../scheduling/local-time.ts'
 
 // Billing a tenant for a repair they caused (MAINT-07, R-031).
 //
@@ -148,7 +149,7 @@ export function chargebackNoticeText(context: ChargebackNoticeContext): string {
     '',
     `A repair at ${context.addressLine1}${
       context.unitName ? ` (${context.unitName})` : ''
-    } was completed on ${context.completedOn}:`,
+    } was completed on ${friendlyBusinessDate(context.completedOn)}:`,
     '',
     context.jobSummary,
     '',

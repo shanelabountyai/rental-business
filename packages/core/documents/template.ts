@@ -1,4 +1,5 @@
 import { mergeFieldsUsed, renderTemplate } from '../comms/merge-fields.ts'
+import { friendlyBusinessDate } from '../scheduling/local-time.ts'
 import type { DocumentBlock } from './blocks.ts'
 import { DOCUMENT_TYPES, type DocumentTypeValue } from './validate.ts'
 
@@ -146,7 +147,7 @@ export interface DocumentTemplateFacts {
 export function documentTemplateBlocks(facts: DocumentTemplateFacts): DocumentBlock[] {
   const blocks: DocumentBlock[] = [{ kind: 'heading', text: facts.templateName }]
 
-  blocks.push({ kind: 'meta', text: `Date: ${facts.generatedOn}` })
+  blocks.push({ kind: 'meta', text: `Date: ${friendlyBusinessDate(facts.generatedOn)}` })
   blocks.push({ kind: 'meta', text: `Property: ${facts.propertyName}` })
   blocks.push({ kind: 'meta', text: `To: ${facts.recipientName}` })
 

@@ -3067,6 +3067,37 @@ async function seedDemoData() {
         data: { leaseId: lease.id, tenantId: tenant.id, isPrimary: true },
       })
 
+      // The deposit as a LIABILITY, which is a different fact from
+      // `Lease.depositCents` and the one every screen actually reads.
+      // `depositCents` is what the lease says should be collected - an
+      // intention; `Deposit` is money that arrived and has not gone back.
+      // `depositHeldCents` derives from the latter (R-071, deliberately -
+      // see `packages/core/ledger/deposits.ts`), so a seed that sets only
+      // the intention leaves the rent roll reporting "$0.00 held" against
+      // five tenancies that each paid one, and hands the move-out persona a
+      // disposition screen reading "This lease holds no deposit - there is
+      // nothing to dispose of." R-128's demo walk found exactly that.
+      //
+      // Mirrors `deposit-clearing-job.ts`, which is the only thing that
+      // writes this row in the real product: `heldCents` off the lease,
+      // `receivedAt` when the move-in funds cleared, `type` left to its
+      // SECURITY default.
+      //
+      // NOT the inherited tenancy. R-033's whole point is that nobody
+      // established where that deposit went - `depositTransferStatus:
+      // UNKNOWN` above says so - and a row asserting we hold it would
+      // answer the question the outstanding-items path exists to raise.
+      if (tenantPlan.lifecycle !== 'inherited-at-acquisition') {
+        await prisma.deposit.create({
+          data: {
+            propertyId: property.id,
+            leaseId: lease.id,
+            heldCents: tenantPlan.lease.depositCents,
+            receivedAt: tenantPlan.lease.startsOn,
+          },
+        })
+      }
+
       const overdueCharge = tenantPlan.lease.overdueCharge
         ? await prisma.charge.create({
             data: {

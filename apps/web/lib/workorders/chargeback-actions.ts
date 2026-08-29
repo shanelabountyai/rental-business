@@ -1,7 +1,7 @@
 'use server'
 
 import { formatCents } from '@rental/core/money'
-import { utcToBusinessDate } from '@rental/core/scheduling'
+import { businessDate, utcToBusinessDate } from '@rental/core/scheduling'
 import { chargebackDecision, chargebackNoticeText } from '@rental/core/workorders'
 import type { ChargebackRefusal } from '@rental/core/workorders'
 import { prisma } from '@rental/db'
@@ -177,10 +177,17 @@ export async function postChargeback(
     addressLine1: context.addressLine1,
     unitName: context.unitName,
     jobSummary: context.jobSummary,
-    // `closedAt` is a real timestamp, so it is read in the PROPERTY's zone.
+    // `closedAt` is a real timestamp, so it is read in the PROPERTY's zone
+    // with `businessDate` - NOT `utcToBusinessDate`, which is the reader for
+    // a date-only column and takes no zone at all. The comment here said
+    // "the PROPERTY's zone" while the code read UTC, and `context.timezone`
+    // was already in hand and unused: a job closed at 8pm in Houston is
+    // 02:00 UTC the next day, so the tenant's chargeback notice dated the
+    // repair a day after it happened. Found by R-128's demo walk; the same
+    // shape as R-042 and as the panels R-121 fixed.
     completedOn: context.closedAt
-      ? utcToBusinessDate(context.closedAt)
-      : utcToBusinessDate(new Date()),
+      ? businessDate(context.closedAt, context.timezone)
+      : businessDate(new Date(), context.timezone),
     jobCostCents: context.jobCostCents,
     amountCents,
     reason,
