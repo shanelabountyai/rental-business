@@ -5762,7 +5762,7 @@ and a browser spec in e2e, and by nothing in between.
 
 ## R-135: 189 database connections against a server that allows 100, reported as flaky tests
 
-**Commit:** PENDING  ·  **Date:** 2026-08-29
+**Commit:** 90f7272  ·  **Date:** 2026-08-29
 
 Owner-chosen after the backlog ran out of buildable rows for the seventh item
 running. Two sweeps had ended with tests marked **flaky** — which still exits
