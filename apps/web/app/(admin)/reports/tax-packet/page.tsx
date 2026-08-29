@@ -1,4 +1,5 @@
 import { formatCents } from '@rental/core/money'
+import { friendlyBusinessDate } from '@rental/core/scheduling'
 import { isAccountingBasis } from '@rental/core/tax'
 import Link from 'next/link'
 import { ArchivePacketPanel } from '@/components/tax/archive-panel.tsx'
@@ -215,7 +216,7 @@ export default async function TaxPacketPage({
                         <span>
                           {row.propertyName} · {row.description}
                           <span className="text-muted-foreground block text-xs">
-                            In service {row.bookedOn}
+                            In service {row.bookedOn ? friendlyBusinessDate(row.bookedOn) : 'unknown'}
                           </span>
                         </span>
                         <span className="tabular-nums">{formatCents(row.amountCents)}</span>

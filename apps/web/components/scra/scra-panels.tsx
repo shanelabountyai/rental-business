@@ -9,6 +9,7 @@ import {
   type ScraLookupResult,
   type ScraTerminationBasis,
 } from '@rental/core/scra'
+import { friendlyBusinessDate, type BusinessDate } from '@rental/core/scheduling'
 import { useActionState, useState } from 'react'
 import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
 import { FieldError, SelectField, TextField } from '@/components/form/field.tsx'
@@ -221,13 +222,17 @@ export function ScraLookupsPanel({
                 </span>
               </span>
               <span className="text-muted-foreground text-sm">
-                Searched {lookup.searchedOn} · recorded by {lookup.recordedByName}
+                Searched {friendlyBusinessDate(lookup.searchedOn)} · recorded by {lookup.recordedByName}
                 {lookup.providerReference && ` · ${lookup.providerReference}`}
               </span>
               {(lookup.activeDutyStartOn || lookup.activeDutyEndOn) && (
                 <span className="text-muted-foreground text-sm">
-                  Active duty {lookup.activeDutyStartOn ?? 'unstated'} to{' '}
-                  {lookup.activeDutyEndOn ?? 'unstated'}
+                  Active duty{' '}
+                  {lookup.activeDutyStartOn
+                    ? friendlyBusinessDate(lookup.activeDutyStartOn)
+                    : 'unstated'}{' '}
+                  to{' '}
+                  {lookup.activeDutyEndOn ? friendlyBusinessDate(lookup.activeDutyEndOn) : 'unstated'}
                 </span>
               )}
               <span className="text-sm">
@@ -270,7 +275,7 @@ export function ScraTerminationPanel({
 }: {
   action: Action
   canRecord: boolean
-  recorded: { basis: ScraTerminationBasis; effectiveOn: string } | null
+  recorded: { basis: ScraTerminationBasis; effectiveOn: BusinessDate | null } | null
 }) {
   const [state, formAction] = useActionState<ScraFormState, FormData>(action, {})
   const [basis, setBasis] = useState<ScraTerminationBasis | ''>('')
@@ -285,7 +290,7 @@ export function ScraTerminationPanel({
       {recorded ? (
         <p className="text-sm">
           Terminated under {SCRA_BASIS_LABELS[recorded.basis]}. The tenancy ends{' '}
-          {recorded.effectiveOn}.
+          {recorded.effectiveOn ? friendlyBusinessDate(recorded.effectiveOn) : '—'}.
         </p>
       ) : (
         <>

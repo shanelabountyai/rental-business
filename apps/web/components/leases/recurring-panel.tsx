@@ -1,6 +1,7 @@
 'use client'
 
 import { formatCents } from '@rental/core/money'
+import { friendlyBusinessDate } from '@rental/core/scheduling'
 import { useActionState } from 'react'
 import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
 import { FieldError } from '@/components/form/field.tsx'
@@ -252,8 +253,8 @@ export function RecurringChargesPanel({
                   </span>
                 </div>
                 <p className="text-muted-foreground text-sm">
-                  From {charge.startsOn}
-                  {charge.endsOn ? ` until ${charge.endsOn}` : ''}
+                  From {friendlyBusinessDate(charge.startsOn)}
+                  {charge.endsOn ? ` until ${friendlyBusinessDate(charge.endsOn)}` : ''}
                   {charge.active
                     ? charge.live
                       ? ' · billing'

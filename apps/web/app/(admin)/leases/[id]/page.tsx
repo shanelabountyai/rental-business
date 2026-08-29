@@ -615,7 +615,7 @@ export default async function LeaseDetailPage({
                     : 'pcs_or_deployment',
                 effectiveOn: lease.noticeEffectiveOn
                   ? utcToBusinessDate(lease.noticeEffectiveOn)
-                  : '—',
+                  : null,
               }
             : null
         }

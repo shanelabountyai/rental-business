@@ -17,6 +17,7 @@
 import { type DocumentBlock, padColumns } from '../documents/blocks.ts'
 import { type PacketExhibit, exhibitIndexBlocks } from '../documents/exhibits.ts'
 import { formatCents } from '../money/money.ts'
+import { friendlyBusinessDate } from '../scheduling/local-time.ts'
 import type { ExportLine } from './export.ts'
 import type { Form1099Candidate, PropertyDepositLiability, PropertyScheduleE } from './packet.ts'
 
@@ -102,7 +103,10 @@ export function taxPacketBlocks(facts: TaxPacketDocumentFacts): DocumentBlock[] 
         kind: 'mono',
         text: row(`${line.propertyName} · ${line.description}`, line.amountCents),
       })
-      blocks.push({ kind: 'mono', text: `  In service ${line.bookedOn ?? 'not recorded'}` })
+      blocks.push({
+        kind: 'mono',
+        text: `  In service ${line.bookedOn ? friendlyBusinessDate(line.bookedOn) : 'not recorded'}`,
+      })
     }
     // Depreciation is the preparer's call - method, recovery period and
     // convention are all theirs, and a number invented here would be a

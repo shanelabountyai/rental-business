@@ -8,6 +8,7 @@ import {
   DOCUMENTATION_LABELS,
   EARLY_TERMINATION_LIABILITY_NOTE,
 } from '@rental/core/confidential'
+import { friendlyBusinessDate } from '@rental/core/scheduling'
 import { FormAlerts, LiveRegion, SubmitButton } from '@/components/auth-form.tsx'
 import { SelectField, TextField, TextareaField } from '@/components/form/field.tsx'
 import type { ConfidentialFormState } from '@/lib/confidential/actions.ts'
@@ -67,7 +68,7 @@ export function CaseDetailsPanel({
             <dt className="text-muted-foreground text-xs">Documentation seen</dt>
             <dd>
               {documentationType
-                ? `${DOCUMENTATION_LABELS[documentationType as keyof typeof DOCUMENTATION_LABELS] ?? documentationType} — ${documentedOn} (${documentationSeenBy ?? 'unknown'})`
+                ? `${DOCUMENTATION_LABELS[documentationType as keyof typeof DOCUMENTATION_LABELS] ?? documentationType} — ${documentedOn ? friendlyBusinessDate(documentedOn) : 'date not recorded'} (${documentationSeenBy ?? 'unknown'})`
                 : 'None recorded'}
             </dd>
           </div>
@@ -333,7 +334,7 @@ export function EarlyTerminationPanel({
       <LiveRegion>
         {recorded && (
           <p className="text-sm">
-            Recorded. The tenancy ends on {effectiveOn}. On the tenancy itself this is an
+            Recorded. The tenancy ends on {effectiveOn && friendlyBusinessDate(effectiveOn)}. On the tenancy itself this is an
             ordinary tenant-given notice and says nothing more.
           </p>
         )}

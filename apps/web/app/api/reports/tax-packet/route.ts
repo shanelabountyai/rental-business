@@ -70,6 +70,9 @@ export async function GET(request: Request) {
       'Capital improvement',
       row.description,
       csvCents(row.amountCents),
+      // ISO deliberately, and this is the exception to D-153. A CSV is read
+      // by a spreadsheet and an accountant's software, both of which sort and
+      // parse `YYYY-MM-DD` and neither of which parses `3 Aug 2026`.
       `In service ${row.bookedOn ?? 'unknown'}`,
     ])
   }

@@ -1,7 +1,11 @@
 import 'server-only'
 
 import { PERIODIC_TYPES, nextPeriodicDueDate, type PeriodicTypeValue } from '@rental/core/inspections'
-import { businessDateToUtc, utcToBusinessDate } from '@rental/core/scheduling'
+import {
+  businessDateToUtc,
+  friendlyBusinessDate,
+  utcToBusinessDate,
+} from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { auditAsSystem } from '@/lib/audit/system.ts'
 import { SCHEDULED_JOBS } from '@/lib/jobs/runner.ts'
@@ -107,7 +111,7 @@ SCHEDULED_JOBS.push({
             subjectId: unit.id,
             businessDate: today,
             priority: 'ROUTINE',
-            title: `${TYPE_LABEL[type]} inspection due ${dueDate} — ${unit.name}`,
+            title: `${TYPE_LABEL[type]} inspection due ${friendlyBusinessDate(dueDate)} — ${unit.name}`,
           })
         })
         scheduled++

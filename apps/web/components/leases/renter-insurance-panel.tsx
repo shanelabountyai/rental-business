@@ -1,5 +1,6 @@
 'use client'
 
+import { friendlyBusinessDate } from '@rental/core/scheduling'
 import { useActionState } from 'react'
 import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
 import { TextField } from '@/components/form/field.tsx'
@@ -25,7 +26,7 @@ function statusLabel(expiresOn: string | null): { text: string; className: strin
   const days = Math.round((new Date(`${expiresOn}T00:00:00Z`).getTime() - Date.now()) / 86_400_000)
   if (days < 0) return { text: `Lapsed ${Math.abs(days)}d ago`, className: 'text-red-700' }
   if (days <= 60) return { text: `Expires in ${days}d`, className: 'text-amber-800' }
-  return { text: `Current, expires ${expiresOn}`, className: 'text-green-800' }
+  return { text: `Current, expires ${friendlyBusinessDate(expiresOn)}`, className: 'text-green-800' }
 }
 
 export function RenterInsurancePanel({

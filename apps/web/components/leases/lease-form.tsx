@@ -1,6 +1,7 @@
 'use client'
 
 import { UTILITIES, UTILITY_PAYERS } from '@rental/core/leases'
+import { friendlyBusinessDate } from '@rental/core/scheduling'
 import { useActionState, useState } from 'react'
 import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
 import { CheckboxField, SelectField, TextField } from '@/components/form/field.tsx'
@@ -333,7 +334,7 @@ export function LeaseForm({
         <div className="flex flex-col gap-2 rounded-md border-2 border-amber-500 p-3">
           <p className="text-sm font-medium">
             {retaliation.daysAgo} day{retaliation.daysAgo === 1 ? '' : 's'} after this
-            tenant&rsquo;s {retaliation.category} complaint ({retaliation.occurredOn}) — inside
+            tenant&rsquo;s {retaliation.category} complaint ({friendlyBusinessDate(retaliation.occurredOn)}) — inside
             the {retaliation.windowDays}-day retaliation-presumption window
           </p>
           <p className="text-muted-foreground text-sm">

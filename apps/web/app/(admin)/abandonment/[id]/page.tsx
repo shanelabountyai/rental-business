@@ -8,7 +8,12 @@ import {
   DISPOSAL_REFUSAL_MESSAGES,
   disposalReadiness,
 } from '@rental/core/abandonment'
-import { businessDate, friendlyDate, friendlyTimestamp } from '@rental/core/scheduling'
+import {
+  businessDate,
+  friendlyBusinessDate,
+  friendlyDate,
+  friendlyTimestamp,
+} from '@rental/core/scheduling'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import {
@@ -119,7 +124,7 @@ export default async function AbandonmentCasePage({
           {found.attempts.length} attempt{found.attempts.length === 1 ? '' : 's'} across{' '}
           {evidence.distinctMethods} method{evidence.distinctMethods === 1 ? '' : 's'}
           {found.lastContactOn
-            ? ` · last sign of them ${found.lastContactOn}`
+            ? ` · last sign of them ${friendlyBusinessDate(found.lastContactOn)}`
             : ' · no last-contact date recorded'}
         </p>
         {evidence.gaps.length === 0 ? (
@@ -147,7 +152,7 @@ export default async function AbandonmentCasePage({
             {found.attempts.map((attempt) => (
               <li key={attempt.id} className="flex flex-col">
                 <span className="font-medium">
-                  {attempt.attemptedOn} — {CONTACT_METHOD_LABELS[attempt.method]}
+                  {friendlyBusinessDate(attempt.attemptedOn)} — {CONTACT_METHOD_LABELS[attempt.method]}
                 </span>
                 <span className="text-muted-foreground">
                   {CONTACT_OUTCOME_LABELS[attempt.outcome]}
@@ -228,9 +233,9 @@ export default async function AbandonmentCasePage({
           {found.belongingsHeldFrom ? (
             <>
               <p className="text-sm">
-                Held from {found.belongingsHeldFrom}
+                Held from {friendlyBusinessDate(found.belongingsHeldFrom)}
                 {found.belongingsNoticeSentOn &&
-                  ` · notice of disposal sent ${found.belongingsNoticeSentOn}`}
+                  ` · notice of disposal sent ${friendlyBusinessDate(found.belongingsNoticeSentOn)}`}
               </p>
               <p className="text-sm whitespace-pre-wrap">{found.belongingsInventory}</p>
 
@@ -247,7 +252,7 @@ export default async function AbandonmentCasePage({
                       disposal && !disposal.allowed
                         ? `${DISPOSAL_REFUSAL_MESSAGES[disposal.refusal!]}${
                             disposal.earliestOn
-                              ? ` The earliest lawful date is ${disposal.earliestOn}.`
+                              ? ` The earliest lawful date is ${friendlyBusinessDate(disposal.earliestOn)}.`
                               : ''
                           }`
                         : null

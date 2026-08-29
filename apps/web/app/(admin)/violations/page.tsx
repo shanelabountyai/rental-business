@@ -1,4 +1,4 @@
-import { friendlyDate } from '@rental/core/scheduling'
+import { friendlyBusinessDate, friendlyDate } from '@rental/core/scheduling'
 import {
   VIOLATION_KIND_LABELS,
   VIOLATION_OUTCOME_LABELS,
@@ -59,7 +59,7 @@ export default async function ViolationsPage() {
                 {' · '}
                 {row.observationCount} observation{row.observationCount === 1 ? '' : 's'}
                 {row.lastObservedOn
-                  ? ` · last seen ${row.lastObservedOn}`
+                  ? ` · last seen ${friendlyBusinessDate(row.lastObservedOn)}`
                   : ' · nothing observed yet'}
               </p>
               {row.openAccommodationCount > 0 && (

@@ -1,4 +1,5 @@
 import { formatCents } from '@rental/core/money'
+import { friendlyBusinessDate } from '@rental/core/scheduling'
 import Link from 'next/link'
 import { requireScope } from '@/lib/auth/guard.ts'
 import { thisWeekLeasingActivity, vacantUnitsWithTurnover } from '@/lib/reports/queries.ts'
@@ -87,7 +88,7 @@ export default async function VacanciesPage() {
                   {unit.currentStage && (
                     <> · {STAGE_LABELS[unit.currentStage] ?? unit.currentStage}</>
                   )}
-                  {unit.targetRentReadyDate && <> · rent-ready {unit.targetRentReadyDate}</>}
+                  {unit.targetRentReadyDate && <> · rent-ready {friendlyBusinessDate(unit.targetRentReadyDate)}</>}
                 </span>
               </Link>
             </li>

@@ -243,7 +243,7 @@ test('Golden Path 3: what the other surfaces show', async ({ page, browser }) =>
   const endPanel = page.getByRole('region', { name: 'Ending the tenancy early' })
   await endPanel.getByLabel('Date they gave written notice').fill('2026-08-20')
   await endPanel.getByRole('button', { name: 'Record the early termination' }).click()
-  await expect(page.getByText('2026-09-19 — 30 days from the notice')).toBeVisible()
+  await expect(page.getByText('19 Sept 2026 — 30 days from the notice')).toBeVisible()
 
   const leaseAfter = await prisma.lease.findUniqueOrThrow({ where: { id: lease.id } })
   expect(leaseAfter.noticeGivenBy).toBe('TENANT')

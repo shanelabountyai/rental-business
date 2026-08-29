@@ -3,7 +3,7 @@
 import { PET_MONEY_REFUSAL, petMoneyAllowed } from '@rental/core/accommodations'
 import { validateRecurringCharge } from '@rental/core/billing'
 import { dollarsToCents, formatCents } from '@rental/core/money'
-import { utcToBusinessDate } from '@rental/core/scheduling'
+import { friendlyBusinessDate, utcToBusinessDate } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { audit } from '@/lib/audit/index.ts'
@@ -51,6 +51,17 @@ export async function addRecurringCharge(
   // `utcToBusinessDate` - a calendar day never goes through a timezone.
   const startsOn = String(formData.get('startsOn') ?? '') || utcToBusinessDate(lease.startsOn)
   const endsOn = String(formData.get('endsOn') ?? '').trim() || null
+
+  // Both are rendered back through `friendlyBusinessDate`, which throws on
+  // anything that is not `YYYY-MM-DD`. `<input type="date">` cannot send
+  // anything else; a hand-made POST can.
+  const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/
+  if (!ISO_DAY.test(startsOn) || (endsOn && !ISO_DAY.test(endsOn))) {
+    return {
+      error: 'Give the dates as calendar days.',
+      fieldErrors: { [ISO_DAY.test(startsOn) ? 'endsOn' : 'startsOn']: 'A date, please.' },
+    }
+  }
 
   // R-086 (RISK-13). BEFORE anything is validated or priced, because the
   // answer does not depend on the amount: an assistance animal is not a pet,
@@ -113,8 +124,8 @@ export async function addRecurringCharge(
   revalidatePath(`/leases/${lease.id}`)
   return {
     notice: `${created.description} — added${
-      endsOn ? `, ending ${endsOn}` : ''
-    }. It bills with the rent from ${startsOn}.`,
+      endsOn ? `, ending ${friendlyBusinessDate(endsOn)}` : ''
+    }. It bills with the rent from ${friendlyBusinessDate(startsOn)}.`,
   }
 }
 

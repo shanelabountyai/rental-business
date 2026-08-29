@@ -1,5 +1,6 @@
 'use client'
 
+import { friendlyBusinessDate } from '@rental/core/scheduling'
 import { useActionState } from 'react'
 import { FormAlerts, LiveRegion, SubmitButton } from '@/components/auth-form.tsx'
 import { CheckboxField, TextField, TextareaField } from '@/components/form/field.tsx'
@@ -108,7 +109,7 @@ export function PartyChangePanel({
           {changes.map((change) => (
             <li key={change.id} className="flex flex-col gap-1 py-3">
               <span className="font-medium">
-                {partiesLine(change) || 'No parties recorded'} — effective {change.effectiveOn}
+                {partiesLine(change) || 'No parties recorded'} — effective {friendlyBusinessDate(change.effectiveOn)}
               </span>
               <span className="text-muted-foreground text-xs">
                 {change.status === 'PENDING_SIGNATURE'

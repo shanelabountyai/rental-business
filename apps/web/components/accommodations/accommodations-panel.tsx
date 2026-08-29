@@ -13,6 +13,7 @@ import {
   type RequestStatus,
   responseClock,
 } from '@rental/core/accommodations'
+import { friendlyBusinessDate } from '@rental/core/scheduling'
 import { useActionState, useState } from 'react'
 import { FormAlerts, LiveRegion, SubmitButton } from '@/components/auth-form.tsx'
 import { FieldError, SelectField, TextField, TextareaField } from '@/components/form/field.tsx'
@@ -386,8 +387,8 @@ export function AccommodationsPanel({
                 </span>
 
                 <span className="text-muted-foreground text-sm">
-                  {ACCOMMODATION_KIND_LABELS[request.kind]} · received {request.receivedOn}
-                  {request.infoRequestedOn && ` · documentation requested ${request.infoRequestedOn}`}
+                  {ACCOMMODATION_KIND_LABELS[request.kind]} · received {friendlyBusinessDate(request.receivedOn)}
+                  {request.infoRequestedOn && ` · documentation requested ${friendlyBusinessDate(request.infoRequestedOn)}`}
                 </span>
 
                 <span
@@ -420,7 +421,7 @@ export function AccommodationsPanel({
                 {request.determinationText && (
                   <div className="rounded-md border p-3 text-sm">
                     <p className="font-medium">
-                      {REQUEST_STATUS_LABELS[request.status]} on {request.decidedOn}
+                      {REQUEST_STATUS_LABELS[request.status]} on {request.decidedOn && friendlyBusinessDate(request.decidedOn)}
                       {request.decidedByName ? ` by ${request.decidedByName}` : ''}
                       {request.subjectDescription ? ` — ${request.subjectDescription}` : ''}
                     </p>

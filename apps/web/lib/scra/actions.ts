@@ -9,7 +9,12 @@ import {
   isScraTerminationBasis,
   scraTermination,
 } from '@rental/core/scra'
-import { businessDate, businessDateToUtc, utcToBusinessDate } from '@rental/core/scheduling'
+import {
+  businessDate,
+  businessDateToUtc,
+  friendlyBusinessDate,
+  utcToBusinessDate,
+} from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { audit } from '@/lib/audit/index.ts'
@@ -106,6 +111,8 @@ export async function recordScraLookup(
   if (!tenantId) fieldErrors.tenantId = 'Who was searched for?'
   if (!isScraLookupResult(rawResult)) fieldErrors.result = 'What did the certificate say?'
   if (!searchedOn) fieldErrors.searchedOn = 'When was the search run?'
+  else if (!/^\d{4}-\d{2}-\d{2}$/.test(searchedOn))
+    fieldErrors.searchedOn = 'Give the date the search was run.'
 
   const today = businessDate(new Date(), lease.property.timezone)
   if (searchedOn && searchedOn > today) {
@@ -207,7 +214,7 @@ export async function recordScraLookup(
       select: { id: true },
     })
     if (!existing) {
-      const reason = `DMDC search on ${searchedOn}${
+      const reason = `DMDC search on ${friendlyBusinessDate(searchedOn)}${
         lookup.providerReference ? ` (certificate ${lookup.providerReference})` : ''
       } reports active duty service.`
       const hold = await prisma.leaseHold.create({

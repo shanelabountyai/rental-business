@@ -1,6 +1,11 @@
 import 'server-only'
 
-import { addBusinessDays, businessDateToUtc, utcToBusinessDate } from '@rental/core/scheduling'
+import {
+  addBusinessDays,
+  businessDateToUtc,
+  friendlyBusinessDate,
+  utcToBusinessDate,
+} from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { createTask } from '@/lib/tasks/create.ts'
 import { rulesFor } from '@/lib/jurisdiction/queries.ts'
@@ -64,7 +69,7 @@ export async function startDepositDisposition(leaseId: string): Promise<StartDis
       subjectId: lease.id,
       businessDate: moveOutDate,
       priority: 'ROUTINE',
-      title: `Deposit disposition due ${dueOn} — ${lease.unit.name}`,
+      title: `Deposit disposition due ${friendlyBusinessDate(dueOn)} — ${lease.unit.name}`,
     })
   })
 

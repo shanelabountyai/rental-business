@@ -8,7 +8,12 @@ import {
   restrictedPartyNote,
   validateConfidentialCase,
 } from '@rental/core/confidential'
-import { businessDate, businessDateToUtc, utcToBusinessDate } from '@rental/core/scheduling'
+import {
+  businessDate,
+  businessDateToUtc,
+  friendlyBusinessDate,
+  utcToBusinessDate,
+} from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
@@ -660,7 +665,7 @@ export async function recordEarlyTermination(
   revalidatePath(`/confidential/${caseId}`)
   revalidatePath(`/leases/${found.lease.id}`)
   return {
-    notice: `Recorded. The tenancy ends on ${decision.effectiveOn} — ${decision.noticeDays} days from the notice. The tenancy shows an ordinary tenant-given notice and nothing else.`,
+    notice: `Recorded. The tenancy ends on ${friendlyBusinessDate(decision.effectiveOn)} — ${decision.noticeDays} days from the notice. The tenancy shows an ordinary tenant-given notice and nothing else.`,
   }
 }
 

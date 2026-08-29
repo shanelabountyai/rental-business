@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { requireScope } from '@/lib/auth/guard.ts'
 import { leasingFunnel } from '@/lib/reports/funnel.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
-import type { BusinessDate } from '@rental/core/scheduling'
+import { friendlyBusinessDate, type BusinessDate } from '@rental/core/scheduling'
 import { scrollableRegionProps } from '@/components/ui-classes.ts'
 
 export const metadata = { title: 'Leasing funnel — Rental Operations' }
@@ -240,8 +240,8 @@ export default async function LeasingFunnelPage({
                 <span>
                   {fill.propertyName} · {fill.unitName}
                   <span className="text-muted-foreground block text-xs">
-                    Vacated {fill.vacatedOn}
-                    {fill.filledOn ? ` · filled ${fill.filledOn}` : ' · still vacant'}
+                    Vacated {friendlyBusinessDate(fill.vacatedOn)}
+                    {fill.filledOn ? ` · filled ${friendlyBusinessDate(fill.filledOn)}` : ' · still vacant'}
                   </span>
                 </span>
                 <span className="tabular-nums">

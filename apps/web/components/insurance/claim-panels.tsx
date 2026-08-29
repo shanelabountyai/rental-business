@@ -12,7 +12,7 @@ import {
   RENT_SOURCE_LABELS,
   mitigationSummary,
 } from '@rental/core/insurance'
-import { friendlyDate, utcToWallClock } from '@rental/core/scheduling'
+import { friendlyBusinessDate, friendlyDate, utcToWallClock } from '@rental/core/scheduling'
 import { useActionState } from 'react'
 import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
 import { FieldError, SelectField, TextField, TextareaField } from '@/components/form/field.tsx'
@@ -260,7 +260,7 @@ export function PaymentsPanel({ claim, action }: { claim: ClaimView; action: Act
           {claim.payments.map((payment) => (
             <li key={payment.id} className="flex justify-between gap-2">
               <span>
-                {payment.receivedOn} · {PAYMENT_CATEGORY_LABELS[payment.category]}
+                {friendlyBusinessDate(payment.receivedOn)} · {PAYMENT_CATEGORY_LABELS[payment.category]}
                 {payment.reference ? ` · ${payment.reference}` : ''}
               </span>
               <span className="font-medium">{money(payment.amountCents)}</span>
@@ -345,8 +345,8 @@ export function LossOfRentsPanel({ claim, units, action }: {
 
       {claim.lossOfRents ? (
         <p className="text-sm">
-          {claim.lossOfRents.unitName} was down from {claim.lossOfRents.fromOn} to{' '}
-          {claim.lossOfRents.toOn} — {claim.lossOfRents.days} day
+          {claim.lossOfRents.unitName} was down from {friendlyBusinessDate(claim.lossOfRents.fromOn)} to{' '}
+          {friendlyBusinessDate(claim.lossOfRents.toOn)} — {claim.lossOfRents.days} day
           {claim.lossOfRents.days === 1 ? '' : 's'} at {money(claim.lossOfRents.monthlyRentCents)} a
           month, so <strong>{money(claim.lossOfRents.amountCents)}</strong>. Built on{' '}
           {RENT_SOURCE_LABELS[claim.lossOfRents.source]}.

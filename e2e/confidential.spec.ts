@@ -498,7 +498,7 @@ test('records the statutory early termination, and the tenancy shows only a tena
   // state's `noticeToVacateDays`, which this path never consults. The
   // arithmetic is asserted against the alert, which is the only place the
   // number and the day count appear together.
-  await expect(page.getByText('2026-09-19 — 30 days from the notice')).toBeVisible()
+  await expect(page.getByText('19 Sept 2026 — 30 days from the notice')).toBeVisible()
 
   // ==========================================================================
   // WHAT THE TENANCY SHOWS. R-066's ordinary tenant-given notice and nothing
@@ -539,7 +539,7 @@ test('records the statutory early termination, and the tenancy shows only a tena
   // Recorded once. A second one would be a second notice on a tenancy that
   // already has one.
   await page.goto(caseUrl)
-  await expect(panel.getByText('The tenancy ends on 2026-09-19')).toBeVisible()
+  await expect(panel.getByText('The tenancy ends on 19 Sept 2026')).toBeVisible()
   await expect(panel.getByLabel('Date they gave written notice')).toHaveCount(0)
 })
 

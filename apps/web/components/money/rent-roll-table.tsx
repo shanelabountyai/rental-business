@@ -4,6 +4,7 @@ import { useActionState, useState } from 'react'
 import { BUCKET_LABELS } from '@rental/core/ledger'
 import type { AgingBucket } from '@rental/core/ledger'
 import { formatCents } from '@rental/core/money'
+import { friendlyBusinessDate } from '@rental/core/scheduling'
 import { LiveRegion } from '@/components/auth-form.tsx'
 import { FieldError } from '@/components/form/field.tsx'
 import type { ReminderFormState } from '@/lib/payments/reminders.ts'
@@ -269,7 +270,7 @@ export function RentRollTable({
                   {formatCents(row.depositHeldCents)}
                 </td>
                 <td className="text-muted-foreground py-2">
-                  {row.lastContactOn ?? 'never'}
+                  {row.lastContactOn ? friendlyBusinessDate(row.lastContactOn) : 'never'}
                 </td>
               </tr>
             ))}

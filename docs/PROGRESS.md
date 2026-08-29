@@ -5238,3 +5238,56 @@ Threading the zone cost almost nothing, because it was already there and unused:
 - **The GitHub Actions billing block is still unresolved** — 13 days, owner-only, exactly as R-126 and R-127 left it. `lhci autorun` is still unrun, and `lighthouserc.json` targets `http://localhost:3000/` while its own `startServerCommand` serves on :3100, so it has never audited this app; that was the alternative item this session did not take.
 - **Gate run:** `typecheck`, `lint` (0 errors, the same 14 pre-existing warnings), `npm run build`, unit **2,774 passed + 4 skipped of 2,778** — R-127's exact totals — and the seven e2e specs covering every changed document and notice at **66 passed of 66 listed, 0 failed, 0 flaky** (`chargeback`, `deposit-disposition`, `notices`, `lease-party-change`, `property-handoff`, `lease-esign`, `entry-notice`). Not a full sweep: CI has not run since 2026-08-17 and R-127 ran the full 1,054 the day before against a tree this one changes only in `packages/core` and the demo seed.
 - **The fork-CI commit `224266c` has no PROGRESS entry.** It landed outside the backlog and is recorded here only as a pointer: `applications.spec.ts` now skips itself, with a reason, when `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` is unset, and CI writes that key into `.env.local` only when the secret exists — because GitHub gives no secrets to a workflow triggered from a forked pull request, so on a contributor's PR the fee panel cannot render and the spec was permanently red.
+
+---
+
+## R-129: the other half of D-153, and the predicate that was 80% precise in both directions
+**Commit:** PENDING  ·  **Date:** 2026-08-29
+
+R-128 fixed `packages/core` — every date a tenant, applicant or vendor receives — and deliberately stopped there. This is the remainder: the in-app screens staff read, with the grep predicate written into the backlog row so it would not be re-derived a fourth time. It was re-derived anyway, because the predicate turned out to be wrong in both directions.
+
+### What it built
+
+**1. Twenty render sites across 16 components and pages.** The rent roll's **Last contacted** column, the accommodations panel's three dates, both retaliation warnings (`lease-form` and `lifecycle-panel`), the party-change panel, the recurring-charges panel, renter's insurance, the confidential case's documentation and early-termination dates, all four SCRA dates, the insurance claim's payments and loss-of-rents window, the abandonment case's six, the leasing and tax-packet reports, `vacancies` and `violations`.
+
+**2. Six staff-facing strings in `apps/web/lib` that the predicate cannot see, because they never reach JSX.** Three `Task` titles — `Compliance item due …`, `… inspection due …`, `Deposit disposition due …`, written by the compliance-alert, periodic-inspection and deposit-disposition jobs — plus the SCRA hold reason, the recurring-charge action notice and the early-termination action notice.
+
+**3. Two form actions gained the format guard neither had.** `recordScraLookup` and `addRecurringCharge` now check `YYYY-MM-DD` before the value reaches anything that formats it. This is a consequence of the fix, not a pre-existing bug found: `friendlyBusinessDate` throws, `<input type="date">` cannot send anything else, and a hand-made POST can. Before this item both wrote a bogus date silently; after it and without the guard, both would have 500'd.
+
+**4. `ScraTerminationPanel` stops being passed a sentinel.** `/leases/[id]` handed it the literal string `'—'` for "no effective date". It now passes `null` and the panel renders the dash — the sentinel only survived because nothing had ever needed that field to be a real date.
+
+**5. One extra in `packages/core`, folded in.** The archived tax packet's `In service 2026-05-02` line — R-128's own miss on the half it did own, and an accountant is exactly the stranger D-153's who-reads-the-string test is about.
+
+### What it decided
+
+- **A date-shaped grep produces candidates, and the field's name tells you nothing — the source does** (**D-154**). Nine of the 46 hits were already correct, because their page builds the prop with `friendlyDate(...)` and the field is still called `placedOn`, `issuedOn`, `openedOn`, `dueOn`, `createdOn`, `closedOn` or `startsOn`. Wrapping one is not a cosmetic mistake: `friendlyBusinessDate` throws a `RangeError` on `"29 Aug 2026"`, so it is a 500. **The first full sweep died at test 5** on `access-codes-move-in.spec.ts` with exactly that, and eight components were reverted. The rule is now a bullet in `CLAUDE.md`: grep the page that constructs the prop before touching the render.
+- **Formatting in the renderer only works if the renderer is the only formatter.** D-153's guardrail — type the field `BusinessDate`, format inside the template — assumes the caller hands over a raw value. Where a page had already formatted, the same guardrail is a crash. The raw `BusinessDate` reaching the component is the side that scales, so the two double-formatting pages were left alone and their components reverted rather than the reverse.
+- **The tax-packet CSV stays ISO, and the reason is now in the file.** `/api/reports/tax-packet` is read by a spreadsheet and an accountant's software, both of which sort and parse `2026-05-02` and neither of which parses `2 May 2026`. The tax-packet **screen** and the archived **PDF** are prose and were both fixed. This is the one deliberate exception to D-153 inside `apps/web`.
+- **`chargeback-actions.ts:136` is still untouched**, exactly as R-128 left it. Its `dueOn` derives from a UTC "today" for a property-local due date, which is a real defect — but changing a due date changes billing, not display, and it does not belong in a formatting sweep.
+
+### What it left behind
+
+- **`chargeback-actions.ts:136`'s UTC `dueOn` still owns nothing.** Carried unchanged from R-128 now. It is a correctness bug in a billing path, and it wants an item that can argue about the money.
+- **The `apps/web/lib` half was found by widening the grep by hand, not by a predicate anyone wrote down.** The strings that matter there are `Task` titles, hold reasons and `useActionState` notices; there is no mechanical way to tell those from an idempotency key or a filename, and this item read all 46 hits to sort them.
+- **The GitHub Actions billing block is still unresolved** — 12 days and ~75 pushes, owner-only, exactly as R-126, R-127 and R-128 left it. `lhci autorun` is still unrun.
+- **`middleware.ts` is still deprecated on Next 16.3.3** and nothing owns the `proxy` migration (R-128's leftover).
+- **Gate run:** `typecheck`, `lint` (0 errors, the same 14 pre-existing warnings), `npm run build`, unit **2,774 passed + 4 skipped of 2,778** — R-127 and R-128's exact totals — and the **full e2e sweep at 1,046 passed + 8 skipped of 1,054, 0 failed, 0 flaky**, reconciled against `npx playwright test --list`'s `Total: 1054 tests in 85 files`. It took three sweeps: the first died at test 5 on the double-formatting 500, the second at test 379 on `scra.spec.ts`'s `expect(hold.reason).toContain('2026-08-15')` — an assertion form the `getByText` sweep for ISO literals does not find — and this one is the confirming run. **17.1 minutes against R-127's 4.1**, on a laptop that had just run two killed sweeps; not investigated, because the totals reconcile and nothing timed out. The unit run immediately after that sweep reported **5 failures in 3 files, every one of them `FATAL: sorry, too many clients already`** — Postgres connections not yet released, an environment symptom exactly like the `ERR_CONNECTION_REFUSED` wall `CLAUDE.md` warns about, and green on the very next run with nothing changed. A `next-server` for a neighbouring project was resident throughout.
+- **Four specs moved with the fix**, which is what the backlog row predicted for two of them: `confidential.spec.ts` (two assertions), `golden-path-3.spec.ts`, `scra.spec.ts` (two — the panel text the row named, and the hold reason it did not).
+
+### Lighthouse was auditing port 3000 — another app's port, and nothing at all in CI
+
+`lighthouserc.json` pointed at `http://localhost:3000/` while `npm run start`
+serves `next start -p ${PORT:-3100}`. In CI nothing listens on 3000, so Chrome
+loaded an interstitial and every metric threw `CHROME_INTERSTITIAL_ERROR` —
+first-contentful-paint, largest-contentful-paint, cumulative-layout-shift, all
+of them, with the step failing as `Lighthouse failed with exit code 1`.
+
+This is the exact collision `playwright.config.ts:3` was written to prevent
+("3100, NOT 3000, and the default is the whole point"). That comment guarded
+the Playwright config; nothing guarded this file, and 3000 is the storage
+app's port, so on a laptop running both this would have quietly audited the
+WRONG PRODUCT rather than failing.
+
+It had never been caught because the step was unreachable: the `e2e` job runs
+Lighthouse after `End-to-end + axe`, and that step had been failing on the
+Stripe fee spec. Fixing the one ahead of it is what surfaced this.

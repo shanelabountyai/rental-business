@@ -271,7 +271,9 @@ test('recording an active-duty certificate places the SCRA hold by itself', asyn
   // The reason names the document it came from, which is more than most
   // typed ones manage.
   expect(hold.reason).toContain('DMDC-2026-88214')
-  expect(hold.reason).toContain('2026-08-15')
+  // '15 Aug 2026', not '2026-08-15' - R-129 put the hold reason through
+  // `friendlyBusinessDate` with everything else a staff member reads.
+  expect(hold.reason).toContain('15 Aug 2026')
 })
 
 test('§3955: the effective date is computed from the statute, not typed', async ({ page }) => {
@@ -301,7 +303,7 @@ test('§3955: the effective date is computed from the statute, not typed', async
   // populated it — the self-replacing-panel trap `closeCase` documents at
   // length. What survives is the durable render, which is the better thing
   // to be asserting anyway.
-  await expect(page.getByText(/The tenancy ends 2026-10-01/)).toBeVisible()
+  await expect(page.getByText(/The tenancy ends 1 Oct 2026/)).toBeVisible()
 
   const after = await prisma.lease.findUniqueOrThrow({ where: { id: lease.id } })
   expect(after.scraTerminationBasis).toBe('PCS_OR_DEPLOYMENT')

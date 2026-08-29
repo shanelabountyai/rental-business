@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { addBusinessDays, utcToBusinessDate } from '@rental/core/scheduling'
+import { addBusinessDays, friendlyBusinessDate, utcToBusinessDate } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { createTask } from '@/lib/tasks/create.ts'
 import { SCHEDULED_JOBS } from '@/lib/jobs/runner.ts'
@@ -73,8 +73,8 @@ SCHEDULED_JOBS.push({
         businessDate: today,
         priority: overdue ? 'URGENT' : 'ROUTINE',
         title: overdue
-          ? `Compliance item OVERDUE (was due ${dueDate}) — ${item.label}`
-          : `Compliance item due ${dueDate} — ${item.label}`,
+          ? `Compliance item OVERDUE (was due ${friendlyBusinessDate(dueDate)}) — ${item.label}`
+          : `Compliance item due ${friendlyBusinessDate(dueDate)} — ${item.label}`,
       })
       flagged++
     }
