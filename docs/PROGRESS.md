@@ -5242,7 +5242,7 @@ Threading the zone cost almost nothing, because it was already there and unused:
 ---
 
 ## R-129: the other half of D-153, and the predicate that was 80% precise in both directions
-**Commit:** PENDING  ·  **Date:** 2026-08-29
+**Commit:** 8944325  ·  **Date:** 2026-08-29
 
 R-128 fixed `packages/core` — every date a tenant, applicant or vendor receives — and deliberately stopped there. This is the remainder: the in-app screens staff read, with the grep predicate written into the backlog row so it would not be re-derived a fourth time. It was re-derived anyway, because the predicate turned out to be wrong in both directions.
 
