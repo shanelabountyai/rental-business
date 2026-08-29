@@ -2,6 +2,7 @@ import 'server-only'
 
 import { formatCents } from '@rental/core/money'
 import { nsfFeeFor } from '@rental/core/payments'
+import { businessDate, businessDateToUtc } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { auditAsSystem } from '@/lib/audit/system.ts'
 import { getBillingProvider } from '@/lib/billing/provider.ts'
@@ -68,7 +69,7 @@ export async function assessNsfFee(args: {
 
   const property = await prisma.property.findUniqueOrThrow({
     where: { id: args.propertyId },
-    select: { state: true, county: true },
+    select: { state: true, county: true, timezone: true },
   })
   // No configured rule means no fee, exactly as late fees treat it: D-4's
   // whole point is that a statutory number comes from configuration, and
@@ -124,7 +125,11 @@ export async function assessNsfFee(args: {
       type: 'NSF_FEE',
       amountCents: decision.amountCents,
       description,
-      dueOn: new Date(now.toISOString().slice(0, 10) + 'T00:00:00.000Z'),
+      // The property's calendar day, not UTC's. Slicing an ISO string is
+      // `utcToBusinessDate` by hand and has the same defect: a returned
+      // payment processed at 8pm in Houston fell due tomorrow, which moves
+      // grace and the late fee that counts from it.
+      dueOn: businessDateToUtc(businessDate(now, property.timezone)),
       assessedOnPaymentId: args.paymentId,
       // WHICH VERSION of the rule permitted this, and at what ceiling. "What
       // did the law say on the day we charged it" is the first question in a

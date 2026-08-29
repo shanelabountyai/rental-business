@@ -58,7 +58,12 @@ export async function syncLeasePayer(leasePayerId: string): Promise<SyncResult> 
       stripeSubscriptionId: true,
       collectionPaused: true,
       lease: {
-        select: { status: true, rentCents: true, moveOutAt: true },
+        select: {
+          status: true,
+          rentCents: true,
+          moveOutAt: true,
+          property: { select: { timezone: true } },
+        },
       },
     },
   })
@@ -83,6 +88,7 @@ export async function syncLeasePayer(leasePayerId: string): Promise<SyncResult> 
         stripeSubscriptionId: payer.stripeSubscriptionId,
         collectionPaused: payer.collectionPaused,
         moveOutAt: payer.lease.moveOutAt,
+        timezone: payer.lease.property.timezone,
       },
       stripe,
     )

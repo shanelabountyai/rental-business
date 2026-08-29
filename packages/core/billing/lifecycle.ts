@@ -1,3 +1,5 @@
+import { businessDate, friendlyBusinessDate } from '../scheduling/local-time.ts'
+
 // The subscription lifecycle (PAY-03, D-11, R-036). Pure - no database, no
 // SDK, no HTTP.
 //
@@ -38,6 +40,11 @@ export interface LeaseBillingFacts {
   /// When the tenancy actually ends, for a cancellation that should take
   /// effect then rather than immediately.
   moveOutAt: Date | null
+  /// The property's zone. `cancelAt` is a real instant and the reason below
+  /// is read by a person, so the day it names has to be the property's day -
+  /// D-153 and D-154 in one line, and the reason string carried a raw
+  /// `toISOString().slice(0, 10)` until R-130.
+  timezone: string
 }
 
 /// What Stripe currently believes. Null when nothing has been fetched -
@@ -91,7 +98,7 @@ export function lifecycleDecision(
     if (stripe?.cancelAt) {
       return {
         action: 'none',
-        reason: `Already scheduled to cancel on ${stripe.cancelAt.toISOString().slice(0, 10)}.`,
+        reason: `Already scheduled to cancel on ${friendlyBusinessDate(businessDate(stripe.cancelAt, lease.timezone))}.`,
       }
     }
     return {

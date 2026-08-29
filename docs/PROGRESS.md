@@ -5291,3 +5291,95 @@ WRONG PRODUCT rather than failing.
 It had never been caught because the step was unreachable: the `e2e` job runs
 Lighthouse after `End-to-end + axe`, and that step had been failing on the
 Stripe fee spec. Fixing the one ahead of it is what surfaced this.
+
+---
+
+## R-130: a due date read off a UTC clock, and it was never one site
+**Commit:** PENDING  ·  **Date:** 2026-08-29
+
+The leftover R-128 filed and R-129 carried unchanged, both times correctly —
+*changing a due date changes billing, not display, and it does not belong in
+a formatting sweep.* This is that item. Grepping the class before editing is
+what turned one line into three.
+
+### What it built
+
+**1. `chargeback-actions.ts:136` — the named defect.** It read
+`utcToBusinessDate(new Date())`. That function's own doc says it is the reader
+for a date-only **column** and takes no zone; handed a real instant it reads
+the UTC clock, so a chargeback posted at 8pm in Houston fell due **tomorrow**.
+`daysPastDue` counts grace and the late fee from `dueOn`, so the defect moved
+money rather than a label. Now `businessDateToUtc(businessDate(new Date(),
+context.timezone))` — the zone was already in hand and already used four lines
+further down for the tenant's notice.
+
+**2. `nsf-fees.ts:127` — the same defect, written by hand.**
+`now.toISOString().slice(0, 10)` is `utcToBusinessDate` spelled out, on the
+returned-payment fee: same money, same grace, same one-day slip. Its
+`property` select had no `timezone` in it to fix with; it does now.
+
+**3. `packages/core/billing/lifecycle.ts:94` — both halves at once.**
+`Already scheduled to cancel on 2026-09-30.` is a UTC day **and** a raw ISO
+string, and it renders verbatim as the `useActionState` notice on
+`/leases/[id]`'s re-sync button. `LeaseBillingFacts` gained a `timezone`, and
+the string goes through `friendlyBusinessDate`.
+
+**4. Two tests that fail without the fix.** `assessNsfFee` already took an
+injectable `now`, so the check is a real one: at `2026-03-06T02:00:00Z` the fee
+must fall due `2026-03-05`, and it reported `2026-03-06` before. `lifecycleDecision`
+is pure, so its check asserts the whole sentence: `Already scheduled to cancel
+on 30 Sept 2026.`
+
+### What it decided
+
+- **A grep for the class, before the edit, is what this item was for.** The
+  backlog row named one line. The predicate — a real instant turned into a
+  calendar day without a zone — found two more, and the third was in
+  `packages/core`, which R-128 owned and R-129's JSX-scoped predicate could
+  never have seen. Two of the three are money.
+- **`utcToBusinessDate` on a `new Date()` is always wrong**, and the
+  hand-written `toISOString().slice(0, 10)` is the same call in disguise. The
+  distinction `CLAUDE.md` draws — `utcToBusinessDate` reads a **column**,
+  `businessDate` reads an **instant** — is the whole rule, and both defects
+  were a column reader pointed at an instant.
+- **Write the day back with `businessDateToUtc`, not a template string.**
+  `new Date(\`${day}T00:00:00.000Z\`)` appears in four more places; it is
+  correct in all of them because the value is already a `BusinessDate`, but
+  the helper validates and the hand-rolled version is what let site 2 look
+  like ordinary code. The three sites this item touched now use it.
+- **`lifecycleDecision` takes a zone rather than returning a `Date`.** The
+  alternative — hand back the instant and format at the caller — is D-153's
+  losing side: the string is already prose everywhere else in that function,
+  and a caller that formats is a caller that can forget.
+
+### What it left behind
+
+- **Three portfolio-wide files still read a UTC today, and they need an owner
+  decision rather than an edit.** `reports/maintenance/page.tsx:42,47` and
+  `reports/leasing/page.tsx:37,39` default their from/to range off
+  `new Date().toISOString().slice(0, 10)`, and
+  `api/reports/rent-roll/route.ts:67` stamps the CSV filename the same way — a
+  rent roll exported at 8pm in Houston is filed under tomorrow's date and
+  handed to a lender. **There is no portfolio zone to use.** R-125 built
+  `complianceToday(now, timezones)` for exactly this shape, but it returns the
+  **earliest** local day — *late everywhere before it is called late* — which
+  is right for "is this overdue" and wrong for the **end** of a report range,
+  where it would cut off today's data for every eastern property. The right
+  semantic per site is a call somebody has to make.
+- **`chargeback-actions.ts` still has no unit test.** `postChargeback` reads
+  `new Date()` directly with no injectable clock, so the fix there is covered
+  by inspection and by `chargeback.spec.ts` continuing to pass, not by a test
+  that would have caught it. `assessNsfFee`'s `now` parameter is the reason
+  site 2 could be pinned and site 1 could not.
+- **The GitHub Actions billing block is still unresolved** — 12 days,
+  owner-only, as R-126 through R-129 all left it. `lhci autorun` is still
+  unrun, though R-129 fixed the port it was auditing.
+- **`middleware.ts` is still deprecated on Next 16.3.3** and nothing owns the
+  `proxy` migration.
+- **Gate run:** `typecheck`, `lint` (0 errors, the same 14 pre-existing
+  warnings), `npm run build`, unit **2,775 passed + 4 skipped of 2,779**
+  (R-129's 2,778 plus this item's one new test), and the three e2e specs
+  covering every changed path — `chargeback`, `leases`, `property-handoff` —
+  at **64 passed of 64 listed, 0 failed, 0 flaky**, reconciled against
+  `npx playwright test --list`. Not a full sweep: R-129 ran the full 1,054 the
+  same day against a tree this one changes in three files.

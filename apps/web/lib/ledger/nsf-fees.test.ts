@@ -119,6 +119,27 @@ describe('assessNsfFee', () => {
     expect(fee.description).toContain('lease provides')
   }, 20_000)
 
+  it('dates the fee in the PROPERTY\'s calendar, not UTC\'s', async () => {
+    // 8pm on 5 March in Houston is 02:00 on the 6th in UTC. Reading the UTC
+    // clock for a date-only column made the fee fall due tomorrow, and
+    // `daysPastDue` counts grace and the late fee from that date - so the
+    // defect moved money, not just a label. Same shape as R-042.
+    const payment = await returnedPayment()
+    await assessNsfFee({
+      leaseId,
+      propertyId,
+      leasePayerId,
+      paymentId: payment.id,
+      now: new Date('2026-03-06T02:00:00.000Z'),
+    })
+
+    const fee = await prisma.charge.findFirstOrThrow({
+      where: { assessedOnPaymentId: payment.id, type: 'NSF_FEE' },
+      select: { dueOn: true },
+    })
+    expect(fee.dueOn?.toISOString().slice(0, 10)).toBe('2026-03-05')
+  }, 20_000)
+
   it('charges ONCE however many times Stripe redelivers', async () => {
     // A tenant charged twice for one bounced payment is a support call that
     // starts from a position of being wrong.

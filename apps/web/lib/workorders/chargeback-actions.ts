@@ -1,7 +1,7 @@
 'use server'
 
 import { formatCents } from '@rental/core/money'
-import { businessDate, utcToBusinessDate } from '@rental/core/scheduling'
+import { businessDate, businessDateToUtc } from '@rental/core/scheduling'
 import { chargebackDecision, chargebackNoticeText } from '@rental/core/workorders'
 import type { ChargebackRefusal } from '@rental/core/workorders'
 import { prisma } from '@rental/db'
@@ -133,7 +133,15 @@ export async function postChargeback(
         // Due today, in the property's own calendar (D-3). Not netted against
         // the next rent charge: a repair charge and rent are separate debts,
         // and the allocation order (D-11) decides what a payment settles.
-        dueOn: new Date(utcToBusinessDate(new Date()) + 'T00:00:00.000Z'),
+        //
+        // `businessDate`, NOT `utcToBusinessDate` - the same confusion the
+        // notice below already carries a comment about, and the reason it is
+        // spelled out twice in one file. `utcToBusinessDate` reads a date-only
+        // COLUMN and takes no zone; handing it a real instant reads the UTC
+        // clock, so a chargeback posted at 8pm in Houston fell due TOMORROW.
+        // A due date is not display: `daysPastDue` counts from it, so grace
+        // and the late fee moved with it (D-3, D-4).
+        dueOn: businessDateToUtc(businessDate(new Date(), context.timezone)),
         // The evidence key AND the idempotency key. The partial unique index
         // is what actually prevents a double charge — two staff pressing this
         // within the same second would both pass a read-then-write check.

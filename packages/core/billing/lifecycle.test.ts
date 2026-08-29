@@ -11,6 +11,7 @@ function lease(over: Partial<Parameters<typeof lifecycleDecision>[0]> = {}) {
     stripeSubscriptionId: 'sub_1',
     collectionPaused: false,
     moveOutAt: null,
+    timezone: 'America/Chicago',
     ...over,
   }
 }
@@ -52,6 +53,18 @@ describe('the tenancy is over', () => {
     )
     expect(decision.action).toBe('none')
     expect(decision.reason).toMatch(/Already scheduled/)
+  })
+
+  it('says the date in the PROPERTY\'s calendar and in plain language', () => {
+    // This reason renders verbatim as the notice on the lease page's re-sync
+    // button, so it is a string a person reads (D-153). It printed an ISO
+    // date off a UTC clock: a cancellation at 8pm on 30 Sep in Houston came
+    // back as `2026-10-01` - wrong format AND wrong day.
+    const decision = lifecycleDecision(
+      lease({ status: 'ENDED' }),
+      stripe({ cancelAt: new Date('2026-10-01T02:00:00.000Z') }),
+    )
+    expect(decision.reason).toBe('Already scheduled to cancel on 30 Sept 2026.')
   })
 
   it('does nothing for an ended lease that never had a subscription', () => {
