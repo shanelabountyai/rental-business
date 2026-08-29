@@ -5863,7 +5863,7 @@ running. Two sweeps had ended with tests marked **flaky** — which still exits
 
 ## R-136: R-135's fifteen locator candidates were eight, and none of them was a defect
 
-**Commit:** _pending_  ·  **Date:** 2026-08-29
+**Commit:** 815dc93  ·  **Date:** 2026-08-29
 
 Owner-chosen after the backlog ran out of buildable rows for the eighth item
 running. R-135 fixed four `getByText` collisions and filed the rest as
