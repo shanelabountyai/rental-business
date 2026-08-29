@@ -196,12 +196,29 @@ jobs:
       # env blocks disagreeing would mean the suite tests a different database
       # than the one the migrations were applied to.
       - name: Provision CI env
+        # Read through `env:` rather than interpolated into the script body:
+        # `${{ }}` inside `run:` is substituted before bash ever sees it, which
+        # is the shape script-injection advisories are about.
+        env:
+          STRIPE_PK: ${{ secrets.STRIPE_PUBLISHABLE_KEY_TEST }}
         run: |
           {
             echo 'DATABASE_URL=postgresql://ci:ci@localhost:5432/ci'
             echo 'DIRECT_URL=postgresql://ci:ci@localhost:5432/ci'
             echo "AUTH_SECRET=$(openssl rand -base64 32)"
             echo 'AUTH_URL=http://localhost:3100'
+            # WRITTEN ONLY WHEN THE SECRET EXISTS, and the absence is a
+            # supported state rather than a misconfiguration. GitHub gives no
+            # secrets to a workflow triggered from a FORKED pull request, so on
+            # a contributor's PR this is empty — and applications.spec.ts skips
+            # itself with a reason instead of failing on a fee button that
+            # cannot render without a publishable key (fee-payment.tsx:89).
+            #
+            # Publishable, not secret: the spec asserts the panel RENDERS and
+            # never drives the Elements iframe, so no sk_ key is needed here.
+            if [ -n "$STRIPE_PK" ]; then
+              echo "NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=$STRIPE_PK"
+            fi
           } > .env.local
 
       - run: npm run db:generate

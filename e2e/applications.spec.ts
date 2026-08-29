@@ -213,6 +213,22 @@ test('an application fee is required, and paying it is what completes the applic
   page,
   browser,
 }) => {
+  // SKIPPED WITHOUT A PUBLISHABLE KEY, rather than failing.
+  //
+  // fee-payment.tsx returns null when there is no key (`if (!publishableKey)
+  // return null`), so the fee heading and button this spec asserts on simply do
+  // not render — the failure names a missing button and says nothing about the
+  // missing key, which is a bad half-hour for whoever hits it.
+  //
+  // This is not only about a secret being unset. The repo is public now, and
+  // GitHub does not expose Actions secrets to workflows triggered from FORKED
+  // pull requests — so without this guard the spec is permanently red for every
+  // outside contributor, no matter what is configured on the repo.
+  test.skip(
+    !process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY,
+    'Stripe publishable key not configured — the fee panel does not render without one.',
+  )
+
   const staff = await createStaff()
   const { prospect } = await seedPreScreenedProspect(7_500)
 
