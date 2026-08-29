@@ -5203,7 +5203,7 @@ Threading the zone cost almost nothing, because it was already there and unused:
 ---
 
 ## R-128: the demo walk D-28 owes at a milestone, and the deposit every screen said was $0.00
-**Commit:** _(recorded below)_  ·  **Date:** 2026-08-29
+**Commit:** fbf5870  ·  **Date:** 2026-08-29
 
 **Chosen by the owner** from a backlog whose every buildable row is ✅ for the third item running — the demo walk was last done at R-105, seven items earlier, and D-28 says to walk it when a milestone closes. R-105's own lesson is the reason: it found seven defects across 88 routes that all returned 200, three of them visible only as a screen saying something quietly wrong.
 
