@@ -87,18 +87,23 @@ code from an account that has enrolled — so a demo account can skip it.
 
 ### Walking `/login/mfa` without a phone
 
-**R-128 walked it, and left MFA ON for `owner@demo.test`.** R-117 had cleared
-it to get through the screens, so `/login/mfa` was one of two routes no walk
-had ever seen; it has now been signed in through end to end. Two consequences
-you will meet immediately:
+**R-128 walked it end to end, then put MFA back off.** R-117 had cleared it to
+get through the screens, so `/login/mfa` was one of two routes no walk had ever
+seen; it has now been enrolled, challenged and signed through to `/dashboard`.
+**Every demo account is back to two-factor OFF**, which is the state a demo
+needs — `db:seed:demo-access` clears it on every run, and R-128 finished by
+running it. Nothing will ask you for a code.
 
-- **Signing in as the demo owner now asks for a code.** The secret is not
-  written down (see below), so if you do not hold it, clear MFA first — the
-  next subsection says how, and the way this file used to say does not work.
-- **A scripted walk needs the TOTP step too.** Anything driving the browser
-  has to fill `/login/mfa` before it reaches `/dashboard`; a script that
-  waits for a URL outside `/login` will hang for its full timeout on
-  `/login/mfa`, which starts with `/login`.
+Two things that walk established, worth having written down before you enrol
+on purpose:
+
+- **The secret is shown once, on the enrolment screen, and nowhere else.**
+  There is no recovery path through this repo if you close that page without
+  saving it — clear MFA and start again.
+- **A scripted walk needs the TOTP step.** Anything driving the browser has to
+  fill `/login/mfa` before it reaches `/dashboard`, and a script that waits for
+  a URL outside `/login` hangs for its full timeout on `/login/mfa`, which
+  starts with `/login`.
 
 You do not need an authenticator app to cover this route, and **no TOTP secret
 is seeded or written down here** — that would be the fixed credential the top

@@ -74,7 +74,12 @@ On a property page, the things worth naming:
 - **The filing cabinet** — mortgages with ARM-adjustment and balloon alerts,
   insurance renewals, warranties, capital improvements. Every date here reads
   as `2 May 2026`, not `2026-05-02`, and a calendar day never passes through a
-  timezone (R-121).
+  timezone (R-121). **Everything a tenant or vendor receives** — a served
+  notice, a generated lease, an amendment, a chargeback notice, the handoff
+  packet, every emailed and texted notification — reads the same way since
+  R-128. **A handful of internal screens still show the ISO form** (the rent
+  roll's *Last contacted* column is the one you are most likely to open in
+  front of somebody); that is R-129 and it is filed, not forgotten.
 - **Maintenance spend** read straight off the work orders. There is no
   second store of the same money.
 - **Claims** sit below the filing cabinet on purpose: a claim is opened
@@ -129,15 +134,63 @@ replacement" for Lone Star Heating & Air.
 
 ---
 
+## Act 3.5 — the money you are only holding (`owner@demo.test`)
+
+**This is the act to run if you only have time for one.** It is the part of
+the job that generates the most disputes and the one a spreadsheet handles
+worst, and until R-128 it could not be demoed at all — the seed set what the
+lease *said* the deposit was and never recorded the money arriving, so every
+screen read `$0.00` and the disposition page said *"This lease holds no
+deposit."*
+
+**`/money/rent-roll`.** Point at the **Deposit held** column: five tenancies,
+four holding $1,600–$2,200, and **Grant Okafor at $0.00**. That zero is the
+interesting one. Grant's tenancy was *inherited at acquisition* — the property
+was bought with him already in it, and nobody ever established where his
+deposit went. The system records that as `depositTransferStatus: UNKNOWN`
+rather than guessing, and it is the only zero on the screen precisely because
+the other four are real.
+
+Say the rule out loud, because it is the whole design: **a deposit is a
+liability, not income, and "held" means money that actually arrived.** The
+figure is never derived from what the lease asked for. A tenant who paid
+late, paid partially, or moved out has a lease number and a held number that
+differ, and only one of them is defensible in a dispute.
+
+**`/leases` → Wanda Combs → Deposit disposition.** Magnolia Drive House, main
+house, moving out **3 Sept 2026**, **$1,950.00 held**.
+
+- **Deductions are evidence, not line items.** Each one can be backed by the
+  **work order** whose actual cost it is, and by a **move-out photo** from the
+  inspection. A deduction with neither is a number you are asserting.
+- **The depreciation check.** Fill in estimated age and useful life and it
+  will argue with you about full replacement cost on a worn item — which is
+  the argument you would otherwise have in front of a judge.
+- **Texas gives 30 days** and that number is not in the code: it is
+  `depositDispositionDays` on the jurisdiction rule, versioned and
+  effective-dated (D-4). Change the state and the clock changes.
+- **Finalize locks it.** The deduction list stops accepting edits, the letter
+  is generated, and the flow moves to recording how it was served. Say that it
+  cannot be undone, then don't press it — leave the demo with the story
+  intact.
+
+---
+
 ## Act 4 — the narrow roles (`tech@demo.test`, `partner@demo.test`)
 
-Sign in as **`tech@demo.test`**. The nav is visibly shorter: Properties,
-Maintenance, Work orders, Tasks, Messages, Inspections, Reports. **No Leases,
-no Money, no Notices.** The tech is the "phone in one hand in a driveway at
-3am" reader, and R-115 was a whole item spent on that surface.
+Sign in as **`tech@demo.test`**. The nav is visibly shorter — Properties,
+Maintenance, Work orders, Tasks, Messages, Notifications, Inspections,
+Reports, Compliance, Preventive maintenance, Claims — and the point is what is
+**missing: no Leases, no Money, no Notices.** The tech is the "phone in one
+hand in a driveway at 3am" reader, and R-115 was a whole item spent on that
+surface.
 
 Sign in as **`partner@demo.test`** — the read-only bookkeeper or investor.
-Same reach as a manager, no write controls anywhere.
+Sees, writes nothing. **Not quite a manager's reach**, and the difference is
+worth pointing at rather than glossing: no Confidential, and also no Document
+templates, no Evictions and no Gone dark. Those are places where merely being
+in the room is the sensitive part, so read-only does not mean "the same screens
+with the buttons greyed out".
 
 ---
 
