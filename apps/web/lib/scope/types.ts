@@ -11,7 +11,14 @@ export type ScopeSelection =
 export interface ResolvedScope {
   selection: ScopeSelection
   availableEntities: Array<{ id: string; name: string }>
-  availableProperties: Array<{ id: string; name: string; legalEntityId: string }>
+  availableProperties: Array<{
+    id: string
+    name: string
+    legalEntityId: string
+    // The property's own clock. Carried here so a report does not need a
+    // second query to find out what day it is where the rows are.
+    timezone: string
+  }>
   propertyIds: string[]
   switchable: boolean
 }

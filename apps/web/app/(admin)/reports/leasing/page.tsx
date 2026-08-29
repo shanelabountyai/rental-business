@@ -2,7 +2,12 @@ import Link from 'next/link'
 import { requireScope } from '@/lib/auth/guard.ts'
 import { leasingFunnel } from '@/lib/reports/funnel.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
-import { friendlyBusinessDate, type BusinessDate } from '@rental/core/scheduling'
+import { reportToday } from '@/lib/scope/report-today.ts'
+import {
+  addBusinessDays,
+  friendlyBusinessDate,
+  type BusinessDate,
+} from '@rental/core/scheduling'
 import { scrollableRegionProps } from '@/components/ui-classes.ts'
 
 export const metadata = { title: 'Leasing funnel — Rental Operations' }
@@ -33,10 +38,9 @@ export default async function LeasingFunnelPage({
   const scope = await currentScope(actor)
   const params = await searchParams
 
-  const today = new Date()
-  const defaultTo = today.toISOString().slice(0, 10) as BusinessDate
-  const ninetyBack = new Date(today.getTime() - 89 * 86_400_000)
-  const defaultFrom = ninetyBack.toISOString().slice(0, 10) as BusinessDate
+  // The latest local day in scope, not a UTC one - see `reportToday`.
+  const defaultTo = reportToday(scope, new Date())
+  const defaultFrom = addBusinessDays(defaultTo, -89)
   const isDate = (value: string | undefined): value is BusinessDate =>
     value != null && /^\d{4}-\d{2}-\d{2}$/.test(value)
 

@@ -7,7 +7,7 @@ import { uniqueClientHeaders } from './fixtures.ts'
 // A CSP THAT IS NOT SENT LOOKS EXACTLY LIKE ONE THAT IS.
 //
 // Every other spec in this suite passed just as happily before the header
-// existed, and would keep passing if the matcher in middleware.ts stopped
+// existed, and would keep passing if the matcher in proxy.ts stopped
 // matching - a regex with one character wrong silently protects nothing.
 // So the header itself is asserted here, along with the two properties that
 // make it worth having rather than merely present:
@@ -76,7 +76,7 @@ test('the page policy does not reach the routes that serve document bytes', asyn
 }) => {
   // THE REGRESSION THIS FILE EXISTS FOR. `documentResponse` answers
   // `default-src 'none'; sandbox` for any type it will not render. If the
-  // matcher ever stops excluding these paths, the middleware overwrites that
+  // matcher ever stops excluding these paths, the proxy overwrites that
   // with the ordinary page policy - undoing the fix, silently, while every
   // other test stays green.
   //

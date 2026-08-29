@@ -16,7 +16,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 // development, CI, the e2e suite and a genuinely public launch all want.
 //
 // THERE IS NO EXEMPTION LIST HERE, and that is a property of the caller rather
-// than a difference of opinion with the storage app. `middleware.ts`'s matcher
+// than a difference of opinion with the storage app. `proxy.ts`'s matcher
 // already excludes every `/api/` path - it has to, because those routes set
 // their own far stricter CSP - so both crons, the Stripe and Resend webhooks
 // and the three SMS/email routes never reach this function at all. If that

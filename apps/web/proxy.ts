@@ -83,7 +83,11 @@ function policy(nonce: string): string {
   ].join('; ')
 }
 
-export function middleware(request: NextRequest) {
+// Next 16 renamed this file convention from `middleware` to `proxy`, and
+// the export with it: the build reads `mod.proxy || mod.default` for a proxy
+// file. Everything below - the matcher, the nonce, the request header Next
+// stamps its inline scripts from - is unchanged by the rename.
+export function proxy(request: NextRequest) {
   // Before the nonce work: a visitor who is not past the demo gate should cost
   // a 401 and nothing else, not a minted nonce and a policy they never see.
   // Only active when DEMO_ACCESS_PASSWORD is set, so local dev, CI and the e2e
@@ -116,12 +120,12 @@ export const config = {
      * of them sets its OWN, far stricter policy: `documentResponse` answers
      * `default-src 'none'; sandbox` for any content type it will not render.
      * A blanket page policy applied here would REPLACE that with a weaker
-     * one - the middleware would quietly undo the fix it was written to back
+     * one - the proxy would quietly undo the fix it was written to back
      * up. The three non-`api` routes that also serve document bytes are
      * excluded by name for exactly the same reason.
      *
      * `_next/static` and `_next/image` are build output and image
-     * optimisation; running middleware on them costs a function invocation
+     * optimisation; running the proxy on them costs a function invocation
      * per asset and buys nothing, since neither is a document a script can
      * live in.
      */

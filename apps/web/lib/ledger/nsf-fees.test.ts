@@ -17,6 +17,13 @@ let unitId: string
 let tenantId: string
 let leaseId: string
 let leasePayerId: string
+// Its own state code, minted per run. Shared with nothing: a constant here
+// collides with `e2e/notice-to-vacate.spec.ts`, which writes a statewide rule
+// of its own, and `rulesFor` fetches EVERY rule for a state before choosing -
+// so the cap this test asserts could come from the other file's row. The
+// nullable-jurisdiction unique constraint refuses nothing (R-108).
+const CAPPED_STATE = `Q${randomUUID().slice(0, 8)}`
+
 const ruleIds: string[] = []
 const propertyIds: string[] = []
 
@@ -235,7 +242,7 @@ describe('assessNsfFee', () => {
     // silently does nothing is worse than no test: it reports as covered.
     const capped = await prisma.jurisdictionRule.create({
       data: {
-        state: 'YY',
+        state: CAPPED_STATE,
         jurisdiction: null,
         version: 1,
         effectiveFrom: new Date('2020-01-01'),
@@ -258,7 +265,7 @@ describe('assessNsfFee', () => {
         name: `capped-${randomUUID().slice(0, 6)}`,
         addressLine1: '8 Ceiling Court',
         city: 'Nowhere',
-        state: 'YY',
+        state: CAPPED_STATE,
         postalCode: '00001',
         timezone: 'America/Chicago',
         propertyType: 'SINGLE_FAMILY',

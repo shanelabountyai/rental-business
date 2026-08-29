@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { hashPassword, mintToken } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
-import { uniquePhone, uniqueClientHeaders } from './fixtures.ts'
+import { uniquePhone, uniqueClientHeaders, uniqueStateCode } from './fixtures.ts'
 
 // R-003's login limiter is ten attempts per IP per five minutes, and local
 // e2e traffic carries no x-forwarded-for - so without this every spec shares
@@ -26,12 +26,14 @@ test.beforeEach(async ({ page }) => {
 // self-serve intake from the portal.
 
 const PASSWORD = 'correct-horse-battery-staple'
-// An isolated state code, same reasoning e2e/renewals.spec.ts's own STATE
-// constant gives - a real JurisdictionRule row this test controls fully,
-// not the shared TX seed another spec could be reading concurrently. 'YY'
-// rather than that file's own 'ZZ' so the two never collide on
-// @@unique([state, jurisdiction, version]).
-const STATE = 'YY'
+// An isolated state code - a real JurisdictionRule row this spec controls
+// fully, not the shared TX seed another spec could be reading concurrently.
+// MINTED, not a constant: 'YY' was also written by
+// `apps/web/lib/ledger/nsf-fees.test.ts` and asserted ABSENT by
+// `apps/web/lib/jurisdiction/queries.test.ts`, and the
+// @@unique([state, jurisdiction, version]) this comment used to lean on
+// refuses nothing over a null jurisdiction (R-108).
+const STATE = uniqueStateCode()
 
 const staffIds: string[] = []
 const propertyIds: string[] = []

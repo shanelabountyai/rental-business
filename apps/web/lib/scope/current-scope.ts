@@ -58,7 +58,7 @@ export const currentScope = cache(
               ],
             }),
       },
-      select: { id: true, name: true, legalEntityId: true },
+      select: { id: true, name: true, legalEntityId: true, timezone: true },
       orderBy: { name: 'asc' },
     })
 

@@ -1,9 +1,14 @@
 import { formatCents } from '@rental/core/money'
-import { type BusinessDate, friendlyDate } from '@rental/core/scheduling'
+import {
+  addBusinessDays,
+  type BusinessDate,
+  friendlyDate,
+} from '@rental/core/scheduling'
 import Link from 'next/link'
 import { requireScope } from '@/lib/auth/guard.ts'
 import { maintenanceAnalytics } from '@/lib/reports/maintenance.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
+import { reportToday } from '@/lib/scope/report-today.ts'
 import { scrollableRegionProps } from '@/components/ui-classes.ts'
 
 export const metadata = { title: 'Maintenance analytics — Rental Operations' }
@@ -38,13 +43,14 @@ export default async function MaintenanceAnalyticsPage({
   const scope = await currentScope(actor)
   const params = await searchParams
 
-  const today = new Date()
-  const defaultTo = today.toISOString().slice(0, 10) as BusinessDate
+  // The range ends on the LATEST local day in scope, not on a UTC one - see
+  // `reportToday`. `to` is inclusive, so a UTC "today" ran the range into
+  // tomorrow from 18:00 onward on every property west of UTC.
+  const defaultTo = reportToday(scope, new Date())
   // A year back by default: repeat-issue detection needs enough history to
   // find a chain at all, and a 30-day default would report "no repeats" on a
   // portfolio full of them.
-  const yearBack = new Date(today.getTime() - 364 * 86_400_000)
-  const defaultFrom = yearBack.toISOString().slice(0, 10) as BusinessDate
+  const defaultFrom = addBusinessDays(defaultTo, -364)
   const isDate = (value: string | undefined): value is BusinessDate =>
     value != null && /^\d{4}-\d{2}-\d{2}$/.test(value)
 

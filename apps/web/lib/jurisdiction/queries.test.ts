@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { prisma } from '@rental/db'
 import { afterAll, describe, expect, it } from 'vitest'
 import {
@@ -11,6 +12,17 @@ import {
 // Against a real database, and a fake state code ("ZZ") rather than a real
 // one - the real seed data (TX, statewide, v1) must be left alone by every
 // test file that runs against the same dev database.
+
+// THE UNCONFIGURED STATE IS GENERATED, NOT A CONSTANT, and that is the whole
+// difference between the two assertions below passing and failing for ever.
+// This used to be 'YY', which `nsf-fees.test.ts` and
+// `e2e/notice-to-vacate.spec.ts` both WRITE statewide rules for. An assertion
+// about the ABSENCE of configuration is the one that cannot survive a
+// neighbour at all: 15 rows a crashed run left behind made both of these
+// permanently red, and no unique constraint stopped it because
+// @@unique([state, jurisdiction, version]) is over a NULLABLE jurisdiction
+// (R-108). A code minted per run cannot have been written by anybody.
+const UNCONFIGURED = `Q${randomUUID().slice(0, 8)}`
 
 const created: string[] = []
 
@@ -73,7 +85,7 @@ describe('rulesFor', () => {
   })
 
   it('throws for a state with no configuration at all', async () => {
-    await expect(rulesFor({ state: 'YY' }, new Date())).rejects.toThrow(
+    await expect(rulesFor({ state: UNCONFIGURED }, new Date())).rejects.toThrow(
       JurisdictionRuleNotFoundError,
     )
   })
@@ -109,6 +121,6 @@ describe('currentRuleVersion', () => {
   })
 
   it('returns null when nothing has been configured', async () => {
-    expect(await currentRuleVersion('YY', null)).toBeNull()
+    expect(await currentRuleVersion(UNCONFIGURED, null)).toBeNull()
   })
 })

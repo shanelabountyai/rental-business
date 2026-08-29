@@ -2,6 +2,7 @@ import { BUCKET_LABELS, csvCents, toCsv } from '@rental/core/ledger'
 import { requireScope } from '@/lib/auth/guard.ts'
 import { rentRoll } from '@/lib/payments/rent-roll.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
+import { reportToday } from '@/lib/scope/report-today.ts'
 
 // The rent roll as a file (PAY-06, RPT-02, R-044).
 //
@@ -64,7 +65,10 @@ export async function GET() {
     ]),
   )
 
-  const stamp = new Date().toISOString().slice(0, 10)
+  // The day it was exported WHERE THE PROPERTIES ARE, not in UTC. A roll run
+  // at 20:00 in Houston used to be filed under tomorrow and handed to a
+  // lender that way. See `reportToday`.
+  const stamp = reportToday(scope, new Date())
   return new Response(csv, {
     headers: {
       'content-type': 'text/csv; charset=utf-8',

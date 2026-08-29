@@ -25,8 +25,8 @@ function scopeOf(): ResolvedScope {
     selection: { kind: 'all' },
     availableEntities: [{ id: entityId, name: 'R082 Holdings' }],
     availableProperties: [
-      { id: oakId, name: 'Oak St', legalEntityId: entityId },
-      { id: elmId, name: 'Elm Ave', legalEntityId: entityId },
+      { id: oakId, name: 'Oak St', legalEntityId: entityId, timezone: 'America/Chicago' },
+      { id: elmId, name: 'Elm Ave', legalEntityId: entityId, timezone: 'America/Chicago' },
     ],
     propertyIds: [oakId, elmId],
     switchable: false,

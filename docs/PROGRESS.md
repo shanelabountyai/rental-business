@@ -5383,3 +5383,104 @@ on 30 Sept 2026.`
   at **64 passed of 64 listed, 0 failed, 0 flaky**, reconciled against
   `npx playwright test --list`. Not a full sweep: R-129 ran the full 1,054 the
   same day against a tree this one changes in three files.
+
+## R-131: a report's "today" is the latest local day, and the proxy rename nobody owned
+**Commit:** _(recorded below)_  ·  **Date:** 2026-08-29
+
+Owner-chosen as one row over two, the backlog having had no buildable row of
+its own since R-125. Two unrelated leftovers — R-130's three portfolio-wide
+UTC clocks, which it deliberately filed for an owner decision rather than
+guessing, and the Next 16 `middleware`→`proxy` rename R-128 filed and two
+items carried unchanged. A third thing was found by the gate and had to be
+fixed to get a green one.
+
+### What it built
+
+**1. `reportToday(scope, now)` — `apps/web/lib/scope/report-today.ts`.** The
+calendar day a portfolio-wide report is run on: `businessDate` in every
+*selected* property's zone, sorted, last one wins, UTC when nothing is
+selected. `ResolvedScope.availableProperties` gains a required `timezone`,
+selected in the query `currentScope` already runs for the property switcher,
+so no caller pays a second round trip.
+
+**2. The three call sites, all of which read
+`new Date().toISOString().slice(0, 10)`.** `reports/maintenance/page.tsx` and
+`reports/leasing/page.tsx` for their default `to` bound — their `from` bounds
+now come off that day via `addBusinessDays(-364)` / `addBusinessDays(-89)`
+rather than subtracting milliseconds from an instant — and
+`api/reports/rent-roll/route.ts` for the exported CSV's filename.
+
+**3. `apps/web/middleware.ts` → `apps/web/proxy.ts`**, `export function
+middleware` → `export function proxy`. Next 16 reads `mod.proxy || mod.default`
+for a proxy file; the matcher, the nonce and the request header Next stamps
+its inline scripts from are all unchanged. `npm run build` now prints
+`ƒ Proxy (Middleware)` and no deprecation line. The two comments in
+`e2e/csp.spec.ts` and the one in `lib/demo-gate.ts` that named the old file
+were updated with it.
+
+**4. Three test files that shared the magic state code `'YY'`.**
+`jurisdiction/queries.test.ts` asserts `'YY'` has NO configuration;
+`ledger/nsf-fees.test.ts` and `e2e/notice-to-vacate.spec.ts` both WRITE a
+statewide `'YY'` rule. All three now mint their own code per run.
+
+### What it decided
+
+- **A report's "today" is the LATEST local day in scope — the exact opposite
+  of `complianceToday`** (**D-155**, owner call). `complianceToday` returns the
+  earliest, *late everywhere before it is called late*, which is the
+  conservative direction for judging an obligation overdue. `to` is an
+  INCLUSIVE end, so the same rule applied to a report truncates today's rows
+  for every property east of the westernmost one — silently, in a document
+  nobody would think to distrust. Both rules are the conservative direction for
+  their own question, which is why they point opposite ways.
+- **The zones ride on `ResolvedScope`, and the field is required.** An optional
+  `timezone` lets the next caller fall back to UTC without noticing, which is
+  the defect itself. Making it required cost exactly one fixture
+  (`split-invoice-export.test.ts`).
+- **`reportToday` reads `propertyIds`, not `availableProperties` wholesale.** A
+  manager filtered down to one Houston property should not have their range end
+  moved by an eastern property they are not looking at.
+- **The `'YY'` debris is left in the database on purpose.** 15 rows a crashed
+  run left behind; `NoticeDelivery` references them, and deleting a row an
+  append-only table points at is the cleanup this repo already refuses. Minting
+  the codes makes the rows unreachable instead, which is the fix either way —
+  deleting them would have restored the tests without removing the collision.
+- **The rename was done by hand, not by `npx @next/codemod@canary
+  middleware-to-proxy`.** A file rename and one identifier, against a 139-line
+  file whose value is almost entirely in its comments.
+
+### What it left behind
+
+- **This is a third distinct shape of D-153/D-154's class, and no grep finds
+  it.** R-119/R-121 swept values FORMATTED wrongly; D-153/D-154 swept a
+  `BusinessDate` printed verbatim. This is a calendar day **derived from a UTC
+  clock in the first place** — nothing is formatted wrongly because nothing was
+  ever the right value. The only way to find one is to ask which clock a
+  date-shaped value was read off. `new Date().toISOString().slice(0, 10)` and
+  `utcToBusinessDate(new Date())` are the two spellings seen so far; both are
+  now zero in `apps/web` and `packages/core` outside tests.
+- **Staff users still have no timezone of their own.** A reader in New York
+  running a Texas-only report sees Texas's day. That is right for a report
+  *about properties* and wrong for a personal "today"; a `StaffUser.timezone`
+  column plus a settings screen is a separate item nobody has asked for
+  (D-155 records the refusal).
+- **`chargeback-actions.ts` still has no unit test** — R-130's leftover,
+  unchanged. `postChargeback` reads `new Date()` with no injectable clock.
+- **The GitHub Actions billing block is still unresolved** — 13 days,
+  owner-only, as R-126 through R-130 all left it. `lhci autorun` is still
+  unrun.
+- **Gate run:** `typecheck`, `lint` (0 errors, the same 14 pre-existing
+  warnings), `npm run build`, `check:ship-deps` clean, unit **2,780 passed + 4
+  skipped of 2,784** (R-130's total plus this item's four new `reportToday`
+  tests, and the two `'YY'` tests that were red before this item touched them),
+  and the six e2e specs covering every changed path — `csp`, `csp-browser`,
+  `notice-to-vacate`, `rent-roll`, `reports`, `operating-report` — at **48
+  passed of 48 listed, 0 failed, 0 flaky**, reconciled against
+  `npx playwright test --list`. Not a full sweep.
+- **One process note worth keeping.** The first e2e attempt failed all 48 in
+  under a second each, which is the exact signature `CLAUDE.md` warns reads as
+  fifty broken tests. It was neither the OS nor the diff: `npx playwright test`
+  invoked directly skips the `dotenv -e .env.test -e .env.local` wrapper that
+  `npm run test:e2e` carries, so every spec died on a missing `DATABASE_URL`.
+  Memory was at 74% available with zero pressure. **Run the npm script, never
+  the binary.**
