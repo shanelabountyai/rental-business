@@ -5486,7 +5486,7 @@ statewide `'YY'` rule. All three now mint their own code per run.
   the binary.**
 
 ## R-132: the Core Web Vitals budgets had never once been evaluated
-**Commit:** _(recorded below)_  ·  **Date:** 2026-08-29
+**Commit:** dfb5bce  ·  **Date:** 2026-08-29
 
 Owner-chosen over a full sweep, the chargeback clock and a demo walk, on the
 grounds that a check nobody has ever seen run is this repo's most expensive
