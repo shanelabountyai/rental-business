@@ -5295,7 +5295,7 @@ Stripe fee spec. Fixing the one ahead of it is what surfaced this.
 ---
 
 ## R-130: a due date read off a UTC clock, and it was never one site
-**Commit:** PENDING  ·  **Date:** 2026-08-29
+**Commit:** 13e73bc  ·  **Date:** 2026-08-29
 
 The leftover R-128 filed and R-129 carried unchanged, both times correctly —
 *changing a due date changes billing, not display, and it does not belong in
