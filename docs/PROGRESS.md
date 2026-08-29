@@ -5662,3 +5662,100 @@ and a silent skip on a security test is the defect this item is about.
   plus this item's 8 new tests exactly — and `e2e/cron.spec.ts` at **10 passed
   of 10 listed, 0 skipped, 0 failed, 0 flaky**, reconciled against
   `npx playwright test --list`. Not a full sweep.
+
+## R-134: `postChargeback` had no unit test, and its promises are the ones a browser cannot test
+**Commit:** _pending_  ·  **Date:** 2026-08-29
+
+Owner-chosen after the backlog ran out of buildable rows for the sixth item
+running. R-130's leftover, carried unchanged by R-131, R-132 and R-133: 287
+lines that bill a tenant for damage, covered by a pure-function test in core
+and a browser spec in e2e, and by nothing in between.
+
+### What it built
+
+- **`apps/web/lib/workorders/chargeback-actions.test.ts`, six tests**, chosen
+  for what the two existing files cannot reach rather than for coverage.
+  `packages/core/workorders/chargeback.test.ts` proves `chargebackDecision`
+  and `chargebackNoticeText` in isolation; `e2e/chargeback.spec.ts` drives the
+  panel and covers the permission, the refusals, the partial arithmetic and
+  the happy path. Neither can reach the **ordering** the action's own doc
+  comment promises — *the tenant is never billed silently* — because every
+  step of it is a failure or a race a browser has no way to cause.
+- **A provider failure leaves the Charge standing.** The push is mocked to
+  throw; the Charge is still there, `stripeInvoiceItemId` is null — the
+  visible recoverable state `assessNsfFee` also leaves — the REPAIR_CHARGE
+  notice is still served with the right `servedByStaffId`, and the tenant's
+  EMAIL notification row still carries their real address and the amount. The
+  EMAIL row specifically, not a count: `notify` fans out to PORTAL, EMAIL and
+  SMS, so a bare count passes on the PORTAL row alone, which reaches a tenant
+  only if they sign in.
+- **A tenancy with no payment method is charged anyway**, and the returned
+  notice says nothing was sent to the provider rather than implying it was.
+- **Two presses landing together bill once.** Both submits read the context
+  before either writes, so both pass the `existingChargeId` check and both
+  reach the insert; `Charge_one_chargeback_per_work_order` is the only thing
+  between the tenant and two charges for one repair.
+- **The R-130 regression, which nothing had asserted.** Under
+  `vi.setSystemTime` at 02:00Z on 6 March, a Houston chargeback falls due
+  **2026-03-05**. A due date is money — `daysPastDue` counts grace and the
+  late fee from it — and R-130 fixed this three items ago with no test.
+- **A hand-made POST amount writes no Charge row.**
+
+### What it decided
+
+- **The session is the only thing faked.** `vi.mock('@/auth.ts')` returns a
+  staff principal with `mfaVerified: true` (`ledger.adjust` is on
+  `PRIVILEGED_PERMISSIONS`, so an unproved factor is refused) and nothing else
+  about authorization is stubbed: `currentActor` still loads the StaffUser,
+  the assignment and the seeded `owner` role out of Postgres, and
+  `requirePermission` still runs the real RBAC decision against them. Faking
+  the `Actor` instead would have made `ledger.adjust` a string in the test
+  file rather than a grant in the database, which is the half worth proving.
+  `owner` is read rather than created — roles are data (D-5), and `manager`
+  deliberately does not hold `ledger.adjust`.
+- **`next/cache` and `next/headers` are stubbed only for the missing request
+  context**, the same reason and the same stub `vendors/complete-gate.test.ts`
+  already uses for the first. `headers` returns a real empty `Headers`, so
+  `currentAuditActor`'s `x-forwarded-for` splitting runs for real against the
+  empty case — which is also what a scheduled job hits.
+- **The billing seam wraps the real selector rather than replacing it**, so
+  the ordinary path still runs the simulator every other test runs and only
+  the failure is invented.
+- **The race is asserted as an invariant, not as a branch.** Either ordering
+  is a correct outcome — one submit can finish before the other reads, in
+  which case the decision refuses rather than the index — so the test asserts
+  one Charge, one notice and one refusal. Only the index makes all three true
+  in both orderings.
+- **This is the first unit test in the repo to call a `requirePermission`-
+  gated server action.** Ten test files create a StaffUser; none of them had
+  ever gone through the guard.
+- **Mutation-tested rather than assumed**, per R-133. Rethrowing the provider
+  error, deleting the unique-violation catch, and restoring R-130's
+  `new Date().toISOString().slice(0, 10)` each turn exactly one test red.
+
+### What it left behind
+
+- **One mutant survived, and it is recorded rather than fixed.** The action's
+  `Number.isFinite(requestedCents) ? requestedCents : 0` is unreachable:
+  `chargebackDecision`'s `Number.isInteger` is the stricter test and already
+  refuses NaN and Infinity, so dropping the action's guard leaves all six
+  tests green. Left in place as a backstop on a money path, with the test's
+  own comment naming which guard is load-bearing — so the next reader does not
+  mistake the redundant one for the real one, in either direction.
+- **`Math.round(Number(x) * 100)` still rounds a sub-cent amount up.** A
+  hand-made POST of `150.005` is charged as $150.01. Bounded by
+  `exceeds_job_cost` and unreachable from a `step="0.01"` number input, so it
+  is noted rather than owned.
+- **No production file changed.** This item is a test file and two documents;
+  `git diff --stat` over `apps/` and `packages/` is empty.
+- **`chargeback-actions.ts`'s partial path is still only proven in a browser.**
+  The e2e spec bills part of a repair and asserts both numbers on screen; this
+  file asserts the audit row carries both, and neither asserts what Stripe was
+  handed, because the simulator is the only provider either can reach.
+- **The GitHub Actions billing block is still unresolved** — 14 days,
+  owner-only.
+- **Gate run:** `typecheck` clean, `lint` 0 errors and the same 14
+  pre-existing warnings, `check:ship-deps` clean (755 dev packages), unit
+  **2,794 passed + 4 skipped of 2,798** — reconciling against R-133's 2,792
+  plus this item's 6 new tests exactly. No e2e: no production file changed, so
+  there is no spec this item touched.
