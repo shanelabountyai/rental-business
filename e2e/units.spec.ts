@@ -197,6 +197,12 @@ test.describe('creating and viewing units', () => {
     // called), and unlike a visible list item, an <option> inside a closed
     // dropdown still counts as a DOM match.
     await expect(page.getByRole('listitem').filter({ hasText: 'ADU' })).toBeVisible()
+    // Unscoped deliberately, and it survives a near-miss by one letter:
+    // `maintenance-spend.tsx` renders "beside income and vacancy" on this
+    // same page, and "vacancy" does not contain "vacant". Reword that prose
+    // to "vacant days" and this goes red as a strict-mode violation, not as
+    // anything to do with units. The fixture's single unit is the other half
+    // of why one match is one match (R-136).
     await expect(page.getByText('Vacant')).toBeVisible()
 
     const created = await prisma.unit.findFirst({ where: { propertyId: property.id, name: 'ADU' } })

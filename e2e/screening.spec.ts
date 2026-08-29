@@ -251,6 +251,12 @@ test('refuses a decline with no individualized-assessment note', async ({ page }
   await page.getByLabel('Decision').selectOption('DECLINED')
   await page.getByLabel('Individualized-assessment notes').fill('Two evictions in the last year.')
   await page.getByRole('button', { name: 'Record decision' }).click()
+  // One match only because the badge and the <option> differ by one letter:
+  // the badge is "Declined" (`prospects/[id]/page.tsx`) and the select's
+  // option is "Decline" (`screening-decision-form.tsx`), which does not
+  // contain it. The form is still mounted after the action - see the comment
+  // above - so relabelling that option "Declined" makes this a strict-mode
+  // violation, and an <option> in a closed dropdown still counts (R-136).
   await expect(page.getByText('Declined')).toBeVisible()
 
   // No separate ProspectStatus for a decline - the pipeline stays at

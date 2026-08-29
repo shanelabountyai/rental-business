@@ -5860,3 +5860,130 @@ running. Two sweeps had ended with tests marked **flaky** — which still exits
   against `playwright test --list`. That one flaky is the `7392` collision;
   the four locators were fixed after the sweep and the three specs holding
   them re-ran **42/42**. Peak Postgres backends during the sweep: **42**.
+
+## R-136: R-135's fifteen locator candidates were eight, and none of them was a defect
+
+**Commit:** _pending_  ·  **Date:** 2026-08-29
+
+Owner-chosen after the backlog ran out of buildable rows for the eighth item
+running. R-135 fixed four `getByText` collisions and filed the rest as
+**candidates, not defects** — "each needs its own page read to judge", which is
+D-154's rule applied to locators instead of dates. This is that read. The
+answer is that all of them are safe, and the interesting half is *why*, because
+two of them are safe by one letter.
+
+### What it built
+
+- **Nothing in production. No locator changed.** The deliverable is the
+  judgment, recorded where the next session will find it rather than re-derive
+  it, plus two comments at the sites where the safety is load-bearing and
+  invisible.
+
+### What it decided
+
+- **There were eight live locators, not fifteen.** Seven of R-135's fifteen
+  grep hits are **comment lines** in `leases.spec.ts` (×2),
+  `confidential.spec.ts`, `operational.spec.ts`, `units.spec.ts` and
+  `inspections.spec.ts` — prose describing collisions already fixed, in which
+  the phrase `getByText('active')` or `getByText('Gate')` appears as the thing
+  being explained. The grep counted this repo's own documentation of the trap
+  as instances of the trap. Filtering comment lines is one `grep -v`, and the
+  real list is seven unscoped `page.getByText` calls plus one already scoped to
+  a section.
+- **The hex-suffix vector — R-135's actual defect — cannot fire for any of
+  them.** `getByText('7392')` collided with `Axe House-e7392d7f` because an
+  all-digit access code is also valid hex, and every staff page renders one
+  `<option>` per in-scope property as `<Name>-<8 hex>`. Hex is `0-9a-f`;
+  `Vacant`, `Down`, `New`, `Good`, `Urgent`, `ADU`, `Gate` and `Saved.` all
+  contain characters that are not, so no generated suffix can ever produce
+  them. The residual vector is a property *name*, and no fixture in `e2e/` or
+  `packages/db/` names a property with any of these words.
+- **That leaves same-page duplication, which is the part that needed the page
+  read.** Seven pages read, seven single matches, each for a stated reason:
+  `/properties/[id]` renders one unit row from a one-unit fixture;
+  `/account` renders exactly two ceilings and the other is `$100.00`, which
+  does not contain `$0.00`; `/portal/notices` renders one `New` badge per
+  unread notice against a one-notice fixture, and the portal layout contains no
+  "new"; the unit detail page and all four of its child components contain no
+  "Down" (no *Download*, no *dropdown*); `/leases/[id]` has two actions
+  returning `Saved.` and an autopay panel rendering "Saved. We will collect…",
+  but each is gated on its own `useActionState` and only one action fires per
+  test.
+- **Two are safe by exactly one letter, and both are now commented.**
+  `units.spec.ts`'s `getByText('Vacant')` shares its page with
+  `maintenance-spend.tsx`'s prose *"beside income and vacancy"* — and
+  "vacancy" does not contain "vacant", differing at the sixth character.
+  `screening.spec.ts`'s `getByText('Declined')` shares its page with the
+  decision `<select>`, whose option is labelled **"Decline"** in
+  `screening-decision-form.tsx` while the badge is **"Declined"** in
+  `prospects/[id]/page.tsx` — the option does not contain the badge's text, and
+  the form is still mounted after the action by that file's own design. Rewording
+  either string turns a green assertion into a strict-mode violation that reads
+  as a broken test, so the near-miss is written next to the assertion rather
+  than left for the next sweep to rediscover.
+- **`portal.spec.ts`'s `getByText('ACTIVE')).toHaveCount(0)` over-asserts in
+  the safe direction, and is left alone.** Its intent is D-10's lexicon — no
+  status enum on a tenant's screen — but `getByText` is a case-insensitive
+  substring match, so it also forbids the ordinary English word "active"
+  anywhere on the page. That is stricter than intended rather than looser, and
+  tightening it to `{ exact: true }` would narrow it to a badge whose whole
+  text is the enum and stop catching one leaked inline. Recorded so the next
+  session does not "fix" it into something weaker.
+- **The announcer trap has no live instances, checked mechanically rather than
+  by eye.** R-127's `#__next-route-announcer__` collision has fired five times
+  and is the sub-class with real recurrence, so the 194 distinct unscoped
+  `page.getByText('…')` literals in `e2e/` were intersected against the 49
+  strings the suite elsewhere asserts as `getByRole('heading', { name })`. One
+  hit: `'Locks & doors'` in `maintenance.spec.ts:133` and `:204`. Both are on
+  the wizard's **review step**, still at `/portal/maintenance/new`, whose `<h1>`
+  is not that; line 137 — the assertion that *is* on the page whose `<h1>` is
+  `Locks & doors` — already uses `getByRole('heading')`. Zero instances.
+
+### What it found along the way
+
+- **A bare `npx playwright test` fails in exactly the shape `CLAUDE.md` teaches
+  you to read as a memory kill, and it is not one.** The first confirming run
+  was launched as `npx playwright test <files>` rather than
+  `npm run test:e2e -- <files>`, so the runner process never got
+  `dotenv -e .env.test -e .env.local`. The result was **110 failures in 121
+  tests, every one of them sub-second** — the precise signature this repo
+  records for a jetsam-killed server, and the reason it says to check
+  `lsof -ti :3100` and `kern.memorystatus_level` before reading a stack trace.
+  Those checks were clean (67% memory available, pressure 0, the only
+  JetsamEvent file seven hours old), which is what sent the diagnosis to the
+  right place: the real error is `Environment variable not found: DATABASE_URL`,
+  raised in each spec's own `afterAll`. **The server was fine; the runner had no
+  database.** `CLAUDE.md` already says to use the `:test` variants and never the
+  bare scripts — what was missing is that breaking that rule is
+  *indistinguishable at a glance* from the environment failure it also warns
+  about, so the memory check is what tells them apart, in both directions.
+
+### What it left behind
+
+- **No lint rule and no gate script, deliberately.** The obvious durable fix is
+  a check that refuses a short unscoped `getByText`, and it was considered and
+  rejected: it would fire on eight sites just proved safe, and `{ exact: true }`
+  is not uniformly the right assertion for them (`portal.spec.ts` above is the
+  counter-example). The sub-class with genuine recurrence is the announcer one,
+  and that is not statically checkable — it needs the page's rendered `<h1>`,
+  which is dynamic for most of these routes. **The heading intersection above is
+  the cheap approximation and it is a two-command recipe, not a script:** extract
+  the `page.getByText` literals, extract the `getByRole('heading', { name })`
+  names, `comm -12`. Worth re-running after a milestone rather than wiring into
+  the gate.
+- **The judgment is a snapshot of the pages as they are today.** Every one of
+  these eight is safe because of what its page currently renders — a one-unit
+  fixture, a one-notice fixture, two ceilings, an option labelled "Decline". A
+  panel added to any of those pages can make any of them red, which is the
+  standing hazard `CLAUDE.md` already records for `/leases/[id]`. This item does
+  not remove that hazard; it removes the open question of whether eight known
+  locators were already broken.
+- **The GitHub Actions billing block is still unresolved** — 15 days,
+  owner-only.
+- **Gate run:** `typecheck` clean, `lint` 0 errors and the same 14 pre-existing
+  warnings, unit **2,800 passed + 4 skipped of 2,804** — identical to R-135's
+  totals, since this item adds no tests — and the six specs holding the audited
+  locators (`units`, `screening`, `notices`, `auth`, `portal`,
+  `retaliation-guard`) at **132 passed of 132**, reconciling exactly against
+  `playwright test --list`, with 0 skipped and 0 flaky. A full sweep was not run:
+  no production file and no locator changed.
