@@ -5572,3 +5572,93 @@ reason: it carries no script, so there is no nonce to lose.
   covering the changed proxy matcher and prerender guard — `csp`,
   `csp-browser` — at **18 passed of 18 listed, 0 failed, 0 flaky**, reconciled
   against `npx playwright test --list`. Not a full sweep.
+
+## R-133: the cron authorization had never been executed, and its spec passed against `return false`
+**Commit:** PENDING  ·  **Date:** 2026-08-29
+
+Owner-chosen after the backlog ran out of buildable rows for the fifth item
+running. The same class R-132 closed — an assertion that has never been
+evaluated is not coverage — but on the authorization boundary in front of
+every scheduled job in the product rather than on a performance budget.
+
+### What it built
+
+**1. `apps/web/lib/cron/authorize.test.ts`** — eight tests, the first anything
+has ever run against `isAuthorizedCron`. It is the gate on `/api/cron` and
+`/api/cron/escalations`, and it is the durable half of this item: a unit test
+does not care what the environment happens to hold.
+
+**2. One line in `playwright.config.ts`**, beside the three fake secrets
+already there for Twilio, Stripe and inbound email — written, in each case,
+for exactly this reason.
+
+**3. The three `test.skip` lines in `e2e/cron.spec.ts` are deleted**, not left
+as reassurance. With the config supplying a secret they can no longer fire,
+and a silent skip on a security test is the defect this item is about.
+
+### What it decided
+
+- **The spec was passing against a gate that refused everything.** Three of
+  `e2e/cron.spec.ts`'s five tests read `process.env.CRON_SECRET` and skipped
+  when it was falsy. The two that remained assert a **refusal** — and an empty
+  secret makes `isAuthorizedCron` refuse every request on earth. The file
+  would have been green against a body of `return false`, on the endpoint that
+  runs every scheduled job there is. It now runs **10 of 10, 0 skipped**,
+  including the 200 that proves the runner actually executes its jobs.
+- **The variable was EMPTY, not absent, and that is why nobody ever looked.**
+  `.env.local` is written by `vercel env pull` and carries `CRON_SECRET=""`.
+  An absent variable in a `.env` file reads as something not yet set up; an
+  empty one reads as set up. Both are falsy to `isAuthorizedCron`, which is
+  correct, and only one of them looks wrong to a person.
+- **`||=`, not `??=` like its three neighbours, and that is the whole reason
+  it needed its own block with its own comment.** Twilio's, Stripe's and the
+  inbound-email secret are absent from `.env.local`, so `??=` supplies them.
+  This one is present and empty, so `??=` is inert and would have changed
+  nothing while looking identical to the three lines above it.
+- **The fix is in the config, not in CI.** An earlier draft of this item wrote
+  a freshly minted `CRON_SECRET` into both CI jobs' `.env.local` — which fixes
+  CI, leaves this laptop exactly as broken, and needs a comment in the
+  `verify` job explaining why a variable nothing in that job reads is written
+  there anyway. The config default fixes all three environments (laptop, CI,
+  forked PR) in one line and no CI edit. `.github/workflows/ci.yml` is
+  unchanged by this item.
+- **The scheme check was untested and looked tested — mutation testing is what
+  found it.** Failing the gate open and dropping the `timingSafeEqual` length
+  guard each turn the file red. Deleting `startsWith('Bearer ')` left all
+  seven original tests **green**: without the guard the code still runs
+  `header.slice('Bearer '.length)`, which for a scheme of any *other* length
+  mangles the token into a refusal for the wrong reason. `Basic ` is six
+  characters, so `Basic <secret>` refuses either way. The eighth test sends
+  `Digest ` — exactly seven characters, like `Bearer ` — and is the only input
+  in the file that kills that mutant.
+
+### What it left behind
+
+- **`e2e/cron.spec.ts`'s 200 path runs the ledger reconciliation sweep, and it
+  prints one `DRIFT projected_but_missing` line per accumulated debris row.**
+  Fourteen today, all of them **deliberate test debris rather than a product
+  bug**: `apps/web/lib/ledger/ledger.test.ts` seeds a rowless
+  `invoice.payment_failed` / `payment_returned` event on purpose, to prove the
+  drift check catches a lost reversal, and `ProcessedStripeEvent` rows are
+  never cleaned up. 45 of the 59 real `payment_returned` events in
+  `rental_test` do carry their ledger entry, and both branches of
+  `reverseSettledPayment` write one with the event id, so the projection path
+  is sound. It fails nothing — the cron reports `failedJobs: 0` and the drift
+  is logged, not thrown — but the line count grows with the age of the
+  database, which is R-102/R-109's shape. Nobody owns it yet.
+- **The cron gate is still only proven with a fake secret.** Nothing asserts
+  that the *deployed* `CRON_SECRET` is non-empty, and `vercel env pull`
+  returning `""` for the development environment is not evidence about
+  production either way. If production's is empty, every scheduled job 404s
+  and the product looks idle rather than broken. Worth an owner check against
+  the Vercel dashboard; it cannot be checked from here.
+- **`chargeback-actions.ts` still has no unit test** — R-130's leftover,
+  carried unchanged by R-131, R-132 and this item.
+- **The GitHub Actions billing block is still unresolved** — 13 days,
+  owner-only.
+- **Gate run:** `typecheck` clean, `lint` 0 errors and the same 14
+  pre-existing warnings, `check:ship-deps` clean (755 dev packages), unit
+  **2,788 passed + 4 skipped of 2,792** — reconciling against R-132's 2,784
+  plus this item's 8 new tests exactly — and `e2e/cron.spec.ts` at **10 passed
+  of 10 listed, 0 skipped, 0 failed, 0 flaky**, reconciled against
+  `npx playwright test --list`. Not a full sweep.

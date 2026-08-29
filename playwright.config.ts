@@ -63,6 +63,29 @@ process.env.STRIPE_WEBHOOK_SECRET ??= TEST_STRIPE_WEBHOOK_SECRET
 const TEST_INBOUND_EMAIL_SECRET = 'test-only-not-a-real-inbound-email-secret'
 process.env.INBOUND_EMAIL_SECRET ??= TEST_INBOUND_EMAIL_SECRET
 
+/**
+ * And the cron endpoint's bearer token (R-133).
+ *
+ * `||=`, NOT `??=` like the three above, and the difference is the whole
+ * reason this block exists. `.env.local` is written by `vercel env pull`, and
+ * it carries `CRON_SECRET=""` - so unlike the three secrets above, this one is
+ * not absent, it is present and EMPTY. `??=` would leave the empty string in
+ * place and change nothing.
+ *
+ * An empty secret makes `isAuthorizedCron` refuse everything, which is correct
+ * behaviour and a disaster for the spec: three of `e2e/cron.spec.ts`'s five
+ * tests skip, and the two that remain assert a REFUSAL - so the whole file
+ * passed against a gate that was answering `false` to every request on earth.
+ * It would pass identically against `return false`. The endpoint runs every
+ * scheduled job in the product, so that is the last gate worth proving by
+ * accident.
+ *
+ * Not a secret, and deliberately does not look like one: it authenticates
+ * nothing real, and the only thing it can open is a local test server.
+ */
+const TEST_CRON_SECRET = 'test-only-not-a-real-cron-secret'
+process.env.CRON_SECRET ||= TEST_CRON_SECRET
+
 export default defineConfig({
   testDir: './e2e',
   fullyParallel: true,

@@ -6,6 +6,23 @@ import { expect, test } from '@playwright/test'
 
 const CRON_PATH = '/api/cron'
 
+// NO `test.skip` ON A MISSING SECRET, and that is the point of R-133.
+//
+// These three tests used to skip when `CRON_SECRET` was falsy - and it was
+// falsy everywhere, because `.env.local` comes from `vercel env pull` and
+// carries `CRON_SECRET=""`. That left the two unconditional tests below, both
+// asserting a REFUSAL, which an empty secret produces for every request on
+// earth: the file passed exactly as well against `return false` as against the
+// real gate, on the authorization for every scheduled job in the product.
+//
+// `playwright.config.ts` now supplies a fake one, so the skips could never
+// fire again. They are gone rather than left as reassurance: if that line is
+// ever removed, these tests must go RED, not quietly green.
+// The fallback is deliberately a wrong value rather than a `!` assertion: if
+// the config ever stops supplying one, the last test below fails on a 404 it
+// expected to be a 200, naming the problem, instead of skipping past it.
+const secret = process.env.CRON_SECRET || 'no-cron-secret-in-this-environment'
+
 test.describe('the cron endpoint', () => {
   // 404 rather than 401: an unauthenticated caller learns nothing about
   // whether this endpoint exists, and a scanner gets no signal to come back.
@@ -26,19 +43,13 @@ test.describe('the cron endpoint', () => {
   test('refuses a token that is merely a prefix of the real one', async ({
     request,
   }) => {
-    const secret = process.env.CRON_SECRET
-    test.skip(!secret, 'CRON_SECRET is not set in this environment')
-
     const response = await request.get(CRON_PATH, {
-      headers: { authorization: `Bearer ${secret!.slice(0, -1)}` },
+      headers: { authorization: `Bearer ${secret.slice(0, -1)}` },
     })
     expect(response.status()).toBe(404)
   })
 
   test('refuses a non-bearer authorization scheme', async ({ request }) => {
-    const secret = process.env.CRON_SECRET
-    test.skip(!secret, 'CRON_SECRET is not set in this environment')
-
     const response = await request.get(CRON_PATH, {
       headers: { authorization: `Basic ${secret}` },
     })
@@ -46,9 +57,6 @@ test.describe('the cron endpoint', () => {
   })
 
   test('runs when the bearer token is right', async ({ request }) => {
-    const secret = process.env.CRON_SECRET
-    test.skip(!secret, 'CRON_SECRET is not set in this environment')
-
     const response = await request.get(CRON_PATH, {
       headers: { authorization: `Bearer ${secret}` },
     })
