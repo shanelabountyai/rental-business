@@ -5990,7 +5990,7 @@ two of them are safe by one letter.
 
 ## R-137: the script named for the demo seeded the cloud, and nothing stopped it
 
-**Commit:** _pending_  ·  **Date:** 2026-08-29
+**Commit:** d66250d  ·  **Date:** 2026-08-29
 
 Owner-chosen 2026-08-29, from a question about whether the demo script, logins
 and passwords were current in a markdown file. Two of the three answers were
