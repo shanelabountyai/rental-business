@@ -16,8 +16,11 @@ npm run db:seed:demo-access      # staff passwords + fresh tenant/vendor links
 npm run dev:demo                 # http://localhost:3100
 ```
 
-If the database is empty or you want a clean slate first, run the five setup
-commands in `DEMO-LOGINS.md` §1, then the two above.
+If the database is empty or you want a clean slate first, run the setup
+commands in `DEMO-LOGINS.md` §1, then the two above. They are all `:demo`-suffixed
+npm scripts as of R-137 — the un-suffixed ones (`db:seed`, `db:seed:demo` before
+the fix) pointed at the Neon dev branch, and both demo seeds now refuse any
+database but a local `rental_demo` rather than trusting the env file.
 
 `db:seed:demo-access` prints everything you need and is **safe to re-run** —
 it resets the passwords and mints fresh links, which is what you want five

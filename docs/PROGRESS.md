@@ -5987,3 +5987,92 @@ two of them are safe by one letter.
   `retaliation-guard`) at **132 passed of 132**, reconciling exactly against
   `playwright test --list`, with 0 skipped and 0 flaky. A full sweep was not run:
   no production file and no locator changed.
+
+## R-137: the script named for the demo seeded the cloud, and nothing stopped it
+
+**Commit:** _pending_  ·  **Date:** 2026-08-29
+
+Owner-chosen 2026-08-29, from a question about whether the demo script, logins
+and passwords were current in a markdown file. Two of the three answers were
+yes. The third was a live footgun that had nothing to do with documentation.
+
+### What it built
+
+- **`refuseUnlessDemoDatabase` in a shared module**
+  (`packages/db/prisma/demo-database-guard.mts`), called by **both** demo seeds
+  before their first write. It refuses any `DATABASE_URL` that is not a *local*
+  `rental_demo`, checked on the URL rather than `NODE_ENV`, which is unset in
+  half the ways either script can be run.
+- **The `:demo` npm variants** the docs needed and did not have:
+  `db:migrate:demo`, `db:seed:base:demo`, `db:seed:lease-templates:demo`,
+  `db:create-owner:demo` — each carrying `-e .env.demo -e .env.local`.
+- **`db:seed:demo` fixed** to carry `.env.demo`, which it never had.
+- **Eight unit tests** on the guard, and the three markdown files reconciled.
+
+### What it decided
+
+- **The defect was the missing guard, not the env flag.** `npm run db:seed:demo`
+  read `dotenv -e .env.local`, which on this machine resolves to
+  `…neon.tech` — so a script named for the demo wrote the **Neon dev branch**,
+  and its `--reset` deletes and retires rows there. Fixing the flag alone would
+  have left the next misordered `-e` doing the same thing silently. The sibling
+  `seed-demo-access.mts` had refused since R-122 on the global convention's
+  terms; `demo-seed.mts`, the one that writes far more, had no guard at all. The
+  refusal now lives in one file and both call it.
+- **Verified as a refusal, not as a diff.** Pointed at `.env.local` the seed
+  exits 1 and names the database it was given, with the password masked;
+  pointed at `rental_demo` it runs. Both were executed.
+- **`db:create-owner` is still in the demo path, and the order is forced.**
+  `db:seed:lease-templates:demo` needs a staff user to attribute wording to;
+  `db:seed:demo` throws without a lease template, because an e-signature
+  envelope with no template behind it is an envelope wrapping nothing; and
+  `db:seed:demo-access` throws without the Riverside Court Duplex that
+  `db:seed:demo` creates, since one of its five personas is scoped to it. The
+  cycle is why `db:create-owner:demo` exists rather than being replaced by
+  `db:seed:demo-access`.
+- **No one-shot `db:setup:demo` chain, and it was written and then deleted.**
+  `db:create-owner` refuses an address that already exists, so a chain would
+  have to `|| true` past a real error to stay re-runnable — swallowing the
+  failure of the step that creates the account everything else attributes to.
+  Seven named scripts in a documented order beat one chain that lies on its
+  second run.
+- **`DEMO-LOGINS.md`'s headline was false and is corrected in place.** It opened
+  with *"There are no fixed passwords anywhere in this repo, deliberately"*,
+  written 2026-08-25 — two days before R-122 added `demo-rental-2026`. The file
+  had even been edited since (R-128 added the MFA section referencing
+  `db:seed:demo-access`) without the contradiction being noticed. It now states
+  the real rule: the *product* has no fixed passwords, the *demo seed* has
+  exactly one, and it refuses to run anywhere that could matter.
+- **`DEMO-SCRIPT.md` needed almost nothing.** Every credential fact in it was
+  verified against `seed-demo-access.mts` and correct: the password, the five
+  `@demo.test` addresses, their roles, and `scoped@demo.test`'s scope. The six
+  tenant emails, three vendor emails and five property names in
+  `DEMO-LOGINS.md` were checked against `demo-seed.mts` and correct too. **The
+  stale document was the older one, not the newer** — which is the opposite of
+  the usual assumption, and the reason both were checked rather than one.
+- **Mutation-tested rather than assumed** (R-133's rule). Dropping the `isLocal`
+  half, dropping the `isDemo` half, unanchoring the database-name match so
+  `rental_demo_backup` passes, and removing the password mask each turn a
+  distinct test red. The two-halves cases matter: a single condition passes one
+  and fails the other.
+
+### What it left behind
+
+- **`.env.demo` is still what decides which database a *correct* run reaches.**
+  The guard is a floor, not a router — it stops a wrong database being written,
+  it does not find the right one. A missing `.env.demo` is still a refusal to
+  read, not a silent success.
+- **`db:seed`, `db:create-owner` and `db:seed:lease-templates` still carry only
+  `-e .env.local`,** deliberately: they legitimately serve the Neon dev branch,
+  and that is what `db:migrate:dev` and `db:status:dev` are for. What changed is
+  that the demo path no longer borrows them.
+- **No e2e sweep.** Nothing outside `packages/db/prisma` imports either demo
+  seed — checked — and the suite runs against `.env.test` and `db:seed:test`.
+- **The GitHub Actions billing block is still unresolved** — 15 days,
+  owner-only.
+- **Gate run:** `typecheck` clean, `lint` 0 errors and the same 14 pre-existing
+  warnings, `check:ship-deps` clean (755 dev packages), unit **2,808 passed + 4
+  skipped of 2,812** — R-136's 2,804 plus this item's 8, reconciling exactly.
+  `db:migrate:demo`, `db:seed:base:demo`, `db:seed:lease-templates:demo`,
+  `db:seed:demo` and `db:seed:demo-access` were each run against `rental_demo`
+  and each exited 0.

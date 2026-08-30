@@ -1,27 +1,66 @@
 # Demo logins and roles
 
 How to get into every surface of this product with a seeded demo database.
-Written 2026-08-25, after R-105's demo walk.
+Written 2026-08-25 after R-105's demo walk; corrected 2026-08-29 (R-137).
 
-**There are no fixed passwords anywhere in this repo, deliberately.** Staff set
-their own through a single-use link the bootstrap script prints; tenants and
-vendors never have one at all. Nothing below is a credential — every line is
-either a command you run or an address you type into a form.
+**Start at [DEMO-SCRIPT.md](DEMO-SCRIPT.md) §0 if you just want to sign in.**
+`npm run db:seed:demo-access` makes five staff accounts with one documented
+password and prints a magic link per tenant and vendor. This file is the
+reference for *how* accounts and roles work, and for the paths that script does
+not cover.
+
+**The product has no fixed passwords; the demo seed has exactly one, and it
+refuses to run anywhere it could matter.** That distinction is the whole of it:
+`db:create-owner` mints a single-use setup link and never prints a credential,
+because a password in a repo is a password in every clone of it — while
+`db:seed:demo-access` (R-122) writes the known `demo-rental-2026`, on the global
+convention's own terms, *"known-value demo credentials are fine when the seed
+that uses them refuses to run in production, and the file should say so."*
+It says so, and it refuses: `refuseUnlessDemoDatabase` rejects any
+`DATABASE_URL` that is not a local `rental_demo`.
+
+**This file used to open by claiming there were no fixed passwords anywhere in
+this repo.** That was written two days before R-122 made it false, and it stayed
+on the page until R-137. Tenants and vendors still have no password at all, and
+that part was never in doubt.
 
 ---
 
 ## 1. Bring up the demo database
 
-Run once, in order. All five use `.env.demo` first so they hit the LOCAL
-`rental_demo` database rather than the Neon dev branch (see CLAUDE.md).
+Run once, in order. Every script below carries `-e .env.demo -e .env.local`, so
+it hits the LOCAL `rental_demo` database rather than the Neon dev branch.
 
 ```bash
-npx dotenv -e .env.demo -e .env.local -- npx prisma migrate deploy --schema packages/db/prisma/schema.prisma
-npx dotenv -e .env.demo -e .env.local -- node packages/db/prisma/seed.mts                 # roles + the Texas jurisdiction rule
-npx dotenv -e .env.demo -e .env.local -- node packages/db/prisma/create-owner.mts --email you@example.test --name "Your Name"
-npx dotenv -e .env.demo -e .env.local -- node packages/db/prisma/seed-lease-templates.mts
-npx dotenv -e .env.demo -e .env.local -- npx tsx packages/db/prisma/demo-seed.mts
+createdb rental_demo                     # once, if it does not exist yet
+npm run db:migrate:demo                  # every migration
+npm run db:seed:base:demo                # roles + the Texas jurisdiction rule
+npm run db:create-owner:demo -- --email owner@demo.test --name "Dana Reyes"
+npm run db:seed:lease-templates:demo -- --staff owner@demo.test
+npm run db:seed:demo                     # the demo portfolio, tenants and money
+npm run db:seed:demo-access              # the five staff logins and the links
 ```
+
+**These used to be raw `npx dotenv -e .env.demo …` lines, and that was load
+bearing** — the obvious script names (`db:seed`, `db:create-owner`,
+`db:seed:lease-templates`, `db:seed:demo`) all carried only `-e .env.local`,
+which is the Neon dev branch, so writing them out longhand was the only way to
+be right. R-137 added the `:demo` variants and, more to the point, a **refusal
+inside both demo seeds**: pointed anywhere but a local `rental_demo` they now
+exit 1 naming the database they were given, rather than seeding it.
+
+**The order is forced, not a preference.** `db:seed:lease-templates:demo` needs
+a staff user to attribute the wording to; `db:seed:demo` throws without a lease
+template, because an e-signature envelope with no template behind it is an
+envelope wrapping nothing; and `db:seed:demo-access` throws without the
+Riverside Court Duplex that `db:seed:demo` creates, since one of its five
+personas is scoped to it. There is no one-shot chain script because
+`db:create-owner` refuses an address that already exists, so a chain would have
+to swallow a real error to stay re-runnable.
+
+`owner@demo.test` is used above so that the account this creates is the same one
+`db:seed:demo-access` later resets to the documented password — any address
+works, but a second one is just an extra account to explain.
 
 Then serve it:
 
@@ -55,21 +94,23 @@ meaning "may approve nothing" — the fallback is on null, not on falsiness.
 
 ### Making the accounts
 
+**For a demo, you do not need any of this** — `npm run db:seed:demo-access`
+makes all five accounts, with a password, in one command. Use the script below
+when you want an account this repo has no seeded persona for, or on a database
+`db:seed:demo-access` refuses to touch.
+
 ```bash
 # The owner (first, and only once — the script refuses a second without --force)
-npx dotenv -e .env.demo -e .env.local -- node packages/db/prisma/create-owner.mts \
-  --email owner@example.test --name "Dana Reyes"
+npm run db:create-owner:demo -- --email owner@demo.test --name "Dana Reyes"
 
 # One of each other role
-npx dotenv -e .env.demo -e .env.local -- node packages/db/prisma/create-owner.mts \
-  --email manager@example.test --name "Pat Morales" --role manager
-
-npx dotenv -e .env.demo -e .env.local -- node packages/db/prisma/create-owner.mts \
-  --email tech@example.test --name "Sam Okonkwo" --role maintenance_tech
-
-npx dotenv -e .env.demo -e .env.local -- node packages/db/prisma/create-owner.mts \
-  --email partner@example.test --name "Jo Whitlock" --role read_only
+npm run db:create-owner:demo -- --email manager@demo.test --name "Pat Morales" --role manager
+npm run db:create-owner:demo -- --email tech@demo.test --name "Sam Okonkwo" --role maintenance_tech
+npm run db:create-owner:demo -- --email partner@demo.test --name "Jo Bookkeeper" --role read_only
 ```
+
+**`--` before the flags is not optional.** Without it npm eats them and the
+script sees no arguments at all.
 
 Against a non-demo database, `npm run db:create-staff -- --role manager …` is
 the same script with the same flags.

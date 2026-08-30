@@ -32,6 +32,7 @@
 // script is being run twice five minutes before the demo.
 
 import { recordAudit } from '../../core/audit/index.ts'
+import { refuseUnlessDemoDatabase } from './demo-database-guard.mts'
 import { hashPassword, mintToken } from '../../core/auth/index.ts'
 import { prisma } from '../index.ts'
 
@@ -62,28 +63,6 @@ const PERSONAS: Persona[] = [
     scopeToPropertyNamed: 'Riverside Court Duplex',
   },
 ]
-
-function refuseUnlessDemoDatabase(): void {
-  const url = process.env.DATABASE_URL ?? ''
-  const isLocal = /@(localhost|127\.0\.0\.1)[:/]/.test(url)
-  const isDemo = /\/rental_demo(\?|$)/.test(url)
-  if (isLocal && isDemo) return
-
-  console.error(
-    [
-      '',
-      'REFUSED. This script writes known passwords, so it runs against the',
-      'local rental_demo database and nothing else.',
-      '',
-      `  DATABASE_URL names: ${url.replace(/:[^:@]*@/, ':***@') || '(unset)'}`,
-      `  local: ${isLocal}   rental_demo: ${isDemo}`,
-      '',
-      'Run it as: npm run db:seed:demo-access',
-      '',
-    ].join('\n'),
-  )
-  process.exit(1)
-}
 
 async function upsertStaff(persona: Persona, passwordHash: string) {
   const role = await prisma.role.findUnique({ where: { key: persona.roleKey } })
@@ -208,7 +187,7 @@ async function vendorLinkFor(workOrderId: string, vendorId: string): Promise<str
 }
 
 async function main() {
-  refuseUnlessDemoDatabase()
+  refuseUnlessDemoDatabase('writes known passwords', 'npm run db:seed:demo-access')
 
   const base = process.env.AUTH_URL ?? 'http://localhost:3100'
   const passwordHash = await hashPassword(DEMO_PASSWORD)

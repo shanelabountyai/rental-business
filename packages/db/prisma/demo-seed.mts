@@ -43,6 +43,7 @@ import type { StripeEventEnvelope } from '@rental/core/billing'
 import { threadKey } from '@rental/core/comms'
 import { wallClockToUtc } from '@rental/core/scheduling'
 import { prisma } from '../index.ts'
+import { refuseUnlessDemoDatabase } from './demo-database-guard.mts'
 
 // Deliberately avoid generic UI words in these names ("Properties", nav
 // section labels, unit-status words) - an unscoped e2e locator elsewhere
@@ -3289,6 +3290,13 @@ async function seedDemoData() {
 }
 
 async function main() {
+  // Before `--reset`, not after: reset DELETES and RETIRES rows, so a run
+  // pointed at the wrong database does its damage in the first statement.
+  // `db:seed:demo` carried `-e .env.local` until R-137, which on this machine
+  // is the Neon dev branch - the guard is what makes the npm script's env a
+  // convenience rather than the only thing standing between a demo seed and
+  // the cloud.
+  refuseUnlessDemoDatabase('writes demo data', 'npm run db:seed:demo')
   if (process.argv.includes('--reset')) await reset()
   await seedDemoData()
 }
