@@ -202,6 +202,10 @@ with the buttons greyed out".
 Riley Chen manages **Riverside Court Duplex and nothing else**. This is
 ROLE-04, and it is the most interesting thing the permission model does.
 
+> **Riley used to be unmakeable in the app**, and as of R-138 is not: Act 6
+> below grants exactly this scope from a screen. The seeded persona stays
+> because a demo wants one ready.
+>
 > **This used to be the caveat in this file**, and it is worth saying out loud
 > during a demo. Riley's left nav rendered **completely empty** until R-123:
 > the filter asked `can(actor, permission)` with no resource, which only a
@@ -224,6 +228,47 @@ they stay hidden rather than dead-ending.
 Then say the part that matters: a record outside your scope answers **404, not
 403** (ROLE-01), deliberately, so "forbidden" cannot be used to confirm that a
 record exists.
+
+---
+
+## Act 6 — hiring, promoting and firing (`owner@demo.test`)
+
+**`/staff`.** New in R-138, and the reason it is worth showing is that until
+that item this screen did not exist: `grantAssignment()` had been written,
+tested and called by nothing since R-004, so an owner could not add a
+colleague, change what one could do, or cut off a leaver without a shell on
+the server.
+
+- **The directory lists active people only**, with a link to show
+  deactivated ones. Deactivation preserves the row for ever (ROLE-06), so
+  without that default the first screenful is eventually last year's leavers.
+- **Add staff member** creates the account and mints a **single-use setup
+  link**. No password is ever chosen for somebody else. The link is shown on
+  screen as well as emailed — say why, because it is the honest version: auth
+  links are printed to the terminal in development and **dropped entirely in
+  production** today (R-139), so an invite that could only be emailed would be
+  an invite that does not work where it matters.
+- **Grant access** is where ROLE-04 stops being an abstraction: the scope
+  select offers all properties, any legal entity, or **one property**. Grant
+  Riley Chen the Riverside Court Duplex and Act 5 is something you built in
+  front of the room rather than something the seed prepared.
+- **Revoke** writes a timestamp, never a delete — the revoked row is the
+  evidence the access existed. It moves to a *Revoked access* list below.
+- **Deactivate** ends their sessions within a minute. Auth.js sessions are
+  JWTs and cannot be deleted server-side, so it works by bumping a
+  `sessionsValidFrom` watermark that `auth.ts` re-reads every ~30 seconds.
+
+**Two things it refuses, and they are the interesting half.** Revoking the
+**last owner assignment**, and **deactivating yourself**. There is no
+superuser (D-5), so either one would leave a deployment whose only way back in
+is a script on the server — they are refusals at a trust boundary, not
+confirm dialogs.
+
+**You need a second factor to press any of it.** `staff.manage` is on
+`PRIVILEGED_PERMISSIONS`, and `db:seed:demo-access` clears MFA on every run —
+so enrol first (`DEMO-LOGINS.md` → *Walking `/login/mfa` without a phone*) or
+this act is a locked door. A manager signs in and sees the directory with no
+controls at all, which is its own point worth making.
 
 ---
 

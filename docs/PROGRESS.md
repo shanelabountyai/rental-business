@@ -6076,3 +6076,111 @@ yes. The third was a live footgun that had nothing to do with documentation.
   `db:migrate:demo`, `db:seed:base:demo`, `db:seed:lease-templates:demo`,
   `db:seed:demo` and `db:seed:demo-access` were each run against `rental_demo`
   and each exited 0.
+
+## R-138: `grantAssignment` had no caller for 131 items, so nobody could hire, promote or fire anybody without a shell
+
+**Commit:** _pending_  ·  **Date:** 2026-08-31
+
+Owner-chosen 2026-08-31, over seeding the seven stranger-link routes no demo
+walk can reach. The backlog had no buildable row of its own; this one came out
+of asking what a manual walk-through of every use case could not do, and the
+answer was "add a colleague".
+
+`apps/web/lib/staff/assignments.ts` has carried the comment *"R-007 builds the
+screen. These are the functions it should call"* since **R-004**. R-007 built a
+nav and a bootstrap script instead, and the comment went stale for 131 backlog
+items.
+
+### What it built
+
+- **`/staff`, `/staff/new`, `/staff/[id]`** — the directory, the invite, and
+  one person's page. `staff.read` to look (the manager holds it), `staff.manage`
+  to change (owner-only, and MFA-gated because it is on
+  `PRIVILEGED_PERMISSIONS`). A manager sees the directory with no controls.
+- **Grant and revoke route through `grantAssignment` / `revokeAssignment`**,
+  never through a hand-written `StaffAssignment` write, because those two put
+  the row and its audit entry in one transaction and a local write would not.
+  The scope select offers all properties, any legal entity, or **one property**
+  — so **ROLE-04's property-scoped manager can now be made in the app**, which
+  `db:create-owner --role` explicitly cannot do and says so in its own comment.
+- **Deactivation, which nothing in the product had ever performed.**
+  `StaffUser.active`, `deactivatedAt` and the `sessionsValidFrom` watermark all
+  existed; the watermark was bumped by password reset and by a lease party
+  change, and **no code path anywhere deactivated a staff member**. ROLE-06's
+  "kills access within a minute" was a schema comment with no caller.
+- **Per-person approval ceilings (ROLE-02) got their first editor.** Blank means
+  null — "fall back to the role default" — and is deliberately not zero, which
+  is the real and different value "may approve nothing".
+- **Three audit actions written for the first time.** `staff.deactivated`,
+  `staff.reactivated` and `staff.ceiling_changed` were declared in R-005 and had
+  **never been recorded once** in the product's history. `staff.setup_link_reissued`
+  is new: minting a credential-bearing URL for somebody else's account is
+  "let this person in", not the "they asked to reset" that `auth.password_reset`
+  records at the other end of the same flow.
+- **`lib/staff/rules.ts` + 12 unit tests** for the two lockouts (D-158), pure and
+  database-free.
+- **One `useActionState` shared by six forms** on the detail page. Each control
+  can change whether its own panel renders, and a result region inside a panel
+  the action unmounts announces nothing — several `<form>`s can share one
+  dispatch function, so `FormAlerts` is mounted once above all of them.
+
+### What it decided
+
+- **D-158: the two lockouts are refusals, not warnings**, and a deactivation
+  leaves the assignments standing so reactivation restores what the person held.
+- **The invite SHOWS the setup link as well as sending it.** Not convenience —
+  see below. It is the same posture `db:create-owner` takes by printing the link
+  to a terminal, and the reader created the account seconds ago and can mint
+  another at will.
+- **The directory is `portfolioOnly` in the nav and resource-less in its guard**,
+  registered in `RESOURCE_LESS_GUARDS` with the reason: a `StaffUser` carries no
+  `propertyId`, the scope lives on `StaffAssignment`, and a guard scoped to one
+  property could not express "who may work here at all".
+
+### What it left behind
+
+- **R-139, and it is bigger than this row: no auth link has ever left a
+  production deployment.** `apps/web/lib/auth/delivery.ts` is R-003's
+  placeholder verbatim, untouched since `62700de` — `if (NODE_ENV ===
+  'production') { console.warn(…); return }`. Its comment says *"R-030 replaces
+  this"*; R-030 built the engine, **R-104 wired Resend and Twilio into it, and
+  neither touched this file**. So on a deployed environment the **tenant magic
+  link is never sent** — and it is the only tenant provider wired in `auth.ts`,
+  so no tenant can sign in at all — and neither is a staff password reset. The
+  e2e run printed the proof twice: `[auth] staff_password_reset not delivered:
+  the notification engine (R-030) is not wired up yet`. Not the vendor path:
+  R-025 built its own `lib/vendors/link.ts` and dispatches through the engine,
+  which is why the hole survived — `auth/vendor-link.ts`'s `sendVendorLink` is
+  dead code and the live vendor flow was fine. Filed rather than folded in
+  because the fix needs a decision, not an edit: an auth link is transactional
+  and must ignore quiet hours and category preferences.
+- **The directory now lists active staff only**, with a link to include
+  deactivated people. Found by the axe scan timing out: deactivation preserves
+  the row for ever, `rental_test` holds **10,449** staff rows, and rendering all
+  of them unbounded is a shape a long-lived deployment reaches on its own.
+  Marked `ponytail:` — no page size until a real deployment passes ~200, because
+  this product is 10–50 units with a small team.
+- **The last-owner refusal is covered by unit tests and deliberately not by
+  e2e**, with the reason written next to the spec. It asks a question about the
+  whole deployment and `rental_test` holds **1,715** active owner grants, so the
+  condition cannot be created. The first version asserted it through the UI and
+  passed *by accident*: with other owners present the revoke was ALLOWED, the
+  signed-in owner lost their own grant mid-test, and the next request redirected
+  to `/no-access`. Now a rule in `CLAUDE.md`.
+- **`getByRole('alert')` is ambiguous on every page** and that is now in
+  `CLAUDE.md` beside the route-announcer trap it belongs to.
+  `#__next-route-announcer__` is itself a `role="alert"`, and after a redirect it
+  holds the destination's heading — so an assertion about a form error read back
+  *"You don't have access to that"*.
+- **Still no in-app way to turn MFA off**, so `db:seed:demo-access` remains the
+  only route for a demo. Unchanged by this item.
+- **`packages/db/generated/client/index.d 6.ts`** — a duplicated generated file
+  with a space in its name, noticed while grepping. Nothing imports it. Not
+  touched here; it wants a one-line delete in a housekeeping pass.
+- **Gate run:** `lint` 0 errors and the same 14 pre-existing warnings,
+  `typecheck` clean, `check:ship-deps` clean (755 dev packages), `build`
+  compiled, unit **2,827 passed + 4 skipped of 2,831** (R-137's 2,819 plus this
+  item's 12, reconciling exactly), and `e2e/staff.spec.ts` **14 passed of 14**
+  (7 tests × 2 projects) in 59s, no flaky. The full sweep was not run locally —
+  CI owns it, and **the GitHub Actions billing block is still unresolved at 17
+  days**, owner-only.

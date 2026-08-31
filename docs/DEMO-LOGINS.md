@@ -183,18 +183,33 @@ user already exists for … This script creates a NEW one"*. There is also **no
 in-app way to turn two-factor off** — `/account` offers enrolment and
 re-enrolment, never removal — so the seed script is the only route.
 
-### The gap this papers over
+### The gap this used to paper over — closed by R-138
 
-**There is no in-app staff management.** `grantAssignment()` in
-`apps/web/lib/staff/assignments.ts` has no caller anywhere in the app, so an
-owner cannot add a colleague from a screen — which is why `--role` had to be
-added to a bootstrap script to make roles demonstrable at all. Two consequences
-for a demo:
+**There is now in-app staff management, at `/staff`.** An owner adds a
+colleague, grants and revokes roles at any scope, edits per-person approval
+ceilings and deactivates a leaver from a screen. `grantAssignment()` and
+`revokeAssignment()` finally have the caller their own comment has promised
+since R-004.
 
-- Every account this script makes is scoped to **all properties**. ROLE-04's
-  property-scoped manager — arguably the most interesting thing RBAC does here —
-  cannot be created without writing a `StaffAssignment` row by hand.
-- Revoking access is the same story: `revokeAssignment()` also has no caller.
+What that changes for a demo:
+
+- **ROLE-04's property-scoped manager can be made in the app.** The scope
+  select offers all properties, any legal entity, or any single property, so
+  Riley Chen's grant no longer needs a hand-written `StaffAssignment` row.
+- **`db:create-owner` is a bootstrap, not the only door.** Use it for the
+  FIRST owner on a fresh database; everything after that belongs on `/staff`,
+  where the grant is audited against the person who made it rather than
+  against a script.
+- **The screen is owner-only and MFA-gated.** `staff.manage` is on
+  `PRIVILEGED_PERMISSIONS`, so an owner who has not enrolled a second factor
+  is sent to `/account` to enrol before any control renders. A manager holds
+  `staff.read` and sees the directory with no controls on it. That is the
+  product working — and it means **demoing `/staff` needs the TOTP step**
+  above, because `db:seed:demo-access` clears MFA on every run.
+- **The invite screen shows the setup link as well as emailing it**, which is
+  what makes it demoable at all: see *Where the link actually appears* below —
+  auth links are printed to the terminal in development and, as of today,
+  dropped entirely in production (R-139).
 
 ---
 

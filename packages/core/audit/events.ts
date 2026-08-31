@@ -88,6 +88,11 @@ export const AUDIT_ACTIONS = [
   'staff.deactivated',
   'staff.reactivated',
   'staff.ceiling_changed',
+  /// R-138: an owner minted a fresh password-setup link for somebody else's
+  /// account. Recorded because it hands out a credential-bearing URL - the
+  /// act is "let this person in", not "they asked to reset", which is what
+  /// `auth.password_reset` records at the other end of the same flow.
+  'staff.setup_link_reissued',
 
   // Money (ROLE-03, PAY-04)
   'ledger.adjusted',

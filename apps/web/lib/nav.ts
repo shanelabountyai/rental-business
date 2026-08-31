@@ -198,4 +198,19 @@ export const NAV_ITEMS: readonly NavItem[] = [
     permission: 'lease.read',
     ownedBy: 'R-088',
   },
+  {
+    href: '/staff',
+    label: 'Staff',
+    /// `staff.read`, which the manager holds - the directory is readable by
+    /// the people who work alongside it. Changing access needs
+    /// `staff.manage`, which only the owner holds, and the page hides those
+    /// controls rather than offering ones that would refuse.
+    permission: 'staff.read',
+    /// A StaffUser carries no `propertyId`, so there is no scoped resource to
+    /// check against and the page guards itself resource-lessly - the same
+    /// posture Vendors and Jurisdiction rules take. A property-scoped manager
+    /// cannot pass that guard, so showing them the link would only dead-end.
+    portfolioOnly: true,
+    ownedBy: 'R-138',
+  },
 ]
