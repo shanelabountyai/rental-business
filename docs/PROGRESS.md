@@ -6187,7 +6187,7 @@ items.
 
 ## R-139: no auth link had ever left a production deployment
 
-**Commit:** _pending_  ·  **Date:** 2026-08-31
+**Commit:** 80dac5a  ·  **Date:** 2026-08-31
 
 Filed by R-138 while building the staff invite, and taken immediately because
 it is larger than the item that found it. `apps/web/lib/auth/delivery.ts` was
