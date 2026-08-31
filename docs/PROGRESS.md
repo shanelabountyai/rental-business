@@ -6079,7 +6079,7 @@ yes. The third was a live footgun that had nothing to do with documentation.
 
 ## R-138: `grantAssignment` had no caller for 131 items, so nobody could hire, promote or fire anybody without a shell
 
-**Commit:** _pending_  ·  **Date:** 2026-08-31
+**Commit:** 5b45e1f  ·  **Date:** 2026-08-31
 
 Owner-chosen 2026-08-31, over seeding the seven stranger-link routes no demo
 walk can reach. The backlog had no buildable row of its own; this one came out
