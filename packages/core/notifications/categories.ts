@@ -106,6 +106,16 @@ export const NOTIFICATION_CATEGORIES = [
   /// inspection happens during an active tenancy, never before move-in) -
   /// no reason to restrict this to EMAIL/SMS the way that category does.
   'inspection_signature',
+
+  /// R-139: the link that IS the sign-in - a tenant's magic link and a staff
+  /// password-setup or reset link. Its own category rather than folded into
+  /// anything above, for a reason none of them share: every other message
+  /// here is ABOUT a tenancy, and this one is how somebody proves they are
+  /// party to it in the first place. A recipient who muted it could never
+  /// sign in again, and could not reach the preferences screen to unmute it -
+  /// which is why it is on LOCKED_CATEGORIES with the bluntest explanation on
+  /// that list.
+  'account_access',
 ] as const
 
 export type NotificationCategory = (typeof NOTIFICATION_CATEGORIES)[number]
@@ -145,6 +155,14 @@ export function isDigestEligible(category: NotificationCategory): boolean {
  */
 const CATEGORY_CHANNELS: Partial<Record<NotificationCategory, readonly NotificationChannel[]>> = {
   digest_daily: ['EMAIL'],
+  /// R-139. EMAIL only, and PORTAL in particular is a contradiction: the
+  /// portal is what the link exists to let them into, so a sign-in link
+  /// delivered there could only be read by somebody who did not need it. SMS
+  /// is deliberately not offered YET - `deliverAuthLink` has only ever taken
+  /// one address and every live caller passes an email - rather than being
+  /// ruled out on principle; an SMS magic link is the obvious thing R-021's
+  /// phone-only tenant wants next.
+  account_access: ['EMAIL'],
   /// Never PORTAL - a prospect has no account and no portal to read one in
   /// (NotificationRecipientType.PROSPECT's own schema comment).
   prospect_prescreening: ['EMAIL', 'SMS'],
@@ -222,6 +240,8 @@ export const LOCKED_CATEGORIES: Readonly<
     'Emergency maintenance can involve gas, flooding, or loss of heat. These reach you whatever your other settings say, including during quiet hours.',
   lease_signature:
     'This is how you review and sign your lease. Turning it off would leave nobody able to reach you to finish signing.',
+  account_access:
+    'This is how you sign in. Turning it off would lock you out of your account, including out of this page to turn it back on.',
 }
 
 export function isLockedCategory(category: NotificationCategory): boolean {
@@ -338,6 +358,7 @@ export const CATEGORY_LABELS: Record<NotificationCategory, string> = {
   prospect_application: 'Application invites and fee confirmations',
   prospect_showing: 'Showing bookings and reminders',
   inspection_signature: 'Inspection reports ready to review and sign',
+  account_access: 'Sign-in and password links',
 }
 
 /**

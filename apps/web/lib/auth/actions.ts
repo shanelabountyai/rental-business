@@ -332,9 +332,11 @@ export async function requestPasswordReset(
     )
     await deliverAuthLink({
       kind: 'staff_password_reset',
+      recipient: { type: 'STAFF', id: staffUser.id, name: staffUser.name },
       to: staffUser.email,
       url: authUrl(`/reset-password?token=${issued.token}`),
       expiresAt: issued.expiresAt,
+      tokenId: issued.id,
     })
   }
 
@@ -441,9 +443,11 @@ export async function requestTenantMagicLink(
     )
     await deliverAuthLink({
       kind: 'tenant_magic_link',
+      recipient: { type: 'TENANT', id: tenant.id, name: tenant.firstName },
       to: tenant.email,
       url: authUrl(`/portal/verify?token=${issued.token}`),
       expiresAt: issued.expiresAt,
+      tokenId: issued.id,
     })
   }
 

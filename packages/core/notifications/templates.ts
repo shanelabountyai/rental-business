@@ -1811,7 +1811,105 @@ export const accommodationDeterminationTemplate: NotificationTemplate<Accommodat
     }),
   }
 
+/// Context for the three `account_access` templates (R-139) - a tenant's
+/// magic link, a staff password reset, and a staff setup link for an account
+/// somebody else just created.
+///
+/// `url` IS A LIVE CREDENTIAL, and rendering it here puts it in
+/// `Notification.body`, which is append-only. That is the same posture the
+/// product already takes for a vendor work-order link (`vendorDispatchTemplate`
+/// below has carried one since R-025) and it is deliberately NOT the posture
+/// the audit log takes - `workorder.dispatched` records that a link was
+/// issued and never its value. The difference is that a message has to
+/// contain the link to be the message; an audit entry does not.
+export interface AuthLinkContext {
+  /// What to call them. The staff and tenant flows both have a name on file
+  /// by the time a link is minted.
+  name: string
+  url: string
+  /// Rendered by the caller, which is the only place that knows the minutes
+  /// remaining - "30 minutes", "15 minutes".
+  expiresIn: string
+}
+
+/**
+ * A tenant's sign-in link.
+ *
+ * Says who it is from and what it does in the first line, because a bare link
+ * in an email is indistinguishable from a phishing attempt - and this is the
+ * one message in the product whose whole job is to be clicked by somebody who
+ * is not signed in.
+ */
+export const tenantMagicLinkTemplate: NotificationTemplate<AuthLinkContext> = {
+  key: 'auth.tenant_magic_link',
+  category: 'account_access',
+  channels: ['EMAIL'],
+  render: (context) => ({
+    subject: 'Sign in to your home',
+    body: [
+      `Hi ${context.name},`,
+      '',
+      'Here is your sign-in link. It works once and expires in ' + context.expiresIn + '.',
+      '',
+      context.url,
+      '',
+      'If you did not ask to sign in, you can ignore this - the link only works from this message.',
+    ].join('\n'),
+  }),
+}
+
+/// A staff member resetting their own forgotten password.
+export const staffPasswordResetTemplate: NotificationTemplate<AuthLinkContext> = {
+  key: 'auth.staff_password_reset',
+  category: 'account_access',
+  channels: ['EMAIL'],
+  render: (context) => ({
+    subject: 'Reset your password',
+    body: [
+      `Hi ${context.name},`,
+      '',
+      `Use this link to choose a new password. It works once and expires in ${context.expiresIn}.`,
+      '',
+      context.url,
+      '',
+      'If you did not ask for this, ignore it and tell whoever runs your portfolio - somebody tried to reset your password.',
+    ].join('\n'),
+  }),
+}
+
+/**
+ * The setup link for an account somebody ELSE just created (R-138's invite).
+ *
+ * A separate template from the reset above even though both mint a
+ * `STAFF_PASSWORD_RESET` token, because the recipient's situation is
+ * opposite: nobody asked for this, it arrives unprompted, and "if you did not
+ * ask for this, ignore it" would be exactly the wrong advice.
+ */
+export const staffSetupLinkTemplate: NotificationTemplate<AuthLinkContext> = {
+  key: 'auth.staff_setup_link',
+  category: 'account_access',
+  channels: ['EMAIL'],
+  render: (context) => ({
+    subject: 'Set up your rental operations account',
+    body: [
+      `Hi ${context.name},`,
+      '',
+      `An account has been created for you. Choose a password here - the link works once and expires in ${context.expiresIn}.`,
+      '',
+      context.url,
+      '',
+      'If you were not expecting this, check with whoever runs the portfolio before using it.',
+    ].join('\n'),
+  }),
+}
+
 export const TEMPLATES: Readonly<Record<string, NotificationTemplate<never>>> = {
+  [tenantMagicLinkTemplate.key]:
+    tenantMagicLinkTemplate as unknown as NotificationTemplate<never>,
+  [staffPasswordResetTemplate.key]:
+    staffPasswordResetTemplate as unknown as NotificationTemplate<never>,
+  [staffSetupLinkTemplate.key]:
+    staffSetupLinkTemplate as unknown as NotificationTemplate<never>,
   [accommodationDeterminationTemplate.key]:
     accommodationDeterminationTemplate as unknown as NotificationTemplate<never>,
   [vendorDeclinedTemplate.key]:

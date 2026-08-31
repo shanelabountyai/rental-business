@@ -111,10 +111,14 @@ export async function inviteStaff(
   })
   const url = authUrl(`/reset-password?token=${issued.token}`)
   await deliverAuthLink({
-    kind: 'staff_password_reset',
+    // A SETUP link, not a reset: nobody asked for this one, so "ignore it if
+    // you did not request it" would be exactly the wrong advice.
+    kind: 'staff_setup_link',
+    recipient: { type: 'STAFF', id: created.id, name },
     to: email,
     url,
     expiresAt: issued.expiresAt,
+    tokenId: issued.id,
   })
 
   revalidatePath('/staff')
@@ -236,10 +240,12 @@ export async function manageStaff(
     })
     const url = authUrl(`/reset-password?token=${issued.token}`)
     await deliverAuthLink({
-      kind: 'staff_password_reset',
+      kind: 'staff_setup_link',
+      recipient: { type: 'STAFF', id: staffUserId, name: target.name },
       to: target.email,
       url,
       expiresAt: issued.expiresAt,
+      tokenId: issued.id,
     })
     await audit({
       action: 'staff.setup_link_reissued',

@@ -6184,3 +6184,87 @@ items.
   (7 tests × 2 projects) in 59s, no flaky. The full sweep was not run locally —
   CI owns it, and **the GitHub Actions billing block is still unresolved at 17
   days**, owner-only.
+
+## R-139: no auth link had ever left a production deployment
+
+**Commit:** _pending_  ·  **Date:** 2026-08-31
+
+Filed by R-138 while building the staff invite, and taken immediately because
+it is larger than the item that found it. `apps/web/lib/auth/delivery.ts` was
+R-003's placeholder **verbatim**, unchanged since `62700de`:
+
+```ts
+if (process.env.NODE_ENV === 'production') { console.warn(…); return }
+```
+
+Its own comment said *"R-030 replaces this"*. R-030 built the notification
+engine. **R-104 wired Resend and Twilio into it and did not touch this file.**
+
+So on a deployed environment the **tenant magic link was never sent** — and
+`tenant-magic-link` is the only tenant provider wired in `auth.ts`, so **no
+tenant could sign in at all** — and neither was a staff password reset.
+
+### What it built
+
+- **`deliverAuthLink` routes through the engine**, `notify()` plus a **scoped**
+  `dispatchPendingNotifications`, the same shape R-025's vendor dispatch has
+  used since it was written. A person is standing at a login form, so it cannot
+  wait for the hourly cron; an unscoped sweep would make them pay for the whole
+  global queue and could send everything except the link they asked for.
+- **A new `account_access` category** with three properties, each for its own
+  reason. **LOCKED** — somebody who muted the message that lets them sign in
+  could not reach the page to unmute it, and the explanation on the preferences
+  screen says exactly that. **EMAIL only** — PORTAL would deliver a sign-in link
+  to a surface you must already be signed in to read; SMS is not offered *yet*
+  rather than ruled out, and is the obvious next thing for R-021's phone-only
+  tenant. **No `propertyId`** — which is what keeps quiet hours out of it, by
+  `notify()`'s own rule that a property-less notification never defers, not by
+  an exemption written here. A fifteen-minute link cannot wait until 8am.
+- **Three templates**: `auth.tenant_magic_link`, `auth.staff_password_reset`,
+  and a separate `auth.staff_setup_link` for R-138's invite.
+- **`issueToken` returns the `AuthToken` row's id**, and `auth-link:<tokenId>`
+  is the idempotency key.
+- **`apps/web/lib/auth/vendor-link.ts` deleted whole.** Nothing had imported it
+  since R-025 built its own `lib/vendors/link.ts`; `sendVendorLink` was the only
+  other caller of this seam and it was dead.
+- **`delivery.test.ts`, four tests**, and **one assertion added to
+  `e2e/staff.spec.ts`** because e2e runs a production build — the only
+  environment the old code dropped.
+
+### What it decided
+
+- **D-159**, in full. The three category properties, the token-keyed
+  idempotency, the separate setup template, and what it accepts.
+- **The key is the TOKEN, never the recipient.** Keyed on the person, a second
+  password reset would be swallowed as a duplicate and send nothing — the one
+  failure a sign-in link cannot have. A test pins it.
+- **Not wrapped in a blanket try/catch.** A failure to RECORD throws; only the
+  immediate dispatch is caught, because by then the row is durable and R-106's
+  retry sweep owns it. Seventeen months of a silent `console.warn` is the
+  argument: the neutral *"if that address has an account…"* answer every caller
+  gives is about not confirming who has an account, never about hiding that the
+  product is broken.
+- **`tenant_password_reset` was cut, not built.** `TenantCredential.passwordHash`
+  is schema-only and no flow writes it, so a fourth template would be a guess.
+
+### What it left behind
+
+- **The link now lives in `Notification.body`, which is append-only.** A live
+  credential at rest, deliberately accepted: it is the posture the product
+  already had (`vendorDispatchTemplate` has carried a work-order link since
+  R-025), and it is explicitly *not* the audit log's posture, which records that
+  a link was issued and never its value. A message has to contain the link to be
+  the message; an audit entry does not.
+- **No SMS magic link.** `deliverAuthLink` has only ever taken one address and
+  every live caller passes an email. R-021's SMS-only tenant is the persona that
+  wants it and nobody has asked yet.
+- **Nothing was verified against a real deployment**, because the GitHub Actions
+  billing block is still unresolved at **17 days** and remains owner-only. What
+  is proven is that the production BUILD now records and dispatches: the R-138
+  e2e run printed `[auth] staff_password_reset not delivered` twice, and this
+  item's run prints it **zero** times.
+- **Gate run:** `lint` 0 errors and the same 14 pre-existing warnings,
+  `typecheck` clean, `check:ship-deps` clean (755 dev packages), `build`
+  compiled, unit **2,831 passed + 4 skipped of 2,835** (R-138's 2,827 plus this
+  item's 4, reconciling exactly), and `staff` + `auth` + `vendor-link` e2e
+  **96 passed against `Total: 96 tests`**, no flaky.

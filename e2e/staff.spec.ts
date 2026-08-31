@@ -147,6 +147,19 @@ test('an owner invites a colleague, and the setup link actually signs them in', 
   expect(invited.assignments[0]!.role.key).toBe('manager')
   expect(invited.assignments[0]!.propertyId).toBeNull()
 
+  // R-139's regression, and it belongs in the e2e suite specifically because
+  // e2e runs a PRODUCTION BUILD - which is the only environment the old
+  // `deliverAuthLink` silently dropped. This run used to print "[auth]
+  // staff_password_reset not delivered" and write nothing at all.
+  const sent = await prisma.notification.findFirst({
+    where: { recipientType: 'STAFF', recipientId: invited.id, category: 'account_access' },
+    select: { channel: true, toAddress: true, body: true },
+  })
+  expect(sent).not.toBeNull()
+  expect(sent!.channel).toBe('EMAIL')
+  expect(sent!.toAddress).toBe(email)
+  expect(sent!.body).toContain('/reset-password?token=')
+
   // The whole point of the item: somebody who was never touched by a shell
   // script sets a password and gets in.
   const context = await page.context().browser()!.newContext()

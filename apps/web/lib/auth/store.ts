@@ -81,6 +81,11 @@ export interface IssuedToken {
   /// whatever is delivering it.
   token: string
   expiresAt: Date
+  /// The AuthToken row's id - safe to log, store and key on, unlike `token`.
+  /// R-139 needs it as the notification's idempotency key: it is the natural
+  /// key of "this link was issued", so a retry of the same mint is a
+  /// duplicate and a second mint is not.
+  id: string
 }
 
 export async function issueToken(
@@ -89,7 +94,7 @@ export async function issueToken(
   options: { requestedIp?: string; metadata?: Prisma.InputJsonValue } = {},
 ): Promise<IssuedToken> {
   const minted = mintToken(purpose)
-  await prisma.authToken.create({
+  const row = await prisma.authToken.create({
     data: {
       purpose,
       tokenHash: minted.tokenHash,
@@ -100,7 +105,7 @@ export async function issueToken(
       metadata: options.metadata,
     },
   })
-  return { token: minted.token, expiresAt: minted.expiresAt }
+  return { token: minted.token, expiresAt: minted.expiresAt, id: row.id }
 }
 
 export type RedeemResult =
