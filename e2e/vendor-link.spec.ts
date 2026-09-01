@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { hashPassword, sealSecret } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
-import { axeScan, expectFocusSurvived, uniquePhone } from './fixtures.ts'
+import { axeScan, expectFocusSurvived, uniqueClientHeaders, uniquePhone } from './fixtures.ts'
 
 // The zero-login vendor journey, end to end (D-6, D-16, MAINT-03, R-025).
 //
@@ -413,6 +413,56 @@ test.describe('the vendor journey', () => {
     await expect(heading).toBeFocused()
     await expectFocusSurvived(vendorPage, 'accepting a vendor job')
     await expect(vendorPage.getByRole('status')).toContainText('the office has been told')
+
+    await vendorContext.close()
+  })
+
+  // R-140 found this by walking the demo seed's own vendor link in a browser:
+  // the booked window and every message timestamp rendered as
+  // "2026-08-30 19:00" - `utcToWallClock(...).replace('T', ' ')`, a machine
+  // format shown to a stranger. D-153's class with a third face, which is why
+  // both R-128's and R-129's greps missed it: it is neither a
+  // `toISOString().slice(0, 10)` nor a bare `{...On}` interpolation.
+  //
+  // ASSERTED AS THE ABSENCE OF THE RAW SHAPE rather than as an exact string.
+  // The friendly wording may change; a `YYYY-MM-DD` reaching a vendor may not.
+  test('shows the booked window and the thread in words, never a raw timestamp', async ({
+    page,
+    browser,
+  }) => {
+    const { workOrder } = await seedJob()
+    // 09:00-12:00 on the PROPERTY's clock (America/Chicago), which is the
+    // whole point of the rendering under test - a UTC read would say 14:00.
+    //
+    // ACCEPTED as well as SCHEDULED, because the "When to come" panel renders
+    // only once the vendor is `working` - a job somebody has not taken has no
+    // confirmed window to show them.
+    const start = new Date('2026-08-30T14:00:00Z')
+    await prisma.workOrder.update({
+      where: { id: workOrder.id },
+      data: {
+        status: 'SCHEDULED',
+        vendorResponse: 'ACCEPTED',
+        vendorRespondedAt: new Date(),
+        scheduledStart: start,
+        scheduledEnd: new Date(start.getTime() + 3 * 3_600_000),
+      },
+    })
+    const token = await dispatchAndCaptureToken(page, workOrder.id, workOrder.propertyId)
+
+    const vendorContext = await browser.newContext({ extraHTTPHeaders: uniqueClientHeaders() })
+    const vendorPage = await vendorContext.newPage()
+    await vendorPage.goto(`/vendor/${token}`)
+
+    await expect(vendorPage.getByText('30 Aug 2026, 09:00 CDT to 12:00')).toBeVisible()
+    expect(await vendorPage.locator('body').innerText()).not.toMatch(/\d{4}-\d{2}-\d{2}/)
+
+    // THE THREAD'S OWN TIMESTAMPS - the other half of what the walk found -
+    // are asserted in `comms-threading.spec.ts`, not here. Posting a message
+    // would leave this spec's `afterAll` unable to delete its work orders:
+    // `Message` is append-only with `onDelete: Restrict`, so the cleanup dies
+    // on `Message_workOrderId_fkey`. That spec already posts one and already
+    // cleans up around it.
 
     await vendorContext.close()
   })

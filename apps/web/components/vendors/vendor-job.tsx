@@ -440,7 +440,7 @@ export function VendorJob({
               <h2 className="text-base font-semibold">When to come</h2>
               <p className="text-base">
                 {job.scheduledStart}
-                {job.scheduledEnd ? ` to ${job.scheduledEnd.slice(11)}` : ''}
+                {job.scheduledEnd ? ` to ${job.scheduledEnd}` : ''}
               </p>
               <p className="text-muted-foreground text-sm">
                 Confirmed with the tenant. Times are local to the property.

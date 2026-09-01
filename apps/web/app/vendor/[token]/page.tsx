@@ -1,5 +1,5 @@
 import { actualTotalCents, reapprovalCheck } from '@rental/core/approvals'
-import { utcToWallClock } from '@rental/core/scheduling'
+import { friendlyTimestamp, localParts } from '@rental/core/scheduling'
 import { INVOICE_STATUS_LABELS, invoiceLifecycleStatus } from '@rental/core/vendors'
 import { prisma } from '@rental/db'
 import { VendorJob } from '@/components/vendors/vendor-job.tsx'
@@ -111,6 +111,23 @@ export default async function VendorLinkPage({
     select: { id: true, body: true, sentAt: true, direction: true },
   })
 
+  const zone = workOrder.property.timezone
+  const friendlyOrNull = (instant: Date | null) =>
+    instant ? friendlyTimestamp(instant, zone) : null
+  // JUST THE CLOCK for the far end of a window, so the vendor reads
+  // "29 Aug 2026, 09:00 CDT to 12:00" rather than the same date twice. The
+  // zone abbreviation stays on the opening time and covers both ends.
+  //
+  // A window crossing midnight would read ambiguously here - "23:00 CDT to
+  // 01:00" - and that is unchanged from what this replaced. Entry windows
+  // are a few daylight hours by construction; if one ever legitimately spans
+  // a day boundary, this is the line that has to grow a date.
+  const endClockOrNull = (instant: Date | null) => {
+    if (!instant) return null
+    const { hour, minute } = localParts(instant, zone)
+    return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`
+  }
+
   const address = [
     workOrder.property.addressLine1,
     workOrder.property.city,
@@ -133,27 +150,27 @@ export default async function VendorLinkPage({
         ticketDescription: workOrder.ticket?.description ?? null,
         vendorResponse: workOrder.vendorResponse,
         status: workOrder.status,
-        // THE PROPERTY'S CLOCK, like the messages twenty lines below.
+        // THE PROPERTY'S CLOCK, like the messages further down.
         //
-        // These two read UTC while `utcToWallClock` was already in use in the
-        // same file - so a vendor who proposed 9am Central read back "14:00".
-        // Same defect class as R-036b's entry-window bug: I fixed the admin
-        // work order page and missed this one.
-        proposedStart: workOrder.proposedStart
-          ? utcToWallClock(workOrder.proposedStart, workOrder.property.timezone).replace('T', ' ')
-          : null,
-        proposedEnd: workOrder.proposedEnd
-          ? utcToWallClock(workOrder.proposedEnd, workOrder.property.timezone).replace('T', ' ')
-          : null,
+        // These two read UTC while a zone-aware read was already in use in
+        // the same file - so a vendor who proposed 9am Central read back
+        // "14:00". Same defect class as R-036b's entry-window bug: the admin
+        // work order page was fixed and this one missed.
+        //
+        // FORMATTED FOR A PERSON, not for a machine (D-153, R-140). Every
+        // one of these was `utcToWallClock(...).replace('T', ' ')`, which
+        // renders "2026-08-30 19:00" - a third face of the raw-date class
+        // that both R-128's and R-129's sweeps missed, because it is neither
+        // a `toISOString().slice(0, 10)` nor a bare `{...On}` interpolation.
+        // The vendor is a stranger holding a link, which is the half of the
+        // product that rule exists for.
+        proposedStart: friendlyOrNull(workOrder.proposedStart),
+        proposedEnd: endClockOrNull(workOrder.proposedEnd),
         // The CONFIRMED window, which the vendor could not see at all - so
         // somebody whose visit had been booked and legally noticed still read
         // "we'll confirm" and phoned the office to ask.
-        scheduledStart: workOrder.scheduledStart
-          ? utcToWallClock(workOrder.scheduledStart, workOrder.property.timezone).replace('T', ' ')
-          : null,
-        scheduledEnd: workOrder.scheduledEnd
-          ? utcToWallClock(workOrder.scheduledEnd, workOrder.property.timezone).replace('T', ' ')
-          : null,
+        scheduledStart: friendlyOrNull(workOrder.scheduledStart),
+        scheduledEnd: endClockOrNull(workOrder.scheduledEnd),
         // THE TENANT'S OWN ANSWERS, finally reaching the person who opens
         // the door (R-032b). R-019 collected both, validated both, and wrote
         // both to the Ticket — where the PM could see them and the vendor
@@ -184,10 +201,7 @@ export default async function VendorLinkPage({
       messages={threadMessages.map((message) => ({
         id: message.id,
         body: message.body,
-        sentAt: utcToWallClock(message.sentAt, workOrder.property.timezone).replace(
-          'T',
-          ' ',
-        ),
+        sentAt: friendlyTimestamp(message.sentAt, workOrder.property.timezone),
         fromStaff: message.direction === 'OUTBOUND',
       }))}
       messageAction={sendVendorMessage.bind(null, token)}

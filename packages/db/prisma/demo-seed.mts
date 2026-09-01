@@ -473,6 +473,18 @@ async function reset() {
     await prisma.listingSyndication.deleteMany({
       where: { listing: { propertyId: { in: deletableProperties } } },
     })
+    // Showings before the prospects and units they name (R-140), and the
+    // access grant before the showing. `ShowingAccess` also references a
+    // `SmartLock` and an `IdentityCheck`; the seed writes neither - the
+    // self-showing link walks that flow itself - so anything here is what a
+    // demo walk left behind, and it goes with the showing it belongs to.
+    await prisma.showingAccess.deleteMany({
+      where: { showing: { propertyId: { in: deletableProperties } } },
+    })
+    await prisma.showing.deleteMany({ where: { propertyId: { in: deletableProperties } } })
+    await prisma.identityCheck.deleteMany({
+      where: { prospect: { propertyId: { in: deletableProperties } } },
+    })
     await prisma.prospect.deleteMany({ where: { propertyId: { in: deletableProperties } } })
     await prisma.listing.deleteMany({ where: { propertyId: { in: deletableProperties } } })
 
@@ -488,7 +500,11 @@ async function reset() {
     await prisma.inspection.deleteMany({ where: { propertyId: { in: deletableProperties } } })
 
     // Work orders before tickets (WorkOrder.ticketId) and before the
-    // preventive-maintenance templates further down (WorkOrder.pmTemplateId).
+    // preventive-maintenance templates further down (WorkOrder.pmTemplateId)
+    // - and the bids a job collected before the job itself (R-140).
+    await prisma.workOrderBid.deleteMany({
+      where: { workOrder: { propertyId: { in: deletableProperties } } },
+    })
     await prisma.workOrder.deleteMany({ where: { propertyId: { in: deletableProperties } } })
     await prisma.ticket.deleteMany({ where: { propertyId: { in: deletableProperties } } })
 
@@ -508,6 +524,18 @@ async function reset() {
     await prisma.leaseTenant.deleteMany({ where: { leaseId: { in: leaseIds } } })
     await prisma.lease.deleteMany({ where: { id: { in: leaseIds } } })
     await prisma.tenant.deleteMany({ where: { id: { in: tenantIds } } })
+    // The unit's smart lock, and anything the lock recorded. Seeded for the
+    // self-showing link (R-140); `LockEvent` and `TenantLockCode` are what a
+    // walk of that flow writes, and both point at the lock.
+    await prisma.lockEvent.deleteMany({
+      where: { smartLock: { unit: { propertyId: { in: deletableProperties } } } },
+    })
+    await prisma.tenantLockCode.deleteMany({
+      where: { smartLock: { unit: { propertyId: { in: deletableProperties } } } },
+    })
+    await prisma.smartLock.deleteMany({
+      where: { unit: { propertyId: { in: deletableProperties } } },
+    })
     await prisma.unit.deleteMany({ where: { propertyId: { in: deletableProperties } } })
 
     // JobRun first. It is machine bookkeeping, not evidence (D-9's own
@@ -677,10 +705,11 @@ interface TicketPlan {
 
 interface WorkOrderPlan {
   scope: string
-  status: 'ASSIGNED' | 'SCHEDULED' | 'IN_PROGRESS' | 'WORK_COMPLETE' | 'INVOICED'
+  status: 'PENDING_APPROVAL' | 'ASSIGNED' | 'SCHEDULED' | 'IN_PROGRESS' | 'WORK_COMPLETE' | 'INVOICED'
   priority: 'EMERGENCY' | 'URGENT' | 'ROUTINE'
-  /// Index into VENDOR_NAMES.
-  vendorIndex: 0 | 1 | 2
+  /// Index into VENDOR_NAMES. ABSENT means nobody is assigned yet, which is
+  /// the only honest shape for a job still collecting bids.
+  vendorIndex?: 0 | 1 | 2
   estimateCents: number
   approvedAmountCents?: number
   /// Days from now - negative is past, positive is a booked future window.
@@ -692,6 +721,16 @@ interface WorkOrderPlan {
   /// end of the run and is unrecoverable afterwards, because only its
   /// SHA-256 is stored.
   liveVendorLink?: boolean
+  /// THE TENANT'S VERIFY LINK (MAINT-07, R-032c). Requires WORK_COMPLETE and
+  /// a parent ticket - `seedWorkOrder` throws otherwise rather than minting a
+  /// link whose page renders a rejection.
+  liveVerifyLink?: boolean
+  /// Vendors this job asked for a PRICE from, as indexes into VENDOR_NAMES.
+  /// Each gets a `WorkOrderBid` row and its own live link, because bidding is
+  /// the one flow where several vendors hold live links to one job at once.
+  /// Only meaningful while the job is still open to bids - `verifyBidLink`
+  /// refuses anything past APPROVED.
+  bidVendorIndexes?: (0 | 1 | 2)[]
   /// What the vendor said back, where they have answered at all.
   vendorResponse?: 'ACCEPTED' | 'DECLINED' | 'PROPOSED_TIME'
   /// A message on the vendor's own per-job thread.
@@ -778,6 +817,22 @@ interface ProspectPlan {
   /// no Application row, which is the point - a funnel where every prospect
   /// has an application is not a funnel.
   application?: { completed: boolean; monthlyIncomeCents: number; employer: string }
+  /// A LIVE PRESCREEN LINK (LEAS-02). Only mintable while the prospect has
+  /// not answered - `prescreenLinkStatus` refuses one who has, which is the
+  /// correct product rule and a dead demo page.
+  livePrescreenLink?: boolean
+  /// A LIVE BOOKING LINK (LEAS-04). Only mintable for a prospect with NO
+  /// showing yet - `showingLinkStatus` short-circuits to "already booked"
+  /// otherwise, which is a rejection page rather than the slot picker.
+  liveBookingLink?: boolean
+  /// A booked viewing, and with `selfAccess` a live self-showing link that
+  /// walks identity check -> lock code (LEAS-05). Needs the unit's smart
+  /// lock, which is seeded alongside it.
+  showing?: { inDays: number; selfAccess: boolean }
+  /// A LIVE APPLICATION LINK (LEAS-06), for the applicant this prospect's
+  /// application names as lead. Most useful on an application still being
+  /// filled in - a completed one renders a finished form.
+  liveApplicationLink?: boolean
 }
 
 interface EnvelopePlan {
@@ -793,7 +848,15 @@ interface EnvelopePlan {
   /// PARTIALLY_SIGNED is the only interesting one: DRAFT has not gone out
   /// and COMPLETED is just a lease. Mid-envelope is the state the chase
   /// screens exist for.
-  signers: { name: string; role: 'TENANT' | 'GUARANTOR'; status: 'SIGNED' | 'SENT' | 'VIEWED' }[]
+  signers: {
+    name: string
+    role: 'TENANT' | 'GUARANTOR'
+    status: 'SIGNED' | 'SENT' | 'VIEWED'
+    /// A LIVE SIGNING LINK (LEAS-08). Meaningless on a SIGNED signer, whose
+    /// page is a receipt - the interesting one is whoever the envelope is
+    /// still waiting on.
+    liveSignLink?: boolean
+  }[]
 }
 
 interface NoticePlan {
@@ -864,6 +927,7 @@ export const LEASING: Record<string, LeasingPlan> = {
         status: 'INQUIRY',
         source: 'zillow',
         daysAgo: 1,
+        livePrescreenLink: true,
       },
       {
         firstName: 'Grace',
@@ -872,6 +936,7 @@ export const LEASING: Record<string, LeasingPlan> = {
         status: 'PRE_SCREENED',
         source: 'apartments.com',
         daysAgo: 4,
+        liveBookingLink: true,
       },
       {
         firstName: 'Elias',
@@ -880,6 +945,7 @@ export const LEASING: Record<string, LeasingPlan> = {
         status: 'SHOWING',
         source: 'zillow',
         daysAgo: 6,
+        showing: { inDays: 2, selfAccess: true },
       },
       {
         firstName: 'Nadia',
@@ -889,6 +955,21 @@ export const LEASING: Record<string, LeasingPlan> = {
         source: 'referral',
         daysAgo: 9,
         application: { completed: true, monthlyIncomeCents: 616_000, employer: 'St. David\u2019s Medical Center' },
+      },
+      {
+        // MID-APPLICATION. Every other application here is complete, which
+        // makes the one screen the applicant actually uses - the form, the
+        // co-applicant invite, the document upload, the fee - unreachable
+        // from the demo. Started, not finished, is the state that link is
+        // for.
+        firstName: 'Priya',
+        lastName: 'Raghunathan',
+        email: 'priya.raghunathan@example.test',
+        status: 'APPLIED',
+        source: 'zillow',
+        daysAgo: 2,
+        application: { completed: false, monthlyIncomeCents: 559_000, employer: 'Silverline Logistics' },
+        liveApplicationLink: true,
       },
       {
         firstName: 'Reuben',
@@ -924,7 +1005,7 @@ export const LEASING: Record<string, LeasingPlan> = {
       // means and the only state where the chase has anything to chase.
       signers: [
         { name: 'Imani Oyelaran', role: 'TENANT', status: 'SIGNED' },
-        { name: 'Adaeze Oyelaran', role: 'GUARANTOR', status: 'VIEWED' },
+        { name: 'Adaeze Oyelaran', role: 'GUARANTOR', status: 'VIEWED', liveSignLink: true },
       ],
     },
   },
@@ -1192,6 +1273,52 @@ export const MAINTENANCE: Record<string, MaintenancePlan> = {
   // checklist starts null rather than defaulted to a condition nobody
   // observed, and "due" only looks like anything on screen because of it.
   'Magnolia Drive House::Main house': {
+    // A JOB THE VENDOR SAYS IS DONE AND THE TENANT HAS NOT CONFIRMED
+    // (MAINT-07, R-032c). WORK_COMPLETE is not the end of the loop - the
+    // tenant answers "was this fixed?" from a link, and answering no reopens
+    // it. Until R-140 the demo had no work order in this state attached to a
+    // ticket, so the verify page was unreachable and the reopen path with it.
+    tickets: [
+      {
+        category: 'Appliance',
+        description: 'Garbage disposal hums but will not turn. Nothing stuck in it that I can see.',
+        priority: 'ROUTINE',
+        status: 'CONVERTED',
+        source: 'PORTAL',
+        daysAgo: 6,
+        respondedAfterMinutes: 55,
+        conversation: [
+          {
+            from: 'TENANT',
+            body: 'Garbage disposal hums but will not turn. Nothing stuck in it that I can see.',
+            minutesAfter: 0,
+          },
+          {
+            from: 'STAFF',
+            body: 'Sending Rivera out Tuesday morning. We will text you to confirm once they mark it done.',
+            minutesAfter: 55,
+          },
+        ],
+        workOrder: {
+          scope: 'Free or replace seized garbage disposal in the kitchen.',
+          status: 'WORK_COMPLETE',
+          priority: 'ROUTINE',
+          vendorIndex: 0,
+          estimateCents: 24_000,
+          approvedAmountCents: 24_000,
+          scheduledInDays: -2,
+          vendorResponse: 'ACCEPTED',
+          liveVerifyLink: true,
+          vendorConversation: [
+            {
+              from: 'VENDOR',
+              body: 'Motor was seized. Swapped the unit, ran it ten minutes, draining clean. Photos attached.',
+              minutesAfter: 320,
+            },
+          ],
+        },
+      },
+    ],
     inspections: [
       {
         type: 'PRE_MOVE_OUT',
@@ -1211,6 +1338,18 @@ export const MAINTENANCE: Record<string, MaintenancePlan> = {
   // with nobody in it is where this is least intrusive and most realistic.
   'Coral Way Condo::Unit 1': {
     standaloneWorkOrders: [
+      {
+        // WHY THE UNIT IS DOWN, and the only job here still collecting
+        // prices (MAINT-04, R-026). PENDING_APPROVAL names no vendor on
+        // purpose - nobody has been chosen - and each bidder holds their own
+        // live link at the same time, which is the whole reason VENDOR_BID
+        // is a separate purpose from the dispatch link.
+        scope: 'Replace failed water heater and repair water-damaged subfloor in the utility closet.',
+        status: 'PENDING_APPROVAL',
+        priority: 'URGENT',
+        estimateCents: 340_000,
+        bidVendorIndexes: [0, 2],
+      },
       {
         scope: 'Quarterly HVAC filter replacement.',
         status: 'ASSIGNED',
@@ -1526,6 +1665,88 @@ async function writeUnitPhoto(
   return true
 }
 
+/**
+ * WHERE EVERY STRANGER-REACHABLE LINK POINTS, keyed by the token purpose that
+ * opens it.
+ *
+ * ==========================================================================
+ * THIS TABLE IS THE ITEM. Until R-140 the seed minted exactly ONE live token
+ * - a vendor dispatch link - so eight routes a stranger can reach held no
+ * demo state anyone could open: the prescreen, the application, the lease
+ * signature, the pay link, the tenant's "was this fixed?", the bid request,
+ * the showing booking, the self-showing access code and the calendar feed.
+ * D-28 requires a browser walk when a milestone closes, and a walk cannot
+ * reach a page whose only door needs a token nothing prints.
+ *
+ * Keyed by purpose rather than a free string at each call site so that a new
+ * `AuthTokenPurpose` cannot be minted here without somebody deciding, in one
+ * place, where its link points.
+ * ==========================================================================
+ */
+export const STRANGER_ROUTES = {
+  VENDOR_WORK_ORDER: '/vendor/',
+  VENDOR_BID: '/vendor/bid/',
+  TENANT_VERIFY: '/verify/',
+  TENANT_PAY_LINK: '/pay/',
+  PROSPECT_PRESCREEN: '/prescreen/',
+  APPLICATION_LINK: '/apply/',
+  LEASE_SIGN: '/sign/',
+  SHOWING_BOOKING: '/showings/',
+  SHOWING_ACCESS: '/showings/access/',
+  CALENDAR_FEED: '/api/calendar/',
+} as const
+
+type StrangerPurpose = keyof typeof STRANGER_ROUTES
+
+/// One printed link. `who` is the person holding it, because a demo walk is
+/// performed as somebody - opening the bid link as "Rivera Plumbing" is a
+/// different act from opening it as "a vendor".
+interface DemoLink {
+  who: string
+  what: string
+  url: string
+}
+
+/**
+ * Mints one live token and records the link to print at the end of the run.
+ *
+ * The same purpose, subject and metadata shape the product's own issuer
+ * writes, minted here rather than by calling it: every issuer lives in
+ * `apps/web` and this script is in `packages/db`. `mintToken` is core, which
+ * both can reach - so the token itself comes from the one function that
+ * produces every other token in the product, and only the row around it is
+ * written twice. That is the rule R-100a set for the vendor link and this
+ * generalizes it rather than adding a second way.
+ *
+ * METADATA IS NOT OPTIONAL DECORATION on three of these. `TENANT_VERIFY`
+ * refuses a link whose `tenantId` is not still the ticket's tenant,
+ * `TENANT_PAY_LINK` records the tenant and lease so a payer row edited
+ * afterwards cannot silently move who the link belongs to, and `VENDOR_BID`
+ * carries the vendor whose bid it authorizes. A link minted without them
+ * renders a rejection page, which looks exactly like a broken demo.
+ */
+async function mintDemoLink(
+  purpose: StrangerPurpose,
+  subject: { type: string; id: string },
+  link: { who: string; what: string },
+  sink: DemoLink[],
+  metadata?: Record<string, unknown>,
+): Promise<void> {
+  const minted = mintToken(purpose)
+  await prisma.authToken.create({
+    data: {
+      purpose,
+      tokenHash: minted.tokenHash,
+      subjectType: subject.type,
+      subjectId: subject.id,
+      expiresAt: minted.expiresAt,
+      ...(metadata ? { metadata: metadata as never } : {}),
+    },
+  })
+  const base = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3100'
+  sink.push({ ...link, url: `${base}${STRANGER_ROUTES[purpose]}${minted.token}` })
+}
+
 interface SeedContext {
   propertyId: string
   addressOfRecord: string
@@ -1540,7 +1761,7 @@ interface SeedContext {
   /// template - but a demo where every inspection is a one-off never shows
   /// what a checklist is for.
   inspectionTemplateId: string
-  vendorLinks: { vendor: string; scope: string; url: string }[]
+  demoLinks: DemoLink[]
 }
 
 function minutesFrom(base: Date, minutes: number): Date {
@@ -1682,18 +1903,21 @@ async function seedWorkOrder(
   plan: WorkOrderPlan,
   context: SeedContext & { ticketId: string | null },
 ): Promise<{ messages: number }> {
-  const vendor = context.vendorRows[plan.vendorIndex]!
-  // Everything past SUBMITTED has been dispatched to somebody - that is what
-  // ASSIGNED means - so the dispatch timestamp is derived from the state
-  // rather than carried in the plan, where it could silently disagree with it.
-  const dispatchedAt = daysFrom(plan.status === 'ASSIGNED' ? -1 : -4)
+  // A JOB STILL COLLECTING BIDS NAMES NO VENDOR. Nobody has been chosen yet,
+  // so `vendorId` and `dispatchedAt` are both null - a PENDING_APPROVAL work
+  // order already pointing at a vendor is two facts about the same job
+  // disagreeing on screen. Everything past that has been dispatched to
+  // somebody, which is what ASSIGNED means, so the timestamp is derived from
+  // the state rather than carried in the plan where it could drift from it.
+  const vendor = plan.vendorIndex == null ? null : context.vendorRows[plan.vendorIndex]!
+  const dispatchedAt = vendor == null ? null : daysFrom(plan.status === 'ASSIGNED' ? -1 : -4)
 
   const workOrder = await prisma.workOrder.create({
     data: {
       propertyId: context.propertyId,
       unitId: context.unitId,
       ticketId: context.ticketId,
-      vendorId: vendor.id,
+      vendorId: vendor?.id ?? null,
       assignedStaffId: context.staffId,
       status: plan.status,
       priority: plan.priority,
@@ -1719,40 +1943,78 @@ async function seedWorkOrder(
   })
 
   if (plan.liveVendorLink) {
-    // The same purpose and the same shape `issueVendorLink` writes (D-6,
-    // D-16), minted here rather than by calling it: that function lives in
-    // apps/web and this script is in packages/db. `mintToken` is core, which
-    // both can reach - so the token itself is produced by the one function
-    // that produces every other token in the product, and only the row
-    // around it is written twice.
-    const minted = mintToken('VENDOR_WORK_ORDER')
-    await prisma.authToken.create({
+    if (!vendor) {
+      throw new Error(
+        `liveVendorLink on a work order with no vendor (${plan.scope}). A dispatch ` +
+          'link is scoped to whoever the job names, so there is nobody to scope it to.',
+      )
+    }
+    await mintDemoLink(
+      'VENDOR_WORK_ORDER',
+      { type: 'WorkOrder', id: workOrder.id },
+      { who: vendor.name, what: `Vendor work order - ${plan.scope}` },
+      context.demoLinks,
+      // What `vendorLinkAccess()` compares against whoever the work order
+      // currently names - the check that stops a reassigned vendor's
+      // un-expired link still opening a gate code.
+      { vendorId: vendor.id },
+    )
+  }
+
+  // THE TENANT'S "was this fixed?" (MAINT-07, R-032c). Only mintable on a job
+  // that is WORK_COMPLETE and hangs off a TICKET: `verifyVerifyLink` refuses
+  // a link whose recorded tenant is not still the ticket's tenant, and a
+  // standalone work order has no ticket and therefore no tenant at all.
+  if (plan.liveVerifyLink) {
+    if (!context.ticketId || !context.tenantId) {
+      throw new Error(
+        `liveVerifyLink on a work order with no ticket or no tenant (${plan.scope}). ` +
+          'The verify link is answerable only by the tenant who raised the ticket.',
+      )
+    }
+    await mintDemoLink(
+      'TENANT_VERIFY',
+      { type: 'WorkOrder', id: workOrder.id },
+      {
+        who: `the tenant at ${context.addressOfRecord}`,
+        what: `Was this fixed? - ${plan.scope}`,
+      },
+      context.demoLinks,
+      // The round is the token's question, not the job's current one - see
+      // `verifyVerifyLink`. A fresh job has never been reopened, so it is 1.
+      { tenantId: context.tenantId, round: workOrder.reopenCount + 1 },
+    )
+  }
+
+  // A PRICE REQUEST, before anybody is assigned (MAINT-04, R-026). N vendors
+  // hold live links to the same job at once, which is the whole reason
+  // VENDOR_BID is a separate purpose from the dispatch link - so the demo
+  // seeds every requested bid and prints a link for each.
+  for (const bidIndex of plan.bidVendorIndexes ?? []) {
+    const bidder = context.vendorRows[bidIndex]!
+    await prisma.workOrderBid.create({
       data: {
-        purpose: 'VENDOR_WORK_ORDER',
-        tokenHash: minted.tokenHash,
-        subjectType: 'WorkOrder',
-        subjectId: workOrder.id,
-        expiresAt: minted.expiresAt,
-        // What `vendorLinkAccess()` compares against whoever the work order
-        // currently names - the check that stops a reassigned vendor's
-        // un-expired link still opening a gate code.
-        metadata: { vendorId: vendor.id },
+        workOrderId: workOrder.id,
+        vendorId: bidder.id,
+        requestedAt: daysFrom(-2),
       },
     })
-    context.vendorLinks.push({
-      vendor: vendor.name,
-      scope: plan.scope,
-      url: `${process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3100'}/vendor/${minted.token}`,
-    })
+    await mintDemoLink(
+      'VENDOR_BID',
+      { type: 'WorkOrder', id: workOrder.id },
+      { who: bidder.name, what: `Bid request - ${plan.scope}` },
+      context.demoLinks,
+      { vendorId: bidder.id },
+    )
   }
 
   let messages = 0
-  for (const line of plan.vendorConversation ?? []) {
+  for (const line of vendor == null ? [] : (plan.vendorConversation ?? [])) {
     const thread = await threadFor(
       {
         scope: 'VENDOR',
         propertyId: context.propertyId,
-        vendorId: vendor.id,
+        vendorId: vendor!.id,
         workOrderId: workOrder.id,
       },
       { workOrderId: workOrder.id, ticketId: context.ticketId },
@@ -1762,9 +2024,9 @@ async function seedWorkOrder(
       channel: 'SMS',
       direction: line.from === 'VENDOR' ? 'INBOUND' : 'OUTBOUND',
       body: line.body,
-      sentAt: minutesFrom(dispatchedAt, line.minutesAfter),
+      sentAt: minutesFrom(dispatchedAt!, line.minutesAfter),
       staffUserId: line.from === 'STAFF' ? context.staffId : null,
-      vendorId: line.from === 'VENDOR' ? vendor.id : null,
+      vendorId: line.from === 'VENDOR' ? vendor!.id : null,
       workOrderId: workOrder.id,
     })
     messages++
@@ -1987,6 +2249,69 @@ async function seedLeasing(
       })
       prospects++
 
+      if (prospectPlan.livePrescreenLink) {
+        await mintDemoLink(
+          'PROSPECT_PRESCREEN',
+          { type: 'Prospect', id: prospect.id },
+          {
+            who: `${prospectPlan.firstName} ${prospectPlan.lastName} (prospect)`,
+            what: `Pre-screen questions - ${context.addressOfRecord}`,
+          },
+          context.demoLinks,
+        )
+      }
+
+      if (prospectPlan.liveBookingLink) {
+        await mintDemoLink(
+          'SHOWING_BOOKING',
+          { type: 'Prospect', id: prospect.id },
+          {
+            who: `${prospectPlan.firstName} ${prospectPlan.lastName} (prospect)`,
+            what: `Book a viewing - ${context.addressOfRecord}`,
+          },
+          context.demoLinks,
+        )
+      }
+
+      if (prospectPlan.showing) {
+        // The lock is the unit's, not the showing's, and `showingAccessLinkStatus`
+        // reads it through the unit - so a self-showing link on a unit with no
+        // lock renders a page that can never produce a code.
+        if (prospectPlan.showing.selfAccess) {
+          await prisma.smartLock.upsert({
+            where: { unitId: context.unitId },
+            update: {},
+            create: {
+              unitId: context.unitId,
+              externalId: `demo-lock-${context.unitId}`,
+              label: 'Front door keypad',
+            },
+          })
+        }
+        const start = atLocalTime(prospectPlan.showing.inDays, '17:30')
+        const showing = await prisma.showing.create({
+          data: {
+            propertyId: context.propertyId,
+            unitId: context.unitId,
+            prospectId: prospect.id,
+            scheduledStart: start,
+            scheduledEnd: minutesFrom(start, 30),
+            status: 'BOOKED',
+          },
+        })
+        if (prospectPlan.showing.selfAccess) {
+          await mintDemoLink(
+            'SHOWING_ACCESS',
+            { type: 'Showing', id: showing.id },
+            {
+              who: `${prospectPlan.firstName} ${prospectPlan.lastName} (prospect)`,
+              what: `Self-showing access - ${context.addressOfRecord}`,
+            },
+            context.demoLinks,
+          )
+        }
+      }
+
       if (!prospectPlan.application) continue
       const application = await prisma.application.create({
         data: {
@@ -1997,7 +2322,7 @@ async function seedLeasing(
           createdAt: enquiredAt,
         },
       })
-      await prisma.applicant.create({
+      const applicant = await prisma.applicant.create({
         data: {
           applicationId: application.id,
           firstName: prospectPlan.firstName,
@@ -2015,6 +2340,18 @@ async function seedLeasing(
             : null,
         },
       })
+
+      if (prospectPlan.liveApplicationLink) {
+        await mintDemoLink(
+          'APPLICATION_LINK',
+          { type: 'Applicant', id: applicant.id },
+          {
+            who: `${prospectPlan.firstName} ${prospectPlan.lastName} (applicant)`,
+            what: `Rental application - ${context.addressOfRecord}`,
+          },
+          context.demoLinks,
+        )
+      }
     }
   }
 
@@ -2080,7 +2417,7 @@ async function seedLeasing(
     })
     let order = 0
     for (const signer of plan.envelope.signers) {
-      await prisma.leaseSigner.create({
+      const signerRow = await prisma.leaseSigner.create({
         data: {
           envelopeId: envelope.id,
           order: order++,
@@ -2098,6 +2435,17 @@ async function seedLeasing(
           signedName: signer.status === 'SIGNED' ? signer.name : null,
         },
       })
+      if (signer.liveSignLink) {
+        await mintDemoLink(
+          'LEASE_SIGN',
+          { type: 'LeaseSigner', id: signerRow.id },
+          {
+            who: `${signer.name} (${signer.role.toLowerCase()})`,
+            what: `Sign the lease - ${context.addressOfRecord}`,
+          },
+          context.demoLinks,
+        )
+      }
     }
   }
 
@@ -2417,6 +2765,9 @@ interface MoneyTarget {
   lifecycle: string
   rentCents: number
   overdueChargeId: string | null
+  /// For the printed pay link's label. A demo link that says only "pay" is
+  /// unwalkable when six tenancies exist.
+  addressOfRecord: string
 }
 
 /**
@@ -2610,7 +2961,10 @@ async function replay(
  * Returns counts rather than logging its own line, so the seed's single
  * summary stays the one place that says what was built.
  */
-async function seedMoney(targets: MoneyTarget[]): Promise<{ payers: number; events: number }> {
+async function seedMoney(
+  targets: MoneyTarget[],
+  demoLinks: DemoLink[],
+): Promise<{ payers: number; events: number }> {
   const planned = targets.filter((target) => MONEY[target.lifecycle])
   if (planned.length === 0) return { payers: 0, events: 0 }
 
@@ -2836,6 +3190,35 @@ async function seedMoney(targets: MoneyTarget[]): Promise<{ payers: number; even
         console.warn(`demo money: billing sweep on ${target.leaseId} said ${result.error}`)
       }
     }
+
+    // ---- THE PAY LINK, ON THE TENANCY THAT OWES SOMETHING ----
+    //
+    // Last, because the payer row it is subject to is created by
+    // `provisionLeaseBilling` for an autopay tenancy rather than above, and
+    // because a link to a zero balance is a page saying there is nothing to
+    // pay. `late` is the tenancy every other part of the demo already agrees
+    // is behind - the notice, the eviction case and the overdue charge all
+    // hang off it - so it is the one a "pay now" text would really go to.
+    if (target.lifecycle === 'late') {
+      const payer = await prisma.leasePayer.findFirst({
+        where: { leaseId: target.leaseId, tenantId: target.tenantId, active: true },
+        select: { id: true },
+      })
+      if (!payer) throw new Error(`demo money: no active payer on lease ${target.leaseId}`)
+      await mintDemoLink(
+        'TENANT_PAY_LINK',
+        { type: 'LeasePayer', id: payer.id },
+        {
+          who: `the tenant at ${target.addressOfRecord}`,
+          what: 'Pay rent without signing in',
+        },
+        demoLinks,
+        // The tenant and lease are RECORDED, not inferred at use time - a
+        // payer row edited between issue and use must not silently move who
+        // the link belongs to. `verifyPayLink` refuses one without them.
+        { tenantId: target.tenantId, leaseId: target.leaseId, notificationKey: null },
+      )
+    }
   }
 
   return { payers, events }
@@ -2989,7 +3372,7 @@ async function seedDemoData() {
   /// Printed at the very end. The raw token exists only here - only its
   /// SHA-256 reaches the database - so a link not printed on this run is a
   /// link nobody can ever open.
-  const vendorLinks: { vendor: string; scope: string; url: string }[] = []
+  const demoLinks: DemoLink[] = []
 
   for (const plan of buildPlan()) {
     const property = await prisma.property.create({
@@ -3122,6 +3505,7 @@ async function seedDemoData() {
         lifecycle: tenantPlan.lifecycle,
         rentCents: tenantPlan.lease.rentCents,
         overdueChargeId: overdueCharge?.id ?? null,
+        addressOfRecord: `${plan.addressLine1} ${unit.name}`,
       })
     }
 
@@ -3158,7 +3542,7 @@ async function seedDemoData() {
         vendorRows,
         pmTemplateRows,
         inspectionTemplateId: inspectionTemplate.id,
-        vendorLinks,
+        demoLinks,
       }
 
       for (const ticketPlan of maintenance.tickets ?? []) {
@@ -3210,7 +3594,7 @@ async function seedDemoData() {
         vendorRows,
         pmTemplateRows,
         inspectionTemplateId: inspectionTemplate.id,
-        vendorLinks,
+        demoLinks,
         propertyName: plan.name,
         unitName: unitPlan.name,
       })
@@ -3226,7 +3610,7 @@ async function seedDemoData() {
   // LAST OF THE THREE STORIES AND DELIBERATELY SO. It reads the overdue
   // `Charge` written above, and it is the only section here that can make a
   // property permanently undeletable - see `reset()`'s sticky set.
-  const money = await seedMoney(moneyTargets)
+  const money = await seedMoney(moneyTargets, demoLinks)
 
   // ---- The staff queue, LAST: it is derived from everything above ----
   const taskCount = await seedTasks(
@@ -3279,14 +3663,33 @@ async function seedDemoData() {
     )
   }
 
+  // ---- The staff member's own calendar feed (NOTIF-06, R-097c) ----
+  //
+  // The one link here nobody hands to a stranger, and included for the same
+  // reason as the rest: the token in the path is the entire credential, so a
+  // walk that never opens one has never checked what it serves. Fetched by a
+  // machine rather than read in a browser - `curl` it, or subscribe to it.
+  await mintDemoLink(
+    'CALENDAR_FEED',
+    { type: 'StaffUser', id: staff.id },
+    { who: 'the owner (staff)', what: 'Visit calendar feed (.ics, subscribe or curl)' },
+    demoLinks,
+  )
+
   // LAST, ALONE, AND LOUD. This is the only output of the whole run that
-  // cannot be recovered by looking at the database afterwards.
-  for (const link of vendorLinks) {
-    console.info(
-      `\nLive vendor link - ${link.vendor}\n  ${link.scope}\n  ${link.url}\n` +
-        '  (Shown once. Only the hash is stored, so re-run the seed to mint another.)',
-    )
+  // cannot be recovered by looking at the database afterwards: only the
+  // SHA-256 of each token reaches the database, so a link not printed here is
+  // a link nobody can ever open.
+  console.info(
+    `\n${'='.repeat(78)}\n` +
+      `LIVE LINKS - ${demoLinks.length}, shown once. Every stranger-facing route in the\n` +
+      'product opens from one of these. Only the hash is stored, so re-run the seed\n' +
+      `to mint another set.\n${'='.repeat(78)}`,
+  )
+  for (const [index, link] of demoLinks.entries()) {
+    console.info(`\n${index + 1}. ${link.what}\n   as ${link.who}\n   ${link.url}`)
   }
+  console.info('')
 }
 
 async function main() {

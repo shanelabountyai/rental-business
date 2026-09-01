@@ -8,6 +8,7 @@ import {
   MESSAGE_TEMPLATE_BODY,
   MESSAGE_TEMPLATE_SUBJECT,
   MONEY,
+  STRANGER_ROUTES,
   buildPlan,
 } from './demo-seed.mts'
 
@@ -73,7 +74,16 @@ describe('the maintenance story points at units that exist', () => {
     // Out of range is an undefined row and a crash halfway through seeding,
     // which leaves a half-built demo behind.
     for (const plan of workOrderPlans) {
-      expect(plan.vendorIndex, plan.scope).toBeLessThan(3)
+      // ABSENT is legal and means nobody is assigned yet - the only honest
+      // shape for a job still collecting bids (R-140). Out of range is not:
+      // it is an undefined row and a crash halfway through seeding, which
+      // leaves a half-built demo behind.
+      if (plan.vendorIndex != null) {
+        expect(plan.vendorIndex, plan.scope).toBeLessThan(3)
+      }
+      for (const index of plan.bidVendorIndexes ?? []) {
+        expect(index, plan.scope).toBeLessThan(3)
+      }
       if (plan.pmTemplateIndex != null) {
         expect(plan.pmTemplateIndex, plan.scope).toBeLessThan(3)
       }
@@ -96,6 +106,113 @@ describe('the maintenance story points at units that exist', () => {
     // demo where the operator has to work out which link is which; none is a
     // vendor page nobody can open.
     expect(workOrderPlans.filter((plan) => plan.liveVendorLink)).toHaveLength(1)
+  })
+})
+
+// ---- The stranger-facing links (R-140) ----
+//
+// ==========================================================================
+// EVERY ONE OF THESE ROUTES HAS A TOKEN IN ITS PATH AS ITS ENTIRE
+// CREDENTIAL, so the only way to walk one is to hold a link the seed printed
+// - and until R-140 the seed printed exactly one. These assert that each
+// flag lands somewhere its verifier will actually accept, because the
+// failure mode is not an error: it is a rejection page, which reads as the
+// product being broken rather than the seed pointing at the wrong row.
+// ==========================================================================
+
+/// The prospects the leasing story writes, which is where four of the flags
+/// live.
+const prospectPlans = Object.values(LEASING).flatMap((plan) => plan.prospects ?? [])
+
+const signerPlans = Object.values(LEASING).flatMap((plan) => plan.envelope?.signers ?? [])
+
+describe('every stranger-reachable route has a link somebody can open', () => {
+  it('mints one live link per purpose, and no purpose is left without one', () => {
+    // THE ITEM, in one assertion. A new `AuthTokenPurpose` added to
+    // STRANGER_ROUTES without a demo link is a route the next walk cannot
+    // reach - which is how eight of them went unwalked for 140 items.
+    const planned = new Set<string>([
+      ...workOrderPlans.flatMap((plan) => (plan.liveVendorLink ? ['VENDOR_WORK_ORDER'] : [])),
+      ...workOrderPlans.flatMap((plan) => (plan.liveVerifyLink ? ['TENANT_VERIFY'] : [])),
+      ...workOrderPlans.flatMap((plan) => (plan.bidVendorIndexes?.length ? ['VENDOR_BID'] : [])),
+      ...prospectPlans.flatMap((plan) => (plan.livePrescreenLink ? ['PROSPECT_PRESCREEN'] : [])),
+      ...prospectPlans.flatMap((plan) => (plan.liveBookingLink ? ['SHOWING_BOOKING'] : [])),
+      ...prospectPlans.flatMap((plan) => (plan.showing?.selfAccess ? ['SHOWING_ACCESS'] : [])),
+      ...prospectPlans.flatMap((plan) => (plan.liveApplicationLink ? ['APPLICATION_LINK'] : [])),
+      ...signerPlans.flatMap((plan) => (plan.liveSignLink ? ['LEASE_SIGN'] : [])),
+      // Unconditional in `seedDemoData`/`seedMoney` rather than plan-driven:
+      // there is exactly one late tenancy and one staff member, so neither
+      // needs a flag to choose between candidates.
+      'TENANT_PAY_LINK',
+      'CALENDAR_FEED',
+    ])
+    expect([...planned].sort()).toEqual(Object.keys(STRANGER_ROUTES).sort())
+  })
+
+  it('puts the verify link on a completed job that hangs off a ticket', () => {
+    // `verifyVerifyLink` refuses anything but WORK_COMPLETE, and refuses a
+    // link whose recorded tenant is not still the TICKET's tenant - so a
+    // standalone work order, which has no ticket and therefore no tenant,
+    // can never carry one. `seedWorkOrder` throws on the second half at run
+    // time; this catches both before the seed is run at all.
+    const ticketed = new Set(
+      ticketPlans.flatMap((ticket) => (ticket.workOrder ? [ticket.workOrder] : [])),
+    )
+    const flagged = workOrderPlans.filter((plan) => plan.liveVerifyLink)
+    expect(flagged).toHaveLength(1)
+    for (const plan of flagged) {
+      expect(plan.status, plan.scope).toBe('WORK_COMPLETE')
+      expect(ticketed.has(plan), plan.scope).toBe(true)
+    }
+  })
+
+  it('asks several vendors for a price on a job still open to bids, and names none of them', () => {
+    // `verifyBidLink` refuses once the job is past APPROVED - the bidding is
+    // over - and several vendors holding live links to ONE job at once is
+    // the whole reason VENDOR_BID is a separate purpose from the dispatch
+    // link. One bidder would demonstrate neither.
+    const open = ['SUBMITTED', 'TRIAGED', 'PENDING_APPROVAL', 'APPROVED']
+    const bidding = workOrderPlans.filter((plan) => plan.bidVendorIndexes?.length)
+    expect(bidding.length).toBeGreaterThan(0)
+    for (const plan of bidding) {
+      expect(open, plan.scope).toContain(plan.status)
+      expect(plan.bidVendorIndexes!.length, plan.scope).toBeGreaterThan(1)
+      expect(new Set(plan.bidVendorIndexes).size, plan.scope).toBe(plan.bidVendorIndexes!.length)
+      // A job still collecting prices has not chosen anybody. Naming a
+      // vendor here is the work order contradicting its own status on
+      // screen.
+      expect(plan.vendorIndex, plan.scope).toBeUndefined()
+    }
+  })
+
+  it('gives the booking link to a prospect with no showing, and the access link to one with', () => {
+    // `showingLinkStatus` short-circuits to "already booked" for a prospect
+    // who has one, so the two flags cannot sit on the same person: the slot
+    // picker and the access code are different pages for different moments.
+    for (const plan of prospectPlans.filter((p) => p.liveBookingLink)) {
+      expect(plan.showing, plan.email).toBeUndefined()
+    }
+    const selfShowing = prospectPlans.filter((plan) => plan.showing?.selfAccess)
+    expect(selfShowing).toHaveLength(1)
+    // A viewing in the past is a link whose page has nothing left to open.
+    expect(selfShowing[0]!.showing!.inDays).toBeGreaterThan(0)
+  })
+
+  it('gives the application link to an application still being filled in', () => {
+    // Every other seeded application is complete, which renders a finished
+    // form - the applicant's own screens (the form, the co-applicant invite,
+    // the upload, the fee) only show what they are for while one is open.
+    const flagged = prospectPlans.filter((plan) => plan.liveApplicationLink)
+    expect(flagged).toHaveLength(1)
+    expect(flagged[0]!.application?.completed).toBe(false)
+  })
+
+  it('gives the signing link to a signer the envelope is still waiting on', () => {
+    // A SIGNED signer's page is a receipt. The interesting one is whoever
+    // has not signed, which is also the only one PARTIALLY_SIGNED means.
+    const flagged = signerPlans.filter((plan) => plan.liveSignLink)
+    expect(flagged).toHaveLength(1)
+    expect(flagged[0]!.status).not.toBe('SIGNED')
   })
 })
 

@@ -88,6 +88,14 @@ export function BidForm({
           <form key={formVersion} action={formAction} className="flex flex-col gap-3">
             <TextField
               label="Your price"
+              // R-140's demo walk: this was the only money field in the
+              // product with no unit on it, and the only one a STRANGER
+              // fills in - every staff-facing one already says "dollars"
+              // (`record-invoice-form`, `create-work-order-form`,
+              // `add-capital-improvement-form`). A vendor reading "Your
+              // price" over an empty box has nothing telling them whether
+              // 340000 is the answer or a hundredfold mistake.
+              hint="Whole or fractional dollars, parts and labour included."
               name="amountDollars"
               idPrefix="bid"
               type="number"

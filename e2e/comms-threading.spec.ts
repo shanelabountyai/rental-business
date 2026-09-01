@@ -255,6 +255,14 @@ test.describe('the work order timeline', () => {
       vendorPage.getByLabel('Messages').getByText('You', { exact: true }),
     ).toBeVisible()
 
+    // R-140's demo walk found every message here stamped "2026-08-30 19:00" -
+    // `utcToWallClock(...).replace('T', ' ')`, a machine format shown to a
+    // stranger, and a third face of D-153's raw-date class that both R-128's
+    // and R-129's greps missed. Asserted as the ABSENCE of the raw shape
+    // rather than as an exact string: the wording may change, a raw date
+    // reaching a vendor may not.
+    expect(await vendorPage.locator('body').innerText()).not.toMatch(/\d{4}-\d{2}-\d{2}/)
+
     const staff = await createStaff()
     await signIn(page, staff.email)
     await page.goto(`/workorders/${workOrder.id}`)

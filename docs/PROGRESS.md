@@ -6268,3 +6268,132 @@ tenant could sign in at all** — and neither was a staff password reset.
   compiled, unit **2,831 passed + 4 skipped of 2,835** (R-138's 2,827 plus this
   item's 4, reconciling exactly), and `staff` + `auth` + `vendor-link` e2e
   **96 passed against `Total: 96 tests`**, no flaky.
+
+## R-140: the demo seed minted one live token, so eight stranger-facing routes had never been walked
+
+**Commit:** _pending_  ·  **Date:** 2026-09-01
+
+Owner-chosen 2026-09-01, and R-138's own filed runner-up. The backlog has had
+no buildable row of its own for ten items.
+
+Every stranger-facing route in this product takes a token in its path as its
+**entire credential**. The demo seed minted exactly one — a vendor dispatch
+link — so `/verify`, `/prescreen`, `/apply`, `/sign`, `/showings`,
+`/showings/access`, `/vendor/bid` and `/api/calendar` had no door anyone could
+open. D-28 requires a browser walk when a milestone closes; R-105 and R-128
+each walked 88 routes and neither ever saw these, because a walk cannot reach a
+page whose only key is a token nothing prints.
+
+### What it built
+
+- **`STRANGER_ROUTES`**, one table in `demo-seed.mts` mapping every
+  stranger-reachable `AuthTokenPurpose` to the route its link opens, and
+  **`mintDemoLink`** generalizing the one-off vendor mint R-100a wrote. The
+  seed now prints **eleven** live links, numbered, with who holds each one.
+- **Three subjects the product had no demo state for**, each a state that could
+  not otherwise be demonstrated at all:
+  - **A WORK_COMPLETE work order hanging off a ticket** — MAINT-07's "was this
+    fixed?", whose reopen path had no reachable entry point. It has to hang off
+    a ticket: `verifyVerifyLink` refuses a link whose recorded tenant is not
+    still the *ticket's* tenant, and a standalone job has no ticket and
+    therefore no tenant. `seedWorkOrder` throws rather than mint one.
+  - **A PENDING_APPROVAL job collecting prices from two vendors** — MAINT-04,
+    and the first `WorkOrderBid` rows the demo has ever held. Two, not one:
+    several vendors holding live links to one job at once is the whole reason
+    `VENDOR_BID` is a separate purpose from the dispatch link.
+  - **A booked showing with a smart lock** — LEAS-05's self-showing, which also
+    put the first `Showing` on the visit calendar feed.
+- **A seventh prospect, mid-application.** Every existing one was complete, and
+  the applicant's own four screens (the form, the co-applicant invite, the
+  upload, the fee) only show what they are for while a form is open.
+- **`WorkOrderPlan.vendorIndex` became optional.** A PENDING_APPROVAL job
+  already pointing at a vendor is two facts about one job disagreeing on
+  screen, so a job still collecting bids names nobody and carries no
+  `dispatchedAt`.
+- **`reset()` grew six tables**, found the honest way — the second reset died
+  on `WorkOrderBid_workOrderId_fkey`. `WorkOrderBid`, `ShowingAccess`,
+  `Showing`, `IdentityCheck`, `SmartLock`, `LockEvent` and `TenantLockCode`;
+  the last four are mostly what a *walk* of the self-showing flow leaves
+  behind rather than what the seed writes.
+- **Six unit tests**, one of which is the item: the planned purposes must EQUAL
+  `Object.keys(STRANGER_ROUTES)`, so a new purpose cannot be added without a
+  demo link. The others pin each flag to a state its verifier accepts — the
+  booking link on a prospect with no showing, the application link on an
+  application still open, the signing link on a signer who has not signed.
+
+### What the walk found
+
+All eleven returned 200, which is exactly the state R-105 warns the real
+defects hide in. Then a browser walk of all ten HTML routes:
+
+- **`/vendor/[token]` rendered `2026-08-30 19:00`** for the booked window and
+  for every message in the thread — `utcToWallClock(...).replace('T', ' ')`, a
+  machine format shown to a stranger. **A third face of D-153's raw-date class
+  that both R-128's and R-129's sweeps missed**, because it is neither a
+  `toISOString().slice(0, 10)` nor a bare `{...On}` interpolation. Now
+  `friendlyTimestamp`, and the component's `scheduledEnd.slice(11)` — a
+  positional slice that only worked because the string happened to be
+  fixed-width — went with it. The regression asserts the **absence** of
+  `\d{4}-\d{2}-\d{2}` rather than an exact string: the wording may change, a
+  raw date reaching a vendor may not.
+  - **It is two assertions in two specs, and the split is not tidiness.**
+    `vendor-link.spec.ts` covers the booked window; the thread's timestamps
+    are covered in `comms-threading.spec.ts` because posting a message from
+    `vendor-link.spec.ts` left its own `afterAll` unable to delete its work
+    orders — `Message` is append-only with `onDelete: Restrict`, so the
+    cleanup died on `Message_workOrderId_fkey`. That is this repo's own
+    documented trap, met from the test side rather than the seed side, and
+    `comms-threading.spec.ts` already posts a vendor message and already
+    cleans up around it.
+  - **The window renders only once the vendor has ACCEPTED** (`working` in
+    `vendor-job.tsx`), which the first version of the test did not do — a job
+    nobody has taken has no confirmed window to show them.
+- **The bid form was the only money field in the product with no unit on it,
+  and the only one a stranger fills in.** A vendor reading "Your price" over an
+  empty box had nothing telling them whether 340000 was the answer or a
+  hundredfold mistake. Every staff-facing money field already says "dollars";
+  this one now does too.
+
+### What it decided
+
+- **D-160**, in full: the keyed table rather than a string per call site, the
+  three seeded subjects, and what the eleven printed credentials accept.
+- **Rejected: a lint rule or filesystem check** that every `[token]` route has
+  an entry. The table is keyed by PURPOSE and the mapping is not mechanical —
+  two purposes sit on sibling `/showings` paths and `CALENDAR_FEED` is fetched
+  by a machine. One unit test asserting set equality is the same guarantee.
+- **Rejected: minting only for subjects that already existed.** Eight links
+  instead of eleven, with the three most interesting flows left exactly as
+  unwalkable as before.
+
+### What it left behind
+
+- **Three UX findings filed rather than fixed**, all pre-existing and none in
+  this item's scope. `/showings/[token]` offers **233 options in one
+  `<select>`** — every half-hour slot for weeks — and shows a prospect nothing
+  but their own name and the address: no rent, no photos, no duration, no what
+  happens next. `/verify/[token]` says what the tenant *reported* and never
+  what was *done*, which a tenant answering three days later may not remember.
+- **The `.replace('T', ' ')` class survives in five more places**, all
+  staff-facing or internal: `(admin)/messages/[id]`,
+  `(admin)/workorders/[id]` (three sites) and
+  `packages/core/workorders/timeline.ts`. Deliberately not swept here, on
+  R-128's own precedent — it fixed the half that reaches strangers and left the
+  rest — and because D-154's rule means each needs its own page read. The
+  vendor page is the half a stranger holds.
+- **No SMS or portal delivery for any of these links.** The seed prints them;
+  nothing sends them, which is what the notification engine already does in the
+  product.
+- **`walk-tmp{,2,3,4}.mjs` in the repo root** are untracked debris from an
+  earlier session, not touched here.
+- **Gate run:** `lint` 0 errors and the same 14 pre-existing warnings,
+  `typecheck` clean, `build:test` compiled, unit **2,837 passed + 4 skipped of
+  2,841** — R-139's 2,835 plus this item's 6, reconciling exactly. The demo
+  seed was run with `--reset` three times from a clean database and each exited
+  0 with eleven links. `vendor-link` + `comms-threading` e2e **36 passed
+  against `Total: 36 tests`**, no flaky; `approvals` passed alongside them in
+  an earlier run (its four flakes were 7-minute timings under a loaded
+  machine, all green on retry). The full sweep was not run locally — CI owns
+  it, and
+  **the GitHub Actions billing block is still unresolved at 18 days**,
+  owner-only.
