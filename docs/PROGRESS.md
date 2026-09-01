@@ -6907,7 +6907,7 @@ was dead too, which is why nobody had noticed it was ready.
 
 ## R-145: two of R-143's forty-four were alive, and one of the dead ones was a carrier obligation
 
-**Commit:** PENDING  ·  **Date:** 2026-09-01
+**Commit:** a24891a  ·  **Date:** 2026-09-01
 
 Owner-chosen 2026-09-01 over a demo walk — the second of the three things
 R-143 filed. The row said "the 27 readers and rules are dead code, not broken
