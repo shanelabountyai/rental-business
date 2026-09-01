@@ -6271,7 +6271,7 @@ tenant could sign in at all** — and neither was a staff password reset.
 
 ## R-140: the demo seed minted one live token, so eight stranger-facing routes had never been walked
 
-**Commit:** _pending_  ·  **Date:** 2026-09-01
+**Commit:** 71f5e18  ·  **Date:** 2026-09-01
 
 Owner-chosen 2026-09-01, and R-138's own filed runner-up. The backlog has had
 no buildable row of its own for ten items.
