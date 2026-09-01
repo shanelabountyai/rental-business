@@ -122,7 +122,10 @@ test.describe('turnover', () => {
     await expect(page.getByLabel('Target rent-ready date')).toHaveValue('2026-07-15')
 
     await page.getByRole('button', { name: 'Mark rent-ready' }).click()
-    await expect(page.getByText(/Rent-ready \d{1,2} \w{3,4} \d{4}/)).toBeVisible()
+    // `\w+`, for the reason spelled out in access-codes-move-in.spec.ts.
+    // The `\w{3,4}` this replaces was the same bug patched one line deep:
+    // it happens to cover "Sept" and still encodes a month-length guess.
+    await expect(page.getByText(/Rent-ready \d{1,2} \w+ \d{4}/)).toBeVisible()
 
     const updatedUnit = await prisma.unit.findUniqueOrThrow({ where: { id: unit.id } })
     expect(updatedUnit.status).toBe('VACANT')

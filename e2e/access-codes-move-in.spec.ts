@@ -175,5 +175,11 @@ test('a code stays withheld until move-in funds clear, then can be issued and st
 
   await page.goto(`/leases/${lease.id}`)
   await expect(page.getByRole('button', { name: 'Issue to tenant' })).toHaveCount(0)
-  await expect(page.getByText(/Issued \d{1,2} \w{3} \d{4}/)).toBeVisible()
+  // `\w+` FOR THE MONTH, NOT `\w{3}` (R-141). Every month abbreviates to
+  // three letters except September, which en-GB renders as "Sept" - so
+  // this assertion was green for eleven months of the year and went red on
+  // 1 Sept 2026, the suite's first September run, with nothing in the app
+  // having changed. `MONTH_WORDS` in packages/core/scheduling/local-time.ts
+  // carries the same four letters deliberately, so both readers agree.
+  await expect(page.getByText(/Issued \d{1,2} \w+ \d{4}/)).toBeVisible()
 })

@@ -6522,5 +6522,34 @@ not say.
   section that renders on a public page. `showings` + `self-showing` +
   `verify-link` + `golden-path-4` e2e **28 passed against `Total: 28 tests`**,
   no flaky, no skipped — including both files' axe checks over the new
-  markup. The full sweep was not run locally — CI owns it, and **the GitHub
-  Actions billing block is still unresolved at 18 days**, owner-only.
+  markup. The full sweep was not run locally — CI owns it.
+
+### The correction this item's own gate line needed
+
+**CI is not blocked and has not been since 2026-08-29.** The sentence above
+originally read *"the GitHub Actions billing block is still unresolved at 18
+days, owner-only"*, copied forward from R-140, which copied it from R-139, and
+so on back to R-129 — with the day count climbing while **every one of those
+pushes ran the full sweep and passed**. R-129's run was the first green one.
+`gh run list --limit 5` is three seconds and settles it; nobody spent them for
+eleven items.
+
+That matters here for a concrete reason rather than a tidiness one: **R-140's
+own CI run failed**, on `access-codes-move-in.spec.ts:178`, and its entry says
+the pipeline could not have run. The assertion was
+`getByText(/Issued \d{1,2} \w{3} \d{4}/)`, and **every month abbreviates to
+three letters except September**, which en-GB renders as `Sept` — so it was
+green for eleven months of the year and went red on **1 Sept 2026**, the
+suite's first September run, with nothing in the app having changed. Both
+readers are correct: `friendlyDate` goes through Intl and `MONTH_WORDS`
+carries the same four letters deliberately, so the two screens agree. Only
+the spec's regex guessed.
+
+Fixed at the root rather than at the line that failed: `turnover.spec.ts:125`
+already carried `\w{3,4}`, which is this same bug patched one line deep by
+whoever last met it. Both are now `\w+`, matching what
+`applications.spec.ts` already did.
+
+**The full sweep is 1,068 tests, not 596.** `CLAUDE.md` said 596 in two
+places — R-042's measurement, from before the `mobile-chrome` project
+existed. Corrected there, along with the CI-is-dead claim.
