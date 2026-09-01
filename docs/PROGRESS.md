@@ -6400,7 +6400,7 @@ defects hide in. Then a browser walk of all ten HTML routes:
 
 ## R-141: the three stranger-page findings R-140's walk filed rather than fixed
 
-**Commit:** _pending_  ·  **Date:** 2026-09-01
+**Commit:** be966d7  ·  **Date:** 2026-09-01
 
 Owner-chosen 2026-09-01, over sweeping the last five raw-timestamp sites and
 over a full local sweep. The backlog has had no buildable row of its own for
