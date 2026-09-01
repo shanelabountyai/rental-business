@@ -6682,7 +6682,7 @@ them surfaced two more that nobody had counted.
 
 ## R-143: the dead-export sweep, and two of the forty-four had no way to be pressed
 
-**Commit:** _pending_  ·  **Date:** 2026-09-01
+**Commit:** dabfd97  ·  **Date:** 2026-09-01
 
 Owner-chosen 2026-09-01 over a demo walk and a check of whether the deployed
 environment can actually send, after the backlog ran out of buildable rows for
