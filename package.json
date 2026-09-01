@@ -40,6 +40,8 @@
     "dev:demo": "dotenv -e .env.demo -e .env.local -- npm run dev -w web",
     "build:test": "dotenv -e .env.test -e .env.local -- npm run build -w web",
     "start:test": "dotenv -e .env.test -e .env.local -- npm run start -w web",
+    "build:demo": "dotenv -e .env.demo -e .env.local -- npm run build -w web",
+    "start:demo": "dotenv -e .env.demo -e .env.local -- npm run start -w web",
     "e2e:server": "npm run build:test && npm run start:test",
     "db:migrate:all": "npm run db:migrate:test && npm run db:migrate:dev",
     "db:migrate:dev": "dotenv -e .env.local -- prisma migrate deploy --schema packages/db/prisma/schema.prisma",
