@@ -100,6 +100,29 @@ export default async function ShowingBookingPage({
           UTC (D-3, R-042). */}
       <section className="flex flex-col gap-2 rounded-md border p-4">
         <h2 className="text-sm font-medium">What you&rsquo;re coming to see</h2>
+        {/* THE PHOTOS, through the PUBLIC listing route rather than a new
+            token-scoped one (R-142). These are the same bytes the published
+            listing page already serves to anybody, so a second credential
+            would be protecting nothing - and `showingLinkStatus` returns an
+            empty list unless the listing is PUBLISHED, so the route's own
+            publication check and this page can never disagree.
+
+            Plain <img>, not next/image: the source is a dynamic route, not
+            a static asset. */}
+        {link.photoIds.length > 0 && (
+          <ul className="flex flex-col gap-2">
+            {link.photoIds.map((photoId, index) => (
+              <li key={photoId}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={`/listings/${link.listingId}/photos/${photoId}`}
+                  alt={`${link.addressLine1}, photo ${index + 1} of ${link.photoIds.length}`}
+                  className="w-full rounded-md border"
+                />
+              </li>
+            ))}
+          </ul>
+        )}
         {link.headline && <p className="text-base">{link.headline}</p>}
         <p className="text-base font-medium">{formatCents(link.rentCents)} a month</p>
         {size.length > 0 && <p className="text-sm">{size.join(' \u00b7 ')}</p>}
@@ -115,7 +138,15 @@ export default async function ShowingBookingPage({
         Viewings last {DEFAULT_SHOWING_WINDOW.slotMinutes} minutes.{' '}
         {link.selfService
           ? 'You let yourself in — once you have booked we send you an entry-code link separately.'
-          : 'A member of our team will meet you there.'}
+          : 'A member of our team will meet you there.'}{' '}
+        {/* AND WHAT HAPPENS AFTER IT (R-142). This deliberately does not
+            promise an application link will arrive on its own: an
+            APPLICATION_LINK is minted for an `Applicant`, a record that does
+            not exist until somebody creates it, and it is sent by a member
+            of staff. A page that promised one automatically would be
+            describing a flow the product does not have. */}
+        If you want to apply after seeing it, tell us and we&rsquo;ll send you an
+        application link.
       </p>
 
       <ShowingBookingForm

@@ -2,8 +2,14 @@ import { actualTotalCents, compareBids, reapprovalCheck } from '@rental/core/app
 import { earliestCompliantStart } from '@rental/core/entry'
 import {
   businessDate,
+  clockTime,
   friendlyBusinessDate,
+  friendlyTimestamp,
   utcToBusinessDate,
+  // STILL HERE, and correctly: `localInput` feeds an `<input
+  // type="datetime-local">`, which can only accept `YYYY-MM-DDTHH:MM`. The
+  // human-readable stamps on this page went to `friendlyTimestamp` in R-141;
+  // this one must not.
   utcToWallClock,
 } from '@rental/core/scheduling'
 import { formatCents } from '@rental/core/money'
@@ -173,18 +179,18 @@ export default async function WorkOrderDetailPage({
   // COMM-06, R-032: the merged timeline - tenant thread, vendor thread and
   // staff notes, one chronological view.
   const rawEntries = await workOrderTimeline(workOrder.id)
+  // FORMATTED FOR A PERSON, not for a machine (D-153, R-141). Every stamp on
+  // this page was `utcToWallClock(...).replace('T', ' ')` - "2026-08-30
+  // 19:00" - which R-140 fixed on the vendor page and filed here.
   const timelineEntries = rawEntries.map((entry) => ({
     ...entry,
-    atLocal: utcToWallClock(entry.at, workOrder.property.timezone).replace('T', ' '),
+    atLocal: friendlyTimestamp(entry.at, workOrder.property.timezone),
   }))
   const unattached = canWrite
     ? (await unattachedTenantMessages(workOrder.id)).map((message) => ({
         id: message.id,
         body: message.body,
-        sentAt: utcToWallClock(message.sentAt, workOrder.property.timezone).replace(
-          'T',
-          ' ',
-        ),
+        sentAt: friendlyTimestamp(message.sentAt, workOrder.property.timezone),
       }))
     : []
   const tenantChannels = workOrder.ticket?.tenant
@@ -241,7 +247,13 @@ export default async function WorkOrderDetailPage({
   const zone = workOrder.property.timezone
   const localInput = (value: Date | null) =>
     value ? utcToWallClock(value, zone) : null
-  const localTime = (value: Date) => utcToWallClock(value, zone).replace('T', ' ')
+  const localTime = (value: Date) => friendlyTimestamp(value, zone)
+  // The far end of a window, so a PM reads "29 Aug 2026, 09:00 CDT to 12:00"
+  // rather than the same date twice. This replaces a `.slice(11)` on the
+  // wall-clock string - a positional slice that only worked because
+  // `utcToWallClock` is fixed-width, and would have silently produced
+  // garbage the moment the stamp above it stopped being.
+  const endClock = (value: Date) => clockTime(value, zone)
 
   const entity = await prisma.legalEntity.findUnique({
     where: { id: workOrder.property.legalEntityId },
@@ -318,7 +330,7 @@ export default async function WorkOrderDetailPage({
             <dt className="text-muted-foreground">Scheduled</dt>
             <dd className="col-span-1 sm:col-span-2">
               {localTime(workOrder.scheduledStart)}
-              {workOrder.scheduledEnd && ` to ${localTime(workOrder.scheduledEnd).slice(11)}`}
+              {workOrder.scheduledEnd && ` to ${endClock(workOrder.scheduledEnd)}`}
               {workOrder.entryOverrideReason && (
                 <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900">
                   Entry override logged
@@ -357,7 +369,7 @@ export default async function WorkOrderDetailPage({
                 : 'No answer yet'}
               {workOrder.vendorDeclineReason && ` — ${workOrder.vendorDeclineReason}`}
               {workOrder.proposedStart &&
-                ` — ${localTime(workOrder.proposedStart)} to ${workOrder.proposedEnd ? localTime(workOrder.proposedEnd).slice(11) : ''}`}
+                ` — ${localTime(workOrder.proposedStart)} to ${workOrder.proposedEnd ? endClock(workOrder.proposedEnd) : ''}`}
             </dd>
           </>
         )}

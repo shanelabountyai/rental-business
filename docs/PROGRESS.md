@@ -6553,3 +6553,129 @@ whoever last met it. Both are now `\w+`, matching what
 **The full sweep is 1,068 tests, not 596.** `CLAUDE.md` said 596 in two
 places — R-042's measurement, from before the `mobile-chrome` project
 existed. Corrected there, along with the CI-is-dead claim.
+
+## R-142: everything R-141 filed, and a third reader of a calendar month
+
+**Commit:** _pending_  ·  **Date:** 2026-09-01
+
+Owner-asked 2026-09-01, immediately after R-141, in the same breath as the
+GitHub failure R-141a fixed. Three leftovers were filed; the work of clearing
+them surfaced two more that nobody had counted.
+
+### What it built
+
+- **The raw-timestamp class was SIX sites, not the five R-140 filed.**
+  `(admin)/messages/unrouted/page.tsx` was `receivedAt.toISOString().slice(0,
+  16).replace('T', ' ')` followed by the word "UTC" appended by hand — and
+  both R-140's count and R-141's carried-forward count missed it. It is the
+  one site where UTC is the *correct* clock (an unrouted message has no
+  property, so there is no property zone to render it in), and that was
+  already right; the ISO shape was not. The zone now comes from the formatter
+  rather than from a literal.
+- **`clockTime` in `packages/core/scheduling`**, which is R-140's inline
+  `endClockOrNull` moved out when the admin work-order page turned out to need
+  the identical thing. That page carried the **same `.slice(11)` positional
+  slice twice** — the one R-140 removed from the vendor page — and it only
+  ever worked because `utcToWallClock` happens to be fixed-width. Both pages
+  now call one function, and the midnight-crossing ceiling is documented once
+  instead of in a comment on one of the two copies.
+- **`(admin)/workorders/[id]`, `(admin)/messages/[id]` and
+  `packages/core/workorders/timeline.ts`** all read in words now. The timeline
+  is the one that mattered most: it is a document an insurance adjuster reads
+  somewhere else, so `friendlyTimestamp` naming the zone replaces
+  `(property-local time)`, a parenthetical that told a reader the clock was
+  local to somewhere without saying where.
+- **A tenant can see the completion photo.** `/verify/[token]` asked "was this
+  fixed?" and showed no evidence of what was done — somebody who was out when
+  the vendor came had no way to answer honestly. The new route
+  `verify/[token]/photos/[documentId]` mirrors
+  `vendor/[token]/documents/[documentId]` and is deliberately **narrower**:
+  exactly the `COMPLETION_PHOTO`s on exactly that work order, where a vendor
+  may also read the ticket's photos of the problem they were sent to fix. 404
+  — never 403 — for a bad token, for another job's document, and for any other
+  document type, so a status code cannot confirm a guessed id is real. It is
+  registered in `route-guards.test.ts` with its justification, which is the
+  test that caught it being unguarded.
+- **A prospect can see the house.** `/showings/[token]` now renders the
+  listing's photos through `/listings/[id]/photos/[documentId]` — **the route
+  that already existed**, which is public and authorizes on PUBLICATION STATE.
+  No second credential was invented, because these are the same bytes anybody
+  browsing the published listing already gets. `showingLinkStatus` returns an
+  empty list unless the listing is `PUBLISHED`, so the page and the route's own
+  check cannot disagree and a prospect invited to view something not yet on the
+  market gets the description and no broken images.
+- **What happens after the viewing, as a sentence rather than a link.** An
+  `APPLICATION_LINK` is minted for an `Applicant` — a record that does not
+  exist until somebody creates it — and it is sent by a member of staff. A page
+  promising one would arrive automatically would be describing a flow the
+  product does not have, so it says to ask.
+
+### What it found on the way
+
+- **`friendlyTimestamp` was a THIRD reader of a calendar month, and it
+  disagreed with the other two.** It assembles its output from `en-US` parts,
+  deliberately and correctly — under `en-GB` ICU renders an American zone as
+  `GMT-5` rather than `CDT`, which is useless on a Texas court exhibit. But
+  `en-US`'s short September is **"Sep"** where `en-GB`'s is **"Sept"**, so on
+  the same day a compliance due date read *1 Sept 2026* and a transcript entry
+  read *1 Sep 2026*. `scheduling.test.ts` has pinned `friendlyBusinessDate` to
+  `friendlyDate` across all twelve months since R-119 — that test exists for
+  exactly this defect — and it did not know there was a third reader to pin.
+  - **The date half now DELEGATES to `friendlyBusinessDate`** rather than
+    indexing the shared `MONTH_WORDS` array. Three readers sharing an array
+    still leaves three assemblies to get wrong; this way one function turns a
+    calendar day into words. Only the clock and the zone still come from the
+    display formatter, where they have to: the abbreviation must come from the
+    same resolution that picked the offset. `localParts` resolves the day in
+    the same zone, so the two halves cannot drift.
+  - The test now covers all three.
+- **The sweep introduced its own bug and a spec caught it.** Renaming
+  `utcToWallClock` across `(admin)/messages/[id]` rather than reading it turned
+  `LogCallForm`'s `defaultOccurredAt` into "1 Sept 2026, 11:04 CDT". That prop
+  feeds an `<input type="datetime-local">`, which accepts only
+  `YYYY-MM-DDTHH:MM`, so the field rendered empty and `messages.spec.ts:276`
+  failed on the submit. **This is D-154's own exclusion met from the sweeping
+  side rather than the reading side** — the rule already says a form field is
+  not a display site, and a rename cannot tell the difference. The import is
+  still there, with a comment saying why.
+
+### What it decided
+
+- **Rejected: a token-scoped photo route for the booking page.** The bytes are
+  already public on the listing page. A second credential in front of the same
+  files protects nothing and gives the two checks a way to disagree.
+- **Kept as correct: the e-sign Certificate of Completion's
+  `generatedAt.toISOString()`** in `esign-actions.ts` and
+  `party-change-apply.ts`. It sits beside `Envelope:` and `Document hash
+  (SHA-256):`, which is machine-precise evidence rather than prose for a
+  reader — a third deliberate exclusion alongside a card expiry ("12/2026")
+  and an `<input type="date">` default.
+- **Rejected: a schema column for what the vendor did.** Unchanged from R-141;
+  the photo is the answer, and MAINT-06 already makes it mandatory before a job
+  can reach `WORK_COMPLETE`, so the list on that page is never empty.
+
+### What it left behind
+
+- **The photo tests assert the page's URL and the route's refusals, not the
+  bytes.** Both fixtures create a `Document` row whose `storageKey` points at
+  nothing, deliberately: what could break is the page emitting the wrong URL
+  and the route accepting the wrong document, and neither needs a real stored
+  object. `documentFileResponse`'s own byte path is covered where the listing
+  and vendor routes are tested.
+- **No lightbox, no ordering control, no captions** on either page. Photos
+  render in `capturedAt` order at full width, which is what a phone wants and
+  what the listing page already does.
+- **A window crossing midnight still reads ambiguously** — "23:00 CDT to
+  01:00". Carried unchanged from R-140, now documented once on `clockTime`
+  instead of in one of two copies.
+- **Gate run:** `lint` 0 errors and the same 14 pre-existing warnings,
+  `typecheck` clean, `build:test` compiled. Unit **2,838 passed + 4 skipped of
+  2,842** — R-141's 2,841 plus this item's third-reader test, reconciling
+  exactly. E2E **196 passed against `Total: 196 tests`** across twenty files,
+  no flaky and no skipped: the nine that touch the pages this item changed,
+  plus every spec that asserts a dated string, because a change to
+  `friendlyTimestamp` could reach any of them. The first attempt at that run
+  went red at `messages.spec.ts:276` and that failure is written up above as
+  a finding rather than smoothed over — it was this item's own bug.
+- **CI is green and was checked, not assumed** (see R-141's own correction).
+  R-140's failing run is the item this one started from.

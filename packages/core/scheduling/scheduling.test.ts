@@ -248,6 +248,21 @@ describe('friendlyBusinessDate — a calendar day in plain language (R-116)', ()
     }
   })
 
+  // THE THIRD READER, which the test above did not know existed (R-142).
+  // `friendlyTimestamp` builds its output from `en-US` parts — deliberately,
+  // because `en-GB` renders an American zone as "GMT-5" rather than "CDT" —
+  // and `en-US`'s short September is "Sep". So a compliance due date read
+  // "1 Sept 2026" while a transcript entry on the same day read "1 Sep 2026",
+  // which is exactly the defect R-119 fixed between the other two.
+  it('agrees with friendlyBusinessDate on every month of the year', () => {
+    for (let month = 1; month <= 12; month += 1) {
+      const day = `2026-${String(month).padStart(2, '0')}-15` as const
+      // The date half of the stamp, up to the comma before the clock.
+      const stamped = friendlyTimestamp(new Date(`${day}T12:00:00.000Z`), 'UTC').split(',')[0]
+      expect(stamped, day).toBe(friendlyBusinessDate(day))
+    }
+  })
+
   it('reads like a sentence, not like a column', () => {
     expect(friendlyBusinessDate('2026-09-01')).toBe('1 Sept 2026')
     expect(friendlyBusinessDate('2026-12-25')).toBe('25 Dec 2026')

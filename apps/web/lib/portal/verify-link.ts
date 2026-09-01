@@ -100,6 +100,12 @@ export type VerifyLinkResult =
         /// The property's own zone, because a completion time printed in
         /// UTC is a time in no particular place (R-052).
         timezone: string
+        /// The completion photos, which MAINT-06 makes mandatory before a job
+        /// can reach WORK_COMPLETE at all — so a tenant on this page is
+        /// guaranteed at least one (R-142). Ids only; the bytes go out
+        /// through `verify/[token]/photos/[documentId]`, which re-checks the
+        /// token rather than trusting that this page rendered the link.
+        photoIds: string[]
       }
     }
   | {
@@ -193,6 +199,14 @@ export async function verifyVerifyLink(token: string): Promise<VerifyLinkResult>
 
   if (workOrder.status !== 'WORK_COMPLETE') return { ok: false, reason: 'not_pending' }
 
+  // AFTER the status gate, not in the select above: a job that is not
+  // pending verification never renders a photo, and this is a second query.
+  const photos = await prisma.document.findMany({
+    where: { workOrderId: workOrder.id, type: 'COMPLETION_PHOTO', deletedAt: null },
+    orderBy: { capturedAt: 'asc' },
+    select: { id: true },
+  })
+
   return {
     ok: true,
     workOrderId: workOrder.id,
@@ -208,6 +222,7 @@ export async function verifyVerifyLink(token: string): Promise<VerifyLinkResult>
       completedAt: workOrder.completedAt,
       vendorName: workOrder.vendor?.name ?? null,
       timezone: workOrder.property.timezone,
+      photoIds: photos.map((photo) => photo.id),
     },
   }
 }

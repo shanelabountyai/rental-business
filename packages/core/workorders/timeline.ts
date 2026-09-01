@@ -15,7 +15,7 @@
 // entries into the transcript a PM hands to an adjuster - formatting logic
 // worth testing without a database.
 
-import { utcToWallClock } from '../scheduling/local-time.ts'
+import { friendlyTimestamp } from '../scheduling/local-time.ts'
 
 export const TIMELINE_ENTRY_KINDS = [
   /// The tenant's original report - synthesized from the Ticket itself, not
@@ -80,7 +80,14 @@ export function workOrderTimelineText(
     }`,
     `Scope: ${header.scope}`,
     `Status: ${header.workOrderStatus}`,
-    `Generated: ${utcToWallClock(new Date(), header.timezone).replace('T', ' ')} (property-local time)`,
+    // NAMES THE ZONE (R-052, R-141). This was
+    // `utcToWallClock(...).replace('T', ' ')` followed by the words
+    // "(property-local time)" - which told a reader the clock was local to
+    // somewhere without saying where. `friendlyTimestamp` prints the
+    // abbreviation from the same resolution that picked the offset, so a
+    // document generated on a DST boundary cannot label the wrong one, and
+    // the parenthetical is no longer carrying the claim.
+    `Generated: ${friendlyTimestamp(new Date(), header.timezone)}`,
     '',
   ]
 
@@ -94,7 +101,7 @@ export function workOrderTimelineText(
     lines.push('Nothing recorded yet.')
   } else {
     for (const entry of sorted) {
-      const when = utcToWallClock(entry.at, header.timezone).replace('T', ' ')
+      const when = friendlyTimestamp(entry.at, header.timezone)
       lines.push(
         `[${when}] ${entry.author}${entry.channel ? ` (${entry.channel})` : ''}`,
         entry.body,

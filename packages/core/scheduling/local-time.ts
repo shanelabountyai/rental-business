@@ -512,5 +512,49 @@ export function friendlyTimestamp(instant: Date, timeZone: string): string {
   }).formatToParts(instant)
 
   const at = (type: string) => parts.find((p) => p.type === type)?.value ?? ''
-  return `${at('day')} ${at('month')} ${at('year')}, ${at('hour')}:${at('minute')} ${at('timeZoneName')}`
+
+  // THE DATE HALF COMES FROM `friendlyBusinessDate`, NOT FROM THESE PARTS
+  // (R-142). Only the clock and the zone are taken from the formatter above,
+  // where they have to be: the abbreviation must come from the same
+  // resolution that picked the offset.
+  //
+  // The date could not, because `en-US`'s short September is "Sep" and
+  // `en-GB`'s is "Sept" — so this was a THIRD reader of a calendar month and
+  // it disagreed with the other two. A compliance due date read
+  // "1 Sept 2026" while a transcript entry on the same day read
+  // "1 Sep 2026". `scheduling.test.ts` has pinned `friendlyBusinessDate` to
+  // `friendlyDate` across all twelve months since R-119; it did not know
+  // there was a third to pin. It does now.
+  //
+  // Delegating rather than indexing `MONTH_WORDS` here is deliberate: three
+  // readers sharing an array still leaves three places to get the assembly
+  // wrong, and this way there is only one function that turns a calendar day
+  // into words. `localParts` resolves that day in the SAME zone, so the two
+  // halves of the stamp cannot drift apart.
+  const dateHalf = friendlyBusinessDate(localParts(instant, timeZone).businessDate)
+  return `${dateHalf}, ${at('hour')}:${at('minute')} ${at('timeZoneName')}`
+}
+
+/**
+ * Just the clock, property-local: `14:30`.
+ *
+ * THE FAR END OF A WINDOW, and nothing else. `friendlyTimestamp` opens the
+ * window and names the zone; this closes it, so a reader gets
+ * "29 Aug 2026, 09:00 CDT to 12:00" rather than the same date printed twice.
+ *
+ * R-140 wrote this inline in `/vendor/[token]` as `endClockOrNull`; R-141
+ * moved it here when the admin work-order page needed the identical thing.
+ * The reason it is a function rather than a `.slice(11)` on a wall-clock
+ * string is that the positional slice only worked because
+ * `utcToWallClock` happens to be fixed-width - it silently produced garbage
+ * the moment the stamp above it became a human-readable one.
+ *
+ * A WINDOW CROSSING MIDNIGHT READS AMBIGUOUSLY HERE - "23:00 CDT to 01:00" -
+ * and that is a known ceiling, unchanged from R-140. Entry and viewing
+ * windows are a few daylight hours by construction; if one ever legitimately
+ * spans a day boundary, this is the call site that has to grow a date.
+ */
+export function clockTime(instant: Date, timeZone: string): string {
+  const { hour, minute } = localParts(instant, timeZone)
+  return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`
 }

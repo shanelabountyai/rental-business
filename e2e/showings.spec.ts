@@ -68,6 +68,23 @@ async function seedListing(unitStatus: 'VACANT' | 'OCCUPIED') {
     },
   })
 
+  // R-142: one photo, so the booking page has something to render. The bytes
+  // are never fetched by this spec - it asserts the page emits the PUBLIC
+  // listing photo URL, and that route's own byte-serving is covered where
+  // the listing page is tested. A `storageKey` pointing at nothing is
+  // therefore fine and is deliberately not made real.
+  const photo = await prisma.document.create({
+    data: {
+      propertyId: property.id,
+      unitId: unit.id,
+      type: 'UNIT_PHOTO',
+      fileName: 'front.jpg',
+      contentType: 'image/jpeg',
+      sizeBytes: 1,
+      storageKey: `showing-fixture/${unique}.jpg`,
+    },
+  })
+
   let tenant = null
   if (unitStatus === 'OCCUPIED') {
     tenant = await prisma.tenant.create({
@@ -91,7 +108,7 @@ async function seedListing(unitStatus: 'VACANT' | 'OCCUPIED') {
     await prisma.leaseTenant.create({ data: { leaseId: lease.id, tenantId: tenant.id, isPrimary: true } })
   }
 
-  return { property, unit, listing, tenant }
+  return { property, unit, listing, tenant, photo }
 }
 
 async function mintShowingToken(prospectId: string): Promise<string> {
@@ -150,7 +167,7 @@ test('a prospect self-books a vacant-unit showing, raising an escort task, and s
   browser,
 }) => {
   const staff = await createStaff()
-  const { listing, unit } = await seedListing('VACANT')
+  const { listing, unit, photo } = await seedListing('VACANT')
   const lastName = `Booker-${randomUUID().slice(0, 8)}`
 
   const anon = await browser.newContext({ extraHTTPHeaders: uniqueClientHeaders() })
@@ -205,6 +222,16 @@ test('a prospect self-books a vacant-unit showing, raising an escort task, and s
   await expect(anonPage.getByText('$1,550.00 a month')).toBeVisible()
   await expect(anonPage.getByText('Available from 1 Sept 2026')).toBeVisible()
   await expect(anonPage.getByText('A member of our team will meet you there')).toBeVisible()
+
+  // R-142: the photos, and what happens AFTER the viewing. The image points
+  // at the PUBLIC listing route the listing page already uses - a prospect
+  // holding a booking link sees exactly the bytes anybody browsing the
+  // published listing sees, so a second credential would protect nothing.
+  await expect(anonPage.locator('img').first()).toHaveAttribute(
+    'src',
+    `/listings/${listing.id}/photos/${photo.id}`,
+  )
+  await expect(anonPage.getByText(/tell us and we.ll send you an application link/)).toBeVisible()
 
   // R-141: two selects, not one 233-option list. A day holds at most 18
   // half-hour slots between 9 and 6, so 19 options with the disabled

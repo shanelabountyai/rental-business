@@ -79,6 +79,49 @@ async function seedAnsweredJob() {
     },
   })
 
+  // R-142: MAINT-06 makes a completion photo mandatory before a job can
+  // reach WORK_COMPLETE, so a tenant on this page always has at least one.
+  // The bytes are never fetched here - the assertions below are about the
+  // page emitting a token-scoped URL and about that route REFUSING the
+  // wrong document, neither of which needs a real stored object.
+  const photo = await prisma.document.create({
+    data: {
+      propertyId: property.id,
+      unitId: unit.id,
+      workOrderId: workOrder.id,
+      type: 'COMPLETION_PHOTO',
+      fileName: 'ceiling-repaired.jpg',
+      contentType: 'image/jpeg',
+      sizeBytes: 1,
+      storageKey: `verify-fixture/${stamp}.jpg`,
+    },
+  })
+  // A document on the SAME property and the SAME unit but a DIFFERENT work
+  // order - the thing the route's scope check exists to refuse. Scoped this
+  // closely on purpose: a check that only refuses another property's file
+  // would pass against a route that forgot the work-order clause entirely.
+  const otherJob = await prisma.workOrder.create({
+    data: {
+      propertyId: property.id,
+      unitId: unit.id,
+      scope: 'Unrelated job at the same address',
+      status: 'WORK_COMPLETE',
+      completedAt: new Date(),
+    },
+  })
+  const otherPhoto = await prisma.document.create({
+    data: {
+      propertyId: property.id,
+      unitId: unit.id,
+      workOrderId: otherJob.id,
+      type: 'COMPLETION_PHOTO',
+      fileName: 'not-yours.jpg',
+      contentType: 'image/jpeg',
+      sizeBytes: 1,
+      storageKey: `verify-fixture/${stamp}-other.jpg`,
+    },
+  })
+
   // The link the SMS would carry, minted through CORE rather than by
   // importing `issueVerifyLink`. The app module declares `server-only`, which
   // Vitest aliases away and Playwright does not — importing it here fails at
@@ -101,7 +144,7 @@ async function seedAnsweredJob() {
   })
   const token = minted.token
 
-  return { workOrder, ticket, tenant, vendor, token }
+  return { workOrder, ticket, tenant, vendor, token, photo, otherPhoto }
 }
 
 test.afterAll(async () => {
@@ -120,7 +163,7 @@ test.afterAll(async () => {
 
 test.describe('answering without an account', () => {
   test('a tenant with NO EMAIL confirms the repair in one tap', async ({ page }) => {
-    const { workOrder, vendor, token } = await seedAnsweredJob()
+    const { workOrder, vendor, token, photo, otherPhoto } = await seedAnsweredJob()
 
     await page.goto(`/verify/${token}`)
 
@@ -137,6 +180,21 @@ test.describe('answering without an account', () => {
     await expect(page.getByRole('heading', { name: 'What we did' })).toBeVisible()
     await expect(page.getByText('Trace leak above hall ceiling')).toBeVisible()
     await expect(page.getByText(`${vendor.name} marked this finished on`)).toBeVisible()
+
+    // R-142: the PHOTO, which is the actual answer to the question this page
+    // asks - somebody who was out when the vendor came has no other way to
+    // see what was done.
+    await expect(page.locator('img').first()).toHaveAttribute(
+      'src',
+      `/verify/${token}/photos/${photo.id}`,
+    )
+
+    // AND THE ROUTE REFUSES EVERYTHING ELSE. 404 rather than 403 for all
+    // three, so a status code can never confirm that a guessed id is real -
+    // the same rule ROLE-01 applies on the staff side.
+    expect((await page.request.get(`/verify/${token}/photos/${otherPhoto.id}`)).status()).toBe(404)
+    expect((await page.request.get(`/verify/${token}/photos/does-not-exist`)).status()).toBe(404)
+    expect((await page.request.get(`/verify/not-a-token/photos/${photo.id}`)).status()).toBe(404)
 
     await page.getByRole('button', { name: /Yes, it.s fixed/ }).click()
 

@@ -2,6 +2,7 @@ import 'server-only'
 
 import { checkToken, hashToken } from '@rental/core/auth'
 import { prisma } from '@rental/db'
+import { unitPhotosForListing } from '@/lib/listings/queries.ts'
 
 // Reading a SHOWING_BOOKING link (LEASE-08, R-064) - the non-consuming
 // half, same split apps/web/lib/prospects/prescreen-link.ts's own
@@ -44,6 +45,16 @@ export type ShowingLinkResult =
       /// difference between needing us there and not. Same derivation the
       /// `booked` branch below already uses, deliberately not a second one.
       selfService: boolean
+      /// The listing's photos, served through the PUBLIC route the listing
+      /// page already uses (`/listings/[id]/photos/[documentId]`) rather
+      /// than a new token-scoped one (R-142) - which is why `listingId` is
+      /// here and why the list is empty unless the listing is PUBLISHED.
+      /// That route authorizes on publication state, so an unpublished
+      /// listing's photos would 404 into broken images; a prospect invited
+      /// to view something not yet on the market sees the description and
+      /// no pictures, which is honest rather than broken.
+      listingId: string
+      photoIds: string[]
     }
   | {
       ok: false
@@ -129,5 +140,10 @@ export async function showingLinkStatus(rawToken: string): Promise<ShowingLinkRe
     selfService:
       prospect.listing.unit.status === 'VACANT' &&
       prospect.listing.unit.smartLock?.active === true,
+    listingId: prospect.listing.id,
+    photoIds:
+      prospect.listing.status === 'PUBLISHED'
+        ? (await unitPhotosForListing(prospect.listing.unitId)).map((photo) => photo.id)
+        : [],
   }
 }

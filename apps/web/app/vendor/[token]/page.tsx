@@ -1,5 +1,5 @@
 import { actualTotalCents, reapprovalCheck } from '@rental/core/approvals'
-import { friendlyTimestamp, localParts } from '@rental/core/scheduling'
+import { clockTime, friendlyTimestamp } from '@rental/core/scheduling'
 import { INVOICE_STATUS_LABELS, invoiceLifecycleStatus } from '@rental/core/vendors'
 import { prisma } from '@rental/db'
 import { VendorJob } from '@/components/vendors/vendor-job.tsx'
@@ -117,16 +117,10 @@ export default async function VendorLinkPage({
   // JUST THE CLOCK for the far end of a window, so the vendor reads
   // "29 Aug 2026, 09:00 CDT to 12:00" rather than the same date twice. The
   // zone abbreviation stays on the opening time and covers both ends.
-  //
-  // A window crossing midnight would read ambiguously here - "23:00 CDT to
-  // 01:00" - and that is unchanged from what this replaced. Entry windows
-  // are a few daylight hours by construction; if one ever legitimately spans
-  // a day boundary, this is the line that has to grow a date.
-  const endClockOrNull = (instant: Date | null) => {
-    if (!instant) return null
-    const { hour, minute } = localParts(instant, zone)
-    return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`
-  }
+  // R-141 moved the body to `clockTime` in core when the admin work-order
+  // page needed the identical thing - the midnight caveat lives there now.
+  const endClockOrNull = (instant: Date | null) =>
+    instant ? clockTime(instant, zone) : null
 
   const address = [
     workOrder.property.addressLine1,

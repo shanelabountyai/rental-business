@@ -92,6 +92,32 @@ export default async function VerifyLinkPage({
             {friendlyTimestamp(link.job.completedAt, link.job.timezone)}.
           </p>
         )}
+
+        {/* THE PHOTO, which is the answer to the question this page asks
+            (R-142). MAINT-06 makes a completion photo mandatory before a job
+            can reach WORK_COMPLETE, so this list is never empty here — and
+            somebody who was out when the vendor came has no other way to see
+            what was done. Bytes go out through a token-scoped route that
+            re-checks the credential; this page rendering the URL is not the
+            authorization.
+
+            `unoptimized`-equivalent plain <img> rather than next/image: the
+            source is a dynamic authenticated route, not a static asset, and
+            the optimizer would need its own access to fetch it. */}
+        {link.job.photoIds.length > 0 && (
+          <ul className="flex flex-col gap-2">
+            {link.job.photoIds.map((photoId, index) => (
+              <li key={photoId}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={`/verify/${token}/photos/${photoId}`}
+                  alt={`The finished work, photo ${index + 1} of ${link.job.photoIds.length}`}
+                  className="w-full rounded-md border"
+                />
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
 
       <VerifyLinkForm action={answerFromLink.bind(null, token)} />

@@ -1,5 +1,5 @@
 import { formatPhone } from '@rental/core/comms'
-import { utcToWallClock } from '@rental/core/scheduling'
+import { friendlyTimestamp, utcToWallClock } from '@rental/core/scheduling'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { ExportTranscriptForm } from '@/components/comms/export-transcript-form.tsx'
@@ -42,8 +42,21 @@ const DELIVERY_LABELS: Record<string, string> = {
 /// (D-3: "UTC in the DB, property-local timezone for display"). A transcript
 /// is read against what happened at the house - a tenant saying "I called at
 /// nine" means nine there.
+/// FORMATTED FOR A PERSON, and NAMING THE ZONE (D-153, R-052, R-142). This
+/// was `utcToWallClock(...).replace('T', ' ')` - "2026-08-30 19:00" - which
+/// R-140 fixed on the vendor page and filed here. A transcript is the one
+/// screen where the zone is not decoration: it is the document an adjuster
+/// or an attorney reads somewhere else, on a different clock.
+///
+/// `utcToWallClock` IS STILL IMPORTED, and correctly: `LogCallForm`'s
+/// `defaultOccurredAt` feeds an `<input type="datetime-local">`, which can
+/// only accept `YYYY-MM-DDTHH:MM`. Sweeping this file with a rename rather
+/// than a read turned that default into "1 Sept 2026, 11:04 CDT", the input
+/// rendered empty, and `messages.spec.ts:276` went red on the submit - which
+/// is the same "a form field is not a display site" exclusion D-154 already
+/// records for `<input type="date">`.
 function localStamp(instant: Date, timeZone: string): string {
-  return utcToWallClock(instant, timeZone).replace('T', ' ')
+  return friendlyTimestamp(instant, timeZone)
 }
 
 export default async function ThreadPage({

@@ -1,3 +1,4 @@
+import { friendlyTimestamp } from '@rental/core/scheduling'
 import { formatPhone } from '@rental/core/comms'
 import { scopeIsEmpty } from '@rental/core/rbac'
 import { prisma } from '@rental/db'
@@ -82,12 +83,13 @@ export default async function UnroutedMessagesPage() {
                   <span className="font-medium">
                     {formatPhone(message.fromAddress)}
                   </span>
+                  {/* UTC, and it says so - an unrouted message has no
+                      property, so there is no property clock to render it
+                      in. That was already right; the ISO shape was not
+                      (D-153, R-141), and the zone now comes from the
+                      formatter rather than a hand-appended word. */}
                   <span className="text-muted-foreground text-xs">
-                    {message.receivedAt
-                      .toISOString()
-                      .slice(0, 16)
-                      .replace('T', ' ')}{' '}
-                    UTC
+                    {friendlyTimestamp(message.receivedAt, 'UTC')}
                   </span>
                 </div>
                 <p className="text-muted-foreground text-xs">
