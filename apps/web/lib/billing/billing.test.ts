@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { prisma } from '@rental/db'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { leaseBillingState, provisionLeaseBilling } from './provision.ts'
-import { leaseBalanceCents } from '@/lib/ledger/queries.ts'
+import { leaseBalanceCents, outstandingCharges } from '@/lib/ledger/queries.ts'
 import { processStripeEvent } from './webhook.ts'
 
 // Provisioning and the projection pipeline against a real database
@@ -299,6 +299,127 @@ describe('processStripeEvent', () => {
     // 20s like its neighbours: the payment path now also resolves any
     // charges named on the invoice line metadata, and the whole thing walks
     // provisioning plus a full projection.
+  }, 20_000)
+
+  it('PAYS RENT BEFORE THE LATE FEE, in the jurisdiction’s order (D-12, PAY-03)', async () => {
+    // THE BUG THIS ITEM EXISTS TO FIX. `allocatePayment` has answered "which
+    // debt did this pay off" since R-035 and had no caller, so the projection
+    // settled every charge the invoice named IN FULL and gave the leftover to
+    // rent. That is fees-before-rent under any order, including the RENT-first
+    // one Texas is seeded with - and rent still showing unpaid is what a
+    // pay-or-quit notice is served on.
+    //
+    // $1,500 rent and a $500 late fee owing; the tenant pays $1,500. The rent
+    // is settled and the fee is what is left, not the other way round.
+    const { lease, customerId } = await provisionedLease()
+    const fee = await prisma.charge.create({
+      data: {
+        propertyId: lease.propertyId,
+        leaseId: lease.id,
+        type: 'LATE_FEE',
+        amountCents: 50_000,
+        description: 'Late fee',
+        dueOn: new Date('2026-03-05T00:00:00.000Z'),
+      },
+    })
+
+    // Rent: the subscription's own line, which mints no Charge row (D-11).
+    await processStripeEvent(
+      invoiceEvent({ customer: customerId, type: 'invoice.finalized', amountDue: 150_000 }),
+    )
+    // The fee, raised as its own invoice item and linked back by metadata.
+    const feeInvoice = invoiceEvent({
+      customer: customerId,
+      type: 'invoice.finalized',
+      amountDue: 50_000,
+    })
+    ;(feeInvoice.data.object as Record<string, unknown>).lines = {
+      data: [{ metadata: { chargeId: fee.id } }],
+    }
+    await processStripeEvent(feeInvoice)
+    expect(await leaseBalanceCents(lease.id)).toBe(200_000)
+
+    // The payment names the fee on its line, exactly as the old code needed
+    // to credit it in full. The order is what decides now, not the line.
+    const payment = invoiceEvent({ customer: customerId, amountPaid: 150_000 })
+    ;(payment.data.object as Record<string, unknown>).lines = {
+      data: [{ metadata: { chargeId: fee.id } }],
+    }
+    expect(await processStripeEvent(payment)).toEqual({
+      outcome: 'projected',
+      detail: 'payment_succeeded',
+    })
+
+    // NOTHING was applied to the fee. Before this item the fee took $500 of
+    // it and rent took the remaining $1,000, leaving rent $500 short.
+    const applied = await prisma.ledgerEntry.findMany({
+      where: { leaseId: lease.id, chargeId: fee.id, type: 'PAYMENT' },
+    })
+    expect(applied).toHaveLength(0)
+
+    const outstanding = await outstandingCharges(lease.id)
+    expect(outstanding).toEqual([
+      expect.objectContaining({ id: fee.id, outstandingCents: 50_000 }),
+    ])
+    // And the balance is right either way - which is why this was invisible.
+    expect(await leaseBalanceCents(lease.id)).toBe(50_000)
+  }, 20_000)
+
+  it('SPLITS a partial payment across the fees it cannot cover, most senior first', async () => {
+    // The other half. When the named charges totalled more than what arrived,
+    // the projection wrote ONE UNLINKED row - so every one of them went on
+    // reading as fully outstanding on the tenant's pay screen for ever, while
+    // the balance said otherwise. $500 late fee + $300 returned-payment fee,
+    // $600 paid: the late fee clears and $100 lands on the NSF fee.
+    const { lease, customerId } = await provisionedLease()
+    const charges = await Promise.all(
+      (
+        [
+          ['LATE_FEE', 50_000, 'Late fee'],
+          ['NSF_FEE', 30_000, 'Returned payment fee'],
+        ] as const
+      ).map(([type, amountCents, description]) =>
+        prisma.charge.create({
+          data: {
+            propertyId: lease.propertyId,
+            leaseId: lease.id,
+            type,
+            amountCents,
+            description,
+            dueOn: new Date('2026-03-05T00:00:00.000Z'),
+          },
+        }),
+      ),
+    )
+
+    const raised = invoiceEvent({
+      customer: customerId,
+      type: 'invoice.finalized',
+      amountDue: 80_000,
+    })
+    ;(raised.data.object as Record<string, unknown>).lines = {
+      data: charges.map((charge) => ({ metadata: { chargeId: charge.id } })),
+    }
+    await processStripeEvent(raised)
+    expect(await leaseBalanceCents(lease.id)).toBe(80_000)
+
+    const payment = invoiceEvent({ customer: customerId, amountPaid: 60_000 })
+    ;(payment.data.object as Record<string, unknown>).lines = {
+      data: charges.map((charge) => ({ metadata: { chargeId: charge.id } })),
+    }
+    await processStripeEvent(payment)
+
+    const outstanding = await outstandingCharges(lease.id)
+    expect(outstanding).toEqual([
+      expect.objectContaining({ id: charges[1]!.id, outstandingCents: 20_000 }),
+    ])
+    // Every cent that moved is on the ledger, linked or not: allocation
+    // decides WHERE it lands and can never change how much did.
+    const entries = await prisma.ledgerEntry.findMany({
+      where: { leaseId: lease.id, type: 'PAYMENT' },
+    })
+    expect(entries.reduce((sum, entry) => sum + entry.amountCents, 0)).toBe(-60_000)
+    expect(await leaseBalanceCents(lease.id)).toBe(20_000)
   }, 20_000)
 
   it('POSTS A CHARGE when an invoice is finalized — the missing half of the ledger', async () => {

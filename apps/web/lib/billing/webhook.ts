@@ -20,6 +20,7 @@ import { authUrl } from '@/lib/auth/delivery.ts'
 import { isUniqueViolation } from '@/lib/db/unique-violation.ts'
 import { auditAsSystem } from '@/lib/audit/system.ts'
 import { getBillingProvider } from '@/lib/billing/provider.ts'
+import { planAllocation } from '@/lib/ledger/allocate.ts'
 import { assessNsfFee } from '@/lib/ledger/nsf-fees.ts'
 import { leaseBalanceCents } from '@/lib/ledger/queries.ts'
 import { dispatchPendingNotifications, notify } from '@/lib/notifications/send.ts'
@@ -47,7 +48,10 @@ import { dispatchPendingNotifications, notify } from '@/lib/notifications/send.t
 // allocation order and days-past-due are core's (D-12) and are R-035's and
 // R-040's work; a projector that started deciding amounts would be exactly
 // the "Stripe generates a jurisdiction-dependent number" mistake D-12
-// forbids, inverted.
+// forbids, inverted. It does now ASK core how to split a settled payment
+// across the debts on file - see `planAllocation` below - which is the same
+// rule and not an exception to it: the amount is Stripe's, the order is the
+// jurisdiction's, and this file decides neither.
 
 export type PipelineOutcome =
   | 'projected'
@@ -181,6 +185,28 @@ export async function processStripeEvent(
     return { outcome: 'ignored', detail }
   }
 
+  // WHICH DEBT THIS PAID OFF, decided by core in the jurisdiction's order
+  // (D-12, PAY-03) - see lib/ledger/allocate.ts for why the rent debt is in
+  // that list even though it has no `Charge` row.
+  //
+  // Money coming IN is the only kind this applies to. A finalized invoice is
+  // raising the charges, not paying them, and a refund or a void re-opens a
+  // balance rather than settling one; both keep the linked-in-full shape
+  // below, where the invoice line already names exactly what moved.
+  //
+  // OUTSIDE THE TRANSACTION, so the balance it works from is the one before
+  // this payment's own entries exist.
+  const plan =
+    action !== 'reverse' && intent.kind === 'payment_succeeded' && movesLedger(intent)
+      ? await planAllocation({
+          leaseId: payer.leaseId,
+          propertyId: payer.propertyId,
+          leasePayerId: payer.id,
+          paymentCents: Math.abs(ledgerAmountCents(intent)),
+          occurredAt: intent.occurredAt,
+        })
+      : null
+
   await prisma.$transaction(async (tx) => {
     if (action === 'reverse' && settled) {
       await reverseSettledPayment(tx, event, intent, payer, settled)
@@ -188,6 +214,51 @@ export async function processStripeEvent(
     }
 
     const payment = await writePayment(tx, event, intent, payer)
+
+    if (plan) {
+      // ONE ENTRY PER DEBT THE ALLOCATION LANDED ON, plus one unlinked entry
+      // for the part that paid ordinary rent and for any overpayment. The
+      // two together always sum to exactly what moved, which is what keeps
+      // the balance right whatever the order says.
+      for (const application of plan.applications) {
+        await tx.ledgerEntry.create({
+          data: {
+            propertyId: payer.propertyId,
+            leaseId: payer.leaseId,
+            leasePayerId: payer.id,
+            chargeId: application.chargeId,
+            type: 'PAYMENT',
+            amountCents: -application.appliedCents,
+            description: intent.description,
+            occurredAt: intent.occurredAt,
+            // CARRIES THE PAYMENT. `reverseSettledPayment` finds what to undo
+            // BY `paymentId`, so an entry without it is a credit a returned
+            // payment can never take back.
+            paymentId: payment?.id ?? null,
+            stripeEventId: event.id,
+            stripeObjectId: intent.stripeObjectId,
+          },
+        })
+      }
+
+      if (plan.unlinkedCents > 0) {
+        await tx.ledgerEntry.create({
+          data: {
+            propertyId: payer.propertyId,
+            leaseId: payer.leaseId,
+            leasePayerId: payer.id,
+            type: 'PAYMENT',
+            amountCents: -plan.unlinkedCents,
+            description: intent.description,
+            occurredAt: intent.occurredAt,
+            paymentId: payment?.id ?? null,
+            stripeEventId: event.id,
+            stripeObjectId: intent.stripeObjectId,
+          },
+        })
+      }
+      return
+    }
 
     if (movesLedger(intent)) {
       // ONE ENTRY PER CHARGE WE RAISED, so each is linked to the row that
@@ -215,9 +286,12 @@ export async function processStripeEvent(
       // only what arrived, while the charges named on the invoice carry their
       // full amounts - crediting each in full would forgive money nobody
       // sent. When they do not fit, fall back to a single unlinked row for
-      // the actual amount: the balance stays right, and which charge it paid
-      // down is a question for R-035's allocation policy rather than
-      // something to guess at here.
+      // the actual amount, which keeps the balance right.
+      //
+      // SETTLED PAYMENTS NO LONGER REACH THIS (R-144): they go through
+      // `planAllocation` above, which is what "R-035's allocation policy"
+      // meant when this comment deferred to it. What is left here raises or
+      // retracts charges, where the invoice line already names what moved.
       const fits = linkedTotal <= movedCents
       const rows = fits ? linked : []
 

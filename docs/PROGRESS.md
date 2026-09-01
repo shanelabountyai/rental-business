@@ -6789,3 +6789,118 @@ for 131 items; nobody had asked whether there were others. There were 44.
 - **CI was green on R-142 and was checked, not assumed** (`gh run list`, run
   33531510560, success). R-141's and R-141a's runs were both *cancelled* by the
   next push, so R-140's failure was the last completed verdict before it.
+
+## R-144: the allocation order the form collected and nothing read
+
+**Commit:** PENDING  ·  **Date:** 2026-09-01
+
+Owner-chosen 2026-09-01 over the remaining dead-export sweep and a demo walk —
+the first of the three things R-143 filed. R-143 found `allocatePayment` dead
+and said it needed an owner decision rather than a fix: either core applies the
+jurisdiction's allocation order, as D-12 says it must, or the jurisdiction form
+stops offering configuration the product ignores.
+
+**R-118 sized the fix as out of scale for an S and that sizing was wrong.** Its
+note reads *"a `settledCents` column fed from Stripe webhooks... a migration, a
+webhook change and a backfill"*. There is no column: per-charge settlement is
+already derived from `LedgerEntry` rows carrying a `chargeId`, and
+`outstandingCharges()` — whose own doc comment says *"for the allocation policy
+to work over"* — already returns exactly `allocatePayment`'s input shape. It
+was dead too, which is why nobody had noticed it was ready.
+
+### What it built
+
+- **`apps/web/lib/ledger/allocate.ts`, and `allocatePayment`'s first caller in
+  the product.** `planAllocation` reads the outstanding charges, the balance
+  and the versioned `JurisdictionRule`, hands them to core, and returns one
+  application per `Charge` plus whatever did not land on one. `webhook.ts`
+  calls it **before** the transaction — the balance it works from has to be the
+  one before this payment's own entries exist — and writes one linked `PAYMENT`
+  entry per application plus a single unlinked entry for the rest.
+- **The rent debt is in the list, and leaving it out would have been the bug.**
+  Ordinary rent mints no `Charge` (D-11/D-40), so a list of charge rows is a
+  list of everything *except* the debt the order is mostly about: allocating
+  over charges alone would still have paid every fee before rent, while looking
+  like the fix. One synthetic `RENT` debt, sized at the part of the balance no
+  charge row accounts for and dated `dueDateOnOrBefore(today, debitDay ??
+  rentDueDay)` — the same construction `delinquencyFor` already uses (R-118,
+  D-151), reached the same way.
+- **Only `payment_succeeded` takes this path.** A finalized invoice is raising
+  the charges rather than paying them, and a refund or a void re-opens a
+  balance rather than settling one; for both, the invoice line already names
+  exactly what moved. The linked-in-full shape stays for those.
+- **`outstandingCharges` and the pay screen both exclude waived charges now.**
+  A waiver pushes a credit note to Stripe and the offsetting ledger entry
+  arrives on a later webhook, so between the two a forgiven fee still reads as
+  unpaid — it was showing on the tenant's pay screen as something to pay, and
+  once allocation was wired it could have absorbed a payment. `rent-roll.ts`
+  and `late-fees.ts` have always filtered it.
+
+### What it found on the way
+
+- **The defect was live in both directions, and the balance was right in
+  both**, which is what kept it invisible. On $1,500 rent plus a $500 late fee
+  with $1,500 paid, the fee was settled in full and $1,000 went to rent —
+  leaving rent $500 short under a RENT-first jurisdiction, which is what a
+  pay-or-quit notice is served on. And where the named charges totalled *more*
+  than what arrived, the `fits` guard fell back to one unlinked row, so every
+  one of those charges went on reading as fully outstanding on the tenant's pay
+  screen for ever. That guard's own comment deferred the question to *"R-035's
+  allocation policy"*, which is this.
+- **`outstandingCharges` was dead, and the pay screen hand-rolls its
+  arithmetic** — the same derive-from-linked-entries sum, written out again in
+  `lib/payments/queries.ts` with a comment saying it follows the same rule.
+  That is why the waived-charge hole existed in two places.
+- **The tenancy-aging path was never affected.** `delinquencyFor` allocates
+  from the *balance* newest-first (D-151) and does not read which ledger row is
+  linked to which charge, so no tenancy was ever chased early over this. What
+  was wrong is what the tenant and the operator were shown, and which fee the
+  late-fee delta arithmetic reads back.
+
+### What it decided
+
+- **D-161: the projection asks core, and that is D-12 working rather than an
+  exception to it.** The amount is Stripe's, the order is the jurisdiction's,
+  and `webhook.ts` decides neither.
+- **A missing rule falls back to core's `DEFAULT_ALLOCATION_ORDER` rather than
+  refusing**, which is the opposite of what late fees and deposits do with an
+  unconfigured state. The difference is that those decline to *act*; this one
+  has already been paid, and refusing would mean refusing to project money that
+  arrived. The default is RENT-first for the same reason the whole item is.
+- **Deleting the config was the other half of the fork and was never viable.**
+  Allocation order is a statutory number, so removing it contradicts D-4 and
+  D-12 outright — and it would have cost a migration to remove a column, where
+  wiring it cost one new file.
+
+### What it left behind
+
+- **The pay screen still duplicates `outstandingCharges`.** Unifying them needs
+  the shared reader to return `description`, and its `dueOn` is a
+  `BusinessDate` where the screen passes a `Date` down to a component — the
+  D-153/D-154 trap sits directly on that change, so it belongs to an item that
+  can look at the render rather than to this one. The waived-charge filter is
+  in both files, with the reason written next to each.
+- **Concurrent settlements can plan against the same balance** and both aim at
+  the same charge. The balance stays right either way — each writes entries
+  summing to its own amount — and the cost is a mis-attributed link, not lost
+  money. A lease-level lock is the fix if reconciliation ever surfaces one; it
+  is not worth the contention today.
+- **Multi-month unlinked rent is still one debt**, unchanged and inherited:
+  `dueDateOnOrBefore` can only anchor to the most recent occurrence of a
+  day-of-month, so two months of unpaid rent allocate as one debt dated the
+  nearer day. Same limitation `nearestRentDueOn` has documented since R-045.
+- **The other two things R-143 filed are still open**: the 27 dead readers and
+  rules (several of which are a missing screen rather than dead code), and the
+  `debitsAutomatically` duplication.
+- **Gate run:** `lint` 0 errors and the same 14 pre-existing warnings,
+  `typecheck` clean, `npm run build` compiled, `check:ship-deps` clean. Unit
+  **2,840 passed + 4 skipped of 2,844** — up exactly the two tests this added.
+  E2E **128 passed against `npx playwright test --list`'s `Total: 128 tests`**
+  across the nine money-path specs (`pay`, `pay-link`, `stripe-webhook`,
+  `fee-waiver`, `chargeback`, `rent-roll`, `collection-method`,
+  `recurring-and-rubs`, `dashboard`), no flaky and no skipped.
+- **Both new tests were confirmed to fail against the old behaviour before
+  being trusted.** Disabling the `planAllocation` call failed exactly those two
+  and left the other 28 in the file passing.
+- **CI was green on R-143 and was checked, not assumed** (`gh run list`, run
+  33534760135, success).

@@ -120,7 +120,10 @@ export async function paymentView(scope: TenantScope): Promise<PaymentView | nul
       select: { id: true, amountCents: true },
     }),
     prisma.charge.findMany({
-      where: { leaseId: payer.leaseId },
+      // Not waived: the credit note reaches the ledger on a later webhook,
+      // and until it does a forgiven fee would still be listed here as
+      // something to pay. Same filter, same reason, as `outstandingCharges`.
+      where: { leaseId: payer.leaseId, waivedAt: null },
       select: {
         id: true,
         type: true,

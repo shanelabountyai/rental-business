@@ -60,11 +60,18 @@ export async function leaseBalanceCents(leaseId: string): Promise<number> {
 }
 
 /// Charges with anything still unpaid, for the allocation policy to work
-/// over. Outstanding is derived from the charge's own applications rather
-/// than stored, for the same reason the balance is.
+/// over (`lib/ledger/allocate.ts`). Outstanding is derived from the charge's
+/// own applications rather than stored, for the same reason the balance is.
+///
+/// WAIVED CHARGES ARE NOT OUTSTANDING, even before their credit lands. A
+/// waiver pushes a credit note to Stripe and the offsetting ledger entry
+/// arrives on a later webhook, so between the two this charge still looks
+/// unpaid - and a payment settling in that window would be allocated to a
+/// fee somebody has already forgiven. `rent-roll.ts` and `late-fees.ts`
+/// both filter it for the same reason.
 export async function outstandingCharges(leaseId: string) {
   const charges = await prisma.charge.findMany({
-    where: { leaseId },
+    where: { leaseId, waivedAt: null },
     select: {
       id: true,
       type: true,
