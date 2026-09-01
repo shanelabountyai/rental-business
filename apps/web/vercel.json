@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "ignoreCommand": "cd \"$(git rev-parse --show-toplevel)\" && git cat-file -e \"${VERCEL_GIT_PREVIOUS_SHA}^{commit}\" 2>/dev/null && git diff --quiet \"$VERCEL_GIT_PREVIOUS_SHA\" HEAD -- . ':(exclude)docs' ':(exclude)*.md' || exit 1",
+  "ignoreCommand": "cd \"$(git rev-parse --show-toplevel)\" && echo \"ignore-step: prev=${VERCEL_GIT_PREVIOUS_SHA:-none} head=$(git rev-parse --short HEAD)\" && git fetch --quiet --deepen=50 2>/dev/null; git cat-file -e \"${VERCEL_GIT_PREVIOUS_SHA}^{commit}\" 2>/dev/null || { echo \"ignore-step: base unreachable, building\"; exit 1; }; git diff --quiet \"$VERCEL_GIT_PREVIOUS_SHA\" HEAD -- . ':(exclude)docs' ':(exclude)*.md' && echo \"ignore-step: docs only, skipping\" || { echo \"ignore-step: code changed, building\"; exit 1; }",
   "crons": [
     {
       "path": "/api/cron",
