@@ -6556,7 +6556,7 @@ existed. Corrected there, along with the CI-is-dead claim.
 
 ## R-142: everything R-141 filed, and a third reader of a calendar month
 
-**Commit:** _pending_  ·  **Date:** 2026-09-01
+**Commit:** 923b37e  ·  **Date:** 2026-09-01
 
 Owner-asked 2026-09-01, immediately after R-141, in the same breath as the
 GitHub failure R-141a fixed. Three leftovers were filed; the work of clearing
