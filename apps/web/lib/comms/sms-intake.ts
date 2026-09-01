@@ -3,6 +3,7 @@ import 'server-only'
 import {
   classifyOptOutKeyword,
   decideSmsIntake,
+  optOutReply,
   formatSmsTicketDescription,
   isOpenTicketStatus,
 } from '@rental/core/comms'
@@ -12,6 +13,7 @@ import { prisma } from '@rental/db'
 // session by definition. See system.ts's own comment.
 import { auditAsSystem } from '@/lib/audit/system.ts'
 import { emitEvent } from '@/lib/jobs/outbox.ts'
+import { notificationAdapter } from '@/lib/notifications/provider.ts'
 import { recordOptIn, recordOptOut } from './opt-out-store.ts'
 import { receiveInboundMessage } from './messages.ts'
 
@@ -67,6 +69,8 @@ export async function handleInboundSms(args: {
   } else if (keyword === 'START') {
     await recordOptIn({ phone: args.from, reason: args.body.trim().slice(0, 40) })
   }
+
+  if (keyword !== null) await replyToKeyword(keyword, args.from)
 
   const routed = await receiveInboundMessage({
     channel: 'SMS',
@@ -192,3 +196,44 @@ export async function handleInboundSms(args: {
 }
 
 export { isOpenTicketStatus }
+
+/// The business name on a carrier keyword reply. Same constant and same
+/// shape as `email-opt-out.ts`'s, deliberately: a tenant who texts HELP and
+/// a tenant who clicks unsubscribe are being told about the same business.
+const BUSINESS_NAME = 'Rental Operations'
+
+/**
+ * The reply the carrier expects for HELP, and the confirmation for START
+ * (R-145, D-162).
+ *
+ * SENT STRAIGHT AT THE ADAPTER, which is the one documented exception to
+ * "every module sends through the notification engine". The engine addresses
+ * a PERSON - it resolves a recipient's id, preferences, quiet hours and TCPA
+ * consent - and an inbound keyword addresses a NUMBER, which routinely
+ * belongs to nobody we know: `receiveInboundMessage` returns `unrouted` for
+ * exactly that case, and it is the case the carrier requirement is most
+ * about. A path that could only answer tenants we recognise would be silent
+ * precisely where it must not be.
+ *
+ * It therefore bypasses the consent gate at `send.ts`, and that is correct
+ * rather than convenient: a HELP response is what a carrier requires of us,
+ * not a message anybody consents to receive. STOP is answered by returning
+ * NOTHING - the carrier sends its own confirmation and then blocks the
+ * number, so anything queued here would fail for ever.
+ *
+ * A failed reply must not fail the intake. The inbound message is already
+ * recorded by the time this runs, and throwing would hand Twilio a 500,
+ * which retries and duplicates a message we have already stored.
+ */
+async function replyToKeyword(
+  keyword: 'STOP' | 'START' | 'HELP',
+  to: string,
+): Promise<void> {
+  const body = optOutReply(keyword, BUSINESS_NAME)
+  if (!body) return
+  try {
+    await notificationAdapter.send({ channel: 'SMS', to, body })
+  } catch (error) {
+    console.error(`[sms] could not answer ${keyword} from ${to}`, error)
+  }
+}

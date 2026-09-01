@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { prisma } from '@rental/db'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import { notificationAdapter } from '@/lib/notifications/provider.ts'
 import { handleInboundSms } from './sms-intake.ts'
 
 // SMS-to-ticket against a real database (MAINT-01, COMM-01, R-021).
@@ -289,5 +290,73 @@ describe('provider redelivery', () => {
 
     const messages = await prisma.message.count({ where: { externalId } })
     expect(messages).toBe(1)
+  })
+})
+
+describe('carrier keyword replies (R-145, D-162)', () => {
+  // The gap this closes: `optOutReply` was written for exactly this, had five
+  // tests, and had NO CALLER - so a tenant who texted HELP got silence, and a
+  // tenant who texted START was resubscribed without being told.
+  //
+  // The number here belongs to nobody on purpose. An inbound keyword arrives
+  // from an unrecognised number routinely, and that is the case the carrier
+  // requirement is most about - a reply path that could only answer tenants
+  // we recognise would be silent precisely where it must not be.
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  const strangerArgs = (body: string) => ({
+    from: `+1555${Math.floor(Math.random() * 9_000_000 + 1_000_000)}`,
+    body,
+    receivedAt: new Date(),
+    externalId: `SM${randomUUID()}`,
+  })
+
+  it('answers HELP from a number we do not know', async () => {
+    const send = vi.spyOn(notificationAdapter, 'send').mockResolvedValue({ externalId: 'stub' })
+    const args = strangerArgs('HELP')
+
+    const result = await handleInboundSms(args)
+    expect(result).toMatchObject({ outcome: 'opt_out', keyword: 'HELP' })
+
+    expect(send).toHaveBeenCalledTimes(1)
+    const sent = send.mock.calls[0]![0]
+    expect(sent.channel).toBe('SMS')
+    expect(sent.to).toBe(args.from)
+    // The carrier expects the business named, what the messages are about,
+    // how to stop, and the rates disclosure.
+    expect(sent.body).toContain('Rental Operations')
+    expect(sent.body).toContain('Reply STOP to opt out')
+    expect(sent.body).toContain('Message and data rates may apply')
+  })
+
+  it('confirms a START, so somebody who opted back in is told', async () => {
+    const send = vi.spyOn(notificationAdapter, 'send').mockResolvedValue({ externalId: 'stub' })
+
+    await handleInboundSms(strangerArgs('START'))
+
+    expect(send).toHaveBeenCalledTimes(1)
+    expect(send.mock.calls[0]![0].body).toContain('subscribed again')
+  })
+
+  it('says NOTHING back to a STOP', async () => {
+    // The carrier sends its own confirmation and then blocks the number, so
+    // anything queued here would be undeliverable for ever.
+    const send = vi.spyOn(notificationAdapter, 'send').mockResolvedValue({ externalId: 'stub' })
+
+    await handleInboundSms(strangerArgs('STOP'))
+
+    expect(send).not.toHaveBeenCalled()
+  })
+
+  it('does not fail the intake when the reply cannot be sent', async () => {
+    // The inbound message is already recorded by the time the reply runs.
+    // Throwing would hand Twilio a 500, which retries and duplicates a
+    // message we have already stored.
+    vi.spyOn(notificationAdapter, 'send').mockRejectedValue(new Error('twilio down'))
+
+    const result = await handleInboundSms(strangerArgs('HELP'))
+    expect(result).toMatchObject({ outcome: 'opt_out', keyword: 'HELP' })
   })
 })

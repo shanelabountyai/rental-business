@@ -6904,3 +6904,132 @@ was dead too, which is why nobody had noticed it was ready.
   and left the other 28 in the file passing.
 - **CI was green on R-143 and was checked, not assumed** (`gh run list`, run
   33534760135, success).
+
+## R-145: two of R-143's forty-four were alive, and one of the dead ones was a carrier obligation
+
+**Commit:** PENDING  ·  **Date:** 2026-09-01
+
+Owner-chosen 2026-09-01 over a demo walk — the second of the three things
+R-143 filed. The row said "the 27 readers and rules are dead code, not broken
+behaviour, and deleting them is a separate item that should read each one
+rather than trust this list." Reading them started with re-deriving the list,
+which is where the first finding was.
+
+### What it found first: the list was wrong
+
+**42, not 44, and the two that fell off were both live.** R-143's sweep searched
+`apps/web/lib`, `apps/web/app`, `apps/web/components`, `e2e`, `packages/*` and
+`scripts`. It did not search `apps/web/*.ts` — the app's root-level modules —
+so it reported two functions as having no caller when they do:
+
+- **`matchRecoveryCode` is called at `auth.ts:292`**, inside `verifySecondFactor`.
+  It is the constant-time comparison that redeems an MFA recovery code and then
+  spends it. `e2e/auth.spec.ts` has a passing test called *"accepts a recovery
+  code and spends it"*. **Deleting on R-143's list would have broken
+  recovery-code sign-in for every locked-out staff member**, with the e2e suite
+  the only thing standing between that and production.
+- **`demoGate` is called from the middleware path**, and is what makes the
+  shared-password demo gate work at all.
+
+The predicate now searches **every tracked `.ts`/`.tsx`/`.mts`/`.mjs` in the
+repo** rather than an enumerated list of directories, and independently
+reproduces 42. An enumerated search scope is the same shape of bug as the
+`toISOString` greps in R-119/R-121: it under-reports in a direction nobody
+checks, and here the under-report was in the dangerous direction — it made live
+code look dead.
+
+### What it built
+
+- **A tenant who texts HELP now gets an answer.** `optOutReply` had five unit
+  tests and a doc comment reading *"The reply the carrier expects for HELP, and
+  the confirmation for START"*, and **no caller anywhere**.
+  `sms-intake.ts` classifies the keyword, records the opt-out or opt-in, returns
+  `{ outcome: 'opt_out', keyword: 'HELP' }` — and nothing ever replied. So
+  somebody texting HELP or INFO got silence, and somebody texting START was
+  resubscribed without being told it worked. `replyToKeyword` closes it.
+- **Sent straight at the adapter, which is a deliberate exception (D-162).**
+  `CLAUDE.md` says every module sends through the notification engine. The
+  engine resolves a **person** — recipient id, type, preferences, quiet hours,
+  TCPA consent — and an inbound keyword addresses a **number**, which routinely
+  belongs to nobody we know. `receiveInboundMessage` returns `unrouted` for
+  exactly that case, and it is the case the carrier requirement is most about:
+  a reply path that could only answer tenants we recognise would be silent
+  precisely where it must not be.
+- **Bypassing the consent gate is the correct behaviour, not a shortcut.** A
+  HELP response is what a carrier requires of us, not a message anybody
+  consents to receive. `send.ts:209` would suppress it for any number with no
+  `TenantConsent` row, which after R-143 is most of them.
+- **STOP is answered with nothing**, as `optOutReply` already decided: the
+  carrier sends its own confirmation and then blocks the number, so anything
+  queued here would fail for ever.
+- **A failed reply cannot fail the intake.** The inbound message is already
+  recorded by the time the reply runs; throwing would hand Twilio a 500, which
+  retries and duplicates a message we have already stored. Caught and logged,
+  with a test.
+
+### What it decided
+
+- **D-162**, recorded in full there. The route's standing refusal to auto-reply
+  (*"an auto-reply is COMM-07's, and R-029 owns the after-hours version, so this
+  build must not invent one here"*) is untouched and still right — a
+  conversational auto-reply is a different thing from a carrier keyword
+  response, and this item does not build the former.
+- **The other 41 are classified and NOT deleted.** D-158's rule is that an
+  export is read before it is removed, and reading 41 properly is more than this
+  item's remaining budget. Deleting dead code harms nobody today; deleting live
+  code — which this item nearly did on an inherited list — does.
+
+### The 41 still standing, classified
+
+**Missing screens (9)** — each one's own doc comment says so, which is why they
+are the strongest candidates for the next item: `recentDrift` (*"for the
+screen"*), `recentStripeEvents` (*"for the operational screen R-036 will build
+out"*), `deadLetteredEvents` (*"Nothing consumes this yet"*),
+`documentsPastRetention` (DOC-05's retention report), `listRuleVersions` (D-4's
+version history), `effectLabels` (*"for the UI"*), `blockedNumbers`,
+`externalReconciliationAvailable`, `getAccessCodeHistory`.
+
+**Worth checking next, and possibly the same class as `optOutReply` (1)** —
+`cardFeeDisclosure`: *"The sentence a tenant sees before they choose a card."*
+Nothing shows it. It may be correctly absent, because D-149 seeds Texas
+`CREDIT_ONLY` and both call sites pass `unknown` funding, so no card surcharge
+is charged here at all — a disclosure for a fee nobody is charged is not a gap.
+**That argument needs checking against a state that does permit one**, and it is
+a five-minute read somebody should do rather than assume.
+
+**Rules nothing applies (12)**: `awaitingVerification`, `clampToStateCap`,
+`conditionChange`, `debitsAutomatically`, `effectsInForce`, `needsRehash`,
+`noticePeriodCheckFor`, `occupancyRate`, `railsUnderHold`, `scraTerminationDate`,
+`simulatedScreeningFacts`, `workOrderIsOpen`. `debitsAutomatically` is the
+duplication R-143 already filed — four files read
+`collectionMethod === 'charge_automatically'` directly instead.
+
+**Readers with no screen (5)**: `getAccessCode`, `getDocument`,
+`getTenantDocument`, `leasesWithApprovedAssistanceAnimal`, `listingForWrite`.
+
+**Genuine noise (14)**: `cn`, `endOfMonth`, `serializeSelection`,
+`toCoreLookupResult`, `idempotencyKeyFor`, `oneOffIdempotencyKey`, and eight
+`isX` type guards.
+
+### What it left behind
+
+- **Nothing was deleted.** The next item on this thread should take the nine
+  missing screens — several are operational visibility that exists in the
+  database and cannot be seen by anyone (reconciliation drift, the dead-letter
+  queue, the Stripe event log) — and read the 12 rules one at a time.
+- **`cardFeeDisclosure` is the one that might be a live obligation** and is
+  written up above rather than fixed, because settling it needs a jurisdiction
+  that permits a surcharge and this item had no test fixture for one.
+- **The e2e suite does not cover the keyword reply.** `e2e/sms-webhook.spec.ts`
+  drives the route, but asserting an outbound SMS means asserting on a provider
+  that is somebody else's network; the four unit tests spy the adapter directly,
+  which is the same reason R-139's regression assertion checks a row rather than
+  a delivery.
+- **Gate run:** `lint` 0 errors and the same 14 pre-existing warnings,
+  `typecheck` clean. Unit **2,844 passed + 4 skipped of 2,848** — up exactly the
+  four tests this added. E2E **42 passed + 2 skipped against `npx playwright
+  test --list`'s `Total: 44 tests`** across `sms-webhook`, `notifications` and
+  `consent`, no flaky. Both positive keyword tests were confirmed to fail with
+  the `replyToKeyword` call removed; the STOP and send-failure tests correctly
+  stay green, because they assert an absence and a non-throw.
+- **CI was green on R-144 and was checked, not assumed** (`gh run list`).
