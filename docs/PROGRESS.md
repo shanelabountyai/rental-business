@@ -6679,3 +6679,113 @@ them surfaced two more that nobody had counted.
   a finding rather than smoothed over — it was this item's own bug.
 - **CI is green and was checked, not assumed** (see R-141's own correction).
   R-140's failing run is the item this one started from.
+
+## R-143: the dead-export sweep, and two of the forty-four had no way to be pressed
+
+**Commit:** _pending_  ·  **Date:** 2026-09-01
+
+Owner-chosen 2026-09-01 over a demo walk and a check of whether the deployed
+environment can actually send, after the backlog ran out of buildable rows for
+the tenth item running. R-138 found that `grantAssignment` had had no caller
+for 131 items; nobody had asked whether there were others. There were 44.
+
+### What it built
+
+- **The sweep, and the predicate that makes it worth running.** Of the 1,062
+  exported functions in `apps/web/lib` and `packages/core`, **44 have no
+  reference outside their own definition and their own tests**. Classified:
+  **14 readers** (a query with no screen), **13 rules** (a pure function
+  nothing applies), **14 helpers and type guards** (genuine noise — `cn`,
+  `endOfMonth`, seven `isX` guards), and **3 writers**. The three writers are
+  the whole finding. **A dead reader is dead code; a dead writer is a broken
+  behaviour** — something the product promises and cannot do — and the sharpest
+  case of all is a dead writer whose rows a live reader gates on.
+- **Nobody could receive a text message, and nobody could ever have.**
+  `recordConsent` and `withdrawConsent` are the ONLY writers of
+  `TenantConsent` in the product, and neither had a caller — not a page, not
+  even a test. `send.ts:209` has gated every tenant SMS on a consent row since
+  R-051b built it, so in any deployed environment every tenant SMS was
+  `SUPPRESSED / no_consent`, correctly and permanently, with no screen anywhere
+  that could unblock it. `ConsentPanel` on `/leases/[id]` binds both actions.
+- **Nobody could be put on a payment plan, or taken off autopay.**
+  `switchCollectionMethod` is the decision D-29 is entirely about — the one
+  that stops a tenant being billed twice for one month's rent while they move
+  between modes — built with the Stripe read, the refusal ladder, the audit row
+  and the push-before-write ordering, and with no control in the product. A
+  payer kept whichever mode they were provisioned with, for ever. The switch
+  now lives in `BillingPanel`, which also shows each payer's current mode.
+- **Both actions now read their id from the form** rather than from a bound
+  argument — `endRecurringCharge`'s documented shape, one action serving every
+  row. Authorisation is unchanged and still derives FROM the id supplied (the
+  property comes off the named tenant or payer), so a forged value is checked
+  against its own record rather than the one on screen.
+
+### What it found on the way
+
+- **`recordConsent` and `withdrawConsent` revalidated `/leases`, not
+  `/leases/[id]`.** The index page, not the page the panel lives on — so even
+  once wired, recording a consent would not have shown it. A defect only
+  reachable by actually calling the thing.
+- **The label-collision class again, and this time between a status line and a
+  control.** The success-path spec went red on strict mode: the payer's current
+  mode and the switch form's own `<option>` carried the same sentence, so
+  `getByText('Charged automatically on the billing day')` resolved to two
+  elements. This item's own bug, caught by its own spec. Fixed in the markup —
+  the line now reads `Currently: …`, which is the better line anyway — never by
+  relaxing the assertion. It is the sixth instance on `/leases/[id]` and the
+  first found between a text and a control rather than between two controls.
+- **`allocatePayment` is dead too, and the sweep could not see it.** D-11 and
+  D-12's payment allocation — which debt a partial payment pays off, the rule
+  whose comment says getting it backwards serves an eviction notice on somebody
+  who paid their rent — is implemented, unit-tested, and configurable through
+  the jurisdiction form (`paymentAllocationOrder`), and nothing applies it. It
+  escaped the list only because two other files mention it in comments.
+
+### What it decided
+
+- **Wired rather than deleted, for both.** The lazy reading of a dead export is
+  to delete it. It is the wrong reading when a live consumer gates behaviour on
+  data only that export can produce: deleting `recordConsent` would have made
+  "no tenant can be texted" permanent by design rather than by omission.
+- **One form with a select, not a control per row**, in both panels. A form
+  beside each row repeats its labels and its button name once per row, which is
+  the collision this page has now collected six of.
+- **`tenant.write` for the consent panel, not the `lease.write` its neighbours
+  use.** Asserting what a tenant agreed to is a change to their record rather
+  than to the tenancy; the panel is gated on what the action actually demands.
+- **The withdraw form stays mounted with nothing left to withdraw.** Behind
+  `live.length > 0` it would unmount in the same pass that produced its own
+  confirmation — R-044's trap. The fields go; the live regions stay.
+
+### What it left behind
+
+- **41 of the 44 are untouched and classified rather than fixed.** The 14
+  helpers and type guards are noise. The 14 readers and 13 rules are dead code,
+  not broken behaviour, and deleting them is a separate item that should read
+  each one rather than trust this list — several are worth a screen instead
+  (`documentsPastRetention` is a retention promise, `listRuleVersions` is D-4's
+  version history, `recentDrift`/`deadLetteredEvents`/`recentStripeEvents` are
+  the reconciliation and outbox visibility nobody can see today).
+- **`allocatePayment` needs an owner decision, not a fix.** Either core applies
+  the jurisdiction's allocation order (D-12 says it must) or the jurisdiction
+  form stops offering configuration the product ignores. Both are product
+  choices and neither belongs in a sweep.
+- **`debitsAutomatically`'s own comment names two callers that do not exist.**
+  Four files read `collectionMethod === 'charge_automatically'` directly
+  instead, so the behaviour is right and the shared reader is bypassed — a
+  duplication finding, not a defect.
+- **No unit tests were added, and the count is unchanged at 2,838 + 4 skipped
+  of 2,842.** That is correct rather than a gap: what was missing was a form,
+  and no unit test can see a form that does not exist. Both new specs are e2e
+  for that reason, and each says so at the top.
+- **Gate run:** `lint` 0 errors and the same 14 pre-existing warnings,
+  `typecheck` clean, `npm run build` compiled (both changed modules are
+  `'use server'`). Unit **2,838 passed + 4 skipped of 2,842**, identical to
+  R-142. E2E **104 passed against `Total: 104 tests`** across six files — the
+  two new ones plus `leases`, `pay`, `legal-hold` and `recurring-and-rubs`,
+  because a new panel on `/leases/[id]` can break any locator on that page — no
+  flaky and no skipped. The first attempt went red on the collision written up
+  above; the run was killed on the first `✘` rather than left to finish.
+- **CI was green on R-142 and was checked, not assumed** (`gh run list`, run
+  33531510560, success). R-141's and R-141a's runs were both *cancelled* by the
+  next push, so R-140's failure was the last completed verdict before it.

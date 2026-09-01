@@ -27,10 +27,16 @@ import type { WorkOrderFormState } from '@/lib/workorders/actions.ts'
 // payment plan while Stripe is still debiting them automatically.
 
 export async function switchCollectionMethod(
-  leasePayerId: string,
   _previous: WorkOrderFormState,
   formData: FormData,
 ): Promise<WorkOrderFormState> {
+  // From the form, not a bound argument - one action serves every payer on
+  // the lease, the shape `endRecurringCharge` settled on. Authorisation is
+  // derived FROM this id: the property comes off the payer that was named, so
+  // a forged value is checked against its own property rather than the one on
+  // screen.
+  const leasePayerId = String(formData.get('leasePayerId') ?? '')
+  if (!leasePayerId) return { error: 'Choose which payer is changing.' }
   const target = String(formData.get('collectionMethod') ?? '')
   const reason = String(formData.get('reason') ?? '').trim()
 

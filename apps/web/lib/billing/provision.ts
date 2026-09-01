@@ -274,6 +274,10 @@ export async function leaseBillingState(leaseId: string) {
       stripeCustomerId: true,
       stripeSubscriptionId: true,
       active: true,
+      // R-143: the lease page shows how each payer is collected from, and
+      // offers the D-29 switch. Read here rather than in a second query, the
+      // same reason the hold columns below are.
+      collectionMethod: true,
       tenant: { select: { firstName: true, lastName: true } },
       externalPayerName: true,
       // PAY-12's legal-action controls (R-047), read here so the lease page

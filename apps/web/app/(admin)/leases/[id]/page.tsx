@@ -13,6 +13,7 @@ import {
   businessDate,
   friendlyBusinessDate,
   friendlyDate,
+  friendlyTimestamp,
   utcToBusinessDate,
 } from '@rental/core/scheduling'
 import Link from 'next/link'
@@ -20,6 +21,9 @@ import { notFound } from 'next/navigation'
 import { AccessCodesPanel } from '@/components/leases/access-codes-panel.tsx'
 import { OpenAbandonmentCasePanel } from '@/components/abandonment/open-case-panel.tsx'
 import { AccommodationsPanel } from '@/components/accommodations/accommodations-panel.tsx'
+import { ConsentPanel } from '@/components/consent/consent-panel.tsx'
+import { recordConsent, withdrawConsent } from '@/lib/consent/actions.ts'
+import { consentsForLease } from '@/lib/consent/queries.ts'
 import { HoldBanner } from '@/components/holds/hold-banner.tsx'
 import { HoldsPanel } from '@/components/holds/holds-panel.tsx'
 import { ScraLookupsPanel, ScraTerminationPanel } from '@/components/scra/scra-panels.tsx'
@@ -74,6 +78,7 @@ import {
 } from '@/lib/leases/actions.ts'
 import { generateAndSendLease, voidEnvelope } from '@/lib/leases/esign-staff-actions.ts'
 import { resyncLease, setPaymentHold } from '@/lib/billing/actions.ts'
+import { switchCollectionMethod } from '@/lib/payments/collection.ts'
 import { billingIsLive, billingProviderName } from '@/lib/billing/provider.ts'
 import { leaseBillingState } from '@/lib/billing/provision.ts'
 import { recurringChargesForLease } from '@/lib/billing/recurring.ts'
@@ -192,6 +197,11 @@ export default async function LeaseDetailPage({
     propertyResource(lease.property),
   )
   const canManageEvictions = await actorCan('eviction.manage', propertyResource(lease.property))
+  // `tenant.write`, which is what both consent actions demand - NOT the
+  // `lease.write` the panels around it use. Asserting what a tenant agreed to
+  // is a change to their record rather than to the tenancy, and offering a
+  // form the action would refuse is worse than not offering it.
+  const canManageConsent = await actorCan('tenant.write', propertyResource(lease.property))
 
   const currentEnvelope = lease.envelopes[0] ?? null
   const envelopeIsLive = currentEnvelope
@@ -244,6 +254,7 @@ export default async function LeaseDetailPage({
     violationCases,
     applicantsForChange,
     confidentialCases,
+    consents,
   ] = await Promise.all([
     outstandingIntakeGaps(lease),
     canWrite ? selectableTenants() : Promise.resolve([]),
@@ -265,6 +276,7 @@ export default async function LeaseDetailPage({
     canManageConfidential
       ? confidentialCaseCount(lease.id)
       : Promise.resolve({ open: 0, total: 0 }),
+    consentsForLease(lease.id),
   ])
   // R-069: nothing to clear on a zero-deposit lease (NONE/SURETY_BOND hold
   // zero by the database CHECK constraint `chargeDeposit()`'s own comment
@@ -522,7 +534,10 @@ export default async function LeaseDetailPage({
           portionCents: payer.portionCents,
           stripeCustomerId: payer.stripeCustomerId,
           stripeSubscriptionId: payer.stripeSubscriptionId,
+          collectionMethod: payer.collectionMethod,
         }))}
+        canSwitchCollection={canWrite}
+        switchCollection={switchCollectionMethod}
       />
 
       <HoldsPanel
@@ -541,6 +556,35 @@ export default async function LeaseDetailPage({
         }))}
         placeAction={placeLeaseHold}
         liftAction={liftLeaseHold}
+      />
+
+      {/* R-143. Above the SCRA and risk panels: this one governs whether an
+          ordinary rent reminder can be texted at all, so it belongs with the
+          everyday facts about the tenancy rather than among the statutes that
+          only some tenancies ever touch. */}
+      <ConsentPanel
+        consents={consents.map((row) => ({
+          id: row.id,
+          tenantId: row.tenant.id,
+          tenantName: `${row.tenant.firstName} ${row.tenant.lastName}`,
+          channel: row.channel,
+          basis: row.basis,
+          recordedOn: friendlyTimestamp(row.recordedAt, lease.property.timezone),
+          recordedByName: row.recordedBy?.name ?? null,
+          note: row.note,
+          hasDisclosure: row.disclosureText !== null,
+          revokedOn: row.revokedAt
+            ? friendlyTimestamp(row.revokedAt, lease.property.timezone)
+            : null,
+          revokeReason: row.revokeReason,
+        }))}
+        tenants={lease.leaseTenants.map((lt) => ({
+          id: lt.tenant.id,
+          name: `${lt.tenant.firstName} ${lt.tenant.lastName}`,
+        }))}
+        canManage={canManageConsent}
+        recordAction={recordConsent}
+        withdrawAction={withdrawConsent}
       />
 
       {/* R-085. Below the holds, because a positive search PLACES one — the

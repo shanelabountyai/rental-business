@@ -33,18 +33,25 @@ async function propertyForTenant(tenantId: string) {
   const leaseTenant = await prisma.leaseTenant.findFirst({
     where: { tenantId },
     orderBy: { createdAt: 'desc' },
-    select: { lease: { select: { property: true } } },
+    select: { leaseId: true, lease: { select: { property: true } } },
   })
-  return leaseTenant?.lease.property ?? null
+  return leaseTenant ? { property: leaseTenant.lease.property, leaseId: leaseTenant.leaseId } : null
 }
 
 export async function recordConsent(
-  tenantId: string,
   _previous: ConsentFormState,
   formData: FormData,
 ): Promise<ConsentFormState> {
-  const property = await propertyForTenant(tenantId)
-  if (!property) return { error: 'That tenant is not on a lease at any property you can see.' }
+  // From the form, not a bound argument - one action for every tenant on the
+  // lease, the shape `endRecurringCharge` settled on. The authorisation is
+  // derived FROM this id (the property is whichever one they hold a lease at,
+  // and `tenant.write` is checked against that), so a forged value authorises
+  // against its own tenant rather than against the one on screen.
+  const tenantId = str(formData, 'tenantId')
+  if (!tenantId) return { error: 'Choose which tenant consented.' }
+  const found = await propertyForTenant(tenantId)
+  if (!found) return { error: 'That tenant is not on a lease at any property you can see.' }
+  const { property, leaseId } = found
   const actor = await requirePermission('tenant.write', propertyResource(property))
 
   const channel = str(formData, 'channel') as ConsentChannelName
@@ -94,7 +101,7 @@ export async function recordConsent(
     )
   })
 
-  revalidatePath('/leases')
+  revalidatePath(`/leases/${leaseId}`)
   return { notice: 'Consent recorded.' }
 }
 
@@ -110,16 +117,20 @@ export async function recordConsent(
  * taken back and given again survives intact.
  */
 export async function withdrawConsent(
-  consentId: string,
   _previous: ConsentFormState,
   formData: FormData,
 ): Promise<ConsentFormState> {
+  // From the form, for the same reason `recordConsent` reads its tenant that
+  // way: one action serves every row in the list.
+  const consentId = str(formData, 'consentId')
+  if (!consentId) return { error: 'That consent record could not be found.' }
   const consent = await prisma.tenantConsent.findUniqueOrThrow({
     where: { id: consentId },
     select: { id: true, tenantId: true, channel: true, basis: true, revokedAt: true },
   })
-  const property = await propertyForTenant(consent.tenantId)
-  if (!property) return { error: 'That tenant is not on a lease at any property you can see.' }
+  const found = await propertyForTenant(consent.tenantId)
+  if (!found) return { error: 'That tenant is not on a lease at any property you can see.' }
+  const { property, leaseId } = found
   await requirePermission('tenant.write', propertyResource(property))
 
   if (consent.revokedAt) return { error: 'That consent has already been withdrawn.' }
@@ -145,6 +156,6 @@ export async function withdrawConsent(
     )
   })
 
-  revalidatePath('/leases')
+  revalidatePath(`/leases/${leaseId}`)
   return { notice: 'Consent withdrawn.' }
 }
