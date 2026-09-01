@@ -101,7 +101,7 @@ async function seedAnsweredJob() {
   })
   const token = minted.token
 
-  return { workOrder, ticket, tenant, token }
+  return { workOrder, ticket, tenant, vendor, token }
 }
 
 test.afterAll(async () => {
@@ -120,7 +120,7 @@ test.afterAll(async () => {
 
 test.describe('answering without an account', () => {
   test('a tenant with NO EMAIL confirms the repair in one tap', async ({ page }) => {
-    const { workOrder, token } = await seedAnsweredJob()
+    const { workOrder, vendor, token } = await seedAnsweredJob()
 
     await page.goto(`/verify/${token}`)
 
@@ -129,6 +129,14 @@ test.describe('answering without an account', () => {
     await expect(page.getByRole('heading', { name: 'Was this fixed?' })).toBeVisible()
     // Their OWN words, not the internal scope.
     await expect(page.getByText('Water coming through the ceiling')).toBeVisible()
+
+    // R-141: and WHAT WE DID, which this page never said. A tenant answering
+    // three days later was being asked to confirm a visit the page declined
+    // to describe. Both halves have to be here at once - the report they
+    // recognise AND the work it is asking them to sign off.
+    await expect(page.getByRole('heading', { name: 'What we did' })).toBeVisible()
+    await expect(page.getByText('Trace leak above hall ceiling')).toBeVisible()
+    await expect(page.getByText(`${vendor.name} marked this finished on`)).toBeVisible()
 
     await page.getByRole('button', { name: /Yes, it.s fixed/ }).click()
 

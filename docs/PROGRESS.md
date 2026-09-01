@@ -6397,3 +6397,130 @@ defects hide in. Then a browser walk of all ten HTML routes:
   it, and
   **the GitHub Actions billing block is still unresolved at 18 days**,
   owner-only.
+
+## R-141: the three stranger-page findings R-140's walk filed rather than fixed
+
+**Commit:** _pending_  ·  **Date:** 2026-09-01
+
+Owner-chosen 2026-09-01, over sweeping the last five raw-timestamp sites and
+over a full local sweep. The backlog has had no buildable row of its own for
+eleven items.
+
+R-140 minted the eleven links that made these routes reachable at all and then
+walked them. Three of what it found were pre-existing and outside its scope, so
+it filed them by name. This is those three. All of them are on pages whose
+entire credential is the token in the path — a prospect or a tenant with a link
+and no account, who cannot navigate anywhere else to fill in what the page does
+not say.
+
+### What it built
+
+- **`/showings/[token]`: a day select filtering a time select, instead of 233
+  options in one list.** `availableShowingSlots` yields every half-hour from 9
+  to 6 for fourteen days ahead, and all of it went into a single "Pick a time"
+  field — a wheel picker on a phone that somebody scrolls a hundred entries
+  into to reach next Tuesday. Now at most 14 days and then at most 18 times.
+  Three things about the split are deliberate:
+  - **`name="slot"` stays on the TIME field.** The day field carries no slot
+    value and is not read by anything, so `bookShowing` is untouched and still
+    re-validates the exact instant it is handed against a freshly computed
+    `availableSlotsFor` — the same split that keeps the page and the action
+    from quietly disagreeing about what a valid slot is.
+  - **The day field is an uncontrolled filter with an `onChange`, so it is
+    inert until hydration** — and that costs nothing here, because the
+    unhydrated page already shows the first day's times and books them. It
+    degrades to "you can book today", not to a dead form.
+  - **The time field is keyed on the day**, so switching days clears a time
+    chosen for the previous one; an uncontrolled select handed new options
+    otherwise keeps the old selection index sitting on a different instant.
+    The key is stable across a form submission — the day does not change when
+    the action responds — so this is **not** the `formVersion` trap that
+    throws a form's live regions away on every dispatch.
+  - Grouped in the **property's** timezone, not the browser's: a prospect
+    booking from another state has to see the day the viewing happens on where
+    the house is (D-3).
+- **`/showings/[token]`: what they are actually coming to see.** The page named
+  the prospect and the street and stopped — no rent, no size, no availability —
+  which asks somebody to give up an hour of a Saturday for a home the page
+  declines to describe. Headline, rent, bed/bath/sq ft and the available-from
+  date now render, and every one of them is already on the `Listing` the
+  prospect is attached to. Two details that are not cosmetic:
+  - **`availableOn` is `@db.Date`, so it goes through `utcToBusinessDate` and
+    `friendlyBusinessDate`, never `friendlyDate`.** A calendar day put through
+    a timezone moves a day west of UTC, which is R-042's bug exactly (D-3).
+  - **`bathrooms` is a Prisma `Decimal`, stringified in the query rather than
+    in the page.** A `Decimal` cannot cross the Server→Client boundary, and
+    this result is one `await` away from a client component.
+  - The size line renders only the parts that are recorded — a listing with no
+    square footage says nothing about square footage rather than "— sq ft".
+- **`/showings/[token]`: the escort answer, before they commit rather than
+  after.** Whether somebody meets them at the door or they let themselves in
+  with a code existed only on the confirmation screen, which is the wrong side
+  of the decision: it is the fact that decides whether this is a trip a person
+  can make alone. Derived from the same unit status and smart lock the `booked`
+  branch already reads — deliberately not a second derivation. The viewing
+  length comes from `DEFAULT_SHOWING_WINDOW.slotMinutes`, not a literal 30.
+- **`/verify/[token]`: what we did.** The page asked *"was this fixed?"* over
+  the tenant's own report and nothing else, so a tenant answering on Thursday
+  about a Monday leak was being asked to confirm a visit the page declined to
+  describe — one they may not have been home for. It now shows the work order's
+  `scope`, who marked it finished and when. All three were already on the work
+  order; none is new state.
+  - **The `scope` is the right text there even though the section above it
+    deliberately avoids it.** Above, the question is what the tenant recognises
+    as their own complaint, so it uses their words. Below, it is the record of
+    the work, and "R/R T&P valve, 40gal" is what was actually done.
+  - `completedAt` is rendered with `friendlyTimestamp` and the property's own
+    zone — a completion time printed without one is a time in no particular
+    place (R-052).
+  - **The vendor is named, or "Our maintenance team" is.** A job with no
+    vendor is an in-house job, and a sentence that names nobody reads worse
+    than one that names the team.
+
+### What it decided
+
+- **Two selects rather than `<optgroup>`.** Grouping is the lazier fix and
+  needs no client state at all, and it was rejected: it still puts 233 options
+  in one list, and a native picker on a phone still scrolls through all of them
+  with headings in between. The split is the shape every booking product
+  settles on, and the hydration cost is one day's worth of times.
+- **Rejected: shortening the window** (fewer days, hourly instead of
+  half-hourly) as the fix for the option count. It is a one-line config change
+  and it is the wrong one — the list is long because there are genuinely that
+  many open times, and cutting real choice to fix a picker is a product
+  decision disguised as a UI fix. `ShowingWindowConfig` is still there for an
+  operator who actually wants it.
+- **Rejected: a schema column for "what the vendor did".** `markWorkComplete`
+  takes no free text today, and adding one would have made this item about the
+  vendor page. Scope, completion time and vendor name are the record that
+  already exists, and they answer the question the tenant is being asked.
+
+### What it left behind
+
+- **No photos on either page**, which is the strongest evidence both of them
+  could show — the listing's own pictures on the booking page, the vendor's
+  `COMPLETION_PHOTO` on the verify page. Serving a stored file to a stranger
+  has to go through `documentResponse` (D-137), and no token-scoped byte route
+  exists for either audience. Neither of these pages is the item that should
+  invent one.
+- **`/showings/[token]` still cannot say what happens after the viewing** —
+  whether they apply, and how. The application link is minted separately and
+  the page has no way to reach it.
+- **The `.replace('T', ' ')` class still survives in five staff-facing places**
+  — `(admin)/messages/[id]`, `(admin)/workorders/[id]` (three sites) and
+  `packages/core/workorders/timeline.ts`. Carried unchanged from R-140, which
+  filed it, on R-128's own precedent: the half a stranger holds is fixed and
+  the staff half is not. It was one of the two candidates this item was chosen
+  over.
+- **`walk-tmp{,2,3,4}.mjs` are gone.** R-140 named them as untracked debris
+  from an earlier session and did not touch them; they reference a scratchpad
+  directory that no longer exists.
+- **Gate run:** `lint` 0 errors and the same 14 pre-existing warnings,
+  `typecheck` clean, `build:test` compiled (the e2e run builds it). Unit
+  **2,837 passed + 4 skipped of 2,841** — identical to R-140, because this
+  item's checks are e2e: no unit test can see a select's option count or a
+  section that renders on a public page. `showings` + `self-showing` +
+  `verify-link` + `golden-path-4` e2e **28 passed against `Total: 28 tests`**,
+  no flaky, no skipped — including both files' axe checks over the new
+  markup. The full sweep was not run locally — CI owns it, and **the GitHub
+  Actions billing block is still unresolved at 18 days**, owner-only.

@@ -88,6 +88,18 @@ export type VerifyLinkResult =
         unitName: string
         propertyName: string
         requestSummary: string | null
+        /// WHAT WAS ACTUALLY DONE, and when, and by whom (R-141). The page
+        /// asked "was this fixed?" over the tenant's own three-day-old
+        /// report and nothing else - so somebody answering on Thursday about
+        /// a Monday leak had to remember, unprompted, which visit this was.
+        /// All three are already on the work order; none is new state.
+        completedAt: Date | null
+        /// Null for an in-house job - the page says "our maintenance team"
+        /// rather than naming nobody.
+        vendorName: string | null
+        /// The property's own zone, because a completion time printed in
+        /// UTC is a time in no particular place (R-052).
+        timezone: string
       }
     }
   | {
@@ -137,8 +149,10 @@ export async function verifyVerifyLink(token: string): Promise<VerifyLinkResult>
       status: true,
       scope: true,
       reopenCount: true,
+      completedAt: true,
       unit: { select: { name: true } },
-      property: { select: { name: true } },
+      property: { select: { name: true, timezone: true } },
+      vendor: { select: { name: true } },
       ticket: { select: { tenantId: true, description: true } },
     },
   })
@@ -191,6 +205,9 @@ export async function verifyVerifyLink(token: string): Promise<VerifyLinkResult>
       // The TENANT's words, not the internal scope — the same choice the
       // message itself makes.
       requestSummary: workOrder.ticket?.description?.slice(0, 200) ?? null,
+      completedAt: workOrder.completedAt,
+      vendorName: workOrder.vendor?.name ?? null,
+      timezone: workOrder.property.timezone,
     },
   }
 }

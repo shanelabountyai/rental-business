@@ -197,6 +197,35 @@ test('a prospect self-books a vacant-unit showing, raising an escort task, and s
 
   await anonPage.goto(`/showings/${match[1]}`)
   await expect(anonPage.getByRole('heading', { name: /Hi Riley/ })).toBeVisible()
+
+  // R-141: the page used to say a first name and a street and stop. Rent and
+  // availability come off the Listing the prospect is already attached to,
+  // and the escort answer used to appear only AFTER booking - which is the
+  // one fact that decides whether this is a trip somebody can make alone.
+  await expect(anonPage.getByText('$1,550.00 a month')).toBeVisible()
+  await expect(anonPage.getByText('Available from 1 Sept 2026')).toBeVisible()
+  await expect(anonPage.getByText('A member of our team will meet you there')).toBeVisible()
+
+  // R-141: two selects, not one 233-option list. A day holds at most 18
+  // half-hour slots between 9 and 6, so 19 options with the disabled
+  // placeholder. The flat list this replaced offered 233 (R-140 counted
+  // them), which is the whole defect.
+  const timeValues = () =>
+    anonPage
+      .getByLabel('Pick a time')
+      .locator('option')
+      .evaluateAll((options) => options.map((o) => (o as HTMLOptionElement).value))
+  const firstDay = await timeValues()
+  expect(firstDay.length).toBeLessThanOrEqual(19)
+
+  // And the day field actually filters the time field. Polled rather than
+  // asserted straight after the change, because the filter is client state
+  // and the assertion would otherwise race hydration.
+  await anonPage.getByLabel('Pick a day').selectOption({ index: 2 })
+  await expect.poll(timeValues).not.toEqual(firstDay)
+  await anonPage.getByLabel('Pick a day').selectOption({ index: 1 })
+  await expect.poll(timeValues).toEqual(firstDay)
+
   await anonPage.getByLabel('Pick a time').selectOption({ index: 1 })
   await anonPage.getByRole('button', { name: 'Book this showing' }).click()
 

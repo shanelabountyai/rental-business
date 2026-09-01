@@ -1,4 +1,10 @@
-import { friendlyTimestamp } from '@rental/core/scheduling'
+import { formatCents } from '@rental/core/money'
+import {
+  DEFAULT_SHOWING_WINDOW,
+  friendlyBusinessDate,
+  friendlyTimestamp,
+  utcToBusinessDate,
+} from '@rental/core/scheduling'
 import { ShowingBookingForm } from '@/components/showings/showing-booking-form.tsx'
 import { bookShowing } from '@/lib/showings/actions.ts'
 import { availableSlotsFor } from '@/lib/showings/queries.ts'
@@ -68,6 +74,15 @@ export default async function ShowingBookingPage({
     new Date(),
   )
 
+  // Size as one line rather than a definition list, and only the parts that
+  // are actually recorded - a listing with no square footage should say
+  // nothing about square footage rather than "- sq ft".
+  const size = [
+    link.bedrooms !== null ? `${link.bedrooms} bed` : null,
+    link.bathrooms !== null ? `${link.bathrooms} bath` : null,
+    link.squareFeet !== null ? `${link.squareFeet.toLocaleString('en-US')} sq ft` : null,
+  ].filter(Boolean)
+
   return (
     <main className="mx-auto flex max-w-md flex-col gap-6 p-6">
       <header className="flex flex-col gap-1">
@@ -77,6 +92,32 @@ export default async function ShowingBookingPage({
           {link.unitName ? ` (${link.unitName})` : ''}
         </p>
       </header>
+
+      {/* R-141. Before this the page named the prospect and the street and
+          stopped, which asks somebody to book a viewing of a home the page
+          declines to describe. `availableOn` is a `@db.Date` and goes through
+          `utcToBusinessDate` - `friendlyDate` would move it a day west of
+          UTC (D-3, R-042). */}
+      <section className="flex flex-col gap-2 rounded-md border p-4">
+        <h2 className="text-sm font-medium">What you&rsquo;re coming to see</h2>
+        {link.headline && <p className="text-base">{link.headline}</p>}
+        <p className="text-base font-medium">{formatCents(link.rentCents)} a month</p>
+        {size.length > 0 && <p className="text-sm">{size.join(' \u00b7 ')}</p>}
+        <p className="text-muted-foreground text-sm">
+          Available from {friendlyBusinessDate(utcToBusinessDate(link.availableOn))}.
+        </p>
+      </section>
+
+      {/* WHAT HAPPENS NEXT, before they commit rather than after. The escort
+          answer was only ever on the confirmation screen, and it is the one
+          fact that decides whether this is a trip they can make alone. */}
+      <p className="text-muted-foreground text-sm">
+        Viewings last {DEFAULT_SHOWING_WINDOW.slotMinutes} minutes.{' '}
+        {link.selfService
+          ? 'You let yourself in — once you have booked we send you an entry-code link separately.'
+          : 'A member of our team will meet you there.'}
+      </p>
+
       <ShowingBookingForm
         action={bookShowing.bind(null, token)}
         slots={slots.map((s) => s.toISOString())}

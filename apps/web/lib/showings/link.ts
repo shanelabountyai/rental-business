@@ -22,6 +22,28 @@ export type ShowingLinkResult =
       timezone: string
       state: string
       county: string | null
+      /// WHAT THEY ARE ACTUALLY COMING TO SEE (R-141). This page used to
+      /// carry a first name and a street address and nothing else - no rent,
+      /// no size, no availability - so somebody deciding whether to spend an
+      /// hour of a Saturday on it had to go back to whichever listing they
+      /// came from, if they still had it. Every field here is already on the
+      /// Listing the prospect is attached to; none of it is new state.
+      headline: string | null
+      rentCents: number
+      /// `@db.Date`, so it is a calendar day and no timezone may touch it
+      /// (D-3) - the page reads it with `utcToBusinessDate`.
+      availableOn: Date
+      bedrooms: number | null
+      /// Prisma `Decimal`, stringified here rather than in the page: a
+      /// Decimal cannot cross the Server->Client boundary, and this result
+      /// is one `await` away from a client component.
+      bathrooms: string | null
+      squareFeet: number | null
+      /// Whether they let themselves in or somebody meets them, said BEFORE
+      /// they book rather than only on the confirmation - it is the
+      /// difference between needing us there and not. Same derivation the
+      /// `booked` branch below already uses, deliberately not a second one.
+      selfService: boolean
     }
   | {
       ok: false
@@ -79,7 +101,10 @@ export async function showingLinkStatus(rawToken: string): Promise<ShowingLinkRe
 
   const prospect = await prisma.prospect.findUnique({
     where: { id: stored!.subjectId },
-    include: { property: true, listing: { include: { unit: true } } },
+    include: {
+      property: true,
+      listing: { include: { unit: { include: { smartLock: { select: { active: true } } } } } },
+    },
   })
   if (!prospect) return { ok: false, reason: 'not_found' }
 
@@ -95,5 +120,14 @@ export async function showingLinkStatus(rawToken: string): Promise<ShowingLinkRe
     timezone: prospect.property.timezone,
     state: prospect.property.state,
     county: prospect.property.county,
+    headline: prospect.listing.headline,
+    rentCents: prospect.listing.rentCents,
+    availableOn: prospect.listing.availableOn,
+    bedrooms: prospect.listing.unit.bedrooms,
+    bathrooms: prospect.listing.unit.bathrooms?.toString() ?? null,
+    squareFeet: prospect.listing.unit.squareFeet,
+    selfService:
+      prospect.listing.unit.status === 'VACANT' &&
+      prospect.listing.unit.smartLock?.active === true,
   }
 }

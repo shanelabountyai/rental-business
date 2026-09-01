@@ -1,3 +1,4 @@
+import { friendlyTimestamp } from '@rental/core/scheduling'
 import { VerifyLinkForm } from '@/components/portal/verify-link-form.tsx'
 import { answerFromLink } from '@/lib/portal/verify-link-actions.ts'
 import { answeredMessage, rejectionMessage, verifyVerifyLink } from '@/lib/portal/verify-link.ts'
@@ -73,6 +74,24 @@ export default async function VerifyLinkPage({
         <p className="whitespace-pre-wrap text-sm">
           {link.job.requestSummary ?? link.job.scope}
         </p>
+      </section>
+
+      {/* WHAT WE DID, which this page never said (R-141). "Was this fixed?"
+          over the tenant's own report and nothing else asks somebody to
+          confirm a visit they may not have been home for, three days after
+          it happened. The SCOPE is the right text here even though the
+          section above deliberately avoids it: above, the question is what
+          they recognise as their own complaint; here, it is the record of
+          the work, and "R/R T&P valve, 40gal" is what was actually done. */}
+      <section className="flex flex-col gap-2 rounded-md border p-4">
+        <h2 className="text-sm font-medium">What we did</h2>
+        <p className="whitespace-pre-wrap text-sm">{link.job.scope}</p>
+        {link.job.completedAt && (
+          <p className="text-muted-foreground text-sm">
+            {link.job.vendorName ?? 'Our maintenance team'} marked this finished on{' '}
+            {friendlyTimestamp(link.job.completedAt, link.job.timezone)}.
+          </p>
+        )}
       </section>
 
       <VerifyLinkForm action={answerFromLink.bind(null, token)} />
