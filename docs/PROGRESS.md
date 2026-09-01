@@ -6792,7 +6792,7 @@ for 131 items; nobody had asked whether there were others. There were 44.
 
 ## R-144: the allocation order the form collected and nothing read
 
-**Commit:** PENDING  ·  **Date:** 2026-09-01
+**Commit:** 39bb5bd  ·  **Date:** 2026-09-01
 
 Owner-chosen 2026-09-01 over the remaining dead-export sweep and a demo walk —
 the first of the three things R-143 filed. R-143 found `allocatePayment` dead
