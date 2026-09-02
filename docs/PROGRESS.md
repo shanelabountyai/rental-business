@@ -7319,4 +7319,4 @@ fixture debris R-147 already recorded, not a rendering defect.
 **Gate run:** `lint` 0 errors, `typecheck` clean, `ops-visibility.spec.ts`
 4/4 with the new cap assertion. Component-only change; CI owns the sweep.
 
-Commit: (recorded in follow-up)
+Commit: 526c3df
