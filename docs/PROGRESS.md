@@ -7079,4 +7079,4 @@ per-component classes). `--accent` repointed from the grey wash to copper
   `.env.test` and fails on a missing `DATABASE_URL` — the ":test variants
   only" rule, re-proven.) Full sweep belongs to CI per the gate's own text.
 
-Commit: (recorded in follow-up)
+Commit: fc4c789
