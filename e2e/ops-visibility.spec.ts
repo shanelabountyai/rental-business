@@ -145,6 +145,30 @@ test.describe('the money screen ops panels', () => {
       },
     })
 
+    const bigRunDetail = `e2e drift big ${randomUUID()}`
+    await prisma.auditLog.create({
+      data: {
+        actorType: 'SYSTEM',
+        actorRef: 'ledger.reconcile',
+        entityType: 'LedgerEntry',
+        entityId: 'reconciliation',
+        action: 'ledger.drift_detected',
+        after: {
+          windowDays: 30,
+          checkedEvents: 40,
+          checkedEntries: 28,
+          externalChecked: false,
+          drift: Array.from({ length: 12 }, (_, i) => ({
+            kind: 'missing_ledger_row',
+            stripeEventId: `evt_${randomUUID().slice(0, 12)}`,
+            ledgerEntryId: null,
+            differenceCents: 100 + i,
+            detail: `${bigRunDetail} #${i}`,
+          })),
+        },
+      },
+    })
+
     const stripeDetail = `e2e stripe ${randomUUID()}`
     const stripeEventId = `evt_e2e_${randomUUID()}`
     stripeEventIds.push(stripeEventId)
@@ -176,6 +200,15 @@ test.describe('the money screen ops panels', () => {
     // proves the money math survived the Json round trip: 12345 cents.
     await expect(
       page.getByText(`${driftDetail} — off by $123.45`),
+    ).toBeVisible()
+
+    // The cap R-152's walk forced: a run with more than eight discrepancies
+    // renders a sample and an honest remainder, not a 200,000px page.
+    await expect(
+      page
+        .getByRole('listitem')
+        .filter({ hasText: bigRunDetail })
+        .getByText('…and 4 more discrepancies in this run.'),
     ).toBeVisible()
 
     await expect(

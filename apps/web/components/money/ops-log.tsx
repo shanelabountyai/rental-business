@@ -98,8 +98,12 @@ export function ReconciliationDrift({
                 Checked {run.checkedEvents} events against {run.checkedEntries}{' '}
                 ledger entries.
               </p>
+              {/* Capped, because a mass-drift incident is exactly when this
+                  screen must stay readable — R-152's brand walk found a run
+                  rendering thousands of items into a 200,000px page. The
+                  count above is already honest; the list is a sample. */}
               <ul className="flex flex-col gap-1">
-                {run.items.map((item, index) => (
+                {run.items.slice(0, 8).map((item, index) => (
                   <li key={index}>
                     {item.detail || item.kind}
                     {item.differenceCents !== null &&
@@ -112,6 +116,11 @@ export function ReconciliationDrift({
                     )}
                   </li>
                 ))}
+                {run.items.length > 8 && (
+                  <li className="text-muted-foreground">
+                    …and {run.items.length - 8} more discrepancies in this run.
+                  </li>
+                )}
               </ul>
             </li>
           ))}

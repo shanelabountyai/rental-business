@@ -7288,3 +7288,35 @@ of 2,816** (down the four deleted conditionChange tests). Pure core-level
 deletion with no route or component change; CI's full sweep is the backstop.
 
 Commit: 0413ef9
+
+## R-152: the brand walk, and the 204,000-pixel drift panel
+
+**What it did.** The browser walk the R-146–R-151 arc owed under D-28's
+rule, done as screenshots read by eye — a one-off capture spec (created,
+run, deleted, per the demo-capture precedent) signed in as a fresh owner
+and photographed /login, the dashboard, /money, the rent roll and
+/jurisdiction. **Homestead is confirmed live**: Albert Sans's letterforms
+on every screen, copper links and the copper wordmark, the near-black
+primary button, the visible focus ring, and R-148's version history opening
+to its versions with a copper "Add new version" beneath.
+
+**What it found — the reason walks exist.** The reconciliation-drift panel
+rendered every discrepancy of every run: one test-database run put a
+**204,282-pixel-tall** element on /money. R-147's gate never saw it because
+its seeded run had one item. In production, a mass-drift incident — the one
+scenario this panel exists for — would have made the screen unusable at
+precisely the moment it mattered. The list is now capped at eight items per
+run with an "…and N more discrepancies" remainder (the count line above it
+was already honest), and `ops-visibility.spec.ts` seeds a 12-item run and
+asserts the remainder renders.
+
+**What it left behind.** The chase affordance's copper did not appear in
+the walk — correctly, since no seeded tenancy was past grace — so its
+rendering rests on `rent-roll.spec.ts` rather than an eyeball. The full
+Stripe event log renders 25 identical future-dated test rows, which is the
+fixture debris R-147 already recorded, not a rendering defect.
+
+**Gate run:** `lint` 0 errors, `typecheck` clean, `ops-visibility.spec.ts`
+4/4 with the new cap assertion. Component-only change; CI owns the sweep.
+
+Commit: (recorded in follow-up)
