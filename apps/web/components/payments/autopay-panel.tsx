@@ -137,7 +137,7 @@ function DebitDayForm({
         </select>
         <button
           type="submit"
-          className="border-input hover:bg-accent focus-visible:ring-ring flex min-h-11 items-center rounded-md border px-4 py-2 text-base font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+          className="border-input hover:bg-secondary focus-visible:ring-ring flex min-h-11 items-center rounded-md border px-4 py-2 text-base font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
         >
           Save
         </button>
@@ -255,7 +255,7 @@ export function AutopayPanel({
             }
             setClientSecret(result.clientSecret)
           }}
-          className="border-input hover:bg-accent focus-visible:ring-ring flex min-h-11 w-full items-center justify-center rounded-md border px-6 py-2 text-base font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:opacity-60 sm:w-auto"
+          className="border-input hover:bg-secondary focus-visible:ring-ring flex min-h-11 w-full items-center justify-center rounded-md border px-6 py-2 text-base font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:opacity-60 sm:w-auto"
         >
           {busy ? 'Getting ready…' : 'Set up automatic payments'}
         </button>

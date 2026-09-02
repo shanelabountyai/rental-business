@@ -29,7 +29,7 @@ export default async function ReportsPage() {
         <li>
           <Link
             href="/money/rent-roll"
-            className="hover:bg-accent focus-visible:ring-ring flex min-h-14 flex-col justify-center gap-0.5 px-4 py-3 focus-visible:ring-2 focus-visible:-outline-offset-2 focus-visible:outline-none"
+            className="hover:bg-secondary focus-visible:ring-ring flex min-h-14 flex-col justify-center gap-0.5 px-4 py-3 focus-visible:ring-2 focus-visible:-outline-offset-2 focus-visible:outline-none"
           >
             <span className="font-medium">Rent roll + delinquency aging</span>
             <span className="text-muted-foreground text-sm">
@@ -40,7 +40,7 @@ export default async function ReportsPage() {
         <li>
           <Link
             href="/workorders"
-            className="hover:bg-accent focus-visible:ring-ring flex min-h-14 flex-col justify-center gap-0.5 px-4 py-3 focus-visible:ring-2 focus-visible:-outline-offset-2 focus-visible:outline-none"
+            className="hover:bg-secondary focus-visible:ring-ring flex min-h-14 flex-col justify-center gap-0.5 px-4 py-3 focus-visible:ring-2 focus-visible:-outline-offset-2 focus-visible:outline-none"
           >
             <span className="font-medium">Open work orders by age &amp; priority</span>
             <span className="text-muted-foreground text-sm">
@@ -51,7 +51,7 @@ export default async function ReportsPage() {
         <li>
           <Link
             href="/vacancies"
-            className="hover:bg-accent focus-visible:ring-ring flex min-h-14 flex-col justify-center gap-0.5 px-4 py-3 focus-visible:ring-2 focus-visible:-outline-offset-2 focus-visible:outline-none"
+            className="hover:bg-secondary focus-visible:ring-ring flex min-h-14 flex-col justify-center gap-0.5 px-4 py-3 focus-visible:ring-2 focus-visible:-outline-offset-2 focus-visible:outline-none"
           >
             <span className="font-medium">Vacancy &amp; turn status</span>
             <span className="text-muted-foreground text-sm">
@@ -62,7 +62,7 @@ export default async function ReportsPage() {
         <li>
           <Link
             href="/reports/cash"
-            className="hover:bg-accent focus-visible:ring-ring flex min-h-14 flex-col justify-center gap-0.5 px-4 py-3 focus-visible:ring-2 focus-visible:-outline-offset-2 focus-visible:outline-none"
+            className="hover:bg-secondary focus-visible:ring-ring flex min-h-14 flex-col justify-center gap-0.5 px-4 py-3 focus-visible:ring-2 focus-visible:-outline-offset-2 focus-visible:outline-none"
           >
             <span className="font-medium">Cash summary per entity</span>
             <span className="text-muted-foreground text-sm">
@@ -73,7 +73,7 @@ export default async function ReportsPage() {
         <li>
           <Link
             href="/reports/dates"
-            className="hover:bg-accent focus-visible:ring-ring flex min-h-14 flex-col justify-center gap-0.5 px-4 py-3 focus-visible:ring-2 focus-visible:-outline-offset-2 focus-visible:outline-none"
+            className="hover:bg-secondary focus-visible:ring-ring flex min-h-14 flex-col justify-center gap-0.5 px-4 py-3 focus-visible:ring-2 focus-visible:-outline-offset-2 focus-visible:outline-none"
           >
             <span className="font-medium">Upcoming critical dates</span>
             <span className="text-muted-foreground text-sm">
@@ -91,7 +91,7 @@ export default async function ReportsPage() {
         <li>
           <Link
             href="/reports/operating"
-            className="hover:bg-accent focus-visible:ring-ring flex min-h-14 flex-col justify-center gap-0.5 px-4 py-3 focus-visible:ring-2 focus-visible:-outline-offset-2 focus-visible:outline-none"
+            className="hover:bg-secondary focus-visible:ring-ring flex min-h-14 flex-col justify-center gap-0.5 px-4 py-3 focus-visible:ring-2 focus-visible:-outline-offset-2 focus-visible:outline-none"
           >
             <span className="font-medium">Operating report per property</span>
             <span className="text-muted-foreground text-sm">
@@ -103,7 +103,7 @@ export default async function ReportsPage() {
         <li>
           <Link
             href="/reports/leasing"
-            className="hover:bg-accent focus-visible:ring-ring flex min-h-14 flex-col justify-center gap-0.5 px-4 py-3 focus-visible:ring-2 focus-visible:-outline-offset-2 focus-visible:outline-none"
+            className="hover:bg-secondary focus-visible:ring-ring flex min-h-14 flex-col justify-center gap-0.5 px-4 py-3 focus-visible:ring-2 focus-visible:-outline-offset-2 focus-visible:outline-none"
           >
             <span className="font-medium">Leasing funnel</span>
             <span className="text-muted-foreground text-sm">
@@ -115,7 +115,7 @@ export default async function ReportsPage() {
         <li>
           <Link
             href="/reports/maintenance"
-            className="hover:bg-accent focus-visible:ring-ring flex min-h-14 flex-col justify-center gap-0.5 px-4 py-3 focus-visible:ring-2 focus-visible:-outline-offset-2 focus-visible:outline-none"
+            className="hover:bg-secondary focus-visible:ring-ring flex min-h-14 flex-col justify-center gap-0.5 px-4 py-3 focus-visible:ring-2 focus-visible:-outline-offset-2 focus-visible:outline-none"
           >
             <span className="font-medium">Maintenance analytics</span>
             <span className="text-muted-foreground text-sm">
@@ -126,7 +126,7 @@ export default async function ReportsPage() {
         <li>
           <Link
             href="/reports/reserves"
-            className="hover:bg-accent focus-visible:ring-ring flex min-h-14 flex-col justify-center gap-0.5 px-4 py-3 focus-visible:ring-2 focus-visible:-outline-offset-2 focus-visible:outline-none"
+            className="hover:bg-secondary focus-visible:ring-ring flex min-h-14 flex-col justify-center gap-0.5 px-4 py-3 focus-visible:ring-2 focus-visible:-outline-offset-2 focus-visible:outline-none"
           >
             <span className="font-medium">Reserves &amp; capital plan</span>
             <span className="text-muted-foreground text-sm">
@@ -138,7 +138,7 @@ export default async function ReportsPage() {
         <li>
           <Link
             href="/reports/tax-packet"
-            className="hover:bg-accent focus-visible:ring-ring flex min-h-14 flex-col justify-center gap-0.5 px-4 py-3 focus-visible:ring-2 focus-visible:-outline-offset-2 focus-visible:outline-none"
+            className="hover:bg-secondary focus-visible:ring-ring flex min-h-14 flex-col justify-center gap-0.5 px-4 py-3 focus-visible:ring-2 focus-visible:-outline-offset-2 focus-visible:outline-none"
           >
             <span className="font-medium">Year-end tax packet</span>
             <span className="text-muted-foreground text-sm">
@@ -150,7 +150,7 @@ export default async function ReportsPage() {
         <li>
           <Link
             href="/reports/tax"
-            className="hover:bg-accent focus-visible:ring-ring flex min-h-14 flex-col justify-center gap-0.5 px-4 py-3 focus-visible:ring-2 focus-visible:-outline-offset-2 focus-visible:outline-none"
+            className="hover:bg-secondary focus-visible:ring-ring flex min-h-14 flex-col justify-center gap-0.5 px-4 py-3 focus-visible:ring-2 focus-visible:-outline-offset-2 focus-visible:outline-none"
           >
             <span className="font-medium">Year-end tax export</span>
             <span className="text-muted-foreground text-sm">

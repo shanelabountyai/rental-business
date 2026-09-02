@@ -88,7 +88,7 @@ export function MaintenanceSpendSection({
               <li key={job.id} className="py-2">
                 <Link
                   href={`/workorders/${job.id}`}
-                  className="hover:bg-accent focus-visible:ring-ring flex min-h-11 flex-wrap items-center justify-between gap-2 rounded-md px-2 focus-visible:ring-2 focus-visible:outline-none"
+                  className="hover:bg-secondary focus-visible:ring-ring flex min-h-11 flex-wrap items-center justify-between gap-2 rounded-md px-2 focus-visible:ring-2 focus-visible:outline-none"
                 >
                   <span className="flex flex-col">
                     <span>{job.scope}</span>

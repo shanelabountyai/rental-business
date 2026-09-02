@@ -47,7 +47,7 @@ export default async function PropertiesPage({
             {canCreateEntity && (
               <Link
                 href="/properties/entities/new"
-                className="border-input hover:bg-accent focus-visible:ring-ring flex min-h-11 items-center rounded-md border px-4 py-2 text-sm font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+                className="border-input hover:bg-secondary focus-visible:ring-ring flex min-h-11 items-center rounded-md border px-4 py-2 text-sm font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
               >
                 New entity
               </Link>
@@ -85,7 +85,7 @@ export default async function PropertiesPage({
             <li key={property.id}>
               <Link
                 href={`/properties/${property.id}`}
-                className="hover:bg-accent focus-visible:ring-ring flex min-h-11 flex-col gap-0.5 px-4 py-3 focus-visible:ring-2 focus-visible:-outline-offset-2 focus-visible:outline-none sm:flex-row sm:items-baseline sm:justify-between"
+                className="hover:bg-secondary focus-visible:ring-ring flex min-h-11 flex-col gap-0.5 px-4 py-3 focus-visible:ring-2 focus-visible:-outline-offset-2 focus-visible:outline-none sm:flex-row sm:items-baseline sm:justify-between"
               >
                 <span className="font-medium">{property.name}</span>
                 <span className="text-muted-foreground text-sm">

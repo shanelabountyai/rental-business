@@ -7033,3 +7033,50 @@ duplication R-143 already filed — four files read
   the `replyToKeyword` call removed; the STOP and send-failure tests correctly
   stay green, because they assert an absence and a non-throw.
 - **CI was green on R-144 and was checked, not assumed** (`gh run list`).
+
+## R-146: Homestead lands in the tokens, not on the screens
+
+**What it built.** D-163's implementation item, created and closed in one
+session (the decision's own text said adoption "is its own backlog item,
+token-first"). Albert Sans throughout via `next/font/google` (variable font,
+self-hosted at build, exposed as `--font-albert` on `<html>` and wired into
+Tailwind v4's `--font-sans`, so preflight carries it everywhere with no
+per-component classes). `--accent` repointed from the grey wash to copper
+`#9A5B32` with white foreground (5.36:1) and `--accent-strong` `#7A4523`
+(7.78:1) for hover. Links are copper via one `@layer base` anchor rule in
+`globals.css`; the chase affordance on the rent roll uses a new shared
+`ACCENT_BUTTON_CLASSES` in `ui-classes.ts`.
+
+**What it decided.**
+- **The wash rename is what made token-first possible**: every prior use of
+  `--accent` (57× `hover:bg-accent`, the nav active pill, a radio checked
+  state) was a grey wash whose values are *identical* to `--secondary`, so
+  they were renamed to `secondary` as a pixel-for-pixel no-op. If a future
+  screen wants a grey wash it says `secondary`; `accent` now means copper.
+- **The base-layer anchor rule is the link styling**, deliberately: utilities
+  override the base layer, so the 45 deliberately-muted footnote links, the
+  nav, and button-styled anchors are all unchanged, and only anchors that
+  inherited plain foreground went copper. No per-screen edits.
+- **D-163's standing rule is restated in code twice** (the token comment and
+  `ACCENT_BUTTON_CLASSES`): copper is never an alarm colour; urgency is red +
+  icon + words.
+- **`#B4713F` (the light tint) got no token** — nothing uses it yet, and a
+  token nobody reads is the dead-theme lesson R-111 already paid for.
+
+**What it left behind.**
+- **Eyebrows and sparklines have no shipped surface** — they exist only on
+  the design canvas. They take the accent token when something builds them.
+- **No spec asserts the brand.** The one computed-style assertion in the
+  suite (`portal.spec.ts`, font *size*) is unaffected; asserting a font
+  family or a link colour in e2e would pin the token value, which is the
+  decision log's job, not the suite's.
+- **Gate run:** `lint` 0 errors + the same 14 pre-existing warnings,
+  `typecheck` clean, unit **2,844 passed + 4 skipped of 2,848** (unchanged —
+  nothing behavioural moved). `npm run build` green, which is also the proof
+  `next/font` fetched and self-hosted Albert Sans. Targeted e2e via
+  `test:e2e`: `rent-roll.spec.ts` + `portal.spec.ts`, **19 passed of a listed
+  19**, no flaky. (First attempt ran bare `npx playwright test`, which skips
+  `.env.test` and fails on a missing `DATABASE_URL` — the ":test variants
+  only" rule, re-proven.) Full sweep belongs to CI per the gate's own text.
+
+Commit: (recorded in follow-up)

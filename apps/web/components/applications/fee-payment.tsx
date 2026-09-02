@@ -131,7 +131,7 @@ export function FeePayment({
             }
             setClientSecret(result.clientSecret)
           }}
-          className="border-input hover:bg-accent focus-visible:ring-ring flex min-h-11 items-center justify-center rounded-md border px-6 py-2 text-base font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:opacity-60 sm:w-auto"
+          className="border-input hover:bg-secondary focus-visible:ring-ring flex min-h-11 items-center justify-center rounded-md border px-6 py-2 text-base font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:opacity-60 sm:w-auto"
         >
           {busy ? 'Getting ready…' : 'Pay application fee'}
         </button>

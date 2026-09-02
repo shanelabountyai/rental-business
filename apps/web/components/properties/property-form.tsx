@@ -156,7 +156,7 @@ export function PropertyForm({
               form={formId}
               name="confirmDuplicate"
               value="true"
-              className="border-input hover:bg-accent min-h-11 self-start rounded-md border px-4 py-2 text-sm font-medium"
+              className="border-input hover:bg-secondary min-h-11 self-start rounded-md border px-4 py-2 text-sm font-medium"
             >
               Save anyway
             </button>

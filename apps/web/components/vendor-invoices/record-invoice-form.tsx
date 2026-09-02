@@ -172,7 +172,7 @@ export function RecordInvoiceForm({
         <button
           type="button"
           onClick={() => setLineCount((count) => count + 1)}
-          className="hover:bg-accent focus-visible:ring-ring w-fit rounded-md border px-3 py-2 text-sm focus-visible:ring-2 focus-visible:outline-none"
+          className="hover:bg-secondary focus-visible:ring-ring w-fit rounded-md border px-3 py-2 text-sm focus-visible:ring-2 focus-visible:outline-none"
         >
           Add another line
         </button>

@@ -162,7 +162,7 @@ export default async function PropertyDetailPage({
         {canWrite && (
           <Link
             href={`/properties/${property.id}/edit`}
-            className="border-input hover:bg-accent focus-visible:ring-ring flex min-h-11 items-center rounded-md border px-4 py-2 text-sm font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+            className="border-input hover:bg-secondary focus-visible:ring-ring flex min-h-11 items-center rounded-md border px-4 py-2 text-sm font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
           >
             Edit
           </Link>
@@ -226,7 +226,7 @@ export default async function PropertyDetailPage({
             {canWriteUnits && (
               <Link
                 href={`/properties/${property.id}/units/new`}
-                className="border-input hover:bg-accent focus-visible:ring-ring flex min-h-11 items-center rounded-md border px-3 py-1.5 text-sm font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+                className="border-input hover:bg-secondary focus-visible:ring-ring flex min-h-11 items-center rounded-md border px-3 py-1.5 text-sm font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
               >
                 Add unit
               </Link>
@@ -243,7 +243,7 @@ export default async function PropertyDetailPage({
                 <li key={unit.id}>
                   <Link
                     href={`/properties/${property.id}/units/${unit.id}`}
-                    className="hover:bg-accent focus-visible:ring-ring flex min-h-11 items-center justify-between gap-2 rounded-md px-2 py-2 text-sm focus-visible:ring-2 focus-visible:-outline-offset-2 focus-visible:outline-none"
+                    className="hover:bg-secondary focus-visible:ring-ring flex min-h-11 items-center justify-between gap-2 rounded-md px-2 py-2 text-sm focus-visible:ring-2 focus-visible:-outline-offset-2 focus-visible:outline-none"
                   >
                     <span className="font-medium">{unit.name}</span>
                     <span className="text-muted-foreground">

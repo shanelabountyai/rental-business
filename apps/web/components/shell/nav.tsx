@@ -34,8 +34,8 @@ export function Nav({
                 aria-current={active ? 'page' : undefined}
                 className={`focus-visible:ring-ring flex min-h-11 items-center rounded-md px-3 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none ${
                   active
-                    ? 'bg-accent text-accent-foreground font-medium'
-                    : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
+                    ? 'bg-secondary text-secondary-foreground font-medium'
+                    : 'text-muted-foreground hover:bg-secondary/50 hover:text-foreground'
                 }`}
               >
                 {item.label}

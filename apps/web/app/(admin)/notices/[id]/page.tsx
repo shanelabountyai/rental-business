@@ -113,7 +113,7 @@ export default async function NoticePage({
           <form action={generateNoticePdfAction.bind(null, notice.id)}>
             <button
               type="submit"
-              className="border-input hover:bg-accent focus-visible:ring-ring min-h-11 rounded-md border px-4 text-sm font-medium focus-visible:ring-2 focus-visible:outline-none"
+              className="border-input hover:bg-secondary focus-visible:ring-ring min-h-11 rounded-md border px-4 text-sm font-medium focus-visible:ring-2 focus-visible:outline-none"
             >
               Generate the PDF
             </button>

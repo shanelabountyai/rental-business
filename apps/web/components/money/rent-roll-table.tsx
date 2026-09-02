@@ -8,7 +8,7 @@ import { friendlyBusinessDate } from '@rental/core/scheduling'
 import { LiveRegion } from '@/components/auth-form.tsx'
 import { FieldError } from '@/components/form/field.tsx'
 import type { ReminderFormState } from '@/lib/payments/reminders.ts'
-import { PRIMARY_BUTTON_CLASSES, scrollableRegionProps } from '@/components/ui-classes.ts'
+import { ACCENT_BUTTON_CLASSES, scrollableRegionProps } from '@/components/ui-classes.ts'
 
 // The rent roll, and the one action that chases everybody on it (PAY-06,
 // R-044).
@@ -156,7 +156,7 @@ export function RentRollTable({
           <button
             type="submit"
             disabled={pending || selected.size === 0 || templates.length === 0}
-            className={`${PRIMARY_BUTTON_CLASSES} self-start disabled:opacity-60`}
+            className={`${ACCENT_BUTTON_CLASSES} self-start disabled:opacity-60`}
           >
             {selected.size === 0
               ? 'Send reminder'

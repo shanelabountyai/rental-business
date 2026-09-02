@@ -65,7 +65,7 @@ export default async function PortalPapersPage() {
             <li key={inspection.id}>
               <a
                 href={`/portal/papers/inspections/${inspection.id}`}
-                className="hover:bg-accent focus-visible:ring-ring flex min-h-14 flex-col justify-center gap-1 rounded-md border-2 border-amber-500 px-4 py-3 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+                className="hover:bg-secondary focus-visible:ring-ring flex min-h-14 flex-col justify-center gap-1 rounded-md border-2 border-amber-500 px-4 py-3 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
               >
                 <span className="font-medium">Complete your move-in walkthrough</span>
                 <span className="text-muted-foreground">
@@ -84,7 +84,7 @@ export default async function PortalPapersPage() {
             <li key={inspection.id}>
               <a
                 href={`/portal/papers/inspections/${inspection.id}`}
-                className="hover:bg-accent focus-visible:ring-ring flex min-h-14 flex-col justify-center gap-1 rounded-md border-2 border-amber-500 px-4 py-3 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+                className="hover:bg-secondary focus-visible:ring-ring flex min-h-14 flex-col justify-center gap-1 rounded-md border-2 border-amber-500 px-4 py-3 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
               >
                 <span className="font-medium">Review and sign your inspection report</span>
                 <span className="text-muted-foreground">
@@ -115,7 +115,7 @@ export default async function PortalPapersPage() {
                 // window.opener.
                 target="_blank"
                 rel="noopener noreferrer"
-                className="hover:bg-accent focus-visible:ring-ring flex min-h-14 flex-col justify-center gap-1 rounded-md border px-4 py-3 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+                className="hover:bg-secondary focus-visible:ring-ring flex min-h-14 flex-col justify-center gap-1 rounded-md border px-4 py-3 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
               >
                 <span className="font-medium">
                   {TYPE_WORDS[document.type] ?? document.fileName}
@@ -132,7 +132,7 @@ export default async function PortalPapersPage() {
 
       <a
         href="/portal/papers/notice"
-        className="hover:bg-accent focus-visible:ring-ring flex min-h-14 flex-col justify-center gap-1 rounded-md border px-4 py-3 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+        className="hover:bg-secondary focus-visible:ring-ring flex min-h-14 flex-col justify-center gap-1 rounded-md border px-4 py-3 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
       >
         <span className="font-medium">Moving out?</span>
         <span className="text-muted-foreground">Give notice to vacate</span>

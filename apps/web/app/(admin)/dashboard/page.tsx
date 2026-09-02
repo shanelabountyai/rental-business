@@ -20,7 +20,7 @@ export const metadata = { title: 'Dashboard — Rental Operations' }
 // other admin section.
 
 const CARD =
-  'hover:bg-accent focus-visible:ring-ring flex flex-col gap-1 rounded-lg border p-3 focus-visible:ring-2 focus-visible:outline-none'
+  'hover:bg-secondary focus-visible:ring-ring flex flex-col gap-1 rounded-lg border p-3 focus-visible:ring-2 focus-visible:outline-none'
 const CARD_GLOW =
   'flex flex-col gap-1 rounded-lg border border-red-300 bg-red-50 p-3 hover:bg-red-100 focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none'
 

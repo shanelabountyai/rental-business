@@ -30,7 +30,7 @@ export default async function InspectionsPage() {
         </Link>
         <Link
           href="/inspections/templates"
-          className="focus-visible:ring-ring border-input hover:bg-accent flex min-h-11 items-center rounded-md border px-4 py-2 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+          className="focus-visible:ring-ring border-input hover:bg-secondary flex min-h-11 items-center rounded-md border px-4 py-2 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
         >
           Checklists
         </Link>

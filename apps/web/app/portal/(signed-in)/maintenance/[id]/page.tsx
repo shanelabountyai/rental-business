@@ -114,7 +114,7 @@ export default async function MaintenanceTicketPage({
                   href={`/api/documents/${document.id}/file`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="hover:bg-accent focus-visible:ring-ring flex min-h-11 items-center rounded-md border px-3 py-2 underline underline-offset-2 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+                  className="hover:bg-secondary focus-visible:ring-ring flex min-h-11 items-center rounded-md border px-3 py-2 underline underline-offset-2 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
                 >
                   {document.fileName}
                 </a>

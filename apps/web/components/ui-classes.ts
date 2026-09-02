@@ -24,6 +24,13 @@
 export const PRIMARY_BUTTON_CLASSES =
   'bg-foreground text-background focus-visible:ring-ring min-h-11 rounded-md px-4 py-2 text-sm font-medium aria-disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none'
 
+/// The copper button (D-163) - Homestead reserves the accent for the chase
+/// affordance, so this is deliberately used in one place today. White on
+/// #9A5B32 is 5.36:1. D-163's standing rule applies: this is NEVER an alarm
+/// colour - anything urgent is red + icon + words, not copper.
+export const ACCENT_BUTTON_CLASSES =
+  'bg-accent text-accent-foreground hover:bg-accent-strong focus-visible:ring-ring min-h-11 rounded-md px-4 py-2 text-sm font-medium aria-disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none'
+
 /// The text input / textarea / select boundary and focus ring (R-115).
 ///
 /// `components/form/field.tsx` owns the labelled primitives, and five forms

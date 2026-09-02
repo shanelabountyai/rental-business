@@ -21,7 +21,7 @@ function FormButtons() {
         name="intent"
         value="save"
         {...pendingButtonProps(pending)}
-        className="border-input hover:bg-accent focus-visible:ring-ring min-h-11 rounded-md border px-4 py-2 text-base font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+        className="border-input hover:bg-secondary focus-visible:ring-ring min-h-11 rounded-md border px-4 py-2 text-base font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
       >
         {pending ? 'Working…' : 'Save progress'}
       </button>

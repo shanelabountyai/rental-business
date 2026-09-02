@@ -58,7 +58,7 @@ export default async function NoticesPage() {
               <li key={notice.id}>
                 <Link
                   href={`/notices/${notice.id}`}
-                  className="hover:bg-accent focus-visible:ring-ring flex min-h-14 flex-col gap-1 px-4 py-3 focus-visible:ring-2 focus-visible:-outline-offset-2 focus-visible:outline-none"
+                  className="hover:bg-secondary focus-visible:ring-ring flex min-h-14 flex-col gap-1 px-4 py-3 focus-visible:ring-2 focus-visible:-outline-offset-2 focus-visible:outline-none"
                 >
                   <span className="flex flex-wrap items-center justify-between gap-2">
                     <span className="font-medium">

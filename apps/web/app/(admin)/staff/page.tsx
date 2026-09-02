@@ -52,7 +52,7 @@ export default async function StaffPage({
             <li key={member.id}>
               <Link
                 href={`/staff/${member.id}`}
-                className="hover:bg-accent focus-visible:ring-ring flex min-h-14 flex-col justify-center gap-0.5 px-4 py-3 focus-visible:ring-2 focus-visible:-outline-offset-2 focus-visible:outline-none"
+                className="hover:bg-secondary focus-visible:ring-ring flex min-h-14 flex-col justify-center gap-0.5 px-4 py-3 focus-visible:ring-2 focus-visible:-outline-offset-2 focus-visible:outline-none"
               >
                 <span className="font-medium">
                   {member.name}

@@ -83,7 +83,7 @@ export default async function LeasesPage({
         {canWrite && (
           <Link
             href="/leases/new"
-            className="border-input hover:bg-accent focus-visible:ring-ring flex min-h-11 items-center rounded-md border px-3 py-1.5 text-sm font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+            className="border-input hover:bg-secondary focus-visible:ring-ring flex min-h-11 items-center rounded-md border px-3 py-1.5 text-sm font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
           >
             New lease
           </Link>
@@ -113,7 +113,7 @@ export default async function LeasesPage({
               <li key={lease.id}>
                 <Link
                   href={`/leases/${lease.id}`}
-                  className="hover:bg-accent focus-visible:ring-ring flex min-h-14 flex-col gap-1 rounded-md px-2 py-3 focus-visible:ring-2 focus-visible:outline-none"
+                  className="hover:bg-secondary focus-visible:ring-ring flex min-h-14 flex-col gap-1 rounded-md px-2 py-3 focus-visible:ring-2 focus-visible:outline-none"
                 >
                   <span className="flex flex-wrap items-center justify-between gap-2">
                     <span className="font-medium">

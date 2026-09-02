@@ -76,7 +76,7 @@ export function VerifyLinkForm({
           type="submit"
           name="resolved"
           value="no"
-          className="border-input focus-visible:ring-ring min-h-14 rounded-md border-2 px-4 text-base font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none hover:bg-accent"
+          className="border-input focus-visible:ring-ring min-h-14 rounded-md border-2 px-4 text-base font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none hover:bg-secondary"
         >
           No, it&rsquo;s still a problem
         </button>

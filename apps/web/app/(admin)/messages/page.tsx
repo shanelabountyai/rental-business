@@ -103,7 +103,7 @@ export default async function MessagesPage() {
               <li key={thread.id}>
                 <Link
                   href={`/messages/${thread.id}`}
-                  className="hover:bg-accent focus-visible:ring-ring flex flex-col gap-1 px-4 py-3 text-sm focus-visible:ring-2 focus-visible:-outline-offset-2 focus-visible:outline-none"
+                  className="hover:bg-secondary focus-visible:ring-ring flex flex-col gap-1 px-4 py-3 text-sm focus-visible:ring-2 focus-visible:-outline-offset-2 focus-visible:outline-none"
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <span className="font-medium">

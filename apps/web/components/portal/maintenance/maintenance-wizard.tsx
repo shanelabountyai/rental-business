@@ -125,7 +125,7 @@ export type WizardParams = Record<string, string | string[] | undefined>
 const NEXT_BUTTON =
   'bg-primary text-primary-foreground focus-visible:ring-ring flex min-h-12 items-center justify-center rounded-md px-6 py-2 text-base font-medium disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none'
 const BACK_BUTTON =
-  'border-input hover:bg-accent focus-visible:ring-ring flex min-h-12 items-center justify-center rounded-md border px-6 py-2 text-base font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none'
+  'border-input hover:bg-secondary focus-visible:ring-ring flex min-h-12 items-center justify-center rounded-md border px-6 py-2 text-base font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none'
 /// The visual shape of a choice. Applied to a `<label>` rather than a
 /// `<button>` - see `Choice` below for why - so both the focus ring and the
 /// selected styling come from the RADIO INSIDE IT (`focus-within`,
@@ -133,7 +133,7 @@ const BACK_BUTTON =
 /// second is R-111's: the thing actually receiving focus is the input, and a
 /// tap made before this page has hydrated has to look like it landed.
 const OPTION_BUTTON =
-  'focus-within:ring-ring has-[:checked]:border-foreground has-[:checked]:bg-accent relative flex min-h-12 w-full cursor-pointer items-center rounded-md border px-4 py-2 text-left text-base focus-within:ring-2 focus-within:ring-offset-2 has-[:checked]:font-medium hover:bg-accent'
+  'focus-within:ring-ring has-[:checked]:border-foreground has-[:checked]:bg-secondary relative flex min-h-12 w-full cursor-pointer items-center rounded-md border px-4 py-2 text-left text-base focus-within:ring-2 focus-within:ring-offset-2 has-[:checked]:font-medium hover:bg-secondary'
 
 function one(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value

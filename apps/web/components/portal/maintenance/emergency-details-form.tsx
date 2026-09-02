@@ -20,7 +20,7 @@ import type { EmergencyFormState } from '@/lib/maintenance/actions.ts'
 // any state to keep.
 
 const RADIO_LABEL =
-  'focus-within:ring-ring flex min-h-12 w-full cursor-pointer items-center gap-3 rounded-md border px-4 py-2 text-base focus-within:ring-2 focus-within:ring-offset-2 has-[:checked]:border-foreground has-[:checked]:bg-accent has-[:checked]:font-medium'
+  'focus-within:ring-ring flex min-h-12 w-full cursor-pointer items-center gap-3 rounded-md border px-4 py-2 text-base focus-within:ring-2 focus-within:ring-offset-2 has-[:checked]:border-foreground has-[:checked]:bg-secondary has-[:checked]:font-medium'
 
 function YesNo({ name, legend }: { name: string; legend: string }) {
   return (

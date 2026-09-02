@@ -150,7 +150,7 @@ export default async function EmergencyPage({
                   href={`/api/documents/${shutoffs[category]!.photoDocumentId}/file`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="hover:bg-accent focus-visible:ring-ring flex min-h-12 w-fit items-center rounded-md border px-4 py-2 underline underline-offset-2 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+                  className="hover:bg-secondary focus-visible:ring-ring flex min-h-12 w-fit items-center rounded-md border px-4 py-2 underline underline-offset-2 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
                 >
                   See the photo
                 </a>

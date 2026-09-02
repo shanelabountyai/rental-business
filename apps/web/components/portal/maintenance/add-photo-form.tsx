@@ -28,7 +28,7 @@ export function AddPhotoForm({ ticketId }: { ticketId: string }) {
 
   return (
     <div className="flex flex-col gap-2">
-      <label className="border-input hover:bg-accent focus-visible:ring-ring flex min-h-11 w-fit cursor-pointer items-center rounded-md border px-4 py-2 text-base focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none">
+      <label className="border-input hover:bg-secondary focus-visible:ring-ring flex min-h-11 w-fit cursor-pointer items-center rounded-md border px-4 py-2 text-base focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none">
         {status === 'uploading' ? 'Uploading…' : 'Add a photo'}
         <input
           type="file"

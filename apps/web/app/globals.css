@@ -21,8 +21,18 @@
   --secondary-foreground: oklch(0.205 0 0);
   --muted: oklch(0.97 0 0);
   --muted-foreground: oklch(0.45 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
+  /* Homestead's copper (D-163). Until R-146 this token was the same grey as
+     --muted and every use of it was a hover/selected wash - those washes now
+     say `secondary`, which has identical values, so the accent token is free
+     to mean the brand. Tint family per D-163: #9A5B32 base (5.36:1 on white),
+     #7A4523 strong/hover (7.78:1), #B4713F light - the light tint has no use
+     yet and gets a token when something needs it. STANDING RULE (D-163):
+     copper sits nearest --destructive's hue family, so no alarm state may
+     lean on the accent - red keeps its exclusive meaning, and urgency is
+     red + icon + words, never copper. */
+  --accent: #9a5b32;
+  --accent-foreground: oklch(1 0 0); /* white on copper, 5.36:1 */
+  --accent-strong: #7a4523;
   --destructive: oklch(0.577 0.245 27.325);
   /* WCAG 1.4.11 wants 3:1 for a UI boundary and a focus indicator, and the
      shadcn defaults these replaced were nowhere near it (R-107a). Measured
@@ -59,6 +69,12 @@
   --color-muted-foreground: var(--muted-foreground);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
+  --color-accent-strong: var(--accent-strong);
+  /* Albert Sans throughout (D-163) - the variable is defined by next/font on
+     <html> in app/layout.tsx and already carries its own size-adjusted
+     fallback face. Setting --font-sans here is what makes preflight's
+     html { font-family } and every `font-sans` utility resolve to it. */
+  --font-sans: var(--font-albert), ui-sans-serif, system-ui, sans-serif;
   --color-destructive: var(--destructive);
   --color-border: var(--border);
   --color-input: var(--input);
@@ -76,5 +92,15 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+  /* Links are copper by default (D-163) - here, once, rather than on ~200
+     anchors. This is the base layer, so any anchor that sets its own text
+     colour utility (the muted footnote links, nav, button-styled links)
+     still wins; only anchors that used to inherit plain foreground change. */
+  a {
+    color: var(--accent);
+  }
+  a:hover {
+    color: var(--accent-strong);
   }
 }

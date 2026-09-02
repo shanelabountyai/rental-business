@@ -75,7 +75,7 @@ export default async function VacanciesPage() {
             <li key={unit.id}>
               <Link
                 href={`/properties/${unit.propertyId}/units/${unit.id}`}
-                className="hover:bg-accent focus-visible:ring-ring flex min-h-11 flex-col gap-0.5 px-4 py-3 focus-visible:ring-2 focus-visible:-outline-offset-2 focus-visible:outline-none sm:flex-row sm:items-baseline sm:justify-between"
+                className="hover:bg-secondary focus-visible:ring-ring flex min-h-11 flex-col gap-0.5 px-4 py-3 focus-visible:ring-2 focus-visible:-outline-offset-2 focus-visible:outline-none sm:flex-row sm:items-baseline sm:justify-between"
               >
                 <span className="font-medium">
                   {unit.propertyName} — {unit.name}

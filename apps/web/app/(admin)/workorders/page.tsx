@@ -85,7 +85,7 @@ export default async function WorkOrdersPage() {
             <li key={wo.id}>
               <Link
                 href={`/workorders/${wo.id}`}
-                className="hover:bg-accent focus-visible:ring-ring flex min-h-14 flex-col justify-center gap-1 rounded-md border px-4 py-3 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+                className="hover:bg-secondary focus-visible:ring-ring flex min-h-14 flex-col justify-center gap-1 rounded-md border px-4 py-3 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
               >
                 <span className="font-medium">
                   {wo.scope.slice(0, 80)}
