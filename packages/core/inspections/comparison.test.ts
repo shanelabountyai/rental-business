@@ -1,25 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { conditionChange, isFixableCondition } from './comparison.ts'
-
-describe('conditionChange', () => {
-  it('is unknown when either side has not been walked yet', () => {
-    expect(conditionChange(null, 'GOOD')).toBe('unknown')
-    expect(conditionChange('GOOD', null)).toBe('unknown')
-  })
-
-  it('detects a decline', () => {
-    expect(conditionChange('NEW', 'FAIR')).toBe('declined')
-    expect(conditionChange('GOOD', 'MISSING')).toBe('declined')
-  })
-
-  it('detects an improvement (a repair between walks)', () => {
-    expect(conditionChange('POOR', 'GOOD')).toBe('improved')
-  })
-
-  it('detects no change', () => {
-    expect(conditionChange('GOOD', 'GOOD')).toBe('same')
-  })
-})
+import { isFixableCondition } from './comparison.ts'
 
 describe('isFixableCondition', () => {
   it('flags POOR, DAMAGED and MISSING', () => {

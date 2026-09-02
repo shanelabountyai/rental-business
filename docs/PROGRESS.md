@@ -7260,3 +7260,31 @@ packages, none imported by shipping code), e2e sanity `smoke` + `shell` +
 `portal` 27/27. Pure deletions — CI's full sweep is the backstop.
 
 Commit: a0428b8
+
+## R-151: the screen conditionChange was waiting for already existed
+
+**What it did.** Corrected R-149's one wrong verdict and deleted the last
+export on the R-143 thread. R-149 kept `conditionChange` as "the INSP-02
+move-in/move-out comparison screen candidate; the function is its core,
+waiting" — but INSP-02 was built by **R-070**: the inspection detail page
+renders each move-out item beside its move-in counterpart's condition,
+notes and photos through the `InspectionItem.moveInItemId` FK. The shipped
+screen shows both sides — the deposit-disposition evidence the PRD asks
+for — and never needed a computed improved/same/declined word.
+`conditionChange`, its type and rank map are gone with their tests;
+`isFixableCondition` remains, alive in the turnover punch list.
+
+**What it decided.** A "keep, pending its screen" verdict is only as good
+as the check that the screen is actually missing — R-149 read the function
+and not the feature. The five-minute check that settles it: the backlog row
+for the PRD story, then the page it names.
+
+**What it left behind.** Nothing. R-143 → R-151: 44 suspected dead exports
+became 42 (two were load-bearing), and every one is now called, rendered,
+or deliberately deleted, with each deletion read first (D-158).
+
+**Gate run:** `lint` 0 errors, `typecheck` clean, unit **2,812 + 4 skipped
+of 2,816** (down the four deleted conditionChange tests). Pure core-level
+deletion with no route or component change; CI's full sweep is the backstop.
+
+Commit: (recorded in follow-up)
