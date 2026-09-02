@@ -7352,4 +7352,4 @@ notice (R-157).
 **Gate run:** docs-only change — no code touched, no deploy (the
 ignoreCommand skips it by design).
 
-Commit: (recorded in the follow-up commit)
+Commit: 9080b55
