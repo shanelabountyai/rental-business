@@ -58,24 +58,6 @@ export function holdIsActive(hold: PaymentHold): boolean {
   return hold.blockOnline || hold.blockPartial || hold.certifiedFundsOnly
 }
 
-/**
- * Which rails a payer may use through the PRODUCT, given a hold.
- *
- * `certifiedFundsOnly` removes every rail this product can offer online,
- * and that is the correct outcome rather than a gap: certified funds are a
- * cashier's cheque or a money order handed over in person, which reaches the
- * ledger through R-036's offline recording (PAY-05) and not through a
- * payment form. A screen that offered "certified funds" as a rail would be
- * offering something it cannot execute.
- */
-export function railsUnderHold(
-  rails: readonly PaymentRail[],
-  hold: PaymentHold,
-): PaymentRail[] {
-  if (hold.blockOnline || hold.certifiedFundsOnly) return []
-  return [...rails]
-}
-
 export type HoldRefusal =
   /// Every online rail is closed — either outright, or because only
   /// certified funds are accepted and none of them are.

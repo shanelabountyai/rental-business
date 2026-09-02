@@ -1,10 +1,10 @@
 'use server'
 
-import { canGiveNotice, noticePeriodCheck, parseLeaseDate } from '@rental/core/leases'
+import { canGiveNotice, parseLeaseDate } from '@rental/core/leases'
+import { noticePeriodCheckFor } from '@/lib/leases/notice-period-check.ts'
 import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { audit } from '@/lib/audit/index.ts'
-import { rulesFor } from '@/lib/jurisdiction/queries.ts'
 import { requireTenantWithScope } from './guard.ts'
 import { getTenantHome } from './queries.ts'
 
@@ -62,14 +62,11 @@ export async function submitNoticeToVacate(
   const forwardingAddress = String(formData.get('forwardingAddress') ?? '').trim() || null
 
   const now = new Date()
-  const rule = await rulesFor(
-    { state: home.property.state, county: home.property.county },
-    now,
-  ).catch(() => null)
-  const period = noticePeriodCheck({
+  const period = await noticePeriodCheckFor({
+    propertyState: home.property.state,
+    propertyCounty: home.property.county,
     givenOn: now,
     effectiveOn,
-    noticeToVacateDays: rule?.noticeToVacateDays ?? null,
   })
 
   await prisma.$transaction(async (tx) => {

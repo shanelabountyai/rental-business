@@ -7,44 +7,55 @@ import {
   SCRA_BASIS_EVIDENCE,
   SCRA_BASIS_LABELS,
   scraTermination,
-  scraTerminationDate,
 } from './index.ts'
+
+// The worked examples below drive `scraTermination` - the function the
+// product calls - and assert on `.effectiveOn`. They were written against a
+// duplicate (`scraTerminationDate`) that R-149 deleted; the statute they
+// document is unchanged.
+const terminationDate = (deliveredOn: string, rentDueDay: number) =>
+  scraTermination({
+    deliveredOn,
+    rentDueDay,
+    basis: 'pcs_or_deployment',
+    hasOrdersOnFile: true,
+  }).effectiveOn
 
 describe('§3955 termination date', () => {
   // THE WORKED EXAMPLE EVERY SCRA GUIDE LEADS WITH, and the reason "after"
   // is not "on or after": notice delivered ON the rent due date does not
   // count that date's payment as the next one.
   it('notice on 1 August against rent due on the 1st ends the tenancy on 1 October', () => {
-    expect(scraTerminationDate('2026-08-01', 1)).toBe('2026-10-01')
+    expect(terminationDate('2026-08-01', 1)).toBe('2026-10-01')
   })
 
   it('notice the day after the due date lands the same way', () => {
     // 2 August: next payment due after that is 1 September, +30 = 1 October.
-    expect(scraTerminationDate('2026-08-02', 1)).toBe('2026-10-01')
+    expect(terminationDate('2026-08-02', 1)).toBe('2026-10-01')
   })
 
   it('notice just before the due date runs from that month', () => {
     // 31 July: the next payment due after it is 1 August, +30 = 31 August.
-    expect(scraTerminationDate('2026-07-31', 1)).toBe('2026-08-31')
+    expect(terminationDate('2026-07-31', 1)).toBe('2026-08-31')
   })
 
   it('handles a mid-month rent day', () => {
     // Delivered 20 June, rent due the 15th: next due after 20 June is
     // 15 July, +30 = 14 August.
-    expect(scraTerminationDate('2026-06-20', 15)).toBe('2026-08-14')
+    expect(terminationDate('2026-06-20', 15)).toBe('2026-08-14')
   })
 
   it('clamps a 31st rent day in a short month', () => {
     // Delivered 15 January, rent due the 31st: next due after is 31 January,
     // +30 = 2 March (2026 is not a leap year).
-    expect(scraTerminationDate('2026-01-15', 31)).toBe('2026-03-02')
+    expect(terminationDate('2026-01-15', 31)).toBe('2026-03-02')
     // Delivered 1 February, rent due the 31st: February's due day clamps to
     // the 28th, +30 = 30 March.
-    expect(scraTerminationDate('2026-02-01', 31)).toBe('2026-03-30')
+    expect(terminationDate('2026-02-01', 31)).toBe('2026-03-30')
   })
 
   it('crosses a year boundary', () => {
-    expect(scraTerminationDate('2026-12-05', 1)).toBe('2027-01-31')
+    expect(terminationDate('2026-12-05', 1)).toBe('2027-01-31')
   })
 })
 

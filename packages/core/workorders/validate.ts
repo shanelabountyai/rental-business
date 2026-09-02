@@ -145,9 +145,4 @@ export const OPEN_WORK_ORDER_STATUSES = [
   'WAITING_ON_TENANT',
 ] as const
 
-const OPEN_WORK_ORDER_STATUS_SET: ReadonlySet<string> = new Set(OPEN_WORK_ORDER_STATUSES)
 
-/// Whether a work order still appears on the open board.
-export function workOrderIsOpen(status: string): boolean {
-  return OPEN_WORK_ORDER_STATUS_SET.has(status)
-}

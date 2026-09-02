@@ -44,20 +44,6 @@ export function formatCents(cents: Cents, currency = 'USD'): string {
   }).format(cents / 100)
 }
 
-/**
- * Clamp a computed fee to a jurisdiction's maximum.
- *
- * `cap` of `null` means the jurisdiction sets no maximum - which is not the
- * same as a cap of zero, and conflating the two is how a state with no cap
- * silently stops charging late fees.
- */
-export function clampToStateCap(computed: Cents, cap: Cents | null): Cents {
-  assertCents(computed, 'computed fee')
-  if (cap === null) return computed
-  assertCents(cap, 'cap')
-  return Math.min(computed, cap)
-}
-
 export type ProrationMethod = 'actual' | 'banker30'
 
 /**

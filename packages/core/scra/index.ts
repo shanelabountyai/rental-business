@@ -70,40 +70,6 @@ export const SCRA_BASIS_EVIDENCE: Record<ScraTerminationBasis, string> = {
     'A copy of the PCS or deployment orders. Deployment orders must show a period of 90 days or more.',
 }
 
-/**
- * When a §3955 termination actually takes effect.
- *
- * §3955(d)(1), for a lease providing for MONTHLY rent: termination is
- * effective 30 days after the first date on which the next rental payment is
- * due and payable AFTER the date the notice was delivered.
- *
- * ==========================================================================
- * "AFTER", NOT "ON OR AFTER", AND THE DIFFERENCE IS A WHOLE MONTH.
- *
- * Notice delivered on 1 August against rent due on the 1st: a payment due ON
- * the delivery date is not due "after" it, so the next one is 1 September
- * and the tenancy ends 1 October. Reading it as "on or after" would end the
- * tenancy on 31 August - a month of rent the owner is owed and would never
- * bill, or a month the tenant pays and should not.
- *
- * That worked example (1 August in, 1 October out) is the one every SCRA
- * guide leads with, which is why it is also the first test below.
- * ==========================================================================
- *
- * `rentDueDay` is clamped to the length of the month by `dueDateInMonth`, so
- * a lease with rent due on the 31st behaves in February.
- */
-export function scraTerminationDate(
-  deliveredOn: BusinessDate,
-  rentDueDay: number,
-): BusinessDate {
-  // Strictly after the delivery date: step one day forward, then find the
-  // first due day on or after that.
-  const dayAfterDelivery = addBusinessDays(deliveredOn, 1)
-  const nextRentDue = dueDateOnOrAfter(dayAfterDelivery, rentDueDay)
-  return addBusinessDays(nextRentDue, 30)
-}
-
 export interface ScraTerminationInput {
   deliveredOn: BusinessDate
   rentDueDay: number
@@ -126,6 +92,29 @@ export interface ScraTermination {
 
 /**
  * The whole §3955 computation, with the one refusal it carries.
+ *
+ * §3955(d)(1), for a lease providing for MONTHLY rent: termination is
+ * effective 30 days after the first date on which the next rental payment is
+ * due and payable AFTER the date the notice was delivered.
+ *
+ * ==========================================================================
+ * "AFTER", NOT "ON OR AFTER", AND THE DIFFERENCE IS A WHOLE MONTH.
+ *
+ * Notice delivered on 1 August against rent due on the 1st: a payment due ON
+ * the delivery date is not due "after" it, so the next one is 1 September
+ * and the tenancy ends 1 October. Reading it as "on or after" would end the
+ * tenancy on 31 August - a month of rent the owner is owed and would never
+ * bill, or a month the tenant pays and should not.
+ *
+ * That worked example (1 August in, 1 October out) is the one every SCRA
+ * guide leads with, which is why it is also the first test of this function.
+ * (Until R-149 the same computation existed twice - `scraTerminationDate`
+ * carried this header and the tests while THIS body, the one the product
+ * calls, was a second copy nothing tested directly.)
+ * ==========================================================================
+ *
+ * `rentDueDay` is clamped to the length of the month by `dueDateInMonth`, so
+ * a lease with rent due on the 31st behaves in February.
  *
  * The date is returned even when the orders are missing, deliberately: a PM
  * on the phone with a tenant needs to be able to say "that would end it on

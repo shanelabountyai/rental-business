@@ -178,7 +178,7 @@ export function effectsInForce(holds: readonly PlacedHold[]): ReadonlySet<HoldEf
 }
 
 export function isHalted(holds: readonly PlacedHold[], effect: HoldEffect): boolean {
-  return holds.some((hold) => isActive(hold) && HOLD_DEFINITIONS[hold.type].effects.includes(effect))
+  return effectsInForce(holds).has(effect)
 }
 
 /**

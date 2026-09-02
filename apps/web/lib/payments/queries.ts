@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { balanceCents, statement, reversedEntryIds } from '@rental/core/ledger'
-import { cardFeeFor, payable, railsFor } from '@rental/core/payments'
+import { cardFeeFor, debitsAutomatically, payable, railsFor } from '@rental/core/payments'
 import type { CollectionMethod, PaymentRail } from '@rental/core/payments'
 import { prisma } from '@rental/db'
 import { rulesFor } from '@/lib/jurisdiction/queries.ts'
@@ -203,7 +203,7 @@ export async function paymentView(scope: TenantScope): Promise<PaymentView | nul
     // not autopay, and an automatic payer with no method on file is an
     // invoice that finalizes and then fails - which is exactly the state
     // every payer provisioned before R-039a was in.
-    autopayOn: method === 'charge_automatically' && payer.defaultPaymentMethodId != null,
+    autopayOn: debitsAutomatically(method) && payer.defaultPaymentMethodId != null,
     debitDay: payer.debitDay,
     rentDueDay: payer.lease.rentDueDay,
     // The ceiling the tenant may choose up to, from the versioned rule (D-4).

@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { formatCents } from '@rental/core/money'
+import { type CollectionMethod, debitsAutomatically } from '@rental/core/payments'
 import { businessDate } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { authUrl } from '@/lib/auth/delivery.ts'
@@ -106,7 +107,7 @@ export async function sendDueNotices(
     // ALREADY COVERED BY `autopay.predebit`. Both halves of the same check
     // `predebit.ts` makes: on automatic collection, AND a method on file to
     // actually collect from.
-    if (payer.collectionMethod === 'charge_automatically' && payer.defaultPaymentMethodId) {
+    if (debitsAutomatically(payer.collectionMethod as CollectionMethod) && payer.defaultPaymentMethodId) {
       continue
     }
 

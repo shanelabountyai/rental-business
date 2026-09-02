@@ -7,6 +7,7 @@ import {
   isLockedOut,
   lockoutUntil,
   mintRecoveryCodes,
+  needsRehash,
   openSecret,
   sealSecret,
   validatePassword,
@@ -140,6 +141,23 @@ export async function startStaffSignIn(
       })
     }
     return { error: GENERIC_SIGN_IN_ERROR }
+  }
+
+  // Password proved. If the stored hash was made under weaker scrypt
+  // parameters than current policy, re-hash NOW, while the plaintext is
+  // still in hand - `needsRehash`'s own contract, unhonoured from R-003
+  // until R-149, which would have left every existing hash at the old
+  // strength for ever after a parameter bump. Best-effort: a failed upgrade
+  // must not fail a correct sign-in.
+  if (needsRehash(staffUser.credential.passwordHash)) {
+    await prisma.staffCredential
+      .update({
+        where: { id: staffUser.credential.id },
+        data: { passwordHash: await hashPassword(password) },
+      })
+      .catch((error) => {
+        console.error(`[auth] failed to upgrade password hash for ${staffUser.id}`, error)
+      })
   }
 
   // Password proved. Hand out a single-use challenge and finish in the

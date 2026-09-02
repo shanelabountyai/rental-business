@@ -4,7 +4,6 @@ import {
   holdIsActive,
   holdMessage,
   holdRefusal,
-  railsUnderHold,
 } from './legal-hold.ts'
 import type { HoldRefusal, PaymentHold } from './legal-hold.ts'
 
@@ -28,33 +27,6 @@ describe('holdIsActive', () => {
     expect(holdIsActive(hold({ blockOnline: true }))).toBe(true)
     expect(holdIsActive(hold({ blockPartial: true }))).toBe(true)
     expect(holdIsActive(hold({ certifiedFundsOnly: true }))).toBe(true)
-  })
-})
-
-describe('railsUnderHold', () => {
-  const all = ['ACH', 'CARD', 'RETAIL_CASH'] as const
-
-  it('leaves every rail alone with no hold', () => {
-    expect(railsUnderHold(all, NO_HOLD)).toEqual([...all])
-  })
-
-  it('CLOSES EVERY RAIL when online payments are blocked', () => {
-    expect(railsUnderHold(all, hold({ blockOnline: true }))).toEqual([])
-  })
-
-  it('CLOSES EVERY RAIL for certified-funds-only, including ACH', () => {
-    // The subtle one. ACH feels "bank-like" and is exactly what must not be
-    // accepted: a debit can be RETURNED days later, by which point the
-    // notice may have been abandoned on the strength of money that never
-    // cleared. Certified funds reach the ledger through offline recording
-    // (PAY-05), never through a payment form.
-    expect(railsUnderHold(all, hold({ certifiedFundsOnly: true }))).toEqual([])
-  })
-
-  it('leaves rails open when only partial payments are blocked', () => {
-    // Full payment online is still fine — it is the PART payment that can
-    // void a notice.
-    expect(railsUnderHold(all, hold({ blockPartial: true }))).toEqual([...all])
   })
 })
 

@@ -1,5 +1,5 @@
 import { formatCents } from '@rental/core/money'
-import { CARD_FIXED_CENTS, CARD_RATE_BPS } from '@rental/core/payments'
+import { CARD_FIXED_CENTS, CARD_RATE_BPS, debitsAutomatically } from '@rental/core/payments'
 import { PayForm } from '@/components/payments/pay-form.tsx'
 import { startPaymentFromLink } from '@/lib/payments/actions.ts'
 import { paymentView } from '@/lib/payments/queries.ts'
@@ -118,7 +118,7 @@ export default async function PayLinkPage({
             ? 'Everything you owe is already on its way. We will email you when it clears.'
             : 'Your balance is clear — there is nothing to pay right now.'}
         </p>
-      ) : !view.hasPaymentMethod && view.collectionMethod === 'charge_automatically' ? (
+      ) : !view.hasPaymentMethod && debitsAutomatically(view.collectionMethod) ? (
         <p className="rounded-md border p-4">
           Your payment account is still being set up. Please contact the office
           and we will sort it out.

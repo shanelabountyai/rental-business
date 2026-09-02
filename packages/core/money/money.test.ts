@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
   allocate,
-  clampToStateCap,
   daysPastDue,
   dollarsToCents,
   formatCents,
@@ -16,21 +15,6 @@ describe('cents conversion', () => {
 
   it('rejects non-integer cents', () => {
     expect(() => formatCents(1234.5)).toThrow(TypeError)
-  })
-})
-
-describe('clampToStateCap', () => {
-  it('clamps a computed fee to the cap', () => {
-    expect(clampToStateCap(9500, 5000)).toBe(5000)
-  })
-
-  it('leaves a fee below the cap alone', () => {
-    expect(clampToStateCap(4000, 5000)).toBe(4000)
-  })
-
-  it('treats a null cap as no maximum, not as zero', () => {
-    expect(clampToStateCap(9500, null)).toBe(9500)
-    expect(clampToStateCap(9500, 0)).toBe(0)
   })
 })
 

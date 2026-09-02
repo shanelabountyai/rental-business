@@ -1,4 +1,4 @@
-import { EFFECT_LABELS, HOLD_DEFINITIONS, type HoldType } from '@rental/core/holds'
+import { effectLabels, HOLD_DEFINITIONS, type HoldType } from '@rental/core/holds'
 
 // The persistent hold banner (R-084).
 //
@@ -69,7 +69,7 @@ export function HoldBanner({
                 Placed {hold.placedOn} by {hold.placedByName} — “{hold.reason}”
               </span>
               <span className="text-xs text-amber-800">
-                In force: {definition.effects.map((effect) => EFFECT_LABELS[effect]).join('; ')}.
+                In force: {effectLabels(hold.type).join('; ')}.
               </span>
             </li>
           )

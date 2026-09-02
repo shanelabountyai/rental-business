@@ -70,12 +70,6 @@ export function validateVerification(input: VerificationInput): Violation[] {
   return violations
 }
 
-/// Statuses from which a tenant may be asked to verify. Before WORK_COMPLETE
-/// there is nothing to verify; after CLOSED the question is settled.
-export function awaitingVerification(status: string): boolean {
-  return status === 'WORK_COMPLETE'
-}
-
 export interface CloseFacts {
   status: string
   /// Null when the job has no ticket, and so no tenant to ask.

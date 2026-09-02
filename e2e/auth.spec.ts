@@ -594,3 +594,41 @@ test.describe('tenant magic link', () => {
     )
   })
 })
+
+test.describe('password hash upgrades (R-149)', () => {
+  test('a correct sign-in against a weak-params hash re-hashes at current policy', async ({
+    page,
+  }) => {
+    // A REAL hash of the right password made under weaker scrypt parameters
+    // (N=2^16 against the current 2^17), in the stored `scrypt$N$r$p$salt$hash`
+    // format. `needsRehash`'s contract - "call after a successful verify,
+    // while the plaintext is still in hand" - had no caller from R-003 until
+    // R-149, so a parameter bump would have left every existing hash weak
+    // for ever. This proves the sign-in path now upgrades it.
+    const { scryptSync, randomBytes } = await import('node:crypto')
+    const weakN = 2 ** 16
+    const salt = randomBytes(16)
+    const derived = scryptSync(PASSWORD, salt, 32, {
+      N: weakN,
+      r: 8,
+      p: 1,
+      maxmem: 256 * 1024 * 1024,
+    })
+    const weakHash = ['scrypt', weakN, 8, 1, salt.toString('base64'), derived.toString('base64')].join('$')
+
+    const staff = await createStaffUser()
+    await prisma.staffCredential.update({
+      where: { staffUserId: staff.id },
+      data: { passwordHash: weakHash },
+    })
+
+    await signInAsStaff(page, staff.email)
+
+    const upgraded = await prisma.staffCredential.findUniqueOrThrow({
+      where: { staffUserId: staff.id },
+      select: { passwordHash: true },
+    })
+    expect(upgraded.passwordHash).not.toBe(weakHash)
+    expect(upgraded.passwordHash.startsWith(`scrypt$${2 ** 17}$`)).toBe(true)
+  })
+})

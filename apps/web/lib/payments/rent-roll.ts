@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { agingTotals, balanceCents, delinquencyFor } from '@rental/core/ledger'
+import { type CollectionMethod, debitsAutomatically } from '@rental/core/payments'
 import type { AgingBucket } from '@rental/core/ledger'
 import { businessDate, dueDateOnOrBefore, utcToBusinessDate } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
@@ -218,7 +219,7 @@ export async function rentRoll(scope: ResolvedScope, asOfDate?: Date): Promise<R
       oldestDueOn: delinquency.oldestDueOn,
       // Any active payer on autopay counts: what the question is really
       // asking is "will money arrive without somebody chasing it".
-      autopay: lease.leasePayers.some((payer) => payer.collectionMethod === 'charge_automatically'),
+      autopay: lease.leasePayers.some((payer) => debitsAutomatically(payer.collectionMethod as CollectionMethod)),
       // Held, less what has been applied or refunded — the LIABILITY still
       // owed back, which is the number PAY-07 says must never be mixed with
       // income and the number a lender is asking for.

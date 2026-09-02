@@ -7163,3 +7163,61 @@ E2E via `test:e2e`: `reader-screens` 4/4 (new), `lease-holds` 4/4
 `operational` + `units` + `reports` + `leases` 48/48, no flaky.
 
 Commit: 6c4185e
+
+## R-149: the 12 rules read one at a time, and one was a live security gap
+
+**What it built/fixed.**
+- **`needsRehash` wired into staff sign-in** — the one rule of the twelve
+  that was an unmet obligation (the `optOutReply` class). Its doc comment
+  says "call after a successful verify, while the plaintext is still in
+  hand"; nothing ever did, so strengthening the scrypt parameters would have
+  silently left every existing hash at the old strength. Best-effort: a
+  failed upgrade logs and never fails a correct sign-in. The e2e test seeds
+  a real weak-params hash, signs in through the UI, and asserts the stored
+  hash was re-made at current policy — and was confirmed to FAIL with the
+  wiring inverted before being trusted.
+- **Four consolidations**: hold-banner held a third inline copy of
+  `effectLabels`; `isHalted` now reads `effectsInForce` instead of
+  duplicating its union logic; the portal notice-to-vacate action calls
+  `noticePeriodCheckFor` instead of carrying the same fetch; the six inline
+  `=== 'charge_automatically'` reads now call `debitsAutomatically`.
+- **Six deletions, each read first (D-158)**: `awaitingVerification`
+  (inline checks are deliberately richer), `clampToStateCap` (late-fee.ts
+  caps properly, flat + percent, surfacing `cappedAtCents`),
+  `railsUnderHold` (the pay screen shows held rails as unavailable WITH a
+  reason — a better outcome than hiding them), `workOrderIsOpen` (the list
+  is the used export), `occupancyRate` with its module (the operating report
+  chose `vacancyRate`, the same number inverted), and `scraTerminationDate`
+  — a verbatim duplicate of the computation inside `scraTermination`, which
+  the product calls. Its "AFTER, not ON-OR-AFTER" header moved onto the
+  live function and its seven worked-example tests now assert on
+  `scraTermination(...).effectiveOn`, which is strictly better: the statute
+  is now tested against the code path that runs.
+
+**What it decided.**
+- **The leases action keeps its own rule fetch** — it reuses one
+  `rulesFor` result for just-cause AND notice-period checks, so pointing it
+  at the wrapper would add a second identical query, not remove one.
+- **Kept alive**: `simulatedScreeningFacts` (five test callers — its stated
+  purpose; R-145's classification of it as unapplied was wrong) and
+  `conditionChange` (the INSP-02 move-in/move-out comparison screen is real
+  and unbuilt; the function is its core, waiting).
+
+**What it left behind.**
+- The final slice of the R-145 thread: deleting the **14 genuine noise**
+  exports, the **5 readers with no screen and no promise** (`getAccessCode`,
+  `getDocument`, `getTenantDocument`, `leasesWithApprovedAssistanceAnimal`,
+  `listingForWrite`), and `cardFeeDisclosure` (R-148's verdict: dead
+  duplicate of the pay form's live sentence) — each still owed its own read
+  before removal.
+- The INSP-02 comparison screen (`conditionChange`'s consumer) as a build
+  candidate.
+
+**Gate run:** `lint` 0 errors, `typecheck` clean, unit **2,834 + 4 skipped
+of 2,838** — down exactly the 11 deleted tests (occupancy's file, the
+clampToStateCap and railsUnderHold describes), with scra's seven repointed
+tests green. E2E via `test:e2e`: touched surfaces `auth` (31/31, including
+the new rehash test) + `pay` + `pay-link` + `rent-roll` +
+`notice-to-vacate` + `scra` + `lease-holds` 71/71, no flaky.
+
+Commit: (recorded in follow-up)

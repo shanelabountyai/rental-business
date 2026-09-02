@@ -18,7 +18,6 @@
 // 07-decisions.md); "every metric's file physically lives under
 // packages/core/metrics" is not the same rule, and is not this one.
 
-export * from './occupancy.ts'
 export * from './vacancy.ts'
 export * from './maintenance.ts'
 export * from './leasing.ts'
