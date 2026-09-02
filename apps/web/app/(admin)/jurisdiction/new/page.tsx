@@ -1,3 +1,4 @@
+import { parseServiceMethodMap } from '@rental/core/notices'
 import { friendlyBusinessDate, utcToBusinessDate } from '@rental/core/scheduling'
 import { RuleForm } from '@/components/jurisdiction/rule-form.tsx'
 import { requirePermission } from '@/lib/auth/guard.ts'
@@ -76,6 +77,23 @@ export default async function NewJurisdictionRulePage({
             ? previous.rentIncreaseCapPercentBps / 100
             : '',
           retaliationWindowDays: previous?.retaliationWindowDays ?? '',
+          abandonmentPresumedAfterDays: previous?.abandonmentPresumedAfterDays ?? '',
+          belongingsStorageDays: previous?.belongingsStorageDays ?? '',
+          // ?? rather than a truthiness check: 0 here means "the state
+          // expressly requires no disposal notice" and must survive the
+          // round trip - see the schema's own comment on the column.
+          belongingsNoticeDays: previous?.belongingsNoticeDays ?? '',
+          leaseViolationCureDays: previous?.leaseViolationCureDays ?? '',
+          nsfFeePermitted: previous?.nsfFeePermitted ?? true,
+          nsfFeeMaxDollars: previous?.nsfFeeMaxCents
+            ? previous.nsfFeeMaxCents / 100
+            : '',
+          cardSurchargePolicy: previous?.cardSurchargePolicy,
+          cardSurchargeMaxPercent: previous?.cardSurchargeMaxBps
+            ? previous.cardSurchargeMaxBps / 100
+            : '',
+          noticeServiceMethods:
+            parseServiceMethodMap(previous?.noticeServiceMethods) ?? undefined,
           sourceOfIncomeProtected: previous?.sourceOfIncomeProtected ?? null,
           justCauseRequired: previous?.justCauseRequired,
           paymentAllocationOrder: previous?.paymentAllocationOrder,

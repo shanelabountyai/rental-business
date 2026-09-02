@@ -210,6 +210,7 @@ export function CheckboxField({
   hint,
   required,
   onChange,
+  ariaLabel,
 }: {
   label: string
   name: string
@@ -234,6 +235,13 @@ export function CheckboxField({
   /// the form needs to react as the box is (un)checked. Stays UNCONTROLLED
   /// (`defaultChecked`, not `checked`) either way.
   onChange?: (checked: boolean) => void
+  /// Set when the same visible label repeats across groups on one page (the
+  /// jurisdiction form's per-notice-type service-method grid is the first) -
+  /// two controls must never share an accessible name (see CLAUDE.md), and a
+  /// fieldset legend does not become part of the checkbox's name. WCAG 2.5.3
+  /// requires the visible label be CONTAINED in this, so it is always
+  /// "<label> — <group>", never a different phrase.
+  ariaLabel?: string
 }) {
   const id = value ? `field-${name}-${value}` : `field-${name}`
   const hintId = `${id}-hint`
@@ -248,6 +256,7 @@ export function CheckboxField({
         defaultChecked={defaultChecked}
         required={required}
         onChange={onChange ? (event) => onChange(event.target.checked) : undefined}
+        aria-label={ariaLabel}
         aria-describedby={hint ? hintId : undefined}
         // The only control in this file that set no focus classes, so its
         // focus indicator was the base `* { outline-ring }` rule and nothing

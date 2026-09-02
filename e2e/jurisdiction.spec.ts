@@ -246,6 +246,107 @@ test.describe('viewing and creating jurisdiction rules', () => {
     rows.forEach((r) => ruleIds.push(r.id))
   })
 
+  // R-153. createRuleVersion used to write only the fields the form
+  // rendered, so nine statutory columns fell to schema defaults on every new
+  // version - an uncapped NSF fee, a dead disposal workflow, a wiped
+  // service-method map. Fully populate v1, change exactly one field through
+  // the real form, and assert EVERY column of v2 is equal or deliberately
+  // changed - so a schema column the form has not learned to render yet
+  // fails this test the moment a version drops it.
+  test('a new version carries every statutory column forward', async ({ page }) => {
+    const jurisdiction = `Test County ${randomUUID().slice(0, 8)}`
+    const v1 = await prisma.jurisdictionRule.create({
+      data: {
+        state: STATE,
+        jurisdiction,
+        version: 1,
+        effectiveFrom: new Date('2026-01-01'),
+        graceDays: 2,
+        lateFeeType: 'FLAT_PLUS_DAILY',
+        lateFeeFlatCents: 5000,
+        lateFeeDailyCents: 500,
+        lateFeeMaxCents: 10000,
+        lateFeeMaxPercentBps: 1200,
+        depositMaxBps: 20000,
+        depositDispositionDays: 30,
+        depositEscrowRequired: true,
+        depositInterestRequired: true,
+        preMoveOutWalkthroughRequired: true,
+        preMoveOutWalkthroughDaysBefore: 14,
+        entryNoticeHours: 24,
+        payOrQuitDays: 3,
+        noticeToVacateDays: 30,
+        rentIncreaseNoticeDays: 60,
+        rentIncreaseCapPercentBps: 500,
+        retaliationWindowDays: 180,
+        justCauseRequired: true,
+        abandonmentPresumedAfterDays: 15,
+        belongingsStorageDays: 30,
+        // 0 on purpose: "expressly none needed" must survive the round trip
+        // as 0, not collapse to null.
+        belongingsNoticeDays: 0,
+        leaseViolationCureDays: 14,
+        // Methods in NOTICE_SERVICE_METHODS render order, because the form
+        // submits checkboxes in DOM order - a semantically-equal but
+        // reordered list would fail the toEqual below for the wrong reason.
+        noticeServiceMethods: {
+          ENTRY_NOTICE: ['EMAIL'],
+          NOTICE_TO_VACATE: ['PERSONAL', 'CERTIFIED_MAIL'],
+        },
+        paymentAllocationOrder: ['RENT', 'LATE_FEE'],
+        nsfFeePermitted: true,
+        nsfFeeMaxCents: 3000,
+        cardSurchargePolicy: 'CREDIT_ONLY',
+        cardSurchargeMaxBps: 300,
+        applicationFeeCapCents: 7500,
+        rubsPermitted: false,
+        sourceOfIncomeProtected: true,
+        earlyTerminationRightExists: true,
+        earlyTerminationNoticeDays: 30,
+        earlyTerminationDocumentationTypes: ['PROTECTIVE_ORDER'],
+        citation: 'Test Stat. §1',
+        reviewedBy: 'Counsel Q. Test',
+        notes: 'fully populated for the carry-forward test',
+      },
+    })
+    ruleIds.push(v1.id)
+
+    const staff = await createStaff('owner')
+    await signIn(page, staff.email)
+    await page.goto(
+      `/jurisdiction/new?state=${STATE}&jurisdiction=${encodeURIComponent(jurisdiction)}`,
+    )
+    await expect(page.getByLabel('Grace days')).toHaveValue('2')
+    await page.getByLabel('Effective from').fill('2027-01-01')
+    await page.getByLabel('Grace days').fill('9')
+    await page.getByRole('button', { name: 'Add version' }).click()
+    await page.waitForURL(/\/jurisdiction\?versioned=/)
+
+    const v2 = await prisma.jurisdictionRule.findFirstOrThrow({
+      where: { state: STATE, jurisdiction, version: 2 },
+    })
+    ruleIds.push(v2.id)
+
+    const deliberatelyChanged = new Set([
+      'id',
+      'version',
+      'effectiveFrom',
+      'effectiveTo',
+      'createdAt',
+      'updatedAt',
+      'graceDays',
+      // Not carried forward on purpose: a new version is a new legal
+      // question - see the prefill's own comment in new/page.tsx.
+      'reviewedBy',
+    ])
+    for (const [column, was] of Object.entries(v1)) {
+      if (deliberatelyChanged.has(column)) continue
+      expect(v2[column as keyof typeof v2], column).toEqual(was)
+    }
+    expect(v2.graceDays).toBe(9)
+    expect(v2.reviewedBy).toBeNull()
+  })
+
   test('rejects a late fee type with no matching amount', async ({ page }) => {
     const staff = await createStaff('owner')
     await signIn(page, staff.email)

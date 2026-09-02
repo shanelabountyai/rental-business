@@ -5,6 +5,13 @@ import {
   DOCUMENTATION_TYPES,
 } from '@rental/core/confidential'
 import { PAYMENT_ALLOCATION_CHARGE_TYPES } from '@rental/core/jurisdiction'
+import {
+  KNOWN_NOTICE_TYPES,
+  NOTICE_SERVICE_METHODS,
+  SERVICE_METHOD_LABELS,
+  noticeTypeLabel,
+} from '@rental/core/notices'
+import type { ServiceMethodMap } from '@rental/core/notices'
 import { US_STATE_OPTIONS } from '@rental/core/property'
 import { useActionState } from 'react'
 import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
@@ -22,6 +29,12 @@ const LATE_FEE_TYPE_OPTIONS = [
   { value: 'PERCENT_OF_RENT', label: 'Percent of rent' },
   { value: 'DAILY', label: 'Daily amount' },
   { value: 'FLAT_PLUS_DAILY', label: 'Flat plus daily' },
+]
+
+const CARD_SURCHARGE_POLICY_OPTIONS = [
+  { value: 'NONE', label: 'Not permitted — owner absorbs the cost' },
+  { value: 'CREDIT_ONLY', label: 'Credit cards only (never debit)' },
+  { value: 'ALL', label: 'All cards' },
 ]
 
 const CHARGE_TYPE_LABELS: Record<string, string> = {
@@ -60,6 +73,15 @@ export interface RuleFormDefaults {
   rentIncreaseNoticeDays?: number | ''
   rentIncreaseCapPercent?: number | ''
   retaliationWindowDays?: number | ''
+  abandonmentPresumedAfterDays?: number | ''
+  belongingsStorageDays?: number | ''
+  belongingsNoticeDays?: number | ''
+  leaseViolationCureDays?: number | ''
+  nsfFeePermitted?: boolean
+  nsfFeeMaxDollars?: number | ''
+  cardSurchargePolicy?: string
+  cardSurchargeMaxPercent?: number | ''
+  noticeServiceMethods?: ServiceMethodMap
   sourceOfIncomeProtected?: boolean | null
   earlyTerminationRightExists?: boolean | null
   earlyTerminationNoticeDays?: number | ''
@@ -101,6 +123,16 @@ export function RuleForm({
   const acceptedDocumentation = new Set<string>(
     defaults.earlyTerminationDocumentationTypes ?? [],
   )
+  const configuredServiceMethods = defaults.noticeServiceMethods ?? {}
+  // The known types the product generates, plus any free-form type the
+  // previous version configured (Notice.type is deliberately open - a state
+  // that invents a notice must not need a migration, or lose its rule here).
+  const serviceMethodTypes = [
+    ...KNOWN_NOTICE_TYPES,
+    ...Object.keys(configuredServiceMethods).filter(
+      (type) => !(KNOWN_NOTICE_TYPES as readonly string[]).includes(type),
+    ),
+  ]
 
   return (
     <form action={formAction} className="flex max-w-2xl flex-col gap-8">
@@ -319,6 +351,17 @@ export function RuleForm({
             error={errors.payOrQuitDays}
           />
           <TextField
+            label="Violation cure period (days, optional)"
+            name="leaseViolationCureDays"
+            type="number"
+            inputMode="numeric"
+            min={0}
+            max={365}
+            defaultValue={defaults.leaseViolationCureDays}
+            error={errors.leaseViolationCureDays}
+            hint="Days to cure a non-monetary breach after a violation notice - distinct from pay-or-quit, the nonpayment clock. Left blank, the cure clock runs with no deadline rather than one this product invented."
+          />
+          <TextField
             label="Notice-to-vacate days (optional)"
             name="noticeToVacateDays"
             type="number"
@@ -370,6 +413,84 @@ export function RuleForm({
 
       <fieldset className="flex flex-col gap-4">
         <legend className="text-sm font-semibold">
+          Notice service methods (COMM-02)
+        </legend>
+        <p className="text-muted-foreground text-sm">
+          Which service methods the state allows, per notice type. A notice type with
+          nothing ticked means the state&rsquo;s service rules are not configured for it -
+          service is still recordable and flagged unverified, never refused.
+        </p>
+        <FieldError
+          id="field-notice-service-methods-error"
+          message={errors.noticeServiceMethods}
+        />
+        {serviceMethodTypes.map((noticeType) => (
+          <fieldset
+            key={noticeType}
+            className="border-input flex flex-col gap-2 rounded-md border p-3"
+          >
+            <legend className="px-1 text-sm font-medium">
+              {noticeTypeLabel(noticeType)}
+            </legend>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {NOTICE_SERVICE_METHODS.map((method) => (
+                <CheckboxField
+                  key={method}
+                  label={SERVICE_METHOD_LABELS[method]}
+                  ariaLabel={`${SERVICE_METHOD_LABELS[method]} — ${noticeTypeLabel(noticeType)}`}
+                  name={`serviceMethods:${noticeType}`}
+                  value={method}
+                  defaultChecked={
+                    configuredServiceMethods[noticeType]?.includes(method) ?? false
+                  }
+                />
+              ))}
+            </div>
+          </fieldset>
+        ))}
+      </fieldset>
+
+      <fieldset className="flex flex-col gap-4">
+        <legend className="text-sm font-semibold">Abandonment (RISK-01)</legend>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <TextField
+            label="Presumed abandoned after (days, optional)"
+            name="abandonmentPresumedAfterDays"
+            type="number"
+            inputMode="numeric"
+            min={0}
+            max={365}
+            defaultValue={defaults.abandonmentPresumedAfterDays}
+            error={errors.abandonmentPresumedAfterDays}
+            hint="Days of silence before the state treats a tenancy as presumptively abandoned. Left blank, the assessment warns and leaves the call with a person."
+          />
+          <TextField
+            label="Belongings storage period (days, optional)"
+            name="belongingsStorageDays"
+            type="number"
+            inputMode="numeric"
+            min={0}
+            max={365}
+            defaultValue={defaults.belongingsStorageDays}
+            error={errors.belongingsStorageDays}
+            hint="How long belongings must be held before disposal. Left blank, disposal is REFUSED outright - the one irreversible step in the workflow."
+          />
+          <TextField
+            label="Disposal notice period (days, optional)"
+            name="belongingsNoticeDays"
+            type="number"
+            inputMode="numeric"
+            min={0}
+            max={365}
+            defaultValue={defaults.belongingsNoticeDays}
+            error={errors.belongingsNoticeDays}
+            hint="Notice of intended disposal required on top of the storage period. 0 means the state expressly requires none - a different statement from blank."
+          />
+        </div>
+      </fieldset>
+
+      <fieldset className="flex flex-col gap-4">
+        <legend className="text-sm font-semibold">
           Payments and applications (PAY-03, LEASE-03)
         </legend>
         <div className="flex flex-col gap-2">
@@ -404,6 +525,46 @@ export function RuleForm({
           step={1}
           defaultValue={defaults.applicationFeeCapDollars}
           error={errors.applicationFeeCapCents}
+        />
+        <CheckboxField
+          label="Returned-payment fee permitted"
+          name="nsfFeePermitted"
+          defaultChecked={defaults.nsfFeePermitted ?? true}
+          // "state" must not appear in this hint: CheckboxField nests the
+          // hint INSIDE the <label>, so it joins the accessible name, and
+          // getByLabel('State') is a substring match (see CLAUDE.md).
+          hint="Whether an NSF fee is permitted here at all. The fee is still a lease term first - a lease that is silent charges nothing."
+        />
+        <TextField
+          label="Returned-payment fee cap ($, optional)"
+          name="nsfFeeMaxDollars"
+          type="number"
+          inputMode="decimal"
+          min={0}
+          step={1}
+          defaultValue={defaults.nsfFeeMaxDollars}
+          error={errors.nsfFeeMaxCents}
+          hint="The statutory ceiling core clamps to (D-12). Texas caps a returned-check fee at $30."
+        />
+        <SelectField
+          label="Card surcharge policy"
+          name="cardSurchargePolicy"
+          required
+          defaultValue={defaults.cardSurchargePolicy ?? 'NONE'}
+          error={errors.cardSurchargePolicy}
+          options={CARD_SURCHARGE_POLICY_OPTIONS}
+        />
+        <TextField
+          label="Card surcharge cap (% of amount, optional)"
+          name="cardSurchargeMaxPercent"
+          type="number"
+          inputMode="decimal"
+          min={0}
+          max={100}
+          step={0.1}
+          defaultValue={defaults.cardSurchargeMaxPercent}
+          error={errors.cardSurchargeMaxBps}
+          hint="A statutory ceiling on the surcharge, where the policy above permits one. Leave blank where the state sets none."
         />
         <CheckboxField
           label="RUBS billing permitted"

@@ -7353,3 +7353,58 @@ notice (R-157).
 ignoreCommand skips it by design).
 
 Commit: 9080b55
+
+## R-153: a new rule version no longer wipes the nine fields the form never rendered
+
+**What it built.** The review's finding 1, re-verified against the code
+before touching anything: `createRuleVersion` wrote only the fields the rule
+form rendered, so every new version silently reset nine statutory columns to
+schema defaults — `noticeServiceMethods` to null (D-48's "nobody has told
+us" for every service, and R-083's premature-filing gate reads the stored
+verdict), the three abandonment periods (D-92's refusal makes disposal
+impossible portfolio-wide), `leaseViolationCureDays`, the NSF pair (an
+UNCAPPED fee starts posting), and the card-surcharge pair (the surcharge
+switches off). Both halves of the prescribed fix: the action now spreads the
+previous version's entire row under the form's fields (`carriedForward` in
+`apps/web/lib/jurisdiction/actions.ts`), and the form renders all nine —
+cure days beside pay-or-quit, an Abandonment fieldset, NSF and card-surcharge
+controls in Payments, and a service-method sub-form: one checkbox grid per
+notice type (`KNOWN_NOTICE_TYPES` plus any free-form type the previous
+version configured), posted as `serviceMethods:<TYPE>` groups.
+`validateJurisdictionRule` gained the five fields it had never heard of,
+with the same half-finished-edit refusals the early-termination pair already
+makes (a cap where the fee is not permitted, a surcharge cap under policy
+NONE). The proof is the review's own test, in `e2e/jurisdiction.spec.ts`: a
+fully-populated v1, one field changed through the real form, and a loop
+asserting EVERY column of v2 equals v1 or is deliberately changed — so the
+next schema column the form has not learned yet fails the test the moment a
+version drops it.
+
+**What it decided.** The spread is kept even though the form now covers
+every column — it is the structural half: a future column carries forward
+instead of falling to its default. `reviewedBy` stays deliberately
+un-carried (a new version is a new legal question). The form cannot express
+`{ TYPE: [] }` ("expressly no method permitted") — unticking a row reads
+back as unconfigured; nothing writes empty lists today, and
+`parseServiceMethodMap`'s handling of them is unchanged if something ever
+does. `CheckboxField` gained an `ariaLabel` param so the ~63 repeated method
+checkboxes each carry a unique accessible name (`"<method> — <notice type>"`,
+label-in-name preserved per WCAG 2.5.3) instead of nine copies of
+"Certified mail".
+
+**What it left behind.** The audit row still records only
+state/version/effectiveFrom — the review noted the diff was invisible
+afterwards, but the fix makes the loss impossible and no row owns audit
+enrichment. The seed's TX row still leaves the abandonment trio and
+`leaseViolationCureDays` null (real config gaps, not wipes — they now
+survive versioning and can be filled through the form). Found along the way:
+`CheckboxField` nests its hint inside the `<label>`, so hint prose joins the
+accessible name — a hint containing "state" collided with `getByLabel('State')`
+and broke two existing specs until reworded; the comment in the form now
+warns the next author.
+
+**Gate run:** lint ✓, typecheck ✓, unit 2,816 passed / 4 skipped ✓,
+`e2e/jurisdiction.spec.ts` 9/9 on both desktop-chrome and mobile-chrome
+against the production build ✓, `npm run build` ✓. Full sweep is CI's.
+
+Commit: (recorded in the follow-up commit)

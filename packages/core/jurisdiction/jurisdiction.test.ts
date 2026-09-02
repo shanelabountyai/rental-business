@@ -29,6 +29,10 @@ function baseInput(
     sourceOfIncomeProtected: false,
     justCauseRequired: false,
     paymentAllocationOrder: ['RENT', 'LATE_FEE'],
+    nsfFeePermitted: true,
+    nsfFeeMaxCents: 3_000,
+    cardSurchargePolicy: 'CREDIT_ONLY',
+    cardSurchargeMaxBps: null,
     applicationFeeCapCents: null,
     rubsPermitted: true,
     citation: 'Tex. Prop. Code §92.019',
@@ -86,6 +90,42 @@ describe('validateJurisdictionRule', () => {
     expect(
       validateJurisdictionRule(baseInput({ preMoveOutWalkthroughDaysBefore: 200 })),
     ).toContainEqual(expect.objectContaining({ field: 'preMoveOutWalkthroughDaysBefore' }))
+  })
+
+  // R-153: the five fields the rule form never rendered, now validated on
+  // the same write path as everything else.
+  it('rejects an unrealistic violation cure period', () => {
+    expect(
+      validateJurisdictionRule(baseInput({ leaseViolationCureDays: 400 })),
+    ).toContainEqual(expect.objectContaining({ field: 'leaseViolationCureDays' }))
+  })
+
+  it('rejects an NSF cap on a rule that says the fee is not permitted', () => {
+    expect(
+      validateJurisdictionRule(baseInput({ nsfFeePermitted: false, nsfFeeMaxCents: 3_000 })),
+    ).toContainEqual(expect.objectContaining({ field: 'nsfFeeMaxCents' }))
+    expect(
+      validateJurisdictionRule(baseInput({ nsfFeePermitted: false, nsfFeeMaxCents: null })),
+    ).toEqual([])
+  })
+
+  it('rejects an unknown card-surcharge policy', () => {
+    expect(
+      validateJurisdictionRule(baseInput({ cardSurchargePolicy: 'DEBIT_ONLY' })),
+    ).toContainEqual(expect.objectContaining({ field: 'cardSurchargePolicy' }))
+  })
+
+  it('rejects a surcharge cap on a rule whose policy is NONE', () => {
+    expect(
+      validateJurisdictionRule(
+        baseInput({ cardSurchargePolicy: 'NONE', cardSurchargeMaxBps: 300 }),
+      ),
+    ).toContainEqual(expect.objectContaining({ field: 'cardSurchargeMaxBps' }))
+    expect(
+      validateJurisdictionRule(
+        baseInput({ cardSurchargePolicy: 'ALL', cardSurchargeMaxBps: 300 }),
+      ),
+    ).toEqual([])
   })
 
   it('rejects a state that is not a real US state code', () => {

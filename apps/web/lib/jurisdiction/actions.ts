@@ -5,7 +5,8 @@ import {
   type JurisdictionRuleInput,
   validateJurisdictionRule,
 } from '@rental/core/jurisdiction'
-import { prisma } from '@rental/db'
+import type { ServiceMethodMap } from '@rental/core/notices'
+import { type JurisdictionRule, prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { audit } from '@/lib/audit/index.ts'
@@ -20,6 +21,28 @@ import { currentRuleVersion } from './queries.ts'
 export interface FormState {
   error?: string
   fieldErrors?: Record<string, string>
+}
+
+/// R-153. The previous version's ENTIRE row, minus the columns that identify
+/// a version rather than state a rule, as the base the new version is built
+/// on. This is the structural half of the fix for "a new version silently
+/// reset nine statutory fields to schema defaults": a column added to the
+/// schema before the form learns to render it now carries forward instead of
+/// falling to its default - an uncapped NSF fee, a dead disposal workflow.
+/// `noticeServiceMethods` is excluded because the form always states it and
+/// its read-back JsonValue type does not fit Prisma's Json write input.
+function carriedForward(previous: JurisdictionRule) {
+  const {
+    id: _id,
+    version: _version,
+    effectiveFrom: _effectiveFrom,
+    effectiveTo: _effectiveTo,
+    createdAt: _createdAt,
+    updatedAt: _updatedAt,
+    noticeServiceMethods: _noticeServiceMethods,
+    ...rest
+  } = previous
+  return rest
 }
 
 function violationsToState(
@@ -67,6 +90,20 @@ function optionalBps(formData: FormData, name: string): number | null {
   return percent != null ? Math.round(percent * 100) : null
 }
 
+/// The service-method sub-form posts one checkbox group per notice type,
+/// named `serviceMethods:<TYPE>` - a type with nothing ticked posts nothing
+/// and stays out of the map, which reads back as "not configured" (D-48's
+/// null, never "no method permitted"). validateJurisdictionRule checks every
+/// method name, so the cast is a claim it verifies before anything is written.
+function serviceMethodsFrom(formData: FormData): ServiceMethodMap | null {
+  const map: Record<string, string[]> = {}
+  for (const key of new Set(formData.keys())) {
+    if (!key.startsWith('serviceMethods:')) continue
+    map[key.slice('serviceMethods:'.length)] = formData.getAll(key).map(String)
+  }
+  return Object.keys(map).length > 0 ? (map as ServiceMethodMap) : null
+}
+
 function ruleInputFrom(formData: FormData): JurisdictionRuleInput {
   return {
     state: str(formData, 'state'),
@@ -98,6 +135,15 @@ function ruleInputFrom(formData: FormData): JurisdictionRuleInput {
       .getAll('earlyTerminationDocumentationTypes')
       .map(String),
     justCauseRequired: formData.get('justCauseRequired') === 'on',
+    abandonmentPresumedAfterDays: optionalNumber(formData, 'abandonmentPresumedAfterDays'),
+    belongingsStorageDays: optionalNumber(formData, 'belongingsStorageDays'),
+    belongingsNoticeDays: optionalNumber(formData, 'belongingsNoticeDays'),
+    leaseViolationCureDays: optionalNumber(formData, 'leaseViolationCureDays'),
+    nsfFeePermitted: formData.get('nsfFeePermitted') === 'on',
+    nsfFeeMaxCents: optionalCents(formData, 'nsfFeeMaxDollars'),
+    cardSurchargePolicy: str(formData, 'cardSurchargePolicy'),
+    cardSurchargeMaxBps: optionalBps(formData, 'cardSurchargeMaxPercent'),
+    noticeServiceMethods: serviceMethodsFrom(formData),
     paymentAllocationOrder: formData.getAll('paymentAllocationOrder').map(String),
     applicationFeeCapCents: optionalCents(formData, 'applicationFeeCapDollars'),
     rubsPermitted: formData.get('rubsPermitted') === 'on',
@@ -156,6 +202,7 @@ export async function createRuleVersion(
 
     const created = await tx.jurisdictionRule.create({
       data: {
+        ...(previous ? carriedForward(previous) : {}),
         state: input.state,
         jurisdiction: input.jurisdiction,
         version,
@@ -184,6 +231,17 @@ export async function createRuleVersion(
         retaliationWindowDays: input.retaliationWindowDays,
         sourceOfIncomeProtected: input.sourceOfIncomeProtected,
         justCauseRequired: input.justCauseRequired,
+        abandonmentPresumedAfterDays: input.abandonmentPresumedAfterDays,
+        belongingsStorageDays: input.belongingsStorageDays,
+        belongingsNoticeDays: input.belongingsNoticeDays,
+        leaseViolationCureDays: input.leaseViolationCureDays,
+        nsfFeePermitted: input.nsfFeePermitted,
+        nsfFeeMaxCents: input.nsfFeeMaxCents,
+        cardSurchargePolicy: input.cardSurchargePolicy as never,
+        cardSurchargeMaxBps: input.cardSurchargeMaxBps,
+        // A cleared map falls to the column's own default (null) rather than
+        // writing Prisma.JsonNull - same outcome, no special-case import.
+        noticeServiceMethods: input.noticeServiceMethods ?? undefined,
         paymentAllocationOrder: input.paymentAllocationOrder,
         applicationFeeCapCents: input.applicationFeeCapCents,
         rubsPermitted: input.rubsPermitted,

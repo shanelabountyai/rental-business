@@ -1,4 +1,4 @@
-import type { ChargeType, LateFeeType } from '@rental/db'
+import type { CardSurchargePolicy, ChargeType, LateFeeType } from '@rental/db'
 import { isUsStateCode } from '../property/us-states.ts'
 // Imported from the leaf module, not '../notices/index.ts': this file is
 // reachable from a client component (see the note below), so it takes the
@@ -33,6 +33,15 @@ const LATE_FEE_TYPES = [
   'FLAT_PLUS_DAILY',
 ] as const satisfies readonly LateFeeType[]
 const LATE_FEE_TYPE_SET: ReadonlySet<string> = new Set(LATE_FEE_TYPES)
+
+const CARD_SURCHARGE_POLICIES = [
+  'NONE',
+  'CREDIT_ONLY',
+  'ALL',
+] as const satisfies readonly CardSurchargePolicy[]
+const CARD_SURCHARGE_POLICY_SET: ReadonlySet<string> = new Set(
+  CARD_SURCHARGE_POLICIES,
+)
 
 const ALL_CHARGE_TYPES = [
   'RENT',
@@ -119,6 +128,21 @@ export interface JurisdictionRuleInput {
   /// Notice of intended disposal the state requires ON TOP of the storage
   /// period. Null means not configured; 0 means expressly none needed.
   belongingsNoticeDays?: number | null
+
+  /// R-088. Days to cure a NON-MONETARY breach after a violation notice -
+  /// distinct from `payOrQuitDays`, the nonpayment clock. Null means not
+  /// configured; `cureClock` then reports a clock with no deadline.
+  leaseViolationCureDays?: number | null
+
+  /// PAY-02's returned-payment fee (R-039). Whether the state permits one at
+  /// all, and the statutory ceiling core clamps to (D-12) where it does.
+  nsfFeePermitted: boolean
+  nsfFeeMaxCents?: number | null
+  /// PAY-01's card pass-through (R-037b, D-149). Three states, not a
+  /// boolean - Texas permits a surcharge on credit while barring it on
+  /// debit, which a boolean could not say.
+  cardSurchargePolicy: string
+  cardSurchargeMaxBps?: number | null
 
   paymentAllocationOrder: string[]
   /// Which service methods serve which notice type here (R-051, COMM-02).
@@ -261,6 +285,7 @@ export function validateJurisdictionRule(
     'abandonmentPresumedAfterDays',
     'belongingsStorageDays',
     'belongingsNoticeDays',
+    'leaseViolationCureDays',
   ] as const) {
     const value = input[field]
     if (value != null && !isWholeNumberInRange(value, 365)) {
@@ -301,6 +326,46 @@ export function validateJurisdictionRule(
       }
       seen.add(chargeType)
     }
+  }
+
+  if (
+    input.nsfFeeMaxCents != null &&
+    !isWholeNumberInRange(input.nsfFeeMaxCents, 100_000_00)
+  ) {
+    violations.push({
+      field: 'nsfFeeMaxCents',
+      message: 'Enter a realistic returned-payment fee cap, or leave blank for no statutory cap.',
+    })
+  }
+  // The same half-finished-edit refusal the early-termination pair makes:
+  // "no fee here, capped at $30" is a rule nobody meant to write.
+  if (!input.nsfFeePermitted && input.nsfFeeMaxCents != null) {
+    violations.push({
+      field: 'nsfFeeMaxCents',
+      message: 'A cap only means something where the fee is permitted.',
+    })
+  }
+
+  if (!CARD_SURCHARGE_POLICY_SET.has(input.cardSurchargePolicy)) {
+    violations.push({
+      field: 'cardSurchargePolicy',
+      message: 'Choose a card-surcharge policy.',
+    })
+  }
+  if (
+    input.cardSurchargeMaxBps != null &&
+    !isWholeNumberInRange(input.cardSurchargeMaxBps, 10_000)
+  ) {
+    violations.push({
+      field: 'cardSurchargeMaxBps',
+      message: 'Enter a realistic surcharge cap in basis points, or leave blank for no statutory cap.',
+    })
+  }
+  if (input.cardSurchargePolicy === 'NONE' && input.cardSurchargeMaxBps != null) {
+    violations.push({
+      field: 'cardSurchargeMaxBps',
+      message: 'A cap only means something where a surcharge is permitted.',
+    })
   }
 
   if (
