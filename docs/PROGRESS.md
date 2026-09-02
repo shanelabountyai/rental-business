@@ -7123,4 +7123,4 @@ E2E via `test:e2e` (production build): `ops-visibility` 4/4, and the
 touched-page set `notifications.spec.ts` + `shell.spec.ts` green in the same
 sweep that caught the two spec defects above. Full sweep belongs to CI.
 
-Commit: (recorded in follow-up)
+Commit: d1f76e9
