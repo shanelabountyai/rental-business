@@ -7287,4 +7287,4 @@ or deliberately deleted, with each deletion read first (D-158).
 of 2,816** (down the four deleted conditionChange tests). Pure core-level
 deletion with no route or component change; CI's full sweep is the backstop.
 
-Commit: (recorded in follow-up)
+Commit: 0413ef9
