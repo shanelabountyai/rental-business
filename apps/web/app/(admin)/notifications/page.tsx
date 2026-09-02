@@ -1,5 +1,6 @@
 import { friendlyTimestamp } from '@rental/core/scheduling'
 import { requireScope } from '@/lib/auth/guard.ts'
+import { deadLetteredEvents } from '@/lib/jobs/outbox.ts'
 import { listNotifications } from '@/lib/notifications/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 
@@ -56,9 +57,15 @@ export default async function NotificationsPage() {
   // property-scoped manager holds message.read only over their own property,
   // and a resource-less check would deny them this page entirely rather than
   // letting the scoped query decide which rows they see.
-  const { actor } = await requireScope('message.read')
+  const { actor, scope: permissionScope } = await requireScope('message.read')
   const scope = await currentScope(actor)
   const notifications = await listNotifications(scope)
+
+  // R-147: an event that exhausted its retries is the most upstream "it did
+  // not get through" this screen can show. Dead letters can belong to any
+  // property or none, so the panel is portfolio-wide only - the same rule
+  // the money screen's drift panel and announcement history follow.
+  const deadLetters = permissionScope.everything ? await deadLetteredEvents() : null
 
   return (
     <div className="flex flex-col gap-6">
@@ -113,6 +120,42 @@ export default async function NotificationsPage() {
             )
           })}
         </ul>
+      )}
+
+      {deadLetters && (
+        <section className="flex flex-col gap-3">
+          <h2 className="text-lg font-semibold">Events that gave up</h2>
+          <p className="text-muted-foreground text-sm">
+            Internal events that exhausted their delivery retries before any
+            consumer handled them. Whatever they were meant to cause — a
+            notification, a task, a sync — never happened.
+          </p>
+          {deadLetters.length === 0 ? (
+            <p className="text-muted-foreground text-sm">
+              Nothing has exhausted its retries.
+            </p>
+          ) : (
+            <ul className="flex flex-col divide-y rounded-md border">
+              {deadLetters.map((event) => (
+                <li key={event.id} className="flex flex-col gap-1 px-4 py-3 text-sm">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="font-medium">{event.type}</span>
+                    <span className="rounded-md bg-red-100 px-2 py-0.5 text-xs font-medium text-red-900">
+                      Gave up after {event.attempts} attempts
+                    </span>
+                  </div>
+                  <p className="text-muted-foreground">
+                    {event.aggregateType} {event.aggregateId} ·{' '}
+                    {friendlyTimestamp(event.occurredAt, 'UTC')}
+                  </p>
+                  {event.lastError && (
+                    <p className="text-red-700">{event.lastError}</p>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
       )}
     </div>
   )

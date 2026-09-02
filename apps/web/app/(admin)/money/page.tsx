@@ -1,11 +1,21 @@
 import { friendlyTimestamp } from '@rental/core/scheduling'
 import Link from 'next/link'
 import { BillingRuns } from '@/components/billing/billing-runs.tsx'
+import {
+  parseDriftRun,
+  ReconciliationDrift,
+  StripeEventLog,
+} from '@/components/money/ops-log.tsx'
 import { WaiverPattern } from '@/components/money/waiver-pattern.tsx'
 import { requirePermission, requireScope } from '@/lib/auth/guard.ts'
 import { resyncPayer } from '@/lib/billing/actions.ts'
 import { billingRunRows } from '@/lib/billing/lifecycle.ts'
 import { billingIsLive, billingProviderName } from '@/lib/billing/provider.ts'
+import { recentStripeEvents } from '@/lib/billing/webhook.ts'
+import {
+  externalReconciliationAvailable,
+  recentDrift,
+} from '@/lib/ledger/reconcile.ts'
 import { waiverPatternByTenant } from '@/lib/ledger/waiver-report.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 
@@ -24,12 +34,19 @@ export default async function MoneyPage() {
   // empty resource only ever matches a portfolio-wide grant, so the obvious
   // guard locks out every entity- and property-scoped actor. See
   // `requireScope`'s own comment.
-  const { actor } = await requireScope('ledger.read')
+  const { actor, scope: permissionScope } = await requireScope('ledger.read')
   const scope = await currentScope(actor)
   const [rows, waiverRows] = await Promise.all([
     billingRunRows(scope.propertyIds),
     waiverPatternByTenant(scope.propertyIds),
   ])
+
+  // R-147: drift audit rows and Stripe's event log carry no propertyId, so
+  // they are shown only to an actor whose grant covers the whole portfolio -
+  // the same rule announcement history follows, for the same reason.
+  const ops = permissionScope.everything
+    ? await Promise.all([recentDrift(), recentStripeEvents()])
+    : null
 
   return (
     <div className="flex max-w-3xl flex-col gap-6">
@@ -82,6 +99,16 @@ export default async function MoneyPage() {
       />
 
       <WaiverPattern rows={waiverRows} />
+
+      {ops && (
+        <>
+          <ReconciliationDrift
+            available={externalReconciliationAvailable()}
+            runs={ops[0].map(parseDriftRun)}
+          />
+          <StripeEventLog events={ops[1]} />
+        </>
+      )}
     </div>
   )
 }

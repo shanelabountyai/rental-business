@@ -7080,3 +7080,47 @@ per-component classes). `--accent` repointed from the grey wash to copper
   only" rule, re-proven.) Full sweep belongs to CI per the gate's own text.
 
 Commit: fc4c789
+
+## R-147: the operational-visibility readers get their screens
+
+**What it built.** The first slice of R-145's "nine missing screens": the
+reconciliation-drift panel and Stripe event log on `/money`
+(`components/money/ops-log.tsx`), and the dead-letter panel on
+`/notifications`. Read-only by construction; drift and dead letters render
+red + words, never the copper accent (D-163's standing rule). One new spec,
+`e2e/ops-visibility.spec.ts`, drives both pages as a portfolio owner and a
+property-scoped manager.
+
+**What it decided.**
+- **Portfolio-wide only, all three panels.** Drift audit rows,
+  `ProcessedStripeEvent` and dead letters carry no propertyId, so the panels
+  follow `announcementHistory`'s rule: rendered only when the actor's
+  permission scope is `everything`, absent (not empty) for a scoped manager.
+- **UTC timestamps, printed with the abbreviation** — these rows hang off no
+  property, so UTC is the honest clock (the notification log's precedent).
+- **The readers themselves are untouched.** The item gives them screens; it
+  does not re-scope them.
+
+**What it left behind.**
+- Six of the nine readers still have no screen: `documentsPastRetention`,
+  `listRuleVersions`, `getAccessCodeHistory`, `effectLabels`,
+  `blockedNumbers` — plus the `cardFeeDisclosure` five-minute read R-145
+  flagged. Next slices of this thread, plus the 12-rules read.
+- **The shared test database holds 1,099 FUTURE-dated `ProcessedStripeEvent`
+  rows** (unit-test fixture debris, measured 2026-09-01). The screen lists
+  newest-first, so a spec row stamped "now" can never surface — the spec
+  seeds year 9999 and deletes by id. If that debris keeps growing, the
+  fixtures writing future timestamps are the thing to fix, not the reader.
+- Two spec traps re-proven and dodged: deleting a signed-in staff user trips
+  the AuditLog append-only trigger via the actorStaffId SetNull (deactivate
+  instead, notifications.spec's pattern), and a retried test seeding a second
+  drift run made a bare "off by $123.45" ambiguous (assert the run-unique
+  detail and the amount as one string).
+
+**Gate run:** `lint` 0 errors + the same 14 pre-existing warnings,
+`typecheck` clean, unit **2,844 passed + 4 skipped of 2,848** (unchanged).
+E2E via `test:e2e` (production build): `ops-visibility` 4/4, and the
+touched-page set `notifications.spec.ts` + `shell.spec.ts` green in the same
+sweep that caught the two spec defects above. Full sweep belongs to CI.
+
+Commit: (recorded in follow-up)
