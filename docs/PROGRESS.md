@@ -7320,3 +7320,36 @@ fixture debris R-147 already recorded, not a rendering defect.
 4/4 with the new cap assertion. Component-only change; CI owns the sweep.
 
 Commit: 526c3df
+
+## Arc 2 planning: the operator review sources the next backlog
+
+**What it did.** The original backlog closed at R-152 with everything left
+either cut (D-122/D-133/D-136), deferred (D-17), or partner-gated (R-093).
+The owner chose the next arc's source (D-164): the rental-operator agent
+reviewed the shipped product end to end — PRDs, decisions, PROGRESS, and the
+code itself — and returned sixteen ranked findings, five of them behaviour
+that is WRONG rather than missing. The full review is kept verbatim at
+`docs/reviews/2026-09-02-operator-review.md`; the findings became Milestone
+12 ("Arc 2") in `06-backlog.md`, rows R-153–R-168, wrongness first.
+
+**What it decided.** D-164 (the arc itself, and that the cut items' re-open
+triggers stay authoritative). The review's "Do not build" list is recorded
+as part of the milestone: no second case queue (D-9), no two-way calendar
+sync, no settings UI for house-rule constants, no backfill of R-038a's
+historical no-ledger payments. Two rows are OQ-gated: R-156 needs
+counsel-reviewed acceptance-waiver values in `JurisdictionRule`, and R-168
+needs an owner decision on the opening-balance mechanism plus an L-split
+before starting.
+
+**What it left behind.** The findings are inherited evidence — each row says
+so, and each build session re-verifies its claim against the code before
+touching anything (R-150's lesson). The headline candidates for wrongness:
+`createRuleVersion` dropping nine statutory fields (R-153), renewal
+stranding the `Deposit` row (R-154), `certifiedFundsOnly` unenforced offline
+(R-155), no payment-to-case linkage (R-156), inspections entering with no
+notice (R-157).
+
+**Gate run:** docs-only change — no code touched, no deploy (the
+ignoreCommand skips it by design).
+
+Commit: (recorded in the follow-up commit)
