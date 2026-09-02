@@ -7,7 +7,7 @@ import { actorCan, propertyResource, requireScope } from '@/lib/auth/guard.ts'
 import { currentScope as switcherScope } from '@/lib/scope/current-scope.ts'
 import { listDeletedDocuments, listDocuments } from '@/lib/documents/queries.ts'
 import { listingForUnit } from '@/lib/listings/queries.ts'
-import { getOperationalData } from '@/lib/operational/queries.ts'
+import { getAccessCodeHistory, getOperationalData } from '@/lib/operational/queries.ts'
 import { SmartLockPanel } from '@/components/showings/smart-lock-panel.tsx'
 import { smartLockPanel } from '@/lib/showings/lock-queries.ts'
 import { revokeShowingAccess, syncLockEvents } from '@/lib/showings/staff-actions.ts'
@@ -152,6 +152,20 @@ export default async function UnitDetailPage({
     actorCan('lease.write', propertyResource(unit.property)),
   ])
 
+  // R-148: PROP-03's "history log", unread since it was written. One query
+  // per code slot currently on file; the sealed code itself is never in the
+  // rendered history - only versions, dates and labels.
+  const accessCodeHistories = operationalData
+    ? Object.fromEntries(
+        await Promise.all(
+          [...new Set(operationalData.accessCodes.map((code) => code.type))].map(
+            async (type) =>
+              [type, await getAccessCodeHistory(propertyId, unitId, type, scope)] as const,
+          ),
+        ),
+      )
+    : {}
+
   return (
     <div className="flex max-w-2xl flex-col gap-6">
       <header className="flex flex-wrap items-start justify-between gap-3">
@@ -227,6 +241,8 @@ export default async function UnitDetailPage({
           <OperationalDataSection
             unitId={unitId}
             accessCodes={operationalData.accessCodes}
+            accessCodeHistories={accessCodeHistories}
+            timeZone={unit.property.timezone}
             appliances={operationalData.appliances}
             utilityAccounts={operationalData.utilityAccounts}
             shutoffs={operationalData.shutoffs}

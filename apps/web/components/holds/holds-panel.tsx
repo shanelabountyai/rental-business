@@ -1,6 +1,6 @@
 'use client'
 
-import { EFFECT_LABELS, HOLD_DEFINITIONS, HOLD_TYPES, type HoldType } from '@rental/core/holds'
+import { effectLabels, HOLD_DEFINITIONS, HOLD_TYPES, type HoldType } from '@rental/core/holds'
 import { useActionState, useState } from 'react'
 import { FormAlerts, LiveRegion, SubmitButton } from '@/components/auth-form.tsx'
 import { SelectField, TextField } from '@/components/form/field.tsx'
@@ -73,7 +73,7 @@ function PlaceForm({
       <LiveRegion>
         {type && (
           <p className="text-muted-foreground text-sm">
-            Switches on: {HOLD_DEFINITIONS[type].effects.map((e) => EFFECT_LABELS[e]).join('; ')}.
+            Switches on: {effectLabels(type).join('; ')}.
             {HOLD_DEFINITIONS[type].liftIsPrivileged &&
               ' Lifting it later needs the protected-hold permission and a second factor.'}
           </p>
@@ -175,7 +175,7 @@ export function HoldsPanel({
                 Placed {hold.placedOn} by {hold.placedByName} — “{hold.reason}”
               </span>
               <span className="text-muted-foreground text-xs">
-                {HOLD_DEFINITIONS[hold.type].effects.map((e) => EFFECT_LABELS[e]).join('; ')}.
+                {effectLabels(hold.type).join('; ')}.
               </span>
               {canManage && <LiftForm hold={hold} action={liftAction} />}
             </li>

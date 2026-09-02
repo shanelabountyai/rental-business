@@ -159,6 +159,18 @@ export default async function ReportsPage() {
             </span>
           </Link>
         </li>
+        <li>
+          <Link
+            href="/reports/retention"
+            className="hover:bg-secondary focus-visible:ring-ring flex min-h-14 flex-col justify-center gap-0.5 px-4 py-3 focus-visible:ring-2 focus-visible:-outline-offset-2 focus-visible:outline-none"
+          >
+            <span className="font-medium">Retention review</span>
+            <span className="text-muted-foreground text-sm">
+              Documents past their retention window (DOC-05), for a person to review — nothing is
+              purged automatically.
+            </span>
+          </Link>
+        </li>
       </ul>
     </div>
   )

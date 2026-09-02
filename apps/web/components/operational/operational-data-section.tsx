@@ -1,3 +1,4 @@
+import { friendlyTimestamp } from '@rental/core/scheduling'
 import type { AccessCode, Appliance, ShutoffLocation, UtilityAccount } from '@rental/db'
 import { AddAccessCodeForm } from '@/components/operational/add-access-code-form.tsx'
 import { AddApplianceForm } from '@/components/operational/add-appliance-form.tsx'
@@ -56,6 +57,8 @@ const SHUTOFF_TYPE_LABELS: Record<string, string> = {
 export async function OperationalDataSection({
   unitId,
   accessCodes,
+  accessCodeHistories,
+  timeZone,
   appliances,
   utilityAccounts,
   shutoffs,
@@ -64,6 +67,12 @@ export async function OperationalDataSection({
 }: {
   unitId: string
   accessCodes: AccessCode[]
+  /// Every version ever recorded per code slot (R-148, PROP-03's history
+  /// log). Metadata only - the sealed code never renders here; revealing a
+  /// current code stays behind `canReveal` and its audit row.
+  accessCodeHistories: Record<string, AccessCode[]>
+  /// The property's clock, for the history dates.
+  timeZone: string
   appliances: Appliance[]
   utilityAccounts: UtilityAccount[]
   shutoffs: ShutoffLocation[]
@@ -90,6 +99,26 @@ export async function OperationalDataSection({
                   <RevealCodeButton action={revealAccessCode.bind(null, unitId, code.id, null)} />
                 ) : (
                   <span className="text-muted-foreground font-mono text-sm">••••</span>
+                )}
+                {(accessCodeHistories[code.type]?.length ?? 0) > 0 && (
+                  <details className="w-full">
+                    <summary className="min-h-11 cursor-pointer text-sm">
+                      History ({accessCodeHistories[code.type]!.length}{' '}
+                      {accessCodeHistories[code.type]!.length === 1 ? 'version' : 'versions'})
+                    </summary>
+                    <ul className="text-muted-foreground flex flex-col gap-1 pt-1 pl-4">
+                      {accessCodeHistories[code.type]!.map((version) => (
+                        <li key={version.id}>
+                          v{version.version}
+                          {version.label ? ` — ${version.label}` : ''} · set{' '}
+                          {friendlyTimestamp(version.effectiveFrom, timeZone)}
+                          {version.effectiveTo
+                            ? ` · replaced ${friendlyTimestamp(version.effectiveTo, timeZone)}`
+                            : ' · current'}
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
                 )}
               </li>
             ))}

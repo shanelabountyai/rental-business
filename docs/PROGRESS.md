@@ -7124,3 +7124,42 @@ touched-page set `notifications.spec.ts` + `shell.spec.ts` green in the same
 sweep that caught the two spec defects above. Full sweep belongs to CI.
 
 Commit: d1f76e9
+
+## R-148: the last five readers get their screens, and cardFeeDisclosure gets its verdict
+
+**What it built.** The rest of R-145's "missing screens" list, each in its
+named home: jurisdiction version history as a `<details>` per row on
+`/jurisdiction` (no new route, no client code); access-code history per slot
+on the unit page; the DOC-05 retention review at `/reports/retention` with a
+hub link; the SMS opt-out note beside a party's phone on `/leases/[id]`
+(staff texting into the void could not see why); and `effectLabels` wired
+into `holds-panel.tsx`, which had **inlined the function's body verbatim in
+two places** — the reader was not missing a screen, the screen was missing
+the call.
+
+**What it decided.**
+- **`cardFeeDisclosure` is NOT a live obligation** (closing R-145's open
+  question): the pay form renders the equivalent sentence live against the
+  typed amount, gated on the same permitted/zero rules, and a client
+  recomputing per keystroke structurally cannot call the server-side
+  function. It is a dead duplicate; deletion belongs to the dead-code item.
+- **Access-code history renders metadata only** — versions, labels, dates.
+  The sealed code stays behind `canReveal` and its audit row.
+- **The retention review is a report, never a purge** — the reader's own
+  header says so and the page repeats it.
+
+**What it left behind.**
+- The R-145 thread's remaining half: the **12 rules nothing applies** and
+  the 41-item dead-code list (now 40, with `effectLabels` alive and
+  `cardFeeDisclosure` given its verdict). That is the next item.
+- No negative (scoped-manager) e2e cases: all four readers scope themselves
+  through the same guards their host pages already prove in ROLE-01 specs.
+
+**Gate run:** `lint` 0 errors, `typecheck` clean, unit **2,845 + 4 skipped
+of 2,849** — up exactly one, which is `route-guards.test.ts` generating a
+test per route file and picking up `/reports/retention` (its guard passed).
+E2E via `test:e2e`: `reader-screens` 4/4 (new), `lease-holds` 4/4
+(effectLabels unchanged output), and the touched-page set `jurisdiction` +
+`operational` + `units` + `reports` + `leases` 48/48, no flaky.
+
+Commit: (recorded in follow-up)

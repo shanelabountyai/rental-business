@@ -1,7 +1,7 @@
 import { friendlyBusinessDate, utcToBusinessDate } from '@rental/core/scheduling'
 import Link from 'next/link'
 import { actorCan, requirePermission } from '@/lib/auth/guard.ts'
-import { listCurrentRules } from '@/lib/jurisdiction/queries.ts'
+import { listCurrentRules, listRuleVersions } from '@/lib/jurisdiction/queries.ts'
 
 export const metadata = { title: 'Jurisdiction rules — Rental Operations' }
 
@@ -50,6 +50,14 @@ export default async function JurisdictionRulesPage({
     searchParams,
   ])
 
+  // R-148: the version history D-4 promises. Old versions are never edited
+  // or deleted, so the history IS the audit trail - it just had no screen
+  // until now (`listRuleVersions` sat unread since R-010). One query per
+  // configured pair; a handful of states, not a fan-out worth batching.
+  const histories = await Promise.all(
+    rules.map((rule) => listRuleVersions(rule.state, rule.jurisdiction)),
+  )
+
   return (
     <div className="flex flex-col gap-6">
       <header className="flex flex-wrap items-center justify-between gap-3">
@@ -90,7 +98,7 @@ export default async function JurisdictionRulesPage({
         </p>
       ) : (
         <ul className="flex flex-col divide-y rounded-md border">
-          {rules.map((rule) => (
+          {rules.map((rule, index) => (
             <li key={rule.id} className="flex flex-col gap-1 px-4 py-3">
               <div className="flex flex-wrap items-baseline justify-between gap-2">
                 <span className="font-medium">
@@ -106,6 +114,27 @@ export default async function JurisdictionRulesPage({
               <p className="text-muted-foreground text-sm">
                 {summarize(rule)}
               </p>
+              <details>
+                <summary className="min-h-11 cursor-pointer text-sm font-medium">
+                  Version history ({histories[index]!.length})
+                </summary>
+                <ul className="flex flex-col gap-1 pt-1 pl-4 text-sm">
+                  {histories[index]!.map((version) => (
+                    <li key={version.id}>
+                      v{version.version} · effective{' '}
+                      {friendlyBusinessDate(utcToBusinessDate(version.effectiveFrom))}
+                      {version.effectiveTo
+                        ? ` to ${friendlyBusinessDate(utcToBusinessDate(version.effectiveTo))}`
+                        : ' — current'}
+                      <span className="text-muted-foreground">
+                        {version.reviewedBy
+                          ? ` · reviewed by ${version.reviewedBy}`
+                          : ' · unreviewed'}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </details>
               {canWrite && (
                 <Link
                   href={`/jurisdiction/new?state=${rule.state}${rule.jurisdiction ? `&jurisdiction=${encodeURIComponent(rule.jurisdiction)}` : ''}`}

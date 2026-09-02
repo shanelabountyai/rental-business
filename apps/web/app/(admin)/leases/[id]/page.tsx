@@ -1,4 +1,5 @@
-import { formatPhone } from '@rental/core/comms'
+import { formatPhone, normalizePhone } from '@rental/core/comms'
+import { blockedNumbers } from '@/lib/comms/opt-out-store.ts'
 import {
   CONDITION_BASELINE_DOCUMENT_TYPE,
   type LeaseStatusValue,
@@ -138,6 +139,20 @@ export default async function LeaseDetailPage({
   // Out of scope and does not exist are indistinguishable - the same call
   // every other detail page in this product makes.
   if (!lease) notFound()
+
+  // R-148: a party who texted STOP gets silence from every SMS this product
+  // sends, and until now nothing on this screen said so - staff texting into
+  // the void read it as a tenant ignoring them. Informational, not an alarm.
+  const smsBlocked = await blockedNumbers([
+    ...lease.leaseTenants.map((lt) => lt.tenant.phone),
+    ...lease.guarantors.map((g) => g.phone),
+  ])
+  const phoneWithNote = (phone: string) => {
+    const normalized = normalizePhone(phone)
+    return normalized && smsBlocked.has(normalized)
+      ? `${formatPhone(phone)} (opted out of texts)`
+      : formatPhone(phone)
+  }
 
   // What this state demands of money held on trust (D-4, R-041). Read from
   // the versioned rule rather than hardcoded, and empty for a state nobody
@@ -755,7 +770,7 @@ export default async function LeaseDetailPage({
           id: lt.id,
           name: `${lt.tenant.firstName} ${lt.tenant.lastName}`,
           contact:
-            [lt.tenant.email, lt.tenant.phone ? formatPhone(lt.tenant.phone) : null]
+            [lt.tenant.email, lt.tenant.phone ? phoneWithNote(lt.tenant.phone) : null]
               .filter(Boolean)
               .join(' · ') || 'No contact details on file',
           isPrimary: lt.isPrimary,
@@ -764,7 +779,7 @@ export default async function LeaseDetailPage({
           id: g.id,
           name: `${g.firstName} ${g.lastName}`,
           contact:
-            [g.email, g.phone ? formatPhone(g.phone) : null].filter(Boolean).join(' · ') ||
+            [g.email, g.phone ? phoneWithNote(g.phone) : null].filter(Boolean).join(' · ') ||
             'No contact details on file',
         }))}
         selectableTenants={tenants
