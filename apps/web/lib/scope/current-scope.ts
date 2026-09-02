@@ -28,13 +28,6 @@ function parseCookie(raw: string | undefined): ScopeSelection {
   return { kind: 'all' }
 }
 
-export function serializeSelection(selection: ScopeSelection): string {
-  if (selection.kind === 'all') return 'all'
-  return selection.kind === 'entity'
-    ? `entity:${selection.legalEntityId}`
-    : `property:${selection.propertyId}`
-}
-
 /**
  * Resolves what the actor is currently looking at.
  *

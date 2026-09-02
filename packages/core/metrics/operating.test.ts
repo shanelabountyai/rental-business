@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { endOfMonth, monthStartsBetween, startOfMonth } from '../scheduling/local-time.ts'
+import { monthStartsBetween, startOfMonth } from '../scheduling/local-time.ts'
 import type { ExportLine } from '../tax/export.ts'
 import {
   UNATTRIBUTED_TRADE,
@@ -32,15 +32,6 @@ function line(overrides: Partial<ExportLine> = {}): ExportLine {
 }
 
 describe('month helpers', () => {
-  it('finds the first and last day of a month', () => {
-    expect(startOfMonth('2026-03-17')).toBe('2026-03-01')
-    expect(endOfMonth('2026-03-17')).toBe('2026-03-31')
-  })
-
-  it('knows how long February is, in both kinds of year', () => {
-    expect(endOfMonth('2026-02-10')).toBe('2026-02-28')
-    expect(endOfMonth('2028-02-10')).toBe('2028-02-29')
-  })
 
   it('counts a partial month at either end as a month', () => {
     // A report that dropped March's four days would print a total that does

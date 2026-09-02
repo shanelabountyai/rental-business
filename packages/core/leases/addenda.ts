@@ -64,6 +64,3 @@ export function applicableAddenda(facts: PropertyAddendumFacts): AddendumKey[] {
   return keys
 }
 
-export function isAddendumKey(value: string): value is AddendumKey {
-  return (ADDENDUM_KEYS as readonly string[]).includes(value)
-}

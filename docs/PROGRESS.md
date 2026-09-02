@@ -7221,3 +7221,42 @@ the new rehash test) + `pay` + `pay-link` + `rent-roll` +
 `notice-to-vacate` + `scra` + `lease-holds` 71/71, no flaky.
 
 Commit: f992cd7
+
+## R-150: the last 20 dead exports deleted, and the R-143 thread closes
+
+**What it did.** Deleted the remaining dead exports from R-145's classified
+list — after re-verifying every name against the whole tracked tree, because
+that list once held live code (`matchRecoveryCode`). The 12 named: `cn`
+(the entirety of `apps/web/lib/utils.ts`, and with it the `clsx` and
+`tailwind-merge` dependencies, used nowhere else), `endOfMonth`,
+`serializeSelection`, `toCoreLookupResult`, `idempotencyKeyFor`,
+`oneOffIdempotencyKey`, the five unpromised readers (`getAccessCode`,
+`getDocument`, `getTenantDocument`, `leasesWithApprovedAssistanceAnimal`,
+`listingForWrite`), and `cardFeeDisclosure` (executing R-148's verdict).
+The eight `isX` guards were re-derived by predicate — exported, referenced
+nowhere else *including inside their own file* — and the predicate landing
+on exactly eight is an independent confirmation of R-145's tally.
+
+**What it decided.**
+- **A guard used inside its own file is alive** even when nothing imports
+  it — `isActive`, `isAdult`, `isSensitiveField` and ten others survived the
+  raw sweep on exactly this distinction.
+- **`endOfMonth`'s foreign "callers" were tests OF it**, not uses — the
+  same trap in reverse that kept `simulatedScreeningFacts` alive in R-149.
+
+**What it left behind.** Nothing on this thread. R-143 found 44 uncalled
+exports; R-145 corrected the list to 42 and answered one; R-147/R-148 gave
+nine screens; R-149 applied or consolidated seven and deleted six; R-150
+deleted the rest. Every export in the product is now called, rendered, or
+deliberately gone. The one build candidate that fell out and remains:
+the INSP-02 move-in/move-out comparison screen (`conditionChange`).
+
+**Gate run:** `lint` 0 errors, `typecheck` clean, unit **2,816 + 4 skipped
+of 2,820** — down exactly the 18 deleted test cases, with one round of
+empty-describe cleanup the block remover left behind (vitest fails a
+describe with no tests, which was the right complaint). `npm run build`
+green after the dependency removal, `check:ship-deps` clean (756 dev
+packages, none imported by shipping code), e2e sanity `smoke` + `shell` +
+`portal` 27/27. Pure deletions — CI's full sweep is the backstop.
+
+Commit: (recorded in follow-up)

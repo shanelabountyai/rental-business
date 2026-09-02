@@ -311,10 +311,6 @@ export const ABANDONMENT_STATUSES = [
 
 export type AbandonmentStatus = (typeof ABANDONMENT_STATUSES)[number]
 
-export function isAbandonmentStatus(value: string): value is AbandonmentStatus {
-  return (ABANDONMENT_STATUSES as readonly string[]).includes(value)
-}
-
 export const ABANDONMENT_STATUS_LABELS: Record<AbandonmentStatus, string> = {
   MONITORING: 'Monitoring — logging contact attempts',
   ENTERED: 'Entered and documented',

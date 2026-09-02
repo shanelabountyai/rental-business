@@ -59,10 +59,6 @@ export type DomainEvent = (typeof DOMAIN_EVENTS)[number]
 
 const EVENT_SET: ReadonlySet<string> = new Set(DOMAIN_EVENTS)
 
-export function isDomainEvent(value: string): value is DomainEvent {
-  return EVENT_SET.has(value)
-}
-
 /**
  * What an emitter provides. `aggregate` names the record the event is about so
  * a consumer can load the current state rather than trusting a payload that

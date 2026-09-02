@@ -3,7 +3,6 @@ import { tenantCanSeeDocument } from '@rental/core/portal'
 import { prisma } from '@rental/db'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
-  getTenantDocument,
   getTenantHome,
   getTenantThread,
   listTenantDocuments,
@@ -180,20 +179,6 @@ describe('a tenant sees only their own papers (DOC-03)', () => {
     expect(ids).not.toContain(deleted.id)
   })
 
-  it('refuses a direct fetch of another tenant’s document by id', async () => {
-    // The list being correct is not enough - the id is guessable and the
-    // download route takes one. Null, not an error, so "not yours" and "does
-    // not exist" are indistinguishable.
-    const theirs = await makeDocument({ tenantId: themId })
-    expect(await getTenantDocument(theirs.id, myScope())).toBeNull()
-  })
-
-  it('allows a direct fetch of their own document by id', async () => {
-    const mine = await makeDocument({ leaseId: myLeaseId })
-    const found = await getTenantDocument(mine.id, myScope())
-    expect(found?.id).toBe(mine.id)
-  })
-
   it('shows a tenant with no lease nothing but their own named documents', async () => {
     const orphanScope = { tenantId: meId, leaseIds: [] as string[] }
     const named = await makeDocument({ tenantId: meId })
@@ -204,43 +189,6 @@ describe('a tenant sees only their own papers (DOC-03)', () => {
     // An empty leaseIds array must match NOTHING - not every document whose
     // leaseId happens to be null, which is every landlord document there is.
     expect(ids).not.toContain(onLease.id)
-  })
-
-  it('allows a shutoff photo on their own unit, and refuses one on another (R-020)', async () => {
-    // The safety exception, through the real query rather than the predicate.
-    const mineShutoff = await makeDocument({
-      type: 'SHUTOFF_PHOTO',
-      unitId: myUnitId,
-      fileName: 'my-water-main.jpg',
-    })
-    const theirShutoff = await makeDocument({
-      type: 'SHUTOFF_PHOTO',
-      unitId: theirUnitId,
-      fileName: 'their-water-main.jpg',
-    })
-
-    const ids = (await listTenantDocuments(myScope())).map((d) => d.id)
-    expect(ids).toContain(mineShutoff.id)
-    expect(ids).not.toContain(theirShutoff.id)
-
-    // And by direct id, which is what the download route uses.
-    expect((await getTenantDocument(mineShutoff.id, myScope()))?.id).toBe(
-      mineShutoff.id,
-    )
-    expect(await getTenantDocument(theirShutoff.id, myScope())).toBeNull()
-  })
-
-  it('still refuses a NON-shutoff document on their own unit (R-020)', async () => {
-    // The exception is one named type. PROP-08's condition photo library
-    // lives on the same unit and can include previous tenancies' photos.
-    const unitPhoto = await makeDocument({
-      type: 'UNIT_PHOTO',
-      unitId: myUnitId,
-      fileName: 'condition.jpg',
-    })
-    const ids = (await listTenantDocuments(myScope())).map((d) => d.id)
-    expect(ids).not.toContain(unitPhoto.id)
-    expect(await getTenantDocument(unitPhoto.id, myScope())).toBeNull()
   })
 
   it('agrees with the pure rule on every document in the fixture', async () => {

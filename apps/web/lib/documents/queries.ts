@@ -40,20 +40,6 @@ export type DocumentWithProperty = Document & {
   property: { id: string; name: string; legalEntityId: string }
 }
 
-export async function getDocument(
-  documentId: string,
-  scope: ResolvedScope,
-): Promise<DocumentWithProperty | null> {
-  const document = await prisma.document.findUnique({
-    where: { id: documentId },
-    include: { property: { select: { id: true, name: true, legalEntityId: true } } },
-  })
-  if (!document || !document.propertyId || !scope.propertyIds.includes(document.propertyId)) {
-    return null
-  }
-  return document as DocumentWithProperty
-}
-
 export interface RetentionReview {
   document: Document
   cutoff: Date

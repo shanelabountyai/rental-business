@@ -194,18 +194,3 @@ export function cardFeeFor(
   }
 }
 
-/**
- * The sentence a tenant sees before they choose a card.
- *
- * PAY-01 requires the fee be "disclosed", and disclosure means BEFORE the
- * choice, in money rather than a percentage. A tenant deciding between free
- * and not-free needs the actual number, and "2.9% + $0.30" is a calculation
- * they should not have to do while holding a phone.
- *
- * Returns null when there is nothing to disclose, so a caller cannot
- * accidentally render "a fee of $0.00" and teach tenants to ignore the line.
- */
-export function cardFeeDisclosure(decision: CardFeeDecision, formatCents: (c: Cents) => string): string | null {
-  if (!decision.permitted || decision.feeCents <= 0) return null
-  return `Paying by card adds a ${formatCents(decision.feeCents)} processing fee, charging ${formatCents(decision.totalCents)} in total. Paying by bank transfer is free.`
-}

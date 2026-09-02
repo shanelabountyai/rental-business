@@ -23,10 +23,6 @@ const TO_DB: Record<CoreLookupResult, ScraLookupResult> = {
   indeterminate: 'INDETERMINATE',
 }
 
-export function toCoreLookupResult(value: ScraLookupResult): CoreLookupResult {
-  return TO_CORE[value]
-}
-
 export function toDbLookupResult(value: CoreLookupResult): ScraLookupResult {
   return TO_DB[value]
 }

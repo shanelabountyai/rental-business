@@ -1,7 +1,7 @@
 import { sealSecret } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { getAccessCode, getAccessCodeHistory, getOperationalData } from './queries.ts'
+import { getAccessCodeHistory, getOperationalData } from './queries.ts'
 
 let propA: string
 let propB: string
@@ -128,13 +128,3 @@ describe('getAccessCodeHistory', () => {
   })
 })
 
-describe('getAccessCode', () => {
-  it('returns a code belonging to the named unit', async () => {
-    const code = await getAccessCode(propA, unitA, accessCodeIds[1]!, scopeOf([propA]))
-    expect(code?.version).toBe(2)
-  })
-
-  it('returns null outside scope', async () => {
-    expect(await getAccessCode(propA, unitA, accessCodeIds[1]!, scopeOf([propB]))).toBeNull()
-  })
-})

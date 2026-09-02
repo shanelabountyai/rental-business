@@ -336,13 +336,6 @@ export function startOfMonth(date: BusinessDate): BusinessDate {
   return `${date.slice(0, 7)}-01`
 }
 
-/// The last day of the month `date` falls in, clamped to that month's real
-/// length. February is 28 or 29 and this says which.
-export function endOfMonth(date: BusinessDate): BusinessDate {
-  const [year, month] = date.split('-').map(Number)
-  return dueDateInMonth(year, month, 31)
-}
-
 /**
  * Every calendar month touched by `[from, to]`, as that month's first day,
  * oldest first.

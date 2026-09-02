@@ -30,15 +30,6 @@ export async function listingForUnit(
   return listing
 }
 
-export async function listingForWrite(
-  listingId: string,
-  scope: ResolvedScope,
-): Promise<Listing | null> {
-  const listing = await prisma.listing.findUnique({ where: { id: listingId } })
-  if (!listing || !scope.propertyIds.includes(listing.propertyId)) return null
-  return listing
-}
-
 export interface PublicListing extends Listing {
   property: { addressLine1: string; city: string; state: string; postalCode: string; timezone: string; county: string | null }
   unit: { name: string; bedrooms: number | null; bathrooms: Prisma.Decimal | null; squareFeet: number | null }

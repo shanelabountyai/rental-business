@@ -892,10 +892,6 @@ export type AuditAction = (typeof AUDIT_ACTIONS)[number]
 
 const ACTION_SET: ReadonlySet<string> = new Set(AUDIT_ACTIONS)
 
-export function isAuditAction(value: string): value is AuditAction {
-  return ACTION_SET.has(value)
-}
-
 /**
  * Reason codes. A closed set, because "reason" as free text alone cannot be
  * reported on - and PAY-04 wants a waiver-pattern report by tenant for fair

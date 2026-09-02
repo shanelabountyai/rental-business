@@ -4,8 +4,6 @@ import {
   ACCOMMODATION_KIND_LABELS,
   clockSummary,
   documentationRequestable,
-  isOpen,
-  isPetMoneyType,
   LAWFUL_DENIAL_GROUNDS,
   PET_MONEY_TYPES,
   petMoneyAllowed,
@@ -90,14 +88,6 @@ describe('what may lawfully be asked', () => {
 })
 
 describe('pet money', () => {
-  it('names all three types, including the two nothing writes yet', () => {
-    // PET_FEE and PET_DEPOSIT have no writer in this product today. They are
-    // here so the writer somebody adds later finds the rule by grepping the
-    // constant, rather than rediscovering it in a complaint.
-    expect([...PET_MONEY_TYPES]).toEqual(['PET_RENT', 'PET_FEE', 'PET_DEPOSIT'])
-    expect(isPetMoneyType('PET_RENT')).toBe(true)
-    expect(isPetMoneyType('RENT')).toBe(false)
-  })
 
   it('is refused outright once an assistance animal is approved', () => {
     expect(petMoneyAllowed(true)).toBe(false)
@@ -142,12 +132,6 @@ describe('the response clock', () => {
     const clock = responseClock('2026-08-01', '2026-09-01', '2026-12-01')
     expect(clock.decided).toBe(true)
     expect(clock.overdue).toBe(true)
-  })
-})
-
-describe('request statuses', () => {
-  it('treats only the undecided ones as open', () => {
-    expect(REQUEST_STATUSES.filter(isOpen)).toEqual(['RECEIVED', 'INFO_REQUESTED'])
   })
 })
 

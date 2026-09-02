@@ -3,7 +3,6 @@ import { prisma } from '@rental/db'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   documentsPastRetention,
-  getDocument,
   listDeletedDocuments,
   listDocuments,
 } from './queries.ts'
@@ -128,20 +127,6 @@ describe('listDeletedDocuments', () => {
     const deleted = await listDeletedDocuments(propA, scopeOf([propA]))
     expect(deleted).toHaveLength(1)
     expect(deleted[0]!.deletedAt).not.toBeNull()
-  })
-})
-
-describe('getDocument', () => {
-  it('returns a document whose property is in scope', async () => {
-    const docs = await listDocuments(propA, scopeOf([propA]))
-    const doc = await getDocument(docs[0]!.id, scopeOf([propA]))
-    expect(doc?.id).toBe(docs[0]!.id)
-    expect(doc?.property.id).toBe(propA)
-  })
-
-  it('returns null when the property is outside scope', async () => {
-    const docs = await listDocuments(propA, scopeOf([propA]))
-    expect(await getDocument(docs[0]!.id, scopeOf([propB]))).toBeNull()
   })
 })
 

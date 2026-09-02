@@ -55,15 +55,3 @@ export async function getAccessCodeHistory(
   })
 }
 
-export async function getAccessCode(
-  propertyId: string,
-  unitId: string,
-  accessCodeId: string,
-  scope: ResolvedScope,
-): Promise<AccessCode | null> {
-  const unit = await getUnitDetail(propertyId, unitId, scope)
-  if (!unit) return null
-  const code = await prisma.accessCode.findUnique({ where: { id: accessCodeId } })
-  if (!code || code.unitId !== unitId) return null
-  return code
-}

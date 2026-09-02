@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
   applicableAddenda,
-  isAddendumKey,
   leaseDocumentBlocks,
   orderedSigners,
   unknownLeaseMergeFields,
@@ -46,13 +45,6 @@ describe('applicableAddenda', () => {
         hasHoa: true,
       }),
     ).toEqual(['LEAD_PAINT', 'MOLD', 'BEDBUG', 'HOA_RULES', 'POOL', 'WELL_SEPTIC'])
-  })
-})
-
-describe('isAddendumKey', () => {
-  it('accepts only the closed list', () => {
-    expect(isAddendumKey('POOL')).toBe(true)
-    expect(isAddendumKey('NOT_A_KEY')).toBe(false)
   })
 })
 

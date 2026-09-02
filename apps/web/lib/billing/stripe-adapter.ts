@@ -734,15 +734,3 @@ const STRIPE_PAYMENT_METHOD: Record<PaymentRail, string> = {
   RETAIL_CASH: 'unsupported',
 }
 
-/// A stable idempotency key for a caller that has its own notion of the fact
-/// being asserted. Exported so the lifecycle layer can key a retryable
-/// operation on the lease and the change, rather than on the attempt.
-export function idempotencyKeyFor(fact: string): string {
-  return fact
-}
-
-/// Only used where a genuinely new, unrepeatable operation is being started.
-/// Kept explicit so that reaching for it is a visible decision.
-export function oneOffIdempotencyKey(): string {
-  return randomUUID()
-}

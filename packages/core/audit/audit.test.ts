@@ -5,7 +5,6 @@ import {
   AUDIT_ACTIONS,
   REASON_CODES,
   REASON_REQUIRED,
-  isAuditAction,
   isReasonCode,
   requiresReason,
 } from './events.ts'
@@ -242,11 +241,6 @@ describe('changedFields', () => {
 })
 
 describe('the audit vocabulary', () => {
-  it('recognises its own actions and rejects invented ones', () => {
-    expect(isAuditAction('fee.waived')).toBe(true)
-    expect(isAuditAction('feeWaived')).toBe(false)
-    expect(isAuditAction('lease.update')).toBe(false)
-  })
 
   it('recognises its own reason codes', () => {
     expect(isReasonCode('goodwill')).toBe(true)

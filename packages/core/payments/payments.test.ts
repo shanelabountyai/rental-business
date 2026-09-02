@@ -4,7 +4,6 @@ import {
   CARD_FIXED_CENTS,
   CARD_RATE_BPS,
   allowsPartialPayment,
-  cardFeeDisclosure,
   cardFeeFor,
   debitsAutomatically,
   isCollectionMethod,
@@ -252,25 +251,6 @@ describe('cardFeeFor', () => {
       expect(Number.isInteger(decision.feeCents), `amount ${amount}`).toBe(true)
       expect(Number.isInteger(decision.totalCents), `amount ${amount}`).toBe(true)
     }
-  })
-})
-
-describe('cardFeeDisclosure', () => {
-  it('states the fee in money, and names the free alternative', () => {
-    // PAY-01 requires disclosure BEFORE the choice. A percentage is a
-    // calculation a tenant should not do while holding a phone.
-    const decision = cardFeeFor({ cardSurchargePolicy: 'ALL', cardSurchargeMaxBps: null }, 150_000, 'credit')
-    const text = cardFeeDisclosure(decision, formatCents)!
-    expect(text).toContain(formatCents(decision.feeCents))
-    expect(text).toContain(formatCents(decision.totalCents))
-    expect(text).toContain('free')
-  })
-
-  it('says nothing at all when there is no fee', () => {
-    // Not "a fee of $0.00" - a line that always renders is a line tenants
-    // learn to skip, which defeats the disclosure on the months it matters.
-    const decision = cardFeeFor({ cardSurchargePolicy: 'NONE', cardSurchargeMaxBps: null }, 150_000, 'credit')
-    expect(cardFeeDisclosure(decision, formatCents)).toBeNull()
   })
 })
 

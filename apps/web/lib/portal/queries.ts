@@ -52,15 +52,6 @@ export async function listTenantDocuments(scope: TenantScope) {
   })
 }
 
-/// One document, or null if it is not theirs. Null rather than a thrown
-/// error: "not yours" and "does not exist" must be indistinguishable, or the
-/// response confirms a document id belongs to somebody.
-export async function getTenantDocument(id: string, scope: TenantScope) {
-  return prisma.document.findFirst({
-    where: { id, ...visibleDocumentWhere(scope) },
-  })
-}
-
 /**
  * The home this tenant rents, from their most recent tenancy.
  *

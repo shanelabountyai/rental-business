@@ -123,10 +123,6 @@ export const NOTICE_LANGUAGE_RULE =
 export const VIOLATION_STATUSES = ['OPEN', 'CLOSED'] as const
 export type ViolationStatus = (typeof VIOLATION_STATUSES)[number]
 
-export function isViolationStatus(value: string): value is ViolationStatus {
-  return (VIOLATION_STATUSES as readonly string[]).includes(value)
-}
-
 export const VIOLATION_STATUS_LABELS: Record<ViolationStatus, string> = {
   OPEN: 'Open',
   CLOSED: 'Closed',

@@ -103,14 +103,4 @@ export async function hasApprovedAssistanceAnimal(leaseId: string): Promise<bool
 }
 
 /** The same question for many leases at once, for a sweep or a list. */
-export async function leasesWithApprovedAssistanceAnimal(
-  leaseIds: readonly string[],
-): Promise<ReadonlySet<string>> {
-  if (leaseIds.length === 0) return new Set()
-  const rows = await prisma.accommodationRequest.findMany({
-    where: { leaseId: { in: [...leaseIds] }, status: 'APPROVED', kind: { in: [...ANIMAL_KINDS] } },
-    select: { leaseId: true },
-    distinct: ['leaseId'],
-  })
-  return new Set(rows.map((row) => row.leaseId))
-}
+

@@ -135,10 +135,6 @@ export function isAnimalKind(value: string): value is AnimalKind {
 export const PET_MONEY_TYPES = ['PET_RENT', 'PET_FEE', 'PET_DEPOSIT'] as const
 export type PetMoneyType = (typeof PET_MONEY_TYPES)[number]
 
-export function isPetMoneyType(value: string): value is PetMoneyType {
-  return (PET_MONEY_TYPES as readonly string[]).includes(value)
-}
-
 export const PET_MONEY_REFUSAL =
   'This tenancy has an approved assistance animal, which is not a pet — no pet rent, pet fee, pet deposit, or breed or size restriction may be applied to it. Charging one is a fair-housing violation, not a billing preference.'
 
@@ -179,10 +175,6 @@ export const REQUEST_STATUSES = [
 
 export type RequestStatus = (typeof REQUEST_STATUSES)[number]
 
-export function isRequestStatus(value: string): value is RequestStatus {
-  return (REQUEST_STATUSES as readonly string[]).includes(value)
-}
-
 export const REQUEST_STATUS_LABELS: Record<RequestStatus, string> = {
   RECEIVED: 'Received — not yet decided',
   INFO_REQUESTED: 'Documentation requested',
@@ -192,10 +184,6 @@ export const REQUEST_STATUS_LABELS: Record<RequestStatus, string> = {
 }
 
 const OPEN_STATUSES: ReadonlySet<RequestStatus> = new Set(['RECEIVED', 'INFO_REQUESTED'])
-
-export function isOpen(status: RequestStatus): boolean {
-  return OPEN_STATUSES.has(status)
-}
 
 // ---------------------------------------------------------------------------
 // What may lawfully be asked

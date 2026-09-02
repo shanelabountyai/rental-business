@@ -3,7 +3,6 @@ import { prisma } from '@rental/db'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   hasApprovedAssistanceAnimal,
-  leasesWithApprovedAssistanceAnimal,
   requestsForLease,
 } from './queries.ts'
 
@@ -150,23 +149,6 @@ describe('hasApprovedAssistanceAnimal — the fact the charge writer reads', () 
     await request(leaseId, tenantId, 'APPROVED')
     await request(leaseId, tenantId, 'DENIED')
     expect(await hasApprovedAssistanceAnimal(leaseId)).toBe(true)
-  })
-})
-
-describe('leasesWithApprovedAssistanceAnimal', () => {
-  it('touches the database not at all for an empty input', async () => {
-    expect((await leasesWithApprovedAssistanceAnimal([])).size).toBe(0)
-  })
-
-  it('picks out only the approved ones', async () => {
-    const approved = await seedTenancy()
-    const pending = await seedTenancy()
-    await request(approved.leaseId, approved.tenantId, 'APPROVED')
-    await request(pending.leaseId, pending.tenantId, 'RECEIVED')
-
-    const found = await leasesWithApprovedAssistanceAnimal([approved.leaseId, pending.leaseId])
-    expect(found.has(approved.leaseId)).toBe(true)
-    expect(found.has(pending.leaseId)).toBe(false)
   })
 })
 
