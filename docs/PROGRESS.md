@@ -7259,4 +7259,4 @@ green after the dependency removal, `check:ship-deps` clean (756 dev
 packages, none imported by shipping code), e2e sanity `smoke` + `shell` +
 `portal` 27/27. Pure deletions — CI's full sweep is the backstop.
 
-Commit: (recorded in follow-up)
+Commit: a0428b8
