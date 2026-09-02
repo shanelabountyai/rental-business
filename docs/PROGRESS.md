@@ -7220,4 +7220,4 @@ tests green. E2E via `test:e2e`: touched surfaces `auth` (31/31, including
 the new rehash test) + `pay` + `pay-link` + `rent-roll` +
 `notice-to-vacate` + `scra` + `lease-holds` 71/71, no flaky.
 
-Commit: (recorded in follow-up)
+Commit: f992cd7
