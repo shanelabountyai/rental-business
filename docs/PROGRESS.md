@@ -7618,4 +7618,4 @@ tests, both projects), `npm run build` ✓, `db:drift` ✓, `db:ci` ✓
 (hand migration applies from scratch). Full sweep is CI's; checking
 `gh run list` after push.
 
-Commit:
+Commit: 0588f3c
