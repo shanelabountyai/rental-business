@@ -7681,3 +7681,43 @@ case type). e2e not run locally for this item (job-only change, no new
 routes or UI) — CI's full sweep covers it on push.
 
 Commit: 7c3c0c59e2c2ae843e576b91cb11158b616f7163
+
+## R-159: Court-date reminders
+
+**What it built.** `apps/web/lib/cases/court-date-reminder-job.ts`, a
+scheduled job (`evictions.court_date_reminders`, 7am property-local)
+that reads `EvictionCase.courtDate` — stored, displayed, and until now
+never scheduled against (review §9). For every open case with a hearing
+set, it raises a `Task` (D-9) at T-7 (ROUTINE) and again at T-1
+(URGENT), each exactly once via the same `(type, subjectId)` guard
+`case-stall-job.ts` and `deposit-disposition-reminder-job.ts` already
+use — `createTask`'s own uniqueness is per `businessDate`, and this job
+re-checks the same still-upcoming hearing every day it runs. Inside
+that same seven-day window it also raises a Task when the DMDC search
+on file (`affidavitLookupFor`, R-085) is older than
+`LOOKUP_STALE_AFTER_DAYS` (30, `packages/core/scra`) — turning R-085's
+render-only `staleLookupWarning` into something that reaches someone
+before the hearing rather than only a staff member who happens to open
+the case page.
+
+**What it decided.** The stale-search Task fires only when a search
+exists and is stale — not when no search is on file at all. A missing
+search is `affidavitReadiness`'s own hard stop at judgment time
+(`no_lookup`), a different and already-enforced failure mode; adding a
+second warning for it here would just be noise ahead of every hearing
+that was never going to reach a default judgment. `courtDate` is a real
+timestamp (not `@db.Date`), so its business day is read with
+`businessDate(instant, zone)`, never `utcToBusinessDate` — the
+distinction CLAUDE.md's own local-time rule exists to keep straight.
+
+**What it left behind.** A flagged Task is never un-flagged if the
+hearing is later continued or the case closes — matching every other
+job in this codebase; staff clear it by hand. Nothing in this item
+changes `EvictionCase` or the case page.
+
+**Gate run:** lint ✓ (pre-existing warnings only), typecheck ✓, unit
+2,846 passed / 4 skipped ✓ (8 new in court-date-reminder-job.test.ts).
+e2e not run locally for this item (job-only change, no new routes or
+UI) — CI's full sweep covers it on push.
+
+Commit: (recorded in the follow-up SHA commit)
