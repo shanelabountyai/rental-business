@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { hashPassword, mintToken } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
-import { uniqueClientHeaders } from './fixtures.ts'
+import { uniqueClientHeaders, uniqueStateCode } from './fixtures.ts'
 
 // R-003's login limiter is ten attempts per IP per five minutes, and local
 // e2e traffic carries no x-forwarded-for - so without this every spec shares
@@ -523,4 +523,170 @@ test('a move-out inspection copies the move-in checklist and shows the side-by-s
     where: { action: 'inspection.created', entityId: id },
   })
   expect(audited?.after).toMatchObject({ copiedFromInspectionId: moveIn.id })
+})
+
+// ── R-157: the entry-notice chain ────────────────────────────────────────
+//
+// An interior walk of an occupied unit is somebody entering a tenant's
+// home. What only a browser proves: scheduling the visit serves a real
+// ENTRY_NOTICE through the same chain work orders use, and a walk nobody
+// served notice for cannot be marked performed without a logged override -
+// warn-and-override, never a hard block. A unique state code per test
+// (fixtures.ts's own rule) so the 24-hour rule seeded here can never be
+// masked by another file's rows.
+
+/// An occupied tenancy in a state requiring 24 hours' entry notice, plus a
+/// one-item checklist to start a PERIODIC walk from.
+async function seedOccupiedUnitWithEntryRule(staffId: string) {
+  const unique = randomUUID().slice(0, 8)
+  const state = uniqueStateCode()
+  await prisma.jurisdictionRule.create({
+    data: {
+      state,
+      version: 1,
+      effectiveFrom: new Date('2020-01-01'),
+      graceDays: 3,
+      lateFeeType: 'NONE',
+      entryNoticeHours: 24,
+      paymentAllocationOrder: ['RENT'],
+    },
+  })
+  const entity = await prisma.legalEntity.create({
+    data: { name: `Entry LLC-${unique}`, type: 'LLC' },
+  })
+  const property = await prisma.property.create({
+    data: {
+      legalEntityId: entity.id,
+      name: `Entry House-${unique}`,
+      addressLine1: '9 Notice Row',
+      city: 'Houston',
+      state,
+      postalCode: '77002',
+      timezone: 'America/Chicago',
+      propertyType: 'SINGLE_FAMILY',
+    },
+  })
+  propertyIds.push(property.id)
+  const unit = await prisma.unit.create({
+    data: { propertyId: property.id, name: `U-${unique}`, status: 'OCCUPIED' },
+  })
+  unitIds.push(unit.id)
+  const tenant = await prisma.tenant.create({
+    data: { firstName: 'Noor', lastName: `Athome-${unique}`, email: `noor-${unique}@example.test` },
+  })
+  tenantIds.push(tenant.id)
+  const lease = await prisma.lease.create({
+    data: {
+      propertyId: property.id,
+      unitId: unit.id,
+      status: 'ACTIVE',
+      startsOn: new Date('2026-01-01'),
+      rentCents: 150_000,
+    },
+  })
+  await prisma.leaseTenant.create({ data: { leaseId: lease.id, tenantId: tenant.id, isPrimary: true } })
+  const template = await prisma.inspectionTemplate.create({
+    data: {
+      name: `Annual-${unique}`,
+      items: [{ room: 'Kitchen', item: 'Sink' }],
+      createdByStaffId: staffId,
+    },
+  })
+  templateIds.push(template.id)
+  return { property, unit, tenant, lease, template }
+}
+
+async function startPeriodicWalk(
+  page: import('@playwright/test').Page,
+  unitId: string,
+  templateId: string,
+) {
+  await page.goto('/inspections/new')
+  await page.getByLabel('Unit').selectOption(unitId)
+  await page.getByLabel('Type').selectOption('PERIODIC')
+  await page.getByLabel('Checklist').selectOption(templateId)
+  await page.getByRole('button', { name: 'Start inspection' }).click()
+  await page.waitForURL(/\/inspections\/(?!new$)[a-z0-9]+$/)
+  return new URL(page.url()).pathname.split('/').pop()!
+}
+
+async function walkTheOneItem(page: import('@playwright/test').Page, inspectionId: string) {
+  const itemForm = page.locator('li', { hasText: 'Kitchen — Sink' })
+  await itemForm.getByLabel('Condition').selectOption('GOOD')
+  await itemForm.getByRole('button', { name: 'Save' }).click()
+  await expect
+    .poll(async () =>
+      (await prisma.inspectionItem.findFirstOrThrow({ where: { inspectionId } })).condition,
+    )
+    .toBe('GOOD')
+}
+
+test('scheduling an occupied-unit walk serves a real entry notice, and the walk then finishes clean (R-157)', async ({
+  page,
+}) => {
+  const staff = await createStaff()
+  const { unit, lease, template } = await seedOccupiedUnitWithEntryRule(staff.id)
+  await signIn(page, staff.email)
+
+  const inspectionId = await startPeriodicWalk(page, unit.id, template.id)
+
+  // Three days out - comfortably past the 24-hour period whatever zone the
+  // string is read in, so no override is owed.
+  const start = new Date(Date.now() + 72 * 3_600_000)
+  const end = new Date(start.getTime() + 2 * 3_600_000)
+  await page.getByLabel('Window starts').fill(start.toISOString().slice(0, 16))
+  await page.getByLabel('Window ends').fill(end.toISOString().slice(0, 16))
+  await page.getByLabel('What the visit is for').fill('Annual interior inspection')
+  await page.getByRole('button', { name: 'Schedule and notify' }).click()
+  await expect(page.getByText('Scheduled, and the tenant has been told.')).toBeVisible()
+
+  // The same chain work orders use: a served ENTRY_NOTICE on the lease,
+  // linked from the inspection itself.
+  const notice = await prisma.notice.findFirstOrThrow({
+    where: { leaseId: lease.id, type: 'ENTRY_NOTICE' },
+  })
+  expect(notice.servedAt).not.toBeNull()
+  const scheduled = await prisma.inspection.findUniqueOrThrow({ where: { id: inspectionId } })
+  expect(scheduled.entryNoticeId).toBe(notice.id)
+  expect(scheduled.entryOverriddenAt).toBeNull()
+
+  // Notice served, so finishing the walk asks for nothing extra.
+  await walkTheOneItem(page, inspectionId)
+  await page.getByRole('button', { name: 'Finish walk' }).click()
+  await expect(page.getByText('PERIODIC · Pending signature')).toBeVisible()
+  const performed = await prisma.inspection.findUniqueOrThrow({ where: { id: inspectionId } })
+  expect(performed.performedAt).not.toBeNull()
+  expect(performed.entryOverrideReason).toBeNull()
+})
+
+test('a walk no notice was served for cannot be finished without a logged override (R-157)', async ({
+  page,
+}) => {
+  const staff = await createStaff()
+  const { unit, template } = await seedOccupiedUnitWithEntryRule(staff.id)
+  await signIn(page, staff.email)
+
+  const inspectionId = await startPeriodicWalk(page, unit.id, template.id)
+  await walkTheOneItem(page, inspectionId)
+
+  // No scheduling, no notice - the press must warn and require a reason,
+  // not silently record an undocumented entry.
+  await page.getByRole('button', { name: 'Finish walk' }).click()
+  await expect(page.getByLabel('Why was entry made without notice?')).toBeVisible()
+  const unfinished = await prisma.inspection.findUniqueOrThrow({ where: { id: inspectionId } })
+  expect(unfinished.performedAt).toBeNull()
+
+  await page.getByLabel('Why was entry made without notice?').fill('Tenant phoned and asked us in today')
+  await page.getByRole('button', { name: 'Finish anyway, with this reason' }).click()
+  await expect(page.getByText('PERIODIC · Pending signature')).toBeVisible()
+
+  const performed = await prisma.inspection.findUniqueOrThrow({ where: { id: inspectionId } })
+  expect(performed.performedAt).not.toBeNull()
+  expect(performed.entryOverrideReason).toBe('Tenant phoned and asked us in today')
+  expect(performed.entryOverriddenAt).not.toBeNull()
+
+  const overrideAudit = await prisma.auditLog.findFirstOrThrow({
+    where: { action: 'entry_notice.overridden', entityId: inspectionId },
+  })
+  expect(overrideAudit.reason).toBe('Tenant phoned and asked us in today')
 })

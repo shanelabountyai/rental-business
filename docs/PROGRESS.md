@@ -7555,3 +7555,67 @@ notices — 23/23) ✓ against the production build, `npm run build` ✓,
 from scratch). Full sweep is CI's; checking `gh run list` after push.
 
 Commit: 549a3e7
+
+## R-157: inspections enter occupied units through the entry-notice chain
+
+**What it built.** The fourth caller of `entryDecision()`. Review
+finding 5: work orders, showings and abandonment each route entry
+through the jurisdiction's notice period, and no inspection path did —
+the auto-scheduled annual interior walk entered occupied homes with no
+notice at all. `inspectionRequiresEntryNotice(type, leaseStatus)`
+(packages/core/inspections/entry.ts) names which walks owe notice:
+interior types (PERIODIC, PRE_MOVE_OUT, MOVE_OUT) on a lease still
+ACTIVE/MONTH_TO_MONTH. `scheduleInspectionEntry`
+(apps/web/lib/inspections/scheduling.ts) mirrors the work-order chain —
+same `entryDecision` → `entryNoticeText` → Notice + NoticeDelivery +
+`notice.served` audit → tenant notification, same warn-and-override
+inside the window with `entry_notice.overridden` logged. `Inspection`
+gained `scheduledEndAt`, `entryNoticeId` (FK → Notice, **Restrict**),
+`entryOverrideReason`, `entryOverriddenAt` (migration
+20260902120000). And the gate: `finishInspection` refuses to mark an
+occupied-interior walk performed with no served notice and no override
+— the form re-renders asking why entry was made without one, the reason
+lands in `entry_notice.overridden` (REASON_REQUIRED enforces it at the
+writer), never a hard block (R-027's posture). The inspection detail
+page reuses the work-order `ScheduleForm` component unchanged —
+structural typing carries the inspection action into it — and a new
+`FinishWalkForm` renders the override field only after the server says
+it is owed.
+
+**What it decided.** Which walks owe notice: SEASONAL and DRIVE_BY are
+exterior (INSP-04's own naming) and entry statutes govern entering the
+dwelling, so they are exempt; MOVE_IN is exempt even on an ACTIVE lease
+because the walk happens at handover before the tenant is in residence
+— and the finish-gate override is the record if staff ever re-walk one
+with the tenant living there. A MOVE_OUT after the lease is
+ENDED/TERMINATED enters an empty unit and owes nothing. Inspections
+have no logged permission-to-enter flow — a tenant who says "come
+today" is the override path with that fact as the reason; add the
+column only if the override log shows it happening often. The
+`entryNoticeId` FK is `onDelete: Restrict`, not the SetNull WorkOrder
+and Showing carry, because Notice becomes append-only in R-161 and a
+SetNull cascade against a trigger is the twice-fixed R-032/R-034 bug —
+R-161 should flip those two when it lands. The auto-scheduling jobs
+still create walks with a bare due date and no notice: the notice is
+served when staff book the actual window, and the finish gate is what
+makes skipping that step impossible to do silently.
+
+**What it left behind.** The periodic job's Task tells a PM the walk is
+due but not that scheduling it serves the notice — the screen says it
+instead ("This unit is occupied — schedule the visit…"). The
+work-order and inspection scheduling actions are deliberate ~80-line
+twins; a shared serve-entry-notice helper is worth extracting only if a
+fifth caller appears. `scheduleInspectionEntry` calls `rulesFor()`
+uncaught (a state with no rule 500s the submit), the same posture
+`scheduleEntry` takes — R-162's no-rule-on-file surface owns that
+class. No calendar rendering of `scheduledEndAt`; the calendar still
+reads `scheduledFor` alone.
+
+**Gate run:** lint ✓ (pre-existing warnings only), typecheck ✓, unit
+2,833 passed / 4 skipped ✓ (4 new in entry.test.ts), e2e
+inspections.spec.ts 12/12 ✓ against the production build (2 new R-157
+tests, both projects), `npm run build` ✓, `db:drift` ✓, `db:ci` ✓
+(hand migration applies from scratch). Full sweep is CI's; checking
+`gh run list` after push.
+
+Commit:

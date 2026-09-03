@@ -25,9 +25,19 @@ export async function getInspection(id: string, scope: ResolvedScope) {
   const inspection = await prisma.inspection.findUnique({
     where: { id },
     include: {
-      property: { select: { id: true, name: true, legalEntityId: true, timezone: true } },
+      property: {
+        // state/county feed the entry-notice hint (R-157) via rulesFor().
+        select: {
+          id: true,
+          name: true,
+          legalEntityId: true,
+          timezone: true,
+          state: true,
+          county: true,
+        },
+      },
       unit: { select: { id: true, name: true } },
-      lease: { select: { id: true } },
+      lease: { select: { id: true, status: true } },
       template: { select: { id: true, name: true } },
       performedBy: { select: { name: true } },
       items: {

@@ -5357,6 +5357,7 @@ model Notice {
   entryForWorkOrders  WorkOrder[]       @relation("WorkOrderEntryNotice")
   entryForShowings    Showing[]         @relation("ShowingEntryNotice")
   entryForAbandonment AbandonmentCase?  @relation("AbandonmentEntryNotice")
+  entryForInspections Inspection[]      @relation("InspectionEntryNotice")
 
   /// R-088: the violation case this notice was served under, when it was
   /// served under one. RISK-03's "violation-notice series" is this key plus
@@ -5467,23 +5468,40 @@ model InspectionTemplate {
 }
 
 model Inspection {
-  id                 String         @id @default(cuid())
-  propertyId         String
-  unitId             String
-  leaseId            String?
-  type               InspectionType
+  id                  String         @id @default(cuid())
+  propertyId          String
+  unitId              String
+  leaseId             String?
+  type                InspectionType
   /// Which checklist this inspection's items were copied from at creation
   /// time - null for one built ad hoc with no template. Never re-read after
   /// creation (the copy is the record); this is provenance, not a live link.
-  templateId         String?
-  scheduledFor       DateTime?
-  performedAt        DateTime?
-  performedByStaffId String?
-  tenantSignedAt     DateTime?
+  templateId          String?
+  scheduledFor        DateTime?
+  /// R-157: the far end of the visit window. `scheduledFor` is the start -
+  /// the auto-scheduling jobs write it as a bare due date, and
+  /// scheduleInspectionEntry overwrites it with the actual window start
+  /// when staff book the walk and the entry notice is served.
+  scheduledEndAt      DateTime?
+  /// R-157: the entry notice served for this walk, when one was required
+  /// (interior type, occupied unit - inspectionRequiresEntryNotice). Null
+  /// on a performed walk of an occupied unit means entry happened on a
+  /// logged override instead (entryOverrideReason below).
+  entryNoticeId       String?
+  /// Set when staff went ahead without a served notice - scheduling inside
+  /// the statutory window, or finishing a walk no notice was served for.
+  /// The reason is REQUIRED (entry_notice.overridden is in REASON_REQUIRED)
+  /// - this pair is the contemporaneous record an unlawful-entry claim is
+  /// defended with, or lost on. Same shape WorkOrder carries.
+  entryOverrideReason String?
+  entryOverriddenAt   DateTime?
+  performedAt         DateTime?
+  performedByStaffId  String?
+  tenantSignedAt      DateTime?
   /// Once locked the report is immutable evidence (INSP-01). The move-out
   /// comparison is only worth anything if the move-in side cannot be edited
   /// after the damage is found.
-  lockedAt           DateTime?
+  lockedAt            DateTime?
   /// INSP-05 (R-074): true when staff created this MOVE_IN inspection for
   /// the TENANT to walk themselves from the portal, rather than staff
   /// walking it in person. Never set for any other type. This is what
@@ -5492,15 +5510,21 @@ model Inspection {
   /// walkthrough-window job below filters on - without it, a traditional
   /// staff-performed MOVE_IN inspection that simply hasn't been walked yet
   /// would otherwise look identical to one a tenant was asked to complete.
-  selfGuided         Boolean        @default(false)
-  notes              String?
-  createdAt          DateTime       @default(now())
-  updatedAt          DateTime       @updatedAt
+  selfGuided          Boolean        @default(false)
+  notes               String?
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
 
   property    Property            @relation(fields: [propertyId], references: [id])
   unit        Unit                @relation(fields: [unitId], references: [id])
   lease       Lease?              @relation(fields: [leaseId], references: [id])
   template    InspectionTemplate? @relation(fields: [templateId], references: [id])
+  /// Restrict, not SetNull: Notice is on its way to append-only (R-161),
+  /// and a SetNull cascade against a trigger-protected table can never
+  /// fire - it fails the whole delete at runtime (the bug fixed twice, in
+  /// R-032 and R-034). AbandonmentCase.entryNotice already takes Restrict
+  /// for the same reason.
+  entryNotice Notice?             @relation("InspectionEntryNotice", fields: [entryNoticeId], references: [id], onDelete: Restrict)
   performedBy StaffUser?          @relation("InspectionPerformedBy", fields: [performedByStaffId], references: [id])
   items       InspectionItem[]
 

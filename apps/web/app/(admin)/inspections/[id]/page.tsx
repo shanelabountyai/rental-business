@@ -1,9 +1,17 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { canEditItem, inspectionStatus, INSPECTION_STATUS_LABELS } from '@rental/core/inspections'
-import { businessDate } from '@rental/core/scheduling'
+import { earliestCompliantStart } from '@rental/core/entry'
+import {
+  canEditItem,
+  inspectionRequiresEntryNotice,
+  inspectionStatus,
+  INSPECTION_STATUS_LABELS,
+} from '@rental/core/inspections'
+import { businessDate, friendlyTimestamp, utcToWallClock } from '@rental/core/scheduling'
+import { FinishWalkForm } from '@/components/inspections/finish-walk-form.tsx'
 import { InspectionItemForm } from '@/components/inspections/inspection-item-form.tsx'
 import { TaskActionButton } from '@/components/tasks/action-button.tsx'
+import { ScheduleForm } from '@/components/workorders/schedule-form.tsx'
 import { requireScope } from '@/lib/auth/guard.ts'
 import {
   finishInspection,
@@ -12,7 +20,9 @@ import {
   recordItemPhoto,
   recordSignature,
 } from '@/lib/inspections/actions.ts'
+import { scheduleInspectionEntry } from '@/lib/inspections/scheduling.ts'
 import { getInspection } from '@/lib/inspections/queries.ts'
+import { rulesFor } from '@/lib/jurisdiction/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 
 export const metadata = { title: 'Inspection — Rental Operations' }
@@ -41,6 +51,21 @@ export default async function InspectionPage({
   })
   const editable = canEditItem({ lockedAt: inspection.lockedAt }).allowed
   const canFinish = inspection.items.length > 0 && inspection.items.every((item) => item.condition != null)
+
+  // The entry-notice chain (R-157): an interior walk of an occupied unit is
+  // somebody entering a tenant's home, and goes through the same
+  // entryDecision → generate → serve → log chain work orders use. Tolerated
+  // as null when no rule is configured for the state, so an unconfigured
+  // jurisdiction shows the form rather than 500ing the page.
+  const entryRequired = inspectionRequiresEntryNotice(inspection.type, inspection.lease?.status ?? null)
+  const entryRule = entryRequired
+    ? await rulesFor(
+        { state: inspection.property.state, county: inspection.property.county },
+        new Date(),
+      ).catch(() => null)
+    : null
+  const zone = inspection.property.timezone
+  const localInput = (value: Date | null) => (value ? utcToWallClock(value, zone) : null)
 
   return (
     <div className="flex max-w-2xl flex-col gap-6">
@@ -113,6 +138,43 @@ export default async function InspectionPage({
 
       {editable && (
         <section className="flex flex-col gap-3 border-t pt-4">
+          {entryRequired && !inspection.performedAt && (
+            <div className="flex flex-col gap-2">
+              {inspection.entryNoticeId ? (
+                <p className="text-sm">
+                  Entry notice served
+                  {inspection.scheduledFor &&
+                    ` for the window starting ${friendlyTimestamp(inspection.scheduledFor, zone)}`}
+                  .
+                </p>
+              ) : inspection.entryOverriddenAt ? (
+                <p className="text-sm">
+                  Scheduled on a logged override — the reason is on the record.
+                </p>
+              ) : (
+                <p className="text-muted-foreground text-sm">
+                  This unit is occupied — schedule the visit so the entry notice is served before
+                  anyone goes in.
+                </p>
+              )}
+              <ScheduleForm
+                action={scheduleInspectionEntry.bind(null, inspection.id)}
+                entryNoticeHours={entryRule?.entryNoticeHours ?? null}
+                earliestCompliant={
+                  entryRule?.entryNoticeHours != null
+                    ? friendlyTimestamp(
+                        earliestCompliantStart(new Date(), entryRule.entryNoticeHours),
+                        zone,
+                      )
+                    : null
+                }
+                scheduledStart={localInput(inspection.scheduledFor)}
+                scheduledEnd={localInput(inspection.scheduledEndAt)}
+                hasPermission={false}
+                isEmergency={false}
+              />
+            </div>
+          )}
           {!inspection.performedAt && (
             <div className="flex flex-col gap-1">
               {!canFinish && (
@@ -120,10 +182,7 @@ export default async function InspectionPage({
                   Every item needs a condition before the walk can be finished.
                 </p>
               )}
-              <TaskActionButton
-                action={finishInspection.bind(null, inspection.id)}
-                label="Finish walk"
-              />
+              <FinishWalkForm action={finishInspection.bind(null, inspection.id)} />
             </div>
           )}
           {inspection.performedAt && !inspection.tenantSignedAt && (

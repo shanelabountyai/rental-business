@@ -5,6 +5,7 @@ import {
   canFinishInspection,
   canLockInspection,
   canRecordSignature,
+  inspectionRequiresEntryNotice,
   isInspectionType,
   type TemplateChecklistItem,
 } from '@rental/core/inspections'
@@ -52,6 +53,9 @@ async function inspectionForWrite(inspectionId: string) {
     include: {
       property: { select: { id: true, legalEntityId: true, addressLine1: true, timezone: true } },
       unit: { select: { name: true } },
+      // For the entry-notice gate on finishing the walk (R-157): whether
+      // anybody is living in the unit this inspection entered.
+      lease: { select: { status: true } },
       items: { select: { id: true, room: true, item: true, condition: true, notes: true } },
     },
   })
@@ -265,11 +269,20 @@ export async function recordItemPhoto(
 
 /// Marks the walk performed - every item must already carry a condition
 /// (canFinishInspection's own check).
+export interface FinishWalkResult extends InspectionFormState {
+  /// R-157: the walk entered an occupied unit and no entry notice was
+  /// served for it. The form re-renders with a warning and a required
+  /// reason field - warn-and-override (R-027's posture), never a hard
+  /// block: the walk already happened, and refusing to record it would
+  /// just push staff to stop recording walks at all.
+  needsEntryOverride?: boolean
+}
+
 export async function finishInspection(
   inspectionId: string,
-  _previous: InspectionFormState,
-  _formData: FormData,
-): Promise<InspectionFormState> {
+  _previous: FinishWalkResult,
+  formData: FormData,
+): Promise<FinishWalkResult> {
   const { inspection, actor } = await inspectionForWrite(inspectionId)
 
   const decision = canFinishInspection({
@@ -279,11 +292,55 @@ export async function finishInspection(
   })
   if (!decision.allowed) return { error: decision.message }
 
+  // THE ENTRY-NOTICE GATE (R-157). A walk of an occupied interior cannot be
+  // marked performed unless entry rested on something: a served notice
+  // (scheduleInspectionEntry), an override logged at scheduling, or an
+  // override reason stated right here. Without it, the auto-scheduled
+  // annual walk was an undocumented entry into somebody's home - exposure
+  // that taints the very photos a deposit case rests on.
+  const entryRequired = inspectionRequiresEntryNotice(
+    inspection.type,
+    inspection.lease?.status ?? null,
+  )
+  const entryUnaccounted =
+    entryRequired && inspection.entryNoticeId == null && inspection.entryOverriddenAt == null
+  const entryOverrideReason = str(formData, 'entryOverrideReason')
+  if (entryUnaccounted && !entryOverrideReason) {
+    return {
+      error:
+        'No entry notice was served for this walk. State why entry was made without one - it is recorded.',
+      needsEntryOverride: true,
+    }
+  }
+
+  const now = new Date()
   await prisma.$transaction(async (tx) => {
     await tx.inspection.update({
       where: { id: inspectionId },
-      data: { performedAt: new Date(), performedByStaffId: actor.id },
+      data: {
+        performedAt: now,
+        performedByStaffId: actor.id,
+        ...(entryUnaccounted
+          ? { entryOverrideReason, entryOverriddenAt: now }
+          : {}),
+      },
     })
+    if (entryUnaccounted) {
+      await audit(
+        {
+          action: 'entry_notice.overridden',
+          entityType: 'Inspection',
+          entityId: inspectionId,
+          propertyId: inspection.propertyId,
+          after: { performedWithoutNotice: true, type: inspection.type },
+          // entry_notice.overridden is in REASON_REQUIRED - recordAudit()
+          // itself refuses to write it without the reason.
+          reasonCode: 'other',
+          reason: entryOverrideReason,
+        },
+        tx,
+      )
+    }
     await audit(
       {
         action: 'inspection.performed',
