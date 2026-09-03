@@ -7553,3 +7553,5 @@ like every other statutory field.
 notices — 23/23) ✓ against the production build, `npm run build` ✓,
 `check:ship-deps` ✓, `db:drift` ✓, `db:ci` ✓ (hand migration applies
 from scratch). Full sweep is CI's; checking `gh run list` after push.
+
+Commit: 549a3e7
