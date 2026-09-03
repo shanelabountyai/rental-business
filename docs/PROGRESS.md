@@ -7775,4 +7775,4 @@ transitions and disposition) run locally against a production build —
 44/44 passed after the cleanup fix. Full e2e sweep not run locally;
 CI's full sweep covers it on push.
 
-Commit: (recorded in a follow-up commit)
+Commit: a4e302a2dd78e8e2bf3460210b341a64cff9460e
