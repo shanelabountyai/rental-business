@@ -7451,4 +7451,4 @@ build ✓, `npm run build` ✓, demo seed rebuilt and the renewed tenancy
 verified holding its deposit ✓. CI green through R-153's push. Full sweep
 is CI's.
 
-Commit: (recorded in follow-up)
+Commit: bed3ab5
