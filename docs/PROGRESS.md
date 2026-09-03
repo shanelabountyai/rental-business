@@ -7721,3 +7721,58 @@ e2e not run locally for this item (job-only change, no new routes or
 UI) — CI's full sweep covers it on push.
 
 Commit: 602e75df22fc93c7991d7af3f6582ad55739dff5
+
+## R-160: Move-out proration
+
+**What it built.** `moveOutProration` in
+`packages/core/billing/proration.ts` — `moveInProration`'s mirror
+(deferred twice, per the backlog text). Same half-open day arithmetic
+and same "own month is the divisor" rule, run from the other end: given
+the tenant's last day of occupancy and the next rent-due day on or
+after it (the boundary of the period already billed in advance), it
+returns the credit owed for the unoccupied tail, or null when moving
+out exactly on the due day means nothing was billed yet to give back.
+`describeProration` took an optional `label` so the ledger line reads
+"Move-out credit — …" instead of "Part month — …" without forking the
+arithmetic. `chargeMoveOutProration` (`apps/web/lib/billing/
+proration.ts`) is the wiring mirror of `chargeMoveInProration`: same
+Charge-first-then-push shape, keyed on the lease for idempotency, non-
+fatal on a push failure. Wired into `changeLeaseStatus`
+(`apps/web/lib/leases/actions.ts`) right after `syncLease` cancels the
+subscription and before `startDepositDisposition` starts the R-071
+countdown.
+
+**What it decided.** Recorded as D-165: `Charge.amountCents` can be
+negative, and a move-out credit is the one case — core returns the
+credit as a positive magnitude (same shape as `moveInProration`), and
+the wiring layer is the single place that negates it, writing that
+same negative number to both the `Charge` row and the pushed
+`addInvoiceItem` amount. A negative invoice item is Stripe's own credit
+mechanism and the identical pattern `waiveCharge` already uses. Charge
+type stays `RENT` — it IS rent, credited back — never a separate
+`CREDIT` type. Running the credit before disposition, not after, is
+load-bearing: it is what makes the backlog's "minus balance owed" a
+settled number by the time `computeDisposition` reads the ledger.
+
+**What it left behind.** `e2e/leases.spec.ts`'s tenancy-ending test now
+posts a real Charge every run, and its shared cleanup deleted `Lease`
+rows with `TurnoverProject` cleared first but no equivalent for
+`Charge` (`Charge_leaseId_fkey` is `ON DELETE RESTRICT`, same as
+`TurnoverProject`) — found by running the spec, not by CI, and fixed
+with the same one-line pattern R-084 already used for
+`TurnoverProject`. `moveInAt` remains unset by any writer in this
+codebase (noted, not fixed — out of scope here); `chargeMoveInProration`
+reads `lease.startsOn` instead, and this item's mirror reads
+`lease.moveOutAt`, which `changeLeaseStatus` does write.
+
+**Gate run:** lint ✓ (pre-existing warnings only), typecheck ✓, unit
+2,860 passed / 4 skipped ✓ (19 new in `packages/core/billing/
+proration.test.ts`, 10 new — 5 move-out plus the 5 pre-existing move-in
+— in `apps/web/lib/billing/proration.test.ts`), `npm run build` ✓
+(touched a `'use server'` module). e2e: `leases.spec.ts` and
+`deposit-disposition.spec.ts` (the two specs touching lease status
+transitions and disposition) run locally against a production build —
+44/44 passed after the cleanup fix. Full e2e sweep not run locally;
+CI's full sweep covers it on push.
+
+Commit: (recorded in a follow-up commit)

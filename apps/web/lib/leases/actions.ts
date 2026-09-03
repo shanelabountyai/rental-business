@@ -25,6 +25,7 @@ import { redirect } from 'next/navigation'
 import { audit } from '@/lib/audit/index.ts'
 import { syncLease } from '@/lib/billing/lifecycle.ts'
 import { provisionLeaseBilling } from '@/lib/billing/provision.ts'
+import { chargeMoveOutProration } from '@/lib/billing/proration.ts'
 import { startDepositDisposition } from '@/lib/leases/deposit-disposition-start.ts'
 import { revokeTenantLockCodes } from '@/lib/locks/tenant-codes.ts'
 import { startTurnoverProjectForLease } from '@/lib/turnover/start.ts'
@@ -563,6 +564,13 @@ export async function changeLeaseStatus(
     // tenancy ending on the last day of a month still bills that month.
     await syncLease(leaseId).catch((error) => {
       console.error(`[lease] billing sync failed for ${leaseId}`, error)
+    })
+    // The unoccupied tail of the final month, credited back BEFORE
+    // disposition reads the ledger (R-160) - moveInProration's mirror, so
+    // "minus balance owed" is net of days the tenant paid for and never
+    // lived.
+    await chargeMoveOutProration(leaseId).catch((error) => {
+      console.error(`[lease] move-out proration failed for ${leaseId}`, error)
     })
     // The statutory disposition countdown starts from THIS move-out (R-071,
     // INSP-03) - a no-op for a zero-deposit lease or one already started.

@@ -1,7 +1,7 @@
 import 'server-only'
 
-import { billingCycleAnchor, moveInProration } from '@rental/core/billing'
-import { businessDate, utcToBusinessDate } from '@rental/core/scheduling'
+import { billingCycleAnchor, moveInProration, moveOutProration } from '@rental/core/billing'
+import { businessDate, businessDateToUtc, utcToBusinessDate } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { auditAsSystem } from '@/lib/audit/system.ts'
 import { getBillingProvider } from '@/lib/billing/provider.ts'
@@ -175,4 +175,141 @@ export async function chargeMoveInProration(leaseId: string): Promise<ProrationC
   })
 
   return { chargeId: charge.id, amountCents: charge.amountCents, reason: 'charged' }
+}
+
+export interface MoveOutProrationChargeResult {
+  chargeId: string | null
+  amountCents: number
+  reason:
+    | 'credited'
+    | 'no_credit'
+    | 'already_credited'
+    | 'no_customer'
+    | 'push_failed'
+    | 'no_move_out'
+}
+
+/**
+ * Credit the unoccupied tail of the final month, if there is one (R-160).
+ *
+ * `chargeMoveInProration`'s mirror, same idempotency posture: re-running a
+ * status transition — or a nightly resync — must not credit a tenant twice.
+ * `Charge.amountCents` is negative here, the one place in the product a
+ * charge reduces rather than increases what's owed, so the deposit
+ * disposition's ledger read (D-11) is already net of it by the time
+ * disposition runs.
+ */
+export async function chargeMoveOutProration(leaseId: string): Promise<MoveOutProrationChargeResult> {
+  const lease = await prisma.lease.findUniqueOrThrow({
+    where: { id: leaseId },
+    select: {
+      id: true,
+      propertyId: true,
+      rentCents: true,
+      rentDueDay: true,
+      moveOutAt: true,
+      prorationMethod: true,
+      property: { select: { timezone: true } },
+      leasePayers: {
+        select: { id: true, stripeCustomerId: true },
+        take: 1,
+      },
+    },
+  })
+
+  if (!lease.moveOutAt) return { chargeId: null, amountCents: 0, reason: 'no_move_out' }
+
+  const moveOutOn = businessDate(lease.moveOutAt, lease.property.timezone)
+
+  // The boundary of the period already billed in advance: the next due day
+  // on or after move-out. Same function that told Stripe when to bill, so
+  // this cannot disagree with it about where the period ends.
+  const anchor = billingCycleAnchor({
+    rentDueDay: lease.rentDueDay,
+    timezone: lease.property.timezone,
+    notBefore: lease.moveOutAt,
+  })
+
+  const proration = moveOutProration({
+    monthlyRentCents: lease.rentCents,
+    moveOutOn,
+    currentPeriodEndsOn: businessDate(anchor, lease.property.timezone),
+    method: lease.prorationMethod === 'BANKER30' ? 'banker30' : 'actual',
+  })
+
+  // Null covers moving out exactly on the next due day — the period already
+  // billed is the one fully occupied, so there is nothing to give back.
+  if (!proration) return { chargeId: null, amountCents: 0, reason: 'no_credit' }
+
+  const existing = await prisma.charge.findFirst({
+    where: { leaseId, type: 'RENT', description: { startsWith: 'Move-out credit' } },
+    select: { id: true, amountCents: true },
+  })
+  if (existing) {
+    return { chargeId: existing.id, amountCents: existing.amountCents, reason: 'already_credited' }
+  }
+
+  const payer = lease.leasePayers[0]
+  if (!payer) return { chargeId: null, amountCents: 0, reason: 'no_customer' }
+
+  const charge = await prisma.charge.create({
+    data: {
+      propertyId: lease.propertyId,
+      leaseId: lease.id,
+      // RENT, not a separate type — it's a reduction of rent already billed,
+      // and typing it as something else would drop it out of every
+      // rent-versus-fees split the product already makes.
+      type: 'RENT',
+      amountCents: -proration.amountCents,
+      description: proration.description,
+      dueOn: businessDateToUtc(moveOutOn),
+    },
+  })
+
+  if (!payer.stripeCustomerId) {
+    return { chargeId: charge.id, amountCents: charge.amountCents, reason: 'no_customer' }
+  }
+
+  try {
+    const item = await getBillingProvider().addInvoiceItem({
+      stripeCustomerId: payer.stripeCustomerId,
+      // A NEGATIVE invoice item — Stripe's own mechanism for a credit
+      // (same pattern as `waiveCharge`), which keeps Stripe the system of
+      // record for what is owed (D-11).
+      amountCents: -proration.amountCents,
+      currency: 'usd',
+      description: proration.description,
+      chargeId: charge.id,
+      // Keyed on the lease, because there is exactly one move-out per lease.
+      idempotencyKey: `moveout-proration:${lease.id}`,
+    })
+    await prisma.charge.update({
+      where: { id: charge.id },
+      data: { stripeInvoiceItemId: item.stripeInvoiceItemId },
+    })
+  } catch (error) {
+    console.error(`[proration] failed to push move-out credit ${charge.id}`, error)
+    return { chargeId: charge.id, amountCents: charge.amountCents, reason: 'push_failed' }
+  }
+
+  await auditAsSystem('billing.proration', {
+    action: 'ledger.adjusted',
+    entityType: 'Charge',
+    entityId: charge.id,
+    propertyId: lease.propertyId,
+    reason: proration.description,
+    after: {
+      type: 'RENT',
+      moveOutCredit: true,
+      amountCents: -proration.amountCents,
+      daysVacant: proration.daysOccupied,
+      daysInMonth: proration.daysInMonth,
+      method: proration.method,
+      monthlyRentCents: lease.rentCents,
+    },
+  }).catch((error: unknown) => {
+    console.error(`[proration] failed to audit move-out credit ${charge.id}`, error)
+  })
+
+  return { chargeId: charge.id, amountCents: charge.amountCents, reason: 'credited' }
 }

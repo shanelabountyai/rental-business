@@ -102,13 +102,73 @@ export function describeProration(input: {
   daysInMonth: number
   method: ProrationMethod
   amountCents: Cents
+  /// Move-in owes; move-out credits back — same arithmetic, different line.
+  label?: string
 }): string {
   const divisor = input.method === 'banker30' ? 30 : input.daysInMonth
   const basis =
     input.method === 'banker30'
       ? `${input.daysOccupied}/30 days (30-day month)`
       : `${input.daysOccupied}/${input.daysInMonth} days`
-  return `Part month — ${formatDollars(input.monthlyRentCents)} × ${basis} = ${formatDollars(input.amountCents)}`
+  return `${input.label ?? 'Part month'} — ${formatDollars(input.monthlyRentCents)} × ${basis} = ${formatDollars(input.amountCents)}`
+}
+
+export interface MoveOutProrationInput {
+  monthlyRentCents: Cents
+  /// The tenant's last day of occupancy, property-local.
+  moveOutOn: BusinessDate
+  /// The next rent due day on or after `moveOutOn` — the boundary of the
+  /// period already billed in advance. The credit covers the day AFTER
+  /// moveOutOn up to but not including this.
+  currentPeriodEndsOn: BusinessDate
+  method: ProrationMethod
+}
+
+/**
+ * What the tenant is owed back for the unoccupied tail of the final month.
+ *
+ * `moveInProration`'s mirror (R-160): rent bills a full period in advance,
+ * so a tenant who vacates before the period ends is due a credit for the
+ * days already paid for and never lived. Returns null when there is
+ * nothing to credit — moving out ON the next due day means the period
+ * already billed is the one fully occupied.
+ */
+export function moveOutProration(input: MoveOutProrationInput): ProrationResult | null {
+  const moveOut = parseBusinessDate(input.moveOutOn)
+  const periodEnd = parseBusinessDate(input.currentPeriodEndsOn)
+
+  // Half-open like `daysBetween` everywhere else, minus the move-out day
+  // itself — the tenant occupied that day, so only the days AFTER it are
+  // unoccupied and creditable.
+  const daysVacant = daysBetween(moveOut, periodEnd) - 1
+  if (daysVacant <= 0) return null
+
+  // Same divisor rule as move-in: the credit is a fraction of the month the
+  // vacancy actually falls in, not the length of the billing period.
+  const daysInMonth = daysInMonthOf(moveOut)
+  if (daysVacant > daysInMonth) return null
+
+  const amountCents = prorateRent({
+    monthlyRentCents: input.monthlyRentCents,
+    daysOccupied: daysVacant,
+    daysInMonth,
+    method: input.method,
+  })
+
+  return {
+    amountCents,
+    daysOccupied: daysVacant,
+    daysInMonth,
+    method: input.method,
+    description: describeProration({
+      monthlyRentCents: input.monthlyRentCents,
+      daysOccupied: daysVacant,
+      daysInMonth,
+      method: input.method,
+      amountCents,
+      label: 'Move-out credit',
+    }),
+  }
 }
 
 /// Days from `from` up to but NOT including `to`. Half-open on purpose: a

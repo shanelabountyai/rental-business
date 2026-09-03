@@ -184,6 +184,10 @@ test.afterAll(async () => {
   // failure lands on whichever test finished last in the worker, which is
   // why it read as two unrelated lifecycle tests breaking.
   await prisma.turnoverProject.deleteMany({ where: { leaseId: { in: removable } } })
+  // R-160's move-out credit (and R-042's move-in proration before it) posts
+  // a Charge, and `Charge.leaseId` is Restrict like TurnoverProject above -
+  // the ending-a-tenancy test now leaves one behind on every run.
+  await prisma.charge.deleteMany({ where: { leaseId: { in: removable } } })
   await prisma.lease.deleteMany({ where: { id: { in: removable } } })
   const stillLeased = new Set(
     (
