@@ -1,13 +1,15 @@
 'use server'
 
 import { createHash } from 'node:crypto'
+import { CURE_NOTICE_TYPES } from '@rental/core/evictions'
 import { NOTICE_SERVICE_METHODS, servicePermitted } from '@rental/core/notices'
 import type { NoticeServiceMethodName } from '@rental/core/notices'
 import { businessDate, wallClockToUtc } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { audit } from '@/lib/audit/index.ts'
-import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
+import { actorCan, propertyResource, requirePermission } from '@/lib/auth/guard.ts'
+import { applyPaymentHold } from '@/lib/payments/legal-hold.ts'
 import { extractCapturedAt } from '@/lib/documents/exif.ts'
 import { rulesFor } from '@/lib/jurisdiction/queries.ts'
 import { generateStorageKey, storage } from '@/lib/storage/index.ts'
@@ -334,7 +336,79 @@ export async function recordNoticeService(
 
   revalidatePath(`/notices/${noticeId}`)
   revalidatePath('/notices')
+
+  // R-156. Serving a cure-starting notice is the moment the hold matters -
+  // the review's own finding: the panel that does the right thing lives on
+  // the lease page, at a different moment, driven by memory. The service is
+  // ALREADY RECORDED above whatever happens here: a hold that could not be
+  // placed must never cost the owner the record of a service that physically
+  // happened.
+  if (formData.get('placeHold') === 'on') {
+    const outcome = await placeServiceHold(notice, formData, actor.id)
+    if (!outcome.ok) {
+      return {
+        error: `Service recorded — but the payment hold is NOT in force: ${outcome.error}`,
+      }
+    }
+    return {
+      notice:
+        outcome.linksRevoked > 0
+          ? `Service recorded, and the payment hold is in force — confirmed with the payment provider. ${outcome.linksRevoked} live pay-now ${outcome.linksRevoked === 1 ? 'link was' : 'links were'} revoked.`
+          : 'Service recorded, and the payment hold is in force — confirmed with the payment provider.',
+    }
+  }
+
   return { notice: 'Service recorded.' }
+}
+
+/// The inline serve-and-hold (R-156). Placing a hold is `ledger.adjust`
+/// work whoever's form it rides in - the page only OFFERS the switches to
+/// actors who hold it, but a hand-made POST must meet the same bar as the
+/// lease page's own panel.
+async function placeServiceHold(
+  notice: { id: string; type: string; leaseId: string | null; property: { id: string; legalEntityId: string } },
+  formData: FormData,
+  actorStaffId: string,
+): Promise<{ ok: true; linksRevoked: number } | { ok: false; error: string }> {
+  if (!notice.leaseId) return { ok: false, error: 'This notice has no lease to hold payments on.' }
+  if (!CURE_NOTICE_TYPES.includes(notice.type)) {
+    return { ok: false, error: 'Only a cure-starting notice places a hold at service.' }
+  }
+  if (!(await actorCan('ledger.adjust', propertyResource(notice.property)))) {
+    return { ok: false, error: 'Placing a payment hold needs the ledger-adjust permission.' }
+  }
+
+  const change = {
+    blockOnline: formData.get('holdBlockOnline') === 'on',
+    blockPartial: formData.get('holdBlockPartial') === 'on',
+    certifiedFundsOnly: formData.get('holdCertifiedFundsOnly') === 'on',
+    reason: str(formData, 'holdReason'),
+  }
+  if (!change.blockOnline && !change.blockPartial && !change.certifiedFundsOnly) {
+    // All-off through applyPaymentHold LIFTS a hold - not what a serve
+    // screen may ever do by accident. Untick the offer instead.
+    return { ok: false, error: 'Every switch is off. Untick the hold instead of placing an empty one.' }
+  }
+
+  const payers = await prisma.leasePayer.findMany({
+    where: { leaseId: notice.leaseId, active: true },
+    select: { id: true },
+  })
+  if (payers.length === 0) return { ok: false, error: 'No active payer exists on this lease.' }
+
+  // Every active payer, not just the tenant's own: a pay-now link in a
+  // roommate's phone collects the same waiver-risk money. Voucher leases
+  // would want the housing authority left alone, and there are none (D-136)
+  // - the first one re-opens this as a feature, not a bug.
+  let linksRevoked = 0
+  for (const payer of payers) {
+    const result = await applyPaymentHold(payer.id, change, actorStaffId, audit)
+    if (!result.ok) return { ok: false, error: result.error }
+    linksRevoked += result.linksRevoked
+  }
+  revalidatePath(`/leases/${notice.leaseId}`)
+  revalidatePath('/money')
+  return { ok: true, linksRevoked }
 }
 
 /**

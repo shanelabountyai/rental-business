@@ -1,9 +1,13 @@
+import { CURE_NOTICE_TYPES } from '@rental/core/evictions'
 import {
   SERVICE_METHOD_LABELS,
   noticeTypeLabel,
   serviceMethodsFor,
   serviceStandingLabel,
 } from '@rental/core/notices'
+import { holdIsActive } from '@rental/core/payments'
+import { prisma } from '@rental/db'
+
 import { friendlyDate } from '@rental/core/scheduling'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
@@ -13,6 +17,7 @@ import { actorCan, requireScope } from '@/lib/auth/guard.ts'
 import { rulesFor } from '@/lib/jurisdiction/queries.ts'
 import { generateNoticePdfAction, recordNoticeService } from '@/lib/notices/actions.ts'
 import { holdsForLease } from '@/lib/holds/queries.ts'
+import { holdFrom } from '@/lib/payments/legal-hold.ts'
 import { getNotice } from '@/lib/notices/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 
@@ -51,6 +56,30 @@ export default async function NoticePage({
   // notice to an applicant has no lease and therefore no holds — hence the
   // conditional rather than an unconditional read.
   const holds = notice.lease ? await holdsForLease(notice.lease.id) : []
+
+  // R-156. Serving a cure-starting notice offers the payment hold INLINE -
+  // the panel that does the right thing lives on the lease page, at a
+  // different moment, driven by memory, and that gap is the review's finding.
+  // Offered only to an actor who could place it from that panel too; the
+  // action re-checks.
+  let holdOffer: { alreadyHeld: boolean; defaultReason: string } | null = null
+  if (
+    canSend &&
+    notice.lease &&
+    CURE_NOTICE_TYPES.includes(notice.type) &&
+    (await actorCan('ledger.adjust', { propertyId: notice.propertyId, legalEntityId: undefined }))
+  ) {
+    const payers = await prisma.leasePayer.findMany({
+      where: { leaseId: notice.lease.id, active: true },
+      select: { collectionPaused: true, blockPartialPayments: true, certifiedFundsOnly: true },
+    })
+    holdOffer = {
+      alreadyHeld:
+        payers.length > 0 &&
+        payers.every((payer) => holdIsActive(holdFrom(payer))),
+      defaultReason: `${noticeTypeLabel(notice.type)} served — payments held pending the case.`,
+    }
+  }
 
   // EITHER a lease or an applicant (R-061's either/or).
   const tenants = notice.lease
@@ -220,6 +249,7 @@ export default async function NoticePage({
             permittedMethods={permittedMethods}
             propertyTimezone={notice.property.timezone}
             alreadyServed={notice.deliveries.length > 0}
+            holdOffer={holdOffer}
           />
         </section>
       )}

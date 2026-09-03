@@ -1,7 +1,13 @@
 import 'server-only'
 
-import { CURE_NOTICE_TYPES, cureClock, type ServiceEvent } from '@rental/core/evictions'
-import { businessDate, utcToBusinessDate } from '@rental/core/scheduling'
+import {
+  CURE_NOTICE_TYPES,
+  cureClock,
+  paymentsSinceService,
+  type CurePayment,
+  type ServiceEvent,
+} from '@rental/core/evictions'
+import { businessDate } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { rulesFor } from '@/lib/jurisdiction/queries.ts'
 import type { ResolvedScope } from '@/lib/scope/current-scope.ts'
@@ -79,8 +85,16 @@ export async function cureClockFor(evictionCase: EvictionCaseDetail) {
   // caller is not an error: an unconfigured state means the cure period is
   // unknown, and `cureClock` reports that rather than guessing a number.
   let payOrQuitDays: number | null = null
+  // R-156. Same D-48 posture as the cure period: null means this product has
+  // not been taught whether this state treats acceptance as waiver, and the
+  // case page then warns conservatively rather than answering for the state.
+  let acceptanceWaivesNotice: boolean | null = null
+  let acceptanceWaiverNote: string | null = null
   try {
-    payOrQuitDays = (await rulesFor(evictionCase.property, new Date())).payOrQuitDays
+    const rule = await rulesFor(evictionCase.property, new Date())
+    payOrQuitDays = rule.payOrQuitDays
+    acceptanceWaivesNotice = rule.acceptanceWaivesNotice
+    acceptanceWaiverNote = rule.acceptanceWaiverNote
   } catch {
     payOrQuitDays = null
   }
@@ -93,7 +107,11 @@ export async function cureClockFor(evictionCase: EvictionCaseDetail) {
     .filter((notice) => CURE_NOTICE_TYPES.includes(notice.type))
     .flatMap((notice) =>
       notice.deliveries.map((delivery) => ({
-        servedOn: utcToBusinessDate(delivery.servedAt),
+        // `servedAt` is a real timestamp, so the property-local reader -
+        // `utcToBusinessDate` here (fixed at R-156) put a 9pm Chicago
+        // service on the NEXT calendar day, starting the cure clock a day
+        // late and hiding a same-evening payment from the acceptance band.
+        servedOn: businessDate(delivery.servedAt, evictionCase.property.timezone),
         permittedByJurisdiction: delivery.permittedByJurisdiction,
       })),
     )
@@ -101,7 +119,45 @@ export async function cureClockFor(evictionCase: EvictionCaseDetail) {
   const hasNotice = evictionCase.notices.some((notice) => CURE_NOTICE_TYPES.includes(notice.type))
   const today = businessDate(new Date(), evictionCase.property.timezone)
 
-  return { clock: cureClock(services, payOrQuitDays, today), hasNotice }
+  // R-156: the money that may have waived the notice. Every rail lands here -
+  // portal ACH, an autopay retry, cash at the counter - because the webhook
+  // and the offline recorder both mint a `Payment` row. A reversed or failed
+  // payment was not KEPT, and acceptance is about keeping the money.
+  const paymentRows = await prisma.payment.findMany({
+    where: {
+      leaseId: evictionCase.leaseId,
+      status: { in: ['PENDING', 'SETTLED'] },
+      reversedAt: null,
+    },
+    orderBy: { receivedAt: 'asc' },
+    select: { amountCents: true, receivedAt: true, channel: true },
+  })
+  const payments: CurePayment[] = paymentRows.map((p) => ({
+    receivedOn: businessDate(p.receivedAt, evictionCase.property.timezone),
+    amountCents: p.amountCents,
+    channelLabel: PAYMENT_CHANNEL_LABELS[p.channel] ?? p.channel,
+  }))
+
+  return {
+    clock: cureClock(services, payOrQuitDays, today),
+    hasNotice,
+    paymentsSinceService: paymentsSinceService(services, payments),
+    acceptanceWaivesNotice,
+    acceptanceWaiverNote,
+  }
+}
+
+/// Display names for every rail a `Payment` can carry. The acceptance band
+/// and the packet quote these verbatim; nothing branches on them.
+const PAYMENT_CHANNEL_LABELS: Record<string, string> = {
+  ACH: 'ACH',
+  CARD: 'Card',
+  RETAIL_CASH: 'Retail cash network',
+  OFFLINE_CHECK: 'Check at the counter',
+  MONEY_ORDER: 'Money order',
+  OFFLINE_CASH: 'Cash at the counter',
+  HAP_ACH: 'Housing-authority ACH',
+  OTHER: 'Payment provider',
 }
 
 /// Notices on this lease that could start a cure period and are not yet filed

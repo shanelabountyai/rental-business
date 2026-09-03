@@ -7491,3 +7491,65 @@ the counter form, so none run locally; full sweep is CI's. CI green
 through R-153's push; R-154's run still in progress at commit time.
 
 Commit: d132578
+
+## R-156: money arriving now connects to the notice and the case
+
+**What it built.** The review's finding 3, re-verified before touching
+anything (all three holes were real): `cure.ts` had no concept of a
+payment, `recordNoticeService` never touched the hold switches, and the
+panel that does the right thing lives on the lease page, driven by
+memory. Three closures. (i) Serving a cure-starting notice offers the
+hold inline: the ServeForm grows a pre-set "also place a payment hold"
+block (all three switches on, reason prefilled, button becomes "Serve
+and hold"), rendered only for `CURE_NOTICE_TYPES` with a lease and an
+actor holding `ledger.adjust`, re-checked server-side; the hold goes
+through `applyPaymentHold` for every active payer, after the service is
+recorded — a hold that fails must never cost the record of a service
+that physically happened, and the error says exactly that. (ii)
+`paymentsSinceService` in core filters the lease's kept payments
+(PENDING/SETTLED, unreversed — every rail mints a `Payment` row) to
+those on/after the FIRST recorded service of any quality, defective
+included; the case page shows them as a red band — amount, channel,
+date — with `acceptanceWarning`'s sentence. (iii) The packet cover sheet
+names them under "Payments accepted after service" (D-50: never omit the
+awkward fact). The OQ-gate follows OQ-6/OQ-7's precedent: two new
+`JurisdictionRule` columns, `acceptanceWaivesNotice Boolean?` and
+`acceptanceWaiverNote String?`, null = nobody has told us, rendered on
+the rule form (tri-state select + note), validated (a note with no
+stance is a half-finished edit, the early-termination pair's shape),
+populated in the carry-forward e2e's v1. No state is seeded with a
+stance — that is counsel's answer to give, and until it arrives the
+band warns that acceptance MAY waive.
+
+**What it decided.** The row said `cureClock()` takes
+payments-since-service; built as a sibling core function instead,
+because `cureClock`'s second caller (violation cure, R-088) legitimately
+has no payment concept and would have passed `[]` forever. The anchor is
+the earliest service of ANY quality, not the earliest good one — hiding
+a payment because the service before it was flawed would decide the
+legal question in the risky direction. Acceptance is a WARNING, never a
+blocker: `readyToFile` deliberately does not read it, the same line
+`servicePermitted` draws. The serve-hold applies to every active payer
+(a roommate's pay-link collects the same waiver-risk money); the first
+voucher tenancy re-opens that as a feature (D-136). All-switches-off
+with the offer ticked is refused — all-off through `applyPaymentHold`
+LIFTS a hold, which a serve screen must never do by accident.
+
+**What it left behind.** Real bug found and fixed along the way:
+`cureClockFor` read `NoticeDelivery.servedAt` (a real timestamp) with
+`utcToBusinessDate`, the date-only reader — a 9pm Chicago service
+started the cure clock a calendar day late and would have hidden a
+same-evening payment from the band. Fixed with `businessDate(instant,
+zone)`. Left behind: the band and packet list payments, not Stripe
+invoice credits — a concession posted as a credit invoice item is not a
+payment and does not appear; R-163's amount reconciliation is the item
+nearest that seam. `acceptanceWaiverNote` is prose the product never
+computes with, by design. No state has a reviewed acceptance stance;
+the legal-review release gate (flagged-gaps §6) covers these two columns
+like every other statutory field.
+
+**Gate run:** lint ✓ (pre-existing warnings only), typecheck ✓, unit
+2,829 passed / 4 skipped ✓, targeted e2e (evictions, jurisdiction,
+notices — 23/23) ✓ against the production build, `npm run build` ✓,
+`check:ship-deps` ✓, `db:drift` ✓, `db:ci` ✓ (hand migration applies
+from scratch). Full sweep is CI's; checking `gh run list` after push.

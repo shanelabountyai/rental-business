@@ -100,6 +100,21 @@ describe('validateJurisdictionRule', () => {
     ).toContainEqual(expect.objectContaining({ field: 'leaseViolationCureDays' }))
   })
 
+  // R-156: a counsel note with no stance recorded is a half-finished edit -
+  // the case page's warning hangs off the stance, so the note would never
+  // show anywhere.
+  it('rejects an acceptance-waiver note on an unreviewed stance, and accepts it with one', () => {
+    expect(
+      validateJurisdictionRule(baseInput({ acceptanceWaiverNote: 'Partial acceptance waives.' })),
+    ).toContainEqual(expect.objectContaining({ field: 'acceptanceWaiverNote' }))
+    expect(
+      validateJurisdictionRule(
+        baseInput({ acceptanceWaivesNotice: false, acceptanceWaiverNote: 'Partial acceptance waives.' }),
+      ),
+    ).toEqual([])
+    expect(validateJurisdictionRule(baseInput({ acceptanceWaivesNotice: true }))).toEqual([])
+  })
+
   it('rejects an NSF cap on a rule that says the fee is not permitted', () => {
     expect(
       validateJurisdictionRule(baseInput({ nsfFeePermitted: false, nsfFeeMaxCents: 3_000 })),

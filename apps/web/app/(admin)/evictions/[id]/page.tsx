@@ -1,4 +1,5 @@
 import {
+  acceptanceWarning,
   costTotals,
   CURE_STATE_LABELS,
   EVICTION_COST_LABELS,
@@ -81,7 +82,8 @@ export default async function EvictionCasePage({ params }: { params: Promise<{ i
   if (!evictionCase) notFound()
 
   const zone = evictionCase.property.timezone
-  const { clock, hasNotice } = await cureClockFor(evictionCase)
+  const { clock, hasNotice, paymentsSinceService, acceptanceWaivesNotice, acceptanceWaiverNote } =
+    await cureClockFor(evictionCase)
   const stage = evictionCase.stage as EvictionStageValue
   const next = NEXT_STAGE[stage]
   const totals = costTotals(evictionCase.costs)
@@ -161,6 +163,33 @@ export default async function EvictionCasePage({ params }: { params: Promise<{ i
           )
         )}
       </section>
+
+      {/* R-156. The fact opposing counsel raises first, on the screen where
+          the filing decision is made rather than on the money pages. A
+          warning, never a blocker — readyToFile deliberately does not read
+          this, the same line servicePermitted draws. */}
+      {paymentsSinceService.length > 0 && (
+        <section
+          aria-labelledby="acceptance"
+          className="flex flex-col gap-2 rounded-md border border-red-300 bg-red-50 p-4"
+        >
+          <h2 id="acceptance" className="text-lg font-semibold text-red-900">
+            Money accepted after service
+          </h2>
+          <ul className="flex flex-col gap-1 text-sm text-red-900">
+            {paymentsSinceService.map((payment, index) => (
+              <li key={index} className="tabular-nums">
+                {formatCents(payment.amountCents)} — {payment.channelLabel},{' '}
+                {friendlyBusinessDate(payment.receivedOn)}
+              </li>
+            ))}
+          </ul>
+          <p className="text-sm text-red-900">{acceptanceWarning(acceptanceWaivesNotice)}</p>
+          {acceptanceWaiverNote && (
+            <p className="text-sm text-red-900">Counsel&rsquo;s note on file: {acceptanceWaiverNote}</p>
+          )}
+        </section>
+      )}
 
       <ScraLookupsPanel
         lookups={scraLookups}

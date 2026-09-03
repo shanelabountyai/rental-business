@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
-import { hashPassword } from '@rental/core/auth'
+import { createTotpEnrolment, hashPassword, sealSecret } from '@rental/core/auth'
+import { Secret, TOTP } from 'otpauth'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
 
@@ -318,4 +319,139 @@ test('a case closes with cash for keys, and the outcome is on the record', async
     where: { action: 'eviction.case_closed', entityId: evictionCase.id },
   })
   expect(audited.reason).toContain('1,200')
+})
+
+// R-156. Money arriving now connects to the notice and the case: the case
+// page names any payment accepted after service, and serving a cure-starting
+// notice offers the hold in the same press.
+
+async function seedPayer(leaseId: string, propertyId: string, tenantId: string) {
+  return prisma.leasePayer.create({
+    data: {
+      leaseId,
+      propertyId,
+      payerType: 'TENANT',
+      tenantId,
+      collectionMethod: 'send_invoice',
+      stripeCustomerId: `cus_${randomUUID().replace(/-/g, '').slice(0, 14)}`,
+    },
+  })
+}
+
+test('a payment accepted after service shows as a red band on the case, and pre-service money does not', async ({ page }) => {
+  const { property, unit, lease, stamp } = await seedTenancy()
+  const staff = await seedOwner()
+  const evictionCase = await openCaseFor(lease.id, staff.id, property.id, unit.id)
+  const servedAt = new Date('2026-08-20T15:00:00Z')
+  const notice = await seedServedNotice({
+    propertyId: property.id,
+    leaseId: lease.id,
+    servedAt,
+    permitted: true,
+  })
+  await prisma.notice.update({ where: { id: notice.id }, data: { evictionCaseId: evictionCase.id } })
+
+  const tenant = await prisma.tenant.findFirstOrThrow({ where: { lastName: `Tenant-${stamp}` } })
+  const payer = await seedPayer(lease.id, property.id, tenant.id)
+  // One before service, one after - only the second may appear. Distinct
+  // amounts so the assertion cannot match the wrong row.
+  await prisma.payment.createMany({
+    data: [
+      {
+        propertyId: property.id,
+        leaseId: lease.id,
+        leasePayerId: payer.id,
+        channel: 'OFFLINE_CASH',
+        status: 'SETTLED',
+        amountCents: 12_345,
+        receivedAt: new Date('2026-08-01T12:00:00Z'),
+      },
+      {
+        propertyId: property.id,
+        leaseId: lease.id,
+        leasePayerId: payer.id,
+        channel: 'OFFLINE_CASH',
+        status: 'SETTLED',
+        amountCents: 40_000,
+        receivedAt: new Date('2026-08-25T12:00:00Z'),
+      },
+    ],
+  })
+
+  await signIn(page, staff.email)
+  await page.goto(`/evictions/${evictionCase.id}`)
+
+  await expect(page.getByRole('heading', { name: 'Money accepted after service' })).toBeVisible()
+  await expect(page.getByText('$400.00 — Cash at the counter, 25 Aug 2026')).toBeVisible()
+  // Texas's seeded rule has no acceptance stance on file, so the warning is
+  // the conservative one - never an answer the state did not give.
+  await expect(page.getByText(/state law this product has not been taught/)).toBeVisible()
+  await expect(page.getByText('$123.45')).toHaveCount(0)
+})
+
+test('serving a pay-or-quit places the hold in the same press, and proves it reached the payer row', async ({ page }) => {
+  const { property, unit, lease, stamp } = await seedTenancy()
+  const tenant = await prisma.tenant.findFirstOrThrow({ where: { lastName: `Tenant-${stamp}` } })
+  const payer = await seedPayer(lease.id, property.id, tenant.id)
+
+  // MFA ENROLLED, because placing a hold is `ledger.adjust` and R-004
+  // requires a verified second factor for it - without one the offer does
+  // not render at all, which is the product working (fee-waiver.spec.ts
+  // documents the same trap).
+  const email = `evict-hold-${randomUUID()}@example.test`
+  const { secret } = createTotpEnrolment(email)
+  const holder = await prisma.staffUser.create({
+    data: {
+      email,
+      name: 'Serve And Hold Owner',
+      credential: {
+        create: {
+          passwordHash: await hashPassword(PASSWORD),
+          mfaSecret: sealSecret(secret),
+          mfaEnrolledAt: new Date(),
+        },
+      },
+    },
+  })
+  staffIds.push(holder.id)
+  const role = await prisma.role.findUniqueOrThrow({ where: { key: 'owner' } })
+  await prisma.staffAssignment.create({ data: { staffUserId: holder.id, roleId: role.id } })
+  const evictionCase = await openCaseFor(lease.id, holder.id, property.id, unit.id)
+
+  const notice = await prisma.notice.create({
+    data: {
+      propertyId: property.id,
+      leaseId: lease.id,
+      evictionCaseId: evictionCase.id,
+      type: 'NOTICE_TO_VACATE',
+      addressOfRecord: '4 Courthouse Way, Houston, TX 77002',
+    },
+  })
+
+  await page.goto('/login')
+  await page.getByLabel('Email').fill(email)
+  await page.getByLabel('Password').fill(PASSWORD)
+  await page.getByRole('button', { name: 'Sign in' }).click()
+  await page.waitForURL(/\/login\/mfa/)
+  await page.getByLabel(/code/i).fill(new TOTP({ secret: Secret.fromBase32(secret) }).generate())
+  await page.getByRole('button', { name: 'Verify' }).click()
+  await page.waitForURL('**/dashboard')
+
+  await page.goto(`/notices/${notice.id}`)
+  // The offer arrives pre-set: the safe path is the one-press path and
+  // opting out is the deliberate act.
+  await expect(
+    page.getByLabel('Also place a payment hold when this service is recorded'),
+  ).toBeChecked()
+  await page.getByLabel('When was it served?').fill('2026-08-30T10:00')
+  await page.getByRole('button', { name: 'Serve and hold' }).click()
+
+  await expect(page.getByText(/payment hold is in force/)).toBeVisible()
+  // The row the pay screen, the pay-link page and the counter all read.
+  const held = await prisma.leasePayer.findUniqueOrThrow({ where: { id: payer.id } })
+  expect(held.collectionPaused).toBe(true)
+  expect(held.blockPartialPayments).toBe(true)
+  expect(held.certifiedFundsOnly).toBe(true)
+  expect(held.paymentHoldReason).toContain('served')
+  expect(held.paymentHoldSetByStaffId).toBe(holder.id)
 })

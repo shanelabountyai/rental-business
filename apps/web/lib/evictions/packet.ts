@@ -1,10 +1,10 @@
 'use server'
 
 import { createHash } from 'node:crypto'
-import { costTotals, packetBlocks, type PacketExhibit } from '@rental/core/evictions'
+import { acceptanceWarning, costTotals, packetBlocks, type PacketExhibit } from '@rental/core/evictions'
 import { statementBlocks, statementForPeriod } from '@rental/core/ledger'
 import { noticeTypeLabel } from '@rental/core/notices'
-import { businessDate, friendlyDate, friendlyTimestamp } from '@rental/core/scheduling'
+import { businessDate, friendlyBusinessDate, friendlyDate, friendlyTimestamp } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { audit } from '@/lib/audit/index.ts'
@@ -78,7 +78,7 @@ export async function exportAttorneyPacket(
   const zone = evictionCase.property.timezone
   const generatedAt = new Date()
 
-  const { clock } = await cureClockFor(evictionCase)
+  const { clock, paymentsSinceService, acceptanceWaivesNotice } = await cureClockFor(evictionCase)
 
   // The ledger, read whole. `statementForPeriod` needs the entire history to
   // carry a balance - see its own comment on why filtering first produces a
@@ -228,6 +228,8 @@ export async function exportAttorneyPacket(
     generatedBy,
     tenantNames,
     clock,
+    paymentsSinceService,
+    acceptanceWaivesNotice,
     closingBalanceCents: period.closingBalanceCents,
     statementPdf,
     fetched,
@@ -244,6 +246,8 @@ async function finish(args: {
   generatedBy: string
   tenantNames: string[]
   clock: Awaited<ReturnType<typeof cureClockFor>>['clock']
+  paymentsSinceService: Awaited<ReturnType<typeof cureClockFor>>['paymentsSinceService']
+  acceptanceWaivesNotice: boolean | null
   closingBalanceCents: number
   statementPdf: Uint8Array
   fetched: Fetched[]
@@ -288,6 +292,14 @@ async function finish(args: {
         writOn: asDate(evictionCase.writOn),
         lockoutOn: asDate(evictionCase.lockoutOn),
         clock,
+        // R-156: named on the cover sheet, never omitted (D-50). Dates are
+        // formatted here because the packet quotes them as prose.
+        paymentsSinceService: args.paymentsSinceService.map((payment) => ({
+          receivedOn: friendlyBusinessDate(payment.receivedOn),
+          amountCents: payment.amountCents,
+          channelLabel: payment.channelLabel,
+        })),
+        acceptanceWarning: acceptanceWarning(args.acceptanceWaivesNotice),
         costs: totals,
         ledgerBalanceCents: args.closingBalanceCents,
         exhibits: buildExhibits(failed),

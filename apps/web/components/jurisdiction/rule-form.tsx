@@ -69,6 +69,8 @@ export interface RuleFormDefaults {
   preMoveOutWalkthroughDaysBefore?: number | ''
   entryNoticeHours?: number | ''
   payOrQuitDays?: number | ''
+  acceptanceWaivesNotice?: boolean | null
+  acceptanceWaiverNote?: string
   noticeToVacateDays?: number | ''
   rentIncreaseNoticeDays?: number | ''
   rentIncreaseCapPercent?: number | ''
@@ -349,6 +351,37 @@ export function RuleForm({
             max={365}
             defaultValue={defaults.payOrQuitDays}
             error={errors.payOrQuitDays}
+          />
+          <div className="flex flex-col gap-1.5">
+            <SelectField
+              label="Accepting payment after service waives the notice (R-156)"
+              name="acceptanceWaivesNotice"
+              idPrefix="rule"
+              defaultValue={
+                defaults.acceptanceWaivesNotice == null
+                  ? ''
+                  : String(defaults.acceptanceWaivesNotice)
+              }
+              error={errors.acceptanceWaivesNotice}
+              placeholder="Not reviewed"
+              options={[
+                { value: 'true', label: 'Yes, acceptance waives' },
+                { value: 'false', label: 'No, it does not by itself' },
+              ]}
+            />
+            <p className="text-muted-foreground text-sm">
+              Whether taking a tenant&rsquo;s money after a pay-or-quit is served voids the
+              notice here. Left unreviewed, the case page warns that acceptance MAY waive
+              rather than answering for the state.
+            </p>
+          </div>
+          <TextField
+            label="Counsel's note on acceptance (optional)"
+            name="acceptanceWaiverNote"
+            type="text"
+            defaultValue={defaults.acceptanceWaiverNote}
+            error={errors.acceptanceWaiverNote}
+            hint="The nuance in prose - partial vs full payment, written-agreement exceptions. Shown verbatim beside the warning; the product never computes with it."
           />
           <TextField
             label="Violation cure period (days, optional)"

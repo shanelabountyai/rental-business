@@ -5947,6 +5947,20 @@ model JurisdictionRule {
   earlyTerminationNoticeDays         Int?
   earlyTerminationDocumentationTypes String[]
 
+  // Acceptance-of-rent waiver (PAY-14, R-156; D-4).
+  //
+  // Whether accepting a payment after a cure notice is served waives the
+  // notice is state law, and getting it wrong voids the notice or refuses a
+  // tenant's cure - so it is configuration with counsel's name on it, never
+  // code. THREE-VALUED like `sourceOfIncomeProtected`: null means nobody has
+  // reviewed this state, and the case page then warns that acceptance MAY
+  // waive rather than answering for the state. `acceptanceWaiverNote` carries
+  // counsel's nuance in prose (partial vs full, written-agreement exceptions)
+  // - the product only ever WARNS on these fields, it never computes with
+  // them, so the nuance does not need to be structured.
+  acceptanceWaivesNotice Boolean?
+  acceptanceWaiverNote   String?
+
   /// Statute citation and who reviewed it. Every one of these numbers needs
   /// an attorney's eyes before it governs a real tenancy; this is where that
   /// review is recorded.

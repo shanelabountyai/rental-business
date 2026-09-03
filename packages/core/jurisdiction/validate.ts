@@ -164,6 +164,13 @@ export interface JurisdictionRuleInput {
   earlyTerminationNoticeDays?: number | null
   earlyTerminationDocumentationTypes?: readonly string[]
 
+  /// PAY-14 (R-156). Null means nobody has reviewed whether this state
+  /// treats accepting payment after a cure notice as waiving it - a
+  /// different claim from `false`. The note carries counsel's nuance in
+  /// prose; the product only warns on these, it never computes with them.
+  acceptanceWaivesNotice?: boolean | null
+  acceptanceWaiverNote?: string | null
+
   citation?: string | null
   reviewedBy?: string | null
   notes?: string | null
@@ -414,6 +421,16 @@ export function validateJurisdictionRule(
         seenMethods.add(method)
       }
     }
+  }
+
+  // R-156's half-finished-edit refusal, the early-termination pair's shape:
+  // a counsel note with no stance recorded is a note the case page will
+  // never show, because the warning it hangs off reads the stance.
+  if (input.acceptanceWaiverNote != null && input.acceptanceWaiverNote.trim() && input.acceptanceWaivesNotice == null) {
+    violations.push({
+      field: 'acceptanceWaiverNote',
+      message: 'Record whether acceptance waives the notice before attaching a note to it.',
+    })
   }
 
   return violations

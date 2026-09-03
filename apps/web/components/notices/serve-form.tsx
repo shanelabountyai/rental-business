@@ -26,19 +26,33 @@ import type { FormState } from '@/lib/notices/actions.ts'
 /// Which methods a state permits for this notice type, when it says. `null`
 /// means unconfigured, and the form still offers everything - an owner in an
 /// unconfigured state must still be able to record what they did.
+/// R-156's inline serve-and-hold. Present only for a cure-starting notice
+/// whose reader holds `ledger.adjust` - the server re-checks both.
+export interface HoldOffer {
+  /// Every active payer already has all three switches on - nothing to add.
+  alreadyHeld: boolean
+  defaultReason: string
+}
+
 export function ServeForm({
   action,
   permittedMethods,
   propertyTimezone,
   alreadyServed,
+  holdOffer = null,
 }: {
   action: (previous: FormState, formData: FormData) => Promise<FormState>
   permittedMethods: NoticeServiceMethodName[] | null
   propertyTimezone: string
   alreadyServed: boolean
+  holdOffer?: HoldOffer | null
 }) {
   const [state, formAction, pending] = useActionState(action, {})
   const [method, setMethod] = useState<NoticeServiceMethodName>('PERSONAL')
+  // Pre-set (the review's own words): serving a pay-or-quit and then taking
+  // next morning's autopay is the defect, so the safe path is the one-press
+  // path and opting OUT is the deliberate act.
+  const [placeHold, setPlaceHold] = useState(holdOffer != null && !holdOffer.alreadyHeld)
 
   const needsPhoto = method === 'POSTED_WITH_PHOTO'
   const needsTracking = method === 'CERTIFIED_MAIL'
@@ -189,12 +203,74 @@ export function ServeForm({
         />
       </div>
 
+      {holdOffer?.alreadyHeld && (
+        <p className="text-muted-foreground text-sm">
+          A payment hold is already in force for every payer on this lease, so
+          there is nothing more to place at service.
+        </p>
+      )}
+      {holdOffer && !holdOffer.alreadyHeld && (
+        <fieldset className="flex flex-col gap-2 rounded-md border border-amber-300 p-3">
+          <legend className="px-1 text-sm font-semibold">Payment hold</legend>
+          <label className="flex min-h-11 items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              name="placeHold"
+              className="mt-1 size-5"
+              checked={placeHold}
+              onChange={(event) => setPlaceHold(event.target.checked)}
+            />
+            <span>
+              <span className="font-medium">Also place a payment hold when this service is recorded</span>
+              <span className="text-muted-foreground block text-xs">
+                An autopay charge that fires the morning after a notice is
+                served can waive the notice. This closes online payment for
+                every payer on the lease in the same press, and proves it with
+                the payment provider before reporting success.
+              </span>
+            </span>
+          </label>
+          {placeHold && (
+            <>
+              <label className="flex min-h-11 items-center gap-2 text-sm">
+                <input type="checkbox" name="holdBlockOnline" className="size-5" defaultChecked />
+                <span>Block online payments and pause the subscription</span>
+              </label>
+              <label className="flex min-h-11 items-center gap-2 text-sm">
+                <input type="checkbox" name="holdBlockPartial" className="size-5" defaultChecked />
+                <span>Refuse partial payments</span>
+              </label>
+              <label className="flex min-h-11 items-center gap-2 text-sm">
+                <input type="checkbox" name="holdCertifiedFundsOnly" className="size-5" defaultChecked />
+                <span>Certified funds only at the counter</span>
+              </label>
+              <div className="flex flex-col gap-1">
+                <label htmlFor="holdReason" className="text-sm font-medium">
+                  Why the hold is being placed
+                </label>
+                <input
+                  id="holdReason"
+                  name="holdReason"
+                  type="text"
+                  defaultValue={holdOffer.defaultReason}
+                  className="border-input focus-visible:ring-ring min-h-11 rounded-md border px-3 text-sm focus-visible:ring-2 focus-visible:outline-none"
+                />
+                <p className="text-muted-foreground text-xs">
+                  This is the record an eviction is argued from — say why in a
+                  sentence.
+                </p>
+              </div>
+            </>
+          )}
+        </fieldset>
+      )}
+
       <button
         type="submit"
         {...pendingButtonProps(pending)}
         className="bg-primary text-primary-foreground focus-visible:ring-ring min-h-11 rounded-md px-4 text-sm font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
       >
-        {pending ? 'Recording…' : 'Record service'}
+        {pending ? 'Recording…' : placeHold ? 'Serve and hold' : 'Record service'}
       </button>
     </form>
   )

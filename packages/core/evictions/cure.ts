@@ -170,3 +170,60 @@ export const FILING_REFUSAL_MESSAGES: Record<FilingRefusal, string> = {
   still_curing:
     'The cure period has not run out yet. Filing early is the most common reason these cases are dismissed.',
 }
+
+/**
+ * A payment that landed on the lease, in the shape the acceptance warning
+ * needs (R-156). `channelLabel` is display text ("ACH", "cash at the
+ * counter") because the warning quotes it verbatim; core never branches on
+ * the channel.
+ */
+export interface CurePayment {
+  receivedOn: BusinessDate
+  amountCents: number
+  channelLabel: string
+}
+
+/**
+ * The payments accepted on or after the FIRST recorded service of a
+ * cure-starting notice - the money that may have waived it (R-156).
+ *
+ * Anchored at the earliest service of ANY quality, not the earliest GOOD one
+ * the clock runs from: a defectively-served notice was still put in the
+ * tenant's hands, and whether accepting rent after it has consequences is
+ * exactly the question this exists to surface, not to answer. Missing a
+ * payment because the service that preceded it was flawed would be the
+ * product deciding the legal question in the risky direction.
+ *
+ * No recorded service means no notice to waive, so no payment qualifies.
+ */
+export function paymentsSinceService(
+  services: readonly ServiceEvent[],
+  payments: readonly CurePayment[],
+): CurePayment[] {
+  if (services.length === 0) return []
+  const anchor = services.reduce(
+    (earliest, s) => (s.servedOn < earliest ? s.servedOn : earliest),
+    services[0]!.servedOn,
+  )
+  return payments
+    .filter((p) => p.receivedOn >= anchor)
+    .sort((a, b) => (a.receivedOn < b.receivedOn ? -1 : a.receivedOn > b.receivedOn ? 1 : 0))
+}
+
+/**
+ * What accepting those payments means here, per the configured rule - a
+ * WARNING, never a verdict, and never a blocker: `readyToFile` deliberately
+ * does not read this, for the same reason an unknown cure period does not
+ * block filing. `null` is D-48's "nobody has told us", and the unknown case
+ * warns as if acceptance may waive, because that is the direction a wrong
+ * guess is cheap in.
+ */
+export function acceptanceWarning(acceptanceWaivesNotice: boolean | null): string {
+  if (acceptanceWaivesNotice === true) {
+    return 'This state’s configured rule says accepting payment waives the notice. Ask your attorney before relying on this notice to file.'
+  }
+  if (acceptanceWaivesNotice === false) {
+    return 'This state’s configured rule says acceptance does not by itself waive the notice. It is still part of the record an attorney needs to see.'
+  }
+  return 'Whether accepting this money waived the notice is state law this product has not been taught. Ask your attorney before filing on this notice.'
+}

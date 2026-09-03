@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { costTotals, validateEvictionCost } from './costs.ts'
-import { cureClock, readyToFile, type ServiceEvent } from './cure.ts'
+import {
+  acceptanceWarning,
+  cureClock,
+  paymentsSinceService,
+  readyToFile,
+  type CurePayment,
+  type ServiceEvent,
+} from './cure.ts'
 import { canAdvanceTo } from './stages.ts'
 
 // The cure clock is the legally load-bearing part of R-083: filing early, or
@@ -163,5 +170,60 @@ describe('eviction costs', () => {
       description: '   ',
     })
     expect(violations.map((v) => v.field).sort()).toEqual(['description', 'type'])
+  })
+})
+
+// R-156. A payment accepted after service is the fact the case page, the
+// packet and (per the state's rule) the notice's validity all turn on.
+const paid = (receivedOn: string, amountCents = 50_000): CurePayment => ({
+  receivedOn,
+  amountCents,
+  channelLabel: 'ACH',
+})
+
+describe('paymentsSinceService', () => {
+  it('returns nothing when no service has been recorded', () => {
+    expect(paymentsSinceService([], [paid('2026-08-15')])).toEqual([])
+  })
+
+  it('keeps payments on or after the first service and drops earlier ones', () => {
+    const kept = paymentsSinceService(
+      [good('2026-08-10')],
+      [paid('2026-08-09'), paid('2026-08-10'), paid('2026-08-14')],
+    )
+    expect(kept.map((p) => p.receivedOn)).toEqual(['2026-08-10', '2026-08-14'])
+  })
+
+  it('anchors at the earliest service even when that service was defective', () => {
+    // A defectively-served notice was still put in the tenant's hands, so a
+    // payment accepted after it must surface - hiding it would be the
+    // product deciding the legal question in the risky direction.
+    const kept = paymentsSinceService(
+      [bad('2026-08-10'), good('2026-08-14')],
+      [paid('2026-08-11')],
+    )
+    expect(kept).toHaveLength(1)
+  })
+
+  it('sorts what it keeps by date', () => {
+    const kept = paymentsSinceService(
+      [good('2026-08-01')],
+      [paid('2026-08-20'), paid('2026-08-05')],
+    )
+    expect(kept.map((p) => p.receivedOn)).toEqual(['2026-08-05', '2026-08-20'])
+  })
+})
+
+describe('acceptanceWarning', () => {
+  it('warns that acceptance may waive when the state is unreviewed', () => {
+    // null is D-48's "nobody has told us" - the warning must not answer for
+    // the state in either direction, and the cheap direction to be wrong in
+    // is the cautious one.
+    expect(acceptanceWarning(null)).toContain('has not been taught')
+  })
+
+  it('states the configured rule when counsel has answered', () => {
+    expect(acceptanceWarning(true)).toContain('waives the notice')
+    expect(acceptanceWarning(false)).toContain('does not by itself waive')
   })
 })

@@ -71,6 +71,8 @@ export default async function NewJurisdictionRulePage({
           preMoveOutWalkthroughDaysBefore: previous?.preMoveOutWalkthroughDaysBefore ?? '',
           entryNoticeHours: previous?.entryNoticeHours ?? '',
           payOrQuitDays: previous?.payOrQuitDays ?? '',
+          acceptanceWaivesNotice: previous?.acceptanceWaivesNotice ?? null,
+          acceptanceWaiverNote: previous?.acceptanceWaiverNote ?? '',
           noticeToVacateDays: previous?.noticeToVacateDays ?? '',
           rentIncreaseNoticeDays: previous?.rentIncreaseNoticeDays ?? '',
           rentIncreaseCapPercent: previous?.rentIncreaseCapPercentBps

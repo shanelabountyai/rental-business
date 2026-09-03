@@ -55,6 +55,11 @@ export interface PacketFacts {
   writOn: string | null
   lockoutOn: string | null
   clock: CureClock
+  /// Payments accepted on or after the first recorded service (R-156).
+  /// Formatted upstream: `receivedOn` is already friendly text here.
+  paymentsSinceService: readonly { receivedOn: string; amountCents: number; channelLabel: string }[]
+  /// `acceptanceWarning(...)`'s sentence for this jurisdiction's rule.
+  acceptanceWarning: string
   costs: CostTotals
   ledgerBalanceCents: number | null
   exhibits: readonly PacketExhibit[]
@@ -107,6 +112,20 @@ export function packetBlocks(facts: PacketFacts): DocumentBlock[] {
       kind: 'meta',
       text: 'Last day to cure: not configured for this jurisdiction in this system',
     })
+  }
+
+  // R-156, under D-50's rule: never silently omit the awkward fact. A payment
+  // accepted after service is the first thing opposing counsel will raise,
+  // and a packet that hid it is worse for the owner than one that names it.
+  if (facts.paymentsSinceService.length > 0) {
+    blocks.push({ kind: 'subheading', text: 'Payments accepted after service' })
+    for (const payment of facts.paymentsSinceService) {
+      blocks.push({
+        kind: 'mono',
+        text: padRow(`${payment.receivedOn} — ${payment.channelLabel}`, formatCents(payment.amountCents)),
+      })
+    }
+    blocks.push({ kind: 'paragraph', text: facts.acceptanceWarning })
   }
 
   const courtDates: [string, string | null][] = [
