@@ -14,7 +14,7 @@ import { chargeDeposit } from './deposit-charge.ts'
 import { esignAdapter } from '@/lib/esign/provider.ts'
 import { appendPdfs, renderBlocksPdf } from '@/lib/pdf/render.ts'
 import { generateStorageKey, storage } from '@/lib/storage/index.ts'
-import { activateLeaseSideEffects } from './activate.ts'
+import { activateLeaseSideEffects, endRenewalPredecessor } from './activate.ts'
 import { completePartyChangeEnvelope } from './party-change-apply.ts'
 import { verifySignerLink } from './sign-link.ts'
 
@@ -352,9 +352,11 @@ async function completeEnvelope(envelopeId: string): Promise<void> {
       // MAKE_READY on the way off, correct for an ordinary end of tenancy and
       // wrong here, since the tenant never left. `moveOutAt` is deliberately
       // left unset for the identical reason.
-      await tx.lease.update({
-        where: { id: envelope.lease.renewedFromLeaseId! },
-        data: { status: 'ENDED' },
+      // The deposit follows the live tenancy (R-154) - see
+      // endRenewalPredecessor's own comment.
+      const { movedDepositIds } = await endRenewalPredecessor(tx, {
+        predecessorId: envelope.lease.renewedFromLeaseId!,
+        successorId: envelope.lease.id,
       })
       await auditAsSystem(
         'esign.completion',
@@ -363,7 +365,11 @@ async function completeEnvelope(envelopeId: string): Promise<void> {
           entityType: 'Lease',
           entityId: envelope.lease.id,
           propertyId: envelope.lease.propertyId,
-          after: { renewedFromLeaseId: envelope.lease.renewedFromLeaseId, effectiveOn: envelope.lease.startsOn.toISOString() },
+          after: {
+            renewedFromLeaseId: envelope.lease.renewedFromLeaseId,
+            effectiveOn: envelope.lease.startsOn.toISOString(),
+            movedDepositIds,
+          },
         },
         tx,
       )
@@ -393,9 +399,9 @@ async function completeEnvelope(envelopeId: string): Promise<void> {
   })
   if (isRenewal) {
     // No deposit charge - the deposit already held under the predecessor
-    // lease is not recollected (this item's own PROGRESS entry names the
-    // continuity gap that leaves). The predecessor's own subscription is
-    // cancelled instead of provisioning a second one.
+    // lease is not recollected; its `Deposit` row was re-pointed at the
+    // successor inside the transaction above (R-154). The predecessor's own
+    // subscription is cancelled instead of provisioning a second one.
     await syncLease(envelope.lease.renewedFromLeaseId!).catch((error: unknown) => {
       console.error(`[esign] billing sync failed for predecessor ${envelope.lease.renewedFromLeaseId}`, error)
     })

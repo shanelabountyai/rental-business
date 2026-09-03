@@ -521,7 +521,20 @@ async function reset() {
     await prisma.leasePayer.deleteMany({ where: { leaseId: { in: leaseIds } } })
 
     await prisma.charge.deleteMany({ where: { leaseId: { in: leaseIds } } })
+    // Deposits before the leases they reference (RESTRICT), deductions
+    // before the deposits - both latent gaps until R-154's renewed tenancy
+    // put a deposit on a lease this branch actually reaches.
+    await prisma.depositDeduction.deleteMany({
+      where: { deposit: { leaseId: { in: leaseIds } } },
+    })
+    await prisma.deposit.deleteMany({ where: { leaseId: { in: leaseIds } } })
     await prisma.leaseTenant.deleteMany({ where: { leaseId: { in: leaseIds } } })
+    // The renewal self-FK is RESTRICT, and one deleteMany's internal row
+    // order is unspecified - unlink predecessors before deleting both rows.
+    await prisma.lease.updateMany({
+      where: { id: { in: leaseIds }, renewedFromLeaseId: { not: null } },
+      data: { renewedFromLeaseId: null },
+    })
     await prisma.lease.deleteMany({ where: { id: { in: leaseIds } } })
     await prisma.tenant.deleteMany({ where: { id: { in: tenantIds } } })
     // The unit's smart lock, and anything the lock recorded. Seeded for the
@@ -655,6 +668,13 @@ interface UnitPlan {
       isMonthToMonth?: boolean
       moveOutAt?: Date
       noticeGivenAt?: Date
+      /// The tenancy's prior term, where this lease is a renewal successor
+      /// (R-154). Seeds an ENDED predecessor lease linked via
+      /// `renewedFromLeaseId`, with the `Deposit` on THIS lease and
+      /// `receivedAt` at the original move-in - exactly the state the
+      /// renewal cutover's `endRenewalPredecessor` writer produces, so the
+      /// demo walk can see a renewed tenancy whose deposit clock works.
+      renewedPriorTerm?: { startsOn: Date; endsOn: Date; rentCents: number }
       /// A single overdue rent charge, standing in for "late" - no Payment
       /// or LedgerEntry rows here (D-11: those are a Stripe-webhook
       /// projection, never written directly). A Charge is fair game - it is
@@ -1407,6 +1427,7 @@ export function buildPlan(): PropertyPlan[] {
               endsOn: daysFrom(125),
               rentCents: 220000,
               depositCents: 220000,
+              renewedPriorTerm: { startsOn: daysFrom(-605), endsOn: daysFrom(-240), rentCents: 210000 },
             },
           },
         },
@@ -3451,6 +3472,28 @@ async function seedDemoData() {
         data: { leaseId: lease.id, tenantId: tenant.id, isPrimary: true },
       })
 
+      if (tenantPlan.lease.renewedPriorTerm) {
+        const prior = tenantPlan.lease.renewedPriorTerm
+        const predecessor = await prisma.lease.create({
+          data: {
+            propertyId: property.id,
+            unitId: unit.id,
+            status: 'ENDED',
+            startsOn: prior.startsOn,
+            endsOn: prior.endsOn,
+            rentCents: prior.rentCents,
+            depositCents: tenantPlan.lease.depositCents,
+          },
+        })
+        await prisma.leaseTenant.create({
+          data: { leaseId: predecessor.id, tenantId: tenant.id, isPrimary: true },
+        })
+        await prisma.lease.update({
+          where: { id: lease.id },
+          data: { renewedFromLeaseId: predecessor.id },
+        })
+      }
+
       // The deposit as a LIABILITY, which is a different fact from
       // `Lease.depositCents` and the one every screen actually reads.
       // `depositCents` is what the lease says should be collected - an
@@ -3477,7 +3520,9 @@ async function seedDemoData() {
             propertyId: property.id,
             leaseId: lease.id,
             heldCents: tenantPlan.lease.depositCents,
-            receivedAt: tenantPlan.lease.startsOn,
+            // Received at the ORIGINAL move-in - a renewed tenancy's deposit
+            // arrived under the predecessor term and followed the tenancy.
+            receivedAt: tenantPlan.lease.renewedPriorTerm?.startsOn ?? tenantPlan.lease.startsOn,
           },
         })
       }

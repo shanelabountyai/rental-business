@@ -7,7 +7,7 @@ import { prisma } from '@rental/db'
 import { syncLease } from '@/lib/billing/lifecycle.ts'
 import { provisionLeaseBilling } from '@/lib/billing/provision.ts'
 import { SCHEDULED_JOBS } from '@/lib/jobs/runner.ts'
-import { activateLeaseSideEffects } from './activate.ts'
+import { activateLeaseSideEffects, endRenewalPredecessor } from './activate.ts'
 
 // The renewal effective-date cutover (LEASE-09, R-065): "Given a signed
 // renewal ..., when effective, then the ledger updates with no manual
@@ -93,9 +93,11 @@ SCHEDULED_JOBS.push({
         })
         // Same "no MAKE_READY, no moveOutAt" reasoning as completeEnvelope's
         // own same-day case - the tenant never left, only the lease row did.
-        await tx.lease.update({
-          where: { id: successor.renewedFromLeaseId! },
-          data: { status: 'ENDED' },
+        // The deposit follows the live tenancy (R-154) - see
+        // endRenewalPredecessor's own comment.
+        const { movedDepositIds } = await endRenewalPredecessor(tx, {
+          predecessorId: successor.renewedFromLeaseId!,
+          successorId: successor.id,
         })
         await recordAudit(tx, {
           actor: { type: 'SYSTEM', ref: 'lease.renewal_cutover' },
@@ -103,7 +105,11 @@ SCHEDULED_JOBS.push({
           entityType: 'Lease',
           entityId: successor.id,
           propertyId,
-          after: { renewedFromLeaseId: successor.renewedFromLeaseId, effectiveOn: successor.startsOn.toISOString() },
+          after: {
+            renewedFromLeaseId: successor.renewedFromLeaseId,
+            effectiveOn: successor.startsOn.toISOString(),
+            movedDepositIds,
+          },
         })
       })
 

@@ -1,5 +1,6 @@
 import { prisma } from '@rental/db'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
+import { endRenewalPredecessor } from './activate.ts'
 import { startDepositDisposition } from './deposit-disposition-start.ts'
 
 // Starting the disposition countdown "from the recorded move-out date"
@@ -66,7 +67,12 @@ async function seedProperty() {
 
 async function seedLease(
   propertyId: string,
-  overrides: { moveOutAt?: Date | null; noticeForwardingAddress?: string | null; deposit?: boolean } = {},
+  overrides: {
+    moveOutAt?: Date | null
+    noticeForwardingAddress?: string | null
+    deposit?: boolean
+    renewedFromLeaseId?: string
+  } = {},
 ) {
   const unique = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
   const unit = await prisma.unit.create({ data: { propertyId, name: `U-${unique}`, status: 'VACANT' } })
@@ -84,6 +90,7 @@ async function seedLease(
       moveOutAt: overrides.moveOutAt === undefined ? new Date('2026-08-31T20:00:00Z') : overrides.moveOutAt,
       noticeForwardingAddress:
         overrides.noticeForwardingAddress === undefined ? '99 Forwarding Ln' : overrides.noticeForwardingAddress,
+      renewedFromLeaseId: overrides.renewedFromLeaseId,
     },
   })
   leaseIds.push(lease.id)
@@ -144,6 +151,32 @@ describe('startDepositDisposition', () => {
 
     const after = await prisma.deposit.findFirstOrThrow({ where: { leaseId: lease.id } })
     expect(after.dispositionDueOn).toEqual(first.dispositionDueOn)
+  })
+
+  it('starts on a twice-renewed lease - the deposit follows the tenancy through each cutover (R-154)', async () => {
+    await seedRule(30)
+    const property = await seedProperty()
+    // The original tenancy holds the only Deposit row; each renewal cutover
+    // re-points it at the successor, so the final lease - the one whose
+    // move-out actually happens - is the one the disposition clock reads.
+    const original = await seedLease(property.id, { moveOutAt: null })
+    const first = await seedLease(property.id, {
+      moveOutAt: null,
+      deposit: false,
+      renewedFromLeaseId: original.id,
+    })
+    await endRenewalPredecessor(prisma, { predecessorId: original.id, successorId: first.id })
+    const second = await seedLease(property.id, { deposit: false, renewedFromLeaseId: first.id })
+    await endRenewalPredecessor(prisma, { predecessorId: first.id, successorId: second.id })
+
+    const result = await startDepositDisposition(second.id)
+    expect(result.reason).toBe('started')
+
+    const deposit = await prisma.deposit.findFirstOrThrow({ where: { leaseId: second.id } })
+    expect(deposit.heldCents).toBe(HELD_CENTS)
+    expect(deposit.dispositionDueOn).not.toBeNull()
+    // The predecessors hold nothing - one liability row, never a copy.
+    expect(await prisma.deposit.count({ where: { leaseId: { in: [original.id, first.id] } } })).toBe(0)
   })
 
   it('does nothing for a zero-deposit lease', async () => {

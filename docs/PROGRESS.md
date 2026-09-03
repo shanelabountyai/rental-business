@@ -7408,3 +7408,47 @@ warns the next author.
 against the production build ✓, `npm run build` ✓. Full sweep is CI's.
 
 Commit: 10b18ee
+
+
+## R-154: the deposit follows the tenancy through a renewal
+
+**What it built.** `endRenewalPredecessor` in
+`apps/web/lib/leases/activate.ts` — the one writer that ends a renewal
+predecessor now also re-points its `Deposit` rows at the successor, called
+from both cutover paths (`completeEnvelope`'s same-day case and
+`renewal-cutover-job.ts`), replacing the two hand-written
+`status: 'ENDED'` updates. Every deposit reader keys off `lease.deposits`,
+so before this a renewed tenancy had no deposit at all: no
+`dispositionDueOn` clock, no statutory letter, a rent roll printing $0.00
+held (D-54's continuity gap, review finding 2 — verified real before
+building). The `lease.renewed` audit rows in both paths now record
+`movedDepositIds`. Tests: the cutover job's own suite asserts the deposit
+lands on the successor through the real job, and
+`deposit-disposition-start.test.ts` asserts `startDepositDisposition`
+returns `started` on a twice-renewed lease with the one original deposit
+row, both predecessors holding nothing. The demo seed gains a renewed
+tenancy (Maria Alvarez at 122 Bluebonnet Ln: ENDED prior term linked via
+`renewedFromLeaseId`, deposit on the live lease, `receivedAt` at the
+original move-in) so the walk can see it.
+
+**What it decided.** The deposit row MOVES — one liability row per
+tenancy, never a copy; `receivedAt` and the row's id are the evidence
+trail and survive the move. It moves inside the same transaction that ends
+the predecessor, so no instant exists where either lease reads as holding
+it wrongly. Disposition state cannot be in flight at cutover (the
+predecessor is still the live tenancy, `moveOutAt` unset), so the move
+needs no disposition guard.
+
+**What it left behind.** Nothing new. Found along the way: the demo
+seed's `--reset` never deleted `Deposit` rows — latent since R-128 seeded
+them, unreachable only because every seeded property goes sticky — and the
+renewal self-FK made one `lease.deleteMany` order-dependent; both fixed in
+the reset (deductions → deposits → unlink `renewedFromLeaseId` → leases).
+
+**Gate run:** lint ✓, typecheck ✓, unit 2,818 passed / 4 skipped ✓,
+`e2e/renewals.spec.ts` 2/2 on desktop-chrome against the production
+build ✓, `npm run build` ✓, demo seed rebuilt and the renewed tenancy
+verified holding its deposit ✓. CI green through R-153's push. Full sweep
+is CI's.
+
+Commit: (recorded in follow-up)

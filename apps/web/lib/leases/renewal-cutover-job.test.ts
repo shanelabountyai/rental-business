@@ -57,6 +57,7 @@ afterEach(async () => {
   // The cutover job's own provisionLeaseBilling() call opens a (simulated)
   // LeasePayer on activation - cleared before the lease it references.
   await prisma.leasePayer.deleteMany({ where: { leaseId: { in: leaseIds } } })
+  await prisma.deposit.deleteMany({ where: { leaseId: { in: leaseIds } } })
   await prisma.lease.deleteMany({ where: { id: { in: leaseIds } } })
   await prisma.tenant.deleteMany({ where: { id: { in: tenantIds } } })
   await prisma.unit.deleteMany({ where: { id: { in: unitIds } } })
@@ -150,6 +151,19 @@ describe('the renewal-cutover job', () => {
     expect(updatedPredecessor.status).toBe('ENDED')
     // The tenant never left - a real move-out timestamp would be wrong here.
     expect(updatedPredecessor.moveOutAt).toBeNull()
+  })
+
+  it('re-points the predecessor deposit at the successor - the disposition clock reads lease.deposits (R-154)', async () => {
+    const unit = await makeUnit()
+    const { predecessor, successor } = await makeRenewalPair(unit.id, { successorStartsOn: '2026-07-01' })
+    const deposit = await prisma.deposit.create({
+      data: { propertyId, leaseId: predecessor.id, heldCents: 150_000, receivedAt: new Date('2026-01-01') },
+    })
+
+    await runAt('2026-07-02T09:00:00Z')
+
+    const moved = await prisma.deposit.findUniqueOrThrow({ where: { id: deposit.id } })
+    expect(moved.leaseId).toBe(successor.id)
   })
 
   it('leaves the unit OCCUPIED, never MAKE_READY - the tenant is continuing, not leaving', async () => {

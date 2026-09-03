@@ -37,3 +37,33 @@ export async function activateLeaseSideEffects(
     payload: { unitId: lease.unitId },
   })
 }
+
+// The renewal predecessor's end, shared by the SAME two callers' renewal
+// branches (`completeEnvelope`'s same-day case and the cutover job). One
+// writer on purpose (R-154): every deposit reader keys off `lease.deposits`,
+// so a renewal that ends the predecessor without re-pointing its `Deposit`
+// rows leaves the successor tenancy with no deposit at all - no
+// `dispositionDueOn` clock, no statutory letter, a rent roll printing $0.00
+// held (D-54's continuity gap, review finding 2). The money never moved and
+// the tenant never left; only the lease row changed, so the liability row
+// follows the live tenancy. `Deposit` is not append-only, and its
+// disposition cannot have started here - the predecessor is still the live
+// tenancy at cutover, so `moveOutAt` is unset and `dispositionDueOn` null.
+export async function endRenewalPredecessor(
+  db: OutboxDb,
+  args: { predecessorId: string; successorId: string },
+): Promise<{ movedDepositIds: string[] }> {
+  const deposits = await db.deposit.findMany({
+    where: { leaseId: args.predecessorId },
+    select: { id: true },
+  })
+  await db.deposit.updateMany({
+    where: { leaseId: args.predecessorId },
+    data: { leaseId: args.successorId },
+  })
+  await db.lease.update({
+    where: { id: args.predecessorId },
+    data: { status: 'ENDED' },
+  })
+  return { movedDepositIds: deposits.map((deposit) => deposit.id) }
+}
