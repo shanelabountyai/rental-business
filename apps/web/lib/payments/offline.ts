@@ -56,6 +56,10 @@ export async function recordOfflinePayment(
       // online path, because R-038a made a part-payment possible at the
       // counter for the first time.
       blockPartialPayments: true,
+      // PAY-12's certified-funds switch, unread here since R-038a — the gap
+      // R-155 closes. Without it a tenancy under legal action could pay by
+      // personal check or cash at exactly the moment the switch says not to.
+      certifiedFundsOnly: true,
       // Needed by the attach below: Stripe refuses to attach a payment
       // record whose customer is not the invoice's customer.
       stripeCustomerId: true,
@@ -113,6 +117,10 @@ export async function recordOfflinePayment(
       ),
       openInvoiceAmountCents: invoice?.amountRemainingCents ?? null,
       blockPartial: payer.blockPartialPayments,
+      certifiedFundsOnly: payer.certifiedFundsOnly,
+      // Safe cast: `validateOfflinePayment` above refused anything that is
+      // not an OfflineChannel before we got here.
+      channel: input.channel as OfflineChannel,
     },
     input.amountCents,
   )

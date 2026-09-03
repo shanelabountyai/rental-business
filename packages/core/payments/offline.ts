@@ -141,11 +141,23 @@ export type OfflineRefusal =
   /// after serving notice can void the eviction, and the counter is where
   /// that happens.
   | 'partial_blocked'
+  /// An instrument that can bounce or be disputed, on a tenancy set to take
+  /// certified funds only (PAY-12). A personal check can be returned days
+  /// after a notice was abandoned on the strength of it; cash is refused
+  /// because the switch's point is a bank-guaranteed, traceable instrument.
+  /// R-038a's recorded gap - the switch existed and the counter never read
+  /// it (R-155).
+  | 'not_certified_funds'
 
 export interface OfflineFacts {
   balanceCents: number
   /// The operator's PAY-12 switch: take the full balance or nothing.
   blockPartial: boolean
+  /// The operator's other PAY-12 switch: take nothing that can bounce.
+  certifiedFundsOnly: boolean
+  /// The instrument in hand. In the facts rather than a separate argument
+  /// because the decision is about WHAT arrived, not only how much.
+  channel: OfflineChannel
   /// What Stripe says is still owed on issued invoices. Null means we could
   /// not ask, which refuses - the same rule the collection-method switch
   /// follows, and for the same reason.
@@ -176,9 +188,15 @@ export function offlinePaymentDecision(
   if (amountCents > facts.openInvoiceAmountCents) {
     return { allowed: false, refusal: 'more_than_invoiced' }
   }
-  // LAST, because it is the only refusal that is a policy rather than an
-  // arithmetic fact, and a staff member should hear "that is the wrong
-  // tenant" or "that is more than is owed" first.
+  // The policy refusals come after the arithmetic ones - a staff member
+  // should hear "that is the wrong tenant" or "that is more than is owed"
+  // first. Between the two policies, the instrument before the amount,
+  // following `holdRefusal`'s ordering rule: certified-funds closes the door
+  // on the thing in the payer's hand, and hearing about the part-payment
+  // rule first would invite a second refusal after they swap instruments.
+  if (facts.certifiedFundsOnly && facts.channel !== 'MONEY_ORDER') {
+    return { allowed: false, refusal: 'not_certified_funds' }
+  }
   //
   // Compared against the BALANCE, not the open invoice: `blockPartial`'s own
   // words are "take the full balance or nothing", and a tenancy two periods
@@ -207,4 +225,10 @@ export const OFFLINE_REFUSALS: Record<OfflineRefusal, string> = {
   // the person standing at the counter.
   partial_blocked:
     'This tenancy is set to accept the full balance or nothing. Record the full amount, or lift the hold first if that is the intention.',
+  // "Record either as a money order" because that is the certified-paper
+  // channel this form has: a cashier's cheque is bank-guaranteed exactly as
+  // a money order is, and the tenant-facing hold message already invites
+  // both instruments.
+  not_certified_funds:
+    'This tenancy is set to take certified funds only. Accept a cashier’s cheque or money order — record either as a money order — or lift the hold first if that is the intention.',
 }

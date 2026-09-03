@@ -424,7 +424,13 @@ describe('offline payments (PAY-05)', () => {
 })
 
 describe('offlinePaymentDecision', () => {
-  const owing = { balanceCents: 150_000, openInvoiceAmountCents: 150_000, blockPartial: false }
+  const owing = {
+    balanceCents: 150_000,
+    openInvoiceAmountCents: 150_000,
+    blockPartial: false,
+    certifiedFundsOnly: false,
+    channel: 'OFFLINE_CHECK',
+  } as const
 
   it('applies a payment that settles the open invoice', () => {
     expect(offlinePaymentDecision(owing, 150_000)).toEqual({ allowed: true })
@@ -459,7 +465,7 @@ describe('offlinePaymentDecision', () => {
     // and the surplus belongs to a period nobody has billed yet.
     expect(
       offlinePaymentDecision(
-        { balanceCents: 200_000, openInvoiceAmountCents: 150_000, blockPartial: false },
+        { ...owing, balanceCents: 200_000, openInvoiceAmountCents: 150_000 },
         175_000,
       ).refusal,
     ).toBe('more_than_invoiced')
@@ -486,12 +492,45 @@ describe('offlinePaymentDecision', () => {
     ).toBe('nothing_owed')
   })
 
-  it('refuses when there is no issued invoice to mark', () => {
+  it('refuses a personal check under certified funds only (PAY-12, R-155)', () => {
+    // The gap R-038a recorded: the switch existed and the counter never read
+    // it, so a tenancy under legal action could pay by personal check at
+    // exactly the moment the hold said cashier's cheque or money order only.
+    const held = { ...owing, certifiedFundsOnly: true }
+    expect(offlinePaymentDecision({ ...held, channel: 'OFFLINE_CHECK' }, 150_000).refusal).toBe(
+      'not_certified_funds',
+    )
+  })
+
+  it('refuses cash under certified funds only', () => {
+    expect(
+      offlinePaymentDecision({ ...owing, certifiedFundsOnly: true, channel: 'OFFLINE_CASH' }, 150_000)
+        .refusal,
+    ).toBe('not_certified_funds')
+  })
+
+  it('accepts a money order under certified funds only', () => {
+    // The certified-paper channel - a cashier's cheque records here too.
+    expect(
+      offlinePaymentDecision({ ...owing, certifiedFundsOnly: true, channel: 'MONEY_ORDER' }, 150_000),
+    ).toEqual({ allowed: true })
+  })
+
+  it('names the instrument problem before the part-payment one', () => {
+    // Both switches on, cash for half the balance: hearing about the
+    // part-payment rule first would invite a second refusal after the payer
+    // swaps instruments - `holdRefusal`'s ordering rule, applied here.
     expect(
       offlinePaymentDecision(
-        { balanceCents: 150_000, openInvoiceAmountCents: 0, blockPartial: false },
-        150_000,
+        { ...owing, certifiedFundsOnly: true, blockPartial: true, channel: 'OFFLINE_CASH' },
+        50_000,
       ).refusal,
+    ).toBe('not_certified_funds')
+  })
+
+  it('refuses when there is no issued invoice to mark', () => {
+    expect(
+      offlinePaymentDecision({ ...owing, openInvoiceAmountCents: 0 }, 150_000).refusal,
     ).toBe('no_open_invoice')
   })
 
@@ -499,10 +538,7 @@ describe('offlinePaymentDecision', () => {
     // Null means "we have not asked", never "nothing owed" - the same rule
     // the collection-method switch follows.
     expect(
-      offlinePaymentDecision(
-        { balanceCents: 150_000, openInvoiceAmountCents: null, blockPartial: false },
-        150_000,
-      ).refusal,
+      offlinePaymentDecision({ ...owing, openInvoiceAmountCents: null }, 150_000).refusal,
     ).toBe('no_open_invoice')
   })
 })

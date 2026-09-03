@@ -7452,3 +7452,40 @@ verified holding its deposit ✓. CI green through R-153's push. Full sweep
 is CI's.
 
 Commit: bed3ab5
+
+
+## R-155: certified funds only is enforced at the counter
+
+**What it built.** The gap R-038a recorded and carried since: PAY-12's
+`certifiedFundsOnly` switch was enforced online (`holdRefusal`) and never
+at the counter — `offlinePaymentDecision` did not take the flag and the
+action's payer query did not even select the column, so a tenancy under
+legal action could pay by personal check or cash at exactly the moment
+the hold said cashier's cheque or money order only. `OfflineFacts` gains
+`certifiedFundsOnly` and `channel` (the instrument travels in the facts:
+the decision is about what arrived, not only how much); the decision
+refuses `OFFLINE_CHECK` and `OFFLINE_CASH` under the flag with a new
+`not_certified_funds` refusal in the existing neutral-sentence pattern —
+says what to do, never why. `recordOfflinePayment` selects the column and
+passes it through. Core tests: one per instrument (check refused, cash
+refused, money order allowed) plus an ordering assertion.
+
+**What it decided.** The refusal sits with the policy refusals after the
+arithmetic ones, and before `partial_blocked` — `holdRefusal`'s
+door-closing order, so a payer who swaps instruments is not invited into
+a second refusal. `MONEY_ORDER` is the certified-paper channel: a
+cashier's cheque records there too, and the staff sentence says so,
+because the tenant-facing hold message already invites both instruments
+and refusing to record the one it named would strand a tenant who
+followed it.
+
+**What it left behind.** No `CASHIERS_CHECK` channel — a cashier's
+cheque recorded as a money order loses its cheque number; add the
+channel if that ever matters for reconciliation. No e2e spec exercises
+the counter form at all (true before this item); the decision is
+unit-covered in core and the wiring is typechecked.
+
+**Gate run:** lint ✓, typecheck ✓, unit 2,822 passed / 4 skipped ✓,
+`npm run build` ✓ (a `'use server'` module changed). No e2e spec touches
+the counter form, so none run locally; full sweep is CI's. CI green
+through R-153's push; R-154's run still in progress at commit time.
