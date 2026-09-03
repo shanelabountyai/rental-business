@@ -7619,3 +7619,65 @@ tests, both projects), `npm run build` ✓, `db:drift` ✓, `db:ci` ✓
 `gh run list` after push.
 
 Commit: 0588f3c
+
+## R-158: one stall sweep for the five case types nothing was watching
+
+**What it built.** A single scheduled job,
+`apps/web/lib/cases/case-stall-job.ts`, registered into R-006's nightly
+runner as `cases.stalled`. It runs once per property per property-local
+day and checks five case types that each had a clock or an evidence bar
+already defined somewhere in the codebase, and nobody watching whether
+it was actually met (review §7): an `AccommodationRequest` whose
+ten-day FHA `responseClock` (packages/core/accommodations, D-89) has
+run out with nothing decided; an `AbandonmentCase` with no
+`AbandonmentContactAttempt` logged in fourteen days while still open; a
+`ViolationCase` carrying a `Notice` that has sat unserved past the
+state's `leaseViolationCureDays` (or a fourteen-day house fallback when
+that field is not yet configured); an `InsuranceClaim` where
+`mitigationClock` (packages/core/insurance) already reports `urgent` —
+a WATER loss past `WATER_MITIGATION_TARGET_HOURS` with nothing
+recorded as started; and a `LeasePartyChange` still
+`PENDING_SIGNATURE` after three days with an incoming party whose
+`ScreeningReport.decision` is still null. All five raise the one `Task`
+queue (D-9) under five new task types, never a second table. Every
+check is flagged exactly once — keyed on `(type, subjectId)` with no
+`businessDate` in the lookup, the same shape `compliance/alert-job.ts`
+already uses — so a case stalled for a month gets one Task, not
+thirty.
+
+**What it decided.** Accommodation is the one case type that
+*escalates* rather than nudges (the backlog's own word, D-89's "unwatched
+is worst" reasoning): intake already raises `accommodation.respond` at
+URGENT, so this job's `accommodation.response_overdue` fires at
+EMERGENCY once the clock actually expires, rather than adding a second
+routine reminder nobody reads differently from the first. The other
+four are ROUTINE nudges. The violation check cannot reuse
+`cureClock` (packages/core/evictions) directly — that function only
+ever answers from an *actual* service, so an unserved notice reports
+`not_served` forever with no deadline, which is correct for the legal
+question and useless for this one. Instead the job measures the same
+`leaseViolationCureDays` window from the notice's *generation* date, as
+a pure ops-stall signal that is never printed anywhere a tenant or a
+court would see it — only on the internal Task. Three of the five
+checks (accommodation, insurance, and the violation notice's cure
+window) reuse an already-tested pure function or column with zero new
+legal logic; the other two (`ABANDONMENT_QUIET_STALL_DAYS = 14`,
+`PARTY_CHANGE_STALL_DAYS = 3`) are named house heuristics with their
+reasoning written beside them, the same posture
+`WATER_MITIGATION_TARGET_HOURS` already takes for itself.
+
+**What it left behind.** A flagged Task is never un-flagged if the
+underlying condition resolves later — matching every other job in this
+codebase, staff clear it by hand. R-159 (court-date reminders) is the
+next item in this same family and was left for its own item rather than
+folded in here, per the backlog's own split. The violation-notice
+fallback constant is exercised only when a state has no
+`leaseViolationCureDays` configured yet, which R-162 (state
+configurability) will make progressively rarer.
+
+**Gate run:** lint ✓ (pre-existing warnings only), typecheck ✓, unit
+2,838 passed / 4 skipped ✓ (5 new in case-stall-job.test.ts, one per
+case type). e2e not run locally for this item (job-only change, no new
+routes or UI) — CI's full sweep covers it on push.
+
+Commit: (recorded in a follow-up commit)
