@@ -321,3 +321,53 @@ export async function tenantStatement(scope: TenantScope) {
     balanceCents: balanceCents(rows),
   }
 }
+
+/**
+ * The same statement a tenant sees, for a guarantor (R-165, LEASE-06).
+ *
+ * NOT `tenantStatement` WITH A DIFFERENT SCOPE - a guarantor is not
+ * authorized by a LeasePayer row the way a tenant is. A guarantor guarantees
+ * the lease's obligations; they are not necessarily the one Stripe bills,
+ * and requiring a payer row here would 404 a guarantor whose tenant pays
+ * everything directly. Authorized instead by the lease id itself, which
+ * `requireGuarantorWithScope()` already resolved from `Guarantor.leaseId` -
+ * the same "authorized by the row, not by a scope list" posture, just a
+ * different row.
+ *
+ * SAME `statement()`/`balanceCents()` CALLS AS `tenantStatement`, by
+ * construction: a guarantor and the tenant they guarantee seeing different
+ * numbers for the same lease is the exact defect D-10's comment above
+ * warns about, just with a second reader added.
+ */
+export async function guarantorStatement(leaseId: string) {
+  const lease = await prisma.lease.findUnique({
+    where: { id: leaseId },
+    select: {
+      property: { select: { name: true, timezone: true } },
+      unit: { select: { name: true } },
+    },
+  })
+  if (!lease) return null
+
+  const rows = await prisma.ledgerEntry.findMany({
+    where: { leaseId },
+    orderBy: { occurredAt: 'asc' },
+    select: {
+      id: true,
+      type: true,
+      amountCents: true,
+      occurredAt: true,
+      description: true,
+      reversesId: true,
+    },
+  })
+
+  return {
+    propertyName: lease.property.name,
+    unitName: lease.unit.name,
+    timezone: lease.property.timezone,
+    lines: statement(rows),
+    reversed: reversedEntryIds(rows),
+    balanceCents: balanceCents(rows),
+  }
+}

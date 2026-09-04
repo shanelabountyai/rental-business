@@ -172,11 +172,13 @@ const CATEGORY_CHANNELS: Partial<Record<NotificationCategory, readonly Notificat
   /// Same reasoning again - a PROSPECT has no account and no portal to read
   /// one in.
   prospect_showing: ['EMAIL', 'SMS'],
-  /// A GUARANTOR recipient has no portal login at all (LEASE-06: "no portal
-  /// access to maintenance/comms"), and a TENANT signing a brand-new lease
-  /// may not have set one up yet either - the signing link goes to its own
-  /// token-gated page (`/sign/[token]`), not the portal, so PORTAL would
-  /// promise a read surface that does not apply here.
+  /// A GUARANTOR has a portal now (R-165), but a financial-only one with no
+  /// lease-signing surface in it (LEASE-06: "no portal access to
+  /// maintenance/comms" - signing is neither), and a TENANT signing a
+  /// brand-new lease may not have set one up yet either - the signing link
+  /// goes to its own token-gated page (`/sign/[token]`), not the portal, so
+  /// PORTAL would promise a read surface that does not apply for either
+  /// recipient.
   lease_signature: ['EMAIL', 'SMS'],
 }
 

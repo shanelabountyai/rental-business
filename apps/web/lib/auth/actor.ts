@@ -139,6 +139,45 @@ async function loadTenantActor(tenantId: string) {
   return actor
 }
 
+/// R-165. A guarantor guarantees exactly one lease (Guarantor.leaseId), so
+/// their scope is a single-element `leaseIds` rather than a join table.
+async function loadGuarantorActor(guarantorId: string) {
+  const guarantor = await prisma.guarantor.findUnique({
+    where: { id: guarantorId },
+    select: { id: true, active: true, leaseId: true },
+  })
+  if (!guarantor) return null
+
+  const role = await prisma.role.findUnique({ where: { key: 'guarantor' } })
+  if (!role) {
+    // Same failure posture as the tenant role above: a guarantor with a
+    // silently-guessed permission set is worse than one who cannot sign in.
+    throw new Error(
+      'The `guarantor` role is missing. Run `npm run db:seed` - roles are data (D-5).',
+    )
+  }
+
+  const actor: Actor = {
+    id: guarantor.id,
+    kind: 'guarantor',
+    active: guarantor.active,
+    // No second factor and nothing on the privileged list, same reasoning
+    // as a tenant.
+    mfaVerified: false,
+    assignments: [
+      {
+        roleKey: role.key,
+        permissions: knownPermissions(role.permissions),
+        legalEntityId: null,
+        propertyId: null,
+      },
+    ],
+    leaseIds: [guarantor.leaseId],
+    ceilings: { approveWorkOrderCents: 0, waiveFeeCents: 0 },
+  }
+  return actor
+}
+
 /**
  * The signed-in actor, or null. Per-request memoized.
  *
@@ -149,7 +188,12 @@ export const currentActor = cache(async (): Promise<Actor | null> => {
   const session = await auth()
   if (!session?.principal) return null
 
-  return session.principal.kind === 'staff'
-    ? loadStaffActor(session.principal.id, session.principal.mfaVerified)
-    : loadTenantActor(session.principal.id)
+  switch (session.principal.kind) {
+    case 'staff':
+      return loadStaffActor(session.principal.id, session.principal.mfaVerified)
+    case 'guarantor':
+      return loadGuarantorActor(session.principal.id)
+    default:
+      return loadTenantActor(session.principal.id)
+  }
 })

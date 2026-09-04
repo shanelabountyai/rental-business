@@ -41,11 +41,13 @@ import { dispatchPendingNotifications, notify } from '@/lib/notifications/send.t
 
 export type AuthLinkKind =
   | 'tenant_magic_link'
+  | 'guarantor_magic_link'
   | 'staff_password_reset'
   | 'staff_setup_link'
 
 const TEMPLATE_KEYS: Record<AuthLinkKind, string> = {
   tenant_magic_link: 'auth.tenant_magic_link',
+  guarantor_magic_link: 'auth.guarantor_magic_link',
   staff_password_reset: 'auth.staff_password_reset',
   staff_setup_link: 'auth.staff_setup_link',
 }
@@ -55,7 +57,7 @@ export interface AuthLinkDelivery {
   /// Who it is for, in the engine's own terms. `id` makes the send auditable
   /// against a person rather than against an address, which is what lets
   /// "did we ever actually send them one" be answered from the delivery log.
-  recipient: { type: 'STAFF' | 'TENANT'; id: string; name: string }
+  recipient: { type: 'STAFF' | 'TENANT' | 'GUARANTOR'; id: string; name: string }
   /// Email address or phone number, depending on the recipient's preference.
   /// R-030 resolves the channel; R-003 only knows who to hand it to.
   to: string

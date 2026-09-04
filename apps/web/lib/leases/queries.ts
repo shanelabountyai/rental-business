@@ -17,7 +17,10 @@ const leaseInclude = {
       tenant: { select: { id: true, firstName: true, lastName: true, email: true, phone: true } },
     },
   },
-  guarantors: { orderBy: { createdAt: 'asc' } },
+  // R-165: only current guarantors - a released one is done being a party
+  // to the lease and drops off this list, the same way a departing tenant's
+  // LeaseTenant row is deleted rather than kept and flagged.
+  guarantors: { where: { active: true }, orderBy: { createdAt: 'asc' } },
   // LEASE-09 (R-065): the renewal lineage in both directions. Small enough
   // to carry on every read rather than a second query - a lease has at most
   // a handful of renewal attempts over its life (LeaseEnvelope.leaseId's
@@ -114,7 +117,12 @@ export async function getLease(id: string, scope: ResolvedScope) {
         orderBy: { createdAt: 'desc' },
         include: {
           parties: {
-            include: { tenant: { select: { id: true, firstName: true, lastName: true } } },
+            include: {
+              tenant: { select: { id: true, firstName: true, lastName: true } },
+              // R-165: a released guarantor is a party with no tenant at
+              // all - see LeasePartyChangeParty's own comment.
+              guarantor: { select: { id: true, firstName: true, lastName: true } },
+            },
             orderBy: { createdAt: 'asc' },
           },
           envelope: {

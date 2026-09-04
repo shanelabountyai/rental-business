@@ -115,9 +115,16 @@ export async function completePartyChangeEnvelope(envelopeId: string): Promise<v
     signers: envelope.signers,
   })
 
-  const outgoingTenantIds = change.parties
-    .filter((p) => p.direction === 'OUTGOING')
+  const outgoing = change.parties.filter((p) => p.direction === 'OUTGOING')
+  const outgoingTenantIds = outgoing
     .map((p) => p.tenantId)
+    .filter((id): id is string => id != null)
+  // R-165: a guarantor being released, as opposed to a tenant leaving. Same
+  // OUTGOING direction, different id column - see LeasePartyChangeParty's
+  // own "exactly one of tenantId/guarantorId" comment.
+  const outgoingGuarantorIds = outgoing
+    .map((p) => p.guarantorId)
+    .filter((id): id is string => id != null)
   const incoming = change.parties.filter((p) => p.direction === 'INCOMING')
 
   await prisma.$transaction(async (tx) => {
@@ -187,7 +194,19 @@ export async function completePartyChangeEnvelope(envelopeId: string): Promise<v
 
     for (const party of incoming) {
       await tx.leaseTenant.create({
-        data: { leaseId: envelope.leaseId, tenantId: party.tenantId, isPrimary: false },
+        data: { leaseId: envelope.leaseId, tenantId: party.tenantId!, isPrimary: false },
+      })
+    }
+
+    if (outgoingGuarantorIds.length > 0) {
+      // Never deleted (R-165) - a Guarantor is referenced by their own
+      // LeaseSigner rows and this very LeasePartyChangeParty, and it is
+      // evidence of who guaranteed what and when. `active: false` is the
+      // release; `sessionsValidFrom` kills any live portal session the same
+      // way a departing tenant's does.
+      await tx.guarantor.updateMany({
+        where: { id: { in: outgoingGuarantorIds } },
+        data: { active: false, sessionsValidFrom: new Date() },
       })
     }
 
@@ -246,6 +265,7 @@ export async function completePartyChangeEnvelope(envelopeId: string): Promise<v
           removedTenantIds: removed.map((r) => r.tenantId),
           addedTenantIds: incoming.map((p) => p.tenantId),
           screenedApplicantIds: incoming.map((p) => p.applicantId),
+          releasedGuarantorIds: outgoingGuarantorIds,
           promotedPrimaryTenantId: promotedTenantId,
           executedDocumentId: document.id,
         },

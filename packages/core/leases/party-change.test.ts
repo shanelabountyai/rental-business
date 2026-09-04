@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   DEPOSIT_STAYS_WITH_UNIT,
+  GUARANTEE_RELEASE_IS_PROSPECTIVE,
   OTHERWISE_UNCHANGED,
   RELEASE_IS_PROSPECTIVE,
   amendmentDocumentBlocks,
@@ -113,6 +114,18 @@ describe('assessPartyChange', () => {
     expect(fields(base)).toEqual(['parties'])
   })
 
+  // R-165: a guarantor release moves nobody in `outgoing`/`incoming` at all -
+  // it is the one case the "at least one" check must not mistake for an
+  // empty form.
+  it('accepts a guarantor-only release with no tenant moving', () => {
+    const result = assessPartyChange(
+      { ...base, outgoingGuarantors: [{ id: 'g-pat', name: 'Pat Nu' }] },
+      null,
+    )
+    expect(result.violations).toEqual([])
+    expect(result.remainingTenantIds).toEqual(['t-alice', 't-bob'])
+  })
+
   it('refuses an effective date outside the term', () => {
     expect(
       fields({ ...base, effectiveOn: '2025-12-31', incoming: [screened] }),
@@ -203,5 +216,24 @@ describe('amendmentDocumentBlocks', () => {
     const texts = amendmentDocumentBlocks(facts).map((b) => b.text)
     expect(texts).toContain('Rent (unchanged): $1,600.00')
     expect(texts).toContain('Security deposit held (unchanged): $1,600.00')
+  })
+
+  // R-165: a released guarantor gets their own clause and is never called an
+  // "occupant" - the occupant release clause must not fire for them.
+  it('prints a guarantor release under its own heading, not as an occupant', () => {
+    const texts = amendmentDocumentBlocks({
+      ...facts,
+      outgoingNames: [],
+      incomingNames: [],
+      outgoingGuarantorNames: ['Pat Nu'],
+    }).map((b) => b.text)
+    expect(texts).toContain(GUARANTEE_RELEASE_IS_PROSPECTIVE)
+    expect(texts).toContain('Pat Nu')
+    expect(texts).not.toContain(RELEASE_IS_PROSPECTIVE)
+  })
+
+  it('omits the guarantor release clause when no guarantor is leaving', () => {
+    const texts = amendmentDocumentBlocks(facts).map((b) => b.text)
+    expect(texts).not.toContain(GUARANTEE_RELEASE_IS_PROSPECTIVE)
   })
 })

@@ -280,7 +280,9 @@ test('swaps a roommate on the same lease, with the deposit and the ledger untouc
 
   // The incoming party's Tenant row exists already - they have to be
   // addressable to be sent a link at all - but they are NOT on the lease yet.
-  const caraTenantId = change.parties.find((p) => p.direction === 'INCOMING')!.tenantId
+  // Non-null: an INCOMING party is always a tenant - a guarantor party
+  // (R-165) is never incoming, enforced by its own CHECK constraint.
+  const caraTenantId = change.parties.find((p) => p.direction === 'INCOMING')!.tenantId!
   tenantIds.push(caraTenantId)
   expect(
     await prisma.leaseTenant.count({ where: { leaseId: lease.id, tenantId: caraTenantId } }),

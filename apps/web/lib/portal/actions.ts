@@ -13,6 +13,12 @@ export async function signOutTenant() {
   await signOut({ redirectTo: '/portal/login' })
 }
 
+/// R-165. Same NextAuth signOut, different landing page - it does not matter
+/// which portal a session came from, only where it should go back to.
+export async function signOutGuarantor() {
+  await signOut({ redirectTo: '/portal/guarantor/login' })
+}
+
 export interface FormState {
   error?: string
   fieldErrors?: Record<string, string>

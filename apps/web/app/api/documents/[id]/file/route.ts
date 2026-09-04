@@ -11,12 +11,16 @@ import { documentFileResponse } from '@/lib/documents/serve.ts'
 // out-of-scope one on /no-access, same as everywhere else in the admin shell,
 // rather than this route inventing its own response shape for the same cases.
 //
-// TWO PRINCIPALS REACH THIS ROUTE, authorized by completely different rules.
+// THREE PRINCIPALS REACH THIS ROUTE NOW, each authorized by a different rule.
 // R-018 added the tenant half; before it, the only check here was staff RBAC,
 // so a tenant clicking their own lease was bounced to the STAFF sign-in page.
+// R-165 added the guarantor half, deliberately narrower than the tenant one -
+// LEASE-06 gives a guarantor notices only, never the whole file, so their
+// branch checks the document TYPE as well as the lease rather than reusing
+// tenantCanSeeDocument's broader tenant/lease/shutoff-photo rule.
 //
-// The branch is on the session's own `kind`, and the tenant side never falls
-// through to the staff side. A principal that is neither ends at
+// The branch is on the session's own `kind`, and neither portal branch falls
+// through to another. A principal that is none of the three ends at
 // requirePermission, which refuses - the correct default for a route that
 // hands over bytes is that an unrecognised caller gets nothing.
 
@@ -45,6 +49,20 @@ export async function GET(
       // 404, not 403. "Not yours" and "does not exist" must be
       // indistinguishable, or the status code confirms that a guessed id
       // belongs to somebody at the address this tenant rents.
+      return new Response('Not found', { status: 404 })
+    }
+    return serve(document)
+  }
+
+  if (session?.principal.kind === 'guarantor') {
+    const guarantor = await prisma.guarantor.findUnique({
+      where: { id: session.principal.id },
+      select: { leaseId: true },
+    })
+    // NOTICE only, and only on the guaranteed lease - a guarantor guessing
+    // another document's id must not reach the executed lease, an
+    // inspection photo, or anything else LEASE-06 excludes.
+    if (!guarantor || document.leaseId !== guarantor.leaseId || document.type !== 'NOTICE') {
       return new Response('Not found', { status: 404 })
     }
     return serve(document)

@@ -31,11 +31,12 @@ import { type Snapshot, changedFields } from './redact.ts'
 export type AuditDb = PrismaClient | Prisma.TransactionClient
 
 export interface AuditActor {
-  type: 'STAFF' | 'TENANT' | 'VENDOR' | 'SYSTEM'
+  type: 'STAFF' | 'TENANT' | 'GUARANTOR' | 'VENDOR' | 'SYSTEM'
   /// Set only for STAFF; the foreign key that ties the entry to a person.
   staffUserId?: string | null
-  /// Non-staff identity: a tenant id, a vendor id, or a job name. Free text
-  /// because a nightly job is a legitimate actor and is not a row anywhere.
+  /// Non-staff identity: a tenant id, a guarantor id, a vendor id, or a job
+  /// name. Free text because a nightly job is a legitimate actor and is not
+  /// a row anywhere.
   ref?: string | null
   ipAddress?: string | null
   userAgent?: string | null

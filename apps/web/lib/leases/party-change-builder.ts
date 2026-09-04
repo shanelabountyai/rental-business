@@ -81,7 +81,10 @@ export async function loadLeaseForPartyChange(leaseId: string) {
         },
         orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
       },
-      guarantors: true,
+      // Only guarantors still on the lease. A released one (R-165) is done
+      // being a party to it and must not be offered again as a signer or a
+      // party to release a second time.
+      guarantors: { where: { active: true } },
     },
   })
   const actor = await requirePermission('lease.execute', propertyResource(lease.property))
@@ -96,6 +99,9 @@ export interface BuildPartyChangeInput {
   /// ever has a Tenant id to hand.
   outgoingTenantIds: readonly string[]
   incomingApplicantIds: readonly string[]
+  /// R-165: guarantors being released. Always outgoing - see
+  /// PartyChangeInput.outgoingGuarantors's own comment.
+  outgoingGuarantorIds?: readonly string[]
   effectiveOn: string
   reason: string
   acknowledgedWarnings: boolean
@@ -132,6 +138,14 @@ export async function buildPartyChange(
     .map((lt) => ({ tenantId: lt.tenant.id, name: `${lt.tenant.firstName} ${lt.tenant.lastName}` }))
   if (outgoing.length !== input.outgoingTenantIds.length) {
     return { error: 'One of the people named as leaving is not on this lease.' }
+  }
+
+  const outgoingGuarantorIds = input.outgoingGuarantorIds ?? []
+  const outgoingGuarantors = lease.guarantors
+    .filter((g) => outgoingGuarantorIds.includes(g.id))
+    .map((g) => ({ id: g.id, name: `${g.firstName} ${g.lastName}` }))
+  if (outgoingGuarantors.length !== outgoingGuarantorIds.length) {
+    return { error: 'One of the guarantors named as released is not on this lease.' }
   }
 
   // The applicant IS the screening record (R-088's own precedent for
@@ -188,6 +202,7 @@ export async function buildPartyChange(
       currentTenantIds: lease.leaseTenants.map((lt) => lt.tenant.id),
       outgoing,
       incoming,
+      outgoingGuarantors,
       effectiveOn: input.effectiveOn,
       leaseStartsOn: utcToBusinessDate(lease.startsOn),
       leaseEndsOn: lease.endsOn ? utcToBusinessDate(lease.endsOn) : null,
@@ -280,6 +295,7 @@ export async function buildPartyChange(
     outgoingNames: leaving.map((lt) => name(lt.tenant)),
     incomingNames: incomingTenants.map((t) => name(t)),
     remainingNames,
+    outgoingGuarantorNames: outgoingGuarantors.map((g) => g.name),
     signers: signers.map((s) => ({
       order: s.order,
       role: s.role,
@@ -350,6 +366,10 @@ export async function buildPartyChange(
               tenantId: tenantByApplicant.get(a.id)!.id,
               applicantId: a.id,
             })),
+            ...outgoingGuarantors.map((g) => ({
+              direction: 'OUTGOING' as const,
+              guarantorId: g.id,
+            })),
           ],
         },
       },
@@ -381,6 +401,7 @@ export async function buildPartyChange(
           envelopeId: envelope.id,
           effectiveOn: input.effectiveOn,
           outgoingTenantIds: outgoing.map((p) => p.tenantId),
+          outgoingGuarantorIds: outgoingGuarantors.map((g) => g.id),
           incoming: applicants.map((a) => ({
             applicantId: a.id,
             tenantId: tenantByApplicant.get(a.id)!.id,
@@ -461,6 +482,9 @@ export async function buildPartyChange(
   const summary = [
     leaving.length > 0 ? `${leaving.map((lt) => name(lt.tenant)).join(', ')} leaving` : null,
     incomingTenants.length > 0 ? `${incomingTenants.map((t) => name(t)).join(', ')} joining` : null,
+    outgoingGuarantors.length > 0
+      ? `${outgoingGuarantors.map((g) => g.name).join(', ')} released as guarantor`
+      : null,
   ]
     .filter(Boolean)
     .join(', ')

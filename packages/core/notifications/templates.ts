@@ -1858,6 +1858,29 @@ export const tenantMagicLinkTemplate: NotificationTemplate<AuthLinkContext> = {
   }),
 }
 
+/**
+ * A guarantor's own sign-in link (R-165). Says "what you owe" rather than
+ * "your home" - a guarantor never lived there, and D-10's tenant lexicon
+ * would misdescribe their relationship to the lease.
+ */
+export const guarantorMagicLinkTemplate: NotificationTemplate<AuthLinkContext> = {
+  key: 'auth.guarantor_magic_link',
+  category: 'account_access',
+  channels: ['EMAIL'],
+  render: (context) => ({
+    subject: 'Sign in to view what you guarantee',
+    body: [
+      `Hi ${context.name},`,
+      '',
+      'Here is your sign-in link. It works once and expires in ' + context.expiresIn + '.',
+      '',
+      context.url,
+      '',
+      'If you did not ask to sign in, you can ignore this - the link only works from this message.',
+    ].join('\n'),
+  }),
+}
+
 /// A staff member resetting their own forgotten password.
 export const staffPasswordResetTemplate: NotificationTemplate<AuthLinkContext> = {
   key: 'auth.staff_password_reset',
@@ -1906,6 +1929,8 @@ export const staffSetupLinkTemplate: NotificationTemplate<AuthLinkContext> = {
 export const TEMPLATES: Readonly<Record<string, NotificationTemplate<never>>> = {
   [tenantMagicLinkTemplate.key]:
     tenantMagicLinkTemplate as unknown as NotificationTemplate<never>,
+  [guarantorMagicLinkTemplate.key]:
+    guarantorMagicLinkTemplate as unknown as NotificationTemplate<never>,
   [staffPasswordResetTemplate.key]:
     staffPasswordResetTemplate as unknown as NotificationTemplate<never>,
   [staffSetupLinkTemplate.key]:

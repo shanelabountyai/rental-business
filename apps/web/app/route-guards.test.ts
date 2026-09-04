@@ -31,6 +31,9 @@ const PUBLIC_ROUTES: Record<string, string> = {
   'portal/login/page.tsx': 'Tenant sign-in.',
   'portal/verify/route.ts':
     'Where a magic link lands. The token is redeemed inside the Auth.js provider.',
+  'portal/guarantor/login/page.tsx': 'Guarantor sign-in (R-165), same reason as tenant sign-in.',
+  'portal/guarantor/verify/route.ts':
+    'Where a guarantor magic link lands (R-165). Same shape as portal/verify/route.ts.',
   'api/auth/[...nextauth]/route.ts': 'Auth.js owns its own endpoints.',
   'api/cron/route.ts':
     'Authorized by a constant-time CRON_SECRET bearer check rather than a session - no human is signed in.',
@@ -98,6 +101,9 @@ const GUARD_CALLS = [
   // mentioning the word, which is exactly how R-009 found this test passing
   // pages for the wrong reason.
   'requireTenantWithScope(',
+  // R-165's guarantor portal, same shape as the tenant pair above.
+  'requireGuarantor(',
+  'requireGuarantorWithScope(',
   // The document download route branches on the session kind directly before
   // choosing between the staff and tenant rules, which is the same assertion
   // made by hand.

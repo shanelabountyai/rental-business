@@ -29,6 +29,10 @@ export interface MintedToken {
 /// short-lived half; `consumedAt` in the database is the single-use half.
 export const TOKEN_TTL_MINUTES = {
   TENANT_MAGIC_LINK: 15,
+  /// R-165: a guarantor's own sign-in link. Same fifteen minutes as a
+  /// tenant's - it is the identical credential over a different subject
+  /// type, and there is no reason for it to be more or less exposed.
+  GUARANTOR_MAGIC_LINK: 15,
   STAFF_PASSWORD_RESET: 30,
   TENANT_PASSWORD_RESET: 30,
   /// Long enough to fetch a phone from another room, short enough that a

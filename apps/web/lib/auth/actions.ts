@@ -471,3 +471,50 @@ export async function requestTenantMagicLink(
 
   return { notice: MAGIC_LINK_NOTICE }
 }
+
+// ---------------------------------------------------------------------------
+// Guarantor magic link (R-165)
+// ---------------------------------------------------------------------------
+
+const GUARANTOR_MAGIC_LINK_NOTICE =
+  'If that address is on a guarantee, a sign-in link is on its way. It expires in 15 minutes.'
+
+export async function requestGuarantorMagicLink(
+  _previous: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const email = String(formData.get('email') ?? '')
+    .trim()
+    .toLowerCase()
+
+  const ip = await clientIp()
+  // Same shared bucket as the tenant flow: both are "somebody asking for a
+  // sign-in link from this IP", and a separate budget per flow would just
+  // double the attempts an attacker gets.
+  const limit = await consumeRateLimit(
+    `magiclink:${ip}`,
+    RATE_LIMITS.magicLinkRequest,
+  )
+  if (!limit.allowed) return { notice: GUARANTOR_MAGIC_LINK_NOTICE }
+
+  const guarantor = await prisma.guarantor.findFirst({
+    where: { email, active: true },
+  })
+  if (guarantor?.email) {
+    const issued = await issueToken(
+      'GUARANTOR_MAGIC_LINK',
+      { type: 'Guarantor', id: guarantor.id },
+      { requestedIp: ip },
+    )
+    await deliverAuthLink({
+      kind: 'guarantor_magic_link',
+      recipient: { type: 'GUARANTOR', id: guarantor.id, name: guarantor.firstName },
+      to: guarantor.email,
+      url: authUrl(`/portal/guarantor/verify?token=${issued.token}`),
+      expiresAt: issued.expiresAt,
+      tokenId: issued.id,
+    })
+  }
+
+  return { notice: GUARANTOR_MAGIC_LINK_NOTICE }
+}

@@ -39,7 +39,7 @@ import { redeemToken } from './lib/auth/store.ts'
 /// property scope on top; this is authentication only.
 export interface Principal {
   id: string
-  kind: 'staff' | 'tenant'
+  kind: 'staff' | 'tenant' | 'guarantor'
   email: string | null
   name: string
   /// Whether this staff user has completed MFA enrolment at all.
@@ -194,6 +194,52 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         } as never
       },
     }),
+
+    /**
+     * Guarantor magic link (R-165). Same shape as tenant-magic-link above -
+     * a separate provider only because it redeems a separate token purpose
+     * against a separate table.
+     */
+    Credentials({
+      id: 'guarantor-magic-link',
+      credentials: { token: {} },
+      authorize: async (raw) => {
+        const token = asString(raw.token)
+        if (!token) return null
+
+        const redeemed = await redeemToken(token, {
+          purpose: 'GUARANTOR_MAGIC_LINK',
+          subjectType: 'Guarantor',
+        })
+        if (!redeemed.ok) return null
+
+        const guarantor = await prisma.guarantor.findUnique({
+          where: { id: redeemed.subjectId },
+        })
+        if (!guarantor?.active) return null
+
+        await recordAudit(prisma, {
+          actor: {
+            type: 'GUARANTOR',
+            ref: guarantor.id,
+            ipAddress: redeemed.requestedIp,
+          },
+          action: 'auth.signed_in',
+          entityType: 'Guarantor',
+          entityId: guarantor.id,
+          after: { method: 'magic_link' },
+        })
+
+        return {
+          id: guarantor.id,
+          email: guarantor.email,
+          name: `${guarantor.firstName} ${guarantor.lastName}`,
+          kind: 'guarantor',
+          mfaEnrolled: false,
+          mfaVerified: false,
+        } as never
+      },
+    }),
   ],
 
   callbacks: {
@@ -248,10 +294,15 @@ async function principalIsStillValid(
           where: { id },
           select: { active: true, sessionsValidFrom: true },
         })
-      : await prisma.tenant.findUnique({
-          where: { id },
-          select: { active: true, sessionsValidFrom: true },
-        })
+      : kind === 'guarantor'
+        ? await prisma.guarantor.findUnique({
+            where: { id },
+            select: { active: true, sessionsValidFrom: true },
+          })
+        : await prisma.tenant.findUnique({
+            where: { id },
+            select: { active: true, sessionsValidFrom: true },
+          })
 
   if (!record?.active) return false
   // Strictly greater-than: a watermark set in the same millisecond as the

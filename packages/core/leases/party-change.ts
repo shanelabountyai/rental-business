@@ -47,6 +47,12 @@ export interface PartyChangeInput {
   currentTenantIds: readonly string[]
   outgoing: readonly PartyChangePartyInput[]
   incoming: readonly PartyChangePartyInput[]
+  /// R-165: guarantors being released. Always outgoing - there is no
+  /// "add a guarantor" path through this change, only removing one who is
+  /// already on the lease - so unlike `outgoing`/`incoming` this has no
+  /// direction of its own and carries no screening or income facts: none of
+  /// this function's tenant-replacement rules apply to a guarantor leaving.
+  outgoingGuarantors?: readonly { id: string; name: string }[]
   /// `YYYY-MM-DD`, property-local. A BusinessDate, never a Date - this is a
   /// calendar day and no timezone may touch it (CLAUDE.md's `@db.Date` rule).
   effectiveOn: string
@@ -96,7 +102,11 @@ export function assessPartyChange(
     })
   }
 
-  if (input.outgoing.length === 0 && input.incoming.length === 0) {
+  if (
+    input.outgoing.length === 0 &&
+    input.incoming.length === 0 &&
+    (input.outgoingGuarantors?.length ?? 0) === 0
+  ) {
     violations.push({ field: 'parties', message: 'Name at least one person joining or leaving.' })
   }
 
@@ -213,6 +223,14 @@ export const OTHERWISE_UNCHANGED =
 export const RELEASE_IS_PROSPECTIVE =
   'A departing occupant is released from obligations arising on and after the effective date. They remain liable for everything that accrued while they were a party to the lease, including any unpaid rent, fees or damage arising before that date.'
 
+/// R-165's version of the paragraph above, for a guarantor rather than an
+/// occupant. Same shape and the same reason it exists: a release running
+/// backwards would erase a guarantee over arrears that already accrued.
+/// Worded around a GUARANTEE rather than tenancy obligations, because a
+/// guarantor was never an occupant and the amendment must not say they were.
+export const GUARANTEE_RELEASE_IS_PROSPECTIVE =
+  'A released guarantor is discharged from guaranteeing obligations arising on and after the effective date. Their guarantee remains in force for everything that accrued before that date, including any unpaid rent, fees or damage.'
+
 export interface AmendmentDocumentFacts {
   propertyName: string
   propertyAddress: string
@@ -228,6 +246,10 @@ export interface AmendmentDocumentFacts {
   outgoingNames: readonly string[]
   incomingNames: readonly string[]
   remainingNames: readonly string[]
+  /// R-165: guarantors released by this amendment. Separate from
+  /// `outgoingNames` because a guarantor is not an occupant and the
+  /// document must not call them one - see `GUARANTEE_RELEASE_IS_PROSPECTIVE`.
+  outgoingGuarantorNames?: readonly string[]
   signers: readonly LeaseSignatureFact[]
 }
 
@@ -287,6 +309,14 @@ export function amendmentDocumentBlocks(facts: AmendmentDocumentFacts): Document
       kind: 'paragraph',
       text: 'Each occupant joining accepts every term of the lease as if originally named in it, and is jointly and severally liable with the other occupants for the whole of the rent and every other obligation under it.',
     })
+  }
+
+  if ((facts.outgoingGuarantorNames?.length ?? 0) > 0) {
+    blocks.push({ kind: 'subheading', text: 'Guarantors released from this lease' })
+    for (const name of facts.outgoingGuarantorNames ?? []) {
+      blocks.push({ kind: 'meta', text: name })
+    }
+    blocks.push({ kind: 'paragraph', text: GUARANTEE_RELEASE_IS_PROSPECTIVE })
   }
 
   blocks.push({ kind: 'subheading', text: 'Occupants after this amendment' })

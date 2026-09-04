@@ -2,8 +2,9 @@
 
 import { useActionState } from 'react'
 import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
-import { SelectField, TextField } from '@/components/form/field.tsx'
+import { SelectField, TextareaField, TextField } from '@/components/form/field.tsx'
 import type { LeaseFormState } from '@/lib/leases/actions.ts'
+import type { PartyChangeFormState } from '@/lib/leases/party-change-builder.ts'
 
 // The people on a lease (LEASE-06, R-033).
 //
@@ -14,6 +15,10 @@ import type { LeaseFormState } from '@/lib/leases/actions.ts'
 // and showing them as one list invites treating them as one thing.
 
 type Action = (state: LeaseFormState, formData: FormData) => Promise<LeaseFormState>
+type ReleaseAction = (
+  state: PartyChangeFormState,
+  formData: FormData,
+) => Promise<PartyChangeFormState>
 
 export interface PartyView {
   id: string
@@ -22,19 +27,32 @@ export interface PartyView {
   isPrimary?: boolean
 }
 
+export interface GuarantorView extends PartyView {
+  /// R-165. Bound to this guarantor's id server-side - see the lease page's
+  /// own comment on why the bind cannot happen in this client component.
+  releaseAction: ReleaseAction
+}
+
 export function PartiesPanel({
   tenants,
   guarantors,
   selectableTenants,
   canWrite,
+  leaseIsRunning,
+  today,
   addTenant,
   removeTenant,
   addGuarantor,
 }: {
   tenants: readonly PartyView[]
-  guarantors: readonly PartyView[]
+  guarantors: readonly GuarantorView[]
   selectableTenants: readonly { id: string; label: string }[]
   canWrite: boolean
+  /// R-165: release goes through the same "only a running tenancy" rule as
+  /// every other party change - hidden rather than shown-and-refused, same
+  /// posture as PartyChangePanel's own `canStart`.
+  leaseIsRunning: boolean
+  today: string
   addTenant: Action
   removeTenant: Action
   addGuarantor: Action
@@ -133,10 +151,12 @@ export function PartiesPanel({
         ) : (
           <ul className="flex flex-col divide-y text-sm">
             {guarantors.map((guarantor) => (
-              <li key={guarantor.id} className="flex flex-col py-2">
-                <span>{guarantor.name}</span>
-                <span className="text-muted-foreground text-xs">{guarantor.contact}</span>
-              </li>
+              <GuarantorRow
+                key={guarantor.id}
+                guarantor={guarantor}
+                canRelease={canWrite && leaseIsRunning}
+                today={today}
+              />
             ))}
           </ul>
         )}
@@ -184,5 +204,67 @@ export function PartiesPanel({
         )}
       </div>
     </section>
+  )
+}
+
+/// Its own component, not inlined in the `.map()` above - `useActionState`
+/// is a hook, and calling one per guarantor inside a loop is the rules-of-
+/// hooks violation that a fixed-count-per-render component avoids.
+function GuarantorRow({
+  guarantor,
+  canRelease,
+  today,
+}: {
+  guarantor: GuarantorView
+  canRelease: boolean
+  today: string
+}) {
+  const [state, action] = useActionState<PartyChangeFormState, FormData>(
+    guarantor.releaseAction,
+    {},
+  )
+  const errors = state.fieldErrors ?? {}
+
+  return (
+    <li className="flex flex-col gap-2 py-2">
+      <span className="flex flex-col">
+        <span>{guarantor.name}</span>
+        <span className="text-muted-foreground text-xs">{guarantor.contact}</span>
+      </span>
+
+      {canRelease && (
+        <details className="rounded-md border p-3">
+          {/* NAMES WHO (R-116) - "Release" alone is a substring of nothing
+              else on this page today, but a second guarantor row would make
+              every summary read identically to a screen-reader user
+              navigating by heading. */}
+          <summary className="min-h-11 cursor-pointer text-sm font-medium">
+            Release {guarantor.name} as guarantor
+          </summary>
+          <form action={action} className="mt-3 flex flex-col gap-3">
+            <FormAlerts state={state} />
+            <TextField
+              label="Released effective"
+              name="effectiveOn"
+              type="date"
+              required
+              defaultValue={today}
+              idPrefix={`guarantor-release-${guarantor.id}`}
+              error={errors.effectiveOn}
+              hint="Printed on the amendment. The guarantee stays in force for everything that accrued before this date."
+            />
+            <TextareaField
+              label="Why is this guarantee ending?"
+              name="reason"
+              required
+              rows={2}
+              idPrefix={`guarantor-release-${guarantor.id}`}
+              error={errors.reason}
+            />
+            <SubmitButton label="Send for signature" />
+          </form>
+        </details>
+      )}
+    </li>
   )
 }

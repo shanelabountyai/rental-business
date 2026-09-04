@@ -56,6 +56,13 @@ const NOTICE_INCLUDE = {
         orderBy: { isPrimary: 'desc' as const },
         select: { tenant: { select: { id: true, firstName: true, lastName: true } } },
       },
+      // R-165: the demand ladder is addressed to a guarantor alongside the
+      // tenant - only ones still attached to the lease (a released guarantor
+      // is no longer a party to it).
+      guarantors: {
+        where: { active: true },
+        select: { firstName: true, lastName: true },
+      },
     },
   },
   /// The "or" half of Notice's either/or (R-061) - see that column's own
@@ -95,7 +102,10 @@ export async function generateNoticePdf(noticeId: string): Promise<FormState> {
   // own "To:" line, whichever one this notice actually has.
   const unitName = notice.lease?.unit.name ?? null
   const recipientNames = notice.lease
-    ? notice.lease.leaseTenants.map((lt) => `${lt.tenant.firstName} ${lt.tenant.lastName}`)
+    ? [
+        ...notice.lease.leaseTenants.map((lt) => `${lt.tenant.firstName} ${lt.tenant.lastName}`),
+        ...notice.lease.guarantors.map((g) => `${g.firstName} ${g.lastName} (guarantor)`),
+      ]
     : notice.applicant
       ? [`${notice.applicant.firstName} ${notice.applicant.lastName}`]
       : []

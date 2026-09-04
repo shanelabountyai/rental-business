@@ -8014,3 +8014,56 @@ existing specs (`notifications`, `consent`, `collection-method`, `pay`,
 build. CI green through R-163 (`gh run list`).
 
 Commit: 8b5710d71849d3698cba3ee22e80a901b6a62a6e
+
+## R-165: the guarantor becomes a person who can see what they owe
+
+**What it built.** A guarantor's own magic-link sign-in (`guarantor-magic-link`
+provider, `GUARANTOR_MAGIC_LINK` token purpose, mirroring the tenant flow
+`loadTenantActor`'s own comment already named as the shape to copy) and a
+financial-only portal at `/portal/guarantor` — balance and full ledger on one
+page (`guarantorStatement`, calling the identical `statement()`/
+`balanceCents()` a tenant and staff would see for the same lease, never a
+second calculation) and served notices at `/portal/guarantor/notices`,
+reusing `listTenantNotices`/`markNoticeRead` unchanged since both already take
+a lease-id list rather than a tenant id. LEASE-06's "no maintenance, no
+comms" is enforced by absence — the route tree has no such pages — and by a
+guarantor branch on `/api/documents/[id]/file` narrower than the tenant one:
+NOTICE type only, on the guaranteed lease only. The demand ladder now prints
+active guarantors alongside tenants on a served notice's "To:" line
+(`notices/actions.ts`). Release is a signed `LeasePartyChange`, never a
+delete — `LeasePartyChangeParty` gained a nullable `guarantorId` alongside
+the now-nullable `tenantId` (CHECK: exactly one set, and a guarantor party is
+always `OUTGOING`), a "Release guarantor" control on `/leases/[id]`'s parties
+panel sends the same amendment ceremony R-090 built for a roommate swap, and
+completion sets `Guarantor.active = false` rather than deleting the row —
+mirroring exactly how a departing tenant's portal session dies.
+
+**What it decided.** D-167: reuse `LeasePartyChange` rather than a parallel
+release mechanism, and the reasoning for the read-receipt and multi-guarantor
+signer gaps left open by that choice. `AuditActor`/`ActorType` both gained a
+`GUARANTOR` value so a guarantor's own sign-in is a first-class audit actor
+rather than a `SYSTEM` entry with the id smuggled into `ref`, which is how
+`esign-actions.ts`'s existing `auditAsSystem('guarantor:id', ...)` fallback
+had to record a guarantor's SIGNATURE before this item — that fallback is
+unchanged; it was never in this item's scope to rewire.
+
+**What it left behind.** Both named in D-167: a served notice's portal read
+receipt is not per-recipient, so whichever of the tenant or guarantor opens
+it first is who the record shows as having read it; and `orderedSigners`
+puts every current guarantor on a lease's amendment, so a lease with two
+guarantors releasing one would still ask the other to sign — untested because
+no fixture here has ever put two guarantors on one lease. Rent reminders
+(`payments/reminders.ts`) still address tenants only — the backlog line asked
+for the *demand* ladder, not the reminder one, and widening that was not
+this item's call to make silently.
+
+**Gate run:** lint ✓ (pre-existing warnings only, one new one fixed —
+`react/no-unescaped-entities`), typecheck ✓, `db:drift` ✓ (two hand-written
+migrations, checked against the diff before writing the SQL), `db:ci` ✓
+(migrations from scratch + seed + drift, throwaway `rental_ci`), unit 2,875
+passed / 4 skipped (13 pre-existing `assessPartyChange`/`amendmentDocumentBlocks`
+tests plus 4 new ones for the guarantor-release path). New
+`e2e/portal-guarantor.spec.ts` (6 tests: sign-in and balance, cross-lease
+notice 404, own-notice read receipt, non-NOTICE document refusal, tenant⇄
+guarantor portal cross-refusal, anonymous redirect) run clean against a
+production build. CI green through R-164 (`gh run list`).

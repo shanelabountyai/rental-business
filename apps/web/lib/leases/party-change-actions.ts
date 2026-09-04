@@ -86,6 +86,40 @@ export async function startPartyChange(
 }
 
 /**
+ * Releases one guarantor from a live lease (R-165), through the identical
+ * signed-amendment ceremony a roommate change uses - never a delete. Its own
+ * action rather than a field on `startPartyChange`'s form: a release moves
+ * no tenant and needs none of that panel's applicant/screening inputs, so
+ * giving it a dedicated entry point (per-guarantor, on the parties panel)
+ * keeps the roommate-change form free of a control that would apply to it
+ * only rarely.
+ */
+export async function releaseGuarantor(
+  leaseId: string,
+  guarantorId: string,
+  _previous: PartyChangeFormState,
+  formData: FormData,
+): Promise<PartyChangeFormState> {
+  const { lease, actor } = await loadLeaseForPartyChange(leaseId)
+
+  const result = await buildPartyChange({
+    lease,
+    actorId: actor.id,
+    outgoingTenantIds: [],
+    incomingApplicantIds: [],
+    outgoingGuarantorIds: [guarantorId],
+    effectiveOn: str(formData, 'effectiveOn'),
+    reason: str(formData, 'reason'),
+    acknowledgedWarnings: formData.get('acknowledgeWarnings') === 'on',
+    unsigned: null,
+  })
+
+  revalidatePath(`/leases/${leaseId}`)
+  const { changeId: _changeId, ...state } = result
+  return state
+}
+
+/**
  * Withdraws an amendment that is out for signature. REASON_REQUIRED - asking
  * several people to sign a change to their tenancy and then pulling it is an
  * act somebody will ask about later.

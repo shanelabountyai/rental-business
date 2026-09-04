@@ -95,7 +95,7 @@ import { recordRenterInsurance } from '@/lib/leases/insurance-actions.ts'
 import { offerRenewal } from '@/lib/leases/renewal-actions.ts'
 import { recordOfflinePayment } from '@/lib/payments/offline.ts'
 import { getLease, screenedApplicants, selectableTenants } from '@/lib/leases/queries.ts'
-import { startPartyChange, voidPartyChange } from '@/lib/leases/party-change-actions.ts'
+import { releaseGuarantor, startPartyChange, voidPartyChange } from '@/lib/leases/party-change-actions.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 
 export const metadata = { title: 'Lease — Rental Operations' }
@@ -812,7 +812,13 @@ export default async function LeaseDetailPage({
           contact:
             [g.email, g.phone ? phoneWithNote(g.phone) : null].filter(Boolean).join(' · ') ||
             'No contact details on file',
+          // R-165. Bound here rather than inside the client component - a
+          // server action cannot be constructed on the client, only passed
+          // down already bound.
+          releaseAction: releaseGuarantor.bind(null, lease.id, g.id),
         }))}
+        leaseIsRunning={leaseIsInForce(lease.status)}
+        today={businessDate(new Date(), lease.property.timezone)}
         selectableTenants={tenants
           .filter((t) => !alreadyOn.has(t.id))
           .map((t) => ({
@@ -857,12 +863,21 @@ export default async function LeaseDetailPage({
           status: change.status,
           effectiveOn: utcToBusinessDate(change.effectiveOn),
           reason: change.reason,
+          // R-165: an OUTGOING party is a departing occupant OR a released
+          // guarantor now - `tenant` is null for the latter (see
+          // LeasePartyChangeParty's own "exactly one" comment).
           leavingNames: change.parties
             .filter((p) => p.direction === 'OUTGOING')
-            .map((p) => `${p.tenant.firstName} ${p.tenant.lastName}`),
+            .map((p) =>
+              p.tenant
+                ? `${p.tenant.firstName} ${p.tenant.lastName}`
+                : `${p.guarantor!.firstName} ${p.guarantor!.lastName} (guarantor)`,
+            ),
+          // Always a tenant - a guarantor party is never INCOMING (the CHECK
+          // on LeasePartyChangeParty enforces it).
           joiningNames: change.parties
             .filter((p) => p.direction === 'INCOMING')
-            .map((p) => `${p.tenant.firstName} ${p.tenant.lastName}`),
+            .map((p) => `${p.tenant!.firstName} ${p.tenant!.lastName}`),
           voidReason: change.voidReason,
           draftDocumentId: change.envelope?.draftDocumentId ?? null,
           executedDocumentId: change.envelope?.executedDocumentId ?? null,

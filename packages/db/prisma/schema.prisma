@@ -441,6 +441,9 @@ enum LateFeeType {
 enum ActorType {
   STAFF
   TENANT
+  /// R-165: a guarantor acting on their own behalf (signing in). Distinct
+  /// from TENANT - a guarantor was never a party to the tenancy itself.
+  GUARANTOR
   VENDOR
   SYSTEM
 }
@@ -2119,11 +2122,21 @@ model Guarantor {
   lastName  String
   email     String?
   phone     String?
+  /// R-165: false once released from the lease (a signed LeasePartyChange,
+  /// never a delete - see LeasePartyChangeParty). Doubles as the portal's
+  /// session gate, same as Tenant.active: `principalIsStillValid` refuses a
+  /// magic-link session for a guarantor no longer attached to anything.
+  active    Boolean  @default(true)
+  /// Same revocation watermark as Tenant/StaffUser. Bumped on release so a
+  /// live portal session dies with the release rather than at its own
+  /// expiry.
+  sessionsValidFrom DateTime @default(now())
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  lease           Lease         @relation(fields: [leaseId], references: [id])
+  lease           Lease                   @relation(fields: [leaseId], references: [id])
   leaseSignatures LeaseSigner[]
+  partyChanges    LeasePartyChangeParty[]
 
   @@index([leaseId])
 }
@@ -2536,31 +2549,42 @@ model LeasePartyChange {
 
 /// One person moving on or off the tenancy.
 ///
-/// `tenantId` is NOT NULL in both directions. An incoming party's Tenant
-/// row is created when the amendment is SENT, not when it completes -
-/// they have to be a real, addressable party to receive a signing link at
-/// all, and a LeaseSigner with neither a tenantId nor a guarantorId is a
-/// signature attributable to nobody.
+/// `tenantId` is NOT NULL in both directions EXCEPT the one R-165 adds: a
+/// guarantor being released. An incoming party's Tenant row is created when
+/// the amendment is SENT, not when it completes - they have to be a real,
+/// addressable party to receive a signing link at all, and a LeaseSigner
+/// with neither a tenantId nor a guarantorId is a signature attributable to
+/// nobody.
 ///
 /// `applicantId` is required for an INCOMING party BY DATABASE CHECK, which
 /// is RISK-10's "screened to full criteria" made unfalsifiable: a
 /// replacement with no screening record cannot exist in this table. Whether
 /// that screening was APPROVED is checked in the action, because a decision
 /// is a column on ScreeningReport that a CHECK here cannot reach.
+///
+/// `guarantorId` is R-165's addition: a guarantor being released, always
+/// OUTGOING (enforced by CHECK below) - there is no path here for adding a
+/// guarantor, only releasing one who already exists. Exactly one of
+/// tenantId/guarantorId is set, also by CHECK: this row names one person
+/// moving, never both at once.
 model LeasePartyChangeParty {
   id          String               @id @default(cuid())
   changeId    String
   direction   PartyChangeDirection
-  tenantId    String
+  tenantId    String?
+  guarantorId String?
   applicantId String?
   createdAt   DateTime             @default(now())
 
   change    LeasePartyChange @relation(fields: [changeId], references: [id], onDelete: Cascade)
-  tenant    Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  tenant    Tenant?          @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  guarantor Guarantor?       @relation(fields: [guarantorId], references: [id], onDelete: Restrict)
   applicant Applicant?       @relation(fields: [applicantId], references: [id], onDelete: Restrict)
 
   @@unique([changeId, tenantId])
+  @@unique([changeId, guarantorId])
   @@index([tenantId])
+  @@index([guarantorId])
 }
 
 enum ConfidentialCaseStatus {
@@ -3578,6 +3602,9 @@ model StaffAssignment {
 
 enum AuthTokenPurpose {
   TENANT_MAGIC_LINK
+  /// R-165: same shape as TENANT_MAGIC_LINK, a separate purpose because it
+  /// redeems against a different subject type (Guarantor, not Tenant).
+  GUARANTOR_MAGIC_LINK
   STAFF_PASSWORD_RESET
   TENANT_PASSWORD_RESET
   /// Issued after a correct staff password, redeemed by the MFA step. It
