@@ -7906,3 +7906,52 @@ the production build. Full sweep is CI's; `gh run list` confirms the
 pipeline is green through the prior push.
 
 Commit: acf379655088c00375c2d3768be6b78af36a2760
+
+## R-163: the reconciliation learns to compare amounts
+
+**What it built.** The external half of ledger reconciliation D-25 scoped
+out and R-147's `/money` panel already had a slot for
+(`externalReconciliationAvailable`, wired to `false` since there was nothing
+behind it). `detectLeaseBalanceDrift` (`packages/core/ledger/reconcile.ts`)
+is a new pure comparison, separate from `detectDrift`: given
+`{leaseId, stripeBalanceCents, projectedBalanceCents}` it reports an
+`amount_mismatch` `Drift` wherever they disagree, skipping a lease whose
+Stripe side is `null` ("could not be asked", not "nothing owed" — the same
+distinction `switchDecision` already draws). `reconcileLedger` (app layer)
+runs it whenever `billingIsLive()`: for every active `LeasePayer` with a
+`stripeSubscriptionId`, it calls the already-existing
+`getOpenInvoiceAmountCents` (sums `amount_remaining` — amount_due minus
+amount_paid — across a subscription's open invoices) and sums per lease,
+then compares against `leaseBalanceCents`. Drift from both halves lands in
+the same `ledger.drift_detected` audit row and the same `/money` panel;
+`externalChecked` on the report and the audit payload now reflects whether
+the external half actually ran, rather than the hardcoded `false` it was.
+
+**What it decided.** D-166: the comparison is LEASE-level (Stripe's open
+invoices vs the projection's running balance for that lease), not a second
+per-event comparison bolted onto `detectDrift` — `detectDrift`'s whole shape
+is "one Stripe event vs the rows it should have produced" and a lease
+balance has no event to key on. `Drift` gained a `leaseId: string | null`
+field for this (null on every row the internal, event-keyed check produces)
+rather than overloading `stripeEventId`/`ledgerEntryId` to mean something
+they don't. No new Stripe adapter method was needed — `getOpenInvoiceAmountCents`
+already existed for `switchDecision` and already draws the null-vs-zero
+distinction this reuses.
+
+**What it left behind.** Scoped to the ordinary single-payer lease, per
+D-4's multi-payer voucher split (`LeasePayer`) staying gated on OQ-2/R-048 —
+a lease with more than one payer sums their subscriptions' remaining
+amounts, which is correct for the common case and untested against a real
+HAP split because that feature does not exist yet. The check is sequential
+per payer (portfolio-sized, not history-sized, so no batching was worth
+adding). No schema migration — `Drift` is a `packages/core` type serialized
+into the existing append-only `AuditLog`, not a table.
+
+**Gate run:** lint ✓ (pre-existing warnings only), typecheck ✓, unit 2,868
+passed / 4 skipped (3 new: `detectLeaseBalanceDrift`'s core tests). No
+schema change, so `db:ci`/`db:drift` don't apply; no route, component or
+`'use server'` module touched, so `npm run build` and the e2e sweep were not
+re-run locally — CI is green through R-162 (`gh run list`) and will run the
+full sweep on push.
+
+Commit: <recorded in next commit>

@@ -11,11 +11,18 @@
 // of those raise an error at the time - the money screens just quietly show
 // a number that is not what Stripe thinks.
 //
-// This module compares two lists and says what disagrees. It deliberately
-// takes both sides as plain data so the SAME comparison serves both the
-// internal check (events we processed vs rows we wrote) and, once there is a
-// Stripe account to call, the external one (Stripe's invoices vs our rows) -
-// see the app layer for which of those exists today.
+// This module compares two lists and says what disagrees. `detectDrift`
+// takes both sides as plain data, events we processed vs rows we wrote - see
+// the app layer for how that runs today.
+//
+// R-163 adds the external check the header above used to say was somebody
+// else's item: `detectLeaseBalanceDrift`, a SEPARATE comparison rather than a
+// second use of `detectDrift`. That function is shaped around one Stripe
+// event; the external check has no event to key on - Stripe's own invoice
+// is the independent figure, and the only reading of it that means anything
+// is "what does this LEASE still owe", which is what R-038a's actual miss
+// looked like (an event Stripe never sent, invisible to any event-shaped
+// check by construction).
 
 export const DRIFT_KINDS = [
   /// An event we claimed and marked `projected`, with no ledger entry
@@ -38,6 +45,9 @@ export interface Drift {
   kind: DriftKind
   stripeEventId: string | null
   ledgerEntryId: string | null
+  /// Set only by `detectLeaseBalanceDrift` below - the internal check is
+  /// keyed on events and entries, which already name themselves.
+  leaseId: string | null
   /// Plain language. This ends up in an alert somebody reads at 8am.
   detail: string
   /// Signed cents, when the drift is about an amount. Null otherwise.
@@ -97,6 +107,7 @@ export function detectDrift(
         kind: 'stuck_claim',
         stripeEventId: event.stripeEventId,
         ledgerEntryId: null,
+        leaseId: null,
         detail: `${event.type} was claimed but never resolved - the pipeline stopped between claiming it and recording an outcome.`,
         differenceCents: null,
       })
@@ -115,6 +126,7 @@ export function detectDrift(
         kind: 'projected_but_missing',
         stripeEventId: event.stripeEventId,
         ledgerEntryId: null,
+        leaseId: null,
         detail: `${event.type} was projected but no ledger entry carries its id - money Stripe reported is missing from the books.`,
         differenceCents: event.amountCents,
       })
@@ -134,6 +146,7 @@ export function detectDrift(
         kind: 'amount_mismatch',
         stripeEventId: event.stripeEventId,
         ledgerEntryId: rows[0]!.id,
+        leaseId: null,
         detail: `${event.type} reported ${Math.abs(event.amountCents)}c but the projection carries ${projected}c.`,
         differenceCents: projected - Math.abs(event.amountCents),
       })
@@ -146,11 +159,56 @@ export function detectDrift(
         kind: 'orphan_entry',
         stripeEventId: entry.stripeEventId,
         ledgerEntryId: entry.id,
+        leaseId: null,
         detail: `Ledger entry ${entry.id} names event ${entry.stripeEventId}, which is not in the processed-event log.`,
         differenceCents: null,
       })
     }
   }
 
+  return drift
+}
+
+export interface LeaseBalanceView {
+  leaseId: string
+  /// Stripe's own figure for what this lease's payer(s) still owe: the sum
+  /// of `amount_remaining` across every open invoice on the subscription(s),
+  /// which is amount_due minus amount_paid. Null when Stripe could not be
+  /// asked - a distinct answer from "nothing owed", the same distinction
+  /// `switchDecision` draws, so a network hiccup does not get reported as
+  /// drift.
+  stripeBalanceCents: number | null
+  /// What our own projection says is owed - `balanceCents` over the lease's
+  /// `LedgerEntry` rows.
+  projectedBalanceCents: number
+}
+
+/**
+ * Compares Stripe's own idea of what a lease owes against the projection.
+ *
+ * The one comparison `detectDrift` cannot do (see its own field comments):
+ * `Payment.amountCents` and `LedgerEntry.amountCents` are written from the
+ * same event by the same code, so nothing internal can ever disagree with
+ * itself. This asks the one party with an independent figure - Stripe's own
+ * open invoices - which is what would have caught R-038a's actual miss: an
+ * offline payment Stripe never emitted a subscribed event for left no trace
+ * on either side of the internal check, but the balance it should have moved
+ * was still wrong.
+ */
+export function detectLeaseBalanceDrift(leases: readonly LeaseBalanceView[]): Drift[] {
+  const drift: Drift[] = []
+  for (const lease of leases) {
+    if (lease.stripeBalanceCents == null) continue
+    const differenceCents = lease.projectedBalanceCents - lease.stripeBalanceCents
+    if (differenceCents === 0) continue
+    drift.push({
+      kind: 'amount_mismatch',
+      stripeEventId: null,
+      ledgerEntryId: null,
+      leaseId: lease.leaseId,
+      detail: `Lease ${lease.leaseId}: Stripe's open invoices say ${lease.stripeBalanceCents}c still owed, the projection says ${lease.projectedBalanceCents}c.`,
+      differenceCents,
+    })
+  }
   return drift
 }

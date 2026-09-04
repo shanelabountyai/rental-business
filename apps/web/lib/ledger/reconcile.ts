@@ -1,9 +1,10 @@
 import 'server-only'
 
-import { type Drift, detectDrift } from '@rental/core/ledger'
+import { type Drift, detectDrift, detectLeaseBalanceDrift } from '@rental/core/ledger'
 import { prisma } from '@rental/db'
 import { auditAsSystem } from '@/lib/audit/system.ts'
-import { billingIsLive } from '@/lib/billing/provider.ts'
+import { billingIsLive, getBillingProvider } from '@/lib/billing/provider.ts'
+import { leaseBalanceCents } from '@/lib/ledger/queries.ts'
 
 // Reconciling the projection (D-11, R-035).
 //
@@ -26,12 +27,12 @@ import { billingIsLive } from '@/lib/billing/provider.ts'
 //     or something wrote to the projection directly, which D-11 forbids);
 //   - a claim the pipeline died in the middle of.
 //
-// It DELIBERATELY DOES NOT compare amounts. `detectDrift` supports that and
-// the external check will use it, but there is no independent amount to
-// compare against here: `Payment.amountCents` and `LedgerEntry.amountCents`
-// were both written from the same event, in the same transaction, by the
-// same code. Checking one against the other would always pass and would
-// look like coverage. The only source that could disagree is Stripe.
+// THIS INTERNAL HALF DELIBERATELY DOES NOT compare amounts. There is no
+// independent amount to compare against here: `Payment.amountCents` and
+// `LedgerEntry.amountCents` were both written from the same event, in the
+// same transaction, by the same code. Checking one against the other would
+// always pass and would look like coverage. The only source that could
+// disagree is Stripe.
 //
 // And the gap that matters most: an event Stripe sent that we NEVER
 // RECEIVED is invisible to this check by construction, because a webhook
@@ -46,16 +47,26 @@ import { billingIsLive } from '@/lib/billing/provider.ts'
 // `paid_out_of_band`, for which Stripe emits no `invoice.payment_succeeded`
 // - the event the pipeline subscribed to - so money that genuinely arrived
 // left a Payment row, a paid invoice on Stripe, and no ledger entry. NEITHER
-// half of this reconciliation could see it: there was no processed event to
+// half of the internal check could see it: there was no processed event to
 // find a missing row for, and no ledger row to find a missing event for.
-// Both sides agreed, because both sides were empty.
+// Both sides agreed, because both sides were empty. The defect itself was
+// closed at source - the pipeline now reads `invoice.updated`, which every
+// money path emits - but a check that could only ever see its own side
+// would miss the next thing shaped like it.
 //
-// What would catch its shape is a comparison this check does not do and
-// deliberately does not pretend to: walking Stripe's OWN invoices for the
-// window and asking whether each `amount_paid` is reflected in the
-// projection. That is external reconciliation done properly and it belongs
-// to its own item, not to a bug fix. The defect itself is closed at source -
-// the pipeline now reads `invoice.updated`, which every money path emits.
+// R-163 IS THE EXTERNAL HALF THIS HEADER USED TO SAY BELONGED TO ITS OWN
+// ITEM: it now runs whenever `billingIsLive()`, walking every active
+// `LeasePayer`'s Stripe subscription for what it still owes
+// (`getOpenInvoiceAmountCents` - the sum of `amount_remaining`, i.e.
+// amount_due minus amount_paid, across its open invoices) and comparing that
+// to `leaseBalanceCents`, the projection's own figure for the same lease.
+// That is a coarser question than "does this one event's amount match" -
+// `detectLeaseBalanceDrift` (packages/core) is a separate comparison from
+// `detectDrift`, not a second use of it, because it has no event to key on -
+// but it is the question that actually catches R-038a's shape: an event
+// Stripe never sent moves the lease's true balance without moving either
+// side of the internal check, and only asking Stripe what it thinks this
+// lease owes would notice.
 // ==========================================================================
 
 export interface ReconciliationReport {
@@ -118,6 +129,43 @@ export async function reconcileLedger(
     })),
   )
 
+  // The external half (R-163): only possible once there is a real Stripe
+  // account to ask. NOT windowed like the internal check above - it walks
+  // every currently-active payer rather than a growing table, so its cost is
+  // the size of the portfolio, not the size of history.
+  const externalChecked = billingIsLive()
+  if (externalChecked) {
+    const payers = await prisma.leasePayer.findMany({
+      where: { active: true, stripeSubscriptionId: { not: null } },
+      select: { leaseId: true, stripeSubscriptionId: true },
+    })
+
+    const provider = getBillingProvider()
+    const stripeBalanceByLease = new Map<string, number | null>()
+    for (const payer of payers) {
+      // Null means Stripe could not be asked, not "nothing owed" - the same
+      // distinction switchDecision draws. A lease with any unreachable
+      // payer is skipped rather than compared against a partial figure.
+      if (stripeBalanceByLease.get(payer.leaseId) === null) continue
+      const remaining = await provider.getOpenInvoiceAmountCents({
+        stripeSubscriptionId: payer.stripeSubscriptionId!,
+      })
+      stripeBalanceByLease.set(
+        payer.leaseId,
+        remaining === null ? null : (stripeBalanceByLease.get(payer.leaseId) ?? 0) + remaining,
+      )
+    }
+
+    const leaseBalances = await Promise.all(
+      [...stripeBalanceByLease].map(async ([leaseId, stripeBalanceCents]) => ({
+        leaseId,
+        stripeBalanceCents,
+        projectedBalanceCents: await leaseBalanceCents(leaseId),
+      })),
+    )
+    drift.push(...detectLeaseBalanceDrift(leaseBalances))
+  }
+
   if (drift.length > 0) {
     // ALARMED, not merely logged. An append-only projection that has drifted
     // cannot be quietly corrected - the fix is a reversing entry somebody
@@ -131,11 +179,12 @@ export async function reconcileLedger(
         windowDays,
         checkedEvents: events.length,
         checkedEntries: entries.length,
-        externalChecked: false,
+        externalChecked,
         drift: drift.map((item) => ({
           kind: item.kind,
           stripeEventId: item.stripeEventId,
           ledgerEntryId: item.ledgerEntryId,
+          leaseId: item.leaseId,
           differenceCents: item.differenceCents,
           detail: item.detail,
         })),
@@ -153,7 +202,7 @@ export async function reconcileLedger(
     checkedEvents: events.length,
     checkedEntries: entries.length,
     drift,
-    externalChecked: false,
+    externalChecked,
   }
 }
 

@@ -5,6 +5,7 @@ import {
   allocationOrderFor,
   balanceCents,
   detectDrift,
+  detectLeaseBalanceDrift,
   reversedEntryIds,
   statement,
 } from './index.ts'
@@ -273,6 +274,48 @@ describe('detectDrift', () => {
       detectDrift([projected], [
         { id: 'a', stripeEventId: 'evt_1', amountCents: -100_000 },
         { id: 'b', stripeEventId: 'evt_1', amountCents: -50_000 },
+      ]),
+    ).toEqual([])
+  })
+})
+
+describe('detectLeaseBalanceDrift', () => {
+  // R-163: the external half detectDrift cannot do - there is no event to
+  // key on here, only what Stripe's own open invoices say a LEASE owes
+  // against what the projection says.
+
+  it('reports NOTHING when Stripe and the projection agree', () => {
+    expect(
+      detectLeaseBalanceDrift([
+        { leaseId: 'l1', stripeBalanceCents: 150_000, projectedBalanceCents: 150_000 },
+      ]),
+    ).toEqual([])
+  })
+
+  it('catches the shape R-038a actually missed: money Stripe never emitted an event for', () => {
+    // An offline payment recorded outside the webhook pipeline leaves both
+    // halves of detectDrift agreeing (both empty) while the lease's real
+    // balance has moved. Only asking Stripe what IT thinks this lease owes
+    // notices.
+    const drift = detectLeaseBalanceDrift([
+      { leaseId: 'l1', stripeBalanceCents: 150_000, projectedBalanceCents: 0 },
+    ])
+    expect(drift).toHaveLength(1)
+    expect(drift[0]).toMatchObject({
+      kind: 'amount_mismatch',
+      leaseId: 'l1',
+      stripeEventId: null,
+      differenceCents: -150_000,
+    })
+  })
+
+  it('does NOT report drift when Stripe could not be asked', () => {
+    // Null is "we could not ask", not "nothing owed" - the same distinction
+    // switchDecision draws. Guessing here would report drift on every lease
+    // in a network hiccup.
+    expect(
+      detectLeaseBalanceDrift([
+        { leaseId: 'l1', stripeBalanceCents: null, projectedBalanceCents: 150_000 },
       ]),
     ).toEqual([])
   })
