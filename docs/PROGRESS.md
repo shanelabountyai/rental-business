@@ -8067,3 +8067,5 @@ tests plus 4 new ones for the guarantor-release path). New
 notice 404, own-notice read receipt, non-NOTICE document refusal, tenant⇄
 guarantor portal cross-refusal, anonymous redirect) run clean against a
 production build. CI green through R-164 (`gh run list`).
+
+Commit: d622fd3db918d8d149fa9a97070d1616bf0376f5
