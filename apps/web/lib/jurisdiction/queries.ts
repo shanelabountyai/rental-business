@@ -1,6 +1,7 @@
 import 'server-only'
 
-import { selectApplicableRule } from '@rental/core/jurisdiction'
+import { computeCoverage, selectApplicableRule } from '@rental/core/jurisdiction'
+import type { PortfolioCoverage } from '@rental/core/jurisdiction'
 import { type JurisdictionRule, prisma } from '@rental/db'
 
 // The database side of R-010. packages/core/jurisdiction decides which row
@@ -95,4 +96,23 @@ export async function currentRuleVersion(
     where: { state, jurisdiction, effectiveTo: null },
     orderBy: { version: 'desc' },
   })
+}
+
+/// R-162 (review finding 11): the fetch side of `computeCoverage` - active
+/// property states plus whatever is currently configured, handed to the pure
+/// predicate. Portfolio-wide, like `listCurrentRules`; the same small-N
+/// justification applies.
+export async function portfolioCoverage(asOf: Date): Promise<PortfolioCoverage> {
+  const [properties, currentRules] = await Promise.all([
+    prisma.property.findMany({
+      where: { active: true },
+      distinct: ['state'],
+      select: { state: true },
+    }),
+    listCurrentRules(asOf),
+  ])
+  return computeCoverage(
+    properties.map((p) => p.state),
+    currentRules,
+  )
 }

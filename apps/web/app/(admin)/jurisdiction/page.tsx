@@ -1,7 +1,11 @@
 import { friendlyBusinessDate, utcToBusinessDate } from '@rental/core/scheduling'
 import Link from 'next/link'
 import { actorCan, requirePermission } from '@/lib/auth/guard.ts'
-import { listCurrentRules, listRuleVersions } from '@/lib/jurisdiction/queries.ts'
+import {
+  listCurrentRules,
+  listRuleVersions,
+  portfolioCoverage,
+} from '@/lib/jurisdiction/queries.ts'
 
 export const metadata = { title: 'Jurisdiction rules — Rental Operations' }
 
@@ -44,10 +48,11 @@ export default async function JurisdictionRulesPage({
   searchParams: Promise<{ versioned?: string }>
 }) {
   await requirePermission('jurisdiction.read')
-  const [rules, canWrite, { versioned }] = await Promise.all([
+  const [rules, canWrite, { versioned }, coverage] = await Promise.all([
     listCurrentRules(new Date()),
     actorCan('jurisdiction.write'),
     searchParams,
+    portfolioCoverage(new Date()),
   ])
 
   // R-148: the version history D-4 promises. Old versions are never edited
@@ -89,6 +94,64 @@ export default async function JurisdictionRulesPage({
         >
           Added a new version for {versioned}.
         </p>
+      )}
+
+      {/* R-162 (review finding 11): "a portfolio screen naming which of your
+          states has no rule and which has one with unreviewed fields" -
+          R-055's retaliation-window gap folded in as one of the unreviewed
+          fields rather than a screen of its own. */}
+      {(coverage.statesNeedingRule.length > 0 || coverage.gaps.length > 0) && (
+        <section
+          aria-labelledby="coverage-heading"
+          className="flex flex-col gap-3 rounded-md border border-amber-300 bg-amber-50 p-4 text-amber-900"
+        >
+          <h2 id="coverage-heading" className="text-lg font-semibold">
+            Coverage gaps
+          </h2>
+          {coverage.statesNeedingRule.length > 0 && (
+            <div>
+              <p className="text-sm font-medium">
+                States with a property and no rule at all:
+              </p>
+              <ul className="flex flex-wrap gap-x-3 text-sm">
+                {coverage.statesNeedingRule.map((code) => (
+                  <li key={code}>
+                    {canWrite ? (
+                      <Link
+                        href={`/jurisdiction/new?state=${code}`}
+                        className="font-medium underline underline-offset-2"
+                      >
+                        {code}
+                      </Link>
+                    ) : (
+                      code
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {coverage.gaps.length > 0 && (
+            <div>
+              <p className="text-sm font-medium">Configured, but not fully reviewed:</p>
+              <ul className="flex flex-col gap-1 text-sm">
+                {coverage.gaps.map((gap) => (
+                  <li key={`${gap.state}::${gap.jurisdiction ?? ''}`}>
+                    {/* Deliberately NOT "state — Statewide" - the main list
+                        below renders that exact string for the same row, and
+                        getByText is a substring match (see this repo's own
+                        note on that trap). */}
+                    <span className="font-medium">
+                      {gap.state}
+                      {gap.jurisdiction ? ` (${gap.jurisdiction})` : ''}
+                    </span>
+                    : {gap.unreviewedFields.join(', ')}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </section>
       )}
 
       {rules.length === 0 ? (

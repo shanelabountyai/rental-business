@@ -7838,3 +7838,71 @@ a production build — 28/28 passed after the cleanup fixes above. Full
 e2e sweep not run locally; CI's full sweep covers it on push.
 
 Commit: 631842be03d74a0d8a115b40d20fd58b61ade66e
+
+
+## R-162: the second state becomes configurable without a seed script
+
+**What it built.** Review finding 11, re-verified before touching anything:
+finding 1's data loss was already fixed by R-153, but the rest of the finding
+still held — no discoverable way to seed a new state except writing to the
+database directly, no gate stopping an unreviewed number from governing a
+real tenancy, and no screen naming which states or fields still needed
+attention. Three pieces. (1) `createRuleVersion` now refuses to create the
+FIRST version of any (state, jurisdiction) pair without both `citation` and
+`reviewedBy` — later versions are still saveable unreviewed (the list page's
+existing "unreviewed" badge is how that gets noticed), only the founding
+version that starts governing tenancies is blocked. (2) `/jurisdiction/new`
+gained a "Clone from" selector: pick any state with a current statewide rule
+and every field prefills from it — except `state`/`jurisdiction` (the new
+config's own identity) and `citation`/`reviewedBy` (the source state's
+statute is not this state's, and review of THIS state's numbers has not
+happened yet). (3) A "Coverage gaps" section on `/jurisdiction` itself, from
+a new pure `computeCoverage` in `packages/core/jurisdiction/coverage.ts`:
+which active-property states have zero configured rules at all (`rulesFor`
+throws for all of them today), and which configured rules still carry a null
+tri-state legal field — `retaliationWindowDays` (R-055's own gap, folded in
+rather than given a second screen), `sourceOfIncomeProtected`,
+`preMoveOutWalkthroughRequired`, `earlyTerminationRightExists`,
+`acceptanceWaivesNotice`, or no `reviewedBy` at all.
+
+**What it decided.** `computeCoverage` is a pure function over values the
+caller fetched (property states, `listCurrentRules`'s output), not a live
+query — the same posture R-138's `revokeRefusal` finding established for any
+predicate that reasons about "every row of this kind in the deployment": the
+real e2e database holds a real rule for nearly every real state, so no state
+code is safe to assert "has no rule" against there, and the review's own
+"which states" question cannot be exercised end-to-end at all. Covered by a
+unit test that takes the list as a value instead — five cases in
+`jurisdiction.test.ts` — and the e2e clone test reads the real seeded TX
+statewide rule rather than creating a second one, because
+`@@unique([state, jurisdiction, version])` does not fire across two NULL
+`jurisdiction` rows (Postgres treats NULLs as distinct) and a second
+statewide row for the same state would make `currentRuleVersion` read back
+either one nondeterministically. Nullable day-count fields (abandonment
+periods, cure days) were deliberately left off the "unreviewed" list — they
+are configuration still owed, not a stalled legal question the way the five
+tri-state booleans are, per the schema's own comments on each.
+
+**What it left behind.** The coverage screen's "no rule" check is
+state-level existence, not `selectApplicableRule`'s full county-aware logic —
+a state with only a county-specific rule and a property outside that county
+would still throw at `rulesFor` without showing up here. That is a narrower
+gap than the one finding 11 named (real states with literally zero
+configuration, like the seeded FL properties) and is the honest MVP for it;
+a property-level check would need to run `selectApplicableRule` per
+property, which nothing here needed yet. Found along the way: the clone
+selector's first label, "Start from an existing state's configuration",
+collided with `getByLabel('State')` under Playwright's substring match —
+this repo's own repeatedly-documented trap, caught before merge rather than
+after. Renamed to "Clone from".
+
+**Gate run:** lint ✓ (pre-existing warnings only), typecheck ✓, unit 2,865
+passed / 4 skipped (5 new, `computeCoverage`), `npm run build` ✓, `db:ci`
+(fresh Postgres, migrations from scratch, seed, drift) ✓ — no schema change
+in this item. `e2e/jurisdiction.spec.ts` (11/11, two new tests: the
+citation/reviewer gate and the clone flow) and `e2e/reader-screens.spec.ts`
+(4/4, the one other spec touching `/jurisdiction`) on desktop-chrome against
+the production build. Full sweep is CI's; `gh run list` confirms the
+pipeline is green through the prior push.
+
+Commit: (recorded in the follow-up commit)

@@ -178,6 +178,23 @@ export async function createRuleVersion(
     input.state,
     input.jurisdiction ?? null,
   )
+
+  // R-162 (review finding 11): the FIRST version of a (state, jurisdiction)
+  // is the moment this product starts governing real tenancies there with
+  // numbers nobody has attached a source to. Later versions may still be
+  // saved unreviewed (the list page's own "unreviewed" badge is how that
+  // gets noticed and fixed) - only the founding version is blocked.
+  if (!previous && (!input.citation || !input.reviewedBy)) {
+    return violationsToState([
+      ...(input.citation
+        ? []
+        : [{ field: 'citation', message: 'A new jurisdiction needs a statute or ordinance citation before it can govern a real tenancy.' }]),
+      ...(input.reviewedBy
+        ? []
+        : [{ field: 'reviewedBy', message: 'A new jurisdiction needs a reviewer on record before it can govern a real tenancy.' }]),
+    ])
+  }
+
   if (previous && input.effectiveFrom <= previous.effectiveFrom) {
     return {
       error: 'The new version must take effect after the version it replaces.',

@@ -201,6 +201,10 @@ test.describe('viewing and creating jurisdiction rules', () => {
     await page.getByLabel('Grace days').fill('3')
     await page.getByLabel('Late-fee type').selectOption('PERCENT_OF_RENT')
     await page.getByLabel('Percent of rent (%)').fill('10')
+    // R-162: a state's first version needs a citation and reviewer before it
+    // can be created at all.
+    await page.getByLabel('Citation').fill('Wyo. Stat. §1-1-101')
+    await page.getByLabel('Reviewed by').fill('Counsel Q. Test')
     await page.getByRole('button', { name: 'Create configuration' }).click()
 
     await page.waitForURL(/\/jurisdiction\?versioned=/)
@@ -217,6 +221,95 @@ test.describe('viewing and creating jurisdiction rules', () => {
       where: { entityType: 'JurisdictionRule', entityId: created!.id },
     })
     expect(entry?.action).toBe('jurisdiction_rule.versioned')
+  })
+
+  // R-162 (review finding 11): the founding version of a (state,
+  // jurisdiction) is the one that starts governing real tenancies there -
+  // unlike a later version, it cannot be saved without a citation and a
+  // reviewer on record.
+  test('refuses to create a first version with no citation or reviewer', async ({
+    page,
+  }) => {
+    const jurisdiction = `Test County ${randomUUID().slice(0, 8)}`
+    const staff = await createStaff('owner')
+    await signIn(page, staff.email)
+
+    await page.goto('/jurisdiction/new')
+    await page.getByLabel('State').selectOption(STATE)
+    await page.getByLabel('City or county (optional)').fill(jurisdiction)
+    await page.getByLabel('Effective from').fill('2026-01-01')
+    await page.getByLabel('Grace days').fill('3')
+    await page.getByLabel('Late-fee type').selectOption('NONE')
+    await page.getByRole('button', { name: 'Create configuration' }).click()
+
+    await expect(
+      page.getByText('A new jurisdiction needs a statute or ordinance citation before it can govern a real tenancy.'),
+    ).toBeVisible()
+    await expect(
+      page.getByText('A new jurisdiction needs a reviewer on record before it can govern a real tenancy.'),
+    ).toBeVisible()
+    expect(
+      await prisma.jurisdictionRule.findFirst({ where: { state: STATE, jurisdiction } }),
+    ).toBeNull()
+
+    // A later version of the SAME pair is not held to the same gate -
+    // seedRule() below leaves reviewedBy null, matching the "unreviewed"
+    // badge the list page already shows for exactly this case.
+    const previous = await seedRule(jurisdiction)
+    await page.goto(
+      `/jurisdiction/new?state=${STATE}&jurisdiction=${encodeURIComponent(jurisdiction)}`,
+    )
+    await page.getByLabel('Effective from').fill('2027-01-01')
+    await page.getByRole('button', { name: 'Add version' }).click()
+    await page.waitForURL(/\/jurisdiction\?versioned=/)
+    const v2 = await prisma.jurisdictionRule.findFirstOrThrow({
+      where: { state: STATE, jurisdiction, version: 2 },
+    })
+    ruleIds.push(previous.id, v2.id)
+    expect(v2.reviewedBy).toBeNull()
+  })
+
+  // R-162: "start a state from an existing one" - every OTHER field carries
+  // from the source's reviewed rule, but state/jurisdiction/citation/
+  // reviewedBy never do, because those are the new config's own identity and
+  // its own unmade legal review. Clones from the real seeded TX statewide
+  // rule (read-only here, and already this file's own fixture in "an owner
+  // sees the seeded Texas rule") rather than creating a second statewide row
+  // itself - JurisdictionRule's unique constraint is over (state,
+  // jurisdiction, version) and Postgres treats NULLs as distinct, so two
+  // statewide rows for the same state would not collide at the database and
+  // `currentRuleVersion` could read either one back nondeterministically
+  // (see this repo's own note on that trap). Asserting against whatever TX's
+  // real graceDays IS, rather than a hardcoded number, keeps this from
+  // depending on the seed's specific values.
+  test('clones an existing statewide rule into a new one', async ({ page }) => {
+    const source = await prisma.jurisdictionRule.findFirstOrThrow({
+      where: { state: 'TX', jurisdiction: null, effectiveTo: null },
+    })
+    const targetJurisdiction = `Test County ${randomUUID().slice(0, 8)}`
+    const staff = await createStaff('owner')
+    await signIn(page, staff.email)
+
+    await page.goto('/jurisdiction/new?cloneFrom=TX')
+    await expect(page.getByLabel('Clone from')).toHaveValue('TX')
+    await expect(page.getByLabel('Grace days')).toHaveValue(String(source.graceDays))
+    await expect(page.getByLabel('Citation')).toHaveValue('')
+    await expect(page.getByLabel('Reviewed by')).toHaveValue('')
+
+    await page.getByLabel('State').selectOption(STATE)
+    await page.getByLabel('City or county (optional)').fill(targetJurisdiction)
+    await page.getByLabel('Effective from').fill('2026-01-01')
+    await page.getByLabel('Citation').fill('Wyo. Stat. §1-1-102')
+    await page.getByLabel('Reviewed by').fill('Counsel R. Clone')
+    await page.getByRole('button', { name: 'Create configuration' }).click()
+
+    await page.waitForURL(/\/jurisdiction\?versioned=/)
+    const cloned = await prisma.jurisdictionRule.findFirstOrThrow({
+      where: { state: STATE, jurisdiction: targetJurisdiction },
+    })
+    ruleIds.push(cloned.id)
+    expect(cloned.graceDays).toBe(source.graceDays)
+    expect(cloned.citation).toBe('Wyo. Stat. §1-1-102')
   })
 
   test('adding a version closes out the one it replaces', async ({ page }) => {

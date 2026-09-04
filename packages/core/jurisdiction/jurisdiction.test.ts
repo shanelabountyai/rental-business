@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
+  computeCoverage,
   type JurisdictionRuleInput,
   type JurisdictionRuleLike,
+  type RuleCoverageLike,
   selectApplicableRule,
   validateJurisdictionRule,
 } from './index.ts'
@@ -361,5 +363,66 @@ describe('selectApplicableRule', () => {
 
   it('returns null for a state with no candidates at all', () => {
     expect(selectApplicableRule([], null, new Date('2026-01-01'))).toBeNull()
+  })
+})
+
+// R-162: portfolio-wide predicates ("which state has no rule, which rule has
+// an unreviewed field") cannot be exercised end-to-end against the shared
+// e2e database - it holds real rules for every real state, so no state code
+// is safe to assert "has no rule" against there (D-4, the same posture
+// R-138's revokeRefusal takes for a deployment-wide predicate). Covered here
+// as a unit test that takes the list as a value instead.
+describe('computeCoverage', () => {
+  function rule(overrides: Partial<RuleCoverageLike> = {}): RuleCoverageLike {
+    return {
+      state: 'TX',
+      jurisdiction: null,
+      reviewedBy: 'Counsel Q. Test',
+      retaliationWindowDays: 180,
+      sourceOfIncomeProtected: false,
+      preMoveOutWalkthroughRequired: true,
+      earlyTerminationRightExists: true,
+      acceptanceWaivesNotice: false,
+      ...overrides,
+    }
+  }
+
+  it('names a property state with no rule at all', () => {
+    const { statesNeedingRule } = computeCoverage(['TX', 'FL'], [rule({ state: 'TX' })])
+    expect(statesNeedingRule).toEqual(['FL'])
+  })
+
+  it('is silent about a fully reviewed rule', () => {
+    const { statesNeedingRule, gaps } = computeCoverage(['TX'], [rule()])
+    expect(statesNeedingRule).toEqual([])
+    expect(gaps).toEqual([])
+  })
+
+  it('flags an unreviewed row even when every field is filled in', () => {
+    const { gaps } = computeCoverage(['TX'], [rule({ reviewedBy: null })])
+    expect(gaps).toEqual([
+      {
+        state: 'TX',
+        jurisdiction: null,
+        unreviewedFields: ['not yet reviewed by an attorney'],
+      },
+    ])
+  })
+
+  it("lists R-055's retaliation window alongside the other unreviewed legal fields", () => {
+    const { gaps } = computeCoverage(
+      ['TX'],
+      [rule({ retaliationWindowDays: null, earlyTerminationRightExists: null })],
+    )
+    expect(gaps).toHaveLength(1)
+    expect(gaps[0]!.unreviewedFields).toEqual([
+      'retaliation window (RISK-06)',
+      'early-termination right (RISK-04)',
+    ])
+  })
+
+  it('a state with no property at all is never listed as needing a rule', () => {
+    const { statesNeedingRule } = computeCoverage([], [])
+    expect(statesNeedingRule).toEqual([])
   })
 })
