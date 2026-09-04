@@ -30,7 +30,6 @@ let ruleId: string
 
 const accommodationIds: string[] = []
 const abandonmentCaseIds: string[] = []
-const noticeIds: string[] = []
 const violationCaseIds: string[] = []
 const claimIds: string[] = []
 const partyChangeIds: string[] = []
@@ -126,8 +125,11 @@ afterEach(async () => {
   await prisma.task.deleteMany({ where: { subjectId: { in: subjectIds } } })
   await prisma.accommodationRequest.deleteMany({ where: { id: { in: accommodationIds } } })
   await prisma.abandonmentCase.deleteMany({ where: { id: { in: abandonmentCaseIds } } })
-  await prisma.notice.deleteMany({ where: { id: { in: noticeIds } } })
-  await prisma.violationCase.deleteMany({ where: { id: { in: violationCaseIds } } })
+  // Notice is append-only by trigger (R-161) - it cannot be deleted, and
+  // its Restrict FK means a ViolationCase a Notice was filed under can't be
+  // either. Left as debris, same as this file already leaves its property/
+  // lease/staff/tenant fixtures - every test's ids are freshly randomized,
+  // so nothing collides.
   await prisma.insuranceClaim.deleteMany({ where: { id: { in: claimIds } } })
   await prisma.leasePartyChange.deleteMany({ where: { id: { in: partyChangeIds } } })
   await prisma.screeningReport.deleteMany({ where: { applicantId: { in: applicantIds } } })
@@ -136,7 +138,6 @@ afterEach(async () => {
   await prisma.jobRun.deleteMany({ where: { propertyId } })
   accommodationIds.length = 0
   abandonmentCaseIds.length = 0
-  noticeIds.length = 0
   violationCaseIds.length = 0
   claimIds.length = 0
   partyChangeIds.length = 0
@@ -228,7 +229,7 @@ describe('violation cure notice expired, unserved', () => {
       data: { propertyId, unitId, leaseId, kind: 'UNAUTHORIZED_OCCUPANT', openedByStaffId: staffId },
     })
     violationCaseIds.push(stalledCase.id, freshCase.id)
-    const stalledNotice = await prisma.notice.create({
+    await prisma.notice.create({
       data: {
         propertyId,
         leaseId,
@@ -238,7 +239,7 @@ describe('violation cure notice expired, unserved', () => {
         generatedAt: new Date('2026-08-25T12:00:00Z'), // 7 days before NOW, > 5-day rule
       },
     })
-    const freshNotice = await prisma.notice.create({
+    await prisma.notice.create({
       data: {
         propertyId,
         leaseId,
@@ -248,8 +249,6 @@ describe('violation cure notice expired, unserved', () => {
         generatedAt: new Date('2026-08-30T12:00:00Z'), // 2 days before NOW, < 5-day rule
       },
     })
-    noticeIds.push(stalledNotice.id, freshNotice.id)
-
     await run()
 
     expect(

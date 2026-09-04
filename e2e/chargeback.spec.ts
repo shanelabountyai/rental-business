@@ -501,7 +501,9 @@ test.afterAll(async () => {
     where: { charge: { workOrderId: { in: workOrderIds } } },
   })
   await prisma.charge.deleteMany({ where: { workOrderId: { in: workOrderIds } } })
-  await prisma.notice.deleteMany({ where: { propertyId: { in: propertyIds } } })
+  // Notice is append-only by trigger (R-161) - it can't be deleted, so a
+  // lease it points at can't be either (Restrict). Left behind, same as
+  // any other lease a LedgerEntry or TurnoverProject pins (leases.spec.ts).
   await prisma.notificationDelivery.deleteMany({
     where: { notification: { recipientId: { in: tenantIds } } },
   })
@@ -510,10 +512,30 @@ test.afterAll(async () => {
   await prisma.ticket.deleteMany({ where: { id: { in: ticketIds } } })
   await prisma.leaseTenant.deleteMany({ where: { tenantId: { in: tenantIds } } })
   await prisma.leasePayer.deleteMany({ where: { propertyId: { in: propertyIds } } })
-  await prisma.lease.deleteMany({ where: { propertyId: { in: propertyIds } } })
+  const noticedLeaseIds = (
+    await prisma.notice.findMany({
+      where: { propertyId: { in: propertyIds } },
+      select: { leaseId: true },
+    })
+  ).flatMap((n) => (n.leaseId ? [n.leaseId] : []))
+  await prisma.lease.deleteMany({
+    where: { propertyId: { in: propertyIds }, id: { notIn: noticedLeaseIds } },
+  })
   await prisma.staffAssignment.deleteMany({ where: { staffUserId: { in: staffIds } } })
   await prisma.vendor.deleteMany({ where: { id: { in: vendorIds } } })
-  await prisma.unit.deleteMany({ where: { id: { in: unitIds } } })
+  // A notice-pinned lease still points at its unit (Lease.unitId is
+  // Restrict) - exclude those units too, same reasoning as the lease above.
+  const stillLeasedUnitIds = new Set(
+    (
+      await prisma.lease.findMany({
+        where: { unitId: { in: unitIds } },
+        select: { unitId: true },
+      })
+    ).map((l) => l.unitId),
+  )
+  await prisma.unit.deleteMany({
+    where: { id: { in: unitIds.filter((id) => !stillLeasedUnitIds.has(id)) } },
+  })
   // Deactivated, not deleted: these carry audit rows, and AuditLog refuses
   // the cascading update.
   await prisma.staffUser.updateMany({

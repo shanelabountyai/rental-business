@@ -7776,3 +7776,65 @@ transitions and disposition) run locally against a production build —
 CI's full sweep covers it on push.
 
 Commit: a4e302a2dd78e8e2bf3460210b341a64cff9460e
+
+## R-161: `Notice` becomes append-only by trigger
+
+**What it built.** `Notice_append_only` / `Notice_no_truncate` triggers
+(`packages/db/prisma/migrations/20260904000000_r161_notice_append_only`),
+joining `LedgerEntry`/`AuditLog`/`Message`/`Notification`. DELETE is
+refused outright. Unlike those four, `Notice` is not insert-and-never-
+touch — `generateNoticePdf`, `recordNoticeService` and
+`attachNoticeToCase` (`apps/web/lib/notices/actions.ts`,
+`apps/web/lib/evictions/actions.ts`) each already treat one column as
+write-once (NULL → a value, guarded in application code with an early
+return on a second attempt). `notice_guard()` is the database backstop
+for all seven of those columns at once (`documentId`, `serviceMethod`,
+`servedAt`, `servedByStaffId`, `proofDocumentId`, `trackingNumber`,
+`evictionCaseId`): each may move NULL → a value exactly once, and a
+`jsonb` diff minus that column set rejects any other change, the same
+technique `NoticeDelivery`'s guard (R-051) already uses for its one
+`readAt` exception. `reject_mutation()` (the core migration's shared
+function) still handles the outright-immutable case.
+
+**What it decided.** No new D-number — this generalizes an existing
+pattern (`NoticeDelivery`'s write-once `readAt`) rather than choosing
+a new one. The seven-column allowlist is exhaustive on purpose: every
+column `Notice` is ever updated for in production code is now in it,
+and nothing else may move without a migration to extend the trigger.
+
+**What it left behind.** Notice is created from eight different
+modules (showings, abandonment, deposits, inspections, leases,
+work-order scheduling, chargebacks, screening), so the search was for
+every test that both creates a real `Notice` row and hard-deletes
+something `Notice` points at with `onDelete: Restrict` (`Lease`,
+`Applicant`, `ViolationCase`, `EvictionCase`) — INSERT is untouched by
+the trigger, only UPDATE/DELETE. Three files needed fixing:
+`case-stall-job.test.ts` (dropped its per-test `Notice`/`ViolationCase`
+deleteMany — left as debris across tests in the file, same as its
+already-undeleted property/lease/staff/tenant fixtures, since every
+test's ids are freshly randomized and nothing collides on them);
+`chargeback.spec.ts` (dropped `Notice` deleteMany, then excluded
+notice-pinned leases from its `Lease` deleteMany and, one level further
+down the FK chain, excluded still-leased units from its `Unit`
+deleteMany — `Lease.unitId` is Restrict too, and the first fix alone
+left a lease pointing at a unit the cleanup still tried to delete).
+`evictions.spec.ts` and `notices.spec.ts` had already adopted the
+deactivate-only pattern pre-emptively; `leases.spec.ts` doesn't create
+Notices and was untouched. Every other producer's own spec
+(`showings.spec.ts`, `self-showing.spec.ts`, `abandonment.spec.ts`,
+`deposit-disposition.spec.ts`, `inspections.spec.ts`,
+`screening.spec.ts`, `workorders.spec.ts`) either never hard-deletes
+`Lease`/`Applicant` at all or (workorders.spec.ts) never exercises the
+notice-required branch of its scheduling flow — checked file by file,
+not assumed.
+
+**Gate run:** lint ✓ (pre-existing warnings only), typecheck ✓, `npm
+run build` ✓, unit 2,860 passed / 4 skipped (unchanged — no new unit
+tests; this is a database-trigger item, not application logic).
+`db:ci` (fresh Postgres, migrations from scratch, seed, drift) ✓. e2e:
+`notices.spec.ts`, `evictions.spec.ts` and `chargeback.spec.ts` (the
+three specs that mutate or delete around `Notice`) run locally against
+a production build — 28/28 passed after the cleanup fixes above. Full
+e2e sweep not run locally; CI's full sweep covers it on push.
+
+Commit: [pending]

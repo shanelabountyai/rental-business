@@ -5298,6 +5298,14 @@ model EvictionCost {
   @@index([evictionCaseId])
 }
 
+/// APPEND-ONLY BY TRIGGER (R-161), like LedgerEntry/AuditLog/Message/
+/// Notification, with seven write-once exceptions: `documentId`,
+/// `serviceMethod`, `servedAt`, `servedByStaffId`, `proofDocumentId`,
+/// `trackingNumber` and `evictionCaseId` may each move NULL -> a value
+/// exactly once (the PDF archived, the first service recorded, the case
+/// filed) and never again. A correction is a superseding `Notice` linked
+/// to the one it replaces - the served original is never overwritten. See
+/// the migration.
 model Notice {
   id                 String               @id @default(cuid())
   propertyId         String
