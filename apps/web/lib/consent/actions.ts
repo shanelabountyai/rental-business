@@ -6,6 +6,7 @@ import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { audit } from '@/lib/audit/index.ts'
 import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
+import { requireTenant } from '@/lib/portal/guard.ts'
 
 // Recording and withdrawing TCPA consent (COMM-02, R-051b).
 //
@@ -29,7 +30,12 @@ function str(formData: FormData, name: string): string {
 /// hold a lease at. A tenant with no lease at all has no property to scope
 /// the check to, so there is nobody who may edit them - which is the correct
 /// refusal rather than an oversight.
-async function propertyForTenant(tenantId: string) {
+///
+/// Exported: the same derivation authorizes the staff-side notification
+/// mirror in lib/notifications/actions.ts. "Consent" in this file's name is
+/// history, not scope - this helper answers "which property may staff edit
+/// this tenant through", which is the same question for either table.
+export async function propertyForTenant(tenantId: string) {
   const leaseTenant = await prisma.leaseTenant.findFirst({
     where: { tenantId },
     orderBy: { createdAt: 'desc' },
@@ -157,5 +163,56 @@ export async function withdrawConsent(
   })
 
   revalidatePath(`/leases/${leaseId}`)
+  return { notice: 'Consent withdrawn.' }
+}
+
+/**
+ * A tenant withdrawing their OWN consent, from the portal (R-164).
+ *
+ * Same write and the same required-reason rule as `withdrawConsent` above -
+ * a withdrawal with no stated reason is indistinguishable from a mistake
+ * regardless of who presses the button. What differs is authorization: no
+ * `tenant.write` check, because a tenant needs no permission to change their
+ * own record - just proof the consent named is actually theirs, which
+ * `findFirst({ where: { id, tenantId } })` establishes by construction rather
+ * than by a comparison that could be gotten backwards.
+ */
+export async function withdrawOwnConsent(
+  _previous: ConsentFormState,
+  formData: FormData,
+): Promise<ConsentFormState> {
+  const tenant = await requireTenant()
+  const consentId = str(formData, 'consentId')
+  if (!consentId) return { error: 'That consent record could not be found.' }
+
+  const consent = await prisma.tenantConsent.findFirst({
+    where: { id: consentId, tenantId: tenant.id },
+    select: { id: true, channel: true, basis: true, revokedAt: true },
+  })
+  if (!consent) return { error: 'That consent record could not be found.' }
+  if (consent.revokedAt) return { error: 'That consent has already been withdrawn.' }
+
+  const reason = str(formData, 'revokeReason')
+  if (!reason) return { error: 'Say why the consent is being withdrawn.' }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.tenantConsent.update({
+      where: { id: consentId },
+      data: { revokedAt: new Date(), revokeReason: reason },
+    })
+    await audit(
+      {
+        action: 'consent.withdrawn',
+        entityType: 'Tenant',
+        entityId: tenant.id,
+        propertyId: null,
+        reason,
+        after: { consentId, channel: consent.channel, basis: consent.basis },
+      },
+      tx,
+    )
+  })
+
+  revalidatePath('/portal/account')
   return { notice: 'Consent withdrawn.' }
 }

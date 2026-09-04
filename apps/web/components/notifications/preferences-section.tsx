@@ -5,7 +5,7 @@ import {
   type NotificationChannel,
 } from '@rental/core/notifications'
 import { PreferenceToggle } from '@/components/notifications/preference-toggle.tsx'
-import { setNotificationPreference } from '@/lib/notifications/actions.ts'
+import type { FormState } from '@/lib/notifications/actions.ts'
 import type { PreferenceRow } from '@/lib/notifications/queries.ts'
 
 // NOTIF-02: "Per-category channel preferences per user; legally-critical
@@ -35,8 +35,26 @@ const CHANNEL_LABELS: Record<NotificationChannel, string> = {
 
 export function NotificationPreferencesSection({
   preferences,
+  action,
+  heading = 'Notifications',
+  headingId = 'notifications',
+  idPrefix = '',
 }: {
   preferences: PreferenceRow[]
+  /// Which recipient this writes to - three different derivations share this
+  /// one screen (own-staff, own-tenant, staff-on-behalf-of-tenant), see
+  /// lib/notifications/actions.ts.
+  action: (state: FormState, formData: FormData) => Promise<FormState>
+  /// All three default to the own-account case. Override together when this
+  /// section is rendered more than once on one page (the staff "counter"
+  /// mirror, one per tenant on a lease) - two sections both titled
+  /// "Notifications" collide under `getByRole('heading', { name })` (this
+  /// page's own header comment already warns about that collision), and two
+  /// instances' toggles would otherwise share the same `id` (see
+  /// PreferenceToggle's own comment).
+  heading?: string
+  headingId?: string
+  idPrefix?: string
 }) {
   // Keyed by the UNION, not by `string`. `PreferenceRow.category` is already
   // typed; a `Map<string, …>` widened it back and was what made the missing
@@ -49,10 +67,10 @@ export function NotificationPreferencesSection({
   }
 
   return (
-    <section aria-labelledby="notifications" className="flex flex-col gap-4">
+    <section aria-labelledby={headingId} className="flex flex-col gap-4">
       <div className="flex flex-col gap-1">
-        <h2 id="notifications" className="text-lg font-semibold">
-          Notifications
+        <h2 id={headingId} className="text-lg font-semibold">
+          {heading}
         </h2>
         <p className="text-muted-foreground text-sm">
           Changes save as you make them. Quiet hours (9pm–8am at the property)
@@ -83,11 +101,12 @@ export function NotificationPreferencesSection({
                     return (
                       <PreferenceToggle
                         key={channel}
+                        idPrefix={idPrefix}
                         category={category}
                         channel={channel}
                         label={CHANNEL_LABELS[channel]}
                         enabled={row.enabled}
-                        action={setNotificationPreference}
+                        action={action}
                       />
                     )
                   })}

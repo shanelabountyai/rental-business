@@ -1,11 +1,19 @@
 'use server'
 
 import { billingCycleAnchor } from '@rental/core/billing'
-import { debitDayDecision, debitDayRefusalMessage } from '@rental/core/payments'
+import {
+  SWITCH_REFUSALS,
+  debitDayDecision,
+  debitDayRefusalMessage,
+  switchDecision,
+} from '@rental/core/payments'
+import type { CollectionMethod } from '@rental/core/payments'
 import { getBillingProvider } from '@/lib/billing/provider.ts'
 import { createPaymentMethodSetup } from '@/lib/billing/provision.ts'
 import { rulesFor } from '@/lib/jurisdiction/queries.ts'
 import { prisma } from '@rental/db'
+import { revalidatePath } from 'next/cache'
+import { audit } from '@/lib/audit/index.ts'
 import { requireTenantWithScope } from '@/lib/portal/guard.ts'
 
 // Starting autopay enrolment (PAY-02, R-039a).
@@ -139,4 +147,101 @@ export async function setDebitDay(
   }
 
   return { saved: true }
+}
+
+/**
+ * Turning autopay off, from the portal (R-164, D-29).
+ *
+ * The tenant's own switch to `send_invoice` - `switchCollectionMethod` in
+ * lib/payments/collection.ts is the same decision and the same push-first
+ * order, gated for a staff member acting on any payer. This is that logic
+ * for a tenant acting on their own, one payer they cannot choose (found the
+ * same way `setDebitDay` finds it), and no free-text reason - "I turned my
+ * own autopay off" needs no explanation the way a staff override does.
+ *
+ * D-36's refusal (Stripe will not invoice a customer with no email) is
+ * unchanged and reached through the same `switchDecision` - a tenant with no
+ * email on file gets the same sentence a staff member would.
+ */
+export async function turnOffAutopay(): Promise<{ error?: string; notice?: string }> {
+  const { scope } = await requireTenantWithScope()
+
+  const payer = await prisma.leasePayer.findFirst({
+    where: { leaseId: { in: [...scope.leaseIds] }, tenantId: scope.tenantId, active: true },
+    select: {
+      id: true,
+      leaseId: true,
+      propertyId: true,
+      collectionMethod: true,
+      collectionPaused: true,
+      stripeSubscriptionId: true,
+      tenant: { select: { email: true } },
+    },
+  })
+  if (!payer) return { error: 'There is no account set up to pay against yet.' }
+
+  const provider = getBillingProvider()
+  let openInvoiceAmountCents: number | null = null
+  if (payer.stripeSubscriptionId) {
+    try {
+      openInvoiceAmountCents = await provider.getOpenInvoiceAmountCents({
+        stripeSubscriptionId: payer.stripeSubscriptionId,
+      })
+    } catch (error) {
+      // Left null, which the decision refuses on - a provider we could not
+      // reach is not evidence that nothing is owed.
+      console.error(`[autopay] could not read open invoices for ${payer.id}`, error)
+    }
+  }
+
+  const inFlight = await prisma.payment.count({
+    where: { leasePayerId: payer.id, status: 'PENDING' },
+  })
+
+  const decision = switchDecision({
+    current: payer.collectionMethod as CollectionMethod,
+    target: 'send_invoice',
+    hasSubscription: payer.stripeSubscriptionId != null,
+    collectionPaused: payer.collectionPaused,
+    payerHasEmail: Boolean(payer.tenant?.email?.trim()),
+    paymentsInFlight: inFlight,
+    openInvoiceAmountCents,
+  })
+
+  if (decision.alreadySet) return { notice: 'Automatic payments are already off.' }
+  if (!decision.allowed) return { error: SWITCH_REFUSALS[decision.refusal!] }
+
+  try {
+    await provider.setCollectionMethod({
+      stripeSubscriptionId: payer.stripeSubscriptionId!,
+      collectionMethod: 'send_invoice',
+    })
+  } catch (error) {
+    console.error(`[autopay] could not turn off autopay for ${payer.id}`, error)
+    return {
+      error: 'The billing provider could not be reached. Nothing has changed — try again shortly.',
+    }
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.leasePayer.update({
+      where: { id: payer.id },
+      data: { collectionMethod: 'send_invoice' },
+    })
+    await audit(
+      {
+        action: 'payment.collection_method_changed',
+        entityType: 'LeasePayer',
+        entityId: payer.id,
+        propertyId: payer.propertyId,
+        before: { collectionMethod: payer.collectionMethod },
+        after: { collectionMethod: 'send_invoice', provider: provider.name },
+        reason: 'Turned off from the tenant portal',
+      },
+      tx,
+    )
+  })
+
+  revalidatePath('/portal/pay')
+  return { notice: 'Automatic payments are off. You can pay what you owe any time from this page.' }
 }

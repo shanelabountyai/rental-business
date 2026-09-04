@@ -12,6 +12,7 @@ import {
 } from '@/lib/auth/actions.ts'
 import { requireStaff } from '@/lib/auth/guard.ts'
 import { setOnCall } from '@/lib/oncall/actions.ts'
+import { setNotificationPreference } from '@/lib/notifications/actions.ts'
 import { getPreferences } from '@/lib/notifications/queries.ts'
 import { CalendarFeedPanel } from '@/components/account/calendar-feed-panel.tsx'
 import { regenerateCalendarFeed } from '@/lib/calendar/actions.ts'
@@ -174,7 +175,7 @@ export default async function AccountPage({
         />
       </section>
 
-      <NotificationPreferencesSection preferences={preferences} />
+      <NotificationPreferencesSection preferences={preferences} action={setNotificationPreference} />
 
       <section aria-labelledby="sessions" className="flex flex-col gap-3">
         <h2 id="sessions" className="text-lg font-semibold">

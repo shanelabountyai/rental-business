@@ -25,6 +25,9 @@ import { AccommodationsPanel } from '@/components/accommodations/accommodations-
 import { ConsentPanel } from '@/components/consent/consent-panel.tsx'
 import { recordConsent, withdrawConsent } from '@/lib/consent/actions.ts'
 import { consentsForLease } from '@/lib/consent/queries.ts'
+import { NotificationPreferencesSection } from '@/components/notifications/preferences-section.tsx'
+import { setTenantNotificationPreference } from '@/lib/notifications/actions.ts'
+import { getPreferences } from '@/lib/notifications/queries.ts'
 import { HoldBanner } from '@/components/holds/hold-banner.tsx'
 import { HoldsPanel } from '@/components/holds/holds-panel.tsx'
 import { ScraLookupsPanel, ScraTerminationPanel } from '@/components/scra/scra-panels.tsx'
@@ -270,6 +273,7 @@ export default async function LeaseDetailPage({
     applicantsForChange,
     confidentialCases,
     consents,
+    tenantPreferences,
   ] = await Promise.all([
     outstandingIntakeGaps(lease),
     canWrite ? selectableTenants() : Promise.resolve([]),
@@ -292,6 +296,18 @@ export default async function LeaseDetailPage({
       ? confidentialCaseCount(lease.id)
       : Promise.resolve({ open: 0, total: 0 }),
     consentsForLease(lease.id),
+    // Gated the same as ConsentPanel just below - same "who may edit this
+    // tenant's contact settings" question, same `tenant.write` answer
+    // (R-164's staff mirror for the counter).
+    canManageConsent
+      ? Promise.all(
+          lease.leaseTenants.map(async (lt) => ({
+            tenantId: lt.tenant.id,
+            name: `${lt.tenant.firstName} ${lt.tenant.lastName}`,
+            preferences: await getPreferences('TENANT', lt.tenant.id),
+          })),
+        )
+      : Promise.resolve([]),
   ])
   // R-069: nothing to clear on a zero-deposit lease (NONE/SURETY_BOND hold
   // zero by the database CHECK constraint `chargeDeposit()`'s own comment
@@ -601,6 +617,21 @@ export default async function LeaseDetailPage({
         recordAction={recordConsent}
         withdrawAction={withdrawConsent}
       />
+
+      {/* R-164: the counter's mirror of a tenant's own portal preferences -
+          somebody calls in and asks for a change, staff make it here. One
+          section per tenant on the lease, each with its own heading and its
+          own accessible name (the collision this page has hit repeatedly). */}
+      {tenantPreferences.map((row) => (
+        <NotificationPreferencesSection
+          key={row.tenantId}
+          preferences={row.preferences}
+          action={setTenantNotificationPreference.bind(null, row.tenantId)}
+          heading={`Notifications — ${row.name}`}
+          headingId={`notifications-${row.tenantId}`}
+          idPrefix={`${row.tenantId}-`}
+        />
+      ))}
 
       {/* R-085. Below the holds, because a positive search PLACES one — the
           two read top to bottom in the order they actually happen. */}

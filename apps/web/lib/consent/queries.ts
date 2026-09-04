@@ -9,6 +9,27 @@ import { prisma } from '@rental/db'
 // they were on a different lease - which is what the send path reads too, and
 // the panel would be lying if it showed a narrower set.
 
+/// One tenant's own consent trail, for the portal (R-164). Scoped by
+/// `tenantId` directly rather than through a lease - see this file's header:
+/// `TenantConsent` hangs off the tenant and outlives any one tenancy, so a
+/// tenant reading their own record should see all of it, the same as
+/// `consentsForLease` shows staff for anyone on the lease.
+export async function consentsForTenant(tenantId: string) {
+  return prisma.tenantConsent.findMany({
+    where: { tenantId },
+    orderBy: { recordedAt: 'desc' },
+    select: {
+      id: true,
+      channel: true,
+      basis: true,
+      disclosureText: true,
+      recordedAt: true,
+      revokedAt: true,
+      revokeReason: true,
+    },
+  })
+}
+
 export async function consentsForLease(leaseId: string) {
   const tenantIds = (
     await prisma.leaseTenant.findMany({ where: { leaseId }, select: { tenantId: true } })

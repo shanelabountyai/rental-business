@@ -35,15 +35,22 @@ export function PreferenceToggle({
   label,
   enabled,
   action,
+  idPrefix = '',
 }: {
   category: string
   channel: string
   label: string
   enabled: boolean
   action: (state: FormState, formData: FormData) => Promise<FormState>
+  /// Distinguishes one recipient's toggles from another's when this section
+  /// is rendered more than once on a page (the staff "counter" mirror, one
+  /// per tenant on a lease) - `id`s are otherwise identical across instances,
+  /// which is invalid HTML and breaks every `#pref-…` locator, not just this
+  /// test suite's.
+  idPrefix?: string
 }) {
   const [state, formAction, pending] = useActionState<FormState, FormData>(action, {})
-  const id = `pref-${category}-${channel}`
+  const id = `pref-${idPrefix}${category}-${channel}`
 
   return (
     <form action={formAction} className="contents">

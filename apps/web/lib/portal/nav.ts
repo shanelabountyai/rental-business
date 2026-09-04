@@ -1,6 +1,6 @@
 // The tenant portal's navigation, as data (R-018).
 //
-// Five items and no permissions: a tenant has one role and sees the same
+// Six items and no permissions: a tenant has one role and sees the same
 // portal as every other tenant. Unlike the staff nav, nothing here is
 // filtered - the scoping happens inside each page's queries, on the tenant's
 // own records.
@@ -35,4 +35,6 @@ export const PORTAL_NAV_ITEMS: readonly PortalNavItem[] = [
   // how it goes unread. D-10's lexicon - "notices", never "service".
   { href: '/portal/notices', label: 'Notices', description: 'Letters about your home' },
   { href: '/portal/messages', label: 'Messages', description: 'Messages with your landlord' },
+  // Last: settings, not something opened often (R-164).
+  { href: '/portal/account', label: 'Account', description: 'How we contact you and your payment settings' },
 ]

@@ -167,6 +167,7 @@ export function AutopayPanel({
   latestSafeDebitDay,
   start,
   saveDebitDay,
+  turnOff,
 }: {
   publishableKey: string | null
   /// True when a payment method is already on file and the payer is on
@@ -180,86 +181,129 @@ export function AutopayPanel({
     state: { error?: string; saved?: boolean },
     formData: FormData,
   ) => Promise<{ error?: string; saved?: boolean }>
+  turnOff: () => Promise<{ error?: string; notice?: string }>
 }) {
   const [clientSecret, setClientSecret] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
   const [busy, setBusy] = useState(false)
 
+  // Turning autopay OFF (R-164). Lifted to this level, and rendered outside
+  // the branch below, rather than kept local to a nested button.
+  //
+  // TURNING IT OFF IS WHAT CHANGES `alreadyOn`: a successful call ends in
+  // `revalidatePath`, and Next refreshes this same component with fresh
+  // server props the instant the promise resolves - so `isOn` below flips to
+  // false in the SAME render pass that reports success. A confirmation
+  // rendered inside the "on" branch would be unmounted by its own success -
+  // R-044's trap, from the one direction this panel had not hit yet.
+  const [turnOffBusy, setTurnOffBusy] = useState(false)
+  const [turnOffError, setTurnOffError] = useState<string | null>(null)
+  const [turnOffNotice, setTurnOffNotice] = useState<string | null>(null)
+
   // Nothing to offer without a publishable key. Rendering a button that
   // cannot work is worse than rendering nothing - the same call the vendor
   // help line makes when its number is unset (R-098).
   if (!publishableKey) return null
 
-  if (alreadyOn || saved) {
-    return (
-      <section aria-labelledby="autopay" className="flex flex-col gap-2 rounded-lg border p-4">
-        <h2 id="autopay" className="text-base font-medium">
-          Automatic payments are on
-        </h2>
-        {/* `role="status"` only announces a MUTATION, so this is only a live
-            region when it has just changed - S2's rule, applied rather than
-            copied. Rendered plain when the page loads with autopay already
-            on, because nothing changed and there is nothing to announce. */}
-        <p className="text-base" {...(saved ? { role: 'status' as const } : {})}>
-          Rent will be collected automatically. You will still get a message
-          two days before every payment, and you can turn this off by
-          contacting the office.
-        </p>
-        {/* Only once autopay is actually on. Asking somebody to pick a
-            collection day before there is anything to collect with is a
-            setting that does nothing. */}
-        <DebitDayForm
-          debitDay={debitDay}
-          rentDueDay={rentDueDay}
-          latestSafeDay={latestSafeDebitDay}
-          save={saveDebitDay}
-        />
-      </section>
-    )
-  }
+  const isOn = alreadyOn || saved
 
   return (
     <section aria-labelledby="autopay" className="flex flex-col gap-3 rounded-lg border p-4">
       <h2 id="autopay" className="text-base font-medium">
-        Turn on automatic payments
+        {isOn ? 'Automatic payments are on' : 'Turn on automatic payments'}
       </h2>
-      <p className="text-base">
-        Rent gets paid on time without you having to remember. Your card or
-        bank details are held by our payment provider, never by us.
-      </p>
 
-      <LiveRegion assertive>
-        {error && <p className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-base text-red-900">{error}</p>}
-      </LiveRegion>
-
-      {clientSecret ? (
-        <Elements
-          stripe={stripe(publishableKey)}
-          options={{ clientSecret, appearance: { theme: 'stripe' } }}
-        >
-          <ConfirmForm onDone={() => setSaved(true)} />
-        </Elements>
+      {isOn ? (
+        <>
+          {/* `role="status"` only announces a MUTATION, so this is only a
+              live region when it has just changed - S2's rule, applied
+              rather than copied. Rendered plain when the page loads with
+              autopay already on, because nothing changed and there is
+              nothing to announce. */}
+          <p className="text-base" {...(saved ? { role: 'status' as const } : {})}>
+            Rent will be collected automatically. You will still get a message
+            two days before every payment.
+          </p>
+          {/* Only once autopay is actually on. Asking somebody to pick a
+              collection day before there is anything to collect with is a
+              setting that does nothing. */}
+          <DebitDayForm
+            debitDay={debitDay}
+            rentDueDay={rentDueDay}
+            latestSafeDay={latestSafeDebitDay}
+            save={saveDebitDay}
+          />
+          <div className="flex flex-col gap-2 border-t pt-3">
+            <button
+              type="button"
+              disabled={turnOffBusy}
+              onClick={async () => {
+                setTurnOffBusy(true)
+                setTurnOffError(null)
+                const result = await turnOff()
+                setTurnOffBusy(false)
+                if (result.error) {
+                  setTurnOffError(result.error)
+                  return
+                }
+                setTurnOffNotice(result.notice ?? 'Automatic payments are off.')
+              }}
+              className="border-input hover:bg-secondary focus-visible:ring-ring flex min-h-11 w-fit items-center rounded-md border px-4 py-2 text-base font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:opacity-60"
+            >
+              {turnOffBusy ? 'Turning off…' : 'Turn off automatic payments'}
+            </button>
+          </div>
+        </>
       ) : (
-        <button
-          type="button"
-          disabled={busy}
-          onClick={async () => {
-            setBusy(true)
-            setError(null)
-            const result = await start()
-            setBusy(false)
-            if (result.error || !result.clientSecret) {
-              setError(result.error ?? 'That did not work. Please try again.')
-              return
-            }
-            setClientSecret(result.clientSecret)
-          }}
-          className="border-input hover:bg-secondary focus-visible:ring-ring flex min-h-11 w-full items-center justify-center rounded-md border px-6 py-2 text-base font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:opacity-60 sm:w-auto"
-        >
-          {busy ? 'Getting ready…' : 'Set up automatic payments'}
-        </button>
+        <>
+          <p className="text-base">
+            Rent gets paid on time without you having to remember. Your card or
+            bank details are held by our payment provider, never by us.
+          </p>
+
+          <LiveRegion assertive>
+            {error && <p className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-base text-red-900">{error}</p>}
+          </LiveRegion>
+
+          {clientSecret ? (
+            <Elements
+              stripe={stripe(publishableKey)}
+              options={{ clientSecret, appearance: { theme: 'stripe' } }}
+            >
+              <ConfirmForm onDone={() => setSaved(true)} />
+            </Elements>
+          ) : (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={async () => {
+                setBusy(true)
+                setError(null)
+                const result = await start()
+                setBusy(false)
+                if (result.error || !result.clientSecret) {
+                  setError(result.error ?? 'That did not work. Please try again.')
+                  return
+                }
+                setClientSecret(result.clientSecret)
+              }}
+              className="border-input hover:bg-secondary focus-visible:ring-ring flex min-h-11 w-full items-center justify-center rounded-md border px-6 py-2 text-base font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:opacity-60 sm:w-auto"
+            >
+              {busy ? 'Getting ready…' : 'Set up automatic payments'}
+            </button>
+          )}
+        </>
       )}
+
+      {/* ALWAYS MOUNTED, regardless of which branch above renders - see the
+          state comment above. */}
+      <LiveRegion assertive>
+        {turnOffError && <p className="text-base text-red-700">{turnOffError}</p>}
+      </LiveRegion>
+      <LiveRegion>
+        {turnOffNotice && <p className="text-base">{turnOffNotice}</p>}
+      </LiveRegion>
     </section>
   )
 }

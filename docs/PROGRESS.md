@@ -7955,3 +7955,62 @@ re-run locally — CI is green through R-162 (`gh run list`) and will run the
 full sweep on push.
 
 Commit: 0b18d4946ef4c0c152a38538ded1e25013d621bf
+
+## R-164: `/portal/account` — the tenant gets a say
+
+**What it built.** A tenant-facing settings page at `/portal/account`
+bundling three things that had a staff caller and never a tenant one:
+notification preferences (NOTIF-02), TCPA consent (COMM-02), and autopay
+collection method (D-29). `setNotificationPreference` in
+`apps/web/lib/notifications/actions.ts` was split into a shared
+`writePreference` writer plus three thin derivations — the staff member's own
+(unchanged), a tenant's own (`setOwnNotificationPreference`, identity from
+`requireTenant()`, never the form), and a staff-on-behalf-of-tenant mirror
+(`setTenantNotificationPreference`, tenant id bound server-side at the page,
+authorized the same way `propertyForTenant` already authorizes consent edits
+— that helper is now exported and reused rather than re-derived).
+`NotificationPreferencesSection` and `PreferenceToggle` gained `action`/
+`heading`/`headingId`/`idPrefix` props so the same component serves all three
+call sites without three copies; the staff mirror renders one section per
+tenant on `/leases/[id]`, next to the existing `ConsentPanel`. A tenant's own
+consent trail gets a read-and-withdraw-only view (`TenantConsentSection`,
+`withdrawOwnConsent`) — recording stays a staff-only evidentiary act, per
+`ConsentPanel`'s own header. Turning autopay off is new: `turnOffAutopay`
+reuses `switchDecision` exactly as staff's `switchCollectionMethod` does,
+scoped to the signed-in tenant's own `LeasePayer` rather than any payer named
+in a form. Digest opt-in needed no new code — `digest_daily` was already a
+category `getPreferences` walks.
+
+**What it decided.** Autopay's on/off control stays a single instance on
+`/portal/pay`, not duplicated onto `/portal/account` — splitting one control
+across two pages risks the two disagreeing about which is current, and
+`/portal/account` links to it instead. The staff mirror covers notification
+preferences only: consent and collection-method already had staff mirrors
+(`ConsentPanel`, `BillingPanel` on `/leases/[id]`) before this item.
+
+**What it left behind, and the bug this item's own e2e sweep found before
+merge.** `turnOffAutopay`'s success return triggers `revalidatePath`, and
+Next refreshes `AutopayPanel` with fresh server props — `alreadyOn` — in the
+same render pass that reports success. The confirmation was originally
+rendered inside the "autopay is on" branch, which the successful turn-off
+itself flips to false, unmounting the confirmation with it — R-044's trap
+from a direction this panel had not hit before, since turning autopay *on*
+never triggers a server-driven prop refresh the same way. Fixed by lifting
+the turn-off confirmation's state to the top of `AutopayPanel` and rendering
+its live regions unconditionally, outside the on/off branch. Caught only
+because the e2e spec asserted the confirmation text rather than just the
+database row. Scope left for later: the staff-side mirror shows one section
+per tenant on a lease with no collapsing for a lease with many tenants, which
+is fine at today's typical one-or-two-tenant lease but would want a summary
+view if that changed.
+
+**Gate run:** lint ✓ (pre-existing warnings only), typecheck ✓, unit 2,869
+passed / 4 skipped (no core logic added — `switchDecision`, `consentVerdict`,
+`isLockedCategory` are unchanged and already covered), `npm run build` ✓
+(touches `'use server'` modules and new Client Components, so this was not
+optional). New `e2e/portal-account.spec.ts` (16 tests) plus the touched
+existing specs (`notifications`, `consent`, `collection-method`, `pay`,
+`leases` — 104 tests) run clean against both the dev server and a production
+build. CI green through R-163 (`gh run list`).
+
+Commit: <recorded in next commit>

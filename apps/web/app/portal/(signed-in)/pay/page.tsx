@@ -5,7 +5,7 @@ import { friendlyBusinessDate, utcToBusinessDate } from '@rental/core/scheduling
 import { AutopayPanel } from '@/components/payments/autopay-panel.tsx'
 import { PayForm } from '@/components/payments/pay-form.tsx'
 import { startPayment } from '@/lib/payments/actions.ts'
-import { setDebitDay, startAutopaySetup } from '@/lib/payments/autopay-actions.ts'
+import { setDebitDay, startAutopaySetup, turnOffAutopay } from '@/lib/payments/autopay-actions.ts'
 import { paymentView } from '@/lib/payments/queries.ts'
 import { requireTenantWithScope } from '@/lib/portal/guard.ts'
 
@@ -82,6 +82,7 @@ export default async function PayPage() {
         latestSafeDebitDay={view.latestSafeDebitDay}
         start={startAutopaySetup}
         saveDebitDay={setDebitDay}
+        turnOff={turnOffAutopay}
       />
       )}
 
