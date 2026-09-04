@@ -7905,4 +7905,4 @@ citation/reviewer gate and the clone flow) and `e2e/reader-screens.spec.ts`
 the production build. Full sweep is CI's; `gh run list` confirms the
 pipeline is green through the prior push.
 
-Commit: (recorded in the follow-up commit)
+Commit: acf379655088c00375c2d3768be6b78af36a2760
