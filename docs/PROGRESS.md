@@ -8199,4 +8199,4 @@ At commit, inside the same transaction that creates the lease, `runImport` write
 
 **Gate run:** lint ✓ (same 16 pre-existing warnings, none in touched files), typecheck ✓, `npm run build` ✓. No schema change (D-170 reuses `ChargeType.OTHER`), so no migration and `db:ci` is not applicable this item. Unit 2,915 passed / 4 skipped (6 new `planImport` opening-balance cases in `plan.test.ts`). `e2e/import.spec.ts` against a production build: 11 of 12 passed (both projects) — the one failure is D-171, confirmed pre-existing on `main` before this item touched anything, not a regression. CI green through R-168 (`gh run list`).
 
-Commit: (pending)
+Commit: c765e9f0f5b9b65a4672be25d7d4034e98f34d97
