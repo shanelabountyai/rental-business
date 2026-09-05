@@ -8185,4 +8185,4 @@ New `Property.historyStartsOn` (nullable `@db.Date`, migration `20260904160000_r
 
 **Gate run:** lint ✓ (16 pre-existing warnings only, none in touched files), typecheck ✓, `db:ci` ✓ (migrations from scratch + seed + drift, throwaway `rental_ci`), unit 2,909 passed / 4 skipped (17 new: `parseCsv` × 8, `planImport` × 7, `validateProperty`'s `historyStartsOn` covered by existing property-validation tests, `route-guards.test.ts` extended for the two new resource-less guards). `npm run build` ✓. New `e2e/import.spec.ts` (5 tests: preview-then-commit with DB assertions on `origin`/`depositTransferStatus`/`isPrimary`, a per-row error hiding the commit button, a property-scoped manager redirected to `/no-access`, an axe scan, and the bulk document upload matching by address) run clean against a production build, no retries. CI green through R-167 (`gh run list`).
 
-Commit: (pending)
+Commit: 8fa10a1babab150c8871c088d596e8b216e9c166
