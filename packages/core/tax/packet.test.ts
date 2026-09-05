@@ -46,6 +46,7 @@ function deposit(overrides: Partial<DepositFact> = {}): DepositFact {
     refundedCents: 0,
     receivedAt: new Date('2024-06-01T12:00:00Z'),
     dispositionSentAt: null,
+    refundPaidOn: null,
     ...overrides,
   }
 }
@@ -109,9 +110,14 @@ describe('deposit liability at a date', () => {
     expect(result.byProperty[0]?.depositCount).toBe(1)
   })
 
-  it('subtracts applied and refunded once the disposition has been sent', () => {
+  it('subtracts what the disposition APPLIED, and keeps owing the refund until it is paid', () => {
     // heldCents is GROSS and never decremented - rent-roll.ts has always used
     // this arithmetic, and the schema comment that said otherwise was wrong.
+    //
+    // R-170 CHANGED THIS ASSERTION AND THE OLD ONE WAS THE BUG. It expected
+    // 0 the moment the letter went out, which reported a liability the owner
+    // had genuinely discharged for the applied half and had NOT discharged
+    // for the $1,000 it had just promised back in writing.
     const result = depositLiabilityAt(
       [
         deposit({
@@ -123,7 +129,41 @@ describe('deposit liability at a date', () => {
       yearEnd,
       NAMES,
     )
+    expect(result.totalCents).toBe(100_000)
+  })
+
+  it('is finally zero once the refund is actually paid', () => {
+    const result = depositLiabilityAt(
+      [
+        deposit({
+          appliedCents: 45_000,
+          refundedCents: 100_000,
+          dispositionSentAt: new Date('2026-11-01T12:00:00Z'),
+          refundPaidOn: new Date('2026-11-20T12:00:00Z'),
+        }),
+      ],
+      yearEnd,
+      NAMES,
+    )
     expect(result.totalCents).toBe(0)
+  })
+
+  it('still owes a refund cut after the year end', () => {
+    // The sibling of the disposition-date case below: the cheque exists, but
+    // it did not leave the bank until March, so it was owed on 31 December.
+    const result = depositLiabilityAt(
+      [
+        deposit({
+          appliedCents: 45_000,
+          refundedCents: 100_000,
+          dispositionSentAt: new Date('2026-11-01T12:00:00Z'),
+          refundPaidOn: new Date('2027-03-04T12:00:00Z'),
+        }),
+      ],
+      yearEnd,
+      NAMES,
+    )
+    expect(result.totalCents).toBe(100_000)
   })
 
   it('still owes the whole deposit when the disposition came AFTER the year end', () => {

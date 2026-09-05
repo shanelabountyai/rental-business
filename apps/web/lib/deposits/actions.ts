@@ -1,13 +1,24 @@
 'use server'
 
 import { createHash } from 'node:crypto'
-import { balanceCents, computeDisposition, dispositionLetterText } from '@rental/core/ledger'
-import { prisma } from '@rental/db'
+import {
+  balanceCents,
+  computeDisposition,
+  DEPOSIT_REFUND_INSTRUMENTS,
+  type DepositRefundInstrument,
+  dispositionLetterText,
+  validateDepositRefund,
+} from '@rental/core/ledger'
+import { formatCents } from '@rental/core/money'
+import { businessDate, businessDateToUtc, friendlyBusinessDate } from '@rental/core/scheduling'
+import { prisma, type PaymentChannel } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { audit } from '@/lib/audit/index.ts'
 import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
 import { generateStorageKey, storage } from '@/lib/storage/index.ts'
+import { completeTaskWork } from '@/lib/tasks/complete.ts'
+import { createTask } from '@/lib/tasks/create.ts'
 
 // Writes for deposit disposition (INSP-03, R-071).
 //
@@ -283,9 +294,173 @@ export async function finalizeDisposition(
       },
       tx,
     )
+    // R-170: the letter promises money back; SOMEBODY HAS TO CUT THE CHEQUE.
+    // Raised here, in the same transaction as the letter, because a letter
+    // without the obligation behind it is exactly the state this item
+    // exists to remove - and it goes in the one queue (D-9), not a second
+    // "refunds to pay" table.
+    //
+    // LAST in the transaction on purpose. `createTask` swallows a duplicate
+    // by catching P2002, which leaves this transaction aborted at the
+    // Postgres level - so nothing may follow it. It cannot actually fire
+    // here (the `dispositionSentAt` guard above means a deposit is finalized
+    // once), and if it somehow did, the whole finalization failing is the
+    // safe direction: no letter, nothing to reconcile.
+    if (totals.refundedCents > 0) {
+      await createTask(tx, {
+        propertyId: deposit.propertyId,
+        type: 'deposit_refund_due',
+        subjectType: 'Deposit',
+        subjectId: deposit.id,
+        businessDate: businessDate(new Date(), deposit.property.timezone),
+        // A statutory deadline the owner has already passed the decision
+        // point on. Late here is treble damages in Texas, not a late fee.
+        priority: 'URGENT',
+        title: `Pay ${tenantName} the ${formatCents(totals.refundedCents)} deposit refund`,
+      })
+    }
     return created
   })
 
   revalidatePath(`/leases/${deposit.leaseId}/deposit`)
   redirect(`/notices/${notice.id}`)
+}
+
+/**
+ * The refund actually leaving (R-170).
+ *
+ * `finalizeDisposition` decides the number and puts it in writing; this is
+ * the only thing that makes it paid. Until it runs, `depositLiabilityCents`
+ * keeps the money on the books as owed, which is what the rent roll, the
+ * handoff file and the year-end packet all read.
+ *
+ * `ledger.adjust`, the same privileged permission the rest of this file
+ * sits behind: there is no processor on the other side to disagree that the
+ * cheque was written, so a refund somebody types in is exactly as forgeable
+ * as an offline payment.
+ *
+ * WRITE-ONCE, deliberately, and for the same reason a deduction cannot be
+ * edited after finalization: this is the evidence the owner produces when a
+ * tenant says the deposit was never returned. A correction is a matter for
+ * the audit trail and a second, real disbursement - not an edit that leaves
+ * no trace of what it replaced.
+ */
+export async function recordDepositRefund(
+  depositId: string,
+  _previous: DepositFormState,
+  formData: FormData,
+): Promise<DepositFormState> {
+  const deposit = await prisma.deposit.findUniqueOrThrow({
+    where: { id: depositId },
+    select: {
+      id: true,
+      propertyId: true,
+      leaseId: true,
+      refundedCents: true,
+      dispositionSentAt: true,
+      refundPaidOn: true,
+      property: { select: { id: true, legalEntityId: true, timezone: true } },
+    },
+  })
+  const actor = await requirePermission('ledger.adjust', propertyResource(deposit.property))
+
+  if (!deposit.dispositionSentAt) {
+    return { error: 'Finalize the disposition before recording a refund against it.' }
+  }
+  if (deposit.refundPaidOn) {
+    return { error: 'This refund has already been recorded.' }
+  }
+  if (deposit.refundedCents <= 0) {
+    return { error: 'This disposition refunds nothing, so there is nothing to pay.' }
+  }
+
+  const method = str(formData, 'method')
+  const paidOn = str(formData, 'paidOn')
+  const reference = str(formData, 'reference') || null
+  const today = businessDate(new Date(), deposit.property.timezone)
+  const violations = validateDepositRefund({ method, paidOn, reference }, today)
+  if (violations.length > 0) {
+    return {
+      error: 'Fix the highlighted fields.',
+      fieldErrors: Object.fromEntries(violations.map((v) => [v.field, v.message])),
+    }
+  }
+
+  await prisma.$transaction(async (tx) => {
+    let refundDocumentId: string | null = null
+    const file = formData.get('file')
+    if (file instanceof File && file.size > 0) {
+      const buffer = Buffer.from(await file.arrayBuffer())
+      const contentType = file.type || 'application/octet-stream'
+      const sha256 = createHash('sha256').update(buffer).digest('hex')
+      const storageKey = generateStorageKey(deposit.propertyId, file.name)
+      await storage.put(storageKey, buffer, contentType)
+      const document = await tx.document.create({
+        data: {
+          propertyId: deposit.propertyId,
+          leaseId: deposit.leaseId,
+          type: 'RECEIPT',
+          fileName: file.name,
+          contentType,
+          sizeBytes: file.size,
+          storageKey,
+          sha256,
+          uploadedByStaffId: actor.id,
+        },
+      })
+      refundDocumentId = document.id
+    }
+
+    await tx.deposit.update({
+      where: { id: deposit.id },
+      data: {
+        // A calendar day straight through - `businessDateToUtc` is the only
+        // reader a @db.Date column takes, and no zone may touch it (D-3).
+        refundPaidOn: businessDateToUtc(paidOn),
+        refundMethod: method as PaymentChannel,
+        refundReference: reference,
+        refundDocumentId,
+        refundRecordedById: actor.id,
+      },
+    })
+
+    await audit(
+      {
+        action: 'deposit.refund_recorded',
+        entityType: 'Deposit',
+        entityId: deposit.id,
+        propertyId: deposit.propertyId,
+        after: {
+          amountCents: deposit.refundedCents,
+          method,
+          reference,
+          paidOn,
+          refundDocumentId,
+        },
+      },
+      tx,
+    )
+
+    // Closes the obligation finalization raised. Not a second queue and not
+    // a second notion of "done" - `completeTaskWork` is the one write that
+    // marks a Task complete (D-9), and the disbursement IS the completion,
+    // exactly as a triage decision is for a ticket task.
+    const task = await tx.task.findFirst({
+      where: {
+        type: 'deposit_refund_due',
+        subjectId: deposit.id,
+        status: { notIn: ['DONE', 'CANCELED'] },
+      },
+      select: { id: true, type: true, status: true, propertyId: true },
+    })
+    if (task) {
+      await completeTaskWork(tx, task, actor.id, {
+        note: `${formatCents(deposit.refundedCents)} by ${DEPOSIT_REFUND_INSTRUMENTS[method as DepositRefundInstrument].toLowerCase()} on ${friendlyBusinessDate(paidOn)}${reference ? ` (${reference})` : ''}`,
+      })
+    }
+  })
+
+  revalidatePath(`/leases/${deposit.leaseId}/deposit`)
+  revalidatePath('/tasks')
+  return { notice: 'Refund recorded.' }
 }

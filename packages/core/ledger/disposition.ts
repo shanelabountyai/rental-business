@@ -194,3 +194,99 @@ function formatDate(instant: Date, timeZone: string): string {
     year: 'numeric',
   }).format(instant)
 }
+
+// ==========================================================================
+// The refund is an EVENT (R-170).
+//
+// `finalizeDisposition` used to write `refundedCents` and a letter and stop,
+// and all three readers of the deposit liability - the rent roll, the
+// handoff file and the year-end tax packet - subtracted that promise as
+// though the money had moved. So the moment the letter went out the deposit
+// read as settled everywhere, while the tenant was still owed every cent of
+// it. That is worse evidence than sending nothing, because it looks paid.
+//
+// Money the landlord KEEPS releases at the letter: `appliedCents` is the
+// deduction and the arrears, and the disposition is the act that converts
+// it. Money the landlord OWES BACK releases only when it is disbursed.
+// ==========================================================================
+
+export interface DepositBalanceFact {
+  heldCents: Cents
+  appliedCents: Cents
+  refundedCents: Cents
+  dispositionSentAt: Date | null
+  refundPaidOn: Date | null
+}
+
+/**
+ * What is still owed back to the tenant.
+ *
+ * `asOf` answers it as a BALANCE ON A DATE, which is the question the tax
+ * packet asks and the only one that needs it: a deposit disposed of in March
+ * 2027 was still held in full on 31 December 2026, and a refund cut in
+ * March 2027 had not left the bank on that date either. Omit it and every
+ * event counts, which is what a screen showing "now" wants.
+ */
+export function depositLiabilityCents(deposit: DepositBalanceFact, asOf?: Date): Cents {
+  const happened = (at: Date | null) => at != null && (asOf == null || at <= asOf)
+  const applied = happened(deposit.dispositionSentAt) ? deposit.appliedCents : 0
+  const refunded = happened(deposit.refundPaidOn) ? deposit.refundedCents : 0
+  return deposit.heldCents - applied - refunded
+}
+
+/// The ways a refund actually leaves. A subset of `PaymentChannel`, spelled
+/// here rather than in the schema because the enum is shared with money
+/// coming IN, where `RETAIL_CASH` and `HAP_ACH` mean something and here they
+/// do not. Same shape as `OFFLINE_INSTRUMENTS` for money at the counter.
+export const DEPOSIT_REFUND_INSTRUMENTS = {
+  OFFLINE_CHECK: 'Check',
+  ACH: 'Bank transfer (ACH)',
+  MONEY_ORDER: 'Money order',
+  OFFLINE_CASH: 'Cash',
+} as const
+
+export type DepositRefundInstrument = keyof typeof DEPOSIT_REFUND_INSTRUMENTS
+
+export interface DepositRefundInput {
+  method: string
+  /// The day the money actually left, on the property's clock - frequently
+  /// not today, for the same reason `OfflinePaymentInput.receivedOn` is not:
+  /// a cheque written Friday and typed in on Monday was paid Friday, and it
+  /// is the statutory deadline this date is measured against.
+  paidOn: string
+  /// Required for anything that carries one. A refund nobody can match back
+  /// to a bank statement is the tenant's word against the owner's, which is
+  /// exactly the dispute the evidence trail exists to settle.
+  reference?: string | null
+}
+
+export interface DepositRefundViolation {
+  field: string
+  message: string
+}
+
+export function validateDepositRefund(
+  input: DepositRefundInput,
+  today: string,
+): DepositRefundViolation[] {
+  const violations: DepositRefundViolation[] = []
+
+  if (!(input.method in DEPOSIT_REFUND_INSTRUMENTS)) {
+    violations.push({ field: 'method', message: 'Choose how the refund was paid.' })
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.paidOn)) {
+    violations.push({ field: 'paidOn', message: 'Enter the day the refund was paid.' })
+  } else if (input.paidOn > today) {
+    // String comparison is the correct one for YYYY-MM-DD and keeps this
+    // pure - no zone may touch a calendar day (D-3).
+    violations.push({ field: 'paidOn', message: 'A refund cannot be paid in the future.' })
+  }
+  if (input.method !== 'OFFLINE_CASH' && !input.reference?.trim()) {
+    violations.push({
+      field: 'reference',
+      message: 'Enter the check number, trace or confirmation number.',
+    })
+  }
+
+  return violations
+}

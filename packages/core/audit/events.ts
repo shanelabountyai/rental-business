@@ -240,6 +240,14 @@ export const AUDIT_ACTIONS = [
   /// The disposition letter's arithmetic is locked and a Notice is created
   /// for it - the moment `DepositDeduction` rows stop accepting edits.
   'deposit.disposition_finalized',
+  /// R-170: the refund actually left - date, instrument, reference and the
+  /// document behind it. Its own action rather than folded into
+  /// `deposit.disposition_finalized`, because the letter and the payment are
+  /// two events days or weeks apart, and a disposition that promised money
+  /// back must not read as a disposition that returned it. This is the row
+  /// the owner produces when a former tenant says the deposit was never
+  /// refunded, so it is worth auditing every single time.
+  'deposit.refund_recorded',
 
   // Compliance calendar (PROP-05, R-077).
   'compliance.item_created',

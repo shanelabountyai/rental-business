@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
   computeDisposition,
+  depositLiabilityCents,
   depreciationGuidance,
   dispositionLetterText,
   isUnsupportedDeduction,
+  validateDepositRefund,
 } from './disposition.ts'
 
 describe('computeDisposition', () => {
@@ -122,5 +124,103 @@ describe('dispositionLetterText', () => {
     })
     expect(text).toContain('you still owe $300.00')
     expect(text).not.toContain('refunded')
+  })
+})
+
+describe('depositLiabilityCents', () => {
+  const held = {
+    heldCents: 200_000,
+    appliedCents: 0,
+    refundedCents: 0,
+    dispositionSentAt: null,
+    refundPaidOn: null,
+  }
+
+  it('owes the full amount while the money is simply held', () => {
+    expect(depositLiabilityCents(held)).toBe(200_000)
+  })
+
+  // R-170's defect, as an assertion: the letter promised $1,040 back and
+  // nothing left the bank, so the owner still owes $1,040.
+  it('still owes the refund after the letter goes out and before it is paid', () => {
+    expect(
+      depositLiabilityCents({
+        ...held,
+        appliedCents: 96_000,
+        refundedCents: 104_000,
+        dispositionSentAt: new Date('2026-08-20T00:00:00Z'),
+      }),
+    ).toBe(104_000)
+  })
+
+  it('releases the liability once the refund is actually paid', () => {
+    expect(
+      depositLiabilityCents({
+        ...held,
+        appliedCents: 96_000,
+        refundedCents: 104_000,
+        dispositionSentAt: new Date('2026-08-20T00:00:00Z'),
+        refundPaidOn: new Date('2026-08-28T00:00:00Z'),
+      }),
+    ).toBe(0)
+  })
+
+  it('releases the applied half at the letter even with no refund due', () => {
+    expect(
+      depositLiabilityCents({
+        ...held,
+        appliedCents: 200_000,
+        dispositionSentAt: new Date('2026-08-20T00:00:00Z'),
+      }),
+    ).toBe(0)
+  })
+
+  it('counts neither event as having happened before its own date', () => {
+    const disposed = {
+      ...held,
+      appliedCents: 96_000,
+      refundedCents: 104_000,
+      dispositionSentAt: new Date('2027-03-01T00:00:00Z'),
+      refundPaidOn: new Date('2027-03-09T00:00:00Z'),
+    }
+    const yearEnd = new Date('2026-12-31T23:59:59Z')
+    expect(depositLiabilityCents(disposed, yearEnd)).toBe(200_000)
+    expect(depositLiabilityCents(disposed, new Date('2027-03-05T00:00:00Z'))).toBe(104_000)
+    expect(depositLiabilityCents(disposed, new Date('2027-03-31T00:00:00Z'))).toBe(0)
+  })
+})
+
+describe('validateDepositRefund', () => {
+  const today = '2026-09-05'
+
+  it('accepts a check with a number', () => {
+    expect(
+      validateDepositRefund({ method: 'OFFLINE_CHECK', paidOn: '2026-09-04', reference: '1042' }, today),
+    ).toEqual([])
+  })
+
+  it('accepts cash with no reference, because there is none to give', () => {
+    expect(validateDepositRefund({ method: 'OFFLINE_CASH', paidOn: today }, today)).toEqual([])
+  })
+
+  it('demands a reference for anything that carries one', () => {
+    const violations = validateDepositRefund({ method: 'ACH', paidOn: today, reference: '  ' }, today)
+    expect(violations.map((v) => v.field)).toEqual(['reference'])
+  })
+
+  it('refuses a channel money never comes back through and a future date', () => {
+    const violations = validateDepositRefund(
+      { method: 'HAP_ACH', paidOn: '2026-09-06', reference: 'x' },
+      today,
+    )
+    expect(violations.map((v) => v.field)).toEqual(['method', 'paidOn'])
+  })
+
+  it('refuses a date that is not a calendar day at all', () => {
+    const violations = validateDepositRefund(
+      { method: 'OFFLINE_CASH', paidOn: 'yesterday' },
+      today,
+    )
+    expect(violations.map((v) => v.field)).toEqual(['paidOn'])
   })
 })

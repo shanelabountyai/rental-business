@@ -197,4 +197,83 @@ test('a PM itemizes deductions, sees the unsupported flag and depreciation guida
     where: { action: 'deposit.disposition_finalized', entityId: deposit.id },
   })
   expect(finalizedAudit).not.toBeNull()
+
+  // ==========================================================================
+  // R-170: THE LETTER IS NOT THE PAYMENT.
+  //
+  // Everything above used to be the whole flow, and it left $1,040 promised
+  // in writing with no way to pay it and every report reading the deposit as
+  // settled. From here: the obligation exists as a Task, the deposit screen
+  // is still reachable to discharge it, and only the disbursement releases
+  // the liability.
+  // ==========================================================================
+  expect(deposit.refundPaidOn).toBeNull()
+
+  const refundTask = await prisma.task.findFirstOrThrow({
+    where: { type: 'deposit_refund_due', subjectId: deposit.id },
+  })
+  expect(refundTask.subjectType).toBe('Deposit')
+  expect(refundTask.status).toBe('OPEN')
+  expect(refundTask.priority).toBe('URGENT')
+  expect(refundTask.title).toContain('$1,040.00')
+
+  // The task is not a dead end - it reaches the screen that can discharge it.
+  await page.goto(`/tasks/${refundTask.id}`)
+  await page.getByRole('link', { name: 'Open the deposit disposition to record the refund' }).click()
+  await page.waitForURL(`**/leases/${lease.id}/deposit`)
+
+  // The deduction list is locked: it renders, its controls do not.
+  await expect(page.getByText('Missing blinds', { exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: /^Remove/ })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Add deduction' })).toHaveCount(0)
+
+  await expect(page.getByRole('heading', { name: 'Refund payment' })).toBeVisible()
+  const refundA11y = await axeScan(page)
+  expect(refundA11y.violations).toEqual([])
+
+  // A check with no number is refused - a refund nobody can match back to a
+  // bank statement is the tenant's word against the owner's.
+  await page.getByLabel('Date the refund was paid').fill('2026-08-28')
+  await page.getByRole('button', { name: 'Record refund payment' }).click()
+  await expect(page.getByText('Enter the check number, trace or confirmation number.')).toBeVisible()
+  expect((await prisma.deposit.findUniqueOrThrow({ where: { id: deposit.id } })).refundPaidOn).toBeNull()
+
+  await page.getByLabel('How the refund was paid').selectOption('OFFLINE_CHECK')
+  await page.getByLabel('Date the refund was paid').fill('2026-08-28')
+  await page.getByLabel('Check, trace or confirmation number').fill('10425')
+  await page.getByRole('button', { name: 'Record refund payment' }).click()
+
+  // Poll the FACT the next assertions rest on, not a UI signal that was
+  // already true before the press (CLAUDE.md's own rule - the "Refund
+  // payment" heading is on the page in both states).
+  await expect
+    .poll(async () =>
+      (await prisma.deposit.findUniqueOrThrow({ where: { id: deposit.id } })).refundPaidOn,
+    )
+    .not.toBeNull()
+
+  const paid = await prisma.deposit.findUniqueOrThrow({ where: { id: deposit.id } })
+  // A calendar day, stored as one - no zone may touch it (D-3).
+  expect(paid.refundPaidOn?.toISOString()).toBe('2026-08-28T00:00:00.000Z')
+  expect(paid.refundMethod).toBe('OFFLINE_CHECK')
+  expect(paid.refundReference).toBe('10425')
+  expect(paid.refundRecordedById).not.toBeNull()
+
+  // The obligation is closed by the disbursement, not by a second click.
+  const closedTask = await prisma.task.findUniqueOrThrow({ where: { id: refundTask.id } })
+  expect(closedTask.status).toBe('DONE')
+  expect((closedTask.proof as { note?: string }).note).toContain('28 Aug 2026')
+
+  const refundAudit = await prisma.auditLog.findFirst({
+    where: { action: 'deposit.refund_recorded', entityId: deposit.id },
+  })
+  expect(refundAudit).not.toBeNull()
+
+  // And the record survives on the screen, which is what a former tenant
+  // claiming the money never came back is answered with.
+  await expect(page.getByText('10425')).toBeVisible()
+  await expect(page.getByText('28 Aug 2026')).toBeVisible()
+
+  // Write-once: a second attempt is refused, not silently applied again.
+  await expect(page.getByRole('button', { name: 'Record refund payment' })).toHaveCount(0)
 })

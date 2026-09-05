@@ -8330,3 +8330,99 @@ exactly this reading and is still unfixed.
 Commit: 48478015ba16824e1d62140cfcf6a87671f1fe08
 
 Commit: 00ee37fc0e7d51edd62541981c38e43f7330d185
+
+---
+
+## R-170 — the deposit refund becomes an event that can actually be paid
+
+**What it built.** `finalizeDisposition` used to write `refundedCents`, mint
+the `DEPOSIT_DISPOSITION` letter and stop. There was no column for a refund
+having been paid, no action to record one, and no work item asking anybody
+to cut the cheque — while all three readers of the deposit liability
+subtracted `refundedCents` the instant the letter existed. So a disposition
+promising a former tenant $1,040 back read as fully settled on the rent
+roll, in a buyer's handoff file and in the year-end tax packet, with the
+money still in the account. That is worse evidence than sending nothing,
+because it looks paid to everyone who reads it.
+
+Five columns on `Deposit` (migration
+`20260905140000_r170_deposit_refund_event`): `refundPaidOn` (`@db.Date`),
+`refundMethod` (`PaymentChannel`), `refundReference`, `refundDocumentId`
+(unique, `ON DELETE RESTRICT` to `Document`) and `refundRecordedById`.
+`recordDepositRefund` in `lib/deposits/actions.ts` is the write — behind
+`ledger.adjust` like everything else in that file, refusing an unfinalized
+disposition, a zero refund and a second attempt, taking an optional cheque
+image, and writing a `deposit.refund_recorded` audit row. `finalizeDisposition`
+now raises a `deposit_refund_due` Task (URGENT, subject `Deposit`) in the
+same transaction as the letter whenever `refundedCents > 0`, and the refund
+write closes it through `completeTaskWork` — the disbursement IS the
+completion, the same shape a triage decision has for a ticket task.
+
+`/leases/[id]/deposit` used to `redirect` to the notice the moment
+`noticeId` existed, which is how the one screen that could record the
+disbursement became unreachable at exactly the moment it became due. It now
+redirects only when the disposition refunded nothing, and otherwise stays as
+the refund's own screen: the deduction list rendered but locked, the letter
+linked, the form while the money is outstanding, and the date/instrument/
+reference/proof afterwards. `/tasks/[id]` carries a scoped link to it for a
+`Deposit`-subject task, so the Task is not a dead end.
+
+**What it decided.** D-174. The liability is released by two different
+events on two different dates, and `depositLiabilityCents(deposit, asOf?)`
+in `packages/core/ledger/disposition.ts` is now the only place that
+arithmetic lives: `appliedCents` releases at `dispositionSentAt` (the
+landlord keeps that money and the disposition is what converts it),
+`refundedCents` only at `refundPaidOn`. `rent-roll.ts`, `handoff-file.ts`
+and `core/tax/packet.ts`'s `depositLiabilityAt` all call it. **The three
+copies were not merely duplicated — they were wrong in the identical way,
+which is the argument for one function rather than three careful edits.**
+
+`refundPaidOn` is a calendar day, not a timestamp, and that is deliberate: a
+cheque written on 31 December was paid on 31 December whatever day somebody
+typed it in, and the year-end liability turns on exactly that. It follows
+`Payment.receivedOn`, and `businessDateToUtc` is its only writer, so no zone
+touches it (D-3). `refundMethod` reuses `PaymentChannel` rather than minting
+a refund enum — the subset that makes sense for money going out is a UI
+concern, and core's `DEPOSIT_REFUND_INSTRUMENTS` is that narrowing, with
+`validateDepositRefund` refusing `HAP_ACH`, a future date, and a missing
+reference on anything but cash.
+
+The refund write is **write-once**. This is the row an owner produces when a
+former tenant says the deposit never came back, so a correction is a second
+real disbursement and an audit trail, never an edit that leaves no trace of
+what it replaced.
+
+**What it left behind.** `/reports`' upcoming-dates calendar still keys
+`DEPOSIT_DISPOSITION_DUE` on `dispositionSentAt`, so it stops warning once
+the LETTER goes out even if the refund it promised is unpaid past the same
+statutory deadline — in Texas §92.103 the refund and the itemization share
+one 30-day clock. The URGENT Task is the only surface today; a second
+calendar kind keyed on `refundPaidOn` is the fix if that queue proves too
+quiet. And a refund is one event, so a split refund — two cheques, or one to
+each of two former roommates — has no representation; the honest shape is a
+`DepositRefund` child table, and nothing has ever needed it.
+
+**A real bug found along the way, in a test rather than in the product.**
+`e2e/property-handoff.spec.ts` seeded a deposit with `appliedCents: 22_500`
+and no `dispositionSentAt`, then asserted the handoff file printed the
+$150,000 remainder. That state cannot exist: `finalizeDisposition` is the
+only writer of `appliedCents` and it stamps both fields in one update. The
+old unconditional subtraction gave the right answer for the wrong reason,
+and the fixture went red the moment each amount was tied to its own event.
+Fixed by making the fixture producible, not by loosening the rule — the same
+"a fixture simpler than the real input only ever tests the simple case"
+lesson D-132 already records.
+
+`packages/core/tax/packet.test.ts`'s **"subtracts applied and refunded once
+the disposition has been sent" was the defect written down as an
+assertion**, expecting a zero liability at year end for a refund nobody had
+paid. Rewritten with the reasoning next to it, plus two new cases (paid
+before the year end, and a cheque cut in the following March).
+
+**Gate run:** `lint` clean (0 errors, 16 pre-existing warnings),
+`typecheck` clean, `npm test` 2928 passed / 4 skipped across 219 files
+(+12 new: five on `depositLiabilityCents`, five on `validateDepositRefund`,
+two on the year-end refund date). e2e on every touched or adjacent spec:
+`deposit-disposition` + `rent-roll` 16 passed, reconciling exactly against
+`--list`'s `Total: 16 tests in 2 files`; `tasks` + `property-handoff` +
+`tax-packet` + `tax-export` 58 of 58 after the fixture fix.

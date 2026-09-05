@@ -2,6 +2,7 @@ import 'server-only'
 
 import type { HandoffAccessCode, HandoffLease, HandoffUnit, HandoffVendorJob, HandoffWarranty } from '@rental/core/property'
 import { utcToBusinessDate } from '@rental/core/scheduling'
+import { depositLiabilityCents } from '@rental/core/ledger'
 import { jobCostCents } from '@rental/core/workorders'
 import { prisma } from '@rental/db'
 import { getFilingCabinet } from '@/lib/filing-cabinet/queries.ts'
@@ -86,7 +87,15 @@ export async function handoffSource(
           orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
           select: { tenant: { select: { firstName: true, lastName: true } } },
         },
-        deposits: { select: { heldCents: true, appliedCents: true, refundedCents: true } },
+        deposits: {
+          select: {
+            heldCents: true,
+            appliedCents: true,
+            refundedCents: true,
+            dispositionSentAt: true,
+            refundPaidOn: true,
+          },
+        },
       },
     }),
     // Current codes only - `effectiveTo: null` is R-005's own notion of "on
@@ -161,8 +170,10 @@ export async function handoffSource(
       // What is STILL held, not what was ever taken. A deposit partly applied
       // to a previous claim transfers at the remainder, and printing the
       // gross would hand the buyer a liability that is bigger than the money.
+      // R-170: an unpaid refund transfers too — the buyer inherits the
+      // obligation, and the letter is not the payment.
       depositHeldCents: lease.deposits.reduce(
-        (sum, deposit) => sum + deposit.heldCents - deposit.appliedCents - deposit.refundedCents,
+        (sum, deposit) => sum + depositLiabilityCents(deposit),
         0,
       ),
       balanceCents: balances[index] ?? 0,

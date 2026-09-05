@@ -35,6 +35,10 @@ export async function getDepositForLease(leaseId: string, scope: ResolvedScope) 
           forwardingAddress: true,
           appliedCents: true,
           refundedCents: true,
+          refundPaidOn: true,
+          refundMethod: true,
+          refundReference: true,
+          refundDocumentId: true,
           noticeId: true,
           deductions: {
             orderBy: { createdAt: 'asc' },

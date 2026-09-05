@@ -9,6 +9,7 @@
 // already carries `propertyId`, so a second money pipeline here would only be
 // a second chance to get the sign or the timezone wrong.
 
+import { depositLiabilityCents } from '../ledger/disposition.ts'
 import { requiresForm1099 } from '../vendors/invoice.ts'
 import { SCHEDULE_E, type ScheduleEKey } from './schedule-e.ts'
 import type { ExportLine } from './export.ts'
@@ -92,6 +93,9 @@ export interface DepositFact {
   refundedCents: number
   receivedAt: Date | null
   dispositionSentAt: Date | null
+  /// R-170. The letter is not the payment: a disposition finalized in
+  /// December promising a refund still owed that money on 31 December.
+  refundPaidOn: Date | null
 }
 
 export interface PropertyDepositLiability {
@@ -108,14 +112,16 @@ export interface PropertyDepositLiability {
  *
  * ==========================================================================
  * `heldCents` IS GROSS AND IS NEVER DECREMENTED. `appliedCents` and
- * `refundedCents` account for it at disposition, so what is still owed back
- * is the difference — the same arithmetic `rent-roll.ts` has always used, and
- * what `computeDisposition`'s own doc comment describes.
+ * `refundedCents` account for it at disposition, and `depositLiabilityCents`
+ * is the one place that arithmetic lives — shared with `rent-roll.ts` and
+ * the handoff file since R-170, because three copies of it disagreed about
+ * exactly one thing and all three were wrong the same way.
  *
- * AND THE DISPOSITION DATE MATTERS, which is the part a naive sum gets wrong.
- * A deposit disposed of in March 2027 was still held in full on 31 December
- * 2026: subtracting its applied and refunded amounts from the 2026 balance
- * would report a liability the owner did not yet have.
+ * AND BOTH EVENT DATES MATTER, which is the part a naive sum gets wrong. A
+ * deposit disposed of in March 2027 was still held in full on 31 December
+ * 2026, and a refund cheque cut in March 2027 had not left the bank on that
+ * date either — subtracting either from the 2026 balance reports a liability
+ * the owner did not yet have.
  * ==========================================================================
  *
  * A null `receivedAt` counts as received. The row exists, so the money is
@@ -132,10 +138,7 @@ export function depositLiabilityAt(
   for (const deposit of deposits) {
     if (deposit.receivedAt != null && deposit.receivedAt > asOf) continue
 
-    const settled = deposit.dispositionSentAt != null && deposit.dispositionSentAt <= asOf
-    const liabilityCents = settled
-      ? deposit.heldCents - deposit.appliedCents - deposit.refundedCents
-      : deposit.heldCents
+    const liabilityCents = depositLiabilityCents(deposit, asOf)
     if (liabilityCents === 0) continue
 
     const row = byProperty.get(deposit.propertyId) ?? {

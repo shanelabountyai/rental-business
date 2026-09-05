@@ -74,6 +74,7 @@ export async function taxPacket(
         refundedCents: true,
         receivedAt: true,
         dispositionSentAt: true,
+        refundPaidOn: true,
       },
     }),
     prisma.property.findMany({

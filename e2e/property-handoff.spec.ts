@@ -105,12 +105,19 @@ async function seedProperty() {
   // Partly applied against an earlier claim: what transfers is the REMAINDER,
   // and printing the gross would hand the buyer a bigger liability than the
   // money actually in the account.
+  //
+  // `dispositionSentAt` alongside `appliedCents` because R-170 made the pair
+  // inseparable, and it always was in real data - `finalizeDisposition` is
+  // the only writer of `appliedCents` and it stamps both in one update. The
+  // fixture used to set the amount with no letter behind it, a state the
+  // product cannot produce, and read the right answer for the wrong reason.
   await prisma.deposit.create({
     data: {
       propertyId: property.id,
       leaseId: lease.id,
       heldCents: 172_500,
       appliedCents: 22_500,
+      dispositionSentAt: new Date('2026-05-02T15:00:00Z'),
     },
   })
   await prisma.accessCode.create({

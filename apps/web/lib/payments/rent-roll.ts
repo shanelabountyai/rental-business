@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { agingTotals, balanceCents, delinquencyFor } from '@rental/core/ledger'
+import { agingTotals, balanceCents, delinquencyFor, depositLiabilityCents } from '@rental/core/ledger'
 import { type CollectionMethod, debitsAutomatically } from '@rental/core/payments'
 import type { AgingBucket } from '@rental/core/ledger'
 import { businessDate, dueDateOnOrBefore, utcToBusinessDate } from '@rental/core/scheduling'
@@ -101,7 +101,15 @@ export async function rentRoll(scope: ResolvedScope, asOfDate?: Date): Promise<R
           where: { active: true },
           select: { payerType: true, collectionMethod: true, portionCents: true, debitDay: true },
         },
-        deposits: { select: { heldCents: true, appliedCents: true, refundedCents: true } },
+        deposits: {
+          select: {
+            heldCents: true,
+            appliedCents: true,
+            refundedCents: true,
+            dispositionSentAt: true,
+            refundPaidOn: true,
+          },
+        },
       },
     }),
     prisma.unit.findMany({
@@ -236,11 +244,13 @@ export async function rentRoll(scope: ResolvedScope, asOfDate?: Date): Promise<R
       // Any active payer on autopay counts: what the question is really
       // asking is "will money arrive without somebody chasing it".
       autopay: lease.leasePayers.some((payer) => debitsAutomatically(payer.collectionMethod as CollectionMethod)),
-      // Held, less what has been applied or refunded — the LIABILITY still
-      // owed back, which is the number PAY-07 says must never be mixed with
-      // income and the number a lender is asking for.
+      // The LIABILITY still owed back — the number PAY-07 says must never be
+      // mixed with income and the number a lender is asking for. R-170: a
+      // refund the letter promised and nobody has paid is still owed, so
+      // this reads the shared `depositLiabilityCents` rather than
+      // subtracting `refundedCents` the moment the letter goes out.
       depositHeldCents: lease.deposits.reduce(
-        (sum, deposit) => sum + deposit.heldCents - deposit.appliedCents - deposit.refundedCents,
+        (sum, deposit) => sum + depositLiabilityCents(deposit),
         0,
       ),
       subsidyCents: subsidy,

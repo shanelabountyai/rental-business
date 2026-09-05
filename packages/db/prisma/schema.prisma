@@ -2052,6 +2052,7 @@ model StaffUser {
   propertyReservesUpdated                 PropertyReserve[]               @relation("PropertyReserveUpdatedBy")
   mortgageStatementsRecorded              MortgageAnnualStatement[]       @relation("MortgageAnnualStatementRecordedBy")
   depositDeductionsCreated                DepositDeduction[]              @relation("DepositDeductionCreatedBy")
+  depositRefundsRecorded                  Deposit[]                       @relation("DepositRefundRecordedBy")
   complianceCompletionsRecorded           ComplianceCompletion[]
   translationsApproved                    MessageTemplateTranslation[]    @relation("TranslationApprovedBy")
   paymentHoldsSet                         LeasePayer[]                    @relation("PaymentHoldSetBy")
@@ -4303,17 +4304,17 @@ model LedgerEntry {
 /// deadline is computed from the property's JurisdictionRule at move-out and
 /// stored, so a later rule change never moves a deadline already running.
 model Deposit {
-  id                   String      @id @default(cuid())
+  id                   String          @id @default(cuid())
   propertyId           String
   leaseId              String
-  type                 DepositType @default(SECURITY)
+  type                 DepositType     @default(SECURITY)
   heldCents            Int
   receivedAt           DateTime?
   /// Set where the state requires a separate or escrow account (D-4).
   escrowAccountRef     String?
-  interestAccruedCents Int         @default(0)
+  interestAccruedCents Int             @default(0)
   /// Property-local statutory deadline, frozen at move-out (D-12).
-  dispositionDueOn     DateTime?   @db.Date
+  dispositionDueOn     DateTime?       @db.Date
   /// Stamped when the disposition is finalized (R-071) - the itemized
   /// letter's own arithmetic is locked at this instant, and every
   /// `DepositDeduction` under it stops accepting edits. Distinct from
@@ -4323,19 +4324,40 @@ model Deposit {
   /// "the letter reached the tenant's mailbox".
   dispositionSentAt    DateTime?
   forwardingAddress    String?
-  appliedCents         Int         @default(0)
-  refundedCents        Int         @default(0)
+  appliedCents         Int             @default(0)
+  refundedCents        Int             @default(0)
+  /// R-170: THE REFUND IS AN EVENT, NOT THE LETTER. `refundedCents` is what
+  /// the disposition PROMISED; these five are the money actually leaving.
+  /// The liability is released by `refundPaidOn` and never by
+  /// `dispositionSentAt` - a letter saying "we owe you $1,040" next to a
+  /// rent roll reading the deposit as settled is worse evidence than sending
+  /// nothing, because it looks paid to everyone who reads it.
+  ///
+  /// A CALENDAR DAY, like `Payment.receivedOn` and for the same reason: a
+  /// cheque written on 31 December was paid on 31 December whatever day
+  /// somebody typed it in, and the year-end liability turns on that.
+  refundPaidOn         DateTime?   @db.Date
+  refundMethod         PaymentChannel?
+  /// Cheque number, ACH trace, money-order serial - how the disbursement is
+  /// matched back to a bank statement months later, the same job
+  /// `Payment.checkNumber` does for money arriving.
+  refundReference      String?
+  /// The cheque image, remittance advice or bank confirmation.
+  refundDocumentId     String?         @unique
+  refundRecordedById   String?
   /// The generated disposition letter (R-071) - a real `Notice` (type
   /// DEPOSIT_DISPOSITION), reusing R-051's existing generate/serve
   /// machinery unmodified rather than a second document pipeline.
-  noticeId             String?     @unique
-  createdAt            DateTime    @default(now())
-  updatedAt            DateTime    @updatedAt
+  noticeId             String?         @unique
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
 
-  property   Property           @relation(fields: [propertyId], references: [id])
-  lease      Lease              @relation(fields: [leaseId], references: [id])
-  notice     Notice?            @relation(fields: [noticeId], references: [id])
-  deductions DepositDeduction[]
+  property         Property           @relation(fields: [propertyId], references: [id])
+  lease            Lease              @relation(fields: [leaseId], references: [id])
+  notice           Notice?            @relation(fields: [noticeId], references: [id])
+  refundDocument   Document?          @relation("DepositRefundDocument", fields: [refundDocumentId], references: [id], onDelete: Restrict)
+  refundRecordedBy StaffUser?         @relation("DepositRefundRecordedBy", fields: [refundRecordedById], references: [id])
+  deductions       DepositDeduction[]
 
   @@index([leaseId])
   @@index([propertyId])
@@ -5786,6 +5808,7 @@ model Document {
   complianceCompletions   ComplianceCompletion[]
   scraLookupAsCertificate ScraLookup?               @relation("ScraCertificate")
   paymentReceipt          Payment?                  @relation("PaymentReceipt")
+  depositRefund           Deposit?                  @relation("DepositRefundDocument")
   paymentDepositSlips     Payment[]                 @relation("PaymentDepositSlip")
   accommodationRequestId  String?
   accommodationRequest    AccommodationRequest?     @relation("AccommodationDocuments", fields: [accommodationRequestId], references: [id])

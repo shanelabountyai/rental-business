@@ -106,6 +106,19 @@ export default async function TaskDetailPage({
     task.subjectType === 'WorkOrder' && canReadWorkOrder
       ? await getWorkOrder(task.subjectId, scope)
       : null
+
+  // R-170: a refund task's work is done on the deposit's own screen, so this
+  // is a LINK rather than a panel - the disbursement form needs the letter,
+  // the totals and the deduction list around it, all of which already live
+  // there. Scoped like every other subject read on this page: a task-only
+  // role must not learn a deposit exists by being handed its address.
+  const refundDeposit =
+    task.subjectType === 'Deposit' && (await actorCan('lease.read', propertyResource(task.property)))
+      ? await prisma.deposit.findUnique({
+          where: { id: task.subjectId },
+          select: { leaseId: true },
+        })
+      : null
   const jobContext = workOrder ? await jobContextForWorkOrder(workOrder, scope) : null
   // MAINT-04's "approve from phone in <=2 taps": the approval lands in the
   // one queue (D-9) as a Task, and this is where a thumb reaches it.
@@ -167,6 +180,17 @@ export default async function TaskDetailPage({
           </>
         )}
       </dl>
+
+      {refundDeposit && (
+        <p className="text-sm">
+          <Link
+            href={`/leases/${refundDeposit.leaseId}/deposit`}
+            className="underline underline-offset-4"
+          >
+            Open the deposit disposition to record the refund
+          </Link>
+        </p>
+      )}
 
       {ticket && (
         <TriagePanel
