@@ -8426,3 +8426,5 @@ two on the year-end refund date). e2e on every touched or adjacent spec:
 `deposit-disposition` + `rent-roll` 16 passed, reconciling exactly against
 `--list`'s `Total: 16 tests in 2 files`; `tasks` + `property-handoff` +
 `tax-packet` + `tax-export` 58 of 58 after the fixture fix.
+
+Commit: 1476861d9275a132635032d5586d32833aa486c2
