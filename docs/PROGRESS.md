@@ -8286,16 +8286,42 @@ the four wrong ones identifiable as wrong rather than as a house style.
 ledger/disposition.ts` — no change needed there, and worth knowing before
 anyone greps `moveOutAt` and assumes every hit is a site.
 
-No backfill. Deposits whose `dispositionDueOn` was frozen a day late keep
-that date: the field's own schema comment and D-12 make it frozen-once, and
-moving a running statutory deadline retroactively is the thing that rule
-exists to prevent. New dispositions get the correct clock.
+The two judgement calls above were both put to the owner rather than left
+as build decisions, and both were reversed from what this entry first said.
+The `moveInAt` reader is now flagged in R-172's own row, so that session
+knows its reader is already correct and owns only the writer.
+
+And the deadlines already frozen a day late ARE corrected, by migration
+`20260905120000_r169_correct_late_disposition_deadlines` (D-173). This
+entry originally said they would not be, resting on D-12's frozen-once
+rule — **that was wrong, and the argument was weaker than it was written**.
+D-12 stops a later `JurisdictionRule` version from moving a running
+deadline; it never governed a computation bug, and a deadline frozen a day
+LATE means the owner sends the disposition after the statutory cutoff,
+which in Texas is bad-faith retention with treble damages. The correction
+is one-directional — it only ever shortens, only for open dispositions
+(`dispositionSentAt IS NULL`), and leaves the mirror case in a zone east of
+UTC alone, because lengthening a running statutory deadline is a legal act
+rather than a bug fix. It is a date delta, not a recompute: `addBusinessDays`
+is plain calendar-day addition, so only the start date ever differed, while
+a recompute would re-resolve the rule as of today and could move a deadline
+for a second, unrelated reason. `dispositionDueOn` has exactly one writer,
+which is what makes that reasoning safe.
+
+The migration's timezone and date arithmetic was verified against Postgres
+over four cases before it was trusted — Chicago evening (corrected, −1 day),
+Chicago daytime (untouched), Tokyo morning (untouched, the one-directional
+rule doing its job), Denver evening (corrected). Applied from scratch by
+`npm run db:ci` with no drift.
 
 **Gate run:** `lint` clean (0 errors, 16 pre-existing warnings),
 `typecheck` clean, `npm test` 2916 passed / 4 skipped across 219 files,
 and the three touched e2e specs (`turnover`, `dashboard`,
 `deposit-disposition`) 14 passed — reconciling exactly against
-`--list`'s `Total: 14 tests in 3 files`. CI on `main` is currently RED and
+`--list`'s `Total: 14 tests in 3 files`. Re-run in full after the
+migration landed, with the same result; `npm run db:ci` green (every
+migration from scratch on a throwaway database, then no drift) and
+`npm run db:drift` clean against `rental_test`. CI on `main` is currently RED and
 was red before this item: `gh run list` shows R-168a's run failing on
 D-171's `mobile-chrome` pointer-interception races in `import.spec.ts` and
 `inspections.spec.ts`, neither of which this diff touches. D-171 predicted
