@@ -2,9 +2,9 @@ import 'server-only'
 
 import {
   addBusinessDays,
+  businessDate,
   businessDateToUtc,
   friendlyBusinessDate,
-  utcToBusinessDate,
 } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { createTask } from '@/lib/tasks/create.ts'
@@ -34,7 +34,7 @@ export async function startDepositDisposition(leaseId: string): Promise<StartDis
       propertyId: true,
       moveOutAt: true,
       noticeForwardingAddress: true,
-      property: { select: { state: true, county: true } },
+      property: { select: { state: true, county: true, timezone: true } },
       unit: { select: { name: true } },
       deposits: { select: { id: true, dispositionDueOn: true }, take: 1 },
     },
@@ -46,7 +46,13 @@ export async function startDepositDisposition(leaseId: string): Promise<StartDis
   const rule = await rulesFor(lease.property, new Date()).catch(() => null)
   if (!rule?.depositDispositionDays) return { reason: 'no_rule_configured' }
 
-  const moveOutDate = utcToBusinessDate(lease.moveOutAt)
+  // `moveOutAt` is a real TIMESTAMP (`changeLeaseStatus` stamps `new Date()`),
+  // so it is read through the property's zone - NOT with `utcToBusinessDate`,
+  // which is the reader for a `@db.Date`. R-169: a 7pm Chicago move-out is
+  // 00:00Z the NEXT day, so the date-only reader started this statutory clock
+  // a day late for every evening move-out. Identical to the defect R-156
+  // fixed on the eviction cure clock.
+  const moveOutDate = businessDate(lease.moveOutAt, lease.property.timezone)
   const dueOn = addBusinessDays(moveOutDate, rule.depositDispositionDays)
 
   await prisma.$transaction(async (tx) => {

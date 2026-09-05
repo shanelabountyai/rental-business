@@ -8239,3 +8239,64 @@ session — read it before assuming R-169's first build broke something.
 ignoreCommand skips it by design).
 
 Commit: 48bb8ccd6627fcde0ab1fa7714177e371fe175b5
+
+## R-169 — the deposit-disposition clock reads move-out in the property's timezone
+
+**What it built.** Four readers of `Lease.moveOutAt` corrected from
+`utcToBusinessDate` (the `@db.Date` reader) to `businessDate(instant, zone)`
+(the timestamp reader). `moveOutAt` is `DateTime?` — `changeLeaseStatus`
+stamps `new Date()` on the ENDED/TERMINATED transition — so any move-out
+after 7pm Central was already the next calendar day in UTC, and the
+date-only reader started the statutory clock from that later day. The four:
+`deposit-disposition-start.ts` (the statutory deadline itself, plus the
+`deposit.disposition_due` Task's business date), `deposit-disposition-
+reminder-job.ts` (the halfway/overdue window, which the same skew widened by
+a day), `turnover/queries.ts` and `dashboard/queries.ts`. Each needed the
+zone: the start selects `property.timezone`, the reminder job takes
+`timezone` off the `JobContext` it was already destructuring, and the other
+two had the zone in hand already — `getTurnoverForUnit` takes it as a
+parameter, `vacantUnits` binds it two lines above the defect.
+
+A regression test in `deposit-disposition-start.test.ts` seeds
+`2026-09-01T01:30:00Z` — 8:30pm Chicago on 31 August — and asserts the
+deadline is 30 September, not 1 October. Verified red against the old
+reader before the fix landed (`expected '2026-10-01' to be '2026-09-30'`),
+which is the only thing that makes it a regression test rather than a
+restatement.
+
+**What it decided.** The adjacent `nextLease.moveInAt` read in
+`getTurnoverForUnit` was fixed in the same pass, though the row names only
+`moveOutAt`'s four sites: it is the identical defect class on the identical
+line, with the zone already bound, and leaving a known day-late read two
+lines from its own fix is how this class survived R-156 the first time.
+That read stays dead until R-172 gives `moveInAt` a writer — the fix is to
+the reader, not the writer, and R-172 still owns the writer.
+
+Nothing was changed about WHICH moment the clock runs from. The row marks
+that OQ-gated (staff's click on `moveOutAt` vs. the tenant's actual
+surrender date is state law), and D-172 already recorded it as counsel's
+question, not this item's.
+
+**What it left behind.** Three `moveOutAt` readers were already correct and
+were left alone — `reports/operating.ts`, `reports/funnel.ts` and
+`billing/proration.ts` all use `businessDate(x, zone)`, which is what made
+the four wrong ones identifiable as wrong rather than as a house style.
+`deposits/actions.ts` passes the raw `Date` plus the zone into
+`dispositionLetterText`, which formats it correctly in `packages/core/
+ledger/disposition.ts` — no change needed there, and worth knowing before
+anyone greps `moveOutAt` and assumes every hit is a site.
+
+No backfill. Deposits whose `dispositionDueOn` was frozen a day late keep
+that date: the field's own schema comment and D-12 make it frozen-once, and
+moving a running statutory deadline retroactively is the thing that rule
+exists to prevent. New dispositions get the correct clock.
+
+**Gate run:** `lint` clean (0 errors, 16 pre-existing warnings),
+`typecheck` clean, `npm test` 2916 passed / 4 skipped across 219 files,
+and the three touched e2e specs (`turnover`, `dashboard`,
+`deposit-disposition`) 14 passed — reconciling exactly against
+`--list`'s `Total: 14 tests in 3 files`. CI on `main` is currently RED and
+was red before this item: `gh run list` shows R-168a's run failing on
+D-171's `mobile-chrome` pointer-interception races in `import.spec.ts` and
+`inspections.spec.ts`, neither of which this diff touches. D-171 predicted
+exactly this reading and is still unfixed.

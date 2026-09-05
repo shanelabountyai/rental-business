@@ -139,6 +139,27 @@ describe('startDepositDisposition', () => {
     expect(task).not.toBeNull()
   })
 
+  // R-169. `moveOutAt` is a real timestamp, so an evening move-out is
+  // ALREADY the next calendar day in UTC: 8:30pm Chicago on 31 Aug is
+  // 2026-09-01T01:30Z. Reading it with the date-only reader started the
+  // statutory clock from 1 Sep and gave the owner a day of deadline that
+  // no statute grants - the same defect R-156 fixed on the cure clock.
+  it('starts the clock on the property-local move-out day, not the UTC one (R-169)', async () => {
+    await seedRule(30)
+    const property = await seedProperty()
+    const lease = await seedLease(property.id, { moveOutAt: new Date('2026-09-01T01:30:00Z') })
+
+    expect((await startDepositDisposition(lease.id)).reason).toBe('started')
+
+    const deposit = await prisma.deposit.findFirstOrThrow({ where: { leaseId: lease.id } })
+    // 2026-08-31 + 30, not 2026-09-01 + 30.
+    expect(deposit.dispositionDueOn?.toISOString().slice(0, 10)).toBe('2026-09-30')
+    const task = await prisma.task.findFirstOrThrow({
+      where: { subjectId: lease.id, type: 'deposit.disposition_due' },
+    })
+    expect(task.businessDate.toISOString().slice(0, 10)).toBe('2026-08-31')
+  })
+
   it('is a no-op once already started, even if the rule later changes', async () => {
     await seedRule(30)
     const property = await seedProperty()

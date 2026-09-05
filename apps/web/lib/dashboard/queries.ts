@@ -230,7 +230,10 @@ export async function vacantUnits(scope: ResolvedScope, asOf: Date): Promise<Vac
       propertyId: unit.property.id,
       propertyName: unit.property.name,
       daysOnMarket: daysOnMarket({
-        lastMoveOutAt: unit.leases[0]?.moveOutAt ? utcToBusinessDate(unit.leases[0].moveOutAt) : null,
+        // `moveOutAt` is a timestamp, so `businessDate` - the same reader the
+        // two lines below already use. R-169: `utcToBusinessDate` here read a
+        // 6pm move-out as the next day and under-counted days on market.
+        lastMoveOutAt: unit.leases[0]?.moveOutAt ? businessDate(unit.leases[0].moveOutAt, zone) : null,
         unitCreatedAt: businessDate(unit.createdAt, zone),
         asOf: businessDate(asOf, zone),
       }),

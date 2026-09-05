@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { businessDaysBetween, utcToBusinessDate } from '@rental/core/scheduling'
+import { businessDate, businessDaysBetween, utcToBusinessDate } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { createTask } from '@/lib/tasks/create.ts'
 import { SCHEDULED_JOBS } from '@/lib/jobs/runner.ts'
@@ -22,7 +22,7 @@ SCHEDULED_JOBS.push({
   localHour: LOCAL_HOUR,
   description:
     'Flags a deposit disposition halfway to its statutory deadline, and again once it is overdue (INSP-03).',
-  run: async ({ propertyId, businessDate: today }) => {
+  run: async ({ propertyId, timezone, businessDate: today }) => {
     const deposits = await prisma.deposit.findMany({
       where: { propertyId, dispositionDueOn: { not: null }, dispositionSentAt: null },
       select: {
@@ -37,7 +37,11 @@ SCHEDULED_JOBS.push({
     for (const deposit of deposits) {
       if (!deposit.lease.moveOutAt || !deposit.dispositionDueOn) continue
 
-      const start = utcToBusinessDate(deposit.lease.moveOutAt)
+      // `moveOutAt` is a TIMESTAMP read through the property's zone;
+      // `dispositionDueOn` is a `@db.Date` and must not go near one. Reading
+      // the first with `utcToBusinessDate` (R-169) widened this window by a
+      // day for every evening move-out, skewing halfway and overdue with it.
+      const start = businessDate(deposit.lease.moveOutAt, timezone)
       const due = utcToBusinessDate(deposit.dispositionDueOn)
       const windowDays = businessDaysBetween(start, due)
       const elapsedDays = businessDaysBetween(start, today)

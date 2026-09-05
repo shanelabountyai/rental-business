@@ -71,7 +71,11 @@ export async function getTurnoverForUnit(
   })
   if (!project || !project.lease.moveOutAt) return null
 
-  const moveOutDate = utcToBusinessDate(project.lease.moveOutAt)
+  // Both `moveOutAt` and `moveInAt` are real TIMESTAMPS, so the property's
+  // zone reads them - `utcToBusinessDate` is the `@db.Date` reader and put an
+  // evening move-out on the next calendar day, shortening every turn's
+  // `daysVacant` by one (R-169). `targetRentReadyDate` below IS a `@db.Date`.
+  const moveOutDate = businessDate(project.lease.moveOutAt, timezone)
 
   // Whichever lease starts this unit's NEXT tenancy, once one has actually
   // moved in - excludes the departing lease itself (its own `startsOn` is
@@ -89,7 +93,7 @@ export async function getTurnoverForUnit(
 
   const fill = daysToFill({
     vacatedOn: moveOutDate,
-    filledOn: nextLease?.moveInAt ? utcToBusinessDate(nextLease.moveInAt) : null,
+    filledOn: nextLease?.moveInAt ? businessDate(nextLease.moveInAt, timezone) : null,
     asOf: businessDate(asOf, timezone),
   })
 
