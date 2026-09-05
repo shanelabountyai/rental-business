@@ -8200,3 +8200,42 @@ At commit, inside the same transaction that creates the lease, `runImport` write
 **Gate run:** lint ✓ (same 16 pre-existing warnings, none in touched files), typecheck ✓, `npm run build` ✓. No schema change (D-170 reuses `ChargeType.OTHER`), so no migration and `db:ci` is not applicable this item. Unit 2,915 passed / 4 skipped (6 new `planImport` opening-balance cases in `plan.test.ts`). `e2e/import.spec.ts` against a production build: 11 of 12 passed locally (both projects) — the one failure is D-171, confirmed pre-existing on `main` before this item touched anything. **CI itself is red on `main` as of this item's push, and stays red on `gh run rerun --failed` across three consecutive attempts — not a green pipeline.** Both failing tests (`import.spec.ts`'s bulk-document-upload and, newly, `inspections.spec.ts`'s checklist builder — a file this item never touches) pass clean and fast in local isolation on the identical commit; see D-171's update for the full evidence. Recorded plainly rather than claimed green, per this file's own R-141 lesson about not copying forward a CI status nobody checked.
 
 Commit: c765e9f0f5b9b65a4672be25d7d4034e98f34d97
+
+## Arc 3 planning: a second operator review sources the next backlog
+
+**What it did.** Arc 2 closed at R-168a with everything else through R-152
+already ✅. The owner chose the next arc's source the same way (D-172,
+D-164's precedent repeated): the rental-operator agent reviewed the shipped
+product end to end again — PRDs, decisions, PROGRESS, and the code itself —
+and returned fifteen ranked findings, five of them behaviour that is WRONG
+rather than missing. The full review is kept verbatim at
+`docs/reviews/2026-09-05-operator-review.md`; the findings became Milestone
+13 ("Arc 3") in `06-backlog.md`, rows R-169–R-183, wrongness first.
+
+**What it decided.** D-172 (the arc itself). Three rows are OQ-gated rather
+than fully resolved: R-169 fixes the deposit-disposition clock's timezone
+bug but leaves which moment the clock legally runs from (staff's click vs.
+tenant's surrender) for counsel; R-180 ships only the cheap per-entity
+settlement report, not Stripe Connect, which needs a legal-structure
+decision first; R-182 adds day-count-basis fields whose per-state values
+still route through the existing pre-activation legal-review gate. The
+review's "do not build" list (a house-rules settings screen, Stripe Connect
+now, backfilling R-038a/D-169's historical doubled payment rows, a second
+job-failure queue, a deposit-interest accrual engine) is recorded in the
+review doc, not repeated as rows.
+
+**What it left behind.** The findings are inherited evidence — each row
+re-verifies its claim against the code before touching anything, same
+discipline R-153 applied to the last review. The headline candidates for
+wrongness: the deposit clock's timezone bug (R-169), a computed refund with
+no way to pay it (R-170), every counter payment double-counted on three
+surfaces including an eviction packet exhibit (R-171), days-vacant that
+never stops counting because `moveInAt` has no writer (R-172), a tenant with
+no email or phone recorded as portal-notified when they cannot sign in
+(R-173). D-171's CI flake is still open and unrelated to this planning
+session — read it before assuming R-169's first build broke something.
+
+**Gate run:** docs-only change — no code touched, no deploy (the
+ignoreCommand skips it by design).
+
+Commit: (recorded in the next commit)
