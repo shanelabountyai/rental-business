@@ -8238,4 +8238,4 @@ session — read it before assuming R-169's first build broke something.
 **Gate run:** docs-only change — no code touched, no deploy (the
 ignoreCommand skips it by design).
 
-Commit: (recorded in the next commit)
+Commit: 48bb8ccd6627fcde0ab1fa7714177e371fe175b5
