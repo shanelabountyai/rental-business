@@ -37,6 +37,9 @@ const COLUMN_NOTES: Record<(typeof IMPORT_COLUMNS)[number], string> = {
   lease_rent_due_day: 'Optional, defaults to 1.',
   lease_deposit_dollars: 'Optional.',
   lease_deposit_arrangement: 'Optional — CASH, SURETY_BOND or NONE, defaults to CASH.',
+  opening_balance_dollars:
+    'Optional — what this tenancy still owed as of the date below, net of anything already paid. Give both this and the as-of date, or neither.',
+  opening_balance_as_of: 'Required if an opening balance is given. YYYY-MM-DD, on or after the lease start date.',
 }
 
 export default async function ImportPage() {
@@ -48,10 +51,11 @@ export default async function ImportPage() {
         <h1 className="text-2xl font-semibold tracking-tight">Import</h1>
         <p className="text-muted-foreground text-sm">
           Bring an existing portfolio&rsquo;s properties, tenants and leases in from
-          a spreadsheet, plus the paperwork that goes with them. Opening
-          balances are not part of this — a lease starts here with a clean
-          ledger, which is the honest starting point until that mechanism has
-          its own item.
+          a spreadsheet, plus the paperwork that goes with them. A tenancy
+          that still owed money the moment it was migrated in can carry that
+          as an opening balance — charged once the lease is activated, the
+          same as everything else an inherited tenancy waits on staff review
+          for.
         </p>
       </header>
 

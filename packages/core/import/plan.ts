@@ -56,6 +56,8 @@ export const IMPORT_COLUMNS = [
   'lease_rent_due_day',
   'lease_deposit_dollars',
   'lease_deposit_arrangement',
+  'opening_balance_dollars',
+  'opening_balance_as_of',
 ] as const
 export type ImportColumn = (typeof IMPORT_COLUMNS)[number]
 
@@ -162,6 +164,14 @@ export interface LeasePlanData {
   rentDueDay: number
   depositCents: number
   depositArrangement: 'CASH' | 'SURETY_BOND' | 'NONE'
+  /// R-168a: what this tenancy owed the moment it was migrated in - the NET
+  /// amount still outstanding as of `openingBalanceAsOf`, not a
+  /// reconstruction of gross historical charges and payments. Same "known
+  /// position, not reconstructed history" R-168 already applies to an
+  /// imported deposit (owner decision, D-170). Null means no balance was
+  /// owed at migration, which is the ordinary case.
+  openingBalanceCents: number | null
+  openingBalanceAsOf: string | null
 }
 
 export interface RowPlan {
@@ -423,6 +433,7 @@ export function planImport(headerRow: string[], dataRows: string[][], snapshot: 
         const rentCents = leaseCents(cell(raw, 'lease_rent_dollars'))
         const depositCents = leaseCents(cell(raw, 'lease_deposit_dollars')) ?? 0
         const endsOn = cell(raw, 'lease_ends_on') || null
+        const openingBalanceDollars = cell(raw, 'opening_balance_dollars')
         const data: LeasePlanData = {
           unitKey: unit.action === 'reuse' ? unit.id : unit.key,
           startsOn,
@@ -432,6 +443,8 @@ export function planImport(headerRow: string[], dataRows: string[][], snapshot: 
           rentDueDay: Number(cell(raw, 'lease_rent_due_day') || '1'),
           depositCents,
           depositArrangement: (cell(raw, 'lease_deposit_arrangement').toUpperCase() || 'CASH') as LeasePlanData['depositArrangement'],
+          openingBalanceCents: leaseCents(openingBalanceDollars),
+          openingBalanceAsOf: cell(raw, 'opening_balance_as_of') || null,
         }
         const group = leaseGroups.get(leaseKey)
         if (group) {
@@ -452,6 +465,37 @@ export function planImport(headerRow: string[], dataRows: string[][], snapshot: 
             mtmRentDollars: null,
           })
           for (const v of violations) err(`lease_${v.field}`, v.message)
+          // R-168a: an opening balance is optional, but if either half is
+          // given the other is required too - a bare amount with no as-of
+          // date (or the reverse) is not something the charge below can act
+          // on. Checked only on the row that creates the lease, same as
+          // every other lease-term violation above.
+          if (data.openingBalanceCents != null || data.openingBalanceAsOf != null) {
+            if (data.openingBalanceCents == null || !data.openingBalanceAsOf) {
+              err('opening_balance_dollars', 'Give both an opening balance and its as-of date, or neither.')
+            } else if (data.openingBalanceCents <= 0) {
+              err('opening_balance_dollars', 'Enter a positive dollar amount.')
+            } else if (Number.isNaN(new Date(`${data.openingBalanceAsOf}T00:00:00Z`).getTime())) {
+              err('opening_balance_as_of', 'Enter a valid date (YYYY-MM-DD).')
+            } else if (data.openingBalanceAsOf < startsOn) {
+              err('opening_balance_as_of', 'Cannot be before the lease start date.')
+            } else {
+              // A landlord claiming "no honest record before X"
+              // (`historyStartsOn`) and also asserting a specific balance
+              // owed before X is a contradiction on the same property -
+              // whichever row creates the property (or the one already on
+              // file) is what this checks against.
+              const historyFloor =
+                existingProperty?.historyStartsOn ??
+                (property && property.action === 'create' ? property.data.historyStartsOn : null)
+              if (historyFloor && data.openingBalanceAsOf < historyFloor) {
+                err(
+                  'opening_balance_as_of',
+                  `Cannot be before this property's history-starts-on date (${historyFloor}).`,
+                )
+              }
+            }
+          }
           // A DEPOSIT CAP IS NOT CHECKED HERE, deliberately: `validateDepositAmount`
           // guards a NEW deposit against today's statutory ceiling, but every
           // lease this importer creates is `origin: 'INHERITED'` - the deposit
@@ -501,6 +545,8 @@ function placeholderLease(unitKey: string, startsOn: string): LeasePlanData {
     rentDueDay: 1,
     depositCents: 0,
     depositArrangement: 'CASH',
+    openingBalanceCents: null,
+    openingBalanceAsOf: null,
   }
 }
 
@@ -510,7 +556,9 @@ function sameLeaseTerms(a: LeasePlanData, b: LeasePlanData): boolean {
     a.rentCents === b.rentCents &&
     a.rentDueDay === b.rentDueDay &&
     a.depositCents === b.depositCents &&
-    a.depositArrangement === b.depositArrangement
+    a.depositArrangement === b.depositArrangement &&
+    a.openingBalanceCents === b.openingBalanceCents &&
+    a.openingBalanceAsOf === b.openingBalanceAsOf
   )
 }
 

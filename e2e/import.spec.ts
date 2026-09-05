@@ -6,8 +6,9 @@ import { axeScan, uniqueClientHeaders } from './fixtures.ts'
 
 // Bulk CSV import (R-168, PRD §6.8) - entities/tenants/leases with a
 // dry-run diff and per-row errors, plus the bulk document upload keyed by
-// address + type. Opening balances are a separate, not-yet-built item
-// (D-11), so nothing here asserts a ledger effect.
+// address + type. R-168a's opening balances are covered in their own
+// describe block below: a Charge written at commit, pushed to Stripe only
+// once the lease is activated (D-170).
 
 const PASSWORD = 'correct-horse-battery-staple'
 const HEADER = [
@@ -36,6 +37,8 @@ const HEADER = [
   'lease_rent_due_day',
   'lease_deposit_dollars',
   'lease_deposit_arrangement',
+  'opening_balance_dollars',
+  'opening_balance_as_of',
 ].join(',')
 
 const staffIds: string[] = []
@@ -86,6 +89,12 @@ test.afterAll(async () => {
   ).map((lt) => lt.tenantId)
   await prisma.leaseTenant.deleteMany({ where: { leaseId: { in: leaseIds } } })
   await prisma.tenant.deleteMany({ where: { id: { in: tenantIds } } })
+  // R-168a's opening-balance test activates a lease (provisioning a
+  // LeasePayer) and posts a real Charge - neither FK cascades, same shape
+  // D-165 already hit for `TurnoverProject` and leases.spec.ts already
+  // handles for LeasePayer.
+  await prisma.leasePayer.deleteMany({ where: { leaseId: { in: leaseIds } } })
+  await prisma.charge.deleteMany({ where: { leaseId: { in: leaseIds } } })
   await prisma.lease.deleteMany({ where: { id: { in: leaseIds } } })
   await prisma.document.deleteMany({ where: { propertyId: { in: propertyIds } } })
   await prisma.unit.deleteMany({ where: { propertyId: { in: propertyIds } } })
@@ -163,6 +172,8 @@ function csvRow(overrides: Record<string, string> = {}, address: { line1: string
     lease_rent_due_day: '1',
     lease_deposit_dollars: '1500',
     lease_deposit_arrangement: 'CASH',
+    opening_balance_dollars: '',
+    opening_balance_as_of: '',
   }
   const merged = { ...defaults, ...overrides }
   return HEADER.split(',').map((column) => merged[column]).join(',')
@@ -257,6 +268,54 @@ test.describe('bulk import (R-168)', () => {
     await page.goto('/import')
     const results = await axeScan(page)
     expect(results.violations).toEqual([])
+  })
+})
+
+test.describe('opening balances (R-168a)', () => {
+  test('writes an unpushed Charge at import, then pushes it to Stripe once the lease is activated', async ({
+    page,
+  }) => {
+    const owner = await createOwner()
+    await signIn(page, owner.email)
+
+    const entityName = `Import LLC ${randomUUID().slice(0, 8)}`
+    const line1 = `${randomUUID().slice(0, 8)} Import Ave`
+    const csv = `${HEADER}\n${csvRow(
+      { opening_balance_dollars: '450', opening_balance_as_of: '2024-06-15' },
+      { line1, entityName },
+    )}`
+
+    await page.goto('/import')
+    await page
+      .getByLabel('CSV file')
+      .setInputFiles({ name: 'import.csv', mimeType: 'text/csv', buffer: Buffer.from(csv) })
+    await page.getByRole('button', { name: 'Preview' }).click()
+    await page.getByRole('button', { name: 'Import these rows' }).click()
+    await expect(page.getByText(/Imported 1 tenant across 1 lease/)).toBeVisible()
+
+    const property = await prisma.property.findFirstOrThrow({ where: { addressLine1: line1 } })
+    propertyIds.push(property.id)
+    entityIds.push(property.legalEntityId)
+    const lease = await prisma.lease.findFirstOrThrow({ where: { propertyId: property.id } })
+
+    // Written, but not pushed - a DRAFT lease has no Stripe customer yet.
+    const charge = await prisma.charge.findFirstOrThrow({ where: { leaseId: lease.id, type: 'OTHER' } })
+    expect(charge.amountCents).toBe(45000)
+    expect(charge.dueOn.toISOString().slice(0, 10)).toBe('2024-06-15')
+    expect(charge.stripeInvoiceItemId).toBeNull()
+
+    // Activation is what opens the Stripe customer this needs to push to
+    // (`provisionLeaseBilling`) - the tenant is already on the lease as
+    // primary, imported that way, so there is no "add somebody" step first.
+    await page.goto(`/leases/${lease.id}`)
+    await page.getByRole('button', { name: 'Make this lease active' }).click()
+
+    // Polled for the same reason every other activation assertion in this
+    // suite is (leases.spec.ts): every UI signal here resolves before the
+    // write lands.
+    await expect
+      .poll(() => prisma.charge.findUniqueOrThrow({ where: { id: charge.id } }).then((row) => row.stripeInvoiceItemId))
+      .not.toBeNull()
   })
 })
 

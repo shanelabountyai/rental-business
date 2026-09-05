@@ -16,9 +16,10 @@ import { audit } from '@/lib/audit/index.ts'
 import { requirePermission } from '@/lib/auth/guard.ts'
 import { raiseIntakeTasks } from '@/lib/leases/intake.ts'
 
-// Bulk CSV import (R-168, PRD §6.8): entities, tenants and leases only -
-// opening balances are a separate item (D-11 means they cannot be a direct
-// ledger write, and that mechanism needs its own row).
+// Bulk CSV import (R-168, PRD §6.8): entities, tenants and leases, plus
+// R-168a's opening balances - written here as a plain Charge (D-11 means
+// they can never be a direct ledger write) and pushed to Stripe later, on
+// activation, by `chargeOpeningBalance` (lib/leases/opening-balance-charge.ts).
 //
 // Gated on a bare `property.write` - no resource - exactly like
 // `createLegalEntity` (apps/web/lib/properties/actions.ts): a portfolio can
@@ -222,6 +223,46 @@ export async function runImport(
           },
           tx,
         )
+
+        // R-168a: whatever this tenancy owed at migration, recorded now as a
+        // plain Charge - but NOT pushed to Stripe yet. The lease is DRAFT and
+        // has no payer/Stripe customer until staff activates it (same as
+        // every other INHERITED lease), so there is nothing to push to. See
+        // `chargeOpeningBalance` (lib/leases/opening-balance-charge.ts),
+        // called on activation, for the other half.
+        if (data.openingBalanceCents != null && data.openingBalanceAsOf) {
+          const openingBalanceCharge = await tx.charge.create({
+            data: {
+              propertyId,
+              leaseId,
+              type: 'OTHER',
+              amountCents: data.openingBalanceCents,
+              description: 'Opening balance owed at migration',
+              dueOn: parseLeaseDate(data.openingBalanceAsOf)!,
+            },
+          })
+          await audit(
+            {
+              action: 'ledger.adjusted',
+              entityType: 'Charge',
+              entityId: openingBalanceCharge.id,
+              propertyId,
+              after: {
+                type: 'OTHER',
+                amountCents: openingBalanceCharge.amountCents,
+                leaseId,
+                source: 'import',
+                batchId,
+              },
+              // Same choice `chargeDeposit` makes for the identical
+              // situation: none of REASON_REQUIRED's codes describe "a
+              // historical balance was recorded during a bulk import".
+              reasonCode: 'other',
+              reason: 'Opening balance recorded from bulk import at migration (R-168a).',
+            },
+            tx,
+          )
+        }
       }
 
       await tx.leaseTenant.create({

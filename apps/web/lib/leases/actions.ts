@@ -35,6 +35,7 @@ import { rulesFor } from '@/lib/jurisdiction/queries.ts'
 import { dispatchPendingNotifications, notify } from '@/lib/notifications/send.ts'
 import { activateLeaseSideEffects } from './activate.ts'
 import { raiseIntakeTasks } from './intake.ts'
+import { chargeOpeningBalance } from './opening-balance-charge.ts'
 import { retaliationCheckFor } from './retaliation-check.ts'
 
 // Writes for lease records (LEASE-06, RISK-08, R-033). Same shape as every
@@ -557,6 +558,14 @@ export async function changeLeaseStatus(
   if (!wasInForce && willBeInForce) {
     await provisionLeaseBilling(leaseId).catch((error) => {
       console.error(`[lease] billing provisioning failed for ${leaseId}`, error)
+    })
+    // R-168a: an imported (INHERITED) lease may carry one un-pushed opening
+    // balance Charge from the CSV import. `chargeOpeningBalance` is a cheap
+    // no-op (`no_balance`) for every ordinary lease, which has none - see
+    // its own header for why activation, not import, is when this can
+    // finally reach Stripe.
+    await chargeOpeningBalance(leaseId).catch((error) => {
+      console.error(`[lease] opening balance charge failed for ${leaseId}`, error)
     })
   } else if (wasInForce && !willBeInForce) {
     // The tenancy ended. `syncLease` reads what Stripe currently believes

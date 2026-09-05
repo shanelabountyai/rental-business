@@ -32,6 +32,8 @@ function row(overrides: Partial<Record<(typeof IMPORT_COLUMNS)[number], string>>
     lease_rent_due_day: '1',
     lease_deposit_dollars: '1500',
     lease_deposit_arrangement: 'CASH',
+    opening_balance_dollars: '',
+    opening_balance_as_of: '',
   }
   const merged = { ...defaults, ...overrides }
   return HEADER.map((column) => merged[column])
@@ -120,6 +122,76 @@ describe('planImport - a multi-tenant lease', () => {
     )
     expect(plan.ok).toBe(false)
     expect(plan.errors.some((e) => e.line === 3 && e.field === 'lease_rent_dollars')).toBe(true)
+  })
+})
+
+describe('planImport - opening balances (R-168a)', () => {
+  it('plans a clean opening balance onto the new lease', () => {
+    const plan = planImport(
+      HEADER,
+      [row({ opening_balance_dollars: '450', opening_balance_as_of: '2024-01-15' })],
+      EMPTY_SNAPSHOT,
+    )
+    expect(plan.errors).toEqual([])
+    expect(plan.ok).toBe(true)
+    const [planned] = plan.rows
+    expect(planned!.lease.data.openingBalanceCents).toBe(45000)
+    expect(planned!.lease.data.openingBalanceAsOf).toBe('2024-01-15')
+  })
+
+  it('requires both the amount and the as-of date, not just one', () => {
+    const plan = planImport(HEADER, [row({ opening_balance_dollars: '450' })], EMPTY_SNAPSHOT)
+    expect(plan.ok).toBe(false)
+    expect(plan.errors).toContainEqual({
+      line: 2,
+      field: 'opening_balance_dollars',
+      message: 'Give both an opening balance and its as-of date, or neither.',
+    })
+  })
+
+  it('rejects an as-of date before the lease start date', () => {
+    const plan = planImport(
+      HEADER,
+      [row({ opening_balance_dollars: '450', opening_balance_as_of: '2023-12-01' })],
+      EMPTY_SNAPSHOT,
+    )
+    expect(plan.ok).toBe(false)
+    expect(plan.errors.some((e) => e.field === 'opening_balance_as_of')).toBe(true)
+  })
+
+  it("rejects an as-of date before the property's history-starts-on", () => {
+    const plan = planImport(
+      HEADER,
+      [
+        row({
+          property_history_starts_on: '2024-06-01',
+          opening_balance_dollars: '450',
+          opening_balance_as_of: '2024-01-15',
+        }),
+      ],
+      EMPTY_SNAPSHOT,
+    )
+    expect(plan.ok).toBe(false)
+    expect(plan.errors.some((e) => e.field === 'opening_balance_as_of')).toBe(true)
+  })
+
+  it('flags a roommate row that disagrees on the opening balance', () => {
+    const plan = planImport(
+      HEADER,
+      [
+        row({ tenant_first_name: 'Grant', opening_balance_dollars: '450', opening_balance_as_of: '2024-01-15' }),
+        row({ tenant_first_name: 'Robin', lease_rent_dollars: '1500' }),
+      ],
+      EMPTY_SNAPSHOT,
+    )
+    expect(plan.ok).toBe(false)
+    expect(plan.errors.some((e) => e.line === 3 && e.field === 'lease_rent_dollars')).toBe(true)
+  })
+
+  it('is optional - a row with neither cell plans no balance', () => {
+    const plan = planImport(HEADER, [row({})], EMPTY_SNAPSHOT)
+    expect(plan.ok).toBe(true)
+    expect(plan.rows[0]!.lease.data.openingBalanceCents).toBeNull()
   })
 })
 
