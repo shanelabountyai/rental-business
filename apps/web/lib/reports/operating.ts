@@ -8,14 +8,16 @@ import {
   monthlyPandL,
   operatingSnapshot,
   renewalRate,
+  scheduledRentCentsInWindow,
   spendByTrade,
   tradeForJob,
   vacantDaysInWindow,
 } from '@rental/core/metrics'
-import type { OccupiedInterval, RenewalRate } from '@rental/core/metrics'
+import type { OccupiedInterval, RentedInterval, RenewalRate } from '@rental/core/metrics'
 import { businessDate, businessDaysBetween, utcToBusinessDate } from '@rental/core/scheduling'
 import type { BusinessDate } from '@rental/core/scheduling'
 import type { AccountingBasis, ExportLine } from '@rental/core/tax'
+import { dailyCostOfVacancyCents } from '@rental/core/units'
 import { prisma } from '@rental/db'
 import type { ResolvedScope } from '@/lib/scope/current-scope.ts'
 import { taxExportFacts } from '@/lib/tax/queries.ts'
@@ -109,7 +111,7 @@ export async function operatingReport(
     .filter((line) => line.sourceKind === 'WorkOrder')
     .map((line) => line.sourceId)
 
-  const [properties, units, ticketCounts, jobTrades, renewalLeases] = await Promise.all([
+  const [properties, units, ticketCounts, jobTrades, renewalLeases, concessionCharges] = await Promise.all([
     prisma.property.findMany({
       where: { id: { in: propertyIds } },
       select: { id: true, name: true, timezone: true, acquiredOn: true, createdAt: true },
@@ -119,8 +121,10 @@ export async function operatingReport(
       select: {
         id: true,
         propertyId: true,
+        status: true,
+        marketRentCents: true,
         leases: {
-          select: { startsOn: true, endsOn: true, moveInAt: true, moveOutAt: true },
+          select: { startsOn: true, endsOn: true, moveInAt: true, moveOutAt: true, rentCents: true },
         },
       },
     }),
@@ -157,6 +161,15 @@ export async function operatingReport(
       },
       select: { status: true, renewalLeases: { select: { id: true }, take: 1 } },
     }),
+    // Value given away as a move-in concession (review §12) - the economic-
+    // occupancy denominator's third term. No write path creates one of these
+    // today (grep the app for `CONCESSION`), so this returns nothing yet;
+    // the query exists so a future one is counted without a second item.
+    prisma.charge.groupBy({
+      by: ['propertyId'],
+      where: { propertyId: { in: propertyIds }, type: 'CONCESSION', dueOn: { gte: windowStart, lte: windowEnd } },
+      _sum: { amountCents: true },
+    }),
   ])
 
   const zoneOf = new Map(properties.map((p) => [p.id, p.timezone]))
@@ -166,6 +179,8 @@ export async function operatingReport(
   const vacantDays = new Map<string, number>()
   const availableDays = new Map<string, number>()
   const unitCounts = new Map<string, number>()
+  const vacancyLoss = new Map<string, number>()
+  const scheduledRent = new Map<string, number>()
   const windowLength = businessDaysBetween(from, to) + 1
 
   for (const unit of units) {
@@ -194,7 +209,30 @@ export async function operatingReport(
     vacantDays.set(unit.propertyId, (vacantDays.get(unit.propertyId) ?? 0) + days)
     availableDays.set(unit.propertyId, (availableDays.get(unit.propertyId) ?? 0) + available)
     unitCounts.set(unit.propertyId, (unitCounts.get(unit.propertyId) ?? 0) + 1)
+
+    // Economic occupancy (review §12) - DOWN excluded from both terms below.
+    // A unit off the market for repairs was never available to rent, so it
+    // is neither losing the owner a tenant nor scheduled to bill one.
+    if (unit.status !== 'DOWN') {
+      const dailyCost = dailyCostOfVacancyCents(unit.marketRentCents)
+      if (dailyCost != null) {
+        vacancyLoss.set(unit.propertyId, (vacancyLoss.get(unit.propertyId) ?? 0) + dailyCost * days)
+      }
+      const rentedIntervals: RentedInterval[] = unit.leases.map((lease) => ({
+        ...occupiedInterval(lease, zone),
+        rentCents: lease.rentCents,
+      }))
+      scheduledRent.set(
+        unit.propertyId,
+        (scheduledRent.get(unit.propertyId) ?? 0) +
+          scheduledRentCentsInWindow({ intervals: rentedIntervals, from, to }),
+      )
+    }
   }
+
+  const concessions = new Map(
+    concessionCharges.map((row) => [row.propertyId, Math.abs(row._sum.amountCents ?? 0)]),
+  )
 
   // -- Trade attribution and turn cost, both off the export's own lines -----
   const tradeOf = new Map(
@@ -242,6 +280,9 @@ export async function operatingReport(
       availableDays,
       ticketCounts: new Map(ticketCounts.map((row) => [row.propertyId, row._count._all])),
       turnCosts,
+      vacancyLoss,
+      scheduledRent,
+      concessions,
     }),
     tradeSpend,
     renewal: renewalRate(renewalLeases),

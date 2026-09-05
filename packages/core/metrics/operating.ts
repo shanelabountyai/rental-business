@@ -73,6 +73,39 @@ export function vacantDaysInWindow(facts: {
   return Math.max(0, totalDays - occupied)
 }
 
+/// An occupied stretch with the rent it was occupied AT - a unit re-let
+/// mid-period at a different rent has two of these, not one.
+export interface RentedInterval extends OccupiedInterval {
+  rentCents: number
+}
+
+/**
+ * What rent was actually scheduled to bill across `[from, to]` - the
+ * contract-rent counterpart to `vacantDaysInWindow`'s empty days, using the
+ * same flat thirty-day month `dailyCostOfVacancyCents`
+ * (`packages/core/units/vacancy.ts`) already uses for a day's cost. This is
+ * the "scheduled" side of economic occupancy (review §12): what tenants
+ * actually agreed to pay for their occupied days, as distinct from what was
+ * COLLECTED, which a delinquency can make smaller.
+ */
+export function scheduledRentCentsInWindow(facts: {
+  intervals: readonly RentedInterval[]
+  from: BusinessDate
+  to: BusinessDate
+}): number {
+  const endExclusive = addBusinessDays(facts.to, 1)
+  let total = 0
+  for (const interval of facts.intervals) {
+    const overlapStart = interval.movedInOn > facts.from ? interval.movedInOn : facts.from
+    const intervalEnd = interval.movedOutOn ?? endExclusive
+    const overlapEnd = intervalEnd < endExclusive ? intervalEnd : endExclusive
+    if (overlapStart >= overlapEnd) continue
+    const days = businessDaysBetween(overlapStart, overlapEnd)
+    total += Math.round((interval.rentCents / 30) * days)
+  }
+  return total
+}
+
 /**
  * The day a unit started being able to earn for this owner.
  *
@@ -255,6 +288,17 @@ export interface PropertySnapshot {
   availableDays: number
   ticketCount: number
   turnCostCents: number
+  /// Market rent × vacant days, DOWN units excluded (review §12) - a unit
+  /// off the market for repairs is not costing the owner a tenant it could
+  /// not have rented anyway.
+  vacancyLossCents: number
+  /// What tenants actually agreed to pay for their occupied days (DOWN
+  /// units excluded) - the "scheduled" side of economic occupancy.
+  scheduledRentCents: number
+  /// Value given away as move-in concessions (`Charge.type === 'CONCESSION'`),
+  /// as a positive figure - added back on the economic-occupancy denominator
+  /// because `incomeCents` above already nets it out.
+  concessionCents: number
 }
 
 /// The Schedule E lines that are maintenance. Both, not just repairs: a
@@ -276,6 +320,11 @@ export function operatingSnapshot(input: {
   availableDays: ReadonlyMap<string, number>
   ticketCounts: ReadonlyMap<string, number>
   turnCosts: ReadonlyMap<string, number>
+  /// Optional: absent callers (all existing tests) get zero on the three new
+  /// columns rather than having to thread empty maps through every case.
+  vacancyLoss?: ReadonlyMap<string, number>
+  scheduledRent?: ReadonlyMap<string, number>
+  concessions?: ReadonlyMap<string, number>
 }): PropertySnapshot[] {
   const maintenance = new Map<string, number>()
   for (const line of input.lines) {
@@ -297,8 +346,29 @@ export function operatingSnapshot(input: {
       availableDays: input.availableDays.get(property.propertyId) ?? 0,
       ticketCount: input.ticketCounts.get(property.propertyId) ?? 0,
       turnCostCents: input.turnCosts.get(property.propertyId) ?? 0,
+      vacancyLossCents: input.vacancyLoss?.get(property.propertyId) ?? 0,
+      scheduledRentCents: input.scheduledRent?.get(property.propertyId) ?? 0,
+      concessionCents: input.concessions?.get(property.propertyId) ?? 0,
     }))
     .sort((a, b) => a.netCents - b.netCents || a.propertyName.localeCompare(b.propertyName))
+}
+
+/**
+ * Collected ÷ (scheduled + vacancy loss + concessions) - the share of a
+ * fully-let, no-concessions portfolio this property actually earned. Null
+ * with nothing in the denominator, the same "not priced" reasoning
+ * `dailyCostOfVacancyCents` uses - 0% would read as "earned nothing" rather
+ * than "cannot be answered".
+ */
+export function economicOccupancy(facts: {
+  collectedCents: number
+  scheduledRentCents: number
+  vacancyLossCents: number
+  concessionCents: number
+}): number | null {
+  const denominator = facts.scheduledRentCents + facts.vacancyLossCents + facts.concessionCents
+  if (denominator <= 0) return null
+  return facts.collectedCents / denominator
 }
 
 /// Vacancy as a share of the days that could have been let. Null rather than

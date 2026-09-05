@@ -69,35 +69,51 @@ export interface RentRoll {
   totals: ReturnType<typeof agingTotals>
   billedCents: number
   outstandingCents: number
+  /// This month's vacancy loss: market rent summed over units currently
+  /// VACANT or MAKE_READY (review §12). A snapshot, not a period integral -
+  /// the rent roll itself is "as of now", not "over a range" - so this is
+  /// simply what an owner is not billing this month, the same footing as
+  /// `billedCents` beside it. DOWN units are excluded: a unit off the market
+  /// for repairs was never available to rent this month either.
+  vacancyLossCents: number
 }
 
 export async function rentRoll(scope: ResolvedScope, asOfDate?: Date): Promise<RentRoll> {
   const asOf = asOfDate ?? new Date()
 
-  const leases = await prisma.lease.findMany({
-    where: {
-      propertyId: { in: scope.propertyIds },
-      status: { in: ['ACTIVE', 'MONTH_TO_MONTH'] },
-    },
-    select: {
-      id: true,
-      propertyId: true,
-      rentCents: true,
-      rentDueDay: true,
-      property: { select: { name: true, state: true, county: true, timezone: true } },
-      unit: { select: { name: true } },
-      leaseTenants: {
-        select: { tenant: { select: { id: true, firstName: true, lastName: true } } },
+  const [leases, vacantUnits] = await Promise.all([
+    prisma.lease.findMany({
+      where: {
+        propertyId: { in: scope.propertyIds },
+        status: { in: ['ACTIVE', 'MONTH_TO_MONTH'] },
       },
-      leasePayers: {
-        where: { active: true },
-        select: { payerType: true, collectionMethod: true, portionCents: true, debitDay: true },
+      select: {
+        id: true,
+        propertyId: true,
+        rentCents: true,
+        rentDueDay: true,
+        property: { select: { name: true, state: true, county: true, timezone: true } },
+        unit: { select: { name: true } },
+        leaseTenants: {
+          select: { tenant: { select: { id: true, firstName: true, lastName: true } } },
+        },
+        leasePayers: {
+          where: { active: true },
+          select: { payerType: true, collectionMethod: true, portionCents: true, debitDay: true },
+        },
+        deposits: { select: { heldCents: true, appliedCents: true, refundedCents: true } },
       },
-      deposits: { select: { heldCents: true, appliedCents: true, refundedCents: true } },
-    },
-  })
+    }),
+    prisma.unit.findMany({
+      where: { propertyId: { in: scope.propertyIds }, status: { in: ['VACANT', 'MAKE_READY'] } },
+      select: { marketRentCents: true },
+    }),
+  ])
+
+  const vacancyLossCents = vacantUnits.reduce((sum, unit) => sum + (unit.marketRentCents ?? 0), 0)
+
   if (leases.length === 0) {
-    return { rows: [], totals: agingTotals([]), billedCents: 0, outstandingCents: 0 }
+    return { rows: [], totals: agingTotals([]), billedCents: 0, outstandingCents: 0, vacancyLossCents }
   }
 
   const leaseIds = leases.map((lease) => lease.id)
@@ -245,6 +261,7 @@ export async function rentRoll(scope: ResolvedScope, asOfDate?: Date): Promise<R
     totals: agingTotals(rows),
     billedCents: rows.reduce((sum, row) => sum + row.rentCents, 0),
     outstandingCents: rows.reduce((sum, row) => sum + Math.max(0, row.balanceCents), 0),
+    vacancyLossCents,
   }
 }
 

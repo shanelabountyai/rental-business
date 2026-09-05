@@ -97,7 +97,14 @@ export default async function RentRollPage({
         </dl>
         <p className="text-muted-foreground text-sm">
           {formatCents(fullRoll.outstandingCents)} outstanding against{' '}
-          {formatCents(fullRoll.billedCents)} of monthly rent.
+          {formatCents(fullRoll.billedCents)} of monthly rent
+          {fullRoll.vacancyLossCents > 0 && (
+            <>
+              , plus {formatCents(fullRoll.vacancyLossCents)} in vacancy loss this month (market
+              rent on vacant and make-ready units; units marked Down are excluded)
+            </>
+          )}
+          .
         </p>
         {(validBucket || pastGrace === '1') && (
           <p className="text-muted-foreground text-sm">

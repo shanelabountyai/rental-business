@@ -1,5 +1,5 @@
 import { formatCents } from '@rental/core/money'
-import { UNATTRIBUTED_TRADE, vacancyRate } from '@rental/core/metrics'
+import { UNATTRIBUTED_TRADE, economicOccupancy, vacancyRate } from '@rental/core/metrics'
 import { isAccountingBasis } from '@rental/core/tax'
 import Link from 'next/link'
 import { requireScope } from '@/lib/auth/guard.ts'
@@ -54,6 +54,15 @@ export default async function OperatingReportPage({
   const entityIncome = report?.snapshot.reduce((t, row) => t + row.incomeCents, 0) ?? 0
   const entityExpense = report?.snapshot.reduce((t, row) => t + row.expenseCents, 0) ?? 0
   const entityTurn = report?.snapshot.reduce((t, row) => t + row.turnCostCents, 0) ?? 0
+  const entityVacancyLoss = report?.snapshot.reduce((t, row) => t + row.vacancyLossCents, 0) ?? 0
+  const entityScheduled = report?.snapshot.reduce((t, row) => t + row.scheduledRentCents, 0) ?? 0
+  const entityConcessions = report?.snapshot.reduce((t, row) => t + row.concessionCents, 0) ?? 0
+  const entityEconomicOcc = economicOccupancy({
+    collectedCents: entityIncome,
+    scheduledRentCents: entityScheduled,
+    vacancyLossCents: entityVacancyLoss,
+    concessionCents: entityConcessions,
+  })
 
   return (
     <div className="flex max-w-5xl flex-col gap-6">
@@ -149,6 +158,9 @@ export default async function OperatingReportPage({
                 </h2>
                 <p className="text-muted-foreground text-xs">
                   Worst net first — a list sorted by name buries the house that is losing money.
+                  Vacancy loss is market rent × vacant days; economic occupancy is collected ÷
+                  (scheduled rent + vacancy loss + concessions). A unit marked Down is excluded from
+                  both — off the market for repairs, not costing you a tenant it could not have had.
                 </p>
 
                 {/* THE FIRST REAL <table> IN THIS APP, and a deliberate break
@@ -190,6 +202,12 @@ export default async function OperatingReportPage({
                         <th scope="col" className="py-2 pr-4 text-right font-medium">
                           Vacant days
                         </th>
+                        <th scope="col" className="py-2 pr-4 text-right font-medium">
+                          Vacancy loss
+                        </th>
+                        <th scope="col" className="py-2 pr-4 text-right font-medium">
+                          Economic occ.
+                        </th>
                         <th scope="col" className="py-2 text-right font-medium">
                           Tickets
                         </th>
@@ -198,6 +216,12 @@ export default async function OperatingReportPage({
                     <tbody>
                       {report.snapshot.map((row) => {
                         const rate = vacancyRate(row)
+                        const economicOcc = economicOccupancy({
+                          collectedCents: row.incomeCents,
+                          scheduledRentCents: row.scheduledRentCents,
+                          vacancyLossCents: row.vacancyLossCents,
+                          concessionCents: row.concessionCents,
+                        })
                         return (
                           <tr key={row.propertyId} className="border-b last:border-0">
                             <th scope="row" className="py-2 pr-4 text-left font-normal">
@@ -234,6 +258,12 @@ export default async function OperatingReportPage({
                                   {Math.round(rate * 100)}%
                                 </span>
                               )}
+                            </td>
+                            <td className="py-2 pr-4 text-right tabular-nums">
+                              {formatCents(row.vacancyLossCents)}
+                            </td>
+                            <td className="py-2 pr-4 text-right tabular-nums">
+                              {economicOcc != null ? `${Math.round(economicOcc * 100)}%` : '—'}
                             </td>
                             <td className="py-2 text-right tabular-nums">{row.ticketCount}</td>
                           </tr>
@@ -323,6 +353,12 @@ export default async function OperatingReportPage({
                   </dd>
                   <dt className="text-muted-foreground">Turn cost</dt>
                   <dd className="text-right tabular-nums">{formatCents(entityTurn)}</dd>
+                  <dt className="text-muted-foreground">Vacancy loss</dt>
+                  <dd className="text-right tabular-nums">{formatCents(entityVacancyLoss)}</dd>
+                  <dt className="text-muted-foreground">Economic occupancy</dt>
+                  <dd className="text-right tabular-nums">
+                    {entityEconomicOcc != null ? `${Math.round(entityEconomicOcc * 100)}%` : '—'}
+                  </dd>
                   <dt className="text-muted-foreground">
                     Renewal rate ({report.renewal.renewed} renewed ·{' '}
                     {report.renewal.endedWithoutRenewal} not)

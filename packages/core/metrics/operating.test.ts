@@ -4,8 +4,10 @@ import type { ExportLine } from '../tax/export.ts'
 import {
   UNATTRIBUTED_TRADE,
   availableFrom,
+  economicOccupancy,
   monthlyPandL,
   operatingSnapshot,
+  scheduledRentCentsInWindow,
   spendByTrade,
   tradeForJob,
   vacancyRate,
@@ -348,5 +350,66 @@ describe('vacancy rate', () => {
     // A property acquired after the window closed has no rate. Showing 0%
     // would read as "never empty".
     expect(vacancyRate({ vacantDays: 0, availableDays: 0 })).toBeNull()
+  })
+})
+
+describe('scheduledRentCentsInWindow', () => {
+  it('bills the contract rent for the occupied days inside the window', () => {
+    // 30 days at $1,500/mo ($50/day) - a full month, moved in on day 1.
+    const cents = scheduledRentCentsInWindow({
+      intervals: [{ movedInOn: '2026-03-01', movedOutOn: null, rentCents: 150_000 }],
+      from: '2026-03-01',
+      to: '2026-03-30',
+    })
+    expect(cents).toBe(150_000)
+  })
+
+  it('clips to the window and to the interval, same as vacantDaysInWindow', () => {
+    // Moved in mid-window, still in residence at the end.
+    const cents = scheduledRentCentsInWindow({
+      intervals: [{ movedInOn: '2026-03-16', movedOutOn: null, rentCents: 150_000 }],
+      from: '2026-03-01',
+      to: '2026-03-30',
+    })
+    expect(cents).toBe(75_000) // 15 days at $50/day
+  })
+
+  it('sums two leases on the same unit at different rents', () => {
+    const cents = scheduledRentCentsInWindow({
+      intervals: [
+        { movedInOn: '2026-01-01', movedOutOn: '2026-03-01', rentCents: 120_000 },
+        { movedInOn: '2026-03-01', movedOutOn: null, rentCents: 150_000 },
+      ],
+      from: '2026-02-01',
+      to: '2026-03-30',
+    })
+    // 28 days of Feb at $120,000/30 = $4,000/day, plus 30 days of March at $50/day.
+    expect(cents).toBe(28 * 4_000 + 30 * 5_000)
+  })
+
+  it('is zero with no intervals', () => {
+    expect(scheduledRentCentsInWindow({ intervals: [], from: '2026-03-01', to: '2026-03-30' })).toBe(0)
+  })
+})
+
+describe('economicOccupancy', () => {
+  it('is collected over scheduled plus vacancy loss plus concessions', () => {
+    const rate = economicOccupancy({
+      collectedCents: 90_000,
+      scheduledRentCents: 80_000,
+      vacancyLossCents: 15_000,
+      concessionCents: 5_000,
+    })
+    expect(rate).toBeCloseTo(0.9) // 90,000 / 100,000
+  })
+
+  it('is null, never zero, with nothing in the denominator', () => {
+    const rate = economicOccupancy({
+      collectedCents: 0,
+      scheduledRentCents: 0,
+      vacancyLossCents: 0,
+      concessionCents: 0,
+    })
+    expect(rate).toBeNull()
   })
 })
