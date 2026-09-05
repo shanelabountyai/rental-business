@@ -8300,3 +8300,5 @@ was red before this item: `gh run list` shows R-168a's run failing on
 D-171's `mobile-chrome` pointer-interception races in `import.spec.ts` and
 `inspections.spec.ts`, neither of which this diff touches. D-171 predicted
 exactly this reading and is still unfixed.
+
+Commit: 48478015ba16824e1d62140cfcf6a87671f1fe08
