@@ -47,8 +47,15 @@ export function PropertySwitcher({
   // one option is noise.
   if (!scope.switchable) return null
 
+  // `min-w-0 max-w-full` on the select, and `min-w-0` on the form, for the
+  // reason INPUT_CLASSES carries them (R-170a): this select's options are
+  // PROPERTY AND ENTITY NAMES, so its min-content width is whatever the
+  // longest name in the portfolio happens to be - measured at 398px on a
+  // 412px phone, in the header of every admin page. A flex item will not
+  // shrink below min-content without `min-w-0`, and the form needs it too or
+  // the select has nothing to shrink inside.
   return (
-    <form action={onSelect} className="flex items-center gap-2">
+    <form action={onSelect} className="flex min-w-0 items-center gap-2">
       <label htmlFor="property-scope" className="sr-only">
         Filter by property or entity
       </label>
@@ -57,7 +64,7 @@ export function PropertySwitcher({
         name="scope"
         defaultValue={value}
         onChange={(event) => event.currentTarget.form?.requestSubmit()}
-        className="border-input bg-background focus-visible:ring-ring min-h-11 rounded-md border px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+        className="border-input bg-background focus-visible:ring-ring min-h-11 max-w-full min-w-0 rounded-md border px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
       >
         <option value="all">All properties</option>
 

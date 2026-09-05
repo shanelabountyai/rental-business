@@ -9,6 +9,15 @@ import { INPUT_CLASSES } from '@/components/ui-classes.ts'
 // aria-describedby, and a select/datalist variant - while keeping the same
 // accessibility baseline: a real <label>, min-h-11 targets, visible focus
 // rings.
+//
+// `min-w-0` ON EVERY FIELD WRAPPER, for the reason INPUT_CLASSES carries the
+// same class (R-170a). Constraining the control alone is not enough when the
+// field sits in a grid: a `grid-cols-*` track is `minmax(auto, 1fr)`, and the
+// `auto` minimum resolves to the min-content contribution of the item - so a
+// <select> whose widest <option> is long still forces its TRACK wide, and the
+// page past the phone viewport, however narrow the control itself is willing
+// to be. Measured: `#field-case-documentationType` stayed 534px on a 412px
+// viewport with the control fixed and the wrapper not.
 
 /**
  * The admin side's error region.
@@ -112,7 +121,7 @@ export function TextField({
     .join(' ')
 
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex min-w-0 flex-col gap-1.5">
       <label htmlFor={id} className="text-sm font-medium">
         {label}
         {required && <span aria-hidden="true"> *</span>}
@@ -177,7 +186,7 @@ export function TextareaField({
     .join(' ')
 
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex min-w-0 flex-col gap-1.5">
       <label htmlFor={id} className="text-sm font-medium">
         {label}
         {required && <span aria-hidden="true"> *</span>}
@@ -306,7 +315,7 @@ export function SelectField({
   const errorId = `${id}-error`
 
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex min-w-0 flex-col gap-1.5">
       <label htmlFor={id} className="text-sm font-medium">
         {label}
         {required && <span aria-hidden="true"> *</span>}

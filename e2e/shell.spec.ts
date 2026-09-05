@@ -344,3 +344,78 @@ test.describe('universal search', () => {
     await expect(page.getByText(/never cross that boundary/)).toBeVisible()
   })
 })
+
+test.describe('the phone viewport', () => {
+  /**
+   * A LONG PROPERTY NAME MUST NOT MAKE THE PAGE WIDER THAN THE PHONE (R-170a).
+   *
+   * =========================================================================
+   * This is the regression guard for the defect that made CI red for four
+   * consecutive runs, and it seeds a deliberately long name because the
+   * defect is DATA-DEPENDENT and the ordinary fixtures are too short to show
+   * it.
+   *
+   * A native `<select>`'s min-content width is the width of its widest
+   * `<option>`, and `min-width: auto` on a flex or grid item refuses to
+   * shrink below min-content - so one long property name made the switcher
+   * 398px wide in the header of every admin page, and the page wider than the
+   * 412px device. Chromium's mobile emulation answers that by EXPANDING THE
+   * LAYOUT VIEWPORT (measured: `innerWidth` 485 and 576 against a
+   * `clientWidth` of 412), at which point Playwright's click point - computed
+   * from `getBoundingClientRect` - stops matching where the browser
+   * dispatches the press. Every click below the fold lands high, on whatever
+   * sits above the target, and reports "<something> intercepts pointer
+   * events" until the 60s timeout. It reads as a race and is not one: the
+   * geometry is stable, so every retry misses identically, which is why
+   * D-171 chased it as a race for three items and why the retry budget was
+   * never going to help.
+   *
+   * WHY AXE DOES NOT COVER THIS. `overflow-x-auto` wrappers clip, so a
+   * scrolling table does not widen `documentElement` - this assertion is
+   * specifically about content that escapes the viewport entirely, which is
+   * WCAG 1.4.10 (Reflow) and which axe cannot see at a desktop width.
+   * `ui-classes.ts` already records the same lesson about a green scan at one
+   * width; this asserts it at the width that matters.
+   *
+   * Deliberately asserted on `documentElement`, not on any one control: the
+   * next instance of this will be some other unconstrained element, and the
+   * page being wider than the device is the property that actually matters.
+   * =========================================================================
+   */
+  test('a long property name does not widen the page past the device', async ({
+    page,
+  }, testInfo) => {
+    test.skip(
+      testInfo.project.name !== 'mobile-chrome',
+      'A desktop viewport is wider than anything here; the defect only exists on a phone.',
+    )
+
+    // Two properties, because the switcher hides itself for an actor with one.
+    await createProperty('Shell Reflow Entity', 'Shell Reflow House')
+    await createProperty(
+      'Shell Reflow Entity With A Deliberately Very Long Legal Name LLC',
+      'Shell Reflow House On A Deliberately Very Long Street Name',
+    )
+    const staff = await createStaff('owner')
+    await signIn(page, staff.email)
+
+    for (const url of ['/dashboard', '/properties', '/inspections']) {
+      await page.goto(url)
+      const width = await page.evaluate(() => ({
+        scrollWidth: document.documentElement.scrollWidth,
+        clientWidth: document.documentElement.clientWidth,
+        innerWidth: window.innerWidth,
+      }))
+      expect(
+        width.scrollWidth,
+        `${url} is ${width.scrollWidth}px wide on a ${width.clientWidth}px viewport`,
+      ).toBeLessThanOrEqual(width.clientWidth)
+      // The layout viewport itself expanding is the mechanism that breaks
+      // every click below the fold, so assert it directly rather than
+      // inferring it.
+      expect(width.innerWidth, `${url} expanded the layout viewport`).toBe(
+        width.clientWidth,
+      )
+    }
+  })
+})

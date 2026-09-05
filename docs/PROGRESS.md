@@ -8441,3 +8441,86 @@ unowned cause, which is why it stopped being something to note and became
 R-170a (D-175).
 
 Commit: 1476861d9275a132635032d5586d32833aa486c2
+
+## R-170a — CI's red mobile-chrome sweep: not a race, an unconstrained `<select>`
+
+**What it built.** Four lines of CSS in three shared places, a regression
+guard, and a CI reporter that writes files.
+
+`INPUT_CLASSES` in [ui-classes.ts](../apps/web/components/ui-classes.ts) gains
+`max-w-full min-w-0`; `field.tsx`'s three field wrappers gain `min-w-0`; the
+property switcher's hand-copied class list gains the same, and its `<form>`
+gains `min-w-0` so the select has something to shrink inside. The wrapper is a
+separate fix and not belt-and-braces: a `grid-cols-*` track is
+`minmax(auto, 1fr)` and the `auto` minimum resolves to the item's min-content
+contribution, so constraining the control alone left the confidential case form
+still 534px wide on a 412px viewport.
+
+**What it decided (D-176).** The cause, established by measurement rather than
+inference, and it is not what D-171 recorded. A native `<select>`'s min-content
+width is the width of its widest `<option>`, and `min-width: auto` refuses to
+shrink a flex or grid item below min-content — so one long name made
+`#property-scope` **398px** wide in the header of *every* admin page and
+`#field-case-documentationType` **534px** in a case form. Chromium's mobile
+emulation answers an over-wide layout by **expanding the layout viewport**:
+measured `innerWidth` **485** and **576** against a `clientWidth` of **412**,
+and the trace catches it changing mid-test (412×839 on `/login`, 589×1200 on
+landing at `/leases/[id]`, ratio 1.43). Playwright's click point comes from
+`getBoundingClientRect`, so it then no longer matches where the browser
+dispatches the press: the press lands high, on whatever sits above the target,
+and the miss grows with distance down the page.
+
+**Three of D-171's conclusions were wrong, and each one is why this went three
+items unowned.** *"Only under CI's concurrent full-sweep load"* — CI runs **2
+workers**, fewer than local, and the full local `mobile-chrome` sweep
+reproduced every failure (7 failed / 573 passed / 1 skipped). *"A race"* — the
+geometry is stable, which is precisely why 60s of retries never won; "retries
+did not recover" should have ruled a race out rather than in, and no retry
+budget was ever going to help. *"A fixed/sticky element overlapping a
+bottom-of-viewport control"* — there is no `sticky`, `fixed` or non-`sr-only`
+`absolute` anywhere in the admin layout or these pages. It **is** genuinely
+mobile-only, but for an unassumed reason: `sm:grid-cols-*` stacks below 640px,
+so the same page is 3–4× taller and the target sits far below the fold, where
+the coordinate error is largest.
+
+**The product defect is the finding, not the tests.** Content that forces
+horizontal panning on a phone is a WCAG 1.4.10 (Reflow) failure, on the staff
+screens a PM uses from a driveway (PRD §6.5). The suite was the messenger.
+
+**Real bug found along the way, and fixed.** `staff.spec.ts`'s three
+`axeScan(page)` calls **discarded their results** — every other caller in the
+suite asserts `expect(results.violations).toEqual([])`, this one awaited the
+promise and threw the answer away, so those three pages could have been
+arbitrarily inaccessible and stayed green. Asserted now; measured 0 violations
+on all three, so the fix cost nothing. Its 60s timeout also had no headroom —
+measured in isolation, one worker, no contention: `/staff` **2.2s**,
+`/staff/new` **20.9s**, `/staff/[id]` **21.8s**, about **45s of a 60s budget
+before any other test runs** — which is why it was the last red test on both
+projects. Now 180s, deliberately far above the measurement.
+
+**Second real bug found, and fixed.** `.github/workflows/ci.yml` has uploaded
+`playwright-report/` on failure for months while `playwright.config.ts` set
+`reporter: 'github'` — an annotation-only reporter that writes no files. All
+three red runs carry `total_count: 0` artifacts. `trace: 'on-first-retry'` was
+recording the exact evidence D-171 said it did not have, into `test-results/`,
+and the runner discarded it every time. The `html` reporter is now on in CI, so
+the next red run arrives with its traces attached.
+
+**What it left behind.** The 10× spread in axe cost between `/staff` (2.2s) and
+`/staff/new` / `/staff/[id]` (~21s each) is not noise — axe's cost is
+superlinear in node count, so a 21s scan is a page saying it is very large. Left
+exactly as found, noted in the spec, and **owned by no item**. Also unowned:
+this fix constrains the shared primitives, so a future control that hand-rolls
+its own classes can reintroduce the same overflow; the `shell.spec.ts` guard
+asserts the page-level property (`documentElement.scrollWidth <= clientWidth`
+and `innerWidth === clientWidth`) rather than any one control, which is what
+catches that.
+
+**Gate run:** `lint` clean (0 errors, 16 pre-existing warnings), `typecheck`
+clean, `npm test` 2928 passed / 4 skipped across 219 files, full e2e
+**1161 passed / 0 failed / 0 flaky / 3 skipped in 6.3m** — reconciling exactly
+against the 1162-test baseline plus this item's one new test on both projects
+(it skips on `desktop-chrome`, where the defect cannot exist). The same sweep
+before the fix was 7 failed and 8.7m; the 2.4 minutes are the 60s timeouts
+going away. The regression guard is proven both ways — with the fix stashed it
+fails with `/dashboard is 639px wide on a 412px viewport`.

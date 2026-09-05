@@ -330,15 +330,41 @@ test('a property-scoped manager cannot reach the directory at all', async ({ pag
   await expect(page).toHaveURL(/\/no-access/)
 })
 
+/**
+ * TWO DEFECTS FIXED HERE, and the second is why the first went unseen (R-170a).
+ *
+ * ==========================================================================
+ * These three scans DISCARDED THEIR RESULTS. `axeScan` returns the results
+ * and every other caller in the suite asserts on them
+ * (`expect(results.violations).toEqual([])`); this one awaited the promise
+ * and threw the answer away, so all three pages could have been arbitrarily
+ * inaccessible and the test would still have been green. A scan that asserts
+ * nothing is worse than no scan, because it reads as coverage.
+ *
+ * THE TIMEOUT HAD NO HEADROOM, which is what made it the last red test on a
+ * pipeline this item exists to make trustworthy. Measured in isolation, one
+ * worker, no contention: `/staff` **2.2s**, `/staff/new` **20.9s**,
+ * `/staff/[id]` **21.8s** - about **45s of a 60s budget spent before any
+ * other test is running**. Under a full sweep it goes over and times out
+ * inside the third scan, on both projects, which is exactly the "timeout set
+ * at the measured cost is a flake generator" pattern CLAUDE.md records
+ * against R-102b and R-040e. 180s is deliberately far above the measurement
+ * rather than just above it.
+ *
+ * The 10x spread between the first page and the other two is not noise and is
+ * not addressed here: axe's cost is superlinear in node count, so a 21s scan
+ * is a page saying it is very large. Left as found, and noted.
+ * ==========================================================================
+ */
 test('the staff screens are accessible', async ({ page }) => {
+  test.setTimeout(180_000)
   const owner = await createStaff('owner', { mfa: true })
   const target = await createStaff('manager')
   await signIn(page, owner)
 
-  await page.goto('/staff')
-  await axeScan(page)
-  await page.goto('/staff/new')
-  await axeScan(page)
-  await page.goto(`/staff/${target.id}`)
-  await axeScan(page)
+  for (const url of ['/staff', '/staff/new', `/staff/${target.id}`]) {
+    await page.goto(url)
+    const results = await axeScan(page)
+    expect(results.violations, `${url} has axe violations`).toEqual([])
+  }
 })

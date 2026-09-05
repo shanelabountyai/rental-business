@@ -38,8 +38,40 @@ export const ACCENT_BUTTON_CLASSES =
 /// verbatim instead. Five copies of a class list carrying a contrast fix is
 /// four places for the next one to be missed - which is the argument this
 /// file was created to make about the button.
+///
+/// ==========================================================================
+/// `min-w-0 max-w-full` IS LOAD-BEARING, AND A `<select>` IS WHY (R-170a).
+///
+/// A native `<select>`'s min-content width is the width of its WIDEST
+/// `<option>`, and `min-width: auto` on a flex or grid item refuses to shrink
+/// below min-content. So one long option makes the control as wide as that
+/// option and nothing downstream can claw it back: no `max-w-2xl` ancestor,
+/// no wrapping, no truncation. Measured on a 412px phone viewport, mid-sweep:
+/// `#field-case-documentationType` rendered **534px** wide and
+/// `#property-scope` **398px**, each stretching its parent past the device.
+///
+/// What that costs is not cosmetic. Chromium's mobile emulation answers an
+/// over-wide layout by EXPANDING THE LAYOUT VIEWPORT - `innerWidth` measured
+/// 485 and 576 against a `clientWidth` of 412 - and Playwright's click point,
+/// computed from `getBoundingClientRect`, then no longer matches where the
+/// browser dispatches the press. The press lands high, on whatever sits ABOVE
+/// the target, and the miss grows with distance down the page: seven
+/// mobile-chrome tests failed this way on four consecutive CI runs, each
+/// reported as "<something> intercepts pointer events" retried fruitlessly to
+/// a 60s timeout. It reads as a race and is not one - the geometry is stable,
+/// so every retry misses identically. D-171 chased it as a race for three
+/// items.
+///
+/// It is also a real WCAG 1.4.10 (Reflow) failure in its own right: content
+/// that forces horizontal panning on a phone, on the staff screens a PM uses
+/// from a driveway (PRD 6.5). The tests were the messenger.
+///
+/// `max-w-full` caps the control in a block container; `min-w-0` is what lets
+/// it shrink as a flex or grid item. Both are needed - either alone leaves
+/// one of the two contexts still overflowing.
+/// ==========================================================================
 export const INPUT_CLASSES =
-  'border-input bg-background focus-visible:ring-ring min-h-11 rounded-md border px-3 py-2 text-base focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none aria-invalid:border-red-500'
+  'border-input bg-background focus-visible:ring-ring min-h-11 max-w-full min-w-0 rounded-md border px-3 py-2 text-base focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none aria-invalid:border-red-500'
 
 /**
  * A sideways-scrolling wrapper a keyboard can actually scroll (WCAG 2.1.1).

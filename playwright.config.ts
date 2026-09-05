@@ -144,7 +144,23 @@ export default defineConfig({
    * retry is still reported as flaky rather than passing quietly.
    */
   retries: process.env.CI ? 2 : 1,
-  reporter: process.env.CI ? 'github' : 'list',
+  /**
+   * `github` PLUS `html` in CI, and the html one is not a nicety.
+   *
+   * `.github/workflows/ci.yml` uploads `playwright-report/` on failure and
+   * has done for months - but `github` is an annotation-only reporter that
+   * writes NO FILES, so the directory never existed and `upload-artifact`
+   * uploaded nothing. Measured: the three red runs that made D-171 an open
+   * bug (33976436681, 33975060885, 33945215875) each carry `total_count: 0`
+   * artifacts. `trace: 'on-first-retry'` below was recording exactly the
+   * evidence D-171 said it did not have, into `test-results/`, and the
+   * runner then threw it away.
+   *
+   * The html reporter copies each failure's trace into the report, so the
+   * upload finally carries something. `open: 'never'` because nothing on a
+   * runner can open a browser.
+   */
+  reporter: process.env.CI ? [['github'], ['html', { open: 'never' }]] : 'list',
   use: { baseURL, trace: 'on-first-retry' },
   // Tenant, tech and vendor surfaces are mobile-primary (master PRD 6.5), so
   // the default project is a phone viewport, not a desktop one.
