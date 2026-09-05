@@ -8427,4 +8427,17 @@ two on the year-end refund date). e2e on every touched or adjacent spec:
 `--list`'s `Total: 16 tests in 2 files`; `tasks` + `property-handoff` +
 `tax-packet` + `tax-export` 58 of 58 after the fixture fix.
 
+**CI on `main` is RED for this push, and it is D-171 again — checked, not
+assumed.** Run 33976436681: the verify job green in 3m19s, the e2e job
+failing with **1157 passed / 2 failed / 1 flaky / 2 skipped, reconciling
+exactly against `npx playwright test --list`'s `Total: 1162 tests in 94
+files`** — so the sweep ran in full and nothing was cut short. The two are
+`[mobile-chrome] inspections.spec.ts:142` (a PM builds a checklist, walks an
+inspection start to finish, and locks it) and `[mobile-chrome]
+import.spec.ts:323` (bulk document upload), with 83 "intercepts pointer
+events" messages. **Zero failures in any of the six specs this item touched
+or sits next to.** That is the fourth consecutive red run from the same
+unowned cause, which is why it stopped being something to note and became
+R-170a (D-175).
+
 Commit: 1476861d9275a132635032d5586d32833aa486c2
