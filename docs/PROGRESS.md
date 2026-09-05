@@ -8524,3 +8524,5 @@ against the 1162-test baseline plus this item's one new test on both projects
 before the fix was 7 failed and 8.7m; the 2.4 minutes are the 60s timeouts
 going away. The regression guard is proven both ways — with the fix stashed it
 fails with `/dashboard is 639px wide on a 412px viewport`.
+
+Commit: 24107ee
