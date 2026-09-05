@@ -522,6 +522,14 @@ model Property {
   /// model, unlike Mortgage/InsurancePolicy/Warranty below - there is only
   /// ever one basis, not a repeating or versioned record.
   costBasisCents     Int?
+  /// R-168: when THIS OWNER's own records for this property begin - set by
+  /// the bulk importer, or by hand for a property that was hand-keyed years
+  /// after it was actually acquired. Distinct from `acquiredOn`: a house
+  /// bought in 2015 and migrated into this software in 2026 has no honest
+  /// vacancy or income figures for the eleven years in between, and a report
+  /// that assumes otherwise reports a mystery. Null means no such gap - every
+  /// property built through the ordinary create form.
+  historyStartsOn    DateTime?    @db.Date
   /// R-063's lease-addenda triggers (LEASE-06). Property facts, not
   /// jurisdiction config (D-4) - a pool or a well is true or false about
   /// THIS property regardless of state, unlike a grace period or a notice
@@ -2116,23 +2124,23 @@ model Tenant {
 /// guaranteeing two leases is two rows, which is the honest shape - their
 /// liability is per-lease.
 model Guarantor {
-  id        String   @id @default(cuid())
-  leaseId   String
-  firstName String
-  lastName  String
-  email     String?
-  phone     String?
+  id                String   @id @default(cuid())
+  leaseId           String
+  firstName         String
+  lastName          String
+  email             String?
+  phone             String?
   /// R-165: false once released from the lease (a signed LeasePartyChange,
   /// never a delete - see LeasePartyChangeParty). Doubles as the portal's
   /// session gate, same as Tenant.active: `principalIsStillValid` refuses a
   /// magic-link session for a guarantor no longer attached to anything.
-  active    Boolean  @default(true)
+  active            Boolean  @default(true)
   /// Same revocation watermark as Tenant/StaffUser. Bumped on release so a
   /// live portal session dies with the release rather than at its own
   /// expiry.
   sessionsValidFrom DateTime @default(now())
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   lease           Lease                   @relation(fields: [leaseId], references: [id])
   leaseSignatures LeaseSigner[]
@@ -4186,15 +4194,15 @@ model Payment {
   createdAt             DateTime       @default(now())
   updatedAt             DateTime       @updatedAt
 
-  property           Property      @relation(fields: [propertyId], references: [id])
-  lease              Lease         @relation(fields: [leaseId], references: [id])
-  leasePayer         LeasePayer    @relation(fields: [leasePayerId], references: [id])
-  receivedBy         StaffUser?    @relation("PaymentReceivedBy", fields: [receivedByStaffId], references: [id])
-  ledgerEntries      LedgerEntry[]
+  property            Property      @relation(fields: [propertyId], references: [id])
+  lease               Lease         @relation(fields: [leaseId], references: [id])
+  leasePayer          LeasePayer    @relation(fields: [leasePayerId], references: [id])
+  receivedBy          StaffUser?    @relation("PaymentReceivedBy", fields: [receivedByStaffId], references: [id])
+  ledgerEntries       LedgerEntry[]
   /// Fees assessed because this payment came back (R-039a).
-  assessedCharges    Charge[]      @relation("ChargeAssessedOnPayment")
-  receiptDocument    Document?     @relation("PaymentReceipt", fields: [receiptDocumentId], references: [id], onDelete: Restrict)
-  depositSlipDocument Document?    @relation("PaymentDepositSlip", fields: [depositSlipDocumentId], references: [id], onDelete: Restrict)
+  assessedCharges     Charge[]      @relation("ChargeAssessedOnPayment")
+  receiptDocument     Document?     @relation("PaymentReceipt", fields: [receiptDocumentId], references: [id], onDelete: Restrict)
+  depositSlipDocument Document?     @relation("PaymentDepositSlip", fields: [depositSlipDocumentId], references: [id], onDelete: Restrict)
 
   @@unique([stripePaymentIntentId])
   @@index([leaseId, receivedAt])

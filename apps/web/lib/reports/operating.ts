@@ -114,7 +114,14 @@ export async function operatingReport(
   const [properties, units, ticketCounts, jobTrades, renewalLeases, concessionCharges] = await Promise.all([
     prisma.property.findMany({
       where: { id: { in: propertyIds } },
-      select: { id: true, name: true, timezone: true, acquiredOn: true, createdAt: true },
+      select: {
+        id: true,
+        name: true,
+        timezone: true,
+        acquiredOn: true,
+        createdAt: true,
+        historyStartsOn: true,
+      },
     }),
     prisma.unit.findMany({
       where: { propertyId: { in: propertyIds } },
@@ -192,7 +199,7 @@ export async function operatingReport(
     // `acquiredOn` is a `@db.Date`; `createdAt` is a timestamp. Different
     // readers, same reason as `occupiedInterval` above. `unit.createdAt` is
     // deliberately NOT part of this - see `availableFrom`'s own comment.
-    const from0 = availableFrom({
+    const computedFrom0 = availableFrom({
       acquiredOn: property.acquiredOn != null ? utcToBusinessDate(property.acquiredOn) : null,
       propertyCreatedOn: businessDate(property.createdAt, zone),
       earliestTenancyOn: intervals.reduce<BusinessDate | null>(
@@ -201,6 +208,15 @@ export async function operatingReport(
         null,
       ),
     })
+    // R-168: `historyStartsOn` overrides whatever `availableFrom` derived,
+    // never the other way round, and only when it is LATER. This owner may
+    // genuinely have acquired the property years before this software ever
+    // saw it (`acquiredOn` says so correctly) - but this software has no
+    // honest vacancy record for that gap, so the later of the two dates is
+    // the first day this report can say anything true about.
+    const historyStartsOn =
+      property.historyStartsOn != null ? utcToBusinessDate(property.historyStartsOn) : null
+    const from0 = historyStartsOn && historyStartsOn > computedFrom0 ? historyStartsOn : computedFrom0
 
     const days = vacantDaysInWindow({ intervals, from, to, availableFrom: from0 })
     const available =

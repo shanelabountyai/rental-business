@@ -20,6 +20,15 @@ export const AUDIT_ACTIONS = [
   'property.updated',
   'unit.created',
   'unit.updated',
+  /// R-168: a person entering the portfolio outside a lease party-change
+  /// (`lease.party_changed` already covers that path) - today, only the
+  /// bulk importer creates a Tenant this way.
+  'tenant.created',
+  /// R-168: one entry per bulk CSV import, alongside the ordinary
+  /// `*.created` entries the import writes for each row - this is the
+  /// summary a reviewer finds first ("these forty records arrived together
+  /// on this date"), not a replacement for the individual ones.
+  'import.committed',
   /// The one AUTOMATED unit mutation (PROP-02): a lease ended without a
   /// renewal in place, so R-009's nightly job flipped the unit to
   /// MAKE_READY. Attributed to SYSTEM, not a staff member.

@@ -199,6 +199,16 @@ export const NAV_ITEMS: readonly NavItem[] = [
     ownedBy: 'R-088',
   },
   {
+    href: '/import',
+    label: 'Import',
+    /// `property.write` with no resource is the same portfolio-wide-only
+    /// guard `createLegalEntity` already uses - onboarding a portfolio is
+    /// not a thing a property- or entity-scoped manager does.
+    permission: 'property.write',
+    portfolioOnly: true,
+    ownedBy: 'R-168',
+  },
+  {
     href: '/staff',
     label: 'Staff',
     /// `staff.read`, which the manager holds - the directory is readable by

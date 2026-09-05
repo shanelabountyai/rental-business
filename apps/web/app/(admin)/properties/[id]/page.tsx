@@ -205,6 +205,15 @@ export default async function PropertyDetailPage({
             </dd>
           </>
         )}
+        {property.historyStartsOn != null && (
+          <>
+            <dt className="text-muted-foreground">History starts</dt>
+            <dd className="col-span-1 sm:col-span-2">
+              {friendlyBusinessDate(utcToBusinessDate(property.historyStartsOn))} — reports show
+              nothing before this date
+            </dd>
+          </>
+        )}
         {property.metro != null && (
           <>
             <dt className="text-muted-foreground">Metro</dt>

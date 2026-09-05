@@ -94,6 +94,15 @@ export interface PropertyInput extends AddressInput {
   yearBuilt?: number | null
   /// ISO date string (yyyy-mm-dd) from a <input type="date">, or empty.
   acquiredOn?: string | null
+  /// R-168: the date this owner's OWN records begin for this property - not
+  /// when it was bought (`acquiredOn` above), when it changes hands to
+  /// somebody's cousin who ran it off a spreadsheet for six years. Reports
+  /// that window by period (the operating snapshot, the tax export) clamp
+  /// their start no earlier than this, so a property imported mid-year does
+  /// not report every day before the migration as a mysteriously vacant,
+  /// income-free stretch nobody can explain. Null means no such gap is
+  /// known - every property built through the ordinary create form.
+  historyStartsOn?: string | null
   /// Freeform, staff-set - "Dallas-Fort Worth" - used only to target segment
   /// announcements (R-053, COMM-04). No validation: two properties
   /// disagreeing on spelling just fail to group together on the segment
@@ -191,6 +200,17 @@ export function validateProperty(input: PropertyInput): Violation[] {
       violations.push({
         field: 'acquiredOn',
         message: 'Acquisition date cannot be in the future.',
+      })
+    }
+  }
+  if (input.historyStartsOn) {
+    const parsed = new Date(`${input.historyStartsOn}T00:00:00Z`)
+    if (Number.isNaN(parsed.getTime())) {
+      violations.push({ field: 'historyStartsOn', message: 'Enter a valid date.' })
+    } else if (parsed.getTime() > Date.now()) {
+      violations.push({
+        field: 'historyStartsOn',
+        message: 'History cannot start in the future.',
       })
     }
   }

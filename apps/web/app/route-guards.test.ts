@@ -248,6 +248,11 @@ const RESOURCE_LESS_GUARDS: Record<string, string> = {
   'app/(admin)/maintenance/preventive/new/page.tsx': 'Same as the preventive list above.',
   'app/(admin)/maintenance/preventive/[id]/page.tsx': 'Same as the preventive list above.',
   'lib/maintenance/preventive-actions.ts': 'Same as the preventive pages above.',
+  'app/(admin)/import/page.tsx':
+    'Bulk-onboarding a portfolio (R-168) is the same act as minting a LegalEntity above - it can create entities and properties nothing yet scopes to, so only a portfolio-wide grant may run it.',
+  'lib/import/actions.ts': 'Same as the import page above.',
+  'lib/import/documents.ts':
+    'Same as the import page above - the manifest can name a property in any entity, so there is no single resource to scope the guard to.',
 }
 
 const RESOURCE_LESS = /requirePermission\(\s*'[a-z_.]+'\s*\)/

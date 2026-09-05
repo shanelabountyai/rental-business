@@ -31,6 +31,7 @@ export interface PropertyDefaults {
   bathrooms?: number | ''
   yearBuilt?: number | ''
   acquiredOn?: string
+  historyStartsOn?: string
   metro?: string
   tags?: string
   hasPool?: boolean
@@ -60,6 +61,7 @@ function defaultsFromSubmitted(
     bathrooms: submitted.bathrooms ?? '',
     yearBuilt: submitted.yearBuilt ?? '',
     acquiredOn: submitted.acquiredOn ?? undefined,
+    historyStartsOn: submitted.historyStartsOn ?? undefined,
     metro: submitted.metro ?? undefined,
     tags: submitted.tags?.join(', '),
     hasPool: submitted.hasPool ?? false,
@@ -316,6 +318,15 @@ export function PropertyForm({
           type="date"
           defaultValue={values.acquiredOn}
           error={errors.acquiredOn}
+        />
+
+        <TextField
+          label="History starts on (optional)"
+          name="historyStartsOn"
+          type="date"
+          hint="Only if this property's real history predates when it was entered here — reports won't show vacancy or income figures before this date."
+          defaultValue={values.historyStartsOn}
+          error={errors.historyStartsOn}
         />
 
         <fieldset className="flex flex-col gap-4 rounded-md border p-4">
