@@ -1,10 +1,19 @@
 import 'server-only'
 
 import { balanceCents, statement, reversedEntryIds } from '@rental/core/ledger'
-import { cardFeeFor, debitsAutomatically, payable, railsFor } from '@rental/core/payments'
+import {
+  cardFeeFor,
+  debitsAutomatically,
+  type UndepositedPayment,
+  groupForDeposit,
+  payable,
+  railsFor,
+} from '@rental/core/payments'
 import type { CollectionMethod, PaymentRail } from '@rental/core/payments'
+import { businessDate } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { rulesFor } from '@/lib/jurisdiction/queries.ts'
+import type { ResolvedScope } from '@/lib/scope/types.ts'
 import type { TenantScope } from '@rental/core/portal'
 
 // What the tenant sees before they pay (PAY-01, R-037).
@@ -370,4 +379,112 @@ export async function guarantorStatement(leaseId: string) {
     reversed: reversedEntryIds(rows),
     balanceCents: balanceCents(rows),
   }
+}
+
+/// One offline payment still sitting undeposited, as the deposit screen
+/// shows it - `groupForDeposit`'s own shape plus the display facts core has
+/// no business knowing (names, formatted amounts stay for the page).
+export interface UndepositedPaymentRow {
+  id: string
+  amountCents: number
+  channel: string
+  checkNumber: string | null
+  description: string
+}
+
+export interface UndepositedDepositGroup {
+  receivedOn: string
+  receivedByStaffId: string
+  receivedByName: string
+  legalEntityId: string
+  entityName: string
+  totalCents: number
+  payments: readonly UndepositedPaymentRow[]
+}
+
+/**
+ * Every undeposited offline payment in scope, grouped into the trip to the
+ * bank it would make (PAY-05's own named leftover, R-166).
+ *
+ * "Undeposited" is `depositBatchId: null` - nothing else marks a payment as
+ * still sitting in a drawer. SETTLED only: a payment that has since
+ * reversed did not go anywhere and has no business on a slip.
+ */
+export async function listUndepositedDepositGroups(
+  scope: ResolvedScope,
+): Promise<UndepositedDepositGroup[]> {
+  if (scope.propertyIds.length === 0) return []
+
+  const rows = await prisma.payment.findMany({
+    where: {
+      propertyId: { in: scope.propertyIds },
+      channel: { in: ['OFFLINE_CHECK', 'MONEY_ORDER', 'OFFLINE_CASH'] },
+      depositBatchId: null,
+      status: 'SETTLED',
+    },
+    select: {
+      id: true,
+      amountCents: true,
+      channel: true,
+      checkNumber: true,
+      receivedAt: true,
+      receivedByStaffId: true,
+      property: {
+        select: {
+          name: true,
+          timezone: true,
+          legalEntityId: true,
+          legalEntity: { select: { name: true } },
+        },
+      },
+      lease: { select: { unit: { select: { name: true } } } },
+      leasePayer: {
+        select: {
+          tenant: { select: { firstName: true, lastName: true } },
+          externalPayerName: true,
+        },
+      },
+      receivedBy: { select: { name: true } },
+    },
+    orderBy: { receivedAt: 'asc' },
+  })
+  if (rows.length === 0) return []
+
+  const coreInput: UndepositedPayment[] = rows.map((row) => ({
+    id: row.id,
+    amountCents: row.amountCents,
+    channel: row.channel,
+    checkNumber: row.checkNumber,
+    receivedOn: businessDate(row.receivedAt, row.property.timezone),
+    receivedByStaffId: row.receivedByStaffId ?? 'unknown',
+    legalEntityId: row.property.legalEntityId,
+  }))
+
+  const rowById = new Map(rows.map((row) => [row.id, row]))
+  const groups = groupForDeposit(coreInput)
+
+  return groups.map((group) => {
+    const first = rowById.get(group.paymentIds[0]!)!
+    return {
+      receivedOn: group.receivedOn,
+      receivedByStaffId: group.receivedByStaffId,
+      receivedByName: first.receivedBy?.name ?? 'Not recorded',
+      legalEntityId: group.legalEntityId,
+      entityName: first.property.legalEntity.name,
+      totalCents: group.totalCents,
+      payments: group.paymentIds.map((id) => {
+        const row = rowById.get(id)!
+        const payerName = row.leasePayer.tenant
+          ? `${row.leasePayer.tenant.firstName} ${row.leasePayer.tenant.lastName}`
+          : (row.leasePayer.externalPayerName ?? 'Payer')
+        return {
+          id: row.id,
+          amountCents: row.amountCents,
+          channel: row.channel,
+          checkNumber: row.checkNumber,
+          description: `${payerName} — ${row.property.name} ${row.lease.unit.name}`,
+        }
+      }),
+    }
+  })
 }

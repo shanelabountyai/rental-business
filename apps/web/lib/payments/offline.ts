@@ -1,19 +1,23 @@
 'use server'
 
+import { createHash } from 'node:crypto'
 import { balanceCents } from '@rental/core/ledger'
 import {
   OFFLINE_INSTRUMENTS,
   OFFLINE_REFUSALS,
   offlinePaymentDecision,
+  receiptBlocks,
   validateOfflinePayment,
 } from '@rental/core/payments'
 import type { OfflineChannel } from '@rental/core/payments'
-import { businessDate } from '@rental/core/scheduling'
+import { businessDate, friendlyDate, friendlyTimestamp } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { audit } from '@/lib/audit/index.ts'
 import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
 import { getBillingProvider } from '@/lib/billing/provider.ts'
+import { renderBlocksPdf } from '@/lib/pdf/render.ts'
+import { generateStorageKey, storage } from '@/lib/storage/index.ts'
 
 // Recording money somebody handed over (PAY-05, R-038).
 //
@@ -33,6 +37,10 @@ export interface OfflineFormState {
   error?: string
   fieldErrors?: Record<string, string>
   notice?: string
+  /// R-166: the counter receipt, once recorded. Absent on every error return
+  /// — a receipt for a payment that was refused would be evidence of money
+  /// that never actually changed hands.
+  receiptDocumentId?: string
 }
 
 function str(formData: FormData, name: string): string {
@@ -63,7 +71,18 @@ export async function recordOfflinePayment(
       // Needed by the attach below: Stripe refuses to attach a payment
       // record whose customer is not the invoice's customer.
       stripeCustomerId: true,
-      property: { select: { id: true, legalEntityId: true, timezone: true } },
+      tenant: { select: { firstName: true, lastName: true } },
+      externalPayerName: true,
+      property: {
+        select: {
+          id: true,
+          legalEntityId: true,
+          timezone: true,
+          name: true,
+          legalEntity: { select: { name: true } },
+        },
+      },
+      lease: { select: { unit: { select: { name: true } } } },
     },
   })
 
@@ -168,7 +187,7 @@ export async function recordOfflinePayment(
     }
   }
 
-  await prisma.$transaction(async (tx) => {
+  const payment = await prisma.$transaction(async (tx) => {
     // OURS, because Stripe cannot hold it: which numbered instrument arrived
     // and who took it. The LEDGER entry is not written here - it arrives
     // through the webhook like every other payment, so there stays exactly
@@ -210,9 +229,84 @@ export async function recordOfflinePayment(
       },
       tx,
     )
+    return payment
   })
+
+  // The receipt is generated OUTSIDE the transaction above and its failure
+  // does not undo the payment - rendering a PDF is real work (pdf-lib) that
+  // does not belong inside an open database transaction, and a receipt that
+  // failed to print is a much smaller problem than a recorded payment that
+  // silently vanished because a PDF library threw. `notice`, not `error`:
+  // the money is recorded either way.
+  let receiptDocumentId: string | undefined
+  try {
+    const staff = await prisma.staffUser.findUnique({
+      where: { id: actor.id },
+      select: { name: true },
+    })
+    const payerName =
+      payer.tenant != null
+        ? `${payer.tenant.firstName} ${payer.tenant.lastName}`
+        : (payer.externalPayerName ?? 'Payer')
+    const bytes = await renderBlocksPdf(
+      receiptBlocks({
+        entityName: payer.property.legalEntity.name,
+        propertyName: payer.property.name,
+        unitName: payer.lease.unit.name,
+        payerName,
+        amountCents: input.amountCents,
+        channel: input.channel,
+        checkNumber: input.checkNumber,
+        receivedOn: friendlyDate(receivedAt, payer.property.timezone),
+        receivedByName: staff?.name ?? 'Not recorded',
+        generatedAt: friendlyTimestamp(new Date(), payer.property.timezone),
+      }),
+      { title: `Payment receipt — ${payer.property.name}` },
+    )
+    const buffer = Buffer.from(bytes)
+    const sha256 = createHash('sha256').update(buffer).digest('hex')
+    const fileName = `receipt-${payment.id}.pdf`
+    const storageKey = generateStorageKey(payer.propertyId, fileName)
+    await storage.put(storageKey, buffer, 'application/pdf')
+
+    receiptDocumentId = await prisma.$transaction(async (tx) => {
+      const document = await tx.document.create({
+        data: {
+          propertyId: payer.propertyId,
+          leaseId: payer.leaseId,
+          type: 'RECEIPT',
+          fileName,
+          contentType: 'application/pdf',
+          sizeBytes: buffer.byteLength,
+          storageKey,
+          sha256,
+          uploadedByStaffId: actor.id,
+        },
+      })
+      await tx.payment.update({
+        where: { id: payment.id },
+        data: { receiptDocumentId: document.id },
+      })
+      await audit(
+        {
+          action: 'payment.receipt_generated',
+          entityType: 'Payment',
+          entityId: payment.id,
+          propertyId: payer.propertyId,
+          after: { documentId: document.id, sha256 },
+        },
+        tx,
+      )
+      return document.id
+    })
+  } catch (error) {
+    console.error(`[payments] receipt generation failed for payment ${payment.id}`, error)
+  }
 
   revalidatePath(`/leases/${payer.leaseId}`)
   revalidatePath('/money')
-  return { notice: 'Recorded. The tenant will get a receipt once it posts.' }
+  return {
+    notice: 'Recorded. The tenant will get a receipt once it posts.',
+    receiptDocumentId,
+  }
 }

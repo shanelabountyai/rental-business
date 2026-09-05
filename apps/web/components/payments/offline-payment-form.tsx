@@ -29,11 +29,19 @@ export function OfflinePaymentForm({
   today,
   defaultAmountDollars,
   payerName,
+  hasBalance,
 }: {
   action: (state: OfflineFormState, formData: FormData) => Promise<OfflineFormState>
   today: string
   defaultAmountDollars: string
   payerName: string
+  /// R-166 (R-044's trap again): whether there is currently a balance to
+  /// record against. Recording the FULL balance is the ordinary case this
+  /// form is built for, and doing so takes this to false on the very
+  /// success this component has to report - so it hides the INPUT FIELDS
+  /// below, never `FormAlerts` or the receipt link, which stay mounted
+  /// unconditionally for exactly that reason.
+  hasBalance: boolean
 }) {
   const [state, formAction] = useActionState<OfflineFormState, FormData>(action, {})
   const [channel, setChannel] = useState<string>('OFFLINE_CHECK')
@@ -42,86 +50,111 @@ export function OfflinePaymentForm({
     <form action={formAction} className="flex flex-col gap-4">
       <FormAlerts state={state} />
 
-      <fieldset className="flex flex-wrap gap-2">
-        <legend className="mb-2 text-sm font-medium">What arrived from {payerName}?</legend>
-        {CHANNELS.map((option) => (
-          // H5 (R-099): the input is `sr-only`, so it never draws a focus
-          // ring of its own and the ring has to live on the label that
-          // visually replaces it. Without `focus-within` a keyboard user
-          // tabbing into this group gets NO visible indication of where they
-          // are - the control looks identical focused and unfocused. Mine,
-          // from R-038.
-          <label
-            key={option.value}
-            className={`focus-within:ring-ring cursor-pointer rounded-md border px-3 py-2 text-sm focus-within:ring-2 focus-within:ring-offset-2 ${
-              channel === option.value ? 'border-foreground font-medium' : ''
-            }`}
-          >
-            <input
-              type="radio"
-              name="channel"
-              value={option.value}
-              checked={channel === option.value}
-              onChange={() => setChannel(option.value)}
-              className="sr-only"
-            />
-            {option.label}
-          </label>
-        ))}
-      </fieldset>
+      {!hasBalance && (
+        <p className="text-muted-foreground text-sm">Nothing is currently owed.</p>
+      )}
 
-      <div className="flex flex-wrap gap-4">
-        <div className="flex flex-col gap-1">
-          <label htmlFor="amountDollars" className="text-sm font-medium">
-            Amount
-          </label>
-          <div className="flex items-center gap-1">
-            <span aria-hidden="true">$</span>
-            <input
-              id="amountDollars"
-              name="amountDollars"
-              type="text"
-              inputMode="decimal"
-              defaultValue={defaultAmountDollars}
-              className="w-32 rounded-md border px-2 py-1.5"
-              aria-describedby={state.fieldErrors?.amountDollars ? 'amount-error' : undefined}
+      {hasBalance && (
+        <>
+          <fieldset className="flex flex-wrap gap-2">
+            <legend className="mb-2 text-sm font-medium">What arrived from {payerName}?</legend>
+            {CHANNELS.map((option) => (
+              // H5 (R-099): the input is `sr-only`, so it never draws a focus
+              // ring of its own and the ring has to live on the label that
+              // visually replaces it. Without `focus-within` a keyboard user
+              // tabbing into this group gets NO visible indication of where they
+              // are - the control looks identical focused and unfocused. Mine,
+              // from R-038.
+              <label
+                key={option.value}
+                className={`focus-within:ring-ring cursor-pointer rounded-md border px-3 py-2 text-sm focus-within:ring-2 focus-within:ring-offset-2 ${
+                  channel === option.value ? 'border-foreground font-medium' : ''
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="channel"
+                  value={option.value}
+                  checked={channel === option.value}
+                  onChange={() => setChannel(option.value)}
+                  className="sr-only"
+                />
+                {option.label}
+              </label>
+            ))}
+          </fieldset>
+
+          <div className="flex flex-wrap gap-4">
+            <div className="flex flex-col gap-1">
+              <label htmlFor="amountDollars" className="text-sm font-medium">
+                Amount
+              </label>
+              <div className="flex items-center gap-1">
+                <span aria-hidden="true">$</span>
+                <input
+                  id="amountDollars"
+                  name="amountDollars"
+                  type="text"
+                  inputMode="decimal"
+                  defaultValue={defaultAmountDollars}
+                  className="w-32 rounded-md border px-2 py-1.5"
+                  aria-describedby={state.fieldErrors?.amountDollars ? 'amount-error' : undefined}
+                />
+              </div>
+              <FieldError id="amount-error" message={state.fieldErrors?.amountDollars} />
+            </div>
+
+            {/* M8 (R-099): both of these rendered their error as a bare <p> with
+                no id, no `aria-describedby` and no `role="alert"` - so a screen
+                reader never associated the message with the field and never
+                announced it arriving. `TextField` had solved exactly this since
+                R-008 and I did not use it. Native date input either way: it works
+                on first paint, phones already know how to render it, and D-8 says
+                use the platform before reaching for a library. */}
+            <TextField
+              label="Received on"
+              name="receivedOn"
+              type="date"
+              defaultValue={today}
+              max={today}
+              error={state.fieldErrors?.receivedOn}
             />
+
+            {channel === 'OFFLINE_CHECK' && (
+              <TextField
+                label="Check number"
+                name="checkNumber"
+                inputMode="numeric"
+                error={state.fieldErrors?.checkNumber}
+              />
+            )}
           </div>
-          <FieldError id="amount-error" message={state.fieldErrors?.amountDollars} />
-        </div>
 
-        {/* M8 (R-099): both of these rendered their error as a bare <p> with
-            no id, no `aria-describedby` and no `role="alert"` - so a screen
-            reader never associated the message with the field and never
-            announced it arriving. `TextField` had solved exactly this since
-            R-008 and I did not use it. Native date input either way: it works
-            on first paint, phones already know how to render it, and D-8 says
-            use the platform before reaching for a library. */}
-        <TextField
-          label="Received on"
-          name="receivedOn"
-          type="date"
-          defaultValue={today}
-          max={today}
-          error={state.fieldErrors?.receivedOn}
-        />
+          <SubmitButton label="Record this payment" />
+        </>
+      )}
 
-        {channel === 'OFFLINE_CHECK' && (
-          <TextField
-            label="Check number"
-            name="checkNumber"
-            inputMode="numeric"
-            error={state.fieldErrors?.checkNumber}
-          />
-        )}
-      </div>
+      {/* R-166: the counter receipt, handed over at the moment of payment -
+          a different artifact from the ordinary payment receipt the tenant
+          gets once the webhook posts (see receipt-document.ts's own header).
+          Mounted unconditionally, same reasoning as `FormAlerts` above. */}
+      {state.receiptDocumentId && (
+        <p className="text-sm">
+          <a
+            href={`/api/documents/${state.receiptDocumentId}/file`}
+            className="underline underline-offset-4"
+          >
+            Print a receipt
+          </a>
+        </p>
+      )}
 
-      <SubmitButton label="Record this payment" />
-
-      <p className="text-muted-foreground text-xs">
-        Recorded against you as the person who took it. The billing provider is told straight away
-        so the tenant is not charged again.
-      </p>
+      {hasBalance && (
+        <p className="text-muted-foreground text-xs">
+          Recorded against you as the person who took it. The billing provider is told straight
+          away so the tenant is not charged again.
+        </p>
+      )}
     </form>
   )
 }

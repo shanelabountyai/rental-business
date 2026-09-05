@@ -8069,3 +8069,77 @@ guarantor portal cross-refusal, anonymous redirect) run clean against a
 production build. CI green through R-164 (`gh run list`).
 
 Commit: d622fd3db918d8d149fa9a97070d1616bf0376f5
+
+## R-166: counter receipt and cheque batching
+
+**What it built.** PAY-05's two named leftovers from R-038. A **counter
+receipt**: `recordOfflinePayment` now renders and archives a one-page PDF
+(`receiptBlocks`, core) the moment a check/money order/cash payment is
+recorded, linked from the lease page as "Print a receipt" and from
+`Payment.receiptDocumentId` (unique — generating one is idempotent, same
+posture as a notice's PDF). A **deposit batch screen** at `/money/deposits`:
+undeposited offline payments (`depositBatchId: null`) grouped by
+`(legalEntityId, receivedOn, receivedByStaffId)` — `groupForDeposit`, core —
+into cards, each with a "Create deposit slip" button that stamps every
+payment in the group with a shared `depositBatchId`/`depositedAt` and
+archives a printable slip (`depositSlipBlocks`, core; mono-column table,
+mirroring `statement-document.ts`'s own layout) anchored to the legal entity
+rather than one property.
+
+**What it decided.** D-168 (grouping is entity-bounded, not just
+date-and-receiver, because two properties under one LLC share a bank account
+and two different LLCs cannot) and D-169 (a real, pre-existing bug this item
+found and did not fix — see below).
+
+**The bug this item's own e2e sweep found, and did not fix.** Recording an
+offline payment writes TWO `Payment` rows: the rich one `recordOfflinePayment`
+writes explicitly, and a second, generic one (`channel: OTHER`, no check
+number, no receiving staff) that `webhook.ts`'s `writePayment` independently
+creates as a side effect of the SAME call, because the `invoice.updated`
+event `recordOutOfBandPayment` fires is unconditionally classified
+`payment_succeeded` and `writePayment`'s own dedup (a unique-constrained
+lookup on `stripePaymentIntentId`) can never fire for an out-of-band payment,
+which has no PaymentIntent. Confirmed with a stack-traced call count that
+`recordOfflinePayment` itself runs exactly once — the duplicate is real, not
+a double-submission. Confirmed as a real-Stripe-shape bug, not a simulator
+artifact: `writePayment`'s classification and its PaymentIntent-only dedup
+key are unconditional, so a real Stripe webhook delivering the identical
+event later would hit the identical gap. Recorded in full as **D-169** rather
+than patched here — the fix touches the shared webhook/billing-provider
+boundary every payment type runs through, and R-038a's own entry is the
+standing argument for how much investigation a question like that deserves
+before touching it. This item's own two screens are unaffected because both
+already filter to the three offline channels, which the generic `OTHER` row
+is not.
+
+**Bugs found and fixed along the way.** Two real instances of R-044's
+"self-replacing panel" trap, both new to this item's own UI, not the bug
+above:
+- The lease page's "Record a payment" section was gated on
+  `(ledger?.balanceCents ?? 0) > 0`. Recording the FULL balance (the ordinary
+  case) zeroes it, which unmounted the whole section — confirmation, receipt
+  link and all — in the same render pass meant to show them. Fixed by
+  ungating the section itself and moving the balance check inside
+  `OfflinePaymentForm`, which now hides only the input fields when nothing
+  is owed and keeps `FormAlerts` and the receipt link mounted unconditionally.
+  This defect predates R-166 — R-038's own confirmation notice sat behind
+  the identical gate and nobody had ever paid off a FULL balance through an
+  e2e spec to notice.
+- `createDepositBatch`'s own `revalidatePath('/money/deposits')` removed the
+  just-deposited card from the list in the same transition that would have
+  shown its "print the slip" link — the card carrying both is gone before
+  either renders. Fixed by not revalidating there at all: the confirmation
+  banner is lifted to an always-mounted parent (`DepositBatchList`) via a
+  bubbled callback, and the list catches up on the next navigation instead,
+  which is what `page.reload()` already stood in for once the bug was found.
+
+**What it left behind.** D-169's bug, in full, for whoever picks it up next.
+
+**Gate run:** lint ✓ (16 pre-existing warnings only), typecheck ✓, `db:ci` ✓
+(migrations from scratch + seed + drift, throwaway `rental_ci`), unit 2,884
+passed / 4 skipped (16 new: `groupForDeposit` × 6, `depositSlipBlocks` × 2,
+plus the pre-existing suite unchanged). New `e2e/deposits.spec.ts` (3 tests:
+receipt PDF from a real click, full batch-to-slip flow with the database
+polled rather than the UI signal, two receivers rendering as separate cards)
+run clean against a production build, no retries. CI green through R-165
+(`gh run list`).

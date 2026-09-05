@@ -121,6 +121,17 @@ export const AUDIT_ACTIONS = [
   /// an eviction turning on "they never tried to pay" must be arguable
   /// against a record of every time they did.
   'payment.hold_refused',
+  /// R-166: the counter receipt was generated and archived. Its own action
+  /// rather than folded into `payment.recorded` - the payment and its
+  /// receipt are two writes moments apart (Stripe first, PDF second), and a
+  /// receipt that failed to render must not read as a payment that failed
+  /// to record.
+  'payment.receipt_generated',
+  /// R-166: undeposited offline payments were grouped into a deposit slip.
+  /// Sits with the money actions rather than under `ledger.*` because
+  /// nothing here touches the ledger - it stamps existing Payment rows and
+  /// archives a document, the same shape `payment.receipt_generated` takes.
+  'payment.deposit_batch_created',
 
   // Maintenance (MAINT-03, R-024)
   /// The scope, priority and estimate a work order was CREATED with -

@@ -4166,21 +4166,41 @@ model Payment {
   stripeInvoiceId       String?
   reversedAt            DateTime?
   reversalReason        String?
+  /// R-166: the counter receipt handed over (or reprinted) at the moment of
+  /// payment. `@@unique` so it can only ever be one document - generating a
+  /// receipt is idempotent, same posture as a notice's PDF (see
+  /// `generateNoticePdf`'s own comment): re-rendering after the fact would
+  /// produce a different artifact claiming to be the same receipt.
+  receiptDocumentId     String?        @unique
+  /// R-166: which deposit trip this payment rode in on. Null means
+  /// undeposited - still sitting in a drawer, in PAY-05's own words. Not a
+  /// foreign key to a batch table, because there is no batch ROW: a batch is
+  /// nothing but "these payments share a value", generated fresh each time
+  /// rather than modeled as an entity with its own lifecycle.
+  depositBatchId        String?
+  depositedAt           DateTime?
+  /// R-166: the printable slip for the batch this payment rode in on. Not
+  /// `@@unique` - every payment in the same batch points at the same
+  /// document.
+  depositSlipDocumentId String?
   createdAt             DateTime       @default(now())
   updatedAt             DateTime       @updatedAt
 
-  property        Property      @relation(fields: [propertyId], references: [id])
-  lease           Lease         @relation(fields: [leaseId], references: [id])
-  leasePayer      LeasePayer    @relation(fields: [leasePayerId], references: [id])
-  receivedBy      StaffUser?    @relation("PaymentReceivedBy", fields: [receivedByStaffId], references: [id])
-  ledgerEntries   LedgerEntry[]
+  property           Property      @relation(fields: [propertyId], references: [id])
+  lease              Lease         @relation(fields: [leaseId], references: [id])
+  leasePayer         LeasePayer    @relation(fields: [leasePayerId], references: [id])
+  receivedBy         StaffUser?    @relation("PaymentReceivedBy", fields: [receivedByStaffId], references: [id])
+  ledgerEntries      LedgerEntry[]
   /// Fees assessed because this payment came back (R-039a).
-  assessedCharges Charge[]      @relation("ChargeAssessedOnPayment")
+  assessedCharges    Charge[]      @relation("ChargeAssessedOnPayment")
+  receiptDocument    Document?     @relation("PaymentReceipt", fields: [receiptDocumentId], references: [id], onDelete: Restrict)
+  depositSlipDocument Document?    @relation("PaymentDepositSlip", fields: [depositSlipDocumentId], references: [id], onDelete: Restrict)
 
   @@unique([stripePaymentIntentId])
   @@index([leaseId, receivedAt])
   @@index([propertyId, receivedAt])
   @@index([status])
+  @@index([depositBatchId])
 }
 
 /**
@@ -5757,6 +5777,8 @@ model Document {
   renterInsurancePolicy   RenterInsurancePolicy?
   complianceCompletions   ComplianceCompletion[]
   scraLookupAsCertificate ScraLookup?               @relation("ScraCertificate")
+  paymentReceipt          Payment?                  @relation("PaymentReceipt")
+  paymentDepositSlips     Payment[]                 @relation("PaymentDepositSlip")
   accommodationRequestId  String?
   accommodationRequest    AccommodationRequest?     @relation("AccommodationDocuments", fields: [accommodationRequestId], references: [id])
   abandonmentCaseId       String?

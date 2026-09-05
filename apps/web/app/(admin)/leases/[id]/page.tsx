@@ -769,7 +769,14 @@ export default async function LeaseDetailPage({
         end={endRecurringCharge}
       />
 
-      {canRecordPayment && payers.length > 0 && (ledger?.balanceCents ?? 0) > 0 && (
+      {/* NOT gated on balanceCents > 0 (R-044's trap, again - R-166 found
+          this instance). Recording the FULL balance zeroes it out, and a
+          section gated on "there is a balance" would unmount itself, and
+          the confirmation and receipt link inside it, in the very render
+          pass meant to show them. `OfflinePaymentForm` itself decides
+          whether to show the input fields; this section only decides
+          whether the feature exists on this lease at all. */}
+      {canRecordPayment && payers.length > 0 && (
         <section
           aria-labelledby="offline-payment"
           className="flex flex-col gap-3 border-t pt-4"
@@ -785,6 +792,7 @@ export default async function LeaseDetailPage({
             // and `npm run build` does not catch the difference.
             action={recordOfflinePayment.bind(null, payers[0]!.id)}
             today={businessDate(new Date(), lease.property.timezone)}
+            hasBalance={(ledger?.balanceCents ?? 0) > 0}
             defaultAmountDollars={((ledger?.balanceCents ?? 0) / 100).toFixed(2)}
             payerName={
               payers[0]!.tenant
