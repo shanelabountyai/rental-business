@@ -8159,3 +8159,5 @@ Commit: ee7025191c82362fe2766546dd9a1f83e6d4bb03
 **What it left behind.** Concessions have a formula and a query but no way to ever be created — the next item that wants move-in concessions to actually show up in this number has to build that write path first. Day-accurate DOWN history (a unit's status over time, not just today) is not tracked; if a future item needs a report where a mid-year DOWN period matters, that needs a status-change log, which does not exist yet.
 
 **Gate run:** lint ✓ (16 pre-existing warnings only, none in touched files), typecheck ✓, unit 2,890 passed / 4 skipped (6 new: `scheduledRentCentsInWindow` × 4, `economicOccupancy` × 2). `e2e/operating-report.spec.ts` + `e2e/rent-roll.spec.ts` (24 tests, both projects) run clean against a production build, no retries, including the operating report's axe check.
+
+Commit: 3ae51761758d7aa8e959fd1f7537da15953716fe
