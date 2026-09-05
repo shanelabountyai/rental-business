@@ -8143,3 +8143,5 @@ receipt PDF from a real click, full batch-to-slip flow with the database
 polled rather than the UI signal, two receivers rendering as separate cards)
 run clean against a production build, no retries. CI green through R-165
 (`gh run list`).
+
+Commit: ee7025191c82362fe2766546dd9a1f83e6d4bb03
