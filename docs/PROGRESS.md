@@ -8673,4 +8673,4 @@ against `--list`'s `Total: 7 tests in 2 files`. CI owns the full sweep;
 `gh run list` was checked at the start of this session rather than assumed, and
 R-171's run (`34044067246`) is green.
 
-Commit: PENDING
+Commit: ec7dd21
