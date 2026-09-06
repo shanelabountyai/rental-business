@@ -1,40 +1,36 @@
 # Next session
 
-## Pick up: R-171 — every counter payment is counted twice in "collected"
+## Pick up: R-172
 
-`docs/prds/06-backlog.md` row 158, Milestone 13 (Arc 3).
+`docs/prds/06-backlog.md`, Milestone 13 (Arc 3) — the next unticked row after
+158. Read its row and its named review finding before starting.
 
-D-169 found that `recordOfflinePayment` writes a rich `Payment` row AND a
-second generic `channel: OTHER` row for the same money — `provider.record
-OutOfBandPayment` fires an `invoice.updated` that `webhook.ts`'s
-`writePayment` independently interprets as a payment, and its dedup key is
-`stripePaymentIntentId`, which an out-of-band payment does not have. R-166
-fixed the one consumer that mattered then; two more have since gone live and
-both aggregate `Payment` without filtering the duplicate.
+Model: recommend at the start of the item, per the global convention.
 
-**Read D-169 in `07-decisions.md` before touching anything.** It records both
-candidate fixes and why R-166 deliberately did not apply either — the fix
-touches the shared webhook/billing-provider boundary that card, ACH, refund
-and NSF all run through, and a rushed patch risks a quieter bug in money the
-ledger already trusts. It also names the starting point: `e2e/deposits.spec.ts`'s
-own comment on the poll it had to scope by channel to work around this.
+## Context from R-171 (done, 8e35cb8)
 
-Model: **Opus** — money correctness on a shared webhook boundary.
+D-169's doubled counter payment is closed by **D-177**, fixed at the writer:
+`recordOfflinePayment` writes its `Payment` row before the push, and
+`writePayment` claims it. **The backlog row's prescribed fix was wrong** —
+filtering `channel` at the three consumer sites cannot work, because every
+invoice-driven ONLINE payment also lands as `channel: OTHER`. The three sites
+(`collectedVsBilled`, `entityCashSummaries`, `cureClockFor`) are untouched and
+now correct.
 
-## Context from R-170a (done, 066c4c0)
+One real bug found, deliberately left, **owned by no item** — and it is
+recorded as *unknown*, not diagnosed:
 
-CI's four-run red streak is fixed and D-171 is closed by **D-176**. It was
-never a race: an unconstrained `<select>` widened the page past the phone
-viewport, Chromium's mobile emulation expanded the layout viewport, and
-Playwright's click coordinates stopped matching. **Check `gh run list --limit 5`
-rather than assuming** — R-170a's own run is the first that should be green,
-and CLAUDE.md's longest warning is about that sentence being copied forward
-instead of checked.
+- `writePayment` dedups only on `stripePaymentIntentId`, so an ACH payment on
+  an invoice may write a `PENDING` row from `payment_intent.processing` and a
+  separate `SETTLED` row from `invoice.updated`, leaving `inFlightCents` never
+  clearing and the payment twice on a tenant's history. It hinges on whether
+  the invoice object carries `payment_intent`: `packages/core/billing/events.ts`
+  says it does not under the account's API version, while every test fixture
+  and the demo seed put one there — so nothing in this repo can see it either
+  way. **Verify against real Stripe before assuming either answer.**
 
-Two things R-170a left unowned, neither blocking:
-- `/staff/new` and `/staff/[id]` each take ~21s to axe-scan against `/staff`'s
-  2.2s. axe is superlinear in node count, so that is a page saying it is very
-  large. Noted in `e2e/staff.spec.ts`, owned by no item.
-- CI now uploads a real `playwright-report/` (the `html` reporter is on). The
-  next red run should arrive with its traces attached — if it does not, that
-  is worth a look, because the upload has silently produced nothing for months.
+Still unowned from R-170a: `/staff/new` and `/staff/[id]` each take ~21s to
+axe-scan against `/staff`'s 2.2s, which is a page saying it is very large.
+
+**Check `gh run list --limit 5`** rather than assuming — R-171's own run is the
+one to read.

@@ -8595,3 +8595,5 @@ this item touches or that read a `Payment` aggregate — `deposits`, `dashboard`
 failed / 0 flaky** on both projects. CI owns the full sweep; `gh run list` was
 checked at the start of this session rather than assumed, and R-170a's run
 (`33981080446`) is green.
+
+Commit: 8e35cb8
