@@ -446,6 +446,9 @@ type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
  * status rather than inserting a second one. Payment is deliberately NOT
  * append-only (unlike LedgerEntry): it is the current state of one attempt,
  * and Stripe moves it through pending → settled → refunded over time.
+ *
+ * An event with NO PaymentIntent to key on - which is how out-of-band money
+ * arrives - falls to the second lookup below instead (D-177).
  */
 async function writePayment(
   tx: Tx,
@@ -497,6 +500,57 @@ async function writePayment(
       })
       return existing
     }
+  }
+
+  // MONEY WE ALREADY RECORDED OURSELVES (D-177, closing D-169). An offline
+  // payment reaches Stripe as a payment record attached to the open invoice,
+  // so it comes back here as an ordinary `invoice.updated` with no
+  // PaymentIntent for the dedupe above to key on - while
+  // `recordOfflinePayment` has already written the row, carrying the check
+  // number and the receiving staff member Stripe cannot hold. Creating a
+  // second row here doubled every counter payment in the dashboard's
+  // "collected" tile, the per-entity cash summary and the eviction packet's
+  // acceptance-after-service exhibit that goes to a court.
+  //
+  // `receivedByStaffId` is the discriminator and it is exact:
+  // `recordOfflinePayment` is the only writer of that column anywhere in the
+  // codebase, so this can never claim an ONLINE payment that happens to match
+  // on invoice and amount - which matters, because every invoice-driven
+  // payment lands here with `rail: null` and so `channel: OTHER`, and the
+  // channel therefore says nothing about where the money came from.
+  //
+  // `ledgerEntries: { none: {} }` makes this a CLAIM rather than a match, and
+  // that is what answers D-169's objection to keying on the invoice: the
+  // simulator hands out one stable invoice id per payer, so two counter
+  // payments of the same amount on different days share every other column.
+  // One unclaimed row each means the second event cannot land on the first's
+  // row and leave a settled payment whose reversal - which finds its entries
+  // BY `paymentId` - could never take the money back.
+  //
+  // ORDERING IS WHAT MAKES THIS WORK: `recordOfflinePayment` now writes its
+  // row BEFORE pushing to the provider, precisely so this lookup cannot run
+  // first and win the race. See its own comment for why that is safe.
+  if (
+    intent.kind === 'payment_succeeded' &&
+    intent.stripePaymentIntentId == null &&
+    intent.stripeInvoiceId != null
+  ) {
+    const recorded = await tx.payment.findFirst({
+      where: {
+        leasePayerId: payer.id,
+        stripeInvoiceId: intent.stripeInvoiceId,
+        amountCents: intent.amountCents,
+        status: 'SETTLED',
+        receivedByStaffId: { not: null },
+        ledgerEntries: { none: {} },
+      },
+      orderBy: { receivedAt: 'asc' },
+      select: { id: true, status: true },
+    })
+    // Returned unchanged rather than updated. The status it would be set to
+    // is `SETTLED`, which it already is, and every other column on that row
+    // is richer than anything this event carries.
+    if (recorded) return recorded
   }
 
   return tx.payment.create({

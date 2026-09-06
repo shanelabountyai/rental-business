@@ -8526,3 +8526,72 @@ going away. The regression guard is proven both ways — with the fix stashed it
 fails with `/dashboard is 639px wide on a 412px viewport`.
 
 Commit: 24107ee
+
+## R-171 — one counter payment, one `Payment` row
+
+**What it built.** D-169's duplicate is closed (D-177), and it is closed at the
+writer rather than at the three readers the backlog row named.
+`recordOfflinePayment` now writes its `Payment` row **before** the push to the
+billing provider, and `writePayment` claims that row instead of minting a
+second. Pushing an out-of-band payment makes an `invoice.updated` come back
+carrying the same money — against the simulated adapter *synchronously, inside
+the push call itself* — so with the old Stripe-first order our row could never
+be the one the webhook found. Inverting it makes the claim possible in both
+worlds: the simulator's event now finds our row already there, and a real
+Stripe webhook arrives later still. The lookup is reached only when the event
+has no PaymentIntent to key on, and matches `leasePayerId` + `stripeInvoiceId`
++ `amountCents` + `status: SETTLED` + `receivedByStaffId: { not: null }` +
+`ledgerEntries: { none: {} }`, returning the row unchanged.
+
+**The backlog row's prescribed fix was wrong, and this is worth writing down.**
+R-171 said to "filter the aggregate the way `listUndepositedDepositGroups`
+already does, at all three sites". That filter is an *inclusion* to the three
+offline channels; a "collected" total has to include everything, so it cannot
+be transferred. Filtering the other way — excluding `channel: OTHER` — drops
+most real money, because **every invoice-driven online payment also lands as
+`OTHER`**: `invoice.updated` carries no payment method so `rail` is null, and
+`payment_intent.succeeded` for an invoiced payment is deliberately ignored by
+`events.ts`'s own double-count guard, which makes the invoice event the sole
+writer. The channel says nothing about where the money came from, and no
+consumer-side predicate exists. `collectedVsBilled`, `entityCashSummaries` and
+`cureClockFor` are all unchanged and now correct for free.
+
+**What it decided.** `receivedByStaffId` is the discriminator, and it is exact
+— `recordOfflinePayment` is the only writer of that column anywhere in the
+codebase, so the claim can never swallow an online payment matching on invoice
+and amount. `ledgerEntries: { none: {} }` is what answers D-169's own objection
+to keying on the invoice: the simulator hands out one stable invoice id per
+payer, so two same-amount counter payments differ in no other column, and one
+unclaimed row each means the second event cannot land on the first's row and
+leave a settled payment whose reversal — which finds its entries by
+`paymentId` — could never take back. Both are asserted. The failed-push
+invariant ("nothing saved") is preserved by deleting the row; nothing can pin
+it, because the only thing that ever projects against it is the event the push
+just failed to fire. The `payment.recorded` audit entry moved to *after* the
+push for the mirror-image reason: `AuditLog` is append-only, so an entry naming
+a payment that was then deleted could never be withdrawn.
+
+**A real bug found and deliberately left, recorded as UNKNOWN rather than
+guessed.** The same `stripePaymentIntentId`-only dedup means an ACH payment on
+an invoice may write a `PENDING` row from `payment_intent.processing` and then
+a separate `SETTLED` row from `invoice.updated` — which would leave
+`inFlightCents` never clearing and the payment twice on a tenant's history.
+It hinges entirely on whether the invoice object carries `payment_intent`;
+`events.ts` says it does not under the account's API version (2026-07-29.
+dahlia), while every test fixture and the demo seed put one there, so nothing
+in this repo can see it either way. **Whether real Stripe omits it is
+unverified.** Owned by no item.
+
+**What it left behind.** `e2e/deposits.spec.ts`'s poll lost its channel filter
+— the workaround D-169 told the fixing item to start from — and gained
+`count === 1`, so the absence of the filter is the end-to-end proof. Three unit
+tests in `apps/web/lib/billing/billing.test.ts` cover the claim, the two
+same-amount payments, and the online payment that must not be claimed.
+
+**Gate run:** `lint` clean (0 errors, 16 pre-existing warnings), `typecheck`
+clean, `npm test` **2931 passed / 4 skipped across 219 files**, and the specs
+this item touches or that read a `Payment` aggregate — `deposits`, `dashboard`,
+`reports`, `operating-report`, `evictions`, `stripe-webhook` — **64 passed / 0
+failed / 0 flaky** on both projects. CI owns the full sweep; `gh run list` was
+checked at the start of this session rather than assumed, and R-170a's run
+(`33981080446`) is green.

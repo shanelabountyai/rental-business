@@ -217,26 +217,23 @@ test('the deposit screen groups undeposited payments and produces a slip', async
   // the render race, and every visible signal on this page can resolve
   // before the batch actually lands.
   //
-  // SCOPED TO THE OFFLINE CHANNELS, same filter `listUndepositedDepositGroups`
-  // itself uses - see D-169. Recording an out-of-band payment leaves TWO
-  // Payment rows on this lease: this one (channel OFFLINE_CHECK, written by
-  // `recordOfflinePayment`) and a second, generic one the webhook projection
-  // also writes for the same `invoice.updated` event (channel OTHER, no
-  // stripePaymentIntentId to dedupe against). The second is a real,
-  // pre-existing bug this item found and did not fix (D-169) - it is
-  // correctly never deposited, so a query with no channel filter would wait
-  // forever for a row that was never supposed to move.
+  // UNSCOPED, and that is the assertion (R-171, D-177). Until this item,
+  // recording an out-of-band payment left TWO Payment rows on this lease -
+  // this one, and a generic `channel: OTHER` duplicate the webhook projection
+  // wrote for the same `invoice.updated` event (D-169) - so this poll had to
+  // be filtered to `OFFLINE_CHECK` or it would wait forever on a row that was
+  // never supposed to move. The counter payment is now one row, so the filter
+  // is gone and its absence is what proves it end to end.
   await expect
     .poll(
       async () =>
         (
-          await prisma.payment.findFirst({
-            where: { leaseId: lease.id, channel: 'OFFLINE_CHECK' },
-          })
+          await prisma.payment.findFirst({ where: { leaseId: lease.id } })
         )?.depositBatchId ?? null,
       { timeout: 15_000 },
     )
     .not.toBeNull()
+  expect(await prisma.payment.count({ where: { leaseId: lease.id } })).toBe(1)
 
   const slipLink = page.getByRole('link', { name: 'Print the slip' })
   await expect(slipLink).toBeVisible()

@@ -27,11 +27,27 @@ import { generateStorageKey, storage } from '@/lib/storage/index.ts'
 // this whole product exists to replace. So the form asks for four things and
 // derives everything else.
 //
-// THE ORDER HERE IS THE WHOLE DESIGN, and it is deliberately Stripe-first.
-// Telling Stripe is what stops it collecting again; writing our own row is
-// bookkeeping. If the push fails we write nothing at all, because a Payment
-// row we hold while Stripe goes on debiting the tenant is worse than no
-// record - the staff member walks away believing it is handled.
+// THE ORDER HERE IS THE WHOLE DESIGN. Telling Stripe is what stops it
+// collecting again; writing our own row is bookkeeping. If the push fails we
+// must end up with nothing at all, because a Payment row we hold while Stripe
+// goes on debiting the tenant is worse than no record - the staff member
+// walks away believing it is handled.
+//
+// THE ROW IS NOW WRITTEN FIRST AND BACKED OUT ON FAILURE (D-177), which was
+// Stripe-first until R-171 and produced a duplicate for every counter
+// payment. The push makes the provider emit an `invoice.updated` carrying the
+// same money, and `writePayment` writes a Payment row for it - against the
+// simulator synchronously, inside the push call itself. Written afterwards,
+// our row could never be the one that event found, so two rows landed for one
+// payment (D-169) and everything that sums `Payment` doubled it. Written
+// first, the event claims this row instead of minting a second, and the
+// ordering holds for real Stripe too, where the webhook arrives later still.
+//
+// The end state on a failed push is unchanged - no Payment row, no ledger
+// entry, an error the staff member can act on. What did change: the audit
+// entry is written after the push rather than beside the row, because
+// `AuditLog` is append-only and a `payment.recorded` entry cannot be taken
+// back when the payment it names is.
 
 export interface OfflineFormState {
   error?: string
@@ -163,6 +179,33 @@ export async function recordOfflinePayment(
 
   const receivedAt = new Date(`${input.receivedOn}T12:00:00Z`)
 
+  // OURS, because Stripe cannot hold it: which numbered instrument arrived
+  // and who took it. The LEDGER entry is not written here - it arrives
+  // through the webhook like every other payment, so there stays exactly
+  // one way money enters the projection (D-11).
+  //
+  // BEFORE the push, and that is load-bearing rather than incidental - see
+  // this file's header. `receivedByStaffId` is what the webhook recognises
+  // this row by, and this is the only place in the codebase that writes it.
+  const payment = await prisma.payment.create({
+    data: {
+      propertyId: payer.propertyId,
+      leaseId: payer.leaseId,
+      leasePayerId: payer.id,
+      channel: input.channel as OfflineChannel,
+      // SETTLED, not PENDING. A check in hand is money received; whether it
+      // clears is a separate future event (a returned check is a reversal,
+      // which R-039's NSF handling owns), and holding it pending would keep
+      // the tenant's balance wrong for days after they paid.
+      status: 'SETTLED',
+      amountCents: input.amountCents,
+      receivedAt,
+      receivedByStaffId: actor.id,
+      checkNumber: input.checkNumber,
+      stripeInvoiceId: invoice!.stripeInvoiceId,
+    },
+  })
+
   try {
     await provider.recordOutOfBandPayment({
       stripeInvoiceId: invoice!.stripeInvoiceId,
@@ -181,55 +224,41 @@ export async function recordOfflinePayment(
     })
   } catch (error) {
     console.error(`[payments] out-of-band push failed for ${payer.id}`, error)
+    // BACKED OUT, so a failed push still leaves no record of money nobody can
+    // see on the provider's side. Nothing can be pinning this row: the only
+    // thing that ever projects a ledger entry against it is the event the
+    // push just failed to fire, so the RESTRICT foreign key cannot bite. A
+    // cleanup that fails anyway is logged and swallowed - the error the staff
+    // member needs to read is the push failure, not a delete.
+    await prisma.payment.delete({ where: { id: payment.id } }).catch((cleanupError) => {
+      console.error(
+        `[payments] could not back out payment ${payment.id} after a failed push`,
+        cleanupError,
+      )
+    })
     return {
       error:
         'That could not be recorded against the billing provider, so nothing has been saved. Try again shortly — do not record it twice.',
     }
   }
 
-  const payment = await prisma.$transaction(async (tx) => {
-    // OURS, because Stripe cannot hold it: which numbered instrument arrived
-    // and who took it. The LEDGER entry is not written here - it arrives
-    // through the webhook like every other payment, so there stays exactly
-    // one way money enters the projection (D-11).
-    const payment = await tx.payment.create({
-      data: {
-        propertyId: payer.propertyId,
-        leaseId: payer.leaseId,
-        leasePayerId: payer.id,
-        channel: input.channel as OfflineChannel,
-        // SETTLED, not PENDING. A check in hand is money received; whether it
-        // clears is a separate future event (a returned check is a reversal,
-        // which R-039's NSF handling owns), and holding it pending would keep
-        // the tenant's balance wrong for days after they paid.
-        status: 'SETTLED',
-        amountCents: input.amountCents,
-        receivedAt,
-        receivedByStaffId: actor.id,
-        checkNumber: input.checkNumber,
-        stripeInvoiceId: invoice!.stripeInvoiceId,
-      },
-    })
-
-    await audit(
-      {
-        action: 'payment.recorded',
-        entityType: 'Payment',
-        entityId: payment.id,
-        propertyId: payer.propertyId,
-        after: {
-          channel: input.channel,
-          amountCents: input.amountCents,
-          receivedOn: input.receivedOn,
-          checkNumber: input.checkNumber,
-          receivedByStaffId: actor.id,
-          stripeInvoiceId: invoice!.stripeInvoiceId,
-          provider: provider.name,
-        },
-      },
-      tx,
-    )
-    return payment
+  // AFTER the push, not beside the row. `AuditLog` is append-only, so an
+  // entry saying a payment was recorded cannot be withdrawn when the row it
+  // names is deleted above.
+  await audit({
+    action: 'payment.recorded',
+    entityType: 'Payment',
+    entityId: payment.id,
+    propertyId: payer.propertyId,
+    after: {
+      channel: input.channel,
+      amountCents: input.amountCents,
+      receivedOn: input.receivedOn,
+      checkNumber: input.checkNumber,
+      receivedByStaffId: actor.id,
+      stripeInvoiceId: invoice!.stripeInvoiceId,
+      provider: provider.name,
+    },
   })
 
   // The receipt is generated OUTSIDE the transaction above and its failure

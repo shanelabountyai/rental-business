@@ -99,7 +99,10 @@ function invoiceEvent(overrides: {
   amountPaid?: number
   amountDue?: number
   invoiceId?: string
-  paymentIntentId?: string
+  /// `null` leaves `payment_intent` OFF the invoice object entirely, which is
+  /// how it arrives under the account's own API version and how every
+  /// out-of-band payment arrives on any version (D-177).
+  paymentIntentId?: string | null
   created?: number
   /// What the invoice had ALREADY been paid before this event. The projected
   /// amount is the difference, so a second instalment is not counted twice.
@@ -124,7 +127,9 @@ function invoiceEvent(overrides: {
         ...(isMoneyIn
           ? { amount_paid: paidBefore + (overrides.amountPaid ?? 150_000) }
           : { amount_due: overrides.amountDue ?? 150_000 }),
-        payment_intent: overrides.paymentIntentId ?? `pi_${randomUUID().slice(0, 12)}`,
+        ...(overrides.paymentIntentId === null
+          ? {}
+          : { payment_intent: overrides.paymentIntentId ?? `pi_${randomUUID().slice(0, 12)}` }),
       },
       // Only on the money event, and only ever the keys that changed - which
       // is what makes the DELTA readable without a database round trip.
@@ -904,4 +909,147 @@ describe('processStripeEvent', () => {
     expect(row.outcome).toBe('projected')
     expect(row.occurredAt.toISOString()).toBe(new Date(event.created * 1000).toISOString())
   })
+})
+
+describe('out-of-band money already recorded at the counter (D-177)', () => {
+  // D-169's duplicate, closed by R-171. `recordOfflinePayment` writes the row
+  // with the check number and the receiving staff member, then pushes to the
+  // provider - and the push makes an `invoice.updated` come back carrying the
+  // SAME money with no PaymentIntent for `writePayment`'s unique-key dedupe to
+  // find. It created a second, generic row every time, so the dashboard's
+  // "collected" tile, the per-entity cash summary and the eviction packet's
+  // acceptance exhibit all doubled every counter payment.
+  //
+  // Driven through `processStripeEvent` rather than `recordOfflinePayment`,
+  // which needs a session: the row this seeds is exactly the row that action
+  // writes, and the event is exactly what the simulated adapter emits.
+  async function counterPayment(amountCents = 150_000) {
+    const lease = await seedActiveLease()
+    const { stripeCustomerId } = await provisionLeaseBilling(lease.id)
+    const payer = await prisma.leasePayer.findFirstOrThrow({ where: { leaseId: lease.id } })
+    const staff = await prisma.staffUser.create({
+      data: { email: `counter-${randomUUID()}@example.test`, name: 'Counter staff' },
+    })
+    const stripeInvoiceId = `in_sim${payer.id.slice(0, 16)}`
+    const payment = await prisma.payment.create({
+      data: {
+        propertyId: lease.propertyId,
+        leaseId: lease.id,
+        leasePayerId: payer.id,
+        channel: 'OFFLINE_CHECK',
+        status: 'SETTLED',
+        amountCents,
+        receivedAt: new Date('2026-03-03T12:00:00Z'),
+        receivedByStaffId: staff.id,
+        checkNumber: '1041',
+        stripeInvoiceId,
+      },
+    })
+    return { lease, payer, payment, stripeInvoiceId, customerId: stripeCustomerId! }
+  }
+
+  it('CLAIMS the row the counter already wrote instead of minting a second', async () => {
+    const { lease, payment, stripeInvoiceId, customerId } = await counterPayment()
+
+    const result = await processStripeEvent(
+      invoiceEvent({
+        customer: customerId,
+        invoiceId: stripeInvoiceId,
+        amountPaid: 150_000,
+        paymentIntentId: null,
+      }),
+    )
+    expect(result.outcome).toBe('projected')
+
+    const rows = await prisma.payment.findMany({ where: { leaseId: lease.id } })
+    expect(rows).toHaveLength(1)
+    // The rich row survives, not a generic replacement for it - the check
+    // number and the receiving staff member are what Stripe cannot hold.
+    expect(rows[0]!.id).toBe(payment.id)
+    expect(rows[0]!.channel).toBe('OFFLINE_CHECK')
+    expect(rows[0]!.checkNumber).toBe('1041')
+
+    // And the ledger entry hangs off it, which is what makes a later reversal
+    // able to find the money: `reverseSettledPayment` looks up by paymentId.
+    const entries = await prisma.ledgerEntry.findMany({
+      where: { leaseId: lease.id, type: 'PAYMENT' },
+    })
+    expect(entries).toHaveLength(1)
+    expect(entries[0]!.paymentId).toBe(payment.id)
+  }, 30_000)
+
+  it('gives two same-amount counter payments one row each, not one shared row', async () => {
+    // D-169's stated objection to keying on the invoice, and the reason the
+    // lookup filters on `ledgerEntries: { none: {} }`: the simulator hands out
+    // ONE stable invoice id per payer, so a second cheque for the same amount
+    // matches on every other column. A match would leave the second payment
+    // settled with no entry of its own, which no reversal could ever undo.
+    const { lease, payer, payment: first, stripeInvoiceId, customerId } = await counterPayment()
+    const second = await prisma.payment.create({
+      data: {
+        propertyId: lease.propertyId,
+        leaseId: lease.id,
+        leasePayerId: payer.id,
+        channel: 'OFFLINE_CHECK',
+        status: 'SETTLED',
+        amountCents: 150_000,
+        receivedAt: new Date('2026-04-03T12:00:00Z'),
+        receivedByStaffId: first.receivedByStaffId,
+        checkNumber: '1042',
+        stripeInvoiceId,
+      },
+    })
+
+    for (const paidBefore of [0, 150_000]) {
+      await processStripeEvent(
+        invoiceEvent({
+          customer: customerId,
+          invoiceId: stripeInvoiceId,
+          amountPaid: 150_000,
+          paidBefore,
+          paymentIntentId: null,
+        }),
+      )
+    }
+
+    expect(await prisma.payment.count({ where: { leaseId: lease.id } })).toBe(2)
+    // One claim each, in receipt order - never both on the older row.
+    for (const id of [first.id, second.id]) {
+      expect(await prisma.ledgerEntry.count({ where: { paymentId: id } })).toBe(1)
+    }
+  }, 30_000)
+
+  it('does NOT claim an online payment that happens to match on invoice and amount', async () => {
+    // `receivedByStaffId` is the discriminator, and it has to be: an ordinary
+    // invoice-driven card or ACH payment also lands with `rail: null` and so
+    // `channel: OTHER`, and it carries no staff member because nobody handed
+    // anything over. Claiming one would swallow real money.
+    const lease = await seedActiveLease()
+    const { stripeCustomerId } = await provisionLeaseBilling(lease.id)
+    const payer = await prisma.leasePayer.findFirstOrThrow({ where: { leaseId: lease.id } })
+    const stripeInvoiceId = `in_sim${payer.id.slice(0, 16)}`
+    await prisma.payment.create({
+      data: {
+        propertyId: lease.propertyId,
+        leaseId: lease.id,
+        leasePayerId: payer.id,
+        channel: 'OTHER',
+        status: 'SETTLED',
+        amountCents: 150_000,
+        receivedAt: new Date('2026-03-03T12:00:00Z'),
+        stripeInvoiceId,
+      },
+    })
+
+    await processStripeEvent(
+      invoiceEvent({
+        customer: stripeCustomerId!,
+        invoiceId: stripeInvoiceId,
+        amountPaid: 150_000,
+        paymentIntentId: null,
+      }),
+    )
+
+    expect(await prisma.payment.count({ where: { leaseId: lease.id } })).toBe(2)
+  }, 30_000)
 })
