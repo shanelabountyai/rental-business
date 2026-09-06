@@ -1,36 +1,35 @@
 # Next session
 
-## Pick up: R-172
+## Pick up: R-173
 
-`docs/prds/06-backlog.md`, Milestone 13 (Arc 3) — the next unticked row after
-158. Read its row and its named review finding before starting.
+`docs/prds/06-backlog.md`, row 160 — the next unticked row. Read its row and
+its named review finding before starting.
 
 Model: recommend at the start of the item, per the global convention.
 
-## Context from R-171 (done, 8e35cb8)
+## Context from R-172 (done, ec7dd21)
 
-D-169's doubled counter payment is closed by **D-177**, fixed at the writer:
-`recordOfflinePayment` writes its `Payment` row before the push, and
-`writePayment` claims it. **The backlog row's prescribed fix was wrong** —
-filtering `channel` at the three consumer sites cannot work, because every
-invoice-driven ONLINE payment also lands as `channel: OTHER`. The three sites
-(`collectedVsBilled`, `entityCashSummaries`, `cureClockFor`) are untouched and
-now correct.
+`Lease.moveInAt` now has a writer: finishing a MOVE_IN walk, both doorways.
+`getTurnoverForUnit` falls back to `startsOn` and the clock stops. **D-178**
+records the two rejected writers and why — `activatedAt` (signing day, not
+handover, and no seed writes it) and access-code issuance (`AccessCode`
+rotates for vendors, so a new row is not possession).
 
-One real bug found, deliberately left, **owned by no item** — and it is
-recorded as *unknown*, not diagnosed:
+Left behind, owned by no item:
 
-- `writePayment` dedups only on `stripePaymentIntentId`, so an ACH payment on
-  an invoice may write a `PENDING` row from `payment_intent.processing` and a
-  separate `SETTLED` row from `invoice.updated`, leaving `inFlightCents` never
-  clearing and the payment twice on a tenant's history. It hinges on whether
-  the invoice object carries `payment_intent`: `packages/core/billing/events.ts`
-  says it does not under the account's API version, while every test fixture
-  and the demo seed put one there — so nothing in this repo can see it either
-  way. **Verify against real Stripe before assuming either answer.**
+- No staff field to type a real handover date for an inherited tenancy whose
+  move-in walk never happened. Those turns take the `startsOn` fallback, which
+  is correct enough, but the actual date is recorded nowhere.
+- `apps/web/lib/turnover/queries.test.ts` cleans up by collected-id list, not
+  by ownership — against this repo's own rule. Pre-existing, untouched.
+
+Still unowned from R-171: `writePayment` dedups only on
+`stripePaymentIntentId`, so an ACH payment on an invoice may write both a
+`PENDING` and a `SETTLED` row. Recorded as **unknown** — verify against real
+Stripe before assuming either answer.
 
 Still unowned from R-170a: `/staff/new` and `/staff/[id]` each take ~21s to
-axe-scan against `/staff`'s 2.2s, which is a page saying it is very large.
+axe-scan against `/staff`'s 2.2s.
 
-**Check `gh run list --limit 5`** rather than assuming — R-171's own run is the
-one to read.
+**Check `gh run list --limit 5`** rather than assuming — R-172's own run
+(pushed 2026-09-06) is the one to read.
