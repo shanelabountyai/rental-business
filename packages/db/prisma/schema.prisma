@@ -2328,6 +2328,13 @@ model Lease {
   /// Who pays which utility. Shape is a lease-template concern (R-063), not
   /// something to normalize before there is a template to normalize against.
   utilityResponsibility   Json?
+  /// When the tenant actually took possession, as against the `startsOn`
+  /// that was agreed. Written by ONE thing (R-172): finishing the MOVE_IN
+  /// walk, from either doorway - see apps/web/lib/inspections/move-in.ts,
+  /// which also records why lease activation and access-code issuance are
+  /// both wrong for this. First writer wins, so a PM who logged the real
+  /// handover is never overwritten. Null on a tenancy nobody walked in, and
+  /// every reader falls back to `startsOn` for that reason.
   moveInAt                DateTime?
   moveOutAt               DateTime?
   /// Notice to end the tenancy has been given - by either side. A FACT
@@ -4336,7 +4343,7 @@ model Deposit {
   /// A CALENDAR DAY, like `Payment.receivedOn` and for the same reason: a
   /// cheque written on 31 December was paid on 31 December whatever day
   /// somebody typed it in, and the year-end liability turns on that.
-  refundPaidOn         DateTime?   @db.Date
+  refundPaidOn         DateTime?       @db.Date
   refundMethod         PaymentChannel?
   /// Cheque number, ACH trace, money-order serial - how the disbursement is
   /// matched back to a bank statement months later, the same job
@@ -4807,8 +4814,9 @@ model WorkOrderBid {
 /// change in leases/actions.ts and the nightly auto-make-ready job).
 ///
 /// The days-vacant clock (LEASE-12's own phrase) reads `Lease.moveOutAt`
-/// (this project's lease) and, once it exists, the NEXT lease's
-/// `moveInAt` on the same unit - not a field here. Two facts the product
+/// (this project's lease) and the NEXT lease's `moveInAt` - or, where no
+/// move-in walk was ever finished, its agreed `startsOn` (R-172) - on the
+/// same unit; not a field here. Two facts the product
 /// already records elsewhere are the honest clock; a third copy is exactly
 /// the class of drift bug this codebase keeps a running list of avoiding
 /// (see `packages/core/units/vacancy.ts`'s own comment).

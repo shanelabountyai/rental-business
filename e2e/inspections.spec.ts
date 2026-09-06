@@ -284,6 +284,15 @@ test('a photo attaches to an item, and the tenant reviews and signs the report f
   await page.getByRole('button', { name: 'Finish walk' }).click()
   await expect(page.getByText('MOVE_IN · Pending signature')).toBeVisible()
 
+  // R-172: finishing the MOVE_IN walk IS the handover, and it is the only
+  // writer `Lease.moveInAt` has. Without it the unit's turn panel counts
+  // days vacant for ever, however long ago somebody moved in.
+  await expect
+    .poll(async () =>
+      (await prisma.lease.findUniqueOrThrow({ where: { id: inspection.leaseId! } })).moveInAt,
+    )
+    .not.toBeNull()
+
   // finishInspection() notifies the tenant with a direct link - the real
   // signal a tenant would follow, rather than this test navigating there
   // by knowing the id in advance.

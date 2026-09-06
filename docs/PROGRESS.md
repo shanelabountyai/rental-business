@@ -8597,3 +8597,80 @@ checked at the start of this session rather than assumed, and R-170a's run
 (`33981080446`) is green.
 
 Commit: 8e35cb8
+
+## R-172 — the days-vacant clock stops
+
+**What it built.** `Lease.moveInAt` finally has a writer.
+`recordMoveInFromWalk` in
+[apps/web/lib/inspections/move-in.ts](../apps/web/lib/inspections/move-in.ts)
+records the handover when a `MOVE_IN` inspection is finished, shared behind
+both doorways — `finishInspection` (staff) and `finishInspectionAsTenant`
+(the tenant's own self-guided walk, INSP-05) — inside each one's existing
+transaction, the same extraction `writeItemCondition` next door already made.
+`getTurnoverForUnit` ([apps/web/lib/turnover/queries.ts](../apps/web/lib/turnover/queries.ts))
+stops gating on `moveInAt` and falls back to the next lease's agreed
+`startsOn`, which is what `operatingReport` and the leasing funnel have
+always done.
+
+**The defect.** `moveInAt` had **no writer anywhere in the codebase** since the
+column was added, so `where: { moveInAt: { not: null } }` matched nothing,
+`nextLease` was always null, and `daysToFill` therefore always fell through to
+`asOf`. Every turn ever counted read "N days vacant **and counting**" for ever
+— a unit filled last March still climbing today, `daysVacantIsFinal` never
+once true in production. The operating report and the leasing funnel dodged it
+because they already fell back to `startsOn`; the per-unit turn screen, the one
+place an operator actually looks at a single turn, did not.
+
+**What it decided.** Recorded as **D-178**, and the review finding named two
+candidate writers of which only one survives.
+
+- **Not `Lease.activatedAt`.** It was the tempting answer — all three
+  activation paths write it, and it would have been a one-token change to the
+  filter — but it is the moment the tenancy went LIVE, usually signing day and
+  often weeks before anybody has a key. Using it would have made `moveInAt` a
+  *worse* answer than the `startsOn` fallback it exists to improve on.
+- **Not access-code issuance.** `AccessCode` is versioned per `(unitId, type)`
+  and rotates for vendors and maintenance, so a new row is not evidence a
+  tenant took possession. The finding named it; the schema refuses it.
+- **First writer wins.** `updateMany` filtered on `moveInAt: null`, so a PM who
+  logged the real handover date is never overwritten by the moment somebody got
+  round to finishing the walk — the posture `changeLeaseStatus` already takes
+  for `moveOutAt`.
+- **The reader's existence gate is a status denylist, not `activatedAt`** —
+  and this one nearly went the other way. `activatedAt` reads like the exact
+  "this tenancy began" marker, but **no seed in `packages/db/prisma` writes it**
+  (zero occurrences across all six seed scripts, checked rather than assumed),
+  so gating on it would have left the demo — and any imported book of business
+  — reading the same never-ending clock this item exists to fix. It would have
+  been the identical bug wearing a new column name.
+  `status: { notIn: ['DRAFT', 'PENDING_SIGNATURE'] }` is also the safer
+  polarity for an enum that grows: a status added after ACTIVE counts as a
+  tenancy, which is right.
+- **A future `startsOn` does not close the clock.** The old `moveInAt`-only
+  filter got this for free (a recorded move-in is in the past by construction)
+  and the fallback does not: a lease signed today to start next month leaves
+  the unit empty today, and taking its `startsOn` would report a *final*
+  days-vacant longer than the real one, for a turn still running.
+- **No new audit action.** `inspection.performed` is already written in the
+  same transaction; the derived fact is reconstructible from it.
+
+**What it left behind.** Nothing writes `moveInAt` for a tenancy where no
+move-in walk is ever performed, which is the ordinary case for an inherited
+book of business — those turns take the `startsOn` fallback and produce a final
+number, which is the point, but the *actual* handover date for them is still
+not recorded anywhere. There is no staff field to type one in; the fallback is
+the answer until somebody asks for one. `apps/web/lib/turnover/queries.test.ts`
+still cleans up by collected-id list rather than by ownership, against this
+repo's own rule — pre-existing, untouched, owned by no item.
+
+**Gate run:** `lint` clean (0 errors, 16 pre-existing warnings), `typecheck`
+clean, `db:drift` "No difference detected", `npm test` **2938 passed / 4
+skipped across 219 files** (four new: three in `queries.test.ts` for the
+fallback, the future lease and the draft lease; four in the new
+`move-in.test.ts` for the writer). `e2e/inspections.spec.ts` +
+`e2e/turnover.spec.ts` on `desktop-chrome`: **7 passed**, reconciling exactly
+against `--list`'s `Total: 7 tests in 2 files`. CI owns the full sweep;
+`gh run list` was checked at the start of this session rather than assumed, and
+R-171's run (`34044067246`) is green.
+
+Commit: PENDING

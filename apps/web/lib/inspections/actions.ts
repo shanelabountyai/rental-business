@@ -16,6 +16,7 @@ import { audit } from '@/lib/audit/index.ts'
 import { authUrl } from '@/lib/auth/delivery.ts'
 import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
 import { writeItemCondition, writeItemPhoto } from '@/lib/inspections/item-writes.ts'
+import { recordMoveInFromWalk } from '@/lib/inspections/move-in.ts'
 import { itemsFromMoveIn } from '@/lib/inspections/move-out-copy.ts'
 import { dispatchPendingNotifications, notify } from '@/lib/notifications/send.ts'
 import { draftPunchListFromInspection } from '@/lib/turnover/punch-list.ts'
@@ -325,6 +326,9 @@ export async function finishInspection(
           : {}),
       },
     })
+    // A finished MOVE_IN walk IS the handover - R-172's writer for
+    // `Lease.moveInAt`, which had none. See move-in.ts.
+    await recordMoveInFromWalk(tx, inspection, now)
     if (entryUnaccounted) {
       await audit(
         {

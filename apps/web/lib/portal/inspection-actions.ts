@@ -5,6 +5,7 @@ import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { audit } from '@/lib/audit/index.ts'
 import { writeItemCondition, writeItemPhoto } from '@/lib/inspections/item-writes.ts'
+import { recordMoveInFromWalk } from '@/lib/inspections/move-in.ts'
 import { requireTenantWithScope } from './guard.ts'
 
 // The tenant's own e-sign (INSP-01, R-068 phase 2). Lives on the PORTAL
@@ -195,8 +196,12 @@ export async function finishInspectionAsTenant(
 
   // `performedByStaffId` stays null - that absence, alongside `selfGuided`,
   // IS the record that the tenant walked this one themselves.
+  const now = new Date()
   await prisma.$transaction(async (tx) => {
-    await tx.inspection.update({ where: { id: inspectionId }, data: { performedAt: new Date() } })
+    await tx.inspection.update({ where: { id: inspectionId }, data: { performedAt: now } })
+    // Same handover fact from the tenant's own doorway (R-172). A tenant
+    // walking their own move-in report has possession by definition.
+    await recordMoveInFromWalk(tx, inspection, now)
     await audit(
       {
         action: 'inspection.performed',

@@ -147,4 +147,80 @@ describe('getTurnoverForUnit', () => {
     expect(detail!.daysVacantIsFinal).toBe(true)
     expect(detail!.rentReadyAt).not.toBeNull()
   })
+
+  // R-172. `moveInAt` had no writer at all until this item, so without the
+  // fallback EVERY turn in the database read "counting" for ever - a unit
+  // filled last March still showing 179 days vacant and rising.
+  it('falls back to the next lease\'s agreed startsOn when no move-in walk recorded one', async () => {
+    const property = await seedProperty()
+    const unit = await prisma.unit.create({ data: { propertyId: property.id, name: 'U-nowalk' } })
+    unitIds.push(unit.id)
+    const lease = await seedLease(property.id, unit.id, {
+      endsOn: new Date('2026-06-30'),
+      moveOutAt: new Date('2026-06-30T18:00:00Z'),
+    })
+    const project = await prisma.turnoverProject.create({
+      data: { propertyId: property.id, unitId: unit.id, leaseId: lease.id },
+    })
+    projectIds.push(project.id)
+    await seedLease(property.id, unit.id, {
+      status: 'ACTIVE',
+      startsOn: new Date('2026-07-08'),
+      endsOn: null,
+      moveInAt: null,
+    })
+
+    const detail = await getTurnoverForUnit(unit.id, CHICAGO, new Date('2026-08-01T12:00:00Z'))
+    expect(detail!.daysVacant).toBe(8)
+    expect(detail!.daysVacantIsFinal).toBe(true)
+  })
+
+  it('keeps counting when the only next lease has not started yet', async () => {
+    const property = await seedProperty()
+    const unit = await prisma.unit.create({ data: { propertyId: property.id, name: 'U-future' } })
+    unitIds.push(unit.id)
+    const lease = await seedLease(property.id, unit.id, {
+      endsOn: new Date('2026-06-30'),
+      moveOutAt: new Date('2026-06-30T18:00:00Z'),
+    })
+    const project = await prisma.turnoverProject.create({
+      data: { propertyId: property.id, unitId: unit.id, leaseId: lease.id },
+    })
+    projectIds.push(project.id)
+    // Signed, live, and starting three weeks after "today" - the unit is
+    // still empty, so a FINAL 32 days would be wrong twice over.
+    await seedLease(property.id, unit.id, {
+      status: 'ACTIVE',
+      startsOn: new Date('2026-08-01'),
+      endsOn: null,
+      moveInAt: null,
+    })
+
+    const detail = await getTurnoverForUnit(unit.id, CHICAGO, new Date('2026-07-10T12:00:00Z'))
+    expect(detail!.daysVacant).toBe(10)
+    expect(detail!.daysVacantIsFinal).toBe(false)
+  })
+
+  it('does not let a lease nobody has signed yet close the clock', async () => {
+    const property = await seedProperty()
+    const unit = await prisma.unit.create({ data: { propertyId: property.id, name: 'U-draft' } })
+    unitIds.push(unit.id)
+    const lease = await seedLease(property.id, unit.id, {
+      endsOn: new Date('2026-06-30'),
+      moveOutAt: new Date('2026-06-30T18:00:00Z'),
+    })
+    const project = await prisma.turnoverProject.create({
+      data: { propertyId: property.id, unitId: unit.id, leaseId: lease.id },
+    })
+    projectIds.push(project.id)
+    await seedLease(property.id, unit.id, {
+      status: 'DRAFT',
+      startsOn: new Date('2026-07-08'),
+      endsOn: null,
+      moveInAt: null,
+    })
+
+    const detail = await getTurnoverForUnit(unit.id, CHICAGO, new Date('2026-08-01T12:00:00Z'))
+    expect(detail!.daysVacantIsFinal).toBe(false)
+  })
 })

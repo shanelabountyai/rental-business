@@ -31,8 +31,9 @@ export interface TurnoverDetail {
   rentReadyAt: Date | null
   moveOutDate: string
   /// Days from move-out to whichever ends the clock: the NEXT lease's
-  /// `moveInAt` on this unit once one exists, otherwise `asOf` (today) -
-  /// see `daysVacantIsFinal` for which one this is.
+  /// `moveInAt` (or its agreed `startsOn`, once that day has arrived) on
+  /// this unit, otherwise `asOf` (today) - see `daysVacantIsFinal` for
+  /// which one this is.
   daysVacant: number
   /// True once a new tenancy has actually started - `daysVacant` is the
   /// turn's final number and will not move again. False means it is still
@@ -77,24 +78,55 @@ export async function getTurnoverForUnit(
   // `daysVacant` by one (R-169). `targetRentReadyDate` below IS a `@db.Date`.
   const moveOutDate = businessDate(project.lease.moveOutAt, timezone)
 
-  // Whichever lease starts this unit's NEXT tenancy, once one has actually
-  // moved in - excludes the departing lease itself (its own `startsOn` is
-  // in the past, but it is not what closes this turn's clock).
+  // Whichever lease starts this unit's NEXT tenancy - excludes the departing
+  // lease itself (its own `startsOn` is in the past, but it is not what
+  // closes this turn's clock).
+  //
+  // NO LONGER GATED ON `moveInAt` (R-172). That column had no writer
+  // anywhere in the codebase, so this filter matched nothing and every turn
+  // ever counted read "N days vacant and counting" for ever, however long
+  // ago the unit was actually filled.
+  //
+  // What replaces it is a status denylist, NOT `activatedAt`: that column
+  // looks like the exact "this tenancy went live" marker and all three
+  // activation paths do write it, but no seed in `packages/db/prisma` ever
+  // does - so gating on it would leave the demo (and any imported book of
+  // business) reading the same never-ending clock this item exists to fix.
+  // A denylist is also the safer polarity for a status enum that grows: a
+  // status added after ACTIVE counts as a tenancy, which is right.
   const nextLease = await prisma.lease.findFirst({
     where: {
       unitId,
       id: { not: project.leaseId },
-      moveInAt: { not: null },
+      status: { notIn: ['DRAFT', 'PENDING_SIGNATURE'] },
       startsOn: { gte: project.lease.moveOutAt },
     },
     orderBy: { startsOn: 'asc' },
-    select: { moveInAt: true },
+    select: { moveInAt: true, startsOn: true },
   })
 
+  const today = businessDate(asOf, timezone)
+
+  // The recorded handover when there is one, otherwise the agreed start -
+  // the same fallback `operatingReport` and the leasing funnel have always
+  // used, and the reason a turn whose move-in walk nobody logged still
+  // produces a final number. `moveInAt` is a real TIMESTAMP and `startsOn`
+  // is a `@db.Date`, so they take different readers (R-042).
+  const startedOn = nextLease
+    ? nextLease.moveInAt != null
+      ? businessDate(nextLease.moveInAt, timezone)
+      : utcToBusinessDate(nextLease.startsOn)
+    : null
+
+  // ...and it only ENDS the vacancy once it has happened. A lease signed
+  // today to start next month leaves this unit empty today; taking its
+  // future `startsOn` would report a final days-vacant longer than the
+  // real one, for a turn still running. A recorded `moveInAt` is in the
+  // past by construction, so this only ever bites the fallback.
   const fill = daysToFill({
     vacatedOn: moveOutDate,
-    filledOn: nextLease?.moveInAt ? businessDate(nextLease.moveInAt, timezone) : null,
-    asOf: businessDate(asOf, timezone),
+    filledOn: startedOn != null && startedOn <= today ? startedOn : null,
+    asOf: today,
   })
 
   return {
