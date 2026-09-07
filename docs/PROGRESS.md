@@ -8758,7 +8758,7 @@ R-172's run (`34048400191`) is green.
 Commit: 25c717f
 
 ## R-174 — Job-run health becomes visible
-**Commit:** `PENDING`  ·  **Date:** 2026-09-07
+**Commit:** `3ecb18a`  ·  **Date:** 2026-09-07
 
 **What it built.** Review finding 6 (PRD §6.5/§6.6). R-006's runner has
 written a `JobRun` row per job per property per day since the beginning, and

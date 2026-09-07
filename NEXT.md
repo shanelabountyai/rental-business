@@ -1,33 +1,35 @@
 # Next session
 
-## Pick up: R-174
+## Pick up: R-175
 
-`docs/prds/06-backlog.md`, row 161 — the next unticked row. Read its row and
+`docs/prds/06-backlog.md`, row 162 — the next unticked row. Read its row and
 its named review finding before starting.
 
 Model: recommend at the start of the item, per the global convention.
 
-## Context from R-173 (done, 25c717f)
+## Context from R-174 (done, 3ecb18a)
 
-`reachableElectronically(recipient)` in `apps/web/lib/notifications/send.ts`
-is one predicate with two callers: PORTAL suppresses as `no_address` without
-it, and D-38's `serve_notice_offline` task now fires on `smsBlocked ||
-unreachable`. The tasks land in `/tasks?type=serve_notice_offline` (reached
-from a banner on `/notifications`) and each hands over
-`GET /tasks/[id]/printable` — R-062's renderer over the stored `Notification`
-rows. **D-179** records why the predicate is about the recipient rather than
-the template's channel list, and why the printable renders the stored rows
-rather than re-deriving the message.
+`/jobs` is the first thing that ever read `JobRun` back. `jobHealth()` in
+`apps/web/lib/jobs/queries.ts` walks **`SCHEDULED_JOBS`**, not the run table —
+a history-driven panel reports perfect health for a job that has never fired.
+`rerunJobRun` refuses anything that is not `FAILED` (the run row IS the
+idempotency guarantee), and `runDueJobs` catches up missed business dates
+bounded to 3 and only where the pair has an earlier run. **D-180** records all
+four rules.
 
 Left behind, owned by no item:
 
-- A tenant with a phone but **no email** still gets a live PORTAL row and
-  still cannot sign in (`tenant-magic-link` resolves by email only). SMS
-  delivers the notice, so nothing is lost; the row is optimistic. The fix is
-  a per-recipient-type credential table.
-- Nothing links a `serve_notice_offline` task to a `Notice` row — the task's
-  subject is the notification's idempotency key, not an entity id — so
-  recording service means finding the notice by hand.
+- A manager holding a `job_failed` task cannot open `/jobs` to act on it —
+  `job.manage` is owner-only, and the task is raised without regard to who can
+  act on it. Same cause: only an owner can press the re-run.
+- `overdueToday` renders every affected property name inline; a dead cron over
+  fifty houses is a wall of names per job.
+- Nothing tests `jobHealth()` directly — the query's overdue/missed arithmetic
+  is covered only through the page.
+
+Still unowned from R-173: a tenant with a phone but no email still gets a live
+PORTAL row and cannot sign in; nothing links a `serve_notice_offline` task to
+a `Notice` row.
 
 Still unowned from R-172: no staff field to type a real handover date for an
 inherited tenancy whose move-in walk never happened;
@@ -40,5 +42,5 @@ Still unowned from R-171: `writePayment` dedups only on
 Still unowned from R-170a: `/staff/new` and `/staff/[id]` each take ~21s to
 axe-scan against `/staff`'s 2.2s.
 
-**Check `gh run list --limit 5`** rather than assuming — R-173's own run is
+**Check `gh run list --limit 5`** rather than assuming — R-174's own run is
 the one to read.
