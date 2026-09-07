@@ -8859,7 +8859,7 @@ than assumed, and R-173's run (`34075415128`) is green, as are the three
 before it.
 
 ## R-175 — A repayment plan the product can actually check
-**Commit:** `PENDING`  ·  **Date:** 2026-09-07
+**Commit:** `53cc52a`  ·  **Date:** 2026-09-07
 
 **What it built.** Review finding 7 (PAY-08, PAY-12, RISK). Grepping
 `paymentPlan|installment|promiseToPay` across the whole repo used to find one
