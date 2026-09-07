@@ -1,37 +1,57 @@
 # Next session
 
-## Pick up: R-177
+## Pick up: R-178
 
-`docs/prds/06-backlog.md`, row 164 — the next unticked one. Read its row and
-its named review finding before starting.
+`docs/prds/06-backlog.md`, row 165 — the next unticked one. Read its row and
+its named review finding (§10) before starting. It depends on R-176 (done) and
+R-158.
 
 Model: recommend at the start of the item, per the global convention.
 
-## Context from R-176 (done, ed88d0e)
+## Context from R-177 (done, ad6bdeb)
 
-**D-182.** A move-out now retires the unit's `AccessCode` rows and the turn
-opens a re-key. Three things are easy to get wrong later:
+**D-183.** The seven troubleshooting scripts now reach SMS and the phone call,
+not just the portal wizard.
 
-- **The retire is INSIDE the tenancy-ending transaction**, unlike every
-  best-effort sibling around it. A stale code cannot be caught up by a
-  re-run, because nothing knows to ask.
-- **Retiring changes no lock.** `effectiveTo` closes our record; the URGENT
-  `REKEY` work order is the half that changes the door.
-- **"Re-key done" is NOT `OPEN_WORK_ORDER_STATUSES`.** VERIFIED counts here —
-  a locksmith who has not been paid has still changed the lock.
+- **There is ONE wizard, not two.** `MaintenanceWizard` takes `submit`,
+  `formAction`, `uploadPhoto` and `doneHref` as optional props; the portal's
+  defaults are unchanged and `/clarify/[token]` injects token-bound actions.
+  If you add a step, both doors get it — that is the point.
+- **`/clarify/[token]` is the fourth token-scoped page** (after vendor, verify,
+  pay). No session. It refuses once a work order exists, appends to the
+  description rather than replacing it, and never overwrites a category a PM
+  set during triage.
+- **The phone form now enforces the script.** `PhoneLoggedRequestInput` extends
+  `MaintenanceRequestInput`; `scriptViolations` is one gate for all three doors.
+  Any new fixture for a phone-logged request needs `promptAnswers` and
+  `troubleshooting`, with REAL option strings — a select answer outside its own
+  options is refused.
 
-Any test that deletes a unit now has to delete its work orders and access
-codes first. Three cleanups were fixed for this; a fourth will surface.
+**Two things needing YOUR decision, both recorded and neither fixed:**
+
+- **R-032c's "was this fixed?" SMS has never been sent by SMS by default.**
+  `defaultEnabled('maintenance_update', 'SMS')` is false, and that template is
+  on `maintenance_update`. Its own comment says "the reply rate IS the
+  feature". One line in `packages/core/notifications/categories.ts` fixes it,
+  but it changes when tenants get texted — your call, not a build decision.
+  R-177 carved its own `maintenance_clarify` category rather than change it.
+- **Whether an inbound text is itself TCPA consent to reply.** Today a tenant
+  with no `TenantConsent` SMS row gets the clarify invitation in the portal
+  only — the one place that persona never looks.
 
 Left behind, owned by no item:
 
-- Nothing warns on `/leases`, the dashboard or the listing flow that a unit
-  is listed with an open re-key — only the rent-ready press warns. **R-178
-  (row 165) already depends on R-176** and is where a stalled stage becomes
-  visible portfolio-wide.
-- A CANCELED re-key reads identically to one that never happened, so an
-  operator with no keypads is warned on every turn with no way to say so once.
-- Nothing backfills units turned before today.
+- Email-intake tickets (R-097f) get no clarify link. `inviteToClarify` takes
+  only a ticket id, so it is a one-line call somebody has to decide to add.
+- No staff "ask them again" button, though `issueClarifyLink` already
+  revokes-then-creates for exactly that.
+- A clarification raises nothing for a PM who already triaged.
+- `e2e/maintenance-phone-log.spec.ts` still cleans up by collected-id list.
+
+Still unowned from R-176: nothing warns portfolio-wide that a unit is listed
+with an open re-key (**R-178 is where that becomes visible**); a CANCELED
+re-key reads identically to one that never happened; nothing backfills units
+turned before 2026-09-07.
 
 Still unowned from R-175: no e-sign on a payment plan agreement; no
 tenant-facing view of the schedule.
@@ -55,5 +75,5 @@ Still unowned from R-171: `writePayment` dedups only on
 Still unowned from R-170a: `/staff/new` and `/staff/[id]` each take ~21s to
 axe-scan against `/staff`'s 2.2s.
 
-**Check `gh run list --limit 5`** rather than assuming — R-176's own run is
-the one to read.
+**Check `gh run list --limit 5`** rather than assuming — R-177's own run
+(`34156327059`) is the one to read.
