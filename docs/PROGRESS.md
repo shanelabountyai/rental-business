@@ -8678,7 +8678,7 @@ Commit: ec7dd21
 ---
 
 ## R-173 — A portal you cannot sign into is not a delivery
-**Commit:** `TBD`  ·  **Date:** 2026-09-06
+**Commit:** `25c717f`  ·  **Date:** 2026-09-06
 
 **What it built.** Review finding 5 (NOTIF-01/NOTIF-05/COMM-04), in three
 pieces that are one bug.
@@ -8755,4 +8755,4 @@ No schema change, so no migration and no drift check. CI owns the full sweep;
 `gh run list` was read at the start of this session rather than assumed, and
 R-172's run (`34048400191`) is green.
 
-Commit: TBD
+Commit: 25c717f
