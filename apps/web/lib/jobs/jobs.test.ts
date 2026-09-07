@@ -2,7 +2,7 @@ import { businessDate } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { CONSUMERS, dispatchOutbox, emitEvent } from './outbox.ts'
-import { SCHEDULED_JOBS, runDueJobs } from './runner.ts'
+import { SCHEDULED_JOBS, rerunJobRun, runDueJobs } from './runner.ts'
 
 // The two idempotency guarantees, against a real database. Neither can be
 // proved by unit tests: both are about what the DATABASE does when two things
@@ -43,6 +43,9 @@ beforeAll(async () => {
 afterEach(async () => {
   SCHEDULED_JOBS.length = 0
   CONSUMERS.length = 0
+  await prisma.task.deleteMany({
+    where: { propertyId: { in: [chicagoPropertyId, honoluluPropertyId] } },
+  })
   await prisma.jobRun.deleteMany({
     where: { propertyId: { in: [chicagoPropertyId, honoluluPropertyId] } },
   })
@@ -492,5 +495,226 @@ describe('business dates as stored', () => {
     for (const run of runs) {
       expect(run.businessDate.toISOString().slice(0, 10)).toBe('2026-08-04')
     }
+  })
+})
+
+// R-174. Everything above proves a job runs once on the day it is due. These
+// prove what happens on the day it did NOT run, and after the day it failed -
+// which until R-174 was nothing at all, for ever, silently.
+describe('missed and failed runs', () => {
+  /// The date-only column, written the way the runner writes it.
+  function utcDate(date: string): Date {
+    return new Date(`${date}T00:00:00.000Z`)
+  }
+
+  it('catches up a business date the cron missed', async () => {
+    // Chicago ran on the 2nd and then the cron died through the 3rd. The 4th
+    // is today.
+    await prisma.jobRun.create({
+      data: {
+        jobType: 'test.catchup',
+        propertyId: chicagoPropertyId,
+        businessDate: utcDate('2026-08-02'),
+        status: 'SUCCEEDED',
+        finishedAt: new Date('2026-08-02T07:00:00Z'),
+      },
+    })
+
+    const ran: string[] = []
+    SCHEDULED_JOBS.push({
+      type: 'test.catchup',
+      localHour: 2,
+      description: 'test',
+      run: async (context) => {
+        if (context.propertyId === chicagoPropertyId) ran.push(context.businessDate)
+      },
+    })
+
+    const summaries = await runForTestProperties(
+      new Date('2026-08-04T07:00:00Z'),
+    )
+
+    // The 3rd first, then today. Oldest first, and both actually executed -
+    // the missed day is a run, not a row backdated to look like one.
+    expect(ran).toEqual(['2026-08-03', '2026-08-04'])
+    const chicago = summaries.filter(
+      (s) => s.propertyId === chicagoPropertyId && s.jobType === 'test.catchup',
+    )
+    expect(chicago.map((s) => `${s.businessDate}:${s.outcome}`)).toEqual([
+      '2026-08-03:caught_up',
+      '2026-08-04:ran',
+    ])
+  })
+
+  // The condition that keeps the catch-up from being a backfill. A job
+  // registered today, or a property acquired today, has no earlier run - so
+  // there is no evidence it was ever live on those dates, and running it
+  // anyway is how a fresh import gets three days of late fees on its first
+  // tick.
+  it('does not backfill a job that has never run at this property', async () => {
+    const ran: string[] = []
+    SCHEDULED_JOBS.push({
+      type: 'test.fresh',
+      localHour: 2,
+      description: 'test',
+      run: async (context) => {
+        if (context.propertyId === chicagoPropertyId) ran.push(context.businessDate)
+      },
+    })
+
+    await runForTestProperties(new Date('2026-08-04T07:00:00Z'))
+    expect(ran).toEqual(['2026-08-04'])
+  })
+
+  // A cron down longer than the bound is a person's decision, not a tick's.
+  it('does not catch up a gap older than the window', async () => {
+    await prisma.jobRun.create({
+      data: {
+        jobType: 'test.stale',
+        propertyId: chicagoPropertyId,
+        businessDate: utcDate('2026-07-20'),
+        status: 'SUCCEEDED',
+        finishedAt: new Date('2026-07-20T07:00:00Z'),
+      },
+    })
+
+    const ran: string[] = []
+    SCHEDULED_JOBS.push({
+      type: 'test.stale',
+      localHour: 2,
+      description: 'test',
+      run: async (context) => {
+        if (context.propertyId === chicagoPropertyId) ran.push(context.businessDate)
+      },
+    })
+
+    await runForTestProperties(new Date('2026-08-04T07:00:00Z'))
+    expect(ran).toEqual(['2026-08-04'])
+  })
+
+  it('raises a Task when a job fails', async () => {
+    SCHEDULED_JOBS.push({
+      type: 'test.task_on_failure',
+      localHour: 0,
+      description: 'The nightly thing',
+      run: async (context) => {
+        if (!isOurs(context.propertyId)) return
+        throw new Error('boom')
+      },
+    })
+
+    await runForTestProperties(new Date('2026-08-04T12:00:00Z'))
+
+    const run = await prisma.jobRun.findFirstOrThrow({
+      where: {
+        jobType: 'test.task_on_failure',
+        propertyId: chicagoPropertyId,
+      },
+    })
+    const task = await prisma.task.findFirstOrThrow({
+      where: { type: 'job_failed', subjectId: run.id },
+    })
+    expect(task.propertyId).toBe(chicagoPropertyId)
+    expect(task.subjectType).toBe('JobRun')
+    expect(task.priority).toBe('URGENT')
+    expect(task.title).toContain('The nightly thing')
+    expect(task.title).toContain('boom')
+  })
+
+  it('re-runs a failed run in place and closes its task', async () => {
+    let explode = true
+    const ran: string[] = []
+    SCHEDULED_JOBS.push({
+      type: 'test.rerun',
+      localHour: 0,
+      description: 'test',
+      run: async (context) => {
+        if (!isOurs(context.propertyId)) return
+        if (explode) throw new Error('boom')
+        ran.push(context.businessDate)
+        return { fixed: true }
+      },
+    })
+
+    await runForTestProperties(new Date('2026-08-04T12:00:00Z'))
+    const failed = await prisma.jobRun.findFirstOrThrow({
+      where: { jobType: 'test.rerun', propertyId: chicagoPropertyId },
+    })
+    expect(failed.status).toBe('FAILED')
+
+    explode = false
+    expect(await rerunJobRun(failed.id)).toEqual({ ok: true })
+
+    const after = await prisma.jobRun.findUniqueOrThrow({
+      where: { id: failed.id },
+    })
+    // Updated in place: the attempt count went up and the ORIGINAL startedAt
+    // survived, because the evidence that it failed last night is the thing
+    // the panel exists to show.
+    expect(after.status).toBe('SUCCEEDED')
+    expect(after.attempts).toBe(2)
+    expect(after.startedAt.getTime()).toBe(failed.startedAt.getTime())
+    expect(after.error).toBeNull()
+    expect(after.result).toEqual({ fixed: true })
+    // It ran for the date it originally failed on, not for today.
+    expect(ran).toContain('2026-08-04')
+
+    const task = await prisma.task.findFirstOrThrow({
+      where: { type: 'job_failed', subjectId: failed.id },
+    })
+    expect(task.status).toBe('DONE')
+  })
+
+  // The safety boundary. These jobs are idempotent per (type, property, date)
+  // BECAUSE of the run row - re-running a successful one posts the charges
+  // twice.
+  it('refuses to re-run a run that succeeded', async () => {
+    let calls = 0
+    SCHEDULED_JOBS.push({
+      type: 'test.no_rerun',
+      localHour: 0,
+      description: 'test',
+      run: async (context) => {
+        if (isOurs(context.propertyId)) calls++
+      },
+    })
+
+    await runForTestProperties(new Date('2026-08-04T12:00:00Z'))
+    const succeeded = await prisma.jobRun.findFirstOrThrow({
+      where: { jobType: 'test.no_rerun', propertyId: chicagoPropertyId },
+    })
+    expect(succeeded.status).toBe('SUCCEEDED')
+
+    expect(await rerunJobRun(succeeded.id)).toEqual({
+      ok: false,
+      reason: 'not_failed',
+    })
+    expect(calls).toBe(2) // the two properties' first runs, and nothing more
+  })
+
+  it('refuses to re-run a job nothing registers any more', async () => {
+    SCHEDULED_JOBS.push({
+      type: 'test.retired',
+      localHour: 0,
+      description: 'test',
+      run: async (context) => {
+        if (!isOurs(context.propertyId)) return
+        throw new Error('boom')
+      },
+    })
+    await runForTestProperties(new Date('2026-08-04T12:00:00Z'))
+    const failed = await prisma.jobRun.findFirstOrThrow({
+      where: { jobType: 'test.retired', propertyId: chicagoPropertyId },
+    })
+
+    SCHEDULED_JOBS.length = 0
+    expect(await rerunJobRun(failed.id)).toEqual({
+      ok: false,
+      reason: 'unknown_job',
+    })
+    // Still FAILED, not left claimed as RUNNING by a re-run that never began.
+    expect(
+      (await prisma.jobRun.findUniqueOrThrow({ where: { id: failed.id } })).status,
+    ).toBe('FAILED')
   })
 })

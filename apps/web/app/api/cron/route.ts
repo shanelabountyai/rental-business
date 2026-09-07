@@ -74,6 +74,11 @@ export async function GET(request: Request) {
   const reconciliation = await reconcileLedger()
 
   const ran = runs.filter((r) => r.outcome === 'ran')
+  // R-174. A run that filled a business date an earlier tick missed, counted
+  // apart from a normal one: a non-zero number here means the cron did not
+  // reach a property yesterday, which is the whole reason the catch-up exists
+  // and is invisible if it is folded into `ranJobs`.
+  const caughtUp = runs.filter((r) => r.outcome === 'caught_up')
   const failures = runs.filter((r) => r.outcome === 'failed')
 
   if (failures.length > 0) {
@@ -93,6 +98,7 @@ export async function GET(request: Request) {
   return Response.json({
     ok: failures.length === 0,
     ranJobs: ran.length,
+    caughtUpJobs: caughtUp.length,
     failedJobs: failures.length,
     notDue: runs.filter((r) => r.outcome === 'not_due').length,
     alreadyRan: runs.filter((r) => r.outcome === 'already_ran').length,

@@ -118,6 +118,13 @@ export const NAV_ITEMS: readonly NavItem[] = [
     ownedBy: 'R-010',
   },
   {
+    href: '/jobs',
+    label: 'Scheduled jobs',
+    permission: 'job.manage',
+    portfolioOnly: true,
+    ownedBy: 'R-174',
+  },
+  {
     href: '/prospects',
     label: 'Prospects',
     permission: 'lease.read',

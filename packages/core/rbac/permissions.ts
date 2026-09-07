@@ -137,6 +137,26 @@ export const PERMISSIONS = [
   /// Opening, updating and closing a confidential case, ordering its lock
   /// change, and retiring the access codes a restricted party may know.
   'confidential.manage',
+  /// Reading the scheduled-job health panel and re-running a failed run
+  /// (R-174). Portfolio-wide only, and owner-only by construction like
+  /// `confidential.read` above - a JobRun belongs to a property, but "did the
+  /// nightly work happen everywhere" is not a question a property-scoped
+  /// manager can usefully be shown half an answer to.
+  ///
+  /// ONE PERMISSION FOR BOTH THE READ AND THE RE-RUN, which the split
+  /// elsewhere in this file (template.write/approve, hold.manage/lift_protected)
+  /// argues against. The reason it does not apply: a re-run does not authorise
+  /// a NEW act. It re-attempts work the system already decided to do on its own
+  /// schedule and failed at, on a run row that is already recorded as FAILED,
+  /// and it refuses anything else. Splitting it would produce a read
+  /// permission whose only screen carries a button the same person may press.
+  ///
+  /// NOT privileged, for the reason the docstring below gives: it gates a
+  /// whole screen, and locking an owner out of "why did last night not run"
+  /// while they find their authenticator is the wrong failure. The re-run
+  /// itself posts nothing an owner could not already post with
+  /// `ledger.adjust`, which IS privileged.
+  'job.manage',
 ] as const
 
 export type Permission = (typeof PERMISSIONS)[number]

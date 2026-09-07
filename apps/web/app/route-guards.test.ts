@@ -227,6 +227,10 @@ const RESOURCE_LESS_GUARDS: Record<string, string> = {
   'app/(admin)/inspections/templates/new/page.tsx': 'Same as the inspection-template list above.',
   'app/(admin)/inspections/templates/[id]/page.tsx': 'Same as the inspection-template list above.',
   'lib/inspections/template-actions.ts': 'Same as the inspection-template pages above.',
+  'app/(admin)/jobs/page.tsx':
+    'A JobRun belongs to a property, but "did last night\'s work happen" does not (R-174): the panel answers a question about the whole deployment - every job, every property, and the jobs that have never run anywhere. Half that answer is worse than none, so refusing a scoped actor is the intended result.',
+  'lib/jobs/actions.ts':
+    'Same as the job-health panel above. The re-run is pressed FROM that screen, and `job.manage` is owner-only by construction - a new permission key belongs to no other role until somebody adds it.',
   'app/(admin)/staff/page.tsx':
     'A StaffUser carries no propertyId - the directory IS the portfolio (ROLE-04, R-138). The scope lives on StaffAssignment, which is what this screen edits, so a guard scoped to one property could not express "who may work here at all".',
   'app/(admin)/staff/new/page.tsx': 'Same as the staff list above.',

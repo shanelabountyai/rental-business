@@ -139,12 +139,14 @@ export interface DueCheck {
  * constraint on (job, property, businessDate) is what stops `>=` from meaning
  * "runs every hour for the rest of the day".
  *
- * ponytail: a job whose target hour is late in the local day (say 23) and
- * whose cron is down through that hour is skipped for that day rather than
- * caught up on the next - `businessDate` has already rolled over. Acceptable
- * while the cron is hourly and the jobs that matter target the early hours;
- * if a late-day job ever becomes important, have runDueJobs look back one
- * business date as well as at today's.
+ * A job whose target hour is late in the local day (say 23) and whose cron is
+ * down through that hour is not caught by `>=` at all - `businessDate` has
+ * already rolled over by the next tick, and nothing here ever asks about
+ * yesterday again. R-174 closed that: `runDueJobs` now looks back a bounded
+ * number of business dates as well as at today's, filling only the dates a
+ * pair has an earlier run than. The rule and the bound live in
+ * apps/web/lib/jobs/runner.ts (`CATCH_UP_BUSINESS_DAYS`), not here, because
+ * catching up needs the run history and this function is pure.
  */
 export function isDue(
   instant: Date,

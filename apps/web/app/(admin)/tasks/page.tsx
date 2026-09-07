@@ -39,6 +39,15 @@ const DRILL_DOWNS: Record<
       `${count} notice${count === 1 ? '' : 's'} that has to be served on paper. Open one, print it, and record the service on the notice itself.`,
     empty: 'Everybody we owe a notice can be reached electronically.',
   },
+  /// R-174. The failure lands here as well as on the job-health panel because
+  /// this is the queue somebody works through; the panel is where it is
+  /// re-run.
+  job_failed: {
+    heading: 'Scheduled jobs that failed',
+    blurb: (count) =>
+      `${count} nightly job run${count === 1 ? '' : 's'} did not complete. Scheduled jobs shows the error and offers a re-run.`,
+    empty: 'Every scheduled job run has completed.',
+  },
 }
 
 // The one work queue (D-9): every staff queue in the product is a view over

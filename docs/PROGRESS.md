@@ -8756,3 +8756,104 @@ No schema change, so no migration and no drift check. CI owns the full sweep;
 R-172's run (`34048400191`) is green.
 
 Commit: 25c717f
+
+## R-174 — Job-run health becomes visible
+**Commit:** `PENDING`  ·  **Date:** 2026-09-07
+
+**What it built.** Review finding 6 (PRD §6.5/§6.6). R-006's runner has
+written a `JobRun` row per job per property per day since the beginning, and
+until now the only thing that ever read one back was the digest job asking
+when it last ran. A failure was recorded, audited, and then seen by nobody; a
+missed day was not recorded at all. Four parts.
+
+*The panel.* `/jobs` — `jobHealth()` in `apps/web/lib/jobs/queries.ts` walks
+**`SCHEDULED_JOBS`**, not the `JobRun` table, and reports per job: last
+success anywhere, properties whose local clock has passed the job's hour today
+with no run row, business dates missed inside the catch-up window, and the 50
+most recent failures with their errors. New permission `job.manage`, checked
+resource-lessly (so only a portfolio-wide grant clears it), with a
+`portfolioOnly` nav entry.
+
+*The task.* A failed run raises a `job_failed` Task keyed on the `JobRun`'s own
+id — D-9's one queue, `URGENT` rather than `EMERGENCY` — with its own
+drill-down on `/tasks`.
+
+*The re-run.* `rerunJobRun` re-executes one FAILED run in place, for its
+**original** business date: `attempts` incremented, `startedAt` preserved,
+`error` cleared, and the `job_failed` task closed on success. Refuses
+`SUCCEEDED`, `RUNNING`, an unregistered job type, and a portfolio-wide row
+with no property. Audited as the new `job.rerun` action whether it worked or
+was refused. One `useActionState` per row, so a result lands beside the run it
+belongs to.
+
+*The catch-up.* `runDueJobs` now fills business dates the cron missed, bounded
+by `CATCH_UP_BUSINESS_DAYS = 3`, and only for a (job, property) pair with an
+**earlier** run row inside the window. One history query per tick, not one per
+pair. `caught_up` is its own `RunSummary` outcome and its own field in the
+cron route's JSON, because a non-zero count means the cron did not reach a
+property yesterday and folding it into `ranJobs` hides exactly that.
+
+**What it decided.** **D-180**, in full. The four a later session must not
+silently reverse:
+
+- **The panel reads the registry, not the table.** A history-driven panel
+  reports perfect health for a job that has never once fired anywhere, because
+  that job has no rows to be listed by. That is the worst case the screen
+  exists to catch.
+- **The catch-up's bound is the point, not the number.** An unbounded catch-up
+  is the more dangerous failure: a property whose cron has been dead a
+  fortnight would post two weeks of late fees and send a fortnight of
+  reminders in one tick with no human deciding that was right. Past the bound
+  the day is lost, the panel says so, and a person decides. This closes the
+  `ponytail:` comment `packages/core/scheduling/local-time.ts` has carried on
+  `isDue` since R-006.
+- **"An earlier run inside the window" is what separates a catch-up from a
+  backfill.** A newly registered job, or a newly acquired property, has no
+  earlier row — no evidence it was ever live on those dates — and inventing
+  that evidence is how a fresh import bills three days of late fees on its
+  first tick. Asserted both ways.
+- **The re-run refuses anything that is not `FAILED`.** These jobs are
+  idempotent per (type, property, businessDate) *because of the run row*, not
+  on their own, so re-running a SUCCEEDED one posts the month's late fees
+  twice. A `RUNNING` row is either live or a process that died mid-run, and
+  telling those apart is a person's judgement.
+
+`job.manage` is one key for both the read and the re-run (a re-run authorises
+no new act), and deliberately **not** privileged — it gates a whole screen,
+and locking an owner out of *"why did last night not run"* while they find
+their authenticator is the wrong failure.
+
+**What it left behind.**
+
+- **A manager holding a `job_failed` task cannot open `/jobs` to act on it.**
+  `job.manage` is owner-only because a new permission key belongs to no other
+  role until somebody adds it, and the task is raised without regard to who
+  can act on it. Owned by no item.
+- **The re-run is only reachable from the panel, so only an owner can press
+  it.** Same cause; noted separately because it is the half that matters when
+  the owner is asleep and a legal clock has stopped.
+- **`overdueToday` renders every affected property name inline.** With a dead
+  cron and fifty houses that is a wall of names per job. Correct, unreadable;
+  a cap belongs to whoever next touches the screen.
+- **Nothing tests `jobHealth()` directly.** The e2e spec proves the screen and
+  `jobs.test.ts` proves the runner and the re-run against a real database, but
+  the query's own overdue/missed arithmetic is covered only through the page.
+
+**A real bug found and fixed along the way.** The e2e spec's `afterAll`
+deleted its `StaffUser` rows. Signing in writes an `AuditLog` row, `AuditLog`
+is append-only by trigger, and the FK's cascade is an UPDATE the trigger
+refuses — so the delete threw and failed **all four tests in the file**, none
+of which had anything wrong with it. Deactivate, never delete: the pattern
+every other spec in `e2e/` already follows.
+
+**The gate.** `lint` clean (0 errors, 16 pre-existing warnings), `typecheck`
+clean, `check:ship-deps` clean (756 dev packages, no shipping file imports
+one), `npm test` **2952 passed / 4 skipped across 220 files**. e2e: the four
+files this item touches or adds, `desktop-chrome`, **30 passed / 1 skipped**
+against `--list`'s `Total: 31 tests in 4 files` — `e2e/jobs.spec.ts` (4),
+`shell` (14), `route-boundaries` (3), `tasks` (10). No schema change, so no
+migration and no drift check. The production build is proven by the e2e run
+itself, which builds before serving — the check that matters for a new
+`'use server'` module. CI owns the full sweep; `gh run list` was read rather
+than assumed, and R-173's run (`34075415128`) is green, as are the three
+before it.

@@ -305,6 +305,13 @@ export const AUDIT_ACTIONS = [
   /// logged, because a nightly job failing silently is how a month of missing
   /// late fees happens - and AuditLog is still there when someone finally asks.
   'job.failed',
+  /// R-174: a staff member pressed the health panel's re-run on a failed run.
+  /// Its own action, and recorded whether it worked or was refused, because a
+  /// re-run re-executes work with real side effects - a late fee, a statutory
+  /// reminder - on a date that has already passed. "Who decided to run last
+  /// Tuesday's billing sweep again, and what happened" is the question a
+  /// support conversation opens with, and `job.failed` cannot answer it.
+  'job.rerun',
 
   // Compliance overrides
   'entry_notice.overridden',
