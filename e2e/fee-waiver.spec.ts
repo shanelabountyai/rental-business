@@ -260,7 +260,14 @@ test.describe('waiving a fee', () => {
     await page.goto('/money')
 
     await expect(page.getByRole('heading', { name: 'Fee waivers by tenant' })).toBeVisible()
-    const row = page.getByRole('row', { name: new RegExp(tenant.lastName) })
+    // SCOPED TO THIS REPORT'S OWN REGION. `/money` carries a second
+    // fair-housing table since R-175 — repayment plans, built to the same
+    // shape — so one tenant now has a row in each and a page-wide row
+    // lookup by name resolves to both. The section is `aria-labelledby`, so
+    // it is a named region and the narrowing costs nothing.
+    const row = page
+      .getByRole('region', { name: 'Fee waivers by tenant' })
+      .getByRole('row', { name: new RegExp(tenant.lastName) })
     await expect(row).toBeVisible()
     await expect(row).toContainText('0%')
   })

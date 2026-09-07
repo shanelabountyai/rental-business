@@ -4,9 +4,11 @@ import { agingTotals, balanceCents, delinquencyFor, depositLiabilityCents } from
 import { type CollectionMethod, debitsAutomatically } from '@rental/core/payments'
 import type { AgingBucket } from '@rental/core/ledger'
 import { businessDate, dueDateOnOrBefore, utcToBusinessDate } from '@rental/core/scheduling'
+import { planProgress } from '@rental/core/payments'
 import { prisma } from '@rental/db'
 import { selectApplicableRule } from '@rental/core/jurisdiction'
 import { leasesHalted } from '@/lib/holds/queries.ts'
+import { type PlanRecord, activePlansByLease, paidTowardPlan } from '@/lib/payments/plans.ts'
 import type { ResolvedScope } from '@/lib/scope/types.ts'
 
 // The rent roll and delinquency aging — the Monday-morning report (PAY-06,
@@ -62,6 +64,12 @@ export interface RentRollRow {
   /// the chase is off. SEPARATE FROM `pastGrace` on purpose: the debt is
   /// still owed, still aged, still on the report. What stops is the asking.
   chaseHeld: boolean
+  /// A repayment plan is in force, and whether the money is keeping up with
+  /// it (R-175). Null when there is no live plan. This is the difference
+  /// between "held, and being paid down" and "held, and nothing has arrived
+  /// since March" — which is otherwise indistinguishable from this screen,
+  /// and is the whole reason `chaseHeld` alone was not enough.
+  plan: { onTrack: boolean; nextDueOn: string | null; remainingCents: number } | null
 }
 
 export interface RentRoll {
@@ -173,6 +181,12 @@ export async function rentRoll(scope: ResolvedScope, asOfDate?: Date): Promise<R
   // (Golden Path 5, D-134).
   const chaseHeldLeases = await leasesHalted(leaseIds, 'halt_dunning')
 
+  // R-175. One read for the whole report, the same call every other bulk
+  // fact on this screen makes. Progress is computed from `entries`, which
+  // this function has already fetched for the balance — so a plan's state
+  // costs one query for the portfolio and no ledger read at all.
+  const plans = await activePlansByLease(leaseIds)
+
   const entriesByLease = groupBy(entries, (row) => row.leaseId)
   const chargesByLease = groupBy(charges, (row) => row.leaseId)
 
@@ -259,6 +273,7 @@ export async function rentRoll(scope: ResolvedScope, asOfDate?: Date): Promise<R
         : null,
       graceUnknown: rule == null,
       chaseHeld: chaseHeldLeases.has(lease.id),
+      plan: planFor(plans.get(lease.id), ledger, zone, today),
     }
   })
 
@@ -272,6 +287,34 @@ export async function rentRoll(scope: ResolvedScope, asOfDate?: Date): Promise<R
     billedCents: rows.reduce((sum, row) => sum + row.rentCents, 0),
     outstandingCents: rows.reduce((sum, row) => sum + Math.max(0, row.balanceCents), 0),
     vacancyLossCents,
+  }
+}
+
+/// The live plan's state for one row, or null. Split out only because the row
+/// literal above is already long enough to hide a mistake in.
+function planFor(
+  plan: PlanRecord | undefined,
+  ledger: readonly { type: string; amountCents: number; occurredAt: Date }[],
+  timezone: string,
+  today: string,
+): RentRollRow['plan'] {
+  if (!plan) return null
+  const startedOn = utcToBusinessDate(plan.startedOn)
+  const progress = planProgress({
+    instalments: plan.instalments.map((row) => ({
+      dueOn: utcToBusinessDate(row.dueOn),
+      amountCents: row.amountCents,
+    })),
+    paidCents: paidTowardPlan(ledger, startedOn, timezone),
+    asOf: today,
+  })
+  return {
+    // The stored status is what last night's sweep decided; this is what is
+    // true now. A tenancy that stopped paying this morning shows as behind
+    // on the Monday screen rather than a day later.
+    onTrack: progress.shortfallCents === 0,
+    nextDueOn: progress.nextDueOn,
+    remainingCents: progress.remainingCents,
   }
 }
 

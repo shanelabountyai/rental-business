@@ -54,6 +54,9 @@ export interface HoldView {
   placedAt: Date
   placedByName: string
   liftedAt: Date | null
+  /// Who lifted it — a person's name, or the job that did (R-175). Never
+  /// null on a lifted hold: the database's own check constraint requires
+  /// exactly one of the two.
   liftedByName: string | null
   liftReason: string | null
 }
@@ -64,6 +67,7 @@ const HOLD_SELECT = {
   reason: true,
   placedAt: true,
   liftedAt: true,
+  liftedBySystem: true,
   liftReason: true,
   placedBy: { select: { name: true } },
   liftedBy: { select: { name: true } },
@@ -75,6 +79,7 @@ function toView(row: {
   reason: string
   placedAt: Date
   liftedAt: Date | null
+  liftedBySystem: string | null
   liftReason: string | null
   placedBy: { name: string }
   liftedBy: { name: string } | null
@@ -86,7 +91,12 @@ function toView(row: {
     placedAt: row.placedAt,
     placedByName: row.placedBy.name,
     liftedAt: row.liftedAt,
-    liftedByName: row.liftedBy?.name ?? null,
+    // A job reads as what it is. R-175's sweep lifts a payment-plan hold
+    // when an instalment goes unpaid, and "lifted by the nightly payment-plan
+    // sweep" is the honest answer to who resumed collection.
+    liftedByName:
+      row.liftedBy?.name ??
+      (row.liftedBySystem ? 'the nightly payment-plan sweep' : null),
     liftReason: row.liftReason,
   }
 }

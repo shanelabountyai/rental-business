@@ -726,6 +726,31 @@ export const AUDIT_ACTIONS = [
   /// is the one an eviction defence asks about. REASON_REQUIRED, both ways.
   'lease.hold_lifted',
 
+  /// R-175 (PAY-08): a repayment plan was agreed — the schedule, the total
+  /// and the arrears it covers, snapshotted. Its own action rather than a
+  /// `lease.hold_placed` with extra fields, because the hold is the
+  /// consequence and the agreement is the fact: "what were they told they
+  /// could pay, and when" is what a tenant argues from, and it must survive
+  /// the plan being cancelled and the hold being lifted.
+  'lease.payment_plan_agreed',
+  /// R-175: the nightly sweep found an instalment unpaid past its slack, so
+  /// the plan broke, the hold came off and the chase resumed. Recorded as
+  /// its own action with a SYSTEM actor - "who decided to start chasing this
+  /// tenant again" has an answer, and the answer is that nobody did: an
+  /// instalment date passed. A tenant told they had an arrangement and then
+  /// served a notice is owed that distinction.
+  'lease.payment_plan_broken',
+  /// R-175: the schedule was paid in full and the hold came off. Its own
+  /// action rather than a flag on the break above, because the two are
+  /// opposite facts about the same tenancy and "the chase resumed" is read
+  /// off the action name in a trail somebody is skimming.
+  'lease.payment_plan_completed',
+  /// R-175: a staff member ended a plan by hand. REASON_REQUIRED, unlike
+  /// the break above: the break has a stated cause of its own (the missed
+  /// instalment), while a cancellation is somebody deciding to resume
+  /// collection against a tenancy that was keeping to what it agreed.
+  'lease.payment_plan_cancelled',
+
   /// R-087 (RISK-01): an abandonment / tenant-gone-dark case was opened.
   /// REASON_REQUIRED - opening one is the first step on a path that ends in
   /// somebody's home being entered and their possessions moved, and "why did
@@ -1020,6 +1045,12 @@ export const REASON_REQUIRED: ReadonlySet<AuditAction> = new Set([
   // resume collecting from a bankrupt tenant".
   'lease.hold_placed',
   'lease.hold_lifted',
+  // R-175. Cancelling only. Agreeing a plan carries a required `note` saying
+  // what was agreed, so asking for the same sentence twice teaches people to
+  // type "see note" - the identical call `confidential.case_closed` makes
+  // just below. Cancelling one resumes the chase and the late-fee meter
+  // against somebody who was told they had an arrangement.
+  'lease.payment_plan_cancelled',
   // R-091. Closing only. Opening one is not on this list because the case
   // carries a required `summary` saying why, and asking for the same
   // sentence twice teaches people to type "see summary". Closing a safety

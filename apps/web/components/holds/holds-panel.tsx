@@ -39,7 +39,7 @@ function PlaceForm({
   if (availableTypes.length === 0) {
     return (
       <p className="text-muted-foreground text-sm">
-        Every hold type is already in force on this tenancy.
+        Every hold that can be placed here is already in force on this tenancy.
       </p>
     )
   }
@@ -187,7 +187,14 @@ export function HoldsPanel({
         <PlaceForm
           leaseId={leaseId}
           action={placeAction}
-          availableTypes={HOLD_TYPES.filter((type) => !activeTypes.has(type))}
+          // R-175: `payment_plan` is not on offer here any more. It is
+          // placed by agreeing a plan in the panel above, which is what
+          // gives it a schedule and something that can notice it broke;
+          // `placeLeaseHold` refuses it too, because a posted value is not
+          // a choice this list made.
+          availableTypes={HOLD_TYPES.filter(
+            (type) => type !== 'payment_plan' && !activeTypes.has(type),
+          )}
         />
       )}
 

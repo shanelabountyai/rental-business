@@ -8857,3 +8857,127 @@ itself, which builds before serving — the check that matters for a new
 `'use server'` module. CI owns the full sweep; `gh run list` was read rather
 than assumed, and R-173's run (`34075415128`) is green, as are the three
 before it.
+
+## R-175 — A repayment plan the product can actually check
+**Commit:** `PENDING`  ·  **Date:** 2026-09-07
+
+**What it built.** Review finding 7 (PAY-08, PAY-12, RISK). Grepping
+`paymentPlan|installment|promiseToPay` across the whole repo used to find one
+thing: a free-text *example* in a refusal message — *'A short note — "agreed a
+payment plan", for example.'* A repayment agreement in this product was a
+`payment_plan` `LeaseHold` with a sentence typed into it. There was no
+schedule, no signed anything, nothing that noticed the tenant had stopped
+paying, no state between *current* and *past grace* on the rent roll, and no
+answer at all to the fair-housing question the waiver report already answers
+about fees: who was offered an arrangement and who went straight to a notice.
+
+*The schedule.* `PaymentPlan` and `PaymentPlanInstalment` hold the arrears
+covered, the start date, the note of what was agreed, and a monthly schedule
+built by `monthlyInstalments` in `packages/core/payments/plan.ts` — split with
+`allocate`, so the instalments sum to the total exactly and the odd cents land
+on the earliest ones. Months step through `dueDateInMonth` carrying the
+*original* day, so a plan first due on the 31st falls on the 28th in February
+and back on the 31st in March.
+
+*The hold is now a consequence, not the agreement.* `agreePaymentPlan` creates
+the plan and its `PAYMENT_PLAN` hold in one transaction, joined by
+`LeaseHold.paymentPlanId`. `placeLeaseHold` **refuses** that type outright and
+the holds panel no longer offers it — the refusal is in the action as well as
+the list, because a posted `type` is not a choice the browser made.
+
+*The break condition.* `payment_plan.check`, 06:00 property-local, registered
+in `registrations.ts`. It breaks a plan whose instalment went unpaid past
+three days' slack, completes one paid in full, lifts the hold either way, and
+raises a `payment_plan.broken` (URGENT) or `payment_plan.completed` (ROUTINE)
+Task. Both outcomes are audited with a SYSTEM actor.
+
+*And the two reports.* Plan state is on every rent-roll row and in the CSV
+export — three answers, not two: no plan, a plan being kept, a plan behind
+schedule. `planOfferPatternByTenant` on `/money` is the waiver report's shape
+asked about plans: every tenancy that reached a collections step (a late or
+returned-payment fee assessed, or a notice actually **served**), never-offered
+first.
+
+**What it decided.** All of it is D-181; the four that a later session must
+not silently reverse:
+
+- **The break test is cumulative, and that is the correct arithmetic rather
+  than a shortcut.** Total paid since the plan started, against the cumulative
+  instalment total matured by today. Per-instalment matching would invent an
+  attribution the money does not carry — half in week one and half in week
+  three has kept the instalment. It also makes new rent charged during the
+  plan cancel out algebraically, since balance is `arrearsAtStart +
+  chargesSince − paymentsSince`. The deliberate consequence: **it measures the
+  plan, not the tenancy.** Somebody paying instalments and nothing toward new
+  rent is keeping the plan and getting further behind, which the rent roll
+  shows as a growing balance beside an on-track plan. An operator who wants
+  current rent to be a condition puts it in the instalment amounts.
+- **A REVERSAL is classified by its SIGN.** Payments and credits are negative
+  here, so a *positive* REVERSAL can only be undoing one — a returned cheque —
+  and a negative one is undoing a charge, which is not a payment. No join
+  needed, and it is the difference between a bounced payment breaking the plan
+  and a bounced payment keeping the chase switched off against a tenancy that
+  has paid nothing. ADJUSTMENT is excluded both ways: a plan kept by an
+  adjustment is a plan kept by us.
+- **A hold can now be lifted by nobody, and the record still has to say who.**
+  R-084's check constraint required `liftedAt`, `liftedByStaffId` and
+  `liftReason` together, and never anticipated a lift no person made.
+  Attributing the sweep's lift to whoever agreed the plan would be a false
+  fact on the row an eviction is argued from, so `LeaseHold.liftedBySystem`
+  was added and the constraint widened to require **exactly one** of the two.
+  The requirement is unchanged in substance; only the vocabulary widens, the
+  same way `AuditLog` has always allowed a SYSTEM actor.
+- **Nothing is backfilled.** An existing hand-placed `payment_plan` hold keeps
+  its free text and a null plan. `agreePaymentPlan` refuses to adopt one — it
+  asks for the stray hold to be lifted first rather than silently replacing
+  it. There is no schedule to invent for an agreement nobody recorded.
+
+**What it left behind.**
+
+- **No signed document and no e-sign on the agreement.** The review names it
+  in the problem; its own fix list does not, and wiring the existing e-sign
+  machinery is a larger item than this one. Owned by no item today.
+- **No tenant-facing view of the schedule.** The tenant learns what was agreed
+  only from whatever message a person sends them. The portal has the
+  machinery; nothing points it at `PaymentPlan`.
+- **At most one active plan per tenancy is enforced in the action, not by a
+  partial unique index** — the same call R-084's own migration made, because
+  Prisma cannot express one and it would report drift on every CI run for
+  ever.
+- **The migration is split in two** (`20260907120000_r175_payment_plans`,
+  `20260907120100_r175_hold_lifted_by_system`) because the first had already
+  been applied to `rental_test` when the constraint problem surfaced, and
+  editing an applied migration is the checksum trap CLAUDE.md names. Both are
+  in this commit and `db:ci` applies them from scratch cleanly.
+
+**Two real defects found and fixed along the way**, both ambiguity rather than
+logic, and both only visible from a browser:
+
+- **The database refused the sweep's own lift.** `LeaseHold_lift_is_complete`
+  is a CHECK constraint, so the failure surfaced as a job recorded `failed`
+  and five assertions reading *expected BROKEN, got ACTIVE* — a job that threw
+  and a job that decided to do nothing are indistinguishable from the outside.
+  `runAt` in the job's test now rethrows a `failed` summary, which is what
+  turned it back into the stack trace it always was.
+- **`/money` now carries two fair-housing tables, and `fee-waiver.spec.ts`
+  looked its tenant up by row name across the whole page.** One tenant has a
+  row in each, so the existing spec went red on strict mode the moment the
+  second table landed. Fixed with the more specific locator — the waiver
+  section is `aria-labelledby`, so it is a named region — never a relaxed
+  assertion. The same trap caught the new spec itself: `getByText('1 Oct
+  2026')` resolved to three elements (the notice, the "next instalment"
+  sentence, and the schedule cell), and it now asserts the cell by role.
+
+**The gate.** `lint` clean (0 errors, 16 pre-existing warnings), `typecheck`
+clean, `npm run build` clean, `check:ship-deps` clean (756 dev packages, no
+shipping file imports one), `npm test` **2968 passed / 4 skipped across 222
+files**. `npm run db:ci` green — both migrations applied to a throwaway
+database from scratch, seeded, and `migrate diff --exit-code` reporting no
+difference; `db:drift` against `rental_test` likewise. e2e: the nine files
+this item touches or adds, `desktop-chrome` — `payment-plans` (5, new),
+`rent-roll`, `fee-waiver` (5), `lease-holds`, `ops-visibility`, `jobs`,
+`leases`, `golden-path-5`, `legal-hold` — **all passed, 0 failed, 0 flaky**.
+The full sweep is `Total: 1188 tests in 97 files` and belongs to CI, which
+**was read rather than assumed**: `gh run list` shows R-174's own run
+(`34146607058`) completed green, as did the three before it. The GitHub
+Actions billing block that eleven entries went on repeating is still lifted.

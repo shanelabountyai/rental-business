@@ -44,6 +44,8 @@ export interface Row {
   lastContactOn: string | null
   graceUnknown: boolean
   chaseHeld: boolean
+  /// R-175. Null when no repayment plan is in force.
+  plan: { onTrack: boolean; nextDueOn: string | null; remainingCents: number } | null
 }
 
 export function RentRollTable({
@@ -224,6 +226,20 @@ export function RentRollTable({
                   <span className="text-muted-foreground block text-xs">
                     {row.propertyName} · {row.unitName}
                     {row.autopay && ' · autopay'}
+                    {/* R-175. IN THE TENANCY CELL, NOT THE "HOW LATE" ONE:
+                        that cell renders nothing at all for a tenancy in the
+                        `current` bucket, and a tenant keeping to a plan is
+                        frequently exactly that. A plan invisible on the row
+                        precisely when it is working is the wrong half to
+                        hide. */}
+                    {row.plan &&
+                      (row.plan.onTrack
+                        ? ` · payment plan, ${formatCents(row.plan.remainingCents)} left${
+                            row.plan.nextDueOn
+                              ? ` (next ${friendlyBusinessDate(row.plan.nextDueOn)})`
+                              : ''
+                          }`
+                        : ' · payment plan, behind schedule')}
                     {row.subsidyCents > 0 &&
                       ` · ${formatCents(row.subsidyCents)} subsidy`}
                   </span>

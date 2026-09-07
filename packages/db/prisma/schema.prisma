@@ -587,6 +587,7 @@ model Property {
   invoiceSplits       VendorInvoiceSplit[]
   reserve             PropertyReserve?
   leaseHolds          LeaseHold[]
+  paymentPlans        PaymentPlan[]
   scraLookups         ScraLookup[]
   accommodations      AccommodationRequest[]
   abandonmentCases    AbandonmentCase[]
@@ -2067,6 +2068,8 @@ model StaffUser {
   abandonmentAttemptsRecorded             AbandonmentContactAttempt[]     @relation("AbandonmentAttemptRecordedBy")
   leaseHoldsPlaced                        LeaseHold[]                     @relation("LeaseHoldPlacedBy")
   leaseHoldsLifted                        LeaseHold[]                     @relation("LeaseHoldLiftedBy")
+  paymentPlansCreated                     PaymentPlan[]                   @relation("PaymentPlanCreatedBy")
+  paymentPlansCancelled                   PaymentPlan[]                   @relation("PaymentPlanCancelledBy")
   listingsCreated                         Listing[]                       @relation("ListingCreatedBy")
   screeningCriteriaCreated                ScreeningCriteria[]
   screeningReportsDecided                 ScreeningReport[]               @relation("ScreeningReportDecidedBy")
@@ -2438,6 +2441,7 @@ model Lease {
   documents                  Document[]
   turnoverProject            TurnoverProject?
   holds                      LeaseHold[]
+  paymentPlans               PaymentPlan[]
   scraLookups                ScraLookup[]
   accommodations             AccommodationRequest[]
   abandonmentCases           AbandonmentCase[]
@@ -2741,23 +2745,130 @@ model LeaseHold {
   /// Null while in force.
   liftedAt        DateTime?
   liftedByStaffId String?
+  /// Names the JOB that lifted this hold, where no person did (R-175). The
+  /// payment-plan sweep lifts a hold because an instalment date passed, and
+  /// attributing that to whoever agreed the plan would be a false fact on
+  /// the one row an eviction is argued from. A check constraint requires
+  /// exactly one of this and `liftedByStaffId` on a lifted row - a lifted
+  /// hold still always says who lifted it, the answer may now be a job.
+  liftedBySystem  String?
   /// Required by the application whenever `liftedAt` is set. Lifting an
   /// automatic-stay hold is a claim that the stay ended; that claim needs a
   /// basis on the record as much as placing it did.
   liftReason      String?
 
+  /// The plan this hold exists for (R-175). Set on every `PAYMENT_PLAN`
+  /// hold and null on every other type: a payment-plan hold is no longer
+  /// something anybody places by hand, it is what agreeing a plan does. The
+  /// `reason` column above still carries what was agreed, but it is no
+  /// longer the only record of it.
+  paymentPlanId String? @unique
+
   createdAt DateTime @default(now())
 
-  lease    Lease      @relation(fields: [leaseId], references: [id])
-  property Property   @relation(fields: [propertyId], references: [id])
+  lease       Lease        @relation(fields: [leaseId], references: [id])
+  property    Property     @relation(fields: [propertyId], references: [id])
   /// Restrict on both, like every other key pointing at evidence: who placed
   /// a hold, and who took it off, are part of explaining what happened to a
   /// tenancy while it was on.
-  placedBy StaffUser  @relation("LeaseHoldPlacedBy", fields: [placedByStaffId], references: [id], onDelete: Restrict)
-  liftedBy StaffUser? @relation("LeaseHoldLiftedBy", fields: [liftedByStaffId], references: [id], onDelete: Restrict)
+  placedBy    StaffUser    @relation("LeaseHoldPlacedBy", fields: [placedByStaffId], references: [id], onDelete: Restrict)
+  liftedBy    StaffUser?   @relation("LeaseHoldLiftedBy", fields: [liftedByStaffId], references: [id], onDelete: Restrict)
+  /// Cascade, and only in this direction: the hold belongs to the plan. A
+  /// plan is never deleted in practice (it is cancelled), so this is the
+  /// cleanup path a test fixture uses rather than an operational one.
+  paymentPlan PaymentPlan? @relation(fields: [paymentPlanId], references: [id], onDelete: Cascade)
 
   @@index([leaseId, liftedAt])
   @@index([propertyId, liftedAt])
+}
+
+/// R-175. Mirrors `PAYMENT_PLAN_STATUSES` in packages/core/payments.
+enum PaymentPlanStatus {
+  ACTIVE
+  COMPLETED
+  BROKEN
+  CANCELLED
+}
+
+/// A repayment agreement with an actual schedule (PAY-08, PAY-12; R-175).
+///
+/// At most one ACTIVE plan per tenancy, enforced by `agreePaymentPlan` rather
+/// than by a partial unique index — the same call `LeaseHold` above makes,
+/// for the same reason: a partial index cannot be expressed here and would
+/// report drift on every CI run for ever.
+///
+/// Before this existed, a plan was a `PAYMENT_PLAN` hold carrying a typed
+/// sentence — nothing knew what was agreed, whether it was being kept, or
+/// that it had stopped being kept. The nightly sweep in
+/// apps/web/lib/payments/payment-plan-job.ts is what makes this a plan
+/// rather than a note: it breaks the plan, lifts the hold and raises a Task
+/// the moment an instalment goes unpaid past its slack.
+model PaymentPlan {
+  id         String            @id @default(cuid())
+  leaseId    String
+  /// Denormalized from the lease, the same call `LeaseHold` and `Charge`
+  /// make, so the per-property nightly sweep filters without a join.
+  propertyId String
+  status     PaymentPlanStatus @default(ACTIVE)
+
+  /// What the plan repays, snapshotted when it was agreed. NOT recomputed
+  /// from the balance afterwards: new rent charged during the plan is not
+  /// part of what was agreed, and a plan whose target moved every month
+  /// would be unkeepable by construction.
+  arrearsCents Int
+  /// Payments on or after this date count toward the plan. A calendar day in
+  /// the property's zone, so it is a `@db.Date` and never goes near a
+  /// timezone on the way out.
+  startedOn    DateTime @db.Date
+  /// What was actually agreed, in words — kept because a schedule does not
+  /// record "she starts the new job on the 14th", which is the thing the
+  /// next person needs. It is no longer the ONLY record, which is the point.
+  note         String
+
+  createdByStaffId String
+  createdAt        DateTime @default(now())
+
+  /// Set when the sweep finds an instalment unpaid past its slack. Both are
+  /// written together; `brokenOn` is the instalment date it broke on, which
+  /// is what a Task title and a later dispute both quote.
+  brokenAt DateTime?
+  brokenOn DateTime? @db.Date
+
+  completedAt DateTime?
+
+  cancelledAt        DateTime?
+  cancelledByStaffId String?
+  /// Required by the application whenever `cancelledAt` is set — cancelling
+  /// a plan resumes the chase and the late-fee meter against somebody who
+  /// was told they had an arrangement, and that is argued from later.
+  cancelReason       String?
+
+  lease       Lease                   @relation(fields: [leaseId], references: [id])
+  property    Property                @relation(fields: [propertyId], references: [id])
+  createdBy   StaffUser               @relation("PaymentPlanCreatedBy", fields: [createdByStaffId], references: [id], onDelete: Restrict)
+  cancelledBy StaffUser?              @relation("PaymentPlanCancelledBy", fields: [cancelledByStaffId], references: [id], onDelete: Restrict)
+  instalments PaymentPlanInstalment[]
+  hold        LeaseHold?
+
+  @@index([leaseId, status])
+  @@index([propertyId, status])
+}
+
+/// One expected payment on a plan (R-175). Immutable once written: a
+/// renegotiation cancels the plan and agrees a new one, so the schedule
+/// somebody was actually held to survives.
+model PaymentPlanInstalment {
+  id          String   @id @default(cuid())
+  planId      String
+  /// 1-based, so "instalment 2 of 4" reads off the row.
+  sequence    Int
+  dueOn       DateTime @db.Date
+  amountCents Int
+
+  plan PaymentPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@unique([planId, sequence])
+  @@index([planId, dueOn])
 }
 
 /// Which limb of SCRA §3955(b) a termination was invoked under (R-085).

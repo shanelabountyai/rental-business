@@ -33,6 +33,19 @@ export async function placeLeaseHold(
 
   if (!leaseId) return { error: 'No tenancy named.' }
   if (!isHoldType(rawType)) return { error: 'Pick a hold type.' }
+  // R-175. A payment-plan hold is no longer something anybody places by
+  // hand: it is what agreeing a plan does, and it is lifted by the nightly
+  // sweep when an instalment goes unpaid. Refused here rather than only
+  // dropped from the panel's list, because the type comes off a form and a
+  // posted value is not a choice the browser made. Placing one this way
+  // would recreate the exact defect the item was raised for - a chase
+  // switched off indefinitely with nothing behind it that could notice.
+  if (rawType === 'payment_plan') {
+    return {
+      error:
+        'A payment-plan hold is placed by agreeing the plan itself, in Repayment plan above — that is what gives it a schedule and a break condition.',
+    }
+  }
   if (!reason) return { error: 'A reason is required. It is what the hold is defended from later.' }
 
   const lease = await prisma.lease.findUnique({

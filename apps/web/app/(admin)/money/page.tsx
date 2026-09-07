@@ -6,6 +6,7 @@ import {
   ReconciliationDrift,
   StripeEventLog,
 } from '@/components/money/ops-log.tsx'
+import { PlanOfferPattern } from '@/components/money/plan-offer-pattern.tsx'
 import { WaiverPattern } from '@/components/money/waiver-pattern.tsx'
 import { requirePermission, requireScope } from '@/lib/auth/guard.ts'
 import { resyncPayer } from '@/lib/billing/actions.ts'
@@ -17,6 +18,7 @@ import {
   recentDrift,
 } from '@/lib/ledger/reconcile.ts'
 import { waiverPatternByTenant } from '@/lib/ledger/waiver-report.ts'
+import { planOfferPatternByTenant } from '@/lib/payments/plan-report.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 
 export const metadata = { title: 'Money — Rental Operations' }
@@ -36,9 +38,10 @@ export default async function MoneyPage() {
   // `requireScope`'s own comment.
   const { actor, scope: permissionScope } = await requireScope('ledger.read')
   const scope = await currentScope(actor)
-  const [rows, waiverRows] = await Promise.all([
+  const [rows, waiverRows, planRows] = await Promise.all([
     billingRunRows(scope.propertyIds),
     waiverPatternByTenant(scope.propertyIds),
+    planOfferPatternByTenant(scope.propertyIds),
   ])
 
   // R-147: drift audit rows and Stripe's event log carry no propertyId, so
@@ -105,6 +108,11 @@ export default async function MoneyPage() {
       />
 
       <WaiverPattern rows={waiverRows} />
+
+      {/* Beside the waiver pattern, deliberately. They are the same question
+          asked about two different acts of leniency, and an operator reading
+          one should be looking at the other. */}
+      <PlanOfferPattern rows={planRows} />
 
       {ops && (
         <>

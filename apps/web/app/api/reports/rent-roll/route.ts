@@ -43,6 +43,7 @@ export async function GET() {
       'Deposit held',
       'Subsidy portion',
       'Last contacted',
+      'Repayment plan',
     ],
     roll.rows.map((row) => [
       row.propertyName,
@@ -62,6 +63,14 @@ export async function GET() {
       csvCents(row.depositHeldCents),
       csvCents(row.subsidyCents),
       row.lastContactOn,
+      // R-175. Three answers, not two: no plan, a plan being kept, and a
+      // plan that is not. "on plan" alone would tell a lender the opposite
+      // of what the third case means.
+      row.plan === null
+        ? 'none'
+        : row.plan.onTrack
+          ? `on plan — ${csvCents(row.plan.remainingCents)} left`
+          : 'on plan — behind schedule',
     ]),
   )
 

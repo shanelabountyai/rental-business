@@ -66,6 +66,9 @@ import { OpenViolationCasePanel } from '@/components/violations/open-case-panel.
 import { openViolationCase } from '@/lib/violations/actions.ts'
 import { casesForLease as violationCasesForLease } from '@/lib/violations/queries.ts'
 import { holdsForLease } from '@/lib/holds/queries.ts'
+import { PaymentPlanPanel } from '@/components/leases/payment-plan-panel.tsx'
+import { agreePaymentPlan, cancelPaymentPlan } from '@/lib/payments/plan-actions.ts'
+import { plansForLease } from '@/lib/payments/plans.ts'
 import { recordScraLookup, recordScraTermination } from '@/lib/scra/actions.ts'
 import { lookupsForLease } from '@/lib/scra/queries.ts'
 import { OfflinePaymentForm } from '@/components/payments/offline-payment-form.tsx'
@@ -266,6 +269,7 @@ export default async function LeaseDetailPage({
     accessCodes,
     doorCodes,
     holds,
+    paymentPlans,
     scraLookups,
     accommodations,
     abandonmentCases,
@@ -284,6 +288,7 @@ export default async function LeaseDetailPage({
     accessCodesForLease(lease.unitId, lease.id),
     doorCodesForLease(lease.id, lease.unitId),
     holdsForLease(lease.id),
+    plansForLease(lease.id, lease.property.timezone),
     lookupsForLease(lease.id),
     requestsForLease(lease.id),
     casesForLease(lease.id),
@@ -569,6 +574,40 @@ export default async function LeaseDetailPage({
         }))}
         canSwitchCollection={canWrite}
         switchCollection={switchCollectionMethod}
+      />
+
+      {/* ABOVE Holds, and that ordering is the item's own argument. A
+          repayment plan is now the ONLY way a payment-plan hold gets placed
+          (R-175), so somebody looking for "how do I stop chasing this tenant
+          while they pay it off" has to meet the plan before the hold list
+          that no longer offers it. */}
+      <PaymentPlanPanel
+        leaseId={lease.id}
+        canManage={canManageHolds}
+        balanceCents={ledger?.balanceCents ?? 0}
+        plans={paymentPlans.map((plan) => ({
+          id: plan.id,
+          status: plan.status,
+          arrearsCents: plan.arrearsCents,
+          // RAW business dates, formatted in the renderer (D-154). A
+          // pre-formatted prop turns `friendlyBusinessDate` from a guardrail
+          // into a crash.
+          startedOn: plan.startedOn,
+          note: plan.note,
+          instalments: plan.instalments,
+          paidCents: plan.progress.paidCents,
+          remainingCents: plan.progress.remainingCents,
+          shortfallCents: plan.progress.shortfallCents,
+          nextDueOn: plan.progress.nextDueOn,
+          missedDueOn: plan.progress.missedDueOn,
+          brokenOn: plan.brokenOn,
+          // A real timestamp, so it reads in the PROPERTY's zone.
+          agreedOn: friendlyDate(plan.createdAt, lease.property.timezone),
+          agreedByName: plan.createdByName,
+          cancelReason: plan.cancelReason,
+        }))}
+        agreeAction={agreePaymentPlan}
+        cancelAction={cancelPaymentPlan}
       />
 
       <HoldsPanel
