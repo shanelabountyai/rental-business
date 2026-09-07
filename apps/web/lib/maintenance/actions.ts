@@ -601,9 +601,23 @@ export async function logPhoneMaintenanceRequest(
   const { property } = leaseTenant.lease
   await requirePermission('ticket.write', propertyResource(property))
 
+  // `p_`/`t_` prefixes, the same names the tenant wizard's own query string
+  // and `submitMaintenanceRequestForm` use (R-177). One naming convention
+  // across all three intake paths, so a step's id means the same thing
+  // wherever it is answered.
+  const promptAnswers: Record<string, string> = {}
+  const troubleshooting: Record<string, string> = {}
+  for (const [key, value] of formData.entries()) {
+    if (typeof value !== 'string') continue
+    if (key.startsWith('p_')) promptAnswers[key.slice(2)] = value.trim()
+    else if (key.startsWith('t_')) troubleshooting[key.slice(2)] = value
+  }
+
   const input: PhoneLoggedRequestInput = {
     category: str(formData, 'category'),
     notes: str(formData, 'notes'),
+    promptAnswers,
+    troubleshooting,
     entryPermission: optionalBool(formData, 'entryPermission'),
     petWarning: optionalBool(formData, 'petWarning'),
     petNote: str(formData, 'petNote') || undefined,

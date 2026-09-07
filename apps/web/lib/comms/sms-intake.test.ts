@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { hashToken } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { notificationAdapter } from '@/lib/notifications/provider.ts'
@@ -101,6 +102,14 @@ afterAll(async () => {
     where: { id: { in: propertyIds } },
     data: { active: false },
   })
+  // WITHDRAWN, NOT DELETED. TenantConsent is append-only by trigger and the
+  // trigger's own message says what to do instead: withdrawal is a
+  // `revokedAt` timestamp. Deleting the evidence that somebody agreed is
+  // exactly what an append-only consent record exists to prevent.
+  await prisma.tenantConsent.updateMany({
+    where: { tenantId: { in: tenantIds }, revokedAt: null },
+    data: { revokedAt: new Date(), revokeReason: 'test fixture cleanup' },
+  })
   await prisma.tenant.updateMany({
     where: { id: { in: tenantIds } },
     data: { active: false },
@@ -197,6 +206,68 @@ describe('a text from a known tenant', () => {
     // MAINT-02/RISK-05: the response clock must start whichever way the
     // words arrived.
     expect(ticket.habitabilityFlag).toBe(true)
+  })
+})
+
+// R-177: the reply that makes the seven troubleshooting scripts reachable
+// from this channel at all. Everything above deliberately refuses to guess a
+// category, which is right — and left this path with no prompts, no script
+// and no photo on roughly half of real intake.
+describe('the clarify invitation', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('texts back one link into the same wizard the portal runs', async () => {
+    await closeOpenTickets()
+    // TCPA CONSENT IS STILL THE GATE (R-051b), and this fixture has to
+    // satisfy it rather than route around it. A tenant texting us in is not
+    // by itself a consent record the engine will act on, which is a real and
+    // deliberate limit of this path: without a row like this one, the
+    // invitation is delivered to the PORTAL only - the one place the tenant
+    // this feature exists for never looks. See PROGRESS for what that leaves
+    // behind.
+    await prisma.tenantConsent.create({
+      data: {
+        tenantId,
+        channel: 'SMS',
+        basis: 'EXISTING_RELATIONSHIP',
+        source: 'STAFF_RECORDED',
+      },
+    })
+    const send = vi
+      .spyOn(notificationAdapter, 'send')
+      .mockResolvedValue({ externalId: 'stub' })
+
+    const result = await text('the AC is blowing warm')
+    if (result.outcome !== 'ticket_opened') throw new Error('expected a ticket')
+
+    const sms = send.mock.calls
+      .map(([args]) => args)
+      .filter((args) => args.channel === 'SMS')
+    expect(sms).toHaveLength(1)
+    const link = /\/clarify\/([\w-]+)/.exec(sms[0]!.body)
+    expect(link).not.toBeNull()
+
+    // THE TOKEN IN THAT MESSAGE AUTHORIZES, and it is pinned to the ticket
+    // this text just opened - not to the tenant at large.
+    const stored = await prisma.authToken.findFirstOrThrow({
+      where: { purpose: 'TICKET_CLARIFY', tokenHash: hashToken(link![1]!) },
+    })
+    expect(stored.subjectId).toBe(result.ticketId)
+    expect(stored.subjectType).toBe('Ticket')
+    expect((stored.metadata as { tenantId?: string }).tenantId).toBe(tenantId)
+  })
+
+  it('opens the ticket anyway when the message cannot be sent', async () => {
+    // `handleInboundSms` runs inside Twilio's webhook. A throw here becomes a
+    // 500, which Twilio retries, which duplicates a message already recorded
+    // — so the ticket is the fact that has to survive, not the invitation.
+    await closeOpenTickets()
+    vi.spyOn(notificationAdapter, 'send').mockRejectedValue(new Error('twilio down'))
+
+    const result = await text('kitchen tap will not shut off')
+    expect(result.outcome).toBe('ticket_opened')
   })
 })
 

@@ -3851,6 +3851,23 @@ enum AuthTokenPurpose {
   /// (NOTIF-06). Long-lived and re-issuable per person - see
   /// `TOKEN_TTL_MINUTES` for why a year is right here and nowhere else.
   CALENDAR_FEED
+  /// R-177: the clarifying questions and troubleshooting script a texted-in
+  /// maintenance request never got asked (MAINT-01, MAINT-02). Scoped to one
+  /// Ticket and, in the metadata, one Tenant.
+  ///
+  /// SINGLE-USE, on PROSPECT_PRESCREEN's reasoning rather than
+  /// TENANT_VERIFY's. The PAGE is read non-consumingly, so a tenant who
+  /// opens it, walks to the breaker panel and comes back finds it alive;
+  /// the token is burned only when the answers are actually SUBMITTED. That
+  /// is what makes "you have already answered this" a real state with no
+  /// new column, and it is also the concurrency guard: two taps of Send
+  /// cannot append the same transcript twice.
+  ///
+  /// THREE DAYS rather than TENANT_VERIFY's seven, for the inverse reason:
+  /// that one asks about finished work, where a late answer is still true;
+  /// this one asks about a request still being triaged, where the answer's
+  /// value is arriving before somebody is dispatched.
+  TICKET_CLARIFY
 }
 
 model StaffCredential {

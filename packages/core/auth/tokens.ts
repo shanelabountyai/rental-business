@@ -149,6 +149,27 @@ export const TOKEN_TTL_MINUTES = {
   /// pressing a button on an account page rather than by rotating anything
   /// anybody else depends on.
   CALENDAR_FEED: 60 * 24 * 365,
+  /// R-177: the questions a texted-in maintenance request never got asked
+  /// (MAINT-01, MAINT-02).
+  ///
+  /// THREE DAYS, and it is deliberately NOT TENANT_VERIFY's seven, for the
+  /// reason that is the exact inverse of that one's. A verification asks
+  /// about work already DONE, so a late answer is still a true answer and
+  /// every extra day buys reply rate. This asks about a request still being
+  /// triaged, where the answer's whole value is arriving BEFORE somebody is
+  /// dispatched - and the page refuses once a work order exists anyway, so a
+  /// longer window would only mint links that die of old business rather
+  /// than of time.
+  ///
+  /// Blast radius, stated the way TENANT_VERIFY's own comment argues from: a
+  /// leaked one can read the reporting tenant's own words back to them, add
+  /// answers and a photo to that one request, and reach nothing else. No
+  /// session, no document, no money.
+  ///
+  /// SINGLE-USE, burned on SUBMIT rather than on open (PROSPECT_PRESCREEN's
+  /// shape) - so the page survives a walk to the breaker panel, and a second
+  /// submission cannot append the same transcript twice.
+  TICKET_CLARIFY: 60 * 24 * 3,
 } as const
 
 export type TokenPurpose = keyof typeof TOKEN_TTL_MINUTES

@@ -458,6 +458,79 @@ export const verifyRequestTemplate: NotificationTemplate<VerifyRequestContext> =
   },
 }
 
+/// Context for `ticket.clarify_request` (MAINT-01, MAINT-02, R-177).
+export interface ClarifyRequestContext {
+  tenantName: string
+  /// What they texted us, in their own words - the first thing they will
+  /// recognise, and the proof this is about their message and not a
+  /// solicitation.
+  requestSummary: string
+  addressLine1: string
+  /// The zero-login link into the same questions and the same troubleshooting
+  /// script the portal wizard runs.
+  url: string
+}
+
+/**
+ * "We got your text — a few quick questions" (MAINT-01, MAINT-02, R-177).
+ *
+ * THE REPLY IS THE FEATURE, exactly as it is for `workorder.verify_request`,
+ * and for a sharper reason: the seven troubleshooting scripts exist to stop a
+ * truck roll, and until this template existed they were reachable only from
+ * the portal wizard - the channel the fewest tenants use. A text and a phone
+ * call are roughly half of real intake, and both opened a ticket with no
+ * category, no prompts, no script and no photo.
+ *
+ * SO IT ANSWERS FIRST AND ASKS SECOND. The tenant has just texted a person
+ * about a broken thing; a reply that opens with a demand reads as a robot
+ * refusing to help. "We have this" is the sentence that has to survive being
+ * the only one they read.
+ *
+ * `maintenance_clarify`, ITS OWN CATEGORY AND NOT `maintenance_update` — and
+ * the difference is the whole reason this message reaches anybody.
+ * `maintenance_update` defaults OFF on SMS, which is correct for "a plumber
+ * is coming Thursday" and fatal for a reply to a text: it would deliver the
+ * troubleshooting script to the portal alone, the one place the phone-only
+ * tenant this path exists for never looks. See `defaultEnabled`'s own entry.
+ *
+ * Not locked, either. A tenant entitled to mute being asked to rate work is
+ * equally entitled to mute being asked to run a checklist, and one who has
+ * muted it is telling the PM to pick up the phone.
+ */
+export const clarifyRequestTemplate: NotificationTemplate<ClarifyRequestContext> = {
+  key: 'ticket.clarify_request',
+  category: 'maintenance_clarify',
+  channels: ['SMS', 'EMAIL', 'PORTAL'],
+  render: (context, channel) => {
+    if (channel === 'SMS') {
+      return {
+        body: [
+          `Got it — we have your request for ${context.addressLine1}.`,
+          'A few quick questions (and a couple of things worth trying) so we send the right person:',
+          context.url,
+        ].join('\n'),
+      }
+    }
+
+    return {
+      subject: `We have your request — ${context.requestSummary}`,
+      body: [
+        `Hi ${context.tenantName},`,
+        '',
+        `We have your request for ${context.addressLine1}:`,
+        '',
+        context.requestSummary,
+        '',
+        'Answering a few questions helps us send the right person with the right parts, and some of these turn out to be a five-minute fix you can do yourself:',
+        '',
+        context.url,
+        '',
+        'You do not need to sign in. If you would rather not, that is fine — we will call you.',
+      ].join('\n'),
+    }
+  },
+}
+
 /// Context for `payment.receipt` (PAY-01, R-037).
 export interface PaymentReceiptContext {
   tenantName: string
@@ -1957,6 +2030,8 @@ export const TEMPLATES: Readonly<Record<string, NotificationTemplate<never>>> = 
     emergencyEscalationTemplate as unknown as NotificationTemplate<never>,
   [verifyRequestTemplate.key]:
     verifyRequestTemplate as unknown as NotificationTemplate<never>,
+  [clarifyRequestTemplate.key]:
+    clarifyRequestTemplate as unknown as NotificationTemplate<never>,
   [paymentReceiptTemplate.key]:
     paymentReceiptTemplate as unknown as NotificationTemplate<never>,
   [paymentReturnedTemplate.key]:

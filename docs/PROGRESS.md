@@ -9097,3 +9097,143 @@ ran 39 passed, 0 failed, 0 flaky against the production build. **CI run
 landed fourteen minutes into it and the concurrency group killed it, so R-175
 never got a verdict of its own. Nothing is outstanding from that: R-176's run is
 cumulative on `main` and covers R-175's code, and it passed.
+
+## R-177 — The troubleshooting script reaches the channels tenants actually use
+**Commit:** `TBD`  ·  **Date:** 2026-09-07
+
+**What it built.** Review finding 9 (MAINT-01, MAINT-02). The starting point
+was a piece of genuinely good work with almost no reach:
+`applicableTroubleshootingSteps`
+([packages/core/maintenance/troubleshooting.ts](packages/core/maintenance/troubleshooting.ts))
+is seven scripts with illustrations — the GFCI that lives in another room, the
+disposal's reset button and its Allen key, the toilet flapper — and a hard rule
+that a TRIED-or-DECLINED outcome is logged before dispatch is allowed. Its only
+consumers were the portal wizard and the validator behind it.
+`handleInboundSms` opened a ticket at `category: 'UNCATEGORIZED'` with no
+prompts, no script and no photo, and the file's own comment conceded there was
+no category to hang a script on. `logPhoneMaintenanceRequest` did the same for
+a phone call. R-021's backlog row puts those two channels at roughly half of
+real requests — and they are the half carrying the tenant who does not use the
+portal and the 11pm text, which is exactly where a wrong dispatch costs a truck
+roll. The deflection machinery was reachable only from the channel the fewest
+tenants use.
+
+*The SMS half.* A new `TICKET_CLARIFY` purpose and
+[apps/web/lib/maintenance/clarify-link.ts](apps/web/lib/maintenance/clarify-link.ts),
+the fourth use of the pattern D-45 argues for at length: `/clarify/[token]` is
+a token-scoped page with no session, scoped to one Ticket and — in the token
+metadata rather than re-derived at use time — one Tenant. `inviteToClarify`
+runs after the intake transaction, never inside it, and swallows its own
+failures, because a throw there becomes a 500 for Twilio, which retries, which
+duplicates a message already recorded.
+
+*And it renders the same wizard the portal renders.* `MaintenanceWizard` gained
+four optional props — `submit`, `formAction`, `uploadPhoto`, `doneHref` — with
+the portal's own defaults unchanged, and the clarify page passes server actions
+bound server-side. The steps are identical because they are the same code: the
+same questions, the same seven scripts, the same `reachableStep` clamping, the
+same URL-driven path that works before hydration. A second copy of a thousand
+lines of stepper would have been a second place for all of that to drift, and
+it would have been the copy nobody remembered to update.
+
+*The phone half, fixed where it lives.* `LogPhoneRequestForm` now renders the
+clarifying prompts as soon as a category is chosen and then the applicable
+script, in a fieldset per step with the illustration and the instructions, for
+the PM to read aloud. `PhoneLoggedRequestInput` EXTENDS `MaintenanceRequestInput`
+rather than sitting beside it, and `scriptViolations` is one shared gate for all
+three doors — the same argument `applicableTroubleshootingSteps` itself makes
+one level down, that what is SHOWN and what is REQUIRED must come from one
+function.
+
+**What it decided.**
+
+- **The write appends and defers, because a clarification lands on a row
+  somebody else may already have touched** (D-183). The description is appended
+  to, never replaced — an SMS ticket's description is the tenant's own words,
+  verbatim, off the message they sent, and a tidy structured transcript
+  replacing them destroys the one piece of evidence nobody can reconstruct. A
+  category a PM set during triage is left alone, with the tenant's own choice
+  landing in the transcript where a human can read the disagreement. Priority is
+  only re-derived while `firstResponseAt` is null. `habitabilityFlag` is only
+  ever raised, never cleared.
+- **It refuses once a work order exists**, or the status has left
+  NEW/TRIAGED/WAITING_ON_TENANT. Two gates, not one, and the work-order count is
+  the load-bearing half: a ticket can still read TRIAGED while a job hangs off
+  it, and past that point the description is the sheet somebody is being sent
+  out with.
+- **Single-use, burned on submit rather than on open** (PROSPECT_PRESCREEN's
+  shape, not TENANT_VERIFY's). The page is read non-consumingly so a tenant who
+  walks to the breaker panel and comes back finds it alive; the burn is both the
+  "you have already answered" state with no new column and the concurrency guard
+  that stops two taps of Send appending the same transcript twice.
+- **Three days, not TENANT_VERIFY's seven**, for the inverse reason: a
+  verification asks about finished work, where a late answer is still true. This
+  asks about a request still being triaged, where the answer's value is arriving
+  before somebody is dispatched — and the page refuses by then anyway, so a
+  longer window would only mint links that die of old business.
+- **`maintenance_clarify` is its own notification category**, and that is not
+  taxonomy — see the bug below.
+- **`reportedWords` makes "the reporter's own words" a contract.** Every intake
+  formatter puts them first and separates them from the staff-facing tail with a
+  blank line; the clarify page needs exactly that half, because the rest of an
+  SMS ticket's description says "may not use the portal — reply by text", which
+  is internal operating vocabulary D-10 keeps off a tenant screen.
+- **`ClarificationArgs` is declared locally rather than imported from
+  `maintenance/actions.ts`.** That module is `'use server'`, and a type reaching
+  out of one is the shape that passes typecheck and vitest and fails only in
+  `npm run build`.
+
+**A real bug found along the way, NOT fixed, and it needs an owner decision.**
+`defaultEnabled('maintenance_update', 'SMS')` is **false** — SMS defaults off
+for everything not in an explicit list. `workorder.verify_request` is on
+`maintenance_update`. **So R-032c's "was this fixed?" message has never gone out
+by SMS by default**, only to email and the portal — and R-032c exists precisely
+because the portal is a dead end for the tenant with a phone and no email, and
+its own template comment says "the reply rate IS the feature". That item's
+entire premise is contradicted by a default set three files away. It was found
+here because this item's own first test asserted an SMS went out and got zero,
+with `preference_off` on the delivery row. **It is not fixed here**: flipping
+the default for `maintenance_update` changes the send behaviour of another
+item's message, which is a decision about texting people rather than a bug in
+this item's code. R-177 took the same escape hatch R-058, R-059 and R-064 each
+took — its own category, defaulted on for SMS with the reasoning written next to
+it — which fixes this item and leaves R-032c's exactly as it was.
+
+**A second thing left alone deliberately.** TCPA consent (R-051b) still gates
+the SMS, so a tenant with no `TenantConsent` row gets the invitation in the
+portal only, however sensibly "they texted us first" reads as agreement. That is
+a legal judgment for the owner, not one to make quietly inside a send helper.
+The unit test seeds an `EXISTING_RELATIONSHIP` consent row and says so in a
+comment rather than routing around the gate.
+
+**What it left behind.**
+
+- **The R-032c SMS default above.** Unowned. One line in `defaultEnabled` and a
+  sentence in `verifyRequestTemplate`'s comment, but it is the owner's call.
+- **The TCPA question above.** Unowned. Whether an inbound text is itself prior
+  express consent for a reply about that request is a decision, not a default.
+- **Nothing invites a clarification for an EMAIL-intake ticket.** R-097f's
+  inbound-email path opens tickets the same way and gets no link; the mechanism
+  is channel-agnostic and `inviteToClarify` takes only a ticket id, so this is a
+  one-line call somebody has to decide to add.
+- **No staff-side "ask them again" button.** A tenant who ignores the text is
+  never re-invited, and `issueClarifyLink` already revokes-then-creates for
+  exactly that.
+- **A clarification raises nothing for staff.** The triage Task already exists
+  from `ticket.created`, and the answers arrive on the row it points at — but a
+  PM who triaged an hour ago is not told the description grew.
+- **The phone form's script disappears on a server-side validation error.**
+  React 19 resets an uncontrolled form on every action dispatch, so the selects
+  clear while the client state that derives the script does not. Pre-existing
+  behaviour for every field on that form; it is more visible now that there are
+  more of them.
+- **`e2e/maintenance-phone-log.spec.ts` still cleans up by collected-id list**,
+  the anti-pattern this repo has written down twice. Touched but not rewritten.
+
+**The gate.** `npm run ci:local` green end to end — `db:ci` (every migration
+applied to a throwaway Postgres from scratch, seeded, `prisma migrate diff`
+reporting no drift), lint, typecheck, `check:ship-deps`, `npm test` (2,993
+passed, 4 skipped) and `npm run build`. The touched e2e specs — clarify-link,
+maintenance-phone-log, maintenance, notifications, portal-account, portal — ran
+**94 passed, 0 failed, 0 flaky** against the production build on `:3100`. CI run
+on the pushed SHA to be recorded in the follow-up commit.

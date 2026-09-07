@@ -31,6 +31,59 @@ export interface MaintenanceRequestInput {
 }
 
 /**
+ * The two gates every structured intake path shares (MAINT-01: "a
+ * troubleshooting script with pictures runs first ... logging tried/declined
+ * before dispatch is allowed").
+ *
+ * Shared rather than copied because THREE paths now run this script, not one
+ * (R-177): the tenant's own wizard, the clarify link a texted-in request is
+ * answered through, and the phone-logged form a PM reads aloud. That is the
+ * same argument `applicableTroubleshootingSteps` itself makes one level down
+ * - one function decides what is SHOWN and what is REQUIRED, so a step a
+ * screen never rendered can never be silently demanded, nor the reverse.
+ *
+ * A step the answers do not make applicable is correctly not required.
+ */
+export function scriptViolations(
+  category: MaintenanceCategory,
+  promptAnswers: Record<string, string>,
+  troubleshooting: Record<string, string>,
+): Violation[] {
+  const violations: Violation[] = []
+
+  for (const prompt of CLARIFYING_PROMPTS[category]) {
+    const answer = promptAnswers[prompt.id]?.trim()
+    if (!answer) {
+      violations.push({
+        field: `prompt.${prompt.id}`,
+        message: 'Please answer this question.',
+      })
+      continue
+    }
+    if (prompt.type === 'select' && prompt.options && !prompt.options.includes(answer)) {
+      violations.push({
+        field: `prompt.${prompt.id}`,
+        message: 'Choose one of the options shown.',
+      })
+    }
+  }
+
+  for (const step of applicableTroubleshootingSteps(category, promptAnswers)) {
+    const outcome = troubleshooting[step.id]
+    if (!outcome) {
+      violations.push({
+        field: `troubleshooting.${step.id}`,
+        message: 'Let us know whether you tried this.',
+      })
+    } else if (!(TROUBLESHOOTING_OUTCOMES as readonly string[]).includes(outcome)) {
+      violations.push({ field: `troubleshooting.${step.id}`, message: 'Invalid answer.' })
+    }
+  }
+
+  return violations
+}
+
+/**
  * Validates a submission end to end, including the two gates MAINT-01 makes
  * explicit:
  *
@@ -59,35 +112,9 @@ export function validateMaintenanceRequest(
   }
   const category = input.category as MaintenanceCategory
 
-  for (const prompt of CLARIFYING_PROMPTS[category]) {
-    const answer = input.promptAnswers[prompt.id]?.trim()
-    if (!answer) {
-      violations.push({
-        field: `prompt.${prompt.id}`,
-        message: 'Please answer this question.',
-      })
-      continue
-    }
-    if (prompt.type === 'select' && prompt.options && !prompt.options.includes(answer)) {
-      violations.push({
-        field: `prompt.${prompt.id}`,
-        message: 'Choose one of the options shown.',
-      })
-    }
-  }
-
-  const steps = applicableTroubleshootingSteps(category, input.promptAnswers)
-  for (const step of steps) {
-    const outcome = input.troubleshooting[step.id]
-    if (!outcome) {
-      violations.push({
-        field: `troubleshooting.${step.id}`,
-        message: 'Let us know whether you tried this.',
-      })
-    } else if (!(TROUBLESHOOTING_OUTCOMES as readonly string[]).includes(outcome)) {
-      violations.push({ field: `troubleshooting.${step.id}`, message: 'Invalid answer.' })
-    }
-  }
+  violations.push(
+    ...scriptViolations(category, input.promptAnswers, input.troubleshooting),
+  )
 
   if (input.entryPermission === undefined) {
     violations.push({
@@ -109,20 +136,36 @@ export function validateMaintenanceRequest(
 // Staff-logged (phone-reported) requests (MAINT-01, D-10, R-022)
 // ---------------------------------------------------------------------------
 
-export interface PhoneLoggedRequestInput {
-  category: string
-  /// Staff's own summary of what the tenant reported - a phone call has no
-  /// structured prompts to answer, unlike the tenant's own wizard.
+/**
+ * EXTENDS the tenant's own input rather than sitting beside it (R-177).
+ *
+ * It used to be a lighter, separate shape - category, free-text notes, entry,
+ * pets - on the reasoning that "staff is writing up a call, not walking a
+ * tenant through a wizard". That reasoning was backwards, and the operator
+ * review found it: the PM IS on the phone with the tenant, which is the one
+ * moment the GFCI-in-another-room script can be read aloud and actually save
+ * a truck roll. The seven scripts were reachable only from the portal wizard,
+ * the channel the fewest tenants use.
+ *
+ * `notes` stays, and stays required: a call has words in it that no prompt
+ * asks for, and losing them to a structured form would be a worse trade.
+ */
+export interface PhoneLoggedRequestInput extends MaintenanceRequestInput {
+  /// Staff's own summary of what the tenant reported, in the caller's words -
+  /// what the structured prompts below cannot capture.
   notes: string
-  entryPermission: boolean | undefined
-  petWarning: boolean | undefined
-  petNote?: string
 }
 
 /**
- * Validates a staff phone-log submission. Deliberately lighter than
- * validateMaintenanceRequest above: no clarifying prompts, no troubleshooting
- * gate - staff is writing up a call, not walking a tenant through a wizard.
+ * Validates a staff phone-log submission.
+ *
+ * The SAME script gate as the tenant's own wizard (`scriptViolations`), for
+ * the reason R-177 exists: MAINT-01's "logging tried/declined before dispatch
+ * is allowed" is a property of the DISPATCH, not of the channel the request
+ * arrived on, and a phone call was previously exempt from it entirely.
+ * DECLINED is always an available answer, so a tenant who hangs up is
+ * recorded honestly rather than blocking the PM.
+ *
  * Entry permission and the pet warning stay real yes/no answers for the same
  * reason they do on the tenant path: both drive real downstream decisions
  * (R-027's entry compliance, a vendor's safety), so "not asked yet" cannot
@@ -135,6 +178,14 @@ export function validatePhoneLoggedRequest(
 
   if (!isMaintenanceCategory(input.category)) {
     violations.push({ field: 'category', message: 'Choose a category.' })
+  } else {
+    violations.push(
+      ...scriptViolations(
+        input.category as MaintenanceCategory,
+        input.promptAnswers,
+        input.troubleshooting,
+      ),
+    )
   }
   if (!input.notes.trim()) {
     violations.push({

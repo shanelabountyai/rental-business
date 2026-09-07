@@ -14,6 +14,7 @@ import { prisma } from '@rental/db'
 import { auditAsSystem } from '@/lib/audit/system.ts'
 import { emitEvent } from '@/lib/jobs/outbox.ts'
 import { notificationAdapter } from '@/lib/notifications/provider.ts'
+import { inviteToClarify } from '@/lib/maintenance/clarify-link.ts'
 import { recordOptIn, recordOptOut } from './opt-out-store.ts'
 import { receiveInboundMessage } from './messages.ts'
 
@@ -191,6 +192,20 @@ export async function handleInboundSms(args: {
     })
     return created
   })
+
+  // THE REPLY THAT MAKES THE SEVEN TROUBLESHOOTING SCRIPTS REACHABLE FROM
+  // HERE AT ALL (R-177). Everything above deliberately refuses to guess a
+  // category, which is right - and left this path with no category to hang a
+  // script on, no clarifying prompts and no photo, on roughly half of real
+  // intake. The tenant gets one link back into the same wizard the portal
+  // runs, pinned to the ticket just opened.
+  //
+  // AFTER the transaction and never inside it: the ticket is the fact that
+  // must survive, and `inviteToClarify` talks to a provider over a network.
+  // It swallows its own failures for the same reason - a throw here becomes a
+  // 500 for Twilio, which retries, which duplicates a message we have already
+  // recorded.
+  await inviteToClarify(ticket.id)
 
   return { outcome: 'ticket_opened', threadId: thread.id, ticketId: ticket.id }
 }

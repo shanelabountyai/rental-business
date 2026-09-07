@@ -5,6 +5,7 @@ import {
   MAINTENANCE_CATEGORIES,
   type MaintenanceRequestInput,
   type PhoneLoggedRequestInput,
+  appendClarification,
   applicableTroubleshootingSteps,
   canMergeTicket,
   detectHabitabilityLanguage,
@@ -13,6 +14,7 @@ import {
   formatPhoneLoggedDescription,
   isMaintenanceCategory,
   isTicketTriageResolved,
+  reportedWords,
   suggestTicketPriority,
   validateMaintenanceRequest,
   validatePhoneLoggedRequest,
@@ -215,9 +217,15 @@ describe('formatMaintenanceDescription', () => {
 })
 
 describe('validatePhoneLoggedRequest', () => {
+  // 'Toilet' is what makes the flapper script apply - see
+  // TROUBLESHOOTING_SCRIPTS.PLUMBING. A fixture that answered 'Kitchen sink'
+  // would have no applicable step and would silently stop testing the gate
+  // R-177 added here.
   const valid: PhoneLoggedRequestInput = {
     category: 'PLUMBING',
-    notes: 'Tenant says the kitchen faucet drips constantly.',
+    notes: 'Tenant says the toilet runs constantly.',
+    promptAnswers: { where: 'Toilet', leaking_now: 'No', only_toilet: 'No' },
+    troubleshooting: { flapper: 'TRIED' },
     entryPermission: true,
     petWarning: false,
   }
@@ -248,10 +256,45 @@ describe('validatePhoneLoggedRequest', () => {
     )
   })
 
-  it('does NOT require clarifying prompts or troubleshooting - unlike the tenant path', () => {
-    // A staff phone-log submission has no prompts/troubleshooting keys at
-    // all, and that must still validate cleanly.
-    expect(validatePhoneLoggedRequest(valid)).toEqual([])
+  // R-177 REVERSED THIS RULE, and the old test asserted the defect. The
+  // phone form used to be exempt from the script on the reasoning that
+  // "staff is writing up a call, not walking a tenant through a wizard" -
+  // but the PM is on the phone WITH the tenant, which is the one moment the
+  // GFCI-in-another-room script can be read aloud and save a truck roll.
+  it('requires the same clarifying prompts the tenant path does', () => {
+    const violations = validatePhoneLoggedRequest({ ...valid, promptAnswers: {} })
+    expect(violations.map((v) => v.field)).toEqual(
+      expect.arrayContaining(['prompt.where', 'prompt.leaking_now', 'prompt.only_toilet']),
+    )
+  })
+
+  it('requires a TRIED or DECLINED outcome for every applicable script step', () => {
+    expect(
+      validatePhoneLoggedRequest({ ...valid, troubleshooting: {} }).map((v) => v.field),
+    ).toContain('troubleshooting.flapper')
+    expect(
+      validatePhoneLoggedRequest({ ...valid, troubleshooting: { flapper: 'MAYBE' } }).map(
+        (v) => v.field,
+      ),
+    ).toContain('troubleshooting.flapper')
+    // DECLINED is always available, so a tenant who hangs up is recorded
+    // honestly rather than blocking the PM from logging the call at all.
+    expect(
+      validatePhoneLoggedRequest({ ...valid, troubleshooting: { flapper: 'DECLINED' } }),
+    ).toEqual([])
+  })
+
+  it('requires no script step the answers do not make applicable', () => {
+    // Kitchen sink: the flapper script does not apply, so nothing is demanded
+    // for it. The step the screen never rendered is the step the validator
+    // must not silently require.
+    expect(
+      validatePhoneLoggedRequest({
+        ...valid,
+        promptAnswers: { where: 'Kitchen sink', leaking_now: 'No', only_toilet: 'Not about a toilet' },
+        troubleshooting: {},
+      }),
+    ).toEqual([])
   })
 })
 
@@ -260,6 +303,8 @@ describe('formatPhoneLoggedDescription', () => {
     const text = formatPhoneLoggedDescription('PLUMBING', {
       category: 'PLUMBING',
       notes: 'Kitchen faucet drips constantly, worse at night.',
+      promptAnswers: { where: 'Toilet', leaking_now: 'No', only_toilet: 'No' },
+      troubleshooting: { flapper: 'DECLINED' },
       entryPermission: true,
       petWarning: false,
     })
@@ -268,10 +313,28 @@ describe('formatPhoneLoggedDescription', () => {
     expect(text).toContain('Entry permitted if the tenant is not home.')
   })
 
+  // R-177: what the PM read out, and what the tenant said back. Whoever
+  // dispatches has to be able to see that the flapper was already checked.
+  it('carries the prompt answers and the script outcomes into the ticket', () => {
+    const text = formatPhoneLoggedDescription('PLUMBING', {
+      category: 'PLUMBING',
+      notes: 'Toilet runs all night.',
+      promptAnswers: { where: 'Toilet', leaking_now: 'No', only_toilet: 'Yes' },
+      troubleshooting: { flapper: 'TRIED' },
+      entryPermission: true,
+      petWarning: false,
+    })
+    expect(text).toContain('Where is the problem? Toilet')
+    expect(text).toContain('Troubleshooting tried before dispatch:')
+    expect(text).toContain('Check the toilet flapper: Tried this - did not fix it.')
+  })
+
   it('includes the pet note when given, and omits the pet line when there is none', () => {
     const withPet = formatPhoneLoggedDescription('LOCKS', {
       category: 'LOCKS',
       notes: "Front door won't lock.",
+      promptAnswers: { what: "Won't lock", which_door: 'Front door' },
+      troubleshooting: {},
       entryPermission: false,
       petWarning: true,
       petNote: 'Friendly dog, does not need to be secured.',
@@ -282,6 +345,8 @@ describe('formatPhoneLoggedDescription', () => {
     const withoutPet = formatPhoneLoggedDescription('LOCKS', {
       category: 'LOCKS',
       notes: "Front door won't lock.",
+      promptAnswers: { what: "Won't lock", which_door: 'Front door' },
+      troubleshooting: {},
       entryPermission: false,
       petWarning: false,
     })
@@ -432,5 +497,62 @@ describe('isTicketTriageResolved', () => {
     for (const status of ['NEW', 'TRIAGED']) {
       expect(isTicketTriageResolved(status), status).toBe(false)
     }
+  })
+})
+
+// R-177: the two pure halves of the clarify link - what a tenant is shown
+// back, and what gets written onto the ticket they texted in.
+
+describe('reportedWords', () => {
+  const CLARIFY: MaintenanceRequestInput = {
+    category: 'PLUMBING',
+    promptAnswers: { where: 'Toilet', leaking_now: 'No', only_toilet: 'No' },
+    troubleshooting: { flapper: 'TRIED' },
+    entryPermission: true,
+    petWarning: false,
+  }
+
+  it('keeps the staff-facing tail of a phone-logged description off a tenant screen', () => {
+    // The clarify page shows a tenant what we think they told us. Everything
+    // after the first blank line is written AT STAFF - D-10 keeps internal
+    // operating vocabulary out of anything tenant-facing.
+    const description = formatPhoneLoggedDescription('PLUMBING', {
+      ...CLARIFY,
+      notes: 'Toilet runs all night.',
+    })
+    expect(reportedWords(description)).toBe('Plumbing issue, reported by phone.')
+    expect(reportedWords(description)).not.toContain('Entry permitted')
+  })
+
+  it('returns a bare report unchanged', () => {
+    expect(reportedWords('  Water heater is leaking  ')).toBe('Water heater is leaking')
+  })
+})
+
+describe('appendClarification', () => {
+  const ANSWERS: MaintenanceRequestInput = {
+    category: 'ELECTRICAL',
+    promptAnswers: { what: 'Multiple outlets or lights', extent: 'One room' },
+    troubleshooting: { breaker: 'TRIED', gfci: 'DECLINED' },
+    entryPermission: true,
+    petWarning: false,
+  }
+
+  // THE WHOLE DESIGN OF THIS FUNCTION. An SMS ticket's description is the
+  // tenant's own words verbatim off the message they sent; a tidy structured
+  // transcript replacing them destroys the one piece of evidence nobody can
+  // reconstruct, on the intake path whose premise is that the tenant does not
+  // use the portal.
+  it('keeps what was already there, verbatim, and adds to it', () => {
+    const text = appendClarification('half the kitchen has no power', 'ELECTRICAL', ANSWERS)
+    expect(text.startsWith('half the kitchen has no power')).toBe(true)
+    expect(text).toContain('The tenant answered our questions after sending this:')
+    expect(text).toContain('Electrical issue.')
+  })
+
+  it('carries the script outcomes, which is what stops the second truck roll', () => {
+    const text = appendClarification('no power in the kitchen', 'ELECTRICAL', ANSWERS)
+    expect(text).toContain('Check the breaker panel: Tried this - did not fix it.')
+    expect(text).toContain('Check for a GFCI reset button: Did not try this.')
   })
 })

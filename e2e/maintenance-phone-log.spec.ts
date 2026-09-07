@@ -151,6 +151,17 @@ test.describe('logging a phone-reported request', () => {
     await page
       .getByLabel('What they reported')
       .fill('Tenant says the kitchen faucet has been dripping all week.')
+    // R-177: the clarifying prompts appear as soon as a category is chosen,
+    // and they are what SELECT the script - "Kitchen sink" makes the toilet
+    // flapper inapplicable, so nothing is demanded for it.
+    await page.getByLabel('Where is the problem?').selectOption('Kitchen sink')
+    await page.getByLabel('Is water actively leaking right now?').selectOption('Yes')
+    await page
+      .getByLabel('If this is a toilet: is it your only one, and not working?')
+      .selectOption('Not about a toilet')
+    await expect(
+      page.getByRole('heading', { name: 'Read these out while they are on the line' }),
+    ).toBeHidden()
     await page.getByLabel('May we enter if they are not home?').selectOption('true')
     await page.getByLabel('Is there a pet at home?').selectOption('false')
     await page.getByRole('button', { name: 'Log request' }).click()
@@ -198,6 +209,11 @@ test.describe('logging a phone-reported request', () => {
     await page.getByLabel('Who called').selectOption({ value: caller.leaseTenant.id })
     await page.getByLabel('Category').selectOption('PLUMBING')
     await page.getByLabel('What they reported').fill('There is sewage backing up into the tub.')
+    await page.getByLabel('Where is the problem?').selectOption('Shower or tub')
+    await page.getByLabel('Is water actively leaking right now?').selectOption('Yes')
+    await page
+      .getByLabel('If this is a toilet: is it your only one, and not working?')
+      .selectOption('Not about a toilet')
     await page.getByLabel('May we enter if they are not home?').selectOption('true')
     await page.getByLabel('Is there a pet at home?').selectOption('false')
     await page.getByRole('button', { name: 'Log request' }).click()
@@ -233,12 +249,73 @@ test.describe('logging a phone-reported request', () => {
     await page.getByLabel('Who called').selectOption({ value: caller.leaseTenant.id })
     await page.getByLabel('Category').selectOption('ELECTRICAL')
     await page.getByLabel('What they reported').fill('   ')
+    await page.getByLabel("What isn't working?").selectOption('One outlet')
+    await page.getByLabel('Is it just one room, or the whole home?').selectOption('One room')
+    // Both electrical scripts always apply, and the radios are `required`, so
+    // an unanswered one would be refused by the browser rather than by the
+    // server check this test is actually about.
+    await page
+      .getByRole('group', { name: 'Check the breaker panel' })
+      .getByLabel('They tried it')
+      .check()
+    await page
+      .getByRole('group', { name: 'Check for a GFCI reset button' })
+      .getByLabel('Not tried')
+      .check()
     await page.getByLabel('May we enter if they are not home?').selectOption('true')
     await page.getByLabel('Is there a pet at home?').selectOption('false')
     await page.getByRole('button', { name: 'Log request' }).click()
 
     await expect(page.getByText('A few things need an answer')).toBeVisible()
     expect(await prisma.ticket.count({ where: { propertyId: property.id } })).toBe(0)
+  })
+
+  // R-177: the point of the whole item. `applicableTroubleshootingSteps`'s
+  // seven scripts used to be reachable only from the portal wizard - the
+  // channel the fewest tenants use - while the phone call, roughly half of
+  // real intake, opened a ticket with no category, no prompts and no script.
+  // The PM is the one person who can read the GFCI-in-another-room advice
+  // aloud while the tenant is standing in the room.
+  test('runs the troubleshooting script on screen and records what the caller said', async ({
+    page,
+  }) => {
+    const caller = await seedCaller()
+    const { property } = caller
+    const staff = await createStaff('owner')
+    await signIn(page, staff.email)
+
+    await page.goto('/maintenance/new')
+    await page.getByLabel('Who called').selectOption({ value: caller.leaseTenant.id })
+    await page.getByLabel('Category').selectOption('PLUMBING')
+    await page.getByLabel('What they reported').fill('Toilet runs all night, she says.')
+    await page.getByLabel('Where is the problem?').selectOption('Toilet')
+    await page.getByLabel('Is water actively leaking right now?').selectOption('No')
+    await page
+      .getByLabel('If this is a toilet: is it your only one, and not working?')
+      .selectOption('No')
+
+    // The script appears because of the ANSWER, not the category: the flapper
+    // advice is nonsense for a kitchen sink, and the prompt above is what
+    // selects it.
+    const flapper = page.getByRole('group', { name: 'Check the toilet flapper' })
+    await expect(flapper).toBeVisible()
+    await expect(flapper).toContainText('rubber flapper at the bottom is sealing')
+    await flapper.getByLabel('They tried it').check()
+
+    await page.getByLabel('May we enter if they are not home?').selectOption('true')
+    await page.getByLabel('Is there a pet at home?').selectOption('false')
+    await page.getByRole('button', { name: 'Log request' }).click()
+    await page.waitForURL(/\/maintenance\/(?!new$)[a-z0-9]+$/)
+
+    const ticket = await prisma.ticket.findFirstOrThrow({ where: { propertyId: property.id } })
+    ticketIds.push(ticket.id)
+    // Whoever dispatches has to be able to see the flapper was already
+    // checked - that is the whole deflection argument.
+    expect(ticket.description).toContain('Where is the problem? Toilet')
+    expect(ticket.description).toContain('Troubleshooting tried before dispatch:')
+    expect(ticket.description).toContain(
+      'Check the toilet flapper: Tried this - did not fix it.',
+    )
   })
 
   test.describe('scoping (ROLE-01)', () => {
@@ -267,6 +344,16 @@ test.describe('logging a phone-reported request', () => {
       expect(results.violations).toEqual([])
 
       await page.goto('/maintenance/new')
+      results = await axeScan(page)
+      expect(results.violations).toEqual([])
+
+      // And again with the prompts and the script on screen (R-177) - those
+      // are fieldsets, legends and radio groups that simply do not exist
+      // until a category is chosen, so the scan above cannot see them.
+      await page.getByLabel('Category').selectOption('ELECTRICAL')
+      await expect(
+        page.getByRole('group', { name: 'Check the breaker panel' }),
+      ).toBeVisible()
       results = await axeScan(page)
       expect(results.violations).toEqual([])
     })

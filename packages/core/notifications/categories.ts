@@ -41,6 +41,18 @@ export const NOTIFICATION_CATEGORIES = [
 
   // Maintenance
   'maintenance_update',
+  /// R-177: "we got your text — here are the questions". Its OWN category
+  /// rather than folded into `maintenance_update`, and the reason is the SMS
+  /// default below, not taxonomy. `maintenance_update` defaults OFF on SMS
+  /// (see `defaultEnabled`), which is right for "a plumber is coming
+  /// Thursday" and fatal here: this is a direct reply to a text the tenant
+  /// sent seconds ago, to the number they sent it from, and it is the ONLY
+  /// way the troubleshooting script reaches the channel half of real intake
+  /// arrives on. Sharing the category would have meant either shipping this
+  /// item inert or flipping the default for every maintenance update in the
+  /// product - the same fork R-058, R-059 and R-064 each resolved by
+  /// carving out their own category.
+  'maintenance_clarify',
   'maintenance_emergency',
   'work_order_assigned',
 
@@ -316,7 +328,14 @@ export function defaultEnabled(
     // R-064: same reasoning again, and the reminders are the entire point
     // of the category - a showing reminder that defaults off is a no-show
     // reduction feature nobody receives.
-    category === 'prospect_showing'
+    category === 'prospect_showing' ||
+    // R-177: the same reasoning one more time, and the clearest instance of
+    // it in this list. A tenant who has just texted us about a broken thing
+    // is answered on the number they texted from, about that thing, within
+    // seconds. Defaulting it off would deliver the troubleshooting script
+    // exclusively to the portal - the one place the phone-only tenant this
+    // whole path exists for never looks.
+    category === 'maintenance_clarify'
   )
 }
 
@@ -340,6 +359,7 @@ export const CATEGORY_LABELS: Record<NotificationCategory, string> = {
   legal_notice: 'Legal notices',
   entry_notice: 'Entry notices',
   maintenance_update: 'Maintenance updates',
+  maintenance_clarify: 'Questions about a request you texted in',
   maintenance_emergency: 'Emergency maintenance',
   work_order_assigned: 'Work orders assigned to you',
   lease_renewal: 'Lease renewals',

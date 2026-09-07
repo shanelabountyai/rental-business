@@ -354,6 +354,18 @@ export const AUDIT_ACTIONS = [
   /// document.uploaded.
   'ticket.submitted',
 
+  /// R-177: the tenant answered the clarifying questions and troubleshooting
+  /// script their TEXTED-IN request never got asked, through a zero-login
+  /// link. A separate action from ticket.submitted because the two are
+  /// different moments by the same person - and because this one lands on a
+  /// row a PM may already have triaged, so the before/after is the whole
+  /// point: it is the only record of a tenant's category disagreeing with
+  /// the one triage chose, which the write itself deliberately does not
+  /// overwrite. Actor is TENANT via auditAsTenant, never SYSTEM: there is no
+  /// session by construction, and "who said they tried the breaker" must
+  /// answer with a name (R-032c's own lesson).
+  'ticket.clarified',
+
   /// R-023: a triage decision - priority override, merge, "waiting on
   /// tenant", converted, or closed. Ticket rows are mutated in place (see
   /// ticket.submitted's own comment), so this is the before/after record of

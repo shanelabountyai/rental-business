@@ -16,6 +16,15 @@ import {
   submitMaintenanceRequestForm,
   uploadMaintenancePhoto,
 } from '@/lib/maintenance/actions.ts'
+// Split from the value import above, and kept `import type` rather than an
+// inline `type` modifier: `actions.ts` is `'use server'`, and a type reaching
+// out of one has to be provably erased before Next enumerates the module's
+// exports (CLAUDE.md's `export type { … }` trap). This is the shape
+// `log-phone-request-form.tsx` already uses against the same module.
+import type {
+  SubmitMaintenanceRequestArgs,
+  SubmitMaintenanceRequestResult,
+} from '@/lib/maintenance/actions.ts'
 import { TroubleshootingIllustration } from './troubleshooting-illustration.tsx'
 
 // The tenant maintenance request flow (MAINT-01, R-019): category → 2-3
@@ -390,8 +399,50 @@ function BackButton({
   )
 }
 
-export function MaintenanceWizard({ initial = {} }: { initial?: WizardParams }) {
+/**
+ * The three writes and the destination, injectable (R-177).
+ *
+ * The portal's own defaults are the ones already in this file, so the tenant
+ * flow is unchanged. What made this necessary is the other half of R-177: a
+ * request that arrived by TEXT opens at `category: 'UNCATEGORIZED'` with no
+ * prompts, no troubleshooting script and no photo, and the fix is to walk
+ * that tenant through THIS wizard from a token-scoped page with no session
+ * (`/clarify/[token]`). The steps themselves are identical - same questions,
+ * same seven scripts, same illustrations, same clamping - and a second copy
+ * of a thousand lines would be a second place for them to drift.
+ *
+ * SERVER ACTIONS, BOUND SERVER-SIDE, never plain functions: only a
+ * `'use server'` export has an identity the client can call back to, and
+ * `npm run build` does not catch the difference - the page 500s in the
+ * browser instead.
+ *
+ * `doneHref` is a STRING rather than a function of the new ticket id, for
+ * the same boundary reason. The portal needs the id (it navigates to the
+ * request it just created); the clarify page does not, because it returns to
+ * itself, where the burned token now renders "we have your answers".
+ */
+export interface WizardActions {
+  submit: (args: SubmitMaintenanceRequestArgs) => Promise<SubmitMaintenanceRequestResult>
+  formAction: (formData: FormData) => Promise<void>
+  uploadPhoto: (file: File) => Promise<{ id: string } | { error: string }>
+  /// Where to go after a successful submit. Omitted means the portal's own
+  /// `/portal/maintenance/<new ticket id>`.
+  doneHref?: string
+}
+
+export function MaintenanceWizard({
+  initial = {},
+  actions,
+  submitLabel = 'Send request',
+}: {
+  initial?: WizardParams
+  actions?: WizardActions
+  submitLabel?: string
+}) {
   const router = useRouter()
+  const submit = actions?.submit ?? submitMaintenanceRequest
+  const formAction = actions?.formAction ?? submitMaintenanceRequestForm
+  const uploadPhoto = actions?.uploadPhoto ?? uploadMaintenancePhoto
 
   const seededCategory = one(initial.category)
   const [category, setCategory] = useState<MaintenanceCategory | null>(
@@ -490,7 +541,7 @@ export function MaintenanceWizard({ initial = {} }: { initial?: WizardParams }) 
     for (const file of Array.from(fileList)) {
       const key = crypto.randomUUID()
       setPhotos((prev) => [...prev, { key, file, status: 'uploading' }])
-      const promise = uploadMaintenancePhoto(file)
+      const promise = uploadPhoto(file)
       uploadPromises.current.set(key, promise)
       promise.then((result) => {
         uploadResults.current.set(key, result)
@@ -540,7 +591,7 @@ export function MaintenanceWizard({ initial = {} }: { initial?: WizardParams }) 
 
     startTransition(async () => {
       const photoDocumentIds = await waitForPendingUploads()
-      const result = await submitMaintenanceRequest({
+      const result = await submit({
         category,
         promptAnswers,
         troubleshooting,
@@ -550,7 +601,7 @@ export function MaintenanceWizard({ initial = {} }: { initial?: WizardParams }) 
         photoDocumentIds,
       })
       if ('ticketId' in result) {
-        router.push(`/portal/maintenance/${result.ticketId}`)
+        router.push(actions?.doneHref ?? `/portal/maintenance/${result.ticketId}`)
         return
       }
       if (result.error) setError(result.error)
@@ -965,7 +1016,7 @@ export function MaintenanceWizard({ initial = {} }: { initial?: WizardParams }) 
             the no-JS path has none by construction.
           */}
           <form
-            action={submitMaintenanceRequestForm}
+            action={formAction}
             onSubmit={(event) => {
               event.preventDefault()
               handleSubmit()
@@ -983,7 +1034,7 @@ export function MaintenanceWizard({ initial = {} }: { initial?: WizardParams }) 
               Back
             </a>
             <button type="submit" className={NEXT_BUTTON} disabled={isPending}>
-              {isPending ? 'Sending…' : 'Send request'}
+              {isPending ? 'Sending…' : submitLabel}
             </button>
             <CarriedAnswers answers={answers} owns={() => false} />
           </form>
