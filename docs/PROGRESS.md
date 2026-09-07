@@ -9087,3 +9087,13 @@ shared-page substring trap CLAUDE.md already documents.
   is warned on every single turn with no way to say so once.
 - Nothing backfills. Units turned before today keep whatever live codes they
   had; there is no evidence about those tenancies worth guessing from.
+
+**The gate.** Lint, typecheck, `npm test` (2,972 passed), `npm run build`,
+`db:drift` (no difference) and `check:ship-deps` all green locally; the touched
+e2e specs — turnover, leases, confidential, operational, access-codes-move-in —
+ran 39 passed, 0 failed, 0 flaky against the production build. **CI run
+`34149430933` on `6568b95` passed** (checked, not assumed). Worth noting that
+**R-175's own run `34148473563` was CANCELLED, not green** — this item's push
+landed fourteen minutes into it and the concurrency group killed it, so R-175
+never got a verdict of its own. Nothing is outstanding from that: R-176's run is
+cumulative on `main` and covers R-175's code, and it passed.
