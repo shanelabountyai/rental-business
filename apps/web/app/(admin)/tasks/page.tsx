@@ -2,7 +2,7 @@ import { scopeIsEmpty } from '@rental/core/rbac'
 import Link from 'next/link'
 import { currentScope as writeScope, requireScope } from '@/lib/auth/guard.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
-import { myDayTasks, pendingApprovals, rollupByProperty } from '@/lib/tasks/queries.ts'
+import { myDayTasks, openTasksOfType, rollupByProperty } from '@/lib/tasks/queries.ts'
 import { scrollableRegionProps } from '@/components/ui-classes.ts'
 
 export const metadata = { title: 'Tasks — Rental Operations' }
@@ -11,6 +11,34 @@ const PRIORITY_LABELS: Record<string, string> = {
   EMERGENCY: 'Emergency',
   URGENT: 'Urgent',
   ROUTINE: 'Routine',
+}
+
+/**
+ * The drill-down views: one task type, every open row in scope, whoever it is
+ * assigned to and whenever it was raised (`openTasksOfType`).
+ *
+ * `serve_notice_offline` is R-173's "cannot be reached electronically" queue.
+ * It is a view over the one Task table (D-9) rather than a second queue, and
+ * it is a view rather than a page of its own because "my day" is the wrong
+ * lens for it: a notice we could not deliver is not less owed because it was
+ * raised on Tuesday and belongs to a colleague.
+ */
+const DRILL_DOWNS: Record<
+  string,
+  { heading: string; blurb: (count: number) => string; empty: string }
+> = {
+  workorder_approval: {
+    heading: 'Pending approvals',
+    blurb: (count) =>
+      `${count} work order${count === 1 ? '' : 's'} waiting on a decision.`,
+    empty: 'Nothing waiting on approval.',
+  },
+  serve_notice_offline: {
+    heading: 'Cannot be reached electronically',
+    blurb: (count) =>
+      `${count} notice${count === 1 ? '' : 's'} that has to be served on paper. Open one, print it, and record the service on the notice itself.`,
+    empty: 'Everybody we owe a notice can be reached electronically.',
+  },
 }
 
 // The one work queue (D-9): every staff queue in the product is a view over
@@ -30,12 +58,13 @@ export default async function TasksPage({
   // R-050's dashboard drills the "pending approvals" tile in here rather
   // than to `myDayTasks` - an approval is urgent to the owner regardless of
   // assignee or businessDate, which is exactly what that query excludes.
-  // See `pendingApprovals`'s own comment.
-  const approvalsOnly = type === 'workorder_approval'
+  // See `openTasksOfType`'s own comment. R-173's offline-service queue is
+  // the second view through the same door.
+  const drillDown = type != null ? DRILL_DOWNS[type] : undefined
 
   const [tasks, rollup, taskWriteScope] = await Promise.all([
-    approvalsOnly ? pendingApprovals(scope) : myDayTasks(scope, actor.id, now),
-    approvalsOnly ? Promise.resolve([]) : rollupByProperty(scope, now),
+    drillDown ? openTasksOfType(scope, type!) : myDayTasks(scope, actor.id, now),
+    drillDown ? Promise.resolve([]) : rollupByProperty(scope, now),
     writeScope('task.write'),
   ])
   const canWrite = !scopeIsEmpty(taskWriteScope)
@@ -45,13 +74,12 @@ export default async function TasksPage({
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">
-            {approvalsOnly ? 'Pending approvals' : 'My day'}
+            {drillDown ? drillDown.heading : 'My day'}
           </h1>
           <p className="text-muted-foreground text-sm">
-            {approvalsOnly ? (
+            {drillDown ? (
               <>
-                {tasks.length} work order{tasks.length === 1 ? '' : 's'} waiting on
-                a decision.{' '}
+                {drillDown.blurb(tasks.length)}{' '}
                 <Link href="/tasks" className="underline underline-offset-2">
                   Back to my day
                 </Link>
@@ -65,7 +93,7 @@ export default async function TasksPage({
             )}
           </p>
         </div>
-        {canWrite && !approvalsOnly && (
+        {canWrite && !drillDown && (
           <Link
             href="/tasks/new"
             className="bg-primary text-primary-foreground focus-visible:ring-ring flex min-h-11 items-center rounded-md px-4 py-2 text-sm font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
@@ -77,7 +105,7 @@ export default async function TasksPage({
 
       {tasks.length === 0 ? (
         <p className="text-muted-foreground text-sm">
-          {approvalsOnly ? 'Nothing waiting on approval.' : 'Nothing due today or overdue. Nice.'}
+          {drillDown ? drillDown.empty : 'Nothing due today or overdue. Nice.'}
         </p>
       ) : (
         <ul className="flex flex-col divide-y rounded-md border">

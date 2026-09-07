@@ -1,8 +1,10 @@
 import { friendlyTimestamp } from '@rental/core/scheduling'
+import Link from 'next/link'
 import { requireScope } from '@/lib/auth/guard.ts'
 import { deadLetteredEvents } from '@/lib/jobs/outbox.ts'
 import { listNotifications } from '@/lib/notifications/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
+import { countOpenTasksOfType } from '@/lib/tasks/queries.ts'
 
 export const metadata = { title: 'Notifications — Rental Operations' }
 
@@ -30,6 +32,9 @@ const SUPPRESSION_LABELS: Record<string, string> = {
   no_address: 'no address on file',
   kill_switch: 'sending is switched off',
   unsupported_channel: 'no provider for this channel',
+  sms_opt_out: 'this number has blocked our texts',
+  no_consent: 'no SMS consent on file',
+  digest_batched: 'batched into the daily digest',
 }
 
 const CHANNEL_LABELS: Record<string, string> = {
@@ -67,6 +72,13 @@ export default async function NotificationsPage() {
   // the money screen's drift panel and announcement history follow.
   const deadLetters = permissionScope.everything ? await deadLetteredEvents() : null
 
+  // R-173. This screen exists to answer "did they get it, and if not, why
+  // not?", so it is where the one unanswerable case belongs: a recipient with
+  // no email and no phone, whose locked-category notice the engine could only
+  // record as undeliverable. The work of serving those is a Task like every
+  // other queue in this product (D-9), and this is the door into it.
+  const unreachable = await countOpenTasksOfType(scope, 'serve_notice_offline')
+
   return (
     <div className="flex flex-col gap-6">
       <header className="flex flex-col gap-1">
@@ -76,6 +88,19 @@ export default async function NotificationsPage() {
           deliberately did not. Append-only.
         </p>
       </header>
+
+      {unreachable > 0 && (
+        <p className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          {unreachable} notice{unreachable === 1 ? '' : 's'} could
+          not be delivered electronically at all.{' '}
+          <Link
+            href="/tasks?type=serve_notice_offline"
+            className="underline underline-offset-4"
+          >
+            Open the queue to print and post
+          </Link>
+        </p>
+      )}
 
       {notifications.length === 0 ? (
         <p className="text-muted-foreground text-sm">

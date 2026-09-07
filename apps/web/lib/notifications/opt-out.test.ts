@@ -263,6 +263,108 @@ describe('sending to a blocked number', () => {
   })
 })
 
+// R-173: THE COMMONER CASE, WHICH EVERY BRANCH ABOVE MISSED.
+//
+// A carrier STOP is a tenant who had a phone and used it. `Tenant.email` and
+// `Tenant.phone` are BOTH nullable, and the tenancy with neither - inherited
+// with the building, pays by check, no email - was recorded as notified
+// through a portal it could never sign into: `tenant-magic-link` resolves by
+// email address, so with no email on file there is no way in, ever. The send
+// log said SENT and nobody was told anything.
+describe('a recipient we hold no address for at all', () => {
+  const context = {
+    propertyName: 'Unreachable House',
+    unitName: 'A',
+    scheduledStart: '2026-08-20T15:00:00Z',
+    scheduledEnd: '2026-08-20T17:00:00Z',
+    timezone: 'America/Chicago',
+    reason: 'Annual inspection',
+  }
+
+  it('suppresses the PORTAL row too, rather than calling it a delivery', async () => {
+    const key = `test:no-address:${randomUUID()}`
+    await notify({
+      category: 'entry_notice',
+      templateKey: 'entry.notice',
+      recipient: { type: 'TENANT', id: tenantId, phone: null, email: null },
+      context,
+      propertyId,
+      idempotencyKey: key,
+      now: new Date('2026-08-18T15:00:00Z'),
+    })
+
+    const rows = await prisma.notification.findMany({
+      where: { idempotencyKey: { startsWith: key } },
+      include: { delivery: true },
+    })
+    notificationIds.push(...rows.map((r) => r.id))
+
+    // Every channel, not just the two with an obvious address. The PORTAL row
+    // is the one this item exists for.
+    expect(rows.length).toBeGreaterThan(0)
+    for (const row of rows) {
+      expect(row.delivery?.status).toBe('SUPPRESSED')
+      expect(row.delivery?.suppressedReason).toBe('no_address')
+    }
+    expect(rows.find((r) => r.channel === 'PORTAL')).toBeDefined()
+  })
+
+  it('RAISES THE SAME TASK a carrier block does, and says what to do', async () => {
+    const key = `test:no-address-task:${randomUUID()}`
+    await notify({
+      category: 'entry_notice',
+      templateKey: 'entry.notice',
+      recipient: { type: 'TENANT', id: tenantId, phone: null, email: null },
+      context,
+      propertyId,
+      idempotencyKey: key,
+      now: new Date('2026-08-18T15:00:00Z'),
+    })
+
+    const task = await prisma.task.findFirst({
+      where: { propertyId, type: 'serve_notice_offline', subjectId: key },
+    })
+    expect(task).not.toBeNull()
+    taskIds.push(task!.id)
+    expect(task!.priority).toBe('URGENT')
+    // The two triggers must stay distinguishable in the title: the person
+    // picking this up needs to know whether another channel already carried
+    // the notice (a carrier block) or whether the paper IS the service.
+    expect(task!.title).toMatch(/print and post/i)
+    expect(task!.title).not.toMatch(/blocking our texts/i)
+  })
+
+  it('leaves the PORTAL row alone when there is any address at all', async () => {
+    // The regression guard on the change above. A tenant with an email but no
+    // phone can be sent a magic link, so the portal IS reachable and the row
+    // is a real delivery - and no task is owed, because the notice went out.
+    const key = `test:email-only:${randomUUID()}`
+    await notify({
+      category: 'entry_notice',
+      templateKey: 'entry.notice',
+      recipient: { type: 'TENANT', id: tenantId, phone: null, email: 'reachable@example.test' },
+      context,
+      propertyId,
+      idempotencyKey: key,
+      now: new Date('2026-08-18T15:00:00Z'),
+    })
+
+    const rows = await prisma.notification.findMany({
+      where: { idempotencyKey: { startsWith: key } },
+      include: { delivery: true },
+    })
+    notificationIds.push(...rows.map((r) => r.id))
+
+    const portal = rows.find((r) => r.channel === 'PORTAL')
+    expect(portal?.delivery?.status).not.toBe('SUPPRESSED')
+
+    const task = await prisma.task.findFirst({
+      where: { propertyId, type: 'serve_notice_offline', subjectId: key },
+    })
+    expect(task).toBeNull()
+  })
+})
+
 // R-106b: THE OPT-OUT TWILIO TELLS US ABOUT WITHOUT EVER SENDING ANYTHING.
 //
 // Every test above learns about a STOP either from an inbound keyword or from

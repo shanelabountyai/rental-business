@@ -108,23 +108,27 @@ export async function rollupByProperty(
 }
 
 /**
- * Every open work-order approval, in scope, regardless of assignee or
+ * Every open task of one type, in scope, regardless of assignee or
  * businessDate (R-050). `myDayTasks()` deliberately excludes both a
  * future-dated task and anything assigned to someone else - right for "what
- * should I do today", wrong for an approval, which is urgent to the owner
- * no matter who it is assigned to or when it was queued. Same where-clause
- * `pendingApprovalsSummary()` counts in lib/dashboard/queries.ts - this is
- * its list-returning sibling, for the dashboard tile's drill-down.
+ * should I do today", wrong for a work-order approval, which is urgent to the
+ * owner no matter who it is assigned to or when it was queued. Same
+ * where-clause `pendingApprovalsSummary()` counts in lib/dashboard/queries.ts
+ * - this is its list-returning sibling, for the dashboard tile's drill-down.
+ *
+ * R-173 made it take the type rather than hard-coding `workorder_approval`:
+ * `serve_notice_offline` wants exactly the same query for exactly the same
+ * reason. A notice nobody can be sent must not drop off the screen because it
+ * is assigned to a colleague or was raised yesterday.
  */
-export async function pendingApprovals(scope: ResolvedScope): Promise<TaskWithProperty[]> {
+export async function openTasksOfType(
+  scope: ResolvedScope,
+  type: string,
+): Promise<TaskWithProperty[]> {
   if (scope.propertyIds.length === 0) return []
 
   const tasks = await prisma.task.findMany({
-    where: {
-      propertyId: { in: scope.propertyIds },
-      type: 'workorder_approval',
-      status: { in: [...OPEN_STATUSES] },
-    },
+    where: openTasksWhere(scope, type),
     include: { property: { select: { id: true, name: true } } },
   })
 
@@ -133,6 +137,30 @@ export async function pendingApprovals(scope: ResolvedScope): Promise<TaskWithPr
       priorityRank(a.priority) - priorityRank(b.priority) ||
       a.businessDate.getTime() - b.businessDate.getTime(),
   )
+}
+
+/**
+ * The same queue, counted. For a screen that only needs to know whether there
+ * is one - R-173's banner on the send log - where fetching every row in a
+ * portfolio-wide scope to call `.length` on it would be the expensive way to
+ * ask a yes/no question. Same where-clause, deliberately shared rather than
+ * retyped: a filter that drifts between the count and the list is a badge
+ * saying 3 over a page showing 5.
+ */
+export async function countOpenTasksOfType(
+  scope: ResolvedScope,
+  type: string,
+): Promise<number> {
+  if (scope.propertyIds.length === 0) return 0
+  return prisma.task.count({ where: openTasksWhere(scope, type) })
+}
+
+function openTasksWhere(scope: ResolvedScope, type: string) {
+  return {
+    propertyId: { in: scope.propertyIds },
+    type,
+    status: { in: [...OPEN_STATUSES] },
+  }
 }
 
 export async function getTask(

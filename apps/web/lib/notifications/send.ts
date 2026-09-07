@@ -317,7 +317,24 @@ export async function notify(
   // and could not meet on the channel most tenants actually read. Texas
   // permits written notice, so posting on the door is a real answer - which
   // is why this raises work for a person rather than logging a warning.
-  if (smsBlocked && isLockedCategory(input.category) && input.propertyId) {
+  //
+  // R-173 GAVE IT ITS SECOND, COMMONER TRIGGER: NOBODY TO SEND TO AT ALL.
+  //
+  // A blocked number was the case D-38 was written about, and it is the rarer
+  // one. `Tenant.email` and `Tenant.phone` are both nullable, so the tenancy
+  // with neither on file - inherited, pays by check, no email - was falling
+  // through every branch here: SMS and EMAIL suppressed as `no_address`,
+  // PORTAL recorded as a live delivery to a portal they cannot sign into, and
+  // no task raised. The product recorded a legal notice as served and nobody
+  // was ever told. Unlike the opt-out case there is no other channel left, so
+  // this one is not a belt-and-braces task, it is the ONLY delivery.
+  const unreachable = !reachableElectronically(input.recipient)
+
+  if (
+    isLockedCategory(input.category) &&
+    input.propertyId &&
+    (smsBlocked || unreachable)
+  ) {
     await raiseNoticeTask({
       db,
       propertyId: input.propertyId,
@@ -325,7 +342,9 @@ export async function notify(
       timezone,
       now,
       idempotencyKey: input.idempotencyKey,
-      title: `Serve ${input.category.replace(/_/g, ' ')} another way - this tenant's phone is blocking our texts`,
+      title: unreachable
+        ? `Print and post ${input.category.replace(/_/g, ' ')} - we hold no email or phone for this ${input.recipient.type.toLowerCase()}`
+        : `Serve ${input.category.replace(/_/g, ' ')} another way - this tenant's phone is blocking our texts`,
     }).catch((error) => {
       // The notice went out on the other channels and those rows are already
       // written. A failure to raise the task must not lose them.
@@ -685,15 +704,39 @@ export async function dispatchPendingNotifications(
   return { sent, failed, remaining }
 }
 
+/**
+ * IS THERE ANY WAY AT ALL TO REACH THIS PERSON ELECTRONICALLY (R-173)?
+ *
+ * Both `Tenant.email` and `Tenant.phone` are nullable, and plenty of real
+ * tenancies have neither - an inherited tenant who pays by check, an elderly
+ * one who does not use email. This is the predicate that stops the engine
+ * pretending otherwise, and it is deliberately about the RECIPIENT rather
+ * than about a template's channel list: a template that only declares EMAIL
+ * says nothing about whether the person could have been texted.
+ */
+function reachableElectronically(recipient: NotificationRecipient): boolean {
+  return Boolean(recipient.email?.trim() || recipient.phone?.trim())
+}
+
 /// PORTAL has no external address: the "address" is the account itself, and
 /// the notification IS the delivery - it is read in the portal (R-018) off
 /// the same log this engine writes. Recording the recipient id keeps the
 /// column meaningful rather than blank for a third of all rows.
+///
+/// BUT AN ACCOUNT IS ONLY AN ADDRESS IF THE PERSON CAN GET INTO IT (R-173).
+/// Every portal in this product is entered by a link we send somewhere else -
+/// `tenant-magic-link` and `guarantor-magic-link` both mail a token to an
+/// email address, and R-025's vendor link is mailed or texted. A recipient
+/// with neither an email nor a phone on file has no way in, ever, so a PORTAL
+/// row reading SENT would record a delivery to a screen they cannot open -
+/// which is worse than no record, because the send log is the evidence that
+/// answers "did they get it". `no_address` is the truth, and it is what
+/// raises the offline-service task in `notify()`.
 function addressFor(
   channel: NotificationChannel,
   recipient: NotificationRecipient,
 ): string | null {
   if (channel === 'EMAIL') return recipient.email?.trim() || null
   if (channel === 'SMS') return recipient.phone?.trim() || null
-  return recipient.id
+  return reachableElectronically(recipient) ? recipient.id : null
 }

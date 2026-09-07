@@ -192,6 +192,24 @@ export default async function TaskDetailPage({
         </p>
       )}
 
+      {task.type === 'serve_notice_offline' && (
+        <p className="text-sm">
+          {/* R-173. A LINK, not a panel, for the same reason the refund task
+              above is one: the paper is the work, and the notice text is
+              already whole in the PDF. `type` rather than `subjectType` -
+              other things point at a Notification, and only this task type
+              means "nobody could be sent this". */}
+          <Link
+            href={`/tasks/${task.id}/printable`}
+            className="underline underline-offset-4"
+            target="_blank"
+            rel="noopener"
+          >
+            Print this notice to post on the door (PDF)
+          </Link>
+        </p>
+      )}
+
       {ticket && (
         <TriagePanel
           ticketId={ticket.id}
