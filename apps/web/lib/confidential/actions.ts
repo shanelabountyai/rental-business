@@ -20,6 +20,7 @@ import { redirect } from 'next/navigation'
 import { audit } from '@/lib/audit/index.ts'
 import { propertyResource, requirePermission, requireScope } from '@/lib/auth/guard.ts'
 import { rulesFor } from '@/lib/jurisdiction/queries.ts'
+import { retireUnitAccessCodes } from '@/lib/locks/access-codes.ts'
 import { issueTenantLockCodeFor, revokeTenantLockCodes } from '@/lib/locks/tenant-codes.ts'
 import {
   buildPartyChange,
@@ -373,19 +374,12 @@ export async function orderLockChange(
       )
     })
 
-    // Every code still open-ended on this unit. `effectiveTo` is R-005's own
-    // retirement mechanism (see `addAccessCode`), reused rather than a second
-    // notion of "retired" - a code with an end date is already what every
-    // reader here means by "no longer current".
-    const live = await tx.accessCode.findMany({
-      where: { unitId: found.lease.unitId, effectiveTo: null },
-      select: { id: true },
-    })
-    if (live.length > 0) {
-      await tx.accessCode.updateMany({
-        where: { id: { in: live.map((c) => c.id) } },
-        data: { effectiveTo: new Date() },
-      })
+    // Every code still open-ended on this unit (R-176 shares this with the
+    // move-out path; see `retireUnitAccessCodes` for why `effectiveTo` is
+    // the retirement mechanism). Its OWN audit action, not the move-out one:
+    // this entry is keyed to the CASE, which is what a safety review reads.
+    const retired = await retireUnitAccessCodes(tx, found.lease.unitId)
+    if (retired > 0) {
       await audit(
         {
           action: 'confidential.codes_retired',
@@ -393,7 +387,7 @@ export async function orderLockChange(
           entityId: caseId,
           propertyId: found.lease.propertyId,
           // How many, never which.
-          after: { caseId, unitId: found.lease.unitId, retiredCount: live.length },
+          after: { caseId, unitId: found.lease.unitId, retiredCount: retired },
         },
         tx,
       )

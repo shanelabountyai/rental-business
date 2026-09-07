@@ -1,6 +1,15 @@
 import 'server-only'
 
+import { recordAudit } from '@rental/core/audit'
 import { prisma, type TurnoverProject } from '@rental/db'
+
+// `recordAudit` straight from core rather than the app-layer `audit()`
+// wrapper, the same call `auto-make-ready.ts` makes and for its reason: one
+// of this function's two callers is a background job with no request to
+// resolve an actor from, and the wrapper imports Auth.js to do that.
+
+export const REKEY_SCOPE =
+  'Re-key the unit - the departing tenant may still hold a working key'
 
 // The one place anything creates a TurnoverProject (LEASE-12, R-072).
 // Called post-commit, best-effort, from both places a unit goes MAKE_READY:
@@ -35,12 +44,58 @@ export async function startTurnoverProjectForLease(
   })
   if (!lease.moveOutAt) return null
 
-  return prisma.turnoverProject.upsert({
-    where: { leaseId: lease.id },
-    create: { propertyId: lease.propertyId, unitId: lease.unitId, leaseId: lease.id },
-    // A no-op write to the row that already exists - upsert requires a
-    // non-empty `update`, and reassigning the same propertyId is the
-    // harmless value already on it.
-    update: { propertyId: lease.propertyId },
+  return prisma.$transaction(async (tx) => {
+    const project = await tx.turnoverProject.upsert({
+      where: { leaseId: lease.id },
+      create: { propertyId: lease.propertyId, unitId: lease.unitId, leaseId: lease.id },
+      // A no-op write to the row that already exists - upsert requires a
+      // non-empty `update`, and reassigning the same propertyId is the
+      // harmless value already on it.
+      update: { propertyId: lease.propertyId },
+    })
+
+    // R-176. THE RE-KEY, opened with the turn rather than left for somebody
+    // to remember. Ending the tenancy retires our record of the unit's
+    // keypad codes (`retireUnitAccessCodes`) - it changes no physical lock,
+    // and a departing tenant who copied a key still has one. This work order
+    // is the act that closes that gap, so it exists from the moment the turn
+    // does.
+    //
+    // Idempotent on "a REKEY item already exists", NOT on which upsert
+    // branch ran: the whole contract of this function is that a re-run is a
+    // no-op, and a turn whose re-key somebody has already added by hand does
+    // not want a second one. Two concurrent first-calls could still both
+    // insert - there is no unique key to lean on and a duplicate line on a
+    // punch list is a cosmetic problem, not a safety one.
+    const existingRekey = await tx.workOrder.findFirst({
+      where: { turnoverProjectId: project.id, turnoverStage: 'REKEY' },
+      select: { id: true },
+    })
+    if (!existingRekey) {
+      const workOrder = await tx.workOrder.create({
+        data: {
+          propertyId: project.propertyId,
+          unitId: project.unitId,
+          turnoverProjectId: project.id,
+          turnoverStage: 'REKEY',
+          // URGENT, not ROUTINE like the rest of the punch list and not
+          // EMERGENCY. Until this closes, somebody who no longer lives there
+          // can open the door - that outranks paint. Emergency is R-029's
+          // after-hours paging tier and would wake a rota for a vacant unit.
+          priority: 'URGENT',
+          scope: REKEY_SCOPE,
+        },
+      })
+      await recordAudit(tx, {
+        actor: { type: 'SYSTEM', ref: 'turnover.start' },
+        action: 'workorder.created',
+        entityType: 'WorkOrder',
+        entityId: workOrder.id,
+        propertyId: project.propertyId,
+        after: { scope: workOrder.scope, priority: workOrder.priority, ticketId: null },
+      })
+    }
+
+    return project
   })
 }

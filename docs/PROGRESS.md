@@ -8981,3 +8981,109 @@ The full sweep is `Total: 1188 tests in 97 files` and belongs to CI, which
 **was read rather than assumed**: `gh run list` shows R-174's own run
 (`34146607058`) completed green, as did the three before it. The GitHub
 Actions billing block that eleven entries went on repeating is still lifted.
+
+---
+
+## R-176 — Move-out retires the codes, and the turn opens the re-key
+**Commit:** `pending`  ·  **Date:** 2026-09-07
+
+**What it built.** Review finding 8 (LEASE-12, PROP-04). One grep settled the
+shape of it: the only code anywhere in this repo that had ever written
+`AccessCode.effectiveTo` on a move-out was R-091's confidential safety-case
+path — a restraining order. An ordinary tenancy ending changed nothing. The
+keypad combination the departing tenant had used for a year stayed live in our
+record, which meant it stayed revealable to any vendor picking up a job at that
+property (`accesscode.revealed`, PROP-03), stayed offerable to the next tenant
+through `issueAccessCodeToTenant`, and stayed printed on the property handoff
+packet. Nothing anywhere prompted anybody to change the lock, and
+`markTurnoverRentReady` would flip the unit to VACANT and let it be listed with
+none of that having happened.
+
+*The retire.* `retireUnitAccessCodes` in
+[apps/web/lib/locks/access-codes.ts](apps/web/lib/locks/access-codes.ts) — one
+`updateMany` stamping `effectiveTo` on every code still open-ended on the unit,
+returning the count. It runs **inside** both transactions that end a tenancy:
+`changeLeaseStatus`'s in-force → not-in-force branch, and the nightly
+`unit.auto_make_ready` job for a lease that simply lapsed. R-091's own path now
+calls it instead of its private copy, which is ten lines fewer and keeps its
+case-keyed `confidential.codes_retired` entry unchanged. New audit action
+`accesscode.retired_on_move_out`, carrying the count and never which codes.
+
+*The re-key.* `startTurnoverProjectForLease` now opens a work order at
+`turnoverStage: 'REKEY'`, priority URGENT, with the turn — in one transaction
+with the project upsert, idempotent on *a REKEY item already exists* rather than
+on which upsert branch ran, so a re-run and a turn whose re-key somebody added
+by hand both stay at one.
+
+*The gate.* `markTurnoverRentReady` counts REKEY work orders that have reached
+WORK_COMPLETE, VERIFIED, INVOICED or CLOSED. None, and it refuses once with the
+sentence and an `acknowledgeNoRekey` checkbox; ticked, it proceeds and the
+`turnover.rent_ready` audit entry carries `rekeyRecorded: false`.
+
+**What it decided (D-182).** *Inside the transaction, unlike every sibling.*
+Billing, proration, deposit disposition and the turn itself are all best-effort
+post-commit here, on the argument that a re-run catches them up. A stale
+`AccessCode` cannot be caught up by anything, because nothing knows to ask: it
+just reads live and gets handed to a stranger. `revokeTenantLockCodes` stays
+outside for the reason it always has — it talks to a device, and a transaction
+must not hold a network call open.
+
+*The retire changes no lock.* `effectiveTo` closes our record; a tenant who cut
+a key still has one. That is why the two halves ship in the same item and why
+neither would have been worth doing alone.
+
+*`effectiveTo`, not a new column.* Every reader that answers *what is the
+current code* already filters `effectiveTo: null` — the vendor reveal, the
+tenant issue, the operational panel, `access-code-queries`, the handoff packet.
+Checked all five before writing anything, which is what made this a
+one-`updateMany` item rather than an enum sweep. The one deliberate exception
+is `getAccessCodeHistory`, PROP-03's version log, which shows every version and
+labels the retired ones *replaced* — that is what it is for, and it is keyed off
+the slots that are currently live, so a unit with nothing live shows nothing.
+
+*"Re-key done" is not "work order closed".* `OPEN_WORK_ORDER_STATUSES`
+deliberately excludes VERIFIED because somebody still has to pay the vendor —
+correct for that question and wrong for this one. A locksmith who has changed
+the lock and not been paid has changed the lock.
+
+*Warned, never blocked (R-027).* A PM who re-keyed it themselves on Saturday is
+doing nothing wrong, and a unit that cannot be listed over a paperwork gap costs
+real rent. What the product owes them is that they cannot do it without being
+told, and that the override is on the record afterwards.
+
+**A real bug found alongside.** The turnover panel's rent-ready form held its
+own `<FormAlerts>` *inside* `{!turnover.rentReadyAt && …}` — the exact trap
+CLAUDE.md names (*a form's result region must not live inside a panel whose own
+render condition the action can change*). Marking the turn ready revalidates the
+page, `rentReadyAt` stops being null, and the success notice unmounted with the
+form that produced it. The alerts now live outside the conditional, which is
+also what `aria-live` needs.
+
+**Three test cleanups were forced, not chosen**, all the same shape. The new
+re-key work order pins its unit, so `auto-make-ready.test.ts` and
+`leases.spec.ts` both had to delete work orders (and access codes) before their
+units — `leases.spec.ts` already carried two comments about exactly this FK
+class, from R-084 and R-160. And `start.test.ts` deleted its property, which the
+AuditLog row this function now writes makes impossible, since the append-only
+trigger refuses the nullable FK's SetNull cascade; it deactivates now, per the
+cleanup-by-ownership rule.
+
+**And one assertion of mine could never have passed.** The first version
+checked the retired code was gone with `getByText('Front door')` — the label on
+the seeded code. The add-a-code form on that same page carries `"Front door"`
+as its *hint*, and `getByText` is a case-insensitive substring match, so the
+locator resolved to 1 whatever the product did. The panel's own empty state
+(*No codes on file.*) is the honest assertion. Sixth instance of the
+shared-page substring trap CLAUDE.md already documents.
+
+**What it left behind.**
+- Nothing warns on `/leases`, the dashboard or the listing flow that a unit is
+  being listed with an open re-key. The warning fires only at the rent-ready
+  press, so a unit marked ready before the item existed carries no signal at
+  all. R-178 (the sequenced turn, which already depends on this item) is where
+  a stalled or skipped stage becomes visible portfolio-wide.
+- A CANCELED re-key reads identically to one that never happened. That is right
+  for the warning, and it means an operator whose units have no keypads at all
+  is warned on every single turn with no way to say so once.
+- Nothing backfills. Units turned before today keep whatever live codes they
+  had; there is no evidence about those tenancies worth guessing from.

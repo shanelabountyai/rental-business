@@ -1,3 +1,4 @@
+import { sealSecret } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { runDueJobs } from '../jobs/runner.ts'
@@ -40,6 +41,11 @@ beforeAll(async () => {
 })
 
 afterEach(async () => {
+  // R-176: the turn now opens a re-key WorkOrder, which pins the unit. It
+  // goes first for the same reason the turnover project goes before the
+  // lease - and AccessCode is the other new row pointing at the unit.
+  await prisma.workOrder.deleteMany({ where: { unitId: { in: unitIds } } })
+  await prisma.accessCode.deleteMany({ where: { unitId: { in: unitIds } } })
   // TurnoverProject.leaseId is RESTRICT (R-072) - a real transition in this
   // file now starts one, same as R-071's deposit and R-011's task before it.
   await prisma.turnoverProject.deleteMany({ where: { leaseId: { in: leaseIds } } })
@@ -240,6 +246,58 @@ describe('the auto-make-ready job', () => {
     const project = await prisma.turnoverProject.findUnique({ where: { leaseId: lease.id } })
     expect(project).not.toBeNull()
     expect(project?.unitId).toBe(unit.id)
+
+    // R-176: and the turn opens the re-key that actually changes the lock.
+    expect(
+      await prisma.workOrder.count({
+        where: { turnoverProjectId: project!.id, turnoverStage: 'REKEY' },
+      }),
+    ).toBe(1)
+  })
+
+  // R-176. A lease that lapsed unattended is the case nobody walked out of,
+  // so nothing else prompts anybody to think about the keypad - and the code
+  // is revealed to any vendor with a job here until it is retired.
+  it('retires the unit access codes when the tenancy lapses', async () => {
+    const unit = await makeUnit('OCCUPIED')
+    const lease = await makeLease(unit.id, { endsOn: '2026-06-30' })
+    const code = await prisma.accessCode.create({
+      data: {
+        unitId: unit.id,
+        type: 'LOCKBOX',
+        sealedCode: sealSecret('7392', 'access-code'),
+        version: 1,
+      },
+    })
+
+    await runAt('2026-07-02T08:00:00Z')
+
+    const after = await prisma.accessCode.findUniqueOrThrow({ where: { id: code.id } })
+    expect(after.effectiveTo).not.toBeNull()
+
+    const entry = await prisma.auditLog.findFirstOrThrow({
+      where: { entityId: lease.id, action: 'accesscode.retired_on_move_out' },
+    })
+    expect((entry.after as { retiredCount?: number }).retiredCount).toBe(1)
+  })
+
+  it('leaves the access codes alone when nothing transitions', async () => {
+    const unit = await makeUnit('OCCUPIED')
+    await makeLease(unit.id, { endsOn: '2026-12-31' })
+    const code = await prisma.accessCode.create({
+      data: {
+        unitId: unit.id,
+        type: 'LOCKBOX',
+        sealedCode: sealSecret('7392', 'access-code'),
+        version: 1,
+      },
+    })
+
+    await runAt('2026-07-02T08:00:00Z')
+
+    expect(
+      (await prisma.accessCode.findUniqueOrThrow({ where: { id: code.id } })).effectiveTo,
+    ).toBeNull()
   })
 
   it('emits nothing when no transition happens', async () => {

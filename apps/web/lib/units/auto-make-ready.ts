@@ -5,6 +5,7 @@ import { businessDateToUtc } from '@rental/core/scheduling'
 import { type LeaseStatus, prisma } from '@rental/db'
 import { emitEvent } from '@/lib/jobs/outbox.ts'
 import { SCHEDULED_JOBS } from '@/lib/jobs/runner.ts'
+import { retireUnitAccessCodes } from '@/lib/locks/access-codes.ts'
 import { startTurnoverProjectForLease } from '@/lib/turnover/start.ts'
 
 // recordAudit straight from packages/core/audit, not the app-layer
@@ -118,6 +119,24 @@ SCHEDULED_JOBS.push({
           before: { status: 'OCCUPIED' },
           after: { status: 'MAKE_READY' },
         })
+
+        // R-176. The same retire `changeLeaseStatus` does on the manual
+        // path, in this transaction for the same reason - and it matters
+        // MORE here, because a lease that lapsed unattended is one nobody
+        // walked out of, so nothing else is going to prompt anybody to think
+        // about the keypad. See `retireUnitAccessCodes` for why this changes
+        // no lock and `startTurnoverProjectForLease` below for what does.
+        const retired = await retireUnitAccessCodes(tx, lease.unitId)
+        if (retired > 0) {
+          await recordAudit(tx, {
+            actor: { type: 'SYSTEM', ref: 'unit.auto_make_ready' },
+            action: 'accesscode.retired_on_move_out',
+            entityType: 'Lease',
+            entityId: lease.id,
+            propertyId,
+            after: { unitId: lease.unitId, retiredCount: retired },
+          })
+        }
         return true
       })
       if (!madeReady) continue

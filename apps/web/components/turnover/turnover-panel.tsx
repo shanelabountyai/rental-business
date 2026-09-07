@@ -3,7 +3,7 @@
 import { friendlyBusinessDate, friendlyDate } from '@rental/core/scheduling'
 import { useActionState } from 'react'
 import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
-import { SelectField, TextField } from '@/components/form/field.tsx'
+import { CheckboxField, SelectField, TextField } from '@/components/form/field.tsx'
 import type { TurnoverFormState } from '@/lib/turnover/actions.ts'
 import type { WorkOrderFormState } from '@/lib/workorders/actions.ts'
 import { scrollableRegionProps } from '@/components/ui-classes.ts'
@@ -198,12 +198,39 @@ export function TurnoverPanel({
             <SubmitButton label="Save" />
           </form>
 
-          {!turnover.rentReadyAt && (
-            <form action={rentReadyFormAction} className="border-t pt-4">
-              <FormAlerts state={rentReadyState} />
-              <SubmitButton label="Mark rent-ready" />
-            </form>
-          )}
+          {/* The alerts live OUTSIDE the conditional below, which the action
+              itself can turn off: marking the turn rent-ready revalidates
+              this page, `rentReadyAt` stops being null, and a result region
+              inside the form would unmount carrying its own success notice
+              (CLAUDE.md's "a form's result region must not live inside a
+              panel whose own render condition the action can change"). It is
+              also what aria-live needs - a region that arrives with its text
+              already in it announces nothing. */}
+          <div className="flex flex-col gap-3 border-t pt-4">
+            <FormAlerts state={rentReadyState} />
+            {rentReadyState.warnings?.map((warning) => (
+              <p
+                key={warning}
+                className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900"
+              >
+                {warning}
+              </p>
+            ))}
+            {!turnover.rentReadyAt && (
+              <form action={rentReadyFormAction} className="flex flex-col gap-3">
+                {/* R-176. Shown only once the warning has fired, the same
+                    shape the party-change panel uses: an override that is
+                    always on screen is one nobody reads. */}
+                {rentReadyState.warnings && rentReadyState.warnings.length > 0 && (
+                  <CheckboxField
+                    label="No re-key is recorded and I want to mark this rent-ready anyway"
+                    name="acknowledgeNoRekey"
+                  />
+                )}
+                <SubmitButton label="Mark rent-ready" />
+              </form>
+            )}
+          </div>
         </>
       )}
     </section>

@@ -300,6 +300,14 @@ export const AUDIT_ACTIONS = [
   /// call for the same reason - a re-key is exactly the kind of fact a
   /// later dispute asks "who did this and when" about).
   'accesscode.set',
+  /// R-176: every live `AccessCode` on a unit was retired because the
+  /// tenancy ended. Its own action rather than a reuse of `accesscode.set`,
+  /// which is somebody deliberately recording a code - this is the system
+  /// closing our record of codes a departing tenant knows, and the question
+  /// a later break-in dispute asks of it ("was the old code still live?") is
+  /// not the question `accesscode.set` answers. Carries the COUNT, never
+  /// which codes: the same call `confidential.codes_retired` already makes.
+  'accesscode.retired_on_move_out',
 
   /// Scheduled work that did not complete (R-006). Recorded rather than only
   /// logged, because a nightly job failing silently is how a month of missing

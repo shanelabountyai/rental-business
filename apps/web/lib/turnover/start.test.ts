@@ -1,14 +1,11 @@
 import { prisma } from '@rental/db'
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
-import { startTurnoverProjectForLease } from './start.ts'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { REKEY_SCOPE, startTurnoverProjectForLease } from './start.ts'
 
 const CHICAGO = 'America/Chicago'
 
 let entityId: string
 const propertyIds: string[] = []
-const unitIds: string[] = []
-const leaseIds: string[] = []
-const projectIds: string[] = []
 
 beforeAll(async () => {
   const entity = await prisma.legalEntity.create({
@@ -17,18 +14,14 @@ beforeAll(async () => {
   entityId = entity.id
 })
 
-afterEach(async () => {
-  await prisma.turnoverProject.deleteMany({ where: { id: { in: projectIds } } })
-  await prisma.lease.deleteMany({ where: { id: { in: leaseIds } } })
-  await prisma.unit.deleteMany({ where: { id: { in: unitIds } } })
-  await prisma.property.deleteMany({ where: { id: { in: propertyIds } } })
-  projectIds.length = 0
-  leaseIds.length = 0
-  unitIds.length = 0
-  propertyIds.length = 0
-})
-
+// DEACTIVATED, NEVER DELETED (R-176). This function now writes an AuditLog
+// row for the re-key work order it opens, and `AuditLog` is append-only by
+// trigger with a nullable `propertyId` FK - so deleting the property fires a
+// SetNull cascade the trigger refuses, and the whole delete dies. Marking the
+// property inactive is also what `notifications.test.ts` reads as "this spec
+// has finished" (CLAUDE.md's cleanup-by-ownership rule).
 afterAll(async () => {
+  await prisma.property.updateMany({ where: { id: { in: propertyIds } }, data: { active: false } })
   await prisma.legalEntity.updateMany({ where: { id: entityId }, data: { active: false } })
   await prisma.$disconnect()
 })
@@ -49,7 +42,6 @@ async function seedLease(moveOutAt: Date | null) {
   })
   propertyIds.push(property.id)
   const unit = await prisma.unit.create({ data: { propertyId: property.id, name: `U-${unique}` } })
-  unitIds.push(unit.id)
   const lease = await prisma.lease.create({
     data: {
       propertyId: property.id,
@@ -61,7 +53,6 @@ async function seedLease(moveOutAt: Date | null) {
       moveOutAt,
     },
   })
-  leaseIds.push(lease.id)
   return { property, unit, lease }
 }
 
@@ -71,7 +62,6 @@ describe('startTurnoverProjectForLease', () => {
 
     const project = await startTurnoverProjectForLease(lease.id)
     expect(project).not.toBeNull()
-    projectIds.push(project!.id)
     expect(project!.unitId).toBe(unit.id)
     expect(project!.rentReadyAt).toBeNull()
   })
@@ -90,11 +80,36 @@ describe('startTurnoverProjectForLease', () => {
     const { lease } = await seedLease(new Date('2026-06-30T18:00:00Z'))
 
     const first = await startTurnoverProjectForLease(lease.id)
-    projectIds.push(first!.id)
     const second = await startTurnoverProjectForLease(lease.id)
 
     expect(second!.id).toBe(first!.id)
     const count = await prisma.turnoverProject.count({ where: { leaseId: lease.id } })
+    expect(count).toBe(1)
+  })
+
+  // R-176.
+  it('opens an urgent re-key work order with the turn', async () => {
+    const { lease } = await seedLease(new Date('2026-06-30T18:00:00Z'))
+
+    const project = await startTurnoverProjectForLease(lease.id)
+
+    const rekeys = await prisma.workOrder.findMany({
+      where: { turnoverProjectId: project!.id, turnoverStage: 'REKEY' },
+    })
+    expect(rekeys).toHaveLength(1)
+    expect(rekeys[0].scope).toBe(REKEY_SCOPE)
+    expect(rekeys[0].priority).toBe('URGENT')
+  })
+
+  it('does not open a second re-key on a re-run', async () => {
+    const { lease } = await seedLease(new Date('2026-06-30T18:00:00Z'))
+
+    const project = await startTurnoverProjectForLease(lease.id)
+    await startTurnoverProjectForLease(lease.id)
+
+    const count = await prisma.workOrder.count({
+      where: { turnoverProjectId: project!.id, turnoverStage: 'REKEY' },
+    })
     expect(count).toBe(1)
   })
 })

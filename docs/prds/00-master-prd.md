@@ -125,6 +125,7 @@ Foundation entity model: **Entity (LLC) → Property → Unit(s) → Lease → T
 - Given a work order on a unit, when the assigned tech opens it, then unit operational data is visible inline without navigation.
 - Given access codes, when an external vendor views a work order, then codes are revealed per-work-order only and each reveal is logged.
 - Given an emergency ticket in a leak/gas/electrical category, when the tenant is in the intake flow, then the relevant shutoff photo and location are shown immediately.
+- Given a unit with live access codes, when the tenancy ends, then every code is retired in the same transaction — so no vendor reveal, tenant issue or handoff packet can carry a departing tenant's code — and the retirement is logged. Retiring the record changes no lock: the re-key work order LEASE-12 opens is what does (R-176, D-182).
 
 **PROP-04 [M]** As an owner, I can associate each property with an owning entity so all reporting and exports split by entity.
 - Given multiple entities, when I run any financial report, then I can filter and group by entity.
@@ -192,6 +193,8 @@ Foundation entity model: **Entity (LLC) → Property → Unit(s) → Lease → T
 **LEASE-11 [S]** As a PM, I can intake a tenant's notice to vacate via portal form (date, forwarding address, lease-notice-period check), timestamped; and issue owner non-renewal notices with delivery logging and just-cause-jurisdiction flags.
 
 **LEASE-12 [S]** As a PM, I can run turnover/make-ready as a mini-project: templated checklist (trash-out → repairs → paint → floors → clean → **re-key, logged**), tasks assignable to vendors in sequence, target rent-ready date, actual costs rolled up per turn, and a days-vacant clock from move-out to new move-in.
+- Given a move-out, when the turn starts, then a re-key work order is opened with it at urgent priority, without anybody having to remember (R-176).
+- Given a turn with no completed re-key, when a PM marks the unit rent-ready, then they are warned once and can proceed anyway; the override is recorded. Never a hard block — a PM who re-keyed it themselves is doing nothing wrong, and a unit that cannot be listed over a paperwork gap costs real rent (R-027's posture, D-182).
 
 **LEASE-13 [W]** AI lead-responder / showing chatbot — not v1.
 

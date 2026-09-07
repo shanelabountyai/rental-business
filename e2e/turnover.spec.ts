@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { hashPassword } from '@rental/core/auth'
+import { hashPassword, sealSecret } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
 
@@ -34,7 +34,7 @@ async function createStaff() {
   return staff
 }
 
-async function seedTurn() {
+async function seedTurn(options: { leaseStatus?: string; withProject?: boolean } = {}) {
   const unique = randomUUID().slice(0, 8)
   const entity = await prisma.legalEntity.create({ data: { name: `Turn LLC-${unique}`, type: 'LLC' } })
   const property = await prisma.property.create({
@@ -50,22 +50,28 @@ async function seedTurn() {
     },
   })
   propertyIds.push(property.id)
+  const ended = (options.leaseStatus ?? 'ENDED') === 'ENDED'
   const unit = await prisma.unit.create({
-    data: { propertyId: property.id, name: `U-${unique}`, status: 'MAKE_READY' },
+    data: {
+      propertyId: property.id,
+      name: `U-${unique}`,
+      status: ended ? 'MAKE_READY' : 'OCCUPIED',
+    },
   })
   unitIds.push(unit.id)
   const lease = await prisma.lease.create({
     data: {
       propertyId: property.id,
       unitId: unit.id,
-      status: 'ENDED',
+      status: (options.leaseStatus ?? 'ENDED') as never,
       startsOn: new Date('2025-01-01'),
       endsOn: new Date('2026-06-30'),
       rentCents: 150_000,
-      moveOutAt: new Date('2026-06-30T18:00:00Z'),
+      moveOutAt: ended ? new Date('2026-06-30T18:00:00Z') : null,
     },
   })
   leaseIds.push(lease.id)
+  if (options.withProject === false) return { property, unit, lease, project: null }
   const project = await prisma.turnoverProject.create({
     data: { propertyId: property.id, unitId: unit.id, leaseId: lease.id },
   })
@@ -87,6 +93,7 @@ test.beforeEach(async ({ page }) => {
 })
 
 test.afterAll(async () => {
+  await prisma.accessCode.deleteMany({ where: { unitId: { in: unitIds } } })
   await prisma.workOrder.deleteMany({ where: { unitId: { in: unitIds } } })
   await prisma.turnoverProject.deleteMany({ where: { id: { in: projectIds } } })
   await prisma.lease.deleteMany({ where: { id: { in: leaseIds } } })
@@ -99,7 +106,10 @@ test.afterAll(async () => {
 
 test.describe('turnover', () => {
   test('a PM adds a checklist item, sets a target date, and marks the turn rent-ready', async ({ page }) => {
-    const { property, unit, project } = await seedTurn()
+    const { property, unit, project: seededProject } = await seedTurn()
+    // Non-null by construction - only the move-out test below opts out of
+    // seeding a project, because it makes the real one.
+    const project = seededProject!
     const staff = await createStaff()
     await signIn(page, staff.email)
 
@@ -121,6 +131,18 @@ test.describe('turnover', () => {
     await page.getByRole('button', { name: 'Save' }).click()
     await expect(page.getByLabel('Target rent-ready date')).toHaveValue('2026-07-15')
 
+    // R-176. WARNED FIRST - this turn has no re-key recorded, and the press
+    // refuses once rather than blocking. Seeded directly, so it never had
+    // the re-key work order `startTurnoverProjectForLease` would have opened.
+    await page.getByRole('button', { name: 'Mark rent-ready' }).click()
+    await expect(page.getByText(/No re-key is recorded on this turn/)).toBeVisible()
+    expect(
+      (await prisma.turnoverProject.findUniqueOrThrow({ where: { id: project.id } })).rentReadyAt,
+    ).toBeNull()
+
+    await page
+      .getByLabel('No re-key is recorded and I want to mark this rent-ready anyway')
+      .check()
     await page.getByRole('button', { name: 'Mark rent-ready' }).click()
     // `\w+`, for the reason spelled out in access-codes-move-in.spec.ts.
     // The `\w{3,4}` this replaces was the same bug patched one line deep:
@@ -130,7 +152,70 @@ test.describe('turnover', () => {
     const updatedUnit = await prisma.unit.findUniqueOrThrow({ where: { id: unit.id } })
     expect(updatedUnit.status).toBe('VACANT')
 
-    const entry = await prisma.auditLog.findFirst({ where: { action: 'turnover.rent_ready', entityId: project.id } })
-    expect(entry).not.toBeNull()
+    const entry = await prisma.auditLog.findFirstOrThrow({ where: { action: 'turnover.rent_ready', entityId: project.id } })
+    // R-176: the override is on the record, which is the whole value of
+    // warning instead of blocking.
+    expect((entry.after as { rekeyRecorded?: boolean }).rekeyRecorded).toBe(false)
+  })
+
+  // R-176. The move-out itself, through the real status change - the two
+  // halves the item exists for, and neither is reachable from the seeded
+  // fixture above: ending the tenancy retires our record of the keypad code
+  // (so no vendor reveal and no handoff packet can hand it to a stranger),
+  // and the turn opens the re-key that actually changes the lock.
+  test('ending a tenancy retires the unit access codes and opens a re-key', async ({ page }) => {
+    const { property, unit, lease } = await seedTurn({
+      leaseStatus: 'ACTIVE',
+      withProject: false,
+    })
+    const code = await prisma.accessCode.create({
+      data: {
+        unitId: unit.id,
+        type: 'LOCKBOX',
+        label: 'Front door',
+        sealedCode: sealSecret('7392', 'access-code'),
+        version: 1,
+      },
+    })
+    const staff = await createStaff()
+    await signIn(page, staff.email)
+
+    await page.goto(`/leases/${lease.id}`)
+    await page
+      .getByLabel('Why is this tenancy being cut short?')
+      .fill('Mutual release, tenant relocating')
+    await page.getByRole('button', { name: 'Terminate this tenancy' }).click()
+    await expect(page.getByText(/Mutual release, tenant relocating/)).toBeVisible()
+
+    // The retire is INSIDE the status-change transaction, so it has landed
+    // by the time the page comes back. The turn and its re-key are
+    // post-commit best-effort, so poll for those.
+    const after = await prisma.accessCode.findUniqueOrThrow({ where: { id: code.id } })
+    expect(after.effectiveTo).not.toBeNull()
+
+    const entry = await prisma.auditLog.findFirstOrThrow({
+      where: { entityId: lease.id, action: 'accesscode.retired_on_move_out' },
+    })
+    expect((entry.after as { retiredCount?: number }).retiredCount).toBe(1)
+
+    await expect
+      .poll(async () =>
+        prisma.workOrder.count({ where: { unitId: unit.id, turnoverStage: 'REKEY' } }),
+      )
+      .toBe(1)
+    const project = await prisma.turnoverProject.findUniqueOrThrow({
+      where: { leaseId: lease.id },
+    })
+    projectIds.push(project.id)
+
+    // ...and the retired code is gone from the operational panel, which is
+    // what a vendor reveal and the handoff packet read from.
+    //
+    // NOT `getByText('Front door')`: the add-a-code form on this same page
+    // carries `"Front door"` as its hint, and getByText is a case-insensitive
+    // SUBSTRING match, so that assertion can never pass. The panel says
+    // exactly this sentence when a unit has none.
+    await page.goto(`/properties/${property.id}/units/${unit.id}`)
+    await expect(page.getByText('No codes on file.')).toBeVisible()
   })
 })

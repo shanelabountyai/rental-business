@@ -183,6 +183,11 @@ test.afterAll(async () => {
   // on the FK. Found by R-084, which ran this spec alongside its own; the
   // failure lands on whichever test finished last in the worker, which is
   // why it read as two unrelated lifecycle tests breaking.
+  // R-176: that turn now opens a re-key WorkOrder, which pins BOTH the
+  // project and the unit - and R-176 also retires the unit's access codes,
+  // so both go before either delete below. Same class of FK, one item later.
+  await prisma.workOrder.deleteMany({ where: { unitId: { in: unitIds } } })
+  await prisma.accessCode.deleteMany({ where: { unitId: { in: unitIds } } })
   await prisma.turnoverProject.deleteMany({ where: { leaseId: { in: removable } } })
   // R-160's move-out credit (and R-042's move-in proration before it) posts
   // a Charge, and `Charge.leaseId` is Restrict like TurnoverProject above -

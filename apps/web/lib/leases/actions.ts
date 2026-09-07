@@ -28,6 +28,7 @@ import { provisionLeaseBilling } from '@/lib/billing/provision.ts'
 import { chargeMoveOutProration } from '@/lib/billing/proration.ts'
 import { startDepositDisposition } from '@/lib/leases/deposit-disposition-start.ts'
 import { revokeTenantLockCodes } from '@/lib/locks/tenant-codes.ts'
+import { retireUnitAccessCodes } from '@/lib/locks/access-codes.ts'
 import { startTurnoverProjectForLease } from '@/lib/turnover/start.ts'
 import { authUrl } from '@/lib/auth/delivery.ts'
 import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
@@ -531,6 +532,32 @@ export async function changeLeaseStatus(
         where: { id: lease.unitId, status: 'OCCUPIED' },
         data: { status: 'MAKE_READY' },
       })
+
+      // R-176. THE DEPARTING TENANT'S KEYPAD CODES, IN THIS TRANSACTION AND
+      // NOT AFTER IT - unlike every other consequence below, which is money
+      // or scheduling and can be caught up by a re-run. A code we still hold
+      // as live is revealed to any vendor with a job here and printed on the
+      // property handoff packet, so a retire that failed silently while the
+      // tenancy ended anyway is a former occupant's code handed to a
+      // stranger. Same call `revokeTenantLockCodes` makes for the electronic
+      // half, one line further down; that one cannot join this transaction
+      // because it talks to a device.
+      //
+      // This changes no lock. `startTurnoverProjectForLease` opens the
+      // re-key work order that does.
+      const retired = await retireUnitAccessCodes(tx, lease.unitId, now)
+      if (retired > 0) {
+        await audit(
+          {
+            action: 'accesscode.retired_on_move_out',
+            entityType: 'Lease',
+            entityId: leaseId,
+            propertyId: lease.propertyId,
+            after: { unitId: lease.unitId, retiredCount: retired, byStaffId: actor.id },
+          },
+          tx,
+        )
+      }
     }
 
     await audit(
