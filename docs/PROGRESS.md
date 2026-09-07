@@ -9099,7 +9099,7 @@ never got a verdict of its own. Nothing is outstanding from that: R-176's run is
 cumulative on `main` and covers R-175's code, and it passed.
 
 ## R-177 — The troubleshooting script reaches the channels tenants actually use
-**Commit:** `TBD`  ·  **Date:** 2026-09-07
+**Commit:** `ad6bdeb`  ·  **Date:** 2026-09-07
 
 **What it built.** Review finding 9 (MAINT-01, MAINT-02). The starting point
 was a piece of genuinely good work with almost no reach:
