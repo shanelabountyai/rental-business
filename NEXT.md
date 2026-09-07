@@ -1,33 +1,40 @@
 # Next session
 
-## Pick up: R-176
+## Pick up: R-177
 
-`docs/prds/06-backlog.md`, the next unticked row after 162. Read its row and
+`docs/prds/06-backlog.md`, row 164 — the next unticked one. Read its row and
 its named review finding before starting.
 
 Model: recommend at the start of the item, per the global convention.
 
-## Context from R-175 (done, 53cc52a)
+## Context from R-176 (done, ed88d0e)
 
-A repayment plan is now a schedule, not a hold reason. **D-181** records the
-four rules. Two are easy to break by accident:
+**D-182.** A move-out now retires the unit's `AccessCode` rows and the turn
+opens a re-key. Three things are easy to get wrong later:
 
-- **The break test is cumulative** — total paid since the plan started against
-  the cumulative instalment total matured today. New rent charged during the
-  plan cancels out algebraically; per-instalment matching would be wrong, not
-  merely more work.
-- **A REVERSAL is classified by its SIGN.** Positive = undoing a payment
-  (a returned cheque), negative = undoing a charge. `paidTowardPlan` in
-  `apps/web/lib/payments/plans.ts` depends on it.
-- `placeLeaseHold` REFUSES `payment_plan`. The hold comes from the plan.
-- `LeaseHold.liftedBySystem` is new: R-084's check constraint now requires
-  exactly one of that and `liftedByStaffId` on a lifted row.
+- **The retire is INSIDE the tenancy-ending transaction**, unlike every
+  best-effort sibling around it. A stale code cannot be caught up by a
+  re-run, because nothing knows to ask.
+- **Retiring changes no lock.** `effectiveTo` closes our record; the URGENT
+  `REKEY` work order is the half that changes the door.
+- **"Re-key done" is NOT `OPEN_WORK_ORDER_STATUSES`.** VERIFIED counts here —
+  a locksmith who has not been paid has still changed the lock.
+
+Any test that deletes a unit now has to delete its work orders and access
+codes first. Three cleanups were fixed for this; a fourth will surface.
 
 Left behind, owned by no item:
 
-- No signed document / e-sign on a payment plan agreement.
-- No tenant-facing view of the schedule — the tenant learns the dates only
-  from whatever message a person sends.
+- Nothing warns on `/leases`, the dashboard or the listing flow that a unit
+  is listed with an open re-key — only the rent-ready press warns. **R-178
+  (row 165) already depends on R-176** and is where a stalled stage becomes
+  visible portfolio-wide.
+- A CANCELED re-key reads identically to one that never happened, so an
+  operator with no keypads is warned on every turn with no way to say so once.
+- Nothing backfills units turned before today.
+
+Still unowned from R-175: no e-sign on a payment plan agreement; no
+tenant-facing view of the schedule.
 
 Still unowned from R-174: a manager holding a `job_failed` task cannot open
 `/jobs` to act on it (`job.manage` is owner-only); `overdueToday` renders
@@ -48,5 +55,5 @@ Still unowned from R-171: `writePayment` dedups only on
 Still unowned from R-170a: `/staff/new` and `/staff/[id]` each take ~21s to
 axe-scan against `/staff`'s 2.2s.
 
-**Check `gh run list --limit 5`** rather than assuming — R-175's own run is
+**Check `gh run list --limit 5`** rather than assuming — R-176's own run is
 the one to read.

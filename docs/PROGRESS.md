@@ -8985,7 +8985,7 @@ Actions billing block that eleven entries went on repeating is still lifted.
 ---
 
 ## R-176 — Move-out retires the codes, and the turn opens the re-key
-**Commit:** `pending`  ·  **Date:** 2026-09-07
+**Commit:** `ed88d0e`  ·  **Date:** 2026-09-07
 
 **What it built.** Review finding 8 (LEASE-12, PROP-04). One grep settled the
 shape of it: the only code anywhere in this repo that had ever written
