@@ -35,6 +35,7 @@ const claimIds: string[] = []
 const partyChangeIds: string[] = []
 const incomingTenantIds: string[] = []
 const applicantIds: string[] = []
+const turnoverLeaseIds: string[] = []
 
 beforeAll(async () => {
   const stamp = `stall-${randomUUID().slice(0, 8)}`
@@ -136,6 +137,15 @@ afterEach(async () => {
   await prisma.applicant.deleteMany({ where: { id: { in: applicantIds } } })
   await prisma.tenant.updateMany({ where: { id: { in: incomingTenantIds } }, data: { active: false } })
   await prisma.jobRun.deleteMany({ where: { propertyId } })
+  // Turn fixtures own a lease each (`TurnoverProject.leaseId` is unique), so
+  // they clean up by ownership - the project, then its work orders, then the
+  // lease that anchored both.
+  await prisma.workOrder.deleteMany({
+    where: { turnoverProject: { leaseId: { in: turnoverLeaseIds } } },
+  })
+  await prisma.turnoverProject.deleteMany({ where: { leaseId: { in: turnoverLeaseIds } } })
+  await prisma.lease.deleteMany({ where: { id: { in: turnoverLeaseIds } } })
+  turnoverLeaseIds.length = 0
   accommodationIds.length = 0
   abandonmentCaseIds.length = 0
   violationCaseIds.length = 0
@@ -347,6 +357,97 @@ describe('party-change amendment unsigned with an unscreened occupant', () => {
       await prisma.task.findFirst({
         where: { type: 'party_change.unsigned_unscreened_stalled', subjectId: screened.id },
       }),
+    ).toBeNull()
+  })
+})
+
+// R-178 (review §10). The sixth case: a make-ready with nothing moving on it.
+describe('turn stalled with nothing moving', () => {
+  async function seedTurn(options: {
+    lastMovedAt: Date
+    /// Which stages are finished. The rest stay SUBMITTED and open.
+    done?: readonly string[]
+  }) {
+    const lease = await prisma.lease.create({
+      data: {
+        propertyId,
+        unitId,
+        status: 'ENDED',
+        startsOn: new Date('2025-01-01'),
+        endsOn: new Date('2026-07-31'),
+        rentCents: 150_000,
+        moveOutAt: new Date('2026-07-31T18:00:00Z'),
+      },
+    })
+    turnoverLeaseIds.push(lease.id)
+    const project = await prisma.turnoverProject.create({
+      data: { propertyId, unitId, leaseId: lease.id, createdAt: options.lastMovedAt },
+    })
+    for (const stage of ['TRASH_OUT', 'PAINT', 'FLOORS'] as const) {
+      await prisma.workOrder.create({
+        data: {
+          propertyId,
+          unitId,
+          turnoverProjectId: project.id,
+          turnoverStage: stage,
+          scope: `${stage} line`,
+          status: options.done?.includes(stage) ? 'CLOSED' : 'SUBMITTED',
+          // `@updatedAt` is set by Prisma on every write, so a fixture that
+          // needs a turn to look OLD has to say so explicitly - there is no
+          // other way to seed one that has not moved in a week.
+          updatedAt: options.lastMovedAt,
+        },
+      })
+    }
+    return project
+  }
+
+  it('flags a turn quiet past the threshold, naming the stage it is stuck behind', async () => {
+    // Trash-out and paint closed, floors still open: the floor guy is not
+    // waiting on anybody, so the Task names the stage itself.
+    const stalled = await seedTurn({
+      lastMovedAt: new Date('2026-08-20T12:00:00Z'), // 12 days before NOW
+      done: ['TRASH_OUT', 'PAINT'],
+    })
+    const moving = await seedTurn({ lastMovedAt: new Date('2026-08-30T12:00:00Z') }) // 2 days
+
+    await run()
+
+    const task = await prisma.task.findFirst({
+      where: { type: 'turnover.stalled', subjectId: stalled.id },
+    })
+    expect(task).not.toBeNull()
+    expect(task!.subjectType).toBe('TurnoverProject')
+    expect(task!.title).toContain('has not moved in 12 days')
+    expect(task!.title).toContain('Floors')
+    expect(
+      await prisma.task.findFirst({ where: { type: 'turnover.stalled', subjectId: moving.id } }),
+    ).toBeNull()
+  })
+
+  it('names what the stuck stage is waiting on, which is the actionable half', async () => {
+    // Nothing done: floors is open and so is trash-out ahead of it.
+    const stalled = await seedTurn({ lastMovedAt: new Date('2026-08-20T12:00:00Z') })
+
+    await run()
+
+    const task = await prisma.task.findFirstOrThrow({
+      where: { type: 'turnover.stalled', subjectId: stalled.id },
+    })
+    expect(task.title).toContain('Trash-out')
+  })
+
+  it('leaves a turn already marked rent-ready alone', async () => {
+    const finished = await seedTurn({ lastMovedAt: new Date('2026-08-20T12:00:00Z') })
+    await prisma.turnoverProject.update({
+      where: { id: finished.id },
+      data: { rentReadyAt: new Date('2026-08-21T12:00:00Z') },
+    })
+
+    await run()
+
+    expect(
+      await prisma.task.findFirst({ where: { type: 'turnover.stalled', subjectId: finished.id } }),
     ).toBeNull()
   })
 })

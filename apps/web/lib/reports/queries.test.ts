@@ -27,6 +27,18 @@ describe('currentStageFor', () => {
     expect(currentStageFor([])).toBeNull()
   })
 
+  // R-178. The correction: this used to name only CLOSED, CANCELED and
+  // INVOICED as done, so a stage physically finished and merely unpaid still
+  // read as the one being worked.
+  it('does not report a stage whose work is finished but unpaid', () => {
+    const stage = currentStageFor([
+      { turnoverStage: 'TRASH_OUT', status: 'WORK_COMPLETE' },
+      { turnoverStage: 'REPAIRS', status: 'VERIFIED' },
+      { turnoverStage: 'PAINT', status: 'ASSIGNED' },
+    ])
+    expect(stage).toBe('PAINT')
+  })
+
   it('ignores a work order with no turnover stage set', () => {
     const stage = currentStageFor([{ turnoverStage: null, status: 'IN_PROGRESS' }])
     expect(stage).toBeNull()

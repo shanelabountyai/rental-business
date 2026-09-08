@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { businessDate, businessDateToUtc, utcToBusinessDate } from '@rental/core/scheduling'
-import { TURNOVER_STAGES, type TurnoverStageValue } from '@rental/core/turnover'
+import { stageWorkIsOpen, TURNOVER_STAGES, type TurnoverStageValue } from '@rental/core/turnover'
 import { jobCostCents } from '@rental/core/workorders'
 import { prisma } from '@rental/db'
 import { filingCabinetAlertsDue } from '@/lib/filing-cabinet/queries.ts'
@@ -313,14 +313,18 @@ export interface VacantUnitWithTurnover extends VacantUnit {
   currentStage: string | null
 }
 
-const NOT_DONE_STATUSES = new Set(['CLOSED', 'CANCELED', 'INVOICED'])
-
+// R-178. `stageWorkIsOpen` from core, replacing a local set that named
+// CLOSED, CANCELED and INVOICED as done and left WORK_COMPLETE and VERIFIED
+// out - so a stage whose work was physically finished and merely unpaid still
+// read here as the stage currently being worked. It was the third copy of the
+// same question and the only one that disagreed (R-036b: a status's meaning
+// has to live where every list that reads it can see it).
 export function currentStageFor(
   workOrders: readonly { turnoverStage: string | null; status: string }[],
 ): TurnoverStageValue | null {
   const openStages = new Set(
     workOrders
-      .filter((wo) => wo.turnoverStage && !NOT_DONE_STATUSES.has(wo.status))
+      .filter((wo) => wo.turnoverStage && stageWorkIsOpen(wo.status))
       .map((wo) => wo.turnoverStage as TurnoverStageValue),
   )
   return TURNOVER_STAGES.find((stage) => openStages.has(stage)) ?? null

@@ -1,5 +1,6 @@
 'use server'
 
+import { WORK_PERFORMED_STATUSES } from '@rental/core/turnover'
 import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { audit } from '@/lib/audit/index.ts'
@@ -18,12 +19,13 @@ export interface TurnoverFormState {
   warnings?: string[]
 }
 
-// R-176. What counts as "the lock has actually been changed" - the PHYSICAL
-// act, which is not the same question as `OPEN_WORK_ORDER_STATUSES`' "is
-// there still work to do here". A locksmith who has done the job and not yet
-// been paid has still changed the lock, so VERIFIED and INVOICED count;
-// CANCELED does not, and neither does anything before the work happened.
-const REKEY_DONE_STATUSES = ['WORK_COMPLETE', 'VERIFIED', 'INVOICED', 'CLOSED'] as const
+// R-176's "the lock has actually been changed" - the PHYSICAL act, not
+// `OPEN_WORK_ORDER_STATUSES`' "is there still work to do here". A locksmith
+// who has done the job and not yet been paid has still changed the lock.
+//
+// R-178 moved the set into core: turn SEQUENCING asks the same question of
+// every stage (the floor guy starts when the paint is done, not when the
+// painter is paid), and `currentStageFor` was a third copy that disagreed.
 
 function str(formData: FormData, name: string): string {
   const value = formData.get(name)
@@ -105,7 +107,7 @@ export async function markTurnoverRentReady(
     where: {
       turnoverProjectId: projectId,
       turnoverStage: 'REKEY',
-      status: { in: [...REKEY_DONE_STATUSES] },
+      status: { in: [...WORK_PERFORMED_STATUSES] },
     },
   })
   const overridden = formData.get('acknowledgeNoRekey') === 'on'

@@ -269,6 +269,7 @@ export default async function UnitDetailPage({
               daysVacant: turnover.daysVacant,
               daysVacantIsFinal: turnover.daysVacantIsFinal,
               totalCostCents: turnover.totalCostCents,
+              plan: turnover.plan,
               items: turnover.items,
             }}
             setTargetDateAction={setTurnoverTargetDate.bind(null, turnover.id)}

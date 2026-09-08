@@ -1,5 +1,7 @@
 import { formatCents } from '@rental/core/money'
 import { friendlyBusinessDate } from '@rental/core/scheduling'
+// R-178: one list of stage labels, not a copy per page.
+import { isTurnoverStage, TURNOVER_STAGE_LABELS } from '@rental/core/turnover'
 import Link from 'next/link'
 import { requireScope } from '@/lib/auth/guard.ts'
 import { thisWeekLeasingActivity, vacantUnitsWithTurnover } from '@/lib/reports/queries.ts'
@@ -7,15 +9,6 @@ import { currentScope } from '@/lib/scope/current-scope.ts'
 
 export const metadata = { title: 'Vacancies — Rental Operations' }
 
-const STAGE_LABELS: Record<string, string> = {
-  TRASH_OUT: 'Trash-out',
-  REPAIRS: 'Repairs',
-  PAINT: 'Paint',
-  FLOORS: 'Floors',
-  CLEAN: 'Clean',
-  REKEY: 'Re-key',
-  OTHER: 'Other',
-}
 
 // The dashboard's vacancies tile drilling into a real list (R-050, RPT-01),
 // extended into RPT-04's "vacancy and turn status" weekly report (R-076):
@@ -86,7 +79,13 @@ export default async function VacanciesPage() {
                     <> · {formatCents(unit.dailyCostCents)}/day</>
                   )}
                   {unit.currentStage && (
-                    <> · {STAGE_LABELS[unit.currentStage] ?? unit.currentStage}</>
+                    <>
+                      {' '}
+                      ·{' '}
+                      {isTurnoverStage(unit.currentStage)
+                        ? TURNOVER_STAGE_LABELS[unit.currentStage]
+                        : unit.currentStage}
+                    </>
                   )}
                   {unit.targetRentReadyDate && <> · rent-ready {friendlyBusinessDate(unit.targetRentReadyDate)}</>}
                 </span>

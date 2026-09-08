@@ -1,5 +1,6 @@
 import { prisma } from '@rental/db'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { TURN_SEQUENCE } from '@rental/core/turnover'
 import { REKEY_SCOPE, startTurnoverProjectForLease } from './start.ts'
 
 const CHICAGO = 'America/Chicago'
@@ -85,6 +86,47 @@ describe('startTurnoverProjectForLease', () => {
     expect(second!.id).toBe(first!.id)
     const count = await prisma.turnoverProject.count({ where: { leaseId: lease.id } })
     expect(count).toBe(1)
+  })
+
+  // R-178. The template - the item's whole premise, and the reason a turn is
+  // a sequenced project rather than a bag of loose work orders.
+  it('instantiates one work order per sequenced stage', async () => {
+    const { lease } = await seedLease(new Date('2026-06-30T18:00:00Z'))
+
+    const project = await startTurnoverProjectForLease(lease.id)
+
+    const workOrders = await prisma.workOrder.findMany({
+      where: { turnoverProjectId: project!.id },
+      select: { turnoverStage: true, priority: true },
+    })
+    expect(workOrders.map((wo) => wo.turnoverStage).sort()).toEqual([...TURN_SEQUENCE].sort())
+    // Only the re-key is urgent (R-176); the rest of the template is routine.
+    expect(workOrders.filter((wo) => wo.priority === 'URGENT')).toHaveLength(1)
+  })
+
+  it('does not duplicate a stage somebody already added by hand', async () => {
+    const { property, unit, lease } = await seedLease(new Date('2026-06-30T18:00:00Z'))
+    // The turn opened, then a PM added their own paint line, then something
+    // re-ran the start (both call sites are best-effort and re-runnable).
+    const project = await startTurnoverProjectForLease(lease.id)
+    await prisma.workOrder.create({
+      data: {
+        propertyId: property.id,
+        unitId: unit.id,
+        turnoverProjectId: project!.id,
+        turnoverStage: 'PAINT',
+        scope: 'Repaint the hallway, hand-added',
+      },
+    })
+
+    await startTurnoverProjectForLease(lease.id)
+
+    const paint = await prisma.workOrder.count({
+      where: { turnoverProjectId: project!.id, turnoverStage: 'PAINT' },
+    })
+    expect(paint).toBe(2)
+    const total = await prisma.workOrder.count({ where: { turnoverProjectId: project!.id } })
+    expect(total).toBe(TURN_SEQUENCE.length + 1)
   })
 
   // R-176.

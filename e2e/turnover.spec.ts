@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { hashPassword, sealSecret } from '@rental/core/auth'
+import { TURN_SEQUENCE } from '@rental/core/turnover'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
 
@@ -208,6 +209,27 @@ test.describe('turnover', () => {
     })
     projectIds.push(project.id)
 
+    // R-178. The whole template opened with the turn, not just the re-key -
+    // six sequenced stages, on the board before anybody remembered them.
+    await expect
+      .poll(async () => prisma.workOrder.count({ where: { turnoverProjectId: project.id } }))
+      .toBe(TURN_SEQUENCE.length)
+
+    // ...and the sequence is on the screen. Scoped to the schedule table by
+    // its caption: every stage name also appears in the punch-list rows below
+    // and in the "Stage" select's own options, so an unscoped getByText for
+    // any of them is ambiguous three ways over.
+    await page.goto(`/properties/${property.id}/units/${unit.id}`)
+    const schedule = page.getByRole('table', {
+      name: 'Each turn stage with its planned window and what it is waiting on',
+    })
+    await expect(schedule.getByRole('row', { name: /Floors/ })).toContainText(
+      'waiting on Trash-out',
+    )
+    // R-176's urgent re-key must never read as blocked, whatever is ahead of
+    // it in the checklist.
+    await expect(schedule.getByRole('row', { name: /Re-key/ })).not.toContainText('waiting on')
+
     // ...and the retired code is gone from the operational panel, which is
     // what a vendor reveal and the handoff packet read from.
     //
@@ -215,7 +237,6 @@ test.describe('turnover', () => {
     // carries `"Front door"` as its hint, and getByText is a case-insensitive
     // SUBSTRING match, so that assertion can never pass. The panel says
     // exactly this sentence when a unit has none.
-    await page.goto(`/properties/${property.id}/units/${unit.id}`)
     await expect(page.getByText('No codes on file.')).toBeVisible()
   })
 })

@@ -9,6 +9,7 @@ import {
   friendlyBusinessDate,
   utcToBusinessDate,
 } from '@rental/core/scheduling'
+import { planTurn, TURN_STALL_DAYS } from '@rental/core/turnover'
 import { prisma } from '@rental/db'
 import { rulesFor } from '@/lib/jurisdiction/queries.ts'
 import { SCHEDULED_JOBS } from '@/lib/jobs/runner.ts'
@@ -18,9 +19,10 @@ import { createTask } from '@/lib/tasks/create.ts'
 // (D-9): accommodation/ESA response clocks, quiet abandonment cases,
 // unserved violation-cure notices, silent insurance-claim mitigation, and
 // unsigned party-change amendments with an unscreened incoming occupant.
+// R-178 (review §10) adds a SIXTH: a make-ready with nothing moving on it.
 //
-// All five raise the SAME `Task` queue - D-9 forbids a second one - and all
-// five are flagged ONCE, not every day the condition holds: the check below
+// All six raise the SAME `Task` queue - D-9 forbids a second one - and all
+// six are flagged ONCE, not every day the condition holds: the check below
 // is keyed on (type, subjectId) with no `businessDate` in it, the same shape
 // compliance/alert-job.ts already uses, so a case stalled for a month gets
 // exactly one Task, not thirty.
@@ -248,11 +250,85 @@ async function checkPartyChanges(propertyId: string, today: BusinessDate, timezo
   return { checked: changes.length, flagged }
 }
 
+// ---------------------------------------------------------------------------
+// 6. Turn stalled - nothing on the make-ready has moved (LEASE-12; R-178,
+//    review §10)
+//
+// The review's own case, and the one it says costs the most per occurrence:
+// "a turn where the floor guy cannot start because the paint is not done, and
+// nobody notices for six days, is invisible to every screen in this product."
+// The only signal was `daysVacant`, which counts days whether or not anybody
+// is working.
+//
+// MOVEMENT IS `WorkOrder.updatedAt`, not a new column. It already changes on
+// every status, assignment, schedule, cost and note write, so there is
+// nothing to keep in step with it - and a turn whose work orders somebody
+// deleted still ages, off the project's own `createdAt`.
+//
+// The Task names the stage the turn is stuck in and what that stage is
+// waiting on, because "this turn is stalled" is not actionable and "floors is
+// waiting on paint" is - it says which vendor to ring.
+// ---------------------------------------------------------------------------
+async function checkTurnovers(propertyId: string, today: BusinessDate, timezone: string) {
+  const projects = await prisma.turnoverProject.findMany({
+    where: { propertyId, rentReadyAt: null },
+    select: {
+      id: true,
+      createdAt: true,
+      targetRentReadyDate: true,
+      lease: { select: { moveOutAt: true } },
+      workOrders: { select: { turnoverStage: true, status: true, updatedAt: true } },
+    },
+  })
+  let flagged = 0
+  for (const project of projects) {
+    if (!project.lease.moveOutAt) continue
+
+    const lastMoved = project.workOrders.reduce<Date>(
+      (latest, workOrder) => (workOrder.updatedAt > latest ? workOrder.updatedAt : latest),
+      project.createdAt,
+    )
+    const quietDays = businessDaysBetween(businessDate(lastMoved, timezone), today)
+    if (quietDays < TURN_STALL_DAYS) continue
+    if (await alreadyFlagged('turnover.stalled', project.id)) continue
+
+    const plan = planTurn({
+      moveOutDate: businessDate(project.lease.moveOutAt, timezone),
+      targetRentReadyDate: project.targetRentReadyDate
+        ? utcToBusinessDate(project.targetRentReadyDate)
+        : null,
+      today,
+      workOrders: project.workOrders,
+    })
+    // The earliest stage still holding open work - the same "what is being
+    // worked right now" question `currentStageFor` answers for /vacancies.
+    const current = plan.stages.find((stage) => stage.openCount > 0)
+    // Every stage done and the turn still not marked rent-ready is its own
+    // stall, and a real one: the work finished and nobody said so, so the
+    // unit is not listed.
+    const where = current
+      ? `${current.label}${current.waitingOn ? `, waiting on ${plan.stages.find((s) => s.stage === current.waitingOn)!.label}` : ''}`
+      : 'every stage done and nobody has marked it rent-ready'
+
+    await createTask(prisma, {
+      propertyId,
+      type: 'turnover.stalled',
+      subjectType: 'TurnoverProject',
+      subjectId: project.id,
+      businessDate: today,
+      priority: 'ROUTINE',
+      title: `Turn has not moved in ${quietDays} days — ${where}`,
+    })
+    flagged++
+  }
+  return { checked: projects.length, flagged }
+}
+
 SCHEDULED_JOBS.push({
   type: 'cases.stalled',
   localHour: LOCAL_HOUR,
   description:
-    'One stall sweep for the five case types nothing else watches (review §7): accommodation response clocks, quiet abandonment cases, unserved violation-cure notices, silent insurance-claim mitigation, and unsigned/unscreened party-change amendments.',
+    'One stall sweep for the case types nothing else watches (review §7, §10): accommodation response clocks, quiet abandonment cases, unserved violation-cure notices, silent insurance-claim mitigation, unsigned/unscreened party-change amendments, and make-readies with nothing moving on them.',
   run: async ({ propertyId, businessDate: today, now }) => {
     const property = await prisma.property.findUniqueOrThrow({
       where: { id: propertyId },
@@ -265,6 +341,7 @@ SCHEDULED_JOBS.push({
       violations: await checkViolations(propertyId, today, property),
       insuranceClaims: await checkInsuranceClaims(propertyId, today, now),
       partyChanges: await checkPartyChanges(propertyId, today, property.timezone),
+      turnovers: await checkTurnovers(propertyId, today, property.timezone),
     }
   },
 })

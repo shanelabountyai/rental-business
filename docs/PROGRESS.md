@@ -9237,3 +9237,117 @@ passed, 4 skipped) and `npm run build`. The touched e2e specs — clarify-link,
 maintenance-phone-log, maintenance, notifications, portal-account, portal — ran
 **94 passed, 0 failed, 0 flaky** against the production build on `:3100`. CI run
 on the pushed SHA to be recorded in the follow-up commit.
+
+## R-178 — The turn becomes a sequenced project
+**Commit:** `PENDING`  ·  **Date:** 2026-09-07
+
+**What it built.** Review finding 10 (LEASE-12, RPT-05). `TurnoverProject` was
+a unit, a lease, a target date, a rent-ready timestamp and a bag of
+`WorkOrder`s with `turnoverStage` mostly null. Nothing created a standard turn:
+`draftPunchListFromInspection` produced one work order per POOR/DAMAGED/MISSING
+inspection finding and left staging to a human, and there was no template, no
+sequence, no dependency, no per-stage target and no stall detection — R-158's
+`cases.stalled` sweep covered five case types and a turn was not one of them.
+The consequence review §10 called the most expensive per occurrence: a turn
+where the floor guy cannot start because the paint is not done, and nobody
+notices for six days, was invisible on every screen in this product.
+
+Four pieces:
+
+- **[packages/core/turnover/schedule.ts](packages/core/turnover/schedule.ts)** —
+  `planTurn`, pure. `TURN_SEQUENCE` (the six stages that actually run in order;
+  `OTHER` is deliberately not one), `TURN_STAGE_DAYS` (a stated house
+  heuristic, 13 days end to end), and per stage a window, an item and open
+  count, a state, what it is waiting on and whether it is past its day. Plus
+  `projectedRentReadyOn` and `daysOverTarget`.
+- **The template.** `startTurnoverProjectForLease` opens one work order per
+  sequenced stage, idempotent on "a line already exists at this stage" — R-176
+  already did this for the re-key, and this is the other five on the same
+  machinery, at ROUTINE with the re-key alone staying URGENT.
+- **The panel.** `/properties/[id]/units/[unitId]` gains a *Turn schedule*
+  table: every stage, its planned window, its state, what it is waiting on and
+  what is overdue, above the punch list it explains.
+- **The sixth stall case.** `cases.stalled` gains `turnover.stalled` at
+  `TURN_STALL_DAYS = 6` — review §10's own number. Movement is the newest
+  `WorkOrder.updatedAt` across the turn, falling back to the project's
+  `createdAt`. The Task names the stage and what it is waiting on.
+
+**What it decided.**
+
+- **The plan is derived on read; there is no per-stage table and no migration**
+  (**D-184**). The obvious build is a `TurnoverStageTarget` row per stage per
+  turn. Nothing would ever have edited one independently, and the commonest
+  edit on that panel is *moving the target date* — which would leave every
+  stored per-stage date stale and disagreeing with the number beside it.
+  `TurnoverProject` already takes exactly this posture on status one level up.
+- **Stages lay FORWARD from the move-out, and the target is what the plan is
+  MEASURED against** (D-184). Backward-scheduling from a distant target gives
+  every stage a lazy late start and makes the stall check useless. The valuable
+  answer is not "when may paint begin" but "does the standard turn make the
+  date somebody has committed to" — `daysOverTarget`, on the day the turn opens
+  rather than the day it is missed.
+- **The template opens REAL work orders, and an unneeded stage is CANCELED, not
+  deleted** (**D-185**). A derived checklist would have been cheaper and is the
+  wrong shape: a stage you cannot assign a vendor to, schedule, price or
+  dispatch is not a stage anybody can work, and all of that machinery hangs off
+  `WorkOrder`. The price of an opinionated template is a line the unit does not
+  need — sound hardwood, no paint — and cancel is the answer: `stageWorkIsOpen`
+  treats CANCELED as nothing left to wait for, so it unblocks the next stage
+  and stops the stall sweep counting it, **and the record still says somebody
+  looked and decided**.
+- **Sequencing reads "the physical work happened", not `OPEN_WORK_ORDER_STATUSES`**
+  (**D-186**). The floor guy starts when the paint is DONE, not when the painter
+  is PAID. R-176 had already worked this out for the re-key as a private const
+  with one reader; it is now `WORK_PERFORMED_STATUSES` in core.
+- **Warned, never blocked — and the re-key waits on nothing** (**D-187**).
+  Review §10 left "blocked-or-warned" open. Warned, for R-027's and R-176's
+  stated reason: a PM who painted it themselves on Saturday is doing nothing
+  wrong, and a unit that cannot be worked over a paperwork gap costs real rent.
+  The re-key is exempt from the chain outright, because that is the one place
+  the checklist order and R-176 genuinely conflict — re-key is last because the
+  trades need access, but R-176 opens it URGENT on day one because the
+  departing tenant may still hold a key. Under the chain a fresh turn's panel
+  would read *"Re-key — waiting on Trash-out"* beside an URGENT work order
+  saying do it now: one screen telling a PM two opposite things.
+
+**A real bug found along the way.** `currentStageFor`
+([apps/web/lib/reports/queries.ts](apps/web/lib/reports/queries.ts)) — what
+`/vacancies` prints as the stage each vacant unit is currently in, portfolio-wide
+— was a **third** copy of "is this stage done" and the only one that disagreed:
+it named CLOSED, CANCELED and INVOICED as done and left WORK_COMPLETE and
+VERIFIED out, so a stage whose work was physically finished and merely unpaid
+still read as the one being worked. R-036b's lesson arriving through a *reader*
+rather than a writer, exactly as D-98 recorded it. Now one definition, three
+readers, with a regression test naming the case.
+
+**What it left behind.**
+
+- **No `cases.stalled` Task links to the thing it is about.** A turn task says
+  "Floors, waiting on Trash-out" and gives no way to reach the turn. This is
+  the same gap for all six types, not something this item introduced — R-158
+  shipped five without links and R-178 adds a sixth. Owned by no item.
+- **A turn that stalls, resumes and stalls again is flagged once.** `alreadyFlagged`
+  is keyed on (type, subjectId) with no date in it, deliberately, so a case
+  stalled for a month gets one Task rather than thirty. Every R-158 type shares
+  this; fixing it is a change to all six at once.
+- **Inspection findings are still unstaged.** `draftPunchListFromInspection`
+  creates its work orders with `turnoverStage: null` on purpose — a PM triages a
+  finding onto a stage, and a guess from a room name is not better than a
+  person. With a template in place the PM now stages findings *alongside* six
+  template lines, which is more list than before.
+- **`TURN_STAGE_DAYS` is not configurable.** A house heuristic in code, stated
+  as one. Nothing about how long paint takes is statutory, so it is not a
+  `JurisdictionRule`; a portfolio whose turns genuinely run differently has
+  nowhere to say so.
+- **Nothing warns portfolio-wide that a unit was listed with an open re-key.**
+  `markTurnoverRentReady` warns once and records the override (R-176), and the
+  stall sweep only looks at turns with `rentReadyAt: null` — so after the
+  override nothing looks again. Carried forward from R-176 still unowned.
+
+**The gate.** lint (0 errors), typecheck, `npm test` — **3,010 passed, 4
+skipped, 0 failed** — and `npm run build` all green. e2e against the production
+build on `:3100`: `turnover.spec.ts` **4 passed**, and the specs most exposed to
+six extra work orders per turn (`reports`, `workorders`, `dashboard`, `leases`)
+**72 passed, 0 failed, 0 flaky**. Full sweep left to CI. R-177's own run
+(`34156327059`) was green; this item's run to be recorded in the follow-up
+commit.

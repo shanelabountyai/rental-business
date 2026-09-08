@@ -2,6 +2,7 @@ import 'server-only'
 
 import { daysToFill, turnCostCents } from '@rental/core/metrics'
 import { businessDate, utcToBusinessDate } from '@rental/core/scheduling'
+import { planTurn, type TurnPlan } from '@rental/core/turnover'
 import { jobCostCents } from '@rental/core/workorders'
 import { prisma } from '@rental/db'
 
@@ -40,6 +41,10 @@ export interface TurnoverDetail {
   /// counting.
   daysVacantIsFinal: boolean
   totalCostCents: number
+  /// R-178. The sequenced plan - per-stage windows against the target date,
+  /// which stage is waiting on which, and what is overdue. Derived on read,
+  /// never stored (see `packages/core/turnover/schedule.ts`).
+  plan: TurnPlan
   items: TurnoverPunchListItem[]
 }
 
@@ -142,6 +147,19 @@ export async function getTurnoverForUnit(
     daysVacant: fill.days,
     daysVacantIsFinal: fill.isFinal,
     totalCostCents: turnCostCents(project.workOrders),
+    plan: planTurn({
+      moveOutDate,
+      // `targetRentReadyDate` is a `@db.Date`, so `utcToBusinessDate` reads
+      // it and no timezone may touch it (R-042).
+      targetRentReadyDate: project.targetRentReadyDate
+        ? utcToBusinessDate(project.targetRentReadyDate)
+        : null,
+      today,
+      workOrders: project.workOrders.map((wo) => ({
+        turnoverStage: wo.turnoverStage,
+        status: wo.status,
+      })),
+    }),
     items: project.workOrders.map((wo) => ({
       id: wo.id,
       scope: wo.scope,

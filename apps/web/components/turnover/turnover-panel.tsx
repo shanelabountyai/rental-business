@@ -1,6 +1,12 @@
 'use client'
 
 import { friendlyBusinessDate, friendlyDate } from '@rental/core/scheduling'
+import {
+  TURNOVER_STAGE_LABELS,
+  TURNOVER_STAGES,
+  type StagePlan,
+  type TurnPlan,
+} from '@rental/core/turnover'
 import { useActionState } from 'react'
 import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
 import { CheckboxField, SelectField, TextField } from '@/components/form/field.tsx'
@@ -14,19 +20,14 @@ import { scrollableRegionProps } from '@/components/ui-classes.ts'
 // row's status/cost come straight from the maintenance machinery R-024
 // already built.
 
-const STAGE_OPTIONS = [
-  { value: 'TRASH_OUT', label: 'Trash-out' },
-  { value: 'REPAIRS', label: 'Repairs' },
-  { value: 'PAINT', label: 'Paint' },
-  { value: 'FLOORS', label: 'Floors' },
-  { value: 'CLEAN', label: 'Clean' },
-  { value: 'REKEY', label: 'Re-key' },
-  { value: 'OTHER', label: 'Other' },
-]
-
-const STAGE_LABELS: Record<string, string> = Object.fromEntries(
-  STAGE_OPTIONS.map((o) => [o.value, o.label]),
-)
+// R-178: from core rather than a fourth hand-kept copy of the same list.
+// This is a client component, and `stages.ts` is type-only-import-checked
+// for exactly that reason (its own comment).
+const STAGE_OPTIONS = TURNOVER_STAGES.map((value) => ({
+  value,
+  label: TURNOVER_STAGE_LABELS[value],
+}))
+const STAGE_LABELS: Record<string, string> = TURNOVER_STAGE_LABELS
 
 const STATUS_LABELS: Record<string, string> = {
   SUBMITTED: 'Submitted',
@@ -68,7 +69,87 @@ export interface TurnoverDetailView {
   daysVacant: number
   daysVacantIsFinal: boolean
   totalCostCents: number
+  plan: TurnPlan
   items: TurnoverPunchListItemView[]
+}
+
+const STAGE_STATE_LABELS: Record<StagePlan['state'], string> = {
+  EMPTY: 'No line',
+  NOT_STARTED: 'Not started',
+  IN_PROGRESS: 'In progress',
+  DONE: 'Done',
+}
+
+/**
+ * The sequence (R-178, review §10): each stage's own window laid forward
+ * from the move-out, what it is waiting on, and what has run past its day.
+ *
+ * The turn's stall is what the nightly `cases.stalled` sweep raises as a
+ * Task; this is the same facts on the screen somebody is already looking at,
+ * so a PM can see the paint is what the floor guy is waiting on without
+ * waiting six days for a queue to tell them.
+ */
+function TurnSchedule({ plan }: { plan: TurnPlan }) {
+  return (
+    <div className="flex flex-col gap-2 border-t pt-4">
+      <h3 id="turn-schedule" className="text-sm font-semibold">
+        Turn schedule
+      </h3>
+      {/* NOT "Rent-ready ..." - that sentence already appears in this
+          panel's own status line above, and `getByText` is a substring
+          match, so a second copy would make the existing assertion on it
+          ambiguous (CLAUDE.md's two-controls-one-name trap, arriving through
+          prose rather than a control). */}
+      <p className="text-muted-foreground text-sm">
+        On these stage budgets the turn finishes{' '}
+        {friendlyBusinessDate(plan.projectedRentReadyOn)}
+        {plan.daysOverTarget != null && (
+          <>
+            {' '}
+            — {plan.daysOverTarget} day{plan.daysOverTarget === 1 ? '' : 's'} past the target
+            date
+          </>
+        )}
+        .
+      </p>
+      <div
+        className="overflow-x-auto"
+        {...scrollableRegionProps('Turn schedule, scrolls sideways')}
+      >
+        <table className="w-full text-sm">
+          <caption className="sr-only">
+            Each turn stage with its planned window and what it is waiting on
+          </caption>
+          <thead>
+            <tr className="text-muted-foreground text-left">
+              <th className="py-1 pr-2 font-medium">Turn stage</th>
+              <th className="py-1 pr-2 font-medium">Planned window</th>
+              <th className="py-1 pr-2 font-medium">Stage status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {plan.stages.map((stage) => (
+              <tr key={stage.stage} className="border-t">
+                <td className="py-1.5 pr-2">{stage.label}</td>
+                <td className="py-1.5 pr-2 whitespace-nowrap">
+                  {friendlyBusinessDate(stage.startsOn)} – {friendlyBusinessDate(stage.dueOn)}
+                </td>
+                <td className="py-1.5 pr-2">
+                  {STAGE_STATE_LABELS[stage.state]}
+                  {stage.waitingOn && (
+                    <> — waiting on {STAGE_LABELS[stage.waitingOn] ?? stage.waitingOn}</>
+                  )}
+                  {stage.overdue && (
+                    <span className="text-destructive"> — past its day</span>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
 }
 
 export function TurnoverPanel({
@@ -123,6 +204,8 @@ export function TurnoverPanel({
             : 'In progress'}
         </dd>
       </dl>
+
+      <TurnSchedule plan={turnover.plan} />
 
       {turnover.items.length > 0 ? (
         <div className="overflow-x-auto" {...scrollableRegionProps('Turnover items, scrolls sideways')}>
