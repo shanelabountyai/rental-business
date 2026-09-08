@@ -198,7 +198,7 @@ test.afterAll(async () => {
 
 test.describe('entry-notice compliance', () => {
   test('schedules cleanly with enough notice, and generates the notice', async ({ page }) => {
-    const { workOrder, property } = await seedWorkOrder()
+    const { workOrder, property, tenant } = await seedWorkOrder()
     const staff = await createStaff()
     await signIn(page, staff.email)
 
@@ -237,6 +237,26 @@ test.describe('entry-notice compliance', () => {
       where: { action: 'notice.served', entityId: notice.id },
     })
     expect(entry.actorType).toBe('STAFF')
+
+    // R-181's SECOND HALF, and the reason it needed no new template: the
+    // tenant who reported this hears when the job is scheduled, on a LOCKED
+    // category they cannot mute. A `ticket.scheduled` message would have
+    // said the same facts to the same person in the same second. Asserted
+    // here so the claim is a test rather than a code read - if scheduling
+    // ever stops telling the tenant, this is the item that regressed.
+    await expect
+      .poll(
+        async () =>
+          prisma.notification.count({
+            where: {
+              recipientType: 'TENANT',
+              recipientId: tenant.id,
+              templateKey: 'entry.notice',
+            },
+          }),
+        { timeout: 15_000 },
+      )
+      .toBeGreaterThan(0)
   })
 
   test('stores the window on the PROPERTY’s clock, not the server’s', async ({ page }) => {

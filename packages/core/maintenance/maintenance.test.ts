@@ -16,6 +16,7 @@ import {
   isTicketTriageResolved,
   reportedWords,
   suggestTicketPriority,
+  ticketReference,
   validateMaintenanceRequest,
   validatePhoneLoggedRequest,
 } from './index.ts'
@@ -554,5 +555,13 @@ describe('appendClarification', () => {
     const text = appendClarification('no power in the kitchen', 'ELECTRICAL', ANSWERS)
     expect(text).toContain('Check the breaker panel: Tried this - did not fix it.')
     expect(text).toContain('Check for a GFCI reset button: Did not try this.')
+  })
+})
+
+describe('ticketReference (R-181)', () => {
+  it('is the six-character tail of the id, uppercased, and stable', () => {
+    const id = 'cmf0abcd1234efgh5678k3m9qz'
+    expect(ticketReference(id)).toBe('K3M9QZ')
+    expect(ticketReference(id)).toBe(ticketReference(id))
   })
 })

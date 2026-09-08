@@ -9614,3 +9614,131 @@ against 5 tests × 2 projects; then `reports`, `operating-report` and
 Full sweep left to CI, and **this item's own run (`34244623019`) is green on
 every job** — lint/types/unit/build and end-to-end/axe/Lighthouse. R-179's
 confirming run (`34238610315`) was green before it.
+
+## R-181 — a tenant who reports a problem hears something back
+
+**Commit:** _(recorded in the follow-up commit)_
+
+### What it built
+
+`ticket.acknowledged` — the first notification template in the product that
+tells a tenant their maintenance request landed. Forty templates preceded it
+and none said "we got it": a tenant reported a leak and the next thing they
+heard, if anything, was an entry notice when a vendor was scheduled, which can
+be days. R-177's `ticket.clarify_request` came closest and reaches the SMS path
+alone, because `inviteToClarify` is called from `sms-intake.ts` and nowhere
+else.
+
+It is sent by ONE outbox consumer, `notify-ticket-acknowledged`, not from the
+five ticket-creation sites. All five — the portal wizard, the emergency form,
+the phone-logged form, SMS intake and email intake — already emit
+`ticket.created`, so reacting to the event covers every one of them and a sixth
+intake path added later gets the acknowledgement without its author knowing
+this consumer exists. That is the same call R-023's triage consumer made about
+the same event, for the same reason.
+
+`ticketReference()` (`packages/core/maintenance/describe.ts`) gives the tenant
+something to quote: the cuid's own six-character tail, uppercased. Not a new
+column and not a sequence — `lib/confidential/actions.ts` already labels a
+locksmith's work order this way and `lib/locks/tenant-codes.ts` labels a
+tenancy this way, so a third scheme would have been the odd one out. The same
+string is printed on the staff ticket screen and the tenant's portal ticket
+page, because a handle the PM taking the call cannot see is not a reference.
+
+### What it decided
+
+- **`maintenance_ack` is its own notification category, and that is the
+  load-bearing decision of the item** (D-192). `maintenance_update` defaults
+  OFF on SMS — correct for "a plumber is coming Thursday", fatal here. Hanging
+  the receipt off it would have delivered this exclusively to the portal, the
+  one place the phone-logged and emailed-in tenant this item exists for never
+  looks; the item would have shipped inert and looked done. This is the
+  identical fork R-058, R-059, R-064 and R-177 each hit and each resolved by
+  carving out a category, and `defaultEnabled` now carries the fifth entry in
+  that list.
+- **It is separate from `maintenance_clarify` as well.** That one is a question
+  the tenant is asked and may reasonably mute ("stop making me run
+  checklists"); this one is the receipt for something they reported. Muting one
+  must not mute the other.
+- **A texted-in request is skipped, decided on `Ticket.source`.** R-177 already
+  replies inside Twilio's webhook with "Got it — we have your request for X",
+  in seconds, on the channel it arrived on; a second "we have your request" an
+  hour later is how a helpful reply becomes spam. The tempting check —
+  "does a clarify notification exist for this ticket?" — is **wrong**, and this
+  is worth writing down: `notify()` writes a `Notification` row per channel
+  even when it SUPPRESSES, so that predicate is also true for a tenant who has
+  MUTED `maintenance_clarify`, and it would then swallow the receipt for
+  exactly the person who asked to hear less about checklists and nothing about
+  receipts. The source is the honest discriminator.
+- **The emergency sentence differs, and the branch is not decoration.**
+  `pageOnCall` reaches staff inside the submitting request, so promising a
+  routine review to somebody standing in water would be untrue by the time the
+  hourly cron delivers this. One boolean in the context, one line of copy.
+- **No link in the message.** The portal ticket list is behind sign-in and the
+  tenant this template exists for is the one who does not sign in. The
+  reference is what works from a phone call, so the reference is what it
+  carries.
+- **The row's second half was already built, and was deliberately NOT
+  duplicated.** `apps/web/lib/workorders/scheduling.ts:252` is the only writer
+  of a `SCHEDULED` work order anywhere in the codebase, and `scheduleEntry`
+  already sends `entry.notice` to the reporting tenant — unconditional on the
+  entry basis, on the LOCKED `entry_notice` category they cannot mute, carrying
+  the window and the reason, with a T-1 reminder behind it. A `ticket.scheduled`
+  template would have said the same facts to the same person in the same
+  second. `e2e/entry-notice.spec.ts` now asserts that send, so the claim this
+  half is covered is a test rather than a code read: if scheduling ever stops
+  telling the tenant, R-181 is the item that regressed.
+- **One consumer per module.** The consumer lives in its own
+  `notifications/ticket-ack-consumer.ts` rather than as a third entry in
+  `notifications/consumers.ts`, because `CONSUMERS` is a plain array shared
+  across every file in a Vitest worker — a test importing `consumers.ts` to
+  reach this one would silently arm `notify-unit-make-ready` for
+  `units/auto-make-ready.test.ts` too. triage-consumer.ts's own header records
+  that exact failure having happened.
+
+### Found along the way
+
+**The append-only trap, met head-on in this item's own test teardown.** The
+obvious cleanup — delete the `OutboxEvent` rows this file emitted — fails with
+`Notification is append-only; UPDATE is not permitted`, because
+`Notification.eventId` is `ON DELETE SET NULL` and the cascade's UPDATE hits
+the trigger, taking the whole delete down with it. CLAUDE.md predicts this
+("cleanup cannot delete a row an append-only table references") and it is
+still easy to walk into, because the delete targets a table that has no
+append-only trigger of its own. The consumption rows have to stay with the
+events, too: dropping those alone would leave consumed events looking
+undelivered to any global sweep. Deactivating the property is the
+retire-don't-delete answer, and it doubles as the marker `notifications.test.ts`
+reads as "this spec has finished" (R-109).
+
+### What it left behind
+
+- **A texted-in tenant never gets the quotable reference**, and gets nothing at
+  all in the case where `inviteToClarify` was correctly silent — no `TenantConsent`
+  row for SMS, or a link-mint failure. Neither is a regression (they got nothing
+  before this item either), and both are the price of not double-texting the
+  common case. Owned by nobody.
+- **The acknowledgement rides the hourly outbox cron**, so it can lag the
+  request by up to an hour. That is the trade the whole bus already makes and
+  it is an enormous improvement on days, but it means the portal wizard's own
+  confirmation screen is still the only instant feedback a tenant gets.
+- **`entry.notice` names no ticket and carries no reference**, so a tenant with
+  two open requests cannot tell which one a scheduled visit is for. Adding a
+  reference to it is a change to legally significant notice text and was not
+  made here on that basis.
+- **No e2e covers the intake → acknowledgement path end to end.** The consumer
+  is proved at the database level (`ticket-ack-consumer.test.ts`, five cases
+  including the SMS skip, the no-tenant skip and redelivery), and each intake
+  path's own test already proves it emits the event; nothing walks a tenant
+  through the wizard and reads the resulting message.
+
+**The gate.** `lint` clean (16 pre-existing warnings, none new), `typecheck`
+clean, `npm run build` clean, `npm test` **3035 passed, 4 skipped, 0 failed**
+(up from 3028 — six new cases plus the reference unit test). e2e against the
+production build on `:3100`: `entry-notice.spec.ts` **8 passed, 0 flaky,
+0 failed**, and then `maintenance`, `maintenance-phone-log`, `clarify-link`,
+`emergency`, `portal` and `notifications` — every spec touching a screen or a
+category this change moved — **54 passed, 0 failed**. No schema change, so no
+migration and no drift check. Full sweep left to CI; R-180's run
+(`34244623019`) was green on every job before this item started, checked
+rather than copied forward.

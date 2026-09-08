@@ -53,6 +53,16 @@ export const NOTIFICATION_CATEGORIES = [
   /// product - the same fork R-058, R-059 and R-064 each resolved by
   /// carving out their own category.
   'maintenance_clarify',
+  /// R-181: "we have your request, here is what happens next". Its own
+  /// category for the SAME reason `maintenance_clarify` above is - the SMS
+  /// default, not taxonomy. `maintenance_update` is OFF on SMS, and an
+  /// acknowledgement delivered to the portal alone is no acknowledgement at
+  /// all for the phone-logged and texted-in tenant this item exists for.
+  /// Separate from `maintenance_clarify` too: that one is a question the
+  /// tenant is asked and can reasonably mute ("stop making me run
+  /// checklists"); this one is the receipt for something they just reported,
+  /// and muting one should not mute the other.
+  'maintenance_ack',
   'maintenance_emergency',
   'work_order_assigned',
 
@@ -335,7 +345,13 @@ export function defaultEnabled(
     // seconds. Defaulting it off would deliver the troubleshooting script
     // exclusively to the portal - the one place the phone-only tenant this
     // whole path exists for never looks.
-    category === 'maintenance_clarify'
+    category === 'maintenance_clarify' ||
+    // R-181: the same reasoning once more, and the plainest case of it. A
+    // tenant who has just reported a broken thing - by text, by phone to a
+    // PM, or through the wizard - hears that we have it. SMS off by default
+    // would mean the tenant with no email and no portal habit reports a leak
+    // into silence, which is the entire defect this category was added for.
+    category === 'maintenance_ack'
   )
 }
 
@@ -360,6 +376,7 @@ export const CATEGORY_LABELS: Record<NotificationCategory, string> = {
   entry_notice: 'Entry notices',
   maintenance_update: 'Maintenance updates',
   maintenance_clarify: 'Questions about a request you texted in',
+  maintenance_ack: 'Confirmation when we receive your request',
   maintenance_emergency: 'Emergency maintenance',
   work_order_assigned: 'Work orders assigned to you',
   lease_renewal: 'Lease renewals',

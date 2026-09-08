@@ -1,4 +1,8 @@
-import { CATEGORY_LABELS, emergencyDefinition } from '@rental/core/maintenance'
+import {
+  CATEGORY_LABELS,
+  emergencyDefinition,
+  ticketReference,
+} from '@rental/core/maintenance'
 import { friendlyTimestamp } from '@rental/core/scheduling'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
@@ -87,6 +91,12 @@ export default async function StaffTicketDetailPage({
       </header>
 
       <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm sm:grid-cols-3">
+        {/* R-181 gives the tenant this string to quote. It is only worth
+            quoting if the PM who takes the call can see the same one. */}
+        <dt className="text-muted-foreground">Reference</dt>
+        <dd className="col-span-1 sm:col-span-2 font-mono">
+          {ticketReference(ticket.id)}
+        </dd>
         <dt className="text-muted-foreground">Priority</dt>
         <dd className="col-span-1 sm:col-span-2">
           {PRIORITY_LABELS[ticket.priority] ?? ticket.priority}

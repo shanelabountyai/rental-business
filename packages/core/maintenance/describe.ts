@@ -158,3 +158,24 @@ export function appendClarification(
 export function reportedWords(description: string): string {
   return description.split('\n\n')[0]!.trim()
 }
+
+/**
+ * The short reference a tenant is given to quote back (MAINT-01, R-181).
+ *
+ * The cuid's own tail, uppercased - not a new column and not a sequence. The
+ * codebase already does exactly this for a work order a locksmith is told to
+ * go and do (`lib/confidential/actions.ts`) and for a tenancy on a lock code
+ * label (`lib/locks/tenant-codes.ts`), so a third scheme would be the odd one
+ * out rather than the tidy one.
+ *
+ * It is a HANDLE, not an identity: six characters of a cuid are not unique
+ * across the portfolio, and nothing looks a ticket up by them. What it has to
+ * do is let a tenant on the phone and the PM reading /maintenance/<id> agree
+ * they are talking about the same request - which is why the same string is
+ * printed on the staff screen. An acknowledgement with no quotable handle is
+ * the thing tenants ring back about, which is the cost this item exists to
+ * remove.
+ */
+export function ticketReference(ticketId: string): string {
+  return ticketId.slice(-6).toUpperCase()
+}

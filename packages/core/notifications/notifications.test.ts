@@ -232,6 +232,38 @@ describe('templates', () => {
     expect(portal.body).toContain('ADU')
   })
 
+  it('acknowledges a maintenance request on every channel, with a quotable reference (R-181)', () => {
+    const context = {
+      tenantName: 'Ada',
+      reference: 'K3M9QZ',
+      requestSummary: 'the kitchen tap will not stop running',
+      addressLine1: '310 Magnolia Dr',
+      isEmergency: false,
+    }
+
+    // SMS is the channel this template exists for - the tenant who reported
+    // by phone or email and has no portal habit. It must carry the reference
+    // on its own, since it carries nothing else.
+    const sms = renderTemplate('ticket.acknowledged', context, 'SMS')
+    expect(sms.body).toContain('310 Magnolia Dr')
+    expect(sms.body).toContain('K3M9QZ')
+
+    const email = renderTemplate('ticket.acknowledged', context, 'EMAIL')
+    expect(email.subject).toContain('K3M9QZ')
+    expect(email.body).toContain('Ada')
+    expect(email.body).toContain('the kitchen tap will not stop running')
+
+    // An emergency was paged in the submitting request, so promising a
+    // review would be untrue by the time this arrives.
+    const emergency = renderTemplate(
+      'ticket.acknowledged',
+      { ...context, isEmergency: true },
+      'SMS',
+    )
+    expect(emergency.body).toContain('paged')
+    expect(emergency.body).not.toContain('before anyone visits')
+  })
+
   it('throws on an unregistered key rather than rendering nothing', () => {
     expect(() => renderTemplate('nope.not_a_template', {}, 'EMAIL')).toThrow(
       /No notification template registered/,

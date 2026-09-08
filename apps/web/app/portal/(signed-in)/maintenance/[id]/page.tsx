@@ -1,4 +1,8 @@
-import { CATEGORY_LABELS, emergencyDefinition } from '@rental/core/maintenance'
+import {
+  CATEGORY_LABELS,
+  emergencyDefinition,
+  ticketReference,
+} from '@rental/core/maintenance'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { AddPhotoForm } from '@/components/portal/maintenance/add-photo-form.tsx'
@@ -97,6 +101,11 @@ export default async function MaintenanceTicketPage({
         </h1>
         <p className="text-muted-foreground">
           {STATUS_WORDS[ticket.status] ?? ticket.status}
+        </p>
+        {/* The same string R-181's acknowledgement gave them, so the message
+            in their inbox and this page are visibly the same request. */}
+        <p className="text-muted-foreground">
+          Reference <span className="font-mono">{ticketReference(ticket.id)}</span>
         </p>
       </div>
 

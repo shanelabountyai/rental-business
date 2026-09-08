@@ -531,6 +531,84 @@ export const clarifyRequestTemplate: NotificationTemplate<ClarifyRequestContext>
   },
 }
 
+/// Context for `ticket.acknowledged` (MAINT-01, COMM-03, NOTIF-01, R-181).
+export interface TicketAcknowledgedContext {
+  tenantName: string
+  /// `ticketReference()` - the six characters a tenant reads back over the
+  /// phone, and the same six printed on the staff ticket screen.
+  reference: string
+  /// What they reported, in their own words, truncated by the caller.
+  requestSummary: string
+  addressLine1: string
+  /// An emergency was PAGED to on-call in the same request that created the
+  /// ticket, so "we will review it" would be untrue by an hour. Branching on
+  /// this rather than sending the routine sentence to somebody standing in
+  /// water.
+  isEmergency: boolean
+}
+
+/**
+ * "We have your request" (MAINT-01, COMM-03, R-181).
+ *
+ * THE FIRST TEMPLATE THAT ACKNOWLEDGES A MAINTENANCE REQUEST AT ALL. Forty
+ * templates preceded it and none said "we got it": a tenant reported a leak
+ * and the next thing they heard, if anything, was an entry notice when a
+ * vendor was scheduled - which can be days. R-177's `ticket.clarify_request`
+ * came closest and reaches only the SMS path, because that is the only place
+ * `inviteToClarify` is called from.
+ *
+ * SENT FROM THE OUTBOX, ONCE, FOR EVERY INTAKE PATH. All five creation sites
+ * (portal wizard, emergency, phone-logged, SMS, email) already emit
+ * `ticket.created`, so one consumer covers all five and a sixth intake path
+ * gets it for free - the same call R-023's triage consumer made, for the same
+ * reason. See `notify-ticket-acknowledged` in lib/notifications/consumers.ts,
+ * including why the texted-in tenant is deliberately skipped here.
+ *
+ * `maintenance_ack`, ITS OWN CATEGORY. `maintenance_update` defaults OFF on
+ * SMS, and a receipt that cannot reach a phone-only tenant is the exact
+ * defect this item was written to fix. See `defaultEnabled`'s own entry.
+ *
+ * NO LINK, DELIBERATELY. The portal list is behind sign-in, and the tenant
+ * this message exists for is the one who does not sign in. The reference is
+ * what they can use from a phone call, so the reference is what it carries.
+ */
+export const ticketAcknowledgedTemplate: NotificationTemplate<TicketAcknowledgedContext> =
+  {
+    key: 'ticket.acknowledged',
+    category: 'maintenance_ack',
+    channels: ['SMS', 'EMAIL', 'PORTAL'],
+    render: (context, channel) => {
+      const next = context.isEmergency
+        ? 'We have paged the on-call team about it now.'
+        : 'Someone reviews it and you will hear from us before anyone visits.'
+
+      if (channel === 'SMS') {
+        return {
+          body: [
+            `We have your request for ${context.addressLine1}.`,
+            next,
+            `Quote ${context.reference} if you call us about it.`,
+          ].join('\n'),
+        }
+      }
+
+      return {
+        subject: `We have your request — ${context.reference}`,
+        body: [
+          `Hi ${context.tenantName},`,
+          '',
+          `We have your maintenance request for ${context.addressLine1}:`,
+          '',
+          context.requestSummary,
+          '',
+          next,
+          '',
+          `Your reference is ${context.reference} — quote it if you call or write to us about this request.`,
+        ].join('\n'),
+      }
+    },
+  }
+
 /// Context for `payment.receipt` (PAY-01, R-037).
 export interface PaymentReceiptContext {
   tenantName: string
@@ -2032,6 +2110,8 @@ export const TEMPLATES: Readonly<Record<string, NotificationTemplate<never>>> = 
     verifyRequestTemplate as unknown as NotificationTemplate<never>,
   [clarifyRequestTemplate.key]:
     clarifyRequestTemplate as unknown as NotificationTemplate<never>,
+  [ticketAcknowledgedTemplate.key]:
+    ticketAcknowledgedTemplate as unknown as NotificationTemplate<never>,
   [paymentReceiptTemplate.key]:
     paymentReceiptTemplate as unknown as NotificationTemplate<never>,
   [paymentReturnedTemplate.key]:
