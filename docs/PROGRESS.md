@@ -9745,7 +9745,7 @@ rather than copied forward.
 
 ## R-182 — a jurisdiction can say how it counts to thirty
 
-Commit: (recorded below)
+Commit: `b96e80c`
 
 **What it built.** `JurisdictionRule` gains two columns and core gains one
 function. `dayCountBasis` is a nullable three-valued enum — `CALENDAR`,
