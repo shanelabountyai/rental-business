@@ -9495,7 +9495,7 @@ have named the file. Fixed in `0b4677c`, whose run (`34238610315`) is
 **green on every job** — lint/types/unit/build and end-to-end/axe/Lighthouse.
 
 ## R-180 — Whose money is in the shared bank account
-**Commit:** `PENDING`  ·  **Date:** 2026-09-08
+**Commit:** `6032cd0`  ·  **Date:** 2026-09-08
 
 **What it built.** Review finding 12's cheap half (PROP-02, RPT-05, RPT-07;
 D-11). `LegalEntity` has a name, a type, an agent and three approval
