@@ -9353,7 +9353,7 @@ six extra work orders per turn (`reports`, `workorders`, `dashboard`, `leases`)
 commit.
 
 ## R-179 — The rent chase reaches every payer, on a schedule
-**Commit:** `PENDING`  ·  **Date:** 2026-09-08
+**Commit:** `838c043`  ·  **Date:** 2026-09-08
 
 **What it built.** Review finding 11 (PAY-06, PAY-07, COMM-03). Two defects
 that look unrelated and are the same one: nobody was reliably being asked for

@@ -1,53 +1,65 @@
 # Next session
 
-## Pick up: R-179
+## Pick up: R-180
 
-`docs/prds/06-backlog.md`, row 166 — the next unticked one. Read its row and
+`docs/prds/06-backlog.md`, row 167 — the next unticked one. Read its row and
 its named review finding before starting.
 
 Model: recommend at the start of the item, per the global convention.
 
-## Context from R-178 (done, 5f83e44)
+## Context from R-179 (done, 838c043)
 
-**D-184 to D-187.** The turn is a sequenced project now.
+**D-188 to D-190.** The chase reaches everybody and runs itself.
 
-- **The plan is DERIVED, not stored.** `planTurn` in
-  `packages/core/turnover/schedule.ts` computes everything from the move-out
-  date, `targetRentReadyDate` and the turn's own work orders. There is no
-  per-stage table and **this item added no migration**. If you are tempted to
-  store a per-stage date, read D-184 first — moving the target is the
-  commonest edit on that panel and a stored date goes stale against it.
-- **`startTurnoverProjectForLease` now opens SIX work orders, not one.** Any
-  fixture that counts work orders on a turn created through that function
-  gets `TURN_SEQUENCE.length`. Specs that seed `turnoverProject.create`
-  directly (punch-list, queries, the first turnover e2e test) are unaffected.
-- **`WORK_PERFORMED_STATUSES` is the one definition of "the physical work
-  happened"** — core, three readers. Do not re-derive it, and do not confuse
-  it with `OPEN_WORK_ORDER_STATUSES`, which counts WORK_COMPLETE and VERIFIED
-  as open because the vendor is still owed money.
-- **The re-key waits on nothing** (D-187). If you add a sequencing rule, keep
-  the exemption or the panel contradicts R-176's URGENT work order.
+- **`sendReminders` sends PER PERSON, not per lease.** The idempotency key is
+  `reminder:<template>:<lease>:<TENANT|GUARANTOR>:<id>:<local day>`. Any
+  fixture counting notification rows off a chase gets one set per active
+  tenant plus one per active guarantor.
+- **`{{tenant.first_name}}` resolves to the RECIPIENT.** A guarantor is
+  greeted by their own name. The catalogue field names did not change.
+- **Every guarantor SMS is suppressed as `no_consent`, deliberately** (D-190).
+  `TenantConsent` is keyed on `tenantId` and there is nowhere to record a
+  guarantor's agreement. The email is the delivery that lands.
+- **`payments.chase` runs at 08:00 property-local and raises a Task, never
+  sends** (D-189). `CHASE_LADDER_DAYS = [1, 5, 15]`, counted from the END of
+  grace and matched exactly — a `>=` there is a queue nobody can clear.
+- **`rentRoll()` now takes `Pick<ResolvedScope, 'propertyIds'>`** and carries
+  `graceDays`. That narrowing is what lets a job reuse it; do not re-derive
+  grace, the R-118 anchor, holds or plans anywhere else.
 
 Left behind, owned by no item:
 
-- No `cases.stalled` Task links to its subject — all six types, not just the
-  new one. R-158 shipped five without links.
-- A turn that stalls, resumes and stalls again is flagged once. Shared by
-  every R-158 type; fixing it changes all six.
-- `TURN_STAGE_DAYS` is a house heuristic in code with nowhere to configure it.
-- `draftPunchListFromInspection` findings are still unstaged, and now land
-  beside six template lines.
+- A guarantor gets a PORTAL-channel chase and the guarantor portal has no
+  inbox to read it in.
+- Guarantor consent cannot be recorded at all, so D-190's suppression is
+  permanent rather than closeable.
+- `CHASE_LADDER_DAYS` is a house heuristic in code with nowhere to configure
+  it — same gap as `TURN_STAGE_DAYS`.
+- The `rent.chase` Task links to nothing, like R-158's five and R-178's sixth.
+- Nothing chases a non-tenant `LeasePayer` — a housing authority behind on its
+  portion (D-13) is invisible to the ladder.
+- **`e2e/leases.spec.ts` flakes on its own cleanup**: `unit.deleteMany` refuses
+  on `WorkOrder_unitId_fkey` because R-178's lease-end opens six work orders
+  and the delete is ordered against the test body rather than the async
+  writer. Went red once in R-179's run, green on retry. It will keep flaking
+  CI.
+- **The merge-field catalogue prints raw `YYYY-MM-DD`** — `lease.starts_on`,
+  `lease.ends_on`, `balance.due_on` and `today` all fill with an ISO string, so
+  any operator template using one has been mailing tenants "due on 2026-09-01".
+  The D-153 defect in the one place D-154's grep predicate cannot see it.
+
+Still unowned from R-178: no `cases.stalled` Task links to its subject (all six
+types); a turn that stalls, resumes and stalls again is flagged once;
+`TURN_STAGE_DAYS` has nowhere to configure it; `draftPunchListFromInspection`
+findings are still unstaged.
 
 Still unowned from R-176: nothing warns portfolio-wide that a unit was listed
-with an open re-key — `markTurnoverRentReady` warns once and the stall sweep
-only looks at turns with `rentReadyAt: null`, so after the override nothing
-looks again. A CANCELED re-key still reads identically to one that never
+with an open re-key; a CANCELED re-key reads identically to one that never
 happened; nothing backfills units turned before 2026-09-07.
 
 Still unowned from R-177: the R-032c "was this fixed?" SMS default and the
-TCPA question are both **owner decisions**, recorded and unfixed. Email-intake
-tickets get no clarify link; no staff "ask them again" button; a clarification
-raises nothing for a PM who already triaged;
+TCPA question are both owner decisions, recorded and unfixed. Email-intake
+tickets get no clarify link; no staff "ask them again" button;
 `e2e/maintenance-phone-log.spec.ts` cleans up by collected-id list.
 
 Still unowned from R-175: no e-sign on a payment plan agreement; no
@@ -72,5 +84,5 @@ Still unowned from R-171: `writePayment` dedups only on
 Still unowned from R-170a: `/staff/new` and `/staff/[id]` each take ~21s to
 axe-scan against `/staff`'s 2.2s.
 
-**Check `gh run list --limit 5`** rather than assuming — R-178's own run is
+**Check `gh run list --limit 5`** rather than assuming — R-179's own run is
 the one to read.
