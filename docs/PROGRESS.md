@@ -9239,7 +9239,7 @@ maintenance-phone-log, maintenance, notifications, portal-account, portal — ra
 on the pushed SHA to be recorded in the follow-up commit.
 
 ## R-178 — The turn becomes a sequenced project
-**Commit:** `PENDING`  ·  **Date:** 2026-09-07
+**Commit:** `5f83e44`  ·  **Date:** 2026-09-07
 
 **What it built.** Review finding 10 (LEASE-12, RPT-05). `TurnoverProject` was
 a unit, a lease, a target date, a rent-ready timestamp and a bag of
