@@ -9611,4 +9611,6 @@ clean, `npm run build` clean, `check:ship-deps` clean, `npm test`
 against 5 tests × 2 projects; then `reports`, `operating-report` and
 `deposits` — the specs that read the pages this change touches —
 **18 passed, 0 failed**. No schema change, so no migration and no drift check.
-Full sweep left to CI. R-179's own run (`34238610315`) was green.
+Full sweep left to CI, and **this item's own run (`34244623019`) is green on
+every job** — lint/types/unit/build and end-to-end/axe/Lighthouse. R-179's
+confirming run (`34238610315`) was green before it.
