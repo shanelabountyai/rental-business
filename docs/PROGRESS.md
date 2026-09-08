@@ -9491,5 +9491,5 @@ change could reach, chosen by what the code touches. **The assertion lived in
 a fifth.** The lesson is narrow and worth stating: when a user-visible STRING
 changes, the spec list is not derived from the modules touched, it is derived
 from `grep -rn "<the old string>" e2e` — which takes three seconds and would
-have named the file. Fixed in the follow-up commit; the run to record is the
-one after it.
+have named the file. Fixed in `0b4677c`, whose run (`34238610315`) is
+**green on every job** — lint/types/unit/build and end-to-end/axe/Lighthouse.

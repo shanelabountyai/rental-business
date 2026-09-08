@@ -7,7 +7,13 @@ its named review finding before starting.
 
 Model: recommend at the start of the item, per the global convention.
 
-## Context from R-179 (done, 838c043)
+## Context from R-179 (done, 838c043 + 0b4677c)
+
+R-179's first CI run **failed** and `0b4677c` fixed it: `golden-path-5.spec.ts`
+carried an assertion on the chase's notice copy, and the local gate had picked
+its specs from the modules touched rather than by grepping for the changed
+string. Run `34238610315` is green on every job. **When a user-visible string
+changes, `grep -rn "<the old string>" e2e` is the spec list.**
 
 **D-188 to D-190.** The chase reaches everybody and runs itself.
 
@@ -84,5 +90,5 @@ Still unowned from R-171: `writePayment` dedups only on
 Still unowned from R-170a: `/staff/new` and `/staff/[id]` each take ~21s to
 axe-scan against `/staff`'s 2.2s.
 
-**Check `gh run list --limit 5`** rather than assuming — R-179's own run is
-the one to read.
+**Check `gh run list --limit 5`** rather than assuming. R-179's own runs are
+there: `34236161652` red, `34238610315` green.
