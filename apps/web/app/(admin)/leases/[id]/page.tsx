@@ -66,6 +66,8 @@ import { OpenViolationCasePanel } from '@/components/violations/open-case-panel.
 import { openViolationCase } from '@/lib/violations/actions.ts'
 import { casesForLease as violationCasesForLease } from '@/lib/violations/queries.ts'
 import { holdsForLease } from '@/lib/holds/queries.ts'
+import { ChasePanel } from '@/components/leases/chase-panel.tsx'
+import { chaseHistoryForLease } from '@/lib/payments/chase-history.ts'
 import { PaymentPlanPanel } from '@/components/leases/payment-plan-panel.tsx'
 import { agreePaymentPlan, cancelPaymentPlan } from '@/lib/payments/plan-actions.ts'
 import { plansForLease } from '@/lib/payments/plans.ts'
@@ -278,6 +280,7 @@ export default async function LeaseDetailPage({
     confidentialCases,
     consents,
     tenantPreferences,
+    chaseHistory,
   ] = await Promise.all([
     outstandingIntakeGaps(lease),
     canWrite ? selectableTenants() : Promise.resolve([]),
@@ -313,6 +316,7 @@ export default async function LeaseDetailPage({
           })),
         )
       : Promise.resolve([]),
+    chaseHistoryForLease(lease.id),
   ])
   // R-069: nothing to clear on a zero-deposit lease (NONE/SURETY_BOND hold
   // zero by the database CHECK constraint `chargeDeposit()`'s own comment
@@ -609,6 +613,12 @@ export default async function LeaseDetailPage({
         agreeAction={agreePaymentPlan}
         cancelAction={cancelPaymentPlan}
       />
+
+      {/* AFTER the plan and BEFORE the holds, for the same reason the plan
+          sits where it does: "who did we actually chase, and what happened to
+          it" is the question somebody asks immediately before deciding
+          whether to place a hold or send another one. */}
+      <ChasePanel rows={chaseHistory} />
 
       <HoldsPanel
         leaseId={lease.id}

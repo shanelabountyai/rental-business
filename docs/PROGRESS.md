@@ -9351,3 +9351,133 @@ six extra work orders per turn (`reports`, `workorders`, `dashboard`, `leases`)
 **72 passed, 0 failed, 0 flaky**. Full sweep left to CI. R-177's own run
 (`34156327059`) was green; this item's run to be recorded in the follow-up
 commit.
+
+## R-179 — The rent chase reaches every payer, on a schedule
+**Commit:** `PENDING`  ·  **Date:** 2026-09-08
+
+**What it built.** Review finding 11 (PAY-06, PAY-07, COMM-03). Two defects
+that look unrelated and are the same one: nobody was reliably being asked for
+the rent.
+
+The first is one line. `sendReminders` picked its recipient with
+`leaseTenants.map(lt => lt.tenant).find(t => t.active)` — the first active
+tenant the database happened to return. On a shared tenancy that is not "the
+tenant": it is one of two or three people jointly and severally liable, and
+frequently not the one holding the money. **A guarantor had never been sent a
+rent chase at all** — a person who exists on the lease precisely because
+somebody wanted a second party answerable for it. Nothing looked wrong: the
+screen said "Reminder sent to 1 tenant" and it had been.
+
+The second is an absence. There was no `SCHEDULED_JOBS` entry for delinquency
+of any kind, so whether a tenancy three weeks in arrears heard anything
+depended entirely on a human opening the rent roll and pressing a button. That
+failure is silent in the worst way — nothing on any screen is ever wrong, the
+money simply does not arrive and nobody can say when it was last asked for.
+
+Five pieces:
+
+- **[packages/core/ledger/aging.ts](packages/core/ledger/aging.ts)** —
+  `CHASE_LADDER_DAYS = [1, 5, 15]`, `CHASE_RUNG_LABELS` and `chaseRungDue`,
+  pure. Days **past grace**, never past due, and an exact match on the rung
+  rather than a threshold.
+- **[apps/web/lib/payments/chase-job.ts](apps/web/lib/payments/chase-job.ts)** —
+  `payments.chase`, 08:00 property-local, raising a `rent.chase` Task per rung.
+  It reuses `rentRoll()` wholesale rather than re-deriving grace, the R-118
+  balance anchor, `halt_dunning` holds or live plans.
+- **[apps/web/lib/payments/reminders.ts](apps/web/lib/payments/reminders.ts)** —
+  the send now builds a party list (every active tenant + every active
+  guarantor) and renders, refuses and sends each on its own merits, with the
+  person in the idempotency key and skips recorded per person.
+- **[apps/web/lib/notifications/send.ts](apps/web/lib/notifications/send.ts)** —
+  the TCPA consent gate covers `GUARANTOR`, not `TENANT` alone.
+- **[apps/web/lib/payments/chase-history.ts](apps/web/lib/payments/chase-history.ts)**
+  + **[chase-panel.tsx](apps/web/components/leases/chase-panel.tsx)** — the
+  per-tenancy record, read off `Notification`. **No migration.**
+
+**What it decided.** D-188, D-189, D-190.
+
+- **The party is in the idempotency key** (D-188). A lease-level key would
+  have sent to whoever came back first and swallowed everybody else on the
+  lease as a duplicate — the same defect this item fixes, wearing the engine's
+  clothes. `{{tenant.first_name}}` resolves to **the recipient**, so a
+  guarantor is greeted by their own name; the catalogue keeps the field names
+  because they are in every template an operator has already written.
+- **The job raises a Task and never sends** (D-189). The obvious build is an
+  auto-send at day N. This is a debt communication to a residential consumer,
+  the copy is an operator-managed template that changes without review, and
+  the tenancy may be under a protection placed five minutes ago — D-9's queue
+  stays the deliberate press.
+- **The ladder counts from the end of grace** (D-189). A ladder written
+  against the due date fires on day one in a five-day-grace state, which is
+  the exact fair-housing exposure `aging.ts`'s own header says it exists to
+  prevent. And it fires on the rung day *exactly*: a `>=` would raise a task
+  every day a balance stayed unpaid, which is not a ladder but a queue nobody
+  can clear.
+- **A guarantor is a residential consumer under the TCPA** (D-190). The
+  consent gate was `type === 'TENANT'`, argued from staff being employees and
+  vendors being counterparties. A co-signer is neither. `TenantConsent` is
+  keyed on `tenantId`, so **every guarantor SMS is now suppressed as
+  `no_consent`, deliberately** — the email is the delivery that lands and the
+  suppression row is the record of why the text did not.
+- **`rentRoll()` takes `Pick<ResolvedScope, 'propertyIds'>`**, which is all it
+  ever read. That narrowing is what let the job reuse the screen's arithmetic
+  instead of growing a second copy of it.
+
+**A second real bug found along the way, not fixed here.**
+`e2e/leases.spec.ts`'s cleanup went red once in this item's own run —
+`prisma.unit.deleteMany()` refused on `WorkOrder_unitId_fkey`, and passed on
+retry. It deletes work orders before the leases, and **R-178 made ending a
+tenancy open six of them**; anything the turn creates after that delete (an
+outbox consumer running a beat later) pins the unit and the cleanup fails on
+whichever test finished last in the worker. It reads as an unrelated
+subscription test breaking, which is exactly how the same file's own comment
+says the R-084 and R-176 instances read. Not touched here — it is R-178's
+blast radius and a spec-hygiene defect, not a product one — but it will keep
+flaking CI until the delete is ordered against the async writer rather than
+against the test body.
+
+**A real bug found along the way, not fixed here.** The merge-field catalogue
+(`packages/core/comms/merge-fields.ts`) offers `lease.starts_on`,
+`lease.ends_on`, `balance.due_on` and `today`, and `templateValues` fills all
+four with a raw `YYYY-MM-DD`. Any operator template using one has been sending
+tenants "…is due on 2026-09-01" by email and SMS, into the append-only
+`Message` trail — **the exact D-153 defect R-116's `friendlyBusinessDate` was
+built for**, in the one place the D-154 grep predicate cannot see it, because
+the value is interpolated by a template engine at runtime rather than written
+into JSX. Its own example strings in the catalogue show the ISO shape, so it
+was decided rather than slipped. Unowned.
+
+**What it left behind.**
+
+- **A guarantor gets a PORTAL-channel chase they cannot read.** `rent_reminder`
+  fans out to SMS/EMAIL/PORTAL and the guarantor portal has two nav items,
+  neither an inbox (LEASE-06 is explicit that a guarantor gets no messages).
+  The row is written and nobody can open it. Either the category should not
+  reach PORTAL for a guarantor, or the guarantor portal needs somewhere to
+  read one.
+- **Guarantor consent cannot be recorded at all**, so D-190's suppression is
+  permanent rather than a gap somebody can close by asking. `TenantConsent`
+  would need a guarantor key.
+- **The ladder is a house heuristic with nowhere to configure it** —
+  `CHASE_LADDER_DAYS` in code, the same gap `TURN_STAGE_DAYS` has.
+- **The `rent.chase` Task links to nothing**, like all six of R-158's types
+  and R-178's. A PM has to find the tenancy from the title.
+- **A tenancy that is chased, pays, and falls behind again next month gets a
+  fresh ladder** — correct, and it means the Task queue carries no history of
+  how many months this has happened. The chase panel is per-tenancy and could
+  answer that; nothing counts it.
+- **Nothing chases a `LeasePayer` who is not a tenant or guarantor** — a
+  housing authority behind on its portion (D-13) is invisible to this ladder.
+- **`e2e/rent-roll.spec.ts` still cleans up by collected-id list**, the
+  pattern CLAUDE.md warns about. Pre-existing; this item added rows to it
+  rather than fixing it.
+
+**Gate.** `lint` clean (16 pre-existing warnings, 0 errors), `typecheck`
+clean, `npm test` **3020 passed, 4 skipped, 0 failed**. e2e against the
+production build on `:3100`: `rent-roll.spec.ts` alone **16 passed**, then the
+four specs this change can reach — `rent-roll`, `leases`, `notifications`,
+`consent` — **83 passed, 1 flaky, 0 failed**, reconciling against
+`npx playwright test --list`'s `Total: 84 tests in 4 files` (42 tests × 2
+projects). The one flaky is the `leases.spec.ts` cleanup described above and
+is not this item's. Full sweep left to CI. R-178's own run (`34172135825`) was
+green; this item's run to be recorded in the follow-up commit.

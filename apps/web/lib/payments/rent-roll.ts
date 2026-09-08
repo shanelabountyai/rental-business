@@ -60,6 +60,11 @@ export interface RentRollRow {
   /// No jurisdiction rule configured for this property's state (D-4). Surfaced
   /// rather than silently treated as zero grace.
   graceUnknown: boolean
+  /// The statutory grace this property's state grants, from the versioned
+  /// rule (D-4). Null is the same fact `graceUnknown` states — carried as a
+  /// number as well because the chase ladder counts FROM the end of grace
+  /// (R-179), and `daysLate` alone cannot say where that is.
+  graceDays: number | null
   /// A hold carrying `halt_dunning` is in force on this tenancy (R-084), so
   /// the chase is off. SEPARATE FROM `pastGrace` on purpose: the debt is
   /// still owed, still aged, still on the report. What stops is the asking.
@@ -86,7 +91,16 @@ export interface RentRoll {
   vacancyLossCents: number
 }
 
-export async function rentRoll(scope: ResolvedScope, asOfDate?: Date): Promise<RentRoll> {
+// `Pick<..., 'propertyIds'>` rather than the whole `ResolvedScope`: the only
+// thing this reads is the property list, and the nightly chase job (R-179)
+// has a propertyId and no switcher state to invent. Narrowing the parameter
+// is what lets the job reuse the screen's own delinquency arithmetic instead
+// of re-deriving grace, holds and plans a second time — which is precisely
+// the duplication `pastGraceLeaseIds` exists to prevent on the send path.
+export async function rentRoll(
+  scope: Pick<ResolvedScope, 'propertyIds'>,
+  asOfDate?: Date,
+): Promise<RentRoll> {
   const asOf = asOfDate ?? new Date()
 
   const [leases, vacantUnits] = await Promise.all([
@@ -272,6 +286,7 @@ export async function rentRoll(scope: ResolvedScope, asOfDate?: Date): Promise<R
         ? businessDate(lastContact.get(tenant.id)!, zone)
         : null,
       graceUnknown: rule == null,
+      graceDays: rule?.graceDays ?? null,
       chaseHeld: chaseHeldLeases.has(lease.id),
       plan: planFor(plans.get(lease.id), ledger, zone, today),
     }

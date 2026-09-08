@@ -24,8 +24,20 @@ import { prisma } from '@rental/db'
 // ==========================================================================
 
 export interface TenancyRef {
-  tenantId: string
   leaseId: string
+  /// EXACTLY ONE OF THESE, and the one that is set is the person the message
+  /// is addressed to (R-179). A rent chase reaches every party who can pay —
+  /// a roommate holding the money and any guarantor on the hook for it — and
+  /// a guarantor is not a `Tenant` row, so "the recipient" cannot be a
+  /// tenantId any more.
+  ///
+  /// BOTH ARE SCOPED TO THE LEASE BY THE QUERY BELOW, not by the caller: an
+  /// id that does not belong to this tenancy resolves to no party and the
+  /// render returns null, which the send path already treats as "do not
+  /// send". That is the property that makes it safe for an id to arrive from
+  /// a form.
+  tenantId?: string | null
+  guarantorId?: string | null
 }
 
 /// The tenancy a template is being rendered against, plus who it goes to.
@@ -50,16 +62,25 @@ export async function templateValues(
       rentDueDay: true,
       property: { select: { name: true, addressLine1: true, timezone: true } },
       unit: { select: { name: true } },
+      // `?? ''` rather than a conditional include: an empty string matches no
+      // cuid, so the unset side comes back empty and the set side is still
+      // constrained to THIS lease. One query either way.
       leaseTenants: {
-        where: { tenantId: ref.tenantId },
+        where: { tenantId: ref.tenantId ?? '' },
         select: { tenant: { select: { firstName: true, lastName: true } } },
+      },
+      guarantors: {
+        where: { id: ref.guarantorId ?? '' },
+        select: { firstName: true, lastName: true },
       },
     },
   })
   if (!lease) return null
 
-  const tenant = lease.leaseTenants[0]?.tenant
-  if (!tenant) return null
+  // The party this message is addressed to, whichever kind it is. Null when
+  // the id names somebody who is not on this lease at all — see `TenancyRef`.
+  const party = lease.leaseTenants[0]?.tenant ?? lease.guarantors[0] ?? null
+  if (!party) return null
 
   const rows = await prisma.ledgerEntry.findMany({
     where: { leaseId: ref.leaseId },
@@ -79,9 +100,16 @@ export async function templateValues(
   const today = businessDate(new Date(), lease.property.timezone)
 
   return {
-    'tenant.first_name': tenant.firstName,
-    'tenant.last_name': tenant.lastName,
-    'tenant.full_name': `${tenant.firstName} ${tenant.lastName}`,
+    // THE RECIPIENT'S OWN NAME, whether they are a tenant or a guarantor.
+    // The catalogue calls these `tenant.*` and they stay called that — the
+    // field names are in every template an operator has already written, and
+    // renaming them would blank a merge field mid-sentence. What they mean is
+    // "the person this copy is addressed to", which is what a salutation
+    // wants: a guarantor greeted by the tenant's first name is a message that
+    // reads as sent to the wrong person.
+    'tenant.first_name': party.firstName,
+    'tenant.last_name': party.lastName,
+    'tenant.full_name': `${party.firstName} ${party.lastName}`,
     'property.name': lease.property.name,
     'property.address': lease.property.addressLine1,
     'unit.name': lease.unit.name,

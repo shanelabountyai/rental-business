@@ -54,7 +54,14 @@ function daysAgo(n: number): Date {
 }
 
 async function seedPropertyWithTenancies(
-  options: { includeUnlinkedRent?: boolean; includeStalePaidCharge?: boolean } = {},
+  options: {
+    includeUnlinkedRent?: boolean
+    includeStalePaidCharge?: boolean
+    /// R-179: a SECOND active tenant and an active guarantor on the
+    /// past-grace tenancy. Opt-in, because every other test in this file
+    /// counts the people a send reached.
+    includeExtraParties?: boolean
+  } = {},
 ) {
   const stamp = randomUUID().slice(0, 8)
   const entity = await prisma.legalEntity.create({
@@ -294,7 +301,39 @@ async function seedPropertyWithTenancies(
     ? await unlinkedRentTenancy('Stale', 1, 400)
     : null
 
-  return { property, within, past, unlinkedRent, stalePaid }
+  // R-179: the roommate holding the money, and the co-signer on the hook for
+  // it. Both are liable, and before R-179 neither was ever written to — the
+  // chase took `leaseTenants.find(t => t.active)` and stopped.
+  const roommate = options.includeExtraParties
+    ? await prisma.tenant.create({
+        data: {
+          firstName: `Room${stamp}`,
+          lastName: `Roll-${stamp}`,
+          email: `room-${stamp}@example.test`,
+          phone: uniquePhone(),
+        },
+      })
+    : null
+  if (roommate) {
+    tenantIds.push(roommate.id)
+    await prisma.leaseTenant.create({ data: { leaseId: past.lease.id, tenantId: roommate.id } })
+  }
+  const guarantor = options.includeExtraParties
+    ? await prisma.guarantor.create({
+        data: {
+          leaseId: past.lease.id,
+          firstName: `Guar${stamp}`,
+          lastName: `Roll-${stamp}`,
+          email: `guar-${stamp}@example.test`,
+          // A NUMBER ON FILE, deliberately. The guarantor's text must be
+          // suppressed for want of TCPA consent rather than for want of an
+          // address, and those are different rows with different fixes.
+          phone: uniquePhone(),
+        },
+      })
+    : null
+
+  return { property, within, past, unlinkedRent, stalePaid, roommate, guarantor }
 }
 
 /// A manager SCOPED TO ONE PROPERTY.
@@ -473,7 +512,7 @@ test.describe('rent roll and delinquency aging (PAY-06)', () => {
     await page.getByLabel('Template').selectOption(template.id)
     await page.getByRole('button', { name: /Send reminder/ }).click()
 
-    await expect(page.getByText(/Reminder sent to 1 tenant/)).toBeVisible()
+    await expect(page.getByText(/Reminder sent to 1 person on 1 tenancy/)).toBeVisible()
 
     // The message the tenant actually gets carries the RENDERED merge fields.
     const delivery = await prisma.notificationDelivery.findFirst({
@@ -495,6 +534,77 @@ test.describe('rent roll and delinquency aging (PAY-06)', () => {
     expect(entry.after).toMatchObject({ requested: 1, sent: 1 })
   })
 
+  test('THE CHASE REACHES THE ROOMMATE AND THE GUARANTOR, not the first name on the lease', async ({
+    page,
+  }) => {
+    // Review finding 11. The old code took `leaseTenants.find(t => t.active)`
+    // and stopped there, so on a shared tenancy the person actually holding
+    // the money heard nothing, and no guarantor had ever been sent a chase at
+    // all. Both are liable for the debt.
+    const { property, past, roommate, guarantor } = await seedPropertyWithTenancies({
+      includeExtraParties: true,
+    })
+    const staff = await seedScopedManager(property.id)
+    const template = await seedTemplate(staff.id)
+
+    await signIn(page, staff)
+    await page.goto('/money/rent-roll')
+
+    await page.getByRole('checkbox', { name: /Select all/ }).check()
+    await page.getByLabel('Template').selectOption(template.id)
+    await page.getByRole('button', { name: /Send reminder/ }).click()
+
+    // THREE PEOPLE, ONE TENANCY, and the copy says both. "Sent to 1 tenant"
+    // counted leases, which was only accidentally true and is plainly false
+    // the moment a lease has two names on it.
+    await expect(page.getByText(/Reminder sent to 3 people on 1 tenancy/)).toBeVisible()
+
+    for (const recipientId of [past.tenant.id, roommate!.id, guarantor!.id]) {
+      expect(
+        await prisma.notification.count({
+          where: { recipientId, templateKey: 'comms.managed_template' },
+        }),
+      ).toBeGreaterThan(0)
+    }
+
+    // ADDRESSED TO THEM, not to the primary tenant. `{{tenant.first_name}}`
+    // resolves to whoever the message is FOR - a guarantor greeted by the
+    // tenant's name is a message that reads as sent to the wrong person.
+    const toGuarantor = await prisma.notification.findFirstOrThrow({
+      where: { recipientId: guarantor!.id, channel: 'EMAIL' },
+    })
+    expect(toGuarantor.body).toContain(guarantor!.firstName)
+    expect(toGuarantor.body).not.toContain(past.tenant.firstName)
+    expect(toGuarantor.body).not.toContain('{{')
+
+    // AND THE GUARANTOR IS NOT TEXTED. A co-signer is a residential consumer
+    // the TCPA is written about, `TenantConsent` has nowhere to record their
+    // agreement, and no consent on file means the text is suppressed rather
+    // than sent (R-179). The email above is the delivery that lands.
+    const guarantorSms = await prisma.notification.findFirst({
+      where: { recipientId: guarantor!.id, channel: 'SMS' },
+      include: { delivery: true },
+    })
+    expect(guarantorSms?.delivery?.status).toBe('SUPPRESSED')
+    expect(guarantorSms?.delivery?.suppressedReason).toBe('no_consent')
+
+    // AND THE TENANCY CARRIES THE RECORD. "Who did we actually chase, and
+    // what happened to it" stopped being one fact the moment the chase
+    // addressed three people, and the suppressed text is on the panel for
+    // exactly that reason: it is the answer to "why didn't the guarantor get
+    // the message".
+    await page.goto(`/leases/${past.lease.id}`)
+    //
+    // `.first()` on every one of these, and not as a shrug: a send fans out to
+    // one row PER CHANNEL, so each person legitimately appears three times on
+    // this panel. Asserting without it is a strict-mode failure that reads as
+    // a duplicate-render bug rather than as the channel count it is.
+    const history = page.getByRole('region', { name: 'Rent chase history' })
+    await expect(history.getByText(guarantor!.firstName).first()).toBeVisible()
+    await expect(history.getByText(roommate!.firstName).first()).toBeVisible()
+    await expect(history.getByText(/Not sent — no consent/).first()).toBeVisible()
+  })
+
   test('DOUBLE-PRESSING SENDS ONCE', async ({ page }) => {
     const { property, past } = await seedPropertyWithTenancies()
     const staff = await seedScopedManager(property.id)
@@ -511,11 +621,11 @@ test.describe('rent roll and delinquency aging (PAY-06)', () => {
       })
 
     await page.getByRole('button', { name: /Send reminder/ }).click()
-    await expect(page.getByText(/Reminder sent to 1 tenant/)).toBeVisible()
+    await expect(page.getByText(/Reminder sent to 1 person on 1 tenancy/)).toBeVisible()
     const afterFirst = await countRows()
 
     await page.getByRole('button', { name: /Send reminder/ }).click()
-    await expect(page.getByText(/Reminder sent to 1 tenant/)).toBeVisible()
+    await expect(page.getByText(/Reminder sent to 1 person on 1 tenancy/)).toBeVisible()
     const afterSecond = await countRows()
 
     // COMPARED AGAINST ITSELF, not against 1. `notify()` writes one row per
@@ -575,6 +685,13 @@ test.afterAll(async () => {
   })
   await prisma.tenant.updateMany({
     where: { id: { in: tenantIds } },
+    data: { active: false },
+  })
+  // Deactivated, not deleted: a guarantor who was chased is referenced by
+  // append-only `Notification` rows, and the release path in production is a
+  // flag rather than a delete for the same reason (R-165).
+  await prisma.guarantor.updateMany({
+    where: { leaseId: { in: leaseIds } },
     data: { active: false },
   })
   await prisma.$disconnect()

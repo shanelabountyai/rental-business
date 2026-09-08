@@ -197,13 +197,25 @@ export async function notify(
   // for the same reason - it is a fact about the recipient, not a per-channel
   // preference.
   //
-  // TENANTS ONLY. A staff member is an employee and a vendor is a
+  // TENANTS AND GUARANTORS. A staff member is an employee and a vendor is a
   // counterparty we are transacting with; neither is a residential consumer
   // the TCPA's consent regime is written about, and gating them would stop
   // the on-call pager for no benefit anybody can name.
+  //
+  // A GUARANTOR IS A RESIDENTIAL CONSUMER (R-179), and the moment the rent
+  // chase started addressing them this stopped being academic: a co-signer
+  // texted about somebody else's debt is the archetypal TCPA claim, and the
+  // damages are statutory and per-message. `TenantConsent` is keyed on
+  // `tenantId`, so a guarantor id matches no row and `consentVerdict`
+  // correctly answers `no_consent_on_file` — every guarantor SMS is
+  // suppressed as `no_consent` until there is somewhere to record that they
+  // agreed. THAT IS THE INTENDED STATE, not an oversight: the email still
+  // goes, and a suppression row says why the text did not. Giving guarantors
+  // a consent record of their own is a schema change nobody has asked for
+  // yet; letting the text go without one is the failure that costs money.
   const smsConsent =
     template.channels.includes('SMS') &&
-    input.recipient.type === 'TENANT' &&
+    (input.recipient.type === 'TENANT' || input.recipient.type === 'GUARANTOR') &&
     addressFor('SMS', input.recipient) !== null
       ? consentVerdict(
           await db.tenantConsent.findMany({

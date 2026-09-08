@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { agingTotals, bucketFor, delinquencyFor } from './aging.ts'
+import {
+  CHASE_LADDER_DAYS,
+  CHASE_RUNG_LABELS,
+  agingTotals,
+  bucketFor,
+  chaseRungDue,
+  delinquencyFor,
+} from './aging.ts'
 import type { DelinquencyFacts } from './aging.ts'
 
 const owing: DelinquencyFacts = {
@@ -239,5 +246,46 @@ describe('agingTotals', () => {
     const totals = agingTotals([])
     expect(Object.keys(totals)).toEqual(['current', '0-5', '6-15', '16-30', '30+'])
     expect(totals['16-30']).toEqual({ count: 0, balanceCents: 0 })
+  })
+})
+
+describe('chaseRungDue', () => {
+  it('COUNTS FROM THE END OF GRACE, NOT FROM THE DUE DATE', () => {
+    // The defect the whole module exists to prevent, in ladder form. Day one
+    // past due is the first rung only where grace is zero; in Texas (one day)
+    // it is still inside grace, and in a five-day state it is four days off.
+    expect(chaseRungDue(1, 0)).toBe(1)
+    expect(chaseRungDue(1, 1)).toBeNull()
+    expect(chaseRungDue(2, 1)).toBe(1)
+    expect(chaseRungDue(6, 5)).toBe(1)
+  })
+
+  it('fires on the rung day and on no other day', () => {
+    // `>=` here would make every day after the first rung a chase day, and
+    // the job standing on this raises a Task each time it fires: three nudges
+    // over a fortnight is a ladder, fourteen is harassment with a queue.
+    const rungs = [1, 2, 3, 4, 5, 6, 14, 15, 16].map((late) => chaseRungDue(late, 0))
+    expect(rungs).toEqual([1, null, null, null, 5, null, null, 15, null])
+  })
+
+  it('NEVER CHASES WHEN NO RULE IS CONFIGURED', () => {
+    // D-4: `graceDays: null` is a state nobody has set up, and the honest
+    // reading is "we do not know what the law here allows". It must never
+    // resolve to "chase them", however late the tenancy looks.
+    expect(chaseRungDue(90, null)).toBeNull()
+  })
+
+  it('never fires on a tenancy that is not late at all', () => {
+    expect(chaseRungDue(0, 0)).toBeNull()
+    expect(chaseRungDue(-3, 0)).toBeNull()
+  })
+
+  it('has a label for every rung', () => {
+    // A rung with no label raises a Task whose title reads `undefined`, which
+    // is the sort of defect only a person opening the queue ever sees.
+    for (const rung of CHASE_LADDER_DAYS) {
+      expect(chaseRungDue(rung, 0)).toBe(rung)
+      expect(CHASE_RUNG_LABELS[rung]).toBeTruthy()
+    }
   })
 })

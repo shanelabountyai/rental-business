@@ -36,9 +36,18 @@ import { pastGraceLeaseIds } from './rent-roll.ts'
 //      exposure this whole item is shaped around, and a stale page or a
 //      crafted post must not be able to cause it.
 //
-//   4. IDEMPOTENT PER LEASE PER DAY. Double-pressing sends once. The engine's
-//      own key is the guarantee, and it is keyed on the FACT (this lease, this
-//      template, today) rather than on the attempt.
+//   4. IDEMPOTENT PER RECIPIENT PER DAY. Double-pressing sends once. The
+//      engine's own key is the guarantee, and it is keyed on the FACT (this
+//      lease, this template, this person, today) rather than on the attempt.
+//
+//   5. IT REACHES EVERY PARTY WHO CAN PAY, not the first name on the lease
+//      (R-179). This used to take `leaseTenants.find(t => t.active)` — so on
+//      a two-tenant lease the roommate actually holding the money heard
+//      nothing, and no guarantor had ever been sent a chase at all. Both are
+//      liable; addressing one of them and calling the tenancy chased is how a
+//      balance runs all the way to a notice with the person who would have
+//      paid it never having been told. Skips are recorded PER PERSON, for the
+//      same reason the skips are recorded at all.
 // ==========================================================================
 
 export interface ReminderFormState {
@@ -95,6 +104,12 @@ export async function sendReminders(
           },
         },
       },
+      // RULE 5. Active only — a released guarantor is no longer liable, and
+      // chasing one for a debt they are off the hook for is its own problem.
+      guarantors: {
+        where: { active: true },
+        select: { id: true, firstName: true, lastName: true, email: true, phone: true },
+      },
     },
   })
 
@@ -111,8 +126,12 @@ export async function sendReminders(
   // the reason a chase was withheld IS the record (Golden Path 5, D-134).
   const held = await leasesHalted(leaseIds, 'halt_dunning')
 
-  const sent: string[] = []
-  const skipped: { leaseId: string; why: string }[] = []
+  /// Lease ids that got at least one message out. Distinct from `sentTo`
+  /// below: "sent to 3 people on 2 tenancies" is the sentence a PM needs, and
+  /// counting either one alone hides the other.
+  const sent = new Set<string>()
+  const sentTo: string[] = []
+  const skipped: { leaseId: string; who: string; why: string }[] = []
   const deliveryIds: string[] = []
 
   for (const lease of leases) {
@@ -120,7 +139,7 @@ export async function sendReminders(
     // supplies ids; a crafted post can name any lease in the database, and
     // "you hold message.send somewhere" is not permission to message here.
     if (!(await actorCan('message.send', propertyResource(lease.property)))) {
-      skipped.push({ leaseId: lease.id, why: 'outside your properties' })
+      skipped.push({ leaseId: lease.id, who: 'the tenancy', why: 'outside your properties' })
       continue
     }
 
@@ -130,6 +149,7 @@ export async function sendReminders(
       // stop the other forty going out.
       skipped.push({
         leaseId: lease.id,
+        who: 'the tenancy',
         why: held.has(lease.id)
           ? 'under a hold that stops the chase'
           : 'not past the grace period',
@@ -137,58 +157,69 @@ export async function sendReminders(
       continue
     }
 
-    const tenant = lease.leaseTenants.map((lt) => lt.tenant).find((t) => t.active)
-    if (!tenant) {
-      skipped.push({ leaseId: lease.id, why: 'no active tenant' })
+    const parties = chaseParties(lease)
+    if (parties.length === 0) {
+      skipped.push({ leaseId: lease.id, who: 'the tenancy', why: 'nobody active to write to' })
       continue
     }
 
-    const rendered = await renderForRecipient(template, {
-      tenantId: tenant.id,
-      leaseId: lease.id,
-      tenantName: `${tenant.firstName} ${tenant.lastName}`,
-      preferredLocale: tenant.preferredLocale,
-      email: tenant.email,
-      phone: tenant.phone,
-    })
-    if (!rendered) {
-      skipped.push({ leaseId: lease.id, why: 'could not build the message' })
-      continue
-    }
-
-    // RULE 2. R-049 reports unfillable fields rather than blanking them
-    // exactly so this refuses here.
-    if (rendered.missing.length > 0) {
-      skipped.push({
+    // RULE 5. Every liable party, each rendered and refused on its own
+    // merits: one guarantor with no email must not stop the tenant's
+    // reminder, and a tenant who bounces must not stop the guarantor's.
+    for (const party of parties) {
+      const rendered = await renderForRecipient(template, {
         leaseId: lease.id,
-        why: `nothing to put in ${rendered.missing.join(', ')}`,
+        tenantId: party.type === 'TENANT' ? party.id : null,
+        guarantorId: party.type === 'GUARANTOR' ? party.id : null,
+        tenantName: party.name,
+        preferredLocale: party.preferredLocale,
+        email: party.email,
+        phone: party.phone,
       })
-      continue
-    }
+      if (!rendered) {
+        skipped.push({ leaseId: lease.id, who: party.name, why: 'could not build the message' })
+        continue
+      }
 
-    const outcomes = await notify({
-      category: 'rent_reminder',
-      templateKey: 'comms.managed_template',
-      recipient: {
-        type: 'TENANT',
-        id: tenant.id,
-        email: tenant.email,
-        phone: tenant.phone,
-      },
-      context: { subject: rendered.subject, body: rendered.body },
-      propertyId: lease.propertyId,
-      // Keyed on the FACT — this lease, this template, this property-local
-      // day — so a double press sends once and a retry tomorrow is a
-      // deliberately different message.
-      idempotencyKey: `reminder:${templateId}:${lease.id}:${businessDate(
-        new Date(),
-        lease.property.timezone,
-      )}`,
-    })
+      // RULE 2. R-049 reports unfillable fields rather than blanking them
+      // exactly so this refuses here.
+      if (rendered.missing.length > 0) {
+        skipped.push({
+          leaseId: lease.id,
+          who: party.name,
+          why: `nothing to put in ${rendered.missing.join(', ')}`,
+        })
+        continue
+      }
 
-    sent.push(lease.id)
-    for (const outcome of outcomes) {
-      if (outcome.deliveryId) deliveryIds.push(outcome.deliveryId)
+      const outcomes = await notify({
+        category: 'rent_reminder',
+        templateKey: 'comms.managed_template',
+        recipient: {
+          type: party.type,
+          id: party.id,
+          email: party.email,
+          phone: party.phone,
+        },
+        context: { subject: rendered.subject, body: rendered.body },
+        propertyId: lease.propertyId,
+        // Keyed on the FACT — this lease, this template, THIS PERSON, this
+        // property-local day — so a double press sends once and a retry
+        // tomorrow is a deliberately different message. The person is in the
+        // key because two people on one lease are two genuinely different
+        // messages, and a lease-level key would send to whoever came first
+        // and swallow the rest as duplicates.
+        idempotencyKey: `reminder:${templateId}:${lease.id}:${party.type}:${party.id}:${businessDate(
+          new Date(),
+          lease.property.timezone,
+        )}`,
+      })
+
+      sent.add(lease.id)
+      sentTo.push(party.id)
+      for (const outcome of outcomes) {
+        if (outcome.deliveryId) deliveryIds.push(outcome.deliveryId)
+      }
     }
   }
 
@@ -207,7 +238,11 @@ export async function sendReminders(
     after: {
       templateName: template.name,
       requested: leaseIds.length,
-      sent: sent.length,
+      sent: sent.size,
+      // BOTH NUMBERS. "Sent to 12" against 9 selected tenancies is the record
+      // that says the chase reached roommates and guarantors rather than the
+      // one name at the top of each lease.
+      sentToPeople: sentTo.length,
       // THE SKIPS ARE RECORDED, not just counted. "Why did this tenant not
       // get the reminder we sent everybody" is the question somebody asks
       // three weeks later, and a bare count cannot answer it.
@@ -220,20 +255,68 @@ export async function sendReminders(
 
   revalidatePath('/money/rent-roll')
 
-  if (sent.length === 0) {
+  if (sentTo.length === 0) {
     return { error: `Nothing was sent. ${describeSkips(skipped)}` }
   }
+  // PEOPLE AND TENANCIES, both counted. The old copy said "sent to N tenants"
+  // where N was a count of LEASES, which was already only accidentally true
+  // and is plainly false now that a two-tenant lease gets two messages.
+  const reach = `${sentTo.length} ${sentTo.length === 1 ? 'person' : 'people'} on ${sent.size} ${
+    sent.size === 1 ? 'tenancy' : 'tenancies'
+  }`
   return {
     notice:
       skipped.length === 0
-        ? `Reminder sent to ${sent.length} ${sent.length === 1 ? 'tenant' : 'tenants'}.`
-        : `Reminder sent to ${sent.length} of ${leaseIds.length}. ${describeSkips(skipped)}`,
+        ? `Reminder sent to ${reach}.`
+        : `Reminder sent to ${reach}, of ${leaseIds.length} selected. ${describeSkips(skipped)}`,
   }
+}
+
+/// Everyone on this tenancy who can be chased for the money (R-179): every
+/// ACTIVE tenant, plus every active guarantor.
+///
+/// A guarantor has no `preferredLocale` column — they are not a portal-first
+/// party and nothing has ever asked them — so they get the template's default
+/// language. Named here rather than left implicit, because a null falling
+/// through `languageFor` silently is exactly how a Spanish-speaking
+/// co-signer gets English forever without anybody noticing.
+function chaseParties(lease: {
+  leaseTenants: { tenant: { id: string; firstName: string; lastName: string; email: string | null; phone: string | null; preferredLocale: string | null; active: boolean } }[]
+  guarantors: { id: string; firstName: string; lastName: string; email: string | null; phone: string | null }[]
+}): {
+  type: 'TENANT' | 'GUARANTOR'
+  id: string
+  name: string
+  email: string | null
+  phone: string | null
+  preferredLocale: string | null
+}[] {
+  return [
+    ...lease.leaseTenants
+      .map((lt) => lt.tenant)
+      .filter((tenant) => tenant.active)
+      .map((tenant) => ({
+        type: 'TENANT' as const,
+        id: tenant.id,
+        name: `${tenant.firstName} ${tenant.lastName}`,
+        email: tenant.email,
+        phone: tenant.phone,
+        preferredLocale: tenant.preferredLocale,
+      })),
+    ...lease.guarantors.map((guarantor) => ({
+      type: 'GUARANTOR' as const,
+      id: guarantor.id,
+      name: `${guarantor.firstName} ${guarantor.lastName}`,
+      email: guarantor.email,
+      phone: guarantor.phone,
+      preferredLocale: null,
+    })),
+  ]
 }
 
 /// Names the reasons rather than the count. A PM who sent 40 of 45 needs to
 /// know the 5 were missing a balance, not that "5 failed".
-function describeSkips(skipped: { why: string }[]): string {
+function describeSkips(skipped: { who: string; why: string }[]): string {
   if (skipped.length === 0) return ''
   const reasons = [...new Set(skipped.map((s) => s.why))]
   return `Skipped ${skipped.length}: ${reasons.join('; ')}.`

@@ -268,3 +268,55 @@ export function agingTotals(
   }
   return totals
 }
+
+// ---------------------------------------------------------------------------
+// The chase ladder (PAY-06, R-179).
+// ---------------------------------------------------------------------------
+
+/**
+ * How many days PAST GRACE a chase step falls on.
+ *
+ * ==========================================================================
+ * COUNTED FROM THE END OF GRACE, NEVER FROM THE DUE DATE, and that is the
+ * whole reason this is not just a list of `daysLate` values. Grace is a
+ * jurisdiction fact (D-4) and it differs by state: a ladder written against
+ * the due date would fire on day 1 in a state granting five days of grace,
+ * which is the fair-housing exposure this module's header exists to prevent.
+ * Read against grace, the same three rungs mean the same thing everywhere —
+ * the day the tenant became chaseable, five days later, fifteen days later.
+ *
+ * A HOUSE HEURISTIC, NOT A STATUTE — the same posture `TURN_STALL_DAYS`
+ * states about itself. Nothing in law says the second nudge belongs on day
+ * five. There is nowhere to configure it yet; when an operator asks for
+ * their own ladder this becomes JurisdictionRule-shaped or house-config
+ * shaped, and the `pastGrace` gate above it stays exactly where it is either
+ * way.
+ * ==========================================================================
+ */
+export const CHASE_LADDER_DAYS: readonly number[] = [1, 5, 15]
+
+/// What each rung is FOR, on the Task a human reads. The last rung is the one
+/// that usually precedes a notice, which is why the job raises it louder.
+export const CHASE_RUNG_LABELS: Record<number, string> = {
+  1: 'first chase — grace has run out',
+  5: 'second chase — five days past grace and nothing has arrived',
+  15: 'final chase before a notice — fifteen days past grace',
+}
+
+/**
+ * The ladder rung due today, or null.
+ *
+ * EXACT MATCH, NOT "AT OR PAST". A rung is a day, not a threshold: `>=` would
+ * make every day past the first rung a chase day, and the job standing on
+ * this raises a Task each time it fires. Three nudges over a fortnight is a
+ * collections ladder; fourteen is harassment with a queue behind it.
+ *
+ * Null whenever grace is unknown (D-4: no configured rule is never "chase
+ * them") or the tenancy is still inside it.
+ */
+export function chaseRungDue(daysLate: number, graceDays: number | null): number | null {
+  if (graceDays == null) return null
+  const pastGrace = daysLate - graceDays
+  if (pastGrace <= 0) return null
+  return CHASE_LADDER_DAYS.includes(pastGrace) ? pastGrace : null
+}
