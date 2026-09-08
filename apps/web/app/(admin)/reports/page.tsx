@@ -125,6 +125,18 @@ export default async function ReportsPage() {
         </li>
         <li>
           <Link
+            href="/reports/settlement"
+            className="hover:bg-secondary focus-visible:ring-ring flex min-h-14 flex-col justify-center gap-0.5 px-4 py-3 focus-visible:ring-2 focus-visible:-outline-offset-2 focus-visible:outline-none"
+          >
+            <span className="font-medium">Settlement by entity</span>
+            <span className="text-muted-foreground text-sm">
+              Whose money is in the shared Stripe account, for a date range &mdash; so funds move
+              between LLCs deliberately rather than by accident.
+            </span>
+          </Link>
+        </li>
+        <li>
+          <Link
             href="/reports/reserves"
             className="hover:bg-secondary focus-visible:ring-ring flex min-h-14 flex-col justify-center gap-0.5 px-4 py-3 focus-visible:ring-2 focus-visible:-outline-offset-2 focus-visible:outline-none"
           >

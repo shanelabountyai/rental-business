@@ -9493,3 +9493,122 @@ changes, the spec list is not derived from the modules touched, it is derived
 from `grep -rn "<the old string>" e2e` — which takes three seconds and would
 have named the file. Fixed in `0b4677c`, whose run (`34238610315`) is
 **green on every job** — lint/types/unit/build and end-to-end/axe/Lighthouse.
+
+## R-180 — Whose money is in the shared bank account
+**Commit:** `PENDING`  ·  **Date:** 2026-09-08
+
+**What it built.** Review finding 12's cheap half (PROP-02, RPT-05, RPT-07;
+D-11). `LegalEntity` has a name, a type, an agent and three approval
+thresholds, and no funds destination of any kind. There is one
+`STRIPE_SECRET_KEY` for the deployment and no `stripeAccount`, `on_behalf_of`
+or `transfer_data` anywhere in the tree, so **every dollar of online rent for
+every property in every LLC settles into one Stripe balance and one bank
+account.** The entity boundary this product otherwise takes seriously —
+R-081a's operating snapshot, R-081b/d's tax packet, D-123's
+one-LLC-per-property, D-168 making R-166's deposit slips entity-bounded
+because "two different LLCs cannot share a bank account" — stopped precisely
+at the money. Commingling is the specific thing an LLC structure exists to
+prevent, and the operator finds out about it from an accountant in April.
+
+Four pieces:
+
+- **[packages/core/payments/settlement.ts](packages/core/payments/settlement.ts)**
+  — `summariseSettlements`, which takes dated payments and a window and
+  returns each entity's share, broken down by house, largest net first.
+- **[apps/web/lib/reports/settlement.ts](apps/web/lib/reports/settlement.ts)**
+  — the fetch, with the day-of-slack window and per-property zone reader that
+  `taxExportFacts` established.
+- **[/reports/settlement](apps/web/app/(admin)/reports/settlement/page.tsx)**
+  — a native `<input type="date">` range in a real `<form method="get">`, the
+  per-entity transfer figure, the per-house breakdown behind it, and every
+  payment behind that.
+- **[the CSV](apps/web/app/api/reports/settlement/route.ts)** — the payment
+  rows, for the person matching them against a bank statement.
+
+**What it decided.**
+
+- **`Payment.channel` cannot say whether money went through Stripe, and a
+  channel filter would have been silently wrong for most of the portfolio.**
+  The webhook says so in its own words: "every invoice-driven payment lands
+  here with `rail: null` and so `channel: OTHER`, and the channel therefore
+  says nothing about where the money came from". So `CARD`/`ACH` would drop
+  most online rent, and `OTHER` is not evidence either way. **The
+  discriminator is `receivedByStaffId`** — the same one the webhook itself
+  uses, and `recordOfflinePayment` is the only writer of that column anywhere
+  in the codebase (asserted in two comments there, verified by grep here).
+- **Offline money is excluded because it genuinely never settled here.** A
+  check reaches Stripe as an *out-of-band* payment against the open invoice:
+  it stops Stripe collecting and moves the ledger, but no money passes through
+  the Stripe balance, so it can never appear in a payout or on the bank line
+  this report is compared against. The page links to R-166's deposit slips
+  rather than blending the two into one number that reconciles to nothing.
+- **The arithmetic is signed, and that is the whole correctness of it.** A
+  payment that settled in March and was returned in April was genuinely in
+  March's payouts and genuinely out of April's. Summing rows that are
+  *currently* `SETTLED` gets that wrong twice — March loses money it really
+  received, and April never shows the clawback at all. A settlement and a
+  reversal are two separately dated events off one row, each counted in
+  whichever window it falls in, and a row can appear in both. Same class of
+  reasoning as R-081b's deposit liability respecting the disposition date.
+- **`reversedAt ?? receivedAt`, and it is not a guess.** The webhook has one
+  path that creates a row already in `REFUNDED` — a refund arriving for a
+  PaymentIntent we never saw succeed — and that row carries no `reversedAt`
+  while its `receivedAt` is the refund's own timestamp. Dating the clawback
+  there makes it settle and reverse on the same day, netting to zero. Leaving
+  `reversedOn` null instead counts a refund as pure income and overstates an
+  entity's share of a bank account, silently.
+- **Gross, never net, and said so on the page.** Nothing in this product
+  records a Stripe processing fee — no column, no event that carries one — so
+  a payout is smaller than this figure by whatever Stripe charged. The
+  settlement window is also not a payout window: Stripe pays out on a rolling
+  lag. Both are named in a caveats panel rather than left for the reader to
+  discover against a bank statement, which is R-078's rule about the nine
+  unfillable Schedule E lines applied to a different number.
+- **An entity with no activity in the window is absent, not zero.** A zero row
+  reads as "this LLC collected nothing", which is a claim about the entity
+  rather than about the window.
+- **A backwards range is swapped rather than rendered empty.** Someone typing
+  the dates the wrong way round is looking for money; "no settlements" is the
+  worst possible answer to give them.
+
+**A real defect in this item's own test, caught by its first run.** The
+reversal test asserted `-$1,500.00` on the **portfolio-wide** total region —
+which sums every entity in scope, in a shared `rental_test` that holds every
+property every spec has ever created. `fullyParallel` meant the other tests in
+this same file were writing March payments concurrently, and it went red on
+the first attempt and green on retry. That is CLAUDE.md's "a test that READS
+GLOBALLY in the shared database" trap, and it is worth noting that the report
+was correct the whole time — only the assertion was unscoped. Now asserted on
+the entity's own card, with the reason written beside it.
+
+**What it left behind.**
+
+- **A connected account per entity is still the real answer** and is
+  deliberately not this row: it changes every payment path in the product and
+  needs a legal-structure decision nobody has taken (the review marks it
+  *needs counsel*). The backlog row re-opens when that decision is made.
+- **Nothing records the transfer itself.** The report says what each entity is
+  owed out of the shared account; the movement between bank accounts is
+  invisible to this product, so "prove they did" rests on the bank statement
+  plus this report, and the report is regenerated on demand rather than
+  archived. R-081d's split — numbers first, archived artifact as its own row —
+  is the precedent for closing that; nothing owns it.
+- **No processing fee anywhere**, so no report in this product can ever state
+  a net payout. Recording one needs a Stripe balance-transaction feed and this
+  deployment has no credentials (the adapter seam's own header explains why an
+  unexecuted HTTP client is worse than an honest gap).
+- **`HAP_ACH` would be counted as a Stripe settlement if anything ever wrote
+  it.** Nothing does today — the channel exists in the enum with no writer —
+  and a housing authority ACHing straight to the owner's bank would not settle
+  here. Whoever wires that channel owns this.
+- No per-payout grouping and no `stripePayoutId`, so a bank line still has to
+  be matched by eye against a population rather than by an identifier.
+
+**The gate.** `lint` clean (16 pre-existing warnings, none new), `typecheck`
+clean, `npm run build` clean, `check:ship-deps` clean, `npm test`
+**3028 passed, 4 skipped, 0 failed**. e2e against the production build on
+`:3100`: `settlement.spec.ts` **10 passed, 0 flaky, 0 failed**, reconciling
+against 5 tests × 2 projects; then `reports`, `operating-report` and
+`deposits` — the specs that read the pages this change touches —
+**18 passed, 0 failed**. No schema change, so no migration and no drift check.
+Full sweep left to CI. R-179's own run (`34238610315`) was green.
