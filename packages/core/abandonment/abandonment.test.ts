@@ -92,6 +92,8 @@ describe('disposalReadiness — the one hard refusal', () => {
     noticeDays: null,
     noticeSentOn: null,
     today: '2026-09-05' as const,
+    // R-182: Texas counts calendar days, stated rather than defaulted.
+    dayCount: { dayCountBasis: 'CALENDAR' as const, observedHolidays: [] },
   }
 
   it('REFUSES when the state period is unconfigured — the one place unknown blocks', () => {

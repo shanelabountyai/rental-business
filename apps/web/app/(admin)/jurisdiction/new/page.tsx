@@ -125,6 +125,13 @@ export default async function NewJurisdictionRulePage({
           preMoveOutWalkthroughDaysBefore: source?.preMoveOutWalkthroughDaysBefore ?? '',
           entryNoticeHours: source?.entryNoticeHours ?? '',
           payOrQuitDays: source?.payOrQuitDays ?? '',
+          // R-182. CLONED, LIKE EVERY OTHER REVIEWED FIELD - including a
+          // null, which carries the "nobody has reviewed this" state forward
+          // rather than quietly resolving it to calendar days on the copy.
+          // Cloning a rule between states is exactly the flow finding 14
+          // named as the way this gap would arrive unnoticed.
+          dayCountBasis: source?.dayCountBasis ?? '',
+          observedHolidays: (source?.observedHolidays ?? []).join('\n'),
           acceptanceWaivesNotice: source?.acceptanceWaivesNotice ?? null,
           acceptanceWaiverNote: source?.acceptanceWaiverNote ?? '',
           noticeToVacateDays: source?.noticeToVacateDays ?? '',

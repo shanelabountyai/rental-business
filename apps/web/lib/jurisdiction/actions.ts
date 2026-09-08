@@ -139,6 +139,15 @@ function ruleInputFrom(formData: FormData): JurisdictionRuleInput {
     belongingsStorageDays: optionalNumber(formData, 'belongingsStorageDays'),
     belongingsNoticeDays: optionalNumber(formData, 'belongingsNoticeDays'),
     leaseViolationCureDays: optionalNumber(formData, 'leaseViolationCureDays'),
+    dayCountBasis: str(formData, 'dayCountBasis') || null,
+    // Split on any newline, trimmed, blanks dropped. Deliberately NOT
+    // deduplicated here: `validateJurisdictionRule` reports a day listed
+    // twice as a violation the operator sees, and silently swallowing it
+    // would hide a typo in a list nobody re-reads.
+    observedHolidays: str(formData, 'observedHolidays')
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0),
     acceptanceWaivesNotice: optionalBoolean(formData, 'acceptanceWaivesNotice'),
     acceptanceWaiverNote: str(formData, 'acceptanceWaiverNote') || null,
     nsfFeePermitted: formData.get('nsfFeePermitted') === 'on',
@@ -254,6 +263,8 @@ export async function createRuleVersion(
         belongingsStorageDays: input.belongingsStorageDays,
         belongingsNoticeDays: input.belongingsNoticeDays,
         leaseViolationCureDays: input.leaseViolationCureDays,
+        dayCountBasis: (input.dayCountBasis ?? null) as never,
+        observedHolidays: [...(input.observedHolidays ?? [])],
         acceptanceWaivesNotice: input.acceptanceWaivesNotice,
         acceptanceWaiverNote: input.acceptanceWaiverNote,
         nsfFeePermitted: input.nsfFeePermitted,

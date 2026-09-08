@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { cureClock, type CureClock } from '@rental/core/evictions'
-import { businessDate, utcToBusinessDate } from '@rental/core/scheduling'
+import { businessDate, UNREVIEWED_DAY_COUNT, utcToBusinessDate } from '@rental/core/scheduling'
 import type {
   ViolationGround,
   ViolationKind,
@@ -140,7 +140,7 @@ async function cureFor(row: NonNullable<CaseRow>): Promise<CureClock> {
       permittedByJurisdiction: delivery.permittedByJurisdiction,
     })),
   )
-  return cureClock(services, rule?.leaseViolationCureDays ?? null, today)
+  return cureClock(services, rule?.leaseViolationCureDays ?? null, today, rule ?? UNREVIEWED_DAY_COUNT)
 }
 
 function toView(row: NonNullable<CaseRow>, cure: CureClock): CaseView {

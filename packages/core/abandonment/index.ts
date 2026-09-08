@@ -27,7 +27,8 @@
 // Nothing in this file is a number.
 // ==========================================================================
 
-import { addBusinessDays, type BusinessDate } from '../scheduling/local-time.ts'
+import type { BusinessDate } from '../scheduling/local-time.ts'
+import { type DayCountRule, statutoryDeadline } from '../scheduling/deadline.ts'
 
 // ---------------------------------------------------------------------------
 // Contact attempts
@@ -203,6 +204,9 @@ export interface BelongingsFacts {
   /// When notice of intended disposal was actually sent, if it was.
   noticeSentOn: BusinessDate | null
   today: BusinessDate
+  /// How this jurisdiction counts the two periods above (R-182). Required,
+  /// not defaulted - see `cureClock`'s note on why.
+  dayCount: DayCountRule
 }
 
 export type DisposalRefusal =
@@ -249,7 +253,7 @@ export interface DisposalReadiness {
 export function disposalReadiness(facts: BelongingsFacts): DisposalReadiness {
   if (facts.storageDays == null) return { allowed: false, refusal: 'period_unknown' }
 
-  const storageEndsOn = addBusinessDays(facts.heldFrom, facts.storageDays)
+  const storageEndsOn = statutoryDeadline(facts.heldFrom, facts.storageDays, facts.dayCount)
   if (facts.today < storageEndsOn) {
     return {
       allowed: false,
@@ -264,7 +268,7 @@ export function disposalReadiness(facts: BelongingsFacts): DisposalReadiness {
   // satisfied by the storage period alone.
   if (facts.noticeDays != null && facts.noticeDays > 0) {
     if (!facts.noticeSentOn) return { allowed: false, refusal: 'notice_not_sent' }
-    const noticeEndsOn = addBusinessDays(facts.noticeSentOn, facts.noticeDays)
+    const noticeEndsOn = statutoryDeadline(facts.noticeSentOn, facts.noticeDays, facts.dayCount)
     if (facts.today < noticeEndsOn) {
       return {
         allowed: false,

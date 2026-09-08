@@ -3648,6 +3648,23 @@ enum CardSurchargePolicy {
   ALL
 }
 
+/// HOW A JURISDICTION COUNTS TO THIRTY (R-182, review finding 14; D-4).
+///
+/// Three values rather than the basis-enum-plus-roll-forward-boolean pair the
+/// backlog row sketched, because that pair has a meaningless combination:
+/// counting N business days forward always lands on a business day, so
+/// BUSINESS + rollForward says nothing, and a form that can be filled in
+/// meaninglessly eventually is. See packages/core/scheduling/deadline.ts.
+enum DayCountBasis {
+  /// Every day counts; the deadline lands where it lands. Texas.
+  CALENDAR
+  /// Every day counts, but a deadline landing on a weekend or an observed
+  /// holiday moves to the next business day.
+  CALENDAR_ROLL_FORWARD
+  /// Only business days are counted at all.
+  BUSINESS
+}
+
 model Role {
   id                           String   @id @default(cuid())
   /// Stable machine key: owner, manager, maintenance_tech, read_only,
@@ -6208,6 +6225,29 @@ model JurisdictionRule {
   // them, so the nuance does not need to be structured.
   acceptanceWaivesNotice Boolean?
   acceptanceWaiverNote   String?
+
+  // How the numbers above are COUNTED (R-182, review finding 14; D-4).
+  //
+  // Every day count on this row was read as calendar days by
+  // `addBusinessDays` until R-182, which is right for Texas and wrong the
+  // moment a business-day-counting state is added from R-162's clone form.
+  //
+  // THREE-VALUED, the same posture as `sourceOfIncomeProtected` and
+  // `acceptanceWaivesNotice`: null means nobody has reviewed this state's
+  // counting rule, which is NOT the claim "this state counts calendar days".
+  // Unlike those booleans this one cannot make the product refuse - a deposit
+  // deadline has to be a date - so `statutoryDeadline` reads null as CALENDAR,
+  // which is exactly the pre-R-182 behaviour and therefore moves no deadline
+  // that is already running (D-12). `computeCoverage` is where the
+  // unreviewedness becomes visible to somebody who can fix it.
+  dayCountBasis    DayCountBasis?
+  /// Days this jurisdiction does not count, as `YYYY-MM-DD`. On the rule row
+  /// rather than in a table of its own so that `rulesFor` already delivers
+  /// them to every clock, and so a holiday list is versioned and
+  /// effective-dated by the machinery that already versions the numbers
+  /// beside it. Weekends are not listed - they are structural. Empty is
+  /// correct for a CALENDAR state, which never consults this.
+  observedHolidays String[]       @default([])
 
   /// Statute citation and who reviewed it. Every one of these numbers needs
   /// an attorney's eyes before it governs a real tenancy; this is where that

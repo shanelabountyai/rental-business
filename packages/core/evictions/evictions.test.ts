@@ -9,6 +9,13 @@ import {
   type ServiceEvent,
 } from './cure.ts'
 import { canAdvanceTo } from './stages.ts'
+import { UNREVIEWED_DAY_COUNT } from '../scheduling/deadline.ts'
+
+// R-182: the cure clock now takes how the state COUNTS its days as well as
+// how many there are. These cases are all Texas, which counts calendar days,
+// and `TX_CALENDAR` is that stated explicitly rather than inherited from a
+// default - the point of the item is that a default is the defect.
+const TX_CALENDAR = { dayCountBasis: 'CALENDAR' as const, observedHolidays: [] }
 
 // The cure clock is the legally load-bearing part of R-083: filing early, or
 // on service the state does not name, is what gets a case dismissed and
@@ -20,13 +27,13 @@ const unknown = (servedOn: string): ServiceEvent => ({ servedOn, permittedByJuri
 
 describe('cureClock', () => {
   it('has no clock running before anything is served', () => {
-    const clock = cureClock([], 3, '2026-08-21')
+    const clock = cureClock([], 3, '2026-08-21', TX_CALENDAR)
     expect(clock.state).toBe('not_served')
     expect(clock.cureBy).toBeNull()
   })
 
   it('runs from a good service, expiring after the configured days', () => {
-    const clock = cureClock([good('2026-08-10')], 3, '2026-08-12')
+    const clock = cureClock([good('2026-08-10')], 3, '2026-08-12', TX_CALENDAR)
     expect(clock.state).toBe('running')
     expect(clock.runsFrom).toBe('2026-08-10')
     expect(clock.cureBy).toBe('2026-08-13')
@@ -36,17 +43,17 @@ describe('cureClock', () => {
     // The tenant has the whole of the last day. Treating the deadline as
     // already past is acting a day early, which is the mistake this whole
     // module exists to prevent.
-    const clock = cureClock([good('2026-08-10')], 3, '2026-08-13')
+    const clock = cureClock([good('2026-08-10')], 3, '2026-08-13', TX_CALENDAR)
     expect(clock.state).toBe('running')
   })
 
   it('expires the day after the cure date', () => {
-    const clock = cureClock([good('2026-08-10')], 3, '2026-08-14')
+    const clock = cureClock([good('2026-08-10')], 3, '2026-08-14', TX_CALENDAR)
     expect(clock.state).toBe('expired')
   })
 
   it('DEFECTIVE SERVICE runs no clock at all', () => {
-    const clock = cureClock([bad('2026-08-10')], 3, '2026-08-30')
+    const clock = cureClock([bad('2026-08-10')], 3, '2026-08-30', TX_CALENDAR)
     expect(clock.state).toBe('defective_service')
     expect(clock.runsFrom).toBeNull()
     expect(clock.cureBy).toBeNull()
@@ -55,26 +62,26 @@ describe('cureClock', () => {
   it('restarts from the later GOOD service when an earlier one was defective', () => {
     // "Defective service restarts everything" - the bad Monday service buys
     // the owner nothing, and the clock starts on Wednesday.
-    const clock = cureClock([bad('2026-08-10'), good('2026-08-12')], 3, '2026-08-13')
+    const clock = cureClock([bad('2026-08-10'), good('2026-08-12')], 3, '2026-08-13', TX_CALENDAR)
     expect(clock.state).toBe('running')
     expect(clock.runsFrom).toBe('2026-08-12')
     expect(clock.cureBy).toBe('2026-08-15')
   })
 
   it('runs from the EARLIEST good service, so re-serving cannot restart a valid clock', () => {
-    const clock = cureClock([good('2026-08-10'), good('2026-08-12')], 3, '2026-08-14')
+    const clock = cureClock([good('2026-08-10'), good('2026-08-12')], 3, '2026-08-14', TX_CALENDAR)
     expect(clock.runsFrom).toBe('2026-08-10')
     expect(clock.state).toBe('expired')
   })
 
   it('treats an UNCONFIGURED jurisdiction verdict as good service (D-48), never as defective', () => {
-    const clock = cureClock([unknown('2026-08-10')], 3, '2026-08-12')
+    const clock = cureClock([unknown('2026-08-10')], 3, '2026-08-12', TX_CALENDAR)
     expect(clock.state).toBe('running')
     expect(clock.runsFrom).toBe('2026-08-10')
   })
 
   it('never invents a deadline when the cure period is unconfigured', () => {
-    const clock = cureClock([good('2026-08-10')], null, '2026-12-31')
+    const clock = cureClock([good('2026-08-10')], null, '2026-12-31', TX_CALENDAR)
     expect(clock.state).toBe('running')
     expect(clock.cureBy).toBeNull()
     expect(clock.periodUnknown).toBe(true)
@@ -85,32 +92,32 @@ describe('readyToFile', () => {
   const today = '2026-08-21'
 
   it('refuses with no notice attached', () => {
-    expect(readyToFile(cureClock([], 3, today), false).refusal).toBe('no_case_notice')
+    expect(readyToFile(cureClock([], 3, today, TX_CALENDAR), false).refusal).toBe('no_case_notice')
   })
 
   it('refuses before the notice is served', () => {
-    expect(readyToFile(cureClock([], 3, today), true).refusal).toBe('not_served')
+    expect(readyToFile(cureClock([], 3, today, TX_CALENDAR), true).refusal).toBe('not_served')
   })
 
   it('REFUSES ON DEFECTIVE SERVICE, however long ago', () => {
-    const clock = cureClock([bad('2020-01-01')], 3, today)
+    const clock = cureClock([bad('2020-01-01')], 3, today, TX_CALENDAR)
     expect(readyToFile(clock, true).refusal).toBe('defective_service')
   })
 
   it('refuses while the tenant still has time to cure', () => {
-    const clock = cureClock([good('2026-08-20')], 3, today)
+    const clock = cureClock([good('2026-08-20')], 3, today, TX_CALENDAR)
     expect(readyToFile(clock, true).refusal).toBe('still_curing')
   })
 
   it('allows filing once the cure period has expired', () => {
-    const clock = cureClock([good('2026-08-01')], 3, today)
+    const clock = cureClock([good('2026-08-01')], 3, today, TX_CALENDAR)
     expect(readyToFile(clock, true).ready).toBe(true)
   })
 
   it('does NOT block filing merely because this product lacks the cure period', () => {
     // Substituting our own ignorance for the owner's attorney would be the
     // wrong call - the packet says the period is unconfigured instead.
-    const clock = cureClock([good('2026-08-20')], null, today)
+    const clock = cureClock([good('2026-08-20')], null, today, TX_CALENDAR)
     expect(readyToFile(clock, true).ready).toBe(true)
   })
 })

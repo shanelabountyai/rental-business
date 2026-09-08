@@ -4,7 +4,11 @@ import {
   DOCUMENTATION_ACCEPTED_LABELS,
   DOCUMENTATION_TYPES,
 } from '@rental/core/confidential'
-import { PAYMENT_ALLOCATION_CHARGE_TYPES } from '@rental/core/jurisdiction'
+import {
+  DAY_COUNT_BASES,
+  DAY_COUNT_BASIS_LABELS,
+  PAYMENT_ALLOCATION_CHARGE_TYPES,
+} from '@rental/core/jurisdiction'
 import {
   KNOWN_NOTICE_TYPES,
   NOTICE_SERVICE_METHODS,
@@ -20,6 +24,7 @@ import {
   FieldError,
   SelectField,
   TextField,
+  TextareaField,
 } from '@/components/form/field.tsx'
 import type { FormState } from '@/lib/jurisdiction/actions.ts'
 
@@ -36,6 +41,11 @@ const CARD_SURCHARGE_POLICY_OPTIONS = [
   { value: 'CREDIT_ONLY', label: 'Credit cards only (never debit)' },
   { value: 'ALL', label: 'All cards' },
 ]
+
+const DAY_COUNT_BASIS_OPTIONS = DAY_COUNT_BASES.map((value) => ({
+  value,
+  label: DAY_COUNT_BASIS_LABELS[value],
+}))
 
 const CHARGE_TYPE_LABELS: Record<string, string> = {
   RENT: 'Rent',
@@ -92,6 +102,8 @@ export interface RuleFormDefaults {
   paymentAllocationOrder?: readonly string[]
   applicationFeeCapDollars?: number | ''
   rubsPermitted?: boolean
+  dayCountBasis?: string
+  observedHolidays?: string
   citation?: string
   reviewedBy?: string
   notes?: string
@@ -249,6 +261,39 @@ export function RuleForm({
             error={errors.lateFeeMaxPercentBps}
           />
         </div>
+      </fieldset>
+
+      <fieldset className="flex flex-col gap-4">
+        <legend className="text-sm font-semibold">
+          How this jurisdiction counts days (R-182)
+        </legend>
+        <div className="flex flex-col gap-1.5">
+          <SelectField
+            label="Day-count basis for every statutory period below"
+            name="dayCountBasis"
+            idPrefix="rule"
+            defaultValue={defaults.dayCountBasis ?? ''}
+            error={errors.dayCountBasis}
+            placeholder="Not reviewed"
+            options={DAY_COUNT_BASIS_OPTIONS}
+          />
+          <p className="text-muted-foreground text-sm">
+            Applies to every day count on this form &mdash; the cure period, the deposit
+            deadline, the notice periods, the belongings clocks. Left unreviewed, deadlines
+            are computed in calendar days, which is what this product did everywhere before
+            anybody was asked; the coverage panel then lists it as an open question rather
+            than treating silence as an answer.
+          </p>
+        </div>
+        <TextareaField
+          label="Holidays this jurisdiction does not count"
+          name="observedHolidays"
+          idPrefix="rule"
+          rows={4}
+          defaultValue={defaults.observedHolidays}
+          error={errors.observedHolidays}
+          hint="One YYYY-MM-DD per line. Weekends are already excluded and are never listed here. Only read on a business-day or rolled-forward basis; a calendar-day state never consults it."
+        />
       </fieldset>
 
       <fieldset className="flex flex-col gap-4">
@@ -671,7 +716,7 @@ export function RuleForm({
           max={180}
           defaultValue={defaults.earlyTerminationNoticeDays}
           error={errors.earlyTerminationNoticeDays}
-          hint="Counted in calendar days from the day the tenant delivers notice. Only used where the right above is granted."
+          hint="Counted from the day the tenant delivers notice, on whichever basis the day-count field above sets. Only used where the right above is granted."
         />
         <div className="flex flex-col gap-2">
           <span className="text-sm font-medium">Documentation this state accepts</span>

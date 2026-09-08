@@ -129,6 +129,10 @@ describe('the statutory early-termination right (R-091b)', () => {
     rightExists: true,
     noticeDays: 30,
     acceptedDocumentationTypes: ['PROTECTIVE_ORDER', 'PROVIDER_STATEMENT'],
+    // R-182: Texas counts calendar days, and this says so rather than
+    // leaning on a default - see packages/core/scheduling/deadline.ts.
+    dayCountBasis: 'CALENDAR' as const,
+    observedHolidays: [],
   }
   const base = {
     deliveredOn: '2026-03-10',
@@ -160,11 +164,11 @@ describe('the statutory early-termination right (R-091b)', () => {
     // to be able to tell which they are looking at.
     const unreviewed = earlyTermination({
       ...base,
-      rule: { rightExists: null, noticeDays: null, acceptedDocumentationTypes: [] },
+      rule: { ...TX, rightExists: null, noticeDays: null, acceptedDocumentationTypes: [] },
     })
     const refused = earlyTermination({
       ...base,
-      rule: { rightExists: false, noticeDays: null, acceptedDocumentationTypes: [] },
+      rule: { ...TX, rightExists: false, noticeDays: null, acceptedDocumentationTypes: [] },
     })
     expect(unreviewed.refusal).toBe('rule_not_reviewed')
     expect(refused.refusal).toBe('right_not_granted')

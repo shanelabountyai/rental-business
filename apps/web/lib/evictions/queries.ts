@@ -7,7 +7,7 @@ import {
   type CurePayment,
   type ServiceEvent,
 } from '@rental/core/evictions'
-import { businessDate } from '@rental/core/scheduling'
+import { businessDate, type DayCountRule, UNREVIEWED_DAY_COUNT } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { rulesFor } from '@/lib/jurisdiction/queries.ts'
 import type { ResolvedScope } from '@/lib/scope/current-scope.ts'
@@ -90,11 +90,16 @@ export async function cureClockFor(evictionCase: EvictionCaseDetail) {
   // case page then warns conservatively rather than answering for the state.
   let acceptanceWaivesNotice: boolean | null = null
   let acceptanceWaiverNote: string | null = null
+  // R-182: how the state counts the cure period, not just how many days it
+  // is. An unconfigured state has neither, and `UNREVIEWED_DAY_COUNT` is what
+  // that absence looks like - `cureClock` reports no deadline at all there.
+  let dayCount: DayCountRule = UNREVIEWED_DAY_COUNT
   try {
     const rule = await rulesFor(evictionCase.property, new Date())
     payOrQuitDays = rule.payOrQuitDays
     acceptanceWaivesNotice = rule.acceptanceWaivesNotice
     acceptanceWaiverNote = rule.acceptanceWaiverNote
+    dayCount = rule
   } catch {
     payOrQuitDays = null
   }
@@ -139,7 +144,7 @@ export async function cureClockFor(evictionCase: EvictionCaseDetail) {
   }))
 
   return {
-    clock: cureClock(services, payOrQuitDays, today),
+    clock: cureClock(services, payOrQuitDays, today, dayCount),
     hasNotice,
     paymentsSinceService: paymentsSinceService(services, payments),
     acceptanceWaivesNotice,

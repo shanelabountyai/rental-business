@@ -155,6 +155,18 @@ async function seedJurisdictionRules() {
       // property this product targets.
       lateFeeMaxPercentBps: 1200,
 
+      // HOW THOSE DAY COUNTS ARE COUNTED (R-182, review finding 14).
+      //
+      // Texas states its periods in plain calendar days - the deposit's "30th
+      // day" (§92.103), the notice to vacate's "3 days" (§24.005) - with no
+      // weekend or holiday roll in the sections this row cites, so
+      // `observedHolidays` stays empty and is never read on this basis.
+      // DRAFT CONFIGURATION like every other number here: CALENDAR is a claim
+      // about the statute, which is why the column is left NULL for anything
+      // nobody has reviewed rather than defaulted to this.
+      dayCountBasis: 'CALENDAR',
+      observedHolidays: [],
+
       // Tex. Prop. Code Ch. 92 Subch. C: no statutory maximum deposit
       // amount, hence depositMaxBps left null. §92.103-.104: 30 days to
       // return or account for the deposit after surrender.

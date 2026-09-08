@@ -383,6 +383,8 @@ describe('computeCoverage', () => {
       preMoveOutWalkthroughRequired: true,
       earlyTerminationRightExists: true,
       acceptanceWaivesNotice: false,
+      dayCountBasis: 'CALENDAR',
+      observedHolidays: [],
       ...overrides,
     }
   }
@@ -405,6 +407,7 @@ describe('computeCoverage', () => {
         state: 'TX',
         jurisdiction: null,
         unreviewedFields: ['not yet reviewed by an attorney'],
+        productLimits: [],
       },
     ])
   })
@@ -419,6 +422,40 @@ describe('computeCoverage', () => {
       'retaliation window (RISK-06)',
       'early-termination right (RISK-04)',
     ])
+  })
+
+  it("names R-182's day-count basis as an unreviewed field like any other", () => {
+    const { gaps } = computeCoverage(['TX'], [rule({ dayCountBasis: null })])
+    expect(gaps[0]!.unreviewedFields).toEqual([
+      'how statutory days are counted (§6.7, R-182)',
+    ])
+    // Null is unreviewed, not "non-calendar" - nothing is claimed about the
+    // product's limits against a rule nobody has answered.
+    expect(gaps[0]!.productLimits).toEqual([])
+  })
+
+  it('warns that two checks still count calendar days once a state says otherwise', () => {
+    // The half of review finding 14 R-182 did NOT fix, said out loud on the
+    // screen that gates a state going effective, rather than left silent in
+    // two functions.
+    const { gaps } = computeCoverage(
+      ['TX'],
+      [rule({ dayCountBasis: 'BUSINESS', observedHolidays: ['2026-09-07'] })],
+    )
+    expect(gaps).toHaveLength(1)
+    expect(gaps[0]!.unreviewedFields).toEqual([])
+    expect(gaps[0]!.productLimits).toEqual([
+      'notice-sufficiency checks (rent increase LEASE-09, notice to vacate LEASE-12) still count calendar days',
+    ])
+  })
+
+  it('adds the empty-holiday-list warning only where the basis actually reads one', () => {
+    const business = computeCoverage(['TX'], [rule({ dayCountBasis: 'BUSINESS' })])
+    expect(business.gaps[0]!.productLimits).toHaveLength(2)
+    expect(business.gaps[0]!.productLimits[1]).toContain('no observed holidays')
+    // A calendar state never consults the list, so an empty one says nothing.
+    const calendar = computeCoverage(['TX'], [rule({ observedHolidays: [] })])
+    expect(calendar.gaps).toEqual([])
   })
 
   it('a state with no property at all is never listed as needing a rule', () => {

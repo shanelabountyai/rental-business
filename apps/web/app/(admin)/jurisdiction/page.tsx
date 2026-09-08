@@ -145,7 +145,22 @@ export default async function JurisdictionRulesPage({
                       {gap.state}
                       {gap.jurisdiction ? ` (${gap.jurisdiction})` : ''}
                     </span>
-                    : {gap.unreviewedFields.join(', ')}
+                    {gap.unreviewedFields.length > 0 &&
+                      `: ${gap.unreviewedFields.join(', ')}`}
+                    {/* R-182: a KNOWN limit of this product against an
+                        answer counsel has already given, not a question
+                        waiting on one. Kept visually distinct because the
+                        remedy is different - nobody clears these by reading
+                        a statute. */}
+                    {gap.productLimits.length > 0 && (
+                      <ul className="text-muted-foreground ml-4 list-disc">
+                        {gap.productLimits.map((limit) => (
+                          <li key={limit}>
+                            This product does not do this yet: {limit}.
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                   </li>
                 ))}
               </ul>

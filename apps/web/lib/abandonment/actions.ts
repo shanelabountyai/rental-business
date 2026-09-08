@@ -9,7 +9,12 @@ import {
   isContactOutcome,
 } from '@rental/core/abandonment'
 import { entryDecision, entryNoticeText } from '@rental/core/entry'
-import { businessDate, businessDateToUtc, wallClockToUtc } from '@rental/core/scheduling'
+import {
+  businessDate,
+  businessDateToUtc,
+  UNREVIEWED_DAY_COUNT,
+  wallClockToUtc,
+} from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
@@ -479,6 +484,7 @@ export async function disposeBelongings(
     noticeDays: rule?.belongingsNoticeDays ?? null,
     noticeSentOn: found.belongingsNoticeSentOn,
     today,
+    dayCount: rule ?? UNREVIEWED_DAY_COUNT,
   })
   if (!decision.allowed) {
     return { error: DISPOSAL_REFUSAL_MESSAGES[decision.refusal!] }

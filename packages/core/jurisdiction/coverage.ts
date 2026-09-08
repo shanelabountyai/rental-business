@@ -18,6 +18,7 @@ const UNREVIEWED_FIELDS = [
   { key: 'preMoveOutWalkthroughRequired', label: 'pre-move-out walkthrough right (INSP-02)' },
   { key: 'earlyTerminationRightExists', label: 'early-termination right (RISK-04)' },
   { key: 'acceptanceWaivesNotice', label: 'acceptance-of-rent waiver (PAY-14)' },
+  { key: 'dayCountBasis', label: 'how statutory days are counted (§6.7, R-182)' },
 ] as const
 
 export interface RuleCoverageLike {
@@ -29,12 +30,20 @@ export interface RuleCoverageLike {
   preMoveOutWalkthroughRequired: boolean | null
   earlyTerminationRightExists: boolean | null
   acceptanceWaivesNotice: boolean | null
+  dayCountBasis: string | null
+  observedHolidays: readonly string[]
 }
 
 export interface CoverageGap {
   state: string
   jurisdiction: string | null
   unreviewedFields: string[]
+  /// R-182: gaps that are not an unanswered legal question but a KNOWN limit
+  /// of this product against an answer that HAS been given. Separate from
+  /// `unreviewedFields` because the remedy is different - nobody can clear
+  /// these by reading a statute, and a screen that mixed them would ask an
+  /// operator to review something already reviewed.
+  productLimits: string[]
 }
 
 export interface PortfolioCoverage {
@@ -68,8 +77,33 @@ export function computeCoverage(
         ({ label }) => label,
       ),
     ]
-    if (unreviewedFields.length > 0) {
-      gaps.push({ state: rule.state, jurisdiction: rule.jurisdiction, unreviewedFields })
+    // R-182 (review finding 14). A state that does NOT count in plain
+    // calendar days is a state where two checks in this product are still
+    // wrong, and they are wrong quietly: `noticePeriodCheck` (LEASE-12) and
+    // `renewalCheck` (LEASE-09) ask "were enough days given" by subtracting
+    // two timestamps, so they count calendar days whatever this column says.
+    // Every clock that ADDS days to produce a deadline goes through
+    // `statutoryDeadline` and is correct. Saying so here is the cheap honest
+    // fix that finding 15 argues for over building the thing: the gap is
+    // loud, on the screen that gates a state going effective, rather than
+    // silent in two functions nobody is going to re-read.
+    const productLimits =
+      rule.dayCountBasis != null && rule.dayCountBasis !== 'CALENDAR'
+        ? [
+            'notice-sufficiency checks (rent increase LEASE-09, notice to vacate LEASE-12) still count calendar days',
+            ...(rule.observedHolidays.length === 0
+              ? ['no observed holidays are on file, so only weekends are skipped']
+              : []),
+          ]
+        : []
+
+    if (unreviewedFields.length > 0 || productLimits.length > 0) {
+      gaps.push({
+        state: rule.state,
+        jurisdiction: rule.jurisdiction,
+        unreviewedFields,
+        productLimits,
+      })
     }
   }
 

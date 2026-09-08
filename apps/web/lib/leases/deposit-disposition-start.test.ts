@@ -103,7 +103,13 @@ async function seedLease(
   return lease
 }
 
-async function seedRule(depositDispositionDays: number | null) {
+async function seedRule(
+  depositDispositionDays: number | null,
+  dayCount: {
+    dayCountBasis?: 'CALENDAR' | 'CALENDAR_ROLL_FORWARD' | 'BUSINESS'
+    observedHolidays?: string[]
+  } = {},
+) {
   const rule = await prisma.jurisdictionRule.create({
     data: {
       state: STATE,
@@ -113,6 +119,7 @@ async function seedRule(depositDispositionDays: number | null) {
       lateFeeType: 'NONE',
       paymentAllocationOrder: [],
       depositDispositionDays,
+      ...dayCount,
     },
   })
   ruleIds.push(rule.id)
@@ -137,6 +144,42 @@ describe('startDepositDisposition', () => {
       where: { subjectId: lease.id, type: 'deposit.disposition_due' },
     })
     expect(task).not.toBeNull()
+  })
+
+  // R-182 (review finding 14). The wiring, not the arithmetic - the
+  // arithmetic has its own tests in packages/core/scheduling/deadline.test.ts.
+  // What this proves is that the number and the COUNTING RULE both come off
+  // the same `JurisdictionRule` row and reach the frozen deadline together.
+  // Before R-182 this row's basis could say anything at all and the deadline
+  // would not move, which is precisely how a second state would have gone
+  // live with wrong dates and nothing to show for it.
+  it('counts the deadline the way the state says it counts (R-182)', async () => {
+    // 2026-08-31 is a Monday. 30 calendar days is Wednesday 30 September;
+    // 30 BUSINESS days, skipping twelve weekend days and the one holiday on
+    // file, is Tuesday 13 October - almost a fortnight apart on the same
+    // statute and the same move-out.
+    await seedRule(30, { dayCountBasis: 'BUSINESS', observedHolidays: ['2026-09-07'] })
+    const property = await seedProperty()
+    const lease = await seedLease(property.id)
+
+    expect((await startDepositDisposition(lease.id)).reason).toBe('started')
+
+    const deposit = await prisma.deposit.findFirstOrThrow({ where: { leaseId: lease.id } })
+    expect(deposit.dispositionDueOn?.toISOString().slice(0, 10)).toBe('2026-10-13')
+  })
+
+  it('leaves an unreviewed basis counting calendar days, exactly as before (R-182)', async () => {
+    // The no-regression half, and it is the load-bearing one: every rule row
+    // that existed when R-182 shipped has a NULL basis, and a deadline
+    // already running must not move (D-12).
+    await seedRule(30, { dayCountBasis: undefined })
+    const property = await seedProperty()
+    const lease = await seedLease(property.id)
+
+    expect((await startDepositDisposition(lease.id)).reason).toBe('started')
+
+    const deposit = await prisma.deposit.findFirstOrThrow({ where: { leaseId: lease.id } })
+    expect(deposit.dispositionDueOn?.toISOString().slice(0, 10)).toBe('2026-09-30')
   })
 
   // R-169. `moveOutAt` is a real timestamp, so an evening move-out is

@@ -13,6 +13,7 @@ import {
   friendlyBusinessDate,
   friendlyDate,
   friendlyTimestamp,
+  UNREVIEWED_DAY_COUNT,
 } from '@rental/core/scheduling'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
@@ -86,6 +87,7 @@ export default async function AbandonmentCasePage({
         noticeDays: rule?.belongingsNoticeDays ?? null,
         noticeSentOn: found.belongingsNoticeSentOn,
         today,
+        dayCount: rule ?? UNREVIEWED_DAY_COUNT,
       })
     : null
 

@@ -598,6 +598,11 @@ export async function recordEarlyTermination(
       rightExists: rule?.earlyTerminationRightExists ?? null,
       noticeDays: rule?.earlyTerminationNoticeDays ?? null,
       acceptedDocumentationTypes: rule?.earlyTerminationDocumentationTypes ?? [],
+      // R-182: the notice period AND how the state counts it. An
+      // unconfigured state refuses on `rightExists: null` long before this
+      // is read.
+      dayCountBasis: rule?.dayCountBasis ?? null,
+      observedHolidays: rule?.observedHolidays ?? [],
     },
     // FROM THE CASE, NEVER FROM THIS FORM (D-108). What the statute turns on
     // is that documentation of an accepted class was produced, which the case

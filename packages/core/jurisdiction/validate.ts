@@ -1,4 +1,4 @@
-import type { CardSurchargePolicy, ChargeType, LateFeeType } from '@rental/db'
+import type { CardSurchargePolicy, ChargeType, DayCountBasis, LateFeeType } from '@rental/db'
 import { isUsStateCode } from '../property/us-states.ts'
 // Imported from the leaf module, not '../notices/index.ts': this file is
 // reachable from a client component (see the note below), so it takes the
@@ -42,6 +42,26 @@ const CARD_SURCHARGE_POLICIES = [
 const CARD_SURCHARGE_POLICY_SET: ReadonlySet<string> = new Set(
   CARD_SURCHARGE_POLICIES,
 )
+
+/// R-182. Restated rather than imported at runtime, for the reason the header
+/// gives - this file is reachable from a client component. `satisfies` pins
+/// it to the Prisma enum at compile time.
+export const DAY_COUNT_BASES = [
+  'CALENDAR',
+  'CALENDAR_ROLL_FORWARD',
+  'BUSINESS',
+] as const satisfies readonly DayCountBasis[]
+const DAY_COUNT_BASIS_SET: ReadonlySet<string> = new Set(DAY_COUNT_BASES)
+
+/// What each basis says, for the form's radio labels. Same wording as
+/// `dayCountNote` in packages/core/scheduling/deadline.ts describes the
+/// consequence; this describes the choice.
+export const DAY_COUNT_BASIS_LABELS: Record<(typeof DAY_COUNT_BASES)[number], string> = {
+  CALENDAR: 'Calendar days — every day counts, and the deadline lands where it lands',
+  CALENDAR_ROLL_FORWARD:
+    'Calendar days, rolled forward — a deadline landing on a weekend or an observed holiday moves to the next business day',
+  BUSINESS: 'Business days — weekends and observed holidays are not counted at all',
+}
 
 const ALL_CHARGE_TYPES = [
   'RENT',
@@ -170,6 +190,15 @@ export interface JurisdictionRuleInput {
   /// prose; the product only warns on these, it never computes with them.
   acceptanceWaivesNotice?: boolean | null
   acceptanceWaiverNote?: string | null
+
+  /// R-182 (review finding 14). Null means nobody has reviewed HOW this
+  /// state counts the day numbers above - a different claim from CALENDAR,
+  /// which says somebody looked. `statutoryDeadline` reads null as calendar
+  /// so no deadline moves; `computeCoverage` is where the gap surfaces.
+  dayCountBasis?: string | null
+  /// `YYYY-MM-DD` days this jurisdiction does not count. Only ever read on a
+  /// non-calendar basis. Weekends are structural and are never listed.
+  observedHolidays?: readonly string[]
 
   citation?: string | null
   reviewedBy?: string | null
@@ -311,6 +340,8 @@ export function validateJurisdictionRule(
       message: 'Enter a realistic rent-increase cap in basis points, or leave blank for no statutory cap.',
     })
   }
+
+  validateDayCount(input, violations)
 
   if (input.paymentAllocationOrder.length === 0) {
     violations.push({
@@ -496,5 +527,43 @@ function validateLateFee(
       field: 'lateFeeMaxPercentBps',
       message: 'Enter a realistic late-fee cap in basis points (100 = 1%).',
     })
+  }
+}
+
+
+/// R-182. The basis has to be one of three values, and the holiday list has
+/// to be dates - a malformed entry there is silent, because `isBusinessDay`
+/// compares strings and a typo simply never matches a day.
+///
+/// AN EMPTY HOLIDAY LIST IS NOT REJECTED even on a business-day basis. It is
+/// a real state of the world (nobody has itemised them yet) and refusing the
+/// write would mean a state could not be recorded at all until somebody had.
+/// `computeCoverage` says it out loud instead, which is where a gap that
+/// needs a human belongs.
+function validateDayCount(
+  input: JurisdictionRuleInput,
+  violations: Violation[],
+): void {
+  if (input.dayCountBasis != null && !DAY_COUNT_BASIS_SET.has(input.dayCountBasis)) {
+    violations.push({
+      field: 'dayCountBasis',
+      message: `"${input.dayCountBasis}" is not a day-count basis.`,
+    })
+  }
+
+  const seen = new Set<string>()
+  for (const day of input.observedHolidays ?? []) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || Number.isNaN(Date.parse(`${day}T00:00:00Z`))) {
+      violations.push({
+        field: 'observedHolidays',
+        message: `"${day}" is not a date. Use YYYY-MM-DD, one per line.`,
+      })
+    } else if (seen.has(day)) {
+      violations.push({
+        field: 'observedHolidays',
+        message: `${day} is listed twice.`,
+      })
+    }
+    seen.add(day)
   }
 }

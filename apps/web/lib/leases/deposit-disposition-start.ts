@@ -1,10 +1,10 @@
 import 'server-only'
 
 import {
-  addBusinessDays,
   businessDate,
   businessDateToUtc,
   friendlyBusinessDate,
+  statutoryDeadline,
 } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { createTask } from '@/lib/tasks/create.ts'
@@ -53,7 +53,10 @@ export async function startDepositDisposition(leaseId: string): Promise<StartDis
   // a day late for every evening move-out. Identical to the defect R-156
   // fixed on the eviction cure clock.
   const moveOutDate = businessDate(lease.moveOutAt, lease.property.timezone)
-  const dueOn = addBusinessDays(moveOutDate, rule.depositDispositionDays)
+  // R-182: the rule says how many days AND how the state counts them. Before
+  // this, `addBusinessDays` read every state as calendar days - right for
+  // Texas, wrong for a business-day state added from R-162's clone form.
+  const dueOn = statutoryDeadline(moveOutDate, rule.depositDispositionDays, rule)
 
   await prisma.$transaction(async (tx) => {
     await tx.deposit.update({

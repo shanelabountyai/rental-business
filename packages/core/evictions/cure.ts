@@ -9,7 +9,8 @@
 // a cure period runs from a service that was actually good, and a case whose
 // only service was defective has no clock running at all.
 
-import { addBusinessDays, type BusinessDate } from '../scheduling/local-time.ts'
+import type { BusinessDate } from '../scheduling/local-time.ts'
+import { type DayCountRule, statutoryDeadline } from '../scheduling/deadline.ts'
 
 /**
  * The notice types that can start a cure period, and so the types an eviction
@@ -90,11 +91,17 @@ export interface CureClock {
  * than as expired: a deadline this product invented is the one number in an
  * eviction file that must never be guessed, because acting a day early is
  * what gets a case dismissed and the whole thing started over.
+ *
+ * `dayCount` is REQUIRED rather than defaulted (R-182). A default would be
+ * this product deciding for itself that a state counts calendar days, which
+ * is the assumption review finding 14 exists to remove - and a defaulted
+ * parameter reproduces it silently at the next call site.
  */
 export function cureClock(
   services: readonly ServiceEvent[],
   payOrQuitDays: number | null,
   today: BusinessDate,
+  dayCount: DayCountRule,
 ): CureClock {
   const periodUnknown = payOrQuitDays == null
 
@@ -113,7 +120,7 @@ export function cureClock(
     return { state: 'running', runsFrom, cureBy: null, periodUnknown }
   }
 
-  const cureBy = addBusinessDays(runsFrom, payOrQuitDays)
+  const cureBy = statutoryDeadline(runsFrom, payOrQuitDays, dayCount)
   return {
     state: today > cureBy ? 'expired' : 'running',
     runsFrom,

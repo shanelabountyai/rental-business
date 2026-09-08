@@ -9742,3 +9742,101 @@ category this change moved — **54 passed, 0 failed**. No schema change, so no
 migration and no drift check. Full sweep left to CI; R-180's run
 (`34244623019`) was green on every job before this item started, checked
 rather than copied forward.
+
+## R-182 — a jurisdiction can say how it counts to thirty
+
+Commit: (recorded below)
+
+**What it built.** `JurisdictionRule` gains two columns and core gains one
+function. `dayCountBasis` is a nullable three-valued enum — `CALENDAR`,
+`CALENDAR_ROLL_FORWARD`, `BUSINESS` — and `observedHolidays` is a `String[]`
+of `YYYY-MM-DD` days the jurisdiction does not count. `statutoryDeadline(from,
+days, rule)` in [packages/core/scheduling/deadline.ts](packages/core/scheduling/deadline.ts)
+is the single deadline function, with `isBusinessDay`, `dayCountNote` and the
+named `UNREVIEWED_DAY_COUNT` a caller with no rule row at all passes. Five
+clocks now route through it: the deposit-disposition deadline
+(`deposit-disposition-start.ts`), the eviction cure clock and the violation
+cure clock (`cureClock`, both callers), the statutory early-termination date
+(`earlyTermination`), and both belongings clocks (`disposalReadiness`). The
+rule form carries a "How this jurisdiction counts days" fieldset, R-162's
+clone flow copies both columns forward — including a null, so an unreviewed
+state stays unreviewed on the copy — and `computeCoverage` reports the basis
+as an unreviewed field alongside the other four.
+
+**What it decided** (D-193, and do not silently reverse any of it).
+
+- **One three-valued column, not the enum-plus-boolean pair the backlog row
+  sketched.** Counting N business days forward lands on a business day by
+  construction, so `BUSINESS` + a roll-forward flag is a combination that
+  cannot mean anything, and a form that can be filled in meaninglessly
+  eventually is.
+- **Null means nobody has reviewed the state, and reads as calendar.** The
+  migration deliberately does not backfill. A `CALENDAR` default would have
+  written a legal claim onto every existing row; falling to calendar on read
+  is exactly the pre-R-182 behaviour, so no deadline already running moves
+  (D-12). This is the same posture `sourceOfIncomeProtected` and
+  `acceptanceWaivesNotice` take, with the one difference that this column
+  cannot refuse — a deposit deadline has to be a date.
+- **Holidays live on the rule row.** `rulesFor` already delivers the whole
+  row to every clock (D-4), so no call site needed a second fetch, and the
+  list gets versioning and effective-dating free. The cost is that next
+  year's dates mean a new rule version, which is how D-4 says config changes.
+- **`addBusinessDays` survives and is not renamed.** It is still right for a
+  report range, a turn-stage target and a showing calendar. What must not
+  happen again is a *statutory* deadline reaching it directly.
+- **`plan.ts`'s `PLAN_GRACE_DAYS` was deliberately left on `addBusinessDays`.**
+  Its own comment says in capitals that it is mail float, not a statutory
+  grace period, so it is not a clock any legislature counts.
+- **`dayCount` is a required parameter everywhere, never defaulted.** A
+  default is this product deciding for itself how a state counts, which is
+  the assumption the finding exists to remove.
+
+**Found along the way.** A zero-day period starting on a Saturday made the
+two non-calendar bases disagree about the same day: `BUSINESS` returned the
+Saturday (the count loop never runs) while `CALENDAR_ROLL_FORWARD` rolled to
+Tuesday. A zero-day notice period is real configuration — `earlyTermination`'s
+own note describes a state where the tenancy ends the day notice is delivered
+— so the branch is reachable. The roll now happens after the count on both,
+and the direction follows the module's own rule: rolling forward gives the
+party more of the period, never less.
+
+**What it left behind.**
+
+- **Two checks still count calendar days whatever the column says**, and this
+  is now loud rather than silent. `noticePeriodCheck` (LEASE-12) and
+  `renewalCheck` (LEASE-09) ask "were enough days given" by subtracting two
+  `Date`s, so they are unaffected by the basis. Converting them means turning
+  those `Date`s into `BusinessDate`s, which is R-042's bug class and its own
+  item. Until then `computeCoverage` emits a `productLimits` entry naming
+  both, on the screen that gates a state going effective — the cheap honest
+  fix review finding 15 argues for over building the thing.
+- **`assessEvidence`'s abandonment presumption period is a plain elapsed
+  count** (`daysSinceContact >= presumedAfterDays`) and takes no basis. Same
+  shape as the two above and not covered by the same warning, because a
+  presumption period counted in business days is not a pattern any state in
+  the footprint uses today.
+- **A business-day state with no holidays on file skips only weekends.** The
+  write is not refused — "nobody has itemised them yet" is a real state of
+  the world and refusing would mean the state could not be recorded at all —
+  and the coverage screen says so as a second `productLimits` line.
+- **SCRA's 30 days stays on `addBusinessDays`.** It is federal (D-82), not
+  state configuration, and giving it a state's counting rule would be wrong.
+- **Nothing seeds a holiday list for any state.** Which holidays toll a
+  statutory deadline is a counsel question, and Texas — the only configured
+  state, and `CALENDAR` — never reads the column.
+
+**The gate.** `lint` clean (16 pre-existing warnings, none new), `typecheck`
+clean, `check:ship-deps` clean, `npm run build` clean, `npm test` **3051
+passed, 4 skipped, 0 failed** (up from 3035 — eleven cases in the new
+`deadline.test.ts`, three in `jurisdiction.test.ts`, two wiring cases in
+`deposit-disposition-start.test.ts`). `npm run db:ci` **exit 0**: every
+migration applied to a throwaway Postgres from scratch, seeded, and
+`migrate diff` reporting no drift — which caught a real defect on the way,
+since a `DEFAULT ARRAY[]::TEXT[]` Prisma cannot express is permanent drift
+unless the schema declares `@default([])` too. e2e against the production
+build on `:3100`: `jurisdiction`, `abandonment` and `evictions` **22 passed,
+0 flaky, 0 failed**, then `confidential`, `violations`, `deposit-disposition`
+and `deposits` **13 passed, 0 failed** — every spec touching a clock or a
+screen this change moved. Full sweep left to CI; R-181's run
+(`34252431016`) was green on every job before this item started, checked with
+`gh run list` rather than copied forward from the previous entry.

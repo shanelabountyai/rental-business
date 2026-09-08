@@ -7,7 +7,8 @@
 // stack trace, a schema, a browser history or a log line, and the fact this
 // case exists is the fact the access control is holding.
 
-import { addBusinessDays, type BusinessDate } from '../scheduling/local-time.ts'
+import type { BusinessDate } from '../scheduling/local-time.ts'
+import { type DayCountRule, statutoryDeadline } from '../scheduling/deadline.ts'
 
 export interface ConfidentialCaseViolation {
   field: string
@@ -200,7 +201,7 @@ export function restrictedPartyNote(input: {
 /// grants no such right" and the two need different messages and different
 /// remedies - one is a five-minute config edit, the other is a legal
 /// conclusion somebody has already reached.
-export interface EarlyTerminationRule {
+export interface EarlyTerminationRule extends DayCountRule {
   rightExists: boolean | null
   noticeDays: number | null
   /// EMPTY IS NOT "NONE". It means nobody has itemised which classes this
@@ -284,7 +285,7 @@ export function earlyTermination(input: EarlyTerminationInput): EarlyTermination
   if (input.rule.noticeDays == null) return { refusal: 'notice_period_not_configured' }
 
   return {
-    effectiveOn: addBusinessDays(input.deliveredOn, input.rule.noticeDays),
+    effectiveOn: statutoryDeadline(input.deliveredOn, input.rule.noticeDays, input.rule),
     noticeDays: input.rule.noticeDays,
   }
 }
