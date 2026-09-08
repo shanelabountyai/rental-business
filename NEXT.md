@@ -1,52 +1,55 @@
 # Next session
 
-## Pick up: R-181
+## Pick up: R-182
 
-`docs/prds/06-backlog.md`, row 168 — the next unticked one. Read its row and
+`docs/prds/06-backlog.md`, row 169 — the next unticked one. Read its row and
 its named review finding before starting.
 
 Model: recommend at the start of the item, per the global convention.
 
-## Context from R-180 (done, 6032cd0 + bf3bbdd)
+## Context from R-181 (done, 1d4f6af + 1abe84b)
 
-**CI run `34244623019` was still in flight when the session closed.** Check it
-(`gh run list --limit 5`) before assuming green — R-179's first run failed.
+**CI run for R-181 was still in flight when the session closed.** Check it
+(`gh run list --limit 5`) before assuming green.
 
-**D-191.** The per-entity settlement report ships; three LLCs collecting into
-one bank account is now visible.
+**D-192.** A tenant who reports a maintenance problem now hears back.
 
-- **`Payment.channel` CANNOT say whether money went through Stripe.** The
-  webhook writes `channel: OTHER` for every invoice-driven payment, because an
-  invoice event carries no `rail`. A `CARD`/`ACH` filter drops most online
-  rent. The discriminator is **`receivedByStaffId`** — the webhook's own, and
-  `recordOfflinePayment` is its only writer anywhere in the codebase.
-- **An offline check never entered the Stripe balance.** It reaches Stripe as
-  an out-of-band payment against the open invoice: the ledger moves, no money
-  passes through the balance, and it can never appear in a payout. R-166's
-  deposit slips are where that money reconciles.
-- **Settlements and reversals are separately dated events off one row.** March
-  keeps money returned in April; April carries the clawback. Netting only
-  currently-`SETTLED` rows is wrong in both directions.
-- **Every money figure in this product is GROSS.** No Stripe processing fee is
-  recorded anywhere — no column, no event. Do not let a later report imply a
-  net payout.
-- `summariseSettlements` is in `packages/core/payments/settlement.ts`; the
-  fetch is `apps/web/lib/reports/settlement.ts`.
+- **`maintenance_ack` is its own category, and that was the whole item.**
+  `maintenance_update` defaults OFF on SMS. Folding a receipt into it ships
+  the feature inert for the phone-only tenant. Fifth entry in the
+  `defaultEnabled` carve-out list after R-058/059/064/177.
+- **All five ticket-creation sites already emit `ticket.created`**, so one
+  outbox consumer covers every intake path. Do not add a sixth per-site call.
+- **"Does a clarify notification exist?" is a WRONG predicate.** `notify()`
+  writes a `Notification` row per channel even when it SUPPRESSES, so it is
+  also true for a tenant who muted the category. The SMS skip is decided on
+  `Ticket.source`.
+- **`scheduleEntry` (`workorders/scheduling.ts:252`) is the ONLY writer of a
+  SCHEDULED work order** and already sends `entry.notice` on a locked
+  category. That is why R-181 shipped no `ticket.scheduled` template.
+- **Deleting an `OutboxEvent` a notification points at fails.**
+  `Notification.eventId` is `ON DELETE SET NULL`; the cascade's UPDATE hits
+  the append-only trigger and kills the whole delete. Deactivate the property
+  instead, and leave the `EventConsumption` rows with their events.
 
 Left behind, owned by no item:
 
-- Nothing records the inter-entity transfer itself, so "prove they did" rests
-  on the bank statement beside a report that is regenerated, not archived.
-  R-081d's split (numbers first, artifact as its own row) is the precedent.
-- No processing fee anywhere, so no net payout can ever be stated.
-- `HAP_ACH` would be counted as a Stripe settlement if anything ever wrote it.
-  Nothing does — the channel is in the enum with no writer.
-- No `stripePayoutId` and no per-payout grouping: a bank line is matched by
-  eye against a population, not by an identifier.
-- **Stripe Connect (a connected account per entity) is the real answer** and
-  is explicitly not built: it changes every payment path and needs a
-  legal-structure decision marked *needs counsel*. Finding 12 re-opens when
-  that decision is made.
+- A texted-in tenant never gets the quotable reference, and gets nothing at
+  all when `inviteToClarify` was correctly silent (no SMS consent, mint
+  failure).
+- The acknowledgement rides the hourly outbox cron, so it can lag by an hour.
+- `entry.notice` names no ticket, so a tenant with two open requests cannot
+  tell which one a scheduled visit is for. Changing it means changing legally
+  significant notice text.
+- No e2e walks intake → acknowledgement end to end; the consumer is proved at
+  the database level only.
+
+Still unowned from R-180: nothing records the inter-entity transfer itself;
+no processing fee anywhere, so no net payout can ever be stated; `HAP_ACH`
+would be counted as a Stripe settlement if anything ever wrote it; no
+`stripePayoutId` and no per-payout grouping. **Stripe Connect (a connected
+account per entity) is the real answer** and is explicitly not built — it
+needs a legal-structure decision marked *needs counsel*.
 
 Still unowned from R-179: a guarantor gets a PORTAL chase with no portal inbox
 to read it in; guarantor consent cannot be recorded at all, so D-190's SMS
