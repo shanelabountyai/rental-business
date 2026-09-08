@@ -252,7 +252,10 @@ test('Golden Path 5: what the fence stops, and what it must not forgive', async 
   await row.getByRole('checkbox', { name: `Chase Mabel Keeler-${unique}` }).check()
   await page.getByLabel('Template').selectOption(template.id)
   await page.getByRole('button', { name: /Send reminder/ }).click()
-  await expect(page.getByText(/Reminder sent to 1 tenant/)).toBeVisible()
+  // ONE PERSON, ONE TENANCY. R-179 counts PEOPLE, not leases: the chase now
+  // addresses every active tenant and guarantor on the lease, and this
+  // fixture seeds exactly one of the first and none of the second.
+  await expect(page.getByText(/Reminder sent to 1 person on 1 tenancy/)).toBeVisible()
 
   // Asserted at the notification engine rather than at the screen, because
   // the screen is R-044's own surface and the promise being checked is

@@ -9480,4 +9480,16 @@ four specs this change can reach — `rent-roll`, `leases`, `notifications`,
 `npx playwright test --list`'s `Total: 84 tests in 4 files` (42 tests × 2
 projects). The one flaky is the `leases.spec.ts` cleanup described above and
 is not this item's. Full sweep left to CI. R-178's own run (`34172135825`) was
-green; this item's run to be recorded in the follow-up commit.
+green.
+
+**And this item's own first CI run FAILED, on a defect the local gate could
+not have caught as it was run.** `golden-path-5.spec.ts:255` asserted
+`/Reminder sent to 1 tenant/` — the copy this item changed — and went red in
+both projects, deterministically. The local run had covered `rent-roll`,
+`leases`, `notifications` and `consent`: the four specs reasoning said this
+change could reach, chosen by what the code touches. **The assertion lived in
+a fifth.** The lesson is narrow and worth stating: when a user-visible STRING
+changes, the spec list is not derived from the modules touched, it is derived
+from `grep -rn "<the old string>" e2e` — which takes three seconds and would
+have named the file. Fixed in the follow-up commit; the run to record is the
+one after it.
