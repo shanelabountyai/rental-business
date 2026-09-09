@@ -9956,7 +9956,7 @@ on both jobs, checked before this item was committed.
 
 ## R-184 — the Milestone 10 demo walk (D-28)
 
-Commit: `PENDING`
+Commit: `cdde562`
 
 **What it built.** Not a feature — a walk, and the three defects it found. The
 last checkpoint was R-105, which found seven defects across 88 routes that all
