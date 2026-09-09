@@ -10279,3 +10279,84 @@ The demo was walked in a browser against `npm run dev:demo` on `:3100` — the
 sign page's link, the PDF's status line and its extracted text. CI's own state
 was checked with `gh run list`, not inherited: run `34387000785` was green on
 both jobs for R-185's `79945a0`.
+
+## Arc 4 planning: a third operator review sources the next backlog
+
+**What it did.** No code. This is the arc-sourcing item R-183/R-184/R-185
+each deferred: with Arc 3 closed at R-186 and nothing left in the file carrying
+an owner, the next arc is sourced the way Arc 2 and Arc 3 were (D-164 and
+D-172's precedent). The Opus-tier `rental-operator` agent read the PRDs,
+D-1…D-200, `PROGRESS.md` from R-169 forward, `NEXT.md`'s "leftovers owned by
+nobody" list and the code itself, and returned **fifteen findings ranked by
+operational pain × frequency, six of them behaviour that is WRONG** rather than
+missing. The review is kept verbatim at
+`docs/reviews/2026-09-09-operator-review.md` (421 lines, third in the series).
+Its findings became **Milestone 14 ("Arc 4"), rows 174–189 / R-187–R-202**, in
+`06-backlog.md`, wrongness first, matching the review's own ranking. D-201
+records the decision.
+
+**What it decided.**
+
+- **Arc 4's theme is whether the record holds up when somebody argues with
+  it.** Arc 3 made money and obligations physically leave the building; what
+  this review found is that the product now writes *confident records that are
+  wrong*. A repayment plan that marks itself COMPLETED on rent the tenant was
+  paying anyway (`paidTowardPlan` sums every payment and nothing subtracts the
+  charges — D-181's "the charges cancel on both sides" drops a term). A
+  `JobRun` written SUCCEEDED for a business date whose work ran under today's
+  clock. A `Payment` row saying *cheque, received at the counter* for money
+  that came off a card. A stall sweep that can never flag a second time, the
+  EMERGENCY FHA response clock included. Each of those is a document you would
+  rather not be holding in front of a judge, which is a different and worse
+  class than Arc 3's "the product cannot do this".
+- **Two findings were spot-checked against the source before their rows were
+  written**, because R-150's lesson is that an inherited claim is never
+  trusted and these rows are about to be built from verbatim. Finding 1 holds:
+  `apps/web/lib/payments/plans.ts:50-67` credits every `PAYMENT`/`CREDIT` since
+  `startedOn` with no charge term anywhere. Finding 5 holds:
+  `case-stall-job.ts:33` is `findFirst({ where: { type, subjectId } })` with no
+  status filter, so a `DONE` Task suppresses for ever. The other thirteen are
+  inherited evidence and the milestone header says so.
+- **`e2e/leases.spec.ts`'s cleanup flake gets row 189 (R-202), not an
+  investigation.** The review put it on its *do not build* list as spec hygiene
+  rather than a product defect — correctly — but it costs CI time on every push
+  and five items have now passed it by. The cause and the fix are both known
+  (R-178's lease-end work orders race the delete; clean up by ownership, which
+  CLAUDE.md already mandates and `workorders.spec.ts` demonstrates).
+- **The "do not build" list is binding for Arc 4 and is now three arcs deep.**
+  No accrual or interest engine before a second state is onboarded (R-183's
+  posture, and finding 14 takes the same one). No Stripe Connect — still a
+  legal-structure decision nobody has taken. No settings screen for
+  `CHASE_LADDER_DAYS`, `TURN_STAGE_DAYS`, `TURN_STALL_DAYS`, `PLAN_GRACE_DAYS`
+  or the stall thresholds; three reviews have declined it and three arcs have
+  proved them right. **No second queue** — D-9 has been paid for three times,
+  and findings 2, 9 and 11 all want the *existing* Task queue reachable and
+  correctly dated, not another table. And **no backfill of anything**,
+  including the payment plans R-187 will find were completed wrongly: report
+  them, fix the writer, leave reconciled history alone.
+- **Two rows are Needs counsel and one records unknown.** R-188 (does a timely
+  itemization with a late refund partially defend?), R-194 (does a partial
+  payment cure, and does accepting it waive — the second is already a
+  three-valued `JurisdictionRule` field, so the pattern exists). R-192's code
+  path is verified and its **production frequency is unknown**, pending real
+  Stripe redelivery behaviour; recorded as unknown rather than guessed.
+
+**What it left behind.**
+
+- **Rows 81, 97 and 155 are still unticked split-parent placeholders** whose
+  children all shipped, and row 93 (R-093) is still externally blocked on
+  signed vendor relationships. Neither is work; both survive another arc.
+- **The review declined to re-open any cut.** D-122, D-133 and D-136 keep their
+  named re-open triggers, and no finding depends on one.
+- **Nothing was verified beyond findings 1 and 5.** Thirteen rows carry file
+  and line references that were not independently checked in this session. The
+  milestone header states this and R-150's rule is the standing instruction.
+
+**Gate.** Docs only — no code, no schema, no migration. `lint`, `typecheck`,
+`npm test` and the e2e sweep are unchanged by this item and were not re-run for
+it; the last full result is R-186's, which CI confirmed **green on both jobs**
+for `34a4d8b` (run `34391093789`, checked with `gh run view` in this session
+rather than inherited from the handoff — R-141's failure was eleven entries
+copying a CI claim forward instead of running the three-second command). This
+commit touches only `docs/`, so `apps/web/vercel.json`'s `ignoreCommand`
+correctly skips the Vercel build.
