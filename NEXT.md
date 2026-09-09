@@ -33,9 +33,11 @@ convention.
 
 ## Context from R-183 (done, d8d1d0f + 2f20ee8)
 
-**CI for R-183 was still in flight when this session closed** — check
-`gh run list --limit 5`. R-182's fix run (`34368255042`) was green on both
-jobs, checked.
+**CI for R-183 is GREEN on both jobs** (`34371202028`), checked before the
+session closed rather than assumed. R-182's fix run (`34368255042`) was green
+too. Nothing is in flight — R-141's lesson is that this sentence gets copied
+forward instead of checked, so re-verify with `gh run list --limit 5` rather
+than trusting this line.
 
 **D-195.** Deposit escrow/interest is now a loud gap rather than two sentences
 that read as a promise.
