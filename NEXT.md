@@ -1,107 +1,117 @@
 # Next session
 
-## R-185 (date merge fields) is done and pushed — `79945a0` + `a1b8dc7`.
+## R-186 (the demo seed's two walk-only defects) is done and pushed — `34a4d8b` + `0b638c3`.
 
-**CI is GREEN on both jobs** — run `34387000785` against `79945a0`, the commit
-carrying every code change: *Lint, types, unit tests, build* and *End-to-end,
-axe, Lighthouse* both passed. Read off `gh run view`, not assumed. **Do not
-copy this line forward** — re-check with `gh run list --limit 5` before
-trusting it, because R-141's lesson is that this exact sentence gets inherited
-instead of run.
+**CI is IN FLIGHT at handoff.** A monitor was armed on `34a4d8b`, the commit
+carrying every code change, and the result had not landed when this was
+written. **Do not copy this line forward** — run `gh run list --limit 5` and
+read it yourself. R-141's lesson is that this exact sentence gets inherited
+instead of run, and R-140's own entry claimed CI could not have run on a push
+that had in fact failed.
 
-The two docs-only commits (`a1b8dc7`, `56a75f9`) have no CI run, and that is
-correct: `.github/workflows/ci.yml` carries `paths-ignore: ['**.md',
-'docs/**']` and each was pushed separately from the code commit.
+`0b638c3` is docs-only and correctly has no run: `.github/workflows/ci.yml`
+carries `paths-ignore: ['**.md', 'docs/**']`.
 
-## What R-185 changed that a later session must not silently undo
+## What R-186 changed that a later session must not silently undo
 
-**D-198. A date merge value is formatted by the VALUE BUILDER, and there are
-three of them.** `comms/merge-fields.ts`, `leases/generation.ts` and
-`documents/template.ts` are three closed catalogues deliberately sharing one
-`renderTemplate`; each has exactly one value builder, and all three had been
-writing raw `YYYY-MM-DD`. Eight values now go through `friendlyBusinessDate`.
+**D-199. Every rename `--reset` performs has to survive being run twice.**
+`reset()` retires properties first and legal entities LAST, and finds
+everything it owns through `ENTITY_NAMES` — so a run that dies in between
+leaves the entity findable under its original name, and the next run retires
+the same properties again. `retiredName` is now the single writer for all five
+renames (property, vendor, PM template, inspection template, legal entity) and
+appends at most once. `retirementStamp` writes demo-zone wall time in words.
 
-Three things in that fix are load-bearing:
+- **The stamp is read off a screen.** `/vendors`, `/properties` and
+  `/inspections/templates` all list inactive rows deliberately, so
+  `2026-09-09T16:51` was D-153's class one item after D-198 fixed it in the
+  merge catalogues. The clock stays: idempotence is per RUN, not per day.
+- **`rental_demo` still holds the pre-fix debris** — eleven generations of
+  doubled names. Inert (inactive, renamed out of the by-name search) and not
+  cleaned up by the fix.
 
-- **`renderTemplate` was deliberately not touched.** It cannot know which of
-  its keys is a date, and a rule that reformats anything matching
-  `\d{4}-\d{2}-\d{2}` would apply a date rule to values nobody typed as dates.
-- **`generatedOn` stays RAW at its other call sites** in
-  `esign-staff-actions.ts` and `documents/generate.ts` — `leaseDocumentBlocks`
-  and `documentTemplateBlocks` format it themselves, and the generated file
-  name wants a sortable day. That is why the fix is per-value, not
-  per-variable. Wrapping the variable would double-format the meta line.
-- **`merge-fields.test.ts` refuses an ISO `example` in any of the three
-  catalogues.** That test is the guard against the next field reintroducing
-  this; it is not decoration.
+**D-200. The seed borrows the product's renderers and duplicates only the
+values.** `writeLeaseDraftDocument` uses `leaseDocumentBlocks`
+(`@rental/core/leases`) and `renderBlocksPdf` (`apps/web/lib/pdf`, through
+`registerWebModuleHooks` — extracted from `loadBillingPipeline`, which had the
+`server-only` / `@/` resolve hooks inline).
 
-## The backlog's next row, and what is left of R-184's walk
+- **The duplicate is kept honest by a test, not a comment.**
+  `demo-seed.test.ts` renders `seed-lease-templates.mts`'s own `LEASE_BODY`
+  through `demoLeaseMergeValues` and asserts nothing is missing and no value
+  reaches the page as `YYYY-MM-DD`. A field added to the template that the seed
+  cannot fill **throws** on the next `--reset`.
+- **Nothing in `apps/web` changed, and that is the finding.**
+  `generateAndSendLease` writes the Document and the envelope in one
+  transaction, so production could never reach the null `draftDocumentId`
+  state. A defect only the seed can produce is fixed in the seed.
+- **Signer order is one-based now**, in both the document and the
+  `LeaseSigner` rows — `orderedSigners` always was, and the seed's own loop
+  counted from 0, so the demo's PDF read "Tenant 0".
 
-Row 172 is R-185, ✅. Still true from R-183/R-184's handoffs:
+## The backlog's next row
+
+Row 173 is R-186, ✅. Still true from earlier handoffs:
 
 - **Rows 81 (R-081) and 97 (R-097) are SPLIT-PARENT placeholders.** Every child
   shipped. Ticking them is bookkeeping, not work.
 - **Row 93 (R-093) is externally blocked** — real vendor drivers, each needing
   a signed commercial relationship. Not a laptop item.
 
-**The best-named unowned item is the second half of R-184's walk: the demo
-seed's two defects.** Both are invisible except on a walk, both are seed-only,
-and one is the screen an owner would demo:
+**The best-named unowned item is now the one R-183/R-184/R-185 have each
+deferred: commission a fresh operator review.** The 2026-09-05 one is spent,
+R-184's walk was the only thing that has refilled the list since, and R-186
+just closed the last item that walk named. Nothing else in the file has an
+owner. Model for that one: **Opus** — it is judgement about product direction,
+not a build.
 
-1. Every `LeaseEnvelope` in `rental_demo` has `draftDocumentId` null, so
-   `/sign/[token]` shows a guarantor a signature form with **nothing to read**.
-   Production cannot reach that state — `generateLeaseDocument` writes the
-   Document and the envelope in one transaction — so the fix is in the seed.
-2. `--reset` re-renames rows it has already renamed, so the database holds ten
-   generations of `Bluebonnet Lane House (retired …) (retired …) (retired …)`
-   and those raw ISO timestamps leak into the vendor and inspection-template
-   pickers.
-
-Model for that one: **Sonnet**. It is a seed script with a clear reproduction
-and no money, security or jurisdiction path.
-
-Also still open: **commission a fresh operator review** — the 2026-09-05 one is
-spent, and R-184's walk is the only thing that has refilled the list since.
-That one is Opus.
+The `e2e/leases.spec.ts` cleanup flake below is the other defensible pick, and
+it is the one thing on this list that costs CI time on every push.
 
 ## Standing traps worth re-reading before any UI work
 
 **Run `--project=mobile-chrome` as well as `desktop-chrome`** whenever a change
 touches a form control or page layout (D-194), and now also whenever a page
 renders a user-supplied VALUE (D-197). The second kind hides from an
-element-by-element probe — no bounding rect exceeds the viewport, because the
-box stays inside and the unbreakable text paints past it. Only
-`document.documentElement.scrollWidth` sees it.
+element-by-element probe — only `document.documentElement.scrollWidth` sees it.
 
 **Use `npm run test:e2e`, never bare `npx playwright test`.** R-184 did the
 latter once and got 28 failures in 0–222ms with no `DATABASE_URL`, which reads
 exactly like the jetsam symptom CLAUDE.md warns about and is not it.
 
-**Prove a new assertion against the reverted fix** (D-197, and R-185 did it).
-An assertion that still passes with the fix removed is worth nothing, and this
-is cheap: `npm run test:e2e -- <spec> -g "<title>"` is about 30 seconds.
+**Prove a new assertion against the reverted fix** (D-197; R-185 and R-186 both
+did it). An assertion that still passes with the fix removed is worth nothing,
+and it is cheap — for a unit test it is one `perl -0pi -e` and 600ms.
+
+**A seed defect is only visible on a walk.** R-186's two were both invisible to
+every test in the repo, and the sign-page one was only provable by starting
+`npm run dev:demo` and fetching the token URL. D-28 is not a formality.
 
 ## Leftovers still owned by nobody
 
+From R-186: the demo's lease term is `startsInDays + termMonths * 30`, so a
+twelve-month lease reads *30 Sept 2026 to 25 Sept 2027* on the document a
+guarantor reads closely; the seeded draft has **no utilities and no addenda**,
+so two blocks the real generator produces are never shown; the staff-side
+`/leases/[id]` e-sign panel was not walked in a browser, only the
+token-authorized page; and `storageIsRemote` skips the draft document entirely,
+so with `BLOB_READ_WRITE_TOKEN` set the defect returns.
+
 From R-185: `packages/core` can test the catalogue EXAMPLES but not the values
 — the three builders are `server-only` Prisma modules in `apps/web` and no unit
-test reaches any of them, so `term.starts_on` and two of the three `today`s are
-covered by nothing but `npm run build` and review. `rent.due_day` still renders
-as a bare `'1'` rather than `'the 1st'`, left alone deliberately (a
-day-of-month is not a date; `friendlyBusinessDate` would throw on it).
+test reaches any of them. (R-186 adds a fourth builder, `demoLeaseMergeValues`,
+and that one IS tested — it is the only one that is.) `rent.due_day` still
+renders as a bare `'1'` rather than `'the 1st'`, left alone deliberately.
 
-From R-184: `leaseStatusLabel` now has tests and its `/money` caller does not
-(nothing seeds a `MONTH_TO_MONTH` lease with Stripe sync rows); `from
-{prospect.source}` prints the raw column, so the prospect header reads
+From R-184: `leaseStatusLabel` now has tests and its `/money` caller does not;
+`from {prospect.source}` prints the raw column, so the prospect header reads
 "Applied · from zillow"; `/workorders/[id]/timeline` was the one route family
-the phone-width pass skipped, because it is a route handler and renders no
-page.
+the phone-width pass skipped.
 
 From R-183: no accrual engine, no interest rate on `JurisdictionRule`, and
 `Deposit.escrowAccountRef` / `interestAccruedCents` are still written by
 nothing — deliberate, and not to be started until a property in such a state is
-onboarded. A bonded tenancy in an interest state shows no obligation on the
-lease panel while the state-level gap is still listed.
+onboarded.
 
 From R-182: `noticePeriodCheck` (LEASE-12) and `renewalCheck` (LEASE-09) still
 count calendar days whatever `dayCountBasis` says — they subtract two `Date`s,
