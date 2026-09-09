@@ -1,92 +1,91 @@
 # Next session
 
-## R-184 (the Milestone 10 demo walk) is done and pushed — `cdde562` + `8be7214`.
+## R-185 (date merge fields) is done and pushed — `79945a0` + `a1b8dc7`.
 
-**CI is GREEN on both jobs** — run `34381705453` against `cdde562`, the commit
-carrying every code change: *Lint, types, unit tests, build* and *End-to-end,
-axe, Lighthouse* both passed. Checked with `gh run view`, not assumed. **Do not
-copy this line forward** — re-check with `gh run list --limit 5` before
-trusting it, because R-141's lesson is that this exact sentence gets inherited
-instead of run.
+**CI status: run `34387000785` against `79945a0` was still IN PROGRESS when
+this was written.** Do not copy that forward — `gh run list --limit 5` is three
+seconds and settles it. R-141's lesson is that this exact sentence gets
+inherited instead of run.
 
-**The two docs-only commits (`8be7214`, `e0bab41`) have no CI run, and that is
-correct.** `.github/workflows/ci.yml` carries `paths-ignore: ['**.md',
-'docs/**']`. If you compare against R-183, whose *"record the SHA"* commit DID
-get a run despite being markdown-only: that commit was pushed in the same
-`git push` as its code commit, so the push event's diff contained code and the
-run took its title from the head commit. R-184 pushed each commit separately,
-so the skip is the rule working, not a pipeline that stopped.
+R-184's handoff verified run `34381705453` green on both jobs for `cdde562`;
+that is history, not this item's gate.
 
-## The backlog still has no next row, and that has not changed
+## What R-185 changed that a later session must not silently undo
 
-R-183's handoff explained this and it still holds:
+**D-198. A date merge value is formatted by the VALUE BUILDER, and there are
+three of them.** `comms/merge-fields.ts`, `leases/generation.ts` and
+`documents/template.ts` are three closed catalogues deliberately sharing one
+`renderTemplate`; each has exactly one value builder, and all three had been
+writing raw `YYYY-MM-DD`. Eight values now go through `friendlyBusinessDate`.
+
+Three things in that fix are load-bearing:
+
+- **`renderTemplate` was deliberately not touched.** It cannot know which of
+  its keys is a date, and a rule that reformats anything matching
+  `\d{4}-\d{2}-\d{2}` would apply a date rule to values nobody typed as dates.
+- **`generatedOn` stays RAW at its other call sites** in
+  `esign-staff-actions.ts` and `documents/generate.ts` — `leaseDocumentBlocks`
+  and `documentTemplateBlocks` format it themselves, and the generated file
+  name wants a sortable day. That is why the fix is per-value, not
+  per-variable. Wrapping the variable would double-format the meta line.
+- **`merge-fields.test.ts` refuses an ISO `example` in any of the three
+  catalogues.** That test is the guard against the next field reintroducing
+  this; it is not decoration.
+
+## The backlog's next row, and what is left of R-184's walk
+
+Row 172 is R-185, ✅. Still true from R-183/R-184's handoffs:
 
 - **Rows 81 (R-081) and 97 (R-097) are SPLIT-PARENT placeholders.** Every child
-  shipped. Ticking them is a deliberate bookkeeping call, not work.
+  shipped. Ticking them is bookkeeping, not work.
 - **Row 93 (R-093) is externally blocked** — real vendor drivers, each needing
   a signed commercial relationship. Not a laptop item.
-- Row 171 is R-184, ✅, this walk.
 
-**The walk itself is now the best source of a next item.** It produced two
-named, unowned defects and neither is trivia:
+**The best-named unowned item is the second half of R-184's walk: the demo
+seed's two defects.** Both are invisible except on a walk, both are seed-only,
+and one is the screen an owner would demo:
 
-1. **The merge-field catalogue renders raw `YYYY-MM-DD` into real tenant
-   email.** Seen in context this time: the template preview shows *"rent … is
-   due on 2026-10-01"* and the subject *"Rent for Bluebonnet Lane House is due
-   2026-10-01"*. `template-values.ts` builds `lease.starts_on`,
-   `lease.ends_on` and `balance.due_on` with `utcToBusinessDate` /
-   `dueDateOnOrAfter` and nothing formats them after that. This is D-153's
-   class and R-179 named it first; it is catalogue-wide, so it wants its own
-   item rather than a patch. **The preview panel cannot catch it** — it
-   correctly flags a merge field with *nothing* behind it (it caught
-   `{{balance.total}}`), and a field with the wrong *format* behind it looks
-   fine to it.
-2. **The demo seed has two defects of its own**, both invisible except on a
-   walk. Every `LeaseEnvelope` in `rental_demo` has `draftDocumentId` null, so
-   `/sign/[token]` shows a guarantor a signature form with nothing to read —
-   production cannot reach that state (`generateLeaseDocument` writes the
-   Document and the envelope in one transaction), so this is seed-only, but it
-   is the screen an owner would demo. And `--reset` re-renames rows it has
-   already renamed, so the database holds ten generations of
-   `Bluebonnet Lane House (retired …) (retired …) (retired …)` and those raw
-   ISO timestamps leak into the vendor and inspection-template pickers.
+1. Every `LeaseEnvelope` in `rental_demo` has `draftDocumentId` null, so
+   `/sign/[token]` shows a guarantor a signature form with **nothing to read**.
+   Production cannot reach that state — `generateLeaseDocument` writes the
+   Document and the envelope in one transaction — so the fix is in the seed.
+2. `--reset` re-renames rows it has already renamed, so the database holds ten
+   generations of `Bluebonnet Lane House (retired …) (retired …) (retired …)`
+   and those raw ISO timestamps leak into the vendor and inspection-template
+   pickers.
+
+Model for that one: **Sonnet**. It is a seed script with a clear reproduction
+and no money, security or jurisdiction path.
 
 Also still open: **commission a fresh operator review** — the 2026-09-05 one is
-spent, and this walk is the only thing that has refilled the list since.
-
-Model: recommend at the start of whatever gets picked, per the global
-convention. The merge-field item is a correctness/formatting sweep across a
-catalogue — Opus.
-
-## What R-184 changed that a later session must not silently undo
-
-**D-196. `requireScope` now distinguishes "no permission" from "no proved
-second factor"** and redirects the latter to `/account?mfa=required`, the same
-destination `requirePermission` has always used. It is checked BEFORE the
-scope check on purpose: `propertyScope` collapses an unproved second factor
-into an empty scope, so after that call the two cases are indistinguishable.
-`/no-access` deliberately gained no `mfa_required` branch — nothing routes
-there with that reason any more.
-
-**D-197. A hyphen is a line-break opportunity and a dot is not.** The reflow
-fixture in `prospects.spec.ts` is `marcus.aurelius.antoninus.<hex>@…` and the
-dots are load-bearing. An earlier version with a hyphen was *longer* than the
-real address that exposed the defect and passed with the fix reverted.
+spent, and R-184's walk is the only thing that has refilled the list since.
+That one is Opus.
 
 ## Standing traps worth re-reading before any UI work
 
 **Run `--project=mobile-chrome` as well as `desktop-chrome`** whenever a change
-touches a form control or page layout (D-194) — and now also whenever a page
+touches a form control or page layout (D-194), and now also whenever a page
 renders a user-supplied VALUE (D-197). The second kind hides from an
-element-by-element probe: no bounding rect exceeds the viewport, because the
+element-by-element probe — no bounding rect exceeds the viewport, because the
 box stays inside and the unbreakable text paints past it. Only
 `document.documentElement.scrollWidth` sees it.
 
 **Use `npm run test:e2e`, never bare `npx playwright test`.** R-184 did the
-latter once and got 28 failures in 0–222ms with no `DATABASE_URL` — which
-reads exactly like the jetsam symptom CLAUDE.md warns about, and is not it.
+latter once and got 28 failures in 0–222ms with no `DATABASE_URL`, which reads
+exactly like the jetsam symptom CLAUDE.md warns about and is not it.
+
+**Prove a new assertion against the reverted fix** (D-197, and R-185 did it).
+An assertion that still passes with the fix removed is worth nothing, and this
+is cheap: `npm run test:e2e -- <spec> -g "<title>"` is about 30 seconds.
 
 ## Leftovers still owned by nobody
+
+From R-185: `packages/core` can test the catalogue EXAMPLES but not the values
+— the three builders are `server-only` Prisma modules in `apps/web` and no unit
+test reaches any of them, so `term.starts_on` and two of the three `today`s are
+covered by nothing but `npm run build` and review. `rent.due_day` still renders
+as a bare `'1'` rather than `'the 1st'`, left alone deliberately (a
+day-of-month is not a date; `friendlyBusinessDate` would throw on it).
 
 From R-184: `leaseStatusLabel` now has tests and its `/money` caller does not
 (nothing seeds a `MONTH_TO_MONTH` lease with Stripe sync rows); `from
