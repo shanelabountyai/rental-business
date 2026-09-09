@@ -117,6 +117,25 @@ async function seedOwner() {
   return { ...staff, secret }
 }
 
+/// An owner with a password and NO enrolled second factor. `seedOwner` above
+/// enrols one, which is why every existing test here proved the deposit
+/// screen works and none of them proved what it says to the person who has
+/// not enrolled yet.
+async function seedOwnerWithoutMfa() {
+  const email = `deposits-nomfa-${randomUUID()}@example.test`
+  const staff = await prisma.staffUser.create({
+    data: {
+      email,
+      name: 'Unenrolled Owner',
+      credential: { create: { passwordHash: await hashPassword(PASSWORD) } },
+    },
+  })
+  staffIds.push(staff.id)
+  const role = await prisma.role.findUniqueOrThrow({ where: { key: 'owner' } })
+  await prisma.staffAssignment.create({ data: { staffUserId: staff.id, roleId: role.id } })
+  return staff
+}
+
 async function signIn(page: import('@playwright/test').Page, staff: { email: string; secret: string }) {
   await page.goto('/login')
   await page.getByLabel('Email').fill(staff.email)
@@ -308,4 +327,34 @@ test('two undeposited payments from different receivers appear as separate cards
     .filter({ hasText: tenantA.lastName })
     .filter({ hasText: tenantB.lastName })
   await expect(mergedCard).toHaveCount(0)
+})
+
+
+test('an owner who has not proved a second factor is sent to enrol, not told their role lacks the permission', async ({
+  page,
+}) => {
+  // R-184's demo walk found this on the first privileged screen it opened.
+  //
+  // `/money/deposits` guards on `ledger.adjust`, which is privileged, and
+  // `propertyScope` collapses "holds the grant but has not proved a second
+  // factor" into an EMPTY SCOPE - indistinguishable from holding no grant at
+  // all. `requireScope` then reported `no_permission`, so the owner of the
+  // whole portfolio was told "Your role doesn't include this. Ask whoever
+  // manages access if you need it. Missing permission: ledger.adjust" -
+  // wrong about the permission they hold, and pointing them at themselves.
+  //
+  // `requirePermission` has always made this distinction and sends the
+  // person to enrolment; `requireScope`, 100 lines below it in the same
+  // file, did not. This asserts the destination rather than the copy,
+  // because the copy is /account's business.
+  const owner = await seedOwnerWithoutMfa()
+  await page.setExtraHTTPHeaders(uniqueClientHeaders())
+  await page.goto('/login')
+  await page.getByLabel('Email').fill(owner.email)
+  await page.getByLabel('Password').fill(PASSWORD)
+  await page.getByRole('button', { name: 'Sign in' }).click()
+  await page.waitForURL('**/dashboard')
+
+  await page.goto('/money/deposits')
+  await expect(page).toHaveURL(/\/account\?mfa=required/)
 })

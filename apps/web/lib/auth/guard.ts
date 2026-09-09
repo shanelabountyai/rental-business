@@ -10,6 +10,7 @@ import {
   can,
   checkMonetaryAuthority,
   propertyScope,
+  requiresMfa,
   scopeIsEmpty,
 } from '@rental/core/rbac'
 import { redirect } from 'next/navigation'
@@ -194,6 +195,20 @@ export async function requireScope(
   permission: Permission,
 ): Promise<{ actor: Actor; scope: PropertyScope }> {
   const actor = await requireStaff()
+  // BEFORE the scope check, because `propertyScope` collapses an unproved
+  // second factor into an empty scope (see its own guard) and an empty scope
+  // is indistinguishable from holding no grant at all. Without this the owner
+  // of the portfolio opening /money/deposits is told "your role doesn't
+  // include this - ask whoever manages access", which is wrong on both
+  // halves: they hold `ledger.adjust`, and the person they would ask is
+  // themselves. `requirePermission` above has always made this distinction;
+  // this is the same branch, to the same place, for the scope-shaped guard.
+  // Found on R-184's demo walk - every privileged permission reachable
+  // through requireScope had it (ledger.adjust, confidential.manage,
+  // property.export).
+  if (requiresMfa(permission) && !actor.mfaVerified) {
+    redirect('/account?mfa=required')
+  }
   const scope = propertyScope(actor, permission)
   if (scopeIsEmpty(scope)) {
     redirect(

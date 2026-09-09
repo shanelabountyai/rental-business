@@ -1,5 +1,6 @@
 'use client'
 
+import { leaseStatusLabel } from '@rental/core/leases'
 import { formatCents } from '@rental/core/money'
 import { useActionState } from 'react'
 import { FormAlerts, LiveRegion, SubmitButton } from '@/components/auth-form.tsx'
@@ -97,7 +98,14 @@ export function BillingRuns({
                 <span className="font-medium">{row.where}</span>
                 <span className="text-muted-foreground">
                   {row.payerName} · {formatCents(row.rentCents)}/mo ·{' '}
-                  {row.leaseStatus.toLowerCase().replace('_', '-')}
+                  {/* `.toLowerCase().replace('_', '-')` was hand-rolled here
+                      and String.replace with a string pattern only replaces
+                      the FIRST match, so MONTH_TO_MONTH rendered
+                      "month-to_month" and PENDING_SIGNATURE rendered
+                      "pending-signature" instead of "awaiting signature".
+                      `leaseStatusLabel` is what /leases and /leases/[id]
+                      already use; R-184's demo walk found the odd one out. */}
+                  {leaseStatusLabel(row.leaseStatus)}
                   {row.collectionPaused && ' · collection on hold'}
                 </span>
                 {/* The region is mounted whether or not this payer failed,

@@ -99,7 +99,13 @@ export default async function ProspectDetailPage({
         </p>
       </header>
 
-      <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm sm:grid-cols-3">
+      {/* `break-words` on the values, not decoration: a grid track's
+          min-width is `auto`, so an unbreakable email address sets the
+          column's floor and pushes the whole page wider than the viewport.
+          R-184's demo walk measured 424px inside a 412px phone on a real
+          prospect - the address ran off the right edge and the page scrolled
+          sideways. Same class as D-194's <select>, one container up. */}
+      <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm break-words sm:grid-cols-3">
         <dt className="text-muted-foreground">Email</dt>
         <dd className="col-span-1 sm:col-span-2">{prospect.email ?? '—'}</dd>
         <dt className="text-muted-foreground">Phone</dt>

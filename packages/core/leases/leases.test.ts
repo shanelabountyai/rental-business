@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import {
+  LEASE_STATUSES,
   activationGaps,
   canGiveNotice,
   inheritedGaps,
   leaseIsInForce,
   leaseIsOver,
+  leaseStatusLabel,
   leaseTransition,
   validateGuarantor,
   validateLease,
@@ -299,5 +301,33 @@ describe('validateGuarantor', () => {
   it('refuses a guarantor nobody can reach', () => {
     const violations = validateGuarantor({ firstName: 'Dana', lastName: 'Reyes' })
     expect(violations[0]?.message).toMatch(/signature with nobody behind it/)
+  })
+})
+
+describe('leaseStatusLabel', () => {
+  // R-184. /money hand-rolled this as `.toLowerCase().replace('_', '-')`,
+  // and String.replace with a STRING pattern replaces only the first match -
+  // so MONTH_TO_MONTH read "month-to_month" on the billing-runs screen and
+  // PENDING_SIGNATURE read "pending-signature" rather than "awaiting
+  // signature". That caller now uses this function, so the labels are worth
+  // holding to something.
+  it('gives every status a label that is not the raw enum', () => {
+    for (const status of LEASE_STATUSES) {
+      const label = leaseStatusLabel(status)
+      expect(label).not.toBe(status)
+      expect(label).not.toMatch(/_/)
+    }
+  })
+
+  it('spells the two-word statuses the way a person would', () => {
+    expect(leaseStatusLabel('MONTH_TO_MONTH')).toBe('month-to-month')
+    expect(leaseStatusLabel('PENDING_SIGNATURE')).toBe('awaiting signature')
+  })
+
+  // An unknown value falls through rather than throwing: this reads a
+  // database column, and a row written by a migration ahead of the code
+  // should show something rather than 500 the page.
+  it('falls through to the raw value for anything it does not know', () => {
+    expect(leaseStatusLabel('SOMETHING_NEW')).toBe('SOMETHING_NEW')
   })
 })

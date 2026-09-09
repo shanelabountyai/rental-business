@@ -202,7 +202,16 @@ test('a prospect answers the identical five questions, and staff moves the pipel
       listingId: listing.id,
       firstName: 'Marcus',
       lastName: `Lee-${randomUUID().slice(0, 6)}`,
-      email: `marcus-${randomUUID().slice(0, 8)}@example.test`,
+      // DELIBERATELY LONG AND DELIBERATELY WITHOUT A HYPHEN - both halves
+      // are load-bearing for the width assertion below. The first version of
+      // this fixture was `marcus.aurelius.antoninus-<hex>@example.test`,
+      // which is LONGER than the real address that exposed the defect and
+      // still passed with the fix reverted: Chromium takes a hyphen as a
+      // line-break opportunity, so the address wrapped and never widened
+      // anything. A real one (`priya.raghunathan@example.test`, 30
+      // characters, dots only) has no break opportunity at all. Dots are not
+      // break opportunities; hyphens are.
+      email: `marcus.aurelius.antoninus.${randomUUID().slice(0, 8)}@example.test`,
       source: 'direct',
     },
   })
@@ -246,6 +255,22 @@ test('a prospect answers the identical five questions, and staff moves the pipel
   await signIn(page, staff.email)
   await page.goto(`/prospects/${prospect.id}`)
   await expect(page.getByText('$3,000–$5,000/mo')).toBeVisible()
+
+  // D-194 / R-184, and the same assertion shell.spec.ts makes for the
+  // property switcher. A grid track's min-width is `auto`, so the prospect's
+  // unbreakable email address set the column's floor: measured 424px inside a
+  // 412px phone on the demo walk, with the address running off the right
+  // edge. Trivially true on desktop, which is why it is not skipped there -
+  // the cost is one evaluate() and the next instance of this will be some
+  // other unconstrained value in the same list.
+  const width = await page.evaluate(() => ({
+    scrollWidth: document.documentElement.scrollWidth,
+    clientWidth: document.documentElement.clientWidth,
+  }))
+  expect(
+    width.scrollWidth,
+    `the prospect page is ${width.scrollWidth}px wide on a ${width.clientWidth}px viewport`,
+  ).toBeLessThanOrEqual(width.clientWidth)
 
   await page.getByLabel('Move to stage').selectOption('SHOWING')
   await page.getByRole('button', { name: 'Update' }).click()

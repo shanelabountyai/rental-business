@@ -9953,3 +9953,140 @@ the run, when it showed one connection — so connection exhaustion is a
 plausible reading and **not a confirmed one**, and it is written down as
 unknown rather than guessed at. R-182's own CI run (`34368255042`) was green
 on both jobs, checked before this item was committed.
+
+## R-184 — the Milestone 10 demo walk (D-28)
+
+Commit: `PENDING`
+
+**What it built.** Not a feature — a walk, and the three defects it found. The
+last checkpoint was R-105, which found seven defects across 88 routes that all
+returned 200. This one covered **250 staff routes** (crawled breadth-first from
+`/dashboard` as `owner@demo.test`, so every `[id]` resolved to a real record),
+the **tenant portal** through two different tenants' magic links, and **every
+public token surface** the seed mints — apply, prescreen, showing, showing
+access, sign, pay, vendor job, vendor bid, verify. Then all 243 staff routes
+again at a 412px phone viewport. **Every single page returned 200**, which is
+exactly why status codes are not the check.
+
+Fixed, all three root-cause rather than at the symptom:
+
+- **`requireScope` told the owner the wrong thing about their own permissions**
+  (D-196). `/money/deposits` guards on `ledger.adjust`, which is privileged, so
+  an owner who has not enrolled an authenticator got *"Your role doesn't
+  include this. Ask whoever manages access if you need it. Missing permission:
+  ledger.adjust"*. They hold `ledger.adjust` — `scoping.test.ts` asserts it —
+  and the person who manages access is themselves. `propertyScope` collapses an
+  unproved second factor into an empty scope, and `requireScope` then hardcoded
+  `reason=no_permission` over the top. `requirePermission`, 100 lines above it
+  in the same file, has always had the branch that gets this right and sends
+  the person to `/account?mfa=required`. Fixed in the guard, which covers all
+  three privileged call sites (`ledger.adjust`, `confidential.manage`,
+  `property.export`) rather than the one screen the walk happened to open.
+- **`/money` printed `month-to_month`.**
+  [billing-runs.tsx](apps/web/components/billing/billing-runs.tsx) hand-rolled
+  the status as `.toLowerCase().replace('_', '-')`, and `String.replace` with a
+  *string* pattern replaces only the first match. `PENDING_SIGNATURE` was worse
+  than cosmetic — it read `pending-signature` rather than `awaiting signature`.
+  `leaseStatusLabel` already existed and is what `/leases` and `/leases/[id]`
+  both use; this was the odd one out.
+- **A prospect's email made the page wider than the phone** (D-197).
+  `/prospects/[id]` measured **424px inside a 412px viewport** because
+  `priya.raghunathan@example.test` has no line-break opportunity and painted
+  past its grid track. `break-words` on the `<dl>`.
+
+**What it decided** (D-196, D-197).
+
+- **The MFA distinction belongs in the guard, not on the page.** A guard on
+  `/money/deposits` would have fixed one of three call sites and left the next
+  privileged screen to arrive with the same hole.
+- **`/no-access` is deliberately unchanged.** It could grow an `mfa_required`
+  branch, but once both guards redirect to enrolment first, nothing routes
+  there with that reason — and a branch no path reaches is a claim about
+  behaviour nobody is testing.
+- **A "deliberately long" fixture has to be shaped like the real value.** See
+  *Found along the way*.
+
+**Found along the way.**
+
+- **The first version of the reflow fixture passed with the fix reverted, and
+  it was LONGER than the address that exposed the defect.**
+  `marcus.aurelius.antoninus-<hex>@example.test` is 46 characters against the
+  real 30, and measured 412/412 — because Chromium takes a **hyphen** as a
+  line-break opportunity and the address simply wrapped. Removing the one
+  hyphen took the same page to **544px** and the assertion went red. This is
+  the "fixture simpler than the real input" rule (D-132) wearing a shape
+  nobody had seen: not simpler, not shorter, just *breakable*.
+- **No element's bounding rect exceeded the viewport**, so an
+  element-by-element probe reported nothing on a page that was demonstrably
+  12px too wide. A grid track's min-width is `auto`, the box stayed inside the
+  viewport, and the unbreakable text painted past it —
+  `documentElement.scrollWidth` is the only thing that sees that. Hiding the
+  `<dl>` dropped it to 412 and hiding the header changed nothing, which is what
+  ruled out the property switcher: the obvious suspect, and the wrong one.
+- **`e2e/deposits.spec.ts` proved the deposit screen worked and never once
+  proved what it says**, because every owner it seeds has `mfaEnrolledAt` set.
+  That is why a whole screen could be unreachable for the highest role for the
+  life of the feature with three green tests sitting on it.
+- **The demo seed leaves signature envelopes with no readable document.** Every
+  `LeaseEnvelope` in `rental_demo` has `draftDocumentId` null, so
+  `/sign/[token]` renders a guarantor a name field and *"I agree that typing my
+  name above and submitting this form is my electronic signature on this
+  lease"* **with nothing to read** — the "Read the lease before signing" link is
+  behind `{link.documentId && ...}` and simply does not render. **This is a
+  demo-seed defect, not a product one**: `generateLeaseDocument` creates the
+  `Document` and the envelope in one transaction, so production cannot reach
+  that state. It is recorded because it is the screen an owner would demo.
+- **The demo seed's `--reset` re-renames rows it has already renamed.**
+  `rental_demo` holds ten generations of properties named
+  `Bluebonnet Lane House (retired 2026-09-01T00:35) (retired 2026-09-01T00:35)
+  (retired 2026-09-01T00:37)`, and those raw ISO timestamps show up in the
+  vendor and inspection-template pickers. The seed's own comment at line 584
+  warns about exactly this.
+- **The merge-field catalogue still prints raw `YYYY-MM-DD`** — the known R-179
+  leftover, now seen in context: the template preview renders *"This is a
+  reminder that $2,200.00 of rent for Bluebonnet Lane House Main house is due
+  on 2026-10-01"* and the subject line *"Rent for Bluebonnet Lane House is due
+  2026-10-01"*. The preview panel exists to catch a merge field with nothing
+  behind it — it correctly flagged `{{balance.total}}` — and it cannot see a
+  field with the wrong *format* behind it, so it showed the raw date
+  approvingly. Not fixed here; it is a catalogue-wide change (D-153's class)
+  and it needs its own item.
+
+**What it left behind.**
+
+- **`leaseStatusLabel` now has tests and the caller does not.** The new cases
+  in `leases.test.ts` hold the labels themselves — including that no label
+  contains an underscore, which is what went wrong — but nothing asserts that
+  the billing-runs row calls it. There is no e2e seeding a `MONTH_TO_MONTH`
+  lease with Stripe sync rows, and building one for a label was not worth it.
+- **`from {prospect.source}` prints the raw column**, so the prospect header
+  reads *"Applied · from zillow"* and *"from apartments.com"*. `STATUS_LABELS`
+  sits two lines above it doing exactly this job for the status. Not fixed —
+  cosmetic, staff-facing, and it wants a label map somebody decides the wording
+  for.
+- **The demo seed's two defects above are unowned.** Neither is a product bug,
+  and neither will be noticed again until the next walk.
+- **The walk covered 243 of 250 routes at phone width.** The seven skipped are
+  `/workorders/[id]/timeline`, which is a route handler and renders no page.
+
+**The gate.** `lint` clean (no new warnings — the `requirePermission` unused
+imports are pre-existing in the guard-scanning tests), `typecheck` clean,
+`npm test` **3057 passed, 4 skipped, 0 failed** of 3061 (up from 3054 — three
+new `leaseStatusLabel` cases). `npm run build` clean, proven by `e2e:server`
+building it. e2e on `:3100` against the production build, **both projects**:
+`deposits` and `prospects` **14 passed, 0 flaky, 0 failed**, reconciling
+against `npx playwright test --list`'s `Total: 14 tests`. The full sweep is
+CI's, per CLAUDE.md.
+
+**Both new assertions were proven to fail against the unfixed code**, not
+assumed to. The MFA test reverted to `expect(page).toHaveURL(expected) failed`
+on `/no-access`; the reflow test reverted to *"the prospect page is 544px wide
+on a 412px viewport"*. The first shape of the reflow fixture passed either way
+and was replaced — see *Found along the way*.
+
+**One process note.** The first e2e attempt ran `npx playwright test` directly
+instead of `npm run test:e2e`, so it started with no `DATABASE_URL` and
+produced 28 failures in 0–222ms that had nothing to do with the code. CLAUDE.md
+already says to use the `:test` variants and never the bare scripts; this is
+what ignoring it looks like from the inside — a wall of sub-second failures
+that reads exactly like the jetsam symptom the same file warns about.
