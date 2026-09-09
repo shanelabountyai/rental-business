@@ -12,7 +12,7 @@ import {
   renderTemplate,
 } from '@rental/core/leases'
 import { formatCents } from '@rental/core/money'
-import { businessDate, utcToBusinessDate } from '@rental/core/scheduling'
+import { businessDate, friendlyBusinessDate, utcToBusinessDate } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { audit } from '@/lib/audit/index.ts'
@@ -228,15 +228,19 @@ export async function generateAndSendLease(
     'property.address': lease.property.addressLine1,
     'unit.name': lease.unit.name,
     'entity.name': lease.property.legalEntity.name,
-    'term.starts_on': startsOnLocal,
-    'term.ends_on': endsOnLocal ?? 'month-to-month',
+    // FORMATTED HERE, RAW BELOW. `leaseDocumentBlocks` takes the raw
+    // `BusinessDate` and formats it itself, so the same document was carrying
+    // "Date prepared: 18 Aug 2026" in its meta line and "on 2026-08-18" in
+    // the body a PM had merged (D-198).
+    'term.starts_on': friendlyBusinessDate(startsOnLocal),
+    'term.ends_on': endsOnLocal ? friendlyBusinessDate(endsOnLocal) : 'month-to-month',
     'rent.amount': formatCents(lease.rentCents),
     'rent.due_day': String(lease.rentDueDay),
     'deposit.amount': formatCents(lease.depositCents),
     'pet.terms': petCharge
       ? `A pet fee of ${formatCents(petCharge.amountCents)}/month applies.`
       : 'No pets are authorized under this lease.',
-    today: generatedOn,
+    today: friendlyBusinessDate(generatedOn),
     'staff.name': staff.name,
   }
 

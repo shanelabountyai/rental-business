@@ -32,7 +32,7 @@ export const DOCUMENT_MERGE_FIELDS: readonly DocumentMergeField[] = [
   { key: 'property.name', label: 'Property name', example: 'Cedar Row' },
   { key: 'property.address', label: 'Property street address', example: '18 Cedar Row' },
   { key: 'entity.name', label: 'Owning entity name', example: 'Cedar Row Rentals LLC' },
-  { key: 'today', label: "Today's date", example: '2026-08-18' },
+  { key: 'today', label: "Today's date", example: '18 Aug 2026' },
   { key: 'staff.name', label: 'Staff member generating this', example: 'Sam Rivera' },
 ] as const
 

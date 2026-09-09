@@ -10090,3 +10090,83 @@ produced 28 failures in 0–222ms that had nothing to do with the code. CLAUDE.m
 already says to use the `:test` variants and never the bare scripts; this is
 what ignoring it looks like from the inside — a wall of sub-second failures
 that reads exactly like the jetsam symptom the same file warns about.
+
+## R-185 — a merge field that is a date reads as a date
+
+Commit: `PENDING`
+
+**What it built.** The fix for the first of the two defects R-184's walk
+recorded and did not fix. The template preview rendered *"rent … is due on
+2026-10-01"* and the subject *"Rent for Bluebonnet Lane House is due
+2026-10-01"* — a machine identifier posted to a person, by email and SMS, into
+the append-only `Message` trail. D-153's class; R-179 named it first.
+
+**The report named one catalogue and the defect was in three.**
+`packages/core/comms/merge-fields.ts`, `packages/core/leases/generation.ts` and
+`packages/core/documents/template.ts` are three closed catalogues that
+deliberately share one `renderTemplate` — each says so in its own header — and
+each has exactly one value builder. All three built raw `BusinessDate`s: eight
+values across `lease.starts_on`, `lease.ends_on`, `balance.due_on`,
+`term.starts_on`, `term.ends_on` and three separate `today`s. Every one now
+goes through `friendlyBusinessDate` in the builder.
+
+The lease and document cases are the ones that show it is not cosmetic.
+`leaseDocumentBlocks` and `documentTemplateBlocks` already format `generatedOn`
+themselves, so **one generated lease carried "Date prepared: 18 Aug 2026" in
+its meta line and "on 2026-08-18" in the body a PM had merged** — the same day,
+two formats, one page.
+
+Every catalogue's `example` string was ISO too, so the editor was telling the
+author the wrong thing as well. Those moved in the same edit.
+
+**What it decided** (D-198).
+
+- **Formatted in the value builder, not in `renderTemplate`.** The engine cannot
+  know which of its keys is a date, and teaching it to reformat anything
+  matching `\d{4}-\d{2}-\d{2}` would apply a date rule to values nobody typed as
+  dates. D-153's own remedy is to format where the value is built, and here the
+  builder *is* the renderer `template-values.ts`'s header describes.
+- **`generatedOn` stays raw at its other call sites.** The block builders format
+  it themselves and `generate.ts`'s file name wants a sortable day, which is why
+  the fix is per-value rather than per-variable.
+- **The catalogue example is the half a unit test can hold.**
+  `merge-fields.test.ts` now asserts that no example in any of the three
+  catalogues matches `\d{4}-\d{2}-\d{2}`. A value builder lives behind Prisma in
+  `apps/web` and is unreachable from `packages/core`, but an ISO example is the
+  reliable tell that whoever added the field built its value the same way — so a
+  field added tomorrow with `example: '2026-01-01'` trips over it.
+- **The preview panel cannot catch this, which is why it survived.** It flags a
+  merge field with *nothing* behind it — it caught `{{balance.total}}` on the
+  walk — and a field with the wrong *format* behind it looks completely fine to
+  it. So the e2e assertion is on rendered text: `templates.spec.ts` already pins
+  its fixture to `startsOn: 2099-01-01`, and now asserts the preview reads
+  `Your lease starts 1 Jan 2099.`
+
+**Proven against the reverted fix, not assumed.** D-197's lesson from the
+previous item is that an assertion which passes with the fix removed is worth
+nothing. `lease.starts_on` was reverted to `utcToBusinessDate` alone and the
+preview test went red on **both** Playwright projects (desktop-chrome and
+mobile-chrome, plus both retries); restored, 2 passed.
+
+**What it left behind.**
+
+- **`packages/core` cannot test the values, only the examples.** The three value
+  builders are `server-only` Prisma modules in `apps/web` and there is no unit
+  test reaching any of them; the real coverage is the one e2e assertion above,
+  and it covers the comms catalogue only. `term.starts_on` and the two other
+  `today`s are covered by nothing but `npm run build` and review.
+- **`rent.due_day` is still a bare number** (`'1'`, not `'the 1st'`). Left alone
+  deliberately: it is a day-of-month, not a date, `friendlyBusinessDate` would
+  throw on it, and an ordinal renderer is a new thing nobody asked for.
+- **The demo seed's two defects are still open** — the null `draftDocumentId` on
+  every `LeaseEnvelope` in `rental_demo`, and `--reset` re-renaming rows it has
+  already renamed so the pickers show
+  `Bluebonnet Lane House (retired …) (retired …)`. Both are seed-only; R-184
+  recorded them and no row owns them yet.
+
+**Gate.** `lint` 0 errors (16 pre-existing warnings), `typecheck` clean, `npm
+test` **3060 passed / 4 skipped in 228 files**, and the three touched e2e specs
+(`templates`, `lease-esign`, `document-templates`) **26 passed, reconciled
+against `--list`'s `Total: 26 tests in 3 files`** — 13 unique tests across both
+Playwright projects. CI's own state was checked with `gh run list`, not
+inherited: run `34381705453` was green on both jobs for R-184's `cdde562`.

@@ -160,6 +160,17 @@ test.describe('writing a template (COMM-03)', () => {
     // The token stays visible rather than becoming a blank — the two failure
     // modes the typed templates got for free.
     await expect(preview.getByText('Your lease ends on {{lease.ends_on}}.')).toBeVisible()
+
+    // AND A DATE READS AS A DATE (D-198). The fixture pins `startsOn` to
+    // 2099-01-01 so this can name the exact output; before the fix the
+    // preview — and the real email behind it — said "starts 2099-01-01".
+    //
+    // THE PREVIEW PANEL CANNOT CATCH THIS ON ITS OWN, which is why the
+    // assertion is here rather than trusted to the "Nothing to put in" line
+    // above it: that line flags a field with NOTHING behind it, and a field
+    // with the wrong FORMAT behind it looks completely fine to it.
+    await page.getByLabel('Message', { exact: true }).fill('Your lease starts {{lease.starts_on}}.')
+    await expect(preview.getByText('Your lease starts 1 Jan 2099.')).toBeVisible()
   })
 
   test('REFUSES A TYPO IN A MERGE FIELD, and names it', async ({ page }) => {

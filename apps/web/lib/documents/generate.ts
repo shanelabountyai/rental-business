@@ -6,7 +6,7 @@ import {
   renderTemplate,
   type DocumentTypeValue,
 } from '@rental/core/documents'
-import { businessDate } from '@rental/core/scheduling'
+import { businessDate, friendlyBusinessDate } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { audit } from '@/lib/audit/index.ts'
@@ -69,7 +69,10 @@ export async function generateDocumentFromTemplate(
     'property.name': property.name,
     'property.address': property.addressLine1,
     'entity.name': property.legalEntity.name,
-    today: generatedOn,
+    // Formatted for the body; `generatedOn` stays raw for
+    // `documentTemplateBlocks` (which formats it itself) and for the file
+    // name, which wants a sortable day. D-198.
+    today: friendlyBusinessDate(generatedOn),
     'staff.name': staff.name,
   }
 

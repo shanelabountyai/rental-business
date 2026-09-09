@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest'
+import { DOCUMENT_MERGE_FIELDS } from '../documents/template.ts'
+import { LEASE_MERGE_FIELDS } from '../leases/generation.ts'
 import {
   MERGE_FIELDS,
   languageFor,
@@ -28,6 +30,37 @@ describe('the merge-field catalogue', () => {
     expect(keys).not.toContain('balance.late_fee')
     expect(keys).not.toContain('lease.grace_period')
   })
+})
+
+describe('no catalogue offers a raw ISO date (D-198)', () => {
+  // EVERY CATALOGUE, not just this file's. All three share `renderTemplate`
+  // and all three had the same defect: `template-values.ts` built
+  // `lease.starts_on` with `utcToBusinessDate` and nothing formatted it after
+  // that, so a real tenant email read "rent is due on 2026-10-01". D-153's
+  // class, found on R-184's demo walk, and it reached the append-only
+  // `Message` trail.
+  //
+  // THE EXAMPLE IS THE TESTABLE HALF. A value builder lives behind Prisma in
+  // `apps/web` and cannot be reached from here, but the example is what the
+  // editor shows a PM beside the field, so an ISO example is both a lie to
+  // the author and the reliable tell that whoever added the field built its
+  // value the same way. A field added later with `example: '2026-01-01'`
+  // fails here.
+  const CATALOGUES = {
+    comms: MERGE_FIELDS,
+    lease: LEASE_MERGE_FIELDS,
+    document: DOCUMENT_MERGE_FIELDS,
+  }
+
+  for (const [name, fields] of Object.entries(CATALOGUES)) {
+    it(`the ${name} catalogue`, () => {
+      for (const field of fields) {
+        expect(field.example, `${field.key} shows a machine date to a tenant`).not.toMatch(
+          /\d{4}-\d{2}-\d{2}/,
+        )
+      }
+    })
+  }
 })
 
 describe('finding merge fields in a body', () => {

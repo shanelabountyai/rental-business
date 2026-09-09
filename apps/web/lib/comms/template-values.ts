@@ -2,7 +2,12 @@ import 'server-only'
 
 import { balanceCents } from '@rental/core/ledger'
 import { formatCents } from '@rental/core/money'
-import { businessDate, dueDateOnOrAfter, utcToBusinessDate } from '@rental/core/scheduling'
+import {
+  businessDate,
+  dueDateOnOrAfter,
+  friendlyBusinessDate,
+  utcToBusinessDate,
+} from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 
 // Turning a real tenancy into merge-field values (COMM-03, R-049).
@@ -116,14 +121,21 @@ export async function templateValues(
     'lease.rent': formatCents(lease.rentCents),
     // `@db.Date` columns. `utcToBusinessDate` is the reader for a calendar
     // day; putting one through a timezone is the R-042 bug in a new place.
-    'lease.starts_on': utcToBusinessDate(lease.startsOn),
-    'lease.ends_on': lease.endsOn ? utcToBusinessDate(lease.endsOn) : null,
+    //
+    // AND `friendlyBusinessDate` ON TOP OF IT, because this is the renderer
+    // (D-153, D-198). A merge value goes into a tenant's email and into the
+    // append-only `Message` trail exactly as written here, so a raw
+    // `2026-10-01` is a machine identifier posted to a person. The preview
+    // panel cannot catch it: it flags a field with NOTHING behind it, and a
+    // field with the wrong FORMAT behind it looks fine to it.
+    'lease.starts_on': friendlyBusinessDate(utcToBusinessDate(lease.startsOn)),
+    'lease.ends_on': lease.endsOn ? friendlyBusinessDate(utcToBusinessDate(lease.endsOn)) : null,
     // NEGATIVE MEANS CREDIT, and a message must never tell a tenant in credit
     // that they owe a negative amount. Null instead, so the send path refuses
     // rather than sending nonsense — see `renderTemplate`'s `missing`.
     'balance.total': owed > 0 ? formatCents(owed) : null,
-    'balance.due_on': dueDateOnOrAfter(today, lease.rentDueDay),
-    today,
+    'balance.due_on': friendlyBusinessDate(dueDateOnOrAfter(today, lease.rentDueDay)),
+    today: friendlyBusinessDate(today),
     'company.name': COMPANY_NAME,
     // No per-property contact number exists on Property yet, so this is the
     // one merge field with nothing behind it. Null rather than a placeholder:

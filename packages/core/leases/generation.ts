@@ -35,13 +35,13 @@ export const LEASE_MERGE_FIELDS: readonly LeaseMergeField[] = [
   { key: 'property.address', label: 'Property street address', example: '18 Cedar Row' },
   { key: 'unit.name', label: 'Unit', example: 'Unit B' },
   { key: 'entity.name', label: 'Owning entity name', example: 'Cedar Row Rentals LLC' },
-  { key: 'term.starts_on', label: 'Lease start date', example: '2026-09-01' },
-  { key: 'term.ends_on', label: 'Lease end date, or "month-to-month"', example: '2027-08-31' },
+  { key: 'term.starts_on', label: 'Lease start date', example: '1 Sept 2026' },
+  { key: 'term.ends_on', label: 'Lease end date, or "month-to-month"', example: '31 Aug 2027' },
   { key: 'rent.amount', label: 'Monthly rent', example: '$1,600.00' },
   { key: 'rent.due_day', label: 'Day of month rent is due', example: '1' },
   { key: 'deposit.amount', label: 'Security deposit', example: '$1,600.00' },
   { key: 'pet.terms', label: 'Pet terms', example: 'No pets are authorized under this lease.' },
-  { key: 'today', label: "Today's date", example: '2026-08-18' },
+  { key: 'today', label: "Today's date", example: '18 Aug 2026' },
   { key: 'staff.name', label: 'Staff member generating this', example: 'Sam Rivera' },
 ] as const
 
