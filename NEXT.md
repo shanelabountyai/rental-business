@@ -2,13 +2,16 @@
 
 ## R-185 (date merge fields) is done and pushed — `79945a0` + `a1b8dc7`.
 
-**CI status: run `34387000785` against `79945a0` was still IN PROGRESS when
-this was written.** Do not copy that forward — `gh run list --limit 5` is three
-seconds and settles it. R-141's lesson is that this exact sentence gets
-inherited instead of run.
+**CI is GREEN on both jobs** — run `34387000785` against `79945a0`, the commit
+carrying every code change: *Lint, types, unit tests, build* and *End-to-end,
+axe, Lighthouse* both passed. Read off `gh run view`, not assumed. **Do not
+copy this line forward** — re-check with `gh run list --limit 5` before
+trusting it, because R-141's lesson is that this exact sentence gets inherited
+instead of run.
 
-R-184's handoff verified run `34381705453` green on both jobs for `cdde562`;
-that is history, not this item's gate.
+The two docs-only commits (`a1b8dc7`, `56a75f9`) have no CI run, and that is
+correct: `.github/workflows/ci.yml` carries `paths-ignore: ['**.md',
+'docs/**']` and each was pushed separately from the code commit.
 
 ## What R-185 changed that a later session must not silently undo
 
