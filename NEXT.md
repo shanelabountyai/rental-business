@@ -1,107 +1,116 @@
 # Next session
 
-## The review-finding backlog is finished. Read this before picking anything up.
+## R-184 (the Milestone 10 demo walk) is done and pushed — `cdde562` + `8be7214`.
 
-R-183 was the last of the 2026-09-05 operator review's findings. **Three rows
-are unticked and none of them is "the next item":**
+**CI was still running when the session closed.** Do not copy this line
+forward: check it yourself with `gh run list --limit 5`. That is R-141's whole
+lesson, and eleven items in a row got it wrong by inheriting a sentence
+instead of running the command.
 
-- **Row 81 (R-081) and row 97 (R-097) are SPLIT-PARENT placeholders.** Every
-  child shipped — R-081a/b/c/d and R-097a/c/d/e/f are all ✅ (R-097b was cut,
-  not built, per D-121). The rows are left unticked because they describe a
-  split rather than work; do not "pick them up" looking for something to
-  build. Ticking them is a bookkeeping call somebody should make deliberately.
-- **Row 93 (R-093) is externally blocked, not ready.** Real vendor drivers
-  replacing the simulators (D-7): a screening provider with an FCRA agreement,
-  an e-sign provider, listing syndication feeds, a certified-mail API,
-  QuickBooks Online. Phase 3, size L, and every one of them needs a signed
-  commercial relationship first. It is not a laptop item.
+## The backlog still has no next row, and that has not changed
 
-**So the next move is a decision, not a row.** Reasonable candidates, in the
-order I would rank them:
+R-183's handoff explained this and it still holds:
 
-1. **Walk the demo checkpoint (D-28).** A milestone has closed and the last
-   walk was R-105, which found seven defects across 88 routes that all
-   returned 200. Setup is in `CLAUDE.md` → *Seeing the demo*, and the `:demo`
-   suffix on every script is load-bearing.
-2. **Clear the named leftovers below.** Several are real defects with owners
-   of nobody — the `e2e/leases.spec.ts` cleanup flake is the one actively
-   costing CI runs.
-3. **Commission a fresh review.** The last one is spent.
+- **Rows 81 (R-081) and 97 (R-097) are SPLIT-PARENT placeholders.** Every child
+  shipped. Ticking them is a deliberate bookkeeping call, not work.
+- **Row 93 (R-093) is externally blocked** — real vendor drivers, each needing
+  a signed commercial relationship. Not a laptop item.
+- Row 171 is R-184, ✅, this walk.
+
+**The walk itself is now the best source of a next item.** It produced two
+named, unowned defects and neither is trivia:
+
+1. **The merge-field catalogue renders raw `YYYY-MM-DD` into real tenant
+   email.** Seen in context this time: the template preview shows *"rent … is
+   due on 2026-10-01"* and the subject *"Rent for Bluebonnet Lane House is due
+   2026-10-01"*. `template-values.ts` builds `lease.starts_on`,
+   `lease.ends_on` and `balance.due_on` with `utcToBusinessDate` /
+   `dueDateOnOrAfter` and nothing formats them after that. This is D-153's
+   class and R-179 named it first; it is catalogue-wide, so it wants its own
+   item rather than a patch. **The preview panel cannot catch it** — it
+   correctly flags a merge field with *nothing* behind it (it caught
+   `{{balance.total}}`), and a field with the wrong *format* behind it looks
+   fine to it.
+2. **The demo seed has two defects of its own**, both invisible except on a
+   walk. Every `LeaseEnvelope` in `rental_demo` has `draftDocumentId` null, so
+   `/sign/[token]` shows a guarantor a signature form with nothing to read —
+   production cannot reach that state (`generateLeaseDocument` writes the
+   Document and the envelope in one transaction), so this is seed-only, but it
+   is the screen an owner would demo. And `--reset` re-renames rows it has
+   already renamed, so the database holds ten generations of
+   `Bluebonnet Lane House (retired …) (retired …) (retired …)` and those raw
+   ISO timestamps leak into the vendor and inspection-template pickers.
+
+Also still open: **commission a fresh operator review** — the 2026-09-05 one is
+spent, and this walk is the only thing that has refilled the list since.
 
 Model: recommend at the start of whatever gets picked, per the global
-convention.
+convention. The merge-field item is a correctness/formatting sweep across a
+catalogue — Opus.
 
-## Context from R-183 (done, d8d1d0f + 2f20ee8)
+## What R-184 changed that a later session must not silently undo
 
-**CI for R-183 is GREEN on both jobs** (`34371202028`), checked before the
-session closed rather than assumed. R-182's fix run (`34368255042`) was green
-too. Nothing is in flight — R-141's lesson is that this sentence gets copied
-forward instead of checked, so re-verify with `gh run list --limit 5` rather
-than trusting this line.
+**D-196. `requireScope` now distinguishes "no permission" from "no proved
+second factor"** and redirects the latter to `/account?mfa=required`, the same
+destination `requirePermission` has always used. It is checked BEFORE the
+scope check on purpose: `propertyScope` collapses an unproved second factor
+into an empty scope, so after that call the two cases are indistinguishable.
+`/no-access` deliberately gained no `mfa_required` branch — nothing routes
+there with that reason any more.
 
-**D-195.** Deposit escrow/interest is now a loud gap rather than two sentences
-that read as a promise.
-
-- **Named where it BREAKS, not where the column is empty.** "A disposition
-  letter would go out short by the interest owed" is actionable;
-  "`interestAccruedCents` is never written" is not.
-- **The write is NOT refused** — same call R-182 made for an empty holiday
-  list. An interest-required state must stay recordable; the block is the
-  existing pre-activation legal-review gate, not a code path.
-- **A test that passes either way protects nothing.** `deposits.test.ts`
-  matched `/interest/i`, which the old bare string satisfied too. The new
-  assertion was proven to fail by reverting the string.
-
-**One full-suite run went red first, cause recorded as UNKNOWN.** Seven
-unrelated files, 30s timeouts plus a `Task_propertyId_fkey` violation and a
-`25P02` aborted transaction. Re-ran green, totals reconciling at 3058 either
-way. `pg_stat_activity` was only checked *after* the run, so connection
-exhaustion is plausible and unconfirmed — **if this recurs, check
-`pg_stat_activity` DURING the run**, which is the one measurement that would
-settle it.
+**D-197. A hyphen is a line-break opportunity and a dot is not.** The reflow
+fixture in `prospects.spec.ts` is `marcus.aurelius.antoninus.<hex>@…` and the
+dots are load-bearing. An earlier version with a hyphen was *longer* than the
+real address that exposed the defect and passed with the fix reverted.
 
 ## Standing traps worth re-reading before any UI work
 
-**Run `--project=mobile-chrome` as well as `desktop-chrome`** whenever a
-change touches a form control or layout (D-194, R-182). A `<select>` is as
-wide as its widest `<option>`; a long one blew the page to 930px inside a
-412px viewport, Chromium scaled the page, and Playwright's clicks missed by
-the scale offset. Six tests failed in CI having passed locally. `min-w-0`
-inside `SelectField` does not save you — **every flex ancestor between the
-control and the form has to allow the shrink**.
+**Run `--project=mobile-chrome` as well as `desktop-chrome`** whenever a change
+touches a form control or page layout (D-194) — and now also whenever a page
+renders a user-supplied VALUE (D-197). The second kind hides from an
+element-by-element probe: no bounding rect exceeds the viewport, because the
+box stays inside and the unbreakable text paints past it. Only
+`document.documentElement.scrollWidth` sees it.
+
+**Use `npm run test:e2e`, never bare `npx playwright test`.** R-184 did the
+latter once and got 28 failures in 0–222ms with no `DATABASE_URL` — which
+reads exactly like the jetsam symptom CLAUDE.md warns about, and is not it.
 
 ## Leftovers still owned by nobody
 
+From R-184: `leaseStatusLabel` now has tests and its `/money` caller does not
+(nothing seeds a `MONTH_TO_MONTH` lease with Stripe sync rows); `from
+{prospect.source}` prints the raw column, so the prospect header reads
+"Applied · from zillow"; `/workorders/[id]/timeline` was the one route family
+the phone-width pass skipped, because it is a route handler and renders no
+page.
+
 From R-183: no accrual engine, no interest rate on `JurisdictionRule`, and
 `Deposit.escrowAccountRef` / `interestAccruedCents` are still written by
-nothing — deliberate, and not to be started until a property in such a state
-is onboarded. Nothing computes what the interest would have been. A bonded
-tenancy in an interest state shows no obligation on the lease panel while the
-state-level gap is still listed.
+nothing — deliberate, and not to be started until a property in such a state is
+onboarded. A bonded tenancy in an interest state shows no obligation on the
+lease panel while the state-level gap is still listed.
 
 From R-182: `noticePeriodCheck` (LEASE-12) and `renewalCheck` (LEASE-09) still
 count calendar days whatever `dayCountBasis` says — they subtract two `Date`s,
-and fixing them is R-042's bug class. The coverage screen names both.
-`assessEvidence`'s presumption period takes no basis. Nothing seeds a holiday
-list for any state.
+and fixing them is R-042's bug class. `assessEvidence`'s presumption period
+takes no basis. Nothing seeds a holiday list for any state.
 
 From R-181: a texted-in tenant never gets the quotable reference; the
 acknowledgement rides the hourly outbox cron so it can lag an hour;
 `entry.notice` names no ticket; no e2e walks intake → acknowledgement.
 
-From R-180: nothing records the inter-entity transfer; no processing fee, so
-no net payout can be stated; `HAP_ACH` would be counted as a Stripe settlement
-if anything wrote it. **Stripe Connect is the real answer**, explicitly not
-built — needs a legal-structure decision marked *needs counsel*.
+From R-180: nothing records the inter-entity transfer; no processing fee, so no
+net payout can be stated; `HAP_ACH` would be counted as a Stripe settlement if
+anything wrote it. **Stripe Connect is the real answer**, explicitly not built
+— needs a legal-structure decision marked *needs counsel*.
 
 From R-179: a guarantor gets a PORTAL chase with no portal inbox; guarantor
 consent cannot be recorded, so D-190's SMS suppression is permanent;
 `CHASE_LADDER_DAYS` has nowhere to configure it. **`e2e/leases.spec.ts` still
 flakes on its own cleanup** — `unit.deleteMany` refuses on
 `WorkOrder_unitId_fkey` because R-178's lease-end opens six work orders and the
-delete races the async writer. It will keep flaking CI. **The merge-field
-catalogue still prints raw `YYYY-MM-DD`** — `lease.starts_on`, `lease.ends_on`,
-`balance.due_on`, `today`.
+delete races the async writer. It will keep flaking CI.
 
 From R-178: no `cases.stalled` Task links to its subject; a turn that stalls,
 resumes and stalls again is flagged once; `TURN_STAGE_DAYS` unconfigurable;
@@ -127,8 +136,8 @@ From R-172: no staff field for a real handover date on an inherited tenancy;
 `apps/web/lib/turnover/queries.test.ts` cleans up by collected-id list.
 
 From R-171: `writePayment` dedups only on `stripePaymentIntentId`, so an ACH
-payment may write both a `PENDING` and a `SETTLED` row. Recorded as
-**unknown** — verify against real Stripe.
+payment may write both a `PENDING` and a `SETTLED` row. Recorded as **unknown**
+— verify against real Stripe.
 
 From R-170a: `/staff/new` and `/staff/[id]` each take ~21s to axe-scan against
 `/staff`'s 2.2s.
