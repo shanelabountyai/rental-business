@@ -10093,7 +10093,7 @@ that reads exactly like the jetsam symptom the same file warns about.
 
 ## R-185 — a merge field that is a date reads as a date
 
-Commit: `PENDING`
+Commit: `79945a0`
 
 **What it built.** The fix for the first of the two defects R-184's walk
 recorded and did not fix. The template preview rendered *"rent … is due on
