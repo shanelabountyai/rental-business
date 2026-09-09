@@ -1,4 +1,4 @@
-import { OPEN_TICKET_STATUSES, unknownMergeFields } from '@rental/core/comms'
+import { renderTemplate, unknownMergeFields, OPEN_TICKET_STATUSES } from '@rental/core/comms'
 import { OPEN_WORK_ORDER_STATUSES } from '@rental/core/workorders'
 import { describe, expect, it } from 'vitest'
 import {
@@ -10,7 +10,11 @@ import {
   MONEY,
   STRANGER_ROUTES,
   buildPlan,
+  demoLeaseMergeValues,
+  retiredName,
+  retirementStamp,
 } from './demo-seed.mts'
+import { LEASE_BODY } from './seed-lease-templates.mts'
 
 // Importing this module must never touch a database - see the file's own
 // `pathToFileURL` guard. If that guard regresses, this test hangs or throws
@@ -479,5 +483,63 @@ describe('the demo message template can actually be sent', () => {
     // time somebody sends from it in front of an audience.
     expect(unknownMergeFields(MESSAGE_TEMPLATE_SUBJECT)).toEqual([])
     expect(unknownMergeFields(MESSAGE_TEMPLATE_BODY)).toEqual([])
+  })
+})
+
+// ---- The signature envelope and the reset (R-186) ----
+
+describe('the demo lease template is one this seed can actually fill', () => {
+  it('leaves no merge field unrendered', () => {
+    // `seed-lease-templates.mts` owns the wording and this file owns the
+    // values, and nothing but this test connects them. A field added to
+    // LEASE_BODY that `demoLeaseMergeValues` does not build throws on the
+    // next `--reset` - deliberately, because the alternative is a signature
+    // page carrying literal `{{term.starts_on}}` in front of an audience.
+    const rendered = renderTemplate(
+      LEASE_BODY,
+      demoLeaseMergeValues({
+        propertyName: 'Bluebonnet Lane House',
+        propertyAddress: '122 Bluebonnet Ln',
+        entityName: 'Bluebonnet Holdings LLC',
+        unitName: 'Main house',
+        startsOnLocal: '2026-10-01',
+        endsOnLocal: '2027-09-30',
+        generatedOn: '2026-09-09',
+        rentCents: 210_000,
+        depositCents: 210_000,
+        rentDueDay: 1,
+        tenantNames: ['Ivy Castellanos'],
+        guarantorNames: ['Adaeze Oyelaran'],
+        staffName: 'Sam Ortega',
+      }),
+    )
+    expect(rendered.missing).toEqual([])
+    // D-198's rule, applied to the fourth builder: no merge value reaches a
+    // person as `YYYY-MM-DD`. The document's own meta line formats the raw
+    // facts separately, which is why the values are formatted and the facts
+    // are not.
+    expect(rendered.text).not.toMatch(/\d{4}-\d{2}-\d{2}/)
+  })
+})
+
+describe('a retired demo row is renamed once, however many resets reach it', () => {
+  const stamp = retirementStamp(new Date('2026-09-09T18:39:00Z'))
+
+  it('reads as a date a person would write', () => {
+    // Demo-zone wall time, not `toISOString()`: /vendors, /properties and
+    // /inspections/templates all list inactive rows, so this string is read
+    // off a screen. D-153's class.
+    expect(stamp).toBe('9 Sept 2026 13:39')
+  })
+
+  it('does not append a second stamp to a row that already carries one', () => {
+    // `reset()` renames properties, then vendors and templates, then the
+    // legal entities LAST - and it finds everything it owns through the
+    // entity name. A run that dies in between leaves the entity findable, so
+    // the next run retires the same properties again. `rental_demo` held ten
+    // generations of exactly that.
+    const once = retiredName('Bluebonnet Lane House', stamp)
+    expect(once).toBe('Bluebonnet Lane House (retired 9 Sept 2026 13:39)')
+    expect(retiredName(once, retirementStamp(new Date('2026-09-09T18:41:00Z')))).toBe(once)
   })
 })

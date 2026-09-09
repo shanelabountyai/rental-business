@@ -34,14 +34,22 @@
 // now decides that per property and RETIRES the sticky ones whole, rather
 // than deleting halfway down and failing on a trigger.
 
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { mintToken } from '@rental/core/auth'
 import type { StripeEventEnvelope } from '@rental/core/billing'
-import { threadKey } from '@rental/core/comms'
-import { wallClockToUtc } from '@rental/core/scheduling'
+import { renderTemplate, threadKey } from '@rental/core/comms'
+import type { DocumentBlock } from '@rental/core/documents'
+import { leaseDocumentBlocks } from '@rental/core/leases'
+import { formatCents } from '@rental/core/money'
+import {
+  businessDate,
+  friendlyBusinessDate,
+  utcToBusinessDate,
+  wallClockToUtc,
+} from '@rental/core/scheduling'
 import { prisma } from '../index.ts'
 import { refuseUnlessDemoDatabase } from './demo-database-guard.mts'
 
@@ -123,6 +131,65 @@ const DEMO_ZONE = 'America/Chicago'
 function atLocalTime(offsetDays: number, wallClock: string): Date {
   const day = daysFrom(offsetDays).toISOString().slice(0, 10)
   return wallClockToUtc(`${day}T${wallClock}`, DEMO_ZONE)
+}
+
+/// The marker `retiredName` looks for. One space before it and one open
+/// paren, so a property genuinely called "Foo (retired)" would not match.
+const RETIRED_MARK = ' (retired '
+
+/**
+ * When a reset happened, for the name of a row it retires.
+ *
+ * DEMO-LOCAL AND WRITTEN THE WAY A PERSON READS A DATE, not
+ * `toISOString().slice(0, 16)`. These names are not internal: `/vendors`,
+ * `/inspections/templates` and `/properties` all list inactive rows
+ * deliberately (`orderBy: [{ active: 'desc' }, ...]`), so the stamp is read
+ * off a screen by whoever is being shown the demo. D-153's class exactly -
+ * a machine identifier put in front of a person - and R-185 spent an item on
+ * it in the merge-field catalogues.
+ *
+ * The clock stays, at demo-zone wall time: `retiredName` below is idempotent
+ * per RUN, not per day, so two resets on one afternoon are two rows and the
+ * minute is what tells them apart.
+ */
+export function retirementStamp(now: Date): string {
+  const clock = new Intl.DateTimeFormat('en-GB', {
+    timeZone: DEMO_ZONE,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(now)
+  return `${friendlyBusinessDate(businessDate(now, DEMO_ZONE))} ${clock}`
+}
+
+/**
+ * A retired row's new name - appended ONCE, however many resets reach it.
+ *
+ * ==========================================================================
+ * `reset()` IS NOT ATOMIC, AND EVERY RENAME HERE HAS TO SURVIVE BEING RUN
+ * TWICE ON THE SAME ROW.
+ *
+ * The renames run in a fixed order - properties first, then the
+ * portfolio-level vendors and templates, then the legal entities last - and
+ * a run that dies anywhere in that sequence leaves the entity still carrying
+ * its ORIGINAL name. `reset()` finds everything it owns through
+ * `ENTITY_NAMES`, so the next run finds that entity, finds the properties
+ * under it that were already retired, and appends a second stamp to each.
+ *
+ * `rental_demo` held the evidence when R-186 looked: ten generations of
+ * `Bluebonnet Lane House (retired ...)`, one of them reading `(retired
+ * 2026-09-01T00:35) (retired 2026-09-01T00:35) (retired 2026-09-01T00:37)`,
+ * plus two `LegalEntity` rows sharing a name. The stamps date one crashed
+ * afternoon.
+ *
+ * Skipping the second append is safe for the reason the rename exists at
+ * all: the rename's job is to take the row OUT of the by-name search the
+ * next reset runs, and a row that already carries a stamp is already out.
+ * Retiring it again would only lengthen the name.
+ * ==========================================================================
+ */
+export function retiredName(name: string, stamp: string): string {
+  return name.includes(RETIRED_MARK) ? name : `${name}${RETIRED_MARK}${stamp})`
 }
 
 /**
@@ -291,7 +358,7 @@ async function reset() {
   // is not something to leave on anybody's day.
   await prisma.task.deleteMany({ where: { propertyId: { in: propertyIds } } })
 
-  const stamp = new Date().toISOString().slice(0, 16)
+  const stamp = retirementStamp(new Date())
 
   // ---- THE STICKY BRANCH: retire, touch nothing beneath ----
   //
@@ -409,7 +476,7 @@ async function reset() {
       const property = await prisma.property.findUniqueOrThrow({ where: { id } })
       await prisma.property.update({
         where: { id },
-        data: { active: false, name: `${property.name} (retired ${stamp})` },
+        data: { active: false, name: retiredName(property.name, stamp) },
       })
     }
   }
@@ -593,7 +660,7 @@ async function reset() {
     })) {
       await prisma.vendor.update({
         where: { id: vendor.id },
-        data: { active: false, name: `${vendor.name} (retired ${stamp})` },
+        data: { active: false, name: retiredName(vendor.name, stamp) },
       })
     }
     for (const template of await prisma.preventiveMaintenanceTemplate.findMany({
@@ -602,7 +669,7 @@ async function reset() {
     })) {
       await prisma.preventiveMaintenanceTemplate.update({
         where: { id: template.id },
-        data: { active: false, name: `${template.name} (retired ${stamp})` },
+        data: { active: false, name: retiredName(template.name, stamp) },
       })
     }
     // Renamed as well as deactivated, and `defaultForType` cleared too - that
@@ -614,7 +681,7 @@ async function reset() {
     })) {
       await prisma.inspectionTemplate.update({
         where: { id: template.id },
-        data: { active: false, defaultForType: null, name: `${template.name} (retired ${stamp})` },
+        data: { active: false, defaultForType: null, name: retiredName(template.name, stamp) },
       })
     }
   }
@@ -632,7 +699,7 @@ async function reset() {
     const entity = await prisma.legalEntity.findUniqueOrThrow({ where: { id: entityId } })
     await prisma.legalEntity.update({
       where: { id: entityId },
-      data: { name: `${entity.name} (retired ${stamp})` },
+      data: { name: retiredName(entity.name, stamp) },
     })
   }
 
@@ -1687,6 +1754,185 @@ async function writeUnitPhoto(
 }
 
 /**
+ * The thirteen merge values the demo's lease template is filled with.
+ *
+ * Pure and exported so `demo-seed.test.ts` can run it against
+ * `seed-lease-templates.mts`'s own `LEASE_BODY` with no database: the two
+ * files are one seed in two scripts, and a field added to the template that
+ * this map does not build is a demo that throws on its next `--reset`.
+ */
+export function demoLeaseMergeValues(input: {
+  propertyName: string
+  propertyAddress: string
+  entityName: string
+  unitName: string
+  startsOnLocal: string
+  endsOnLocal: string
+  generatedOn: string
+  rentCents: number
+  depositCents: number
+  rentDueDay: number
+  tenantNames: readonly string[]
+  guarantorNames: readonly string[]
+  staffName: string
+}): Record<string, string> {
+  return {
+    'tenants.names': input.tenantNames.join(', '),
+    'guarantors.names': input.guarantorNames.length > 0 ? input.guarantorNames.join(', ') : 'None',
+    'property.name': input.propertyName,
+    'property.address': input.propertyAddress,
+    'unit.name': input.unitName,
+    'entity.name': input.entityName,
+    // Formatted here and RAW in the document facts, exactly as D-198 has
+    // `generateAndSendLease` do it: `leaseDocumentBlocks` formats its own
+    // meta line, so formatting the fact as well would be the double-format
+    // that fix exists to avoid.
+    'term.starts_on': friendlyBusinessDate(input.startsOnLocal),
+    'term.ends_on': friendlyBusinessDate(input.endsOnLocal),
+    'rent.amount': formatCents(input.rentCents),
+    // Still a bare '1' rather than 'the 1st', and deliberately: a
+    // day-of-month is not a date, and `friendlyBusinessDate` throws on one.
+    // R-185 left the same value alone in the real catalogue.
+    'rent.due_day': String(input.rentDueDay),
+    'deposit.amount': formatCents(input.depositCents),
+    'pet.terms': 'No pets are authorized under this lease.',
+    today: friendlyBusinessDate(input.generatedOn),
+    'staff.name': input.staffName,
+  }
+}
+
+/**
+ * The unsigned lease PDF a signer actually reads, and the `Document` row the
+ * envelope points at.
+ *
+ * ==========================================================================
+ * WITHOUT THIS THE DEMO'S SIGNATURE PAGE HAS NOTHING ON IT. `/sign/[token]`
+ * renders its "Read the document" link behind `{link.documentId && ...}`,
+ * and `verifySignerLink` takes that id from
+ * `LeaseEnvelope.draftDocumentId` - which every seeded envelope left null.
+ * So a guarantor opening the demo's live LEASE_SIGN link was shown a
+ * signature form for a document they could not see, on one of the eight
+ * stranger-reachable pages R-140's link table exists to make walkable.
+ *
+ * PRODUCTION CANNOT REACH THAT STATE: `generateAndSendLease` writes the
+ * Document and the envelope in one transaction. This is a seed defect and
+ * the fix belongs here, which is why nothing in `apps/web` changed.
+ * ==========================================================================
+ *
+ * The BLOCKS and the PDF are the product's own - `leaseDocumentBlocks` from
+ * `@rental/core/leases` and `renderBlocksPdf` through the module hook - so
+ * the demo holds the artifact production would have produced, disclaimer,
+ * signature block and all. Only the merge VALUES are assembled here, and
+ * they are the same thirteen `generateAndSendLease` builds; duplicated
+ * narrowly and deliberately, the way this file already duplicates
+ * `generateStorageKey`, because the real builder is inline in a `'use
+ * server'` action behind a session and a status-machine transition this
+ * seed has no business driving.
+ *
+ * Returns null when uploads go to a remote blob store, for the reason
+ * `writeUnitPhoto` does: a row whose bytes do not exist is worse than none.
+ */
+async function writeLeaseDraftDocument(input: {
+  propertyId: string
+  leaseId: string
+  staffId: string
+  templateBody: string
+  propertyName: string
+  propertyAddress: string
+  entityName: string
+  unitName: string
+  startsOn: Date
+  endsOn: Date
+  rentCents: number
+  depositCents: number
+  rentDueDay: number
+  tenantNames: string[]
+  guarantorNames: string[]
+  signers: readonly { order: number; role: 'TENANT' | 'GUARANTOR'; name: string }[]
+}): Promise<string | null> {
+  if (storageIsRemote) return null
+
+  const staff = await prisma.staffUser.findUniqueOrThrow({
+    where: { id: input.staffId },
+    select: { name: true },
+  })
+  // `utcToBusinessDate`, never `businessDate`: `Lease.startsOn` is a
+  // calendar day, and putting a zone anywhere near one is R-042's bug.
+  const startsOnLocal = utcToBusinessDate(input.startsOn)
+  const endsOnLocal = utcToBusinessDate(input.endsOn)
+  const generatedOn = businessDate(new Date(), DEMO_ZONE)
+
+  const values = demoLeaseMergeValues({
+    ...input,
+    startsOnLocal,
+    endsOnLocal,
+    generatedOn,
+    staffName: staff.name,
+  })
+
+  const rendered = renderTemplate(input.templateBody, values)
+  // Thrown rather than skipped. A template this seed cannot fill is the
+  // lease-template seed and this one having drifted apart, and the demo
+  // quietly losing its signature document is how that goes unnoticed for
+  // another ten milestones.
+  if (rendered.missing.length > 0) {
+    throw new Error(
+      `The demo lease template wants merge fields this seed does not build: ${rendered.missing
+        .map((k) => `{{${k}}}`)
+        .join(', ')}.`,
+    )
+  }
+
+  const blocks = leaseDocumentBlocks({
+    propertyName: input.propertyName,
+    propertyAddress: input.propertyAddress,
+    unitName: input.unitName,
+    startsOn: startsOnLocal,
+    endsOn: endsOnLocal,
+    rentAmount: values['rent.amount']!,
+    depositAmount: values['deposit.amount']!,
+    generatedOn,
+    bodyText: rendered.text,
+    addenda: [],
+    utilities: {},
+    utilityLabels: {},
+    // Blank, because this is the DRAFT - the artifact as it was when it went
+    // out. Production never re-renders it as signatures arrive; the executed
+    // PDF is a separate document, and seeding one would be claiming the
+    // envelope is COMPLETED when it is PARTIALLY_SIGNED.
+    signers: input.signers.map((s) => ({ ...s, signedAt: null, signedName: null })),
+  })
+
+  const { renderBlocksPdf } = await loadPdfRenderer()
+  const bytes = Buffer.from(
+    await renderBlocksPdf(blocks, {
+      title: `Lease — ${input.propertyName} ${input.unitName}`,
+    }),
+  )
+  const fileName = `lease-draft-${input.leaseId}.pdf`
+  const storageKey = `${input.propertyId}/${randomUUID()}-${fileName}`
+  const path = resolve(DOCUMENT_ROOT, storageKey)
+  await mkdir(dirname(path), { recursive: true })
+  await writeFile(path, bytes)
+
+  const document = await prisma.document.create({
+    data: {
+      propertyId: input.propertyId,
+      leaseId: input.leaseId,
+      type: 'LEASE',
+      fileName,
+      contentType: 'application/pdf',
+      sizeBytes: bytes.byteLength,
+      storageKey,
+      sha256: createHash('sha256').update(bytes).digest('hex'),
+      uploadedByStaffId: input.staffId,
+    },
+  })
+  return document.id
+}
+
+
+/**
  * WHERE EVERY STRANGER-REACHABLE LINK POINTS, keyed by the token purpose that
  * opens it.
  *
@@ -2217,7 +2463,7 @@ async function seedTasks(staffId: string, propertyIds: readonly string[]): Promi
  */
 async function seedLeasing(
   plan: LeasingPlan,
-  context: SeedContext & { propertyName: string; unitName: string },
+  context: SeedContext & { propertyName: string; unitName: string; entityName: string },
 ): Promise<{ photos: number; prospects: number; cases: number }> {
   let photos = 0
   let prospects = 0
@@ -2388,7 +2634,7 @@ async function seedLeasing(
     const template = await prisma.documentTemplate.findFirst({
       where: { documentType: 'LEASE', addendumKey: null, state: null },
       orderBy: { createdAt: 'asc' },
-      select: { id: true },
+      select: { id: true, body: true },
     })
     if (!template) {
       throw new Error(
@@ -2426,6 +2672,36 @@ async function seedLeasing(
       data: { leaseId: lease.id, tenantId: tenant.id, isPrimary: true },
     })
 
+    // THE DOCUMENT BEFORE THE ENVELOPE, the same order
+    // `generateAndSendLease` uses - an envelope is a thing somebody signs,
+    // and until R-186 every seeded one pointed at nothing to sign.
+    // ONE-BASED, because `orderedSigners` is and the number is printed:
+    // the PDF's signature block reads "Tenant 1", and the seed's own loop
+    // below counted from 0, so the demo's document said "Tenant 0".
+    const signerFacts = plan.envelope.signers.map((signer, index) => ({
+      order: index + 1,
+      role: signer.role,
+      name: signer.name,
+    }))
+    const draftDocumentId = await writeLeaseDraftDocument({
+      propertyId: context.propertyId,
+      leaseId: lease.id,
+      staffId: context.staffId,
+      templateBody: template.body,
+      propertyName: context.propertyName,
+      propertyAddress: context.addressOfRecord,
+      entityName: context.entityName,
+      unitName: context.unitName,
+      startsOn,
+      endsOn,
+      rentCents: plan.envelope.rentCents,
+      depositCents: plan.envelope.depositCents,
+      rentDueDay: lease.rentDueDay,
+      tenantNames: signerFacts.filter((s) => s.role === 'TENANT').map((s) => s.name),
+      guarantorNames: signerFacts.filter((s) => s.role === 'GUARANTOR').map((s) => s.name),
+      signers: signerFacts,
+    })
+
     const envelope = await prisma.leaseEnvelope.create({
       data: {
         leaseId: lease.id,
@@ -2434,14 +2710,14 @@ async function seedLeasing(
         status: 'PARTIALLY_SIGNED',
         addendumKeys: [],
         sentAt: daysFrom(-4),
+        draftDocumentId,
       },
     })
-    let order = 0
-    for (const signer of plan.envelope.signers) {
+    for (const [index, signer] of plan.envelope.signers.entries()) {
       const signerRow = await prisma.leaseSigner.create({
         data: {
           envelopeId: envelope.id,
-          order: order++,
+          order: signerFacts[index]!.order,
           role: signer.role,
           name: signer.name,
           email: signer.role === 'TENANT' ? plan.envelope.tenant.email : null,
@@ -2827,8 +3103,28 @@ let billingPipeline: Promise<{
   }
 }> | null = null
 
-function loadBillingPipeline() {
-  billingPipeline ??= (async () => {
+/**
+ * Makes `apps/web`'s own modules importable from this plain node script, and
+ * returns the repo root every dynamic import below is resolved against.
+ *
+ * Two rewrites, and each is doing a specific job:
+ *
+ *   `server-only`  - swapped for an empty module. That marker exists to keep
+ *                    a browser bundle out, not a seed script, and the whole
+ *                    of `apps/web/lib` carries it.
+ *   `@/...`        - the tsconfig path alias, which nothing outside Next
+ *                    resolves.
+ *
+ * Registered ONCE for the process (`registerHooks` applies to every module
+ * resolved after the call, and every import that needs it is dynamic and
+ * happens after). Callers await this rather than the two consumers each
+ * registering their own copy - R-186 added the second consumer and this is
+ * what stopped it being a second set of hooks.
+ */
+let webModuleHooks: Promise<string> | null = null
+
+function registerWebModuleHooks(): Promise<string> {
+  webModuleHooks ??= (async () => {
     // Cast because the installed `@types/node` predates it. `registerHooks`
     // is Node's synchronous, in-process hook API (22.15+/24+) - no loader
     // thread, no `--import` flag, and it applies to every module resolved
@@ -2857,6 +3153,35 @@ function loadBillingPipeline() {
         return next(specifier, context)
       },
     })
+    return root
+  })()
+  return webModuleHooks
+}
+
+/**
+ * `renderBlocksPdf`, the one thing this script borrows from `apps/web` that
+ * is not billing: the real PDF renderer, so the demo's draft lease is the
+ * artifact production would have produced rather than a placeholder.
+ */
+let pdfRenderer: Promise<{
+  renderBlocksPdf: (
+    blocks: readonly DocumentBlock[],
+    options: { title: string; lang?: string },
+  ) => Promise<Uint8Array>
+}> | null = null
+
+function loadPdfRenderer() {
+  pdfRenderer ??= (async () => {
+    const root = await registerWebModuleHooks()
+    const render = await import(pathToFileURL(join(root, 'apps/web/lib/pdf/render.ts')).href)
+    return { renderBlocksPdf: render.renderBlocksPdf }
+  })()
+  return pdfRenderer
+}
+
+function loadBillingPipeline() {
+  billingPipeline ??= (async () => {
+    const root = await registerWebModuleHooks()
     const [provision, webhook, provider, lifecycle] = await Promise.all([
       import(pathToFileURL(join(root, 'apps/web/lib/billing/provision.ts')).href),
       import(pathToFileURL(join(root, 'apps/web/lib/billing/webhook.ts')).href),
@@ -3642,6 +3967,7 @@ async function seedDemoData() {
         demoLinks,
         propertyName: plan.name,
         unitName: unitPlan.name,
+        entityName: entities[plan.legalEntityIndex]!.name,
       })
       photoCount += written.photos
       prospectCount += written.prospects

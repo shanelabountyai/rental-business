@@ -10170,3 +10170,112 @@ test` **3060 passed / 4 skipped in 228 files**, and the three touched e2e specs
 against `--list`'s `Total: 26 tests in 3 files`** — 13 unique tests across both
 Playwright projects. CI's own state was checked with `gh run list`, not
 inherited: run `34381705453` was green on both jobs for R-184's `cdde562`.
+
+## R-186 — the demo seed's two walk-only defects
+
+Commit: `PENDING`
+
+**What it built.** The second half of R-184's Milestone 10 walk: the two
+defects it recorded and did not fix. Both are invisible to every test in the
+repo, both are seed-only, and one of them is the page a stranger sees.
+
+*A guarantor had nothing to read.* Every `LeaseEnvelope` in `rental_demo`
+carried `draftDocumentId` null, and `/sign/[token]` renders its "Read the lease
+before signing" link behind `{link.documentId && …}` — so the demo's live
+LEASE_SIGN link, one of the eleven R-140's link table exists to make walkable,
+opened on a signature form for a document that could not be seen.
+`writeLeaseDraftDocument` now renders the real thing: `leaseDocumentBlocks`
+from `@rental/core/leases` and `renderBlocksPdf` from `apps/web/lib/pdf`, the
+product's own builder and renderer, written to local disk exactly as
+`writeUnitPhoto` writes a listing photo, with the `Document` created before the
+envelope that points at it — the order `generateAndSendLease` uses. A 3.9 KB
+PDF, verified end to end through the running demo server: `200
+application/pdf`, `Date prepared: 9 Sept 2026`, the rent and deposit as
+`$1,450.00`, the guarantor named in clause 4, the signature block, the
+disclaimer.
+
+*`--reset` renamed rows it had already renamed.* `retiredName` is now the
+single writer for all five renames and appends at most once;
+`retirementStamp` writes demo-zone wall time in words.
+
+**What it decided.**
+
+- **D-199. Every rename `--reset` performs has to survive being run twice on
+  the same row.** `reset()` is not atomic and finds everything it owns through
+  `ENTITY_NAMES`. It retires properties first and legal entities last, so a run
+  that dies in between leaves the entity carrying its original name — and the
+  next run finds it, finds the already-retired properties beneath it, and
+  appends a second stamp to each. `rental_demo` held the evidence: eleven
+  generations of `Bluebonnet Lane House (retired …)`, one reading `(retired
+  2026-09-01T00:35) (retired 2026-09-01T00:35) (retired 2026-09-01T00:37)`, and
+  two `LegalEntity` rows sharing a name. **Reproduced deliberately** by
+  un-renaming one entity and re-running `--reset`: with the guard the names
+  held at one stamp, without it they grew. Skipping the second append is safe
+  for the reason the rename exists at all — its job is to take the row out of
+  the by-name search, and a row already carrying a stamp is already out.
+- **The stamp is not internal, so it reads as a date.** `9 Sept 2026 13:39`,
+  not `2026-09-09T16:51`. `/vendors`, `/properties` and
+  `/inspections/templates` all list inactive rows deliberately (`orderBy: [{
+  active: 'desc' }, …]`), so this string is read off a screen by whoever is
+  being shown the demo. D-153's class, one item after D-198 fixed it in the
+  merge catalogues. The clock stays: `retiredName` is idempotent per RUN, not
+  per day, so two resets in one afternoon are two rows and the minute is what
+  tells them apart.
+- **D-200. The renderers are borrowed and the merge values are not.** The real
+  value builder is inline in `generateAndSendLease`, a `'use server'` action
+  behind a session and a `DRAFT → PENDING_SIGNATURE` transition this seed has
+  no business driving, so calling it would mean driving the whole action. The
+  thirteen values are assembled by `demoLeaseMergeValues` instead — exported
+  and pure — and what keeps that duplicate honest is a test rather than a
+  comment: `demo-seed.test.ts` renders `seed-lease-templates.mts`'s own
+  `LEASE_BODY` through it and asserts nothing is missing and no value reaches
+  the page as `YYYY-MM-DD`. A field added to the template that the seed cannot
+  fill now **throws** on the next `--reset` rather than merging a literal
+  `{{term.starts_on}}` in front of an audience.
+- **`registerWebModuleHooks` is now shared.** `loadBillingPipeline` had the
+  `server-only` / `@/` resolve hooks inline; the PDF renderer is the second
+  consumer, and extracting the registration is what stopped it being a second
+  set of hooks for the same process.
+- **Nothing in `apps/web` changed, and that is the finding.** Production writes
+  the Document and the envelope in one transaction, so it cannot reach the
+  state the demo was in. A defect that only the seed can produce is fixed in
+  the seed.
+
+**A real bug found along the way.** The signature block read **"Tenant 0"**.
+`orderedSigners` numbers from 1 and the seed's own signer loop counted from 0 —
+latent for as long as the envelope has been seeded, and invisible until
+something rendered the number. The seed's `LeaseSigner.order` rows are
+one-based now too, from the same array the document is built from.
+
+**What it left behind.**
+
+- **The demo's lease term is still `startsInDays + termMonths * 30`**, so a
+  twelve-month lease reads *30 Sept 2026 to 25 Sept 2027*. Pre-existing, not
+  touched here, and wrong on the one document a guarantor reads closely.
+- **`utilities` and `addenda` are empty in the seeded draft.** The seed writes
+  no `utilityResponsibility` and `applicableAddenda` is not consulted, so the
+  demo's lease has neither the utility matrix nor a lead-paint or pool
+  addendum — two blocks the real generator produces that the demo never shows.
+- **The staff-side `/leases/[id]` e-sign panel was not walked in a browser**,
+  only the token-authorized page; its link is the same `draftDocumentId` and is
+  now non-null, but that is read, not seen.
+- **`rental_demo` still holds the historical debris** — the eleven generations
+  of doubled names predate the fix and are not cleaned up by it. They are inert
+  (inactive, renamed out of the search) and would go on a `--reset` only if
+  something re-found them, which is exactly what must not happen.
+- **`storageIsRemote` skips the draft document**, as it skips listing photos:
+  with `BLOB_READ_WRITE_TOKEN` set, the envelope goes back to a null
+  `draftDocumentId` and the defect returns. Correct for the reason
+  `writeUnitPhoto` gives — a row whose bytes do not exist is worse than none —
+  and recorded because the demo is only supported against local disk.
+
+**Gate.** `lint` 0 errors (16 pre-existing warnings), `typecheck` clean (which
+covers `packages/**/*.mts` — `apps/web/tsconfig.json` includes them
+deliberately), `npm test` **3063 passed / 4 skipped in 228 files**. No app code
+changed, so no e2e spec is in scope; CI owns the full sweep. Each of the three
+new assertions was **proved against the reverted fix** (D-197): the naive
+append, the ISO stamp and the raw `term.starts_on` each turn its own test red.
+The demo was walked in a browser against `npm run dev:demo` on `:3100` — the
+sign page's link, the PDF's status line and its extracted text. CI's own state
+was checked with `gh run list`, not inherited: run `34387000785` was green on
+both jobs for R-185's `79945a0`.
