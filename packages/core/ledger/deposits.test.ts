@@ -136,6 +136,24 @@ describe('depositObligations', () => {
     expect(obligations.join(' ')).toMatch(/interest/i)
   })
 
+  it('says what this product does NOT do, not just what the law demands (R-183)', () => {
+    // Review finding 15, and the assertion above cannot catch this: it
+    // matches /separate account/ and /interest/, which the bare legal
+    // sentences satisfied for as long as they existed. A requirement printed
+    // beside a deposit balance reads as a requirement being MET, and this
+    // product writes neither `escrowAccountRef` nor `interestAccruedCents`
+    // and holds no interest rate at all. If somebody shortens these back to
+    // "Must earn interest for the tenant.", this goes red.
+    const obligations = depositObligations(strict, 'CASH')
+    const escrow = obligations.find((o) => /separate account/i.test(o))!
+    const interest = obligations.find((o) => /interest/i.test(o))!
+    expect(escrow).toMatch(/does not record which account/i)
+    // Named in terms of the letter that goes out short, because that is the
+    // consequence an operator can act on.
+    expect(interest).toMatch(/does not compute or accrue/i)
+    expect(interest).toMatch(/disposition letter/i)
+  })
+
   it('demands nothing where the state demands nothing', () => {
     expect(depositObligations(texas, 'CASH')).toEqual([])
   })

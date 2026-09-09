@@ -32,6 +32,8 @@ export interface RuleCoverageLike {
   acceptanceWaivesNotice: boolean | null
   dayCountBasis: string | null
   observedHolidays: readonly string[]
+  depositEscrowRequired: boolean
+  depositInterestRequired: boolean
 }
 
 export interface CoverageGap {
@@ -87,15 +89,33 @@ export function computeCoverage(
     // fix that finding 15 argues for over building the thing: the gap is
     // loud, on the screen that gates a state going effective, rather than
     // silent in two functions nobody is going to re-read.
-    const productLimits =
-      rule.dayCountBasis != null && rule.dayCountBasis !== 'CALENDAR'
+    const productLimits = [
+      ...(rule.dayCountBasis != null && rule.dayCountBasis !== 'CALENDAR'
         ? [
             'notice-sufficiency checks (rent increase LEASE-09, notice to vacate LEASE-12) still count calendar days',
             ...(rule.observedHolidays.length === 0
               ? ['no observed holidays are on file, so only weekends are skipped']
               : []),
           ]
-        : []
+        : []),
+      // R-183 (review finding 15). Both are FREE IN TEXAS, which requires
+      // neither, and that is exactly why they survived unbuilt: the cost
+      // arrives with the first state that requires one. Interest is the
+      // sharper of the two - a disposition letter short by the interest owed
+      // is what converts a routine deduction dispute into a statutory penalty
+      // claim - so it is named in terms of the letter, not in terms of a
+      // missing column.
+      ...(rule.depositInterestRequired
+        ? [
+            'deposit interest is required here and nothing computes or accrues it, so a disposition letter would go out short by the interest owed (PAY-11)',
+          ]
+        : []),
+      ...(rule.depositEscrowRequired
+        ? [
+            'deposits must be held in a separate account here and there is nowhere in this product to record which one (PAY-11)',
+          ]
+        : []),
+    ]
 
     if (unreviewedFields.length > 0 || productLimits.length > 0) {
       gaps.push({

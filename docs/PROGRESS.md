@@ -9878,3 +9878,78 @@ cannot see a defect that only exists at a phone width, and this repo's own
 `INPUT_CLASSES` comment says so in as many words. R-181's run
 (`34252431016`) was green on every job before this item started, checked with
 `gh run list` rather than copied forward from the previous entry.
+
+## R-183 — deposit escrow and interest become a loud gap
+
+Commit: (recorded below)
+
+**What it built.** Two changes, both small, because R-182 built the mechanism
+this needed a day earlier. `depositObligations`
+([packages/core/ledger/deposits.ts](packages/core/ledger/deposits.ts)) now says
+what this product does *not* do alongside what the law demands — the escrow
+line adds *"This product does not record which account"*, and the interest line
+adds *"does not compute or accrue it, so the disposition letter will not
+include it"*. `computeCoverage` emits a `productLimits` entry for
+`depositInterestRequired` and another for `depositEscrowRequired`, which the
+jurisdiction coverage panel already renders (D-193 added that array). No new
+screen, no new column, no migration.
+
+**What it decided** (D-195).
+
+- **Named where it BREAKS, not where the column is empty.**
+  "`interestAccruedCents` is never written" tells an operator nothing they can
+  act on. "A disposition letter would go out short by the interest owed" tells
+  them what happens, and a short disposition is what converts a routine
+  deduction dispute into a statutory penalty claim.
+- **The write is not refused.** Same call R-182 made for an empty holiday list:
+  refusing would mean an interest-required state could not be recorded at all
+  until somebody built accrual, and a state nobody can record is worse than one
+  recorded with a loud gap. The finding's "blocking that state's rule from
+  going effective" is the existing pre-activation legal-review gate (flagged
+  gaps §6) — a human process the coverage screen feeds, not a code path.
+- **Escrow and interest stay two lines**, not one combined sentence. Separate
+  statutes, a state may require either, and combining them would hide
+  whichever the operator did not already know about.
+
+**Found along the way.** `deposits.test.ts` asserted the two obligation
+sentences with `/separate account/i` and `/interest/i` — which the bare legal
+strings satisfied, and which the new disclaiming strings satisfy equally. A
+test that passes either way was not protecting the thing this item exists to
+change, so there is now an assertion on the disclaimer itself, **proven to fail
+by reverting the string** (`expected 'Must earn interest for the tenant.' to
+match /does not compute or accrue/i`).
+
+**What it left behind.**
+
+- **The accrual engine, deliberately.** No interest rate on
+  `JurisdictionRule`, no write to `Deposit.interestAccruedCents` or
+  `Deposit.escrowAccountRef` — both still dormant, exactly as the finding
+  found them. This is a real build and nobody should start it until a property
+  in an interest-required state is actually onboarded.
+- **Nothing computes what the interest would have been**, so an operator who
+  reads the warning still has to work the number out by hand and put it in the
+  letter themselves.
+- **`arrangement !== 'CASH'` still returns no obligations at all**, which is
+  right for a surety bond but means the coverage warning and the lease panel
+  disagree for a bonded tenancy in an interest state — the screen stays silent
+  there while the state-level gap is still listed.
+
+**The gate.** `lint` clean (16 pre-existing warnings, none new), `typecheck`
+clean, `npm run build` clean, `npm test` **3054 passed, 4 skipped, 0 failed**
+(up from 3051 — three new cases). e2e against the production build on `:3100`,
+**both projects** per R-182's lesson: `jurisdiction` and `deposits` **28
+passed, 0 flaky, 0 failed**, and `leases` (which renders the obligations panel)
+**21 passed**. No schema change, so no migration and no drift check.
+
+**One full-suite run went red first and the cause is recorded as unknown.**
+Seven files failed — `due-notices`, `sms-intake`, `emergency`,
+`triage-consumer`, `notifications`, `auto-make-ready`, `vendors/follow-up` —
+with 30s timeouts, a `Task_propertyId_fkey` violation and a `25P02` aborted
+transaction, none of them importing anything this item touched (two pure
+functions and their tests). All six re-ran green in isolation and the full
+suite then re-ran green, with the totals reconciling at 3058 either way
+(3026 + 7 + 25 = 3054 + 4). `pg_stat_activity` was checked but only *after*
+the run, when it showed one connection — so connection exhaustion is a
+plausible reading and **not a confirmed one**, and it is written down as
+unknown rather than guessed at. R-182's own CI run (`34368255042`) was green
+on both jobs, checked before this item was committed.

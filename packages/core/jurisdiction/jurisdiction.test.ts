@@ -385,6 +385,10 @@ describe('computeCoverage', () => {
       acceptanceWaivesNotice: false,
       dayCountBasis: 'CALENDAR',
       observedHolidays: [],
+      // Texas requires neither, which is the whole reason R-183's gap went
+      // unnoticed for as long as it did.
+      depositEscrowRequired: false,
+      depositInterestRequired: false,
       ...overrides,
     }
   }
@@ -456,6 +460,40 @@ describe('computeCoverage', () => {
     // A calendar state never consults the list, so an empty one says nothing.
     const calendar = computeCoverage(['TX'], [rule({ observedHolidays: [] })])
     expect(calendar.gaps).toEqual([])
+  })
+
+  it('names deposit interest in terms of the letter that would go out short (R-183)', () => {
+    // Review finding 15. The screen has to say what BREAKS, not which column
+    // is empty - "interestAccruedCents is never written" tells an operator
+    // nothing they can act on, and a short disposition is a statutory
+    // penalty claim.
+    const { gaps } = computeCoverage(['TX'], [rule({ depositInterestRequired: true })])
+    expect(gaps).toHaveLength(1)
+    expect(gaps[0]!.unreviewedFields).toEqual([])
+    expect(gaps[0]!.productLimits).toHaveLength(1)
+    expect(gaps[0]!.productLimits[0]).toContain('short by the interest owed')
+  })
+
+  it('names escrow and interest independently, and both alongside a day-count limit', () => {
+    // They are separate statutes and a state may require either - stacking
+    // them into one sentence would hide whichever the operator did not
+    // already know about.
+    const escrowOnly = computeCoverage(['TX'], [rule({ depositEscrowRequired: true })])
+    expect(escrowOnly.gaps[0]!.productLimits).toHaveLength(1)
+    expect(escrowOnly.gaps[0]!.productLimits[0]).toContain('separate account')
+
+    const both = computeCoverage(
+      ['TX'],
+      [
+        rule({
+          depositEscrowRequired: true,
+          depositInterestRequired: true,
+          dayCountBasis: 'BUSINESS',
+          observedHolidays: ['2026-09-07'],
+        }),
+      ],
+    )
+    expect(both.gaps[0]!.productLimits).toHaveLength(3)
   })
 
   it('a state with no property at all is never listed as needing a rule', () => {

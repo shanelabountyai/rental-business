@@ -141,6 +141,20 @@ export function depositHeldCents(
  * Returned as a list of obligations rather than two booleans so a screen can
  * render them without knowing which rules exist - and so a state that adds a
  * third obligation later does not need every caller edited.
+ *
+ * EACH ONE SAYS WHAT THIS PRODUCT DOES NOT DO (R-183, review finding 15).
+ * These two sentences used to read "Must be held in a separate account from
+ * operating funds." and "Must earn interest for the tenant." - true
+ * statements of law, printed beside a deposit balance, in a product that
+ * writes neither `Deposit.escrowAccountRef` nor `Deposit.interestAccruedCents`
+ * anywhere and carries no interest rate on `JurisdictionRule` at all. A
+ * requirement stated next to the money it applies to reads as a requirement
+ * being MET. It costs nothing in Texas, which requires neither and is why
+ * this survived; in the first interest-required state the disposition letter
+ * goes out short by the interest owed, and a short disposition is what turns
+ * a routine deduction dispute into a statutory penalty claim. Naming the gap
+ * is the whole fix here - the accrual engine is a separate build, and one
+ * nobody should start until a property in such a state is actually onboarded.
  */
 export function depositObligations(
   rule: DepositRule,
@@ -152,10 +166,14 @@ export function depositObligations(
 
   const obligations: string[] = []
   if (rule.depositEscrowRequired) {
-    obligations.push('Must be held in a separate account from operating funds.')
+    obligations.push(
+      'Must be held in a separate account from operating funds. This product does not record which account — keep that outside it.',
+    )
   }
   if (rule.depositInterestRequired) {
-    obligations.push('Must earn interest for the tenant.')
+    obligations.push(
+      'Must earn interest for the tenant. This product does not compute or accrue it, so the disposition letter will not include it — work the interest out before that letter goes out.',
+    )
   }
   return obligations
 }
