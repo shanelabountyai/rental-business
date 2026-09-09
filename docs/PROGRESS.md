@@ -9881,7 +9881,7 @@ cannot see a defect that only exists at a phone width, and this repo's own
 
 ## R-183 — deposit escrow and interest become a loud gap
 
-Commit: (recorded below)
+Commit: `d8d1d0f`
 
 **What it built.** Two changes, both small, because R-182 built the mechanism
 this needed a day earlier. `depositObligations`
