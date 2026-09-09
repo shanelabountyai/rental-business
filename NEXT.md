@@ -2,10 +2,20 @@
 
 ## R-184 (the Milestone 10 demo walk) is done and pushed — `cdde562` + `8be7214`.
 
-**CI was still running when the session closed.** Do not copy this line
-forward: check it yourself with `gh run list --limit 5`. That is R-141's whole
-lesson, and eleven items in a row got it wrong by inheriting a sentence
-instead of running the command.
+**CI is GREEN on both jobs** — run `34381705453` against `cdde562`, the commit
+carrying every code change: *Lint, types, unit tests, build* and *End-to-end,
+axe, Lighthouse* both passed. Checked with `gh run view`, not assumed. **Do not
+copy this line forward** — re-check with `gh run list --limit 5` before
+trusting it, because R-141's lesson is that this exact sentence gets inherited
+instead of run.
+
+**The two docs-only commits (`8be7214`, `e0bab41`) have no CI run, and that is
+correct.** `.github/workflows/ci.yml` carries `paths-ignore: ['**.md',
+'docs/**']`. If you compare against R-183, whose *"record the SHA"* commit DID
+get a run despite being markdown-only: that commit was pushed in the same
+`git push` as its code commit, so the push event's diff contained code and the
+run took its title from the head commit. R-184 pushed each commit separately,
+so the skip is the rule working, not a pipeline that stopped.
 
 ## The backlog still has no next row, and that has not changed
 
