@@ -9,9 +9,20 @@ Model: recommend at the start of the item, per the global convention.
 
 ## Context from R-182 (done, b96e80c + 0fc2898)
 
-**CI run for R-182 was still in flight when the session closed.** Check it
-(`gh run list --limit 5`) before assuming green. R-181's run (34252431016) was
-green — checked, not copied forward.
+**R-182's first CI run FAILED (34257801550) and was fixed in `4813875`.** Six
+`mobile-chrome` tests in `jurisdiction.spec.ts`, all one defect: the new
+day-count `<option>` labels were full sentences, a native select is as wide as
+its widest option, and 930px inside a 412px viewport made Chromium scale the
+page so Playwright's clicks missed. **The run for the fix was still in flight
+when this session closed — check `gh run list --limit 5` before assuming
+green.**
+
+**D-194, and it is a working rule, not a footnote:** run
+`--project=mobile-chrome` as well as `desktop-chrome` whenever a change
+touches a form control or page layout. `desktop-chrome` alone passed this
+locally. `min-w-0` inside `SelectField` does not save you — every flex
+ancestor between the control and the form has to allow the shrink, so a
+caller wrapping the field in another `flex flex-col` div reintroduces it.
 
 **D-193.** A jurisdiction can now say how it counts to thirty.
 
