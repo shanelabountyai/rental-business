@@ -10363,6 +10363,8 @@ correctly skips the Vercel build.
 
 ## R-187 — a repayment plan that completed itself on rent the tenant already owed
 
+Commit `e62ad53`.
+
 **What it built.** `paidTowardPlan`
 ([apps/web/lib/payments/plans.ts](apps/web/lib/payments/plans.ts)) now nets the
 rent charged since the plan started off the money that arrived. It is the
