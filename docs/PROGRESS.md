@@ -9791,6 +9791,34 @@ as an unreviewed field alongside the other four.
   default is this product deciding for itself how a state counts, which is
   the assumption the finding exists to remove.
 
+**Found along the way (2), and CI caught it: a one-sentence `<option>` label
+is a WCAG reflow failure and six broken tests.** The first version of the
+day-count picker carried the whole explanation in its option labels &mdash;
+*"Calendar days, rolled forward &mdash; a deadline landing on a weekend or an
+observed holiday moves to the next business day"*, 110 characters. A native
+`<select>`'s min-content width is its widest option, so the control rendered
+**930px wide inside a 412px phone viewport**; Chromium answered the over-wide
+layout by expanding the layout viewport and scaling the page to 43%, and
+Playwright's click point &mdash; computed from `getBoundingClientRect` &mdash;
+then no longer matched where the browser dispatched the press. Six
+`mobile-chrome` tests in `jurisdiction.spec.ts` reported *"&lt;p&gt; ...
+intercepts pointer events"* and retried fruitlessly to a 60s timeout.
+
+**This is `INPUT_CLASSES`' own documented R-170a failure, second instance**,
+and the local gate could not see it because only `desktop-chrome` was run
+locally &mdash; the page is fine at 1280px, which is exactly what that comment
+warns about. Two fixes, and both are right on the merits independent of the
+tests: the option labels are now names (`Calendar days`, `Calendar days,
+rolled forward`, `Business days`) with the three sentences moved into the
+paragraph beside the field where they can wrap, and `min-w-0` is on the
+wrapper `div`. `min-w-0` inside `SelectField` is not enough on its own &mdash;
+**every flex ancestor between the control and the form has to allow the
+shrink**, and a caller that wraps the field in another flex `div` reintroduces
+the trap. All four such wrappers in `rule-form.tsx` had it; all four now carry
+`min-w-0`. Verified directly rather than only through the tests:
+`scrollWidth` 947 &rarr; 412 against a `clientWidth` of 412, and
+`visualViewport.offsetTop` 1088 &rarr; 0.
+
 **Found along the way.** A zero-day period starting on a Saturday made the
 two non-calendar bases disagree about the same day: `BUSINESS` returned the
 Saturday (the count loop never runs) while `CALENDAR_ROLL_FORWARD` rolled to
@@ -9837,6 +9865,16 @@ unless the schema declares `@default([])` too. e2e against the production
 build on `:3100`: `jurisdiction`, `abandonment` and `evictions` **22 passed,
 0 flaky, 0 failed**, then `confidential`, `violations`, `deposit-disposition`
 and `deposits` **13 passed, 0 failed** — every spec touching a clock or a
-screen this change moved. Full sweep left to CI; R-181's run
+screen this change moved.
+
+**CI's first run on this item FAILED and the fix is above.** Run
+`34257801550`: `verify` green, e2e **6 failed, 1201 passed, 3 skipped** — all
+six `mobile-chrome`, all in `jurisdiction.spec.ts`, all the `<option>`-width
+reflow defect. Reproduced locally, bisected by removing the new fieldset (11
+passed without it, 6 failed with it), fixed, and re-run: `jurisdiction.spec.ts`
+**22 passed across `mobile-chrome` AND `desktop-chrome`, 0 flaky, 0 failed**.
+**The lesson is the local command, not the code**: running one project locally
+cannot see a defect that only exists at a phone width, and this repo's own
+`INPUT_CLASSES` comment says so in as many words. R-181's run
 (`34252431016`) was green on every job before this item started, checked with
 `gh run list` rather than copied forward from the previous entry.

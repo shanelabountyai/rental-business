@@ -267,7 +267,11 @@ export function RuleForm({
         <legend className="text-sm font-semibold">
           How this jurisdiction counts days (R-182)
         </legend>
-        <div className="flex flex-col gap-1.5">
+        {/* `min-w-0` here as well as inside SelectField (R-170a). The
+            control can only shrink if every flex ancestor between it and the
+            form lets it: this wrapper is one, and without it a long option
+            makes the whole page wider than the phone. */}
+        <div className="flex min-w-0 flex-col gap-1.5">
           <SelectField
             label="Day-count basis for every statutory period below"
             name="dayCountBasis"
@@ -279,10 +283,16 @@ export function RuleForm({
           />
           <p className="text-muted-foreground text-sm">
             Applies to every day count on this form &mdash; the cure period, the deposit
-            deadline, the notice periods, the belongings clocks. Left unreviewed, deadlines
-            are computed in calendar days, which is what this product did everywhere before
-            anybody was asked; the coverage panel then lists it as an open question rather
-            than treating silence as an answer.
+            deadline, the notice periods, the belongings clocks.{' '}
+            <strong className="font-medium">Calendar days</strong> counts every day and lets
+            the deadline land where it lands.{' '}
+            <strong className="font-medium">Rolled forward</strong> counts every day too, but
+            moves a deadline landing on a weekend or an observed holiday to the next business
+            day. <strong className="font-medium">Business days</strong> does not count
+            weekends or observed holidays at all. Left unreviewed, deadlines are computed in
+            calendar days &mdash; what this product did everywhere before anybody was asked
+            &mdash; and the coverage panel lists it as an open question rather than treating
+            silence as an answer.
           </p>
         </div>
         <TextareaField
@@ -337,7 +347,7 @@ export function RuleForm({
         <legend className="text-sm font-semibold">
           Move-out walkthrough (INSP-02)
         </legend>
-        <div className="flex flex-col gap-1.5">
+        <div className="flex min-w-0 flex-col gap-1.5">
           <SelectField
             label="Pre-move-out walkthrough right"
             name="preMoveOutWalkthroughRequired"
@@ -397,7 +407,7 @@ export function RuleForm({
             defaultValue={defaults.payOrQuitDays}
             error={errors.payOrQuitDays}
           />
-          <div className="flex flex-col gap-1.5">
+          <div className="flex min-w-0 flex-col gap-1.5">
             <SelectField
               label="Accepting payment after service waives the notice (R-156)"
               name="acceptanceWaivesNotice"
@@ -649,7 +659,7 @@ export function RuleForm({
           name="rubsPermitted"
           defaultChecked={defaults.rubsPermitted ?? true}
         />
-        <div className="flex flex-col gap-1.5">
+        <div className="flex min-w-0 flex-col gap-1.5">
           <SelectField
             label="Source-of-income protected class (LEASE-01)"
             name="sourceOfIncomeProtected"
@@ -684,7 +694,7 @@ export function RuleForm({
         <legend className="text-sm font-semibold">
           Early termination on a safety ground (RISK-04)
         </legend>
-        <div className="flex flex-col gap-1.5">
+        <div className="flex min-w-0 flex-col gap-1.5">
           <SelectField
             label="Statutory early-termination right"
             name="earlyTerminationRightExists"

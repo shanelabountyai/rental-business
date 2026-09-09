@@ -53,14 +53,21 @@ export const DAY_COUNT_BASES = [
 ] as const satisfies readonly DayCountBasis[]
 const DAY_COUNT_BASIS_SET: ReadonlySet<string> = new Set(DAY_COUNT_BASES)
 
-/// What each basis says, for the form's radio labels. Same wording as
-/// `dayCountNote` in packages/core/scheduling/deadline.ts describes the
-/// consequence; this describes the choice.
+/// What each basis is called, for the form's picker.
+///
+/// SHORT ON PURPOSE, AND THE FIRST VERSION OF THIS WAS NOT. A native
+/// `<select>`'s min-content width is its widest `<option>`, so the
+/// one-sentence labels these used to carry made the control 930px wide on a
+/// 412px phone - which is `INPUT_CLASSES`' documented R-170a failure exactly,
+/// down to the six mobile-chrome tests that then missed the submit button and
+/// timed out. An option is a name; the sentences explaining the three belong
+/// in the paragraph beside the field, where they can wrap. See
+/// `dayCountNote` in packages/core/scheduling/deadline.ts for the wording
+/// shown against a computed date.
 export const DAY_COUNT_BASIS_LABELS: Record<(typeof DAY_COUNT_BASES)[number], string> = {
-  CALENDAR: 'Calendar days — every day counts, and the deadline lands where it lands',
-  CALENDAR_ROLL_FORWARD:
-    'Calendar days, rolled forward — a deadline landing on a weekend or an observed holiday moves to the next business day',
-  BUSINESS: 'Business days — weekends and observed holidays are not counted at all',
+  CALENDAR: 'Calendar days',
+  CALENDAR_ROLL_FORWARD: 'Calendar days, rolled forward',
+  BUSINESS: 'Business days',
 }
 
 const ALL_CHARGE_TYPES = [
