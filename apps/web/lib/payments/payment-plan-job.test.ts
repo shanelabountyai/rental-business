@@ -16,10 +16,13 @@ import './payment-plan-job.ts'
 // broken, that its hold actually comes off, and that the payments counted
 // are the ones that stayed.
 //
-// That last one is the failure worth a database test. `paidTowardPlan`
-// classifies a REVERSAL by its sign, and if it got that backwards a bounced
-// cheque would keep a plan alive - which is a chase switched off for a
-// tenancy that has paid nothing, silently, for as long as the schedule runs.
+// That last one is the failure worth a database test, and it has now bitten
+// twice. A REVERSAL classified by the wrong sign lets a bounced cheque keep a
+// plan alive; counting the month's ordinary rent as instalment money (R-187)
+// let a tenancy paying nothing extra complete a plan outright. Both are a
+// chase switched off, silently, for as long as the schedule runs - and every
+// test in this file passed straight over the second one, because none of them
+// charged any rent.
 // ==========================================================================
 
 const CHICAGO = 'America/Chicago'
@@ -146,6 +149,22 @@ async function pay(leaseId: string, amountCents: number, on: string) {
   })
 }
 
+/// The month's ordinary rent, raised on the lease. POSITIVE - a charge adds
+/// to what is owed, which is the whole reason it has to be netted off the
+/// money that arrives (R-187).
+async function charge(leaseId: string, amountCents: number, on: string) {
+  await prisma.ledgerEntry.create({
+    data: {
+      propertyId,
+      leaseId,
+      type: 'CHARGE',
+      amountCents,
+      description: 'Rent',
+      occurredAt: new Date(`${on}T06:00:00Z`),
+    },
+  })
+}
+
 async function runAt(isoInstant: string) {
   const summaries = await runDueJobs(new Date(isoInstant), { propertyIds: [propertyId] })
   // A job that THREW is recorded as `failed` and reads, from every assertion
@@ -215,6 +234,34 @@ describe('the payment-plan sweep', () => {
     await runAt('2026-03-05T13:00:00Z')
     expect((await prisma.paymentPlan.findUniqueOrThrow({ where: { id: planId } })).status).toBe(
       'BROKEN',
+    )
+  })
+
+  // ==========================================================================
+  // R-187. THE DEFECT THIS PAIR EXISTS FOR: ordinary rent counted as
+  // instalment money, so a tenancy paying its $1,500 and not a cent more
+  // read as keeping a $900 plan - and completed it. Nothing else in the file
+  // charges rent, which is exactly why every test here passed over it.
+  // ==========================================================================
+  it('does NOT count the month\'s ordinary rent as instalment money', async () => {
+    const { leaseId, planId } = await seedPlan()
+    await charge(leaseId, 150_000, '2026-03-01')
+    await pay(leaseId, 150_000, '2026-03-01')
+
+    await runAt('2026-03-05T13:00:00Z')
+    expect((await prisma.paymentPlan.findUniqueOrThrow({ where: { id: planId } })).status).toBe(
+      'BROKEN',
+    )
+  })
+
+  it('counts the instalment paid ON TOP of the rent', async () => {
+    const { leaseId, planId } = await seedPlan()
+    await charge(leaseId, 150_000, '2026-03-01')
+    await pay(leaseId, 150_000 + 300_00, '2026-03-01')
+
+    await runAt('2026-03-05T13:00:00Z')
+    expect((await prisma.paymentPlan.findUniqueOrThrow({ where: { id: planId } })).status).toBe(
+      'ACTIVE',
     )
   })
 

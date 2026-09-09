@@ -10360,3 +10360,102 @@ rather than inherited from the handoff — R-141's failure was eleven entries
 copying a CI claim forward instead of running the three-second command). This
 commit touches only `docs/`, so `apps/web/vercel.json`'s `ignoreCommand`
 correctly skips the Vercel build.
+
+## R-187 — a repayment plan that completed itself on rent the tenant already owed
+
+**What it built.** `paidTowardPlan`
+([apps/web/lib/payments/plans.ts](apps/web/lib/payments/plans.ts)) now nets the
+rent charged since the plan started off the money that arrived. It is the
+negated sum of the three types the balance is made of — `PAYMENT` (negative),
+`CHARGE` (positive) and `REVERSAL` (either sign, undoing one of the two) —
+floored at zero, and the type test is an **allowlist** rather than "everything
+except CREDIT and ADJUSTMENT", so a seventh `LedgerEntryType` cannot join the
+arithmetic by being added to an enum. Three call sites route through that one
+function — the nightly `payment_plan.check` sweep, the rent roll and the lease
+panel — so the fix is one edit rather than three.
+
+`toPlanView` gained an upper bound: an **ended** plan is measured at
+`completedAt ?? brokenAt ?? cancelledAt` and `asOf` that day, not today. And
+the plan panel now names, in the "earlier plans" list on the tenancy itself,
+any plan recorded `COMPLETED` whose ledger cannot support it.
+
+**What it decided.**
+
+- **D-181's algebra dropped a term, and D-202 corrects it.** The balance is
+  `arrearsAtStart + chargesSince - paymentsSince`, so "has it fallen by the
+  matured schedule" is `paymentsSince - chargesSince >= matured`. Only
+  `arrearsAtStart` cancels — the charges do not. Counting gross payments meant
+  a $2,400 plan of six $400 instalments read `ACTIVE` with `shortfallCents: 0`
+  against a tenancy paying nothing but its ordinary $1,500 rent, and
+  **`COMPLETED` itself by month six**, while `payment_plan`'s `halt_dunning`
+  and `halt_late_fees` held the chase ladder and the late-fee meter off for the
+  whole run and a ROUTINE *"plan paid in full"* Task landed on a debt nobody
+  had paid.
+- **CREDIT joins ADJUSTMENT in being excluded, on D-181's own stated reason** —
+  *a plan kept by an adjustment is a plan kept by us*. That sentence is true of
+  a concession whichever column it lands in. Nothing writes `CREDIT` today
+  (only `webhook.ts` writes the ledger, and it writes `PAYMENT`, `CHARGE` and
+  `REVERSAL`), so this changes no existing row and closes the hole before
+  something does.
+- **The `REVERSAL`-by-sign rule stopped needing to be a rule.** D-181 classified
+  a reversal by its sign to answer "did the money stay" without a join. Under
+  the netted sum both directions are already correct — a positive reversal
+  takes back a payment, a negative one takes back a charge — so the special
+  case is gone and the behaviour it protected is unchanged. Its regression test
+  still passes.
+- **The bound on an ended plan is the same defect with its sign reversed.** An
+  open-ended window swallows next month's rent, so without it a plan genuinely
+  paid in full reads as unpaid again a month later. `plans.test.ts` asserts
+  both directions.
+- **Floored at zero.** A tenancy further behind than when the plan started has
+  made no progress on it, and the unclamped alternative renders as
+  `remainingCents` **exceeding the plan total** on the panel — a second,
+  differently scoped statement of the balance the rent roll already shows. The
+  floor applies to the total and never per period, so a bad month followed by a
+  catch-up still counts in full.
+- **The deliberate consequence flips, and that is the point.** D-181 said the
+  test measures the plan and not the tenancy, so a tenant could keep a plan
+  while falling further behind. It could not actually deliver that — the sum
+  cannot tell an instalment from a rent payment — so what it delivered was the
+  opposite: rent counted as instalment money. Now staying on a plan means
+  staying current too, and an operator who wants to carry a tenancy through a
+  lean month has the instalment amounts and the schedule to do it with.
+- **Nothing is backfilled** (the review's binding "do not build", D-201). A
+  status rewritten months after the fact is a worse record than a true one with
+  the doubt written beside it, so the panel carries the doubt where the plan is
+  read from rather than a migration rewriting history.
+
+**What it left behind.**
+
+- **The report of wrongly-completed plans is zero rows, on every database this
+  laptop can reach.** `rental_demo` holds no `PaymentPlan` rows, and the Neon
+  dev branch has no `PaymentPlan` **table** — `db:status:dev` shows nine
+  migrations pending there, `20260907120000_r175_payment_plans` among them.
+  Production was not queried. The panel warning is what covers it.
+- **Found along the way: the Neon dev branch is nine migrations behind**, back
+  to `20260904120100_r165_guarantor_actor_type`. `npm run dev` reads
+  `.env.local`, so a walk against the dev branch would 500 on anything built
+  since R-165. One command (`npm run db:migrate:dev`) and outside this item's
+  scope; not run, and named here so it is not found twice.
+- **No e2e walks the new warning.** It renders only for a plan recorded
+  `COMPLETED` whose ledger falls short, and no spec creates one; the assertion
+  lives in `plans.test.ts` against `toPlanView` instead. `payment-plans.spec.ts`
+  passes unchanged (5/5, desktop-chrome).
+- **The start-day boundary double-counts a charge raised on the plan's own start
+  date.** `businessDate(occurredAt) < startedOn` excludes only what came before,
+  so rent charged the same day the plan is agreed lands in both `arrearsCents`
+  and `chargesSince`. The same boundary has always applied to payments; left
+  alone rather than given a second rule.
+
+**The gate.** `lint` 0 errors (16 pre-existing warnings), `typecheck` clean,
+`npm test` **3052 passed / 1 failed / 25 skipped across 229 files** — the one
+failure and two file-level failures are `afterEach`/`afterAll` hook timeouts in
+`delivery.test.ts`, `notifications.test.ts` and `auto-make-ready.test.ts`, none
+of which touch payment plans; **all three pass in isolation**, and
+`pg_stat_activity` showed sibling projects holding 9 and 8 connections on
+`storage_test` and `countertop_test` during the run — the documented shared-
+`max_connections` symptom, not this change. `e2e/payment-plans.spec.ts` 5/5.
+Both new database tests and six of the nine new unit assertions were **proven
+against the reverted fix** (D-197): removing only the `CHARGE` term turns both
+sweep tests red. CI on the previous item was **green** — run `34391093789` on
+`34a4d8b`, checked with `gh run list`, not inherited.

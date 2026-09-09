@@ -144,18 +144,22 @@ export interface PlanProgress {
  * and the rest in week three has kept the instalment, and a rule that hunts
  * for one payment of exactly the right size would say otherwise.
  *
- * It also makes new rent charged during the plan drop out of the arithmetic
- * rather than having to be netted off. The balance at any moment is
- * `arrearsAtStart + chargesSince - paymentsSince`, so "has the balance fallen
- * as fast as the schedule promised" reduces exactly to "is `paymentsSince` at
- * least the cumulative instalment total" — the charges cancel on both sides.
+ * `paidCents` IS NET OF THE RENT CHARGED SINCE, and this comment used to say
+ * the charges cancelled (D-181, corrected by R-187). They do not. The balance
+ * is `arrearsAtStart + chargesSince - paymentsSince`, and "has the balance
+ * fallen as fast as the schedule promised" is `paymentsSince - chargesSince
+ * >= matured` — only `arrearsAtStart` cancels. Counting gross payments made a
+ * tenancy paying nothing but its ordinary rent look like one keeping a plan,
+ * and six months later the plan completed itself. The netting is the app's
+ * job, because only the app can read the ledger; see `paidTowardPlan` in
+ * apps/web/lib/payments/plans.ts for which entry types it is made of.
  *
- * The consequence, and it is deliberate: this measures the PLAN, not the
- * tenancy. A tenant paying their instalments and nothing toward the month's
- * new rent is keeping the plan and getting further behind, which the rent
- * roll shows as a growing balance beside an on-track plan. If an operator
- * wants current rent to be a condition, they set the instalment amounts to
- * include it — that is their term to agree, not ours to impose.
+ * The consequence, and it is deliberate: staying on a plan means staying
+ * current too. A tenant paying instalments and nothing toward the month's new
+ * rent is falling behind, and now the plan says so instead of the rent roll
+ * showing a growing balance beside an on-track plan. An operator who wants to
+ * carry a tenancy through a lean month has the instalment amounts and the
+ * schedule to do it with — that is a term to agree, not an arithmetic hole.
  * ==========================================================================
  */
 export function planProgress(input: {

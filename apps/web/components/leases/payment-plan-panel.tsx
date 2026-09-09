@@ -322,6 +322,20 @@ export function PaymentPlanPanel({
                   <> — broken on the instalment due {friendlyBusinessDate(plan.brokenOn)}</>
                 )}
                 {plan.cancelReason && <> — ended: “{plan.cancelReason}”</>}
+                {/* THE RECORD SAYS PAID IN FULL AND THE LEDGER CANNOT SUPPORT
+                    IT (R-187). Until this was fixed, ordinary rent counted as
+                    instalment money, so a tenancy paying nothing extra
+                    completed its own plan. Nothing is backfilled — a status
+                    rewritten months later is a worse record than a true one
+                    with the doubt written beside it — so the panel says so
+                    where the plan is actually read from. */}
+                {plan.status === 'COMPLETED' && plan.remainingCents > 0 && (
+                  <strong className="text-destructive block font-medium">
+                    Recorded as paid in full, but {formatCents(plan.remainingCents)} of the
+                    schedule had not reached the ledger when it closed. Check the statement
+                    before relying on this as proof the arrears were cleared.
+                  </strong>
+                )}
               </li>
             ))}
           </ul>

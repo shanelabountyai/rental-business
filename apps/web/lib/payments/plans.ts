@@ -24,46 +24,75 @@ export interface PlanLedgerRow {
 }
 
 /**
- * What the tenancy has paid since the plan started.
+ * NET progress toward the plan: what arrived, less what was charged since.
  *
  * ==========================================================================
- * A REVERSAL IS CLASSIFIED BY ITS SIGN, NOT BY WHAT IT POINTS AT.
+ * THE CHARGES DO NOT CANCEL, AND D-181 SAID THEY DID (R-187).
  *
- * Payments and credits are negative in this ledger; charges are positive. So
- * a REVERSAL that is POSITIVE can only be undoing something negative - a
- * returned cheque, a failed ACH debit - and a negative one is undoing a
- * charge, which is not a payment at all. That makes "did the money actually
- * stay" answerable without joining each reversal to the row it reverses, and
- * it matters here more than almost anywhere: a bounced payment that still
- * counted toward a repayment plan would keep the chase switched off against
- * a tenancy that has paid nothing.
+ * The balance is `arrearsAtStart + chargesSince - paymentsSince`, and the
+ * plan is being kept when that balance has fallen by the matured schedule:
  *
- * ADJUSTMENT is excluded in both directions. An adjustment is somebody
- * correcting the projection, not the tenant paying - and a plan kept by an
- * adjustment is a plan kept by us.
+ *     arrearsAtStart + chargesSince - paymentsSince <= arrearsAtStart - matured
+ *       =>  paymentsSince - chargesSince >= matured
+ *
+ * The `arrearsAtStart` cancels. `chargesSince` does not, and dropping it is
+ * not a rounding error - it is the difference between a plan and an amnesty.
+ * A $2,400 plan of six $400 instalments, against a tenancy paying only its
+ * ordinary $1,500 rent and not a cent more, read ACTIVE with a zero
+ * shortfall for six months and then COMPLETED itself, while the
+ * `payment_plan` hold kept the chase and the late-fee meter off for the
+ * whole run - and raised a "paid in full" Task on a debt nobody had paid.
+ *
+ * So the arithmetic is the same three types the balance is made of, netted:
+ * PAYMENT (negative), CHARGE (positive) and REVERSAL (either sign, undoing
+ * one of the two). Negating that sum is exactly `paymentsSince -
+ * chargesSince`, which is why a REVERSAL no longer needs classifying by what
+ * it points at: a positive one takes back a payment and a negative one takes
+ * back a charge, and both are already correct in the sum.
+ *
+ * CREDIT AND ADJUSTMENT ARE BOTH EXCLUDED, and for one reason: a plan kept
+ * by a credit is a plan kept by us. D-181 gave that reason for ADJUSTMENT
+ * and then counted CREDIT anyway. A concession we granted is not the tenancy
+ * keeping to a schedule, whichever column it lands in.
+ *
+ * The list is an ALLOWLIST, not "everything except those two". A seventh
+ * `LedgerEntryType` must not join this arithmetic by being added to an enum.
  * ==========================================================================
+ *
+ * FLOORED AT ZERO. A tenancy further behind than when the plan started has
+ * made no progress on it - and the alternative reads as `remainingCents`
+ * exceeding the plan total on the panel, which is a second, differently
+ * scoped statement of the balance the rent roll already shows. The floor is
+ * applied to the total, never per period, so a bad month followed by a
+ * catch-up still counts in full.
+ *
+ * `until` bounds the window for a plan that has already ENDED: what had
+ * arrived at the instant the sweep called it, not what the ledger says
+ * today. Without it every completed plan eventually reads as unpaid again,
+ * because next month's rent is another charge inside an open-ended window.
+ * Left undefined for a live plan, where now is the right question.
  *
  * `startedOn` is a calendar day in the property's zone and `occurredAt` is a
- * real timestamp, so the comparison goes through `businessDate` - the R-042
- * rule, in the direction that is correct for a timestamp.
+ * real timestamp, so the lower bound goes through `businessDate` - the R-042
+ * rule, in the direction that is correct for a timestamp. The upper bound is
+ * an instant compared with an instant, so no zone touches it.
  */
 export function paidTowardPlan(
   entries: readonly PlanLedgerRow[],
   startedOn: BusinessDate,
   timezone: string,
+  until?: Date | null,
 ): number {
-  let credited = 0
+  let net = 0
   for (const entry of entries) {
+    if (entry.type !== 'PAYMENT' && entry.type !== 'CHARGE' && entry.type !== 'REVERSAL') continue
     if (businessDate(entry.occurredAt, timezone) < startedOn) continue
-    const counts =
-      entry.type === 'PAYMENT' ||
-      entry.type === 'CREDIT' ||
-      (entry.type === 'REVERSAL' && entry.amountCents > 0)
-    if (counts) credited += entry.amountCents
+    if (until && entry.occurredAt > until) continue
+    net += entry.amountCents
   }
   // Negated: a payment reduces what is owed, and "paid" is a positive number
   // everywhere it is read.
-  return -credited
+  return Math.max(0, -net)
 }
 
 const PLAN_SELECT = {
@@ -109,9 +138,12 @@ export interface PlanView {
   note: string
   instalments: PlanInstalmentView[]
   /// Computed fresh from the ledger every time this is read, never stored.
-  /// The stored `status` is what the nightly sweep last decided; this is what
-  /// is true right now, and a screen that showed the stored one would be up
-  /// to a day stale on the only question anybody opens it to ask.
+  /// The stored `status` is what the nightly sweep last decided; for a LIVE
+  /// plan this is what is true right now, and a screen showing the stored one
+  /// would be up to a day stale on the only question anybody opens it to ask.
+  /// For an ENDED plan it is measured at the instant the plan ended, so
+  /// `status === 'COMPLETED'` with a non-zero `remainingCents` is a plan the
+  /// record says was paid off and the ledger cannot support (R-187).
   progress: PlanProgress
   createdAt: Date
   createdByName: string
@@ -142,6 +174,13 @@ export function toPlanView(
     amountCents: row.amountCents,
   }))
 
+  // AN ENDED PLAN IS MEASURED AT THE MOMENT IT ENDED, not today. Its window
+  // would otherwise stay open and swallow every rent charge since, so a plan
+  // genuinely paid in full would read as unpaid again a month later - the
+  // R-187 defect with its sign reversed. A live plan takes no bound: now is
+  // the question being asked of it.
+  const endedAt = plan.completedAt ?? plan.brokenAt ?? plan.cancelledAt
+
   return {
     id: plan.id,
     leaseId: plan.leaseId,
@@ -152,8 +191,8 @@ export function toPlanView(
     instalments,
     progress: planProgress({
       instalments,
-      paidCents: paidTowardPlan(entries, startedOn, timezone),
-      asOf: today,
+      paidCents: paidTowardPlan(entries, startedOn, timezone, endedAt),
+      asOf: endedAt ? businessDate(endedAt, timezone) : today,
     }),
     createdAt: plan.createdAt,
     createdByName: plan.createdBy.name,
