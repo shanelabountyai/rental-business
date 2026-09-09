@@ -1,79 +1,73 @@
 # Next session
 
-## Arc 4 planning is done and pushed — `cea6d56`, docs only.
+## R-187 is done and pushed — `e62ad53`, SHA recorded in `5d5ce5e`.
 
-**R-186's CI came back GREEN** — run `34391093789` on `34a4d8b`, both jobs
-(`Lint, types, unit tests, build` and `End-to-end, axe, Lighthouse`). That
-closes the question the last handoff left open. `cea6d56` is docs-only, so
-`.github/workflows/ci.yml`'s `paths-ignore` means it correctly has no run and
-`apps/web/vercel.json`'s `ignoreCommand` correctly skips the deploy.
+**CI has NOT been checked for this item.** Run `gh run list --limit 5` and
+confirm both jobs on `5d5ce5e` (or `e62ad53` — auto job cancellation usually
+leaves only the SHA commit's run). Do not copy this or any earlier green line
+forward; R-141's lesson is eleven entries inheriting a claim instead of running
+the three-second command.
 
-**Do not copy that green line forward.** Run `gh run list --limit 5` yourself.
-R-141's lesson is eleven entries inheriting a CI claim instead of running the
-three-second command.
-
-## Start here: row 174, R-187
+## Start here: row 175, R-188
 
 `docs/prds/06-backlog.md` Milestone 14 ("Arc 4"), rows 174–189, sourced from
 `docs/reviews/2026-09-09-operator-review.md` and recorded as D-201. Work top to
-bottom; the six WRONG rows come first.
+bottom; the WRONG rows come first. R-188 is the next one.
 
-**R-187 — a repayment plan counts ordinary rent as instalment money, so it can
-never break and eventually completes itself.** M. Model: **Opus** — money math
-with a legal-evidence consequence.
+**R-188 is one of the arc's two Needs counsel rows** — does a timely
+itemization with a late refund partially defend? Read the row and the review
+section before deciding whether it can be built without an owner answer, and
+ask as a clickable question if it cannot.
 
-`paidTowardPlan` (`apps/web/lib/payments/plans.ts:50-67`) credits every
-`PAYMENT`/`CREDIT` on the lease since `startedOn` and nothing subtracts the
-rent charged in between. D-181's comment states the algebra and drops a term:
-the charges cancel only if subtracted from `paymentsSince` too, so the correct
-predicate is `paymentsSince − chargesSince >= cumulativeMatured`. A $2,400 plan
-of six $400 instalments, against a tenant paying only their ordinary $1,500
-rent, reads `ACTIVE` with `shortfallCents: 0` and **`COMPLETED`** by month six —
-while `payment_plan`'s `halt_dunning` + `halt_late_fees`
-(`packages/core/holds/index.ts:131-137`) keep the ladder and the late-fee meter
-off for the whole run, and `payment-plan-job.ts:77-110` then raises a ROUTINE
-*"plan paid in full"* Task. Also drop `CREDIT` from the count, for D-181's own
-stated reason: a concession is us.
+Thirteen of the fifteen rows are **inherited evidence**; only findings 1 and 5
+were spot-checked at planning time. R-150's rule stands: re-verify the file and
+line before building, and if the claim is wrong, say so in the entry rather
+than building around it. R-187's claim was verified and was correct.
 
-**I verified this one myself** — `plans.ts:50-67` has no charge term anywhere.
-The row is not inherited on this point. **Do not backfill** the plans already
-completed wrongly (review's "do not build"): report them, fix the writer.
+## What R-187 changed that the next rows touch
 
-## What Arc 4 is, in one line
+- `paidTowardPlan` (`apps/web/lib/payments/plans.ts`) is now
+  `-(PAYMENT + CHARGE + REVERSAL)` since `startedOn`, floored at zero, over an
+  **allowlist** of types. CREDIT and ADJUSTMENT are both out. D-202 records it
+  and corrects D-181.
+- `toPlanView` bounds an **ended** plan's window at
+  `completedAt ?? brokenAt ?? cancelledAt`. A live plan takes no bound.
+- The lease plan panel names any plan recorded `COMPLETED` whose ledger cannot
+  support it. **Nothing was backfilled** and nothing should be.
+- **R-199 (row 186) depends on R-187** and is now unblocked.
 
-Arc 3 made money physically leave the building. This review found the product
-now writes **confident records that are wrong** — a plan that completes itself,
-a `JobRun` marked SUCCEEDED for a day that ran under the wrong clock, a
-`Payment` row saying *cheque at the counter* for money that came off a card, a
-stall sweep that can never flag twice. Documents you would rather not hold in
-front of a judge.
+## Found in R-187, owned by nobody
+
+**The Neon dev branch is nine migrations behind**, back to
+`20260904120100_r165_guarantor_actor_type` and including
+`20260907120000_r175_payment_plans`, so it has no `PaymentPlan` table at all.
+`npm run dev` reads `.env.local`, so a walk against the dev branch would 500 on
+anything built since R-165. `npm run db:migrate:dev` is the whole fix; it was
+outside R-187's scope and was not run.
+
+Also from R-187: the start-day boundary double-counts a charge raised on the
+plan's own start date (it lands in both `arrearsCents` and `chargesSince`); no
+e2e walks the new wrongly-completed warning.
 
 ## Binding for every row in this arc
 
 The review's **"do not build"** list, now three arcs deep and repeated in the
 Milestone 14 header and D-201:
 
-- No accrual or interest engine before a second state is onboarded (R-183's
-  posture; R-200/finding 14 takes the same one).
+- No accrual or interest engine before a second state is onboarded.
 - No Stripe Connect. Still a legal-structure decision nobody has taken.
 - No settings screen for `CHASE_LADDER_DAYS`, `TURN_STAGE_DAYS`,
   `TURN_STALL_DAYS`, `PLAN_GRACE_DAYS` or the stall thresholds.
 - **No second queue.** D-9 has been paid for three times. R-188, R-195 and
   R-197 all want the *existing* Task queue reachable and correctly dated.
 - **No backfill of anything** — D-169's doubled `Payment` rows, R-038a's
-  no-ledger payments, and now any plan R-187 finds completed wrongly.
+  no-ledger payments, and the plans R-187 left named rather than rewritten.
 - No per-stage turn table, no second definition of "days vacant".
 
-**Two rows are Needs counsel**: R-188 (does a timely itemization with a late
-refund partially defend?) and R-194 (does a partial payment cure, and does
+**R-194** is the other Needs counsel row (does a partial payment cure, and does
 accepting it waive — the second is already a three-valued `JurisdictionRule`
 field). **R-192 records its production frequency as unknown** — code path
 verified, frequency not, pending real Stripe redelivery behaviour.
-
-**Thirteen of the fifteen rows are inherited evidence.** Only findings 1 and 5
-were spot-checked in the planning session. R-150's rule stands: re-verify the
-file and line before building, and if the claim is wrong, say so in the entry
-rather than building around it.
 
 ## Still true from earlier handoffs
 
@@ -81,9 +75,9 @@ rather than building around it.
   placeholders.** Every child shipped. Ticking them is bookkeeping.
 - **Row 93 (R-093) is externally blocked** — real vendor drivers, each needing
   a signed commercial relationship. Not a laptop item.
-- **`e2e/leases.spec.ts`'s cleanup flake now has a row** — 189 / R-202, at the
-  end of the arc. It costs CI time on every push, so pull it forward if a
-  sweep goes red on `WorkOrder_unitId_fkey` rather than treating it as new.
+- **`e2e/leases.spec.ts`'s cleanup flake has a row** — 189 / R-202, at the end
+  of the arc. It costs CI time on every push, so pull it forward if a sweep
+  goes red on `WorkOrder_unitId_fkey` rather than treating it as new.
 
 ## Standing traps worth re-reading before any UI work
 
@@ -96,20 +90,18 @@ probe; only `document.documentElement.scrollWidth` sees it.
 28 failures in 0–222ms with no `DATABASE_URL`, which reads exactly like the
 jetsam symptom CLAUDE.md warns about and is not it.
 
-**Prove a new assertion against the reverted fix** (D-197). An assertion that
-still passes with the fix removed is worth nothing, and for a unit test it is
-one `perl -0pi -e` and 600ms.
+**Prove a new assertion against the reverted fix** (D-197). R-187 did this by
+removing only the `CHARGE` term: both new sweep tests went red, which is what
+made them worth adding.
 
-**A seed defect is only visible on a walk** (D-28). R-186's two were invisible
-to every test in the repo.
+**A wall of hook timeouts in unrelated `afterAll`s is an environment symptom.**
+R-187's full unit run showed three such files; all three passed in isolation
+and `pg_stat_activity` had sibling projects holding 17 connections between
+them. Check that before reading a stack trace.
+
+**A seed defect is only visible on a walk** (D-28).
 
 ## Leftovers still owned by nobody
-
-Arc 4 promoted the sharpest of these into rows — the guarantor's unreachable
-channels (R-196), the dead-end Task subjects (R-195), `/jobs` being owner-only
-(R-197), the unrecorded inter-entity transfer (R-198), the payment plan as
-evidence (R-199), `noticePeriodCheck`/`renewalCheck`'s calendar days (R-200).
-What is left unowned:
 
 From R-186: the demo's lease term is `startsInDays + termMonths * 30`, so a
 twelve-month lease reads *30 Sept 2026 to 25 Sept 2027*; the seeded draft has
