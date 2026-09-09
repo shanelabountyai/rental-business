@@ -10173,7 +10173,7 @@ inherited: run `34381705453` was green on both jobs for R-184's `cdde562`.
 
 ## R-186 — the demo seed's two walk-only defects
 
-Commit: `PENDING`
+Commit: `34a4d8b`
 
 **What it built.** The second half of R-184's Milestone 10 walk: the two
 defects it recorded and did not fix. Both are invisible to every test in the
