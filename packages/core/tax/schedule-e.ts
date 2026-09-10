@@ -146,36 +146,36 @@ export function workOrderExpenseLine(facts: { turnoverProjectId: string | null }
 export const UNSOURCED_LINES: ReadonlyArray<{ key: ScheduleEKey; reason: string }> = [
   {
     key: 'ADVERTISING',
-    reason: 'Nothing recorded. Listing spend has no home of its own — enter it as a vendor invoice.',
+    reason: 'Nothing recorded. Enter listing spend as a property expense, or as a vendor invoice if a vendor billed it.',
   },
   {
     key: 'AUTO_TRAVEL',
     reason:
-      'No mileage log is captured (RPT-07 names one; nothing writes it). Out-of-pocket travel can be entered as a vendor invoice.',
+      'No mileage log is captured (RPT-07 names one; nothing writes it). Out-of-pocket travel can be entered as a property expense.',
   },
   {
     key: 'COMMISSIONS',
-    reason: 'Nothing recorded. A leasing commission can be entered as a vendor invoice.',
+    reason: 'Nothing recorded. A leasing commission can be entered as a property expense, or as a vendor invoice if a vendor billed it.',
   },
   {
     key: 'INSURANCE',
     reason:
-      'InsurancePolicy records coverage, not premiums paid. Enter the premium as a vendor invoice to deduct it.',
+      'InsurancePolicy records coverage, not premiums paid. Enter the premium as a property expense to deduct it.',
   },
   {
     key: 'MANAGEMENT_FEES',
-    reason: 'Nothing recorded. A third-party management fee can be entered as a vendor invoice.',
+    reason: 'Nothing recorded. A management fee can be entered as a property expense, monthly if that is how it is charged.',
   },
-  { key: 'OTHER_INTEREST', reason: 'No non-mortgage interest is recorded.' },
+  { key: 'OTHER_INTEREST', reason: 'Nothing recorded. Non-mortgage interest can be entered as a property expense.' },
   {
     key: 'SUPPLIES',
     reason:
-      'Nothing recorded. Supplies bought outside a work order can be entered as a vendor invoice.',
+      'Nothing recorded. Supplies bought outside a work order can be entered as a property expense.',
   },
   {
     key: 'TAXES',
     reason:
-      'Property-tax DUE DATES are tracked (R-077); amounts paid are not. Enter the bill as a vendor invoice to deduct it.',
+      'Property-tax DUE DATES are tracked (R-077); nothing paid has been recorded. Enter the bill as a property expense to deduct it.',
   },
   {
     key: 'DEPRECIATION',

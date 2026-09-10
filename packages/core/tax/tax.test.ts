@@ -4,6 +4,7 @@ import {
   type EvictionCostFact,
   type IncomeFact,
   type InsuranceProceedFact,
+  type PropertyExpenseFact,
   type TaxExportFacts,
   type UtilityBillFact,
   type VendorInvoiceSplitFact,
@@ -35,6 +36,8 @@ function facts(overrides: Partial<TaxExportFacts> = {}): TaxExportFacts {
     insuranceProceeds: [],
     capitalImprovements: [],
     mortgageInterest: [],
+    propertyExpenses: [],
+    asOf: new Date('2027-06-01T12:00:00Z'),
     ...overrides,
   }
 }
@@ -489,6 +492,12 @@ describe('the reconciliation', () => {
         proceed({ id: 'icp_3', receivedOn: new Date('2025-03-04T00:00:00Z') }),
       ],
       capitalImprovements: [capex(), capex({ id: 'ci_2', inServiceOn: null })],
+      propertyExpenses: [
+        expense(),
+        expense({ id: 'pe_2', recursMonthly: true }),
+        expense({ id: 'pe_3', propertyId: null }),
+        expense({ id: 'pe_4', paidOn: new Date('2025-01-30T00:00:00Z') }),
+      ],
     })
 
     for (const basis of ['cash', 'accrual'] as const) {
@@ -500,7 +509,7 @@ describe('the reconciliation', () => {
           counts.capitalised +
           counts.splitInvoiced,
       ).toBe(
-        counts.facts,
+        counts.facts + counts.repeated,
       )
     }
   })
@@ -587,5 +596,90 @@ describe('validating an improvement', () => {
 
   it('refuses a category it does not know', () => {
     expect(validateCapitalImprovement({ ...valid, category: 'SPACESHIP' })).toHaveLength(1)
+  })
+})
+
+function expense(overrides: Partial<PropertyExpenseFact> = {}): PropertyExpenseFact {
+  return {
+    id: 'pe_1',
+    propertyId: PROPERTY,
+    category: 'TAXES',
+    amountCents: 480_000,
+    description: '2025 county tax',
+    paidOn: new Date('2026-01-30T00:00:00Z'),
+    recursMonthly: false,
+    recurrenceEndsOn: null,
+    ...overrides,
+  }
+}
+
+describe('property expenses (R-193)', () => {
+  it('books a tax bill to line 16 on its paid date, the same on both bases', () => {
+    for (const basis of ['cash', 'accrual'] as const) {
+      const result = buildTaxExport(facts({ propertyExpenses: [expense()] }), basis)
+      expect(result.lines).toHaveLength(1)
+      expect(result.lines[0]).toMatchObject({
+        section: 'EXPENSE',
+        scheduleELine: 16,
+        bookedOn: '2026-01-30',
+        amountCents: 480_000,
+        sourceKind: 'PropertyExpense',
+        sourceId: 'pe_1',
+      })
+      expect(result.expenseCents).toBe(480_000)
+    }
+  })
+
+  it('books a monthly fee started last year into this year’s months only, through today', () => {
+    const fee = expense({
+      category: 'MANAGEMENT_FEES',
+      amountCents: 15_000,
+      description: 'Management fee',
+      paidOn: new Date('2025-10-05T00:00:00Z'),
+      recursMonthly: true,
+    })
+    // 5 Apr 2026 in Chicago is still 4 Apr at 03:00 UTC on the 5th - the
+    // property's clock decides whether April has arrived.
+    const result = buildTaxExport(
+      facts({ propertyExpenses: [fee], asOf: new Date('2026-04-05T03:00:00Z') }),
+      'cash',
+    )
+    expect(result.lines.map((line) => line.bookedOn)).toEqual(['2026-01-05', '2026-02-05', '2026-03-05'])
+    expect(result.lines.every((line) => line.scheduleELine === 11)).toBe(true)
+    expect(new Set(result.lines.map((line) => line.sourceId)).size).toBe(3)
+    expect(result.expenseCents).toBe(45_000)
+    expect(result.counts.repeated).toBe(2)
+  })
+
+  it('stops a monthly fee at its end date', () => {
+    const fee = expense({
+      paidOn: new Date('2026-01-05T00:00:00Z'),
+      recursMonthly: true,
+      recurrenceEndsOn: new Date('2026-02-05T00:00:00Z'),
+    })
+    expect(buildTaxExport(facts({ propertyExpenses: [fee] }), 'cash').lines).toHaveLength(2)
+  })
+
+  it('excepts an entity-wide cost rather than spreading it across houses', () => {
+    const result = buildTaxExport(
+      facts({ propertyExpenses: [expense({ propertyId: null, category: 'INSURANCE' })] }),
+      'accrual',
+    )
+    expect(result.lines).toHaveLength(0)
+    expect(result.expenseCents).toBe(0)
+    expect(result.exceptions[0]).toMatchObject({
+      propertyName: 'Cedar Holdings LLC (entity-wide)',
+      amountCents: 480_000,
+    })
+    expect(result.exceptions[0]?.reason).toContain('preparer')
+  })
+
+  it('counts a bill paid in another year out, not in', () => {
+    const result = buildTaxExport(
+      facts({ propertyExpenses: [expense({ paidOn: new Date('2025-12-31T00:00:00Z') })] }),
+      'cash',
+    )
+    expect(result.lines).toHaveLength(0)
+    expect(result.counts.outOfYear).toBe(1)
   })
 })

@@ -19,6 +19,7 @@ import { type PacketExhibit, exhibitIndexBlocks } from '../documents/exhibits.ts
 import { formatCents } from '../money/money.ts'
 import { friendlyBusinessDate } from '../scheduling/local-time.ts'
 import type { ExportLine } from './export.ts'
+import { SCHEDULE_E, type ScheduleEKey, UNSOURCED_LINES } from './schedule-e.ts'
 import type { Form1099Candidate, PropertyDepositLiability, PropertyScheduleE } from './packet.ts'
 
 /// D-4's standing requirement in the form this artifact needs, and
@@ -28,12 +29,26 @@ import type { Form1099Candidate, PropertyDepositLiability, PropertyScheduleE } f
 export const TAX_PACKET_DISCLAIMER =
   'This packet was assembled automatically from records held in this system. It is bookkeeping, not tax advice, and no part of it has been reviewed by a tax preparer. Nothing here has been filed with any taxing authority by this system.'
 
-/// The lines that STILL have no source in this product, carried on the
-/// artifact and not only on the screen. A missing expense line reads as a
-/// zero and a zero overstates income - which is R-078's own reasoning, and it
-/// matters more on a PDF handed to somebody than on a page they can ask about.
-export const UNFILLABLE_NOTE =
-  'Schedule E lines this product cannot fill at all: advertising (line 5), auto and travel (6), cleaning and maintenance beyond recorded jobs (7), commissions (8), insurance (9), legal and professional fees beyond recorded eviction costs (10), management fees (11), other interest (13), supplies (15) and taxes (16). Nothing in this system records them, so they are absent rather than zero.'
+/// The Schedule E lines this packet has nothing on, carried on the artifact
+/// and not only on the screen. A missing expense line reads as a zero and a
+/// zero overstates income - R-078's own reasoning, and it matters more on a
+/// PDF handed to somebody than on a page they can ask about.
+///
+/// DERIVED FROM WHAT IS ACTUALLY EMPTY (R-193). This was one fixed sentence
+/// saying insurance, management fees and taxes "cannot" be filled - false
+/// since R-082 let a vendor invoice carry them, so an archived packet could
+/// print money on a line its own note called absent. Depreciation is left
+/// out: the CapEx section already says why it is not computed.
+export function unfilledLinesNote(filled: ReadonlySet<ScheduleEKey>): string | null {
+  const empty = UNSOURCED_LINES.filter(
+    (gap) => gap.key !== 'DEPRECIATION' && !filled.has(gap.key),
+  )
+  if (empty.length === 0) return null
+  const named = empty.map(
+    (gap) => `${SCHEDULE_E[gap.key].label.toLowerCase()} (line ${SCHEDULE_E[gap.key].line})`,
+  )
+  return `Schedule E lines with nothing recorded against them this year: ${named.join(', ')}. They are absent rather than zero — nothing was entered, which is not the same as nothing spent.`
+}
 
 const COLUMN_LABEL = 46
 const COLUMN_AMOUNT = 14
@@ -92,7 +107,10 @@ export function taxPacketBlocks(facts: TaxPacketDocumentFacts): DocumentBlock[] 
       blocks.push({ kind: 'mono', text: row('  NET', property.netCents) })
     }
   }
-  blocks.push({ kind: 'paragraph', text: UNFILLABLE_NOTE })
+  const unfilled = unfilledLinesNote(
+    new Set(facts.scheduleE.flatMap((property) => property.totals.map((total) => total.key))),
+  )
+  if (unfilled) blocks.push({ kind: 'paragraph', text: unfilled })
 
   blocks.push({ kind: 'subheading', text: 'Capital improvements placed in service' })
   if (facts.capex.length === 0) {

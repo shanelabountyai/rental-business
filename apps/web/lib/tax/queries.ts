@@ -110,6 +110,7 @@ export async function taxExportFacts(
     capitalImprovements,
     invoiceSplits,
     insuranceProceeds,
+    propertyExpenses,
   ] = await Promise.all([
       basis === 'cash'
         ? prisma.ledgerEntry.findMany({
@@ -279,6 +280,38 @@ export async function taxExportFacts(
           claim: { select: { propertyId: true, claimNumber: true } },
         },
       }),
+      // R-193. The entity's own rows and its in-scope properties' rows. An
+      // entity-wide premium is nobody else's house, so a property-scoped
+      // reader sees it; another property's tax bill they do not. A monthly
+      // series started in an earlier year still runs into this one.
+      prisma.propertyExpense.findMany({
+        where: {
+          legalEntityId: entity.id,
+          paidOn: { lte: yearEnd },
+          AND: [
+            { OR: [{ propertyId: { in: propertyIds } }, { propertyId: null }] },
+            {
+              OR: [
+                { paidOn: { gte: yearStart } },
+                {
+                  recursMonthly: true,
+                  OR: [{ recurrenceEndsOn: null }, { recurrenceEndsOn: { gte: yearStart } }],
+                },
+              ],
+            },
+          ],
+        },
+        select: {
+          id: true,
+          propertyId: true,
+          category: true,
+          amountCents: true,
+          description: true,
+          paidOn: true,
+          recursMonthly: true,
+          recurrenceEndsOn: true,
+        },
+      }),
     ])
 
   const income: IncomeFact[] = [
@@ -361,6 +394,8 @@ export async function taxExportFacts(
       lender: row.mortgage.lender,
       interestCents: row.interestCents,
     })),
+    propertyExpenses,
+    asOf: new Date(),
   }
 
   return buildTaxExport(facts, basis)

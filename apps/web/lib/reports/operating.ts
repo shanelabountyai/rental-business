@@ -53,7 +53,17 @@ export interface OperatingReport {
   /// could not classify would be a report somebody acts on (R-078's rule).
   unmappedCount: number
   unmappedCents: number
+  /// R-193. Per property, which of the two costs that differ most between
+  /// houses have nothing booked this year. Named on the row so "worst net
+  /// first" does not silently rank a house with its tax bill against one
+  /// without.
+  missingFixedCosts: Record<string, string[]>
 }
+
+const FIXED_COSTS: ReadonlyArray<{ line: number; label: string }> = [
+  { line: 16, label: 'property tax' },
+  { line: 9, label: 'insurance' },
+]
 
 /**
  * Physical occupancy, preferring what actually happened over what was agreed.
@@ -304,5 +314,17 @@ export async function operatingReport(
     renewal: renewalRate(renewalLeases),
     unmappedCount: report.exceptions.length,
     unmappedCents: report.exceptionCents,
+    missingFixedCosts: Object.fromEntries(
+      propertyIds.map((id) => [
+        id,
+        FIXED_COSTS.filter(
+          (cost) =>
+            !report.lines.some(
+              (line) =>
+                line.section === 'EXPENSE' && line.propertyId === id && line.scheduleELine === cost.line,
+            ),
+        ).map((cost) => cost.label),
+      ]),
+    ),
   }
 }

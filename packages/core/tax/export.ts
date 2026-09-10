@@ -14,6 +14,7 @@
 
 import { businessDate, utcToBusinessDate } from '../scheduling/local-time.ts'
 import type { BusinessDate } from '../scheduling/local-time.ts'
+import { expenseOccurrences } from './property-expense.ts'
 import {
   SCHEDULE_E,
   type ScheduleEKey,
@@ -166,6 +167,23 @@ export interface MortgageInterestFact {
   interestCents: number
 }
 
+/// One owner-side outlay nobody invoiced (R-193) - a tax bill, a premium, a
+/// management fee. `paidOn` and `recurrenceEndsOn` are `@db.Date` calendar
+/// days.
+export interface PropertyExpenseFact {
+  id: string
+  /// Null for a cost of the entity as a whole.
+  propertyId: string | null
+  /// A `ScheduleEKey` from `PROPERTY_EXPENSE_CATEGORIES`, validated at the
+  /// write. Anything else is excepted here rather than guessed.
+  category: string
+  amountCents: number
+  description: string
+  paidOn: Date
+  recursMonthly: boolean
+  recurrenceEndsOn: Date | null
+}
+
 export interface CapitalImprovementFact {
   id: string
   propertyId: string
@@ -205,6 +223,11 @@ export interface TaxExportFacts {
   /// caller - `taxYear` is a plain integer column, so there is no window and
   /// no timezone question.
   mortgageInterest: readonly MortgageInterestFact[]
+  /// R-193. This entity's own rows and its in-scope properties' rows.
+  propertyExpenses: readonly PropertyExpenseFact[]
+  /// Now. A monthly expense is expanded only through today, on its row's own
+  /// clock, so a series never books a month that has not arrived.
+  asOf: Date
 }
 
 export type ExportSection = 'INCOME' | 'EXPENSE' | 'DEPOSIT_LIABILITY' | 'CAPEX' | 'EXCEPTION'
@@ -260,6 +283,11 @@ export interface TaxExport {
     /// chasing a missing deduction, and the identity below only catches a
     /// dropped row if every door is named.
     splitInvoiced: number
+    /// Lines beyond the first that a monthly property expense produced
+    /// (R-193). Not an exit door: one fact leaving by several lines, counted
+    /// so `mapped + excepted + outOfYear + capitalised + splitInvoiced ===
+    /// facts + repeated` still catches a dropped row.
+    repeated: number
   }
 }
 
@@ -276,6 +304,7 @@ export function buildTaxExport(facts: TaxExportFacts, basis: AccountingBasis): T
   let outOfYear = 0
   let capitalised = 0
   let splitInvoiced = 0
+  let repeated = 0
   const name = (propertyId: string) => facts.propertyNames.get(propertyId) ?? propertyId
 
   /// The reader for a real timestamp - `closedAt`, `invoicePaidAt`. Goes
@@ -561,6 +590,73 @@ export function buildTaxExport(facts: TaxExportFacts, basis: AccountingBasis): T
     })
   }
 
+  // -- Property expenses (R-193) --------------------------------------------
+  //
+  // `paidOn` is when the money left, so one day serves both bases, for the
+  // same reason eviction costs use one.
+  //
+  // An ENTITY-WIDE cost is excepted, not spread across houses. Schedule E is
+  // filed per property, and whether an umbrella policy splits by value, rent
+  // or door count is the preparer's call, not this export's.
+  const entityZone = facts.propertyTimezones.values().next().value ?? 'UTC'
+  for (const expense of facts.propertyExpenses) {
+    const zone =
+      expense.propertyId == null
+        ? entityZone
+        : (facts.propertyTimezones.get(expense.propertyId) ?? 'UTC')
+    const days = expenseOccurrences(
+      {
+        paidOn: calendarDay(expense.paidOn),
+        recursMonthly: expense.recursMonthly,
+        recurrenceEndsOn:
+          expense.recurrenceEndsOn == null ? null : calendarDay(expense.recurrenceEndsOn),
+      },
+      businessDate(facts.asOf, zone),
+    ).filter(inYear)
+    if (days.length === 0) {
+      outOfYear += 1
+      continue
+    }
+    repeated += days.length - 1
+
+    for (const day of days) {
+      const common = {
+        bookedOn: day,
+        amountCents: expense.amountCents,
+        description: expense.recursMonthly ? `${expense.description} (monthly)` : expense.description,
+        sourceKind: 'PropertyExpense',
+        // One id per LINE, or a monthly row's lines share a list key.
+        sourceId: expense.recursMonthly ? `${expense.id}:${day}` : expense.id,
+      }
+      if (expense.propertyId == null) {
+        exceptions.push({
+          section: 'EXCEPTION',
+          scheduleELine: null,
+          scheduleELabel: 'Unmapped',
+          quickBooksAccount: '',
+          propertyId: '',
+          propertyName: `${facts.legalEntityName} (entity-wide)`,
+          ...common,
+          reason:
+            'Schedule E is filed per property, and this cost belongs to the whole entity. How it splits between houses is your preparer’s call — or record a share against each property if you already know it.',
+        })
+        continue
+      }
+      if (SCHEDULE_E[expense.category] == null) {
+        except({
+          ...common,
+          propertyId: expense.propertyId,
+          reason: `Category "${expense.category}" carries no Schedule E mapping. Record the expense again under a listed category.`,
+        })
+        continue
+      }
+      mapped('EXPENSE', expense.category as ScheduleEKey, {
+        ...common,
+        propertyId: expense.propertyId,
+      })
+    }
+  }
+
   // -- Mortgage interest, from the lender's 1098 ----------------------------
   //
   // The same figure on either basis: a 1098 reports the interest RECEIVED by
@@ -657,12 +753,14 @@ export function buildTaxExport(facts: TaxExportFacts, basis: AccountingBasis): T
         facts.evictionCosts.length +
         facts.insuranceProceeds.length +
         facts.capitalImprovements.length +
-        facts.mortgageInterest.length,
+        facts.mortgageInterest.length +
+        facts.propertyExpenses.length,
       mapped: lines.length,
       excepted: exceptions.length,
       outOfYear,
       capitalised,
       splitInvoiced,
+      repeated,
     },
   }
 }

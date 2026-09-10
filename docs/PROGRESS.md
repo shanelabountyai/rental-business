@@ -10951,3 +10951,79 @@ total (3100 before this item, plus the one new test), run on its own in 15.8s.
 build on both `desktop-chrome` and `mobile-chrome`: **8 passed**, against 8 from
 `--list`. No `'use server'` module or client prop changed, so no separate build.
 The full sweep is CI's. **CI is green** — run `34538278213` on `117a5c0`, both jobs (verify; end-to-end, axe, Lighthouse), read with `gh run list` after the push, not inherited. The SHA-record commit `87b8c24` started no run: `ci.yml`'s `paths-ignore` skips docs-only pushes.
+
+## R-193 — property expenses that are not vendor invoices can be recorded
+
+Commit `SHA_PENDING`.
+
+**The row's premise was checked before anything was built, and it was half
+wrong.** The review said tax, insurance and management fees "can be entered
+nowhere". D-76 (R-082) had made all three recordable as vendor-invoice splits,
+and those splits already reach "All expenses" and "Net". Two claims did
+survive: the archived tax packet's `UNFILLABLE_NOTE` still said those lines
+"cannot" be filled, and the operating report said nothing about a house with
+no tax bill on it. 1099 candidates are built from work orders only, so the
+vendor route never polluted them. The one concrete cost of that route is that
+a county has to exist as a `Vendor`, which puts it in `vendorsForAssignment`'s
+list for every ticketless job. The choice went to the owner, who took the table
+the row specified over the S-sized honesty fix and over a nullable
+`VendorInvoice.vendorId` (D-208).
+
+**What it built.**
+
+- `PropertyExpense` (migration `20260910180000_r193_property_expenses`):
+  entity, optional property, a `ScheduleEKey` category, cents, `paidOn`,
+  `recursMonthly`, `recurrenceEndsOn`, optional `Document`. CHECKs refuse a
+  non-positive amount and an end date on a one-off. Property and document keys
+  are `Restrict`.
+- `packages/core/tax/property-expense.ts`: `PROPERTY_EXPENSE_CATEGORIES`
+  (excludes REPAIRS, CLEANING_MAINTENANCE, UTILITIES, MORTGAGE_INTEREST and
+  DEPRECIATION, which other records already carry), `validatePropertyExpense`
+  (refuses a future `paidOn` and anything but `YYYY-MM-DD`), and
+  `expenseOccurrences`, which repeats on the first payment's day clamped by
+  `dueDateInMonth` and never passes today.
+- `buildTaxExport` takes `propertyExpenses` and `asOf`. One date serves both
+  bases. An entity-wide row is an exception naming the entity, never spread
+  across houses. A monthly row's lines carry `id:date` source ids so list keys
+  stay unique, and `counts.repeated` keeps the reconciliation identity true.
+- `taxExportFacts` fetches the entity's own rows and in-scope property rows,
+  including a series started in an earlier year that runs into this one.
+- `/money/expenses`: record form (points at vendor invoices so one bill is
+  not entered twice), the twenty most recently entered, a receipt link, and
+  "Stop repeating", which ends a series today on the row's clock. Linked from
+  `/money`.
+- `unfilledLinesNote(filled)` replaces the fixed `UNFILLABLE_NOTE` and lists
+  only lines the packet actually has nothing on. `UNSOURCED_LINES` now points
+  at property expenses.
+- `/reports/operating` explains what "All expenses" includes and flags each
+  house with no property tax or no insurance booked that year
+  (`missingFixedCosts`).
+- **Proven against the reverted fix** (D-197): dropping the recurring-series
+  branch of the query's window turned `property-expense-export.test.ts` red
+  and nothing else; restoring it turned it green.
+
+**What it decided.** D-208: a second write path beside D-76's, accepted with
+the duplicate-entry risk named; expansion on read through today, never
+written ahead; a future date refused; entity-wide costs excepted; the flag
+limited to tax and insurance.
+
+**What it left behind.**
+
+- **Nothing detects the same bill entered as a vendor invoice and a property
+  expense.** The vendor-invoice form does not yet point back at this page.
+- No edit or delete. A wrong row can only be corrected by the database; a
+  series can only be stopped, and only as of today.
+- The demo seed records no property expense, so the D-28 walk still shows
+  every house flagged.
+- An entity-wide row read by a property-scoped manager appears on their
+  export's exception list; its receipt is refused to them by the document
+  route's entity branch.
+- The entity clock for an entity-wide row is one of its houses' zones, which
+  is only a real choice for an entity spanning zones.
+
+**Gate.** `lint` 0 errors (16 warnings, all pre-existing, none in these files);
+`typecheck` clean; `npm test` run alone: 3116 passed, 4 skipped, 231 files;
+`db:drift` no difference; `db:ci` green (migrations from scratch, seed, no drift); `check:ship-deps` clean;
+e2e `property-expenses.spec.ts` + `operating-report.spec.ts` on
+`desktop-chrome` and `mobile-chrome`: 16 passed of 16 listed, production build.
+CI: RESULT_CI.

@@ -77,6 +77,12 @@ export default async function MoneyPage() {
             Vendor invoices
           </Link>
           <Link
+            href="/money/expenses"
+            className="focus-visible:ring-ring w-fit text-sm underline underline-offset-4 focus-visible:ring-2 focus-visible:outline-none"
+          >
+            Property expenses
+          </Link>
+          <Link
             href="/money/deposits"
             className="focus-visible:ring-ring w-fit text-sm underline underline-offset-4 focus-visible:ring-2 focus-visible:outline-none"
           >

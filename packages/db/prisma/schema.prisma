@@ -480,6 +480,7 @@ model LegalEntity {
   assignments     StaffAssignment[]
   documents       Document[]
   vendorInvoices  VendorInvoice[]
+  expenses        PropertyExpense[]
 
   @@index([active])
 }
@@ -585,6 +586,7 @@ model Property {
   capitalImprovements CapitalImprovement[]
   notifications       Notification[]
   invoiceSplits       VendorInvoiceSplit[]
+  expenses            PropertyExpense[]
   reserve             PropertyReserve?
   leaseHolds          LeaseHold[]
   paymentPlans        PaymentPlan[]
@@ -2050,6 +2052,7 @@ model StaffUser {
   evictionCostsRecorded                   EvictionCost[]                  @relation("EvictionCostRecordedBy")
   capitalImprovementsRecorded             CapitalImprovement[]            @relation("CapitalImprovementRecordedBy")
   vendorInvoicesRecorded                  VendorInvoice[]                 @relation("VendorInvoiceRecordedBy")
+  propertyExpensesRecorded                PropertyExpense[]               @relation("PropertyExpenseRecordedBy")
   propertyReservesUpdated                 PropertyReserve[]               @relation("PropertyReserveUpdatedBy")
   mortgageStatementsRecorded              MortgageAnnualStatement[]       @relation("MortgageAnnualStatementRecordedBy")
   depositDeductionsCreated                DepositDeduction[]              @relation("DepositDeductionCreatedBy")
@@ -2280,6 +2283,48 @@ model VendorInvoiceSplit {
 
   @@index([vendorInvoiceId])
   @@index([propertyId])
+}
+
+/// Owner-side outlay nobody invoiced (R-193, RPT-05/RPT-07): the property tax
+/// bill, the landlord policy, the management fee. Read into R-078's export
+/// beside `VendorInvoiceSplit`. NOT a ledger write - D-11 governs the tenant
+/// receivable, and a vendor's own bill still belongs on `VendorInvoice`
+/// (D-208).
+model PropertyExpense {
+  id                String    @id @default(cuid())
+  /// Whose books. Required even when a property is named, so an entity-wide
+  /// row and a property row are read by the same `where`.
+  legalEntityId     String
+  /// Null for a cost of the entity as a whole. The export excepts those
+  /// rather than spreading them across houses.
+  propertyId        String?
+  /// A `ScheduleEKey` from `PROPERTY_EXPENSE_CATEGORIES` - free-form column,
+  /// closed list in code, `VendorInvoiceSplit.category`'s posture.
+  category          String
+  amountCents       Int
+  description       String
+  /// When the money left. The only date, so it serves both bases, as
+  /// `EvictionCost.incurredOn` does.
+  paidOn            DateTime  @db.Date
+  /// Repeats on `paidOn`'s day of each month, expanded on read through today
+  /// and never written ahead (D-201: no accrual engine).
+  recursMonthly     Boolean   @default(false)
+  /// The last day a monthly series covers. Null while it runs.
+  recurrenceEndsOn  DateTime? @db.Date
+  /// The bill or receipt, when there is one - `EvictionCost.documentId`'s
+  /// shape.
+  documentId        String?
+  recordedByStaffId String
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  legalEntity LegalEntity @relation(fields: [legalEntityId], references: [id])
+  property    Property?   @relation(fields: [propertyId], references: [id], onDelete: Restrict)
+  document    Document?   @relation("PropertyExpenseDocument", fields: [documentId], references: [id], onDelete: Restrict)
+  recordedBy  StaffUser   @relation("PropertyExpenseRecordedBy", fields: [recordedByStaffId], references: [id])
+
+  @@index([legalEntityId, paidOn])
+  @@index([propertyId, paidOn])
 }
 
 model Lease {
@@ -5953,6 +5998,7 @@ model Document {
   noticesAsProof          Notice[]                  @relation("NoticeProofDocument")
   noticeDeliveryProofs    NoticeDelivery[]          @relation("NoticeDeliveryProof")
   evictionCostReceipts    EvictionCost[]            @relation("EvictionCostReceipt")
+  propertyExpenses        PropertyExpense[]         @relation("PropertyExpenseDocument")
   utilityBills            UtilityBill[]             @relation("UtilityBillDocument")
   mortgageStatements      MortgageAnnualStatement[] @relation("MortgageAnnualStatementDocument")
   leaseEnvelopeAsDraft    LeaseEnvelope?            @relation("LeaseEnvelopeDraftDocument")

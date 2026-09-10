@@ -51,12 +51,37 @@ describe('taxPacketBlocks', () => {
     )
   })
 
-  it('carries the unfillable Schedule E lines rather than leaving them blank', () => {
+  it('names the empty Schedule E lines rather than leaving them blank', () => {
     // R-078's rule, on the artifact: a missing expense line reads as a zero,
     // and a zero overstates income.
     const out = text(taxPacketBlocks(facts()))
-    expect(out).toContain('cannot fill at all')
+    expect(out).toContain('taxes (line 16)')
+    expect(out).toContain('insurance (line 9)')
     expect(out).toContain('absent rather than zero')
+    // The CapEx section speaks for depreciation.
+    expect(out).not.toContain('(line 18)')
+  })
+
+  it('does not call a line absent when the packet prints money on it (R-193)', () => {
+    const out = text(
+      taxPacketBlocks(
+        facts({
+          scheduleE: [
+            {
+              propertyId: 'prop_a',
+              propertyName: '12 Cedar Row',
+              totals: [{ key: 'TAXES', line: 16, label: 'Taxes', amountCents: 480_000 }],
+              incomeCents: 0,
+              expenseCents: 480_000,
+              netCents: -480_000,
+            },
+          ],
+        }),
+      ),
+    )
+    expect(out).toContain('Line 16 · Taxes')
+    expect(out).not.toContain('taxes (line 16)')
+    expect(out).toContain('insurance (line 9)')
   })
 
   it('says the deposit figure is a balance on a date, not a period flow', () => {

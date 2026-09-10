@@ -162,6 +162,15 @@ export default async function OperatingReportPage({
                   (scheduled rent + vacancy loss + concessions). A unit marked Down is excluded from
                   both — off the market for repairs, not costing you a tenant it could not have had.
                 </p>
+                <p className="text-muted-foreground text-xs">
+                  All expenses means everything recorded: jobs, vendor invoices, utilities, eviction
+                  costs, 1098 interest and{' '}
+                  <Link href="/money/expenses" className="underline underline-offset-2">
+                    property expenses
+                  </Link>
+                  . A house flagged below has no property tax or insurance booked this year, so its
+                  net is overstated against the others.
+                </p>
 
                 {/* THE FIRST REAL <table> IN THIS APP, and a deliberate break
                     from the divided-<ul> house style rather than an oversight.
@@ -234,6 +243,11 @@ export default async function OperatingReportPage({
                               <span className="text-muted-foreground block text-xs">
                                 {row.unitCount} {row.unitCount === 1 ? 'unit' : 'units'}
                               </span>
+                              {(report.missingFixedCosts[row.propertyId]?.length ?? 0) > 0 && (
+                                <span className="block text-xs text-amber-800">
+                                  No {report.missingFixedCosts[row.propertyId].join(' or ')} booked
+                                </span>
+                              )}
                             </th>
                             <td className="py-2 pr-4 text-right tabular-nums">
                               {formatCents(row.incomeCents)}
