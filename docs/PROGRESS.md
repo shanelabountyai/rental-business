@@ -10784,7 +10784,7 @@ previous item was **green** — run `34490180475` on `517229a`, checked with
 
 ## R-191 — a closed flag no longer silences the condition that raised it
 
-Commit `SHA-PENDING`.
+Commit `2686ac5`.
 
 **The claim was verified before anything was built, and it was correct — and
 too narrow.** `alreadyFlagged` in

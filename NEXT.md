@@ -1,60 +1,62 @@
 # Next session
 
-## R-190 is done — commit `589bbf0`, SHA recorded in the follow-up.
+## R-191 is done — commit `2686ac5`, SHA recorded in the follow-up.
 
-**CI for R-190 WAS checked and is green** — run `34499016142` on `f0a0c4b`,
-read with `gh run list` after the push, not inherited. R-189's was checked in
-the same session and was also green (`34490180475`).
+**CI for R-191 had NOT finished when this was written** — run `34503603334`
+was in progress on `2686ac5`, and the follow-up push starts its own. The
+PROGRESS entry's gate line says `CI: CI-PENDING` until a third commit records
+it. **If that placeholder is still there, run `gh run list --limit 5` and
+record what it says** — R-190's run (`34499016142`) was green, and says
+nothing about R-191's.
 
-**Do not copy either line forward.** R-141's lesson is eleven entries
-inheriting a claim instead of running the three-second command; the number
-above belongs to R-190's push and says nothing about yours. Run
-`gh run list --limit 5` after your own push and write down what it says.
-
-## Start here: row 178, R-191
+## Start here: row 179, R-192
 
 `docs/prds/06-backlog.md` Milestone 14 ("Arc 4"), rows 174–189, sourced from
 `docs/reviews/2026-09-09-operator-review.md` and recorded as D-201. Work top to
 bottom; the WRONG rows come first.
 
-**R-191's claim is already verified** — `alreadyFlagged`
-(`apps/web/lib/cases/case-stall-job.ts:32-35`) is
-`findFirst({ where: { type, subjectId } })` with no status filter, exactly as
-the row says, sitting under a comment that defends the *missing `businessDate`*
-(which R-158 was right about and which stays). A DONE or CANCELED Task still
-matches, so the condition can never raise a second one — sharpest for
-`accommodation.response_overdue`, which is EMERGENCY because D-89 says an
-unanswered request reads as denied.
+**R-192 is a money-path row — Stripe is the system of record (D-11), so
+recommend Opus.** The claim: D-177's claim branch (`billing/webhook.ts:535-552`)
+runs whenever `stripePaymentIntentId == null && stripeInvoiceId != null`, and
+`events.ts:386` says this account's API version dropped `payment_intent` from
+the invoice object — so that is every invoice-driven payment, and an online
+payment can land on an unclaimed counter-cheque row. **Re-verify both line
+numbers before building** (R-150). The row asks for two things: bound the claim
+to rows received within a day or two, and count unclaimed-older-than-N offline
+rows on `/money`'s EXISTING drift surface — not a new screen. Production
+frequency is recorded **unknown**; do not state one.
 
-**Read R-191 together with R-188's leftover below before fixing either** — same
-shape, different table.
+**R-171's leftover is adjacent and not the same defect**: `writePayment`
+dedups only on `stripePaymentIntentId`, so an ACH payment may write both a
+`PENDING` and a `SETTLED` row. Also recorded unknown. Read it, do not fold it
+in unless the fix is genuinely the same line.
 
-Fourteen of the fifteen rows were inherited evidence; findings 1, 3, 4 and 5
-have now been verified at build time. R-150's rule stands: re-verify the file
-and line before building, and if the claim is wrong, say so in the entry rather
-than building around it. R-187 through R-190's claims were all verified and all
-correct.
+## What R-191 changed that the next rows touch
 
-## What R-190 changed that the next rows touch
+- **`alreadyFlagged(type, subjectId, today)` in `apps/web/lib/tasks/already-flagged.ts`
+  is now the ONE "have we raised this?" guard** (D-206). An OPEN/IN_PROGRESS/
+  BLOCKED Task suppresses at any age; a DONE/CANCELED one only until its own
+  business date + `TASK_REFLAG_COOL_OFF_DAYS` (7). **A new window-watching job
+  must call it** — do not hand-write `task.findFirst({ where: { type, subjectId } })`
+  a seventh time; that shape was the bug six times over.
+- Its six callers: `cases/case-stall-job.ts`, `cases/court-date-reminder-job.ts`,
+  `compliance/alert-job.ts`, `leases/renewal-window-job.ts`,
+  `leases/renter-insurance-job.ts`, `leases/deposit-disposition-reminder-job.ts`.
+- **`deposit.disposition_halfway` / `_overdue` Tasks are now subjected on the
+  `Deposit`** (`subjectType: 'Deposit'`), not the lease — same as
+  `deposit_refund_due` (D-174). R-188's two-deposits leftover is closed.
+- **First run after deploy will re-raise** every still-true condition whose flag
+  was closed more than a week ago. Expected; it is the finding surfacing, not a
+  backfill.
 
-- **`JobContext.now` is now a documented invariant**: always an instant inside
-  `businessDate` at `timezone`. A job must read it, never `new Date()`, for
-  anything that decides what day it is. The docstring on the interface in
-  `apps/web/lib/jobs/runner.ts` says so at length. D-205.
-- `replayInstant(job, timezone, date)` (private to `runner.ts`) is the job's
-  own `localHour` on the date being replayed, via `wallClockToUtc`. Both the
-  catch-up loop and `rerunJobRun` use it.
-- **`rerunJobRun`'s second parameter is gone.** It was `now = new Date()`; no
-  caller ever passed it. Signature is now `rerunJobRun(jobRunId)`.
-- Four jobs now pass `context.now` through: `ledger.late_fees`,
-  `billing.due_notices`, `billing.predebit_notices`,
-  `billing.card_expiring_notices`.
-- **`billing.sweep` deliberately takes no date** and its header now says so.
-  Do not thread `now` into it by reflex; if a date-dependent decision ever
-  moves into the sweep, that comment has to go with it.
-- `chase-job.test.ts` gained `shiftDay()` and a catch-up test that goes through
-  the real `runDueJobs`. Its existing `runOn()` helper still dodges the
-  catch-up window on purpose — that docstring is still correct.
+## Found in R-191, owned by nobody
+
+- The re-raise path is tested through two callers (stall sweep, compliance);
+  the other four share the code with no re-raise test of their own.
+- `lease_renewal` can now re-raise weekly across a 120-day window (~17 Tasks)
+  if somebody keeps closing it unrenewed. Intended, never seen in a queue.
+- Court-date T-7/T-1 on a RESCHEDULED hearing is what the status filter buys
+  there; untested.
 
 ## Found in R-190, owned by nobody
 
@@ -93,12 +95,6 @@ So: `npm run lint` and `npm run typecheck` alongside a full `npm test` is
 enough to tip these hooks over. Run the suite on its own. **The ceiling is
 still real** — seven sequential `deleteMany`s against vitest's default 10s
 hook timeout has no headroom, the R-040e/R-102b shape — and **it has no row**.
-
-## Still outstanding from R-188, owned by nobody
-
-The deposit reminder job's already-flagged guard keys on `leaseId`, not on the
-deposit, so a lease holding two deposits (SECURITY + PET) flags once for both.
-**Same shape as R-191** — an already-flagged guard that cannot fire twice.
 
 ## Still outstanding from R-187, owned by nobody
 
