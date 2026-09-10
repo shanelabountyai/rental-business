@@ -2,12 +2,14 @@
 
 ## R-190 is done — commit `589bbf0`, SHA recorded in the follow-up.
 
-**CI has NOT been checked for this item.** Run `gh run list --limit 5` and
-confirm the run on the SHA-recording commit (auto job cancellation usually
-leaves only that one). Do not copy this or any earlier green line forward;
-R-141's lesson is eleven entries inheriting a claim instead of running the
-three-second command. R-189's own run WAS checked this session and was green
-(`34490180475`).
+**CI for R-190 WAS checked and is green** — run `34499016142` on `f0a0c4b`,
+read with `gh run list` after the push, not inherited. R-189's was checked in
+the same session and was also green (`34490180475`).
+
+**Do not copy either line forward.** R-141's lesson is eleven entries
+inheriting a claim instead of running the three-second command; the number
+above belongs to R-190's push and says nothing about yours. Run
+`gh run list --limit 5` after your own push and write down what it says.
 
 ## Start here: row 178, R-191
 

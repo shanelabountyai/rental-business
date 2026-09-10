@@ -10780,4 +10780,4 @@ slowdown across unrelated files is contention, and what was contending was
 applied and nothing else running, was 21.9s and green. `pg_stat_activity` showed
 six connections throughout, so no sibling project was involved. CI on the
 previous item was **green** — run `34490180475` on `517229a`, checked with
-`gh run list`, not inherited.
+`gh run list`, not inherited. **This item's own run is green too** — `34499016142` on `f0a0c4b`.
