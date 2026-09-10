@@ -10950,4 +10950,4 @@ total (3100 before this item, plus the one new test), run on its own in 15.8s.
 `/money` changed, so `e2e/ops-visibility.spec.ts` ran against the production
 build on both `desktop-chrome` and `mobile-chrome`: **8 passed**, against 8 from
 `--list`. No `'use server'` module or client prop changed, so no separate build.
-The full sweep is CI's.
+The full sweep is CI's. **CI is green** — run `34538278213` on `117a5c0`, both jobs (verify; end-to-end, axe, Lighthouse), read with `gh run list` after the push, not inherited. The SHA-record commit `87b8c24` started no run: `ci.yml`'s `paths-ignore` skips docs-only pushes.

@@ -2,7 +2,8 @@
 
 ## R-192 is done — commit `117a5c0`, SHA recorded in the follow-up.
 
-**CI for R-192: __CI__**
+**CI for R-192 WAS checked and is green** — run `34538278213` on `117a5c0`,
+both jobs, read with `gh run list` after the push, not inherited.
 
 **The SHA-record push starts NO run**: `.github/workflows/ci.yml` has
 `paths-ignore: ['**.md', 'docs/**']`, so a docs-only commit is skipped and the
