@@ -10954,7 +10954,7 @@ The full sweep is CI's. **CI is green** — run `34538278213` on `117a5c0`, both
 
 ## R-193 — property expenses that are not vendor invoices can be recorded
 
-Commit `SHA_PENDING`.
+Commit `d10e7b0`.
 
 **The row's premise was checked before anything was built, and it was half
 wrong.** The review said tax, insurance and management fees "can be entered
