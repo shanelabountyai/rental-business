@@ -17,8 +17,11 @@ SCHEDULED_JOBS.push({
   localHour: LOCAL_HOUR,
   description:
     'Warns every non-autopay payer whose rent is due in three days or due today, in the property\'s own local time (PAY-02).',
-  run: async ({ propertyId }) => {
-    const result = await sendDueNotices(propertyId)
+  // `now` from the context, never the wall clock (R-190): "due in three
+  // days" is a question about the business date being run, so a caught-up
+  // day sends the notice that day owed, a day late, rather than today's.
+  run: async ({ propertyId, now }) => {
+    const result = await sendDueNotices(propertyId, now)
     return {
       leasesChecked: result.leasesChecked,
       dueSoonSent: result.dueSoonSent,

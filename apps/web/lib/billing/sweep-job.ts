@@ -29,6 +29,20 @@ SCHEDULED_JOBS.push({
   localHour: LOCAL_HOUR,
   description:
     "Makes each Stripe subscription agree with its lease - the safety net for a sync that failed when the lease actually changed (D-11).",
+  // THE ONE JOB THAT TAKES NO DATE, AND THAT IS NOT AN OVERSIGHT (R-190).
+  //
+  // Every other job in the registry was passed the real clock alongside a
+  // historical `businessDate` on a caught-up day and did the wrong day's
+  // work; the fix was to read `context.now`. This one has no day to be wrong
+  // about. `runBillingSweep` reads no date at all - it makes each live
+  // subscription agree with the lease AS IT IS NOW, and there is no
+  // as-of-yesterday version of that question to ask. Replaying a missed date
+  // therefore performs the convergence late rather than for the wrong day,
+  // and the run row saying SUCCEEDED for that date is honest.
+  //
+  // So do not "fix" this by threading `now` in. If a date-dependent decision
+  // ever moves into the sweep, it must take `context.now` like everything
+  // else, and this comment has to go with it.
   run: async ({ propertyId }) => {
     const result = await runBillingSweep({ propertyIds: [propertyId] })
     return {

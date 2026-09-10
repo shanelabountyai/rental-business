@@ -6,6 +6,7 @@ import {
   businessDateToUtc,
   isDue,
   utcToBusinessDate,
+  wallClockToUtc,
 } from '@rental/core/scheduling'
 import { type Prisma, prisma } from '@rental/db'
 import { isUniqueViolation } from '@/lib/db/unique-violation.ts'
@@ -31,6 +32,26 @@ export interface JobContext {
   propertyId: string
   timezone: string
   businessDate: BusinessDate
+  /**
+   * ========================================================================
+   * ALWAYS AN INSTANT INSIDE `businessDate` AT `timezone` (R-190).
+   *
+   * On a live run that is the real clock. On a CAUGHT-UP or re-run day it is
+   * the job's own local hour on the date being replayed - a past instant,
+   * deliberately, because the alternative is what R-190 found: `runOne`
+   * passed the real `now` alongside a historical `businessDate`, so six jobs
+   * did TODAY's work and the `JobRun` was then recorded SUCCEEDED for
+   * yesterday. `payments.chase` was the sharp one - `chaseRungDue` matches
+   * days-past-grace EXACTLY, so a cron gap over the day a tenancy hit a rung
+   * lost that rung for ever while minting a duplicate Task per catch-up
+   * date, and R-174's panel reported the lost day as done.
+   *
+   * So: a job must read THIS, never `new Date()`, for anything that decides
+   * what day it is. A job whose work genuinely cannot be re-dated says so in
+   * its own header (`billing.sweep` is the only one today) rather than
+   * quietly reading the wall clock.
+   * ========================================================================
+   */
   now: Date
 }
 
@@ -220,6 +241,25 @@ function missedDates(
   return missed
 }
 
+/**
+ * The instant a replayed business date pretends to be happening at: the job's
+ * own local hour, on that date, in the property's zone.
+ *
+ * The job's `localHour` rather than midnight, because that IS the hour the run
+ * was scheduled for and missed - a 06:00 late-fee assessment replayed at local
+ * midnight is a different question about the same day. `wallClockToUtc`
+ * already resolves the DST edges (R-017), which is the whole reason this is
+ * three lines and not thirty.
+ */
+function replayInstant(
+  job: ScheduledJob,
+  timezone: string,
+  date: BusinessDate,
+): Date {
+  const hour = String(job.localHour).padStart(2, '0')
+  return wallClockToUtc(`${date}T${hour}:00`, timezone)
+}
+
 async function runOne(
   job: ScheduledJob,
   property: { id: string; timezone: string },
@@ -249,7 +289,15 @@ async function runOne(
   // reads yesterday's charges both behave better in date order, and the cost
   // of getting that wrong is silent.
   for (const date of missedDates(job, property.id, due.businessDate, history)) {
-    const summary = await claimAndRun(job, property, date, now)
+    // NOT `now`. The clock consistent with the date being replayed - see
+    // `JobContext.now`. `isDue` above has already proved the timezone is
+    // usable, so `replayInstant` cannot throw here.
+    const summary = await claimAndRun(
+      job,
+      property,
+      date,
+      replayInstant(job, property.timezone, date),
+    )
     summaries.push(
       summary.outcome === 'ran' ? { ...summary, outcome: 'caught_up' } : summary,
     )
@@ -392,10 +440,7 @@ export type RerunResult =
  * is the thing the panel exists to show; a re-run must not erase it.
  * ==========================================================================
  */
-export async function rerunJobRun(
-  jobRunId: string,
-  now = new Date(),
-): Promise<RerunResult> {
+export async function rerunJobRun(jobRunId: string): Promise<RerunResult> {
   const run = await prisma.jobRun.findUnique({
     where: { id: jobRunId },
     select: {
@@ -437,7 +482,11 @@ export async function rerunJobRun(
       propertyId: property.id,
       timezone: property.timezone,
       businessDate,
-      now,
+      // The date being re-run, not the moment somebody pressed the button
+      // (R-190). Unlike the catch-up path this is inside the try: nothing has
+      // validated the timezone here, so an unusable one lands the row back on
+      // FAILED with the reason on it rather than throwing out of the action.
+      now: replayInstant(job, property.timezone, businessDate),
     })
     await prisma.jobRun.update({
       where: { id: run.id },

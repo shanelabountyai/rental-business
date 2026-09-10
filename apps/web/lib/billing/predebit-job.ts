@@ -17,8 +17,11 @@ SCHEDULED_JOBS.push({
   localHour: LOCAL_HOUR,
   description:
     'Warns every autopay payer whose rent falls due in two days, in the property\'s own local time (PAY-02).',
-  run: async ({ propertyId }) => {
-    const result = await sendPredebitNotices(propertyId)
+  // `now` from the context, never the wall clock (R-190) - same reason as
+  // `billing.due_notices`: "is it two days before the 1st" is a question
+  // about the business date being run.
+  run: async ({ propertyId, now }) => {
+    const result = await sendPredebitNotices(propertyId, now)
     return { leasesChecked: result.leasesChecked, noticesSent: result.noticesSent }
   },
 })

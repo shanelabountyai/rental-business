@@ -10662,3 +10662,122 @@ the unconfigured-token describe, correctly skipped because the token IS
 configured for the run). The full sweep is CI's. **CI on R-188 was checked at
 the start of this session and was green** — run `34427150842`, `R-188: record
 the SHA`, success. That is a run that was read, not a line copied forward.
+
+## R-190 — a caught-up job no longer does today's work under yesterday's date
+
+Commit `PENDING`.
+
+**The claim was verified before anything was built, and it was correct.**
+[apps/web/lib/jobs/runner.ts](apps/web/lib/jobs/runner.ts) line 252 read
+`claimAndRun(job, property, date, now)` — the *historical* business date beside
+the *real* clock — and the six jobs the review named
+(`ledger.late_fees`, `billing.sweep`, `billing.due_notices`,
+`billing.card_expiring_notices`, `billing.predebit_notices`, `payments.chase`)
+were exactly the six whose `run` did not take the day from the context. Five of
+them destructured `{ propertyId }` alone and called a helper whose second
+parameter is `now = new Date()`; the sixth, `payments.chase`, took `now` and
+handed it straight to `rentRoll`. Sixteen of the twenty-two already read
+`businessDate` and were never wrong.
+
+**`rerunJobRun` had the identical shape and the review did not name it.** Line
+436: `now = new Date()` as a default parameter, `businessDate` read off the
+stored run. So R-174's own repair button — the control that exists because a
+failed nightly job is a legal clock that did not tick — re-ran last Tuesday's
+failure as today. No caller ever passed the parameter; it was a test seam that
+made the wall clock look deliberate.
+
+**What it built.** `replayInstant(job, timezone, date)`, three lines over
+`wallClockToUtc` (R-017, which already resolves both DST edges), returning the
+job's own `localHour` on the date being replayed. Both call sites use it: the
+catch-up loop, and `rerunJobRun` — whose `now` parameter is gone. The four
+clock-reading helpers now receive `context.now`
+(`assessLateFees`, `sendDueNotices`, `sendPredebitNotices`,
+`sendCardExpiringNotices`), which is a one-line change each because every one
+of them already accepted the instant and merely defaulted it.
+
+**The local hour rather than local midnight**, because that is the hour the run
+was scheduled for and missed. A 06:00 late-fee assessment replayed at 00:00
+asks a different question about the same day, and `rulesFor` is
+effective-dated, so the instant decides which version of the statute the replay
+reads.
+
+**The sharp consequence is `payments.chase`, and it is the one this item
+actually fixes.** `chaseRungDue` matches days-past-grace **exactly** — the
+ladder is `[1, 5, 15]`, so a rung exists for one day and then never again. With
+the real clock, a replay of the rung day asked *"what rung is due today"*,
+today being a day past the rung, got `null`, raised nothing, and wrote the
+`JobRun` **SUCCEEDED for the rung day**. The rung was lost for ever and R-174's
+health panel — built precisely so a legal clock cannot stop unnoticed —
+reported the day as done. The mirror case was worse: when the replay date did
+land on a rung, `createTask`'s `(type, subjectId, businessDate)` key minted one
+*duplicate* task per catch-up date, because today's rung was written under each
+missed day's key. Late fees survived the whole thing by luck, which is why
+nobody noticed: `postLateFeeDelta` is delta-keyed, so the next live run tops up
+whatever the wrong day under-assessed.
+
+**`billing.sweep` is the one job that takes no date, and that is now written
+down in it rather than left to be rediscovered.** `runBillingSweep` reads no
+date at all — it makes each live subscription agree with the lease *as it is
+now*, and there is no as-of-yesterday version of that question. Replaying a
+missed date performs the convergence late rather than for the wrong day, so the
+run row saying SUCCEEDED is honest. The backlog row allowed for "a job that
+genuinely cannot be re-dated must say so"; this is that job, and it says so in
+a header that also says not to thread `now` into it by reflex.
+
+**Three claims, three reverts, one red test each** (D-197). Reverting the
+catch-up call site turns *"catches up a business date the cron missed"* red on
+the new clock assertion; reverting `rerunJobRun` turns *"re-runs a failed run in
+place and closes its task"* red and nothing else; reverting either turns the new
+`chase-job.test.ts` case — *"raises the rung a cron gap missed, dated to the day
+it was missed"* — red with `expected [] to have a length of 1`, which is the
+finding stated as an assertion. That third test is the valuable one: today's run
+raises nothing (two days past grace is on no rung), so if the catch-up does not
+raise the rung, nobody ever does.
+
+**What it decided.** `JobContext.now` is now a documented invariant — always an
+instant inside `businessDate` at `timezone` — rather than an incidental
+parameter, and the docstring says so at the interface where the next job author
+will read it. A job must read it, never `new Date()`, for anything that decides
+what day it is. There is deliberately **no `replayable: false` flag** on
+`ScheduledJob`: one job is date-independent, and a comment costs nothing where a
+registry-wide opt-out invites a second job to opt out rather than take the
+instant.
+
+**What it left behind.**
+
+- **The four pass-throughs have no test of their own.** The runner's contract is
+  tested and `payments.chase` is tested end to end through `runDueJobs`, but
+  nothing fails if somebody drops the `now` argument back off
+  `sendDueNotices(propertyId, now)`. Each needs a lease-plus-payer fixture to
+  prove, which is a fixture per job for a one-line call site; the comments name
+  R-190 at each one instead.
+- **Nothing re-raises the rungs already lost.** Consistent with the arc's
+  standing "no backfill of anything" (D-201): the chase tasks a past cron gap ate
+  are gone, and past `JobRun` rows still claim those days SUCCEEDED.
+- **The catch-up now genuinely replays the day, which is a behaviour change in
+  production, not only a correctness one.** A three-day gap will send three days
+  of correctly-dated due notices in one tick rather than one day's sent three
+  times. `CATCH_UP_BUSINESS_DAYS = 3` and R-174's reasoning for the bound are
+  what stand between that and a fortnight of notices; nothing else does.
+- **`inspection.*`, `lease.*`, `cases.stalled`, `compliance.item_due`,
+  `notifications.daily_digest` and the rest were already reading the context and
+  are now silently *more* correct on a catch-up** — the digest's
+  `createdAt: { lt: now }` window in particular now closes at the replayed day
+  rather than at the present. None of that is tested per job either.
+
+**The gate.** `lint` and `typecheck` clean; `npm test` **3091 passed / 4 skipped
+= 3095**, reconciled against the run's own total (3090 before this item — the
+one new test is `chase-job.test.ts`'s catch-up case). It took three attempts to
+get a clean run and **the first two failures were this machine, not the
+change**: `maintenance/emergency.test.ts`'s `afterAll` and then
+`listings/delist.test.ts`'s `afterEach` each hit `Hook timed out in 10000ms`,
+with the suite at 135s and 61s against a 19.5s baseline. Stashing the work and
+running the clean tree came back green, which looked like proof — and was not.
+The per-file table showed **everything** slower, `vendors/follow-up.test.ts`
+included (18.7s → 58s), and nothing in that file touches a job; a global
+slowdown across unrelated files is contention, and what was contending was
+`lint` and `typecheck` running alongside the sweep. Run three, with the change
+applied and nothing else running, was 21.9s and green. `pg_stat_activity` showed
+six connections throughout, so no sibling project was involved. CI on the
+previous item was **green** — run `34490180475` on `517229a`, checked with
+`gh run list`, not inherited.

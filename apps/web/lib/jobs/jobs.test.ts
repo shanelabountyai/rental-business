@@ -521,12 +521,15 @@ describe('missed and failed runs', () => {
     })
 
     const ran: string[] = []
+    const clocks: Date[] = []
     SCHEDULED_JOBS.push({
       type: 'test.catchup',
       localHour: 2,
       description: 'test',
       run: async (context) => {
-        if (context.propertyId === chicagoPropertyId) ran.push(context.businessDate)
+        if (context.propertyId !== chicagoPropertyId) return
+        ran.push(context.businessDate)
+        clocks.push(context.now)
       },
     })
 
@@ -537,6 +540,17 @@ describe('missed and failed runs', () => {
     // The 3rd first, then today. Oldest first, and both actually executed -
     // the missed day is a run, not a row backdated to look like one.
     expect(ran).toEqual(['2026-08-03', '2026-08-04'])
+
+    // R-190. The missed day is handed a CLOCK inside the missed day, not the
+    // real one - `runOne` used to pass the real `now` alongside the
+    // historical date, so a caught-up job did today's work and the JobRun was
+    // then recorded SUCCEEDED for yesterday. The live run still gets the real
+    // clock, which is why these two assertions are different.
+    expect(businessDate(clocks[0]!, CHICAGO)).toBe('2026-08-03')
+    expect(clocks[0]!.getTime()).toBeLessThan(
+      new Date('2026-08-04T07:00:00Z').getTime(),
+    )
+    expect(clocks[1]!.toISOString()).toBe('2026-08-04T07:00:00.000Z')
     const chicago = summaries.filter(
       (s) => s.propertyId === chicagoPropertyId && s.jobType === 'test.catchup',
     )
@@ -624,6 +638,7 @@ describe('missed and failed runs', () => {
   it('re-runs a failed run in place and closes its task', async () => {
     let explode = true
     const ran: string[] = []
+    const rerunClocks: Date[] = []
     SCHEDULED_JOBS.push({
       type: 'test.rerun',
       localHour: 0,
@@ -632,6 +647,7 @@ describe('missed and failed runs', () => {
         if (!isOurs(context.propertyId)) return
         if (explode) throw new Error('boom')
         ran.push(context.businessDate)
+        rerunClocks.push(context.now)
         return { fixed: true }
       },
     })
@@ -658,6 +674,14 @@ describe('missed and failed runs', () => {
     expect(after.result).toEqual({ fixed: true })
     // It ran for the date it originally failed on, not for today.
     expect(ran).toContain('2026-08-04')
+    // R-190: and with a CLOCK on that date too. `rerunJobRun` had the same
+    // shape as the catch-up path - a historical `businessDate` beside
+    // `new Date()` - so the health panel's own repair button re-ran the
+    // failed night as today.
+    expect(rerunClocks).not.toHaveLength(0)
+    for (const clock of rerunClocks) {
+      expect(businessDate(clock, CHICAGO)).toBe('2026-08-04')
+    }
 
     const task = await prisma.task.findFirstOrThrow({
       where: { type: 'job_failed', subjectId: failed.id },

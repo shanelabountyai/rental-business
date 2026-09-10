@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { CHASE_LADDER_DAYS } from '@rental/core/ledger'
+import { CHASE_LADDER_DAYS, CHASE_RUNG_LABELS } from '@rental/core/ledger'
 import { businessDate, businessDateToUtc } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
@@ -148,6 +148,13 @@ async function runOn(day: string) {
   })
 }
 
+/// `day` shifted by whole calendar days, as `YYYY-MM-DD`.
+function shiftDay(day: string, by: number): string {
+  const at = businessDateToUtc(day)
+  at.setUTCDate(at.getUTCDate() + by)
+  return at.toISOString().slice(0, 10)
+}
+
 async function chaseTasks(leaseId: string) {
   return prisma.task.findMany({ where: { subjectId: leaseId, type: 'rent.chase' } })
 }
@@ -215,6 +222,46 @@ describe('the chase ladder sweep', () => {
 
     await runOn(dayOfRung('2026-03', 1))
     expect(await chaseTasks(leaseId)).toHaveLength(0)
+  })
+
+  // R-190. THE RUNG THE CRON GAP USED TO EAT.
+  //
+  // `chaseRungDue` matches days-past-grace EXACTLY, so a rung lives for one
+  // day only. `runOne` used to hand a caught-up date the REAL clock, so a
+  // replay of the rung day asked "what rung is due today" - got none, because
+  // today is a day past the rung - and then wrote the JobRun SUCCEEDED for
+  // the rung day. The rung was lost for ever and R-174's health panel said
+  // the day was done. (When the replay date did land on a rung it was worse:
+  // today's rung under yesterday's `businessDate` key, so `createTask` minted
+  // one duplicate per catch-up date.)
+  it('raises the rung a cron gap missed, dated to the day it was missed', async () => {
+    const leaseId = await seedArrears('2026-05')
+    const rungDay = dayOfRung('2026-05', 1)
+    const today = shiftDay(rungDay, 1)
+
+    // The evidence the job was live before the gap - without an earlier run
+    // `missedDates` declines to catch up at all, deliberately (a fresh
+    // property must not get three days of chases on its first tick).
+    await prisma.jobRun.create({
+      data: {
+        jobType: 'payments.chase',
+        propertyId,
+        businessDate: businessDateToUtc(shiftDay(rungDay, -1)),
+        status: 'SUCCEEDED',
+        finishedAt: new Date(`${shiftDay(rungDay, -1)}${AFTERNOON}`),
+      },
+    })
+
+    await runDueJobs(new Date(`${today}${AFTERNOON}`), { propertyIds: [propertyId] })
+
+    // Exactly one task, on the rung day - not on `today`, which is two days
+    // past grace and therefore on no rung at all. That is the whole finding:
+    // today's run raises nothing, so if the catch-up does not raise the rung,
+    // nobody ever does.
+    const tasks = await chaseTasks(leaseId)
+    expect(tasks).toHaveLength(1)
+    expect(tasks[0]!.businessDate?.toISOString().slice(0, 10)).toBe(rungDay)
+    expect(tasks[0]!.title).toContain(CHASE_RUNG_LABELS[1])
   })
 
   it('is registered with the real runner, and is idempotent per day', async () => {

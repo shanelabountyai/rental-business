@@ -1,69 +1,102 @@
 # Next session
 
-## R-189 is done and pushed — `d138189`, SHA recorded in `517229a`.
+## R-190 is done — commit `PENDING`, SHA recorded in `PENDING2`.
 
 **CI has NOT been checked for this item.** Run `gh run list --limit 5` and
-confirm the run on `517229a` (or `d138189` — auto job cancellation usually
-leaves only the SHA commit's run). Do not copy this or any earlier green line
-forward; R-141's lesson is eleven entries inheriting a claim instead of running
-the three-second command. R-188's own run WAS checked this session and was
-green (`34427150842`).
+confirm the run on the SHA-recording commit (auto job cancellation usually
+leaves only that one). Do not copy this or any earlier green line forward;
+R-141's lesson is eleven entries inheriting a claim instead of running the
+three-second command. R-189's own run WAS checked this session and was green
+(`34490180475`).
 
-## Start here: row 177, R-190
+## Start here: row 178, R-191
 
 `docs/prds/06-backlog.md` Milestone 14 ("Arc 4"), rows 174–189, sourced from
 `docs/reviews/2026-09-09-operator-review.md` and recorded as D-201. Work top to
-bottom; the WRONG rows come first. R-190 is the next one — `jobs/runner.ts:252`
-passes the real `now` alongside a *historical* `businessDate` when catching up
-missed days, so six of the twenty-two jobs do today's work under yesterday's
-label and the `JobRun` is then recorded SUCCEEDED for that date. Review
-finding 4, which names the six.
+bottom; the WRONG rows come first.
 
-Thirteen of the fifteen rows were **inherited evidence**; findings 1, 5, and now
-3 have been verified at build time. R-150's rule stands: re-verify the file and
-line before building, and if the claim is wrong, say so in the entry rather than
-building around it. R-187's, R-188's and R-189's claims were all verified and
-all correct.
+**R-191's claim is already verified** — `alreadyFlagged`
+(`apps/web/lib/cases/case-stall-job.ts:32-35`) is
+`findFirst({ where: { type, subjectId } })` with no status filter, exactly as
+the row says, sitting under a comment that defends the *missing `businessDate`*
+(which R-158 was right about and which stays). A DONE or CANCELED Task still
+matches, so the condition can never raise a second one — sharpest for
+`accommodation.response_overdue`, which is EMERGENCY because D-89 says an
+unanswered request reads as denied.
 
-## What R-189 changed that the next rows touch
+**Read R-191 together with R-188's leftover below before fixing either** — same
+shape, different table.
 
-- **`attachMessageDocumentsToTicket`** (`apps/web/lib/comms/inbound-attachments.ts`)
-  is now the ONLY place an inbound `Document` gains a `ticketId`. Both
-  `sms-intake.ts` and `email-intake.ts` call it, on **both** the
-  `ticket_opened` and `thread_only` outcomes. The email path's inline
-  `updateMany` is gone. D-204.
-- `receiveInboundMessage` takes a new optional `attachmentsDeclared`, which is
-  what `UnroutedMessage.attachmentsDropped` now records. It defaults to
-  `attachments.length`, so every existing caller is unchanged.
-- `MAX_ATTACHMENT_BYTES` and `MAX_ATTACHMENT_COUNT` are now **exported** from
-  `inbound-attachments.ts` (they were private `MAX_BYTES` / `MAX_COUNT`).
-  `twilio-media.ts` is the second reader; a third must not copy them.
-- New `apps/web/lib/comms/twilio-media.ts` — the first module in this repo that
-  makes an outbound fetch from *inbound* handling. It is where the host
-  allowlist and the size cap live.
-- `sms-intake.test.ts`'s `afterAll` now deletes `Document` rows by
-  `propertyId`, before the property is deactivated.
+Fourteen of the fifteen rows were inherited evidence; findings 1, 3, 4 and 5
+have now been verified at build time. R-150's rule stands: re-verify the file
+and line before building, and if the claim is wrong, say so in the entry rather
+than building around it. R-187 through R-190's claims were all verified and all
+correct.
 
-## Found in R-189, owned by nobody
+## What R-190 changed that the next rows touch
 
-- **Nothing backfills the photographs discarded before this item.** Those bytes
-  were never fetched and no longer exist to fetch — Twilio retains media for a
-  limited window and the URLs were never stored either.
-- **Nothing re-parents a photograph onto a ticket opened AFTER the message that
-  carried it.** A text an hour before staff open a ticket by hand still leaves
-  the picture on the message alone. Both intake paths only parent at the moment
-  they decide the ticket.
-- **The filename is manufactured** (`texted-1.jpeg`) because Twilio sends none,
-  so two photographs in one thread are told apart by thumbnail and timestamp,
-  not by name.
-- **The memory ceiling on a media fetch is one CDN response bounded by the
-  timeout.** `Content-Length` is checked before the body is read, but a lying
-  header is only caught after buffering. Worth knowing before that module is
-  pointed at any other provider.
-- **The wire between the fetcher and Twilio is untested and cannot be tested
-  from here** — same limit R-104's drivers have. The refusals are unit-tested
-  against a stubbed `fetch`; the route's reading of `NumMedia` is proved e2e
-  through a deliberately non-Twilio media URL.
+- **`JobContext.now` is now a documented invariant**: always an instant inside
+  `businessDate` at `timezone`. A job must read it, never `new Date()`, for
+  anything that decides what day it is. The docstring on the interface in
+  `apps/web/lib/jobs/runner.ts` says so at length. D-205.
+- `replayInstant(job, timezone, date)` (private to `runner.ts`) is the job's
+  own `localHour` on the date being replayed, via `wallClockToUtc`. Both the
+  catch-up loop and `rerunJobRun` use it.
+- **`rerunJobRun`'s second parameter is gone.** It was `now = new Date()`; no
+  caller ever passed it. Signature is now `rerunJobRun(jobRunId)`.
+- Four jobs now pass `context.now` through: `ledger.late_fees`,
+  `billing.due_notices`, `billing.predebit_notices`,
+  `billing.card_expiring_notices`.
+- **`billing.sweep` deliberately takes no date** and its header now says so.
+  Do not thread `now` into it by reflex; if a date-dependent decision ever
+  moves into the sweep, that comment has to go with it.
+- `chase-job.test.ts` gained `shiftDay()` and a catch-up test that goes through
+  the real `runDueJobs`. Its existing `runOn()` helper still dodges the
+  catch-up window on purpose — that docstring is still correct.
+
+## Found in R-190, owned by nobody
+
+- **The four pass-throughs have no test of their own.** Nothing fails if
+  somebody drops the `now` argument back off `sendDueNotices(propertyId, now)`.
+  Each needs a lease-plus-payer fixture to prove — a fixture per job for a
+  one-line call site. The comments name R-190 at each one instead.
+- **Nothing re-raises the chase rungs a past cron gap ate**, and past `JobRun`
+  rows still claim those days SUCCEEDED. D-201's standing no-backfill.
+- **The catch-up now genuinely replays the day, which is a production
+  behaviour change.** A three-day gap sends three days of correctly-dated due
+  notices in one tick rather than one day's sent three times.
+  `CATCH_UP_BUSINESS_DAYS = 3` is the only thing bounding that.
+- **The sixteen jobs that already read `businessDate` are now silently more
+  correct on a catch-up** — the digest's `createdAt: { lt: now }` window in
+  particular now closes at the replayed day. Untested per job.
+
+## The hook-timeout flake, and what actually caused it
+
+Two full unit runs failed this session with **`Hook timed out in 10000ms`** in
+a cleanup hook — `maintenance/emergency.test.ts`'s `afterAll` on the first,
+`listings/delist.test.ts`'s `afterEach` on the second. Different files, same
+10s ceiling, and a suite that ran **135s then 61s against a 19.5s baseline**.
+
+**It was contention on this machine, not the code, and the way that was settled
+is worth copying.** `pg_stat_activity` showed six connections total, so no
+sibling project was implicated; stashing the work and running the clean tree
+gave 3090 passed in 19.5s, which looked like proof the change was at fault.
+It was not — the per-file table showed **everything** slower, including
+`vendors/follow-up.test.ts` (18.7s → 58s) and `workorders/chargeback-actions`,
+neither of which touches a job. A global slowdown across unrelated files is
+machine contention. Re-running with the change applied and **nothing running
+alongside it** gave 3091 passed in 21.9s, green.
+
+So: `npm run lint` and `npm run typecheck` alongside a full `npm test` is
+enough to tip these hooks over. Run the suite on its own. **The ceiling is
+still real** — seven sequential `deleteMany`s against vitest's default 10s
+hook timeout has no headroom, the R-040e/R-102b shape — and **it has no row**.
+
+## Still outstanding from R-188, owned by nobody
+
+The deposit reminder job's already-flagged guard keys on `leaseId`, not on the
+deposit, so a lease holding two deposits (SECURITY + PET) flags once for both.
+**Same shape as R-191** — an already-flagged guard that cannot fire twice.
 
 ## Still outstanding from R-187, owned by nobody
 
@@ -72,19 +105,23 @@ all correct.
 `20260907120000_r175_payment_plans`, so it has no `PaymentPlan` table at all.
 `npm run dev` reads `.env.local`, so a walk against the dev branch would 500 on
 anything built since R-165. `npm run db:migrate:dev` is the whole fix; it was
-outside R-187's, R-188's and R-189's scope and has still not been run.
+outside R-187 through R-190's scope and has still not been run.
 
 Also from R-187: the start-day boundary double-counts a charge raised on the
 plan's own start date (it lands in both `arrearsCents` and `chargesSince`); no
 e2e walks the new wrongly-completed warning.
 
-## Still outstanding from R-188, owned by nobody
+## Still outstanding from R-189, owned by nobody
 
-The deposit reminder job's already-flagged guard keys on `leaseId`, not on the
-deposit, so a lease holding two deposits (SECURITY + PET) flags once for both.
-Pre-existing and untouched. **Note this is the same shape as R-190's neighbour
-R-191** — an already-flagged guard that cannot fire twice — and R-191 is two
-rows away, so read them together before fixing either.
+- Nothing backfills the photographs discarded before that item — those bytes
+  were never fetched and no longer exist to fetch.
+- Nothing re-parents a photograph onto a ticket opened AFTER the message that
+  carried it.
+- The filename is manufactured (`texted-1.jpeg`) because Twilio sends none.
+- The memory ceiling on a media fetch is one CDN response bounded by the
+  timeout; a lying `Content-Length` is only caught after buffering.
+- The wire between the fetcher and Twilio is untested and cannot be tested from
+  here — same limit R-104's drivers have.
 
 ## Binding for every row in this arc
 
@@ -98,8 +135,8 @@ Milestone 14 header and D-201:
 - **No second queue.** D-9 has been paid for three times. R-191 and R-197 want
   the *existing* Task queue reachable and correctly dated.
 - **No backfill of anything** — D-169's doubled `Payment` rows, R-038a's
-  no-ledger payments, R-187's wrongly-completed plans, and now R-189's
-  discarded photographs.
+  no-ledger payments, R-187's wrongly-completed plans, R-189's discarded
+  photographs, and now R-190's lost chase rungs.
 - No per-stage turn table, no second definition of "days vacant".
 
 **R-194** is the arc's other Needs counsel row (does a partial payment cure, and
@@ -112,8 +149,7 @@ does accepting it waive — the second is already a three-valued
 - **Rows 81 (R-081), 97 (R-097) and 155 (R-168) are SPLIT-PARENT
   placeholders.** Every child shipped. Ticking them is bookkeeping.
 - **Row 93 (R-093) is externally blocked** — real vendor drivers, each needing
-  a signed commercial relationship. Not a laptop item. (R-189 is NOT an
-  instance of this: Twilio was already a live relationship.)
+  a signed commercial relationship. Not a laptop item.
 - **`e2e/leases.spec.ts`'s cleanup flake has a row** — 189 / R-202, at the end
   of the arc. It costs CI time on every push, so pull it forward if a sweep
   goes red on `WorkOrder_unitId_fkey` rather than treating it as new.
@@ -125,21 +161,20 @@ touches a form control or page layout (D-194), and whenever a page renders a
 user-supplied VALUE (D-197) — the second kind hides from an element-by-element
 probe; only `document.documentElement.scrollWidth` sees it.
 
-**Use `npm run test:e2e`, never bare `npx playwright test`.** The latter gives
-28 failures in 0–222ms with no `DATABASE_URL`, which reads exactly like the
-jetsam symptom CLAUDE.md warns about and is not it. (`--list` is safe without
-it, and is how you get the real expected test count.)
+**Use `npm test -- <path>` and `npm run test:e2e`, never bare `npx vitest` or
+`npx playwright test`.** Both give a wall of instant failures with no
+`DATABASE_URL`, which reads exactly like the jetsam symptom CLAUDE.md warns
+about and is not it. R-190 hit the vitest half of this. (`--list` is safe
+without it, and is how you get the real expected e2e test count.)
 
-**Prove a new assertion against the reverted fix** (D-197). R-189 did this four
-times, one revert per claim, and each turned exactly one test red — which is
-what showed the four tests guard four things rather than one thing four times.
+**Prove a new assertion against the reverted fix** (D-197). R-190 did this
+three times, one revert per claim, and each turned exactly one test red.
 
 **A fixture that looks complete can still be missing the field under test.**
 Check what the production writer sets, not what the fixture has.
 
 **A wall of hook timeouts in unrelated `afterAll`s is an environment symptom.**
 Check `pg_stat_activity` for sibling projects before reading a stack trace.
-R-189's own full unit run was clean (3090 passed / 4 skipped / 3094).
 
 **A seed defect is only visible on a walk** (D-28).
 

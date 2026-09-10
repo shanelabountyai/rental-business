@@ -19,8 +19,10 @@ SCHEDULED_JOBS.push({
   localHour: LOCAL_HOUR,
   description:
     'Warns every autopay payer whose saved card expires within thirty days, read live from the billing provider (PAY-02).',
-  run: async ({ propertyId }) => {
-    const result = await sendCardExpiringNotices(propertyId)
+  // `now` from the context, never the wall clock (R-190): the thirty-day
+  // window is measured from the business date being run.
+  run: async ({ propertyId, now }) => {
+    const result = await sendCardExpiringNotices(propertyId, now)
     return { payersChecked: result.payersChecked, noticesSent: result.noticesSent }
   },
 })

@@ -24,8 +24,11 @@ SCHEDULED_JOBS.push({
   localHour: LOCAL_HOUR,
   description:
     'Assesses late fees on overdue rent from versioned jurisdiction config, clamped to the statutory cap, and pushes each one to Stripe as an invoice item (D-4, D-12).',
-  run: async ({ propertyId }) => {
-    const result = await assessLateFees(propertyId)
+  // `now` from the context, never the wall clock (R-190): on a caught-up
+  // day this must assess the day it is replaying, and the effective-dated
+  // rule it reads must be the one that was in force then (D-4).
+  run: async ({ propertyId, now }) => {
+    const result = await assessLateFees(propertyId, now)
     return {
       leasesChecked: result.leasesChecked,
       chargesAssessed: result.chargesAssessed,
