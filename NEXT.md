@@ -2,12 +2,14 @@
 
 ## R-191 is done — commit `2686ac5`, SHA recorded in the follow-up.
 
-**CI for R-191 had NOT finished when this was written** — run `34503603334`
-was in progress on `2686ac5`, and the follow-up push starts its own. The
-PROGRESS entry's gate line says `CI: CI-PENDING` until a third commit records
-it. **If that placeholder is still there, run `gh run list --limit 5` and
-record what it says** — R-190's run (`34499016142`) was green, and says
-nothing about R-191's.
+**CI for R-191 WAS checked and is green** — run `34503603334` on `2686ac5`,
+both jobs, read with `gh run list` after the push, not inherited.
+
+**The SHA-record push starts NO run**: `.github/workflows/ci.yml` has
+`paths-ignore: ['**.md', 'docs/**']`, so a docs-only commit is skipped and the
+code commit's run is the one to read. A watcher that waits for a run on the
+SHA commit will wait for ever. **Do not copy the green line forward** — run
+`gh run list --limit 5` after your own push and write down what it says.
 
 ## Start here: row 179, R-192
 

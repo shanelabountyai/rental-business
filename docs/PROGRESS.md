@@ -10873,4 +10873,4 @@ total (3091 before this item, plus the five above), run on its own with nothing
 alongside it in 21.9s. No UI, no `'use server'` module and no e2e-reachable
 behaviour changed — no spec, page or seed reads these Tasks by subject
 (`lease_renewal`'s dashboard link and demo seed are keyed by type, whose subject
-did not move) — so the e2e sweep is CI's. CI: CI-PENDING.
+did not move) — so the e2e sweep is CI's. **CI is green** — run `34503603334` on `2686ac5`, both jobs (verify; end-to-end, axe, Lighthouse), read with `gh run list` after the push, not inherited. The SHA-record commit `c0caa0c` started no run: `ci.yml`'s `paths-ignore` skips docs-only pushes, so the code commit's run is the one that counts.
