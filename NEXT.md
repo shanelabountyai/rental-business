@@ -1,49 +1,62 @@
 # Next session
 
-## R-187 is done and pushed — `e62ad53`, SHA recorded in `5d5ce5e`.
+## R-188 is done and pushed — `f503a14`, SHA recorded in `bd7762c`.
 
 **CI has NOT been checked for this item.** Run `gh run list --limit 5` and
-confirm both jobs on `5d5ce5e` (or `e62ad53` — auto job cancellation usually
+confirm both jobs on `bd7762c` (or `f503a14` — auto job cancellation usually
 leaves only the SHA commit's run). Do not copy this or any earlier green line
 forward; R-141's lesson is eleven entries inheriting a claim instead of running
 the three-second command.
 
-## Start here: row 175, R-188
+## Start here: row 176, R-189
 
 `docs/prds/06-backlog.md` Milestone 14 ("Arc 4"), rows 174–189, sourced from
 `docs/reviews/2026-09-09-operator-review.md` and recorded as D-201. Work top to
-bottom; the WRONG rows come first. R-188 is the next one.
-
-**R-188 is one of the arc's two Needs counsel rows** — does a timely
-itemization with a late refund partially defend? Read the row and the review
-section before deciding whether it can be built without an owner answer, and
-ask as a clickable question if it cannot.
+bottom; the WRONG rows come first. R-189 is the next one — the photograph a
+tenant texts at 11pm is discarded at the door (`app/api/sms/inbound/route.ts`
+reads only `From`/`Body`/`MessageSid`, while the email path has stored and
+re-parented the same photo since R-097d). Review finding 3.
 
 Thirteen of the fifteen rows are **inherited evidence**; only findings 1 and 5
 were spot-checked at planning time. R-150's rule stands: re-verify the file and
 line before building, and if the claim is wrong, say so in the entry rather
-than building around it. R-187's claim was verified and was correct.
+than building around it. R-187's and R-188's claims were both verified and both
+correct.
 
-## What R-187 changed that the next rows touch
+## What R-188 changed that the next rows touch
 
-- `paidTowardPlan` (`apps/web/lib/payments/plans.ts`) is now
-  `-(PAYMENT + CHARGE + REVERSAL)` since `startedOn`, floored at zero, over an
-  **allowlist** of types. CREDIT and ADJUSTMENT are both out. D-202 records it
-  and corrects D-181.
-- `toPlanView` bounds an **ended** plan's window at
-  `completedAt ?? brokenAt ?? cancelledAt`. A live plan takes no bound.
-- The lease plan panel names any plan recorded `COMPLETED` whose ledger cannot
-  support it. **Nothing was backfilled** and nothing should be.
-- **R-199 (row 186) depends on R-187** and is now unblocked.
+- Both deadline surfaces on `Deposit` — `deposit-disposition-reminder-job.ts`
+  and `upcomingCriticalDates` in `reports/queries.ts` — now take
+  `OR: [{ dispositionSentAt: null }, { refundPaidOn: null, refundedCents: { gt: 0 } }]`.
+  Their labels branch on `dispositionSentAt` to say *Deposit refund* vs
+  *Deposit disposition*. D-203.
+- `deposit_refund_due` Tasks are now dated `dispositionDueOn` rather than the
+  day the letter was finalized, and name that date in the title. Anything
+  asserting on that Task's `businessDate` or title should expect the deadline.
+- `e2e/deposit-disposition.spec.ts`'s deposit fixture now seeds
+  `dispositionDueOn: 2026-09-14`; it previously had none despite having a
+  `moveOutAt`.
+- **No new task type and no new `CriticalDateKind`** was added — R-191 (row 178)
+  also wants the existing Task queue behaving correctly, not another vocabulary.
 
-## Found in R-187, owned by nobody
+## Found in R-188, owned by nobody
+
+The reminder job's already-flagged guard keys on `leaseId`, not on the deposit,
+so a lease holding two deposits (SECURITY + PET) flags once for both.
+Pre-existing and untouched.
+
+**Still open and named in D-203:** whether a timely itemization with a late
+refund is a partial defence is a question for counsel. It gated nothing — the
+code shows the date either way — so no owner question was asked.
+
+## Still outstanding from R-187, owned by nobody
 
 **The Neon dev branch is nine migrations behind**, back to
 `20260904120100_r165_guarantor_actor_type` and including
 `20260907120000_r175_payment_plans`, so it has no `PaymentPlan` table at all.
 `npm run dev` reads `.env.local`, so a walk against the dev branch would 500 on
 anything built since R-165. `npm run db:migrate:dev` is the whole fix; it was
-outside R-187's scope and was not run.
+outside both R-187's and R-188's scope and has still not been run.
 
 Also from R-187: the start-day boundary double-counts a charge raised on the
 plan's own start date (it lands in both `arrearsCents` and `chargesSince`); no
@@ -58,16 +71,17 @@ Milestone 14 header and D-201:
 - No Stripe Connect. Still a legal-structure decision nobody has taken.
 - No settings screen for `CHASE_LADDER_DAYS`, `TURN_STAGE_DAYS`,
   `TURN_STALL_DAYS`, `PLAN_GRACE_DAYS` or the stall thresholds.
-- **No second queue.** D-9 has been paid for three times. R-188, R-195 and
-  R-197 all want the *existing* Task queue reachable and correctly dated.
+- **No second queue.** D-9 has been paid for three times. R-191 and R-197 want
+  the *existing* Task queue reachable and correctly dated — R-188 just did that
+  half for deposits without adding a type.
 - **No backfill of anything** — D-169's doubled `Payment` rows, R-038a's
   no-ledger payments, and the plans R-187 left named rather than rewritten.
 - No per-stage turn table, no second definition of "days vacant".
 
-**R-194** is the other Needs counsel row (does a partial payment cure, and does
-accepting it waive — the second is already a three-valued `JurisdictionRule`
-field). **R-192 records its production frequency as unknown** — code path
-verified, frequency not, pending real Stripe redelivery behaviour.
+**R-194** is the arc's other Needs counsel row (does a partial payment cure, and
+does accepting it waive — the second is already a three-valued
+`JurisdictionRule` field). **R-192 records its production frequency as unknown**
+— code path verified, frequency not, pending real Stripe redelivery behaviour.
 
 ## Still true from earlier handoffs
 
@@ -90,14 +104,18 @@ probe; only `document.documentElement.scrollWidth` sees it.
 28 failures in 0–222ms with no `DATABASE_URL`, which reads exactly like the
 jetsam symptom CLAUDE.md warns about and is not it.
 
-**Prove a new assertion against the reverted fix** (D-197). R-187 did this by
-removing only the `CHARGE` term: both new sweep tests went red, which is what
-made them worth adding.
+**Prove a new assertion against the reverted fix** (D-197). R-188 did this
+twice, one revert per term of the new `where` clause — which is what showed the
+two new tests were guarding different things rather than the same thing twice.
+
+**A fixture that looks complete can still be missing the field under test.**
+R-188's first e2e run failed on `Expected: null` because the deposit fixture had
+a `moveOutAt` and no `dispositionDueOn` — the field the real move-out flow
+stamps. Check what the production writer sets, not what the fixture has.
 
 **A wall of hook timeouts in unrelated `afterAll`s is an environment symptom.**
-R-187's full unit run showed three such files; all three passed in isolation
-and `pg_stat_activity` had sibling projects holding 17 connections between
-them. Check that before reading a stack trace.
+Check `pg_stat_activity` for sibling projects before reading a stack trace.
+R-188's own full unit run was clean (3076/0/4).
 
 **A seed defect is only visible on a walk** (D-28).
 
