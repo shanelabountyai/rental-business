@@ -1,53 +1,69 @@
 # Next session
 
-## R-188 is done and pushed — `f503a14`, SHA recorded in `bd7762c`.
+## R-189 is done and pushed — `d138189`, SHA recorded in `517229a`.
 
 **CI has NOT been checked for this item.** Run `gh run list --limit 5` and
-confirm both jobs on `bd7762c` (or `f503a14` — auto job cancellation usually
+confirm the run on `517229a` (or `d138189` — auto job cancellation usually
 leaves only the SHA commit's run). Do not copy this or any earlier green line
 forward; R-141's lesson is eleven entries inheriting a claim instead of running
-the three-second command.
+the three-second command. R-188's own run WAS checked this session and was
+green (`34427150842`).
 
-## Start here: row 176, R-189
+## Start here: row 177, R-190
 
 `docs/prds/06-backlog.md` Milestone 14 ("Arc 4"), rows 174–189, sourced from
 `docs/reviews/2026-09-09-operator-review.md` and recorded as D-201. Work top to
-bottom; the WRONG rows come first. R-189 is the next one — the photograph a
-tenant texts at 11pm is discarded at the door (`app/api/sms/inbound/route.ts`
-reads only `From`/`Body`/`MessageSid`, while the email path has stored and
-re-parented the same photo since R-097d). Review finding 3.
+bottom; the WRONG rows come first. R-190 is the next one — `jobs/runner.ts:252`
+passes the real `now` alongside a *historical* `businessDate` when catching up
+missed days, so six of the twenty-two jobs do today's work under yesterday's
+label and the `JobRun` is then recorded SUCCEEDED for that date. Review
+finding 4, which names the six.
 
-Thirteen of the fifteen rows are **inherited evidence**; only findings 1 and 5
-were spot-checked at planning time. R-150's rule stands: re-verify the file and
-line before building, and if the claim is wrong, say so in the entry rather
-than building around it. R-187's and R-188's claims were both verified and both
-correct.
+Thirteen of the fifteen rows were **inherited evidence**; findings 1, 5, and now
+3 have been verified at build time. R-150's rule stands: re-verify the file and
+line before building, and if the claim is wrong, say so in the entry rather than
+building around it. R-187's, R-188's and R-189's claims were all verified and
+all correct.
 
-## What R-188 changed that the next rows touch
+## What R-189 changed that the next rows touch
 
-- Both deadline surfaces on `Deposit` — `deposit-disposition-reminder-job.ts`
-  and `upcomingCriticalDates` in `reports/queries.ts` — now take
-  `OR: [{ dispositionSentAt: null }, { refundPaidOn: null, refundedCents: { gt: 0 } }]`.
-  Their labels branch on `dispositionSentAt` to say *Deposit refund* vs
-  *Deposit disposition*. D-203.
-- `deposit_refund_due` Tasks are now dated `dispositionDueOn` rather than the
-  day the letter was finalized, and name that date in the title. Anything
-  asserting on that Task's `businessDate` or title should expect the deadline.
-- `e2e/deposit-disposition.spec.ts`'s deposit fixture now seeds
-  `dispositionDueOn: 2026-09-14`; it previously had none despite having a
-  `moveOutAt`.
-- **No new task type and no new `CriticalDateKind`** was added — R-191 (row 178)
-  also wants the existing Task queue behaving correctly, not another vocabulary.
+- **`attachMessageDocumentsToTicket`** (`apps/web/lib/comms/inbound-attachments.ts`)
+  is now the ONLY place an inbound `Document` gains a `ticketId`. Both
+  `sms-intake.ts` and `email-intake.ts` call it, on **both** the
+  `ticket_opened` and `thread_only` outcomes. The email path's inline
+  `updateMany` is gone. D-204.
+- `receiveInboundMessage` takes a new optional `attachmentsDeclared`, which is
+  what `UnroutedMessage.attachmentsDropped` now records. It defaults to
+  `attachments.length`, so every existing caller is unchanged.
+- `MAX_ATTACHMENT_BYTES` and `MAX_ATTACHMENT_COUNT` are now **exported** from
+  `inbound-attachments.ts` (they were private `MAX_BYTES` / `MAX_COUNT`).
+  `twilio-media.ts` is the second reader; a third must not copy them.
+- New `apps/web/lib/comms/twilio-media.ts` — the first module in this repo that
+  makes an outbound fetch from *inbound* handling. It is where the host
+  allowlist and the size cap live.
+- `sms-intake.test.ts`'s `afterAll` now deletes `Document` rows by
+  `propertyId`, before the property is deactivated.
 
-## Found in R-188, owned by nobody
+## Found in R-189, owned by nobody
 
-The reminder job's already-flagged guard keys on `leaseId`, not on the deposit,
-so a lease holding two deposits (SECURITY + PET) flags once for both.
-Pre-existing and untouched.
-
-**Still open and named in D-203:** whether a timely itemization with a late
-refund is a partial defence is a question for counsel. It gated nothing — the
-code shows the date either way — so no owner question was asked.
+- **Nothing backfills the photographs discarded before this item.** Those bytes
+  were never fetched and no longer exist to fetch — Twilio retains media for a
+  limited window and the URLs were never stored either.
+- **Nothing re-parents a photograph onto a ticket opened AFTER the message that
+  carried it.** A text an hour before staff open a ticket by hand still leaves
+  the picture on the message alone. Both intake paths only parent at the moment
+  they decide the ticket.
+- **The filename is manufactured** (`texted-1.jpeg`) because Twilio sends none,
+  so two photographs in one thread are told apart by thumbnail and timestamp,
+  not by name.
+- **The memory ceiling on a media fetch is one CDN response bounded by the
+  timeout.** `Content-Length` is checked before the body is read, but a lying
+  header is only caught after buffering. Worth knowing before that module is
+  pointed at any other provider.
+- **The wire between the fetcher and Twilio is untested and cannot be tested
+  from here** — same limit R-104's drivers have. The refusals are unit-tested
+  against a stubbed `fetch`; the route's reading of `NumMedia` is proved e2e
+  through a deliberately non-Twilio media URL.
 
 ## Still outstanding from R-187, owned by nobody
 
@@ -56,11 +72,19 @@ code shows the date either way — so no owner question was asked.
 `20260907120000_r175_payment_plans`, so it has no `PaymentPlan` table at all.
 `npm run dev` reads `.env.local`, so a walk against the dev branch would 500 on
 anything built since R-165. `npm run db:migrate:dev` is the whole fix; it was
-outside both R-187's and R-188's scope and has still not been run.
+outside R-187's, R-188's and R-189's scope and has still not been run.
 
 Also from R-187: the start-day boundary double-counts a charge raised on the
 plan's own start date (it lands in both `arrearsCents` and `chargesSince`); no
 e2e walks the new wrongly-completed warning.
+
+## Still outstanding from R-188, owned by nobody
+
+The deposit reminder job's already-flagged guard keys on `leaseId`, not on the
+deposit, so a lease holding two deposits (SECURITY + PET) flags once for both.
+Pre-existing and untouched. **Note this is the same shape as R-190's neighbour
+R-191** — an already-flagged guard that cannot fire twice — and R-191 is two
+rows away, so read them together before fixing either.
 
 ## Binding for every row in this arc
 
@@ -72,10 +96,10 @@ Milestone 14 header and D-201:
 - No settings screen for `CHASE_LADDER_DAYS`, `TURN_STAGE_DAYS`,
   `TURN_STALL_DAYS`, `PLAN_GRACE_DAYS` or the stall thresholds.
 - **No second queue.** D-9 has been paid for three times. R-191 and R-197 want
-  the *existing* Task queue reachable and correctly dated — R-188 just did that
-  half for deposits without adding a type.
+  the *existing* Task queue reachable and correctly dated.
 - **No backfill of anything** — D-169's doubled `Payment` rows, R-038a's
-  no-ledger payments, and the plans R-187 left named rather than rewritten.
+  no-ledger payments, R-187's wrongly-completed plans, and now R-189's
+  discarded photographs.
 - No per-stage turn table, no second definition of "days vacant".
 
 **R-194** is the arc's other Needs counsel row (does a partial payment cure, and
@@ -88,7 +112,8 @@ does accepting it waive — the second is already a three-valued
 - **Rows 81 (R-081), 97 (R-097) and 155 (R-168) are SPLIT-PARENT
   placeholders.** Every child shipped. Ticking them is bookkeeping.
 - **Row 93 (R-093) is externally blocked** — real vendor drivers, each needing
-  a signed commercial relationship. Not a laptop item.
+  a signed commercial relationship. Not a laptop item. (R-189 is NOT an
+  instance of this: Twilio was already a live relationship.)
 - **`e2e/leases.spec.ts`'s cleanup flake has a row** — 189 / R-202, at the end
   of the arc. It costs CI time on every push, so pull it forward if a sweep
   goes red on `WorkOrder_unitId_fkey` rather than treating it as new.
@@ -102,20 +127,19 @@ probe; only `document.documentElement.scrollWidth` sees it.
 
 **Use `npm run test:e2e`, never bare `npx playwright test`.** The latter gives
 28 failures in 0–222ms with no `DATABASE_URL`, which reads exactly like the
-jetsam symptom CLAUDE.md warns about and is not it.
+jetsam symptom CLAUDE.md warns about and is not it. (`--list` is safe without
+it, and is how you get the real expected test count.)
 
-**Prove a new assertion against the reverted fix** (D-197). R-188 did this
-twice, one revert per term of the new `where` clause — which is what showed the
-two new tests were guarding different things rather than the same thing twice.
+**Prove a new assertion against the reverted fix** (D-197). R-189 did this four
+times, one revert per claim, and each turned exactly one test red — which is
+what showed the four tests guard four things rather than one thing four times.
 
 **A fixture that looks complete can still be missing the field under test.**
-R-188's first e2e run failed on `Expected: null` because the deposit fixture had
-a `moveOutAt` and no `dispositionDueOn` — the field the real move-out flow
-stamps. Check what the production writer sets, not what the fixture has.
+Check what the production writer sets, not what the fixture has.
 
 **A wall of hook timeouts in unrelated `afterAll`s is an environment symptom.**
 Check `pg_stat_activity` for sibling projects before reading a stack trace.
-R-188's own full unit run was clean (3076/0/4).
+R-189's own full unit run was clean (3090 passed / 4 skipped / 3094).
 
 **A seed defect is only visible on a walk** (D-28).
 
