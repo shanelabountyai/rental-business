@@ -15,6 +15,10 @@ import { auditAsSystem } from '@/lib/audit/system.ts'
 import { emitEvent } from '@/lib/jobs/outbox.ts'
 import { notificationAdapter } from '@/lib/notifications/provider.ts'
 import { inviteToClarify } from '@/lib/maintenance/clarify-link.ts'
+import {
+  type InboundAttachment,
+  attachMessageDocumentsToTicket,
+} from './inbound-attachments.ts'
 import { recordOptIn, recordOptOut } from './opt-out-store.ts'
 import { receiveInboundMessage } from './messages.ts'
 
@@ -48,6 +52,13 @@ export async function handleInboundSms(args: {
   body: string
   receivedAt: Date
   externalId?: string | null
+  /// R-189: the MMS photograph, already fetched from Twilio by the route -
+  /// the one place that knows a provider's shape (D-7). Empty for an
+  /// ordinary text, which is most of them.
+  attachments?: readonly InboundAttachment[]
+  /// How many `NumMedia` said there were, which is what the unrouted queue
+  /// records. See `receiveInboundMessage` for why these are two numbers.
+  attachmentsDeclared?: number
 }): Promise<SmsIntakeResult> {
   // A CARRIER KEYWORD IS NOT A MAINTENANCE REQUEST, and this is checked
   // before anything else (R-040e). Until it was, `STOP` threaded like any
@@ -79,6 +90,8 @@ export async function handleInboundSms(args: {
     body: args.body,
     receivedAt: args.receivedAt,
     externalId: args.externalId,
+    attachments: args.attachments,
+    attachmentsDeclared: args.attachmentsDeclared,
   })
 
   if (routed.outcome === 'duplicate') return { outcome: 'duplicate' }
@@ -116,6 +129,13 @@ export async function handleInboundSms(args: {
   const decision = decideSmsIntake(openTickets)
 
   if (decision.outcome === 'thread_only') {
+    // THE MAJORITY CASE ON THIS CHANNEL, and the one R-189 would have missed
+    // by copying the email path verbatim. `decideSmsIntake` returns
+    // thread_only whenever the tenant has anything open, so a tenant who
+    // texts "there's a leak" and then texts the photograph - two messages,
+    // which is how a phone sends them - had the words on the ticket and the
+    // picture nowhere the vendor could reach (D-204).
+    await attachMessageDocumentsToTicket(prisma, routed.messageId, decision.existingTicketId)
     return {
       outcome: 'threaded',
       threadId: thread.id,
@@ -170,6 +190,11 @@ export async function handleInboundSms(args: {
         habitabilityFlag,
       },
     })
+    // The photograph, moved from the message onto the job somebody will be
+    // dispatched to (R-189). Stored against the `Message` above by
+    // `receiveInboundMessage`, which is where it belongs; this is the half
+    // that makes a vendor's own link able to serve it.
+    await attachMessageDocumentsToTicket(tx, routed.messageId, created.id)
     // SYSTEM, not a staff actor: nobody was signed in. `ref` names the
     // webhook so an entry traces back to what produced it.
     await auditAsSystem(

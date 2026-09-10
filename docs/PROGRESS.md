@@ -10544,3 +10544,121 @@ is still unpaid"* red, and dropping just `refundPaidOn: null` from it turns
 *"stops once the refund has actually been paid"* red. CI on the previous item was
 **green** — run `34414628858` on `5d5ce5e`, checked with `gh run list`, not
 inherited.
+
+## R-189 — the photograph a tenant texts is no longer discarded at the door
+
+Commit `PENDING`.
+
+**The claim was verified before anything was built, and it was correct.**
+`app/api/sms/inbound/route.ts` read exactly three fields off Twilio's form —
+`From`, `Body`, `MessageSid` — and `NumMedia` and `MediaUrl0…N` appeared
+nowhere in the repository. On the channel R-021 measured as roughly half of all
+intake, every photograph a tenant ever texted was read off the wire and thrown
+away.
+
+**What it built.** [apps/web/lib/comms/twilio-media.ts](apps/web/lib/comms/twilio-media.ts)
+parses `NumMedia`/`MediaUrl0…N`/`MediaContentType0…N` and fetches the bytes,
+and the route hands them to the `storeInboundAttachments` R-097d already wrote
+— so an MMS photograph now becomes a `Document` with the same closed type list,
+size cap and count cap as an emailed one, on the same `Message`, in the same
+place on the screen. `receiveInboundMessage` gained `attachmentsDeclared` and
+`handleInboundSms` gained `attachments`; nothing else in the pipeline changed,
+because the pipeline was already channel-agnostic and only the SMS end of it
+was empty.
+
+**The fetch is where the risk is, and it is the one place inbound handling
+opens an outbound connection.** An inbound-email webhook posts its attachment
+inline; Twilio posts URLs and expects us to go and GET them with the account's
+own credentials. So: `https` only, and only on `api.twilio.com`; a 10s timeout
+matching the outbound driver's; `Content-Length` refused above the shared
+`MAX_ATTACHMENT_BYTES` before the body is read; the parse capped at
+`MAX_ATTACHMENT_COUNT` so a `NumMedia` of `5000` cannot turn one signed webhook
+into five thousand outbound fetches; and every failure returning null rather
+than throwing, because a throw here becomes a 500, which makes Twilio retry,
+which duplicates a text already recorded. Both caps are now **exported from
+`inbound-attachments.ts` rather than copied**, since a pre-read refusal that
+disagrees with the post-read one means one of them has stopped meaning
+anything.
+
+**The allowlist governs where the CREDENTIAL may go, which is why it is narrow
+and why the redirect is not covered by it.** Twilio's media URL always
+redirects to a CDN on a different domain. The redirect is followed — the bytes
+are there — but no credential travels with it: `fetch` strips `Authorization`
+on a cross-origin redirect, and the destination is Twilio's own CDN in any
+case. Two independent reasons, written down because depending on only the first
+would be depending on runtime behaviour for a security property.
+
+**No new environment variable, and that was a decision rather than an
+accident.** Twilio's media API wants the account SID, which lives in
+`TWILIO_ACCOUNT_SID` — a value that is only set once 10DLC clears and outbound
+messaging goes live, and which `vitest.config.ts` and `playwright.config.ts`
+both deliberately empty. `.env.example` has said since R-021 that inbound does
+not wait for outbound. So the SID is read from the **signed webhook payload**'s
+own `AccountSid`, which is as authentic as everything else the signature
+covers, and a texted photograph is therefore stored from the day the number
+exists rather than from the day the campaign is approved.
+
+**What decided the shape of the item was the SECOND parenting call, not the
+first** (D-204). The review said to re-parent "exactly as `email-intake.ts`
+does", and doing exactly that would have fixed the minority case and left the
+headline defect standing. `decideSmsIntake` returns `thread_only` whenever the
+tenant has anything open — so a tenant who texts *"there's a leak"* and then
+texts the photograph, two messages, which is how a phone sends them, had the
+words on the ticket and the picture nowhere the vendor could reach. That is not
+a presentation detail:
+[apps/web/app/vendor/[token]/documents/[documentId]/route.ts](apps/web/app/vendor/%5Btoken%5D/documents/%5BdocumentId%5D/route.ts)
+grants a vendor a document on `document.ticketId === workOrder.ticketId`, so an
+unparented photo is invisible to precisely the person it was taken for. The
+re-parent is now `attachMessageDocumentsToTicket`, called on both outcomes —
+and **the email path had the identical gap on a reply**, fixed in the same
+helper rather than left as a sibling caller still broken.
+
+**`attachmentsDropped` now records what was SENT, not what arrived.** The
+unrouted queue's count exists so a triager knows to ask for the photograph
+again, and MMS is the one case where those two numbers can differ: Twilio posts
+URLs, so a fetch that fails leaves intake holding nothing while the tenant
+demonstrably sent something. `receiveInboundMessage` takes
+`attachmentsDeclared` and defaults it to `attachments.length`, which is exactly
+right for email, where the bytes are in the payload and nothing can go missing
+between the wire and here.
+
+**Every new assertion was proved against the reverted fix** (D-197), one revert
+per claim, and each turned exactly one test red: removing the `ticket_opened`
+parenting, removing the `thread_only` parenting, restoring
+`attachments?.length` as the dropped count, and widening the host allowlist to
+`/./`. Four reverts, four distinct failures — which is what shows the tests
+guard four things rather than one thing four times.
+
+**Coverage, and what it honestly cannot reach.** `twilio-media.test.ts` stubs
+`fetch` and covers the refusals, which are decisions made before or after the
+network rather than by it — including that a non-Twilio host is **not dialled
+at all**. `sms-intake.test.ts` covers what happens to the bytes: parented onto
+the ticket the text opens, parented onto the ticket already open, and the
+declared count surviving into the unrouted queue. The e2e spec posts a signed
+form carrying `NumMedia: '2'` with non-Twilio media URLs — which the allowlist
+refuses, the same shape as a fetch that fails — and asserts 204 plus
+`attachmentsDropped: 2`, so the route's own reading of `NumMedia` is proved
+through the real HTTP stack. **The wire between the fetcher and Twilio is not
+tested and cannot be from here**, which is the same limit R-104's drivers have.
+
+**Left behind, and owned by nobody.** Nothing backfills the photographs
+discarded before this item — those bytes were never fetched and no longer exist
+to fetch. Nothing re-parents a photograph onto a ticket opened *after* the
+message carrying it, so a text sent an hour before staff open a ticket by hand
+still leaves the picture on the message alone. The filename is manufactured
+(`texted-1.jpeg`) because Twilio sends none, so two photographs of different
+things in one thread are told apart by their thumbnails and their timestamps
+rather than by their names. And the memory ceiling on the fetch is one CDN
+response bounded by the timeout: `Content-Length` is checked first, but a lying
+header is only caught after the body is buffered — worth knowing before this
+module is pointed at any other provider.
+
+**The gate.** `lint` clean (0 errors, 16 pre-existing warnings), `typecheck`
+clean, `build` clean, `check:ship-deps` clean, the full unit suite **3090
+passed / 4 skipped / 3094** — R-188's 3076 + 4 plus exactly the 14 tests this
+item adds — and `e2e/sms-webhook.spec.ts` 18 passed / 2 skipped, reconciling
+against `--list`'s `Total: 20 tests` (10 tests × 2 projects; the 2 skipped are
+the unconfigured-token describe, correctly skipped because the token IS
+configured for the run). The full sweep is CI's. **CI on R-188 was checked at
+the start of this session and was green** — run `34427150842`, `R-188: record
+the SHA`, success. That is a run that was read, not a line copied forward.

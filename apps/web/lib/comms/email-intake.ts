@@ -11,7 +11,10 @@ import { prisma } from '@rental/db'
 // session by definition.
 import { auditAsSystem } from '@/lib/audit/system.ts'
 import { emitEvent } from '@/lib/jobs/outbox.ts'
-import type { InboundAttachment } from './inbound-attachments.ts'
+import {
+  type InboundAttachment,
+  attachMessageDocumentsToTicket,
+} from './inbound-attachments.ts'
 import { honourEmailOptOut } from './email-opt-out.ts'
 import { receiveInboundMessage } from './messages.ts'
 
@@ -105,6 +108,14 @@ export async function handleInboundEmail(args: {
   })
 
   if (decision.outcome === 'thread_only') {
+    // R-189 / D-204, the same gap the SMS path had and for the same reason:
+    // a reply carrying the photograph left it on the message, where the
+    // vendor's link correctly refuses it. Guarded on the id being present,
+    // because `decideEmailIntake` returns an EMPTY one where the reason was
+    // "this is a reply" rather than "they already have one open".
+    if (decision.existingTicketId) {
+      await attachMessageDocumentsToTicket(prisma, routed.messageId, decision.existingTicketId)
+    }
     return {
       outcome: 'threaded',
       threadId: thread.id,
@@ -147,11 +158,9 @@ export async function handleInboundEmail(args: {
     // they belong; this also hangs them off the ticket, which is what makes
     // the photograph appear on the job somebody is dispatched to. Without
     // it a tenant photographs a leak and the person sent to fix it never
-    // sees the picture.
-    await tx.document.updateMany({
-      where: { messageId: routed.messageId, ticketId: null },
-      data: { ticketId: created.id },
-    })
+    // sees the picture. Moved into a shared helper by R-189, so the SMS path
+    // cannot drift from this one again.
+    await attachMessageDocumentsToTicket(tx, routed.messageId, created.id)
     await auditAsSystem(
       'email-webhook',
       {

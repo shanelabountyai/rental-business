@@ -1,5 +1,6 @@
 import { verifyTwilioSignature } from '@rental/core/comms'
 import { handleInboundSms } from '@/lib/comms/sms-intake.ts'
+import { fetchTwilioMedia, parseTwilioMedia } from '@/lib/comms/twilio-media.ts'
 
 // Twilio's inbound-SMS webhook (MAINT-01, COMM-01, R-021).
 //
@@ -83,12 +84,37 @@ export async function POST(request: Request) {
     return new Response('Missing From', { status: 400 })
   }
 
+  // R-189. THE MMS PHOTOGRAPH, FETCHED HERE because this is the one place
+  // that is allowed to know a provider's shape (D-7) - the email route parses
+  // its own attachments in exactly the same position. Everything downstream
+  // takes bytes.
+  //
+  // AFTER the signature check and never before it: these are URLs we are
+  // about to dial with the account's credentials, and their authenticity is
+  // the signature's alone. `AccountSid` is likewise read from the signed form
+  // rather than from `TWILIO_ACCOUNT_SID`, which is not set until 10DLC
+  // clears - inbound has never waited for outbound and must not start now.
+  const { declared, media } = parseTwilioMedia(params)
+  const accountSid = params.AccountSid ?? ''
+  if (declared > 0 && !accountSid) {
+    // Nothing to authenticate the fetch with. The message is still filed
+    // below, and `declared` still records that a photograph existed - the
+    // one thing worse than not having it is not knowing it was sent.
+    console.error('[sms] inbound media declared but the payload carried no AccountSid')
+  }
+  const attachments =
+    media.length > 0 && accountSid
+      ? await fetchTwilioMedia(media, { accountSid, authToken })
+      : []
+
   try {
     const result = await handleInboundSms({
       from,
       body,
       receivedAt: new Date(),
       externalId,
+      attachments,
+      attachmentsDeclared: declared,
     })
     // 204 with no body on every outcome INCLUDING unrouted. An unrouted
     // message is not a failure - it was recorded for a human to file
@@ -96,7 +122,10 @@ export async function POST(request: Request) {
     // something already saved. Empty rather than TwiML: an auto-reply is
     // COMM-07's, and R-029 owns the after-hours version, so this build must
     // not invent one here.
-    console.info(`[sms] inbound ${externalId ?? '(no sid)'}: ${result.outcome}`)
+    console.info(
+      `[sms] inbound ${externalId ?? '(no sid)'}: ${result.outcome}` +
+        (declared > 0 ? ` (${attachments.length}/${declared} media)` : ''),
+    )
     return new Response(null, { status: 204 })
   } catch (error) {
     // 500 IS the right answer here, because it makes Twilio retry - and a

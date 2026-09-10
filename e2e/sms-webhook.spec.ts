@@ -308,6 +308,55 @@ test.describe('handling a signed message', () => {
     ).toBe(1)
   })
 
+  test('records that an MMS carried a photograph it could not bring back', async ({
+    request,
+    baseURL,
+  }) => {
+    // R-189, END TO END AS FAR AS THIS SUITE HONESTLY CAN GO. The bytes live
+    // behind Twilio's own API, so the fetch itself is unit-tested against a
+    // stubbed `fetch` (`twilio-media.test.ts`); what only the real HTTP
+    // stack can prove is that the route reads `NumMedia` at all, and that
+    // media it cannot retrieve is COUNTED rather than silently forgotten.
+    // The URL below is deliberately not Twilio's, so the allowlist refuses
+    // it before the network - which is the same shape as a fetch that fails.
+    const unknown = `+1512999${Math.floor(1000 + Math.random() * 8999)}`
+    unroutedPhones.push(unknown)
+
+    const params = {
+      From: unknown,
+      Body: 'the gate is hanging off',
+      MessageSid: `SM${randomUUID().replace(/-/g, '')}`,
+      AccountSid: `AC${randomUUID().replace(/-/g, '')}`,
+      NumMedia: '2',
+      MediaUrl0: 'https://example.test/not-twilio/1',
+      MediaContentType0: 'image/jpeg',
+      MediaUrl1: 'https://example.test/not-twilio/2',
+      MediaContentType1: 'image/jpeg',
+    }
+    const response = await request.post('/api/sms/inbound', {
+      form: params,
+      headers: {
+        'x-twilio-signature': twilioSignature(signedUrl(baseURL!), params),
+      },
+    })
+    // Still 204: the WORDS were recorded, and asking Twilio to retry would
+    // only duplicate a message we already have.
+    expect(response.status()).toBe(204)
+
+    await expect
+      .poll(
+        async () =>
+          (
+            await prisma.unroutedMessage.findFirst({ where: { fromAddress: unknown } })
+          )?.attachmentsDropped ?? null,
+        { timeout: 10_000 },
+      )
+      // TWO, from `NumMedia`, not nought from what arrived. Whoever triages
+      // this has to know there was a photograph in order to ask for it
+      // again - reporting nought tells them the opposite of the truth.
+      .toBe(2)
+  })
+
   test('rejects a signed request missing From, without retrying', async ({
     request,
     baseURL,

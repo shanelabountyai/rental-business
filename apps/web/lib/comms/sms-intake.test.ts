@@ -92,6 +92,9 @@ afterAll(async () => {
     where: { event: { propertyId: { in: propertyIds } } },
   })
   await prisma.outboxEvent.deleteMany({ where: { propertyId: { in: propertyIds } } })
+  // BY OWNERSHIP, not by a collected-id list: the rows under test here are
+  // written by the code under test, not by the test (R-189).
+  await prisma.document.deleteMany({ where: { propertyId: { in: propertyIds } } })
   await prisma.ticket.deleteMany({ where: { id: { in: ticketIds } } })
   await prisma.unroutedMessage.deleteMany({
     where: { fromAddress: { in: [UNKNOWN_PHONE] } },
@@ -429,5 +432,117 @@ describe('carrier keyword replies (R-145, D-162)', () => {
 
     const result = await handleInboundSms(strangerArgs('HELP'))
     expect(result).toMatchObject({ outcome: 'opt_out', keyword: 'HELP' })
+  })
+})
+
+describe('a photograph texted in', () => {
+  // R-189. `NumMedia` and `MediaUrl0…N` were read nowhere in the repo, so
+  // the picture of the leak was taken off the wire and discarded - on the
+  // channel R-021 measured as roughly half of all intake. The route fetches
+  // the bytes from Twilio (`twilio-media.ts`, tested separately); what these
+  // prove is what happens to them afterwards, which is the half that
+  // decides whether the person holding the wrench ever sees it.
+
+  const photo = (name = 'texted-1.jpeg') => ({
+    fileName: name,
+    contentType: 'image/jpeg',
+    content: Buffer.alloc(1024, 3),
+  })
+
+  it('hangs it off the ticket the text opens, so whoever is dispatched sees it', async () => {
+    // Not decorative: app/vendor/[token]/documents/[documentId]/route.ts
+    // grants a vendor a document on `document.ticketId === workOrder
+    // .ticketId`, so an unparented photo is invisible to exactly the person
+    // it was taken for.
+    await closeOpenTickets()
+    const result = await handleInboundSms({
+      from: TENANT_PHONE,
+      body: 'The water heater pan is full',
+      receivedAt: new Date(),
+      externalId: `SM${randomUUID()}`,
+      attachments: [photo()],
+      attachmentsDeclared: 1,
+    })
+    expect(result.outcome).toBe('ticket_opened')
+    if (result.outcome !== 'ticket_opened') return
+    ticketIds.push(result.ticketId)
+
+    const documents = await prisma.document.findMany({ where: { ticketId: result.ticketId } })
+    expect(documents).toHaveLength(1)
+    expect(documents[0]!.type).toBe('MAINTENANCE_PHOTO')
+    expect(documents[0]!.propertyId).toBe(propertyId)
+    expect(documents[0]!.tenantId).toBe(tenantId)
+    // Stored against the MESSAGE as well, which is where the evidence trail
+    // needs it - the ticket link is the dispatch half, not a move.
+    expect(documents[0]!.messageId).not.toBeNull()
+  })
+
+  it('hangs it off the ticket ALREADY OPEN, which on this channel is the usual case', async () => {
+    // THE MAJORITY PATH, and the one copying the email path verbatim would
+    // have missed (D-204). `decideSmsIntake` returns thread_only whenever
+    // the tenant has anything open, so "texts the description, then texts
+    // the photograph" - two messages, which is how a phone sends them - put
+    // the words on the ticket and the picture nowhere the vendor could
+    // reach.
+    await closeOpenTickets()
+    const opened = await text('There is water under the sink')
+    expect(opened.outcome).toBe('ticket_opened')
+    if (opened.outcome !== 'ticket_opened') return
+
+    const followUp = await handleInboundSms({
+      from: TENANT_PHONE,
+      body: 'here is what it looks like',
+      receivedAt: new Date(),
+      externalId: `SM${randomUUID()}`,
+      attachments: [photo()],
+      attachmentsDeclared: 1,
+    })
+    expect(followUp).toMatchObject({ outcome: 'threaded', existingTicketId: opened.ticketId })
+
+    const documents = await prisma.document.findMany({ where: { ticketId: opened.ticketId } })
+    expect(documents).toHaveLength(1)
+  })
+
+  it('records that a stranger sent one, even though it cannot be stored', async () => {
+    // A Document must have a property and an unrouted message has none, so
+    // the COUNT is what survives - whoever triages it needs to know to ask
+    // for the photograph again.
+    const result = await handleInboundSms({
+      from: UNKNOWN_PHONE,
+      body: 'the gate is broken',
+      receivedAt: new Date(),
+      externalId: `SM${randomUUID()}`,
+      attachments: [photo()],
+      attachmentsDeclared: 1,
+    })
+    expect(result.outcome).toBe('unrouted')
+
+    const unrouted = await prisma.unroutedMessage.findFirstOrThrow({
+      where: { fromAddress: UNKNOWN_PHONE },
+      orderBy: { receivedAt: 'desc' },
+    })
+    expect(unrouted.attachmentsDropped).toBe(1)
+  })
+
+  it('records the DECLARED count when the media could not be fetched at all', async () => {
+    // The case the two numbers exist for: Twilio posts URLs rather than
+    // bytes, so a media fetch that fails leaves intake holding nothing while
+    // the tenant demonstrably sent something. Reporting nought here would
+    // tell the triager the opposite of the truth.
+    const result = await handleInboundSms({
+      from: UNKNOWN_PHONE,
+      body: 'photo of the gate',
+      receivedAt: new Date(),
+      externalId: `SM${randomUUID()}`,
+      attachments: [],
+      attachmentsDeclared: 2,
+    })
+    expect(result.outcome).toBe('unrouted')
+
+    const unrouted = await prisma.unroutedMessage.findFirstOrThrow({
+      where: { fromAddress: UNKNOWN_PHONE },
+      orderBy: { receivedAt: 'desc' },
+    })
+    expect(unrouted.attachmentsDropped).toBe(2)
   })
 })

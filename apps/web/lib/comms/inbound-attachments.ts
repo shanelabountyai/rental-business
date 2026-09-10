@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { createHash } from 'node:crypto'
-import { prisma } from '@rental/db'
+import { type Prisma, prisma } from '@rental/db'
 import { generateStorageKey, storage } from '@/lib/storage/index.ts'
 
 // Keeping what an inbound email carried (COMM-08, R-097d).
@@ -42,10 +42,16 @@ export interface InboundAttachment {
 
 /// 15MB each, matching R-019's tenant photo upload - the same phone takes
 /// the same picture whichever way it is sent.
-const MAX_BYTES = 15 * 1024 * 1024
+///
+/// EXPORTED because `twilio-media.ts` has to refuse an oversized MMS BEFORE
+/// it reads the body, which is a decision that has to agree with the one
+/// below or one of them stops meaning anything (R-189).
+export const MAX_ATTACHMENT_BYTES = 15 * 1024 * 1024
 /// Ten per message. A real reply carries one or two photographs; a hundred
-/// is either a mistake or an attack, and both want the same answer.
-const MAX_COUNT = 10
+/// is either a mistake or an attack, and both want the same answer. Exported
+/// for the same reason: it is also the ceiling on how many outbound media
+/// fetches one signed webhook may cause.
+export const MAX_ATTACHMENT_COUNT = 10
 
 const ALLOWED = /^(image\/(jpeg|png|gif|webp|heic|heif)|application\/pdf)$/i
 
@@ -56,7 +62,7 @@ export function acceptableAttachment(attachment: {
   return (
     ALLOWED.test(attachment.contentType.split(';')[0]!.trim()) &&
     attachment.size > 0 &&
-    attachment.size <= MAX_BYTES
+    attachment.size <= MAX_ATTACHMENT_BYTES
   )
 }
 
@@ -84,7 +90,7 @@ export async function storeInboundAttachments(input: {
   tenantId: string | null
   vendorId: string | null
 }): Promise<{ kept: number; refused: number }> {
-  const considered = input.attachments.slice(0, MAX_COUNT)
+  const considered = input.attachments.slice(0, MAX_ATTACHMENT_COUNT)
   const overflow = input.attachments.length - considered.length
   let kept = 0
   let refused = overflow
@@ -133,4 +139,39 @@ export async function storeInboundAttachments(input: {
   }
 
   return { kept, refused }
+}
+
+/**
+ * Hangs a message's attachments off the ticket they are about (R-189).
+ *
+ * ==========================================================================
+ * THIS IS WHAT MAKES THE PHOTOGRAPH REACH THE PERSON HOLDING THE WRENCH, and
+ * it is not cosmetic: `app/vendor/[token]/documents/[documentId]/route.ts`
+ * grants a vendor a document on `document.ticketId === workOrder.ticketId`.
+ * A `Document` that stays on the message alone is one the vendor's own link
+ * correctly refuses, so an unparented photo is invisible to exactly the
+ * person it was taken for.
+ *
+ * CALLED ON BOTH INTAKE OUTCOMES, not only on the one that opens a ticket
+ * (D-204). R-097d's email path parented on creation and nothing parented a
+ * reply, which for SMS is the majority case rather than the edge: a tenant
+ * with anything open gets `thread_only`, so "texts the description, then
+ * texts the photo" - two messages, the ordinary way a phone sends them - put
+ * the words on the ticket and left the picture off it.
+ *
+ * `ticketId: null` in the WHERE, so a document already parented is never
+ * moved. Attachments are stored by `receiveInboundMessage` before either
+ * caller reaches a ticket, which is why this can run inside the same
+ * transaction that creates one.
+ * ==========================================================================
+ */
+export async function attachMessageDocumentsToTicket(
+  db: Prisma.TransactionClient | typeof prisma,
+  messageId: string,
+  ticketId: string,
+): Promise<void> {
+  await db.document.updateMany({
+    where: { messageId, ticketId: null },
+    data: { ticketId },
+  })
 }

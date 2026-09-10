@@ -289,6 +289,14 @@ export async function receiveInboundMessage(args: {
   /// R-097d: what the message carried. Stored only for a ROUTED message -
   /// a `Document` must have a property and an unrouted message has none.
   attachments?: readonly InboundAttachment[]
+  /// R-189: how many the sender ACTUALLY attached, where that can differ
+  /// from how many arrived here. It can for MMS and only for MMS: Twilio
+  /// posts URLs rather than bytes, so a media fetch that fails leaves this
+  /// function holding fewer attachments than the tenant sent. Defaults to
+  /// `attachments.length`, which is exactly right for the email path, where
+  /// the bytes are in the payload and nothing can go missing between the
+  /// wire and here.
+  attachmentsDeclared?: number
 }): Promise<InboundResult> {
   if (args.externalId) {
     const [seenMessage, seenUnrouted] = await Promise.all([
@@ -373,7 +381,12 @@ export async function receiveInboundMessage(args: {
         // needs to know there was a photograph, so they can ask for it
         // again. Storing it is not an option - a Document must have a
         // property, and inventing one is the guess decideRoute refuses.
-        attachmentsDropped: args.attachments?.length ?? 0,
+        //
+        // The DECLARED count, not the arrived count (R-189). An MMS whose
+        // media we could not fetch is the case this number exists for, and
+        // reporting nought there would tell the triager the opposite of the
+        // truth - that there was nothing to ask for.
+        attachmentsDropped: args.attachmentsDeclared ?? args.attachments?.length ?? 0,
       },
     })
     return {
