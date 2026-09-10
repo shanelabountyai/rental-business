@@ -3,7 +3,7 @@ import { prisma } from '@rental/db'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { leaseBillingState, provisionLeaseBilling } from './provision.ts'
 import { leaseBalanceCents, outstandingCharges } from '@/lib/ledger/queries.ts'
-import { processStripeEvent } from './webhook.ts'
+import { processStripeEvent, unclaimedCounterPayments } from './webhook.ts'
 
 // Provisioning and the projection pipeline against a real database
 // (D-11, R-034).
@@ -957,6 +957,10 @@ describe('out-of-band money already recorded at the counter (D-177)', () => {
         invoiceId: stripeInvoiceId,
         amountPaid: 150_000,
         paymentIntentId: null,
+        // Stamped the way the simulator stamps it: with the row's own
+        // `receivedAt`, months before the row was written. The claim window
+        // (D-207) must not read a backdated cheque as stale.
+        created: Math.floor(payment.receivedAt.getTime() / 1000),
       }),
     )
     expect(result.outcome).toBe('projected')
@@ -1008,6 +1012,7 @@ describe('out-of-band money already recorded at the counter (D-177)', () => {
           amountPaid: 150_000,
           paidBefore,
           paymentIntentId: null,
+          created: Math.floor(first.receivedAt.getTime() / 1000),
         }),
       )
     }
@@ -1047,9 +1052,64 @@ describe('out-of-band money already recorded at the counter (D-177)', () => {
         invoiceId: stripeInvoiceId,
         amountPaid: 150_000,
         paymentIntentId: null,
+        // NOW, so the row is inside the claim window (D-207) and only the
+        // discriminator can refuse it. The default 2027 stamp would put it
+        // outside, and this test would pass with the discriminator gone.
+        created: Math.floor(Date.now() / 1000),
       }),
     )
 
     expect(await prisma.payment.count({ where: { leaseId: lease.id } })).toBe(2)
+  }, 30_000)
+
+  it('does NOT let an online payment claim a counter row whose own event never came back (R-192)', async () => {
+    // Under the account's API version an ONLINE invoice payment carries no
+    // PaymentIntent either, so it reaches the claim branch too. A cheque
+    // recorded three days ago whose `invoice.updated` was lost matches a card
+    // payment today on payer, invoice, amount and "no ledger entry" - and
+    // claimed, the card money would be on record as the cheque, credited once.
+    const { lease, payer, payment: stale, stripeInvoiceId, customerId } = await counterPayment()
+    await prisma.payment.update({
+      where: { id: stale.id },
+      data: { createdAt: new Date(Date.now() - 3 * 86_400_000) },
+    })
+
+    await processStripeEvent(
+      invoiceEvent({
+        customer: customerId,
+        invoiceId: stripeInvoiceId,
+        amountPaid: 150_000,
+        paymentIntentId: null,
+        created: Math.floor(Date.now() / 1000),
+      }),
+    )
+
+    const rows = await prisma.payment.findMany({
+      where: { leaseId: lease.id },
+      include: { ledgerEntries: true },
+    })
+    expect(rows).toHaveLength(2)
+    const online = rows.find((row) => row.id !== stale.id)!
+    expect(online.receivedByStaffId).toBeNull()
+    expect(online.ledgerEntries).toHaveLength(1)
+    expect(rows.find((row) => row.id === stale.id)!.ledgerEntries).toHaveLength(0)
+
+    // The stale row is what `/money` now counts. A fresh unclaimed one - its
+    // event still in flight - is not drift yet. Scoped to this file's own
+    // property; every earlier row in it is claimed or carries no staff member.
+    await prisma.payment.create({
+      data: {
+        propertyId: lease.propertyId,
+        leaseId: lease.id,
+        leasePayerId: payer.id,
+        channel: 'OFFLINE_CASH',
+        status: 'SETTLED',
+        amountCents: 20_000,
+        receivedAt: new Date(),
+        receivedByStaffId: stale.receivedByStaffId,
+        stripeInvoiceId,
+      },
+    })
+    expect(await unclaimedCounterPayments([lease.propertyId])).toBe(1)
   }, 30_000)
 })

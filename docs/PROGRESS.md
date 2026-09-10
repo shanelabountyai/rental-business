@@ -10874,3 +10874,80 @@ alongside it in 21.9s. No UI, no `'use server'` module and no e2e-reachable
 behaviour changed — no spec, page or seed reads these Tasks by subject
 (`lease_renewal`'s dashboard link and demo seed are keyed by type, whose subject
 did not move) — so the e2e sweep is CI's. **CI is green** — run `34503603334` on `2686ac5`, both jobs (verify; end-to-end, axe, Lighthouse), read with `gh run list` after the push, not inherited. The SHA-record commit `c0caa0c` started no run: `ci.yml`'s `paths-ignore` skips docs-only pushes, so the code commit's run is the one that counts.
+
+## R-192 — an online payment can no longer claim a counter payment's row
+
+Commit `__SHA__`.
+
+**The claim was verified before anything was built, and it was correct.** The
+claim branch was at `apps/web/lib/billing/webhook.ts:534`, two lines off the
+row's `535-552`; `events.ts:386` still reads `payment_intent` off the invoice
+object and records that the account's API version dropped it. So
+`stripePaymentIntentId == null && stripeInvoiceId != null` holds for every
+invoice-driven payment, online ones included, and a counter row whose own
+event never came back matched the next same-amount online payment on that
+invoice on every column the lookup reads.
+
+**The row's prescribed bound was on the wrong column, and was not applied as
+written.** "Rows received within a day or two" read literally is `receivedAt`,
+and `recordOfflinePayment` sets `receivedAt` from the date staff typed
+(`payments/offline.ts:180`), which can be weeks back. Bounding it would have
+put every backdated cheque outside the window, and its own event would then
+mint the second row D-177 closed. The bound is on `createdAt`, when our row was
+written moments before the push. And the simulator stamps its event with that
+backdated `receivedAt` (`simulated-adapter.ts:309`), so the event can predate
+the row it reports: the bound can only be a lower one.
+
+**What it built.**
+
+- `writePayment`'s claim adds `createdAt >= intent.occurredAt − 2 days`
+  (`COUNTER_CLAIM_WINDOW_MS`). It is measured from the event's own time, not
+  the clock, so a Stripe redelivery days later still claims its row.
+- `unclaimedCounterPayments(propertyIds)` in the same file counts `SETTLED`
+  rows with `receivedByStaffId` set, no ledger entry and `createdAt` past the
+  window. `/money`'s existing Reconciliation drift panel prints it in red when
+  it is non-zero. No new screen, no Task. The empty-state line under it no
+  longer says "no drift has ever been detected", which would contradict a red
+  count above it.
+- **A vacuous test fixed on the way.** `does NOT claim an online payment that
+  happens to match` used `invoiceEvent`'s default `created` (2027), which puts
+  its row outside the new window, so it would have gone on passing with the
+  discriminator deleted. It now stamps the event at the current time. The two
+  claim tests stamp theirs the way the simulator does, with the row's own
+  six-months-back `receivedAt`, which is what proves a backdated cheque still
+  claims.
+- **Proven against the reverted fix** (D-197), one revert per claim: dropping
+  the window turned the new R-192 test red and nothing else; dropping the
+  discriminator, with the window kept, turned the online-payment test red and
+  nothing else.
+
+**What it decided.** D-207. The bound is on `createdAt` and never `receivedAt`,
+it is measured from `occurredAt`, it is a lower bound only, it is two days, and
+the count lives on the existing drift panel.
+
+**What it left behind.**
+
+- **An online payment of the same amount inside the two days is still
+  claimed** when that invoice's counter event was lost. The count cannot see
+  that case, because the claimed row has a ledger entry by then. Narrowing it
+  further needs something on the event that tells an out-of-band payment from
+  an online one, which cannot be verified from this laptop.
+- **Production frequency is unknown.** How often a real out-of-band
+  `invoice.updated` goes missing is not known here, and none is stated.
+- **R-171's ACH leftover is untouched and is a different line**:
+  `writePayment`'s PaymentIntent-only dedup may still write a `PENDING` and a
+  `SETTLED` row for one ACH payment. Still recorded as unknown.
+- **No e2e seeds a stale counter row.** The count is covered by the unit test
+  and the panel's render by `ops-visibility.spec.ts`. Nothing asserts the red
+  line on screen, because an owner's portfolio-wide count in the shared
+  database is not a number a spec can pin.
+- **The panel is portfolio-scope only**, like the rest of the ops block
+  (R-147). A property-scoped manager sees no count.
+
+**The gate.** `lint` 0 errors (16 pre-existing warnings), `typecheck` clean;
+`npm test` **3097 passed / 4 skipped = 3101**, reconciled against the run's own
+total (3100 before this item, plus the one new test), run on its own in 15.8s.
+`/money` changed, so `e2e/ops-visibility.spec.ts` ran against the production
+build on both `desktop-chrome` and `mobile-chrome`: **8 passed**, against 8 from
+`--list`. No `'use server'` module or client prop changed, so no separate build.
+The full sweep is CI's.

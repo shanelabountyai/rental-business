@@ -530,6 +530,18 @@ async function writePayment(
   // ORDERING IS WHAT MAKES THIS WORK: `recordOfflinePayment` now writes its
   // row BEFORE pushing to the provider, precisely so this lookup cannot run
   // first and win the race. See its own comment for why that is safe.
+  //
+  // BOUNDED IN TIME (R-192, D-207). Under the account's API version an ONLINE
+  // invoice payment reaches this branch too - it carries no PaymentIntent
+  // either - so a counter row whose own event never came back would sit
+  // claimable for ever, and the next online payment of the same amount on
+  // that invoice would land on it: one ledger entry for two payments, and a
+  // card payment on record as a cheque. The bound is on `createdAt`, when OUR
+  // row was written moments before the push - never `receivedAt`, which is
+  // the date staff typed and may be weeks back. It is measured from the
+  // event's own `occurredAt`, so a Stripe redelivery days later still claims,
+  // and it is a LOWER bound only: the simulator stamps its event with that
+  // backdated `receivedAt`, so an event can legitimately predate its row.
   if (
     intent.kind === 'payment_succeeded' &&
     intent.stripePaymentIntentId == null &&
@@ -543,6 +555,7 @@ async function writePayment(
         status: 'SETTLED',
         receivedByStaffId: { not: null },
         ledgerEntries: { none: {} },
+        createdAt: { gte: new Date(intent.occurredAt.getTime() - COUNTER_CLAIM_WINDOW_MS) },
       },
       orderBy: { receivedAt: 'asc' },
       select: { id: true, status: true },
@@ -575,6 +588,28 @@ async function recordOutcome(stripeEventId: string, outcome: string, detail?: st
   await prisma.processedStripeEvent.update({
     where: { stripeEventId },
     data: { outcome, detail: detail ?? null },
+  })
+}
+
+/// How long after writing a counter row we still expect its own event (D-207).
+/// The push is synchronous, so the real gap is seconds; two days is slack for
+/// clocks and time zones, not for delivery - redelivery keeps its `created`.
+const COUNTER_CLAIM_WINDOW_MS = 2 * 86_400_000
+
+/// Counter payments whose own `invoice.updated` never came back (R-192,
+/// D-207): money staff took that no ledger entry shows. Past the claim window
+/// no NEW event can claim them - only a late redelivery of their own, which
+/// takes them off this count. Invisible to `reconcileLedger`, because the
+/// event it would have checked is the one that is missing.
+export async function unclaimedCounterPayments(propertyIds: string[], now = new Date()) {
+  return prisma.payment.count({
+    where: {
+      propertyId: { in: propertyIds },
+      status: 'SETTLED',
+      receivedByStaffId: { not: null },
+      ledgerEntries: { none: {} },
+      createdAt: { lt: new Date(now.getTime() - COUNTER_CLAIM_WINDOW_MS) },
+    },
   })
 }
 

@@ -1,37 +1,52 @@
 # Next session
 
-## R-191 is done — commit `2686ac5`, SHA recorded in the follow-up.
+## R-192 is done — commit `__SHA__`, SHA recorded in the follow-up.
 
-**CI for R-191 WAS checked and is green** — run `34503603334` on `2686ac5`,
-both jobs, read with `gh run list` after the push, not inherited.
+**CI for R-192: __CI__**
 
 **The SHA-record push starts NO run**: `.github/workflows/ci.yml` has
 `paths-ignore: ['**.md', 'docs/**']`, so a docs-only commit is skipped and the
-code commit's run is the one to read. A watcher that waits for a run on the
-SHA commit will wait for ever. **Do not copy the green line forward** — run
-`gh run list --limit 5` after your own push and write down what it says.
+code commit's run is the one to read. **Do not copy the green line forward** —
+run `gh run list --limit 5` after your own push and write down what it says.
 
-## Start here: row 179, R-192
+## Start here: row 180, R-193
 
-`docs/prds/06-backlog.md` Milestone 14 ("Arc 4"), rows 174–189, sourced from
-`docs/reviews/2026-09-09-operator-review.md` and recorded as D-201. Work top to
-bottom; the WRONG rows come first.
+`docs/prds/06-backlog.md` Milestone 14 ("Arc 4"), sourced from
+`docs/reviews/2026-09-09-operator-review.md` §7 and D-201.
 
-**R-192 is a money-path row — Stripe is the system of record (D-11), so
-recommend Opus.** The claim: D-177's claim branch (`billing/webhook.ts:535-552`)
-runs whenever `stripePaymentIntentId == null && stripeInvoiceId != null`, and
-`events.ts:386` says this account's API version dropped `payment_intent` from
-the invoice object — so that is every invoice-driven payment, and an online
-payment can land on an unclaimed counter-cheque row. **Re-verify both line
-numbers before building** (R-150). The row asks for two things: bound the claim
-to rows received within a day or two, and count unclaimed-older-than-N offline
-rows on `/money`'s EXISTING drift surface — not a new screen. Production
-frequency is recorded **unknown**; do not state one.
+**R-193 is an M-sized build: a new `PropertyExpense` table, a hand-written
+migration, a staff form, and a feed into R-078's export pipeline so
+`/reports/operating`'s "All expenses" and "Net" stop omitting tax, insurance
+and management.** It is not a ledger write (D-11); vendor invoices already set
+the precedent that owner-side outlay lives in its own table. **Recommend Opus**,
+because the figure it corrects ranks houses on the lemon test. Sonnet is
+defensible for the form and migration. **Re-verify `reports/operating/page.tsx:196-201`
+and `packages/core/tax/packet-document.ts:36` before building** (R-150).
+"Optional monthly recurrence" must not become an accrual engine (D-201's do-not-build).
+It touches a form and a page, so run `--project=mobile-chrome` too (D-194/D-197).
 
-**R-171's leftover is adjacent and not the same defect**: `writePayment`
-dedups only on `stripePaymentIntentId`, so an ACH payment may write both a
-`PENDING` and a `SETTLED` row. Also recorded unknown. Read it, do not fold it
-in unless the fix is genuinely the same line.
+## What R-192 changed that the next rows touch
+
+- **`writePayment`'s counter-payment claim now requires
+  `createdAt >= intent.occurredAt − 2 days`** (`COUNTER_CLAIM_WINDOW_MS`,
+  `apps/web/lib/billing/webhook.ts`, D-207). It is a lower bound only, because
+  the simulator stamps its event with the backdated `receivedAt`. **Never
+  bound it on `receivedAt`**, which reopens D-169 for every backdated cheque.
+- **A test that drives the claim must stamp `created` deliberately.**
+  `invoiceEvent`'s default `created` is 2027, outside the window, so a "does
+  NOT claim" test passes vacuously on the default. That is how the
+  online-payment test was silently weakened until R-192 fixed it.
+- **`unclaimedCounterPayments(propertyIds)`** is counted on `/money`'s
+  Reconciliation drift panel, in red when non-zero. Portfolio-scope only.
+
+## Found in R-192, owned by nobody
+
+- An online payment of the same amount **inside** the two days, on an invoice
+  whose counter event was lost, is still claimed. Nothing on the event
+  distinguishes the two here, and that cannot be verified from the laptop.
+- No e2e seeds a stale counter row; the red line is asserted by nothing on
+  screen (unit test covers the count).
+- Production frequency of a lost out-of-band event: **unknown**.
 
 ## What R-191 changed that the next rows touch
 

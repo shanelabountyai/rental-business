@@ -60,9 +60,13 @@ export function parseDriftRun(row: {
 export function ReconciliationDrift({
   available,
   runs,
+  unclaimedCounterPayments,
 }: {
   available: boolean
   runs: DriftRun[]
+  /// R-192: counter rows past the webhook's claim window with no ledger
+  /// entry. "Two days" below is `COUNTER_CLAIM_WINDOW_MS` in webhook.ts.
+  unclaimedCounterPayments: number
 }) {
   return (
     <section className="flex flex-col gap-3">
@@ -74,9 +78,16 @@ export function ReconciliationDrift({
         {!available &&
           ' Billing is simulated in this deployment, so only the internal projection check runs; Stripe’s own records are not consulted.'}
       </p>
+      {unclaimedCounterPayments > 0 && (
+        <p className="text-sm font-medium text-red-700">
+          {unclaimedCounterPayments === 1
+            ? '1 counter payment recorded more than two days ago has no ledger entry: its event never came back from the billing provider, so no balance includes that money.'
+            : `${unclaimedCounterPayments} counter payments recorded more than two days ago have no ledger entry: their events never came back from the billing provider, so no balance includes that money.`}
+        </p>
+      )}
       {runs.length === 0 ? (
         <p className="text-muted-foreground text-sm">
-          No drift has ever been detected. Reconciliation only writes here when
+          No reconciliation run has detected drift. A run only writes here when
           it finds a discrepancy.
         </p>
       ) : (

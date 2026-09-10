@@ -12,7 +12,7 @@ import { requirePermission, requireScope } from '@/lib/auth/guard.ts'
 import { resyncPayer } from '@/lib/billing/actions.ts'
 import { billingRunRows } from '@/lib/billing/lifecycle.ts'
 import { billingIsLive, billingProviderName } from '@/lib/billing/provider.ts'
-import { recentStripeEvents } from '@/lib/billing/webhook.ts'
+import { recentStripeEvents, unclaimedCounterPayments } from '@/lib/billing/webhook.ts'
 import {
   externalReconciliationAvailable,
   recentDrift,
@@ -48,7 +48,11 @@ export default async function MoneyPage() {
   // they are shown only to an actor whose grant covers the whole portfolio -
   // the same rule announcement history follows, for the same reason.
   const ops = permissionScope.everything
-    ? await Promise.all([recentDrift(), recentStripeEvents()])
+    ? await Promise.all([
+        recentDrift(),
+        recentStripeEvents(),
+        unclaimedCounterPayments(scope.propertyIds),
+      ])
     : null
 
   return (
@@ -119,6 +123,7 @@ export default async function MoneyPage() {
           <ReconciliationDrift
             available={externalReconciliationAvailable()}
             runs={ops[0].map(parseDriftRun)}
+            unclaimedCounterPayments={ops[2]}
           />
           <StripeEventLog events={ops[1]} />
         </>
