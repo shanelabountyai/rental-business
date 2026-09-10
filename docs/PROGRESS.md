@@ -10547,7 +10547,7 @@ inherited.
 
 ## R-189 — the photograph a tenant texts is no longer discarded at the door
 
-Commit `PENDING`.
+Commit `d138189`.
 
 **The claim was verified before anything was built, and it was correct.**
 `app/api/sms/inbound/route.ts` read exactly three fields off Twilio's form —
