@@ -21,6 +21,7 @@ const entityIds: string[] = []
 const unitIds: string[] = []
 const leaseIds: string[] = []
 const tenantIds: string[] = []
+const depositIds: string[] = []
 
 function daysFromNow(n: number): Date {
   const d = new Date()
@@ -72,6 +73,40 @@ async function seedActiveLeaseExpiringSoon(propertyId: string, stamp: string) {
   return { unit, lease }
 }
 
+// R-188: a disposition letter already sent, with the refund still unpaid.
+// The calendar used to go blank at exactly this state - `dispositionSentAt`
+// was the filter, so the surface that watches the deadline stopped watching
+// it the moment the obligation to pay money began.
+async function seedRefundAwaitingPayment(propertyId: string, stamp: string) {
+  const unit = await prisma.unit.create({
+    data: { propertyId, name: `D-${stamp}`, status: 'VACANT' },
+  })
+  unitIds.push(unit.id)
+  const lease = await prisma.lease.create({
+    data: {
+      propertyId,
+      unitId: unit.id,
+      status: 'ENDED',
+      startsOn: new Date('2025-01-01'),
+      rentCents: 150_000,
+      moveOutAt: daysFromNow(-10),
+    },
+  })
+  leaseIds.push(lease.id)
+  const deposit = await prisma.deposit.create({
+    data: {
+      propertyId,
+      leaseId: lease.id,
+      heldCents: 200_000,
+      dispositionDueOn: daysFromNow(20),
+      dispositionSentAt: new Date(),
+      refundedCents: 104_000,
+    },
+  })
+  depositIds.push(deposit.id)
+  return { unit }
+}
+
 async function seedManager(propertyId: string) {
   const email = `reports-${randomUUID()}@example.test`
   const staff = await prisma.staffUser.create({
@@ -101,6 +136,7 @@ test.beforeEach(async ({ page }) => {
 })
 
 test.afterAll(async () => {
+  await prisma.deposit.deleteMany({ where: { id: { in: depositIds } } })
   await prisma.leaseTenant.deleteMany({ where: { leaseId: { in: leaseIds } } })
   await prisma.lease.deleteMany({ where: { id: { in: leaseIds } } })
   await prisma.tenant.deleteMany({ where: { id: { in: tenantIds } } })
@@ -115,6 +151,7 @@ test('the reports index links to all five, and cash summary + critical dates sho
 }) => {
   const { property, stamp } = await seedProperty()
   const { unit } = await seedActiveLeaseExpiringSoon(property.id, stamp)
+  const { unit: refundUnit } = await seedRefundAwaitingPayment(property.id, stamp)
   const staff = await seedManager(property.id)
   await signIn(page, staff)
 
@@ -135,6 +172,9 @@ test('the reports index links to all five, and cash summary + critical dates sho
 
   await page.goto('/reports/dates')
   await expect(page.getByText(new RegExp(`Lease ends — ${unit.name}`))).toBeVisible()
+  // R-188. The letter is sent, so the outstanding act is the cheque - and
+  // the row says so rather than claiming the itemization is unwritten.
+  await expect(page.getByText(new RegExp(`Deposit refund due — ${refundUnit.name}`))).toBeVisible()
 
   const datesA11y = await axeScan(page)
   expect(datesA11y.violations).toEqual([])

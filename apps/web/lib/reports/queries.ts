@@ -236,9 +236,18 @@ export async function upcomingCriticalDates(
     where: {
       propertyId: { in: scope.propertyIds },
       dispositionDueOn: { not: null, gte: todayUtc, lte: cutoff },
-      dispositionSentAt: null,
+      // R-188: the calendar went blank the moment the letter was generated,
+      // while the refund it promises runs on the SAME statutory clock. A
+      // finalized disposition with money still owed stays on the calendar
+      // until `refundPaidOn` - the same test the liability itself uses.
+      OR: [{ dispositionSentAt: null }, { refundPaidOn: null, refundedCents: { gt: 0 } }],
     },
-    select: { propertyId: true, dispositionDueOn: true, lease: { select: { unit: { select: { name: true } } } } },
+    select: {
+      propertyId: true,
+      dispositionDueOn: true,
+      dispositionSentAt: true,
+      lease: { select: { unit: { select: { name: true } } } },
+    },
   })
   for (const deposit of deposits) {
     dates.push({
@@ -246,7 +255,9 @@ export async function upcomingCriticalDates(
       propertyName: propertyName.get(deposit.propertyId) ?? '',
       kind: 'DEPOSIT_DISPOSITION_DUE',
       dueOn: deposit.dispositionDueOn!,
-      label: `Deposit disposition due — ${deposit.lease.unit.name}`,
+      // One kind, because it is one deadline; the label says which half of
+      // it is still outstanding rather than claiming a letter is unwritten.
+      label: `Deposit ${deposit.dispositionSentAt ? 'refund' : 'disposition'} due — ${deposit.lease.unit.name}`,
     })
   }
 

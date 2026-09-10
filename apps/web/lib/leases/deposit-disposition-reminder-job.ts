@@ -24,11 +24,23 @@ SCHEDULED_JOBS.push({
     'Flags a deposit disposition halfway to its statutory deadline, and again once it is overdue (INSP-03).',
   run: async ({ propertyId, timezone, businessDate: today }) => {
     const deposits = await prisma.deposit.findMany({
-      where: { propertyId, dispositionDueOn: { not: null }, dispositionSentAt: null },
+      where: {
+        propertyId,
+        dispositionDueOn: { not: null },
+        // R-188: THE LETTER DOES NOT STOP THE CLOCK. Texas §92.103 runs the
+        // itemization and the refund on ONE deadline, so a finalized
+        // disposition that still owes money is still inside the window this
+        // job watches - it was silent from `dispositionSentAt` onward, which
+        // is the moment the obligation to pay actually begins. Keyed on
+        // `refundPaidOn`, exactly as the liability itself is (R-170's schema
+        // comment): the money leaving is the only thing that closes it.
+        OR: [{ dispositionSentAt: null }, { refundPaidOn: null, refundedCents: { gt: 0 } }],
+      },
       select: {
         id: true,
         leaseId: true,
         dispositionDueOn: true,
+        dispositionSentAt: true,
         lease: { select: { moveOutAt: true, unit: { select: { name: true } } } },
       },
     })
@@ -50,6 +62,7 @@ SCHEDULED_JOBS.push({
       if (!overdue && !halfway) continue
 
       const taskType = overdue ? 'deposit.disposition_overdue' : 'deposit.disposition_halfway'
+      const owed = deposit.dispositionSentAt ? 'Deposit refund' : 'Deposit disposition'
       // The same "checked directly, not relying on createTask's daily key"
       // guard renewal-window-job.ts uses - this job can see the SAME
       // deposit as halfway (or overdue) for many days running, and must
@@ -67,9 +80,12 @@ SCHEDULED_JOBS.push({
         subjectId: deposit.leaseId,
         businessDate: today,
         priority: overdue ? 'URGENT' : 'ROUTINE',
+        // Same clock, different outstanding act: before the letter the
+        // owner still owes an itemization, after it they owe the cheque.
+        // Naming the wrong one is how a queue stops being read.
         title: overdue
-          ? `Deposit disposition OVERDUE (was due ${due}) — ${deposit.lease.unit.name}`
-          : `Deposit disposition halfway to its deadline (due ${due}) — ${deposit.lease.unit.name}`,
+          ? `${owed} OVERDUE (was due ${due}) — ${deposit.lease.unit.name}`
+          : `${owed} halfway to its deadline (due ${due}) — ${deposit.lease.unit.name}`,
       })
       flagged++
     }

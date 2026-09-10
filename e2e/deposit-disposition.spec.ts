@@ -5,6 +5,7 @@ import {
   mintRecoveryCodes,
   sealSecret,
 } from '@rental/core/auth'
+import { friendlyBusinessDate, utcToBusinessDate } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
 import { Secret, TOTP } from 'otpauth'
@@ -78,7 +79,17 @@ async function seedEndedLeaseWithDeposit(propertyId: string, unitId: string) {
   leaseIds.push(lease.id)
   await prisma.leaseTenant.create({ data: { leaseId: lease.id, tenantId: tenant.id, isPrimary: true } })
   await prisma.deposit.create({
-    data: { propertyId, leaseId: lease.id, heldCents: HELD_CENTS, receivedAt: new Date('2025-06-01') },
+    data: {
+      propertyId,
+      leaseId: lease.id,
+      heldCents: HELD_CENTS,
+      receivedAt: new Date('2025-06-01'),
+      // What `startDepositDisposition` stamps at move-out: Texas §92.103 is
+      // 30 calendar days from a 15 August Chicago move-out. The fixture
+      // carried no clock at all, which is why R-188's task inherited a
+      // fallback date rather than the deadline it is supposed to name.
+      dispositionDueOn: new Date('2026-09-14T00:00:00Z'),
+    },
   })
   return { lease, tenant }
 }
@@ -216,6 +227,12 @@ test('a PM itemizes deductions, sees the unsupported flag and depreciation guida
   expect(refundTask.status).toBe('OPEN')
   expect(refundTask.priority).toBe('URGENT')
   expect(refundTask.title).toContain('$1,040.00')
+  // R-188: DATED WITH THE STATUTORY DEADLINE, not with the day the letter
+  // was finalized. Dated with today it reads Overdue from the following
+  // morning, which is how the one surface still watching the refund became
+  // one nobody reads.
+  expect(refundTask.businessDate).toEqual(deposit.dispositionDueOn)
+  expect(refundTask.title).toContain(friendlyBusinessDate(utcToBusinessDate(deposit.dispositionDueOn!)))
 
   // The task is not a dead end - it reaches the screen that can discharge it.
   await page.goto(`/tasks/${refundTask.id}`)

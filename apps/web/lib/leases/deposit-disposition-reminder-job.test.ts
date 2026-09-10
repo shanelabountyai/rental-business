@@ -122,9 +122,48 @@ describe('the deposit-disposition reminder job', () => {
     expect(task?.priority).toBe('URGENT')
   })
 
-  it('never flags a disposition already finalized', async () => {
+  it('never flags a finalized disposition that owes nothing back', async () => {
     const { lease, deposit } = await seedDeposit('d', '2026-08-01', '2026-08-31')
     await prisma.deposit.update({ where: { id: deposit.id }, data: { dispositionSentAt: new Date() } })
+    await runAt('2026-09-05T12:00:00Z')
+
+    const task = await prisma.task.findFirst({ where: { subjectId: lease.id } })
+    expect(task).toBeNull()
+  })
+
+  // R-188. The three below are the item: §92.103 runs the itemization and
+  // the refund on ONE clock, so the letter going out cannot be what stops
+  // this job. Each guards one term of the job's `where`, proven by removing
+  // it: drop the whole `refundPaidOn` branch and the first goes red, drop
+  // just `refundPaidOn: null` from it and the second does.
+  it('keeps watching a finalized disposition whose refund is still unpaid', async () => {
+    const { lease, deposit } = await seedDeposit('f', '2026-08-01', '2026-08-31')
+    await prisma.deposit.update({
+      where: { id: deposit.id },
+      data: { dispositionSentAt: new Date('2026-08-05T12:00:00Z'), refundedCents: 104_000 },
+    })
+    await runAt('2026-09-05T12:00:00Z')
+
+    const task = await prisma.task.findFirst({
+      where: { subjectId: lease.id, type: 'deposit.disposition_overdue' },
+    })
+    expect(task?.priority).toBe('URGENT')
+    // The outstanding act is the cheque now, not the letter - a row saying
+    // the disposition is overdue after it was sent is one nobody acts on.
+    expect(task?.title).toContain('Deposit refund OVERDUE')
+    expect(task?.title).toContain('2026-08-31')
+  })
+
+  it('stops once the refund has actually been paid', async () => {
+    const { lease, deposit } = await seedDeposit('g', '2026-08-01', '2026-08-31')
+    await prisma.deposit.update({
+      where: { id: deposit.id },
+      data: {
+        dispositionSentAt: new Date('2026-08-05T12:00:00Z'),
+        refundedCents: 104_000,
+        refundPaidOn: new Date('2026-08-20T00:00:00Z'),
+      },
+    })
     await runAt('2026-09-05T12:00:00Z')
 
     const task = await prisma.task.findFirst({ where: { subjectId: lease.id } })

@@ -10,7 +10,12 @@ import {
   validateDepositRefund,
 } from '@rental/core/ledger'
 import { formatCents } from '@rental/core/money'
-import { businessDate, businessDateToUtc, friendlyBusinessDate } from '@rental/core/scheduling'
+import {
+  businessDate,
+  businessDateToUtc,
+  friendlyBusinessDate,
+  utcToBusinessDate,
+} from '@rental/core/scheduling'
 import { prisma, type PaymentChannel } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
@@ -207,6 +212,7 @@ export async function finalizeDisposition(
       propertyId: true,
       leaseId: true,
       heldCents: true,
+      dispositionDueOn: true,
       dispositionSentAt: true,
       forwardingAddress: true,
       property: { select: { id: true, legalEntityId: true, addressLine1: true, timezone: true } },
@@ -307,16 +313,27 @@ export async function finalizeDisposition(
     // once), and if it somehow did, the whole finalization failing is the
     // safe direction: no letter, nothing to reconcile.
     if (totals.refundedCents > 0) {
+      // R-188: DATED WITH THE DEADLINE, NOT WITH TODAY. This was
+      // `businessDate(new Date(), ...)` - the day the letter was finalized -
+      // so the one URGENT row left watching the refund read *Overdue* from
+      // the following morning and never once named the statutory date. A
+      // queue whose urgent item is overdue on day two is a queue nobody
+      // reads on day twenty. `dispositionDueOn` is a `@db.Date` and takes
+      // `utcToBusinessDate`, never a zone (D-3); the fallback is only
+      // reachable for a deposit whose clock was never started.
+      const refundDueOn = deposit.dispositionDueOn
+        ? utcToBusinessDate(deposit.dispositionDueOn)
+        : businessDate(new Date(), deposit.property.timezone)
       await createTask(tx, {
         propertyId: deposit.propertyId,
         type: 'deposit_refund_due',
         subjectType: 'Deposit',
         subjectId: deposit.id,
-        businessDate: businessDate(new Date(), deposit.property.timezone),
+        businessDate: refundDueOn,
         // A statutory deadline the owner has already passed the decision
         // point on. Late here is treble damages in Texas, not a late fee.
         priority: 'URGENT',
-        title: `Pay ${tenantName} the ${formatCents(totals.refundedCents)} deposit refund`,
+        title: `Pay ${tenantName} the ${formatCents(totals.refundedCents)} deposit refund by ${friendlyBusinessDate(refundDueOn)}`,
       })
     }
     return created

@@ -10461,3 +10461,86 @@ Both new database tests and six of the nine new unit assertions were **proven
 against the reverted fix** (D-197): removing only the `CHARGE` term turns both
 sweep tests red. CI on the previous item was **green** — run `34391093789` on
 `34a4d8b`, checked with `gh run list`, not inherited.
+
+## R-188 — the letter went out and the refund deadline stopped being watched
+
+Commit `PENDING`.
+
+**What it built.** Both surfaces that watch `Deposit.dispositionDueOn` now key
+on the money rather than on the letter. The nightly job
+([apps/web/lib/leases/deposit-disposition-reminder-job.ts](apps/web/lib/leases/deposit-disposition-reminder-job.ts))
+and the 60-day calendar (`upcomingCriticalDates` in
+[apps/web/lib/reports/queries.ts](apps/web/lib/reports/queries.ts)) both take
+`OR: [{ dispositionSentAt: null }, { refundPaidOn: null, refundedCents: { gt: 0 } }]`
+where each previously took `dispositionSentAt: null` alone. Their labels branch
+on the same fact: *Deposit refund* once the letter is out, *Deposit disposition*
+before it. And `finalizeDisposition`
+([apps/web/lib/deposits/actions.ts](apps/web/lib/deposits/actions.ts)) dates the
+`deposit_refund_due` Task with `dispositionDueOn` — read with
+`utcToBusinessDate`, since it is a `@db.Date` (D-3) — and names that date in the
+title, where it previously used `businessDate(new Date(), …)` and named no date
+at all.
+
+**What it decided.** Recorded as **D-203**.
+
+- **The deadline belongs to the money, and `refundPaidOn` is already the test
+  the liability uses.** R-170's own schema comment settled this for the rent
+  roll and the year-end packet — a letter promising $1,040 next to a report
+  reading the deposit as settled is worse evidence than sending nothing — and
+  the two deadline surfaces simply had not been brought into line with it.
+  Texas §92.103 runs the itemization and the refund on **one** clock, so
+  finalizing the letter does not stop that clock; it changes which act is
+  outstanding.
+- **No new task type and no new `CriticalDateKind`.** One statutory deadline is
+  one row (D-9), and adding a value to either vocabulary is the enum trap
+  CLAUDE.md names — every list that reads it would have to be swept. The label
+  says which half is still owed instead, which is the honest wording either way:
+  *Deposit disposition OVERDUE* on a disposition that was sent three weeks ago
+  is a row nobody acts on.
+- **The Task's date was the worse half of the defect.** Dated with the day the
+  letter was finalized, the one URGENT row still watching the refund read
+  *Overdue* from the following morning and never once named the statutory date.
+  A queue whose urgent item is overdue on day two is a queue nobody reads on day
+  twenty.
+- **The Needs-counsel question did not gate the build**, and no owner question
+  was asked. Whether a timely itemization with a late refund is a partial
+  defence is a question for counsel; the review's own *"either way the operator
+  should be able to see the date"* is the whole of what the code does, and the
+  answer changes no branch. It stays open, named in D-203.
+
+**What it left behind.**
+
+- **The review's claim was verified before building and was correct** (R-150's
+  rule). `deposit-disposition-reminder-job.ts:27`, `reports/queries.ts:239` and
+  `deposits/actions.ts:315` each said what finding 2 said they said.
+- **Found along the way: `deposit-disposition.spec.ts`'s deposit fixture carried
+  no `dispositionDueOn` at all**, so the new Task took the fallback branch and
+  the first run of the new assertion failed with `Expected: null`. The real flow
+  (`startDepositDisposition`) stamps it at move-out; the fixture now seeds
+  2026-09-14, which is Texas's 30 calendar days from its 15 August Chicago
+  move-out. Worth knowing because the fixture had a `moveOutAt` and looked
+  complete.
+- **Every other `dispositionSentAt` reader was checked and is correct.**
+  `rent-roll.ts`, `tax/packet.ts`, `properties/handoff-file.ts` and
+  `computeDisposition` all read it for liability accounting and all already key
+  the release on `refundPaidOn`. The two deadline surfaces were the only two
+  wrong, so the finding's diagnosis was complete rather than an instance of a
+  wider class.
+- **The reminder job's already-flagged guard keys on `leaseId`, not on the
+  deposit.** A lease holding two deposits (SECURITY and PET) flags once for
+  both. Pre-existing, unrelated to this change, and not touched.
+- **No `mobile-chrome`-only risk here** — nothing rendered a new control and the
+  only new value on a page is a unit name that was already there. Both specs
+  were run against both projects anyway.
+
+**The gate.** `lint` 0 errors (16 pre-existing warnings), `typecheck` clean,
+`npm test` **3076 passed / 4 skipped across 229 files, 0 failed**.
+`e2e/reports.spec.ts` + `e2e/deposit-disposition.spec.ts` **4/4** across
+`desktop-chrome` and `mobile-chrome` (2 tests × 2 projects, reconciled against
+the run's own total). Both new unit tests were **proven against the reverted
+fix** (D-197), and each guards a different term: dropping the whole
+`refundPaidOn` branch turns *"keeps watching a finalized disposition whose refund
+is still unpaid"* red, and dropping just `refundPaidOn: null` from it turns
+*"stops once the refund has actually been paid"* red. CI on the previous item was
+**green** — run `34414628858` on `5d5ce5e`, checked with `gh run list`, not
+inherited.
