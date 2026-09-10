@@ -10464,7 +10464,7 @@ sweep tests red. CI on the previous item was **green** — run `34391093789` on
 
 ## R-188 — the letter went out and the refund deadline stopped being watched
 
-Commit `PENDING`.
+Commit `f503a14`.
 
 **What it built.** Both surfaces that watch `Deposit.dispositionDueOn` now key
 on the money rather than on the letter. The nightly job
