@@ -13,6 +13,7 @@ import { planTurn, TURN_STALL_DAYS } from '@rental/core/turnover'
 import { prisma } from '@rental/db'
 import { rulesFor } from '@/lib/jurisdiction/queries.ts'
 import { SCHEDULED_JOBS } from '@/lib/jobs/runner.ts'
+import { alreadyFlagged } from '@/lib/tasks/already-flagged.ts'
 import { createTask } from '@/lib/tasks/create.ts'
 
 // The one stall sweep for the five case types review §7 found with none
@@ -22,17 +23,17 @@ import { createTask } from '@/lib/tasks/create.ts'
 // R-178 (review §10) adds a SIXTH: a make-ready with nothing moving on it.
 //
 // All six raise the SAME `Task` queue - D-9 forbids a second one - and all
-// six are flagged ONCE, not every day the condition holds: the check below
-// is keyed on (type, subjectId) with no `businessDate` in it, the same shape
-// compliance/alert-job.ts already uses, so a case stalled for a month gets
-// exactly one Task, not thirty.
+// six are flagged ONCE while the flag is open, not every day the condition
+// holds: `alreadyFlagged` (lib/tasks/already-flagged.ts) is keyed on
+// (type, subjectId) with no `businessDate` in it, so a case stalled for a
+// month gets exactly one Task, not thirty.
+//
+// R-191 replaced this file's own copy of that check, which had NO STATUS
+// FILTER - a Task somebody ticked off still matched, so the condition could
+// never raise a second one for the life of the case. R-158's "one Task, not
+// thirty" is intact; what it never meant was "one Task, ever".
 
 const LOCAL_HOUR = 7
-
-async function alreadyFlagged(type: string, subjectId: string): Promise<boolean> {
-  const existing = await prisma.task.findFirst({ where: { type, subjectId }, select: { id: true } })
-  return existing != null
-}
 
 // ---------------------------------------------------------------------------
 // 1. Accommodation / ESA response clock (RISK-13, D-89) - ESCALATES
@@ -53,7 +54,7 @@ async function checkAccommodations(propertyId: string, today: BusinessDate) {
   for (const request of requests) {
     const clock = responseClock(utcToBusinessDate(request.receivedOn), null, today)
     if (!clock.overdue) continue
-    if (await alreadyFlagged('accommodation.response_overdue', request.id)) continue
+    if (await alreadyFlagged('accommodation.response_overdue', request.id, today)) continue
     await createTask(prisma, {
       propertyId,
       type: 'accommodation.response_overdue',
@@ -96,7 +97,7 @@ async function checkAbandonment(propertyId: string, today: BusinessDate, timezon
       : businessDate(abandonmentCase.openedAt, timezone)
     const quietDays = businessDaysBetween(lastActivity, today)
     if (quietDays < ABANDONMENT_QUIET_STALL_DAYS) continue
-    if (await alreadyFlagged('abandonment.case_stalled', abandonmentCase.id)) continue
+    if (await alreadyFlagged('abandonment.case_stalled', abandonmentCase.id, today)) continue
     await createTask(prisma, {
       propertyId,
       type: 'abandonment.case_stalled',
@@ -156,7 +157,7 @@ async function checkViolations(
   for (const violationCase of withUnserved) {
     const generatedOn = businessDate(violationCase.notices[0]!.generatedAt, property.timezone)
     if (businessDaysBetween(generatedOn, today) < stallDays) continue
-    if (await alreadyFlagged('violation.cure_unserved_stalled', violationCase.id)) continue
+    if (await alreadyFlagged('violation.cure_unserved_stalled', violationCase.id, today)) continue
     await createTask(prisma, {
       propertyId,
       type: 'violation.cure_unserved_stalled',
@@ -188,7 +189,7 @@ async function checkInsuranceClaims(propertyId: string, today: BusinessDate, now
   for (const claim of claims) {
     const clock = mitigationClock(claim.incidentAt, null, claim.cause, now)
     if (!clock.urgent) continue
-    if (await alreadyFlagged('insurance_claim.mitigation_stalled', claim.id)) continue
+    if (await alreadyFlagged('insurance_claim.mitigation_stalled', claim.id, today)) continue
     await createTask(prisma, {
       propertyId,
       type: 'insurance_claim.mitigation_stalled',
@@ -235,7 +236,7 @@ async function checkPartyChanges(propertyId: string, today: BusinessDate, timezo
     if (!unscreened) continue
     const createdOn = businessDate(change.createdAt, timezone)
     if (businessDaysBetween(createdOn, today) < PARTY_CHANGE_STALL_DAYS) continue
-    if (await alreadyFlagged('party_change.unsigned_unscreened_stalled', change.id)) continue
+    if (await alreadyFlagged('party_change.unsigned_unscreened_stalled', change.id, today)) continue
     await createTask(prisma, {
       propertyId,
       type: 'party_change.unsigned_unscreened_stalled',
@@ -290,7 +291,7 @@ async function checkTurnovers(propertyId: string, today: BusinessDate, timezone:
     )
     const quietDays = businessDaysBetween(businessDate(lastMoved, timezone), today)
     if (quietDays < TURN_STALL_DAYS) continue
-    if (await alreadyFlagged('turnover.stalled', project.id)) continue
+    if (await alreadyFlagged('turnover.stalled', project.id, today)) continue
 
     const plan = planTurn({
       moveOutDate: businessDate(project.lease.moveOutAt, timezone),

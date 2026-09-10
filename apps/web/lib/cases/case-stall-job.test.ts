@@ -175,6 +175,16 @@ async function run() {
   return runDueJobs(new Date(NOW), { propertyIds: [propertyId] })
 }
 
+/// A later property-local noon, so a second `run` is a genuinely different
+/// business date rather than a `JobRun` the runner skips as already done.
+function noonOn(date: string) {
+  return new Date(`${date}T12:00:00Z`)
+}
+
+async function runOn(date: string) {
+  return runDueJobs(noonOn(date), { propertyIds: [propertyId] })
+}
+
 describe('accommodation response clock', () => {
   it('escalates to EMERGENCY once the ten-day FHA clock is overdue and undecided', async () => {
     const overdue = await prisma.accommodationRequest.create({
@@ -449,5 +459,72 @@ describe('turn stalled with nothing moving', () => {
     expect(
       await prisma.task.findFirst({ where: { type: 'turnover.stalled', subjectId: finished.id } }),
     ).toBeNull()
+  })
+})
+
+// R-191. `alreadyFlagged` had no status filter, so a Task somebody ticked
+// off still matched and the condition could never raise a second one - for
+// `accommodation.response_overdue` that meant one Task marked done without
+// deciding the request silenced an EMERGENCY escalation for the life of that
+// request (D-89: unanswered reads as denied).
+//
+// Proven by reverting: drop the `OR` from lib/tasks/already-flagged.ts and
+// the FIRST of the three below goes red, alone. The other two are R-158's
+// rule and stay green either way - they are here so a future widening of the
+// cool-off cannot quietly turn "one Task, not thirty" back on.
+describe('the already-flagged guard', () => {
+  async function overdueRequest() {
+    const request = await prisma.accommodationRequest.create({
+      data: {
+        propertyId,
+        leaseId,
+        kind: 'ASSISTANCE_ANIMAL',
+        requestText: 'A cat, for anxiety.',
+        receivedOn: new Date('2026-08-20'),
+      },
+    })
+    accommodationIds.push(request.id)
+    return request
+  }
+
+  const flagsFor = (subjectId: string) =>
+    prisma.task.findMany({
+      where: { type: 'accommodation.response_overdue', subjectId },
+      orderBy: { businessDate: 'asc' },
+    })
+
+  it('raises a second flag once a closed one is past its cool-off', async () => {
+    const request = await overdueRequest()
+    await run() // 2026-09-01
+    const [first] = await flagsFor(request.id)
+    // Ticked off without deciding the request - the case the old guard
+    // could not see.
+    await prisma.task.update({ where: { id: first!.id }, data: { status: 'DONE' } })
+
+    await runOn('2026-09-08') // first flag's business date + TASK_REFLAG_COOL_OFF_DAYS
+
+    const flags = await flagsFor(request.id)
+    expect(flags).toHaveLength(2)
+    expect(flags[1]!.priority).toBe('EMERGENCY')
+  })
+
+  it('stays quiet while the flag is still open, however long the case stalls', async () => {
+    const request = await overdueRequest()
+    await run()
+    await runOn('2026-09-08')
+    await runOn('2026-09-30')
+
+    expect(await flagsFor(request.id)).toHaveLength(1)
+  })
+
+  it('stays quiet on a closed flag until the cool-off has run out', async () => {
+    const request = await overdueRequest()
+    await run()
+    const [first] = await flagsFor(request.id)
+    await prisma.task.update({ where: { id: first!.id }, data: { status: 'CANCELED' } })
+
+    await runOn('2026-09-05') // inside the seven days
+
+    expect(await flagsFor(request.id)).toHaveLength(1)
   })
 })

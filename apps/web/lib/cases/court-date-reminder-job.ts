@@ -5,28 +5,30 @@ import { businessDate, businessDaysBetween, friendlyTimestamp } from '@rental/co
 import { prisma } from '@rental/db'
 import { affidavitLookupFor } from '@/lib/scra/queries.ts'
 import { SCHEDULED_JOBS } from '@/lib/jobs/runner.ts'
+import { alreadyFlagged } from '@/lib/tasks/already-flagged.ts'
 import { createTask } from '@/lib/tasks/create.ts'
 
 // Court-date reminders (RISK-09, review §9).
 //
 // `EvictionCase.courtDate` is stored, displayed, and until now never
 // scheduled against - a missed hearing loses by default at the highest
-// cost-per-occurrence in the product. Three Tasks, each flagged once
-// (the same (type, subjectId) guard case-stall-job.ts and
-// deposit-disposition-reminder-job.ts already use, because `createTask`'s
-// own uniqueness is per businessDate and this job runs daily against the
-// same still-upcoming hearing): seven days out, one day out, and - inside
-// that same seven-day window - a warning when the DMDC search on file is
-// stale, turning R-085's render-only `staleLookupWarning` into something
-// that actually reaches someone before the hearing rather than only a
-// staff member who happens to open the case page.
+// cost-per-occurrence in the product. Three Tasks, each flagged once while
+// its flag is open (the shared `alreadyFlagged` guard case-stall-job.ts and
+// deposit-disposition-reminder-job.ts also use, because `createTask`'s own
+// uniqueness is per businessDate and this job runs daily against the same
+// still-upcoming hearing): seven days out, one day out, and - inside that
+// same seven-day window - a warning when the DMDC search on file is stale,
+// turning R-085's render-only `staleLookupWarning` into something that
+// actually reaches someone before the hearing rather than only a staff
+// member who happens to open the case page.
+//
+// R-191 swapped this file's own copy of that guard for the shared one. The
+// T-7 and T-1 rungs fire on a single `daysUntil` value, so the cool-off can
+// never re-fire them for one hearing - what the status filter buys here is a
+// RESCHEDULED hearing, which used to inherit the old date's ticked-off Task
+// and pass silently.
 
 const LOCAL_HOUR = 7
-
-async function alreadyFlagged(type: string, subjectId: string): Promise<boolean> {
-  const existing = await prisma.task.findFirst({ where: { type, subjectId }, select: { id: true } })
-  return existing != null
-}
 
 SCHEDULED_JOBS.push({
   type: 'evictions.court_date_reminders',
@@ -45,7 +47,7 @@ SCHEDULED_JOBS.push({
       const daysUntil = businessDaysBetween(today, hearingDay)
       const when = friendlyTimestamp(evictionCase.courtDate!, timezone)
 
-      if (daysUntil === 7 && !(await alreadyFlagged('eviction.court_date_t7', evictionCase.id))) {
+      if (daysUntil === 7 && !(await alreadyFlagged('eviction.court_date_t7', evictionCase.id, today))) {
         await createTask(prisma, {
           propertyId,
           type: 'eviction.court_date_t7',
@@ -58,7 +60,7 @@ SCHEDULED_JOBS.push({
         flagged++
       }
 
-      if (daysUntil === 1 && !(await alreadyFlagged('eviction.court_date_t1', evictionCase.id))) {
+      if (daysUntil === 1 && !(await alreadyFlagged('eviction.court_date_t1', evictionCase.id, today))) {
         await createTask(prisma, {
           propertyId,
           type: 'eviction.court_date_t1',
@@ -71,7 +73,7 @@ SCHEDULED_JOBS.push({
         flagged++
       }
 
-      if (daysUntil >= 0 && daysUntil <= 7 && !(await alreadyFlagged('eviction.scra_search_stale', evictionCase.id))) {
+      if (daysUntil >= 0 && daysUntil <= 7 && !(await alreadyFlagged('eviction.scra_search_stale', evictionCase.id, today))) {
         const lookup = await affidavitLookupFor(evictionCase.leaseId)
         const staleDays = lookup ? businessDaysBetween(lookup.searchedOn, today) : null
         if (staleDays !== null && staleDays > LOOKUP_STALE_AFTER_DAYS) {

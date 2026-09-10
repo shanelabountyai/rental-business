@@ -2,6 +2,7 @@ import 'server-only'
 
 import { businessDaysBetween, utcToBusinessDate } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
+import { alreadyFlagged } from '@/lib/tasks/already-flagged.ts'
 import { createTask } from '@/lib/tasks/create.ts'
 import { SCHEDULED_JOBS } from '@/lib/jobs/runner.ts'
 
@@ -51,11 +52,9 @@ SCHEDULED_JOBS.push({
       const type = daysUntil < 0 ? 'renter_insurance_lapsed' : daysUntil <= EXPIRING_SOON_DAYS ? 'renter_insurance_expiring' : null
       if (!type) continue
 
-      const alreadyFlagged = await prisma.task.findFirst({
-        where: { type, subjectId: policy.id },
-        select: { id: true },
-      })
-      if (alreadyFlagged) continue
+      // R-191's shared guard: an OPEN flag blocks a second one at any age,
+      // a closed one only until its cool-off runs out.
+      if (await alreadyFlagged(type, policy.id, businessDate)) continue
 
       await createTask(prisma, {
         propertyId,

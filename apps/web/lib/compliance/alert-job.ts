@@ -2,6 +2,7 @@ import 'server-only'
 
 import { addBusinessDays, friendlyBusinessDate, utcToBusinessDate } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
+import { alreadyFlagged } from '@/lib/tasks/already-flagged.ts'
 import { createTask } from '@/lib/tasks/create.ts'
 import { SCHEDULED_JOBS } from '@/lib/jobs/runner.ts'
 
@@ -59,11 +60,12 @@ SCHEDULED_JOBS.push({
       if (!overdue && !inLeadWindow) continue
 
       const taskType = overdue ? 'compliance.item_overdue' : 'compliance.item_due_soon'
-      const alreadyFlagged = await prisma.task.findFirst({
-        where: { type: taskType, subjectId: item.id },
-        select: { id: true },
-      })
-      if (alreadyFlagged) continue
+      // R-191: the shared guard, which excludes a CLOSED Task past its
+      // cool-off. This file's own copy had no status filter, and a RECURRING
+      // item is where that bit hardest - `dueOn` advances on completion
+      // (compliance/actions.ts), so next year's inspection was flagged once
+      // in its whole life and then never again.
+      if (await alreadyFlagged(taskType, item.id, today)) continue
 
       await createTask(prisma, {
         propertyId,

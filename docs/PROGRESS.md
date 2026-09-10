@@ -10781,3 +10781,96 @@ applied and nothing else running, was 21.9s and green. `pg_stat_activity` showed
 six connections throughout, so no sibling project was involved. CI on the
 previous item was **green** — run `34490180475` on `517229a`, checked with
 `gh run list`, not inherited. **This item's own run is green too** — `34499016142` on `f0a0c4b`.
+
+## R-191 — a closed flag no longer silences the condition that raised it
+
+Commit `SHA-PENDING`.
+
+**The claim was verified before anything was built, and it was correct — and
+too narrow.** `alreadyFlagged` in
+[apps/web/lib/cases/case-stall-job.ts](apps/web/lib/cases/case-stall-job.ts)
+was `findFirst({ where: { type, subjectId } })` with no status filter, exactly
+as the row said. A grep for the shape found **the same unfiltered guard written
+out six times**: a second private `alreadyFlagged` in
+`court-date-reminder-job.ts`, and inline copies in `compliance/alert-job.ts`,
+`leases/renewal-window-job.ts`, `leases/renter-insurance-job.ts` and
+`leases/deposit-disposition-reminder-job.ts`. Every one of them treated a
+ticked-off Task as proof the condition had been dealt with.
+
+**What it built.** One guard,
+[apps/web/lib/tasks/already-flagged.ts](apps/web/lib/tasks/already-flagged.ts),
+next to `createTask`: `alreadyFlagged(type, subjectId, today)` is true while an
+OPEN, IN_PROGRESS or BLOCKED Task exists at any age, or while a DONE/CANCELED
+one's own business date is inside `TASK_REFLAG_COOL_OFF_DAYS` (7). All six job
+files call it; the two private copies are deleted. `createTask`'s
+`(type, subjectId, businessDate)` index still stops a double-fire inside one
+day — this is what stops a daily nag across a long window, and nothing else.
+
+Two further defects in `deposit-disposition-reminder-job.ts`, found reading it:
+
+- **R-188's recorded leftover.** The Task was subjected on `deposit.leaseId`, so
+  a lease holding a SECURITY and a PET deposit flagged once for both and the
+  second deposit's statutory clock had no row anywhere. It is now subjected on
+  the deposit (`subjectType: 'Deposit'`), which is what `finalizeDisposition`'s
+  `deposit_refund_due` Task already used (D-174). Nothing outside the job's own
+  test read these Tasks by subject.
+- **A D-153 date.** Both titles interpolated `due`, a `BusinessDate`, so the
+  urgent queue read *"Deposit refund OVERDUE (was due 2026-08-31)"*. Now
+  `friendlyBusinessDate(due)`. R-188's own test asserted the raw form, and moves
+  to `'31 Aug 2026'`.
+
+Five new tests, each proven against a revert:
+
+- `case-stall-job.test.ts` — a DONE `accommodation.response_overdue` raises a
+  second EMERGENCY flag at its business date + 7, going through the real
+  `runDueJobs` and so through three catch-up days on the way (each correctly
+  suppressed). **Dropping the `OR` from the guard turns exactly this one red.**
+  Two siblings — an open flag stays single to 30 Sept, a CANCELED one stays
+  single inside the cool-off — are R-158's rule and green either way, kept so a
+  widened cool-off cannot quietly undo "one Task, not thirty".
+- `compliance/alert-job.test.ts` — a recurring item completed and rolled
+  forward a year is flagged again on next year's deadline. **Red alone** with
+  the `OR` dropped.
+- `deposit-disposition-reminder-job.test.ts` — two deposits on one lease each
+  get an overdue Task. With the subject reverted to `leaseId` the file goes
+  five red, not one, because every lookup in it moved to the deposit; this test
+  is the one that cannot pass under the old shape by any lookup, since it needs
+  two rows where the old job wrote one.
+
+**What it decided.** One number for every caller: a week, measured from the
+closed flag's own business date (D-206). Deliberately **not a parameter per
+job** and not configurable — D-201's do-not-build list refuses a settings screen
+for thresholds of exactly this kind, and the cool-off only ever applies after a
+human closed the Task without the condition changing. The guard is in
+`lib/tasks`, not `lib/cases`, because four of its six callers are not cases.
+**No new queue, no new status, no new Task type** (D-9).
+
+**What it left behind.**
+
+- **The cool-off is untested at other values and on four of the six jobs.** The
+  guard is tested through two of them (the stall sweep and compliance); the
+  deposit, renewal, renter-insurance and court-date jobs share the code but have
+  no re-raise test of their own. Their existing "idempotent" tests still pass.
+- **Weekly re-raise is now possible where it was impossible**, and on
+  `lease_renewal` that can be up to ~17 Tasks across a 120-day window if
+  somebody keeps closing them unrenewed. That is the intended reading of a
+  closed-but-unresolved flag, not an accident, but nobody has seen it in a queue.
+- **Past silenced conditions are not swept.** A Task closed before this item
+  re-raises on the next run past its cool-off — which, for anything closed more
+  than a week ago, is the first run after deploy. That is a one-time burst of
+  genuinely outstanding flags, not a backfill (nothing is written for past
+  days), but it will look like one in the queue.
+- **The court-date T-7/T-1 rungs fire on one `daysUntil` value**, so the
+  cool-off can never re-fire them for a hearing; what the status filter buys
+  there is a rescheduled hearing that used to inherit the old date's ticked-off
+  Task. Untested.
+- **No `cases.stalled` Task links to its subject** — R-178's leftover, still
+  unowned.
+
+**The gate.** `lint` 0 errors (16 pre-existing warnings), `typecheck` clean;
+`npm test` **3096 passed / 4 skipped = 3100**, reconciled against the run's own
+total (3091 before this item, plus the five above), run on its own with nothing
+alongside it in 21.9s. No UI, no `'use server'` module and no e2e-reachable
+behaviour changed — no spec, page or seed reads these Tasks by subject
+(`lease_renewal`'s dashboard link and demo seed are keyed by type, whose subject
+did not move) — so the e2e sweep is CI's. CI: CI-PENDING.

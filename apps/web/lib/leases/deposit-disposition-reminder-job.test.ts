@@ -40,8 +40,8 @@ beforeAll(async () => {
 })
 
 afterEach(async () => {
+  await prisma.task.deleteMany({ where: { subjectId: { in: [...depositIds, ...leaseIds] } } })
   await prisma.deposit.deleteMany({ where: { id: { in: depositIds } } })
-  await prisma.task.deleteMany({ where: { subjectId: { in: leaseIds } } })
   await prisma.lease.deleteMany({ where: { id: { in: leaseIds } } })
   await prisma.tenant.deleteMany({ where: { id: { in: tenantIds } } })
   await prisma.unit.deleteMany({ where: { id: { in: unitIds } } })
@@ -91,43 +91,43 @@ async function runAt(isoInstant: string) {
 describe('the deposit-disposition reminder job', () => {
   it('flags halfway once the window is half elapsed', async () => {
     // 30-day window (Aug 1 -> Aug 31), 16 days elapsed = past halfway.
-    const { lease } = await seedDeposit('a', '2026-08-01', '2026-08-31')
+    const { deposit } = await seedDeposit('a', '2026-08-01', '2026-08-31')
     await runAt('2026-08-17T12:00:00Z')
 
     const task = await prisma.task.findFirst({
-      where: { subjectId: lease.id, type: 'deposit.disposition_halfway' },
+      where: { subjectId: deposit.id, type: 'deposit.disposition_halfway' },
     })
     expect(task?.priority).toBe('ROUTINE')
     const overdue = await prisma.task.findFirst({
-      where: { subjectId: lease.id, type: 'deposit.disposition_overdue' },
+      where: { subjectId: deposit.id, type: 'deposit.disposition_overdue' },
     })
     expect(overdue).toBeNull()
   })
 
   it('leaves an early disposition alone, well before halfway', async () => {
-    const { lease } = await seedDeposit('b', '2026-08-01', '2026-08-31')
+    const { deposit } = await seedDeposit('b', '2026-08-01', '2026-08-31')
     await runAt('2026-08-03T12:00:00Z')
 
-    const task = await prisma.task.findFirst({ where: { subjectId: lease.id } })
+    const task = await prisma.task.findFirst({ where: { subjectId: deposit.id } })
     expect(task).toBeNull()
   })
 
   it('flags overdue once the deadline has passed', async () => {
-    const { lease } = await seedDeposit('c', '2026-08-01', '2026-08-31')
+    const { deposit } = await seedDeposit('c', '2026-08-01', '2026-08-31')
     await runAt('2026-09-05T12:00:00Z')
 
     const task = await prisma.task.findFirst({
-      where: { subjectId: lease.id, type: 'deposit.disposition_overdue' },
+      where: { subjectId: deposit.id, type: 'deposit.disposition_overdue' },
     })
     expect(task?.priority).toBe('URGENT')
   })
 
   it('never flags a finalized disposition that owes nothing back', async () => {
-    const { lease, deposit } = await seedDeposit('d', '2026-08-01', '2026-08-31')
+    const { deposit } = await seedDeposit('d', '2026-08-01', '2026-08-31')
     await prisma.deposit.update({ where: { id: deposit.id }, data: { dispositionSentAt: new Date() } })
     await runAt('2026-09-05T12:00:00Z')
 
-    const task = await prisma.task.findFirst({ where: { subjectId: lease.id } })
+    const task = await prisma.task.findFirst({ where: { subjectId: deposit.id } })
     expect(task).toBeNull()
   })
 
@@ -137,7 +137,7 @@ describe('the deposit-disposition reminder job', () => {
   // it: drop the whole `refundPaidOn` branch and the first goes red, drop
   // just `refundPaidOn: null` from it and the second does.
   it('keeps watching a finalized disposition whose refund is still unpaid', async () => {
-    const { lease, deposit } = await seedDeposit('f', '2026-08-01', '2026-08-31')
+    const { deposit } = await seedDeposit('f', '2026-08-01', '2026-08-31')
     await prisma.deposit.update({
       where: { id: deposit.id },
       data: { dispositionSentAt: new Date('2026-08-05T12:00:00Z'), refundedCents: 104_000 },
@@ -145,17 +145,17 @@ describe('the deposit-disposition reminder job', () => {
     await runAt('2026-09-05T12:00:00Z')
 
     const task = await prisma.task.findFirst({
-      where: { subjectId: lease.id, type: 'deposit.disposition_overdue' },
+      where: { subjectId: deposit.id, type: 'deposit.disposition_overdue' },
     })
     expect(task?.priority).toBe('URGENT')
     // The outstanding act is the cheque now, not the letter - a row saying
     // the disposition is overdue after it was sent is one nobody acts on.
     expect(task?.title).toContain('Deposit refund OVERDUE')
-    expect(task?.title).toContain('2026-08-31')
+    expect(task?.title).toContain('31 Aug 2026')
   })
 
   it('stops once the refund has actually been paid', async () => {
-    const { lease, deposit } = await seedDeposit('g', '2026-08-01', '2026-08-31')
+    const { deposit } = await seedDeposit('g', '2026-08-01', '2026-08-31')
     await prisma.deposit.update({
       where: { id: deposit.id },
       data: {
@@ -166,18 +166,48 @@ describe('the deposit-disposition reminder job', () => {
     })
     await runAt('2026-09-05T12:00:00Z')
 
-    const task = await prisma.task.findFirst({ where: { subjectId: lease.id } })
+    const task = await prisma.task.findFirst({ where: { subjectId: deposit.id } })
     expect(task).toBeNull()
   })
 
+  // R-191, and R-188's own leftover. The guard keyed on `deposit.leaseId`,
+  // so the SECOND deposit on a lease was silently covered by the first one's
+  // Task and its statutory clock had no row anywhere. Revert `deposit.id`
+  // back to `deposit.leaseId` in the job and this is the one test that goes
+  // red - `type` is what makes the two deposits distinct here, since both
+  // share one lease and one deadline.
+  it('flags each deposit on a lease that holds two', async () => {
+    const { lease, deposit } = await seedDeposit('h', '2026-08-01', '2026-08-31')
+    const pet = await prisma.deposit.create({
+      data: {
+        propertyId,
+        leaseId: lease.id,
+        type: 'PET',
+        heldCents: 40_000,
+        dispositionDueOn: new Date('2026-08-31T00:00:00Z'),
+      },
+    })
+    depositIds.push(pet.id)
+
+    await runAt('2026-09-05T12:00:00Z')
+
+    for (const id of [deposit.id, pet.id]) {
+      const task = await prisma.task.findFirst({
+        where: { subjectId: id, type: 'deposit.disposition_overdue' },
+      })
+      expect(task?.subjectType).toBe('Deposit')
+      expect(task?.priority).toBe('URGENT')
+    }
+  })
+
   it('is idempotent - flags halfway only once across many days', async () => {
-    const { lease } = await seedDeposit('e', '2026-08-01', '2026-08-31')
+    const { deposit } = await seedDeposit('e', '2026-08-01', '2026-08-31')
     await runAt('2026-08-17T12:00:00Z')
     await runAt('2026-08-18T12:00:00Z')
     await runAt('2026-08-19T12:00:00Z')
 
     const tasks = await prisma.task.findMany({
-      where: { subjectId: lease.id, type: 'deposit.disposition_halfway' },
+      where: { subjectId: deposit.id, type: 'deposit.disposition_halfway' },
     })
     expect(tasks).toHaveLength(1)
   })

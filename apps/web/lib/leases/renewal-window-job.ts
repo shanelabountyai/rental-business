@@ -3,6 +3,7 @@ import 'server-only'
 import { daysUntilExpiry, expiryWindow } from '@rental/core/leases'
 import { utcToBusinessDate } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
+import { alreadyFlagged } from '@/lib/tasks/already-flagged.ts'
 import { createTask } from '@/lib/tasks/create.ts'
 import { SCHEDULED_JOBS } from '@/lib/jobs/runner.ts'
 
@@ -20,9 +21,11 @@ import { SCHEDULED_JOBS } from '@/lib/jobs/runner.ts'
 // (type, subjectId, businessDate) idempotency stops a double-fire on ONE
 // day, but this job runs once per property-local day for up to 120 days
 // straight for the same lease - without a check of its own it would raise a
-// fresh Task every single day the lease sits inside the window. Checked
-// directly here (ANY existing lease_renewal task for this lease, any
-// status) rather than relying on createTask's daily key.
+// fresh Task every single day the lease sits inside the window. The shared
+// `alreadyFlagged` guard is what does that, rather than createTask's daily
+// key. R-191 corrected "any status" to "any OPEN status, or closed inside
+// the cool-off": a renewal ticked off with the lease still unrenewed used
+// to leave the window silent for the remaining four months.
 const LOCAL_HOUR = 2
 
 SCHEDULED_JOBS.push({
@@ -41,11 +44,7 @@ SCHEDULED_JOBS.push({
       const window = expiryWindow(daysUntilExpiry(utcToBusinessDate(lease.endsOn!), today))
       if (window == null) continue
 
-      const alreadyFlagged = await prisma.task.findFirst({
-        where: { type: 'lease_renewal', subjectId: lease.id },
-        select: { id: true },
-      })
-      if (alreadyFlagged) continue
+      if (await alreadyFlagged('lease_renewal', lease.id, today)) continue
 
       await createTask(prisma, {
         propertyId,

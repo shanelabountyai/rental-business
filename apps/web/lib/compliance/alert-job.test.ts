@@ -162,6 +162,41 @@ describe('the compliance alert job', () => {
     expect(tasks).toHaveLength(1)
   })
 
+  // R-191. The guard this job hand-wrote had no status filter, so a
+  // RECURRING item was flagged once in its whole life: completing it
+  // advances `dueOn` by `recurrenceMonths` (compliance/actions.ts) and the
+  // ticked-off Task from last year still matched. A fire inspection or a
+  // rental licence renewing annually simply stopped being watched. Revert
+  // the `OR` in lib/tasks/already-flagged.ts and this goes red.
+  it("flags a RECURRING item again on next year's deadline", async () => {
+    const property = await seedProperty()
+    const item = await seedItem({
+      propertyId: property.id,
+      dueOn: '2026-08-01',
+      leadTimeDays: 30,
+      recurrenceMonths: 12,
+    })
+
+    await runAt('2026-08-20T12:00:00Z', property.id)
+    const first = await prisma.task.findFirstOrThrow({
+      where: { subjectId: item.id, type: 'compliance.item_overdue' },
+    })
+    // What completing it actually does: the Task closes and the deadline
+    // rolls forward a year.
+    await prisma.task.update({ where: { id: first.id }, data: { status: 'DONE' } })
+    await prisma.complianceItem.update({
+      where: { id: item.id },
+      data: { dueOn: new Date('2027-08-01T00:00:00Z') },
+    })
+
+    await runAt('2027-08-20T12:00:00Z', property.id)
+
+    const tasks = await prisma.task.findMany({
+      where: { subjectId: item.id, type: 'compliance.item_overdue' },
+    })
+    expect(tasks).toHaveLength(2)
+  })
+
   it('flags an entity-level item exactly once, even spanning several properties', async () => {
     const propertyA = await seedProperty()
     const propertyB = await seedProperty()

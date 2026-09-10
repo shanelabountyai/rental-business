@@ -1,7 +1,13 @@
 import 'server-only'
 
-import { businessDate, businessDaysBetween, utcToBusinessDate } from '@rental/core/scheduling'
+import {
+  businessDate,
+  businessDaysBetween,
+  friendlyBusinessDate,
+  utcToBusinessDate,
+} from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
+import { alreadyFlagged } from '@/lib/tasks/already-flagged.ts'
 import { createTask } from '@/lib/tasks/create.ts'
 import { SCHEDULED_JOBS } from '@/lib/jobs/runner.ts'
 
@@ -38,7 +44,6 @@ SCHEDULED_JOBS.push({
       },
       select: {
         id: true,
-        leaseId: true,
         dispositionDueOn: true,
         dispositionSentAt: true,
         lease: { select: { moveOutAt: true, unit: { select: { name: true } } } },
@@ -67,25 +72,32 @@ SCHEDULED_JOBS.push({
       // guard renewal-window-job.ts uses - this job can see the SAME
       // deposit as halfway (or overdue) for many days running, and must
       // flag it exactly once per threshold, not once per day.
-      const alreadyFlagged = await prisma.task.findFirst({
-        where: { type: taskType, subjectId: deposit.leaseId },
-        select: { id: true },
-      })
-      if (alreadyFlagged) continue
+      //
+      // R-191: KEYED ON THE DEPOSIT, NOT THE LEASE. R-188 left this as
+      // `deposit.leaseId`, so a lease holding a SECURITY and a PET deposit
+      // flagged once for both - the second deposit's own statutory clock had
+      // no row anywhere. The subject is the deposit, which is also what
+      // `finalizeDisposition`'s `deposit_refund_due` Task already uses
+      // (D-174), so the two rows watching one deadline now agree on what
+      // they are about.
+      if (await alreadyFlagged(taskType, deposit.id, today)) continue
 
       await createTask(prisma, {
         propertyId,
         type: taskType,
-        subjectType: 'Lease',
-        subjectId: deposit.leaseId,
+        subjectType: 'Deposit',
+        subjectId: deposit.id,
         businessDate: today,
         priority: overdue ? 'URGENT' : 'ROUTINE',
         // Same clock, different outstanding act: before the letter the
         // owner still owes an itemization, after it they owe the cheque.
         // Naming the wrong one is how a queue stops being read.
+        // D-153: `due` is a BusinessDate and must be RENDERED, never
+        // interpolated - these two titles read "was due 2026-09-30" in the
+        // one urgent queue an operator is meant to act off.
         title: overdue
-          ? `${owed} OVERDUE (was due ${due}) — ${deposit.lease.unit.name}`
-          : `${owed} halfway to its deadline (due ${due}) — ${deposit.lease.unit.name}`,
+          ? `${owed} OVERDUE (was due ${friendlyBusinessDate(due)}) — ${deposit.lease.unit.name}`
+          : `${owed} halfway to its deadline (due ${friendlyBusinessDate(due)}) — ${deposit.lease.unit.name}`,
       })
       flagged++
     }
