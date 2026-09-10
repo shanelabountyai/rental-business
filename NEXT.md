@@ -1,6 +1,6 @@
 # Next session
 
-## R-192 is done — commit `__SHA__`, SHA recorded in the follow-up.
+## R-192 is done — commit `117a5c0`, SHA recorded in the follow-up.
 
 **CI for R-192: __CI__**
 

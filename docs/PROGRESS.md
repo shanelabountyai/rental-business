@@ -10877,7 +10877,7 @@ did not move) — so the e2e sweep is CI's. **CI is green** — run `34503603334
 
 ## R-192 — an online payment can no longer claim a counter payment's row
 
-Commit `__SHA__`.
+Commit `117a5c0`.
 
 **The claim was verified before anything was built, and it was correct.** The
 claim branch was at `apps/web/lib/billing/webhook.ts:534`, two lines off the
