@@ -10665,7 +10665,7 @@ the SHA`, success. That is a run that was read, not a line copied forward.
 
 ## R-190 — a caught-up job no longer does today's work under yesterday's date
 
-Commit `PENDING`.
+Commit `589bbf0`.
 
 **The claim was verified before anything was built, and it was correct.**
 [apps/web/lib/jobs/runner.ts](apps/web/lib/jobs/runner.ts) line 252 read

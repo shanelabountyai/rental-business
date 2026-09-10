@@ -1,6 +1,6 @@
 # Next session
 
-## R-190 is done — commit `PENDING`, SHA recorded in `PENDING2`.
+## R-190 is done — commit `589bbf0`, SHA recorded in the follow-up.
 
 **CI has NOT been checked for this item.** Run `gh run list --limit 5` and
 confirm the run on the SHA-recording commit (auto job cancellation usually
