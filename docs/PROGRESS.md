@@ -11118,3 +11118,82 @@ this item); `typecheck` clean; `npm test` run alone: 3132 passed, 4 skipped,
 seed, no drift); `check:ship-deps` clean; e2e `evictions.spec.ts` +
 `jurisdiction.spec.ts` on `desktop-chrome` and `mobile-chrome`: 38 passed of
 38 listed, production build. CI: run `34606434559` on `25542dc` green, both jobs (lint/types/unit/build; e2e/axe/Lighthouse), read with `gh run list` after the push.
+
+## R-195 — every Task subject type reaches its subject
+
+Commit `PENDING`.
+
+**The row's count was checked before anything was built.** It named
+twenty-four subject types. `subjectType` is also the column name on
+`AuthToken`, and five of the literals the count swept up (`Prospect`,
+`StaffUser`, `LeasePayer`, `LeaseSigner`, `Applicant`) are only ever token
+subjects — every `createTask` call was enumerated and none writes them. A Task
+is about one of **twenty-one** types, three of which linked (Ticket and
+WorkOrder as panels, Deposit as R-170's link).
+
+**What it built.**
+
+- `TASK_SUBJECT_TYPES` / `TaskSubjectType` in `packages/core/tasks/validate.ts`,
+  now the type of `TaskInput.subjectType`. Every producer already passed a
+  literal from the list, so typecheck was clean with no producer edits; the one
+  test that feeds a blank subject to `validateTask` casts it.
+- `apps/web/lib/tasks/subject-link.ts`: `SUBJECT_ROUTES`, a
+  `Record<TaskSubjectType, …>` of permission, label and address per type, and
+  `subjectLinks(tasks)`, which checks each task's permission against its
+  property and resolves the rows that need a parent id with **one query per
+  subject type**. Direct routes (lease, ticket, work order, eviction,
+  abandonment, violation, claim, compliance item, inspection, conversation,
+  scheduled jobs) need no query. Deposit, accommodation request, renter's
+  insurance, party change, turn, showing, unit and tenant each read the parent
+  id; the four that live in a panel link to the parent page with the panel
+  heading's id as the fragment (`#accommodations`, `#renter-insurance`,
+  `#party-change`, `#turnover`, `#showings`).
+- `/tasks/[id]` renders the link for every type; R-170's hand-written deposit
+  branch is gone and is now one row of the table. Its label is "Open the deposit
+  disposition", since the halfway/overdue reminder tasks on the same subject are
+  not refunds; `deposit-disposition.spec.ts`'s locator follows it.
+- `/tasks` (my day and every `?type=` drill-down) renders the link beside each
+  row, as a sibling of the row's own link. `myDayTasks` and `openTasksOfType`
+  now select the property's `legalEntityId`, which `propertyResource` needs.
+- Two e2e tests in `e2e/tasks.spec.ts`: an owner sees the lease link, with the
+  right address, on the detail page and on the list; a maintenance tech holding
+  `task.read` but not `lease.read` on the same property sees the task and no
+  lease link on either page.
+
+**What it decided.** D-210: subject types are a closed union and a new one does
+not typecheck without a route; each link is gated on the permission the target
+page's own guard requires (JobRun's against a portfolio-wide grant, matching
+`/jobs`); `AdHoc` and `Notification` have no link; a tenant links to their
+newest lease on the task's property; list rows are named by reference to the
+title (`aria-labelledby`) so no two rows share an accessible name and the title
+text is not duplicated.
+
+**What it left behind.**
+
+- **Only two of the nineteen routes are exercised end to end**: `Lease` (the new
+  tests) and `Deposit` (`deposit-disposition.spec.ts`, through a real deposit).
+  The other seventeen are held by typecheck and nothing else. A wrong fragment or
+  parent id shows up as a 404 or a page that does not scroll, not as a failure.
+- **A `serve_notice_offline` task still does not reach the notice it is about.**
+  Its `subjectId` is an idempotency key; finding the notice would mean parsing
+  the key, which is not a contract. The printable link remains its destination.
+- `demo-seed.mts` writes Tasks through Prisma with a plain string, outside the
+  union. A seed string with no route is silently unlinked, not refused.
+- A panel anchor on a page that renders the panel conditionally lands on the
+  page without scrolling.
+- The `/tasks` list for a portfolio-wide actor in the shared test database is
+  about 5,100 rows; that was true before this item, which adds eight queries at
+  most per render.
+- R-178's "no `cases.stalled` Task links to its subject" and R-174's `job_failed`
+  leftover are both closed by this item.
+
+**Gate.** `lint` 0 errors (16 warnings, all pre-existing, none in a touched
+file); `typecheck` clean; `npm test` run alone: 3132 passed, 4 skipped, 231
+files; `check:ship-deps` clean; no schema change, so no migration and no drift
+check. e2e `tasks.spec.ts` + `deposit-disposition.spec.ts` on `desktop-chrome`
+and `mobile-chrome` (the list row's layout changed): 26 passed of 26 listed,
+production build. **Both new tests were proved against the reverted fix**
+(D-197), in one run with `--retries=0`: permission check bypassed → the tech
+test failed with the lease link present; list link suppressed → the owner test
+failed at the list step. Files restored and compared byte-for-byte before
+committing.

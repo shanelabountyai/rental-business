@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { currentScope as writeScope, requireScope } from '@/lib/auth/guard.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 import { myDayTasks, openTasksOfType, rollupByProperty } from '@/lib/tasks/queries.ts'
+import { subjectLinks } from '@/lib/tasks/subject-link.ts'
 import { scrollableRegionProps } from '@/components/ui-classes.ts'
 
 export const metadata = { title: 'Tasks — Rental Operations' }
@@ -77,6 +78,8 @@ export default async function TasksPage({
     writeScope('task.write'),
   ])
   const canWrite = !scopeIsEmpty(taskWriteScope)
+  const subjects = await subjectLinks(tasks)
+  const rows = tasks.map((task, i) => ({ task, subject: subjects[i] ?? null }))
 
   return (
     <div className="flex flex-col gap-8">
@@ -118,11 +121,11 @@ export default async function TasksPage({
         </p>
       ) : (
         <ul className="flex flex-col divide-y rounded-md border">
-          {tasks.map((task) => (
-            <li key={task.id}>
+          {rows.map(({ task, subject }) => (
+            <li key={task.id} className="flex flex-col sm:flex-row">
               <Link
                 href={`/tasks/${task.id}`}
-                className="hover:bg-secondary focus-visible:ring-ring flex min-h-11 flex-col gap-0.5 px-4 py-3 focus-visible:ring-2 focus-visible:-outline-offset-2 focus-visible:outline-none sm:flex-row sm:items-baseline sm:justify-between"
+                className="hover:bg-secondary focus-visible:ring-ring flex min-h-11 min-w-0 flex-1 flex-col gap-0.5 px-4 py-3 break-words focus-visible:ring-2 focus-visible:-outline-offset-2 focus-visible:outline-none sm:flex-row sm:items-baseline sm:justify-between"
               >
                 <span className="font-medium">
                   {task.priority === 'EMERGENCY' && (
@@ -130,13 +133,27 @@ export default async function TasksPage({
                       {PRIORITY_LABELS.EMERGENCY}
                     </span>
                   )}
-                  {task.title}
+                  <span id={`task-title-${task.id}`}>{task.title}</span>
                 </span>
                 <span className="text-muted-foreground text-sm">
                   {task.property.name}
                   {task.assigneeStaffId == null && ' · Unclaimed'}
                 </span>
               </Link>
+              {/* R-195. A sibling of the row's link, since an <a> cannot hold
+                  another. Named with the title BY REFERENCE: every row's link
+                  stays distinct to a screen reader without the title's text
+                  appearing twice on the page. */}
+              {subject && (
+                <Link
+                  href={subject.href}
+                  id={`task-subject-${task.id}`}
+                  aria-labelledby={`task-subject-${task.id} task-title-${task.id}`}
+                  className="focus-visible:ring-ring flex min-h-11 shrink-0 items-center px-4 pb-3 text-sm underline underline-offset-4 focus-visible:ring-2 focus-visible:-outline-offset-2 focus-visible:outline-none sm:py-3"
+                >
+                  {subject.label}
+                </Link>
+              )}
             </li>
           ))}
         </ul>

@@ -43,6 +43,39 @@ export function priorityRank(priority: string): number {
   return PRIORITY_RANK[priority] ?? 99
 }
 
+/**
+ * Every kind of record a Task is about (R-195). Closed, unlike `type`: each
+ * one needs somewhere a person can open it, and
+ * `apps/web/lib/tasks/subject-link.ts` keys a `Record` on this union, so a
+ * producer inventing a subject type does not typecheck until that route
+ * exists. Five items shipped a Task nobody could follow to its subject before
+ * this was closed.
+ */
+export const TASK_SUBJECT_TYPES = [
+  'AbandonmentCase',
+  'AccommodationRequest',
+  'AdHoc',
+  'ComplianceItem',
+  'Deposit',
+  'EvictionCase',
+  'Inspection',
+  'InsuranceClaim',
+  'JobRun',
+  'Lease',
+  'LeasePartyChange',
+  'Notification',
+  'RenterInsurancePolicy',
+  'Showing',
+  'Tenant',
+  'Thread',
+  'Ticket',
+  'TurnoverProject',
+  'Unit',
+  'ViolationCase',
+  'WorkOrder',
+] as const
+export type TaskSubjectType = (typeof TASK_SUBJECT_TYPES)[number]
+
 export interface TaskInput {
   propertyId: string
   /// Free-form (no closed vocabulary): a later item can introduce a new task
@@ -50,7 +83,7 @@ export interface TaskInput {
   /// comment. Whatever creates a task also writes its own `title`, since only
   /// the producer knows how to phrase it for a human.
   type: string
-  subjectType: string
+  subjectType: TaskSubjectType
   subjectId: string
   /// A property-local calendar day, `YYYY-MM-DD` (D-3).
   businessDate: string

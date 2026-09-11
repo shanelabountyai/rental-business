@@ -29,7 +29,7 @@ describe('validateTask', () => {
 
   it('rejects a blank property, type, subject and title', () => {
     const violations = validateTask(
-      baseInput({ propertyId: '', type: '  ', subjectType: '', subjectId: '', title: '' }),
+      baseInput({ propertyId: '', type: '  ', subjectType: '' as never, subjectId: '', title: '' }),
     )
     const fields = violations.map((v) => v.field)
     expect(fields).toEqual(

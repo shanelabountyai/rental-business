@@ -236,7 +236,7 @@ test('a PM itemizes deductions, sees the unsupported flag and depreciation guida
 
   // The task is not a dead end - it reaches the screen that can discharge it.
   await page.goto(`/tasks/${refundTask.id}`)
-  await page.getByRole('link', { name: 'Open the deposit disposition to record the refund' }).click()
+  await page.getByRole('link', { name: 'Open the deposit disposition' }).click()
   await page.waitForURL(`**/leases/${lease.id}/deposit`)
 
   // The deduction list is locked: it renders, its controls do not.

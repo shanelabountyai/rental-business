@@ -12,7 +12,9 @@ import type { ResolvedScope } from '@/lib/scope/current-scope.ts'
 
 export const OPEN_STATUSES = ['OPEN', 'IN_PROGRESS', 'BLOCKED'] as const
 
-export type TaskWithProperty = Task & { property: { id: string; name: string } }
+export type TaskWithProperty = Task & {
+  property: { id: string; name: string; legalEntityId: string }
+}
 export type TaskDetail = Task & {
   property: { id: string; name: string; legalEntityId: string }
   assignee: { id: string; name: string } | null
@@ -55,7 +57,7 @@ export async function myDayTasks(
         })),
       },
     },
-    include: { property: { select: { id: true, name: true } } },
+    include: { property: { select: { id: true, name: true, legalEntityId: true } } },
   })
 
   return tasks.sort(
@@ -129,7 +131,7 @@ export async function openTasksOfType(
 
   const tasks = await prisma.task.findMany({
     where: openTasksWhere(scope, type),
-    include: { property: { select: { id: true, name: true } } },
+    include: { property: { select: { id: true, name: true, legalEntityId: true } } },
   })
 
   return tasks.sort(

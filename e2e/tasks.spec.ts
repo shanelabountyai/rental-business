@@ -315,6 +315,47 @@ test.describe('scoping (ROLE-01)', () => {
   })
 })
 
+test.describe('reaching the subject (R-195)', () => {
+  test('a task links to its subject from the detail page and the list', async ({ page }) => {
+    const { property } = await seedProperty()
+    const title = `Chase the rent ${randomUUID().slice(0, 8)}`
+    const task = await seedTask(property.id, { title })
+    const staff = await createStaff('owner')
+    await signIn(page, staff.email)
+
+    await page.goto(`/tasks/${task.id}`)
+    await expect(page.getByRole('link', { name: 'Open the lease' })).toHaveAttribute(
+      'href',
+      `/leases/${task.subjectId}`,
+    )
+
+    await page.goto('/tasks')
+    await expect(page.getByRole('link', { name: `Open the lease ${title}` })).toHaveAttribute(
+      'href',
+      `/leases/${task.subjectId}`,
+    )
+  })
+
+  // ROLE-01's "hide, don't just block": a maintenance tech holds task.read on
+  // this property but not lease.read, so /leases/[id] would refuse them - and
+  // the task must not hand them the lease's address either.
+  test('a role that cannot open the subject is not handed its address', async ({ page }) => {
+    const { property } = await seedProperty()
+    const title = `No lease for the tech ${randomUUID().slice(0, 8)}`
+    const task = await seedTask(property.id, { title })
+    const staff = await createStaff('maintenance_tech', { propertyId: property.id })
+    await signIn(page, staff.email)
+
+    await page.goto(`/tasks/${task.id}`)
+    await expect(page.getByRole('heading', { name: title })).toBeVisible()
+    await expect(page.getByRole('link', { name: /^Open the lease/ })).toHaveCount(0)
+
+    await page.goto('/tasks')
+    await expect(page.getByText(title)).toBeVisible()
+    await expect(page.getByRole('link', { name: /^Open the lease/ })).toHaveCount(0)
+  })
+})
+
 test.describe('accessibility', () => {
   test('the list, add-task and detail pages have no detectable violations', async ({
     page,
