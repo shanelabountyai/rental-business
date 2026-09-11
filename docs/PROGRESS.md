@@ -11454,7 +11454,7 @@ started, checked rather than copied forward. **This item's own run
 end-to-end/axe/Lighthouse.
 
 ## R-199 — an agreed payment plan sends its schedule, and the tenant sees it on the portal
-**Commit:** `PENDING`  ·  **Date:** 2026-09-11
+**Commit:** `1b5b4af`  ·  **Date:** 2026-09-11
 
 **What it built.** Review finding 13. A plan agreed on the phone produced no
 message, no document and no `Notification` row — so when the sweep broke it
