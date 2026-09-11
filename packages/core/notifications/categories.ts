@@ -34,6 +34,15 @@ export const NOTIFICATION_CATEGORIES = [
   'payment_receipt',
   'payment_failed',
   'autopay_predebit',
+  /// R-199: the written schedule of a repayment plan, sent the moment it is
+  /// agreed. Its own category, and LOCKED, because it is the evidence: when
+  /// the sweep later breaks a plan it raises an URGENT Task against the
+  /// tenancy, and "we were never told the terms" has to be answerable with a
+  /// row. Not `rent_reminder` - a tenant may mute that, and it is
+  /// digest-eligible, so the schedule would arrive batched into tomorrow's
+  /// email. Not `legal_notice` - that is never auto-retried, and a failed copy
+  /// of a schedule is one worth retrying.
+  'payment_plan',
 
   // Legally significant. Locked on - see LOCKED_CATEGORIES.
   'legal_notice',
@@ -262,6 +271,8 @@ export const LOCKED_CATEGORIES: Readonly<
     'Advance notice before someone enters your home is required by law in most states, and the required hours come from your property’s own jurisdiction rules.',
   maintenance_emergency:
     'Emergency maintenance can involve gas, flooding, or loss of heat. These reach you whatever your other settings say, including during quiet hours.',
+  payment_plan:
+    'This is the written record of a repayment plan you agreed to. Turning it off would leave you without the dates and amounts the plan holds you to.',
   lease_signature:
     'This is how you review and sign your lease. Turning it off would leave nobody able to reach you to finish signing.',
   account_access:
@@ -372,6 +383,7 @@ export const CATEGORY_LABELS: Record<NotificationCategory, string> = {
   payment_receipt: 'Payment receipts',
   payment_failed: 'Failed payments',
   autopay_predebit: 'Autopay pre-debit notice',
+  payment_plan: 'Repayment plan schedules',
   legal_notice: 'Legal notices',
   entry_notice: 'Entry notices',
   maintenance_update: 'Maintenance updates',

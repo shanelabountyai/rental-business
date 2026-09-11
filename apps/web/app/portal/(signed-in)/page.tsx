@@ -2,6 +2,7 @@ import { friendlyBusinessDate, friendlyDate, utcToBusinessDate } from '@rental/c
 import { formatCents } from '@rental/core/money'
 import Link from 'next/link'
 import { requireTenantWithScope } from '@/lib/portal/guard.ts'
+import { plansForLease } from '@/lib/payments/plans.ts'
 import { getTenantHome, listTenantUpdates } from '@/lib/portal/queries.ts'
 
 export const metadata = { title: 'Your home' }
@@ -34,6 +35,12 @@ export default async function PortalHomePage() {
     listTenantUpdates(scope),
   ])
   const timeZone = home?.property.timezone ?? 'UTC'
+  // R-199: the plan in force, if any. Ended plans stay on the staff page; a
+  // tenant needs the one they are keeping, and the message that sent it stays
+  // in their updates either way.
+  const plan = home
+    ? (await plansForLease(home.id, timeZone)).find((row) => row.status === 'ACTIVE')
+    : undefined
 
   return (
     <div className="flex flex-col gap-8">
@@ -75,6 +82,63 @@ export default async function PortalHomePage() {
           </p>
         )}
       </section>
+
+      {plan && (
+        <section aria-labelledby="repayment-plan" className="flex flex-col gap-3">
+          <h2 id="repayment-plan" className="text-lg font-semibold">
+            Your repayment plan
+          </h2>
+          <div className="flex flex-col gap-3 rounded-md border p-4">
+            <p>
+              Agreed on {friendlyBusinessDate(plan.startedOn)}:{' '}
+              <strong>{formatCents(plan.arrearsCents)}</strong> in{' '}
+              {plan.instalments.length === 1 ? '1 payment' : `${plan.instalments.length} payments`}.
+              Your regular rent is still due each month on top of these.
+            </p>
+            <table className="w-full">
+              <caption className="sr-only">
+                Each payment in your repayment plan: when it is due and how much it is.
+              </caption>
+              <thead>
+                <tr className="text-muted-foreground text-left text-sm">
+                  <th scope="col" className="py-1 pr-3 font-medium">
+                    Payment
+                  </th>
+                  <th scope="col" className="py-1 pr-3 font-medium">
+                    Due
+                  </th>
+                  <th scope="col" className="py-1 text-right font-medium">
+                    Amount
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {plan.instalments.map((instalment) => (
+                  <tr key={instalment.id}>
+                    <td className="py-1.5 pr-3">
+                      {instalment.sequence} of {plan.instalments.length}
+                    </td>
+                    <td className="py-1.5 pr-3">{friendlyBusinessDate(instalment.dueOn)}</td>
+                    <td className="py-1.5 text-right tabular-nums">
+                      {formatCents(instalment.amountCents)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p>
+              Counted toward this plan so far: {formatCents(plan.progress.paidCents)}. Still to pay:{' '}
+              {formatCents(plan.progress.remainingCents)}.
+            </p>
+            {plan.progress.shortfallCents > 0 && (
+              <p>
+                <strong>You are {formatCents(plan.progress.shortfallCents)} behind this plan.</strong>{' '}
+                Please pay, or send us a message so we can talk about it.
+              </p>
+            )}
+          </div>
+        </section>
+      )}
 
       <section aria-labelledby="updates" className="flex flex-col gap-3">
         <h2 id="updates" className="text-lg font-semibold">

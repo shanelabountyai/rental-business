@@ -1,21 +1,52 @@
 # Next session
 
-## R-198 is done — the inter-entity sweep is recorded and archived (D-213).
+## R-199 is done — an agreed payment plan sends its schedule and shows on the portal (D-214).
 
 SHA and CI run are recorded in PROGRESS. **Do not copy a green CI line
 forward** — run `gh run list --limit 5` after your own push.
 
-## Start here: row 186, R-199
+## Start here: row 187, R-200
 
-`docs/prds/06-backlog.md` Milestone 14 ("Arc 4"). **A payment plan becomes
-evidence: sent, visible, and optionally signed.** In value order: send the
-schedule when the plan is agreed (one template, the instalment table — the
-`Message` row *is* the evidence), show it on the portal lease page, e-sign only
-if the operator wants it. Notification engine (R-030), document generation
-(R-062), e-sign (R-063/R-090) and the portal per-lease panels already exist.
-Tenant-facing, so WCAG 2.1 AA applies. Re-verify the row's premises first
-(R-150): that `PaymentPlan.note` is still the entire record and no template
-for the schedule exists.
+`docs/prds/06-backlog.md` Milestone 14 ("Arc 4"). **LEASE-12's and LEASE-09's
+notice checks read `dayCountBasis`.** `noticePeriodCheck`
+(`packages/core/leases/notice-to-vacate.ts`) and `renewalCheck` count days as
+`Math.floor((effectiveOn − givenOn) / 86_400_000)`, deaf to `BUSINESS` and
+`CALENDAR_ROLL_FORWARD`; route them through R-182's `statutoryDeadline`.
+`assessEvidence`'s abandonment presumption is the same shape. Core
+arithmetic, correctness-critical. Re-verify the row's premises first (R-150)
+— the line numbers are from the 2026-09-09 review.
+
+## What R-199 changed that the next rows touch
+
+- **New LOCKED notification category `payment_plan`** and template
+  `payment_plan.agreed`. `CATEGORY_LABELS` is exhaustive, so typecheck
+  already forced the label; the email opt-out confirmation now lists it among
+  what still arrives.
+- **`chaseParties` lives in `apps/web/lib/payments/chase-parties.ts`**, not
+  inside `reminders.ts` (which is `'use server'` and cannot export it). The
+  chase and the plan share it — do not copy it a third time.
+- **`agreePaymentPlan`'s notice now ends with who the schedule reached** by
+  EMAIL or SMS, or "Not sent to … give them a copy yourself". A PORTAL row is
+  deliberately not counted as reaching anyone (R-173).
+- **The portal home has a "Your repayment plan" region** (ACTIVE plan only).
+  Any new portal-home heading must not collide with it.
+- **The e-sign half is row 190, R-203** (owner decision, D-214).
+
+## Found in R-199, owned by nobody
+
+- A cancelled or broken plan sends the tenant nothing; they learn the chase
+  resumed from the chase itself.
+- The staff lease page does not show where the schedule went — only the
+  press's notice says so, then the send log.
+- The notice counts QUEUED/DEFERRED at press time; a later bounce is not
+  reflected anywhere on the plan.
+- The guarantor portal does not show the plan; an ended plan is gone from the
+  tenant portal (its message stays in their updates).
+- The demo seed agrees no plan, so a D-28 walk cannot see either half.
+- `sms-intake.test.ts`'s `afterAll` timed out at 10s twice (once beside lint
+  and typecheck, once alone), then passed twice alone on the same tree and in
+  the full suite, with nothing else on the database. Cause unknown; the
+  hook-timeout ceiling below, a third file.
 
 ## What R-198 changed that the next rows touch
 

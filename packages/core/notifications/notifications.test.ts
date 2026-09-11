@@ -264,6 +264,44 @@ describe('templates', () => {
     expect(emergency.body).not.toContain('before anyone visits')
   })
 
+  it('sends the whole repayment-plan schedule, and says the regular rent is still due (R-199)', () => {
+    const context = {
+      recipientName: 'Ada Rivera',
+      addressLine1: '310 Magnolia Dr',
+      agreedOn: '2026-09-11',
+      instalments: [
+        { dueOn: '2026-10-01', amountCents: 30_001 },
+        { dueOn: '2026-11-01', amountCents: 30_000 },
+        { dueOn: '2026-12-01', amountCents: 30_000 },
+      ],
+      url: 'https://example.test/portal',
+    }
+
+    // The email IS the evidence, so every instalment is in it - not a link.
+    const email = renderTemplate('payment_plan.agreed', context, 'EMAIL')
+    expect(email.subject).toContain('310 Magnolia Dr')
+    expect(email.body).toContain('$900.01')
+    expect(email.body).toContain('1. 1 Oct 2026 — $300.01')
+    expect(email.body).toContain('3. 1 Dec 2026 — $300.00')
+    expect(email.body).toContain('regular rent is still due')
+    expect(email.body).toContain('more than 3 days')
+    expect(email.body).not.toMatch(/\d{4}-\d{2}-\d{2}/)
+
+    const sms = renderTemplate('payment_plan.agreed', context, 'SMS')
+    expect(sms.body).toContain('$900.01 in 3 payments')
+    expect(sms.body).toContain('https://example.test/portal')
+
+    // A guarantor's portal does not show the plan, so they get no link to it.
+    const guarantor = renderTemplate('payment_plan.agreed', { ...context, url: null }, 'EMAIL')
+    expect(guarantor.body).not.toContain('https://')
+    expect(guarantor.body).toContain('3. 1 Dec 2026')
+
+    // Locked: a tenant who muted rent reminders must still be sent the terms.
+    expect(isLockedCategory('payment_plan')).toBe(true)
+    expect(isDigestEligible('payment_plan')).toBe(false)
+    expect(templateFor('payment_plan.agreed')?.category).toBe('payment_plan')
+  })
+
   it('throws on an unregistered key rather than rendering nothing', () => {
     expect(() => renderTemplate('nope.not_a_template', {}, 'EMAIL')).toThrow(
       /No notification template registered/,

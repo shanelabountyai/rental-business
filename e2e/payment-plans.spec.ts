@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { hashPassword } from '@rental/core/auth'
+import { hashPassword, mintToken } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
 import { axeScan, uniqueClientHeaders } from './fixtures.ts'
@@ -33,7 +33,9 @@ const entityIds: string[] = []
 const propertyIds: string[] = []
 const tenantIds: string[] = []
 
-async function seedTenancy() {
+/// `contact: false` seeds a tenant with no email and no phone - the one the
+/// schedule cannot reach, which the staff notice has to say out loud.
+async function seedTenancy({ contact = true }: { contact?: boolean } = {}) {
   const stamp = randomUUID().slice(0, 8)
   const entity = await prisma.legalEntity.create({
     data: { name: `Plan LLC-${stamp}`, type: 'LLC' },
@@ -56,7 +58,11 @@ async function seedTenancy() {
     data: { propertyId: property.id, name: `U-${stamp}`, status: 'OCCUPIED' },
   })
   const tenant = await prisma.tenant.create({
-    data: { firstName: 'Plan', lastName: `Tenant-${stamp}` },
+    data: {
+      firstName: 'Plan',
+      lastName: `Tenant-${stamp}`,
+      email: contact ? `plan-tenant-${stamp}@example.test` : null,
+    },
   })
   tenantIds.push(tenant.id)
   const lease = await prisma.lease.create({
@@ -106,6 +112,7 @@ test.beforeEach(async ({ page }) => {
 })
 
 test.afterAll(async () => {
+  await prisma.authToken.deleteMany({ where: { subjectId: { in: tenantIds } } })
   // Nothing is deleted: LeaseHold and PaymentPlan both point at StaffUser
   // with onDelete: Restrict, and every action here writes an append-only
   // audit row. The roots are retired instead, which is the pattern CLAUDE.md
@@ -126,7 +133,7 @@ test.afterAll(async () => {
 test('agreeing a plan writes a schedule, pauses the chase, and says so on the page', async ({
   page,
 }) => {
-  const { lease } = await seedTenancy()
+  const { lease, tenant } = await seedTenancy()
   const staff = await seedOwner()
 
   await signIn(page, staff.email)
@@ -167,6 +174,67 @@ test('agreeing a plan writes a schedule, pauses the chase, and says so on the pa
     select: { paymentPlanId: true },
   })
   expect(hold.paymentPlanId).not.toBeNull()
+
+  // R-199: AND THE TENANT WAS SENT THE TERMS. The notice names who it went
+  // to, and the Notification row holds the whole schedule as it was sent -
+  // that row is what answers "we were never told" when the plan breaks.
+  await expect(page.getByText(`The written schedule is on its way to Plan ${tenant.lastName}.`)).toBeVisible()
+  const sent = await prisma.notification.findFirstOrThrow({
+    where: {
+      recipientType: 'TENANT',
+      recipientId: tenant.id,
+      templateKey: 'payment_plan.agreed',
+      channel: 'EMAIL',
+    },
+    select: { body: true, toAddress: true },
+  })
+  expect(sent.toAddress).toBe(tenant.email)
+  expect(sent.body).toContain('1. 1 Oct 2026 — $300.00')
+  expect(sent.body).toContain('3. 1 Dec 2026 — $300.00')
+})
+
+test('the tenant sees the plan they are keeping on their portal', async ({ page }) => {
+  const { property, lease, tenant } = await seedTenancy()
+  const staff = await seedOwner()
+  await prisma.paymentPlan.create({
+    data: {
+      leaseId: lease.id,
+      propertyId: property.id,
+      arrearsCents: 90_000,
+      startedOn: new Date('2026-09-11'),
+      note: 'Three payments from October.',
+      createdByStaffId: staff.id,
+      instalments: {
+        create: [
+          { sequence: 1, dueOn: new Date('2026-10-01'), amountCents: 30_000 },
+          { sequence: 2, dueOn: new Date('2026-11-01'), amountCents: 30_000 },
+          { sequence: 3, dueOn: new Date('2026-12-01'), amountCents: 30_000 },
+        ],
+      },
+    },
+  })
+
+  const minted = mintToken('TENANT_MAGIC_LINK')
+  await prisma.authToken.create({
+    data: {
+      purpose: 'TENANT_MAGIC_LINK',
+      tokenHash: minted.tokenHash,
+      subjectType: 'Tenant',
+      subjectId: tenant.id,
+      expiresAt: minted.expiresAt,
+    },
+  })
+  await page.goto(`/portal/verify?token=${minted.token}`)
+  await expect(page).toHaveURL(/\/portal$/)
+
+  const plan = page.getByRole('region', { name: 'Your repayment plan' })
+  await expect(plan.getByRole('cell', { name: '1 Oct 2026', exact: true })).toBeVisible()
+  await expect(plan.getByRole('cell', { name: '1 Dec 2026', exact: true })).toBeVisible()
+  await expect(plan.getByText('Your regular rent is still due each month on top of these.', { exact: false })).toBeVisible()
+  await expect(plan.getByText(/Still to pay: \$900\.00/)).toBeVisible()
+
+  const results = await axeScan(page)
+  expect(results.violations).toEqual([])
 })
 
 test('a payment-plan hold can no longer be placed by hand', async ({ page }) => {
@@ -186,7 +254,7 @@ test('a payment-plan hold can no longer be placed by hand', async ({ page }) => 
 })
 
 test('ending a plan by hand resumes the chase and keeps the record of it', async ({ page }) => {
-  const { lease } = await seedTenancy()
+  const { lease, tenant } = await seedTenancy({ contact: false })
   const staff = await seedOwner()
 
   await signIn(page, staff.email)
@@ -198,6 +266,10 @@ test('ending a plan by hand resumes the chase and keeps the record of it', async
   await page.getByLabel('What was agreed, in words (required)').fill('Two payments after the tax refund.')
   await page.getByRole('button', { name: 'Agree this repayment plan' }).click()
   await expect(page.getByText(/Plan agreed: 2 instalments/)).toBeVisible()
+  // Nobody to send it to, and the person at the screen is told so (R-199).
+  await expect(
+    page.getByText(`Not sent to Plan ${tenant.lastName} — no email or phone we may use; give them a copy yourself.`, { exact: false }),
+  ).toBeVisible()
 
   await page
     .getByLabel('Why this plan is ending (required)')

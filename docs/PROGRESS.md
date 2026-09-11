@@ -11452,3 +11452,86 @@ sweep left to CI; R-197's run (`34621421492`) was green before this item
 started, checked rather than copied forward. **This item's own run
 (`34642406576`) is green on every job** — lint/types/unit/build and
 end-to-end/axe/Lighthouse.
+
+## R-199 — an agreed payment plan sends its schedule, and the tenant sees it on the portal
+**Commit:** `PENDING`  ·  **Date:** 2026-09-11
+
+**What it built.** Review finding 13. A plan agreed on the phone produced no
+message, no document and no `Notification` row — so when the sweep broke it
+and raised an URGENT Task, the tenancy could truthfully say it had never been
+told the terms. Both premises re-verified before building (R-150): nothing
+under `notifications` mentioned a plan, and nothing on the portal read
+`PaymentPlan`.
+
+- **`payment_plan.agreed`** in [templates.ts](packages/core/notifications/templates.ts)
+  on a new **locked** category `payment_plan`
+  ([categories.ts](packages/core/notifications/categories.ts)). EMAIL and
+  PORTAL carry every instalment with its date and amount, the total, the
+  sentence that the regular rent is still due on top, and the grace period
+  read from `PLAN_GRACE_DAYS`. SMS carries the total, the first instalment and
+  — for a tenant — the portal link. Dates are `BusinessDate`s formatted in the
+  renderer (D-153).
+- **`agreePaymentPlan`** now sends it to every party `chaseParties` names
+  (active tenants and active guarantors), keyed
+  `payment-plan-agreed:<planId>:<type>:<id>`, and dispatches only its own
+  deliveries. The notice ends with who the schedule reached by EMAIL or SMS
+  and who it did not — *"give them a copy yourself"* — or that it could not be
+  sent at all.
+- **`chaseParties` moved** to [chase-parties.ts](apps/web/lib/payments/chase-parties.ts):
+  `reminders.ts` is `'use server'` and cannot export a sync function.
+- **The portal home** ([page.tsx](apps/web/app/portal/(signed-in)/page.tsx))
+  shows a "Your repayment plan" region for the ACTIVE plan: the schedule as a
+  captioned table, what is counted toward the plan, what is still to pay, and
+  how far behind when it is.
+
+**What it decided** (D-214).
+
+- **Locked, and its own category.** The row is the evidence. `rent_reminder`
+  can be muted and is digest-eligible; `legal_notice` is never auto-retried,
+  and a failed schedule is one worth retrying.
+- **Guarantors are sent it too** — the chase that resumes when a plan breaks
+  writes to them.
+- **A PORTAL row does not count as reaching anybody** in the staff notice,
+  because a tenant with no email cannot sign in (R-173).
+- **The rent sentence is load-bearing.** Since R-187 a plan is only kept when
+  new rent is paid as well; a tenant told only the instalments would break it
+  by paying exactly them.
+- **The plan's `note` is not sent** — it is written by staff, for staff.
+- **The evidence row is `Notification`, not `Message`.** The backlog row said
+  "the `Message` row *is* the evidence"; `notify` has never written a
+  `Message`. The `Notification` row holds the rendered body, the address used
+  and its delivery.
+- **E-sign is its own row, R-203** — the owner's choice when asked. The
+  envelope machinery is lease-shaped (`LeaseEnvelope.kind` is
+  `LEASE`/`AMENDMENT`, a lease draft PDF), and a plan envelope is L on its own.
+
+**What it left behind** (owned by nobody unless named).
+
+- E-sign on a plan — **R-203**.
+- A cancelled or broken plan sends the tenant nothing.
+- The staff lease page does not show where the schedule went; only the press's
+  notice says so, and afterwards the send log.
+- The notice reads QUEUED/DEFERRED at press time; a later bounce appears
+  nowhere on the plan.
+- The guarantor portal does not show the plan, and an ended plan leaves the
+  tenant portal (its message stays in their updates and inbox).
+- The template has no Spanish variant; `preferredLocale` is not consulted, as
+  for every core template.
+- The demo seed agrees no plan, so a D-28 walk sees neither half.
+
+**The gate.** `lint` clean (16 pre-existing warnings, none in a changed file),
+`typecheck` clean, `check:ship-deps` clean. No schema or migration change, so
+`db:ci` was not re-run. `npm test` alone: **3152 passed, 4 skipped, 0 failed**
+— R-198's 3151 plus the new template test. Two earlier targeted runs failed on
+`sms-intake.test.ts`'s `afterAll` hook timing out at 10s (once beside lint and
+typecheck, once alone); `pg_stat_activity` showed one connection, and the file
+then passed with the change stashed and twice more with it applied. **Cause
+unknown**, recorded rather than guessed; it touches nothing here.
+**Revert-proof** (D-197): replacing the regular-rent sentence turned exactly
+the new template test red. The e2e assertions check text only this change
+renders. e2e against the production build on `:3100`:
+`payment-plans.spec.ts` + `portal.spec.ts` on `desktop-chrome` and
+`mobile-chrome`, **36 passed, 0 flaky, 0 skipped, 0 failed**, reconciling
+against `--list`'s 36 — including the new portal test's axe scan at phone
+width. Full sweep left to CI; R-198's run (`34642406576`) was green before
+this item started, checked rather than copied forward.

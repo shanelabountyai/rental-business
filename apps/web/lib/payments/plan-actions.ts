@@ -7,6 +7,9 @@ import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { audit } from '@/lib/audit/index.ts'
 import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
+import { authUrl } from '@/lib/auth/delivery.ts'
+import { dispatchPendingNotifications, notify } from '@/lib/notifications/send.ts'
+import { chaseParties } from './chase-parties.ts'
 
 // Agreeing and cancelling a repayment plan (PAY-08, PAY-12; R-175).
 //
@@ -75,7 +78,26 @@ export async function agreePaymentPlan(
     select: {
       id: true,
       propertyId: true,
-      property: { select: { id: true, legalEntityId: true, timezone: true } },
+      property: { select: { id: true, legalEntityId: true, timezone: true, addressLine1: true } },
+      leaseTenants: {
+        select: {
+          tenant: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              email: true,
+              phone: true,
+              preferredLocale: true,
+              active: true,
+            },
+          },
+        },
+      },
+      guarantors: {
+        where: { active: true },
+        select: { id: true, firstName: true, lastName: true, email: true, phone: true },
+      },
     },
   })
   if (!lease) return { error: 'That tenancy no longer exists.' }
@@ -183,10 +205,77 @@ export async function agreePaymentPlan(
     },
   })
 
+  // SEND THE SCHEDULE (R-199) - to everyone the chase would write to, since
+  // everyone the chase would write to is somebody this plan switches it off
+  // for. Outside the transaction, as every notify() caller is. The notice says
+  // who it reached by EMAIL or SMS: a PORTAL row alone reaches nobody who
+  // cannot sign in (R-173), and a plan nobody was sent is the defect this
+  // exists to close, so the person at the screen is told to hand it over.
+  const sent = await sendPlanSchedule(plan.id, lease, startedOn, instalments)
+
   revalidatePath(`/leases/${leaseId}`)
   return {
-    notice: `Plan agreed: ${instalments.length} ${instalments.length === 1 ? 'instalment' : 'instalments'} from ${friendlyBusinessDate(instalments[0].dueOn)}. The chase and the late-fee meter are off while it holds.`,
+    notice: `Plan agreed: ${instalments.length} ${instalments.length === 1 ? 'instalment' : 'instalments'} from ${friendlyBusinessDate(instalments[0].dueOn)}. The chase and the late-fee meter are off while it holds.${sent}`,
   }
+}
+
+async function sendPlanSchedule(
+  planId: string,
+  lease: Parameters<typeof chaseParties>[0] & {
+    propertyId: string
+    property: { addressLine1: string }
+  },
+  agreedOn: string,
+  instalments: readonly { dueOn: string; amountCents: number }[],
+): Promise<string> {
+  const parties = chaseParties(lease)
+  if (parties.length === 0) {
+    return ' Nobody active on this tenancy to send the schedule to — give them a copy yourself.'
+  }
+  const reached: string[] = []
+  const unreached: string[] = []
+  try {
+    const deliveryIds: string[] = []
+    for (const party of parties) {
+      const outcomes = await notify({
+        category: 'payment_plan',
+        templateKey: 'payment_plan.agreed',
+        recipient: { type: party.type, id: party.id, email: party.email, phone: party.phone },
+        context: {
+          recipientName: party.name,
+          addressLine1: lease.property.addressLine1,
+          agreedOn,
+          instalments,
+          url: party.type === 'TENANT' ? authUrl('/portal') : null,
+        },
+        propertyId: lease.propertyId,
+        // The plan and the person: a plan is agreed once, and two people on
+        // one tenancy are two different messages.
+        idempotencyKey: `payment-plan-agreed:${planId}:${party.type}:${party.id}`,
+      })
+      const delivered = outcomes.some(
+        (outcome) =>
+          outcome.channel !== 'PORTAL' &&
+          (outcome.status === 'QUEUED' || outcome.status === 'DEFERRED'),
+      )
+      ;(delivered ? reached : unreached).push(party.name)
+      for (const outcome of outcomes) {
+        if (outcome.deliveryId) deliveryIds.push(outcome.deliveryId)
+      }
+    }
+    if (deliveryIds.length > 0) {
+      await dispatchPendingNotifications(new Date(), 100, { deliveryIds })
+    }
+  } catch (error) {
+    console.error(`[plans] failed to send the schedule for plan ${planId}`, error)
+    return ' The schedule could not be sent — give them a copy yourself.'
+  }
+  return [
+    reached.length > 0 ? ` The written schedule is on its way to ${reached.join(', ')}.` : '',
+    unreached.length > 0
+      ? ` Not sent to ${unreached.join(', ')} — no email or phone we may use; give them a copy yourself.`
+      : '',
+  ].join('')
 }
 
 export async function cancelPaymentPlan(

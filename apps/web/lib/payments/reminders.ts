@@ -9,6 +9,7 @@ import { getTemplate } from '@/lib/comms/templates.ts'
 import { leasesHalted } from '@/lib/holds/queries.ts'
 import { dispatchPendingNotifications, notify } from '@/lib/notifications/send.ts'
 import { businessDate } from '@rental/core/scheduling'
+import { chaseParties } from './chase-parties.ts'
 import { pastGraceLeaseIds } from './rent-roll.ts'
 
 // "Select everyone past grace and fire the templated reminder in one action"
@@ -270,48 +271,6 @@ export async function sendReminders(
         ? `Reminder sent to ${reach}.`
         : `Reminder sent to ${reach}, of ${leaseIds.length} selected. ${describeSkips(skipped)}`,
   }
-}
-
-/// Everyone on this tenancy who can be chased for the money (R-179): every
-/// ACTIVE tenant, plus every active guarantor.
-///
-/// A guarantor has no `preferredLocale` column — they are not a portal-first
-/// party and nothing has ever asked them — so they get the template's default
-/// language. Named here rather than left implicit, because a null falling
-/// through `languageFor` silently is exactly how a Spanish-speaking
-/// co-signer gets English forever without anybody noticing.
-function chaseParties(lease: {
-  leaseTenants: { tenant: { id: string; firstName: string; lastName: string; email: string | null; phone: string | null; preferredLocale: string | null; active: boolean } }[]
-  guarantors: { id: string; firstName: string; lastName: string; email: string | null; phone: string | null }[]
-}): {
-  type: 'TENANT' | 'GUARANTOR'
-  id: string
-  name: string
-  email: string | null
-  phone: string | null
-  preferredLocale: string | null
-}[] {
-  return [
-    ...lease.leaseTenants
-      .map((lt) => lt.tenant)
-      .filter((tenant) => tenant.active)
-      .map((tenant) => ({
-        type: 'TENANT' as const,
-        id: tenant.id,
-        name: `${tenant.firstName} ${tenant.lastName}`,
-        email: tenant.email,
-        phone: tenant.phone,
-        preferredLocale: tenant.preferredLocale,
-      })),
-    ...lease.guarantors.map((guarantor) => ({
-      type: 'GUARANTOR' as const,
-      id: guarantor.id,
-      name: `${guarantor.firstName} ${guarantor.lastName}`,
-      email: guarantor.email,
-      phone: guarantor.phone,
-      preferredLocale: null,
-    })),
-  ]
 }
 
 /// Names the reasons rather than the count. A PM who sent 40 of 45 needs to

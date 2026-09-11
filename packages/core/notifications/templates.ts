@@ -18,6 +18,7 @@
 // appear in one. `renderTemplate` cannot enforce that; review does.
 
 import { formatCents } from '../money/money.ts'
+import { PLAN_GRACE_DAYS } from '../payments/plan.ts'
 import { friendlyBusinessDate } from '../scheduling/local-time.ts'
 import type { BusinessDate } from '../scheduling/local-time.ts'
 import type { NotificationCategory, NotificationChannel } from './categories.ts'
@@ -667,6 +668,80 @@ export const paymentReceiptTemplate: NotificationTemplate<PaymentReceiptContext>
         `Balance remaining: ${context.remaining}`,
         '',
         'Keep this email — it is your receipt.',
+      ].join('\n'),
+    }
+  },
+}
+
+/// Context for `payment_plan.agreed` (PAY-08, R-199).
+export interface PaymentPlanAgreedContext {
+  recipientName: string
+  addressLine1: string
+  /// The property-local day the plan was agreed.
+  agreedOn: BusinessDate
+  instalments: readonly { dueOn: BusinessDate; amountCents: number }[]
+  /// The tenant's portal, where the schedule stays visible. Null for a
+  /// guarantor, whose portal does not show it.
+  url: string | null
+}
+
+/**
+ * "Here is the plan you agreed" (PAY-08, R-199).
+ *
+ * THE ROW THIS WRITES IS THE EVIDENCE. Before it, a plan agreed on the phone
+ * produced nothing a tenancy had been sent, and the sweep that later breaks
+ * the plan raised an URGENT Task against somebody who could truthfully say
+ * they were never told the terms. So the email carries the whole instalment
+ * table, not a link to it.
+ *
+ * Two sentences are load-bearing and must not be softened. "The regular rent
+ * is still due" - since R-187 a plan is only kept when the new rent is paid
+ * too, and a tenant told otherwise would break it by doing exactly what they
+ * were told. And the grace period, read from the same constant the sweep
+ * uses, so the promise and the rule cannot drift apart.
+ *
+ * Worded for a tenant OR a guarantor ("the regular rent", not "your rent"):
+ * both are sent the same schedule.
+ */
+export const paymentPlanAgreedTemplate: NotificationTemplate<PaymentPlanAgreedContext> = {
+  key: 'payment_plan.agreed',
+  category: 'payment_plan',
+  channels: ['SMS', 'EMAIL', 'PORTAL'],
+  render: (context, channel) => {
+    const total = formatCents(
+      context.instalments.reduce((sum, instalment) => sum + instalment.amountCents, 0),
+    )
+    const count = context.instalments.length
+    const payments = count === 1 ? '1 payment' : `${count} payments`
+    const first = context.instalments[0]
+    if (channel === 'SMS') {
+      return {
+        body: [
+          `Repayment plan for ${context.addressLine1}: ${total} in ${payments}, first ${formatCents(first.amountCents)} due ${friendlyBusinessDate(first.dueOn)}. The regular rent is still due too.`,
+          context.url ? `Full schedule: ${context.url}` : null,
+        ]
+          .filter((line) => line !== null)
+          .join('\n'),
+      }
+    }
+    return {
+      subject: `Your repayment plan — ${context.addressLine1}`,
+      body: [
+        `Hello ${context.recipientName},`,
+        '',
+        `This is the repayment plan agreed on ${friendlyBusinessDate(context.agreedOn)} for the rent owed at ${context.addressLine1}. It covers ${total}, paid in ${payments}:`,
+        '',
+        ...context.instalments.map(
+          (instalment, index) =>
+            `${index + 1}. ${friendlyBusinessDate(instalment.dueOn)} — ${formatCents(instalment.amountCents)}`,
+        ),
+        '',
+        'The regular rent is still due each month as usual. These payments are on top of it, and the plan only counts as kept when both are paid.',
+        '',
+        `While the plan is kept, we will not send overdue rent reminders or add late fees. If the payments fall behind this schedule for more than ${PLAN_GRACE_DAYS} days after a due date, the plan ends and normal collection starts again.`,
+        '',
+        ...(context.url ? [`You can see this schedule at any time here: ${context.url}`, ''] : []),
+        'If this is not what was agreed, tell us straight away.',
       ].join('\n'),
     }
   },
@@ -2114,6 +2189,8 @@ export const TEMPLATES: Readonly<Record<string, NotificationTemplate<never>>> = 
     ticketAcknowledgedTemplate as unknown as NotificationTemplate<never>,
   [paymentReceiptTemplate.key]:
     paymentReceiptTemplate as unknown as NotificationTemplate<never>,
+  [paymentPlanAgreedTemplate.key]:
+    paymentPlanAgreedTemplate as unknown as NotificationTemplate<never>,
   [paymentReturnedTemplate.key]:
     paymentReturnedTemplate as unknown as NotificationTemplate<never>,
   [chargebackPostedTemplate.key]:
