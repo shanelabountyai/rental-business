@@ -11343,4 +11343,6 @@ run on its own. `e2e/jobs.spec.ts` on both projects: 10 passed of 10 listed, 0
 skipped, 0 flaky. **Proved against the revert**: with `job.manage` removed from
 the manager row in `rental_test`, the new e2e test failed (`toBeVisible`,
 element not found — the manager was redirected), and the seed restored it.
-CI: see the follow-up commit.
+CI: run `34621421492` on `b4fe058` green on both jobs — e2e 1227 passed,
+3 skipped, 0 failed, 0 flaky (1230, R-196's 1228 plus the new test on both
+projects).
