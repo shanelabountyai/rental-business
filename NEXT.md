@@ -1,21 +1,40 @@
 # Next session
 
-## R-194 is done — commit `25542dc`, SHA recorded in the follow-up.
+## R-195 is done — commit `4513e6c`, SHA recorded in the follow-up.
 
-**CI for R-194 WAS checked and is green** — run `34606434559` on `25542dc`,
-both jobs, read with `gh run list` after the push, not inherited. The
-SHA-record push starts no run (`paths-ignore` on docs). **Do not copy the green
-line forward** — run `gh run list --limit 5` after your own push.
+**CI for R-195 was NOT yet read when this was written** — check
+`gh run list --limit 5` for `4513e6c` before trusting it. The SHA-record push
+starts no run (`paths-ignore` on docs). **Do not copy a green line forward.**
 
-## Start here: row 182, R-195
+## Start here: row 183, R-196
 
-`docs/prds/06-backlog.md` Milestone 14 ("Arc 4"). **Every Task subject type
-reaches its subject**: `/tasks/[id]` links three of twenty-four subject types.
-One `subjectHref(subjectType, subjectId)` behind the same per-type scope check
-the three existing branches apply (404 not 403 for out-of-scope, ROLE-01).
-**Recommend Sonnet** — routine wiring, but every branch is a scope check, so
-copy the existing three's pattern exactly. Re-verify the row's line numbers
-(R-150): R-194's premise was wrong in a way that changed the whole item.
+`docs/prds/06-backlog.md` Milestone 14 ("Arc 4"). **A guarantor can actually be
+reached**: `TenantConsent` is keyed on `tenantId`, so every guarantor SMS is
+`no_consent` for ever, and `rent_reminder` fans out to a PORTAL the guarantor
+portal has no inbox for. Consent, TCPA and a schema key change — **recommend
+Opus**. Re-verify the row's line numbers (R-150): R-194's and R-195's premises
+were both off (R-195's "twenty-four types" counted `AuthToken` subjects).
+
+## What R-195 changed that the next rows touch
+
+- **`TaskInput.subjectType` is now `TaskSubjectType`** (core,
+  `TASK_SUBJECT_TYPES`). A producer with a new subject type must add it there
+  AND a row in `SUBJECT_ROUTES` (`apps/web/lib/tasks/subject-link.ts`) or
+  typecheck fails — that is the point (D-210). `type` stays free-form.
+- **`subjectLinks(tasks)`** is the one way a page links a Task to its subject.
+  Gated on the TARGET page's read permission; do not hand-write a per-type
+  branch on a page again.
+- `TaskWithProperty.property` now carries `legalEntityId`.
+- The deposit link's name is now "Open the deposit disposition".
+
+## Found in R-195, owned by nobody
+
+- Only `Lease` and `Deposit` routes are exercised end to end; the other
+  seventeen are held by typecheck alone.
+- A `serve_notice_offline` task still cannot reach its notice — its
+  `subjectId` is an idempotency key.
+- `demo-seed.mts` writes Task subject strings outside the union; an unrouted
+  one is silently unlinked.
 
 ## What R-194 changed that the next rows touch
 

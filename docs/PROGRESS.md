@@ -11121,7 +11121,7 @@ seed, no drift); `check:ship-deps` clean; e2e `evictions.spec.ts` +
 
 ## R-195 — every Task subject type reaches its subject
 
-Commit `PENDING`.
+Commit `4513e6c`.
 
 **The row's count was checked before anything was built.** It named
 twenty-four subject types. `subjectType` is also the column name on
