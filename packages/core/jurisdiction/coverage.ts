@@ -18,6 +18,8 @@ const UNREVIEWED_FIELDS = [
   { key: 'preMoveOutWalkthroughRequired', label: 'pre-move-out walkthrough right (INSP-02)' },
   { key: 'earlyTerminationRightExists', label: 'early-termination right (RISK-04)' },
   { key: 'acceptanceWaivesNotice', label: 'acceptance-of-rent waiver (PAY-14)' },
+  { key: 'cureDemandMayIncludeFees', label: 'fees in a cure demand (PAY-14, R-194)' },
+  { key: 'partialPaymentCures', label: 'partial payment as a cure (PAY-14, R-194)' },
   { key: 'dayCountBasis', label: 'how statutory days are counted (§6.7, R-182)' },
 ] as const
 
@@ -30,6 +32,8 @@ export interface RuleCoverageLike {
   preMoveOutWalkthroughRequired: boolean | null
   earlyTerminationRightExists: boolean | null
   acceptanceWaivesNotice: boolean | null
+  cureDemandMayIncludeFees: boolean | null
+  partialPaymentCures: boolean | null
   dayCountBasis: string | null
   observedHolidays: readonly string[]
   depositEscrowRequired: boolean

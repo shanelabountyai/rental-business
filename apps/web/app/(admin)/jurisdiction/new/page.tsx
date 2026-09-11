@@ -134,6 +134,8 @@ export default async function NewJurisdictionRulePage({
           observedHolidays: (source?.observedHolidays ?? []).join('\n'),
           acceptanceWaivesNotice: source?.acceptanceWaivesNotice ?? null,
           acceptanceWaiverNote: source?.acceptanceWaiverNote ?? '',
+          cureDemandMayIncludeFees: source?.cureDemandMayIncludeFees ?? null,
+          partialPaymentCures: source?.partialPaymentCures ?? null,
           noticeToVacateDays: source?.noticeToVacateDays ?? '',
           rentIncreaseNoticeDays: source?.rentIncreaseNoticeDays ?? '',
           rentIncreaseCapPercent: source?.rentIncreaseCapPercentBps

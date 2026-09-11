@@ -381,6 +381,8 @@ test.describe('viewing and creating jurisdiction rules', () => {
         leaseViolationCureDays: 14,
         acceptanceWaivesNotice: true,
         acceptanceWaiverNote: 'Partial acceptance waives; certified full cure does not.',
+        cureDemandMayIncludeFees: false,
+        partialPaymentCures: true,
         // Methods in NOTICE_SERVICE_METHODS render order, because the form
         // submits checkboxes in DOM order - a semantically-equal but
         // reordered list would fail the toEqual below for the wrong reason.

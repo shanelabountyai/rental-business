@@ -5621,6 +5621,16 @@ model Notice {
   trackingNumber     String?
   /// The rule version whose notice period produced this notice's deadlines.
   jurisdictionRuleId String?
+  /// What a cure notice DEMANDED, computed by `cureDemand` when it was drafted
+  /// (R-194). Set at INSERT and, like every other column outside R-161's
+  /// write-once list, never changed after - the figure a cure verdict is read
+  /// against cannot move once the tenant has been handed it. Null on every
+  /// notice that demands no money, and on cure notices from before R-194.
+  demandedCents      Int?
+  /// The `DemandLine[]` behind `demandedCents`, including fee lines a
+  /// rent-only rule kept out of the total. Present exactly when
+  /// `demandedCents` is (CHECK constraint).
+  demandComposition  Json?
   generatedAt        DateTime             @default(now())
   createdAt          DateTime             @default(now())
 
@@ -6271,6 +6281,16 @@ model JurisdictionRule {
   // them, so the nuance does not need to be structured.
   acceptanceWaivesNotice Boolean?
   acceptanceWaiverNote   String?
+
+  // What a cure notice may demand, and what cures it (R-194; D-4, D-209).
+  //
+  // THREE-VALUED, the same posture as `acceptanceWaivesNotice`: null means
+  // nobody has reviewed this state. `cureDemandMayIncludeFees` false keeps
+  // every non-rent charge out of a drafted demand; null includes them and
+  // warns. `partialPaymentCures` is only ever a warning beside a part-cured
+  // verdict - the product never files, and never refuses a filing, on it.
+  cureDemandMayIncludeFees Boolean?
+  partialPaymentCures      Boolean?
 
   // How the numbers above are COUNTED (R-182, review finding 14; D-4).
   //

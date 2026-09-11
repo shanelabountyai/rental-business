@@ -383,6 +383,8 @@ describe('computeCoverage', () => {
       preMoveOutWalkthroughRequired: true,
       earlyTerminationRightExists: true,
       acceptanceWaivesNotice: false,
+      cureDemandMayIncludeFees: false,
+      partialPaymentCures: false,
       dayCountBasis: 'CALENDAR',
       observedHolidays: [],
       // Texas requires neither, which is the whole reason R-183's gap went

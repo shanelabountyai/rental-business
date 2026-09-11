@@ -1,7 +1,11 @@
 import {
   acceptanceWarning,
   costTotals,
+  CURE_NOTICE_TYPES,
   CURE_STATE_LABELS,
+  cureVerdictSentence,
+  demandLineText,
+  feeDemandWarning,
   EVICTION_COST_LABELS,
   EVICTION_COST_TYPES,
   EVICTION_OUTCOME_LABELS,
@@ -11,6 +15,7 @@ import {
   isEvictionCostType,
   isEvictionOutcome,
   LOST_RENT_IS_DERIVED,
+  partialCureWarning,
   readyToFile,
   type EvictionStageValue,
 } from '@rental/core/evictions'
@@ -35,6 +40,7 @@ import {
   AdvanceStagePanel,
   AttachNoticePanel,
   CloseCasePanel,
+  DraftCureNoticePanel,
   ExportPacketPanel,
   RecordCostPanel,
 } from '@/components/evictions/case-panels.tsx'
@@ -44,13 +50,14 @@ import { requirePermission, requireScope } from '@/lib/auth/guard.ts'
 import {
   advanceEvictionStage,
   attachNoticeToCase,
+  draftCureNotice,
   recordEvictionCost,
 } from '@/lib/evictions/actions.ts'
 import { holdsForLease } from '@/lib/holds/queries.ts'
 import { recordScraLookup } from '@/lib/scra/actions.ts'
 import { affidavitLookupFor, lookupsForLease } from '@/lib/scra/queries.ts'
 import { exportAttorneyPacket } from '@/lib/evictions/packet.ts'
-import { attachableNotices, cureClockFor, getEvictionCase } from '@/lib/evictions/queries.ts'
+import { attachableNotices, cureClockFor, cureDemandFor, getEvictionCase } from '@/lib/evictions/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 
 export const metadata = { title: 'Eviction case — Rental Operations' }
@@ -82,9 +89,19 @@ export default async function EvictionCasePage({ params }: { params: Promise<{ i
   if (!evictionCase) notFound()
 
   const zone = evictionCase.property.timezone
-  const { clock, hasNotice, paymentsSinceService, acceptanceWaivesNotice, acceptanceWaiverNote } =
-    await cureClockFor(evictionCase)
+  const {
+    clock,
+    hasNotice,
+    paymentsSinceService,
+    acceptanceWaivesNotice,
+    acceptanceWaiverNote,
+    partialPaymentCures,
+    demand,
+  } = await cureClockFor(evictionCase)
   const stage = evictionCase.stage as EvictionStageValue
+  // R-194: what a notice drafted now would demand. Only before filing - a
+  // cure notice after the filing is not a thing this path has.
+  const draft = stage === 'NOTICE' ? await cureDemandFor(evictionCase) : null
   const next = NEXT_STAGE[stage]
   const totals = costTotals(evictionCase.costs)
   const attachable = await attachableNotices(evictionCase.leaseId)
@@ -161,6 +178,26 @@ export default async function EvictionCasePage({ params }: { params: Promise<{ i
               attorney — a date guessed here is the one that gets a case dismissed.
             </p>
           )
+        )}
+        {/* R-194. Beside the clock because it answers the same question the
+            filing gate asks. A warning, never a blocker, like the band below. */}
+        {demand && (
+          <div className="flex flex-col gap-1">
+            <p className="text-sm font-medium">{cureVerdictSentence(demand.verdict, clock.state)}</p>
+            {demand.lines.length > 0 && (
+              <ul className="text-muted-foreground flex flex-col text-sm">
+                {demand.lines.map((line, index) => (
+                  <li key={index} className="tabular-nums">
+                    {demandLineText(line)}: {formatCents(line.amountCents)}
+                    {!line.demanded && ' — listed, not demanded'}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {demand.verdict.state === 'part_cured' && (
+              <p className="text-sm text-amber-800">{partialCureWarning(partialPaymentCures)}</p>
+            )}
+          </div>
         )}
       </section>
 
@@ -243,6 +280,39 @@ export default async function EvictionCasePage({ params }: { params: Promise<{ i
               </li>
             ))}
           </ul>
+        )}
+        {draft && (
+          <div className="flex flex-col gap-2 border-t pt-3">
+            <h3 className="font-medium">Draft a cure notice</h3>
+            {draft.demand.demandedCents > 0 ? (
+              <>
+                <ul className="flex flex-col text-sm">
+                  {draft.demand.lines.map((line, index) => (
+                    <li key={index} className="tabular-nums">
+                      {demandLineText(line)}: {formatCents(line.amountCents)}
+                      {!line.demanded && ' — not demanded'}
+                    </li>
+                  ))}
+                  <li className="font-medium tabular-nums">
+                    Would demand {formatCents(draft.demand.demandedCents)}
+                  </li>
+                </ul>
+                {draft.demand.lines.some((line) => line.kind === 'FEE') && feeDemandWarning(draft.mayIncludeFees) && (
+                  <p className="text-sm text-amber-800">{feeDemandWarning(draft.mayIncludeFees)}</p>
+                )}
+                <DraftCureNoticePanel
+                  action={draftCureNotice.bind(null, evictionCase.id)}
+                  types={CURE_NOTICE_TYPES.map((type) => ({ value: type, label: noticeTypeLabel(type) }))}
+                />
+              </>
+            ) : (
+              <p className="text-muted-foreground text-sm">
+                {draft.demand.lines.length > 0
+                  ? 'Only fees are owed, and this state’s rule says a cure notice may demand rent only.'
+                  : 'Nothing is owed on this lease right now, so there is no demand to draft.'}
+              </p>
+            )}
+          </div>
         )}
         {attachable.length > 0 && stage !== 'CLOSED' && (
           <AttachNoticePanel

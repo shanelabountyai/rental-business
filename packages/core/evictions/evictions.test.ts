@@ -8,6 +8,16 @@ import {
   type CurePayment,
   type ServiceEvent,
 } from './cure.ts'
+import {
+  cureDemand,
+  cureNoticeText,
+  cureVerdict,
+  cureVerdictSentence,
+  demandKind,
+  feeDemandWarning,
+  partialCureWarning,
+  type DemandDebt,
+} from './demand.ts'
 import { canAdvanceTo } from './stages.ts'
 import { UNREVIEWED_DAY_COUNT } from '../scheduling/deadline.ts'
 
@@ -232,5 +242,136 @@ describe('acceptanceWarning', () => {
   it('states the configured rule when counsel has answered', () => {
     expect(acceptanceWarning(true)).toContain('waives the notice')
     expect(acceptanceWarning(false)).toContain('does not by itself waive')
+  })
+})
+
+// R-194. The demand is the figure a filing decision is read against, and it
+// is stored on an append-only row, so a wrong number here is permanent.
+describe('cureDemand', () => {
+  const rent = (dueOn: string, amountCents = 150_000): DemandDebt => ({ dueOn, amountCents, label: 'Rent', kind: 'RENT' })
+  const fee = (dueOn: string, amountCents = 7_500): DemandDebt => ({ dueOn, amountCents, label: 'Late fee', kind: 'FEE' })
+
+  it('demands nothing on a settled or credit balance', () => {
+    expect(cureDemand({ balanceCents: 0, debts: [rent('2026-09-01')], mayIncludeFees: true })).toEqual({
+      demandedCents: 0,
+      lines: [],
+    })
+  })
+
+  it('demands only the debts the balance still sits on, newest first, listed oldest first', () => {
+    // $1,575 owed against August rent, September rent and a September fee:
+    // payments settle oldest-first, so August is paid and must not be demanded.
+    const demand = cureDemand({
+      balanceCents: 157_500,
+      debts: [rent('2026-08-01'), rent('2026-09-01'), fee('2026-09-06')],
+      mayIncludeFees: true,
+    })
+    expect(demand.demandedCents).toBe(157_500)
+    expect(demand.lines.map((l) => [l.dueOn, l.amountCents])).toEqual([
+      ['2026-09-01', 150_000],
+      ['2026-09-06', 7_500],
+    ])
+  })
+
+  it('keeps fees out of the total, but on the record, when the rule says rent only', () => {
+    const demand = cureDemand({
+      balanceCents: 157_500,
+      debts: [rent('2026-09-01'), fee('2026-09-06')],
+      mayIncludeFees: false,
+    })
+    expect(demand.demandedCents).toBe(150_000)
+    expect(demand.lines.find((l) => l.kind === 'FEE')).toMatchObject({ amountCents: 7_500, demanded: false })
+  })
+
+  it('includes fees when nobody has reviewed the state, and the warning says so', () => {
+    const demand = cureDemand({
+      balanceCents: 157_500,
+      debts: [rent('2026-09-01'), fee('2026-09-06')],
+      mayIncludeFees: null,
+    })
+    expect(demand.demandedCents).toBe(157_500)
+    expect(feeDemandWarning(null)).toContain('has not been taught')
+    expect(feeDemandWarning(false)).toContain('rent only')
+    expect(feeDemandWarning(true)).toBeNull()
+  })
+
+  it('demands balance no dated debt explains as earlier rent, never drops it', () => {
+    const demand = cureDemand({ balanceCents: 400_000, debts: [rent('2026-09-01')], mayIncludeFees: false })
+    expect(demand.demandedCents).toBe(400_000)
+    expect(demand.lines[0]).toMatchObject({ label: 'Rent from earlier periods', dueOn: null, amountCents: 250_000 })
+  })
+
+  it('treats pet rent as rent and every other charge type as a fee', () => {
+    expect(demandKind('RENT')).toBe('RENT')
+    expect(demandKind('PET_RENT')).toBe('RENT')
+    expect(demandKind('LATE_FEE')).toBe('FEE')
+    expect(demandKind('UTILITY')).toBe('FEE')
+  })
+
+  it('writes only the demanded lines and the total into the notice text', () => {
+    const demand = cureDemand({
+      balanceCents: 157_500,
+      debts: [rent('2026-09-01'), fee('2026-09-06')],
+      mayIncludeFees: false,
+    })
+    const text = cureNoticeText({
+      title: 'Notice to vacate',
+      tenantNames: ['Ada Tenant'],
+      addressLine1: '4 Courthouse Way',
+      unitName: null,
+      demand,
+      payOrQuitDays: 3,
+    })
+    expect(text).toContain('Rent, due 1 Sept 2026: $1,500.00')
+    expect(text).toContain('Total demanded: $1,500.00')
+    expect(text).not.toContain('Late fee')
+    expect(text).toContain('within 3 days')
+    expect(text).toContain('not legal advice')
+  })
+})
+
+describe('cureVerdict', () => {
+  it('counts kept payments from drafting through the last day to cure, both ends inclusive', () => {
+    const verdict = cureVerdict(
+      150_000,
+      [paid('2026-08-31', 99_999), paid('2026-09-01', 50_000), paid('2026-09-04', 25_000), paid('2026-09-05', 75_000)],
+      '2026-09-01',
+      '2026-09-04',
+    )
+    expect(verdict).toMatchObject({ state: 'part_cured', keptCents: 75_000 })
+  })
+
+  it('is cured when what was kept inside the window meets the demand', () => {
+    expect(cureVerdict(150_000, [paid('2026-09-02', 150_000)], '2026-09-01', '2026-09-04').state).toBe('cured')
+  })
+
+  it('is not cured when nothing was kept inside the window', () => {
+    expect(cureVerdict(150_000, [paid('2026-09-10', 150_000)], '2026-09-01', '2026-09-04').state).toBe('not_cured')
+  })
+
+  it('counts every payment since drafting when no cure period is configured, and says so', () => {
+    const verdict = cureVerdict(150_000, [paid('2026-12-01', 150_000)], '2026-09-01', null)
+    expect(verdict.state).toBe('cured')
+    expect(cureVerdictSentence(verdict, 'running')).toContain('no cure period is configured')
+  })
+
+  it('says it cannot answer for a notice from before demands were recorded', () => {
+    const verdict = cureVerdict(null, [paid('2026-09-02', 150_000)], '2026-09-01', '2026-09-04')
+    expect(verdict.state).toBe('demand_not_recorded')
+    expect(cureVerdictSentence(verdict, 'expired')).toContain('cannot be worked out')
+  })
+
+  it('says "so far" until the cure period has run out', () => {
+    const verdict = cureVerdict(150_000, [paid('2026-09-02', 40_000)], '2026-09-01', '2026-09-04')
+    expect(cureVerdictSentence(verdict, 'running')).toBe(
+      'Part-cured so far: $400.00 of $1,500.00 kept between drafting and the last day to cure, $1,100.00 short.',
+    )
+    expect(cureVerdictSentence(verdict, 'expired')).toMatch(/^Part-cured: /)
+  })
+
+  it('states the partial-payment rule without answering for an unreviewed state', () => {
+    expect(partialCureWarning(null)).toContain('has not been taught')
+    expect(partialCureWarning(true)).toContain('cures the notice')
+    expect(partialCureWarning(false)).toContain('only payment in full cures')
   })
 })

@@ -1,7 +1,13 @@
 'use server'
 
 import { createHash } from 'node:crypto'
-import { acceptanceWarning, costTotals, packetBlocks, type PacketExhibit } from '@rental/core/evictions'
+import {
+  acceptanceWarning,
+  costTotals,
+  cureVerdictSentence,
+  packetBlocks,
+  type PacketExhibit,
+} from '@rental/core/evictions'
 import { statementBlocks, statementForPeriod } from '@rental/core/ledger'
 import { noticeTypeLabel } from '@rental/core/notices'
 import { businessDate, friendlyBusinessDate, friendlyDate, friendlyTimestamp } from '@rental/core/scheduling'
@@ -78,7 +84,7 @@ export async function exportAttorneyPacket(
   const zone = evictionCase.property.timezone
   const generatedAt = new Date()
 
-  const { clock, paymentsSinceService, acceptanceWaivesNotice } = await cureClockFor(evictionCase)
+  const { clock, paymentsSinceService, acceptanceWaivesNotice, demand } = await cureClockFor(evictionCase)
 
   // The ledger, read whole. `statementForPeriod` needs the entire history to
   // carry a balance - see its own comment on why filtering first produces a
@@ -230,6 +236,7 @@ export async function exportAttorneyPacket(
     clock,
     paymentsSinceService,
     acceptanceWaivesNotice,
+    cureVerdict: demand ? cureVerdictSentence(demand.verdict, clock.state) : null,
     closingBalanceCents: period.closingBalanceCents,
     statementPdf,
     fetched,
@@ -248,6 +255,7 @@ async function finish(args: {
   clock: Awaited<ReturnType<typeof cureClockFor>>['clock']
   paymentsSinceService: Awaited<ReturnType<typeof cureClockFor>>['paymentsSinceService']
   acceptanceWaivesNotice: boolean | null
+  cureVerdict: string | null
   closingBalanceCents: number
   statementPdf: Uint8Array
   fetched: Fetched[]
@@ -300,6 +308,7 @@ async function finish(args: {
           channelLabel: payment.channelLabel,
         })),
         acceptanceWarning: acceptanceWarning(args.acceptanceWaivesNotice),
+        cureVerdict: args.cureVerdict,
         costs: totals,
         ledgerBalanceCents: args.closingBalanceCents,
         exhibits: buildExhibits(failed),

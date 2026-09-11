@@ -3,11 +3,22 @@ import 'server-only'
 import {
   CURE_NOTICE_TYPES,
   cureClock,
+  cureDemand,
+  cureVerdict,
+  demandKind,
   paymentsSinceService,
   type CurePayment,
+  type DemandLine,
   type ServiceEvent,
 } from '@rental/core/evictions'
-import { businessDate, type DayCountRule, UNREVIEWED_DAY_COUNT } from '@rental/core/scheduling'
+import { balanceCents } from '@rental/core/ledger'
+import {
+  businessDate,
+  type DayCountRule,
+  dueDateOnOrBefore,
+  UNREVIEWED_DAY_COUNT,
+  utcToBusinessDate,
+} from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { rulesFor } from '@/lib/jurisdiction/queries.ts'
 import type { ResolvedScope } from '@/lib/scope/current-scope.ts'
@@ -90,6 +101,9 @@ export async function cureClockFor(evictionCase: EvictionCaseDetail) {
   // case page then warns conservatively rather than answering for the state.
   let acceptanceWaivesNotice: boolean | null = null
   let acceptanceWaiverNote: string | null = null
+  // R-194. Three-valued like the two above; shown only beside a part-cured
+  // verdict.
+  let partialPaymentCures: boolean | null = null
   // R-182: how the state counts the cure period, not just how many days it
   // is. An unconfigured state has neither, and `UNREVIEWED_DAY_COUNT` is what
   // that absence looks like - `cureClock` reports no deadline at all there.
@@ -99,6 +113,7 @@ export async function cureClockFor(evictionCase: EvictionCaseDetail) {
     payOrQuitDays = rule.payOrQuitDays
     acceptanceWaivesNotice = rule.acceptanceWaivesNotice
     acceptanceWaiverNote = rule.acceptanceWaiverNote
+    partialPaymentCures = rule.partialPaymentCures
     dayCount = rule
   } catch {
     payOrQuitDays = null
@@ -143,12 +158,111 @@ export async function cureClockFor(evictionCase: EvictionCaseDetail) {
     channelLabel: PAYMENT_CHANNEL_LABELS[p.channel] ?? p.channel,
   }))
 
+  const clock = cureClock(services, payOrQuitDays, today, dayCount)
+
+  // R-194: the notice whose demand the verdict is read against - the one
+  // holding the service the clock runs from, so a second notice drafted after
+  // a defective first one is judged on its own demand. Before any good
+  // service, the earliest drafted.
+  const cureNotices = evictionCase.notices.filter((notice) => CURE_NOTICE_TYPES.includes(notice.type))
+  const demandNotice =
+    cureNotices.find((notice) =>
+      notice.deliveries.some(
+        (delivery) =>
+          delivery.permittedByJurisdiction !== false &&
+          businessDate(delivery.servedAt, evictionCase.property.timezone) === clock.runsFrom,
+      ),
+    ) ??
+    cureNotices[0] ??
+    null
+
   return {
-    clock: cureClock(services, payOrQuitDays, today, dayCount),
+    clock,
     hasNotice,
     paymentsSinceService: paymentsSinceService(services, payments),
     acceptanceWaivesNotice,
     acceptanceWaiverNote,
+    partialPaymentCures,
+    demand: demandNotice
+      ? {
+          noticeId: demandNotice.id,
+          // Our own write, validated by the drafting action and frozen by
+          // R-161's trigger - read back as the shape it was written in.
+          lines: (demandNotice.demandComposition as DemandLine[] | null) ?? [],
+          verdict: cureVerdict(
+            demandNotice.demandedCents,
+            payments,
+            businessDate(demandNotice.generatedAt, evictionCase.property.timezone),
+            clock.cureBy,
+          ),
+        }
+      : null,
+  }
+}
+
+/**
+ * What a cure notice drafted on this case today would demand (R-194). Read by
+ * the case page to preview it and by `draftCureNotice` to store it, so the
+ * figure shown before the press is the figure computed at it.
+ *
+ * The facts are the rent roll's own: ledger balance, unwaived charges, and
+ * the current period's rent dated by the payer's debit day or the lease's due
+ * day - the same precedence `rentRoll` reads.
+ */
+export async function cureDemandFor(evictionCase: EvictionCaseDetail) {
+  const lease = await prisma.lease.findUniqueOrThrow({
+    where: { id: evictionCase.leaseId },
+    select: {
+      rentCents: true,
+      rentDueDay: true,
+      leasePayers: { where: { active: true }, select: { debitDay: true }, take: 1 },
+      ledgerEntries: {
+        select: { id: true, type: true, amountCents: true, occurredAt: true, description: true, reversesId: true },
+      },
+      charges: {
+        where: { waivedAt: null },
+        select: { type: true, description: true, dueOn: true, amountCents: true },
+      },
+    },
+  })
+
+  // Same resolver and same "no rule is not an error" posture as
+  // `cureClockFor`: an unconfigured state has an unreviewed fee rule and an
+  // unknown cure period, both of which the caller states rather than guesses.
+  let rule: { id: string; payOrQuitDays: number | null; cureDemandMayIncludeFees: boolean | null } | null = null
+  try {
+    rule = await rulesFor(evictionCase.property, new Date())
+  } catch {
+    rule = null
+  }
+
+  const today = businessDate(new Date(), evictionCase.property.timezone)
+  const rentDueDay = lease.leasePayers[0]?.debitDay ?? lease.rentDueDay
+  const mayIncludeFees = rule?.cureDemandMayIncludeFees ?? null
+
+  return {
+    demand: cureDemand({
+      balanceCents: balanceCents(lease.ledgerEntries),
+      debts: [
+        ...lease.charges.map((charge) => ({
+          // `@db.Date` - the calendar-day reader, never a zone (R-042).
+          dueOn: utcToBusinessDate(charge.dueOn),
+          amountCents: charge.amountCents,
+          label: charge.description,
+          kind: demandKind(charge.type),
+        })),
+        {
+          dueOn: dueDateOnOrBefore(today, rentDueDay),
+          amountCents: lease.rentCents,
+          label: 'Rent',
+          kind: 'RENT' as const,
+        },
+      ],
+      mayIncludeFees,
+    }),
+    mayIncludeFees,
+    payOrQuitDays: rule?.payOrQuitDays ?? null,
+    jurisdictionRuleId: rule?.id ?? null,
   }
 }
 

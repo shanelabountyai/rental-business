@@ -230,26 +230,49 @@ function oldestUnsettled(facts: DelinquencyFacts): BusinessDate | null {
   }
   if (debts.length === 0) return null
 
-  // Ties on the date break on amount purely so two runs over the same data
-  // can never disagree - the answer is a date, so tied rows give the same
-  // one either way.
-  const newestFirst = debts.sort(
-    (a, b) => b.dueOn.localeCompare(a.dueOn) || b.amountCents - a.amountCents,
-  )
+  const { owed, unallocatedCents, newestFirst } = allocateBalance(debts, facts.balanceCents)
+  // Covered: the debt the balance ran out on. Not covered: the balance
+  // outruns every debt on file - unlinked rent from a period this schema does
+  // not record - so the oldest thing we CAN name is the anchor, which
+  // understates rather than inventing a date.
+  return unallocatedCents === 0 ? owed[owed.length - 1]!.debt.dueOn : newestFirst[newestFirst.length - 1]!.dueOn
+}
 
-  let covered = 0
+/**
+ * Which debts a positive balance is still sitting on, and how much of each.
+ *
+ * Newest-first, because payments settle oldest-first (D-11): what remains
+ * owed is the most recent end of the list. See the header on
+ * `delinquencyFor` for why a charge row alone is not evidence of a debt.
+ *
+ * ONE ALLOCATION, READ BY BOTH THE AGING AND A CURE NOTICE'S DEMAND (R-194).
+ * The two answer "what is still owed" about the same balance, and two copies
+ * of this loop is how they would come to disagree - the R-118 defect was a
+ * reader that got this allocation wrong.
+ *
+ * `unallocatedCents` is balance no debt on file accounts for.
+ */
+export function allocateBalance<T extends DatedCharge>(
+  debts: readonly T[],
+  balanceCents: Cents,
+): { owed: { debt: T; owedCents: Cents }[]; unallocatedCents: Cents; newestFirst: T[] } {
+  // Ties on the date break on amount purely so two runs over the same data
+  // can never disagree.
+  const newestFirst = [...debts].sort((a, b) => b.dueOn.localeCompare(a.dueOn) || b.amountCents - a.amountCents)
+
+  const owed: { debt: T; owedCents: Cents }[] = []
+  let remaining = balanceCents
   for (const debt of newestFirst) {
-    // Floored at zero: a credit dressed as a charge would otherwise walk
-    // `covered` backwards and age the tenancy from further back than the
+    if (remaining <= 0) break
+    // Floored at zero: a credit dressed as a charge would otherwise walk the
+    // allocation backwards and age the tenancy from further back than the
     // balance can justify. Corrections are reversing LEDGER entries (D-11),
-    // so they belong in `balanceCents`, not here.
-    covered += Math.max(0, debt.amountCents)
-    if (covered >= facts.balanceCents) return debt.dueOn
+    // so they belong in the balance, not here.
+    const take = Math.min(remaining, Math.max(0, debt.amountCents))
+    if (take > 0) owed.push({ debt, owedCents: take })
+    remaining -= take
   }
-  // The balance outruns every debt on file - unlinked rent from a period
-  // this schema does not record. The oldest thing we CAN name is the anchor,
-  // which understates rather than inventing a date.
-  return newestFirst[newestFirst.length - 1]!.dueOn
+  return { owed, unallocatedCents: Math.max(0, remaining), newestFirst }
 }
 
 /// Totals per bucket, for the delinquency tile. Every bucket is present even

@@ -194,6 +194,33 @@ export function AttachNoticePanel({
   )
 }
 
+/// R-194. Drafting the cure notice. The demand itself is rendered by the page
+/// above this form, from the same query the action recomputes at the press.
+export function DraftCureNoticePanel({
+  action,
+  types,
+}: {
+  action: Action
+  types: readonly { value: string; label: string }[]
+}) {
+  const [state, formAction] = useActionState<EvictionFormState, FormData>(action, {})
+
+  return (
+    <form action={formAction} className="flex max-w-sm flex-col gap-3">
+      <FormAlerts state={state} />
+      <SelectField
+        label="Notice to draft"
+        name="noticeType"
+        idPrefix="draft"
+        required
+        defaultValue={types[0]?.value}
+        options={types}
+      />
+      <SubmitButton label="Draft the cure notice" />
+    </form>
+  )
+}
+
 /// The packet. One button, because PAY-14 says one click - and a returned
 /// summary, because the export names any exhibit it could not attach (D-50)
 /// and that sentence has to reach the screen.

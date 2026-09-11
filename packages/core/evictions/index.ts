@@ -2,5 +2,6 @@
 // database, no Next.js, and nothing here files anything anywhere.
 export * from './costs.ts'
 export * from './cure.ts'
+export * from './demand.ts'
 export * from './packet.ts'
 export * from './stages.ts'

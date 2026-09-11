@@ -2,6 +2,8 @@
 
 import {
   canAdvanceTo,
+  CURE_NOTICE_TYPES,
+  cureNoticeText,
   FILING_REFUSAL_MESSAGES,
   isEvictionCostType,
   isEvictionOutcome,
@@ -11,6 +13,7 @@ import {
   validateEvictionCost,
   type EvictionStageValue,
 } from '@rental/core/evictions'
+import { noticeTypeLabel } from '@rental/core/notices'
 import { AFFIDAVIT_REFUSAL_MESSAGES, affidavitReadiness } from '@rental/core/scra'
 import { businessDate, businessDateToUtc } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
@@ -19,7 +22,7 @@ import { redirect } from 'next/navigation'
 import { audit } from '@/lib/audit/index.ts'
 import { propertyResource, requirePermission, requireScope } from '@/lib/auth/guard.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
-import { cureClockFor, getEvictionCase } from '@/lib/evictions/queries.ts'
+import { cureClockFor, cureDemandFor, getEvictionCase } from '@/lib/evictions/queries.ts'
 import { affidavitLookupFor } from '@/lib/scra/queries.ts'
 
 // Writes for eviction case files (PAY-14, R-083).
@@ -158,6 +161,98 @@ export async function attachNoticeToCase(
 
   revalidatePath(`/evictions/${caseId}`)
   return { notice: 'Notice filed under this case.' }
+}
+
+/**
+ * Drafts the cure notice for a case, with what it demands stored on the row
+ * (R-194).
+ *
+ * BEFORE THIS NOTHING IN THE PRODUCT COULD CREATE ONE. R-083 recorded that
+ * R-051 "already generates pay-or-quit notices"; R-051 renders and serves a
+ * notice row that already exists, and every writer of a `PAY_OR_QUIT` or
+ * `NOTICE_TO_VACATE` row was a seed or a test fixture. A real case could
+ * never have a notice attached, so `readyToFile` refused every filing.
+ *
+ * The notice is filed under the case at INSERT (`evictionCaseId` is on
+ * R-161's write-once list either way) and is NOT served here: generating and
+ * serving are separate acts (R-051), so the press lands on the notice page
+ * where the PDF is produced and each service is recorded.
+ */
+export async function draftCureNotice(
+  caseId: string,
+  _previous: EvictionFormState,
+  formData: FormData,
+): Promise<EvictionFormState> {
+  const type = str(formData, 'noticeType')
+  // R-103: `requireScope`, then the property-scoped check once the case is
+  // known - the same pair `attachNoticeToCase` uses.
+  const { actor: guarded } = await requireScope('eviction.manage')
+  const scope = await currentScope(guarded)
+  const evictionCase = await getEvictionCase(caseId, scope)
+  if (!evictionCase) return { error: 'That case no longer exists.' }
+  await requirePermission('eviction.manage', propertyResource(evictionCase.property))
+
+  if (evictionCase.stage !== 'NOTICE') {
+    return { error: 'A cure notice is drafted before filing, while the case is at the notice stage.' }
+  }
+  if (!CURE_NOTICE_TYPES.includes(type)) {
+    return { error: 'Choose which notice to draft.', fieldErrors: { noticeType: 'Required.' } }
+  }
+
+  // Recomputed at the press, never taken from the form: the figure stored is
+  // the one the ledger supports now, not the one a stale page showed.
+  const { demand, payOrQuitDays, jurisdictionRuleId } = await cureDemandFor(evictionCase)
+  if (demand.demandedCents <= 0) {
+    return {
+      error:
+        demand.lines.length > 0
+          ? 'Only fees are owed on this lease, and this state’s rule says a cure notice may demand rent only.'
+          : 'Nothing is owed on this lease, so there is nothing to demand.',
+    }
+  }
+
+  const notice = await prisma.$transaction(async (tx) => {
+    const created = await tx.notice.create({
+      data: {
+        propertyId: evictionCase.propertyId,
+        leaseId: evictionCase.leaseId,
+        evictionCaseId: caseId,
+        type,
+        addressOfRecord: evictionCase.property.addressLine1,
+        bodyText: cureNoticeText({
+          title: noticeTypeLabel(type),
+          tenantNames: evictionCase.lease.leaseTenants.map((lt) => `${lt.tenant.firstName} ${lt.tenant.lastName}`),
+          addressLine1: evictionCase.property.addressLine1,
+          unitName: evictionCase.unit.name,
+          demand,
+          payOrQuitDays,
+        }),
+        demandedCents: demand.demandedCents,
+        demandComposition: demand.lines.map((line) => ({
+          label: line.label,
+          dueOn: line.dueOn,
+          kind: line.kind,
+          amountCents: line.amountCents,
+          demanded: line.demanded,
+        })),
+        jurisdictionRuleId,
+      },
+    })
+    await audit(
+      {
+        action: 'notice.drafted',
+        entityType: 'Notice',
+        entityId: created.id,
+        propertyId: evictionCase.propertyId,
+        after: { evictionCaseId: caseId, type, demandedCents: demand.demandedCents, jurisdictionRuleId },
+      },
+      tx,
+    )
+    return created
+  })
+
+  revalidatePath(`/evictions/${caseId}`)
+  redirect(`/notices/${notice.id}`)
 }
 
 /**

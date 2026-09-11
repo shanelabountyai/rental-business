@@ -300,3 +300,41 @@ describe('renderNoticePdf', () => {
     expect(bytes.byteLength).toBeGreaterThan(500)
   })
 })
+
+// R-194. What a cure notice demanded is set at INSERT and then frozen - not
+// by a new allowance in R-161's trigger but by its absence from one: the
+// trigger's jsonb diff refuses any column outside the write-once list. Its
+// shape is a CHECK constraint, because a total with nothing behind it is a
+// demand nobody can check.
+describe('a notice demand', () => {
+  const line = { label: 'Rent', dueOn: '2026-09-01', kind: 'RENT', amountCents: 150_000, demanded: true }
+
+  it('is set when the notice is drafted and can never be changed afterwards', async () => {
+    const notice = await prisma.notice.create({
+      data: {
+        propertyId,
+        leaseId,
+        type: 'PAY_OR_QUIT',
+        addressOfRecord: '4 Notice Way',
+        demandedCents: 150_000,
+        demandComposition: [line],
+      },
+    })
+    await expect(
+      prisma.notice.update({ where: { id: notice.id }, data: { demandedCents: 1 } }),
+    ).rejects.toThrow(/append-only/)
+    await expect(
+      prisma.notice.update({ where: { id: notice.id }, data: { demandComposition: [] } }),
+    ).rejects.toThrow(/append-only/)
+  })
+
+  it('refuses a total with no lines behind it, and a demand for nothing', async () => {
+    const base = { propertyId, leaseId, type: 'PAY_OR_QUIT', addressOfRecord: '4 Notice Way' }
+    await expect(prisma.notice.create({ data: { ...base, demandedCents: 150_000 } })).rejects.toThrow(
+      /Notice_demand_shape/,
+    )
+    await expect(
+      prisma.notice.create({ data: { ...base, demandedCents: 0, demandComposition: [line] } }),
+    ).rejects.toThrow(/Notice_demand_shape/)
+  })
+})

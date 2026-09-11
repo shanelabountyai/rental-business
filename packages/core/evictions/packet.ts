@@ -60,6 +60,9 @@ export interface PacketFacts {
   paymentsSinceService: readonly { receivedOn: string; amountCents: number; channelLabel: string }[]
   /// `acceptanceWarning(...)`'s sentence for this jurisdiction's rule.
   acceptanceWarning: string
+  /// R-194: `cureVerdictSentence(...)` for the notice the clock runs from.
+  /// Null when the case holds no cure notice.
+  cureVerdict: string | null
   costs: CostTotals
   ledgerBalanceCents: number | null
   exhibits: readonly PacketExhibit[]
@@ -113,6 +116,10 @@ export function packetBlocks(facts: PacketFacts): DocumentBlock[] {
       text: 'Last day to cure: not configured for this jurisdiction in this system',
     })
   }
+
+  // R-194, under the same rule: a notice the tenant paid in full is the
+  // first thing an attorney needs to know before filing on it.
+  if (facts.cureVerdict) blocks.push({ kind: 'paragraph', text: facts.cureVerdict })
 
   // R-156, under D-50's rule: never silently omit the awkward fact. A payment
   // accepted after service is the first thing opposing counsel will raise,

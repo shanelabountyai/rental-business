@@ -11027,3 +11027,94 @@ limited to tax and insurance.
 e2e `property-expenses.spec.ts` + `operating-report.spec.ts` on
 `desktop-chrome` and `mobile-chrome`: 16 passed of 16 listed, production build.
 CI: run `34542871804` on `d10e7b0` green, both jobs (lint/types/unit/build; e2e/axe/Lighthouse), read with `gh run list` after the push.
+
+## R-194 — a cure notice can be drafted, records what it demanded, and the case says whether the tenant cured
+
+Commit `PENDING`.
+
+**The row's premise was checked before anything was built, and the check found
+a larger defect than the row.** The row asked to store `demandedCents` "at
+generation". Every `Notice` insert in `apps/web` was enumerated — entry notices
+(work orders, showings, inspections, abandonment), deposit disposition,
+`NON_RENEWAL`, `REPAIR_CHARGE`, adverse action — and **none writes a
+`PAY_OR_QUIT` or `NOTICE_TO_VACATE`**. Only `demo-seed.mts` and e2e fixtures
+did. R-083 (and backlog row 83) recorded that R-051 "already generates
+pay-or-quit notices"; R-051 renders the PDF of, and records service against, a
+notice row that already exists. So on a real deployment the case page's attach
+picker was always empty, `readyToFile` always refused with `no_case_notice`,
+and **no eviction case could ever reach FILING**. The D-28 walks never saw it
+because the seed writes the notice. The row's other claim — that the demanded
+sum lived as merge text in `bodyText` — was also wrong; there was no generator
+to write it. The owner chose to build the generator and the verdict together
+(D-209).
+
+**What it built.**
+
+- `allocateBalance` in `packages/core/ledger/aging.ts`: the newest-first
+  allocation extracted from `delinquencyFor`, which now calls it. The aging
+  and the demand read one allocation, so a notice cannot demand a debt the
+  rent roll considers paid. `delinquencyFor`'s existing tests are unchanged
+  and green.
+- `packages/core/evictions/demand.ts`: `cureDemand` (itemised lines, oldest
+  first; balance no dated debt explains is demanded as "Rent from earlier
+  periods"; `RENT`/`PET_RENT` are rent, everything else a fee), `cureNoticeText`
+  (draft-only), `cureVerdict` / `cureVerdictSentence` (kept payments from the
+  drafting day through `cureBy` inclusive; "so far" while the clock runs),
+  `feeDemandWarning`, `partialCureWarning`.
+- `Notice.demandedCents` + `Notice.demandComposition` (migration
+  `20260911120000_r194_notice_demand`), set at INSERT. Not added to R-161's
+  write-once list — the trigger's jsonb diff already freezes them. CHECK
+  `Notice_demand_shape`: both or neither, total positive.
+- `JurisdictionRule.cureDemandMayIncludeFees` and `.partialPaymentCures`,
+  three-valued, on the rule form, cloned by the new-version prefill, listed as
+  unreviewed in `computeCoverage`, and populated in `jurisdiction.spec.ts`'s
+  carry-forward v1. No state seeded with a stance.
+- `cureDemandFor` (rent roll's facts: ledger balance, unwaived charges, current
+  rent dated by payer debit day or lease due day) and `draftCureNotice`
+  (`eviction.manage`, NOTICE stage only, recomputes at the press, files under
+  the case, audits `notice.drafted`, lands on `/notices/[id]` to generate the
+  PDF and record service).
+- `/evictions/[id]`: a "Draft a cure notice" block showing what it would
+  demand, the fee warning when fee lines exist and the rule is not "yes"; the
+  verdict sentence, the stored lines and, when part-cured, the partial-payment
+  warning, in "Service and the cure period". The packet cover sheet carries
+  the verdict sentence.
+- Tests: 13 core cases (`evictions.test.ts`), 2 database cases
+  (`notices.test.ts` — the demand cannot be updated, the CHECK refuses a bare
+  total and a zero demand), 1 e2e that drafts through the UI and reads a
+  part-cured verdict back.
+- **Proven against reverted fixes** (D-197): demanding fees regardless of the
+  rule turned two tests red; an exclusive last day to cure turned one red;
+  dropping the drafting-day lower bound turned one red. Each restored green.
+
+**What it decided.** D-209: the product drafts cure notices; the demand is
+stored at INSERT and never moves; fees are included and warned on when the rule
+is unreviewed (owner decision); the verdict counts from drafting, not service;
+it is a warning and never a filing gate.
+
+**What it left behind.**
+
+- **The demo seed's notice has no demand**, so a D-28 walk of Riverside Court
+  shows "created before the product recorded what a notice demanded". The
+  seed writes the notice before the Stripe replay that builds the balance, so
+  it has nothing to compute from at that point.
+- **Pet rent as rent** is a product reading, not counsel's.
+- **Payments on the drafting day before the press are counted**, which can
+  over-credit a tenant; the verdict may read cured or part-cured where the
+  arithmetic on the instant would not.
+- A notice's demand is the balance as the ledger knows it; a concession posted
+  as a Stripe credit rather than a ledger entry is invisible to it (R-156's
+  same seam).
+- Nothing drafts a cure notice from the lease page or the final chase rung
+  ("final chase before a notice"); the case page is the only entry point, so a
+  case has to be opened first.
+- R-083's and backlog row 83's "R-051 already generates pay-or-quit notices" is
+  left as written history; this entry and D-209 are the correction.
+
+**Gate.** `lint` 0 errors (16 warnings, all pre-existing; the one in
+`evictions/[id]/page.tsx` is an unused `requirePermission` import that predates
+this item); `typecheck` clean; `npm test` run alone: 3132 passed, 4 skipped,
+231 files; `db:drift` no difference; `db:ci` green (migrations from scratch,
+seed, no drift); `check:ship-deps` clean; e2e `evictions.spec.ts` +
+`jurisdiction.spec.ts` on `desktop-chrome` and `mobile-chrome`: 38 passed of
+38 listed, production build. CI: to be read with `gh run list` after the push.

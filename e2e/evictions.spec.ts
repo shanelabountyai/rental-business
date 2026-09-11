@@ -389,6 +389,80 @@ test('a payment accepted after service shows as a red band on the case, and pre-
   await expect(page.getByText('$123.45')).toHaveCount(0)
 })
 
+// R-194. Before this nothing in the product could create a cure notice - every
+// PAY_OR_QUIT or NOTICE_TO_VACATE row was a seed or a fixture, so no real case
+// could ever be filed. This drafts one through the case page and reads the
+// verdict back against what it stored.
+test('a cure notice drafted from the case stores what it demanded, and the case says whether the tenant cured', async ({ page }) => {
+  const { property, unit, lease, stamp } = await seedTenancy()
+  const staff = await seedOwner()
+  const evictionCase = await openCaseFor(lease.id, staff.id, property.id, unit.id)
+
+  // A month's rent and a late fee on the ledger - the balance the demand is
+  // allocated from - with the fee also a Charge row, which is what itemises it
+  // as a fee rather than as rent. The fee's date is fixed; the total does not
+  // depend on which month's rent it sits behind.
+  await prisma.ledgerEntry.createMany({
+    data: [
+      { propertyId: property.id, leaseId: lease.id, type: 'CHARGE', amountCents: 150_000, description: 'Rent', occurredAt: new Date() },
+      { propertyId: property.id, leaseId: lease.id, type: 'CHARGE', amountCents: 7_500, description: 'Late fee', occurredAt: new Date() },
+    ],
+  })
+  await prisma.charge.create({
+    data: {
+      propertyId: property.id,
+      leaseId: lease.id,
+      type: 'LATE_FEE',
+      amountCents: 7_500,
+      description: 'Late fee',
+      dueOn: new Date('2026-09-06'),
+    },
+  })
+
+  await signIn(page, staff.email)
+  await page.goto(`/evictions/${evictionCase.id}`)
+  await expect(page.getByText('Would demand $1,575.00')).toBeVisible()
+  // Texas has no reviewed stance on fees in a demand, so they are included
+  // and the page says the question is open rather than answering it.
+  await expect(page.getByText(/may demand fees as well as rent is state law/)).toBeVisible()
+
+  await page.getByLabel('Notice to draft').selectOption('NOTICE_TO_VACATE')
+  await page.getByRole('button', { name: 'Draft the cure notice' }).click()
+  await page.waitForURL(/\/notices\/[a-z0-9]+$/)
+
+  const notice = await prisma.notice.findFirstOrThrow({ where: { evictionCaseId: evictionCase.id } })
+  expect(notice.type).toBe('NOTICE_TO_VACATE')
+  expect(notice.demandedCents).toBe(157_500)
+  expect(notice.bodyText).toContain('Total demanded: $1,575.00')
+
+  // Served today, and $400 kept inside Texas's three days: part-cured, and
+  // still "so far" because the cure period is running.
+  const tenant = await prisma.tenant.findFirstOrThrow({ where: { lastName: `Tenant-${stamp}` } })
+  const payer = await seedPayer(lease.id, property.id, tenant.id)
+  await prisma.noticeDelivery.create({
+    data: { noticeId: notice.id, method: 'PERSONAL', servedAt: new Date(), permittedByJurisdiction: true },
+  })
+  await prisma.payment.create({
+    data: {
+      propertyId: property.id,
+      leaseId: lease.id,
+      leasePayerId: payer.id,
+      channel: 'OFFLINE_CASH',
+      status: 'SETTLED',
+      amountCents: 40_000,
+      receivedAt: new Date(),
+    },
+  })
+
+  await page.goto(`/evictions/${evictionCase.id}`)
+  await expect(
+    page.getByText(
+      'Part-cured so far: $400.00 of $1,575.00 kept between drafting and the last day to cure, $1,175.00 short.',
+    ),
+  ).toBeVisible()
+  await expect(page.getByText(/Whether a partial payment cures the notice/)).toBeVisible()
+})
+
 test('serving a pay-or-quit places the hold in the same press, and proves it reached the payer row', async ({ page }) => {
   const { property, unit, lease, stamp } = await seedTenancy()
   const tenant = await prisma.tenant.findFirstOrThrow({ where: { lastName: `Tenant-${stamp}` } })

@@ -81,6 +81,8 @@ export interface RuleFormDefaults {
   payOrQuitDays?: number | ''
   acceptanceWaivesNotice?: boolean | null
   acceptanceWaiverNote?: string
+  cureDemandMayIncludeFees?: boolean | null
+  partialPaymentCures?: boolean | null
   noticeToVacateDays?: number | ''
   rentIncreaseNoticeDays?: number | ''
   rentIncreaseCapPercent?: number | ''
@@ -438,6 +440,43 @@ export function RuleForm({
             error={errors.acceptanceWaiverNote}
             hint="The nuance in prose - partial vs full payment, written-agreement exceptions. Shown verbatim beside the warning; the product never computes with it."
           />
+          <div className="flex min-w-0 flex-col gap-1.5">
+            <SelectField
+              label="A cure notice may demand fees as well as rent (R-194)"
+              name="cureDemandMayIncludeFees"
+              idPrefix="rule"
+              defaultValue={
+                defaults.cureDemandMayIncludeFees == null ? '' : String(defaults.cureDemandMayIncludeFees)
+              }
+              error={errors.cureDemandMayIncludeFees}
+              placeholder="Not reviewed"
+              options={[
+                { value: 'true', label: 'Yes, fees may be demanded' },
+                { value: 'false', label: 'No, rent only' },
+              ]}
+            />
+            <p className="text-muted-foreground text-sm">
+              &ldquo;No&rdquo; leaves late fees and every other non-rent charge out of a drafted
+              demand. Left unreviewed, fees are included and the case page warns.
+            </p>
+          </div>
+          <div className="flex min-w-0 flex-col gap-1.5">
+            <SelectField
+              label="A partial payment inside the cure period cures the notice (R-194)"
+              name="partialPaymentCures"
+              idPrefix="rule"
+              defaultValue={defaults.partialPaymentCures == null ? '' : String(defaults.partialPaymentCures)}
+              error={errors.partialPaymentCures}
+              placeholder="Not reviewed"
+              options={[
+                { value: 'true', label: 'Yes, a partial payment cures' },
+                { value: 'false', label: 'No, only payment in full' },
+              ]}
+            />
+            <p className="text-muted-foreground text-sm">
+              Only ever shown as a warning beside a part-cured notice; it never blocks a filing.
+            </p>
+          </div>
           <TextField
             label="Violation cure period (days, optional)"
             name="leaseViolationCureDays"

@@ -197,6 +197,9 @@ export interface JurisdictionRuleInput {
   /// prose; the product only warns on these, it never computes with them.
   acceptanceWaivesNotice?: boolean | null
   acceptanceWaiverNote?: string | null
+  /// R-194. Same three-valued posture: null is "nobody has reviewed this".
+  cureDemandMayIncludeFees?: boolean | null
+  partialPaymentCures?: boolean | null
 
   /// R-182 (review finding 14). Null means nobody has reviewed HOW this
   /// state counts the day numbers above - a different claim from CALENDAR,

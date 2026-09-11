@@ -209,6 +209,9 @@ export const AUDIT_ACTIONS = [
   /// field it filled in.
   'document.generated',
   'notice.served',
+  /// R-194: a cure notice was drafted from a case, with what it demanded
+  /// stored on the row. Before this nothing in the product could create one.
+  'notice.drafted',
   /// R-051: the notice PDF was rendered and archived as a Document. Separate
   /// from `notice.served` because generating the artifact and serving it are
   /// different acts that can happen minutes or days apart - and because the
