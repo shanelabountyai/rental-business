@@ -11030,7 +11030,7 @@ CI: run `34542871804` on `d10e7b0` green, both jobs (lint/types/unit/build; e2e/
 
 ## R-194 — a cure notice can be drafted, records what it demanded, and the case says whether the tenant cured
 
-Commit `PENDING`.
+Commit `25542dc`.
 
 **The row's premise was checked before anything was built, and the check found
 a larger defect than the row.** The row asked to store `demandedCents` "at

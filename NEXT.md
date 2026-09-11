@@ -1,27 +1,63 @@
 # Next session
 
-## R-193 is done — commit `d10e7b0`, SHA recorded in `c2cb73a`.
+## R-194 is done — commit `25542dc`, SHA recorded in the follow-up.
 
-**CI for R-193 WAS checked and is green** — run `34542871804` on `d10e7b0`,
-both jobs, read with `gh run list` after the push, not inherited. The
-SHA-record push starts no run (`paths-ignore` on docs). **Do not copy the green
-line forward** — run `gh run list --limit 5` after your own push.
+**CI for R-194 is NOT yet recorded here** — run `gh run list --limit 5` and
+read the run on `25542dc` (both jobs) before starting. The SHA-record push
+starts no run (`paths-ignore` on docs). Do not copy a green line forward.
 
-## Start here: row 181, R-194
+## Start here: row 182, R-195
 
-`docs/prds/06-backlog.md` Milestone 14 ("Arc 4"). **A notice records what it
-demanded, so the product can say whether the tenant cured.** `Notice` stores no
-amount; store `demandedCents` + composition at generation and report *cured /
-part-cured / not cured* against payments since service, beside R-156's
-acceptance band. **Needs counsel** on whether a partial payment cures and
-whether accepting it waives — the second is already a three-valued
-`JurisdictionRule` field, so follow that pattern and do not decide it.
-**Recommend Opus**: legal-consequence code on the eviction path.
-**`Notice` is append-only by trigger with a write-once allowlist (R-161)** — a
-new column set at INSERT is fine; anything set later needs the trigger's list
-changed in a migration. Re-verify `schema.prisma` Notice lines and
-`evictions/queries.ts:129-147` before building (R-150): R-193's row premise
-turned out half wrong on exactly that kind of re-check.
+`docs/prds/06-backlog.md` Milestone 14 ("Arc 4"). **Every Task subject type
+reaches its subject**: `/tasks/[id]` links three of twenty-four subject types.
+One `subjectHref(subjectType, subjectId)` behind the same per-type scope check
+the three existing branches apply (404 not 403 for out-of-scope, ROLE-01).
+**Recommend Sonnet** — routine wiring, but every branch is a scope check, so
+copy the existing three's pattern exactly. Re-verify the row's line numbers
+(R-150): R-194's premise was wrong in a way that changed the whole item.
+
+## What R-194 changed that the next rows touch
+
+- **The product can now create a cure notice** — `draftCureNotice` on
+  `/evictions/[id]`, NOTICE stage only. Before it, no real case could reach
+  FILING (D-209). R-083's "R-051 already generates pay-or-quit notices" was
+  wrong; left as history, corrected in D-209 and PROGRESS.
+- **`allocateBalance` in `packages/core/ledger/aging.ts` is the ONE
+  newest-first allocation.** `delinquencyFor` and `cureDemand` both call it —
+  anything else asking "which debts is this balance still sitting on?" must
+  too, not a third copy.
+- **`Notice.demandedCents` / `demandComposition` are set at INSERT and frozen**
+  by R-161's trigger (not on its write-once list). CHECK
+  `Notice_demand_shape`: both or neither, positive total.
+- **Two new three-valued `JurisdictionRule` fields**,
+  `cureDemandMayIncludeFees` and `partialPaymentCures`, now on the rule form,
+  the clone prefill, and `computeCoverage`'s unreviewed list. `RuleCoverageLike`
+  requires both, so any hand-built fixture must pass them.
+- `PacketFacts` requires `cureVerdict: string | null`.
+- New audit action `notice.drafted`.
+
+## Found in R-194, owned by nobody
+
+- **The demo seed's Riverside notice has no demand**, so a D-28 walk shows
+  "created before the product recorded what a notice demanded". The seed
+  writes it before the Stripe replay builds a balance.
+- Nothing drafts a cure notice from the lease page or the final chase rung
+  (`CHASE_RUNG_LABELS[15]` says "final chase before a notice"); a case must be
+  opened first.
+- Pet rent is counted as rent — a product reading, not counsel's.
+- Payments earlier on the drafting day are counted toward the cure, which can
+  over-credit a tenant (the cheap direction, stated in D-209).
+- A Stripe credit that is not a ledger entry is invisible to the demand
+  (R-156's same seam).
+
+## Binding for every row in this arc
+
+The review's **"do not build"** list, repeated in the Milestone 14 header and
+D-201: no accrual or interest engine before a second state; no Stripe Connect;
+no settings screen for `CHASE_LADDER_DAYS`, `TURN_STAGE_DAYS`,
+`TURN_STALL_DAYS`, `PLAN_GRACE_DAYS` or the stall thresholds; **no second
+queue** (D-9); **no backfill of anything**; no per-stage turn table, no second
+definition of "days vacant".
 
 ## What R-193 changed that the next rows touch
 
@@ -160,27 +196,6 @@ e2e walks the new wrongly-completed warning.
   timeout; a lying `Content-Length` is only caught after buffering.
 - The wire between the fetcher and Twilio is untested and cannot be tested from
   here — same limit R-104's drivers have.
-
-## Binding for every row in this arc
-
-The review's **"do not build"** list, now three arcs deep and repeated in the
-Milestone 14 header and D-201:
-
-- No accrual or interest engine before a second state is onboarded.
-- No Stripe Connect. Still a legal-structure decision nobody has taken.
-- No settings screen for `CHASE_LADDER_DAYS`, `TURN_STAGE_DAYS`,
-  `TURN_STALL_DAYS`, `PLAN_GRACE_DAYS` or the stall thresholds.
-- **No second queue.** D-9 has been paid for three times. R-191 and R-197 want
-  the *existing* Task queue reachable and correctly dated.
-- **No backfill of anything** — D-169's doubled `Payment` rows, R-038a's
-  no-ledger payments, R-187's wrongly-completed plans, R-189's discarded
-  photographs, and now R-190's lost chase rungs.
-- No per-stage turn table, no second definition of "days vacant".
-
-**R-194** is the arc's other Needs counsel row (does a partial payment cure, and
-does accepting it waive — the second is already a three-valued
-`JurisdictionRule` field). **R-192 records its production frequency as unknown**
-— code path verified, frequency not, pending real Stripe redelivery behaviour.
 
 ## Still true from earlier handoffs
 
