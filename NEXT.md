@@ -2,9 +2,10 @@
 
 ## R-194 is done — commit `25542dc`, SHA recorded in the follow-up.
 
-**CI for R-194 is NOT yet recorded here** — run `gh run list --limit 5` and
-read the run on `25542dc` (both jobs) before starting. The SHA-record push
-starts no run (`paths-ignore` on docs). Do not copy a green line forward.
+**CI for R-194 WAS checked and is green** — run `34606434559` on `25542dc`,
+both jobs, read with `gh run list` after the push, not inherited. The
+SHA-record push starts no run (`paths-ignore` on docs). **Do not copy the green
+line forward** — run `gh run list --limit 5` after your own push.
 
 ## Start here: row 182, R-195
 

@@ -11117,4 +11117,4 @@ this item); `typecheck` clean; `npm test` run alone: 3132 passed, 4 skipped,
 231 files; `db:drift` no difference; `db:ci` green (migrations from scratch,
 seed, no drift); `check:ship-deps` clean; e2e `evictions.spec.ts` +
 `jurisdiction.spec.ts` on `desktop-chrome` and `mobile-chrome`: 38 passed of
-38 listed, production build. CI: to be read with `gh run list` after the push.
+38 listed, production build. CI: run `34606434559` on `25542dc` green, both jobs (lint/types/unit/build; e2e/axe/Lighthouse), read with `gh run list` after the push.
