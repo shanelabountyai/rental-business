@@ -578,9 +578,10 @@ test.describe('rent roll and delinquency aging (PAY-06)', () => {
     expect(toGuarantor.body).not.toContain('{{')
 
     // AND THE GUARANTOR IS NOT TEXTED. A co-signer is a residential consumer
-    // the TCPA is written about, `TenantConsent` has nowhere to record their
-    // agreement, and no consent on file means the text is suppressed rather
-    // than sent (R-179). The email above is the delivery that lands.
+    // the TCPA is written about, this fixture records no consent for them,
+    // and no consent on file means the text is suppressed rather than sent
+    // (R-179; R-196 made recording one possible). The email above is the
+    // delivery that lands.
     const guarantorSms = await prisma.notification.findFirst({
       where: { recipientId: guarantor!.id, channel: 'SMS' },
       include: { delivery: true },
@@ -596,8 +597,8 @@ test.describe('rent roll and delinquency aging (PAY-06)', () => {
     await page.goto(`/leases/${past.lease.id}`)
     //
     // `.first()` on every one of these, and not as a shrug: a send fans out to
-    // one row PER CHANNEL, so each person legitimately appears three times on
-    // this panel. Asserting without it is a strict-mode failure that reads as
+    // one row PER CHANNEL, so each person legitimately appears more than once
+    // on this panel (three for a tenant, two for a guarantor - R-196). Asserting without it is a strict-mode failure that reads as
     // a duplicate-render bug rather than as the channel count it is.
     const history = page.getByRole('region', { name: 'Rent chase history' })
     await expect(history.getByText(guarantor!.firstName).first()).toBeVisible()

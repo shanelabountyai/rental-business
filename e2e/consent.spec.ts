@@ -29,6 +29,7 @@ const staffIds: string[] = []
 const entityIds: string[] = []
 const propertyIds: string[] = []
 const tenantIds: string[] = []
+const leaseIds: string[] = []
 
 async function seedTenancy() {
   const stamp = randomUUID().slice(0, 8)
@@ -71,6 +72,7 @@ async function seedTenancy() {
   await prisma.leaseTenant.create({
     data: { leaseId: lease.id, tenantId: tenant.id, isPrimary: true },
   })
+  leaseIds.push(lease.id)
   return { property, unit, lease, tenant }
 }
 
@@ -130,6 +132,7 @@ test.afterAll(async () => {
     data: { status: 'ENDED' },
   })
   await prisma.tenant.updateMany({ where: { id: { in: tenantIds } }, data: { active: false } })
+  await prisma.guarantor.updateMany({ where: { leaseId: { in: leaseIds } }, data: { active: false } })
   await prisma.property.updateMany({ where: { id: { in: propertyIds } }, data: { active: false } })
   await prisma.legalEntity.updateMany({ where: { id: { in: entityIds } }, data: { active: false } })
   await prisma.$disconnect()
@@ -149,7 +152,7 @@ test('THE GAP R-143 CLOSED: a person can create the consent row the send path re
   await expect(page.getByRole('heading', { name: 'Permission to contact' })).toBeVisible()
   await expect(page.getByText(/Nobody on this lease has agreed to be contacted yet/)).toBeVisible()
 
-  await page.getByLabel('Which tenant agreed').selectOption(tenant.id)
+  await page.getByLabel('Who agreed to be contacted').selectOption(`TENANT:${tenant.id}`)
   await page.getByLabel('What they agreed to be contacted on').selectOption('SMS')
   await page
     .getByLabel('How that consent was obtained')
@@ -187,7 +190,7 @@ test('express written consent is refused without the wording that was shown', as
   await signIn(page, staff)
   await page.goto(`/leases/${lease.id}`)
 
-  await page.getByLabel('Which tenant agreed').selectOption(tenant.id)
+  await page.getByLabel('Who agreed to be contacted').selectOption(`TENANT:${tenant.id}`)
   await page.getByLabel('What they agreed to be contacted on').selectOption('SMS')
   await page.getByLabel('How that consent was obtained').selectOption('EXPRESS_WRITTEN')
   await page.getByRole('button', { name: 'Record this consent' }).click()
@@ -198,6 +201,61 @@ test('express written consent is refused without the wording that was shown', as
     page.getByText(/Express written consent needs the wording the tenant agreed to/),
   ).toBeVisible()
   expect(await prisma.tenantConsent.count({ where: { tenantId: tenant.id } })).toBe(0)
+})
+
+test('R-196: a guarantor can be recorded as consenting, and withdrawn', async ({ page }) => {
+  // R-179 gated guarantor texts on consent and gave them nowhere to consent:
+  // `TenantConsent` had only `tenantId`, so no guarantor text could ever go.
+  const { lease } = await seedTenancy()
+  const guarantor = await prisma.guarantor.create({
+    data: {
+      leaseId: lease.id,
+      firstName: 'Gale',
+      lastName: `Surety-${randomUUID().slice(0, 8)}`,
+      phone: uniquePhone(),
+    },
+  })
+  const staff = await seedOwner()
+
+  await signIn(page, staff)
+  await page.goto(`/leases/${lease.id}`)
+
+  await page.getByLabel('Who agreed to be contacted').selectOption(`GUARANTOR:${guarantor.id}`)
+  await page.getByLabel('What they agreed to be contacted on').selectOption('SMS')
+  await page.getByLabel('How that consent was obtained').selectOption('VERBAL')
+  await page.getByRole('button', { name: 'Record this consent' }).click()
+
+  await expect
+    .poll(async () => prisma.tenantConsent.count({ where: { guarantorId: guarantor.id } }))
+    .toBe(1)
+  const row = await prisma.tenantConsent.findFirstOrThrow({ where: { guarantorId: guarantor.id } })
+  expect(row.tenantId).toBeNull()
+  expect(row.recordedByStaffId).toBe(staff.id)
+  expect(
+    await prisma.auditLog.count({
+      where: { action: 'consent.recorded', entityType: 'Guarantor', entityId: guarantor.id },
+    }),
+  ).toBe(1)
+
+  // Withdrawal authorises through the guarantor's lease, not a tenant's -
+  // the branch a tenant-only lookup would refuse as "not on a lease".
+  await page.reload()
+  // `exact: true`: the withdraw select's option starts with the same words,
+  // and getByText is a substring match.
+  await expect(
+    page.getByText(`${guarantor.firstName} ${guarantor.lastName} (guarantor) — Text message`, {
+      exact: true,
+    }),
+  ).toBeVisible()
+  await page.getByLabel('Which consent is being withdrawn').selectOption(row.id)
+  await page.getByLabel('Why the consent is being withdrawn').fill('Guarantor asked us to email only.')
+  await page.getByRole('button', { name: 'Withdraw this consent' }).click()
+
+  await expect
+    .poll(async () =>
+      prisma.tenantConsent.count({ where: { guarantorId: guarantor.id, revokedAt: { not: null } } }),
+    )
+    .toBe(1)
 })
 
 test('withdrawing needs a reason, and the record survives the withdrawal', async ({ page }) => {

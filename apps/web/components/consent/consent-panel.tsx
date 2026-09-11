@@ -45,8 +45,8 @@ const CHANNEL_LABELS: Record<ConsentChannelName, string> = {
 
 export interface ConsentRow {
   id: string;
-  tenantId: string;
-  tenantName: string;
+  /// The person's name, with "(guarantor)" appended for one (R-196).
+  partyName: string;
   channel: ConsentChannelName;
   basis: ConsentBasisName;
   recordedOn: string;
@@ -59,10 +59,10 @@ export interface ConsentRow {
 
 function RecordConsentForm({
   action,
-  tenants,
+  parties,
 }: {
   action: Action;
-  tenants: readonly { id: string; name: string }[];
+  parties: readonly { value: string; label: string }[];
 }) {
   const [state, formAction] = useActionState<ConsentFormState, FormData>(
     action,
@@ -75,11 +75,11 @@ function RecordConsentForm({
       <FormAlerts state={state} />
 
       <SelectField
-        label="Which tenant agreed"
-        name="tenantId"
+        label="Who agreed to be contacted"
+        name="party"
         required
         idPrefix="consent-record"
-        options={tenants.map((t) => ({ value: t.id, label: t.name }))}
+        options={parties}
       />
       <SelectField
         label="What they agreed to be contacted on"
@@ -169,7 +169,7 @@ function WithdrawConsentForm({
             idPrefix="consent-withdraw"
             options={live.map((row) => ({
               value: row.id,
-              label: `${row.tenantName} — ${CHANNEL_LABELS[row.channel]}, recorded ${row.recordedOn}`,
+              label: `${row.partyName} — ${CHANNEL_LABELS[row.channel]}, recorded ${row.recordedOn}`,
             }))}
           />
           <TextareaField
@@ -190,13 +190,14 @@ function WithdrawConsentForm({
 
 export function ConsentPanel({
   consents,
-  tenants,
+  parties,
   canManage,
   recordAction,
   withdrawAction,
 }: {
   consents: readonly ConsentRow[];
-  tenants: readonly { id: string; name: string }[];
+  /// `TENANT:<id>` / `GUARANTOR:<id>` - the value `recordConsent` parses.
+  parties: readonly { value: string; label: string }[];
   canManage: boolean;
   recordAction: Action;
   withdrawAction: Action;
@@ -213,10 +214,10 @@ export function ConsentPanel({
       </h2>
 
       <p className="text-muted-foreground text-sm">
-        A text message to a tenant is sent only where this record says they
-        agreed to receive one (47 U.S.C. §227). Without a row here every text to
-        that tenant is held back and recorded as having no consent — email and
-        the tenant portal are unaffected.
+        A text message to a tenant or guarantor is sent only where this record
+        says they agreed to receive one (47 U.S.C. §227). Without a row here
+        every text to that person is held back and recorded as having no
+        consent — email and the tenant portal are unaffected.
       </p>
 
       {consents.length === 0 ? (
@@ -228,7 +229,7 @@ export function ConsentPanel({
           {consents.map((row) => (
             <li key={row.id} className="rounded border p-3 text-sm">
               <p className="font-medium">
-                {row.tenantName} — {CHANNEL_LABELS[row.channel]}
+                {row.partyName} — {CHANNEL_LABELS[row.channel]}
               </p>
               <p className="text-muted-foreground">{BASIS_LABELS[row.basis]}</p>
               <p className="text-muted-foreground">
@@ -257,7 +258,7 @@ export function ConsentPanel({
       )}
 
       {canManage && (
-        <RecordConsentForm action={recordAction} tenants={tenants} />
+        <RecordConsentForm action={recordAction} parties={parties} />
       )}
       {canManage && <WithdrawConsentForm action={withdrawAction} live={live} />}
     </section>

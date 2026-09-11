@@ -645,8 +645,10 @@ export default async function LeaseDetailPage({
       <ConsentPanel
         consents={consents.map((row) => ({
           id: row.id,
-          tenantId: row.tenant.id,
-          tenantName: `${row.tenant.firstName} ${row.tenant.lastName}`,
+          // The CHECK `TenantConsent_one_subject` guarantees exactly one.
+          partyName: row.tenant
+            ? `${row.tenant.firstName} ${row.tenant.lastName}`
+            : `${row.guarantor?.firstName} ${row.guarantor?.lastName} (guarantor)`,
           channel: row.channel,
           basis: row.basis,
           recordedOn: friendlyTimestamp(row.recordedAt, lease.property.timezone),
@@ -658,10 +660,18 @@ export default async function LeaseDetailPage({
             : null,
           revokeReason: row.revokeReason,
         }))}
-        tenants={lease.leaseTenants.map((lt) => ({
-          id: lt.tenant.id,
-          name: `${lt.tenant.firstName} ${lt.tenant.lastName}`,
-        }))}
+        parties={[
+          ...lease.leaseTenants.map((lt) => ({
+            value: `TENANT:${lt.tenant.id}`,
+            label: `${lt.tenant.firstName} ${lt.tenant.lastName}`,
+          })),
+          // Active only (`getLease` filters them): a released guarantor is no
+          // longer chased, so there is nothing new for them to agree to.
+          ...lease.guarantors.map((g) => ({
+            value: `GUARANTOR:${g.id}`,
+            label: `${g.firstName} ${g.lastName} (guarantor)`,
+          })),
+        ]}
         canManage={canManageConsent}
         recordAction={recordConsent}
         withdrawAction={withdrawConsent}

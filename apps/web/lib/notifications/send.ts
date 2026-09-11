@@ -146,7 +146,15 @@ export async function notify(
   // address-less channel whenever some OTHER channel was addressable: the
   // exact "notification the product promised and never recorded" failure the
   // suppressed-row design exists to make impossible.
-  const addressable = template.channels.filter(
+  //
+  // THE ONE EXCEPTION IS A CHANNEL THE RECIPIENT TYPE DOES NOT HAVE (R-196).
+  // A guarantor has no portal inbox - LEASE-06 gives them a balance and their
+  // notices, no messages - so a PORTAL row for one was recorded as a delivery
+  // to a screen that does not exist. That is not an address missing from a
+  // channel they could have had; it is not a channel for them at all, and a
+  // row saying `no_address` would read as something somebody could fix.
+  const channels = channelsFor(template.channels, input.recipient)
+  const addressable = channels.filter(
     (channel) => addressFor(channel, input.recipient) !== null,
   )
 
@@ -205,21 +213,23 @@ export async function notify(
   // A GUARANTOR IS A RESIDENTIAL CONSUMER (R-179), and the moment the rent
   // chase started addressing them this stopped being academic: a co-signer
   // texted about somebody else's debt is the archetypal TCPA claim, and the
-  // damages are statutory and per-message. `TenantConsent` is keyed on
-  // `tenantId`, so a guarantor id matches no row and `consentVerdict`
-  // correctly answers `no_consent_on_file` — every guarantor SMS is
-  // suppressed as `no_consent` until there is somewhere to record that they
-  // agreed. THAT IS THE INTENDED STATE, not an oversight: the email still
-  // goes, and a suppression row says why the text did not. Giving guarantors
-  // a consent record of their own is a schema change nobody has asked for
-  // yet; letting the text go without one is the failure that costs money.
+  // damages are statutory and per-message.
+  //
+  // LOOKED UP ON THE KEY FOR THEIR TYPE (R-196). Until then `TenantConsent`
+  // had only `tenantId`, this read `{ tenantId: guarantor.id }`, matched
+  // nothing, and every guarantor SMS was `no_consent` for ever with no way to
+  // record otherwise. A guarantor with no row is still refused - there is no
+  // backfill for them (D-211) - but it is now a gap somebody can close.
   const smsConsent =
     template.channels.includes('SMS') &&
     (input.recipient.type === 'TENANT' || input.recipient.type === 'GUARANTOR') &&
     addressFor('SMS', input.recipient) !== null
       ? consentVerdict(
           await db.tenantConsent.findMany({
-            where: { tenantId: input.recipient.id },
+            where:
+              input.recipient.type === 'GUARANTOR'
+                ? { guarantorId: input.recipient.id }
+                : { tenantId: input.recipient.id },
             select: { channel: true, basis: true, revokedAt: true },
           }),
           'SMS',
@@ -251,7 +261,7 @@ export async function notify(
 
   const outcomes: ChannelOutcome[] = []
 
-  for (const channel of template.channels) {
+  for (const channel of channels) {
     const address = addressFor(channel, input.recipient)
     const decision = decisions.get(channel)
 
@@ -728,6 +738,18 @@ export async function dispatchPendingNotifications(
  */
 function reachableElectronically(recipient: NotificationRecipient): boolean {
   return Boolean(recipient.email?.trim() || recipient.phone?.trim())
+}
+
+/// The template's channels, less any this recipient type has no inbox on
+/// (R-196). Only the guarantor today: the tenant portal reads PORTAL rows
+/// (`listTenantUpdates`), the guarantor portal deliberately reads none.
+function channelsFor(
+  channels: readonly NotificationChannel[],
+  recipient: NotificationRecipient,
+): readonly NotificationChannel[] {
+  return recipient.type === 'GUARANTOR'
+    ? channels.filter((channel) => channel !== 'PORTAL')
+    : channels
 }
 
 /// PORTAL has no external address: the "address" is the account itself, and

@@ -2152,6 +2152,10 @@ model Guarantor {
   lease           Lease                   @relation(fields: [leaseId], references: [id])
   leaseSignatures LeaseSigner[]
   partyChanges    LeasePartyChangeParty[]
+  /// R-196: a guarantor's own TCPA consent. Keyed on the guarantor, not the
+  /// lease they guarantee - the same "a fact about the person" reasoning as
+  /// `Tenant.consents`, though a Guarantor row is itself per-lease.
+  consents        TenantConsent[]
 
   @@index([leaseId])
 }
@@ -6391,7 +6395,12 @@ model AuditLog {
 /// and given again survives intact.
 model TenantConsent {
   id                String         @id @default(cuid())
-  tenantId          String
+  /// R-196: exactly one of `tenantId` / `guarantorId` is set, by the CHECK
+  /// `TenantConsent_one_subject`. Widened rather than renamed: the table,
+  /// its append-only trigger and `consentVerdict` are the same for either
+  /// person, and a polymorphic `subjectId` would give up both foreign keys.
+  tenantId          String?
+  guarantorId       String?
   channel           ConsentChannel
   basis             ConsentBasis
   source            ConsentSource
@@ -6406,10 +6415,12 @@ model TenantConsent {
   revokeReason      String?
   createdAt         DateTime       @default(now())
 
-  tenant     Tenant     @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  tenant     Tenant?    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  guarantor  Guarantor? @relation(fields: [guarantorId], references: [id], onDelete: Restrict)
   recordedBy StaffUser? @relation("TenantConsentRecordedBy", fields: [recordedByStaffId], references: [id], onDelete: Restrict)
 
   @@index([tenantId, channel])
+  @@index([guarantorId, channel])
 }
 
 model SmsOptOut {

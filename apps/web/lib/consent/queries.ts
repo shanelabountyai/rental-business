@@ -30,14 +30,22 @@ export async function consentsForTenant(tenantId: string) {
   })
 }
 
+/// Every tenant's consent trail, and every guarantor's (R-196) - released
+/// guarantors included, because what they agreed to while liable is still
+/// the record of why they were or were not texted.
 export async function consentsForLease(leaseId: string) {
-  const tenantIds = (
-    await prisma.leaseTenant.findMany({ where: { leaseId }, select: { tenantId: true } })
-  ).map((lt) => lt.tenantId)
-  if (tenantIds.length === 0) return []
+  const [tenantIds, guarantorIds] = await Promise.all([
+    prisma.leaseTenant
+      .findMany({ where: { leaseId }, select: { tenantId: true } })
+      .then((rows) => rows.map((lt) => lt.tenantId)),
+    prisma.guarantor
+      .findMany({ where: { leaseId }, select: { id: true } })
+      .then((rows) => rows.map((g) => g.id)),
+  ])
+  if (tenantIds.length === 0 && guarantorIds.length === 0) return []
 
   return prisma.tenantConsent.findMany({
-    where: { tenantId: { in: tenantIds } },
+    where: { OR: [{ tenantId: { in: tenantIds } }, { guarantorId: { in: guarantorIds } }] },
     orderBy: { recordedAt: 'desc' },
     select: {
       id: true,
@@ -50,6 +58,7 @@ export async function consentsForLease(leaseId: string) {
       revokedAt: true,
       revokeReason: true,
       tenant: { select: { id: true, firstName: true, lastName: true } },
+      guarantor: { select: { id: true, firstName: true, lastName: true } },
       recordedBy: { select: { name: true } },
     },
   })

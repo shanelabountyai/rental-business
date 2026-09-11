@@ -17,6 +17,12 @@ let propertyId: string
 let entityId: string
 let consentedTenantId: string
 let unconsentedTenantId: string
+let leaseId: string
+/// R-196: phone only, no email - the common shape for a parent co-signing a
+/// thin file, and the one R-179 left with no human reached at all.
+let consentedGuarantorId: string
+let unconsentedGuarantorId: string
+const guarantorPhones = new Map<string, string>()
 const deliveryIds: string[] = []
 /// The engine takes addresses ON the recipient rather than looking them up,
 /// so the fixture has to hand them over the way every real caller does.
@@ -56,6 +62,38 @@ beforeAll(async () => {
   const unconsented = await makeTenant('Ulf')
   consentedTenantId = consented.id
   unconsentedTenantId = unconsented.id
+
+  const unit = await prisma.unit.create({ data: { propertyId, name: `${stamp}-unit` } })
+  const lease = await prisma.lease.create({
+    data: {
+      propertyId,
+      unitId: unit.id,
+      status: 'ACTIVE',
+      startsOn: new Date('2026-01-01'),
+      rentCents: 150_000,
+      rentDueDay: 1,
+    },
+  })
+  leaseId = lease.id
+  const makeGuarantor = async (label: string) => {
+    const phone = `+1512556${String(Math.floor(Math.random() * 9000) + 1000)}`
+    const guarantor = await prisma.guarantor.create({
+      data: { leaseId, firstName: label, lastName: `Surety-${randomUUID().slice(0, 6)}`, phone },
+    })
+    guarantorPhones.set(guarantor.id, phone)
+    return guarantor.id
+  }
+  consentedGuarantorId = await makeGuarantor('Gale')
+  unconsentedGuarantorId = await makeGuarantor('Hal')
+  await prisma.tenantConsent.create({
+    data: {
+      guarantorId: consentedGuarantorId,
+      channel: 'SMS',
+      basis: 'VERBAL',
+      source: 'STAFF_RECORDED',
+      note: 'test fixture',
+    },
+  })
   tenantsById.set(consented.id, consented)
   tenantsById.set(unconsented.id, unconsented)
 
@@ -78,6 +116,8 @@ afterAll(async () => {
     where: { id: { in: [consentedTenantId, unconsentedTenantId] } },
     data: { active: false },
   })
+  await prisma.guarantor.updateMany({ where: { leaseId }, data: { active: false } })
+  await prisma.lease.updateMany({ where: { id: leaseId }, data: { status: 'ENDED' } })
   await prisma.property.updateMany({ where: { id: propertyId }, data: { active: false } })
   await prisma.$disconnect()
 })
@@ -96,6 +136,27 @@ describe('TenantConsent constraints', () => {
         },
       }),
     ).rejects.toThrow()
+  })
+
+  it('REFUSES a consent that names nobody, or names two people (R-196)', async () => {
+    // `tenantId` became nullable so a guarantor could be the subject, which
+    // means Prisma no longer stops a row with neither. The CHECK does.
+    await expect(
+      prisma.tenantConsent.create({
+        data: { channel: 'SMS', basis: 'VERBAL', source: 'STAFF_RECORDED' },
+      }),
+    ).rejects.toThrow(/TenantConsent_one_subject/)
+    await expect(
+      prisma.tenantConsent.create({
+        data: {
+          tenantId: consentedTenantId,
+          guarantorId: consentedGuarantorId,
+          channel: 'SMS',
+          basis: 'VERBAL',
+          source: 'STAFF_RECORDED',
+        },
+      }),
+    ).rejects.toThrow(/TenantConsent_one_subject/)
   })
 
   it('accepts it once the wording is there', async () => {
@@ -250,5 +311,53 @@ describe('the send path refuses a text to a tenant who never agreed', () => {
     const { sms, delivery } = await smsOutcome(consentedTenantId, `consent-gone-${randomUUID()}`)
     expect(sms?.status).toBe('SUPPRESSED')
     expect(delivery?.suppressedReason).toBe('no_consent')
+  })
+})
+
+describe('a guarantor can be reached (R-196)', () => {
+  async function guarantorOutcomes(guarantorId: string, key: string) {
+    const outcomes = await notify({
+      category: 'rent_reminder',
+      templateKey: 'payment.due_soon',
+      recipient: { type: 'GUARANTOR', id: guarantorId, email: null, phone: guarantorPhones.get(guarantorId) },
+      context: {
+        tenantName: 'Test Guarantor',
+        addressLine1: '3 Consent Court',
+        amount: '$1,500.00',
+        dueOn: '2026-09-01',
+        isDueToday: false,
+      },
+      propertyId,
+      idempotencyKey: key,
+    })
+    const sms = outcomes.find((outcome) => outcome.channel === 'SMS')
+    const delivery = sms?.deliveryId
+      ? await prisma.notificationDelivery.findUniqueOrThrow({ where: { id: sms.deliveryId } })
+      : null
+    return { outcomes, delivery }
+  }
+
+  it('reads the GUARANTOR key: their own consent is what the send path finds', async () => {
+    // Before R-196 this looked the guarantor's id up as a `tenantId`, matched
+    // nothing, and answered `no_consent` for a guarantor who had agreed.
+    // Asserted on the reason, not QUEUED, for the preference-default reason
+    // the tenant test above spells out.
+    const { delivery } = await guarantorOutcomes(consentedGuarantorId, `g-consent-ok-${randomUUID()}`)
+    expect(delivery, 'the SMS row must exist').not.toBeNull()
+    expect(delivery?.suppressedReason ?? null).not.toBe('no_consent')
+  })
+
+  it('still refuses a guarantor with no consent on file - there is no backfill for them', async () => {
+    const { delivery } = await guarantorOutcomes(unconsentedGuarantorId, `g-consent-none-${randomUUID()}`)
+    expect(delivery?.status).toBe('SUPPRESSED')
+    expect(delivery?.suppressedReason).toBe('no_consent')
+  })
+
+  it('writes NO portal row for a guarantor - their portal has no inbox', async () => {
+    // R-179's phone-only guarantor got three rows: a suppressed text, an
+    // email with no address, and a PORTAL row recorded as a live delivery to
+    // a screen that does not exist.
+    const { outcomes } = await guarantorOutcomes(unconsentedGuarantorId, `g-portal-${randomUUID()}`)
+    expect(outcomes.map((outcome) => outcome.channel).sort()).toEqual(['EMAIL', 'SMS'])
   })
 })

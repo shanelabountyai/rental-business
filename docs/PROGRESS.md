@@ -11199,3 +11199,89 @@ failed at the list step. Files restored and compared byte-for-byte before
 committing.
 CI: run `34610406558` on `4513e6c` green, both jobs (lint/types/unit/build;
 e2e/axe/Lighthouse), read with `gh run watch` after the push.
+
+## R-196 — a guarantor can actually be reached
+
+Commit `SHA_PENDING`.
+
+**The row was checked before anything was built.** Its line numbers had
+drifted: `TenantConsent` is at `schema.prisma:6392-6413`, not `6326-6347`
+(`send.ts:218-228` was right). One premise was wrong: `reachableElectronically`
+did not need "applying to guarantors". Since R-173 it has taken every recipient
+type. What guarantors were actually missing was a consent key, and a portal
+inbox. LEASE-06 deliberately gives the guarantor portal a balance and notices
+and no messages, so every guarantor PORTAL row was a delivery to a screen that
+does not exist.
+
+**What it built.**
+
+- Migration `20260911180000_r196_guarantor_consent`: `TenantConsent.tenantId`
+  nullable, new `guarantorId` with a RESTRICT foreign key and a
+  `(guarantorId, channel)` index, and the CHECK `TenantConsent_one_subject`
+  (exactly one of the two). The existing append-only trigger freezes the new
+  column with no change, because it compares whole rows minus the withdrawal
+  columns.
+- `apps/web/lib/notifications/send.ts`: the consent lookup reads
+  `{ guarantorId }` for a `GUARANTOR` recipient and `{ tenantId }` otherwise.
+  `channelsFor` drops PORTAL for a guarantor, so a rent chase to one writes
+  EMAIL and SMS rows and no PORTAL row.
+- `apps/web/lib/consent/actions.ts`: `recordConsent` reads a `party` field
+  (`TENANT:<id>` / `GUARANTOR:<id>`). `consentSubject` derives the property
+  from a tenant's lease or from the guarantor's own lease, and
+  `withdrawConsent` authorises through the same helper. Audit rows carry
+  `entityType: 'Guarantor'` for a guarantor.
+- `consentsForLease` also returns the lease's guarantors' consents, released
+  guarantors included. The lease page's "Permission to contact" panel lists
+  active guarantors as "Name (guarantor)" under the renamed field "Who agreed
+  to be contacted", and its copy now says "a tenant or guarantor".
+- Tests. `consent.test.ts` adds four: the CHECK refuses a row naming nobody and
+  one naming two people; a guarantor's own consent is what the send path finds;
+  a guarantor with none is still `no_consent`; and a guarantor gets no PORTAL
+  row. `e2e/consent.spec.ts` adds one: staff record a guarantor's consent and
+  withdraw it through the panel. The existing tests follow the new label and
+  option values, and `e2e/rent-roll.spec.ts` gets comment updates only (its
+  guarantor fixture still records no consent, so its `no_consent` assertion
+  stands).
+
+**What it decided.** D-211: widen the key rather than rename it or make it
+polymorphic; no backfill for guarantors; PORTAL is dropped for a guarantor, not
+suppressed.
+
+**What it left behind.**
+
+- **A phone-only guarantor still hears nothing until somebody records their
+  consent.** The chase history now says why ("Not sent — no consent", "Not sent
+  — no address"). Nothing raises a Task for it; `rent_reminder` is not a locked
+  category.
+- **`sendReminders` counts a person as sent when every one of their channels
+  was suppressed.** It says "Reminder sent to 3 people" when the guarantor got
+  nothing. This was already true of tenants, and this item did not change it.
+- **The guarantor portal shows no consent record and offers no withdrawal.**
+  Revocation for a guarantor is the carrier's STOP or a staff withdrawal. The
+  tenant portal has had self-service withdrawal since R-164.
+- **A guarantor has no notification preferences anyone can set.** R-164's
+  staff counter on `/leases/[id]` is per tenant only.
+- **The guarantor sign-in link is mailed to email only**, so a phone-only
+  guarantor cannot enter their portal at all. R-173's tenant twin (phone, no
+  email, live PORTAL row, no sign-in) is untouched.
+- Whether STAFF or VENDOR PORTAL rows have a reader was not checked. Only the
+  guarantor case was in scope.
+
+**Gate.** `lint` 0 errors (16 warnings, all pre-existing, none in a touched
+file); `typecheck` clean; `npm test` run alone: 3136 passed, 4 skipped, 231
+files. The migration applied to `rental_test` with `db:drift` clean, and
+`db:ci` applied every migration from scratch, seeded, and reported no drift.
+`check:ship-deps` clean. e2e `consent.spec.ts` + `rent-roll.spec.ts` on
+`desktop-chrome` and `mobile-chrome` (the panel's select options got longer):
+26 passed of 26 listed, production build. The first run went red on
+mobile-chrome in the new guarantor test. The cause was my locator:
+`getByText` substring-matched the withdraw select's option as well as the list
+row. I killed the run, made the locator `exact`, and the rerun was green.
+**Two of the new unit tests were proved against the reverted fix** (D-197),
+one revert at a time: consent read on `tenantId` for every recipient made
+"reads the GUARANTOR key" fail, and PORTAL left in for guarantors made "writes
+NO portal row" fail. Each turned exactly that one test red, 13 passing, and
+`send.ts` was restored from a copy. The e2e guarantor test was not
+revert-proved; with the action's guarantor branch removed, the form refuses
+the `GUARANTOR:` value by construction.
+CI: CI_PENDING

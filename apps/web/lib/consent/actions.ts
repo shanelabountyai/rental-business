@@ -44,19 +44,51 @@ export async function propertyForTenant(tenantId: string) {
   return leaseTenant ? { property: leaseTenant.lease.property, leaseId: leaseTenant.leaseId } : null
 }
 
+/// Whose consent this is, and the property staff are authorised through
+/// (R-196). A tenant goes through any lease they hold; a guarantor row is
+/// itself per-lease, so it is that lease. `tenant.write` either way: "who may
+/// assert what a party to this tenancy agreed to" is one question.
+async function consentSubject(key: { tenantId: string | null; guarantorId: string | null }) {
+  if (key.tenantId) {
+    const found = await propertyForTenant(key.tenantId)
+    return found && { ...found, key: { tenantId: key.tenantId }, entityType: 'Tenant', entityId: key.tenantId }
+  }
+  if (key.guarantorId) {
+    const guarantor = await prisma.guarantor.findUnique({
+      where: { id: key.guarantorId },
+      select: { leaseId: true, lease: { select: { property: true } } },
+    })
+    return (
+      guarantor && {
+        property: guarantor.lease.property,
+        leaseId: guarantor.leaseId,
+        key: { guarantorId: key.guarantorId },
+        entityType: 'Guarantor',
+        entityId: key.guarantorId,
+      }
+    )
+  }
+  return null
+}
+
 export async function recordConsent(
   _previous: ConsentFormState,
   formData: FormData,
 ): Promise<ConsentFormState> {
-  // From the form, not a bound argument - one action for every tenant on the
-  // lease, the shape `endRecurringCharge` settled on. The authorisation is
-  // derived FROM this id (the property is whichever one they hold a lease at,
-  // and `tenant.write` is checked against that), so a forged value authorises
-  // against its own tenant rather than against the one on screen.
-  const tenantId = str(formData, 'tenantId')
-  if (!tenantId) return { error: 'Choose which tenant consented.' }
-  const found = await propertyForTenant(tenantId)
-  if (!found) return { error: 'That tenant is not on a lease at any property you can see.' }
+  // From the form, not a bound argument - one action for every party on the
+  // lease, the shape `endRecurringCharge` settled on. `TENANT:<id>` or
+  // `GUARANTOR:<id>` (R-196). The authorisation is derived FROM this id, so a
+  // forged value authorises against its own person rather than against the
+  // one on screen.
+  const [partyType, partyId] = str(formData, 'party').split(':')
+  if (!partyId || (partyType !== 'TENANT' && partyType !== 'GUARANTOR')) {
+    return { error: 'Choose who consented.' }
+  }
+  const found = await consentSubject({
+    tenantId: partyType === 'TENANT' ? partyId : null,
+    guarantorId: partyType === 'GUARANTOR' ? partyId : null,
+  })
+  if (!found) return { error: 'That person is not on a lease at any property you can see.' }
   const { property, leaseId } = found
   const actor = await requirePermission('tenant.write', propertyResource(property))
 
@@ -86,7 +118,7 @@ export async function recordConsent(
   await prisma.$transaction(async (tx) => {
     const consent = await tx.tenantConsent.create({
       data: {
-        tenantId,
+        ...found.key,
         channel,
         basis,
         source: 'STAFF_RECORDED',
@@ -98,8 +130,8 @@ export async function recordConsent(
     await audit(
       {
         action: 'consent.recorded',
-        entityType: 'Tenant',
-        entityId: tenantId,
+        entityType: found.entityType,
+        entityId: found.entityId,
         propertyId: property.id,
         after: { consentId: consent.id, channel, basis, hasDisclosure: disclosureText != null },
       },
@@ -132,10 +164,10 @@ export async function withdrawConsent(
   if (!consentId) return { error: 'That consent record could not be found.' }
   const consent = await prisma.tenantConsent.findUniqueOrThrow({
     where: { id: consentId },
-    select: { id: true, tenantId: true, channel: true, basis: true, revokedAt: true },
+    select: { id: true, tenantId: true, guarantorId: true, channel: true, basis: true, revokedAt: true },
   })
-  const found = await propertyForTenant(consent.tenantId)
-  if (!found) return { error: 'That tenant is not on a lease at any property you can see.' }
+  const found = await consentSubject(consent)
+  if (!found) return { error: 'That person is not on a lease at any property you can see.' }
   const { property, leaseId } = found
   await requirePermission('tenant.write', propertyResource(property))
 
@@ -152,8 +184,8 @@ export async function withdrawConsent(
     await audit(
       {
         action: 'consent.withdrawn',
-        entityType: 'Tenant',
-        entityId: consent.tenantId,
+        entityType: found.entityType,
+        entityId: found.entityId,
         propertyId: property.id,
         reason,
         after: { consentId, channel: consent.channel, basis: consent.basis },
