@@ -11202,7 +11202,7 @@ e2e/axe/Lighthouse), read with `gh run watch` after the push.
 
 ## R-196 — a guarantor can actually be reached
 
-Commit `SHA_PENDING`.
+Commit `2b29d74`.
 
 **The row was checked before anything was built.** Its line numbers had
 drifted: `TenantConsent` is at `schema.prisma:6392-6413`, not `6326-6347`
