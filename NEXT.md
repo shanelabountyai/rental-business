@@ -1,20 +1,43 @@
 # Next session
 
-## R-195 is done — commit `4513e6c`, SHA recorded in the follow-up.
+## R-196 is done — commits `2b29d74` + locator fix `66bec5b`, SHA recorded.
 
-**CI for R-195 WAS checked and is green** — run `34610406558` on `4513e6c`,
-both jobs, read with `gh run watch` after the push, not inherited. The
-SHA-record push starts no run (`paths-ignore` on docs). **Do not copy the green
-line forward** — run `gh run list --limit 5` after your own push.
+**CI for R-196:** run `34616381321` on `2b29d74` FAILED (`leases.spec.ts`: the new consent option "Marta Guarantor (guarantor)" made `getByText('Marta Guarantor')` ambiguous). Fixed in `66bec5b`, whose run `34618664817` is green on both jobs (e2e 3 skipped, 1225 passed, 3 skipped, 1225 passed). **Lesson: a new label or option on `/leases/[id]` can break ANY spec that renders that page, not just the specs you edited.** Grep `e2e/` for the text before pushing. The SHA-record push starts no run (`paths-ignore`
+on docs). **Do not copy the green line forward** — run `gh run list --limit 5`
+after your own push.
 
-## Start here: row 183, R-196
+## Start here: row 184, R-197
 
-`docs/prds/06-backlog.md` Milestone 14 ("Arc 4"). **A guarantor can actually be
-reached**: `TenantConsent` is keyed on `tenantId`, so every guarantor SMS is
-`no_consent` for ever, and `rent_reminder` fans out to a PORTAL the guarantor
-portal has no inbox for. Consent, TCPA and a schema key change — **recommend
-Opus**. Re-verify the row's line numbers (R-150): R-194's and R-195's premises
-were both off (R-195's "twenty-four types" counted `AuthToken` subjects).
+`docs/prds/06-backlog.md` Milestone 14 ("Arc 4"). **A manager can open `/jobs`
+and re-run the failed job.** `job.manage` is in no role but `owner`. Either add
+it to `manager`, or split read from re-run and give the manager the read. RBAC,
+so **Opus recommended**; Sonnet is defensible for a one-line grant. Re-verify
+the row's line numbers (R-150): R-196's were off, and so was one of its
+premises (`reachableElectronically` already covered every recipient type).
+
+## What R-196 changed that the next rows touch
+
+- **`TenantConsent` has two subject keys now**: `tenantId` is nullable beside
+  `guarantorId`, with the CHECK `TenantConsent_one_subject` (exactly one).
+  Anything reading `row.tenant` must handle a guarantor row, where it is null.
+  Any fixture creating a consent row must name one person.
+- **`notify()` drops PORTAL for a `GUARANTOR` recipient** (`channelsFor` in
+  `send.ts`). A guarantor rent chase writes EMAIL and SMS rows only. If a
+  guarantor inbox is ever built, that function is where PORTAL comes back.
+- **`recordConsent` reads `party` = `TENANT:<id>` / `GUARANTOR:<id>`**, not
+  `tenantId`. The panel field is "Who agreed to be contacted".
+- **No guarantor has consent until staff record it** (D-211, no backfill). A
+  guarantor text is still `no_consent` by default.
+
+## Found in R-196, owned by nobody
+
+- `sendReminders` reports "sent to N people" even when every one of a person's
+  channels was suppressed.
+- The guarantor portal shows no consent record and offers no withdrawal, and a
+  guarantor has no notification preferences anyone can set.
+- The guarantor sign-in link is email-only, so a phone-only guarantor cannot
+  enter their portal at all.
+- Whether STAFF or VENDOR PORTAL rows have a reader was not checked.
 
 ## What R-195 changed that the next rows touch
 
