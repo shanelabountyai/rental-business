@@ -9,9 +9,8 @@ import { axeScan, uniqueClientHeaders } from './fixtures.ts'
 //
 // Portfolio-wide, like /jurisdiction: `job.manage` is checked with a
 // RESOURCE-LESS requirePermission, which only ever clears for a portfolio-wide
-// grant. So a property-scoped manager must be refused even where their role
-// carries the key - and the manager role does not carry it at all, because a
-// new permission key is owner-only until somebody adds it to a role.
+// grant. The manager role carries the key since R-197, so a portfolio-wide
+// manager reaches the panel and a property-scoped one is still refused.
 //
 // The re-run itself is proved in apps/web/lib/jobs/jobs.test.ts against a real
 // database, not here: a re-run needs a job REGISTERED in the running server's
@@ -158,6 +157,36 @@ test.describe('scheduled job health', () => {
     // The accessible name carries the job and the date, because the panel
     // renders one of these per failed run and a page of buttons all called
     // "Re-run" is ambiguous to anyone navigating by label.
+    await expect(
+      page.getByRole('button', { name: new RegExp(`Re-run.*${property.name}`) }),
+    ).toBeVisible()
+  })
+
+  test('a portfolio-wide manager sees a failed run and can re-run it', async ({
+    page,
+  }) => {
+    // R-197. The failure Task is raised to whoever is on shift; before this
+    // the manager was handed it and refused the only screen that retries it.
+    // The press itself stays in jobs.test.ts (see the header) - the action is
+    // guarded by the same resource-less `job.manage` check as this page.
+    const property = await seedProperty()
+    const run = await prisma.jobRun.create({
+      data: {
+        jobType: 'billing.sweep',
+        propertyId: property.id,
+        businessDate: new Date('2026-08-05T00:00:00.000Z'),
+        status: 'FAILED',
+        error: `synthetic failure ${randomUUID().slice(0, 8)}`,
+        finishedAt: new Date(),
+      },
+    })
+    jobRunIds.push(run.id)
+
+    const staff = await createStaff('manager')
+    await signIn(page, staff.email)
+    await page.goto('/jobs')
+
+    await expect(page.getByText(run.error!)).toBeVisible()
     await expect(
       page.getByRole('button', { name: new RegExp(`Re-run.*${property.name}`) }),
     ).toBeVisible()

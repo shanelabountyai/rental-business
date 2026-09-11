@@ -1,19 +1,29 @@
 # Next session
 
-## R-196 is done — commits `2b29d74` + locator fix `66bec5b`, SHA recorded.
+## R-197 is done — `job.manage` is seeded to the manager (D-212).
 
-**CI for R-196:** run `34616381321` on `2b29d74` FAILED (`leases.spec.ts`: the new consent option "Marta Guarantor (guarantor)" made `getByText('Marta Guarantor')` ambiguous). Fixed in `66bec5b`, whose run `34618664817` is green on both jobs (e2e 1225 passed, 3 skipped, 0 failed, 0 flaky). **Lesson: a new label or option on `/leases/[id]` can break ANY spec that renders that page, not just the specs you edited.** Grep `e2e/` for the text before pushing. The SHA-record push starts no run (`paths-ignore`
-on docs). **Do not copy the green line forward** — run `gh run list --limit 5`
-after your own push.
+SHA and CI run are recorded in PROGRESS. **Do not copy a green CI line
+forward** — run `gh run list --limit 5` after your own push.
 
-## Start here: row 184, R-197
+## Start here: row 185, R-198
 
-`docs/prds/06-backlog.md` Milestone 14 ("Arc 4"). **A manager can open `/jobs`
-and re-run the failed job.** `job.manage` is in no role but `owner`. Either add
-it to `manager`, or split read from re-run and give the manager the read. RBAC,
-so **Opus recommended**; Sonnet is defensible for a one-line grant. Re-verify
-the row's line numbers (R-150): R-196's were off, and so was one of its
-premises (`reachableElectronically` already covered every recipient type).
+`docs/prds/06-backlog.md` Milestone 14 ("Arc 4"). **The inter-entity sweep is
+recorded, and the settlement report is archived.** An `EntitySettlement`
+(window, entity, gross cents, archived report `Document`, transferred-on,
+reference, who), raised from the settlement report page. Precedents to copy:
+`recordDepositRefund` for money going out, R-081d's tax packet for archiving.
+Stripe Connect stays out of scope. Schema, money and the evidence trail, so
+**Opus recommended**. Re-verify the row's premises first (R-150): check the
+grep for `transfer` and `reports/settlement.ts` has no archive path.
+
+## What R-197 changed that the next rows touch
+
+- **A portfolio-wide manager now reaches `/jobs`, the re-run, and the
+  `job_failed` Task link.** A property-scoped manager is still refused
+  (resource-less guard, unchanged).
+- **A role-permission change reaches a database only through `db:seed`.**
+  `vercel-build` does not run it. Whether production is re-seeded on deploy
+  was not found recorded anywhere, so check before assuming.
 
 ## What R-196 changed that the next rows touch
 

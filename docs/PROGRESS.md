@@ -11292,3 +11292,55 @@ CLAUDE.md's "one page means the whole assembled page" trap again. I ran only
 the two specs I had edited, and the collision was in a third spec that renders
 the same page. Fixed with `exact: true` in a follow-up commit, and that test
 passed locally on both projects. CI for the follow-up: run `34618664817` on `66bec5b` green, both jobs (lint/types/unit/build; e2e/axe/Lighthouse; e2e 1225 passed, 3 skipped, 0 failed, 0 flaky), read by polling the run's jobs after the push, not inherited.
+
+## R-197 — a manager can re-run the job whose failure they were handed
+
+Commit `(recorded below)`.
+
+**The row was checked before anything was built.** Its line numbers held
+(`permissions.ts:159`, the manager list, `runner.ts`'s no-retry comment), and
+so did its premise: `job.manage` was in no role but `owner`, and it guards both
+`/jobs` and `rerunJobAction`.
+
+**What it built.**
+
+- `packages/core/rbac/permissions.ts`: `'job.manage'` added to the `manager`
+  role, with the reason beside it. The key's own comment no longer says
+  "owner-only by construction", and its "not privileged" argument now rests on
+  D-12 (the replayed job chooses no amount) instead of the owner already
+  holding `ledger.adjust`, which a manager does not.
+- No migration. `seed.mts` rewrites a system role's permission list on upsert,
+  so `db:seed` carries the grant into an existing database.
+- Tests. `rbac.test.ts` asserts the manager carries the key.
+  `e2e/jobs.spec.ts` adds "a portfolio-wide manager sees a failed run and can
+  re-run it", which seeds a FAILED `billing.sweep` run and asserts both its error
+  and its re-run button. The property-scoped refusal test is unchanged
+  and still passes: the guard is resource-less. `route-guards.test.ts`'s
+  exemption reason and the spec header are reworded to match.
+
+**What it decided.** D-212: one permission for the read and the re-run, not a
+split, for the reason R-174 already gave — a re-run authorises no new act, and a
+read-only manager would be shown a button they may not press. Still
+portfolio-wide only.
+
+**What it left behind.**
+
+- **A deployed database gets the grant only when somebody runs the seed
+  against it.** `vercel-build` runs `prisma generate` and `next build`, not
+  `db:seed`. Every earlier role change went out the same way. Whether the
+  production seed is run on deploy is **not recorded anywhere this item
+  checked**. The Neon dev branch is also still nine migrations behind (R-187).
+- A property-scoped manager can still see a `job_failed` Task on their
+  property that they cannot act on: `raiseFailureTask` assigns nobody, and
+  its link is gated on a portfolio-wide grant. Owned by nobody.
+- The re-run press itself is still proved only in `jobs.test.ts`. The spec
+  cannot register a job in the server it talks to, and the action carries
+  the same guard as the page.
+
+**Gate.** `lint` exit 0 (17 warnings, the same 17 on the clean tree),
+`typecheck` exit 0, `npm test` 3137 passed / 4 skipped (231 files + 1 skipped),
+run on its own. `e2e/jobs.spec.ts` on both projects: 10 passed of 10 listed, 0
+skipped, 0 flaky. **Proved against the revert**: with `job.manage` removed from
+the manager row in `rental_test`, the new e2e test failed (`toBeVisible`,
+element not found — the manager was redirected), and the seed restored it.
+CI: see the follow-up commit.

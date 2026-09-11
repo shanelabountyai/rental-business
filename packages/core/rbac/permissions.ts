@@ -138,10 +138,11 @@ export const PERMISSIONS = [
   /// change, and retiring the access codes a restricted party may know.
   'confidential.manage',
   /// Reading the scheduled-job health panel and re-running a failed run
-  /// (R-174). Portfolio-wide only, and owner-only by construction like
-  /// `confidential.read` above - a JobRun belongs to a property, but "did the
-  /// nightly work happen everywhere" is not a question a property-scoped
-  /// manager can usefully be shown half an answer to.
+  /// (R-174). Portfolio-wide only - a JobRun belongs to a property, but "did
+  /// the nightly work happen everywhere" is not a question a property-scoped
+  /// manager can usefully be shown half an answer to. Seeded to the manager
+  /// since R-197 (D-212); a property-scoped manager still cannot pass the
+  /// resource-less guard.
   ///
   /// ONE PERMISSION FOR BOTH THE READ AND THE RE-RUN, which the split
   /// elsewhere in this file (template.write/approve, hold.manage/lift_protected)
@@ -154,8 +155,9 @@ export const PERMISSIONS = [
   /// NOT privileged, for the reason the docstring below gives: it gates a
   /// whole screen, and locking an owner out of "why did last night not run"
   /// while they find their authenticator is the wrong failure. The re-run
-  /// itself posts nothing an owner could not already post with
-  /// `ledger.adjust`, which IS privileged.
+  /// itself chooses no amount: it replays a job whose numbers `packages/core`
+  /// computes (D-12), which is also why a manager without `ledger.adjust` may
+  /// press it.
   'job.manage',
 ] as const
 
@@ -322,6 +324,11 @@ export const ROLE_DEFINITIONS: Record<
       /// an owner can revoke it from the role without a release (D-5).
       'hold.manage',
       'hold.lift_protected',
+      /// R-197: the manager is who is awake when a nightly job fails at 5am,
+      /// and the re-run is the only retry the runner has. It replays work the
+      /// system already decided to do, so it authorises no new act (see the
+      /// key's own comment). Reachable only on a portfolio-wide assignment.
+      'job.manage',
     ],
     // ROLE-02's example boundary, in cents. Owner-configurable per user.
     defaultApproveWorkOrderCents: 50_000,

@@ -563,6 +563,11 @@ describe('role definitions', () => {
     expect(manager).not.toContain('document.delete')
   })
 
+  it('lets a manager re-run the nightly job whose failure they were handed (R-197)', () => {
+    const manager: readonly Permission[] = ROLE_DEFINITIONS.manager.permissions
+    expect(manager).toContain('job.manage')
+  })
+
   it('keeps financial data away from the maintenance tech', () => {
     const tech: readonly Permission[] =
       ROLE_DEFINITIONS.maintenance_tech.permissions
