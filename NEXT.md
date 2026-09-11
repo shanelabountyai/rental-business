@@ -1,20 +1,47 @@
 # Next session
 
-## R-197 is done — `job.manage` is seeded to the manager (D-212).
+## R-198 is done — the inter-entity sweep is recorded and archived (D-213).
 
 SHA and CI run are recorded in PROGRESS. **Do not copy a green CI line
 forward** — run `gh run list --limit 5` after your own push.
 
-## Start here: row 185, R-198
+## Start here: row 186, R-199
 
-`docs/prds/06-backlog.md` Milestone 14 ("Arc 4"). **The inter-entity sweep is
-recorded, and the settlement report is archived.** An `EntitySettlement`
-(window, entity, gross cents, archived report `Document`, transferred-on,
-reference, who), raised from the settlement report page. Precedents to copy:
-`recordDepositRefund` for money going out, R-081d's tax packet for archiving.
-Stripe Connect stays out of scope. Schema, money and the evidence trail, so
-**Opus recommended**. Re-verify the row's premises first (R-150): check the
-grep for `transfer` and `reports/settlement.ts` has no archive path.
+`docs/prds/06-backlog.md` Milestone 14 ("Arc 4"). **A payment plan becomes
+evidence: sent, visible, and optionally signed.** In value order: send the
+schedule when the plan is agreed (one template, the instalment table — the
+`Message` row *is* the evidence), show it on the portal lease page, e-sign only
+if the operator wants it. Notification engine (R-030), document generation
+(R-062), e-sign (R-063/R-090) and the portal per-lease panels already exist.
+Tenant-facing, so WCAG 2.1 AA applies. Re-verify the row's premises first
+(R-150): that `PaymentPlan.note` is still the entire record and no template
+for the schedule exists.
+
+## What R-198 changed that the next rows touch
+
+- **`EntitySettlement` is append-only by trigger** and holds its `LegalEntity`,
+  `Document` and `StaffUser` by RESTRICT. A test that records one cannot delete
+  any of the three — retire them.
+- **Two new document types, `DEPOSIT_SLIP` and `SETTLEMENT_REPORT`**, both in
+  `UNUPLOADABLE_DOCUMENT_TYPES`. `DEPOSIT_SLIP` was being written since R-166
+  without being in the vocabulary; a new minted-document type must be added
+  to all four lists in `documents/validate.ts` and `retention.ts`.
+- **`recordedSettlements(entityIds, from, to, db?)`** is the one overlap
+  predicate for recorded transfers. Do not hand-write a second one.
+- **The Prisma model `EntitySettlement` is not core's `EntitySettlement`
+  interface** (the computed share). Nothing imports both today.
+- New audit action `settlement.transfer_recorded`.
+
+## Found in R-198, owned by nobody
+
+- A payment on a property deactivated mid-range is outside the settlement
+  report (`currentScope` reads active properties only), and now outside the
+  archived report too.
+- A late-delivered payment whose settlement date falls in an already-swept
+  range belongs to no recorded transfer; nothing flags it.
+- No per-entity list of recorded transfers; nothing reconciles one against the
+  bank. A raced overlap leaves an orphaned PDF object in storage.
+- The demo seed records no transfer.
 
 ## What R-197 changed that the next rows touch
 

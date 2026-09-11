@@ -481,6 +481,7 @@ model LegalEntity {
   documents       Document[]
   vendorInvoices  VendorInvoice[]
   expenses        PropertyExpense[]
+  settlements     EntitySettlement[]
 
   @@index([active])
 }
@@ -2057,6 +2058,7 @@ model StaffUser {
   mortgageStatementsRecorded              MortgageAnnualStatement[]       @relation("MortgageAnnualStatementRecordedBy")
   depositDeductionsCreated                DepositDeduction[]              @relation("DepositDeductionCreatedBy")
   depositRefundsRecorded                  Deposit[]                       @relation("DepositRefundRecordedBy")
+  entitySettlementsRecorded               EntitySettlement[]              @relation("EntitySettlementRecordedBy")
   complianceCompletionsRecorded           ComplianceCompletion[]
   translationsApproved                    MessageTemplateTranslation[]    @relation("TranslationApprovedBy")
   paymentHoldsSet                         LeasePayer[]                    @relation("PaymentHoldSetBy")
@@ -2294,6 +2296,41 @@ model VendorInvoiceSplit {
 /// beside `VendorInvoiceSplit`. NOT a ledger write - D-11 governs the tenant
 /// receivable, and a vendor's own bill still belongs on `VendorInvoice`
 /// (D-208).
+/// R-198 (review finding 12): one transfer out of the shared Stripe balance and
+/// bank account to the legal entity whose houses earned it, with the
+/// settlement report it was computed from archived beside it.
+///
+/// NOT core's `EntitySettlement` interface (packages/core/payments), which is
+/// the COMPUTED share for a window. This is the RECORDED movement of it.
+///
+/// Append-only by trigger. A mistyped transfer is corrected on the audit trail
+/// and by a real movement, never by an edit - this is the row produced when an
+/// accountant or opposing counsel asks whether the LLCs' money was kept apart.
+model EntitySettlement {
+  id               String   @id @default(cuid())
+  legalEntityId    String
+  /// The report's range, inclusive, as calendar days (D-3).
+  windowFrom       DateTime @db.Date
+  windowTo         DateTime @db.Date
+  /// What the report said the entity was owed for the range, before Stripe's
+  /// fees. Recomputed when the transfer is recorded, never read off the form.
+  grossCents       Int
+  /// What actually left the shared account - usually less than gross by fees.
+  transferredCents Int
+  transferredOn    DateTime @db.Date
+  /// The bank's confirmation or trace number: what matches this to a statement.
+  reference        String
+  documentId       String   @unique
+  recordedById     String
+  createdAt        DateTime @default(now())
+
+  legalEntity LegalEntity @relation(fields: [legalEntityId], references: [id], onDelete: Restrict)
+  document    Document    @relation("EntitySettlementReport", fields: [documentId], references: [id], onDelete: Restrict)
+  recordedBy  StaffUser   @relation("EntitySettlementRecordedBy", fields: [recordedById], references: [id], onDelete: Restrict)
+
+  @@index([legalEntityId, windowFrom])
+}
+
 model PropertyExpense {
   id                String    @id @default(cuid())
   /// Whose books. Required even when a property is named, so an entity-wide
@@ -6023,6 +6060,7 @@ model Document {
   paymentReceipt          Payment?                  @relation("PaymentReceipt")
   depositRefund           Deposit?                  @relation("DepositRefundDocument")
   paymentDepositSlips     Payment[]                 @relation("PaymentDepositSlip")
+  entitySettlement        EntitySettlement?         @relation("EntitySettlementReport")
   accommodationRequestId  String?
   accommodationRequest    AccommodationRequest?     @relation("AccommodationDocuments", fields: [accommodationRequestId], references: [id])
   abandonmentCaseId       String?

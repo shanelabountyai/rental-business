@@ -134,6 +134,16 @@ export const DOCUMENT_TYPES = [
   /// time library - this is evidence of the state a house was handed over in,
   /// and the intake panel's own gap check counts it.
   'CONDITION_BASELINE',
+  /// R-166: the printable slip a bank deposit of offline payments reconciles
+  /// to. ADDED BY R-198, not R-166 - `payments/deposit-actions.ts` has written
+  /// this string since R-166 and it was never in this vocabulary, so every
+  /// slip listed as a raw `DEPOSIT_SLIP` and had no retention rule. The
+  /// ATTORNEY_PACKET miss above, second instance.
+  'DEPOSIT_SLIP',
+  /// R-198: the settlement report an inter-entity transfer was computed from,
+  /// archived when the transfer was recorded. Entity-keyed, like TAX_PACKET,
+  /// because the shared account's money belongs to no one house.
+  'SETTLEMENT_REPORT',
   'OTHER',
 ] as const
 export type DocumentTypeValue = (typeof DOCUMENT_TYPES)[number]
@@ -178,6 +188,8 @@ export const DOCUMENT_TYPE_LABELS: Record<DocumentTypeValue, string> = {
   SCRA_CERTIFICATE: 'SCRA certificate',
   LEASE_AMENDMENT: 'Lease amendment',
   CONDITION_BASELINE: 'Condition as found',
+  DEPOSIT_SLIP: 'Deposit slip',
+  SETTLEMENT_REPORT: 'Settlement report',
   OTHER: 'Other',
 }
 
@@ -202,6 +214,9 @@ export const UNUPLOADABLE_DOCUMENT_TYPES: readonly DocumentTypeValue[] = [
   'COMMS_TRANSCRIPT',
   'LEDGER_STATEMENT',
   'CONDITION_BASELINE',
+  // Both minted by the product with their own audit row, like the packets.
+  'DEPOSIT_SLIP',
+  'SETTLEMENT_REPORT',
 ]
 
 export const UPLOADABLE_DOCUMENT_TYPES: readonly DocumentTypeValue[] = DOCUMENT_TYPES.filter(

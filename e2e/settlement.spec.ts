@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto'
-import { hashPassword } from '@rental/core/auth'
+import { createTotpEnrolment, hashPassword, sealSecret } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
+import { Secret, TOTP } from 'otpauth'
 import { axeScan, uniqueClientHeaders } from './fixtures.ts'
 
 // The per-entity settlement report (review finding 12, R-180).
@@ -35,6 +36,31 @@ async function createStaff() {
   const role = await prisma.role.findUniqueOrThrow({ where: { key: 'owner' } })
   await prisma.staffAssignment.create({ data: { staffUserId: staff.id, roleId: role.id } })
   return { ...staff, email }
+}
+
+/// An owner with an enrolled second factor. Recording a transfer is
+/// `ledger.adjust`, which is privileged (ROLE-05), so `createStaff`'s owner is
+/// sent to enrol instead of reaching the write.
+async function createOwnerWithMfa() {
+  const email = `settlement-mfa-${randomUUID()}@example.test`
+  const { secret } = createTotpEnrolment(email)
+  const staff = await prisma.staffUser.create({
+    data: {
+      email,
+      name: 'Settlement Owner',
+      credential: {
+        create: {
+          passwordHash: await hashPassword(PASSWORD),
+          mfaSecret: sealSecret(secret),
+          mfaEnrolledAt: new Date(),
+        },
+      },
+    },
+  })
+  staffIds.push(staff.id)
+  const role = await prisma.role.findUniqueOrThrow({ where: { key: 'owner' } })
+  await prisma.staffAssignment.create({ data: { staffUserId: staff.id, roleId: role.id } })
+  return { email, secret }
 }
 
 async function seedEntity(label: string) {
@@ -185,6 +211,20 @@ async function signIn(page: import('@playwright/test').Page, email: string) {
   await page.waitForURL('**/dashboard')
 }
 
+async function signInWithMfa(
+  page: import('@playwright/test').Page,
+  staff: { email: string; secret: string },
+) {
+  await page.goto('/login')
+  await page.getByLabel('Email').fill(staff.email)
+  await page.getByLabel('Password').fill(PASSWORD)
+  await page.getByRole('button', { name: 'Sign in' }).click()
+  await page.waitForURL(/\/login\/mfa/)
+  await page.getByLabel(/code/i).fill(new TOTP({ secret: Secret.fromBase32(staff.secret) }).generate())
+  await page.getByRole('button', { name: 'Verify' }).click()
+  await page.waitForURL('**/dashboard')
+}
+
 async function openReport(page: import('@playwright/test').Page) {
   await page.goto(`/reports/settlement?from=${WINDOW.from}&to=${WINDOW.to}`)
 }
@@ -307,6 +347,71 @@ test.describe('the export', () => {
     expect(csv).toContain('2026-03-14')
     expect(csv).toContain('1330.00')
     expect(csv).toContain(house.property.name)
+  })
+})
+
+test.describe('recording the sweep (R-198)', () => {
+  test('records what moved and archives the report it was computed from', async ({ page }) => {
+    const entity = await seedEntity('Sweep')
+    const house = await seedHouse(entity.id, 'Sweep House')
+    await seedOnlinePayment(house, { amountCents: 150_000, receivedAt: '2026-03-20T15:00:00Z' })
+
+    const owner = await createOwnerWithMfa()
+    await signInWithMfa(page, owner)
+    await openReport(page)
+
+    const card = page.getByRole('listitem').filter({ hasText: entity.name })
+    const amount = card.getByLabel(`Amount moved to ${entity.name}`)
+    const movedOn = card.getByLabel(`Day the money was moved to ${entity.name}`)
+    const reference = card.getByLabel(`Bank confirmation for ${entity.name}`)
+    const record = card.getByRole('button', { name: `Record the transfer to ${entity.name}` })
+
+    // More than the report says the entity is owed is not a settlement. The
+    // figure is recomputed server-side, so this is the action refusing, not
+    // the browser.
+    await amount.fill('1500.01')
+    await movedOn.fill('2026-04-04')
+    await reference.fill('TRF-too-much')
+    await record.click()
+    await expect(card.getByText('More than the $1,500.00 this entity is owed for the range.')).toBeVisible()
+    expect(await prisma.entitySettlement.count({ where: { legalEntityId: entity.id } })).toBe(0)
+
+    // Short of the gross by the fees, which is the ordinary case.
+    const trace = `TRF-${randomUUID().slice(0, 8)}`
+    await amount.fill('1455.25')
+    await movedOn.fill('2026-04-04')
+    await reference.fill(trace)
+    await record.click()
+
+    await expect
+      .poll(() => prisma.entitySettlement.count({ where: { legalEntityId: entity.id } }))
+      .toBe(1)
+    const row = await prisma.entitySettlement.findFirstOrThrow({
+      where: { legalEntityId: entity.id },
+      include: { document: true },
+    })
+    expect(row).toMatchObject({ grossCents: 150_000, transferredCents: 145_525, reference: trace })
+    expect(row.document).toMatchObject({ type: 'SETTLEMENT_REPORT', legalEntityId: entity.id })
+    expect(
+      await prisma.auditLog.count({
+        where: { action: 'settlement.transfer_recorded', entityId: row.id },
+      }),
+    ).toBe(1)
+
+    // The record stands where the form was, and the archive is a real PDF.
+    await expect(card.getByText(/Transferred \$1,455\.25 on 4 Apr 2026/)).toBeVisible()
+    await expect(record).toHaveCount(0)
+    const link = card.getByRole('link', { name: /Open the archived report/ })
+    const response = await page.request.get((await link.getAttribute('href'))!)
+    expect(response.status()).toBe(200)
+    expect((await response.body()).subarray(0, 5).toString('latin1')).toBe('%PDF-')
+
+    // A range overlapping the recorded one offers no second transfer - that
+    // would move the 20 March rent twice.
+    await page.goto('/reports/settlement?from=2026-03-15&to=2026-04-15')
+    const overlapping = page.getByRole('listitem').filter({ hasText: entity.name })
+    await expect(overlapping.getByText(/Transferred \$1,455\.25 on 4 Apr 2026/)).toBeVisible()
+    await expect(overlapping.getByRole('button', { name: /Record the transfer/ })).toHaveCount(0)
   })
 })
 

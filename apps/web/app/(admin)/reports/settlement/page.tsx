@@ -2,10 +2,17 @@ import { formatCents } from '@rental/core/money'
 import { friendlyBusinessDate } from '@rental/core/scheduling'
 import type { BusinessDate } from '@rental/core/scheduling'
 import Link from 'next/link'
-import { requireScope } from '@/lib/auth/guard.ts'
-import { settlementReport } from '@/lib/reports/settlement.ts'
+import type { ReactNode } from 'react'
+import { actorDecision, requireScope } from '@/lib/auth/guard.ts'
+import {
+  type RecordedSettlement,
+  recordedSettlements,
+  settlementReport,
+} from '@/lib/reports/settlement.ts'
+import { recordSettlementTransfer } from '@/lib/reports/settlement-actions.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 import { reportToday } from '@/lib/scope/report-today.ts'
+import { SettlementTransferForm } from '@/components/reports/settlement-transfer-form.tsx'
 import { scrollableRegionProps } from '@/components/ui-classes.ts'
 
 export const metadata = { title: 'Settlement by entity — Rental Operations' }
@@ -45,8 +52,21 @@ export default async function SettlementReportPage({
   const { actor } = await requireScope('report.financial')
   const scope = await currentScope(actor)
   const params = await searchParams
-  const { from, to } = readRange(params, reportToday(scope, new Date()))
+  const today = reportToday(scope, new Date())
+  const { from, to } = readRange(params, today)
   const report = await settlementReport(scope, from, to)
+
+  // R-198. Recorded transfers are a read, shown to anyone who can see the
+  // report; the form is for whoever can move money. An owner who has not
+  // enrolled a second factor still sees it - the action's guard sends them to
+  // enrol, which beats a form that silently is not there (R-026's lesson).
+  const entityIds = report.entities.map((entity) => entity.legalEntityId)
+  const [recorded, decisions] = await Promise.all([
+    recordedSettlements(entityIds, from, to),
+    Promise.all(
+      entityIds.map((legalEntityId) => actorDecision('ledger.adjust', { legalEntityId })),
+    ),
+  ])
 
   return (
     <div className="flex max-w-5xl flex-col gap-6">
@@ -158,7 +178,7 @@ export default async function SettlementReportPage({
         </p>
       ) : (
         <ul className="flex flex-col gap-4">
-          {report.entities.map((entity) => (
+          {report.entities.map((entity, index) => (
             <li key={entity.legalEntityId} className="flex flex-col gap-3 rounded-md border p-4">
               <div className="flex flex-wrap items-baseline justify-between gap-2">
                 <h2 className="text-lg font-semibold">{entity.entityName}</h2>
@@ -207,6 +227,29 @@ export default async function SettlementReportPage({
                   </tbody>
                 </table>
               </div>
+              <TransferPanel
+                entityName={entity.entityName}
+                owedCents={entity.netCents}
+                recorded={recorded.filter((row) => row.legalEntityId === entity.legalEntityId)}
+                canRecord={
+                  decisions[index]!.allowed || decisions[index]!.reason === 'mfa_required'
+                }
+                wholeEntity={scope.availableProperties
+                  .filter((property) => property.legalEntityId === entity.legalEntityId)
+                  .every((property) => scope.propertyIds.includes(property.id))}
+                windowClosed={to < today}
+                form={
+                  <SettlementTransferForm
+                    action={recordSettlementTransfer}
+                    entityId={entity.legalEntityId}
+                    entityName={entity.entityName}
+                    from={from}
+                    to={to}
+                    owedDollars={(entity.netCents / 100).toFixed(2)}
+                    today={today}
+                  />
+                }
+              />
             </li>
           ))}
         </ul>
@@ -254,6 +297,85 @@ export default async function SettlementReportPage({
           </div>
         </section>
       )}
+    </div>
+  )
+}
+
+/// What happened to one entity's share (R-198).
+///
+/// A transfer already recorded for any overlapping range REPLACES the form
+/// rather than sitting beside it. The action refuses a second one either way,
+/// and a form next to the record is an invitation to move the same rent twice.
+function TransferPanel({
+  entityName,
+  owedCents,
+  recorded,
+  canRecord,
+  wholeEntity,
+  windowClosed,
+  form,
+}: {
+  entityName: string
+  owedCents: number
+  recorded: RecordedSettlement[]
+  canRecord: boolean
+  wholeEntity: boolean
+  windowClosed: boolean
+  form: ReactNode
+}) {
+  let body: ReactNode
+  if (recorded.length > 0) {
+    body = recorded.map((row) => (
+      <p key={row.id} className="text-sm">
+        Transferred {formatCents(row.transferredCents)} on {friendlyBusinessDate(row.transferredOn)},
+        reference {row.reference}, for money settled {friendlyBusinessDate(row.windowFrom)} to{' '}
+        {friendlyBusinessDate(row.windowTo)} ({formatCents(row.grossCents)} owed). Recorded by{' '}
+        {row.recordedByName}.{' '}
+        <a
+          href={`/api/documents/${row.documentId}/file`}
+          className="focus-visible:ring-ring underline underline-offset-2 focus-visible:ring-2 focus-visible:outline-none"
+        >
+          Open the archived report
+          <span className="sr-only">
+            {' '}
+            for {entityName}, {friendlyBusinessDate(row.windowFrom)} to{' '}
+            {friendlyBusinessDate(row.windowTo)}
+          </span>
+        </a>
+      </p>
+    ))
+  } else if (!canRecord) {
+    return null
+  } else if (owedCents <= 0) {
+    body = (
+      <p className="text-muted-foreground text-sm">
+        Nothing is owed to this entity for this range, so there is no transfer to record.
+      </p>
+    )
+  } else if (!windowClosed) {
+    body = (
+      <p className="text-muted-foreground text-sm">
+        Record the transfer once this range has ended. Money can still settle into it until its
+        last day has passed.
+      </p>
+    )
+  } else if (!wholeEntity) {
+    body = (
+      <p className="text-muted-foreground text-sm">
+        Only part of {entityName} is selected. Switch the property selector to the whole entity to
+        record its transfer: a share worked out from some of its houses is not what it is owed.
+      </p>
+    )
+  } else {
+    body = form
+  }
+
+  return (
+    <div className="flex flex-col gap-2 border-t pt-3">
+      <h3 className="text-sm font-semibold">
+        Transfer out of the shared account<span className="sr-only"> to {entityName}</span>
+      </h3>
+      {body}
     </div>
   )
 }

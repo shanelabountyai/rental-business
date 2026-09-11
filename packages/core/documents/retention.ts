@@ -83,6 +83,14 @@ export const RETENTION_RULES: Record<DocumentTypeValue, RetentionRule> = {
     years: null,
     note: 'R-081d: what the preparer was given for a tax year. Kept indefinitely - a return is examinable for years afterwards and this is the record of what it was filed from.',
   },
+  DEPOSIT_SLIP: {
+    years: null,
+    note: 'R-166: what a bank deposit of offline payments reconciles to. Kept indefinitely - it is the evidence those payments reached the bank at all, and it had no rule until R-198 found it missing, which already meant never purged.',
+  },
+  SETTLEMENT_REPORT: {
+    years: null,
+    note: 'R-198: the report an inter-entity transfer was computed from, as it stood when the transfer was recorded. Kept indefinitely - commingling is argued years later, by an accountant or opposing counsel, from exactly this.',
+  },
   HANDOFF_PACKET: {
     years: null,
     note: 'R-092: what was represented about a property at the moment it changed hands. Kept indefinitely, for the same reason ESTOPPEL_CERTIFICATE is - a buyer disputing what they were told about a tenancy argues from this, and the tenancies it describes have long since moved on.',

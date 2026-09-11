@@ -5,9 +5,9 @@ import {
   type SettlementPayment,
   summariseSettlements,
 } from '@rental/core/payments'
-import { businessDate } from '@rental/core/scheduling'
+import { businessDate, businessDateToUtc, utcToBusinessDate } from '@rental/core/scheduling'
 import type { BusinessDate } from '@rental/core/scheduling'
-import { prisma } from '@rental/db'
+import { type Prisma, prisma } from '@rental/db'
 import type { ResolvedScope } from '@/lib/scope/current-scope.ts'
 
 // The per-entity settlement report (review finding 12, R-180). The arithmetic
@@ -224,4 +224,69 @@ export async function settlementReport(
         reversedOn: entry.reversedOn,
       })),
   }
+}
+
+export interface RecordedSettlement {
+  id: string
+  legalEntityId: string
+  windowFrom: BusinessDate
+  windowTo: BusinessDate
+  grossCents: number
+  transferredCents: number
+  transferredOn: BusinessDate
+  reference: string
+  documentId: string
+  recordedByName: string
+}
+
+/**
+ * Transfers already recorded (R-198) whose range shares at least one day with
+ * `[from, to]`.
+ *
+ * ONE PREDICATE FOR THE PAGE AND THE WRITE. The page uses it to show the record
+ * in place of the form; the action uses it, inside the transaction, to refuse a
+ * second transfer. A range that merely touches a recorded one - 1 April after a
+ * March sweep - does not overlap; a range sharing its last day does, because
+ * that day's rent would be moved twice.
+ */
+export async function recordedSettlements(
+  legalEntityIds: readonly string[],
+  from: BusinessDate,
+  to: BusinessDate,
+  db: Prisma.TransactionClient = prisma,
+): Promise<RecordedSettlement[]> {
+  if (legalEntityIds.length === 0) return []
+  const rows = await db.entitySettlement.findMany({
+    where: {
+      legalEntityId: { in: [...legalEntityIds] },
+      windowFrom: { lte: businessDateToUtc(to) },
+      windowTo: { gte: businessDateToUtc(from) },
+    },
+    orderBy: { windowFrom: 'asc' },
+    select: {
+      id: true,
+      legalEntityId: true,
+      windowFrom: true,
+      windowTo: true,
+      grossCents: true,
+      transferredCents: true,
+      transferredOn: true,
+      reference: true,
+      documentId: true,
+      recordedBy: { select: { name: true } },
+    },
+  })
+  return rows.map((row) => ({
+    id: row.id,
+    legalEntityId: row.legalEntityId,
+    // @db.Date columns: calendar days straight through, no zone (D-3).
+    windowFrom: utcToBusinessDate(row.windowFrom),
+    windowTo: utcToBusinessDate(row.windowTo),
+    grossCents: row.grossCents,
+    transferredCents: row.transferredCents,
+    transferredOn: utcToBusinessDate(row.transferredOn),
+    reference: row.reference,
+    documentId: row.documentId,
+    recordedByName: row.recordedBy.name,
+  }))
 }

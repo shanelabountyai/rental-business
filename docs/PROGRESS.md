@@ -11346,3 +11346,107 @@ element not found — the manager was redirected), and the seed restored it.
 CI: run `34621421492` on `b4fe058` green on both jobs — e2e 1227 passed,
 3 skipped, 0 failed, 0 flaky (1230, R-196's 1228 plus the new test on both
 projects).
+
+## R-198 — the inter-entity sweep is recorded, with the report it was computed from
+**Commit:** `<<SHA>>`  ·  **Date:** 2026-09-11
+
+**What it built.** Review finding 12's second half. R-180 said what each LLC is
+owed out of the one shared Stripe balance and bank account, and stopped: no row
+anywhere recorded that the money moved (the only `transfer` in the schema was
+R-092's `DepositTransferStatus`), and `reports/settlement.ts` had no archive
+path. So *"on 4 October you moved $6,412 to Maple Holdings LLC, and here is the
+report it was computed from"* could not be produced at all.
+
+- **`EntitySettlement`** ([migration](packages/db/prisma/migrations/20260911200000_r198_entity_settlement/migration.sql))
+  — entity, inclusive range as calendar days, `grossCents`, `transferredCents`,
+  `transferredOn`, `reference`, the archived report `Document` (unique) and
+  who recorded it. Append-only by R-002's `reject_mutation()` (row and
+  TRUNCATE triggers), with CHECKs for `0 < transferred <= gross`, the range's
+  order, and `transferredOn >= windowTo`. Every FK is RESTRICT.
+- **[packages/core/payments/settlement-transfer.ts](packages/core/payments/settlement-transfer.ts)**
+  — `validateSettlementTransfer` and `settlementReportBlocks`, the PDF's
+  content. Dates arrive as `BusinessDate` and are formatted inside (D-153).
+- **[recordSettlementTransfer](apps/web/lib/reports/settlement-actions.ts)**
+  — recomputes the entity's share, validates, refuses an overlap, draws and
+  stores the PDF, then writes the Document, the row and a
+  `settlement.transfer_recorded` audit row in one transaction under a
+  per-entity advisory lock, and redirects back to the same range.
+- **`recordedSettlements`** in [lib/reports/settlement.ts](apps/web/lib/reports/settlement.ts)
+  — the one overlap predicate, used by both the page and the write.
+- **The report page** now ends each entity card with a transfer panel: the
+  recorded transfer and a link to its archive if one overlaps the range,
+  otherwise the form (or the sentence saying why there is none).
+- New document type `SETTLEMENT_REPORT` (entity-owned, not uploadable, kept
+  indefinitely) and audit action `settlement.transfer_recorded`.
+
+**What it decided** (D-213).
+
+- **Two amounts, where the row named one.** The report is gross of Stripe's
+  fees and nothing in the product records a fee, so what moved and what was
+  owed differ in the ordinary case. `grossCents` is recomputed in the action
+  and **never read off the form**; the form's amount field only starts at it.
+- **The share is computed over the whole entity, not the switcher's
+  selection.** `currentScope` narrows `propertyIds` to one house when one is
+  selected, and a share worked out from some of an LLC's houses is not what it
+  is owed. The action rebuilds the scope from `availableProperties`; the page
+  offers no form while only part of the entity is selected.
+- **A range must have ended before its transfer can be recorded.** Rent
+  settling later on the last day would otherwise land in a swept range and —
+  because overlaps are refused — in no later range either.
+- **An overlapping range is refused, not warned about.** Sharing even the last
+  day counts; starting the day after does not. The page shows the recorded
+  transfer in place of the form, and the action re-checks under the lock.
+- **Append-only, with no correction path.** A mistyped transfer stays and is
+  explained on the audit trail, `recordDepositRefund`'s posture.
+- **`ledger.adjust` on the entity resource**, so a property-scoped grant never
+  covers it and an owner without a second factor is sent to enrol. The form is
+  shown on `mfa_required` rather than hidden, for R-026's reason.
+- **The archive is a PDF, not the CSV** — the CSV carries no totals, range or
+  caveats, and the reader of this artifact is an accountant or opposing
+  counsel.
+- **Naming, knowingly:** the Prisma model `EntitySettlement` is the RECORDED
+  movement; core's existing `EntitySettlement` interface is the COMPUTED share.
+  The schema comment says so; nothing imports both.
+
+**Found along the way — a real defect, fixed.** `DEPOSIT_SLIP` was never in
+`DOCUMENT_TYPES`. R-166's `createDepositBatch` has written that string since it
+shipped, so anywhere a document's type is labelled (`DOCUMENT_TYPE_LABELS[type]
+?? type`) a slip read as a raw `DEPOSIT_SLIP`, and it had no retention rule. The same miss
+R-081d found for `ATTORNEY_PACKET`, second instance. Added to the vocabulary,
+the labels, the not-uploadable list and `RETENTION_RULES` (indefinite — which
+is what a missing rule already meant, so no behaviour changed but the label).
+
+**What it left behind** (owned by nobody).
+
+- **A payment on a property deactivated mid-range is outside the report**, and
+  now outside the archived one too: `currentScope` reads `active: true`
+  properties only. R-180's behaviour, frozen into evidence here.
+- **A payment that arrives late with a settlement date inside an already-swept
+  range** is in no recorded transfer and nothing flags it. The ended-range rule
+  covers the same day, not a webhook delivered days late.
+- **No list of an entity's recorded transfers** outside the overlapping ones on
+  the report page, and nothing reconciles a recorded transfer against the bank.
+- **A raced overlap leaves the uploaded PDF object orphaned** in storage; no
+  row references it.
+- **The in-transaction overlap check is proved at the query level**
+  (`settlement-record.test.ts`), not by two racing submits; e2e proves the page
+  gate.
+- The demo seed records no transfer, so a D-28 walk shows every entity's form.
+- Stripe Connect remains out of scope (D-201).
+
+**The gate.** `lint` clean (16 pre-existing warnings, none new), `typecheck`
+clean, `check:ship-deps` clean, and `npm run db:ci` applied every migration to
+a throwaway database from scratch, seeded it and reported **no drift**.
+`npm test` **3151 passed, 4 skipped, 0 failed**. The first full run was red —
+hook timeouts in `auth/delivery.test.ts` and `notifications/notifications.test.ts`
+and a 30s timeout in `billing/due-notices.test.ts`, the suite at 56s against
+18s — while the storage project's Playwright sweep held 16 connections. The
+three files passed alone (33/33) and the figure above is the full rerun after
+that sweep ended: the environment symptom NEXT.md already records, and none of
+the three touches this change. **Revert-proof** (D-197): loosening
+`recordedSettlements`' `lte`/`gte` to `lt`/`gt` turned exactly the boundary
+test red. e2e against the production build on `:3100`: `settlement.spec.ts` on
+`desktop-chrome` and `mobile-chrome` **12 passed, 0 flaky, 0 failed**,
+reconciling against `--list`'s 12, which also covers `npm run build`. Full
+sweep left to CI; R-197's run (`34621421492`) was green before this item
+started, checked rather than copied forward.

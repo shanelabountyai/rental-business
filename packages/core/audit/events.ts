@@ -141,6 +141,12 @@ export const AUDIT_ACTIONS = [
   /// nothing here touches the ledger - it stamps existing Payment rows and
   /// archives a document, the same shape `payment.receipt_generated` takes.
   'payment.deposit_batch_created',
+  /// R-198: a transfer out of the shared account to one legal entity was
+  /// recorded, with the settlement report it was computed from archived as a
+  /// Document. Carries both the report's figure and the amount moved, because
+  /// they differ by Stripe's fees in the ordinary case and a reader of the
+  /// trail should not need the PDF to see which one the owner acted on.
+  'settlement.transfer_recorded',
 
   // Maintenance (MAINT-03, R-024)
   /// The scope, priority and estimate a work order was CREATED with -
