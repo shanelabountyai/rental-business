@@ -11348,7 +11348,7 @@ CI: run `34621421492` on `b4fe058` green on both jobs — e2e 1227 passed,
 projects).
 
 ## R-198 — the inter-entity sweep is recorded, with the report it was computed from
-**Commit:** `<<SHA>>`  ·  **Date:** 2026-09-11
+**Commit:** `2a511ec`  ·  **Date:** 2026-09-11
 
 **What it built.** Review finding 12's second half. R-180 said what each LLC is
 owed out of the one shared Stripe balance and bank account, and stopped: no row
