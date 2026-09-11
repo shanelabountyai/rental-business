@@ -2,7 +2,7 @@
 
 ## R-196 is done — commits `2b29d74` + locator fix `66bec5b`, SHA recorded.
 
-**CI for R-196:** run `34616381321` on `2b29d74` FAILED (`leases.spec.ts`: the new consent option "Marta Guarantor (guarantor)" made `getByText('Marta Guarantor')` ambiguous). Fixed in `66bec5b`, whose run `34618664817` is green on both jobs (e2e 3 skipped, 1225 passed, 3 skipped, 1225 passed). **Lesson: a new label or option on `/leases/[id]` can break ANY spec that renders that page, not just the specs you edited.** Grep `e2e/` for the text before pushing. The SHA-record push starts no run (`paths-ignore`
+**CI for R-196:** run `34616381321` on `2b29d74` FAILED (`leases.spec.ts`: the new consent option "Marta Guarantor (guarantor)" made `getByText('Marta Guarantor')` ambiguous). Fixed in `66bec5b`, whose run `34618664817` is green on both jobs (e2e 1225 passed, 3 skipped, 0 failed, 0 flaky). **Lesson: a new label or option on `/leases/[id]` can break ANY spec that renders that page, not just the specs you edited.** Grep `e2e/` for the text before pushing. The SHA-record push starts no run (`paths-ignore`
 on docs). **Do not copy the green line forward** — run `gh run list --limit 5`
 after your own push.
 

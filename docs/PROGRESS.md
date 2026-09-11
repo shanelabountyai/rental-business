@@ -11291,4 +11291,4 @@ item's new "Marta Guarantor (guarantor)" option in the consent panel. It is
 CLAUDE.md's "one page means the whole assembled page" trap again. I ran only
 the two specs I had edited, and the collision was in a third spec that renders
 the same page. Fixed with `exact: true` in a follow-up commit, and that test
-passed locally on both projects. CI for the follow-up: run `34618664817` on `66bec5b` green, both jobs (lint/types/unit/build; e2e/axe/Lighthouse; e2e 3 skipped, 1225 passed, 3 skipped, 1225 passed), read by polling the run's jobs after the push, not inherited.
+passed locally on both projects. CI for the follow-up: run `34618664817` on `66bec5b` green, both jobs (lint/types/unit/build; e2e/axe/Lighthouse; e2e 1225 passed, 3 skipped, 0 failed, 0 flaky), read by polling the run's jobs after the push, not inherited.
