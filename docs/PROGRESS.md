@@ -11026,4 +11026,4 @@ limited to tax and insurance.
 `db:drift` no difference; `db:ci` green (migrations from scratch, seed, no drift); `check:ship-deps` clean;
 e2e `property-expenses.spec.ts` + `operating-report.spec.ts` on
 `desktop-chrome` and `mobile-chrome`: 16 passed of 16 listed, production build.
-CI: RESULT_CI.
+CI: run `34542871804` on `d10e7b0` green, both jobs (lint/types/unit/build; e2e/axe/Lighthouse), read with `gh run list` after the push.

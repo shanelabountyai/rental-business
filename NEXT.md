@@ -1,30 +1,52 @@
 # Next session
 
-## R-192 is done — commit `117a5c0`, SHA recorded in the follow-up.
+## R-193 is done — commit `d10e7b0`, SHA recorded in `c2cb73a`.
 
-**CI for R-192 WAS checked and is green** — run `34538278213` on `117a5c0`,
-both jobs, read with `gh run list` after the push, not inherited.
+**CI for R-193 WAS checked and is green** — run `34542871804` on `d10e7b0`,
+both jobs, read with `gh run list` after the push, not inherited. The
+SHA-record push starts no run (`paths-ignore` on docs). **Do not copy the green
+line forward** — run `gh run list --limit 5` after your own push.
 
-**The SHA-record push starts NO run**: `.github/workflows/ci.yml` has
-`paths-ignore: ['**.md', 'docs/**']`, so a docs-only commit is skipped and the
-code commit's run is the one to read. **Do not copy the green line forward** —
-run `gh run list --limit 5` after your own push and write down what it says.
+## Start here: row 181, R-194
 
-## Start here: row 180, R-193
+`docs/prds/06-backlog.md` Milestone 14 ("Arc 4"). **A notice records what it
+demanded, so the product can say whether the tenant cured.** `Notice` stores no
+amount; store `demandedCents` + composition at generation and report *cured /
+part-cured / not cured* against payments since service, beside R-156's
+acceptance band. **Needs counsel** on whether a partial payment cures and
+whether accepting it waives — the second is already a three-valued
+`JurisdictionRule` field, so follow that pattern and do not decide it.
+**Recommend Opus**: legal-consequence code on the eviction path.
+**`Notice` is append-only by trigger with a write-once allowlist (R-161)** — a
+new column set at INSERT is fine; anything set later needs the trigger's list
+changed in a migration. Re-verify `schema.prisma` Notice lines and
+`evictions/queries.ts:129-147` before building (R-150): R-193's row premise
+turned out half wrong on exactly that kind of re-check.
 
-`docs/prds/06-backlog.md` Milestone 14 ("Arc 4"), sourced from
-`docs/reviews/2026-09-09-operator-review.md` §7 and D-201.
+## What R-193 changed that the next rows touch
 
-**R-193 is an M-sized build: a new `PropertyExpense` table, a hand-written
-migration, a staff form, and a feed into R-078's export pipeline so
-`/reports/operating`'s "All expenses" and "Net" stop omitting tax, insurance
-and management.** It is not a ledger write (D-11); vendor invoices already set
-the precedent that owner-side outlay lives in its own table. **Recommend Opus**,
-because the figure it corrects ranks houses on the lemon test. Sonnet is
-defensible for the form and migration. **Re-verify `reports/operating/page.tsx:196-201`
-and `packages/core/tax/packet-document.ts:36` before building** (R-150).
-"Optional monthly recurrence" must not become an accrual engine (D-201's do-not-build).
-It touches a form and a page, so run `--project=mobile-chrome` too (D-194/D-197).
+- **`PropertyExpense` is a second write path to the same Schedule E lines as
+  D-76's vendor-invoice splits** (D-208). The owner chose it knowingly;
+  nothing detects a bill entered on both.
+- **`TaxExportFacts` now requires `propertyExpenses` and `asOf`.** Any new
+  fixture or caller building facts by hand must pass both.
+- **The export's reconciliation identity is now
+  `mapped + excepted + outOfYear + capitalised + splitInvoiced === facts + repeated`.**
+  A monthly expense is one fact and several lines.
+- **A monthly expense is expanded on read through today** — never write rows
+  ahead (D-201). A future `paidOn` is refused at the write.
+- `UNFILLABLE_NOTE` is gone; `unfilledLinesNote(filled)` derives it.
+- `/reports/operating` carries `missingFixedCosts` per property (tax, insurance).
+
+## Found in R-193, owned by nobody
+
+- The vendor-invoice form does not point back at `/money/expenses`, so the
+  duplicate-entry warning runs one way only.
+- No edit or delete on a property expense; a series can only be stopped as of today.
+- The demo seed records no property expense, so a D-28 walk shows every house
+  flagged "No property tax or insurance booked".
+- An entity-wide row appears on a property-scoped manager's exception list,
+  and its receipt is refused to them by the document route's entity branch.
 
 ## What R-192 changed that the next rows touch
 
