@@ -11449,4 +11449,6 @@ test red. e2e against the production build on `:3100`: `settlement.spec.ts` on
 `desktop-chrome` and `mobile-chrome` **12 passed, 0 flaky, 0 failed**,
 reconciling against `--list`'s 12, which also covers `npm run build`. Full
 sweep left to CI; R-197's run (`34621421492`) was green before this item
-started, checked rather than copied forward.
+started, checked rather than copied forward. **This item's own run
+(`34642406576`) is green on every job** — lint/types/unit/build and
+end-to-end/axe/Lighthouse.
