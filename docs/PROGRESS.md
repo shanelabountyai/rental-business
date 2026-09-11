@@ -11295,7 +11295,7 @@ passed locally on both projects. CI for the follow-up: run `34618664817` on `66b
 
 ## R-197 — a manager can re-run the job whose failure they were handed
 
-Commit `(recorded below)`.
+Commit `b4fe058`.
 
 **The row was checked before anything was built.** Its line numbers held
 (`permissions.ts:159`, the manager list, `runner.ts`'s no-retry comment), and
