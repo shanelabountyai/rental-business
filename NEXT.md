@@ -3,7 +3,9 @@
 ## R-199 is done — an agreed payment plan sends its schedule and shows on the portal (D-214).
 
 SHA and CI run are recorded in PROGRESS. **Do not copy a green CI line
-forward** — run `gh run list --limit 5` after your own push.
+forward** — run `gh run list --limit 5` after your own push, and read the run
+on YOUR code commit. **A docs-only push has no run at all** (`paths-ignore`
+in `ci.yml`), so if the SHA commit is pushed on its own, do not wait for one.
 
 ## Start here: row 187, R-200
 

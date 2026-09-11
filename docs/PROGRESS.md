@@ -11534,4 +11534,11 @@ renders. e2e against the production build on `:3100`:
 `mobile-chrome`, **36 passed, 0 flaky, 0 skipped, 0 failed**, reconciling
 against `--list`'s 36 — including the new portal test's axe scan at phone
 width. Full sweep left to CI; R-198's run (`34642406576`) was green before
-this item started, checked rather than copied forward.
+this item started, checked rather than copied forward. **This item's own run
+(`34648958639`, on the code commit `1b5b4af`) is green on both jobs** —
+lint/types/unit/build and end-to-end/axe/Lighthouse. **The SHA commit has no
+run, and that is correct**: `.github/workflows/ci.yml` has carried
+`paths-ignore: ['**.md', 'docs/**']` since 2026-08-29, so a docs-only push
+runs nothing. R-198's SHA commit shows a run only because that push carried
+the code commit with it; pushed separately, as here, the follow-up is
+skipped. Waiting for one is waiting for a run that cannot start.
