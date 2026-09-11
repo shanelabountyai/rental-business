@@ -11197,3 +11197,5 @@ production build. **Both new tests were proved against the reverted fix**
 test failed with the lease link present; list link suppressed → the owner test
 failed at the list step. Files restored and compared byte-for-byte before
 committing.
+CI: run `34610406558` on `4513e6c` green, both jobs (lint/types/unit/build;
+e2e/axe/Lighthouse), read with `gh run watch` after the push.

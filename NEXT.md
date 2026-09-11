@@ -2,9 +2,10 @@
 
 ## R-195 is done — commit `4513e6c`, SHA recorded in the follow-up.
 
-**CI for R-195 was NOT yet read when this was written** — check
-`gh run list --limit 5` for `4513e6c` before trusting it. The SHA-record push
-starts no run (`paths-ignore` on docs). **Do not copy a green line forward.**
+**CI for R-195 WAS checked and is green** — run `34610406558` on `4513e6c`,
+both jobs, read with `gh run watch` after the push, not inherited. The
+SHA-record push starts no run (`paths-ignore` on docs). **Do not copy the green
+line forward** — run `gh run list --limit 5` after your own push.
 
 ## Start here: row 183, R-196
 
