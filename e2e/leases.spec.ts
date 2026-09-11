@@ -558,7 +558,9 @@ test.describe('parties', () => {
     await page.getByLabel('Email').fill('marta@example.test')
     await page.getByRole('button', { name: 'Add guarantor' }).click()
 
-    await expect(page.getByText('Marta Guarantor')).toBeVisible()
+    // `exact: true` since R-196: the consent panel now offers "Marta Guarantor
+    // (guarantor)" as an option, and getByText is a substring match.
+    await expect(page.getByText('Marta Guarantor', { exact: true })).toBeVisible()
 
     const guarantor = await prisma.guarantor.findFirstOrThrow({
       where: { leaseId: lease.id },

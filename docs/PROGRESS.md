@@ -11284,4 +11284,11 @@ NO portal row" fail. Each turned exactly that one test red, 13 passing, and
 `send.ts` was restored from a copy. The e2e guarantor test was not
 revert-proved; with the action's guarantor branch removed, the form refuses
 the `GUARANTOR:` value by construction.
-CI: CI_PENDING
+CI: run `34616381321` on `2b29d74` **failed** in e2e, 2 failed / 1223 passed
+/ 3 skipped. The failure was `leases.spec.ts` › "adds a guarantor as a distinct
+role", on both projects: `getByText('Marta Guarantor')` also matched this
+item's new "Marta Guarantor (guarantor)" option in the consent panel. It is
+CLAUDE.md's "one page means the whole assembled page" trap again. I ran only
+the two specs I had edited, and the collision was in a third spec that renders
+the same page. Fixed with `exact: true` in a follow-up commit, and that test
+passed locally on both projects. CI for the follow-up: CI_FIX_PENDING
