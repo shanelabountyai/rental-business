@@ -11838,7 +11838,7 @@ gives them no run and the `ignoreCommand` no deployment; both are expected.
 
 ## R-203 — a tenant can e-sign the repayment plan they were sent
 
-**Commit:** _(recorded in the follow-up commit below)_
+**Commit:** `6770095`
 
 **What it built.** The e-sign half of the payment plan (D-214). `LeaseEnvelopeKind`
 gains a third value, `PAYMENT_PLAN`, and `PaymentPlan.envelopeId` points at the
