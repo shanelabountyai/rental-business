@@ -186,7 +186,12 @@ test.afterAll(async () => {
   // R-176: that turn now opens a re-key WorkOrder, which pins BOTH the
   // project and the unit - and R-176 also retires the unit's access codes,
   // so both go before either delete below. Same class of FK, one item later.
-  await prisma.workOrder.deleteMany({ where: { unitId: { in: unitIds } } })
+  // BY PROPERTY, not by the unit ids this file collected (R-202): ownership
+  // is the scope CLAUDE.md's rule names, and `workorders.spec.ts` already
+  // scopes its own cleanup this way. `WorkOrder.propertyId` is non-null on
+  // every row, so this holds a work order the app opened on a unit this
+  // file never registered — which is what a collected-id list cannot.
+  await prisma.workOrder.deleteMany({ where: { propertyId: { in: propertyIds } } })
   await prisma.accessCode.deleteMany({ where: { unitId: { in: unitIds } } })
   await prisma.turnoverProject.deleteMany({ where: { leaseId: { in: removable } } })
   // R-160's move-out credit (and R-042's move-in proration before it) posts
@@ -714,6 +719,38 @@ test.describe('the subscription lifecycle (R-036, D-11)', () => {
     await signIn(page, staff.email)
     await page.goto(`/leases/${lease.id}`)
     await page.getByRole('button', { name: 'Record that the tenancy ended' }).click()
+
+    // ==========================================================================
+    // WAIT FOR THE ACTION TO RETURN, not for the first thing it writes (R-202).
+    //
+    // Ending a tenancy runs five post-commit side effects in order, and
+    // `syncLease` — the one this test is about — is the FIRST. Polling its
+    // column let the test finish while `startTurnoverProjectForLease` was
+    // still opening R-178's six work orders, so `afterAll` deleted work
+    // orders that did not exist yet and `prisma.unit.deleteMany()` then
+    // refused on `WorkOrder_unitId_fkey`. It lands on whichever test
+    // finished last in the worker, which is why R-179's run read as an
+    // unrelated subscription failure.
+    //
+    // This sentence is the ONE signal that covers every side effect
+    // regardless of order: `useActionState` cannot re-render until the
+    // action returns, and the action cannot return until all five have
+    // awaited. `lifecycle-panel.tsx` renders it when the machine offers no
+    // further transition, which an ACTIVE lease does not — so it is false
+    // before the click, unlike the CLAUDE.md traps it is deliberately not.
+    // ==========================================================================
+    await expect(page.getByText(/A tenancy that restarts is a new/)).toBeVisible()
+
+    // NOT polled, deliberately — this is the assertion that proves the line
+    // above waits for the whole action. The turn commits its work orders in
+    // one transaction, so a non-zero count here means the fourth side effect
+    // had already landed when the sentence appeared.
+    //
+    // MEASURED: with the wait removed this is red 3 runs out of 3, on this
+    // line. So the R-179 flake was never intermittent — the race was open on
+    // every run and only cost anything when this test happened to finish last
+    // in the worker, which is the whole reason it read as a subscription bug.
+    expect(await prisma.workOrder.count({ where: { unitId: seed.unit.id } })).toBeGreaterThan(0)
 
     await expect
       .poll(async () => {

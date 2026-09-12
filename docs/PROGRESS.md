@@ -11733,3 +11733,99 @@ not filtered by a short sha, which `gh run list --commit` matches to nothing
 with no error. The `record the SHA` commit (`5ede174`) is docs-only, so
 `paths-ignore` gave it no run and the `ignoreCommand` no deployment; both are
 expected.
+
+---
+
+## R-202 — `leases.spec.ts` waits for the action, not for its first side effect
+
+Commit `TBD`. Backlog row 189 (Milestone 14, Arc 4). Decision: **D-217**.
+
+**What it built.** Two lines in `e2e/leases.spec.ts`, and no product code at
+all — the row is spec hygiene with a known cause, and the review was right to
+decline it as a product defect.
+
+- **`ending a tenancy CANCELS its subscription` now waits for the action to
+  return.** It clicks "Record that the tenancy ended" and asserts the sentence
+  `lifecycle-panel.tsx` renders when the lease machine offers no further
+  transition — *"A tenancy that restarts is a new lease"* — before polling
+  `LeasePayer.lastSyncAction`. `useActionState` cannot repaint until the server
+  action returns, and the action cannot return until every one of its awaited
+  side effects has finished, so one assertion covers all five regardless of
+  their order.
+- **The work-order cleanup is scoped by ownership.**
+  `workOrder.deleteMany({ where: { propertyId: { in: propertyIds } } })` rather
+  than by the `unitIds` this file happened to collect — the rule CLAUDE.md
+  already states and `workorders.spec.ts` already demonstrates.
+
+**What it decided.**
+
+- **The wait is a UI signal, not a longer poll, and that is the point.** The
+  old poll read `lastSyncAction`, written by `syncLease` — **the first of five
+  post-commit side effects** in `setLeaseStatus`'s ended branch. It was correct
+  when it was written and became a race the moment R-178 appended
+  `startTurnoverProjectForLease` behind it. Polling the *last* writer would fix
+  today and rot the same way the next time somebody appends a sixth; a signal
+  only a returned action can produce needs no maintenance.
+- **The proof assertion is deliberately not polled.**
+  `expect(await prisma.workOrder.count({ where: { unitId: seed.unit.id } }))
+  .toBeGreaterThan(0)` sits immediately after the wait, so reverting the wait
+  turns exactly that line red. D-197's rule, applied.
+- **The work-order scope change is belt-and-braces, and it is recorded as
+  such.** `WorkOrder.unitId` is non-null, and every unit this file creates is
+  pushed in the same statement that creates it, so `unitIds` cannot go stale
+  today. `propertyId` is the marker that stays right if that ever stops being
+  true.
+
+**MEASURED, and it corrects the row's own premise.** With the wait removed the
+test is red **3 runs out of 3**, on the work-order assertion — not
+intermittently. **The R-179 flake was never a flake**: the race was open on
+every single run, and only cost anything when this test happened to finish last
+in its worker and `afterAll` therefore ran behind an unfinished action. That is
+precisely why it surfaced as an unrelated subscription failure, which is the
+same misreading `leases.spec.ts`'s own R-084 and R-176 comments already record
+for the two earlier instances of this FK. A "flaky" label on a race with a
+100% hit rate is worth noticing as a shape: the intermittency was in *which
+test ran last*, never in the defect.
+
+**Premises re-verified first (R-150), and one of the two was wrong.** The row
+and the handoff both attribute the late work orders to "an outbox consumer
+running a beat later". **There is no such consumer** — `CONSUMERS` holds four
+entries (delist, triage, notifications, ticket-ack) and none of them creates a
+`WorkOrder`, and `dispatchOutbox` does not run during an e2e sweep at all. The
+six work orders come from `startTurnoverProjectForLease`, awaited inline inside
+the server action; the "beat later" is the test outrunning the action it
+started, not a background job. The *class* the row names survives intact, which
+is R-150's own point about what decays.
+
+**Both sibling specs that end a tenancy were checked and need nothing.**
+`door-codes.spec.ts:163` polls `TenantLockCode.revokedAt`, written by
+`revokeTenantLockCodes` — the **last** of the five, so its wait is accidentally
+complete. `turnover.spec.ts:188` already asserts the rendered termination
+reason before it polls. Neither is safe by design, and D-217 records both so
+the next side effect appended to that branch knows which specs it can break.
+
+**What it left behind.**
+
+- **Nothing holds the ordering of the other four side effects.** The new
+  assertion proves `startTurnoverProjectForLease` landed; nothing proves
+  `chargeMoveOutProration` or `startDepositDisposition` did, and a future
+  reorder that moved the turn earlier would leave the wait technically weaker
+  without turning anything red. The UI signal is still the right guard — it
+  cannot resolve early whatever the order is — but the *proof* of it is
+  stage-specific.
+- **`accessCode`, `task` and `turnoverProject` deletes in that `afterAll` are
+  still keyed off collected ids or lease ids**, not `propertyId`. None of them
+  can flake today (`AccessCode` carries no `propertyId` at all, and a late
+  `updateMany` against a deleted row matches nothing rather than refusing), so
+  they were left alone rather than swept for symmetry. Owned by nobody.
+- **The three `test-server` daemons resident on this machine are two siblings'
+  and not this repo's to kill** — `clinic` since 2026-09-11, `apptbasedservice`
+  since 2026-09-10. Checked by `cwd`, per the handoff; no contention in this
+  item's runs.
+
+**Gate.** `lint` clean (0 errors, 16 pre-existing warnings), `typecheck` clean,
+`npm test` **3166 passed / 4 skipped in 39.4s** — no contention, no `too many
+clients`. `e2e/leases.spec.ts --project=desktop-chrome` **21 passed**, against
+`--list`'s 21 for that file and project: reconciled, nothing skipped, nothing
+flaky. The full sweep is CI's. `mobile-chrome` was not run and does not apply —
+this item renders no control and no user-supplied value (D-194, D-197).
