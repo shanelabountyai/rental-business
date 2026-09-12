@@ -11637,6 +11637,8 @@ returns empty for a short one**, with no error — which reads exactly like the
 
 ## R-201 — the raw `YYYY-MM-DD` surfaces D-154's predicate cannot see
 
+**Commit:** `afa1b77`  ·  **Date:** 2026-09-12
+
 **What it built.** `friendlyBusinessDate` at three render sites: the deposit
 slip's own PDF title (`payments/deposit-actions.ts`), the two party-change
 refusals (`packages/core/leases/party-change.ts`), and the §3955 SCRA
@@ -11720,4 +11722,14 @@ kill — and are reported in `NEXT.md`: `storage business` has held one since
 **2026-09-05**, `apptbasedservice` four headless Chromium from 2026-09-11, and
 `clinic` one.
 
-**Commit:** `afa1b77`  ·  **Date:** 2026-09-12
+**CI green on this item's own code commit** — run `34698000567` on `afa1b77`,
+both jobs (*Lint, types, unit tests, build* and *End-to-end, axe, Lighthouse*)
+`success`. **CI's own full sweep reconciles exactly**: `Running 1234 tests`
+against **1231 passed, 3 skipped, 0 failed, 0 flaky** (1231 + 3 = 1234) across
+both Playwright projects, and unit **3166 passed, 4 skipped**, identical to the
+local run. Read on the run itself and watched by **run id** — not copied
+forward from the previous entry (R-141's failure, which ran eleven items), and
+not filtered by a short sha, which `gh run list --commit` matches to nothing
+with no error. The `record the SHA` commit (`5ede174`) is docs-only, so
+`paths-ignore` gave it no run and the `ignoreCommand` no deployment; both are
+expected.
