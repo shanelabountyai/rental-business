@@ -11829,3 +11829,9 @@ clients`. `e2e/leases.spec.ts --project=desktop-chrome` **21 passed**, against
 `--list`'s 21 for that file and project: reconciled, nothing skipped, nothing
 flaky. The full sweep is CI's. `mobile-chrome` was not run and does not apply —
 this item renders no control and no user-supplied value (D-194, D-197).
+
+**CI run `34702228353`, on the code commit `c8e361a`, is GREEN** — both jobs:
+`Lint, types, unit tests, build` and `End-to-end, axe, Lighthouse`. Read on the
+run, not copied forward from R-201's entry. The `record the SHA` commit
+(`85a46b4`) and the handoff commit after it are docs-only, so `paths-ignore`
+gives them no run and the `ignoreCommand` no deployment; both are expected.

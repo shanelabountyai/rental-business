@@ -2,17 +2,14 @@
 
 ## R-202 is done — `leases.spec.ts` waits for the action, not its first side effect (D-217).
 
-Code `c8e361a`, SHA commit `85a46b4`. **CI run `34702228353` was still
-IN PROGRESS when the session ended** — it is on the code commit, which is the
-one that matters. Read it before doing anything else:
+Code `c8e361a`, SHA commit `85a46b4`. **CI run `34702228353` is GREEN on the
+code commit** — both jobs, read on the run rather than assumed.
 
-```
-gh run view 34702228353
-```
-
-**Do not copy a green CI line forward.** If it failed, that is the first item,
-not R-203. `gh run list --commit` only matches a FULL sha and returns EMPTY for
-a short one, with no error — use `git rev-parse <short>` first, or watch by id.
+**Do not copy that line forward to your own item.** Run `gh run list --limit 5`
+after your push and read the run on YOUR code commit. `gh run list --commit`
+only matches a FULL sha and returns EMPTY for a short one, with no error — that
+empty result is indistinguishable from "docs-only push, no run". Use
+`git rev-parse <short>` first, or watch by id: `gh run watch <id> --exit-status`.
 
 ## Start here: row 190, R-203
 
