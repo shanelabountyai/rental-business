@@ -11738,7 +11738,7 @@ expected.
 
 ## R-202 — `leases.spec.ts` waits for the action, not for its first side effect
 
-Commit `TBD`. Backlog row 189 (Milestone 14, Arc 4). Decision: **D-217**.
+Commit `c8e361a`. Backlog row 189 (Milestone 14, Arc 4). Decision: **D-217**.
 
 **What it built.** Two lines in `e2e/leases.spec.ts`, and no product code at
 all — the row is spec hygiene with a known cause, and the review was right to
