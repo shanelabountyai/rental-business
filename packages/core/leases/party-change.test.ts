@@ -139,6 +139,31 @@ describe('assessPartyChange', () => {
     ).toEqual([])
   })
 
+  // D-153/D-154 (R-201). THE MESSAGE, NOT JUST THE FIELD. Both refusals read
+  // the lease's own dates back to the operator, and for as long as this file
+  // has existed it asserted only which FIELD was flagged - so the two
+  // sentences served a raw `2026-01-01` and nothing went red. That is why
+  // this class has now been fixed five times: the fix is one call, and
+  // nothing anywhere held it in place. `friendlyBusinessDate` throws on
+  // anything that is not `YYYY-MM-DD`, so these also pin the input type.
+  it('renders the term dates it refuses on, rather than printing them raw', () => {
+    const early = assessPartyChange(
+      { ...base, effectiveOn: '2025-12-31', incoming: [screened] },
+      null,
+    )
+    expect(early.violations.map((v) => v.message)).toEqual([
+      'The tenancy did not start until 1 Jan 2026.',
+    ])
+
+    const late = assessPartyChange(
+      { ...base, effectiveOn: '2027-02-01', incoming: [screened] },
+      null,
+    )
+    expect(late.violations.map((v) => v.message)).toEqual([
+      'The term ends 31 Dec 2026. A change after that is a new tenancy, not an amendment.',
+    ])
+  })
+
   it('warns, without refusing, when the replacement does not carry the rent alone', () => {
     const criteria = { incomeToRentMultiplierX100: 300, rentCents: 250_000 }
     const result = assessPartyChange(

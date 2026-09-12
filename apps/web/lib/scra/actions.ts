@@ -9,12 +9,7 @@ import {
   isScraTerminationBasis,
   scraTermination,
 } from '@rental/core/scra'
-import {
-  businessDate,
-  businessDateToUtc,
-  friendlyBusinessDate,
-  utcToBusinessDate,
-} from '@rental/core/scheduling'
+import { businessDate, businessDateToUtc, friendlyBusinessDate } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { audit } from '@/lib/audit/index.ts'
@@ -405,8 +400,13 @@ export async function recordScraTermination(
 
   revalidatePath(`/leases/${leaseId}`)
   return {
-    notice: `Recorded. Under ${SCRA_BASIS_LABELS[basis as 'entered_service']}, the tenancy ends on ${utcToBusinessDate(
-      businessDateToUtc(decision.effectiveOn),
-    )} — 30 days after the ${decision.runsFromRentDue} rent due date.`,
+    // D-153: both are already BusinessDates and must be RENDERED. The
+    // round-trip through `businessDateToUtc`/`utcToBusinessDate` that used to
+    // wrap `effectiveOn` was a no-op on a `YYYY-MM-DD` string, so this
+    // sentence served the operator two raw dates. The §3956 sibling in
+    // `confidential/actions.ts` already had the right shape.
+    notice: `Recorded. Under ${SCRA_BASIS_LABELS[basis as 'entered_service']}, the tenancy ends on ${friendlyBusinessDate(
+      decision.effectiveOn,
+    )} — 30 days after the ${friendlyBusinessDate(decision.runsFromRentDue)} rent due date.`,
   }
 }

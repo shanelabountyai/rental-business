@@ -3,7 +3,12 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { formatCents } from '@rental/core/money'
 import { depositSlipBlocks } from '@rental/core/payments'
-import { businessDate, friendlyDate, friendlyTimestamp } from '@rental/core/scheduling'
+import {
+  businessDate,
+  friendlyBusinessDate,
+  friendlyDate,
+  friendlyTimestamp,
+} from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { audit } from '@/lib/audit/index.ts'
 import { requireScope } from '@/lib/auth/guard.ts'
@@ -124,7 +129,11 @@ export async function createDepositBatch(
       })),
       totalCents,
     }),
-    { title: `Deposit slip — ${entity.name} — ${receivedOn}` },
+    // D-153: `receivedOn` is a BusinessDate (`businessDate(receivedAt, zone)`)
+    // and must be RENDERED, never interpolated - this is the PDF's own title,
+    // which an operator files and a bank clerk reads. The slip's BODY already
+    // renders the same day via `friendlyDate` above; the title did not.
+    { title: `Deposit slip — ${entity.name} — ${friendlyBusinessDate(receivedOn)}` },
   )
   const buffer = Buffer.from(bytes)
   const sha256 = createHash('sha256').update(buffer).digest('hex')

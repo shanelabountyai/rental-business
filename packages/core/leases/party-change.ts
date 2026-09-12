@@ -166,13 +166,13 @@ export function assessPartyChange(
     if (input.effectiveOn < input.leaseStartsOn) {
       violations.push({
         field: 'effectiveOn',
-        message: `The tenancy did not start until ${input.leaseStartsOn}.`,
+        message: `The tenancy did not start until ${friendlyBusinessDate(input.leaseStartsOn)}.`,
       })
     }
     if (input.leaseEndsOn && input.effectiveOn > input.leaseEndsOn) {
       violations.push({
         field: 'effectiveOn',
-        message: `The term ends ${input.leaseEndsOn}. A change after that is a new tenancy, not an amendment.`,
+        message: `The term ends ${friendlyBusinessDate(input.leaseEndsOn)}. A change after that is a new tenancy, not an amendment.`,
       })
     }
   }

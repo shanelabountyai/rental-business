@@ -11634,3 +11634,88 @@ forward from the previous entry (R-141's failure, which ran eleven items).
 One trap found doing it: **`gh run list --commit` matches only a FULL sha and
 returns empty for a short one**, with no error — which reads exactly like the
 "docs-only push, no run" case and cost ten minutes. Watch by run id instead.
+
+## R-201 — the raw `YYYY-MM-DD` surfaces D-154's predicate cannot see
+
+**What it built.** `friendlyBusinessDate` at three render sites: the deposit
+slip's own PDF title (`payments/deposit-actions.ts`), the two party-change
+refusals (`packages/core/leases/party-change.ts`), and the §3955 SCRA
+termination notice (`scra/actions.ts`) — which the row did not name. Plus one
+assertion in `party-change.test.ts` on the rendered *messages*.
+
+**What it decided.** The re-verify (R-150) changed the item, and two of the
+row's four premises were already false.
+
+- **`deposit-disposition-reminder-job.ts` was already fixed** — by R-191
+  (`2686ac5`, 2026-09-10), the day after the 2026-09-09 review that flagged it.
+  Its two Task titles render, and the comment beside them already cites D-153.
+- **`consent-panel.tsx:172` is NOT a defect and must not be "fixed".**
+  `recordedOn` and `revokedOn` arrive as `friendlyTimestamp(...)` output
+  (`3 Mar 2026, 09:14 CST`) from both callers — `leases/[id]/page.tsx:654` and
+  `portal/(signed-in)/account/page.tsx:71` — set by R-143 on 2026-09-01, eight
+  days *before* the review. Wrapping it would throw a `RangeError`: a 500 on
+  the lease page, which is D-154's trap exactly. It is the predicate's one
+  surviving hit and it is a **false positive**.
+- **The review's predicate has a structural blind spot.** It is restricted to
+  `title:`/`label:`/`message:`/`description:` positions, so the SCRA notice —
+  in a `notice:` position — could never be found by it. Widening to
+  `notice:|subject:|body:|text:|reason:|hint:` found it, plus four sites that
+  were already correct.
+- **The SCRA site also carried a no-op round trip**:
+  `utcToBusinessDate(businessDateToUtc(decision.effectiveOn))` on a value that
+  is already a `BusinessDate`, so the sentence served the operator two raw
+  dates. Its §3956 sibling in `confidential/actions.ts:667` already had the
+  right shape, which is what proves the intent rather than guessing it.
+- **The field's NAME told nothing; the source decided** (D-154). Of ~10 further
+  render-position candidates every one was already correct: the expenses page
+  (`friendlyBusinessDate(utcToBusinessDate(...))`), the eviction packet
+  (`asDate` → `friendlyDate`), the disposition letter (a local `formatDate`),
+  the receipt, deposit-slip body and exhibits (formatted at their callers), and
+  the card expiry `12/2026`, which is D-153's documented exclusion and stays.
+- **`leaseStartsOn`/`leaseEndsOn` were left typed `string`, not `BusinessDate`.**
+  The alias *is* `string`, so retyping buys nothing at typecheck; the guard
+  that actually holds is `friendlyBusinessDate` throwing.
+
+**What it left behind** (owned by nobody unless named).
+
+- **The deposit-slip title and the SCRA notice have no test.** `scra.test.ts`
+  covers only affidavit lookups, and the slip's title is set in `apps/web`
+  while `deposit-slip-document.test.ts` asserts only the core blocks — each
+  would need a full fixture for a one-line render. Only the party-change pair
+  is held by an assertion.
+- Deposit slips and SCRA notices already issued keep the raw date in their
+  stored text. Forward-only; nothing backfills (D-201).
+- The demo seed creates no deposit batch and records no SCRA termination, so a
+  D-28 walk can see neither fix.
+- The widened predicate lives in this entry and in D-216, not in a script.
+
+**The gate.** `lint` clean (16 pre-existing warnings, none in a changed file —
+a 17th appeared mid-item when the SCRA edit orphaned `utcToBusinessDate`, and
+was removed), `typecheck` clean, `check:ship-deps` clean (756 dev packages),
+`npm run build` compiled (three `'use server'` modules changed). No schema
+change, so `db:ci` was not re-run. `npm test` alone: **3166 passed, 4 skipped,
+0 failed** — R-200's 3165 plus the one added. Targeted e2e, `desktop-chrome`,
+four specs (lease-party-change, deposits, scra, confidential): **20 passed**,
+reconciling exactly against `--list`'s `Total: 20 tests in 4 files` — no
+flaky, none skipped. Not run on `mobile-chrome`: no component, control or
+layout changed, only computed strings (D-194). **The new assertion was proved
+against its reverted fix** (D-197): reverting the two renders turned exactly
+one test red, the new one, and nothing else.
+
+**The contention this item hit, and how it was settled.** The first full
+`npm test` returned **11 failed / 3154 passed in 193.27s** against a ~20s
+baseline — 11 × `Hook timed out in 10000ms`, every one in a file this item
+does not touch (auth rate-limiting, due-notices, the outbox, notifications,
+auto-make-ready, escalation, workorders), and **zero** `too many clients`.
+`pg_stat_activity` showed six connections, the newest `JetsamEvent` file was
+*yesterday's*, memory sat at 59% available with pressure 0, and nothing held
+:3100. The per-file table settled it: `vendors/follow-up.test.ts` took **188s
+and still passed** — the very file the handoff names as this symptom's tell —
+with `maintenance/escalation.test.ts` at 153s. `ps` found idle Playwright
+`test-server` daemons belonging to **four** projects, one of them this repo's
+(resident since 2026-09-11 15:00). Killing **only this repo's**, scoped by
+`cwd`, and re-running gave **3165 passed in 16.73s on the identical tree**.
+The sibling daemons were deliberately left alone — they are not this repo's to
+kill — and are reported in `NEXT.md`: `storage business` has held one since
+**2026-09-05**, `apptbasedservice` four headless Chromium from 2026-09-11, and
+`clinic` one.

@@ -1,225 +1,106 @@
 # Next session
 
-## R-200 is done — the notice checks and the abandonment presumption count on the jurisdiction's basis (D-215).
+## R-201 is done — the raw `YYYY-MM-DD` surfaces D-154's predicate cannot see (D-216).
 
 SHA and CI run are recorded in PROGRESS. **Do not copy a green CI line
-forward** — run `gh run list --limit 5` after your own push, and read the run
-on YOUR code commit. **A docs-only push has no run at all** (`paths-ignore`
-in `ci.yml`), so if the SHA commit is pushed on its own, do not wait for one.
+forward** — run `gh run list --limit 5` after your own push and read the run on
+YOUR code commit. **A docs-only push has no run at all** (`paths-ignore` in
+`ci.yml`), so if the SHA commit is pushed alone, do not wait for one.
 
-**`gh run list --commit` only matches a FULL sha, and returns EMPTY for a
-short one** — no error, no warning (R-200 burned ten minutes on it). That
-empty result reads exactly like the "docs-only push, no run" case above, so
-it will tell you nothing ran when something did. Use
-`git rev-parse <short>` first, or skip the filter and watch by run id:
-`gh run watch <id> --exit-status`, which is the only form that cannot
-silently match nothing.
+**`gh run list --commit` only matches a FULL sha and returns EMPTY for a short
+one** — no error, no warning. That empty result reads exactly like the
+"docs-only push, no run" case above, so it will tell you nothing ran when
+something did. Use `git rev-parse <short>` first, or skip the filter and watch
+by run id: `gh run watch <id> --exit-status`.
 
-## Start here: row 188, R-201
+## Start here: row 189, R-202
 
-`docs/prds/06-backlog.md` Milestone 14 ("Arc 4"). **Four raw `YYYY-MM-DD`
-surfaces D-154's predicate cannot see** — fifth instance of D-153's class:
-`deposit-disposition-reminder-job.ts:71-72` (Task titles),
-`payments/deposit-actions.ts:127` (the deposit slip's `Document` name),
-`components/consent/consent-panel.tsx:172`, and
-`packages/core/leases/party-change.ts:169,175`. S, mechanical. Re-verify the
-row's premises first (R-150) — the line numbers are from the 2026-09-09
-review. **Read CLAUDE.md's D-154 paragraph before starting**: the predicate
-lists CANDIDATES and the field's NAME tells you nothing, so grep the page
-that BUILDS each prop — `friendlyBusinessDate` throws a `RangeError` on an
-already-formatted value, which is a 500 on the page, and that killed a full
-sweep at test 5 in R-129.
+`docs/prds/06-backlog.md` Milestone 14 ("Arc 4"). **`e2e/leases.spec.ts`'s
+cleanup stops flaking CI.** `prisma.unit.deleteMany()` refuses on
+`WorkOrder_unitId_fkey` because R-178's lease-end opens work orders that race
+the delete (recorded in R-179's own run). It costs CI time on every push. The
+review declines it as a *product* defect and is right: it is spec hygiene with
+a known cause and a known fix — **order the delete against the async writer and
+clean up by OWNERSHIP (`propertyId`), never by a collected-id list**, which
+CLAUDE.md already states and `e2e/workorders.spec.ts` already demonstrates. S.
 
-## What R-200 changed that the next rows touch
+**Re-verify the row's premises first (R-150).** R-201 is the argument for it:
+**two of that row's four cited sites needed nothing** — one had been fixed by
+an unrelated item the day after the review, and one had been correct eight days
+*before* the review. Line numbers in a review decay faster than its class.
 
-- **`statutoryDaysBetween(from, to, rule)`** in
-  `packages/core/scheduling/deadline.ts` is the ONE inverse of
-  `statutoryDeadline` — "how many statutory days does this period contain".
-  Do not hand-write a second one; `abandonment/index.ts` still has a private
-  calendar-only `daysBetween` for its `daysRemaining`, which is correct there
-  and is NOT a second copy of this.
-- **`noticePeriodCheck`, `renewalRentCheck` and `assessEvidence` take
-  `BusinessDate` ends and a REQUIRED `DayCountRule`**, not `Date`s. A caller
-  converts with `utcToBusinessDate` for a `@db.Date` form value and
-  `businessDate(now, zone)` for "today" — they are different readers and
-  mixing them is R-042's bug.
-- **They decide on a DATE, never on a day count.** `effectiveOn <
-  statutoryDeadline(...)`. The count is for the sentence only, because
-  `statutoryDaysBetween` is not inverse for a zero-day period starting on a
-  non-business day. Keep that split if you touch them.
-- **`nonRenewalNoticeText` takes a `BusinessDate` and NO timezone.** It
-  formatted a calendar day through the property zone and served every
-  non-renewal naming the day BEFORE the tenancy ended.
-- **`EvidenceAssessment` gained `daysSinceContact` and `presumedOn`**;
-  `daysSinceContact` in `apps/web/lib/abandonment/queries.ts` is DELETED.
-- **`computeCoverage` no longer carries the "still count calendar days"
-  `productLimit`** — the fix removed it. The empty-holiday warning survives
-  and is reworded.
+## What R-201 changed that the next rows touch
 
-## Found in R-200, owned by nobody
+- **Three renders now go through `friendlyBusinessDate`**: the deposit slip's
+  PDF title (`payments/deposit-actions.ts`), both party-change refusals
+  (`packages/core/leases/party-change.ts`), and the §3955 SCRA notice
+  (`scra/actions.ts`). `scra/actions.ts` no longer imports `utcToBusinessDate`.
+- **`party-change.test.ts` now asserts the rendered SENTENCES**, not just which
+  field was flagged. Rewording either refusal turns it red on purpose.
+- **`consent-panel.tsx:172` is a KNOWN FALSE POSITIVE — do not "fix" it.**
+  `recordedOn`/`revokedOn` arrive as `friendlyTimestamp(...)` output from both
+  callers. `friendlyBusinessDate` throws a `RangeError` on that, which is a
+  **500 on the lease page**. It is the one surviving hit of the review's
+  predicate and it is correct as it stands.
+- **A date predicate is bounded by the POSITIONS it names** (D-216). Review
+  §15's grep covers `title:`/`label:`/`message:`/`description:` only; the SCRA
+  defect sat in a `notice:` position and was structurally unfindable by it.
+  Widen to `notice:|subject:|body:|text:|reason:|hint:` if you re-run it.
 
-- **Non-renewal notices already served carry the wrong end date in their
-  stored `bodyText`.** The fix is forward-only; nothing backfills, and
-  `Notice` rows are not editable anyway (D-201's standing no-backfill).
-- **`CALENDAR_ROLL_FORWARD` applied to a notice PERIOD is a product reading,
-  not counsel's** (D-215 states it and names the line to change). It now
-  warns where it did not.
-- **No e2e drives a business-day state through either notice form** — the
-  basis is held by unit tests alone. `jurisdiction.spec.ts` seeds rules but
-  nothing walks a BUSINESS notice.
-- **`observedHolidays` is still seeded for no state** (carried from R-182),
-  so a BUSINESS state skips weekends only — and that SHORTENS a notice
-  period. `computeCoverage` says so on the coverage screen.
-- **The demo seed configures Texas only** (`CALENDAR`), so a D-28 walk cannot
-  see any of this.
-- The three call sites' instant-vs-date off-by-one is fixed structurally by
-  the type, but no test exercises the call sites themselves.
+## Found in R-201, owned by nobody
 
-## What R-199 changed that the next rows touch
+- **The deposit-slip title and the SCRA notice are held by no test.**
+  `scra.test.ts` covers only affidavit lookups; the slip's title is set in
+  `apps/web` while `deposit-slip-document.test.ts` asserts only the core
+  blocks. Each needs a full fixture for a one-line render. Only the
+  party-change pair has an assertion.
+- Deposit slips and SCRA notices already issued keep the raw date in their
+  stored text. Forward-only; nothing backfills (D-201).
+- The demo seed creates no deposit batch and records no SCRA termination, so a
+  D-28 walk can see neither fix.
+- The widened predicate lives in D-216 and PROGRESS, not in a script.
 
-- **New LOCKED notification category `payment_plan`** and template
-  `payment_plan.agreed`. `CATEGORY_LABELS` is exhaustive, so typecheck
-  already forced the label; the email opt-out confirmation now lists it among
-  what still arrives.
-- **`chaseParties` lives in `apps/web/lib/payments/chase-parties.ts`**, not
-  inside `reminders.ts` (which is `'use server'` and cannot export it). The
-  chase and the plan share it — do not copy it a third time.
-- **`agreePaymentPlan`'s notice now ends with who the schedule reached** by
-  EMAIL or SMS, or "Not sent to … give them a copy yourself". A PORTAL row is
-  deliberately not counted as reaching anyone (R-173).
-- **The portal home has a "Your repayment plan" region** (ACTIVE plan only).
-  Any new portal-home heading must not collide with it.
-- **The e-sign half is row 190, R-203** (owner decision, D-214).
+## MACHINE CONTENTION — read this before diagnosing a red unit run
 
-## Found in R-199, owned by nobody
+R-201's first full `npm test` came back **11 failed / 3154 passed in 193.27s**
+against a ~20s baseline. **None of it was the code.** Every failure was
+`Hook timed out in 10000ms` in a file the item did not touch, and there were
+**zero** `too many clients`.
 
-- A cancelled or broken plan sends the tenant nothing; they learn the chase
-  resumed from the chase itself.
-- The staff lease page does not show where the schedule went — only the
-  press's notice says so, then the send log.
-- The notice counts QUEUED/DEFERRED at press time; a later bounce is not
-  reflected anywhere on the plan.
-- The guarantor portal does not show the plan; an ended plan is gone from the
-  tenant portal (its message stays in their updates).
-- The demo seed agrees no plan, so a D-28 walk cannot see either half.
-- `sms-intake.test.ts`'s `afterAll` timed out at 10s twice (once beside lint
-  and typecheck, once alone), then passed twice alone on the same tree and in
-  the full suite, with nothing else on the database. Cause unknown; the
-  hook-timeout ceiling below, a third file.
+**How it was settled, in order — copy this, it is faster than a stack trace:**
 
-## What R-198 changed that the next rows touch
+1. `pg_stat_activity` → six connections. No sibling database implicated.
+2. `ls -lt /Library/Logs/DiagnosticReports/JetsamEvent-*.ips` → newest file was
+   **yesterday's**. The OS killed nothing. `Killed: 9` names no culprit; this
+   is the check that does.
+3. `sysctl -n kern.memorystatus_level` → 59% available, `vm.memory_pressure` 0.
+4. `lsof -ti :3100` → nothing.
+5. **The per-file duration table, which is what actually settled it.**
+   `vendors/follow-up.test.ts` took **188s and still PASSED**; the handoff
+   already named that file as this symptom's tell. `escalation.test.ts` 153s.
+   **A global slowdown across unrelated files is contention, not a regression.**
+6. `ps` → idle Playwright `test-server` daemons from **four** projects.
 
-- **`EntitySettlement` is append-only by trigger** and holds its `LegalEntity`,
-  `Document` and `StaffUser` by RESTRICT. A test that records one cannot delete
-  any of the three — retire them.
-- **Two new document types, `DEPOSIT_SLIP` and `SETTLEMENT_REPORT`**, both in
-  `UNUPLOADABLE_DOCUMENT_TYPES`. `DEPOSIT_SLIP` was being written since R-166
-  without being in the vocabulary; a new minted-document type must be added
-  to all four lists in `documents/validate.ts` and `retention.ts`.
-- **`recordedSettlements(entityIds, from, to, db?)`** is the one overlap
-  predicate for recorded transfers. Do not hand-write a second one.
-- **The Prisma model `EntitySettlement` is not core's `EntitySettlement`
-  interface** (the computed share). Nothing imports both today.
-- New audit action `settlement.transfer_recorded`.
+**Killing only THIS repo's, scoped by `cwd`, and re-running gave 3165 passed in
+16.73s on the identical tree.**
 
-## Found in R-198, owned by nobody
+**Sibling daemons are still resident and are not this repo's to kill** — close
+them from their own projects: **`storage business` has held one since
+2026-09-05**, `apptbasedservice` has four `chrome-headless-shell` from
+2026-09-11, and `clinic` one. A bare `pkill -f playwright` would kill a
+sibling's live sweep; scope every kill to `$PWD`.
 
-- A payment on a property deactivated mid-range is outside the settlement
-  report (`currentScope` reads active properties only), and now outside the
-  archived report too.
-- A late-delivered payment whose settlement date falls in an already-swept
-  range belongs to no recorded transfer; nothing flags it.
-- No per-entity list of recorded transfers; nothing reconciles one against the
-  bank. A raced overlap leaves an orphaned PDF object in storage.
-- The demo seed records no transfer.
+## Still outstanding from R-187, owned by nobody
 
-## What R-197 changed that the next rows touch
+**The Neon dev branch is nine migrations behind**, back to
+`20260904120100_r165_guarantor_actor_type` and including
+`20260907120000_r175_payment_plans`, so it has no `PaymentPlan` table at all.
+`npm run dev` reads `.env.local`, so a walk against the dev branch would 500 on
+anything built since R-165. `npm run db:migrate:dev` is the whole fix; it has
+still not been run.
 
-- **A portfolio-wide manager now reaches `/jobs`, the re-run, and the
-  `job_failed` Task link.** A property-scoped manager is still refused
-  (resource-less guard, unchanged).
-- **A role-permission change reaches a database only through `db:seed`.**
-  `vercel-build` does not run it. Whether production is re-seeded on deploy
-  was not found recorded anywhere, so check before assuming.
-
-## What R-196 changed that the next rows touch
-
-- **`TenantConsent` has two subject keys now**: `tenantId` is nullable beside
-  `guarantorId`, with the CHECK `TenantConsent_one_subject` (exactly one).
-  Anything reading `row.tenant` must handle a guarantor row, where it is null.
-  Any fixture creating a consent row must name one person.
-- **`notify()` drops PORTAL for a `GUARANTOR` recipient** (`channelsFor` in
-  `send.ts`). A guarantor rent chase writes EMAIL and SMS rows only. If a
-  guarantor inbox is ever built, that function is where PORTAL comes back.
-- **`recordConsent` reads `party` = `TENANT:<id>` / `GUARANTOR:<id>`**, not
-  `tenantId`. The panel field is "Who agreed to be contacted".
-- **No guarantor has consent until staff record it** (D-211, no backfill). A
-  guarantor text is still `no_consent` by default.
-
-## Found in R-196, owned by nobody
-
-- `sendReminders` reports "sent to N people" even when every one of a person's
-  channels was suppressed.
-- The guarantor portal shows no consent record and offers no withdrawal, and a
-  guarantor has no notification preferences anyone can set.
-- The guarantor sign-in link is email-only, so a phone-only guarantor cannot
-  enter their portal at all.
-- Whether STAFF or VENDOR PORTAL rows have a reader was not checked.
-
-## What R-195 changed that the next rows touch
-
-- **`TaskInput.subjectType` is now `TaskSubjectType`** (core,
-  `TASK_SUBJECT_TYPES`). A producer with a new subject type must add it there
-  AND a row in `SUBJECT_ROUTES` (`apps/web/lib/tasks/subject-link.ts`) or
-  typecheck fails — that is the point (D-210). `type` stays free-form.
-- **`subjectLinks(tasks)`** is the one way a page links a Task to its subject.
-  Gated on the TARGET page's read permission; do not hand-write a per-type
-  branch on a page again.
-- `TaskWithProperty.property` now carries `legalEntityId`.
-- The deposit link's name is now "Open the deposit disposition".
-
-## Found in R-195, owned by nobody
-
-- Only `Lease` and `Deposit` routes are exercised end to end; the other
-  seventeen are held by typecheck alone.
-- A `serve_notice_offline` task still cannot reach its notice — its
-  `subjectId` is an idempotency key.
-- `demo-seed.mts` writes Task subject strings outside the union; an unrouted
-  one is silently unlinked.
-
-## What R-194 changed that the next rows touch
-
-- **The product can now create a cure notice** — `draftCureNotice` on
-  `/evictions/[id]`, NOTICE stage only. Before it, no real case could reach
-  FILING (D-209). R-083's "R-051 already generates pay-or-quit notices" was
-  wrong; left as history, corrected in D-209 and PROGRESS.
-- **`allocateBalance` in `packages/core/ledger/aging.ts` is the ONE
-  newest-first allocation.** `delinquencyFor` and `cureDemand` both call it —
-  anything else asking "which debts is this balance still sitting on?" must
-  too, not a third copy.
-- **`Notice.demandedCents` / `demandComposition` are set at INSERT and frozen**
-  by R-161's trigger (not on its write-once list). CHECK
-  `Notice_demand_shape`: both or neither, positive total.
-- **Two new three-valued `JurisdictionRule` fields**,
-  `cureDemandMayIncludeFees` and `partialPaymentCures`, now on the rule form,
-  the clone prefill, and `computeCoverage`'s unreviewed list. `RuleCoverageLike`
-  requires both, so any hand-built fixture must pass them.
-- `PacketFacts` requires `cureVerdict: string | null`.
-- New audit action `notice.drafted`.
-
-## Found in R-194, owned by nobody
-
-- **The demo seed's Riverside notice has no demand**, so a D-28 walk shows
-  "created before the product recorded what a notice demanded". The seed
-  writes it before the Stripe replay builds a balance.
-- Nothing drafts a cure notice from the lease page or the final chase rung
-  (`CHASE_RUNG_LABELS[15]` says "final chase before a notice"); a case must be
-  opened first.
-- Pet rent is counted as rent — a product reading, not counsel's.
-- Payments earlier on the drafting day are counted toward the cure, which can
-  over-credit a tenant (the cheap direction, stated in D-209).
-- A Stripe credit that is not a ledger entry is invisible to the demand
-  (R-156's same seam).
+Also from R-187: the start-day boundary double-counts a charge raised on the
+plan's own start date; no e2e walks the wrongly-completed warning.
 
 ## Binding for every row in this arc
 
@@ -230,153 +111,13 @@ no settings screen for `CHASE_LADDER_DAYS`, `TURN_STAGE_DAYS`,
 queue** (D-9); **no backfill of anything**; no per-stage turn table, no second
 definition of "days vacant".
 
-## What R-193 changed that the next rows touch
-
-- **`PropertyExpense` is a second write path to the same Schedule E lines as
-  D-76's vendor-invoice splits** (D-208). The owner chose it knowingly;
-  nothing detects a bill entered on both.
-- **`TaxExportFacts` now requires `propertyExpenses` and `asOf`.** Any new
-  fixture or caller building facts by hand must pass both.
-- **The export's reconciliation identity is now
-  `mapped + excepted + outOfYear + capitalised + splitInvoiced === facts + repeated`.**
-  A monthly expense is one fact and several lines.
-- **A monthly expense is expanded on read through today** — never write rows
-  ahead (D-201). A future `paidOn` is refused at the write.
-- `UNFILLABLE_NOTE` is gone; `unfilledLinesNote(filled)` derives it.
-- `/reports/operating` carries `missingFixedCosts` per property (tax, insurance).
-
-## Found in R-193, owned by nobody
-
-- The vendor-invoice form does not point back at `/money/expenses`, so the
-  duplicate-entry warning runs one way only.
-- No edit or delete on a property expense; a series can only be stopped as of today.
-- The demo seed records no property expense, so a D-28 walk shows every house
-  flagged "No property tax or insurance booked".
-- An entity-wide row appears on a property-scoped manager's exception list,
-  and its receipt is refused to them by the document route's entity branch.
-
-## What R-192 changed that the next rows touch
-
-- **`writePayment`'s counter-payment claim now requires
-  `createdAt >= intent.occurredAt − 2 days`** (`COUNTER_CLAIM_WINDOW_MS`,
-  `apps/web/lib/billing/webhook.ts`, D-207). It is a lower bound only, because
-  the simulator stamps its event with the backdated `receivedAt`. **Never
-  bound it on `receivedAt`**, which reopens D-169 for every backdated cheque.
-- **A test that drives the claim must stamp `created` deliberately.**
-  `invoiceEvent`'s default `created` is 2027, outside the window, so a "does
-  NOT claim" test passes vacuously on the default. That is how the
-  online-payment test was silently weakened until R-192 fixed it.
-- **`unclaimedCounterPayments(propertyIds)`** is counted on `/money`'s
-  Reconciliation drift panel, in red when non-zero. Portfolio-scope only.
-
-## Found in R-192, owned by nobody
-
-- An online payment of the same amount **inside** the two days, on an invoice
-  whose counter event was lost, is still claimed. Nothing on the event
-  distinguishes the two here, and that cannot be verified from the laptop.
-- No e2e seeds a stale counter row; the red line is asserted by nothing on
-  screen (unit test covers the count).
-- Production frequency of a lost out-of-band event: **unknown**.
-
-## What R-191 changed that the next rows touch
-
-- **`alreadyFlagged(type, subjectId, today)` in `apps/web/lib/tasks/already-flagged.ts`
-  is now the ONE "have we raised this?" guard** (D-206). An OPEN/IN_PROGRESS/
-  BLOCKED Task suppresses at any age; a DONE/CANCELED one only until its own
-  business date + `TASK_REFLAG_COOL_OFF_DAYS` (7). **A new window-watching job
-  must call it** — do not hand-write `task.findFirst({ where: { type, subjectId } })`
-  a seventh time; that shape was the bug six times over.
-- Its six callers: `cases/case-stall-job.ts`, `cases/court-date-reminder-job.ts`,
-  `compliance/alert-job.ts`, `leases/renewal-window-job.ts`,
-  `leases/renter-insurance-job.ts`, `leases/deposit-disposition-reminder-job.ts`.
-- **`deposit.disposition_halfway` / `_overdue` Tasks are now subjected on the
-  `Deposit`** (`subjectType: 'Deposit'`), not the lease — same as
-  `deposit_refund_due` (D-174). R-188's two-deposits leftover is closed.
-- **First run after deploy will re-raise** every still-true condition whose flag
-  was closed more than a week ago. Expected; it is the finding surfacing, not a
-  backfill.
-
-## Found in R-191, owned by nobody
-
-- The re-raise path is tested through two callers (stall sweep, compliance);
-  the other four share the code with no re-raise test of their own.
-- `lease_renewal` can now re-raise weekly across a 120-day window (~17 Tasks)
-  if somebody keeps closing it unrenewed. Intended, never seen in a queue.
-- Court-date T-7/T-1 on a RESCHEDULED hearing is what the status filter buys
-  there; untested.
-
-## Found in R-190, owned by nobody
-
-- **The four pass-throughs have no test of their own.** Nothing fails if
-  somebody drops the `now` argument back off `sendDueNotices(propertyId, now)`.
-  Each needs a lease-plus-payer fixture to prove — a fixture per job for a
-  one-line call site. The comments name R-190 at each one instead.
-- **Nothing re-raises the chase rungs a past cron gap ate**, and past `JobRun`
-  rows still claim those days SUCCEEDED. D-201's standing no-backfill.
-- **The catch-up now genuinely replays the day, which is a production
-  behaviour change.** A three-day gap sends three days of correctly-dated due
-  notices in one tick rather than one day's sent three times.
-  `CATCH_UP_BUSINESS_DAYS = 3` is the only thing bounding that.
-- **The sixteen jobs that already read `businessDate` are now silently more
-  correct on a catch-up** — the digest's `createdAt: { lt: now }` window in
-  particular now closes at the replayed day. Untested per job.
-
-## The hook-timeout flake, and what actually caused it
-
-Two full unit runs failed this session with **`Hook timed out in 10000ms`** in
-a cleanup hook — `maintenance/emergency.test.ts`'s `afterAll` on the first,
-`listings/delist.test.ts`'s `afterEach` on the second. Different files, same
-10s ceiling, and a suite that ran **135s then 61s against a 19.5s baseline**.
-
-**It was contention on this machine, not the code, and the way that was settled
-is worth copying.** `pg_stat_activity` showed six connections total, so no
-sibling project was implicated; stashing the work and running the clean tree
-gave 3090 passed in 19.5s, which looked like proof the change was at fault.
-It was not — the per-file table showed **everything** slower, including
-`vendors/follow-up.test.ts` (18.7s → 58s) and `workorders/chargeback-actions`,
-neither of which touches a job. A global slowdown across unrelated files is
-machine contention. Re-running with the change applied and **nothing running
-alongside it** gave 3091 passed in 21.9s, green.
-
-So: `npm run lint` and `npm run typecheck` alongside a full `npm test` is
-enough to tip these hooks over. Run the suite on its own. **The ceiling is
-still real** — seven sequential `deleteMany`s against vitest's default 10s
-hook timeout has no headroom, the R-040e/R-102b shape — and **it has no row**.
-
-## Still outstanding from R-187, owned by nobody
-
-**The Neon dev branch is nine migrations behind**, back to
-`20260904120100_r165_guarantor_actor_type` and including
-`20260907120000_r175_payment_plans`, so it has no `PaymentPlan` table at all.
-`npm run dev` reads `.env.local`, so a walk against the dev branch would 500 on
-anything built since R-165. `npm run db:migrate:dev` is the whole fix; it was
-outside R-187 through R-190's scope and has still not been run.
-
-Also from R-187: the start-day boundary double-counts a charge raised on the
-plan's own start date (it lands in both `arrearsCents` and `chargesSince`); no
-e2e walks the new wrongly-completed warning.
-
-## Still outstanding from R-189, owned by nobody
-
-- Nothing backfills the photographs discarded before that item — those bytes
-  were never fetched and no longer exist to fetch.
-- Nothing re-parents a photograph onto a ticket opened AFTER the message that
-  carried it.
-- The filename is manufactured (`texted-1.jpeg`) because Twilio sends none.
-- The memory ceiling on a media fetch is one CDN response bounded by the
-  timeout; a lying `Content-Length` is only caught after buffering.
-- The wire between the fetcher and Twilio is untested and cannot be tested from
-  here — same limit R-104's drivers have.
-
 ## Still true from earlier handoffs
 
 - **Rows 81 (R-081), 97 (R-097) and 155 (R-168) are SPLIT-PARENT
   placeholders.** Every child shipped. Ticking them is bookkeeping.
 - **Row 93 (R-093) is externally blocked** — real vendor drivers, each needing
   a signed commercial relationship. Not a laptop item.
-- **`e2e/leases.spec.ts`'s cleanup flake has a row** — 189 / R-202, at the end
-  of the arc. It costs CI time on every push, so pull it forward if a sweep
-  goes red on `WorkOrder_unitId_fkey` rather than treating it as new.
+- **Row 190 / R-203** is the e-sign half of the payment plan (D-214).
 
 ## Standing traps worth re-reading before any UI work
 
@@ -387,72 +128,54 @@ probe; only `document.documentElement.scrollWidth` sees it.
 
 **Use `npm test -- <path>` and `npm run test:e2e`, never bare `npx vitest` or
 `npx playwright test`.** Both give a wall of instant failures with no
-`DATABASE_URL`, which reads exactly like the jetsam symptom CLAUDE.md warns
-about and is not it. R-190 hit the vitest half of this. (`--list` is safe
-without it, and is how you get the real expected e2e test count.)
+`DATABASE_URL`, which reads exactly like the jetsam symptom and is not it.
+(`--list` is safe without it, and is how you get the real expected e2e count.)
 
-**Prove a new assertion against the reverted fix** (D-197). R-190 did this
-three times, one revert per claim, and each turned exactly one test red.
+**Prove a new assertion against the reverted fix** (D-197). R-201 did this: the
+revert turned exactly one test red, the new one.
 
-**A fixture that looks complete can still be missing the field under test.**
-Check what the production writer sets, not what the fixture has.
-
-**A wall of hook timeouts in unrelated `afterAll`s is an environment symptom.**
-Check `pg_stat_activity` for sibling projects before reading a stack trace.
+**Read the e2e summary, not the tail of it.** The gate is
+`passed + skipped + flaky` reconciling against `npx playwright test --list`.
 
 **A seed defect is only visible on a walk** (D-28).
 
 ## Leftovers still owned by nobody
 
-From R-186: the demo's lease term is `startsInDays + termMonths * 30`, so a
-twelve-month lease reads *30 Sept 2026 to 25 Sept 2027*; the seeded draft has
-no utilities and no addenda; the staff-side `/leases/[id]` e-sign panel was
-never walked in a browser; `storageIsRemote` skips the draft document, so with
-`BLOB_READ_WRITE_TOKEN` set the defect returns.
+From R-200: non-renewal notices already served carry the wrong end date in
+stored `bodyText`; no e2e drives a business-day state through either notice
+form; `observedHolidays` is seeded for no state; the demo seed configures Texas
+only.
 
-From R-185: `packages/core` can test the catalogue EXAMPLES but not the values
-— the three builders are `server-only` Prisma modules in `apps/web`.
-`demoLeaseMergeValues` is the only tested one. `rent.due_day` still renders as
-a bare `'1'` rather than `'the 1st'`, left alone deliberately.
+From R-199: a cancelled or broken plan sends the tenant nothing; the staff
+lease page does not show where the schedule went; the guarantor portal does not
+show the plan. `sms-intake.test.ts`'s `afterAll` has timed out at 10s
+intermittently — see the contention section above before treating it as code.
 
-From R-184: `leaseStatusLabel`'s `/money` caller has no tests; `from
-{prospect.source}` prints the raw column, so the prospect header reads
-"Applied · from zillow"; `/workorders/[id]/timeline` was the one route family
-the phone-width pass skipped.
+From R-198: a payment on a property deactivated mid-range is outside the
+settlement report; a late-delivered payment in an already-swept range belongs
+to no recorded transfer.
 
-From R-183: no accrual engine, no interest rate on `JurisdictionRule`, and
-`Deposit.escrowAccountRef` / `interestAccruedCents` are written by nothing —
-deliberate, and not to be started until such a property is onboarded.
+From R-196: `sendReminders` reports "sent to N people" even when every channel
+was suppressed; a phone-only guarantor cannot enter their portal.
 
-From R-182: `assessEvidence`'s presumption period takes no day-count basis, and
-nothing seeds a holiday list for any state.
+From R-195: only `Lease` and `Deposit` Task routes are exercised end to end;
+`demo-seed.mts` writes Task subject strings outside the union.
 
-From R-181: a texted-in tenant never gets the quotable reference; the
-acknowledgement rides the hourly outbox cron so it can lag an hour;
-`entry.notice` names no ticket; no e2e walks intake → acknowledgement.
+From R-194: the demo seed's Riverside notice has no demand; nothing drafts a
+cure notice from the lease page or the final chase rung.
 
-From R-180: no processing fee, so no net payout can be stated; `HAP_ACH` would
-be counted as a Stripe settlement if anything wrote it.
+From R-193: no edit or delete on a property expense; the demo seed records
+none, so every house reads "No property tax or insurance booked".
 
-From R-178: no `cases.stalled` Task links to its subject; `TURN_STAGE_DAYS`
-unconfigurable; `draftPunchListFromInspection` findings are unstaged.
-
-From R-177: the R-032c "was this fixed?" SMS default and the TCPA question are
-owner decisions, recorded and unfixed. Email-intake tickets get no clarify
-link; `e2e/maintenance-phone-log.spec.ts` cleans up by collected-id list.
-
-From R-176: nothing warns portfolio-wide that a unit was listed with an open
-re-key; a CANCELED re-key reads like one that never happened.
+From R-183: no accrual engine, no interest rate on `JurisdictionRule`;
+`Deposit.escrowAccountRef` / `interestAccruedCents` are written by nothing.
 
 From R-173: a tenant with a phone but no email still gets a live PORTAL row and
 cannot sign in.
 
-From R-172: no staff field for a real handover date on an inherited tenancy;
-`apps/web/lib/turnover/queries.test.ts` cleans up by collected-id list.
-
 From R-171: `writePayment` dedups only on `stripePaymentIntentId`, so an ACH
 payment may write both a `PENDING` and a `SETTLED` row. Recorded as **unknown**
-— verify against real Stripe. (R-192 is the adjacent, verified defect.)
+— verify against real Stripe.
 
 From R-170a: `/staff/new` and `/staff/[id]` each take ~21s to axe-scan against
 `/staff`'s 2.2s.
