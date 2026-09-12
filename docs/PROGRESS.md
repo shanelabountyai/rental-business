@@ -11627,4 +11627,10 @@ layout changed, only computed values (D-194). **Each new claim was proved
 against its own reverted fix** (D-197): reverting the basis in
 `noticePeriodCheck` turned three tests red, reverting the notice's `timeZone`
 turned the date test red, and reverting the basis in `assessEvidence` turned
-the presumption test red.
+the presumption test red. **CI green on this item's own code commit** — run
+`34660946450` on `9c67a49`, both jobs (*Lint, types, unit tests, build* and
+*End-to-end, axe, Lighthouse*) `success`. Read on the run itself, never copied
+forward from the previous entry (R-141's failure, which ran eleven items).
+One trap found doing it: **`gh run list --commit` matches only a FULL sha and
+returns empty for a short one**, with no error — which reads exactly like the
+"docs-only push, no run" case and cost ten minutes. Watch by run id instead.

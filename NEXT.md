@@ -7,6 +7,14 @@ forward** — run `gh run list --limit 5` after your own push, and read the run
 on YOUR code commit. **A docs-only push has no run at all** (`paths-ignore`
 in `ci.yml`), so if the SHA commit is pushed on its own, do not wait for one.
 
+**`gh run list --commit` only matches a FULL sha, and returns EMPTY for a
+short one** — no error, no warning (R-200 burned ten minutes on it). That
+empty result reads exactly like the "docs-only push, no run" case above, so
+it will tell you nothing ran when something did. Use
+`git rev-parse <short>` first, or skip the filter and watch by run id:
+`gh run watch <id> --exit-status`, which is the only form that cannot
+silently match nothing.
+
 ## Start here: row 188, R-201
 
 `docs/prds/06-backlog.md` Milestone 14 ("Arc 4"). **Four raw `YYYY-MM-DD`
