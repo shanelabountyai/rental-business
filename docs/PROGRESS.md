@@ -11942,3 +11942,118 @@ control and renders a user-supplied value, the signer's own name (D-194, D-197).
 run itself, not copied forward from R-202's entry. The `record the SHA` commit
 (`7499b45`) and the handoff commit after it are docs-only, so `paths-ignore`
 gives them no run and the `ignoreCommand` no deployment; both are expected.
+
+## R-204 — the Arc 4 demo walk (D-28)
+
+**What it built.** Not a feature — a walk, and the eight defects it found.
+Milestone 14 closed at R-203, and D-28's rule is that a walk catches what no
+test is looking for: R-105 found seven defects across 88 routes that all
+returned 200, R-184 three across 250. This one crawled **236 staff routes** as
+`owner@demo.test` against the local `rental_demo`, **all 236 again at a 412px
+phone**, the **tenant portal through five tenants' magic links** and the
+vendor job link — and probed what each page *said* rather than what it
+returned. **Every page returned 200, nothing overflowed the phone, and no page
+printed `undefined`, `NaN`, `Invalid Date` or `[object Object]`.** R-184's
+D-197 discipline holds. What was wrong was wrong in words.
+
+Six sites of one class, two of another, two in the seed. All fixed at the
+shared point rather than where the walk happened to see them.
+
+- **The eviction packet printed the two dates a filing turns on as
+  `YYYY-MM-DD`** — `Cure period runs from: 2026-09-02`, `Last day to cure:
+  2026-09-09` — on the PDF an attorney files from. `PacketFacts` takes a
+  pre-formatted string for all seven of its other dates (`asDate` in
+  `apps/web/lib/evictions/packet.ts` wraps every one, and the type's comment
+  says *"Formatted upstream"*); `clock` is the exception, passed through whole
+  as a typed `CureClock` carrying two raw `BusinessDate`s. **Both screens
+  showing those same two values already called `friendlyBusinessDate`**, which
+  is exactly why nothing was red and nothing looked wrong.
+- **The lease ledger's Date column printed `2026-01-11`** — on the panel whose
+  own header comment reads *"WRITTEN TO BE READ BY A JUDGE … no cryptic codes
+  - a judge has to read it"*, with entry types rendered as English beside it.
+- **Four more on `/leases/[id]`**: the e-signature stamps, the waived-fee line
+  (`fee.dueOn` is formatted on the line directly above `fee.waivedAt`, which
+  was not), the payment-hold line, and the lifecycle and deposit-disposition
+  sentences.
+- **The tenant portal said *"You gave notice on 2026-08-29."*** — D-153's
+  original shape, on the surface with the least expert reader.
+- **`/inspections` and `/inspections/[id]` printed `PRE_MOVE_OUT`** beside a
+  correctly-labelled status, and **`/violations/[id]` printed
+  `ASSISTANCE_ANIMAL · RECEIVED`** while `accommodations-panel.tsx` renders
+  the same row through `ACCOMMODATION_KIND_LABELS` — both maps already
+  imported on that very page. R-184's `month-to_month` finding, second
+  instance.
+- **The demo seed wrote three compliance types outside
+  `COMPLIANCE_ITEM_TYPES`**, so `complianceItemTypeLabel` fell through to its
+  raw-value fallback and the whole calendar read as machine names.
+  `ENTITY_FRANCHISE_TAX` was the worse half: it is not in
+  `ENTITY_LEVEL_TYPES`, so the demo showed an **entity-scoped item at a type
+  the Add-item form can only ever offer property-scoped** — a state the
+  product itself cannot produce. Now `SMOKE_CO_CERTIFICATION`,
+  `LLC_ANNUAL_REPORT`, and `OTHER` for the pool permit, which is the case the
+  free-form column exists for and the one the demo most wants to show.
+- **A service note built its date with `toISOString().slice(0, 10)`** in the
+  seed — literally the shape D-153 names, written into text an operator reads
+  on `/notices/[id]`.
+
+**What it decided** (D-221). **`friendlyDate(instant, zone)` at the display
+call site, not a new helper and not prop-threading.** It already produces the
+same `3 Mar 2026` as `friendlyBusinessDate` (the two readers are held in
+agreement by `MONTH_WORDS` and a comment saying why), takes the identical
+argument list as the `businessDate` call it replaces, and is already how
+`asDate` formats the eviction packet's other seven dates. D-153 says to format
+in the renderer so the type stops the next caller — that argument holds for a
+`@db.Date` value the panel receives, and does not here: these are real
+timestamps and the zone lives on the page, so formatting in the renderer would
+mean threading `timezone` into eight panels for a weaker guarantee.
+`businessDate` stays wherever the value feeds logic — `today=`, a
+`Task.businessDate`, a comparison — and the walk's grep separated the two
+cleanly, because every display site passes a stored field and every logic site
+passes `new Date()`.
+
+**MEASURED against the reverted fix** (D-197): the new `packetBlocks`
+assertion is red with the two `friendlyBusinessDate` calls removed, reading
+the raw `2026-09-02` where `2 Sept 2026` is expected. It is a unit test rather
+than an e2e because the packet is bytes, and because `packetBlocks` had no
+test at all before this.
+
+**Found along the way.** **`e2e/inspections.spec.ts:285` asserted
+`'MOVE_IN · Pending signature'`** — a test pinning half the defect in place
+while the other half of the same sentence went through its label map. It is
+the only assertion in the suite that broke, and it broke on both projects,
+which is the right outcome: the spec was wrong and the walk is what said so.
+**`CaseAccommodationView` typed `kind`/`status` as `string`** while
+`ViolationView` twenty lines below it in the same file types both as unions
+and casts at the mapper — that `string` is why the panel could print the raw
+value without a type error, and typing it properly is what made the label
+lookups compile.
+
+**What it left behind.** **The seed's type vocabulary is guarded by nothing.**
+`ComplianceItem.type` is free-form by design, so `COMPLIANCE_ITEM_TYPES` is a
+form vocabulary rather than a constraint, and a seed literal outside it is
+invisible until somebody looks at the screen — R-195 recorded the same shape
+for Task subject strings and it is still true of both. A test would need the
+seed's tables exported, which is scaffolding this item declined to build; the
+walk is the check, which is the honest position and also D-28's whole premise.
+**Demo rows already written keep the old values.** The three compliance rows
+were updated in place to verify the fix; a service note already stored keeps
+its raw date until a `--reset`, forward-only exactly as R-201's deposit slips
+and SCRA notices are. **`esign-panel.tsx` declares `sentAt`, `completedAt` and
+`voidedAt` and renders none of them** — they were formatted along with the
+rest rather than left as the next defect, but a prop nothing displays is a
+question for whoever next touches that panel. **Nothing walks the vendor bid,
+apply, prescreen, showing or pay token surfaces** — R-184 covered them and
+this walk reached only the vendor job link the seed mints, because
+`db:seed:demo-access` prints one of those six.
+
+**Gate run:** lint ✓ (0 errors, the same 16 pre-existing warnings, none in
+touched files), typecheck ✓, `npm run check:ship-deps` ✓ clean, `npm run
+build` ✓. Unit **3,173 passed / 4 skipped** in 14.9s on a clean machine, with
+one new `packetBlocks` test. No schema change, so no migration and `db:ci` is
+not applicable. e2e over the eleven specs covering every touched surface,
+against a production build, **both projects**: first run **158 passed / 2
+failed of 160** — the two being `inspections.spec.ts:237` on desktop and
+mobile, the stale `MOVE_IN` assertion above — then **12 passed of 12** on that
+file after fixing it. The full sweep belongs to CI. **Re-crawled after the
+fixes: 236 staff pages and 71 portal pages, zero raw dates, zero enum leaks,
+zero phone overflow.**

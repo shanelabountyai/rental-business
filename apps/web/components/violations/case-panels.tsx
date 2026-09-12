@@ -1,5 +1,6 @@
 'use client'
 
+import { ACCOMMODATION_KIND_LABELS, REQUEST_STATUS_LABELS } from '@rental/core/accommodations'
 import {
   ANIMAL_FORK_MESSAGES,
   LEGITIMIZATION_ROUTES,
@@ -189,7 +190,9 @@ export function AccommodationLinkPanel({
         <ul className="flex flex-col gap-1 text-sm">
           {caseFile.accommodationRequests.map((request) => (
             <li key={request.id}>
-              {request.kind} · {request.status} · received {friendlyBusinessDate(request.receivedOn)}
+              {ACCOMMODATION_KIND_LABELS[request.kind]} ·{' '}
+              {REQUEST_STATUS_LABELS[request.status]} · received{' '}
+              {friendlyBusinessDate(request.receivedOn)}
             </li>
           ))}
         </ul>

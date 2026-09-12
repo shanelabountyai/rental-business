@@ -6,8 +6,9 @@ import {
   inspectionRequiresEntryNotice,
   inspectionStatus,
   INSPECTION_STATUS_LABELS,
+  INSPECTION_TYPE_LABELS,
 } from '@rental/core/inspections'
-import { businessDate, friendlyTimestamp, utcToWallClock } from '@rental/core/scheduling'
+import { friendlyDate, friendlyTimestamp, utcToWallClock } from '@rental/core/scheduling'
 import { FinishWalkForm } from '@/components/inspections/finish-walk-form.tsx'
 import { InspectionItemForm } from '@/components/inspections/inspection-item-form.tsx'
 import { TaskActionButton } from '@/components/tasks/action-button.tsx'
@@ -80,23 +81,24 @@ export default async function InspectionPage({
           {inspection.property.name} — {inspection.unit.name}
         </h1>
         <p className="text-muted-foreground text-sm">
-          {inspection.type} · {INSPECTION_STATUS_LABELS[status]}
+          {INSPECTION_TYPE_LABELS[inspection.type] ?? inspection.type} ·{' '}
+          {INSPECTION_STATUS_LABELS[status]}
           {inspection.template && ` · ${inspection.template.name}`}
         </p>
         {inspection.performedAt && (
           <p className="text-muted-foreground text-sm">
-            Performed {businessDate(inspection.performedAt, inspection.property.timezone)}
+            Performed {friendlyDate(inspection.performedAt, inspection.property.timezone)}
             {inspection.performedBy && ` by ${inspection.performedBy.name}`}
           </p>
         )}
         {inspection.tenantSignedAt && (
           <p className="text-muted-foreground text-sm">
-            Signed {businessDate(inspection.tenantSignedAt, inspection.property.timezone)}
+            Signed {friendlyDate(inspection.tenantSignedAt, inspection.property.timezone)}
           </p>
         )}
         {inspection.lockedAt && (
           <p className="text-sm font-medium">
-            Locked {businessDate(inspection.lockedAt, inspection.property.timezone)} — this report
+            Locked {friendlyDate(inspection.lockedAt, inspection.property.timezone)} — this report
             cannot be edited.
           </p>
         )}

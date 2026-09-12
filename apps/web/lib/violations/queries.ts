@@ -1,5 +1,6 @@
 import 'server-only'
 
+import type { AccommodationKind, RequestStatus } from '@rental/core/accommodations'
 import { cureClock, type CureClock } from '@rental/core/evictions'
 import { businessDate, UNREVIEWED_DAY_COUNT, utcToBusinessDate } from '@rental/core/scheduling'
 import type {
@@ -33,8 +34,11 @@ export interface CaseNoticeView {
 
 export interface CaseAccommodationView {
   id: string
-  kind: string
-  status: string
+  /// The unions, not `string` - `ViolationView` below already does this and
+  /// this did not, which is why the panel printed `ASSISTANCE_ANIMAL` raw
+  /// while `accommodations-panel.tsx` printed the same row's label (R-204).
+  kind: AccommodationKind
+  status: RequestStatus
   receivedOn: string
 }
 
@@ -182,8 +186,8 @@ function toView(row: NonNullable<CaseRow>, cure: CureClock): CaseView {
     })),
     accommodationRequests: row.accommodationRequests.map((a) => ({
       id: a.id,
-      kind: a.kind,
-      status: a.status,
+      kind: a.kind as AccommodationKind,
+      status: a.status as RequestStatus,
       receivedOn: utcToBusinessDate(a.receivedOn),
     })),
     cure,

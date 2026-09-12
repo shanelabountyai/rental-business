@@ -1,5 +1,9 @@
 import Link from 'next/link'
-import { inspectionStatus, INSPECTION_STATUS_LABELS } from '@rental/core/inspections'
+import {
+  inspectionStatus,
+  INSPECTION_STATUS_LABELS,
+  INSPECTION_TYPE_LABELS,
+} from '@rental/core/inspections'
 import { requireScope } from '@/lib/auth/guard.ts'
 import { inspectionsForScope } from '@/lib/inspections/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
@@ -57,7 +61,8 @@ export default async function InspectionsPage() {
                   {inspection.property.name} — {inspection.unit.name}
                 </Link>
                 <p className="text-muted-foreground mt-1 text-sm">
-                  {inspection.type} · {INSPECTION_STATUS_LABELS[status]}
+                  {INSPECTION_TYPE_LABELS[inspection.type] ?? inspection.type} ·{' '}
+                  {INSPECTION_STATUS_LABELS[status]}
                 </p>
               </li>
             )

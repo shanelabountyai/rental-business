@@ -1151,22 +1151,38 @@ export const COMPLIANCE: {
   propertyName?: string
   entityIndex?: 0 | 1
 }[] = [
+  // EVERY `type` HERE MUST BE ONE OF `COMPLIANCE_ITEM_TYPES`, and all three
+  // were not until R-204's demo walk (D-28). The column is free-form by
+  // design - an obligation this product has never heard of needs no migration
+  // - so nothing refused `SMOKE_ALARM_INSPECTION`, `POOL_PERMIT` or
+  // `ENTITY_FRANCHISE_TAX`. `complianceItemTypeLabel` then fell through to its
+  // raw-value fallback and /compliance printed the machine name at an
+  // operator, three items out of three, which is the whole calendar.
+  //
+  // `ENTITY_FRANCHISE_TAX` was the worse half: it is not in
+  // `ENTITY_LEVEL_TYPES`, so the demo showed an entity-scoped item at a type
+  // the Add-item form can only ever offer as property-scoped - a state the
+  // product itself cannot produce.
   {
-    type: 'SMOKE_ALARM_INSPECTION',
+    type: 'SMOKE_CO_CERTIFICATION',
     label: 'Annual smoke and CO alarm certification',
     dueInDays: -11,
     scope: 'PROPERTY',
     propertyName: 'Riverside Court Duplex',
   },
   {
-    type: 'POOL_PERMIT',
+    // `OTHER` on purpose, and it is the one the demo most wants to show: a
+    // city pool-enclosure permit is exactly the obligation no fixed list
+    // anticipates, and the vocabulary carries `OTHER` so it needs no schema
+    // change to be tracked.
+    type: 'OTHER',
     label: 'City pool enclosure permit renewal',
     dueInDays: 19,
     scope: 'PROPERTY',
     propertyName: 'Magnolia Drive House',
   },
   {
-    type: 'ENTITY_FRANCHISE_TAX',
+    type: 'LLC_ANNUAL_REPORT',
     label: 'Texas franchise tax report',
     dueInDays: 46,
     scope: 'ENTITY',
@@ -2790,9 +2806,13 @@ async function seedLeasing(
         servedAt,
         servedByStaffId: context.staffId,
         trackingNumber: plan.notice.trackingNumber ?? null,
-        note: `Served in person and photographed. Cure period ends ${
-          daysFrom(-plan.notice.daysAgo + plan.notice.cureDays).toISOString().slice(0, 10)
-        }.`,
+        // `toISOString().slice(0, 10)` until R-204's demo walk, which is
+        // D-153's original defect written into a note an operator reads on
+        // /notices/[id]. A service note is stored text and forward-only, so
+        // the one this seed had already written stayed raw until a --reset.
+        note: `Served in person and photographed. Cure period ends ${friendlyBusinessDate(
+          businessDate(daysFrom(-plan.notice.daysAgo + plan.notice.cureDays), DEMO_ZONE),
+        )}.`,
       },
     })
   }

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { costTotals, validateEvictionCost } from './costs.ts'
+import { packetBlocks, type PacketFacts } from './packet.ts'
 import {
   acceptanceWarning,
   cureClock,
@@ -373,5 +374,54 @@ describe('cureVerdict', () => {
     expect(partialCureWarning(null)).toContain('has not been taught')
     expect(partialCureWarning(true)).toContain('cures the notice')
     expect(partialCureWarning(false)).toContain('only payment in full cures')
+  })
+})
+
+describe('packetBlocks', () => {
+  // R-204's demo walk (D-28). Every other date on this packet is formatted by
+  // its caller - `asDate` in apps/web/lib/evictions/packet.ts wraps all seven
+  // of them - but `clock` is passed through as a typed `CureClock`, not as
+  // caller-formatted strings, so its two `BusinessDate`s reached the PDF raw:
+  // "Last day to cure: 2026-09-09" on the document an attorney files from.
+  // Both screens that show the same two values already call
+  // `friendlyBusinessDate`, which is why no test caught it and no screen
+  // showed it.
+  const facts = {
+    propertyName: 'Riverside Court Duplex',
+    addressLine1: '48 Riverside Ct',
+    unitName: 'Unit A',
+    tenantNames: ['Maria Alvarez'],
+    stage: 'NOTICE',
+    outcome: null,
+    openedOn: '2 Sept 2026',
+    closedOn: null,
+    filedOn: null,
+    courtDate: null,
+    judgmentOn: null,
+    writOn: null,
+    lockoutOn: null,
+    clock: {
+      state: 'running',
+      runsFrom: '2026-09-02',
+      cureBy: '2026-09-09',
+      periodUnknown: false,
+    },
+    paymentsSinceService: [],
+    acceptanceWarning: '',
+    cureVerdict: null,
+    costs: { byType: {}, totalCents: 0 },
+    ledgerBalanceCents: null,
+    exhibits: [],
+    generatedAt: '12 Sept 2026, 09:14 CDT',
+    generatedBy: 'Dana Reyes',
+    timezone: 'America/Chicago',
+  } as const satisfies PacketFacts
+
+  it('prints the two dates a filing turns on as English, not as YYYY-MM-DD', () => {
+    const text = packetBlocks(facts).map((block) => block.text).join('\n')
+
+    expect(text).toContain('Cure period runs from: 2 Sept 2026')
+    expect(text).toContain('Last day to cure: 9 Sept 2026')
+    expect(text).not.toMatch(/\d{4}-\d{2}-\d{2}/)
   })
 })

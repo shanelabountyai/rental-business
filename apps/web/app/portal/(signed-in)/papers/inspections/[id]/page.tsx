@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation'
-import { businessDate } from '@rental/core/scheduling'
+import { friendlyDate } from '@rental/core/scheduling'
 import { InspectionItemForm } from '@/components/inspections/inspection-item-form.tsx'
 import { InspectionFinishForm } from '@/components/portal/inspection-finish-form.tsx'
 import { InspectionSignForm } from '@/components/portal/inspection-sign-form.tsx'
@@ -53,12 +53,12 @@ export default async function TenantInspectionPage({
                 very next render after signing, IS the confirmation a
                 tenant who just signed actually sees. */}
             You signed this report on{' '}
-            {businessDate(inspection.tenantSignedAt, inspection.property.timezone)}. It is now
+            {friendlyDate(inspection.tenantSignedAt, inspection.property.timezone)}. It is now
             final.
           </p>
         ) : inspection.lockedAt ? (
           <p className="rounded-md border p-4">
-            This report finalized on {businessDate(inspection.lockedAt, inspection.property.timezone)}{' '}
+            This report finalized on {friendlyDate(inspection.lockedAt, inspection.property.timezone)}{' '}
             without a signature on file - contact us if anything about it looks wrong.
           </p>
         ) : selfGuidedWalk ? (

@@ -51,6 +51,19 @@ export const INSPECTION_STATUS_LABELS: Record<InspectionStatusValue, string> = {
   LOCKED: 'Locked',
 }
 
+/// The `InspectionType` enum as English. Its sibling above has existed since
+/// R-040 and this did not, so `/inspections` and `/inspections/[id]` both
+/// printed `PRE_MOVE_OUT` beside a correctly-labelled status - found on the
+/// R-204 demo walk (D-28), the same shape as R-184's `month-to_month`.
+export const INSPECTION_TYPE_LABELS: Record<string, string> = {
+  MOVE_IN: 'Move-in',
+  MOVE_OUT: 'Move-out',
+  PRE_MOVE_OUT: 'Pre-move-out',
+  PERIODIC: 'Periodic',
+  SEASONAL: 'Seasonal',
+  DRIVE_BY: 'Drive-by',
+}
+
 interface TransitionDecision {
   allowed: boolean
   message?: string

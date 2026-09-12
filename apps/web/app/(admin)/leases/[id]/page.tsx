@@ -473,9 +473,9 @@ export default async function LeaseDetailPage({
             <dt className="text-muted-foreground">Notice</dt>
             <dd className="col-span-1 sm:col-span-2">
               Given by {lease.noticeGivenBy === 'TENANT' ? 'the tenant' : 'us'} on{' '}
-              {businessDate(lease.noticeGivenAt, lease.property.timezone)}
+              {friendlyDate(lease.noticeGivenAt, lease.property.timezone)}
               {lease.noticeEffectiveOn &&
-                ` — ends ${businessDate(lease.noticeEffectiveOn, lease.property.timezone)}`}
+                ` — ends ${friendlyDate(lease.noticeEffectiveOn, lease.property.timezone)}`}
               {lease.noticeForwardingAddress && (
                 <>
                   <br />
@@ -524,7 +524,7 @@ export default async function LeaseDetailPage({
                 </a>
                 <span className="text-muted-foreground text-xs">
                   {' · taken '}
-                  {businessDate(photo.capturedAt ?? photo.createdAt, lease.property.timezone)}
+                  {friendlyDate(photo.capturedAt ?? photo.createdAt, lease.property.timezone)}
                   {!photo.capturedAt && ' (upload date — no EXIF timestamp)'}
                 </span>
               </li>
@@ -539,7 +539,7 @@ export default async function LeaseDetailPage({
           id: line.id,
           type: line.type,
           amountCents: line.amountCents,
-          occurredAt: businessDate(line.occurredAt, lease.property.timezone),
+          occurredAt: friendlyDate(line.occurredAt, lease.property.timezone),
           description: line.description,
           runningBalanceCents: line.runningBalanceCents,
           reversed: reversed.has(line.id),
@@ -795,7 +795,7 @@ export default async function LeaseDetailPage({
             reason: payer.paymentHoldReason,
             // A real timestamp, so it is read in the PROPERTY's zone (R-101c).
             setAt: payer.paymentHoldSetAt
-              ? businessDate(payer.paymentHoldSetAt, lease.property.timezone)
+              ? friendlyDate(payer.paymentHoldSetAt, lease.property.timezone)
               : null,
             setByName: payer.paymentHoldSetBy?.name ?? null,
           }))}
@@ -811,7 +811,7 @@ export default async function LeaseDetailPage({
           amountCents: fee.amountCents,
           description: fee.description,
           dueOn: friendlyBusinessDate(utcToBusinessDate(fee.dueOn)),
-          waivedAt: fee.waivedAt ? businessDate(fee.waivedAt, lease.property.timezone) : null,
+          waivedAt: fee.waivedAt ? friendlyDate(fee.waivedAt, lease.property.timezone) : null,
           waiveReason: fee.waiveReason,
           waivedByName: fee.waivedBy?.name ?? null,
         }))}
@@ -964,7 +964,7 @@ export default async function LeaseDetailPage({
             role: signer.role,
             status: signer.status,
             signedAt: signer.signedAt
-              ? businessDate(signer.signedAt, lease.property.timezone)
+              ? friendlyDate(signer.signedAt, lease.property.timezone)
               : null,
           })),
         }))}
@@ -985,13 +985,13 @@ export default async function LeaseDetailPage({
                 draftDocumentId: currentEnvelope.draftDocumentId,
                 executedDocumentId: currentEnvelope.executedDocumentId,
                 sentAt: currentEnvelope.sentAt
-                  ? businessDate(currentEnvelope.sentAt, lease.property.timezone)
+                  ? friendlyDate(currentEnvelope.sentAt, lease.property.timezone)
                   : null,
                 completedAt: currentEnvelope.completedAt
-                  ? businessDate(currentEnvelope.completedAt, lease.property.timezone)
+                  ? friendlyDate(currentEnvelope.completedAt, lease.property.timezone)
                   : null,
                 voidedAt: currentEnvelope.voidedAt
-                  ? businessDate(currentEnvelope.voidedAt, lease.property.timezone)
+                  ? friendlyDate(currentEnvelope.voidedAt, lease.property.timezone)
                   : null,
                 signers: currentEnvelope.signers.map((signer) => ({
                   id: signer.id,
@@ -1000,10 +1000,10 @@ export default async function LeaseDetailPage({
                   name: signer.name,
                   status: signer.status,
                   viewedAt: signer.viewedAt
-                    ? businessDate(signer.viewedAt, lease.property.timezone)
+                    ? friendlyDate(signer.viewedAt, lease.property.timezone)
                     : null,
                   signedAt: signer.signedAt
-                    ? businessDate(signer.signedAt, lease.property.timezone)
+                    ? friendlyDate(signer.signedAt, lease.property.timezone)
                     : null,
                   signedName: signer.signedName,
                 })),
@@ -1107,9 +1107,9 @@ export default async function LeaseDetailPage({
             lease.noticeGivenAt
               ? `Notice was given by ${
                   lease.noticeGivenBy === 'TENANT' ? 'the tenant' : 'us'
-                } on ${businessDate(lease.noticeGivenAt, lease.property.timezone)}. The tenancy is still running until ${
+                } on ${friendlyDate(lease.noticeGivenAt, lease.property.timezone)}. The tenancy is still running until ${
                   lease.noticeEffectiveOn
-                    ? `it ends on ${businessDate(lease.noticeEffectiveOn, lease.property.timezone)}`
+                    ? `it ends on ${friendlyDate(lease.noticeEffectiveOn, lease.property.timezone)}`
                     : 'it ends'
                 }.`
               : null

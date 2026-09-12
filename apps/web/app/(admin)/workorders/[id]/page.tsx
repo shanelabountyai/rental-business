@@ -1,9 +1,9 @@
 import { actualTotalCents, compareBids, reapprovalCheck } from '@rental/core/approvals'
 import { earliestCompliantStart } from '@rental/core/entry'
 import {
-  businessDate,
   clockTime,
   friendlyBusinessDate,
+  friendlyDate,
   friendlyTimestamp,
   utcToBusinessDate,
   // STILL HERE, and correctly: `localInput` feeds an `<input
@@ -531,7 +531,7 @@ export default async function WorkOrderDetailPage({
           </h2>
           <p className="text-sm">
             {workOrder.closedAt
-              ? `Closed ${businessDate(workOrder.closedAt, workOrder.property.timezone)}`
+              ? `Closed ${friendlyDate(workOrder.closedAt, workOrder.property.timezone)}`
               : 'Closed'}
             {` · ${formatCents(jobCostCents(workOrder))}`}
             {workOrder.tenantCaused && ' · tenant-caused'}

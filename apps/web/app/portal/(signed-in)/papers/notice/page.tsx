@@ -1,4 +1,4 @@
-import { businessDate } from '@rental/core/scheduling'
+import { friendlyDate } from '@rental/core/scheduling'
 import { NoticeToVacateForm } from '@/components/portal/notice-to-vacate-form.tsx'
 import { requireTenantWithScope } from '@/lib/portal/guard.ts'
 import { submitNoticeToVacate } from '@/lib/portal/notice-to-vacate-actions.ts'
@@ -31,10 +31,10 @@ export default async function NoticeToVacatePage() {
         <h1 className="text-2xl font-semibold tracking-tight">Notice already on file</h1>
         <p>
           {home.noticeGivenBy === 'TENANT'
-            ? `You gave notice on ${businessDate(home.noticeGivenAt, home.property.timezone)}`
-            : `We gave notice on ${businessDate(home.noticeGivenAt, home.property.timezone)}`}
+            ? `You gave notice on ${friendlyDate(home.noticeGivenAt, home.property.timezone)}`
+            : `We gave notice on ${friendlyDate(home.noticeGivenAt, home.property.timezone)}`}
           {home.noticeEffectiveOn &&
-            ` - your tenancy ends ${businessDate(home.noticeEffectiveOn, home.property.timezone)}`}
+            ` - your tenancy ends ${friendlyDate(home.noticeEffectiveOn, home.property.timezone)}`}
           .
         </p>
         <p>Contact us if anything about your move-out date has changed.</p>

@@ -21,6 +21,7 @@
 import type { DocumentBlock } from '../documents/blocks.ts'
 import { type PacketExhibit, exhibitIndexBlocks } from '../documents/exhibits.ts'
 import { formatCents } from '../money/money.ts'
+import { friendlyBusinessDate } from '../scheduling/local-time.ts'
 import { EVICTION_COST_LABELS, isEvictionCostType, type CostTotals } from './costs.ts'
 import { CURE_STATE_LABELS, type CureClock } from './cure.ts'
 import {
@@ -103,10 +104,16 @@ export function packetBlocks(facts: PacketFacts): DocumentBlock[] {
   blocks.push({ kind: 'subheading', text: 'Service and the cure period' })
   blocks.push({ kind: 'paragraph', text: CURE_STATE_LABELS[facts.clock.state] })
   if (facts.clock.runsFrom) {
-    blocks.push({ kind: 'meta', text: `Cure period runs from: ${facts.clock.runsFrom}` })
+    blocks.push({
+      kind: 'meta',
+      text: `Cure period runs from: ${friendlyBusinessDate(facts.clock.runsFrom)}`,
+    })
   }
   if (facts.clock.cureBy) {
-    blocks.push({ kind: 'meta', text: `Last day to cure: ${facts.clock.cureBy}` })
+    blocks.push({
+      kind: 'meta',
+      text: `Last day to cure: ${friendlyBusinessDate(facts.clock.cureBy)}`,
+    })
   } else if (facts.clock.periodUnknown) {
     // Named, never guessed - the caller has no configured cure period for
     // this state and a number invented here is the one that gets a case

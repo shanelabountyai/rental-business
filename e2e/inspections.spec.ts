@@ -282,7 +282,10 @@ test('a photo attaches to an item, and the tenant reviews and signs the report f
     .toBe('GOOD')
 
   await page.getByRole('button', { name: 'Finish walk' }).click()
-  await expect(page.getByText('MOVE_IN · Pending signature')).toBeVisible()
+  // 'MOVE_IN · Pending signature' until R-204's demo walk: the status half was
+  // already going through INSPECTION_STATUS_LABELS and the type half was not,
+  // so this assertion was pinning the defect in place.
+  await expect(page.getByText('Move-in · Pending signature')).toBeVisible()
 
   // R-172: finishing the MOVE_IN walk IS the handover, and it is the only
   // writer `Lease.moveInAt` has. Without it the unit's turn panel counts

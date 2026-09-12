@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { businessDate } from '@rental/core/scheduling'
+import { friendlyDate } from '@rental/core/scheduling'
 import { UtilityBillsPanel } from '@/components/billing/utility-bills-panel.tsx'
 import { actorCan, propertyResource, requireScope } from '@/lib/auth/guard.ts'
 import { utilityBillsForProperty, utilityLabel } from '@/lib/billing/rubs.ts'
@@ -102,7 +102,7 @@ export default async function PropertyUtilitiesPage({
           // unlike periodStart/periodEnd above, which are @db.Date calendar
           // days and must never go through a timezone at all.
           allocatedAt: bill.allocatedAt
-            ? businessDate(bill.allocatedAt, property.timezone)
+            ? friendlyDate(bill.allocatedAt, property.timezone)
             : null,
           allocatedByName: bill.allocatedBy?.name ?? null,
           landlordCents: bill.landlordCents,
