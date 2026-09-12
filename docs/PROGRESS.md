@@ -11719,3 +11719,5 @@ The sibling daemons were deliberately left alone — they are not this repo's to
 kill — and are reported in `NEXT.md`: `storage business` has held one since
 **2026-09-05**, `apptbasedservice` four headless Chromium from 2026-09-11, and
 `clinic` one.
+
+**Commit:** `afa1b77`  ·  **Date:** 2026-09-12
