@@ -1,6 +1,6 @@
 import { SignForm } from '@/components/leases/sign-form.tsx'
 import { signLeaseDocument } from '@/lib/leases/esign-actions.ts'
-import { markSignerViewed, verifySignerLink } from '@/lib/leases/sign-link.ts'
+import { markSignerViewed, signedThing, verifySignerLink } from '@/lib/leases/sign-link.ts'
 
 export const metadata = {
   // Generic on purpose: the page serves both a lease and a change-of-
@@ -51,11 +51,16 @@ export default async function SignLinkPage({
   await markSignerViewed(link.signerId)
 
   const where = `${link.propertyName} — ${link.unitName}`
-  // R-090. A departing roommate is being asked to sign themselves OFF a
-  // tenancy; calling that "your lease" would be wrong about the one thing
-  // they most need to understand before typing their name.
-  const isAmendment = link.kind === 'AMENDMENT'
-  const what = isAmendment ? 'change to the lease' : 'lease'
+  // R-090, R-203. A departing roommate is being asked to sign themselves OFF
+  // a tenancy, and a tenant on a repayment plan is being asked to agree a
+  // schedule that changes nothing about the lease at all; calling either of
+  // them "your lease" would be wrong about the one thing they most need to
+  // understand before typing their name.
+  const what = signedThing(link.kind)
+  const readLabel =
+    link.kind === 'AMENDMENT'
+      ? 'Read the change in full before signing'
+      : `Read the ${what} before signing`
 
   return (
     <main className="mx-auto flex max-w-md flex-col gap-6 p-6">
@@ -71,7 +76,7 @@ export default async function SignLinkPage({
           rel="noreferrer"
           className="rounded-md border p-4 text-center font-medium underline underline-offset-4"
         >
-          {isAmendment ? 'Read the change in full before signing' : 'Read the lease before signing'}
+          {readLabel}
         </a>
       )}
 
@@ -89,13 +94,15 @@ export default async function SignLinkPage({
         // header for why there is no separate "thank you" screen.
         <p className="rounded-md border p-4">
           {link.envelopeStatus === 'COMPLETED'
-            ? isAmendment
+            ? link.kind === 'AMENDMENT'
               ? 'You have signed this change. Everybody has now signed, and it is in effect.'
-              : 'You have signed this lease. Every signer has now completed, and the lease is active.'
+              : link.kind === 'PAYMENT_PLAN'
+                ? 'You have signed this repayment plan. Everybody has now signed it.'
+                : 'You have signed this lease. Every signer has now completed, and the lease is active.'
             : `You have signed this ${what}. Still waiting on the remaining signer(s) - you can read it above at any time.`}
         </p>
       ) : (
-        <SignForm action={signLeaseDocument.bind(null, token)} />
+        <SignForm what={what} action={signLeaseDocument.bind(null, token)} />
       )}
 
       <p className="text-muted-foreground text-xs">

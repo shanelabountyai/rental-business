@@ -98,6 +98,8 @@ function planRecord(overrides: Partial<PlanRecord> = {}): PlanRecord {
       { id: 'i3', sequence: 3, dueOn: new Date('2026-05-01T00:00:00Z'), amountCents: 300_00 },
     ],
     hold: null,
+    /// R-203: nobody was asked to sign, which is the ordinary case.
+    envelope: null,
     ...overrides,
   }
 }

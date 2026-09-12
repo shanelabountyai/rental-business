@@ -116,11 +116,32 @@ const PLAN_SELECT = {
     orderBy: { sequence: 'asc' },
   },
   hold: { select: { id: true, liftedAt: true } },
+  /// R-203. Joined here rather than fetched separately because every screen
+  /// that shows a plan wants to know whether anybody signed it, and a plan
+  /// has at most one envelope.
+  envelope: {
+    select: {
+      id: true,
+      status: true,
+      executedDocumentId: true,
+      signers: { select: { name: true, status: true }, orderBy: { order: 'asc' } },
+    },
+  },
 } as const
 
 /// The fetched row, exported so a bulk caller that already holds the ledger
 /// can compute progress itself rather than paying for a second read of it.
 export type PlanRecord = Prisma.PaymentPlanGetPayload<{ select: typeof PLAN_SELECT }>
+
+/// Where the plan's own e-signature got to (R-203), or null when nobody has
+/// been asked. Null is the ORDINARY case: the signature is the operator's
+/// choice per plan and never a condition of the hold (D-214).
+export interface PlanSignatureView {
+  status: 'DRAFT' | 'SENT' | 'PARTIALLY_SIGNED' | 'COMPLETED' | 'VOIDED'
+  signedCount: number
+  signerNames: string[]
+  executedDocumentId: string | null
+}
 
 export interface PlanInstalmentView {
   id: string
@@ -155,6 +176,7 @@ export interface PlanView {
   cancelReason: string | null
   /// The hold this plan placed, and whether it is still in force.
   holdInForce: boolean
+  signature: PlanSignatureView | null
 }
 
 /** Turns a fetched plan and the lease's ledger into a view. */
@@ -203,6 +225,14 @@ export function toPlanView(
     cancelledByName: plan.cancelledBy?.name ?? null,
     cancelReason: plan.cancelReason,
     holdInForce: plan.hold != null && plan.hold.liftedAt === null,
+    signature: plan.envelope
+      ? {
+          status: plan.envelope.status,
+          signedCount: plan.envelope.signers.filter((s) => s.status === 'SIGNED').length,
+          signerNames: plan.envelope.signers.map((s) => s.name),
+          executedDocumentId: plan.envelope.executedDocumentId,
+        }
+      : null,
   }
 }
 

@@ -342,3 +342,166 @@ test('the fair-housing report names the tenancies nobody offered a plan', async 
   await expect(row).toBeVisible()
   await expect(row).toContainText('never offered a plan')
 })
+
+// ==========================================================================
+// R-203: THE E-SIGN HALF (PAY-08/LEASE-06, D-214).
+//
+// R-199 proves the schedule was SENT - the Notification rows carry it. These
+// two prove the tenant AGREED, which is the different fact a broken plan is
+// argued from, and they prove the one rule that is easy to get backwards:
+// the signature is the operator's choice per plan and is NEVER a condition
+// of the hold. The plan is in force before anybody is asked and stays in
+// force whether or not they ever sign.
+//
+// Only a browser can show that the signing page does not call a repayment
+// agreement a lease. Every sentence on `/sign/[token]` is generated from the
+// envelope's kind, and the whole risk of reusing R-063's ceremony is that a
+// tenant types their legal name under the word "lease".
+// ==========================================================================
+
+async function mintSignLink(signerId: string) {
+  const minted = mintToken('LEASE_SIGN')
+  await prisma.authToken.create({
+    data: {
+      purpose: 'LEASE_SIGN',
+      tokenHash: minted.tokenHash,
+      subjectType: 'LeaseSigner',
+      subjectId: signerId,
+      expiresAt: minted.expiresAt,
+    },
+  })
+  return minted.token
+}
+
+/// Agrees a plan through the UI, which is the only way one gets written, and
+/// leaves the page on the tenancy.
+async function agreePlanOnPage(page: import('@playwright/test').Page, leaseId: string) {
+  await page.goto(`/leases/${leaseId}`)
+  await page.getByLabel('Amount the plan repays (dollars)').fill('900.00')
+  await page.getByLabel('Number of instalments').fill('3')
+  await page.getByLabel('First instalment due on').fill('2026-10-01')
+  await page.getByLabel('What was agreed, in words (required)').fill('Three payments from October.')
+  await page.getByRole('button', { name: 'Agree this repayment plan' }).click()
+  await expect(page.getByText(/Plan agreed: 3 instalments/)).toBeVisible()
+}
+
+test('a tenant e-signs the repayment plan, and the executed agreement is archived', async ({
+  page,
+}) => {
+  const { lease, tenant } = await seedTenancy()
+  const staff = await seedOwner()
+
+  await signIn(page, staff.email)
+  await agreePlanOnPage(page, lease.id)
+
+  // THE HOLD IS ALREADY ON, BEFORE ANYBODY IS ASKED TO SIGN (D-214). This is
+  // the assertion the whole item turns on: if a later change ever made the
+  // pause wait on a signature, this line goes red before anything else does.
+  const holdBefore = await prisma.leaseHold.findFirstOrThrow({
+    where: { leaseId: lease.id, type: 'PAYMENT_PLAN', liftedAt: null },
+  })
+  expect(holdBefore.liftedAt).toBeNull()
+  await expect(page.getByText(/Nobody has been asked to sign this plan/)).toBeVisible()
+
+  await page.getByRole('button', { name: 'Send this plan for signature' }).click()
+  await expect(page.getByText(/Sent for signature to Plan /)).toBeVisible()
+
+  // Its own template, not `lease.sign_invite` - telling somebody their lease
+  // is ready to sign when the paper is a repayment schedule is wrong about
+  // the thing they are putting their name to.
+  const invite = await prisma.notification.findFirstOrThrow({
+    where: {
+      recipientType: 'TENANT',
+      recipientId: tenant.id,
+      templateKey: 'payment_plan.sign_invite',
+      channel: 'EMAIL',
+    },
+    select: { body: true, subject: true },
+  })
+  expect(invite.subject).toContain('Sign your repayment plan')
+  // And it says the plan is already in force, so nobody panics about a chase
+  // that is not coming.
+  expect(invite.body).toContain('already in force')
+
+  const envelope = await prisma.leaseEnvelope.findFirstOrThrow({
+    where: { leaseId: lease.id, kind: 'PAYMENT_PLAN' },
+    include: { signers: true },
+  })
+  expect(envelope.status).toBe('SENT')
+  // TENANTS SIGN; GUARANTORS DO NOT. A guarantor's signature on a repayment
+  // agreement is an argument that they reaffirmed the debt on new terms, and
+  // this product must not manufacture that by default.
+  expect(envelope.signers).toHaveLength(1)
+  expect(envelope.signers[0]!.role).toBe('TENANT')
+
+  const token = await mintSignLink(envelope.signers[0]!.id)
+  await page.goto(`/sign/${token}`)
+  // NOT "Read the lease before signing", and not "Sign this lease". Every
+  // sentence here is generated from the envelope's kind for exactly this.
+  await expect(page.getByRole('link', { name: 'Read the repayment plan before signing' })).toBeVisible()
+  await page.getByLabel('Type your full legal name').fill(`Plan ${tenant.lastName}`)
+  await page.getByRole('checkbox').check()
+  await page.getByRole('button', { name: 'Sign this repayment plan' }).click()
+  await expect(page.getByText('You have signed this repayment plan.')).toBeVisible()
+
+  const signed = await prisma.leaseEnvelope.findUniqueOrThrow({
+    where: { id: envelope.id },
+    include: { executedDocument: true },
+  })
+  expect(signed.status).toBe('COMPLETED')
+  // The executed PDF is the draft's own bytes plus a completion certificate,
+  // archived - the whole point of the item, and the thing a dispute is
+  // argued from.
+  expect(signed.executedDocument?.type).toBe('PAYMENT_PLAN')
+  expect(signed.executedDocument?.leaseId).toBe(lease.id)
+  expect(signed.executedDocument?.sizeBytes).toBeGreaterThan(0)
+
+  // AND THE PLAN IS UNCHANGED BY THE SIGNATURE. Nothing about the plan's own
+  // lifecycle is an event here: the hold went on when it was agreed and
+  // comes off when the sweep says the plan ended.
+  const after = await prisma.paymentPlan.findFirstOrThrow({ where: { leaseId: lease.id } })
+  expect(after.status).toBe('ACTIVE')
+  expect(after.envelopeId).toBe(envelope.id)
+  expect(
+    (await prisma.leaseHold.findUniqueOrThrow({ where: { id: holdBefore.id } })).liftedAt,
+  ).toBeNull()
+
+  await page.goto(`/leases/${lease.id}`)
+  await expect(page.getByRole('link', { name: 'Read the signed agreement' })).toBeVisible()
+})
+
+test('cancelling a plan withdraws a signing request still out, and the link says so', async ({
+  page,
+}) => {
+  const { lease } = await seedTenancy()
+  const staff = await seedOwner()
+
+  await signIn(page, staff.email)
+  await agreePlanOnPage(page, lease.id)
+  await page.getByRole('button', { name: 'Send this plan for signature' }).click()
+  await expect(page.getByText(/Sent for signature to Plan /)).toBeVisible()
+
+  const envelope = await prisma.leaseEnvelope.findFirstOrThrow({
+    where: { leaseId: lease.id, kind: 'PAYMENT_PLAN' },
+    include: { signers: true },
+  })
+  const token = await mintSignLink(envelope.signers[0]!.id)
+
+  await page.getByLabel('Why this plan is ending (required)').fill('Tenant paid the arrears in full.')
+  await page.getByRole('button', { name: 'End this repayment plan' }).click()
+  await expect(page.getByText(/the signing request withdrawn/)).toBeVisible()
+
+  expect(
+    (await prisma.leaseEnvelope.findUniqueOrThrow({ where: { id: envelope.id } })).status,
+  ).toBe('VOIDED')
+
+  // Asking somebody to sign an arrangement that no longer exists is the same
+  // defect as leaving the hold on, in the other half of the machinery - so
+  // the link that was already sent has to say so rather than accept a
+  // signature on a dead agreement.
+  await page.goto(`/sign/${token}`)
+  await expect(
+    page.getByText('This repayment plan was withdrawn. Contact your property manager for a new link.'),
+  ).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Sign this repayment plan' })).toHaveCount(0)
+})

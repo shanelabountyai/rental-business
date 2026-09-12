@@ -30,6 +30,20 @@ export interface PlanInstalmentRow {
   amountCents: number
 }
 
+/// R-203: where the plan's own e-signature got to, or null when nobody has
+/// been asked. NULL IS THE ORDINARY CASE AND MUST READ AS ONE — the signature
+/// is the operator's choice per plan and never a condition of the hold
+/// (D-214), so an unsigned plan is a complete plan and the panel must not
+/// dress it up as an outstanding task.
+export interface PlanSignatureRow {
+  status: 'DRAFT' | 'SENT' | 'PARTIALLY_SIGNED' | 'COMPLETED' | 'VOIDED'
+  signedCount: number
+  signerCount: number
+  signerNames: string[]
+  /// The executed PDF, once everybody has signed.
+  executedDocumentId: string | null
+}
+
 export interface PlanRow {
   id: string
   status: 'ACTIVE' | 'COMPLETED' | 'BROKEN' | 'CANCELLED'
@@ -47,6 +61,7 @@ export interface PlanRow {
   agreedOn: string
   agreedByName: string
   cancelReason: string | null
+  signature: PlanSignatureRow | null
 }
 
 const STATUS_LABEL: Record<PlanRow['status'], string> = {
@@ -90,6 +105,60 @@ function Schedule({ plan }: { plan: PlanRow }) {
         ))}
       </tbody>
     </table>
+  )
+}
+
+function SignatureBlock({
+  plan,
+  leaseId,
+  canManage,
+  formAction,
+}: {
+  plan: PlanRow
+  leaseId: string
+  canManage: boolean
+  formAction: (formData: FormData) => void
+}) {
+  const signature = plan.signature
+
+  if (signature && signature.status === 'COMPLETED') {
+    return (
+      <p className="text-sm">
+        Signed by {signature.signerNames.join(', ')}.{' '}
+        {signature.executedDocumentId && (
+          <a
+            href={`/api/documents/${signature.executedDocumentId}/file`}
+            className="underline underline-offset-4"
+          >
+            Read the signed agreement
+          </a>
+        )}
+      </p>
+    )
+  }
+
+  if (signature && (signature.status === 'SENT' || signature.status === 'PARTIALLY_SIGNED')) {
+    return (
+      <p className="text-muted-foreground text-sm">
+        Out for signature — {signature.signedCount} of {signature.signerNames.length} signed.
+        The plan is in force either way.
+      </p>
+    )
+  }
+
+  if (!canManage) return null
+
+  return (
+    <form action={formAction} className="flex flex-col gap-2">
+      <input type="hidden" name="planId" value={plan.id} />
+      <input type="hidden" name="leaseId" value={leaseId} />
+      <p className="text-muted-foreground text-sm">
+        {signature?.status === 'VOIDED'
+          ? 'The earlier signing request was withdrawn. Nothing is out for signature.'
+          : 'Nobody has been asked to sign this plan. It is in force either way — a signature records that the tenant agreed to these terms, which is what a broken plan is argued from.'}
+      </p>
+      <SubmitButton label="Send this plan for signature" />
+    </form>
   )
 }
 
@@ -196,6 +265,7 @@ export function PaymentPlanPanel({
   canManage,
   agreeAction,
   cancelAction,
+  sendAction,
 }: {
   leaseId: string
   plans: readonly PlanRow[]
@@ -207,6 +277,7 @@ export function PaymentPlanPanel({
   canManage: boolean
   agreeAction: (state: PlanFormState, formData: FormData) => Promise<PlanFormState>
   cancelAction: (state: PlanFormState, formData: FormData) => Promise<PlanFormState>
+  sendAction: (state: PlanFormState, formData: FormData) => Promise<PlanFormState>
 }) {
   const live = plans.find((plan) => plan.status === 'ACTIVE') ?? null
   const ended = plans.filter((plan) => plan.status !== 'ACTIVE')
@@ -225,6 +296,9 @@ export function PaymentPlanPanel({
   // ==========================================================================
   const [agreeState, agreeFormAction] = useActionState<PlanFormState, FormData>(agreeAction, {})
   const [cancelState, cancelFormAction] = useActionState<PlanFormState, FormData>(cancelAction, {})
+  // Its own state, alongside the other two and for the same reason: pressing
+  // it replaces the form that produced it with the "out for signature" line.
+  const [sendState, sendFormAction] = useActionState<PlanFormState, FormData>(sendAction, {})
 
   return (
     <section aria-labelledby="repayment-plan" className="flex flex-col gap-4 border-t pt-4">
@@ -243,6 +317,7 @@ export function PaymentPlanPanel({
         <div>
           <FormAlerts state={agreeState} />
           <FormAlerts state={cancelState} />
+          <FormAlerts state={sendState} />
         </div>
       )}
 
@@ -287,6 +362,13 @@ export function PaymentPlanPanel({
 
           <Schedule plan={live} />
 
+          <SignatureBlock
+            plan={live}
+            leaseId={leaseId}
+            canManage={canManage}
+            formAction={sendFormAction}
+          />
+
           {canManage && <CancelForm plan={live} formAction={cancelFormAction} />}
         </div>
       ) : (
@@ -322,6 +404,21 @@ export function PaymentPlanPanel({
                   <> — broken on the instalment due {friendlyBusinessDate(plan.brokenOn)}</>
                 )}
                 {plan.cancelReason && <> — ended: “{plan.cancelReason}”</>}
+                {plan.signature?.status === 'COMPLETED' && (
+                  <>
+                    {' — '}
+                    {plan.signature.executedDocumentId ? (
+                      <a
+                        href={`/api/documents/${plan.signature.executedDocumentId}/file`}
+                        className="underline underline-offset-4"
+                      >
+                        signed by {plan.signature.signerNames.join(', ')}
+                      </a>
+                    ) : (
+                      <>signed by {plan.signature.signerNames.join(', ')}</>
+                    )}
+                  </>
+                )}
                 {/* THE RECORD SAYS PAID IN FULL AND THE LEDGER CANNOT SUPPORT
                     IT (R-187). Until this was fixed, ordinary rent counted as
                     instalment money, so a tenancy paying nothing extra

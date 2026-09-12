@@ -1,8 +1,6 @@
 'use server'
 
-import { createHash } from 'node:crypto'
 import { headers } from 'next/headers'
-import { type DocumentBlock } from '@rental/core/documents'
 import { leaseTransition } from '@rental/core/leases'
 import { businessDate } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
@@ -12,11 +10,11 @@ import { syncLease } from '@/lib/billing/lifecycle.ts'
 import { provisionLeaseBilling } from '@/lib/billing/provision.ts'
 import { chargeDeposit } from './deposit-charge.ts'
 import { esignAdapter } from '@/lib/esign/provider.ts'
-import { appendPdfs, renderBlocksPdf } from '@/lib/pdf/render.ts'
-import { generateStorageKey, storage } from '@/lib/storage/index.ts'
 import { activateLeaseSideEffects, endRenewalPredecessor } from './activate.ts'
+import { archiveExecutedDocument } from './executed-pdf.ts'
 import { completePartyChangeEnvelope } from './party-change-apply.ts'
-import { verifySignerLink } from './sign-link.ts'
+import { completePaymentPlanEnvelope } from '@/lib/payments/plan-envelope.ts'
+import { signedThing, verifySignerLink } from './sign-link.ts'
 
 // A signer's own "sign the lease" action (LEASE-06, DOC-02, R-063).
 //
@@ -50,6 +48,20 @@ export interface SignFormState {
   notice?: string
 }
 
+/**
+ * What the signer is being asked to put their name to (R-090, R-203).
+ *
+ * ONE MAP, READ BY THE ACTION AND THE PAGE. Telling a departing roommate
+ * "your lease is ready to sign" would be wrong about the one thing they most
+ * need to understand; telling a tenant that a repayment agreement is their
+ * lease is wrong in the same way and worse, because a plan explicitly does
+ * not change the lease and says so in its own text.
+ *
+ * NOT exported from here - this module is `'use server'`, where a non-async
+ * export fails `npm run build` (CLAUDE.md's own trap). It lives in
+ * sign-link.ts, which is a plain module, and is imported by both.
+ */
+
 export async function signLeaseDocument(
   token: string,
   _previous: SignFormState,
@@ -64,7 +76,7 @@ export async function signLeaseDocument(
           : 'This signing link is not working. Contact your property manager.',
     }
   }
-  const what = link.kind === 'AMENDMENT' ? 'change to the lease' : 'lease'
+  const what = signedThing(link.kind)
   if (link.envelopeStatus === 'VOIDED') {
     return {
       error: `This ${what} was withdrawn. Contact your property manager for a new link.`,
@@ -155,10 +167,21 @@ export async function signLeaseDocument(
     // R-090: an amendment's completion applies a change of occupants and
     // touches nothing else; a lease's activates the tenancy. The two share
     // the ceremony above and nothing below it.
-    if (signer.envelope.kind === 'AMENDMENT') {
-      await completePartyChangeEnvelope(signer.envelopeId)
-    } else {
-      await completeEnvelope(signer.envelopeId)
+    // THREE KINDS, THREE BRANCHES, AND NO `else` (R-203). This used to be
+    // "amendment or lease", with `completeEnvelope`'s own `kind !== 'LEASE'`
+    // guard as the belt to that pair of braces. A third kind falling through
+    // that `else` would have hit the guard and returned silently: every
+    // signer signed, and nothing was ever archived. The switch is what makes
+    // a fourth kind a compile-time question instead of a silent one.
+    switch (signer.envelope.kind) {
+      case 'AMENDMENT':
+        await completePartyChangeEnvelope(signer.envelopeId)
+        break
+      case 'PAYMENT_PLAN':
+        await completePaymentPlanEnvelope(signer.envelopeId)
+        break
+      default:
+        await completeEnvelope(signer.envelopeId)
     }
   } else {
     // Some, but not all, have signed - moves off SENT so the lease page
@@ -176,7 +199,9 @@ export async function signLeaseDocument(
     notice:
       signer.envelope.kind === 'AMENDMENT'
         ? 'Signed. Everybody has now signed, and the change to the lease is in effect.'
-        : 'Signed. Every signer has now completed, and the lease is active.',
+        : signer.envelope.kind === 'PAYMENT_PLAN'
+          ? 'Signed. Everybody has now signed the repayment plan.'
+          : 'Signed. Every signer has now completed, and the lease is active.',
   }
 }
 
@@ -248,42 +273,13 @@ async function completeEnvelope(envelopeId: string): Promise<void> {
     return
   }
 
-  const draftBytes = await storage.get(envelope.draftDocument.storageKey)
-
-  const cert = await esignAdapter.completionCertificate({
+  const archived = await archiveExecutedDocument({
     providerId: envelope.providerId,
-    documentSha256: envelope.draftDocument.sha256 ?? '',
-    signers: envelope.signers.map((s) => ({
-      name: s.signedName ?? s.name,
-      role: s.role,
-      order: s.order,
-      signedAt: s.signedAt ?? new Date(),
-      signedName: s.signedName ?? s.name,
-      signedIp: s.signedIp,
-    })),
+    propertyId: envelope.lease.propertyId,
+    fileName: `lease-executed-${envelope.leaseId}.pdf`,
+    draftDocument: envelope.draftDocument,
+    signers: envelope.signers,
   })
-
-  const certBlocks: DocumentBlock[] = [
-    { kind: 'heading', text: 'Certificate of Completion' },
-    { kind: 'meta', text: `Envelope: ${envelope.providerId}` },
-    { kind: 'meta', text: `Document hash (SHA-256): ${envelope.draftDocument.sha256 ?? 'unknown'}` },
-    { kind: 'meta', text: `Generated: ${cert.generatedAt.toISOString()}` },
-    ...cert.certificateText.split('\n').map((line) => ({ kind: 'mono' as const, text: line })),
-    {
-      kind: 'footer',
-      text: 'Generated by a simulated e-signature provider (D-7) - not a real vendor certificate.',
-    },
-  ]
-  const certBytes = Buffer.from(await renderBlocksPdf(certBlocks, { title: 'Certificate of Completion' }))
-
-  const { bytes: executedBytes } = await appendPdfs(draftBytes, [
-    { label: 'Certificate of Completion', bytes: certBytes },
-  ])
-  const executedBuffer = Buffer.from(executedBytes)
-  const executedSha256 = createHash('sha256').update(executedBuffer).digest('hex')
-  const fileName = `lease-executed-${envelope.leaseId}.pdf`
-  const storageKey = generateStorageKey(envelope.lease.propertyId, fileName)
-  await storage.put(storageKey, executedBuffer, 'application/pdf')
 
   const isRenewal = envelope.lease.renewedFromLeaseId != null
   // A renewal successor does not activate the moment it is signed - two live
@@ -303,11 +299,11 @@ async function completeEnvelope(envelopeId: string): Promise<void> {
         propertyId: envelope.lease.propertyId,
         leaseId: envelope.leaseId,
         type: 'LEASE',
-        fileName,
+        fileName: archived.fileName,
         contentType: 'application/pdf',
-        sizeBytes: executedBuffer.byteLength,
-        storageKey,
-        sha256: executedSha256,
+        sizeBytes: archived.sizeBytes,
+        storageKey: archived.storageKey,
+        sha256: archived.sha256,
       },
     })
     await tx.leaseEnvelope.update({
@@ -321,7 +317,7 @@ async function completeEnvelope(envelopeId: string): Promise<void> {
         entityType: 'LeaseEnvelope',
         entityId: envelope.id,
         propertyId: envelope.lease.propertyId,
-        after: { executedDocumentId: document.id, sha256: executedSha256, signerCount: envelope.signers.length },
+        after: { executedDocumentId: document.id, sha256: archived.sha256, signerCount: envelope.signers.length },
       },
       tx,
     )

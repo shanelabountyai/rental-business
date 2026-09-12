@@ -23,6 +23,28 @@ import { esignAdapter } from '@/lib/esign/provider.ts'
 
 const PURPOSE = 'LEASE_SIGN' as const
 
+export type SignedThingKind = 'LEASE' | 'AMENDMENT' | 'PAYMENT_PLAN'
+
+/**
+ * What the signer is being asked to put their name to (R-090, R-203).
+ *
+ * Reads into a sentence as "this {thing} was withdrawn", "you already signed
+ * this {thing}", "Sign this {thing}" - so every surface says the same words
+ * about the same envelope. Lives here rather than in `esign-actions.ts`
+ * because that file is `'use server'` and may export only async functions;
+ * a sync export there fails `npm run build` and nothing earlier.
+ */
+export function signedThing(kind: SignedThingKind): string {
+  switch (kind) {
+    case 'AMENDMENT':
+      return 'change to the lease'
+    case 'PAYMENT_PLAN':
+      return 'repayment plan'
+    default:
+      return 'lease'
+  }
+}
+
 export type SignerLinkResult =
   | {
       ok: true
@@ -35,7 +57,7 @@ export type SignerLinkResult =
       /// page and the sign action both word themselves from this - telling
       /// a departing roommate "your lease is ready to sign" would be
       /// actively wrong about what they are agreeing to.
-      kind: 'LEASE' | 'AMENDMENT'
+      kind: SignedThingKind
       status: 'PENDING' | 'SENT' | 'VIEWED' | 'SIGNED' | 'DECLINED'
       envelopeStatus: 'DRAFT' | 'SENT' | 'PARTIALLY_SIGNED' | 'COMPLETED' | 'VOIDED'
       propertyName: string

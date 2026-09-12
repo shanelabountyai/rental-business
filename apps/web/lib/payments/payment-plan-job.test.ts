@@ -64,6 +64,9 @@ afterEach(async () => {
   await prisma.task.deleteMany({ where: { propertyId } })
   await prisma.leaseHold.deleteMany({ where: { propertyId } })
   await prisma.paymentPlan.deleteMany({ where: { propertyId } })
+  // AFTER the plans: `PaymentPlan.envelopeId` is `onDelete: Restrict`, so an
+  // envelope a plan still points at refuses to go (R-203).
+  await prisma.leaseEnvelope.deleteMany({ where: { lease: { propertyId } } })
   await prisma.jobRun.deleteMany({ where: { propertyId } })
   // LedgerEntry is append-only by trigger, so the leases and units it points
   // at stay. They are retired in afterAll with the property.
@@ -132,6 +135,29 @@ async function seedPlan() {
     },
   })
   return { leaseId: lease.id, planId: plan.id, holdId: hold.id }
+}
+
+/// R-203: an e-sign envelope on the plan, in whatever state the caller
+/// names. No draft Document - nothing under test reads the bytes, and a real
+/// one would have to be cleaned up ahead of the envelope that points at it.
+async function seedPlanEnvelope(
+  leaseId: string,
+  planId: string,
+  status: 'SENT' | 'COMPLETED',
+) {
+  const envelope = await prisma.leaseEnvelope.create({
+    data: {
+      leaseId,
+      kind: 'PAYMENT_PLAN',
+      status,
+      addendumKeys: [],
+      providerId: `sim-${randomUUID()}`,
+      sentAt: new Date(),
+      completedAt: status === 'COMPLETED' ? new Date() : null,
+    },
+  })
+  await prisma.paymentPlan.update({ where: { id: planId }, data: { envelopeId: envelope.id } })
+  return envelope.id
 }
 
 async function pay(leaseId: string, amountCents: number, on: string) {
@@ -295,6 +321,46 @@ describe('the payment-plan sweep', () => {
       where: { subjectId: leaseId, type: 'payment_plan.completed' },
     })
     expect(task.priority).toBe('ROUTINE')
+  })
+
+  it('withdraws a signing request still out when the plan breaks', async () => {
+    const { leaseId, planId } = await seedPlan()
+    const envelopeId = await seedPlanEnvelope(leaseId, planId, 'SENT')
+    await runAt('2026-03-05T13:00:00Z')
+
+    expect((await prisma.paymentPlan.findUniqueOrThrow({ where: { id: planId } })).status).toBe(
+      'BROKEN',
+    )
+    // Asking somebody to sign an arrangement that no longer exists is the
+    // same defect as leaving the hold on, in the other half of the
+    // machinery.
+    const envelope = await prisma.leaseEnvelope.findUniqueOrThrow({ where: { id: envelopeId } })
+    expect(envelope.status).toBe('VOIDED')
+    expect(envelope.voidedAt).not.toBeNull()
+    // And the fact is on the row somebody actually reads, rather than in a
+    // second audit entry that would have to be joined to this one.
+    const entry = await prisma.auditLog.findFirstOrThrow({
+      where: { action: 'lease.payment_plan_broken', entityId: leaseId },
+      orderBy: { occurredAt: 'desc' },
+    })
+    expect((entry.after as { voidedEnvelopeId?: string }).voidedEnvelopeId).toBe(envelopeId)
+  })
+
+  it('never voids an agreement the tenant already signed', async () => {
+    const { leaseId, planId } = await seedPlan()
+    const envelopeId = await seedPlanEnvelope(leaseId, planId, 'COMPLETED')
+    await runAt('2026-03-05T13:00:00Z')
+
+    expect((await prisma.paymentPlan.findUniqueOrThrow({ where: { id: planId } })).status).toBe(
+      'BROKEN',
+    )
+    // THE PLAN BROKE AND THE EVIDENCE STAYS. A broken plan is argued from
+    // the terms the tenant put their name to, so this is exactly the moment
+    // the executed agreement becomes the most valuable paper on the tenancy
+    // - voiding it here would destroy it on the day it starts to matter.
+    const envelope = await prisma.leaseEnvelope.findUniqueOrThrow({ where: { id: envelopeId } })
+    expect(envelope.status).toBe('COMPLETED')
+    expect(envelope.voidedAt).toBeNull()
   })
 
   it('breaks a plan exactly once however many days the sweep keeps running', async () => {

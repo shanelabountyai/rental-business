@@ -2922,6 +2922,16 @@ model PaymentPlan {
 
   completedAt DateTime?
 
+  /// R-203: the e-sign envelope for this plan, if the operator chose to ask
+  /// for a signature. NULLABLE AND IT MUST STAY NULLABLE - a plan agreed on
+  /// the phone still pauses the chase the same day (D-214); the signature is
+  /// the operator's choice per plan and never a condition of the hold.
+  ///
+  /// On THIS side rather than a `paymentPlanId` on LeaseEnvelope, the same
+  /// call `LeasePartyChange.envelopeId` already makes: the owning record
+  /// points at the envelope it raised.
+  envelopeId String? @unique
+
   cancelledAt        DateTime?
   cancelledByStaffId String?
   /// Required by the application whenever `cancelledAt` is set — cancelling
@@ -2931,6 +2941,7 @@ model PaymentPlan {
 
   lease       Lease                   @relation(fields: [leaseId], references: [id])
   property    Property                @relation(fields: [propertyId], references: [id])
+  envelope    LeaseEnvelope?          @relation(fields: [envelopeId], references: [id], onDelete: Restrict)
   createdBy   StaffUser               @relation("PaymentPlanCreatedBy", fields: [createdByStaffId], references: [id], onDelete: Restrict)
   cancelledBy StaffUser?              @relation("PaymentPlanCancelledBy", fields: [cancelledByStaffId], references: [id], onDelete: Restrict)
   instalments PaymentPlanInstalment[]
@@ -3503,9 +3514,22 @@ enum LeaseSignerRole {
 /// `renewal-cutover-job.ts`'s `envelopes: { some: { status: 'COMPLETED' } }`,
 /// which a completed amendment on the predecessor's successor would have
 /// satisfied.
+/// R-203 adds PAYMENT_PLAN: a repayment agreement (R-175) the tenants are
+/// asked to put their names to. It reuses the whole ceremony - generated
+/// PDF, per-signer links, typed-name signature, completion certificate -
+/// and, like AMENDMENT, none of the lease-activation consequences.
+///
+/// THE FIVE QUERIES R-090's comment names were re-checked and all five
+/// already say `kind: 'LEASE'` (renewal-cutover-job, leases/actions'
+/// out-for-signature guard, evictions/packet, leases/queries,
+/// esign-staff-actions), so none needed a second edit. The one that DID is
+/// `esign-actions.ts`: its completion branch was `AMENDMENT` or else, and
+/// `completeEnvelope`'s own `kind !== 'LEASE'` belt would have swallowed a
+/// completed plan silently. It now branches on all three.
 enum LeaseEnvelopeKind {
   LEASE
   AMENDMENT
+  PAYMENT_PLAN
 }
 
 model LeaseEnvelope {
@@ -3553,6 +3577,7 @@ model LeaseEnvelope {
   lease            Lease             @relation(fields: [leaseId], references: [id], onDelete: Restrict)
   template         DocumentTemplate? @relation(fields: [templateId], references: [id], onDelete: Restrict)
   partyChange      LeasePartyChange?
+  paymentPlan      PaymentPlan?
   draftDocument    Document?         @relation("LeaseEnvelopeDraftDocument", fields: [draftDocumentId], references: [id], onDelete: Restrict)
   executedDocument Document?         @relation("LeaseEnvelopeExecutedDocument", fields: [executedDocumentId], references: [id], onDelete: Restrict)
   signers          LeaseSigner[]

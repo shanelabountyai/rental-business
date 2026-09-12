@@ -10,6 +10,8 @@ import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
 import { authUrl } from '@/lib/auth/delivery.ts'
 import { dispatchPendingNotifications, notify } from '@/lib/notifications/send.ts'
 import { chaseParties } from './chase-parties.ts'
+import { voidPlanEnvelope } from './plan-envelope.ts'
+import { sendPlanForSignature } from './plan-esign.ts'
 
 // Agreeing and cancelling a repayment plan (PAY-08, PAY-12; R-175).
 //
@@ -278,6 +280,31 @@ async function sendPlanSchedule(
   ].join('')
 }
 
+/**
+ * Asks the tenants to e-sign the plan that is already in force (R-203).
+ *
+ * ITS OWN PRESS, NEVER FOLDED INTO `agreePaymentPlan`. The signature is the
+ * operator's choice per plan and never a condition of the hold (D-214) - a
+ * plan agreed on the phone must pause the chase the same day, whether or not
+ * anybody is ever asked to sign paper for it.
+ *
+ * Thin on purpose: the permission check and every write live in
+ * `plan-esign.ts`, which is a plain module, because this file is
+ * `'use server'` and every export in it is a public endpoint.
+ */
+export async function sendPaymentPlanForSignature(
+  _previous: PlanFormState,
+  formData: FormData,
+): Promise<PlanFormState> {
+  const planId = String(formData.get('planId') ?? '')
+  if (!planId) return { error: 'No plan named.' }
+
+  const result = await sendPlanForSignature(planId)
+  const leaseId = String(formData.get('leaseId') ?? '')
+  if (leaseId) revalidatePath(`/leases/${leaseId}`)
+  return result
+}
+
 export async function cancelPaymentPlan(
   _previous: PlanFormState,
   formData: FormData,
@@ -325,15 +352,32 @@ export async function cancelPaymentPlan(
     }
   })
 
+  // R-203: an agreement still out for signature goes with the plan. Asking
+  // somebody to sign an arrangement that no longer exists is the same defect
+  // as leaving the hold on, in the other half of the machinery. A COMPLETED
+  // envelope is untouched - see `voidPlanEnvelope`'s own header.
+  //
+  // AFTER the transaction, because it calls the provider, and its outcome is
+  // recorded in the cancellation's own audit row rather than a second one.
+  const voidedEnvelopeId = await voidPlanEnvelope(planId, `Payment plan cancelled — ${reason}`)
+
   await audit({
     action: 'lease.payment_plan_cancelled',
     entityType: 'Lease',
     entityId: plan.leaseId,
     propertyId: plan.propertyId,
     reason,
-    after: { planId: plan.id, holdLifted: plan.hold != null && plan.hold.liftedAt === null },
+    after: {
+      planId: plan.id,
+      holdLifted: plan.hold != null && plan.hold.liftedAt === null,
+      voidedEnvelopeId,
+    },
   })
 
   revalidatePath(`/leases/${plan.leaseId}`)
-  return { notice: 'Plan cancelled. The chase and the late-fee meter resume from now.' }
+  return {
+    notice: voidedEnvelopeId
+      ? 'Plan cancelled and the signing request withdrawn. The chase and the late-fee meter resume from now.'
+      : 'Plan cancelled. The chase and the late-fee meter resume from now.',
+  }
 }

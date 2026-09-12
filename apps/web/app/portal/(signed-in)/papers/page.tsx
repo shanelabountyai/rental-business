@@ -32,6 +32,11 @@ const TYPE_WORDS: Record<string, string> = {
   /// R-020: safety information about the tenant's own home, visible under
   /// tenantCanSeeDocument's one unit-scoped exception.
   SHUTOFF_PHOTO: 'Where your shutoffs are',
+  /// R-203: the repayment agreement they signed. The draft is on the lease
+  /// too, so both appear here - which is correct: "what were we sent to
+  /// sign" and "what did we sign" are the two questions, and the file names
+  /// say which is which.
+  PAYMENT_PLAN: 'Your repayment plan',
   OTHER: 'A document',
 }
 

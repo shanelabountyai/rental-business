@@ -11835,3 +11835,104 @@ this item renders no control and no user-supplied value (D-194, D-197).
 run, not copied forward from R-201's entry. The `record the SHA` commit
 (`85a46b4`) and the handoff commit after it are docs-only, so `paths-ignore`
 gives them no run and the `ignoreCommand` no deployment; both are expected.
+
+## R-203 — a tenant can e-sign the repayment plan they were sent
+
+**Commit:** _(recorded in the follow-up commit below)_
+
+**What it built.** The e-sign half of the payment plan (D-214). `LeaseEnvelopeKind`
+gains a third value, `PAYMENT_PLAN`, and `PaymentPlan.envelopeId` points at the
+envelope it raised — the same direction `LeasePartyChange.envelopeId` already
+points. `packages/core/payments/plan-document.ts` renders the agreement itself:
+the arrears as snapshotted, the schedule as an aligned table with a computed
+total, the operator's own words quoted, and the four clauses a broken plan is
+argued over — the rent is still due, the pause while it is kept, what happens
+after `PLAN_GRACE_DAYS`, and that this waives nothing. `plan-esign.ts` generates
+it, archives the unsigned draft, builds the signer list and sends each tenant
+their own `/sign/[token]` link through R-030; `plan-envelope.ts` finishes the
+envelope when everybody has signed (draft bytes + completion certificate,
+archived as a `PAYMENT_PLAN` Document on the lease, so it appears in the
+tenant's own papers with no second visibility rule) and withdraws one still out
+when the plan is cancelled or breaks. The panel grew a second press and a line
+saying where the signature got to; `payment_plan.sign_invite` is its own
+notification template on the `lease_signature` category.
+
+**What it decided.** Three things a later session must not silently reverse.
+
+- **D-218: tenants sign, guarantors do not.** R-199 sends the schedule to every
+  active guarantor and the obvious move was to have the same list sign it. A
+  guarantor's signature on a repayment agreement is an argument that they
+  reaffirmed the debt on new terms — a legal consequence nobody asked for,
+  arriving by default on every plan. `orderedSigners` already takes guarantors;
+  this passes `[]`.
+- **D-219: an envelope already signed is never voided.** The row says "voided
+  when the plan is cancelled or breaks", and read literally that destroys the
+  executed agreement at the exact moment it starts to matter. `voidPlanEnvelope`
+  refuses `COMPLETED` and `VOIDED`, and writes no audit row of its own — the
+  void is a consequence, not a decision, so its outcome lands in
+  `lease.payment_plan_cancelled` / `lease.payment_plan_broken` as
+  `after.voidedEnvelopeId` rather than in a second entry somebody has to join.
+  That also keeps an audit actor from being plumbed through a function the
+  nightly sweep calls.
+- **D-220: the signature is evidence, never an event in the plan's lifecycle.**
+  `completePaymentPlanEnvelope` archives the PDF and touches nothing else — no
+  hold, no plan status, no ledger, no Stripe. Agreeing a plan and sending it for
+  signature are two separate presses, because folding them together would make
+  the pause wait on a tenant's inbox, which is R-175's own harm with the sign
+  reversed. The e2e asserts the hold exists and is unlifted **before** anybody
+  is asked to sign, so a change that made the pause wait on a signature goes red
+  on that line first.
+
+**A real defect, found by the enum rule and proved by reverting it.**
+CLAUDE.md's "adding a value to a status enum is never one edit" was worked, and
+the five queries R-090's comment names were all already scoped to
+`kind: 'LEASE'`. The one that was not safe is `esign-actions.ts`: its completion
+branch was `AMENDMENT` or `else`, and `completeEnvelope`'s own
+`kind !== 'LEASE'` belt would have swallowed a completed plan in silence — every
+signer signs, nothing is ever archived, and no error anywhere. It is a `switch`
+on all three kinds now. **Measured, not asserted:** with the switch reverted to
+the old pair, `payment-plans.spec.ts`'s archive test is red in all four runs
+(both projects, both attempts), reading `SENT` where `COMPLETED` was expected —
+the envelope never left the state the last signature found it in.
+
+**One duplicate removed rather than tripled.** Building the executed PDF —
+fetch the draft bytes, ask the provider for its completion certificate, render
+that to its own PDF, append, hash, store — existed twice, written for a lease
+and copied verbatim for an amendment, and this item would have made it three.
+It is now `lib/leases/executed-pdf.ts`, called by all three; the copies differ
+only in the file name, which is the parameter.
+
+**What it left behind.**
+
+- **No staff withdraw for a signing request.** A plan out for signature refuses
+  a second send and says so; ending the plan and agreeing a new one is the
+  stated path, and it voids the envelope on the way out. Nobody owns a
+  withdraw-and-resend, and no operator has asked for one — re-sending the same
+  unsigned paper unchanged is not a need anybody has stated.
+- **The demo seed creates no payment plan at all**, so a D-28 walk can see
+  neither this nor R-199. That gap predates this item and closing it would mean
+  seeding a plan, its hold, an envelope and real PDF bytes into storage.
+- **A declined signature does nothing.** `LeaseSignerStatus.DECLINED` exists and
+  no surface in this product writes it, for a plan or for anything else — the
+  sign page offers sign or leave, exactly as R-063 built it.
+- **Nothing tells staff that a sent agreement has gone unsigned for weeks.** The
+  panel says "out for signature"; there is no chase, no Task, and deliberately
+  so — the plan is in force either way, so an unsigned one is not an
+  outstanding task and must not be dressed up as one (D-220).
+- **`lib/payments/plans.ts`'s `PLAN_SELECT` now joins the envelope and its
+  signers for every caller**, including `activePlansByLease`, which the rent
+  roll and the nightly sweeps use. One plan per tenancy and a handful of signers
+  each, so it was not worth a second query shape — but it is a join those
+  callers did not previously pay for.
+
+**The gate.** `lint` 0 errors, `typecheck` clean, `npm test` **3172 passed | 4
+skipped** (up 6: four in `plan-document.test.ts`, two in
+`payment-plan-job.test.ts`), `npm run build` clean, `check:ship-deps` clean, and
+`npm run db:ci` green — every migration applied to a throwaway Postgres from
+scratch, seeded, `prisma migrate diff --exit-code` reporting no drift. e2e was
+run on the specs this item touches rather than the full sweep (CLAUDE.md's own
+division): `payment-plans` 16/16 and 8/8 on `mobile-chrome`; `lease-esign`,
+`lease-party-change` and `documents` 26/26; `portal`, `notifications` and
+`notice-to-vacate` 46/46. Reconciled against `--list` in each case, nothing
+skipped, nothing flaky. `mobile-chrome` was run because the panel gained a form
+control and renders a user-supplied value, the signer's own name (D-194, D-197).

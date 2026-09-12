@@ -300,7 +300,9 @@ test('swaps a roommate on the same lease, with the deposit and the ledger untouc
       ).toBeVisible()
       await signerPage.getByLabel('Type your full legal name').fill(signer.name)
       await signerPage.getByRole('checkbox').check()
-      await signerPage.getByRole('button', { name: 'Sign this lease' }).click()
+      // R-203 made this label read the envelope's kind. An amendment is not
+      // a lease, and the button no longer says it is.
+      await signerPage.getByRole('button', { name: 'Sign this change to the lease' }).click()
       await expect(
         signerPage.getByText(
           index === signers.length - 1

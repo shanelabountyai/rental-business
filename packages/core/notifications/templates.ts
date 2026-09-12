@@ -1700,6 +1700,75 @@ export const leaseAmendmentSignInviteTemplate: NotificationTemplate<LeaseAmendme
     },
   }
 
+/// Context for `payment_plan.sign_invite` (PAY-08/LEASE-06, R-203) - one
+/// signer's own link to the repayment agreement they were sent.
+export interface PaymentPlanSignInviteContext {
+  name: string
+  addressLine1: string
+  /// The total the plan repays and how many payments it is split into, so
+  /// the recipient can tell a legitimate request from a phishing attempt
+  /// before they click. Same reasoning `LeaseAmendmentSignInviteContext.
+  /// summary` states for an amendment.
+  total: string
+  instalmentCount: number
+  firstDueOn: BusinessDate
+  url: string
+}
+
+/**
+ * "Here is the repayment plan we agreed - please sign it" (PAY-08, R-203).
+ *
+ * ITS OWN TEMPLATE RATHER THAN `lease.sign_invite`, for the same reason the
+ * amendment has one: telling somebody "your lease is ready to sign" when the
+ * paper in front of them is a repayment schedule is wrong about the thing
+ * they are putting their name to. It is worse here than for an amendment,
+ * because the agreement's own text says it changes nothing about the lease.
+ *
+ * `lease_signature`, NOT `payment_plan`. The category decides the channels
+ * and whether it can be muted, and this is a signing link: EMAIL/SMS only
+ * (it goes to a token page, not the portal) and locked, because a tenant who
+ * muted it would leave nobody able to reach them to finish signing. R-199's
+ * schedule keeps `payment_plan`; that one is a record, this one is a door.
+ *
+ * SAYS THE SIGNATURE IS NOT WHAT STARTS THE PLAN. The pause on the chase is
+ * already on (D-214) - a tenant who reads this as "nothing protects me until
+ * I sign" would be told the opposite of what is true, and might reasonably
+ * panic about a chase that is not coming.
+ */
+export const paymentPlanSignInviteTemplate: NotificationTemplate<PaymentPlanSignInviteContext> = {
+  key: 'payment_plan.sign_invite',
+  category: 'lease_signature',
+  channels: ['SMS', 'EMAIL'],
+  render: (context, channel) => {
+    const payments =
+      context.instalmentCount === 1 ? '1 payment' : `${context.instalmentCount} payments`
+    if (channel === 'SMS') {
+      return {
+        body: [
+          `The repayment plan for ${context.addressLine1} (${context.total} in ${payments}, first due ${friendlyBusinessDate(context.firstDueOn)}) is ready for your signature:`,
+          context.url,
+        ].join('\n'),
+      }
+    }
+    return {
+      subject: `Sign your repayment plan — ${context.addressLine1}`,
+      body: [
+        `Hi ${context.name},`,
+        '',
+        `The repayment plan for ${context.addressLine1} is ready for your signature. It covers ${context.total}, paid in ${payments}, with the first due ${friendlyBusinessDate(context.firstDueOn)}.`,
+        '',
+        'The plan is already in force — we are not sending overdue reminders or adding late fees on these arrears while it is kept, whether or not you have signed yet. Signing puts on the record that these are the terms you agreed.',
+        '',
+        'Read the agreement in full and sign here:',
+        '',
+        context.url,
+        '',
+        'If this is not what was agreed, tell us straight away rather than signing.',
+      ].join('\n'),
+    }
+  },
+}
+
 /// Context for `application.coapplicant_invite` (LEASE-03, R-059) - anyone
 /// the lead applicant adds to the household after being invited.
 export interface CoApplicantInviteContext {
@@ -2191,6 +2260,8 @@ export const TEMPLATES: Readonly<Record<string, NotificationTemplate<never>>> = 
     paymentReceiptTemplate as unknown as NotificationTemplate<never>,
   [paymentPlanAgreedTemplate.key]:
     paymentPlanAgreedTemplate as unknown as NotificationTemplate<never>,
+  [paymentPlanSignInviteTemplate.key]:
+    paymentPlanSignInviteTemplate as unknown as NotificationTemplate<never>,
   [paymentReturnedTemplate.key]:
     paymentReturnedTemplate as unknown as NotificationTemplate<never>,
   [chargebackPostedTemplate.key]:

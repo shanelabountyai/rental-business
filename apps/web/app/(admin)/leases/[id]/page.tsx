@@ -69,7 +69,11 @@ import { holdsForLease } from '@/lib/holds/queries.ts'
 import { ChasePanel } from '@/components/leases/chase-panel.tsx'
 import { chaseHistoryForLease } from '@/lib/payments/chase-history.ts'
 import { PaymentPlanPanel } from '@/components/leases/payment-plan-panel.tsx'
-import { agreePaymentPlan, cancelPaymentPlan } from '@/lib/payments/plan-actions.ts'
+import {
+  agreePaymentPlan,
+  cancelPaymentPlan,
+  sendPaymentPlanForSignature,
+} from '@/lib/payments/plan-actions.ts'
 import { plansForLease } from '@/lib/payments/plans.ts'
 import { recordScraLookup, recordScraTermination } from '@/lib/scra/actions.ts'
 import { lookupsForLease } from '@/lib/scra/queries.ts'
@@ -609,9 +613,15 @@ export default async function LeaseDetailPage({
           agreedOn: friendlyDate(plan.createdAt, lease.property.timezone),
           agreedByName: plan.createdByName,
           cancelReason: plan.cancelReason,
+          // R-203. Null when nobody has been asked to sign, which is the
+          // ordinary case and reads as one.
+          signature: plan.signature
+            ? { ...plan.signature, signerCount: plan.signature.signerNames.length }
+            : null,
         }))}
         agreeAction={agreePaymentPlan}
         cancelAction={cancelPaymentPlan}
+        sendAction={sendPaymentPlanForSignature}
       />
 
       {/* AFTER the plan and BEFORE the holds, for the same reason the plan

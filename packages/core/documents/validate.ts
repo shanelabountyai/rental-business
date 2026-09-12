@@ -144,6 +144,12 @@ export const DOCUMENT_TYPES = [
   /// archived when the transfer was recorded. Entity-keyed, like TAX_PACKET,
   /// because the shared account's money belongs to no one house.
   'SETTLEMENT_REPORT',
+  /// R-203: the repayment agreement a tenant e-signs (PAY-08). Distinct from
+  /// LEASE_AMENDMENT, which changes who is a PARTY to the lease - this
+  /// changes nothing about the lease at all, and says so in as many words.
+  /// Its retention follows the lease's, because a broken plan is argued from
+  /// it years later.
+  'PAYMENT_PLAN',
   'OTHER',
 ] as const
 export type DocumentTypeValue = (typeof DOCUMENT_TYPES)[number]
@@ -190,6 +196,7 @@ export const DOCUMENT_TYPE_LABELS: Record<DocumentTypeValue, string> = {
   CONDITION_BASELINE: 'Condition as found',
   DEPOSIT_SLIP: 'Deposit slip',
   SETTLEMENT_REPORT: 'Settlement report',
+  PAYMENT_PLAN: 'Repayment agreement',
   OTHER: 'Other',
 }
 
@@ -217,6 +224,11 @@ export const UNUPLOADABLE_DOCUMENT_TYPES: readonly DocumentTypeValue[] = [
   // Both minted by the product with their own audit row, like the packets.
   'DEPOSIT_SLIP',
   'SETTLEMENT_REPORT',
+  // R-203: minted by the product AND lease-scoped, which is both reasons at
+  // once. This uploader carries a property and a unit and no lease, so a
+  // hand-uploaded one would attach to no tenancy and no plan - invisible to
+  // the panel that is the only thing which ever reads it.
+  'PAYMENT_PLAN',
 ]
 
 export const UPLOADABLE_DOCUMENT_TYPES: readonly DocumentTypeValue[] = DOCUMENT_TYPES.filter(

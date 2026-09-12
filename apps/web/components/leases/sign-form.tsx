@@ -15,8 +15,14 @@ import type { SignFormState } from '@/lib/leases/esign-actions.ts'
 // real vendor's hosted flow exists to copy.
 
 export function SignForm({
+  what,
   action,
 }: {
+  /// What is being signed, in the words `signedThing()` chose - "lease",
+  /// "change to the lease", "repayment plan" (R-203). Every sentence on this
+  /// form reads it, so a repayment agreement can never present itself as a
+  /// lease to somebody about to type their legal name on it.
+  what: string
   action: (state: SignFormState, formData: FormData) => Promise<SignFormState>
 }) {
   const [state, formAction] = useActionState<SignFormState, FormData>(action, {})
@@ -29,15 +35,15 @@ export function SignForm({
         label="Type your full legal name"
         name="signedName"
         required
-        hint="This is how your name will appear on the signed lease."
+        hint={`This is how your name will appear on the signed ${what}.`}
       />
 
       <CheckboxField
-        label="I agree that typing my name above and submitting this form is my electronic signature on this lease."
+        label={`I agree that typing my name above and submitting this form is my electronic signature on this ${what}.`}
         name="agree"
       />
 
-      <SubmitButton label="Sign this lease" />
+      <SubmitButton label={`Sign this ${what}`} />
     </form>
   )
 }

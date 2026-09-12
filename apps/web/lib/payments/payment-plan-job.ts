@@ -10,6 +10,7 @@ import {
 import { prisma } from '@rental/db'
 import { auditAsSystem } from '@/lib/audit/system.ts'
 import { SCHEDULED_JOBS } from '@/lib/jobs/runner.ts'
+import { voidPlanEnvelope } from '@/lib/payments/plan-envelope.ts'
 import { paidTowardPlan } from '@/lib/payments/plans.ts'
 import { createTask } from '@/lib/tasks/create.ts'
 
@@ -123,6 +124,16 @@ SCHEDULED_JOBS.push({
         }
       })
 
+      // R-203: a BROKEN plan withdraws an agreement still out for signature.
+      // A COMPLETED one does not - the tenant kept to it, and an executed
+      // agreement is never voided in any case (see `voidPlanEnvelope`).
+      //
+      // Outside the transaction above, because it calls the provider; its
+      // outcome lands in this plan's own audit row below rather than a
+      // second entry.
+      const voidedEnvelopeId =
+        ended === 'BROKEN' ? await voidPlanEnvelope(plan.id, liftReason) : null
+
       await createTask(prisma, {
         propertyId,
         type: ended === 'BROKEN' ? 'payment_plan.broken' : 'payment_plan.completed',
@@ -153,6 +164,7 @@ SCHEDULED_JOBS.push({
           dueToDateCents: progress.dueToDateCents,
           shortfallCents: progress.shortfallCents,
           missedDueOn: progress.missedDueOn,
+          voidedEnvelopeId,
         },
       })
 
