@@ -3,11 +3,8 @@
 ## R-203 is done — the payment plan's e-sign half (D-214, D-218/219/220).
 
 Code `6770095`, SHA commit `7499b45`.
-**CI run `34712140082` — read the result on the run yourself before quoting
-it.** It was still in flight when this file was written; the session that
-wrote it armed `gh run watch` and recorded the outcome in `docs/PROGRESS.md`.
-If PROGRESS does not state a colour for that run, **nobody read it** — three
-seconds of `gh run list --limit 5` settles it.
+**CI run `34712140082` is GREEN on the code commit** — both jobs, read on the
+run rather than assumed.
 
 **Do not copy a CI line forward to your own item.** `gh run list --commit`
 only matches a FULL sha and returns EMPTY for a short one, with no error;
