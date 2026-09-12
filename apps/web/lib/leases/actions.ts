@@ -18,7 +18,7 @@ import {
   validateRetaliationAck,
 } from '@rental/core/leases'
 import { validateDepositAmount } from '@rental/core/ledger'
-import { businessDate } from '@rental/core/scheduling'
+import { UNREVIEWED_DAY_COUNT, businessDate, utcToBusinessDate } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
@@ -738,10 +738,21 @@ export async function recordLeaseNotice(
     }
   }
 
+  // R-200: the check counts CALENDAR DAYS the way the jurisdiction counts
+  // them, so both ends are read into the property's own calendar first.
+  // `givenOn` is two different kinds of value depending on the branch above -
+  // a `@db.Date`-shaped UTC midnight when staff typed a date, a real instant
+  // when they did not - and those need different readers (D-3).
+  const givenOnDay = givenOnRaw
+    ? utcToBusinessDate(givenOn)
+    : businessDate(givenOn, lease.property.timezone)
+  const effectiveOnDay = utcToBusinessDate(effectiveOn)
+
   const noticePeriod = noticePeriodCheck({
-    givenOn,
-    effectiveOn,
+    givenOn: givenOnDay,
+    effectiveOn: effectiveOnDay,
     noticeToVacateDays: rule?.noticeToVacateDays ?? null,
+    dayCount: rule ?? UNREVIEWED_DAY_COUNT,
   })
   if (noticePeriod.needsOverride) {
     const violations = validateNoticePeriodOverride(noticePeriodReason)
@@ -839,8 +850,7 @@ export async function recordLeaseNotice(
             tenantName: `${primaryTenant.tenant.firstName} ${primaryTenant.tenant.lastName}`,
             addressLine1: lease.property.addressLine1,
             unitName,
-            timezone: lease.property.timezone,
-            effectiveOn,
+            effectiveOn: effectiveOnDay,
             justCauseStatement,
             noticeToVacateDays: rule?.noticeToVacateDays ?? null,
           }),

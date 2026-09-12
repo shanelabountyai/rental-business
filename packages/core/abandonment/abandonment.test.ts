@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import type { DayCountRule } from '../scheduling/deadline.ts'
 import {
   ABANDONMENT_OUTCOMES,
   assessEvidence,
@@ -17,9 +18,14 @@ const attempt = (method: ContactMethod, outcome: ContactOutcome = 'NO_ANSWER') =
 describe('assessEvidence', () => {
   const solid = {
     attempts: [attempt('PHONE_CALL'), attempt('TEXT'), attempt('DOOR_KNOCK')],
-    daysSinceContact: 21,
+    // 21 days, as a pair of dates rather than a count (R-200): the
+    // presumption is a statutory clock and has to be counted on the
+    // jurisdiction's basis.
+    lastContactOn: '2026-08-01',
+    today: '2026-08-22',
     presumedAfterDays: 14,
     rentUnpaid: true,
+    dayCount: { dayCountBasis: 'CALENDAR', observedHolidays: [] } as DayCountRule,
   }
 
   it('reports a solid case with no gaps', () => {
@@ -74,14 +80,50 @@ describe('assessEvidence', () => {
   })
 
   it('reports a period that has not run', () => {
-    const assessment = assessEvidence({ ...solid, daysSinceContact: 5 })
+    const assessment = assessEvidence({ ...solid, lastContactOn: '2026-08-17' })
     expect(assessment.statutoryPeriodMet).toBe(false)
+    expect(assessment.daysSinceContact).toBe(5)
     expect(assessment.gaps.join(' ')).toMatch(/5 days since any sign/)
   })
 
   it('treats an unknown days-since-contact as not meeting the period', () => {
-    const assessment = assessEvidence({ ...solid, daysSinceContact: null })
+    const assessment = assessEvidence({ ...solid, lastContactOn: null })
     expect(assessment.statutoryPeriodMet).toBe(false)
+    expect(assessment.daysSinceContact).toBeNull()
+  })
+
+  // R-200 (review finding 14). The presumption period is the clock that
+  // decides whether somebody's home may be treated as abandoned, and it was
+  // the one statutory clock in this module still counted by subtraction.
+  //
+  // Last contact Friday 4 September, a three-day presumption, asked on
+  // Wednesday the 9th. A calendar count reaches the presumption; counting
+  // business days does not, because Saturday, Sunday and Labor Day are not
+  // days for this purpose. Reaching it early is the "act too soon"
+  // direction this whole module is built to refuse.
+  it('counts the presumption period on the jurisdiction basis, not by subtraction', () => {
+    const facts = {
+      ...solid,
+      lastContactOn: '2026-09-04',
+      today: '2026-09-09',
+      presumedAfterDays: 3,
+    }
+
+    const calendar = assessEvidence(facts)
+    expect(calendar.statutoryPeriodMet).toBe(true)
+    expect(calendar.presumedOn).toBe('2026-09-07')
+
+    const business = assessEvidence({
+      ...facts,
+      dayCount: {
+        dayCountBasis: 'BUSINESS',
+        observedHolidays: ['2026-09-07'],
+      } as DayCountRule,
+    })
+    expect(business.statutoryPeriodMet).toBe(false)
+    expect(business.presumedOn).toBe('2026-09-10')
+    expect(business.daysSinceContact).toBe(2)
+    expect(business.gaps.join(' ')).toMatch(/2 days since any sign/)
   })
 })
 

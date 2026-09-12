@@ -1,22 +1,71 @@
 # Next session
 
-## R-199 is done — an agreed payment plan sends its schedule and shows on the portal (D-214).
+## R-200 is done — the notice checks and the abandonment presumption count on the jurisdiction's basis (D-215).
 
 SHA and CI run are recorded in PROGRESS. **Do not copy a green CI line
 forward** — run `gh run list --limit 5` after your own push, and read the run
 on YOUR code commit. **A docs-only push has no run at all** (`paths-ignore`
 in `ci.yml`), so if the SHA commit is pushed on its own, do not wait for one.
 
-## Start here: row 187, R-200
+## Start here: row 188, R-201
 
-`docs/prds/06-backlog.md` Milestone 14 ("Arc 4"). **LEASE-12's and LEASE-09's
-notice checks read `dayCountBasis`.** `noticePeriodCheck`
-(`packages/core/leases/notice-to-vacate.ts`) and `renewalCheck` count days as
-`Math.floor((effectiveOn − givenOn) / 86_400_000)`, deaf to `BUSINESS` and
-`CALENDAR_ROLL_FORWARD`; route them through R-182's `statutoryDeadline`.
-`assessEvidence`'s abandonment presumption is the same shape. Core
-arithmetic, correctness-critical. Re-verify the row's premises first (R-150)
-— the line numbers are from the 2026-09-09 review.
+`docs/prds/06-backlog.md` Milestone 14 ("Arc 4"). **Four raw `YYYY-MM-DD`
+surfaces D-154's predicate cannot see** — fifth instance of D-153's class:
+`deposit-disposition-reminder-job.ts:71-72` (Task titles),
+`payments/deposit-actions.ts:127` (the deposit slip's `Document` name),
+`components/consent/consent-panel.tsx:172`, and
+`packages/core/leases/party-change.ts:169,175`. S, mechanical. Re-verify the
+row's premises first (R-150) — the line numbers are from the 2026-09-09
+review. **Read CLAUDE.md's D-154 paragraph before starting**: the predicate
+lists CANDIDATES and the field's NAME tells you nothing, so grep the page
+that BUILDS each prop — `friendlyBusinessDate` throws a `RangeError` on an
+already-formatted value, which is a 500 on the page, and that killed a full
+sweep at test 5 in R-129.
+
+## What R-200 changed that the next rows touch
+
+- **`statutoryDaysBetween(from, to, rule)`** in
+  `packages/core/scheduling/deadline.ts` is the ONE inverse of
+  `statutoryDeadline` — "how many statutory days does this period contain".
+  Do not hand-write a second one; `abandonment/index.ts` still has a private
+  calendar-only `daysBetween` for its `daysRemaining`, which is correct there
+  and is NOT a second copy of this.
+- **`noticePeriodCheck`, `renewalRentCheck` and `assessEvidence` take
+  `BusinessDate` ends and a REQUIRED `DayCountRule`**, not `Date`s. A caller
+  converts with `utcToBusinessDate` for a `@db.Date` form value and
+  `businessDate(now, zone)` for "today" — they are different readers and
+  mixing them is R-042's bug.
+- **They decide on a DATE, never on a day count.** `effectiveOn <
+  statutoryDeadline(...)`. The count is for the sentence only, because
+  `statutoryDaysBetween` is not inverse for a zero-day period starting on a
+  non-business day. Keep that split if you touch them.
+- **`nonRenewalNoticeText` takes a `BusinessDate` and NO timezone.** It
+  formatted a calendar day through the property zone and served every
+  non-renewal naming the day BEFORE the tenancy ended.
+- **`EvidenceAssessment` gained `daysSinceContact` and `presumedOn`**;
+  `daysSinceContact` in `apps/web/lib/abandonment/queries.ts` is DELETED.
+- **`computeCoverage` no longer carries the "still count calendar days"
+  `productLimit`** — the fix removed it. The empty-holiday warning survives
+  and is reworded.
+
+## Found in R-200, owned by nobody
+
+- **Non-renewal notices already served carry the wrong end date in their
+  stored `bodyText`.** The fix is forward-only; nothing backfills, and
+  `Notice` rows are not editable anyway (D-201's standing no-backfill).
+- **`CALENDAR_ROLL_FORWARD` applied to a notice PERIOD is a product reading,
+  not counsel's** (D-215 states it and names the line to change). It now
+  warns where it did not.
+- **No e2e drives a business-day state through either notice form** — the
+  basis is held by unit tests alone. `jurisdiction.spec.ts` seeds rules but
+  nothing walks a BUSINESS notice.
+- **`observedHolidays` is still seeded for no state** (carried from R-182),
+  so a BUSINESS state skips weekends only — and that SHORTENS a notice
+  period. `computeCoverage` says so on the coverage screen.
+- **The demo seed configures Texas only** (`CALENDAR`), so a D-28 walk cannot
+  see any of this.
+- The three call sites' instant-vs-date off-by-one is fixed structurally by
+  the type, but no test exercises the call sites themselves.
 
 ## What R-199 changed that the next rows touch
 

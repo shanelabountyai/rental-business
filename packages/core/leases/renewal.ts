@@ -25,6 +25,13 @@
 // split: the caller (apps/web/lib/leases/renewal-check.ts) reads the
 // JurisdictionRule; this decides what it means.
 
+import {
+  type DayCountRule,
+  statutoryDaysBetween,
+  statutoryDeadline,
+} from '../scheduling/deadline.ts'
+import type { BusinessDate } from '../scheduling/local-time.ts'
+
 interface Violation {
   field: string
   message: string
@@ -35,16 +42,20 @@ export type RenewalRentBasis = 'within_limits' | 'capped' | 'insufficient_notice
 export interface RenewalRentCheckInput {
   currentRentCents: number
   proposedRentCents: number
-  /// When the new rent takes effect - the successor lease's `startsOn`.
-  effectiveOn: Date
-  /// When the offer is being drafted - `new Date()` in the ordinary case.
-  offeredOn: Date
+  /// The property-local day the new rent takes effect - the successor
+  /// lease's `startsOn`. A CALENDAR DAY, not an instant (R-200).
+  effectiveOn: BusinessDate
+  /// The property-local day the offer is being drafted.
+  offeredOn: BusinessDate
   /// JurisdictionRule.rentIncreaseCapPercentBps. Null means no statutory
   /// ceiling on file, not "unlimited" - the check is simply not applied,
   /// same posture every other nullable jurisdiction number takes.
   rentIncreaseCapPercentBps: number | null
   /// JurisdictionRule.rentIncreaseNoticeDays. Null means not configured.
   rentIncreaseNoticeDays: number | null
+  /// How this jurisdiction counts statutory days (R-182/R-200). Required,
+  /// never defaulted - same reason `noticePeriodCheck` states.
+  dayCount: DayCountRule
 }
 
 export interface RenewalRentDecision {
@@ -64,6 +75,9 @@ export interface RenewalRentDecision {
   noticeDaysGiven?: number
   requiredNoticeDays?: number
   shortfallDays?: number
+  /// The earliest day the new rent could lawfully take effect on this
+  /// offer. Present only on a notice-period shortfall.
+  earliestOn?: BusinessDate
 }
 
 /**
@@ -101,20 +115,26 @@ export function renewalRentCheck(input: RenewalRentCheckInput): RenewalRentDecis
     }
   }
 
+  // R-200 (review finding 14): the notice period is counted the way the
+  // jurisdiction counts, not by dividing two timestamps by 86,400,000. See
+  // `noticePeriodCheck`'s own header for why the verdict is a date comparison
+  // and only the reported numbers come from a count.
   if (input.rentIncreaseNoticeDays != null) {
-    const msPerDay = 24 * 60 * 60 * 1000
-    const noticeDaysGiven = Math.floor(
-      (input.effectiveOn.getTime() - input.offeredOn.getTime()) / msPerDay,
+    const earliestOn = statutoryDeadline(
+      input.offeredOn,
+      input.rentIncreaseNoticeDays,
+      input.dayCount,
     )
-    if (noticeDaysGiven < input.rentIncreaseNoticeDays) {
+    if (input.effectiveOn < earliestOn) {
       return {
         basis: 'insufficient_notice',
         blocked: false,
         needsOverride: true,
         increasePercentBps,
-        noticeDaysGiven,
+        noticeDaysGiven: statutoryDaysBetween(input.offeredOn, input.effectiveOn, input.dayCount),
         requiredNoticeDays: input.rentIncreaseNoticeDays,
-        shortfallDays: input.rentIncreaseNoticeDays - noticeDaysGiven,
+        shortfallDays: statutoryDaysBetween(input.effectiveOn, earliestOn, input.dayCount),
+        earliestOn,
       }
     }
   }

@@ -1,6 +1,7 @@
 'use server'
 
 import { parseLeaseDate, validateLease, validateRenewalOverride } from '@rental/core/leases'
+import { businessDate, utcToBusinessDate } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
@@ -103,13 +104,17 @@ export async function offerRenewal(
   const overrideReason = str(formData, 'overrideReason') || null
   const now = new Date()
 
+  // R-200: both ends read into the property's own calendar before the check,
+  // and with the reader each one actually needs - `startsOn` is a `@db.Date`
+  // value (UTC midnight), `now` is a real instant. Dividing one by the other
+  // is what made this report a day less notice than the offer gave.
   const decision = await renewalRentCheckFor({
     propertyState: lease.property.state,
     propertyCounty: lease.property.county,
     currentRentCents: lease.rentCents,
     proposedRentCents: rentCents,
-    effectiveOn: startsOn,
-    offeredOn: now,
+    effectiveOn: utcToBusinessDate(startsOn),
+    offeredOn: businessDate(now, lease.property.timezone),
   })
 
   if (decision.blocked) {

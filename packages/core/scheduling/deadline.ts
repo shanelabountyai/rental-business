@@ -22,7 +22,7 @@
 // module takes the rule rather than a bare basis: a caller that has no rule
 // in hand is a caller computing a legal date it cannot justify.
 
-import { addBusinessDays, type BusinessDate } from './local-time.ts'
+import { addBusinessDays, businessDaysBetween, type BusinessDate } from './local-time.ts'
 
 /// Mirrors the Prisma `DayCountBasis` enum. A type-only import of the
 /// generated enum would drag the Prisma client into any client component
@@ -146,6 +146,61 @@ export function statutoryDeadline(
   // gives the party MORE of the period, never less.
   while (!isBusinessDay(deadline, rule)) deadline = addBusinessDays(deadline, 1)
   return deadline
+}
+
+/**
+ * How many statutory days the period `from` → `to` contains, counted the way
+ * this jurisdiction counts. The INVERSE of `statutoryDeadline`, and it exists
+ * because two checks in this product ask the question the other way round
+ * (R-200, review finding 14).
+ *
+ * `statutoryDeadline` answers "given a start and a count, what is the
+ * deadline". `noticePeriodCheck` and `renewalRentCheck` are handed a start
+ * and an END — a notice somebody already gave — and have to say whether
+ * enough days sit between them. Subtracting two timestamps answers that in
+ * calendar days whatever the state says, which is the defect R-182 named and
+ * could not reach from a forward-only function.
+ *
+ * EXACTLY INVERSE ON `BUSINESS`, which is the basis that actually changes the
+ * count: `statutoryDeadline(from, n)` lands on the nth business day strictly
+ * after `from`, so counting the business days in `(from, to]` gives `n` back.
+ * `deadline.test.ts` pins that round trip rather than trusting the reading.
+ *
+ * The one place the round trip does NOT hold is a zero-day period starting on
+ * a non-business day, where `statutoryDeadline` rolls the start forward and
+ * this then counts the day it rolled to. That asymmetry is why the two checks
+ * DECIDE on a date comparison against `statutoryDeadline` and use this only
+ * for the numbers they report — a count can be off by the roll, a date
+ * comparison cannot.
+ *
+ * `CALENDAR` and `CALENDAR_ROLL_FORWARD` both count every day, so both are a
+ * plain calendar difference: rolling forward moves where a deadline LANDS, it
+ * does not change how many days a period contains. Null counts as calendar,
+ * D-193's reading, so this changes nothing for any state on file today.
+ *
+ * Signed: `to` before `from` gives a negative count rather than throwing. A
+ * notice whose effective date precedes the day it was given is somebody's
+ * typo, and reporting it as "-6 days' notice" is more use than a stack trace.
+ */
+export function statutoryDaysBetween(
+  from: BusinessDate,
+  to: BusinessDate,
+  rule: DayCountRule,
+): number {
+  if ((rule.dayCountBasis ?? 'CALENDAR') !== 'BUSINESS') {
+    return businessDaysBetween(from, to)
+  }
+
+  const backwards = to < from
+  const [start, end] = backwards ? [to, from] : [from, to]
+
+  let counted = 0
+  let cursor = start
+  while (cursor < end) {
+    cursor = addBusinessDays(cursor, 1)
+    if (isBusinessDay(cursor, rule)) counted++
+  }
+  return backwards ? -counted : counted
 }
 
 /// What a state's counting rule means for a deadline in one sentence, for the

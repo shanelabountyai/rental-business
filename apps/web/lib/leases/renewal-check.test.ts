@@ -77,8 +77,8 @@ describe('renewalRentCheckFor', () => {
       propertyCounty: null,
       currentRentCents: 100_000,
       proposedRentCents: 110_000, // 10%, over the 5% cap
-      effectiveOn: new Date('2026-09-01'),
-      offeredOn: new Date('2026-08-01'),
+      effectiveOn: '2026-09-01',
+      offeredOn: '2026-08-01',
     })
 
     expect(decision.basis).toBe('capped')
@@ -91,8 +91,8 @@ describe('renewalRentCheckFor', () => {
       propertyCounty: null,
       currentRentCents: 100_000,
       proposedRentCents: 150_000, // a 50% raise with zero notice
-      effectiveOn: new Date('2026-08-01'),
-      offeredOn: new Date('2026-08-01'),
+      effectiveOn: '2026-08-01',
+      offeredOn: '2026-08-01',
     })
 
     expect(decision.basis).toBe('within_limits')
@@ -108,8 +108,8 @@ describe('renewalRentCheckFor', () => {
       propertyCounty: null,
       currentRentCents: 100_000,
       proposedRentCents: 200_000, // 100% raise - would be capped if anything were configured
-      effectiveOn: new Date('2026-08-15'), // 14 days out - short of 60
-      offeredOn: new Date('2026-08-01'),
+      effectiveOn: '2026-08-15', // 14 days out - short of 60
+      offeredOn: '2026-08-01',
     })
 
     expect(decision.basis).toBe('insufficient_notice')

@@ -514,7 +514,7 @@ The Platform's job in edge cases: (1) case-file everything with timestamps, (2) 
 - Daily backups + point-in-time recovery; quarterly restore drill; RPO ≤ 24h, RTO ≤ 8h; document/photo store versioned with soft-delete + 30-day undelete.
 
 ### 6.7 Multi-Jurisdiction Rules Engine — Configuration, Not Code
-- A versioned, effective-dated `jurisdiction_rules` layer consumed by payments, notices, deposits, entry scheduling, and screening: grace days; late-fee type/caps; deposit max, disposition deadline days, escrow/interest flags; entry-notice hours; notice day-counts (template generation only); payment allocation order; just-cause restrictions flag; application-fee caps / portable-report flags; RUBS permissibility; required lease clauses per state.
+- A versioned, effective-dated `jurisdiction_rules` layer consumed by payments, notices, deposits, entry scheduling, and screening: grace days; late-fee type/caps; deposit max, disposition deadline days, escrow/interest flags; entry-notice hours; notice day-counts AND how a jurisdiction counts them — `dayCountBasis` (calendar / calendar-rolled-forward / business days) plus its observed holidays are themselves configuration (D-193), and every statutory deadline, notice-sufficiency check and abandonment presumption reads them (R-182, R-200); no longer template generation only; payment allocation order; just-cause restrictions flag; application-fee caps / portable-report flags; RUBS permissibility; required lease clauses per state.
 - Adding a jurisdiction = adding a reviewed config record + lease template, not a release. Rule changes apply prospectively, never retroactively. Legal review per config before activation (see Risks).
 - Ship sane defaults; make everything a rule; never hardcode a statute.
 

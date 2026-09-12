@@ -31,7 +31,7 @@ import {
   logContactAttempt,
   recordEntry,
 } from '@/lib/abandonment/actions.ts'
-import { daysSinceContact, getAbandonmentCase } from '@/lib/abandonment/queries.ts'
+import { getAbandonmentCase } from '@/lib/abandonment/queries.ts'
 import { requirePermission, requireScope } from '@/lib/auth/guard.ts'
 import { balanceCents } from '@rental/core/ledger'
 import { prisma } from '@rental/db'
@@ -75,9 +75,14 @@ export default async function AbandonmentCasePage({
       method: attempt.method,
       outcome: attempt.outcome,
     })),
-    daysSinceContact: daysSinceContact(found.lastContactOn, today),
+    // R-200: the dates, not a day count computed here. The presumption
+    // period is a statutory clock and has to be counted on the
+    // jurisdiction's own basis, which a precomputed number cannot be.
+    lastContactOn: found.lastContactOn,
+    today,
     presumedAfterDays: rule?.abandonmentPresumedAfterDays ?? null,
     rentUnpaid: balance > 0,
+    dayCount: rule ?? UNREVIEWED_DAY_COUNT,
   })
 
   const disposal = found.belongingsHeldFrom

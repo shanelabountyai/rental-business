@@ -4,6 +4,7 @@ import {
   UNREVIEWED_DAY_COUNT,
   dayCountNote,
   isBusinessDay,
+  statutoryDaysBetween,
   statutoryDeadline,
 } from './deadline.ts'
 
@@ -112,6 +113,57 @@ describe('statutoryDeadline', () => {
     expect(statutoryDeadline('2026-09-08', -3, CALENDAR)).toBe('2026-09-05')
     expect(() => statutoryDeadline('2026-09-08', -3, BUSINESS)).toThrow(RangeError)
     expect(() => statutoryDeadline('2026-09-08', -3, ROLL)).toThrow(RangeError)
+  })
+})
+
+describe('statutoryDaysBetween', () => {
+  it('counts every day on CALENDAR and on an unreviewed rule', () => {
+    expect(statutoryDaysBetween('2026-09-04', '2026-09-09', CALENDAR)).toBe(5)
+    expect(statutoryDaysBetween('2026-09-04', '2026-09-09', UNREVIEWED_DAY_COUNT)).toBe(5)
+  })
+
+  it('counts every day on CALENDAR_ROLL_FORWARD too', () => {
+    // Rolling forward moves where a DEADLINE lands; it does not change how
+    // many days a period contains. Same five days as CALENDAR, across the
+    // same weekend-plus-Labor-Day run.
+    expect(statutoryDaysBetween('2026-09-04', '2026-09-09', ROLL)).toBe(5)
+  })
+
+  it('BUSINESS skips the weekend and the observed holiday', () => {
+    // Friday to Wednesday is five calendar days and two business ones:
+    // Saturday, Sunday and Labor Day are not days for this purpose.
+    expect(statutoryDaysBetween('2026-09-04', '2026-09-09', BUSINESS)).toBe(2)
+  })
+
+  it('is the exact inverse of statutoryDeadline on a business-day start', () => {
+    // The property the two checks in R-200 rest on, pinned rather than
+    // reasoned about: count n days forward, count them back, get n.
+    for (let n = 1; n <= 10; n++) {
+      const deadline = statutoryDeadline('2026-09-04', n, BUSINESS)
+      expect(statutoryDaysBetween('2026-09-04', deadline, BUSINESS)).toBe(n)
+    }
+  })
+
+  it('does NOT round-trip a zero-day period that starts on a non-business day', () => {
+    // The one documented asymmetry, and the reason `noticePeriodCheck`
+    // decides on a date comparison rather than on this count.
+    // `statutoryDeadline` rolls the Saturday start forward to Tuesday; this
+    // then honestly counts the Tuesday it rolled to.
+    expect(statutoryDeadline('2026-09-05', 0, BUSINESS)).toBe('2026-09-08')
+    expect(statutoryDaysBetween('2026-09-05', '2026-09-08', BUSINESS)).toBe(1)
+  })
+
+  it('is signed rather than throwing when the end precedes the start', () => {
+    // A notice whose effective date is before the day it was given is
+    // somebody's typo. "-2 days' notice" is more use than a stack trace.
+    expect(statutoryDaysBetween('2026-09-09', '2026-09-04', BUSINESS)).toBe(-2)
+    expect(statutoryDaysBetween('2026-09-09', '2026-09-04', CALENDAR)).toBe(-5)
+  })
+
+  it('is zero for a period that starts and ends on the same day', () => {
+    expect(statutoryDaysBetween('2026-09-04', '2026-09-04', BUSINESS)).toBe(0)
+    expect(statutoryDaysBetween('2026-09-05', '2026-09-05', BUSINESS)).toBe(0)
+    expect(statutoryDaysBetween('2026-09-04', '2026-09-04', CALENDAR)).toBe(0)
   })
 })
 

@@ -83,23 +83,24 @@ export function computeCoverage(
         ({ label }) => label,
       ),
     ]
-    // R-182 (review finding 14). A state that does NOT count in plain
-    // calendar days is a state where two checks in this product are still
-    // wrong, and they are wrong quietly: `noticePeriodCheck` (LEASE-12) and
-    // `renewalCheck` (LEASE-09) ask "were enough days given" by subtracting
-    // two timestamps, so they count calendar days whatever this column says.
-    // Every clock that ADDS days to produce a deadline goes through
-    // `statutoryDeadline` and is correct. Saying so here is the cheap honest
-    // fix that finding 15 argues for over building the thing: the gap is
-    // loud, on the screen that gates a state going effective, rather than
-    // silent in two functions nobody is going to re-read.
+    // R-200 CLOSED THE FIRST HALF OF THIS (review finding 14), so the warning
+    // it used to carry is GONE rather than reworded: `noticePeriodCheck`
+    // (LEASE-12), `renewalRentCheck` (LEASE-09) and `assessEvidence`'s
+    // presumption all count through `statutoryDeadline` now, so there is no
+    // longer a check in this product that reads this column and ignores it.
+    // A limit that has been fixed must not keep being announced - an operator
+    // who clears a gap and sees the same sentence learns the screen is stale.
+    //
+    // The holiday warning survives and matters MORE than it did. Every one of
+    // those checks now consults `observedHolidays`, so a business-day state
+    // with an empty list silently counts a public holiday as a working day —
+    // which shortens a notice period rather than lengthening it.
     const productLimits = [
-      ...(rule.dayCountBasis != null && rule.dayCountBasis !== 'CALENDAR'
+      ...(rule.dayCountBasis != null &&
+      rule.dayCountBasis !== 'CALENDAR' &&
+      rule.observedHolidays.length === 0
         ? [
-            'notice-sufficiency checks (rent increase LEASE-09, notice to vacate LEASE-12) still count calendar days',
-            ...(rule.observedHolidays.length === 0
-              ? ['no observed holidays are on file, so only weekends are skipped']
-              : []),
+            'no observed holidays are on file, so only weekends are skipped when counting statutory days',
           ]
         : []),
       // R-183 (review finding 15). Both are FREE IN TEXAS, which requires

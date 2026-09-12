@@ -440,25 +440,26 @@ describe('computeCoverage', () => {
     expect(gaps[0]!.productLimits).toEqual([])
   })
 
-  it('warns that two checks still count calendar days once a state says otherwise', () => {
-    // The half of review finding 14 R-182 did NOT fix, said out loud on the
-    // screen that gates a state going effective, rather than left silent in
-    // two functions.
+  it('no longer warns that the notice checks count calendar days - R-200 fixed them', () => {
+    // The warning this used to assert is GONE rather than reworded.
+    // `noticePeriodCheck`, `renewalRentCheck` and `assessEvidence`'s
+    // presumption all count through `statutoryDeadline` now, so a
+    // business-day state with its holidays on file has nothing left to say
+    // here. A limit that has been fixed must not keep being announced.
     const { gaps } = computeCoverage(
       ['TX'],
       [rule({ dayCountBasis: 'BUSINESS', observedHolidays: ['2026-09-07'] })],
     )
-    expect(gaps).toHaveLength(1)
-    expect(gaps[0]!.unreviewedFields).toEqual([])
-    expect(gaps[0]!.productLimits).toEqual([
-      'notice-sufficiency checks (rent increase LEASE-09, notice to vacate LEASE-12) still count calendar days',
-    ])
+    expect(gaps).toEqual([])
   })
 
-  it('adds the empty-holiday-list warning only where the basis actually reads one', () => {
+  it('still warns about an empty holiday list, which now matters more', () => {
+    // Every one of those checks reads `observedHolidays`, so a business-day
+    // state with none on file counts a public holiday as a working day - and
+    // that SHORTENS a notice period rather than lengthening it.
     const business = computeCoverage(['TX'], [rule({ dayCountBasis: 'BUSINESS' })])
-    expect(business.gaps[0]!.productLimits).toHaveLength(2)
-    expect(business.gaps[0]!.productLimits[1]).toContain('no observed holidays')
+    expect(business.gaps[0]!.productLimits).toHaveLength(1)
+    expect(business.gaps[0]!.productLimits[0]).toContain('no observed holidays')
     // A calendar state never consults the list, so an empty one says nothing.
     const calendar = computeCoverage(['TX'], [rule({ observedHolidays: [] })])
     expect(calendar.gaps).toEqual([])
@@ -490,8 +491,12 @@ describe('computeCoverage', () => {
         rule({
           depositEscrowRequired: true,
           depositInterestRequired: true,
+          // R-200: the day-count limit in this combination is now the
+          // EMPTY HOLIDAY LIST, because the notice-check warning beside it
+          // is gone - those checks count on the basis now. With a holiday
+          // on file a business-day state has no product limit left at all.
           dayCountBasis: 'BUSINESS',
-          observedHolidays: ['2026-09-07'],
+          observedHolidays: [],
         }),
       ],
     )

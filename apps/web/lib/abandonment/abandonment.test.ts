@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { prisma } from '@rental/db'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { daysSinceContact, getAbandonmentCase, listAbandonmentCases } from './queries.ts'
+import { getAbandonmentCase, listAbandonmentCases } from './queries.ts'
 
 // Abandonment case files against a real database (RISK-01, R-087).
 //
@@ -191,12 +191,3 @@ describe('reading a case', () => {
   })
 })
 
-describe('daysSinceContact', () => {
-  it('is null when nobody has established a date', () => {
-    expect(daysSinceContact(null, '2026-08-20')).toBeNull()
-  })
-
-  it('counts calendar days', () => {
-    expect(daysSinceContact('2026-08-01', '2026-08-20')).toBe(19)
-  })
-})

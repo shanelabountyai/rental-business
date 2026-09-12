@@ -4,7 +4,7 @@ import { noticePeriodCheckFor } from './notice-period-check.ts'
 // The database half of the notice-period guard (LEASE-11, R-066), against
 // real Texas config (noticeToVacateDays: 30, seeded by packages/db/prisma/seed.mts).
 
-const GIVEN = new Date('2026-08-01T00:00:00.000Z')
+const GIVEN = '2026-08-01'
 
 describe('noticePeriodCheckFor', () => {
   it('passes cleanly at or above the configured period', async () => {
@@ -12,7 +12,7 @@ describe('noticePeriodCheckFor', () => {
       propertyState: 'TX',
       propertyCounty: null,
       givenOn: GIVEN,
-      effectiveOn: new Date('2026-08-31T00:00:00.000Z'), // exactly 30 days
+      effectiveOn: '2026-08-31', // exactly 30 days
     })
     expect(decision.basis).toBe('within_limits')
     expect(decision.needsOverride).toBe(false)
@@ -23,7 +23,7 @@ describe('noticePeriodCheckFor', () => {
       propertyState: 'TX',
       propertyCounty: null,
       givenOn: GIVEN,
-      effectiveOn: new Date('2026-08-15T00:00:00.000Z'), // 14 days
+      effectiveOn: '2026-08-15', // 14 days
     })
     expect(decision.basis).toBe('insufficient_notice')
     expect(decision.needsOverride).toBe(true)

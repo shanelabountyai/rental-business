@@ -1,6 +1,7 @@
 'use server'
 
 import { canGiveNotice, parseLeaseDate } from '@rental/core/leases'
+import { businessDate, utcToBusinessDate } from '@rental/core/scheduling'
 import { noticePeriodCheckFor } from '@/lib/leases/notice-period-check.ts'
 import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
@@ -62,11 +63,17 @@ export async function submitNoticeToVacate(
   const forwardingAddress = String(formData.get('forwardingAddress') ?? '').trim() || null
 
   const now = new Date()
+  // R-200: `now` is a real instant and `effectiveOn` is a calendar day, so
+  // they need different readers (D-3). Subtracting one from the other is what
+  // this did until R-200, and `Math.floor` on the part-day that produced told
+  // a tenant giving exactly thirty days' notice that they had given
+  // twenty-nine - the warning below, on their own screen, about their own
+  // tenancy, wrong for every notice given after midnight UTC.
   const period = await noticePeriodCheckFor({
     propertyState: home.property.state,
     propertyCounty: home.property.county,
-    givenOn: now,
-    effectiveOn,
+    givenOn: businessDate(now, home.property.timezone),
+    effectiveOn: utcToBusinessDate(effectiveOn),
   })
 
   await prisma.$transaction(async (tx) => {

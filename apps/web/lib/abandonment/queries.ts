@@ -151,20 +151,11 @@ export async function casesForLease(leaseId: string): Promise<CaseView[]> {
   return rows.map(toView)
 }
 
-/**
- * Days since the last sign of the tenant, in the property's own calendar.
- *
- * Prefers what somebody established by hand over anything derived: a PM who
- * knows the tenant was seen on the 3rd is a better source than the last
- * ledger row, and getting this wrong shortens a statutory clock.
- */
-export function daysSinceContact(
-  lastContactOn: string | null,
-  today: string,
-): number | null {
-  if (!lastContactOn) return null
-  const ms =
-    new Date(`${today}T00:00:00.000Z`).getTime() -
-    new Date(`${lastContactOn}T00:00:00.000Z`).getTime()
-  return Math.round(ms / 86_400_000)
-}
+// `daysSinceContact` lived here until R-200 and is deliberately gone rather
+// than moved. Its own comment warned that "getting this wrong shortens a
+// statutory clock", and a plain millisecond subtraction was exactly that
+// once a state counts in business days. `assessEvidence` now takes the two
+// dates and counts them on the jurisdiction's basis, so there is nothing
+// left for a caller here to precompute - and nothing left to precompute
+// WRONGLY, which is the point of deleting it rather than leaving it beside
+// the thing that replaced it.

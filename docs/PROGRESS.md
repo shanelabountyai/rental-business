@@ -11542,3 +11542,89 @@ run, and that is correct**: `.github/workflows/ci.yml` has carried
 runs nothing. R-198's SHA commit shows a run only because that push carried
 the code commit with it; pushed separately, as here, the follow-up is
 skipped. Waiting for one is waiting for a run that cannot start.
+## R-200 — the notice checks and the abandonment presumption count on the jurisdiction's basis
+**Commit:** `PENDING_SHA`  ·  **Date:** 2026-09-11
+
+**What it built.** Review finding 14, the half R-182 named and could not
+convert. Premises re-verified before building (R-150): `noticePeriodCheck`
+and `renewalRentCheck` each still divided two `Date`s by 86,400,000, and
+`assessEvidence` still compared a precomputed day count — all three deaf to
+`dayCountBasis`. These produce the `needsOverride` flag a PM ticks past, so in
+a business-day state the product waved a short notice through.
+
+- **`statutoryDaysBetween(from, to, rule)`** in
+  [deadline.ts](packages/core/scheduling/deadline.ts) — the inverse question
+  `statutoryDeadline` could not answer: how many statutory days a period
+  *contains*. Exactly inverse on a business-day start, pinned by a round-trip
+  test over ten values.
+- **`noticePeriodCheck` (LEASE-12), `renewalRentCheck` (LEASE-09) and
+  `assessEvidence`'s presumption (RISK-01)** now take `BusinessDate` ends and
+  a required `DayCountRule`, and each reports the date to act on —
+  `earliestOn` on the two notice checks, `presumedOn` on the presumption.
+- **The verdict is a date comparison**, `effectiveOn < statutoryDeadline(...)`,
+  never the count. `statutoryDaysBetween` is not inverse for a zero-day period
+  starting on a non-business day, so a count can disagree with the deadline
+  and a date cannot.
+- **`computeCoverage`'s "still count calendar days" limit is deleted**, not
+  reworded. The empty-holiday warning survives and now matters more.
+- **Two live defects found while converting, both fixed here.**
+  `nonRenewalNoticeText` formatted a calendar day through the property
+  timezone, so **every served non-renewal named the day before the tenancy
+  ended** — "Wednesday, September 30, 2026" for a tenancy ending 1 October, in
+  the operative sentence of an outbound legal document (R-042's class). And
+  three call sites floored a mid-afternoon instant minus a UTC-midnight date,
+  so a tenant giving exactly thirty days' notice was told they had given
+  twenty-nine.
+- **`daysSinceContact`** in `apps/web/lib/abandonment/queries.ts` is deleted
+  rather than moved; its own comment warned that getting it wrong "shortens a
+  statutory clock".
+
+**What it decided** (D-215).
+
+- **Decide on a date, report in days.** The zero-day roll makes the count
+  non-inverse; the date comparison is what cannot drift.
+- **`CALENDAR_ROLL_FORWARD` now warns where it did not**, deliberately: the
+  party a notice period protects is the one receiving it, so an extension
+  means the tenancy cannot end before that day. The opposite reading is
+  defensible and the line to change is named. Erring toward flagging is right
+  for a check that only ever warns.
+- **The review's "demands an override for one that was fine" does not come
+  from the basis.** Counting only business days always lands on or after the
+  calendar deadline, so `BUSINESS` can only ever flag *more* notices than
+  `CALENDAR`, never fewer. **The first version of this item asserted the
+  opposite in a test and the test was wrong** — corrected, and the real cause
+  was the instant-vs-date off-by-one above.
+- **Nothing on file today moves.** On `CALENDAR` and on a null basis every
+  branch reduces to the arithmetic it replaced (D-12, as D-193 required).
+- **A fixed limit must stop being announced**, or an operator who clears a gap
+  reads a stale screen.
+
+**What it left behind** (owned by nobody unless named).
+
+- Non-renewal notices already served keep the wrong end date in their stored
+  `bodyText`; the fix is forward-only and nothing backfills (D-201).
+- The roll-forward reading for a notice *period* is a product judgment, not
+  counsel's.
+- No e2e drives a business-day state through either notice form — the basis is
+  held by unit tests alone.
+- `observedHolidays` is still seeded for no state (from R-182), so a BUSINESS
+  state skips weekends only, which *shortens* a period. The coverage screen
+  says so.
+- The demo seed configures Texas only, so a D-28 walk cannot see any of it.
+- The call sites' own conversion is enforced by the type, not by a test.
+
+**The gate.** `lint` clean (16 pre-existing warnings, none in a changed file),
+`typecheck` clean, `check:ship-deps` clean (756 dev packages), `npm run build`
+compiled. No schema or migration change, so `db:ci` was not re-run. `npm test`
+alone: **3165 passed, 4 skipped, 0 failed** — R-199's 3152 plus 13 net (seven
+for `statutoryDaysBetween`, five on the notice checks, two on renewal, one on
+the presumption, less the two deleted with `daysSinceContact`). Targeted e2e,
+`desktop-chrome`, six specs touching these surfaces (notice-to-vacate,
+renewals, abandonment, jurisdiction, retaliation-guard, leases): **44 passed**,
+reconciling exactly against `--list`'s `Total: 44 tests in 6 files` — no
+flaky, none skipped. Not run on `mobile-chrome`: no component, control or
+layout changed, only computed values (D-194). **Each new claim was proved
+against its own reverted fix** (D-197): reverting the basis in
+`noticePeriodCheck` turned three tests red, reverting the notice's `timeZone`
+turned the date test red, and reverting the basis in `assessEvidence` turned
+the presumption test red.

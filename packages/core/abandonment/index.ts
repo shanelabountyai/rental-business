@@ -28,7 +28,11 @@
 // ==========================================================================
 
 import type { BusinessDate } from '../scheduling/local-time.ts'
-import { type DayCountRule, statutoryDeadline } from '../scheduling/deadline.ts'
+import {
+  type DayCountRule,
+  statutoryDaysBetween,
+  statutoryDeadline,
+} from '../scheduling/deadline.ts'
 
 // ---------------------------------------------------------------------------
 // Contact attempts
@@ -113,15 +117,23 @@ export const MIN_DISTINCT_METHODS = 2
 
 export interface EvidenceFacts {
   attempts: readonly { method: ContactMethod; outcome: ContactOutcome }[]
-  /// Days since the last sign of the tenant — the most recent payment,
-  /// message, or anything else. Null when nothing is known either way.
-  daysSinceContact: number | null
+  /// The property-local day of the last sign of the tenant — the most recent
+  /// payment, message, or anything else. Null when nothing is known either
+  /// way. A DATE rather than a day count since R-200: the presumption period
+  /// is a statutory clock, so the days between have to be counted the way
+  /// the jurisdiction counts them, which a precomputed number cannot be.
+  lastContactOn: BusinessDate | null
+  today: BusinessDate
   /// `JurisdictionRule.abandonmentPresumedAfterDays`. Null means this
   /// product has not been taught the state's rule.
   presumedAfterDays: number | null
   /// Is rent actually unpaid? Several states make that a precondition, and
   /// none of them treats a paid-up tenancy as abandoned however quiet.
   rentUnpaid: boolean
+  /// How this jurisdiction counts statutory days (R-182/R-200). Required,
+  /// never defaulted - the same posture `disposalReadiness` already takes
+  /// for the two clocks beside this one.
+  dayCount: DayCountRule
 }
 
 export interface EvidenceAssessment {
@@ -135,6 +147,12 @@ export interface EvidenceAssessment {
   statutoryPeriodMet: boolean | null
   /// True when this product has no configured period for the state.
   periodUnknown: boolean
+  /// Days since the last sign of the tenant, counted on this jurisdiction's
+  /// own basis. Null when nothing is known either way.
+  daysSinceContact: number | null
+  /// The day the state's presumption period runs out, where it can be
+  /// computed at all.
+  presumedOn: BusinessDate | null
   /// Everything that is not yet true, in words, for the screen.
   gaps: string[]
 }
@@ -147,9 +165,26 @@ export function assessEvidence(facts: EvidenceFacts): EvidenceAssessment {
     attemptCount >= MIN_ATTEMPTS && distinctMethods >= MIN_DISTINCT_METHODS
   const periodUnknown = facts.presumedAfterDays == null
 
+  const daysSinceContact =
+    facts.lastContactOn == null
+      ? null
+      : statutoryDaysBetween(facts.lastContactOn, facts.today, facts.dayCount)
+
+  // R-200 (review finding 14): a date comparison against `statutoryDeadline`,
+  // never `daysSince >= presumedAfterDays`. The presumption period is a
+  // statutory clock like the two below it, so in a business-day state a
+  // subtraction reaches the presumption early — and this is the clock that
+  // decides whether somebody's home may be treated as abandoned. See
+  // `noticePeriodCheck`'s header for why the count is reported but never
+  // used as the verdict.
+  const presumedOn =
+    periodUnknown || facts.lastContactOn == null
+      ? null
+      : statutoryDeadline(facts.lastContactOn, facts.presumedAfterDays!, facts.dayCount)
+
   const statutoryPeriodMet = periodUnknown
     ? null
-    : facts.daysSinceContact != null && facts.daysSinceContact >= facts.presumedAfterDays!
+    : presumedOn != null && facts.today >= presumedOn
 
   const gaps: string[] = []
   if (reached) {
@@ -173,7 +208,7 @@ export function assessEvidence(facts: EvidenceFacts): EvidenceAssessment {
     )
   } else if (statutoryPeriodMet === false) {
     gaps.push(
-      `It is ${facts.daysSinceContact ?? 'an unknown number of'} days since any sign of the tenant; the configured period is ${facts.presumedAfterDays}.`,
+      `It is ${daysSinceContact ?? 'an unknown number of'} days since any sign of the tenant; the configured period is ${facts.presumedAfterDays}.`,
     )
   }
 
@@ -184,6 +219,8 @@ export function assessEvidence(facts: EvidenceFacts): EvidenceAssessment {
     attemptsSufficient,
     statutoryPeriodMet,
     periodUnknown,
+    daysSinceContact,
+    presumedOn,
     gaps,
   }
 }
