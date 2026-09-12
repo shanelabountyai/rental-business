@@ -11543,7 +11543,7 @@ runs nothing. R-198's SHA commit shows a run only because that push carried
 the code commit with it; pushed separately, as here, the follow-up is
 skipped. Waiting for one is waiting for a run that cannot start.
 ## R-200 — the notice checks and the abandonment presumption count on the jurisdiction's basis
-**Commit:** `PENDING_SHA`  ·  **Date:** 2026-09-11
+**Commit:** `9c67a49`  ·  **Date:** 2026-09-11
 
 **What it built.** Review finding 14, the half R-182 named and could not
 convert. Premises re-verified before building (R-150): `noticePeriodCheck`
