@@ -11945,6 +11945,8 @@ gives them no run and the `ignoreCommand` no deployment; both are expected.
 
 ## R-204 — the Arc 4 demo walk (D-28)
 
+Commit: `14c7be8`
+
 **What it built.** Not a feature — a walk, and the eight defects it found.
 Milestone 14 closed at R-203, and D-28's rule is that a walk catches what no
 test is looking for: R-105 found seven defects across 88 routes that all
