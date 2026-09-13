@@ -12065,3 +12065,91 @@ zero phone overflow.**
 the run itself rather than copied forward from R-203's entry. The `record the
 SHA` and handoff commits after it are docs-only, so `paths-ignore` gives them
 no run and the `ignoreCommand` no deployment; both are expected.
+
+## Arc 5 planning: a fourth operator review sources the next backlog
+
+**What it did.** Arc 4 closed at R-204 with rows 1–191 all ✅ except the cuts
+(48/95/96), the paused 28, the vendor-gated 93 and 97, and two split-parent
+placeholders. The backlog was exhausted and nothing carried an owner. The
+owner chose the next arc's source the same way for the fourth time (D-222,
+D-164/D-172/D-201's precedent): the Opus-tier rental-operator agent reviewed
+the shipped product end to end — PRDs, D-1…D-221, `PROGRESS.md`, `NEXT.md`'s
+~30-item leftover list, and the code itself — and returned **fifteen ranked
+findings, ten of them behaviour that is WRONG** rather than missing. That is
+the highest wrongness ratio of the four reviews (5, then 6, then 10). The
+full review is kept verbatim at `docs/reviews/2026-09-13-operator-review.md`;
+the findings became Milestone 15 ("Arc 5") in `06-backlog.md`, rows
+R-205–R-219, wrongness first, **plus R-220 for the Arc 5 demo walk** — the
+review's own closing section says it read code and schema and therefore
+cannot reach *"the screen says something quietly wrong"*, and the D-28
+precedent is unbroken at seven, three and eight defects across three walks
+that the test suite saw none of.
+
+Rows 81 and 155 were ticked ✅ in the same commit. Both are pure bookkeeping
+and were flagged as such in the handoff: 81's four children (R-081a/b/c/d)
+and 155's R-168 + R-168a all shipped long ago, so the markers were a lie the
+backlog was telling about itself. **Row 97 was deliberately not ticked** —
+97b (rent credit-bureau reporting) is vendor-gated like 93, so the parent is
+genuinely open.
+
+**What it decided.** D-222 (the arc itself, and its binding "do not build"
+list). The theme is **the money numbers are computed off the right base**.
+Arc 3's defects were automated decisions that were silently wrong; this
+review found the arithmetic underneath the two screens an operator lives on.
+D-11/D-40 decided the subscription's rent line mints no `Charge` row, and
+**three separate readers were then written against the `Charge` table as if
+it were the debt list — all three wrong in the normal case.** R-205 and R-206
+share that root and are ordered together, deliberately, because fixing the
+aging anchor gives the late-fee job the dated per-period debts it needs.
+
+Four rows are **Needs counsel** and say so on the row: R-205 (may a
+percentage fee take arrears rather than the period's rent as its base),
+R-208 (the penalty exposure of a missing move-in condition report), R-213
+(does post-service late-fee accrual defeat a pay-or-quit), R-217 (the
+habitability repair deadline and what counts as written notice — a
+`JurisdictionRule` field under D-4, never a constant). None of the four is
+blocked on counsel to start: each has a product half that is wrong on its own
+terms.
+
+**Findings 1, 2 and 3 were spot-checked against source before their rows
+were written**, the same discipline D-201 applied and R-153 before it:
+`LATE_FEE_APPLIES_TO = ['RENT']` (`late-fees.ts:68`), the
+`charges: { none: … }` exclusion (`:306`), `chargeMoveInProration` writing
+`type: 'RENT'` with its own comment defending the type
+(`proration.ts:107-121`), the whole-balance `outstandingCents` handed to
+`lateFeeFor` (`:352-357`), `EMERGENCY_CATEGORIES` holding only
+`maintenance_emergency` (`categories.ts:302-307`), and the vendor dispatch
+sending on `work_order_assigned` with an unread `priority: 'EMERGENCY'` in
+its context (`workorders/actions.ts:407-422`). All confirmed as described.
+
+**What it left behind.** The findings are inherited evidence — **each row
+re-verifies its claim against the code before touching anything**, because
+twelve of the fifteen were not spot-checked here. The three headline
+candidates: every mid-month move-in has never been assessed a late fee for
+the life of the lease while `/jobs` records SUCCEEDED nightly (R-205); the
+aging anchor jumping to the oldest charge on file the day a second month goes
+unpaid, which reads 309 days late instead of 49 and silences R-179's chase
+ladder permanently on the tenancy that most needs it (R-206); and an
+emergency vendor dispatch at 22:40 scheduled for 08:00 with the screen saying
+it went (R-207 — the smallest row in the arc and one line to fix).
+
+**The leftovers ledger in `NEXT.md` was not cleared and is not superseded.**
+The review read it and judged it; several of its items are deliberate and
+should stay deliberate, and the ones that hurt an operator were promoted into
+rows — R-211 closes R-196's suppressed-count leftover, R-216 closes R-173's
+and R-196's phone-only-tenant leftovers. **The Neon dev branch is still
+ten-plus migrations behind** and `npm run db:migrate:dev` has still not been
+run; it remains owned by nobody and was not run in this session either.
+
+**Nothing in this arc may be backfilled.** R-205's never-assessed fees,
+R-206's mis-anchored aging and R-209's un-credited deposits are each reported
+and fixed at the writer. A corrective write against append-only tables has
+the bigger blast radius every time, and D-201 already paid for that lesson.
+
+**Gate run:** docs-only change — no code touched, so no lint/typecheck/test
+delta to report, no migration, and no deployment (`ignoreCommand` skips it by
+design, and `paths-ignore` gives it no CI run). **CI was checked rather than
+copied forward**: run `34726068479` is green on `14c7be8`, Arc 4's head, both
+jobs. `gh run list --commit` only matches a full SHA and returns empty for a
+short one with no error, so `git rev-parse` first — that copy-forward error
+cost eleven items (R-130–R-140) and is the reason this line says which run.
