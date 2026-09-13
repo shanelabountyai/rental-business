@@ -12059,3 +12059,9 @@ mobile, the stale `MOVE_IN` assertion above — then **12 passed of 12** on that
 file after fixing it. The full sweep belongs to CI. **Re-crawled after the
 fixes: 236 staff pages and 71 portal pages, zero raw dates, zero enum leaks,
 zero phone overflow.**
+
+**CI run `34726068479` is GREEN on the code commit `14c7be8`** — both jobs,
+`Lint, types, unit tests, build` and `End-to-end, axe, Lighthouse`, read on
+the run itself rather than copied forward from R-203's entry. The `record the
+SHA` and handoff commits after it are docs-only, so `paths-ignore` gives them
+no run and the `ignoreCommand` no deployment; both are expected.

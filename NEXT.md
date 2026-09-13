@@ -2,13 +2,14 @@
 
 ## R-204 is done — the Arc 4 demo walk (D-28), and its eight defects.
 
-Code `14c7be8`, SHA commit `08b8134`. **CI run `34726068479` was still
-running when this was written — CHECK IT, do not copy this line forward.**
-`gh run view 34726068479` settles it in three seconds.
+Code `14c7be8`, SHA commit `08b8134`.
+**CI run `34726068479` is GREEN on the code commit** — both jobs, read on the
+run rather than assumed.
 
-`gh run list --commit` only matches a FULL sha and returns EMPTY for a short
-one, with no error — indistinguishable from "docs-only push, no run". Use
-`git rev-parse <short>` first.
+**Do not copy a CI line forward to your own item.** `gh run list --commit`
+only matches a FULL sha and returns EMPTY for a short one, with no error;
+that empty result is indistinguishable from "docs-only push, no run". Use
+`git rev-parse <short>` first, or watch by id.
 
 ## THE BACKLOG IS EXHAUSTED. There is no next row.
 
