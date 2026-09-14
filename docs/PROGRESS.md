@@ -12156,7 +12156,7 @@ cost eleven items (R-130–R-140) and is the reason this line says which run.
 
 ## R-205 — a late fee is assessed on the period, not on the lease's whole arrears
 
-**Commit:** `TBD`
+**Commit:** `958b499`
 
 **What it built.** The first row of Arc 5, and one root with two halves.
 
