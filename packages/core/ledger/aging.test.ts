@@ -6,8 +6,10 @@ import {
   bucketFor,
   chaseRungDue,
   delinquencyFor,
+  rentPeriodDebts,
 } from './aging.ts'
 import type { DelinquencyFacts } from './aging.ts'
+import { wallClockToUtc } from '../scheduling/local-time.ts'
 
 const owing: DelinquencyFacts = {
   // No dated charge rows, which is the ORDINARY tenancy: D-11/D-40 mint no
@@ -287,5 +289,54 @@ describe('chaseRungDue', () => {
       expect(chaseRungDue(rung, 0)).toBe(rung)
       expect(CHASE_RUNG_LABELS[rung]).toBeTruthy()
     }
+  })
+})
+
+describe('rentPeriodDebts (R-205)', () => {
+  // The per-period rent debt list D-11/D-40 were said not to leave behind.
+  // `invoice.finalized` already projects one dated unlinked CHARGE entry per
+  // billed period; this turns them back into dated debts.
+  const AT_9AM_CHICAGO = (day: string) => wallClockToUtc(`${day}T09:00`, 'America/Chicago')
+  const charge = (day: string, amountCents: number, chargeId: string | null = null) => ({
+    type: 'CHARGE',
+    chargeId,
+    amountCents,
+    occurredAt: AT_9AM_CHICAGO(day),
+  })
+
+  it('dates each period from the finalize instant, in the PROPERTY zone', () => {
+    // `billingCycleAnchor` puts the anchor at 09:00 property-local precisely
+    // so this read lands on the due day rather than the one before it.
+    expect(
+      rentPeriodDebts([charge('2026-03-01', 150_000), charge('2026-04-01', 150_000)], 'America/Chicago'),
+    ).toEqual([
+      { dueOn: '2026-03-01', amountCents: 150_000 },
+      { dueOn: '2026-04-01', amountCents: 150_000 },
+    ])
+  })
+
+  it('ignores everything that is not the subscription rent line', () => {
+    // A LINKED entry is a `Charge` row's own projection - pass 1's debt, and
+    // counting it here would assess two fees on one debt. A payment and a
+    // reversal are not debts at all.
+    expect(
+      rentPeriodDebts(
+        [
+          charge('2026-03-01', 150_000, 'chg_proration'),
+          { type: 'PAYMENT', chargeId: null, amountCents: -150_000, occurredAt: AT_9AM_CHICAGO('2026-03-02') },
+          { type: 'REVERSAL', chargeId: null, amountCents: -150_000, occurredAt: AT_9AM_CHICAGO('2026-03-03') },
+        ],
+        'America/Chicago',
+      ),
+    ).toEqual([])
+  })
+
+  it('sums two invoices finalized on one local day into ONE period', () => {
+    // `assessedForDueOn` is the fee's anchor, so two debts sharing a date
+    // would each subtract the other's fee as already assessed and neither
+    // would ever be charged in full.
+    expect(
+      rentPeriodDebts([charge('2026-03-01', 100_000), charge('2026-03-01', 50_000)], 'America/Chicago'),
+    ).toEqual([{ dueOn: '2026-03-01', amountCents: 150_000 }])
   })
 })

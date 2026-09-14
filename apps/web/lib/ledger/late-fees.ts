@@ -1,9 +1,15 @@
 import 'server-only'
 
 import { formatCents } from '@rental/core/money'
-import { balanceCents, delinquencyFor, lateFeeDeltaCents, lateFeeFor } from '@rental/core/ledger'
+import {
+  allocateBalance,
+  balanceCents,
+  lateFeeDeltaCents,
+  lateFeeFor,
+  rentPeriodDebts,
+} from '@rental/core/ledger'
 import type { LateFeeDecision } from '@rental/core/ledger'
-import { businessDate, dueDateOnOrBefore, utcToBusinessDate } from '@rental/core/scheduling'
+import { businessDate, utcToBusinessDate } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { auditAsSystem } from '@/lib/audit/system.ts'
 import { getBillingProvider } from '@/lib/billing/provider.ts'
@@ -37,11 +43,14 @@ import { rulesFor } from '@/lib/jurisdiction/queries.ts'
 // what found it: `assessLateFees` only ever queried `Charge` rows, so it
 // silently never fired on the common case at all.
 //
-// Pass 1 (dated charges) is UNCHANGED from before this item - it is
-// well-exercised and the risk of touching it is not worth taking. Pass 2
-// (unlinked rent) is new, and only runs for leases that never got a dated
-// RENT charge in the first place, so the two passes never compete for the
-// same debt. Both anchor a fee differently: a dated charge to itself
+// Pass 1 (dated charges) is UNCHANGED. Pass 2 assesses the periods the
+// subscription billed with NO charge row behind them, one fee per period.
+// THE TWO PASSES ARE SEPARATED BY DEBT, NOT BY LEASE - R-205 found that
+// separating them by lease silently excluded every mid-month move-in from
+// both, because a move-in proration is itself a `RENT` charge. The long note
+// above pass 2 is the whole story.
+//
+// Both anchor a fee differently: a dated charge to itself
 // (`assessedOnChargeId`, unchanged); unlinked rent to the LEASE plus WHICH
 // due cycle it answers to (`assessedOnLeaseId` + `assessedForDueOn`) -
 // `Charge.dueOn` on the fee itself is already the day it was assessed, not
@@ -297,101 +306,157 @@ export async function assessLateFees(
     }
   }
 
-  // ---- Pass 2: unlinked rent - leases that never got a dated RENT charge ----
+  // ---- Pass 2: the subscription's own rent, PERIOD BY PERIOD (R-205) ----
+  //
+  // ==========================================================================
+  // WHAT R-205 FOUND, AND WHY THIS PASS NO LONGER FILTERS BY LEASE.
+  //
+  // This pass used to select leases holding NO `RENT` Charge at all, on the
+  // reasoning that a lease with one belonged to pass 1. But
+  // `chargeMoveInProration` writes exactly such a charge at activation - it
+  // IS rent, for fewer days than usual - so EVERY lease that did not start on
+  // its rent due day was excluded from this pass for the life of the tenancy,
+  // while pass 1 reached only the proration, found it paid, and moved on. The
+  // ordinary monthly rent underneath was assessed by neither pass: a tenant
+  // fifteen days late every month for three years was charged nothing, and
+  // the job recorded SUCCEEDED with `chargesAssessed: 0`.
+  //
+  // The two passes are separated by DEBT, not by lease. Pass 1 assesses the
+  // dated `Charge` rows; this pass assesses the periods the subscription
+  // billed with no charge row behind them (D-11/D-40). A lease can hold both
+  // and they never compete for the same debt.
+  //
+  // AND THE BASE IS THE PERIOD, NOT THE ARREARS. This pass used to hand
+  // `lateFeeFor` the whole ledger balance as `outstandingCents`, so a
+  // PERCENT_OF_RENT rule took 5% of $3,000 of accumulated arrears - $150 -
+  // for being late on one $1,500 month, and at three months took a percentage
+  // of a figure that already included the fees it had itself assessed.
+  // `allocateBalance` - the same allocation the rent roll and a cure notice's
+  // demand read (R-118, R-194) - says how much of the balance each period is
+  // still sitting on, and THAT is what each period's fee is computed from.
+  //
+  // NEEDS COUNSEL, and the row says so: whether a percentage fee may lawfully
+  // take arrears rather than the period's own rent as its base is a legal
+  // question. What is not in question is that the two passes must not
+  // disagree about it, and before this they did.
+  //
+  // THE FEES NEVER ASSESSED ARE NOT BACKFILLED (D-201). This fixes the writer
+  // from today forward; a tenancy that was never charged stays never charged,
+  // because a reconciled ledger is not a place to post three years of
+  // retrospective fees nobody was ever told about.
+  // ==========================================================================
 
-  const unlinkedLeases = await prisma.lease.findMany({
-    where: {
-      propertyId,
-      status: { in: ['ACTIVE', 'MONTH_TO_MONTH'] },
-      charges: { none: { type: { in: [...LATE_FEE_APPLIES_TO] } } },
-    },
+  const leases = await prisma.lease.findMany({
+    where: { propertyId, status: { in: ['ACTIVE', 'MONTH_TO_MONTH'] } },
     select: {
       id: true,
       rentCents: true,
-      rentDueDay: true,
       leasePayers: {
         where: { active: true },
-        select: { id: true, stripeCustomerId: true, debitDay: true },
+        select: { id: true, stripeCustomerId: true },
         take: 1,
       },
       ledgerEntries: {
-        select: { id: true, type: true, amountCents: true, occurredAt: true, description: true },
+        select: {
+          id: true,
+          type: true,
+          chargeId: true,
+          amountCents: true,
+          occurredAt: true,
+          description: true,
+        },
       },
-      // Every LATE_FEE already posted against this lease's unlinked balance,
-      // grouped by which due cycle it answered to below.
+      // Every unwaived charge, as a DEBT competing for the balance - not as
+      // something this pass assesses. A waived fee is not a debt (PAY-04),
+      // and a fee that is real absorbs its own share of what the tenant has
+      // paid before the rent underneath it does. The same list
+      // `delinquencyFor` allocates over, so this pass and the rent-roll
+      // screen can never disagree about which period is still owed.
+      charges: { where: { waivedAt: null }, select: { dueOn: true, amountCents: true } },
+      // Every LATE_FEE already posted against this lease's unlinked rent,
+      // matched below to the period it answered to.
       assessedLateFees: { select: { amountCents: true, assessedForDueOn: true } },
     },
   })
-  result.leasesChecked += unlinkedLeases.length
+  result.leasesChecked += leases.length
 
-  for (const lease of unlinkedLeases) {
+  for (const lease of leases) {
     if (heldFromFees.has(lease.id)) {
       result.heldLeases += 1
       continue
     }
 
     const balance = balanceCents(lease.ledgerEntries)
-    const rentDueDay = lease.leasePayers[0]?.debitDay ?? lease.rentDueDay
-    const nearestRentDueOn = dueDateOnOrBefore(today, rentDueDay)
+    if (balance <= 0) continue
 
-    // Reusing `delinquencyFor` rather than re-deriving grace/bucket logic:
-    // the same function `rentRoll()` displays from, so a lease this pass
-    // fires on and the rent-roll screen showing it "past grace" can never
-    // silently disagree.
-    const delinquency = delinquencyFor({
-      // This pass is the UNLINKED balance only - no charge rows by
-      // construction, which is why R-118's allocation changes nothing here.
-      charges: [],
-      balanceCents: balance,
-      asOf: today,
-      graceDays: rule.graceDays,
-      nearestRentDueOn,
-      monthlyRentCents: lease.rentCents,
-    })
-    if (!delinquency.pastGrace || delinquency.balanceCents <= 0 || !delinquency.oldestDueOn) continue
+    const periods = rentPeriodDebts(lease.ledgerEntries, property.timezone)
+    if (periods.length === 0) continue
 
-    const decision = lateFeeFor(rule, {
-      outstandingCents: delinquency.balanceCents,
-      monthlyRentCents: lease.rentCents,
-      dueOn: delinquency.oldestDueOn,
-      asOf: today,
-    })
+    // Tagged rather than kept in two lists: the allocation has to see every
+    // debt competing for the balance, and only the rent periods are assessed
+    // here.
+    const { owed } = allocateBalance(
+      [
+        ...lease.charges.map((charge) => ({
+          // `@db.Date` comes back as UTC midnight; a timezone must not touch
+          // a calendar day.
+          dueOn: utcToBusinessDate(charge.dueOn),
+          amountCents: charge.amountCents,
+          rentPeriod: false,
+        })),
+        ...periods.map((period) => ({ ...period, rentPeriod: true })),
+      ],
+      balance,
+    )
 
-    // Scoped to THIS due cycle, not every fee this lease has ever attracted -
-    // see the migration's own note on why `assessedForDueOn` exists at all.
-    const alreadyAssessedCents = lease.assessedLateFees
-      .filter((fee) => utcToBusinessDate(fee.assessedForDueOn!) === delinquency.oldestDueOn)
-      .reduce((total, fee) => total + fee.amountCents, 0)
-    const deltaCents = lateFeeDeltaCents(decision, alreadyAssessedCents)
-    if (deltaCents <= 0) continue
+    for (const { debt, owedCents } of owed) {
+      if (!debt.rentPeriod) continue
 
-    const payer = lease.leasePayers[0]
-    if (!payer?.stripeCustomerId) {
-      result.failed += 1
-      continue
-    }
-
-    try {
-      await postLateFeeDelta({
-        propertyId,
-        leaseId: lease.id,
-        deltaCents,
-        decision,
-        ruleId: rule.id,
-        today,
-        stripeCustomerId: payer.stripeCustomerId,
-        // Keyed on the fact: this lease, this due cycle, this business
-        // date. A retried run adds the fee once; a later, distinct cycle
-        // gets its own key.
-        idempotencyKey: `latefee:lease:${lease.id}:${delinquency.oldestDueOn}:${today}`,
-        anchor: { assessedOnLeaseId: lease.id, assessedForDueOn: delinquency.oldestDueOn },
-        onChargeDescription: `lease ${lease.id} (unlinked rent due ${delinquency.oldestDueOn})`,
+      const decision = lateFeeFor(rule, {
+        // THIS PERIOD's unpaid rent, never the whole arrears.
+        outstandingCents: owedCents,
+        monthlyRentCents: lease.rentCents,
+        dueOn: debt.dueOn,
+        asOf: today,
       })
-      result.assessedCents += deltaCents
-      result.chargesAssessed += 1
-    } catch (error) {
-      console.error(`[late-fee] could not assess unlinked rent on lease ${lease.id}`, error)
-      result.failed += 1
+
+      // Scoped to THIS due cycle, not every fee this lease has ever
+      // attracted - see the migration's own note on why `assessedForDueOn`
+      // exists at all.
+      const alreadyAssessedCents = lease.assessedLateFees
+        .filter((fee) => fee.assessedForDueOn && utcToBusinessDate(fee.assessedForDueOn) === debt.dueOn)
+        .reduce((total, fee) => total + fee.amountCents, 0)
+      const deltaCents = lateFeeDeltaCents(decision, alreadyAssessedCents)
+      if (deltaCents <= 0) continue
+
+      const payer = lease.leasePayers[0]
+      if (!payer?.stripeCustomerId) {
+        result.failed += 1
+        continue
+      }
+
+      try {
+        await postLateFeeDelta({
+          propertyId,
+          leaseId: lease.id,
+          deltaCents,
+          decision,
+          ruleId: rule.id,
+          today,
+          stripeCustomerId: payer.stripeCustomerId,
+          // Keyed on the fact: this lease, this rent period, this business
+          // date. A retried run adds the fee once; a distinct period gets
+          // its own key.
+          idempotencyKey: `latefee:lease:${lease.id}:${debt.dueOn}:${today}`,
+          anchor: { assessedOnLeaseId: lease.id, assessedForDueOn: debt.dueOn },
+          onChargeDescription: `lease ${lease.id} (unlinked rent due ${debt.dueOn})`,
+        })
+        result.assessedCents += deltaCents
+        result.chargesAssessed += 1
+      } catch (error) {
+        console.error(`[late-fee] could not assess unlinked rent on lease ${lease.id}`, error)
+        result.failed += 1
+      }
     }
   }
 

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { wallClockToUtc } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { assessLateFees } from './late-fees.ts'
@@ -221,16 +222,23 @@ describe('assessLateFees — unlinked rent (R-050b)', () => {
     return { leaseId: lease.id, payerId: payer.id }
   }
 
-  async function unlinkedRentDue(leaseId: string, dueOn: string) {
+  async function unlinkedRentDue(leaseId: string, dueOn: string, amountCents = 150_000) {
     // NO CHARGE ROW - `chargeId: null` is the whole point of the fixture.
+    //
+    // 09:00 PROPERTY-LOCAL, NOT UTC MIDNIGHT, because that is what production
+    // writes: `occurredAt` is the `invoice.finalized` instant and
+    // `billingCycleAnchor` puts the anchor at `BILLING_HOUR_LOCAL`. R-205
+    // reads the period's due date back out of it, and a UTC-midnight fixture
+    // would land on the previous local day for every US zone - the fixture
+    // shaped unlike the real input that D-132 is about.
     await prisma.ledgerEntry.create({
       data: {
         propertyId,
         leaseId,
         chargeId: null,
         type: 'CHARGE',
-        amountCents: 150_000,
-        occurredAt: new Date(`${dueOn}T00:00:00.000Z`),
+        amountCents,
+        occurredAt: wallClockToUtc(`${dueOn}T09:00`, 'America/Chicago'),
         description: 'Rent',
       },
     })
@@ -313,6 +321,88 @@ describe('assessLateFees — unlinked rent (R-050b)', () => {
     expect(
       await prisma.charge.count({ where: { assessedOnLeaseId: leaseId, type: 'LATE_FEE' } }),
     ).toBe(0)
+  }, 20_000)
+
+  it('assesses the monthly rent of a MID-MONTH MOVE-IN, whose proration is itself a RENT charge (R-205)', async () => {
+    // THE DEFECT THIS ITEM EXISTS FOR. This pass used to select leases
+    // holding no `RENT` Charge at all - and `chargeMoveInProration` writes
+    // exactly one at activation, so every lease that did not start on its
+    // rent due day was excluded from this pass for the life of the tenancy.
+    // Pass 1 reached only the proration, found it paid, and moved on: the
+    // ordinary rent underneath was assessed by neither pass, for ever.
+    const { leaseId, payerId } = await seedUnlinkedLease()
+    const proration = await prisma.charge.create({
+      data: {
+        propertyId,
+        leaseId,
+        type: 'RENT',
+        amountCents: 50_000,
+        description: 'Part month — 10 of 31 days',
+        dueOn: new Date('2026-01-15T00:00:00.000Z'),
+      },
+    })
+    await prisma.ledgerEntry.create({
+      data: {
+        propertyId,
+        leaseId,
+        leasePayerId: payerId,
+        chargeId: proration.id,
+        type: 'CHARGE',
+        amountCents: 50_000,
+        description: 'Part month',
+        occurredAt: new Date('2026-01-15T15:00:00.000Z'),
+      },
+    })
+    await prisma.ledgerEntry.create({
+      data: {
+        propertyId,
+        leaseId,
+        leasePayerId: payerId,
+        chargeId: proration.id,
+        type: 'PAYMENT',
+        amountCents: -50_000,
+        description: 'Paid the part month, on time',
+        occurredAt: new Date('2026-01-16T15:00:00.000Z'),
+      },
+    })
+    await unlinkedRentDue(leaseId, '2026-02-01')
+
+    await assessLateFees(propertyId, new Date('2026-02-20T12:00:00Z'))
+
+    // The proration was paid, so pass 1 correctly charges nothing on it.
+    expect(await prisma.charge.count({ where: { assessedOnChargeId: proration.id } })).toBe(0)
+    // February's rent is what is actually late, and it now attracts a fee.
+    const fee = await prisma.charge.findFirstOrThrow({
+      where: { assessedOnLeaseId: leaseId, type: 'LATE_FEE' },
+    })
+    expect(fee.assessedForDueOn?.toISOString().slice(0, 10)).toBe('2026-02-01')
+    expect(fee.amountCents).toBeGreaterThan(0)
+  }, 20_000)
+
+  it('computes a percentage fee on EACH PERIOD, never on the whole arrears (R-205)', async () => {
+    // The mirror half. This pass used to hand `lateFeeFor` the whole ledger
+    // balance as `outstandingCents`, so the seeded Texas rule (10% of the
+    // outstanding, capped at 12% of a month's rent) produced ONE fee of
+    // $180 - the cap - for two unpaid months, having tried to charge 10% of
+    // $3,000. Allocated per period it is two fees of $150, and neither is
+    // computed off a figure that includes the other period or any fee
+    // already assessed.
+    const { leaseId } = await seedUnlinkedLease()
+    await unlinkedRentDue(leaseId, '2026-03-01')
+    await unlinkedRentDue(leaseId, '2026-04-01')
+
+    await assessLateFees(propertyId, new Date('2026-04-20T12:00:00Z'))
+
+    const fees = await prisma.charge.findMany({
+      where: { assessedOnLeaseId: leaseId, type: 'LATE_FEE' },
+      orderBy: { assessedForDueOn: 'asc' },
+    })
+    expect(fees.map((fee) => fee.assessedForDueOn?.toISOString().slice(0, 10))).toEqual([
+      '2026-03-01',
+      '2026-04-01',
+    ])
+    // 10% of one month's $1,500, twice - not 12% of $1,500 once.
+    expect(fees.map((fee) => fee.amountCents)).toEqual([15_000, 15_000])
   }, 20_000)
 
   it('a distinct later cycle is not silently netted against an earlier one already assessed', async () => {

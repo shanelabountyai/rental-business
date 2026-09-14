@@ -12153,3 +12153,101 @@ copied forward**: run `34726068479` is green on `14c7be8`, Arc 4's head, both
 jobs. `gh run list --commit` only matches a full SHA and returns empty for a
 short one with no error, so `git rev-parse` first — that copy-forward error
 cost eleven items (R-130–R-140) and is the reason this line says which run.
+
+## R-205 — a late fee is assessed on the period, not on the lease's whole arrears
+
+**Commit:** `TBD`
+
+**What it built.** The first row of Arc 5, and one root with two halves.
+
+`assessLateFees` ran two passes and chose between them **by lease**: pass 2 —
+the pass that exists precisely because ordinary subscription rent mints no
+`Charge` row (D-11/D-40) — selected leases holding
+`charges: { none: { type: 'RENT' } }`. `chargeMoveInProration` writes exactly
+such a charge at activation, correctly typed `RENT` because it *is* rent for
+fewer days. So every lease that did not start on its rent due day was excluded
+from pass 2 for the life of the tenancy, while pass 1 reached only the
+proration, found it paid and `continue`d. **The ordinary monthly rent
+underneath was assessed by neither pass** — a tenant fifteen days late every
+month for three years charged nothing, with `/jobs` recording
+`ledger.late_fees` SUCCEEDED and `chargesAssessed: 0`. The mirror half: a
+lease that *did* reach pass 2 was handed `outstandingCents:
+delinquency.balanceCents`, the whole ledger balance, so the seeded Texas rule
+(10% of the outstanding, capped at 12% of a month's rent) charged **$180 — the
+cap — for two unpaid months**, having tried to take 10% of $3,000, and at
+three months took a percentage of a figure that already included the fees it
+had itself assessed.
+
+The passes now split on the **debt**. Pass 1 is unchanged and still assesses
+the dated `Charge` rows. Pass 2 selects every ACTIVE/MONTH_TO_MONTH lease in
+the property and assesses the periods the subscription billed with no charge
+row behind them, one fee per period; a lease may hold both kinds of debt and
+the two passes never compete for the same one. `rentPeriodDebts`
+(`packages/core/ledger/aging.ts`) is the new derivation: `invoice.finalized`
+already projects one dated unlinked `CHARGE` `LedgerEntry` per billed period,
+and those become the dated debt list this schema was said not to have. Each
+period's `outstandingCents` is its share of the balance under
+`allocateBalance` — the same allocation the rent roll and a cure notice's
+demand already read (R-118, R-194) — so a percentage fee is 10% of *that
+period's* unpaid rent. `assessedForDueOn` already existed as the fee's anchor,
+so the delta arithmetic and the idempotency key needed no schema change.
+
+**What it decided.** D-223, and three things inside it a later session must
+not silently reverse.
+
+- **`businessDate(occurredAt, propertyZone)` is the period's due date, with no
+  snapping.** `billingCycleAnchor` deliberately puts the anchor at 09:00
+  property-local (`BILLING_HOUR_LOCAL`, and its own comment says why), so the
+  read has nine hours of slack behind it and fifteen in front. Snapping to
+  `dueDateOnOrBefore(day, rentDueDay)` was considered and **rejected**: where a
+  payer's `debitDay` differs from the subscription's anchor day it names a due
+  date up to a month OLDER than the invoice, and ageing a debt older than it
+  is, is the one direction this arithmetic must never move in. A delayed event
+  names a due date a day LATE, which understates, which is the safe half. A
+  voided invoice's REVERSAL is deliberately not netted off the period it
+  retracts, for the same asymmetry.
+- **The percentage base is the period, and it Needs counsel.** Whether a
+  percentage fee may lawfully take arrears rather than the period's own rent is
+  a legal question the row flags. The narrower reading shipped; widening it
+  later is one argument to `lateFeeFor`. What was never in question is that the
+  two passes must not disagree about it, and before this they did.
+- **Nothing is backfilled** (D-201). The fees never assessed stay never
+  assessed. This fixes the writer from today forward.
+
+**What it left behind.**
+
+- **R-206 is the other half of the same root and is next.** `oldestUnsettled`
+  still builds its debt list as the charges plus *one* month's rent at
+  `nearestRentDueOn`, so the aging anchor still jumps to the oldest charge on
+  file the day a second month goes unpaid. `rentPeriodDebts` is the function
+  it needs; this item deliberately did not change `delinquencyFor`, because
+  the rent roll, the dashboard tile, the chase ladder and the cure demand all
+  read it and that is R-206's blast radius to own.
+- **Pass 2 now reads every active lease in the property rather than a filtered
+  subset**, so `leasesChecked` on the job's record counts more than it did and
+  a lease held from fees can be counted in `heldLeases` by both passes. The
+  numbers are a job record, not a money figure, and were left alone.
+- **A `LATE_FEE` charge raised by pass 1 earlier in the same run is in pass 2's
+  debt list before it is in the balance**, so it absorbs a share the balance
+  does not yet carry and that night's percentage fee is understated by up to
+  the size of that fee. Understating is the safe direction and it is the same
+  thing `delinquencyFor` does on the rent-roll screen; making the two disagree
+  to fix it would cost more than it buys.
+- **The unlinked-rent fixture now writes 09:00 property-local, not UTC
+  midnight.** The old fixture landed on the previous local day for every US
+  zone — the "fixture shaped unlike the real input" trap (D-132) — and it only
+  went unnoticed because nothing read the date back out until now.
+
+**Gate run:** `npm run lint` clean (16 pre-existing warnings, 0 errors);
+`npm run typecheck` clean; `npm test` **3,178 passed / 4 skipped in 17.2s**
+(3,173 before, plus five new — machine clean, so no contention to diagnose);
+targeted e2e **70 passed, 0 failed, 0 flaky, 0 skipped**, reconciling exactly
+against `npx playwright test --list` (`Total: 70 tests in 6 files`) across
+`jobs`, `fee-waiver`, `rent-roll`, `evictions`, `payment-plans` and
+`golden-path-5`, both projects. No migration — `assessedForDueOn` and
+`assessedOnLeaseId` already exist, so `db:ci` was not needed. **Both new
+assertions were proven against the reverted fix** (D-197): with
+`late-fees.ts` and `aging.ts` stashed, the mid-month move-in test fails with
+no fee posted at all and the per-period test fails
+`expected [ '2026-04-01' ] to deeply equal [ '2026-03-01', '2026-04-01' ]` —
+the defect, exactly.

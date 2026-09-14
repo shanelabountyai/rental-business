@@ -1,4 +1,4 @@
-import type { BusinessDate } from '../scheduling/local-time.ts'
+import { type BusinessDate, businessDate } from '../scheduling/local-time.ts'
 import { type Cents, daysPastDue } from '../money/money.ts'
 
 // Delinquency aging — the Monday-morning report (PAY-06, RPT-02, R-044).
@@ -342,4 +342,64 @@ export function chaseRungDue(daysLate: number, graceDays: number | null): number
   const pastGrace = daysLate - graceDays
   if (pastGrace <= 0) return null
   return CHASE_LADDER_DAYS.includes(pastGrace) ? pastGrace : null
+}
+
+// ---------------------------------------------------------------------------
+// The rent periods the subscription actually billed (R-205/R-206).
+// ---------------------------------------------------------------------------
+
+/// As much of a projected `LedgerEntry` as the derivation below reads.
+export interface ProjectedChargeRow {
+  type: string
+  /// Null is the whole point. D-11/D-40 mint a `Charge` row for the
+  /// exceptions only, so an UNLINKED `CHARGE` entry is the subscription's own
+  /// rent line - one row per billed period, which is the per-period debt list
+  /// this schema was said not to have.
+  chargeId: string | null
+  amountCents: Cents
+  occurredAt: Date
+}
+
+/**
+ * One dated debt per rent period the subscription has billed.
+ *
+ * ==========================================================================
+ * WHY `occurredAt` IS THE DUE DATE, WITH NO SNAPPING (R-205).
+ *
+ * `occurredAt` is the `invoice.finalized` instant, and Stripe finalizes a
+ * subscription invoice at the billing cycle anchor - which
+ * `billingCycleAnchor` deliberately places at 09:00 PROPERTY-LOCAL on the
+ * lease's rent due day, for exactly this class of reason (see its own
+ * comment: an anchor at 00:00 lands on the previous calendar day for anybody
+ * reading it slightly west). So `businessDate(occurredAt, zone)` IS the due
+ * day, with nine hours of slack behind it and fifteen in front.
+ *
+ * Snapping the result to `dueDateOnOrBefore(day, rentDueDay)` was considered
+ * and rejected: when the payer's `debitDay` differs from the day the
+ * subscription is anchored on, snapping backwards names a due date up to a
+ * month OLDER than the invoice - and ageing a debt older than it is, is the
+ * one direction this module must never move in (see `delinquencyFor`'s
+ * asymmetry note). An event delayed past midnight names a due date a day
+ * LATE, which understates, which is the safe half.
+ *
+ * A voided invoice's REVERSAL is NOT netted off the period it retracts. The
+ * gross debt therefore stays in the list while the balance no longer carries
+ * it, so the allocation runs out on a NEWER debt - understating again, by
+ * construction.
+ * ==========================================================================
+ */
+export function rentPeriodDebts(
+  rows: readonly ProjectedChargeRow[],
+  timeZone: string,
+): DatedCharge[] {
+  const byDueOn = new Map<BusinessDate, Cents>()
+  for (const row of rows) {
+    if (row.type !== 'CHARGE' || row.chargeId != null || row.amountCents <= 0) continue
+    const dueOn = businessDate(row.occurredAt, timeZone)
+    // Two invoices finalized on one local day are ONE period's debt: the fee
+    // that answers to them is keyed on `assessedForDueOn`, so two debts
+    // sharing a date would each subtract the other's fee as already assessed.
+    byDueOn.set(dueOn, (byDueOn.get(dueOn) ?? 0) + row.amountCents)
+  }
+  return [...byDueOn].map(([dueOn, amountCents]) => ({ dueOn, amountCents }))
 }
