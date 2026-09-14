@@ -1,34 +1,55 @@
 # Next session
 
-## Arc 5 is planned and committed. Pick up R-205.
+## R-205 is done. Pick up R-206 — it is the other half of the same root.
 
-Planning commit `eb5c691` (docs-only — no CI run, no deployment, both
-expected). Arc 4's last code commit `14c7be8` is green on CI run
-`34726068479`, both jobs, read on the run.
+R-205 shipped as `958b499` (SHA recorded in `e082064`). CI run `34855784822`
+was queued on that push; **read it on the run, do not copy this line forward**
+— `git rev-parse` a short SHA before `gh run list --commit`, which returns
+empty for a short one with no error.
 
-**Start here:** `docs/prds/06-backlog.md` → **Milestone 15: Arc 5**, rows
-192–207 / R-205–R-220. Top to bottom, one item per session. The review that
-sourced them is verbatim at `docs/reviews/2026-09-13-operator-review.md`;
-D-222 records the decision and the binding "do not build" list.
+**Start here:** `docs/prds/06-backlog.md` → row 193 / **R-206**. The review
+that sourced the arc is verbatim at
+`docs/reviews/2026-09-13-operator-review.md`; D-222 records the decision and
+the binding "do not build" list, and **D-223 is R-205's own** — read it before
+touching the aging, because R-206 inherits its date mapping.
 
-## R-205 and R-206 share one root — read both before starting either
+## What R-205 left for R-206, concretely
 
-D-11/D-40 decided the subscription's rent line mints no `Charge` row. **Three
-separate readers were then written against the `Charge` table as if it were
-the debt list, and all three are wrong in the normal case.** R-205 is the
-late-fee half, R-206 the aging half, and R-206's fix — age from the dated
-`CHARGE` `LedgerEntry` rows `invoice.finalized` already projects — is what
-gives R-205 the per-period debts it needs. Build them in order, same session
-if it will hold both.
+**`rentPeriodDebts` already exists** (`packages/core/ledger/aging.ts`, exported
+from `@rental/core/ledger`). It takes the projected ledger rows and a
+timezone and returns one dated `DatedCharge` per rent period the subscription
+billed — the per-period debt list D-11/D-40 were said not to leave behind. It
+is derived from the unlinked `CHARGE` entries `invoice.finalized` projects,
+dated `businessDate(occurredAt, propertyZone)` with **no snapping**, and D-223
+writes down at length why snapping to `dueDateOnOrBefore` was rejected (a
+payer `debitDay` that differs from the subscription anchor makes it name a due
+date up to a month OLDER than the invoice). Unit tests are in
+`packages/core/ledger/aging.test.ts`.
 
-**R-205, in one line:** `charges: { none: { type: { in: ['RENT'] } } }`
-(`apps/web/lib/ledger/late-fees.ts:306`) excludes any lease holding a RENT
-charge from pass 2, and `chargeMoveInProration` writes exactly that at
-activation (`apps/web/lib/billing/proration.ts:107-121`) — so **every
-mid-month move-in has never been assessed a late fee for the life of the
-lease**, while the leases that do reach pass 2 get `outstandingCents:
-delinquency.balanceCents` (`:352-357`), making a percentage fee $150 on
-$3,000 of arrears instead of $75 on the month's rent.
+**R-206 is the `delinquencyFor` half, and R-205 deliberately did not touch
+it.** `oldestUnsettled` (`aging.ts:221-238`) still builds its debt list as the
+charges plus *one* month's rent at `nearestRentDueOn`, and falls back to
+`newestFirst[last].dueOn` when the balance outruns it — which is exactly what
+a second unpaid month is. Replace that single synthetic debt with
+`rentPeriodDebts`. **Its blast radius is why it is its own item**: the rent
+roll (`apps/web/lib/payments/rent-roll.ts:231,426`), the dashboard delinquency
+tile, `reports/queries.ts`, `chaseRungDue`'s exact-match ladder and the cure
+notice's demand all read it, so every caller has to hand it the ledger rows
+and the property zone.
+
+**Three consequences the row names and a test should pin:** the rent roll
+prints the oldest unpaid date somebody reads out in a hearing; the report
+sorts by `daysLate`, so a mis-anchored row pins above genuinely older arrears;
+and `chaseRungDue` matches `[1, 5, 15]` **exactly**, so at 309 days R-179's
+whole ladder fires zero times. The opposite case is equally wrong — a lease
+with no charge history reports two unpaid months as 19 days late, emptying the
+`30+` bucket on a portfolio full of 60-day arrears.
+
+**What R-205 changed under it, so R-206 is not surprised:** `assessLateFees`
+pass 2 no longer calls `delinquencyFor` at all — it allocates the balance
+itself over the charges plus `rentPeriodDebts` and assesses per period. So
+R-206 is free to change `delinquencyFor`'s inputs without touching the
+late-fee sweep, and the two readers should end up allocating the same list.
 
 **R-207 is the cheapest real win in the arc** if you want a short session
 instead: one line, `EMERGENCY_CATEGORIES` at
@@ -41,6 +62,10 @@ instead: one line, `EMERGENCY_CATEGORIES` at
 - **Re-verify every finding against the code before touching anything.**
   Only findings 1, 2 and 3 were spot-checked during planning; twelve are
   inherited evidence. Same discipline R-153 applied to the first review.
+  R-205 re-verified finding 1 line by line and it was correct as written.
+  Its worked numbers use an illustrative 5% rule; the rule actually seeded is
+  10% capped at 12% of a month's rent, so the measured defect was **$180 —
+  the cap — for two unpaid months where the fix charges 10% of each**.
 - **Never backfill.** R-205's never-assessed fees, R-206's mis-anchored
   aging, R-209's un-credited deposits: report them, fix the writer, leave
   reconciled history alone. D-201 already paid for this lesson.
@@ -123,6 +148,13 @@ item never touched, that is contention, not a regression:
 **Sibling daemons are not this repo's to kill** — scope every kill to `$PWD`.
 
 ## Leftovers still owned by nobody
+
+From R-205: pass 2 now reads every active lease in the property, so
+`leasesChecked` on the job record counts more than it did and a held lease can
+be counted in `heldLeases` by both passes; a `LATE_FEE` charge raised by pass
+1 earlier in the same run is in pass 2's debt list before it is in the
+balance, understating that night's percentage fee by up to its own size
+(the safe direction, and the same thing `delinquencyFor` does today).
 
 Several of these are now promoted into Arc 5 rows and are marked so. The rest
 stand.
