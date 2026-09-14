@@ -2,10 +2,12 @@
 
 ## R-205 is done. Pick up R-206 — it is the other half of the same root.
 
-R-205 shipped as `958b499` (SHA recorded in `e082064`). CI run `34855784822`
-was queued on that push; **read it on the run, do not copy this line forward**
-— `git rev-parse` a short SHA before `gh run list --commit`, which returns
-empty for a short one with no error.
+R-205 shipped as `958b499` (SHA recorded in `e082064`). **CI run
+`34855784822` is GREEN on both jobs** — `Lint, types, unit tests, build` and
+`End-to-end, axe, Lighthouse` — read on the run itself once it completed, not
+copied forward. Do not copy this line forward either: `git rev-parse` a short
+SHA before `gh run list --commit`, which returns empty for a short one with no
+error.
 
 **Start here:** `docs/prds/06-backlog.md` → row 193 / **R-206**. The review
 that sourced the arc is verbatim at

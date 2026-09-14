@@ -12251,3 +12251,9 @@ assertions were proven against the reverted fix** (D-197): with
 no fee posted at all and the per-period test fails
 `expected [ '2026-04-01' ] to deeply equal [ '2026-03-01', '2026-04-01' ]` —
 the defect, exactly.
+
+**CI run `34855784822` is GREEN on both jobs** — `Lint, types, unit tests,
+build` and `End-to-end, axe, Lighthouse` — read on the run after it completed
+rather than copied forward from R-204's entry. It covers the push carrying
+both `958b499` and the `record the SHA` commit `e082064`; GitHub runs one job
+per push, on its head.
