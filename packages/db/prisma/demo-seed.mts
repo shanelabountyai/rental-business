@@ -81,6 +81,13 @@ const VENDOR_NAMES = [
 /// list behind it. The seed built those from inline item plans and never
 /// created the template a human would have had to build first.
 const INSPECTION_TEMPLATE_NAME = 'Standard interior walk'
+/// R-208's move-in checklist. A SECOND row rather than a second column on the
+/// one above: `defaultForType` is one type per template (UNIQUE), so a
+/// checklist cannot be the default for both PERIODIC and MOVE_IN.
+const MOVE_IN_TEMPLATE_NAME = 'Move-in condition walk'
+/// Both, for `reset()` - the same shape VENDOR_NAMES and PM_TEMPLATE_NAMES
+/// already take.
+const INSPECTION_TEMPLATE_NAMES = [INSPECTION_TEMPLATE_NAME, MOVE_IN_TEMPLATE_NAME] as const
 const MESSAGE_TEMPLATE_NAME = 'Rent reminder'
 
 /// Exported so `demo-seed.test.ts` can hold them against core's CLOSED
@@ -645,7 +652,9 @@ async function reset() {
       where: { name: { in: [...PM_TEMPLATE_NAMES] } },
     })
     await prisma.vendor.deleteMany({ where: { name: { in: [...VENDOR_NAMES] } } })
-    await prisma.inspectionTemplate.deleteMany({ where: { name: INSPECTION_TEMPLATE_NAME } })
+    await prisma.inspectionTemplate.deleteMany({
+      where: { name: { in: [...INSPECTION_TEMPLATE_NAMES] } },
+    })
   } else {
     // RETIRED THE SAME WAY PROPERTIES ARE - deactivated AND RENAMED, and the
     // rename is the half that is easy to skip and wrong to skip. `reset()`
@@ -676,7 +685,7 @@ async function reset() {
     // column is UNIQUE, so a retired checklist still holding PERIODIC would
     // refuse the next run's own template rather than the next run's delete.
     for (const template of await prisma.inspectionTemplate.findMany({
-      where: { name: INSPECTION_TEMPLATE_NAME },
+      where: { name: { in: [...INSPECTION_TEMPLATE_NAMES] } },
       select: { id: true, name: true },
     })) {
       await prisma.inspectionTemplate.update({
@@ -3681,13 +3690,22 @@ async function seedDemoData() {
   //
   // Both are portfolio-level, like the vendors and PM schedules above.
   //
-  // The checklist is `defaultForType: PERIODIC` rather than MOVE_OUT: only
-  // the auto-scheduled types read that column (INSP-04), it is UNIQUE, and
-  // MOVE_IN/MOVE_OUT/PRE_MOVE_OUT are lease-event-driven and never look it
-  // up. Its rooms are the ones the walked inspections below use, so a viewer
-  // opening "New inspection" is offered the list they have just seen filled
-  // in - which is what a reusable checklist is FOR (INSP-01: the same list
-  // walked at move-in and move-out is what makes the two comparable).
+  // TWO checklists, because `defaultForType` is one type per template
+  // (UNIQUE). The first is `PERIODIC` rather than MOVE_OUT - MOVE_OUT and
+  // PRE_MOVE_OUT never read that column at all, since both copy the lease's
+  // own move-in walk (`itemsFromMoveIn`), which beats any template. Its rooms
+  // are the ones the walked inspections below use, so a viewer opening "New
+  // inspection" is offered the list they have just seen filled in - which is
+  // what a reusable checklist is FOR (INSP-01: the same list walked at
+  // move-in and move-out is what makes the two comparable).
+  //
+  // The second is R-208's: the checklist `move-in-consumer.ts` opens a report
+  // from when a tenancy goes live. Without a row here that consumer finds no
+  // default and correctly does nothing, so the demo would show the
+  // UNCONFIGURED state - a screen that is right and proves nothing. Note that
+  // the demo's own leases are written straight to ACTIVE by this seed and
+  // never emit `lease.activated`, so nothing here exercises the consumer;
+  // what it demonstrates is the configuration it needs.
   const inspectionTemplate = await prisma.inspectionTemplate.create({
     data: {
       name: INSPECTION_TEMPLATE_NAME,
@@ -3700,6 +3718,24 @@ async function seedDemoData() {
         { room: 'Primary bedroom', item: 'Flooring' },
         { room: 'Hallway', item: 'Carpet' },
         { room: 'Bathroom', item: 'Tub and surround' },
+      ],
+    },
+  })
+
+  await prisma.inspectionTemplate.create({
+    data: {
+      name: MOVE_IN_TEMPLATE_NAME,
+      defaultForType: 'MOVE_IN',
+      createdByStaffId: staff.id,
+      items: [
+        { room: 'Kitchen', item: 'Countertops' },
+        { room: 'Kitchen', item: 'Appliances' },
+        { room: 'Living room', item: 'Walls and paint' },
+        { room: 'Living room', item: 'Windows and blinds' },
+        { room: 'Primary bedroom', item: 'Flooring' },
+        { room: 'Hallway', item: 'Carpet' },
+        { room: 'Bathroom', item: 'Tub and surround' },
+        { room: 'Exterior', item: 'Yard and fencing' },
       ],
     },
   })

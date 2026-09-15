@@ -5806,11 +5806,18 @@ model InspectionTemplate {
   /// template stops being offered for a NEW inspection. Same reasoning
   /// DocumentTemplate.active's own comment gives.
   active           Boolean         @default(true)
-  /// Which auto-scheduled periodic type (INSP-04, R-073) this checklist is
-  /// used for, when it is one - PERIODIC/SEASONAL/DRIVE_BY only; MOVE_IN/
-  /// MOVE_OUT/PRE_MOVE_OUT are lease-event-driven and never read this. At
-  /// most one active template per type: the scheduling job looks this up
-  /// directly rather than guessing by name.
+  /// Which checklist is used when an inspection of this type is created
+  /// without anybody picking one. At most one template per type (UNIQUE),
+  /// looked up directly rather than guessed by name.
+  ///
+  /// PERIODIC/SEASONAL/DRIVE_BY (INSP-04, R-073), created by the calendar,
+  /// and MOVE_IN (R-208), created by lease activation. The vocabulary is
+  /// `DEFAULTABLE_TYPES` in packages/core/inspections/validate.ts - it used
+  /// to be `PERIODIC_TYPES`, and this comment used to say MOVE_IN never read
+  /// it, which stopped being true the moment move-in-consumer.ts existed.
+  ///
+  /// MOVE_OUT/PRE_MOVE_OUT still never read it: both copy the lease's own
+  /// move-in walk (`itemsFromMoveIn`), which beats any template.
   defaultForType   InspectionType? @unique
   createdByStaffId String
   updatedByStaffId String?

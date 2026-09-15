@@ -5,8 +5,15 @@ import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
 import { FieldError, SelectField, TextField } from '@/components/form/field.tsx'
 import type { InspectionTemplateFormState } from '@/lib/inspections/template-actions.ts'
 
+// KEEP EVERY LABEL SHORTER THAN THE LONGEST ONE ALREADY HERE (D-194). A
+// native <select>'s min-content width is its widest option, so a sentence
+// added here renders wider than a 412px phone, Chromium scales the page, and
+// Playwright's click point stops matching where the press lands - reported as
+// "intercepts pointer events" in mobile-chrome only. R-208's MOVE_IN row is
+// 38 characters against the empty option's 40 for exactly this reason.
 const DEFAULT_FOR_TYPE_OPTIONS = [
   { value: '', label: "Not a default - pick it by hand each time" },
+  { value: 'MOVE_IN', label: 'Default for Move-in (lease activation)' },
   { value: 'PERIODIC', label: 'Default for Periodic (annual interior)' },
   { value: 'SEASONAL', label: 'Default for Seasonal (exterior)' },
   { value: 'DRIVE_BY', label: 'Default for Drive-by' },
@@ -48,7 +55,7 @@ export function InspectionTemplateForm({
       <FormAlerts state={state} />
       <TextField label="Name" name="name" required idPrefix="checklist" defaultValue={defaultName} error={errors.name} />
       <SelectField
-        label="Auto-scheduling"
+        label="Used automatically for"
         name="defaultForType"
         idPrefix="checklist"
         defaultValue={defaultForType}

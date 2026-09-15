@@ -17,6 +17,34 @@ export const INSPECTION_TYPES = [
 ] as const satisfies readonly InspectionType[]
 export type InspectionTypeValue = (typeof INSPECTION_TYPES)[number]
 
+/// Which types a checklist may be designated the default FOR
+/// (`InspectionTemplate.defaultForType`) - the types something other than a
+/// person picking a template creates.
+///
+/// Was PERIODIC_TYPES until R-208. The column's question has never been "is
+/// this on a calendar clock", it has been "when this type gets created
+/// without anybody choosing a checklist, which checklist". MOVE_IN joined
+/// the moment lease activation started opening one (move-in-consumer.ts);
+/// `isPeriodicType` stays exactly what it was, because the periodic
+/// scheduling job really does mean the calendar-driven three and nothing
+/// else.
+///
+/// MOVE_OUT and PRE_MOVE_OUT are deliberately NOT here: both build their
+/// checklist by copying the lease's own move-in walk (`itemsFromMoveIn`),
+/// which is a better answer than any template, and neither has a fallback
+/// worth configuring.
+export const DEFAULTABLE_TYPES = [
+  'MOVE_IN',
+  'PERIODIC',
+  'SEASONAL',
+  'DRIVE_BY',
+] as const satisfies readonly InspectionType[]
+export type DefaultableTypeValue = (typeof DEFAULTABLE_TYPES)[number]
+
+export function isDefaultableType(value: string): value is DefaultableTypeValue {
+  return (DEFAULTABLE_TYPES as readonly string[]).includes(value)
+}
+
 export const ITEM_CONDITIONS = [
   'NEW',
   'GOOD',

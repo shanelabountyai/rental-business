@@ -49,6 +49,18 @@ SCHEDULED_JOBS.push({
         depositCents: true,
         unit: { select: { name: true } },
         charges: { where: { type: 'DEPOSIT' }, select: { id: true }, take: 1 },
+        // R-208. Releasing the access codes is the last moment anybody can
+        // record what this house looked like before the tenant's furniture
+        // is in it - after that the baseline is gone for good and every
+        // deduction at move-out trips `isUnsupportedDeduction`. So the Task
+        // that hands over the codes says whether a walk is on record.
+        // WARN, NEVER BLOCK (D-187, D-222): the codes go out either way.
+        inspections: {
+          where: { type: 'MOVE_IN' },
+          select: { performedAt: true },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+        },
       },
     })
 
@@ -87,6 +99,18 @@ SCHEDULED_JOBS.push({
         settlingPayments.every((e) => fundsCleared(e.payment, asOf))
       if (!allCleared) continue
 
+      // Two different asks, so two different sentences. No report at all
+      // means nobody can walk one - open it, or designate a MOVE_IN default
+      // checklist so `move-in-consumer.ts` opens the next one by itself. An
+      // unwalked one means the tenant has been asked and has not gone round
+      // yet, which is a chase, not a setup problem.
+      const moveIn = lease.inspections[0]
+      const moveInWarning = !moveIn
+        ? ' — NO MOVE-IN REPORT: open one before the codes go out'
+        : !moveIn.performedAt
+          ? ' — MOVE-IN WALK NOT DONE: chase it before the codes go out'
+          : ''
+
       const receivedAt = settlingPayments
         .map((e) => e.payment.receivedAt)
         .sort((a, b) => a.getTime() - b.getTime())[0]!
@@ -106,8 +130,13 @@ SCHEDULED_JOBS.push({
           subjectType: 'Lease',
           subjectId: lease.id,
           businessDate: today,
-          priority: 'ROUTINE',
-          title: `Move-in funds cleared — release access codes (${lease.unit.name})`,
+          // URGENT, not ROUTINE, while no walk is on record: the two facts
+          // are the same fact seen twice - the codes are going out and the
+          // evidence window is closing on the same day. A routine-priority
+          // note about a thing that becomes impossible tomorrow is the wrong
+          // shape.
+          priority: moveInWarning ? 'URGENT' : 'ROUTINE',
+          title: `Move-in funds cleared — release access codes (${lease.unit.name})${moveInWarning}`,
         })
       })
       cleared++

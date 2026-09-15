@@ -48,6 +48,8 @@ afterEach(async () => {
   // Deposit and Task carry no such reference, so those are the only rows
   // worth clearing between tests; everything else just accumulates under
   // this file's own throwaway property, deactivated whole in `afterAll`.
+  await prisma.inspectionItem.deleteMany({ where: { inspection: { leaseId: { in: leaseIds } } } })
+  await prisma.inspection.deleteMany({ where: { leaseId: { in: leaseIds } } })
   await prisma.deposit.deleteMany({ where: { leaseId: { in: leaseIds } } })
   await prisma.task.deleteMany({ where: { subjectId: { in: leaseIds } } })
   await prisma.jobRun.deleteMany({ where: { propertyId } })
@@ -198,5 +200,64 @@ describe('the deposit-clearing job', () => {
 
     const deposits = await prisma.deposit.findMany({ where: { leaseId: lease.id } })
     expect(deposits).toHaveLength(1)
+  })
+})
+
+// R-208. Releasing the access codes is the last moment anyone can record
+// what the house looked like before the tenant's furniture is in it. After
+// that the baseline is gone and every deduction at move-out trips
+// `isUnsupportedDeduction`. The Task that hands over the codes says so.
+//
+// WARN, NEVER BLOCK (D-187, D-222): every one of these still creates the
+// Deposit and still raises the Task. The only thing that changes is what it
+// says and how loudly.
+describe('the access-code Task and the move-in condition report', () => {
+  async function clearedTask(unique: string, seed?: (leaseId: string, unitId: string) => Promise<void>) {
+    const { lease, unit, payer } = await makeLease(unique)
+    await seed?.(lease.id, unit.id)
+    await depositChargedAndPaid(lease.id, payer.id, 'MONEY_ORDER', new Date('2026-08-01T12:00:00Z'))
+    await runAt('2026-08-02T12:00:00Z')
+    return prisma.task.findFirstOrThrow({
+      where: { subjectId: lease.id, type: 'lease.deposit_cleared' },
+    })
+  }
+
+  it('shouts, and goes URGENT, when no move-in report exists at all', async () => {
+    const task = await clearedTask('no-move-in')
+
+    expect(task.title).toContain('NO MOVE-IN REPORT')
+    // The two facts are one fact seen twice: the codes are going out and the
+    // evidence window is closing on the same day.
+    expect(task.priority).toBe('URGENT')
+  })
+
+  it('says CHASE, not open one, when a report exists but nobody walked it', async () => {
+    const task = await clearedTask('unwalked', async (leaseId, unitId) => {
+      await prisma.inspection.create({
+        data: { propertyId, unitId, leaseId, type: 'MOVE_IN', selfGuided: true },
+      })
+    })
+
+    expect(task.title).toContain('MOVE-IN WALK NOT DONE')
+    expect(task.title).not.toContain('NO MOVE-IN REPORT')
+    expect(task.priority).toBe('URGENT')
+  })
+
+  it('says nothing extra, and stays ROUTINE, once the walk is on record', async () => {
+    const task = await clearedTask('walked', async (leaseId, unitId) => {
+      await prisma.inspection.create({
+        data: {
+          propertyId,
+          unitId,
+          leaseId,
+          type: 'MOVE_IN',
+          selfGuided: true,
+          performedAt: new Date('2026-08-01T16:00:00Z'),
+        },
+      })
+    })
+
+    expect(task.title).not.toContain('MOVE-IN')
+    expect(task.priority).toBe('ROUTINE')
   })
 })

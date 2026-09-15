@@ -1,6 +1,6 @@
 'use server'
 
-import { isPeriodicType, validateInspectionTemplate } from '@rental/core/inspections'
+import { isDefaultableType, validateInspectionTemplate } from '@rental/core/inspections'
 import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
@@ -53,7 +53,12 @@ export async function saveInspectionTemplate(
   }
   // Empty option means "not the default for anything" - the ordinary case
   // for most checklists, which exist to be picked by hand.
-  const defaultForType = isPeriodicType(defaultForTypeRaw) ? defaultForTypeRaw : null
+  //
+  // `isDefaultableType`, not `isPeriodicType` (R-208): MOVE_IN is now
+  // created without anybody choosing a checklist too, by lease activation
+  // rather than by a calendar. See DEFAULTABLE_TYPES for why the two
+  // predicates are not the same question.
+  const defaultForType = isDefaultableType(defaultForTypeRaw) ? defaultForTypeRaw : null
 
   const violations = validateInspectionTemplate(input)
   if (violations.length > 0) {
