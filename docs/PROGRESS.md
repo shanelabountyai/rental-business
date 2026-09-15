@@ -12527,7 +12527,7 @@ commit touched before reading it as a dead pipeline.
 **And a trap declined.** The new `<select>` option is `Default for Move-in (lease activation)`, 38 characters against the existing longest option's 40, with the reason written above the list. D-194: a native select's min-content width is its widest option, and R-182 put 930px inside a 412px viewport that way and failed six `mobile-chrome` tests that had passed locally.
 
 ## R-209 — the deposit applied to arrears reaches the ledger
-**Commit:** `PENDING`  ·  **Date:** 2026-09-15
+**Commit:** `fa10c30`  ·  **Date:** 2026-09-15
 
 **What it built.** `computeDisposition` in [disposition.ts](packages/core/ledger/disposition.ts) gains `ledgerAppliedCents` — `min(appliedCents, max(0, outstandingLedgerCents))`, the part of the applied deposit that satisfies the ordinary ledger rather than the deductions. [finalizeDisposition](apps/web/lib/deposits/actions.ts) now spends it: before the letter is written it records a `Payment` (`channel: OTHER`, `SETTLED`, `receivedByStaffId` = the finalizing actor, `stripeInvoiceId` from `getOpenInvoice`) and pushes `recordOutOfBandPayment` against the payer's open Stripe invoice, idempotency-keyed `deposit-disposition:<depositId>`. The `LedgerEntry` arrives on the event that push produces, through `planAllocation` like any other payment. A failed push deletes the row and returns an error, so nothing is sent; a tenancy with no Stripe payer, and arrears too large for one invoice, are each refused with a sentence that says what to do.
 
