@@ -12260,7 +12260,7 @@ per push, on its head.
 
 ## R-206 — the aging anchors to the oldest unpaid PERIOD, not the oldest charge on file
 
-**Commit:** `PENDING`
+**Commit:** `ef39547`
 
 **What it built.** The second half of R-205's root, and the half that is read
 on a screen.
