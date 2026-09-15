@@ -4,9 +4,12 @@
 
 R-210 shipped as `623a4a0` (SHA recorded in `037828a`). **CI: read it on the
 run itself — `gh run list --limit 5` and look at the titles.** Do not copy a
-CI line forward; that error cost eleven items (R-130–R-140). At R-210's push,
-R-209's run `35013699775` was still `in_progress` and the four before it were
-green. Three separate ways to read a green pipeline as dead: both commits go
+CI line forward; that error cost eleven items (R-130–R-140). R-210's own run
+`35015278369` went **green on both jobs** — verify and e2e/axe/Lighthouse.
+R-209's run `35013699775` was **cancelled by R-210's push** after its verify
+job passed, so its e2e job never finished; R-210's run covers both commits.
+That auto-cancel is the same mechanism the `ignoreCommand` rule turns on, and
+it is why a cancelled neighbouring run is not a failure. Three separate ways to read a green pipeline as dead: both commits go
 up in one push so the run is attributed to the HEAD (docs-only) sha and
 `--commit <work sha>` returns EMPTY; `--commit` matches only a FULL sha
 (R-207); and `paths-ignore: ['**.md', 'docs/**']` means a docs-only PUSH
