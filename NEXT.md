@@ -2,12 +2,18 @@
 
 ## R-207 is done. Pick up R-208 — the move-in condition report nothing creates.
 
-R-207 shipped as `cb07374` (SHA recorded in `183937b`). CI run: see the R-207
-entry in `docs/PROGRESS.md`. **Do not copy a CI line forward.**
-`gh run list --commit` matches only a FULL sha and returns empty for a short
-one with no error, indistinguishable from "docs-only push, no run" —
-`git rev-parse` first. That copy-forward error cost eleven items
-(R-130–R-140).
+R-207 shipped as `cb07374` (SHA recorded in `183937b`). **CI run
+`35002916707` is GREEN on both jobs** — read it on the run itself,
+`gh run view 35002916707`. **Do not copy a CI line forward**; that error cost
+eleven items (R-130–R-140).
+
+**Two things make `gh run list --commit` lie, and R-207 hit the second.**
+It matches only a FULL sha and returns empty for a short one with no error.
+And `.github/workflows/ci.yml` carries `paths-ignore: ['**.md', 'docs/**']`,
+so a **docs-only commit legitimately has NO RUN** — `183937b` and `64dde74`
+both do. Check what the commit touched before reading an empty result as a
+dead pipeline. (R-206's entry shows a run against its own SHA commit only
+because that push carried both commits at once.)
 
 **Start here:** `docs/prds/06-backlog.md` → row 195 / **R-208**. The review is
 verbatim at `docs/reviews/2026-09-13-operator-review.md` §4; D-222 holds the
