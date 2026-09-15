@@ -1,67 +1,81 @@
 # Next session
 
-## R-206 is done. Pick up R-207 — one line, the cheapest real win in Arc 5.
+## R-207 is done. Pick up R-208 — the move-in condition report nothing creates.
 
-R-206 shipped as `ef39547` (SHA recorded in `770ea18`). CI run
-`34989417726` — read its verdict on the run itself, `gh run view 34989417726`;
-`docs/PROGRESS.md`'s R-206 entry records what it said. **Do not copy a CI line
-forward.** `gh run list --commit` matches only a FULL sha and returns empty for
-a short one with no error, indistinguishable from "docs-only push, no run" —
+R-207 shipped as `cb07374` (SHA recorded in `183937b`). CI run: see the R-207
+entry in `docs/PROGRESS.md`. **Do not copy a CI line forward.**
+`gh run list --commit` matches only a FULL sha and returns empty for a short
+one with no error, indistinguishable from "docs-only push, no run" —
 `git rev-parse` first. That copy-forward error cost eleven items
 (R-130–R-140).
 
-**Start here:** `docs/prds/06-backlog.md` → row 194 / **R-207**. The review is
-verbatim at `docs/reviews/2026-09-13-operator-review.md` §3; D-222 holds the
-binding "do not build" list.
+**Start here:** `docs/prds/06-backlog.md` → row 195 / **R-208**. The review is
+verbatim at `docs/reviews/2026-09-13-operator-review.md` §4; D-222 holds the
+binding "do not build" list, and it explicitly forbids a move-in inspection
+that BLOCKS occupancy.
 
-## R-207, concretely
+## R-208, concretely
 
-`EMERGENCY_CATEGORIES` has exactly one member, `maintenance_emergency`
-(`packages/core/notifications/categories.ts:302-307`). The vendor dispatch
-sends on `work_order_assigned` with a `propertyId`
-(`apps/web/lib/workorders/actions.ts:407-422`), so it gets `deferUntil =
-quietHoursEndAfter(...)` and status `DEFERRED`
-(`apps/web/lib/notifications/send.ts:180-193,307-309`), and the drain only
-takes `sendAfter: { lte: now }` (`:605`). Default quiet hours are 21:00–08:00
-(`packages/core/notifications/quiet-hours.ts:32`) — **eleven hours**. The
-plumber assigned to a 22:40 sewage backup is texted at 08:00 and the screen
-says the dispatch went. `priority: 'EMERGENCY'` is already sitting unread in
-the notify context. `reissue.ts:105` has the same shape — grep before fixing
-only the path the row names.
+A `MOVE_IN` inspection is created in exactly one place — a staff member
+pressing a button (`apps/web/lib/inspections/actions.ts:85,130`). Lease
+activation creates none. The apparent safety net is not one:
+`inspection.move_in_overdue` selects
+`{ type: 'MOVE_IN', selfGuided: true, performedAt: null }`
+(`apps/web/lib/inspections/auto-finalize-job.ts:122-130`) — **it needs the row
+to exist before it can complain nobody walked it**. The asymmetry is provable
+in two filenames: `pre-move-out-scheduling-job.ts:78` creates its inspection
+automatically and there is no move-in equivalent.
 
-Two halves, and the row asks for both: bypass quiet hours for an EMERGENCY
-work order (or for a VENDOR recipient at all — a business being dispatched,
-not a consumer being marketed to), **and say on the screen when a send was
-deferred**. The second half is what makes the first provable.
+What it costs is the whole deposit case: `move-out-copy.ts:39` builds
+R-070/R-151's side-by-side from `{ leaseId, type: 'MOVE_IN' }`, so with none
+the comparison has nothing on the left and every deduction trips
+`isUnsupportedDeduction` (`packages/core/ledger/disposition.ts:95-105`).
 
-## What R-206 left behind
+Fix: raise the MOVE_IN inspection on lease activation (blank, `selfGuided` per
+the tenant's arrangement) so the existing overdue job has something to watch,
+and loudly warn on the access-code release while no move-in report exists
+(`apps/web/lib/leases/deposit-clearing-job.ts:103-111` is where that Task is
+raised today, and it says nothing about a walk). **Warn, never block** —
+D-187's posture, and D-222 makes it binding: a family must not be stopped
+moving in on a Saturday because nobody pressed a button. **Needs counsel** on
+penalty exposure, not on the gap — not blocked on an answer to start.
 
-- **The chase ladder fires once per arrears EPISODE, not once per unpaid
-  period.** `chaseRungDue` matches days past grace exactly against `[1, 5,
-  15]` off one anchor per lease, so a second unpaid month recovers no rung.
-  The row claimed the fix would restore the ladder; it does not, and D-224
-  records that correction rather than dropping it. What the fix restores is
-  the date, the `30+` bucket and the sort. Owned by nobody.
-- **`webhook.ts:296` can put fee money in an unlinked `CHARGE` entry.**
-  `fits = linkedTotal <= movedCents` writes NO linked rows when false, so a
-  part-paid invoice becomes one unlinked remainder that `rentPeriodDebts`
-  reads as rent while the `Charge` row is still in the list separately. The
-  debit side is double-counted, so the anchor moves NEWER — understating, the
-  safe half. Inherited from R-205.
-- A balance moved by an `ADJUSTMENT` with no charge behind it still falls
-  through to the oldest known debt. Deliberate and unchanged.
-- `late-fees.ts` pass 2 deliberately does **not** use `rentDebtsFor`.
+**"Lease activation" is FOUR call sites, not one — check before you hook it.**
+`leaseTransition()` in `packages/core/leases` is the shared *decider*, not the
+writer: each caller writes for itself. `apps/web/lib/leases/actions.ts:465`
+(the manual "Make this lease active"), `esign-actions.ts` (the tenant finishes
+signing), `esign-staff-actions.ts:151` and `renewal-cutover-job.ts:60` all
+call it. A hook added to only one of them means a lease signed in the portal
+gets a move-in report and one activated by hand does not. Find the common
+write, or add it to all four and say in the entry that you checked.
 
-## The fixture rule paid off three times in two items — expect a fourth
+## What R-207 left behind
+
+- **`urgent` does not reach `scheduleRetry`, so a bounced emergency is still
+  retried at 08:00.** The flag is a fact about the SEND and nothing persists
+  it; a retry runs from the stored row, which knows only its category.
+  Narrower than what R-207 fixed (that held *every* emergency dispatch, this
+  holds only the ones a provider bounced), and closing it means a column on
+  `Notification` plus a migration. The comment at `scheduleRetry` in
+  `apps/web/lib/notifications/send.ts` names it. Owned by nobody.
+- **`plan-actions.ts:258` counts a DEFERRED outcome as "on its way"** and says
+  `The written schedule is on its way to …` for a message held until 08:00.
+  Same shape as the screen half R-207 fixed, different screen. R-211 owns the
+  neighbouring `sendReminders` version.
+- The bid-request send in `approvals.ts` sets no `urgent` and still defers.
+  Deliberate: there is no emergency whose right move is to gather three bids.
+- No e2e drives `dispatchToVendor`'s notice; the deferred branch needs the
+  wall clock inside quiet hours, which is why the cover is a unit test on the
+  pure `vendorDispatchNotice`.
+
+## The fixture rule has now paid off four times in three items
 
 R-205 fixed `rent-roll.spec.ts` (UTC midnight reads as the previous local
-day). R-206's gate then went red in `evictions.spec.ts`, a file the item never
-opened: its cure-notice fixture wrote the late fee as an **unlinked** `CHARGE`
-ledger entry beside its own `Charge` row, and `chargeId: null` is the only
-marker saying *this is the subscription's rent line*. Production cannot
-produce that shape — `webhook.ts:296-337` writes one linked row per `Charge`
-and exactly one unlinked remainder. **Before trusting any fixture that writes
-a `LedgerEntry` by hand, check `chargeId` and check the hour.**
+day). R-206's gate went red in `evictions.spec.ts`, a file it never opened.
+**Before trusting any fixture that writes a `LedgerEntry` by hand, check
+`chargeId` and check the hour.** R-208 writes inspections, not ledger rows,
+but the class is the same: **shape a fixture like the thing production
+actually writes.**
 
 ## Standing traps worth re-reading before any UI work
 
@@ -72,25 +86,30 @@ already, so `--list` is how you get the real expected number.
 
 **Use `npm test -- <path>` and `npm run test:e2e`, never bare `npx vitest` or
 `npx playwright test`** (`--list` is safe without it). And in **zsh an
-unquoted `$F` does not word-split** — `npx playwright test --list $FILES` came
-back `Total: 0 tests in 0 files` with exit 1 and no explanation. Spell the
-paths out.
+unquoted `$F` does not word-split** — spell the paths out.
 
 **Prove a new assertion against the reverted fix** (D-197). R-202 through
-R-206 all did.
+R-207 all did.
 
 **Read the e2e summary, not the tail of it.** The gate is
 `passed + skipped + flaky` reconciling against `npx playwright test --list`.
 
-**`npm run db:ci` before pushing a migration.** R-207 needs no schema change;
-R-217 (`habitabilityRepairDays` on `JurisdictionRule`) does.
+**`npm run db:ci` before pushing a migration.** R-208 may need none (the
+`Inspection` model already exists); R-217 (`habitabilityRepairDays` on
+`JurisdictionRule`) does.
+
+**A `'use server'` module may export only async functions, and that includes a
+type re-export.** R-207 hit this from the other side: the pure notice-builder
+had to leave `actions.ts` for its own module. `npm run build` is the only
+check that catches it.
 
 ## MACHINE CONTENTION — read this before diagnosing a red unit run
 
 R-206's first `npm test` came back **5 files red on `Hook timed out in
 10000ms`** in files the item never opened; the five passed in **1.6s** alone
-and the clean re-run was **3,185 passed in 24.6s**. That is contention, not a
-regression. The checks, in order:
+and the clean re-run was 3,185 passed. That is contention, not a regression.
+R-207's unit runs were clean first time at **3,190 passed / 4 skipped**. The
+checks, in order:
 
 1. `psql -d postgres -c "select datname, count(*) from pg_stat_activity group by datname"` → a project holding 30+ is the tell.
 2. `ls -lt /Library/Logs/DiagnosticReports/JetsamEvent-*.ips` → no file for the relevant minute means the OS killed nothing. `Killed: 9` names no culprit.
@@ -104,15 +123,17 @@ regression. The checks, in order:
 
 - **Re-verify every finding against the code before touching anything.**
   Findings 1, 2 and 3 were spot-checked during planning; twelve are inherited
-  evidence. R-205 and R-206 both re-verified and both were correct as written.
+  evidence. R-205, R-206 and R-207 all re-verified and all three were correct
+  as written — R-207's line numbers matched exactly.
 - **Never backfill.** Report the history, fix the writer, leave reconciled
-  rows alone. D-201 already paid for this lesson.
-- **Four rows are Needs counsel** (R-205, R-208, R-213, R-217); none is
-  blocked on an answer to start.
+  rows alone. D-201 already paid for this lesson. It bites R-208 directly:
+  do not create MOVE_IN rows for leases already active.
+- **Three rows still Needs counsel** (R-208, R-213, R-217); none is blocked on
+  an answer to start.
 - **D-222's "do not build" list is binding**: no Stripe Connect, no
   house-rules settings screen, no second queue (D-9), no deposit interest
-  engine, no `businessDaysBetween` rewrite, and no move-in inspection that
-  BLOCKS occupancy.
+  engine, no `businessDaysBetween` rewrite, and **no move-in inspection that
+  BLOCKS occupancy** — that one is R-208's own constraint.
 
 ## What the review structurally could not see
 
@@ -138,6 +159,16 @@ Also from R-187: the start-day boundary double-counts a charge raised on the
 plan's own start date; no e2e walks the wrongly-completed warning.
 
 ## Leftovers still owned by nobody
+
+From R-206: the chase ladder fires once per arrears EPISODE, not once per
+unpaid period (`chaseRungDue` matches days past grace exactly against
+`[1, 5, 15]` off one anchor per lease), recorded as D-224;
+`webhook.ts:296` can put fee money in an unlinked `CHARGE` entry when
+`fits = linkedTotal <= movedCents` is false, double-counting the debit side
+and moving the anchor NEWER (understating, the safe half); a balance moved by
+an `ADJUSTMENT` with no charge behind it still falls through to the oldest
+known debt (deliberate); `late-fees.ts` pass 2 deliberately does not use
+`rentDebtsFor`.
 
 From R-205: pass 2 reads every active lease in the property, so
 `leasesChecked` counts more than it did and a held lease can be counted in
