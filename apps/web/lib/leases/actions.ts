@@ -30,7 +30,7 @@ import { startDepositDisposition } from '@/lib/leases/deposit-disposition-start.
 import { revokeTenantLockCodes } from '@/lib/locks/tenant-codes.ts'
 import { retireUnitAccessCodes } from '@/lib/locks/access-codes.ts'
 import { startTurnoverProjectForLease } from '@/lib/turnover/start.ts'
-import { authUrl } from '@/lib/auth/delivery.ts'
+import { authUrl, canReceiveAuthLink } from '@/lib/auth/delivery.ts'
 import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
 import { rulesFor } from '@/lib/jurisdiction/queries.ts'
 import { dispatchPendingNotifications, notify } from '@/lib/notifications/send.ts'
@@ -840,6 +840,11 @@ export async function recordLeaseNotice(
     )
 
     if (by === 'LANDLORD' && primaryTenant) {
+      // R-210. A non-renewal is the notice a holdover case is built on, so a
+      // service claim it cannot support is the most expensive kind. Same
+      // predicate as the entry-notice sites: no email, no route into the
+      // portal, no PORTAL service.
+      const servedToPortal = canReceiveAuthLink(primaryTenant.tenant)
       const notice = await tx.notice.create({
         data: {
           propertyId: lease.propertyId,
@@ -854,31 +859,34 @@ export async function recordLeaseNotice(
             justCauseStatement,
             noticeToVacateDays: rule?.noticeToVacateDays ?? null,
           }),
-          serviceMethod: 'PORTAL',
-          servedAt: givenOn,
-          servedByStaffId: actor.id,
+          serviceMethod: servedToPortal ? 'PORTAL' : null,
+          servedAt: servedToPortal ? givenOn : null,
+          servedByStaffId: servedToPortal ? actor.id : null,
           jurisdictionRuleId: rule?.id ?? null,
         },
       })
       noticeId = notice.id
-      await tx.noticeDelivery.create({
-        data: {
-          noticeId: notice.id,
-          method: 'PORTAL',
-          servedAt: givenOn,
-          servedByStaffId: actor.id,
-          jurisdictionRuleId: rule?.id ?? null,
-        },
-      })
+      if (servedToPortal) {
+        await tx.noticeDelivery.create({
+          data: {
+            noticeId: notice.id,
+            method: 'PORTAL',
+            servedAt: givenOn,
+            servedByStaffId: actor.id,
+            jurisdictionRuleId: rule?.id ?? null,
+          },
+        })
+      }
       await audit(
         {
-          action: 'notice.served',
+          action: servedToPortal ? 'notice.served' : 'notice.drafted',
           entityType: 'Notice',
           entityId: notice.id,
           propertyId: lease.propertyId,
           after: {
             type: 'NON_RENEWAL',
-            serviceMethod: 'PORTAL',
+            serviceMethod: servedToPortal ? 'PORTAL' : null,
+            unservedReason: servedToPortal ? null : 'no_portal_sign_in',
             effectiveOn: effectiveOn.toISOString(),
             jurisdictionRuleId: rule?.id ?? null,
           },

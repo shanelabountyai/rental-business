@@ -110,6 +110,9 @@ export async function recordScreeningDecision(
   ]
     .filter(Boolean)
     .join('\n')
+  // Whether we will TRY to email it. R-210: this used to be read as
+  // "whether it was served", which is the defect - see the service block
+  // below the transaction.
   const canAutoServe = owesAdverseAction && Boolean(applicant.email) && Boolean(addressOfRecord)
 
   const { noticeId, autoServed, bodyText } = await prisma.$transaction(async (tx) => {
@@ -170,7 +173,19 @@ export async function recordScreeningDecision(
       decisionNotes: notes || null,
     })
 
-    const now = new Date()
+    // R-210. THE NOTICE IS CREATED UNSERVED, ALWAYS.
+    //
+    // This block used to stamp `serviceMethod: 'EMAIL', servedAt: now` inside
+    // the transaction while the real send happened afterwards in a try/catch
+    // whose failure branch was one `console.error`. So a bounced or
+    // unconfigured send left an FCRA adverse-action notice recorded as served
+    // by email to an applicant who never received one - and worse than the
+    // false record, `adverseActionOwed` reads exactly that `servedAt`, so the
+    // obligation was marked discharged and the household advanced.
+    //
+    // Service is now written BELOW, from what the engine actually did. The
+    // same optimism is the PORTAL half of this item at the five call sites
+    // `canReceiveAuthLink` now guards.
     const notice = await tx.notice.create({
       data: {
         propertyId: application.propertyId,
@@ -178,23 +193,17 @@ export async function recordScreeningDecision(
         type: 'ADVERSE_ACTION',
         addressOfRecord: addressOfRecord || '(no address on file)',
         bodyText,
-        ...(canAutoServe
-          ? { serviceMethod: 'EMAIL', servedAt: now, servedByStaffId: actor.id }
-          : {}),
       },
     })
 
     if (canAutoServe) {
-      await tx.noticeDelivery.create({
-        data: { noticeId: notice.id, method: 'EMAIL', servedAt: now, servedByStaffId: actor.id },
-      })
       await audit(
         {
-          action: 'notice.served',
+          action: 'notice.drafted',
           entityType: 'Notice',
           entityId: notice.id,
           propertyId: application.propertyId,
-          after: { type: 'ADVERSE_ACTION', serviceMethod: 'EMAIL' },
+          after: { type: 'ADVERSE_ACTION', willAttempt: 'EMAIL' },
         },
         tx,
       )
@@ -228,6 +237,55 @@ export async function recordScreeningDecision(
       await dispatchPendingNotifications(new Date(), 50, {
         deliveryIds: outcomes.map((o) => o.deliveryId).filter((id): id is string => id != null),
       })
+
+      // SERVICE IS WRITTEN FROM THE SEND, NOT FROM THE INTENT (R-210).
+      //
+      // `dispatchPendingNotifications` sets SENT only after the adapter
+      // returned one, so this row is the evidence. A suppressed, deferred or
+      // failed EMAIL leaves the notice unserved: it then sorts to the top of
+      // `/notices` as work somebody still owes, `recordNoticeService` is how
+      // a person discharges it by post, and `adverseActionOwed` keeps the
+      // household at SCREENED until one of those happens. That hold is the
+      // point - an FCRA notice nobody received is still owed.
+      const emailDeliveryId = outcomes.find((o) => o.channel === 'EMAIL')?.deliveryId
+      const sent = emailDeliveryId
+        ? await prisma.notificationDelivery.findFirst({
+            where: { id: emailDeliveryId, status: 'SENT' },
+            select: { sentAt: true },
+          })
+        : null
+      if (sent) {
+        const servedAt = sent.sentAt ?? new Date()
+        await prisma.$transaction(async (tx) => {
+          await tx.noticeDelivery.create({
+            data: {
+              noticeId,
+              method: 'EMAIL',
+              servedAt,
+              servedByStaffId: actor.id,
+            },
+          })
+          await tx.notice.update({
+            where: { id: noticeId },
+            data: { serviceMethod: 'EMAIL', servedAt, servedByStaffId: actor.id },
+          })
+          await audit(
+            {
+              action: 'notice.served',
+              entityType: 'Notice',
+              entityId: noticeId,
+              propertyId: application.propertyId,
+              after: {
+                type: 'ADVERSE_ACTION',
+                serviceMethod: 'EMAIL',
+                servedAt: servedAt.toISOString(),
+                notificationDeliveryId: emailDeliveryId,
+              },
+            },
+            tx,
+          )
+        })
+      }
     } catch (error) {
       console.error(`[screening] failed to email adverse action notice ${noticeId}`, error)
     }

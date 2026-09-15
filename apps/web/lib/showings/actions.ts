@@ -5,7 +5,7 @@ import { businessDate, friendlyTimestamp } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { auditAsSystem } from '@/lib/audit/system.ts'
-import { authUrl } from '@/lib/auth/delivery.ts'
+import { authUrl, canReceiveAuthLink } from '@/lib/auth/delivery.ts'
 import { issueToken, redeemToken } from '@/lib/auth/store.ts'
 import { rulesFor } from '@/lib/jurisdiction/queries.ts'
 import { dispatchPendingNotifications, notify } from '@/lib/notifications/send.ts'
@@ -107,6 +107,13 @@ export async function bookShowing(
       return { error: 'That time is no longer available. Pick another.' }
     }
 
+    // R-210, same check and same reason as the two scheduling modules: a
+    // tenant with no email has no route into the portal, so PORTAL service
+    // recorded for them is a false entry in the one record an unlawful-entry
+    // claim is argued off. The showing still goes ahead - the decision above
+    // is unchanged - and the notice still goes out on every channel the
+    // engine can reach; only the SERVICE columns wait for real service.
+    const servedToPortal = canReceiveAuthLink(tenant)
     const notice = await prisma.notice.create({
       data: {
         propertyId: link.propertyId,
@@ -123,23 +130,26 @@ export async function bookShowing(
           timezone: link.timezone,
           entryNoticeHours: rule.entryNoticeHours,
         }),
-        serviceMethod: 'PORTAL',
-        servedAt: now,
+        serviceMethod: servedToPortal ? 'PORTAL' : null,
+        servedAt: servedToPortal ? now : null,
         jurisdictionRuleId: rule.id,
       },
     })
     entryNoticeId = notice.id
-    await prisma.noticeDelivery.create({
-      data: { noticeId: notice.id, method: 'PORTAL', servedAt: now, jurisdictionRuleId: rule.id },
-    })
+    if (servedToPortal) {
+      await prisma.noticeDelivery.create({
+        data: { noticeId: notice.id, method: 'PORTAL', servedAt: now, jurisdictionRuleId: rule.id },
+      })
+    }
     await auditAsSystem(`showing-booking:${link.prospectId}`, {
-      action: 'notice.served',
+      action: servedToPortal ? 'notice.served' : 'notice.drafted',
       entityType: 'Notice',
       entityId: notice.id,
       propertyId: link.propertyId,
       after: {
         type: 'ENTRY_NOTICE',
-        serviceMethod: 'PORTAL',
+        serviceMethod: servedToPortal ? 'PORTAL' : null,
+        unservedReason: servedToPortal ? null : 'no_portal_sign_in',
         scheduledStart: requested.toISOString(),
         entryNoticeHours: rule.entryNoticeHours,
         jurisdictionRuleId: rule.id,

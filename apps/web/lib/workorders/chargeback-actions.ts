@@ -7,7 +7,7 @@ import type { ChargebackRefusal } from '@rental/core/workorders'
 import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { audit } from '@/lib/audit/index.ts'
-import { authUrl } from '@/lib/auth/delivery.ts'
+import { authUrl, canReceiveAuthLink } from '@/lib/auth/delivery.ts'
 import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
 import { getBillingProvider } from '@/lib/billing/provider.ts'
 import { isUniqueViolation } from '@/lib/db/unique-violation.ts'
@@ -202,7 +202,12 @@ export async function postChargeback(
     evidenceCount: context.evidenceCount,
   })
 
+  // R-210. No email, no route into the portal, so no PORTAL service claim -
+  // and this notice is the one a tenant disputes a damage charge against.
+  const servedToPortal = context.tenant != null && canReceiveAuthLink(context.tenant)
+
   await prisma.$transaction(async (tx) => {
+    const servedAt = new Date()
     const notice = await tx.notice.create({
       data: {
         propertyId: context.propertyId,
@@ -210,11 +215,20 @@ export async function postChargeback(
         type: 'REPAIR_CHARGE',
         addressOfRecord: context.addressLine1,
         bodyText: noticeBody,
-        serviceMethod: 'PORTAL',
-        servedAt: new Date(),
-        servedByStaffId: actor.id,
+        serviceMethod: servedToPortal ? 'PORTAL' : null,
+        servedAt: servedToPortal ? servedAt : null,
+        servedByStaffId: servedToPortal ? actor.id : null,
       },
     })
+    // R-051's rule, and this site never obeyed it: the Notice columns are the
+    // FIRST SERVICE denormalized from `deliveries`, never written without the
+    // matching delivery row. A chargeback notice had the columns and no row,
+    // so `/notices/[id]` showed a served notice with no service history.
+    if (servedToPortal) {
+      await tx.noticeDelivery.create({
+        data: { noticeId: notice.id, method: 'PORTAL', servedAt, servedByStaffId: actor.id },
+      })
+    }
     await audit(
       {
         action: 'workorder.chargeback_posted',
@@ -231,6 +245,10 @@ export async function postChargeback(
           jobCostCents: context.jobCostCents,
           partial: decision.partial === true,
           noticeId: notice.id,
+          // R-210: whether the notice behind this charge was actually served,
+          // not whether one was generated. A disputed damage charge turns on
+          // the first question and the record only ever answered the second.
+          noticeServed: servedToPortal,
           evidenceCount: context.evidenceCount,
         },
         reason,

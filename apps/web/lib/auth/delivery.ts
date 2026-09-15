@@ -134,3 +134,32 @@ export function authUrl(path: string): string {
   }
   return new URL(path, base).toString()
 }
+
+/**
+ * CAN A SIGN-IN LINK ACTUALLY REACH THIS PERSON? (R-210, extends D-179.)
+ *
+ * D-179 stopped the NOTIFICATION engine recording a live PORTAL delivery to
+ * somebody it holds no address for - "a portal is not an address unless the
+ * person can get into it". That fix was scoped to `NotificationDelivery` and
+ * never reached the `Notice` table, where five call sites stamped
+ * `serviceMethod: 'PORTAL', servedAt: now` unconditionally, inside the
+ * transaction, before anything was sent. A `Notice` row is the evidence an
+ * unlawful-entry or lockout claim is argued off; claiming service on a screen
+ * the tenant has no route into is worse than claiming nothing, because the
+ * record cannot be falsified - there is no `lastSignedInAt` on `Tenant`.
+ *
+ * EMAIL, not email-or-phone, and that is the difference from
+ * `reachableElectronically`. That predicate asks whether the notification
+ * engine can reach them at all; this one asks whether they can get INTO the
+ * portal, and every portal in this product is entered by a link
+ * `deliverAuthLink` above sends on `account_access` - declared EMAIL only, for
+ * the reason written at the top of this file. A phone-only tenant is perfectly
+ * reachable by SMS and cannot sign in at all.
+ *
+ * R-216 IS THE ITEM THAT GIVES THEM A ROUTE IN. When it lands, this is the one
+ * line that widens - deliberately here, next to the send it is a claim about,
+ * rather than beside each notice that relies on it.
+ */
+export function canReceiveAuthLink(recipient: { email?: string | null }): boolean {
+  return Boolean(recipient.email?.trim())
+}

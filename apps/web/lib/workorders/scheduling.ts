@@ -11,6 +11,7 @@ import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { audit } from '@/lib/audit/index.ts'
 import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
+import { canReceiveAuthLink } from '@/lib/auth/delivery.ts'
 import { rulesFor } from '@/lib/jurisdiction/queries.ts'
 import { dispatchPendingNotifications, notify } from '@/lib/notifications/send.ts'
 import type { WorkOrderFormState } from './actions.ts'
@@ -183,6 +184,17 @@ export async function scheduleEntry(
     let noticeId: string | null = null
     if (decision.basis === 'notice_served' || decision.basis === 'insufficient_notice') {
       if (leaseId && tenant) {
+        // R-210. SERVICE IS A CLAIM, AND THIS ONE WAS NEVER CHECKED.
+        // See `canReceiveAuthLink`'s own comment: a tenant with no email has
+        // no route into the portal at all, so PORTAL service recorded for
+        // them is a false entry in the one record an unlawful-entry claim is
+        // argued off. The notice is still generated and still sent on every
+        // channel the engine can reach - it is only the SERVICE columns that
+        // now wait for service that actually happened. An unserved notice
+        // sorts to the top of `/notices`, which is the screen that exists to
+        // make sure it is not forgotten, and staff close it through
+        // `recordNoticeService` once they have posted or handed it over.
+        const servedToPortal = canReceiveAuthLink(tenant)
         const notice = await tx.notice.create({
           data: {
             propertyId: workOrder.propertyId,
@@ -199,9 +211,9 @@ export async function scheduleEntry(
               timezone: workOrder.property.timezone,
               entryNoticeHours: rule.entryNoticeHours,
             }),
-            serviceMethod: 'PORTAL',
-            servedAt: now,
-            servedByStaffId: actor.id,
+            serviceMethod: servedToPortal ? 'PORTAL' : null,
+            servedAt: servedToPortal ? now : null,
+            servedByStaffId: servedToPortal ? actor.id : null,
             // WHICH RULE VERSION produced this notice's period. D-4's whole
             // point: a rule changing next month must not make it impossible
             // to say what the requirement was when this notice went out.
@@ -216,24 +228,33 @@ export async function scheduleEntry(
         // `permittedByJurisdiction` is left null rather than computed: an
         // entry notice is delivered to the portal by the product itself, so
         // there is no operator choice to check against the state's list.
-        await tx.noticeDelivery.create({
-          data: {
-            noticeId: notice.id,
-            method: 'PORTAL',
-            servedAt: now,
-            servedByStaffId: actor.id,
-            jurisdictionRuleId: rule.id,
-          },
-        })
+        //
+        // R-210 OVERTURNED THE SECOND HALF OF THAT SENTENCE, NOT THE FIRST.
+        // "The product delivers it itself" was the reasoning D-179 had
+        // already rejected for notifications, and it is why this row was
+        // written unconditionally for seven items. The rule check is still
+        // not ours to make here; WHETHER THERE WAS A DELIVERY AT ALL is.
+        if (servedToPortal) {
+          await tx.noticeDelivery.create({
+            data: {
+              noticeId: notice.id,
+              method: 'PORTAL',
+              servedAt: now,
+              servedByStaffId: actor.id,
+              jurisdictionRuleId: rule.id,
+            },
+          })
+        }
         await audit(
           {
-            action: 'notice.served',
+            action: servedToPortal ? 'notice.served' : 'notice.drafted',
             entityType: 'Notice',
             entityId: notice.id,
             propertyId: workOrder.propertyId,
             after: {
               type: 'ENTRY_NOTICE',
-              serviceMethod: 'PORTAL',
+              serviceMethod: servedToPortal ? 'PORTAL' : null,
+              unservedReason: servedToPortal ? null : 'no_portal_sign_in',
               scheduledStart: scheduledStart.toISOString(),
               entryNoticeHours: rule.entryNoticeHours,
               jurisdictionRuleId: rule.id,

@@ -12,6 +12,7 @@ import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { audit } from '@/lib/audit/index.ts'
 import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
+import { canReceiveAuthLink } from '@/lib/auth/delivery.ts'
 import { rulesFor } from '@/lib/jurisdiction/queries.ts'
 import { dispatchPendingNotifications, notify } from '@/lib/notifications/send.ts'
 import type { InspectionFormState } from './actions.ts'
@@ -169,6 +170,11 @@ export async function scheduleInspectionEntry(
   await prisma.$transaction(async (tx) => {
     let noticeId: string | null = null
     if (leaseId && tenant) {
+      // R-210, and the same check for the same reason as
+      // `workorders/scheduling.ts` - a tenant with no email has no route into
+      // the portal, so PORTAL service claimed for them is a false entry in
+      // the record an unlawful-entry claim is argued off.
+      const servedToPortal = canReceiveAuthLink(tenant)
       const notice = await tx.notice.create({
         data: {
           propertyId: inspection.propertyId,
@@ -185,32 +191,35 @@ export async function scheduleInspectionEntry(
             timezone,
             entryNoticeHours: rule.entryNoticeHours,
           }),
-          serviceMethod: 'PORTAL',
-          servedAt: now,
-          servedByStaffId: actor.id,
+          serviceMethod: servedToPortal ? 'PORTAL' : null,
+          servedAt: servedToPortal ? now : null,
+          servedByStaffId: servedToPortal ? actor.id : null,
           // WHICH rule version produced this notice's period (D-4).
           jurisdictionRuleId: rule.id,
         },
       })
       noticeId = notice.id
-      await tx.noticeDelivery.create({
-        data: {
-          noticeId: notice.id,
-          method: 'PORTAL',
-          servedAt: now,
-          servedByStaffId: actor.id,
-          jurisdictionRuleId: rule.id,
-        },
-      })
+      if (servedToPortal) {
+        await tx.noticeDelivery.create({
+          data: {
+            noticeId: notice.id,
+            method: 'PORTAL',
+            servedAt: now,
+            servedByStaffId: actor.id,
+            jurisdictionRuleId: rule.id,
+          },
+        })
+      }
       await audit(
         {
-          action: 'notice.served',
+          action: servedToPortal ? 'notice.served' : 'notice.drafted',
           entityType: 'Notice',
           entityId: notice.id,
           propertyId: inspection.propertyId,
           after: {
             type: 'ENTRY_NOTICE',
-            serviceMethod: 'PORTAL',
+            serviceMethod: servedToPortal ? 'PORTAL' : null,
+            unservedReason: servedToPortal ? null : 'no_portal_sign_in',
             scheduledStart: scheduledStart.toISOString(),
             entryNoticeHours: rule.entryNoticeHours,
             jurisdictionRuleId: rule.id,

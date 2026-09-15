@@ -131,14 +131,17 @@ afterAll(async () => {
 })
 
 /** A closed, tenant-caused, invoiced job with a live tenancy to bill. */
-async function billableJob(options: { withPaymentMethod: boolean }) {
+async function billableJob(options: { withPaymentMethod: boolean; email?: false }) {
   const tenant = await prisma.tenant.create({
     data: {
       firstName: 'Dara',
       lastName: `Sash-${randomUUID().slice(0, 6)}`,
-      email: `dara-${randomUUID().slice(0, 8)}@example.test`,
-      // No phone, deliberately: a literal would collide with the routing
-      // fixture rule, and email alone is enough to prove the tenant was told.
+      // `email: false` is R-210's case: a tenancy the office holds a phone
+      // number for and no email address. `uniquePhone`'s reasoning applies -
+      // a literal number would collide with SMS routing - so this tenant has
+      // neither, which is the same thing as far as the portal is concerned
+      // and keeps the fixture out of the routing fixture rule.
+      email: options.email === false ? null : `dara-${randomUUID().slice(0, 8)}@example.test`,
     },
   })
   tenantIds.push(tenant.id)
@@ -199,6 +202,69 @@ function form(amountDollars: string, reason = 'Sash snapped when it was forced p
 }
 
 describe('postChargeback', () => {
+  // ======================================================================
+  // R-210: THE NOTICE MUST NOT CLAIM SERVICE THE PRODUCT CANNOT PROVE.
+  //
+  // This site stamped `serviceMethod: 'PORTAL', servedAt: now` on every
+  // repair-charge notice, unconditionally, inside the transaction. A tenant
+  // with no email has no route into the portal at all - `deliverAuthLink`
+  // sends every sign-in link on `account_access`, which is EMAIL only - so
+  // the row recorded a service that could not have happened, in the one
+  // record a disputed damage charge is argued off, with no `lastSignedInAt`
+  // anywhere to falsify it.
+  //
+  // Neither `packages/core/workorders/chargeback.test.ts` nor
+  // `e2e/chargeback.spec.ts` can reach this: the first is pure functions, and
+  // the second drives a fixture tenant who has an email like everybody else.
+  // ======================================================================
+  it('records the repair-charge notice as SERVED, with the delivery row behind it', async () => {
+    const job = await billableJob({ withPaymentMethod: true })
+    const result = await postChargeback(job.workOrderId, {}, form('120'))
+    expect(result.error).toBeUndefined()
+
+    const notice = await prisma.notice.findFirstOrThrow({
+      where: { leaseId: job.leaseId, type: 'REPAIR_CHARGE' },
+      include: { deliveries: true },
+    })
+    expect(notice.serviceMethod).toBe('PORTAL')
+    expect(notice.servedAt).not.toBeNull()
+    // R-051's rule, which this site never obeyed: the Notice columns are the
+    // FIRST SERVICE denormalized from `deliveries` and are "never written
+    // without writing the matching delivery row". Without one, `/notices/[id]`
+    // showed a served notice whose service history was empty and
+    // `markNoticeRead` had nothing to hang a read receipt on - and the read
+    // receipt is the only honest evidence PORTAL service has.
+    expect(notice.deliveries).toHaveLength(1)
+    expect(notice.deliveries[0]!.method).toBe('PORTAL')
+  }, 30_000)
+
+  it('leaves it UNSERVED for a tenant who cannot sign in, rather than claiming the portal', async () => {
+    const job = await billableJob({ withPaymentMethod: true, email: false })
+    const result = await postChargeback(job.workOrderId, {}, form('120'))
+    // The charge still stands and the notice still exists - only the claim of
+    // service is withheld. It then sorts to the top of `/notices` as work
+    // somebody owes, and `recordNoticeService` is how a person discharges it.
+    expect(result.error).toBeUndefined()
+
+    const notice = await prisma.notice.findFirstOrThrow({
+      where: { leaseId: job.leaseId, type: 'REPAIR_CHARGE' },
+      include: { deliveries: true },
+    })
+    expect(notice.serviceMethod).toBeNull()
+    expect(notice.servedAt).toBeNull()
+    expect(notice.servedByStaffId).toBeNull()
+    expect(notice.deliveries).toHaveLength(0)
+
+    const charge = await prisma.charge.findFirstOrThrow({
+      where: { workOrderId: job.workOrderId },
+    })
+    const entry = await prisma.auditLog.findFirstOrThrow({
+      where: { entityType: 'Charge', entityId: charge.id, action: 'workorder.chargeback_posted' },
+    })
+    // Whether the notice was SERVED, not whether one was generated.
+    expect((entry.after as Record<string, unknown>).noticeServed).toBe(false)
+  }, 30_000)
+
   it('CHARGES, SERVES AND TELLS even when the payment provider is down', async () => {
     // The invariant the function's own doc comment states: the Charge is
     // written first because it is the thing the database can make idempotent,
