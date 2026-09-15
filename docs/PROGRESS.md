@@ -12384,3 +12384,8 @@ flaky, 0 skipped**, reconciling exactly against `npx playwright test --list`
 both projects. No migration, so no `db:ci`. **Both new assertions were proven
 against the reverted fix** (D-197), recorded above: `rentDebts: []` in the
 unit test returns 309 days and `16–30 days` in the e2e.
+
+**CI run `34989417726` is GREEN on both jobs** — `Lint, types, unit tests,
+build` and `End-to-end, axe, Lighthouse` — read on the run itself once it
+completed, not copied forward from R-205's entry. It covers the push carrying
+`ef39547` and the `record the SHA` commit `770ea18`.
