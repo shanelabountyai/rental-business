@@ -64,9 +64,21 @@ export interface DelinquencyFacts {
   ///
   /// DOES NOT INCLUDE ORDINARY RENT. D-11/D-40 mint no monthly `Charge` for
   /// the subscription's own rent line - only for the exceptions (a late fee,
-  /// a proration, a chargeback). `nearestRentDueOn` and `monthlyRentCents`
-  /// below stand in for the rent debt these rows cannot see.
+  /// a proration, a chargeback). `rentDebts` below is that half.
   charges: readonly DatedCharge[]
+  /// ONE DATED DEBT PER RENT PERIOD THE SUBSCRIPTION HAS BILLED (R-206),
+  /// from `rentPeriodDebts` over the lease's projected ledger rows.
+  ///
+  /// Together with `charges` this is the WHOLE debit side of the balance:
+  /// every `CHARGE` entry is either a `Charge` row's projection or the
+  /// subscription's own rent line, and `rentPeriodDebts` is the second set.
+  /// So the allocation below normally consumes the balance exactly, and the
+  /// "ran out of debts" fallback stops being the ordinary case it was.
+  ///
+  /// Empty is a real state - a tenancy Stripe has not billed yet, or a
+  /// balance moved by an `ADJUSTMENT` alone - and `nearestRentDueOn` below
+  /// is the fallback for exactly that.
+  rentDebts: readonly DatedCharge[]
   /// What the lease owes right now, from `balanceCents`. Negative is a
   /// credit and is a real state.
   balanceCents: Cents
@@ -75,22 +87,22 @@ export interface DelinquencyFacts {
   /// From the versioned JurisdictionRule for this property's state (D-4).
   /// Null when no rule is configured, which is NOT zero — see below.
   graceDays: number | null
-  /// The most recent date ordinary rent was due, from `dueDateOnOrBefore`
+  /// THE FALLBACK, USED ONLY WHEN `rentDebts` IS EMPTY (R-206). The most
+  /// recent date ordinary rent was due, from `dueDateOnOrBefore`
   /// (`Lease.rentDueDay` / `LeasePayer.debitDay`) — the day-of-month pair
   /// `predebit.ts` already reads, in the direction that answers "how long
   /// ago". Null only when the caller has no lease to read it from.
   ///
   /// UNDERSTATES LATENESS WHEN MORE THAN ONE MONTH OF RENT IS UNPAID: it can
-  /// only anchor to the MOST RECENT due date, because unlinked rent balance
-  /// is a single number in this schema, not one row per missed period
-  /// (D-11's "no monthly Charge" decision, see `charges` above). Reporting
-  /// the nearer date is still a real improvement on reporting a delinquent
-  /// tenancy as current - which is what this function did before R-045 found
-  /// the gap - and the limitation is stated rather than left to look more
-  /// precise than it is.
+  /// only anchor to the MOST RECENT occurrence of a day-of-month, so it is
+  /// never more than about a month in the past whatever is owed. That was
+  /// the whole aging until R-206, and it is why a tenancy two months behind
+  /// reported nineteen days late and emptied the `30+` bucket. It survives
+  /// as the answer for a balance `rentDebts` cannot explain, where a rough
+  /// date still beats none.
   nearestRentDueOn: BusinessDate | null
-  /// `Lease.rentCents` - HOW BIG the rent debt dated `nearestRentDueOn` is,
-  /// so the allocation below knows how much of the balance that period's
+  /// `Lease.rentCents` - HOW BIG the fallback debt dated `nearestRentDueOn`
+  /// is, so the allocation below knows how much of the balance that period's
   /// rent can account for before an older charge has to.
   ///
   /// REQUIRED, AND NOT OPTIONAL-WITH-A-DEFAULT ON PURPOSE. A caller that
@@ -142,17 +154,33 @@ export interface Delinquency {
  * debts. Sort the debts newest-first, consume the balance, and the debt the
  * balance runs out on is the oldest one still contributing to it.
  *
- * The debt list is the charges PLUS the current period's rent - `rentCents`
- * dated `nearestRentDueOn` - because ordinary rent mints no `Charge` row and
- * is otherwise invisible here. Without it, a balance that is entirely this
- * month's rent gets attributed to last year's charges, which is the bug.
+ * The debt list is the charges PLUS `rentDebts` - one dated debt per rent
+ * period the subscription billed - because ordinary rent mints no `Charge`
+ * row and is otherwise invisible here. Without it, a balance that is
+ * entirely this month's rent gets attributed to last year's charges.
+ *
+ * ONE DEBT PER PERIOD, NOT ONE PERIOD (R-206). Until this item the rent half
+ * of the list was a single synthetic debt at `nearestRentDueOn`, and a
+ * second unpaid month therefore outran the whole list: the balance fell
+ * through to `newestFirst[last]`, which on a tenancy holding a paid move-in
+ * proration is that proration. Worked, from the row: move-in 15 Jul 2025
+ * with a $726 proration paid on time, rent $1,500, nothing paid since
+ * February; at 20 May 2026 the anchor became 2025-07-15 and `daysLate` read
+ * 309 rather than 49 - the R-118 defect returning through the fallback
+ * branch, on the tenancy that matters most. Because `chaseRungDue` matches
+ * days past grace EXACTLY against [1, 5, 15], 309 fires no rung at all, so
+ * R-179's whole ladder went silent on precisely the tenancies it exists for.
+ * The opposite face was equally wrong: a lease with no charge history
+ * reported two unpaid months as nineteen days late and emptied the `30+`
+ * bucket on a portfolio full of sixty-day arrears.
  *
  * WHICH DIRECTION IT CAN BE WRONG IN: only towards reporting a tenancy
  * NEWER than it is. Running out of debts before the balance is covered means
- * unlinked rent from a period this schema does not record (see
- * `nearestRentDueOn`), and the oldest KNOWN debt is then the anchor. It can
- * never age a tenancy from a debt the balance cannot account for, so it can
- * never chase somebody early - which is the asymmetry that matters.
+ * a debit this list does not carry - an `ADJUSTMENT` with no charge behind
+ * it, or rent Stripe has not billed - and the oldest KNOWN debt is then the
+ * anchor. It can never age a tenancy from a debt the balance cannot account
+ * for, so it can never chase somebody early - which is the asymmetry that
+ * matters, and R-206 narrows the fallback rather than widening it.
  *
  * `nearestRentDueOn` STILL PARTICIPATES WHEN CHARGES EXIST, which is R-045's
  * fix and it survives this one. A late fee's `Charge.dueOn` is the day it
@@ -219,22 +247,17 @@ export function delinquencyFor(facts: DelinquencyFacts): Delinquency {
  * the most recent end of the list. See the header on `delinquencyFor`.
  */
 function oldestUnsettled(facts: DelinquencyFacts): BusinessDate | null {
-  const debts: DatedCharge[] = [...facts.charges]
-  if (facts.nearestRentDueOn) {
-    debts.push({
-      dueOn: facts.nearestRentDueOn,
-      // A zero-rent tenancy is real: the debt absorbs nothing and stays in
-      // the list purely as a DATE the anchor can fall back to.
-      amountCents: facts.monthlyRentCents,
-    })
-  }
+  const debts: DatedCharge[] = [
+    ...facts.charges,
+    ...rentDebtsFor(facts.rentDebts, facts.nearestRentDueOn, facts.monthlyRentCents),
+  ]
   if (debts.length === 0) return null
 
   const { owed, unallocatedCents, newestFirst } = allocateBalance(debts, facts.balanceCents)
   // Covered: the debt the balance ran out on. Not covered: the balance
-  // outruns every debt on file - unlinked rent from a period this schema does
-  // not record - so the oldest thing we CAN name is the anchor, which
-  // understates rather than inventing a date.
+  // outruns every debt on file - a debit neither the `Charge` table nor the
+  // billed periods carry - so the oldest thing we CAN name is the anchor,
+  // which understates rather than inventing a date.
   return unallocatedCents === 0 ? owed[owed.length - 1]!.debt.dueOn : newestFirst[newestFirst.length - 1]!.dueOn
 }
 
@@ -402,4 +425,35 @@ export function rentPeriodDebts(
     byDueOn.set(dueOn, (byDueOn.get(dueOn) ?? 0) + row.amountCents)
   }
   return [...byDueOn].map(([dueOn, amountCents]) => ({ dueOn, amountCents }))
+}
+
+/**
+ * The rent half of a debt list: the billed periods, or the one-month
+ * fallback when nothing has been billed.
+ *
+ * ==========================================================================
+ * SHARED SO THE AGING AND A CURE NOTICE'S DEMAND CANNOT DISAGREE (R-206).
+ *
+ * `allocateBalance` already exists for that reason and this is the other
+ * half of the same argument: the two readers allocate over the same balance,
+ * so a difference in which RENT DEBTS they allocate over is a notice
+ * demanding a period the rent roll thinks is paid.
+ *
+ * The fallback fires only on an EMPTY period list, never alongside one.
+ * `rentPeriodDebts` already carries the current period once the invoice has
+ * finalized, so adding the synthetic debt beside it would count that month's
+ * rent twice - which absorbs balance a real older debt should have taken,
+ * and moves the anchor newer.
+ * ==========================================================================
+ */
+export function rentDebtsFor(
+  periods: readonly DatedCharge[],
+  nearestRentDueOn: BusinessDate | null,
+  monthlyRentCents: Cents,
+): DatedCharge[] {
+  if (periods.length > 0) return [...periods]
+  if (!nearestRentDueOn) return []
+  // A zero-rent tenancy is real: the debt absorbs nothing and stays in the
+  // list purely as a DATE the anchor can fall back to.
+  return [{ dueOn: nearestRentDueOn, amountCents: monthlyRentCents }]
 }

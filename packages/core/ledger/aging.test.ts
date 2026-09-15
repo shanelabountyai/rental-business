@@ -6,6 +6,7 @@ import {
   bucketFor,
   chaseRungDue,
   delinquencyFor,
+  rentDebtsFor,
   rentPeriodDebts,
 } from './aging.ts'
 import type { DelinquencyFacts } from './aging.ts'
@@ -16,6 +17,10 @@ const owing: DelinquencyFacts = {
   // monthly `Charge` for the subscription's own rent line, so a lease behind
   // on rent alone has none. The charge cases get their own blocks below.
   charges: [],
+  // Empty throughout this fixture ON PURPOSE, so every assertion below goes
+  // on exercising the `nearestRentDueOn` FALLBACK it was written for. The
+  // billed-period path gets its own block at the end (R-206).
+  rentDebts: [],
   balanceCents: 150_000,
   asOf: '2026-08-10',
   graceDays: 5,
@@ -189,6 +194,7 @@ describe('delinquencyFor', () => {
     const derrick: DelinquencyFacts = {
       // A move-in proration due on 2025-07-03 and paid on time.
       charges: [{ dueOn: '2025-07-03', amountCents: 80_000 }],
+      rentDebts: [],
       balanceCents: 165_000, // exactly this month's rent
       asOf: '2026-08-27',
       graceDays: 5,
@@ -227,6 +233,91 @@ describe('delinquencyFor', () => {
       expect(result.oldestDueOn).toBe('2026-05-15')
       expect(result.bucket).toBe('30+')
     })
+  })
+
+  describe('ONE DEBT PER BILLED RENT PERIOD — R-206', () => {
+    // The rent half of the debt list used to be a single synthetic month, so
+    // the SECOND unpaid month outran the whole list and the anchor fell
+    // through to `newestFirst[last]`. Both faces of that are below, each
+    // proved against the reverted fix (`rentDebts: []`) in the same block.
+    const behind: DelinquencyFacts = {
+      // A move-in proration due 15 Jul 2025 and paid on time. It sits in the
+      // `Charge` table for ever with no paid marker on it (R-118).
+      charges: [{ dueOn: '2025-07-15', amountCents: 72_600 }],
+      // What `invoice.finalized` has already projected: three billed periods
+      // with no `Charge` row behind them (D-11/D-40).
+      rentDebts: [
+        { dueOn: '2026-03-01', amountCents: 150_000 },
+        { dueOn: '2026-04-01', amountCents: 150_000 },
+        { dueOn: '2026-05-01', amountCents: 150_000 },
+      ],
+      balanceCents: 450_000, // three months, nothing paid since February
+      asOf: '2026-05-20',
+      graceDays: 5,
+      nearestRentDueOn: '2026-05-01',
+      monthlyRentCents: 150_000,
+    }
+
+    it('AGES FROM THE OLDEST UNPAID PERIOD, NOT THE OLDEST CHARGE ON FILE', () => {
+      const result = delinquencyFor(behind)
+      expect(result.oldestDueOn).toBe('2026-03-01')
+      expect(result.daysLate).toBe(80)
+      expect(result.bucket).toBe('30+')
+    })
+
+    it('reverting it ages the same tenancy from a proration paid in 2025', () => {
+      // D-197: the assertion above is worth nothing unless turning the fix
+      // off turns it red. One synthetic month cannot absorb $4,500, so the
+      // allocation runs out, `oldestUnsettled` takes `newestFirst[last]`,
+      // and the anchor is the move-in proration — 309 days, on the row an
+      // operator reads a date out of in a hearing.
+      const result = delinquencyFor({ ...behind, rentDebts: [] })
+      expect(result.oldestDueOn).toBe('2025-07-15')
+      expect(result.daysLate).toBe(309)
+    })
+
+    it('KEEPS A TENANCY WITH NO CHARGE HISTORY IN THE 30+ BUCKET', () => {
+      // The opposite face, and it is the one that hides: with no charge to
+      // fall through to, the anchor became the synthetic month itself, so
+      // three unpaid months read as nineteen days late and `30+` was empty
+      // on a portfolio full of sixty-day arrears.
+      const noCharges = { ...behind, charges: [] }
+      expect(delinquencyFor(noCharges).daysLate).toBe(80)
+      expect(delinquencyFor(noCharges).bucket).toBe('30+')
+
+      const reverted = delinquencyFor({ ...noCharges, rentDebts: [] })
+      expect(reverted.daysLate).toBe(19)
+      expect(reverted.bucket).toBe('16-30')
+    })
+
+    it('does not age from a period the balance has been paid down past', () => {
+      // The allocation still decides, not the list: $1,500 owed against
+      // three billed periods is the NEWEST one, because payments settle
+      // oldest-first (D-11).
+      const result = delinquencyFor({ ...behind, balanceCents: 150_000 })
+      expect(result.oldestDueOn).toBe('2026-05-01')
+      expect(result.daysLate).toBe(19)
+    })
+  })
+})
+
+describe('rentDebtsFor (R-206)', () => {
+  const march = { dueOn: '2026-03-01', amountCents: 150_000 }
+
+  it('uses the billed periods and does NOT add the synthetic month beside them', () => {
+    // Adding it would count the current period twice, absorbing balance a
+    // real older debt should have taken and moving the anchor newer.
+    expect(rentDebtsFor([march], '2026-05-01', 150_000)).toEqual([march])
+  })
+
+  it('falls back to one month when Stripe has billed no period at all', () => {
+    expect(rentDebtsFor([], '2026-05-01', 150_000)).toEqual([
+      { dueOn: '2026-05-01', amountCents: 150_000 },
+    ])
+  })
+
+  it('has no rent debt at all when there is no lease to read a due day from', () => {
+    expect(rentDebtsFor([], null, 150_000)).toEqual([])
   })
 })
 

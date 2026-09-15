@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { hashPassword } from '@rental/core/auth'
-import { businessDate, businessDateToUtc } from '@rental/core/scheduling'
+import { businessDate, businessDateToUtc, utcToBusinessDate, wallClockToUtc } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
 import { uniquePhone } from './fixtures.ts'
@@ -53,6 +53,32 @@ function daysAgo(n: number): Date {
   return d
 }
 
+/**
+ * The instant Stripe would have finalized that period's invoice: 09:00 in the
+ * PROPERTY's zone on the due day.
+ *
+ * ==========================================================================
+ * R-206 MADE THE LEDGER ENTRY'S OWN TIMESTAMP LOAD-BEARING, and a fixture
+ * writing UTC midnight is a day older than it means.
+ *
+ * `daysAgo` returns UTC midnight, which is 18:00 or 19:00 the PREVIOUS day in
+ * Chicago — so `rentPeriodDebts`, which dates a billed period as
+ * `businessDate(occurredAt, propertyZone)`, would read every unlinked rent
+ * entry here as due the day before the fixture intended. The one-day-late
+ * tenancies would land two days late, past Texas's one day of grace, and the
+ * grace assertions this whole file exists for would invert.
+ *
+ * Production cannot produce that shape: `billingCycleAnchor` puts the anchor
+ * at `BILLING_HOUR_LOCAL` (09:00 property-local) precisely so the read lands
+ * on the due day. This is CLAUDE.md's "a fixture simpler than the real input
+ * only ever tests the simple case" — the entry has to arrive the way Stripe
+ * sends it.
+ * ==========================================================================
+ */
+function finalizedAt(dueDate: Date): Date {
+  return wallClockToUtc(`${utcToBusinessDate(dueDate)}T09:00`, 'America/Chicago')
+}
+
 async function seedPropertyWithTenancies(
   options: {
     includeUnlinkedRent?: boolean
@@ -61,6 +87,9 @@ async function seedPropertyWithTenancies(
     /// past-grace tenancy. Opt-in, because every other test in this file
     /// counts the people a send reached.
     includeExtraParties?: boolean
+    /// R-206: TWO billed rent periods, neither paid. Opt-in for the same
+    /// reason as the two above — it is another chaseable row.
+    includeTwoMonthsBehind?: boolean
   } = {},
 ) {
   const stamp = randomUUID().slice(0, 8)
@@ -223,9 +252,10 @@ async function seedPropertyWithTenancies(
     })
     // NO CHARGE ROW. The projection's own remainder shape (webhook.ts's
     // "rent from the subscription itself has no Charge row" comment) -
-    // `chargeId: null`. `occurredAt` only feeds the LEDGER balance here; the
-    // AGING comes entirely from `rentDueDay` above, which is the point of
-    // the test - `delinquencyFor` never reads a LedgerEntry's own timestamp.
+    // `chargeId: null`. Since R-206 this entry IS the dated rent debt: the
+    // aging reads `businessDate(occurredAt, zone)` off it rather than
+    // `rentDueDay`, so the instant has to be the one Stripe would have
+    // stamped. See `finalizedAt`.
     await prisma.ledgerEntry.create({
       data: {
         propertyId: property.id,
@@ -233,7 +263,7 @@ async function seedPropertyWithTenancies(
         chargeId: null,
         type: 'CHARGE',
         amountCents: 150_000,
-        occurredAt: dueDate,
+        occurredAt: finalizedAt(dueDate),
         description: 'Rent',
       },
     })
@@ -279,6 +309,75 @@ async function seedPropertyWithTenancies(
     return { tenant, lease, unit }
   }
 
+  /**
+   * TWO BILLED PERIODS, NEITHER PAID — the tenancy R-206 exists for.
+   *
+   * ==========================================================================
+   * THE `30+` BUCKET THIS FILE PREVIOUSLY COULD NOT REACH.
+   *
+   * `unlinkedRentTenancy`'s own comment says to keep `dueDaysAgo` under ~28,
+   * because the aging anchored to `dueDateOnOrBefore` and that can only name
+   * the most recent occurrence of a day-of-month. That was a real ceiling on
+   * the PRODUCT, not on the fixture: a tenancy two months behind reported one
+   * month late, and `30+` was empty on a portfolio full of sixty-day arrears.
+   *
+   * Since R-206 the debt list carries one dated debt per period the
+   * subscription billed, so the anchor is the OLDER unpaid period and the
+   * ceiling is gone. Two unlinked entries, thirty days apart, is what
+   * production writes for two months of unpaid rent.
+   * ==========================================================================
+   */
+  async function twoMonthsBehindTenancy(label: string, newestDaysAgo: number) {
+    const unit = await prisma.unit.create({
+      data: { propertyId: property.id, name: `${label}-${stamp}`, status: 'OCCUPIED' },
+    })
+    unitIds.push(unit.id)
+    const tenant = await prisma.tenant.create({
+      data: { firstName: `${label}${stamp}`, lastName: `Roll-${stamp}`, phone: uniquePhone() },
+    })
+    tenantIds.push(tenant.id)
+    const newest = daysAgo(newestDaysAgo)
+    const older = daysAgo(newestDaysAgo + 30)
+    const lease = await prisma.lease.create({
+      data: {
+        propertyId: property.id,
+        unitId: unit.id,
+        status: 'ACTIVE',
+        startsOn: new Date('2026-01-01'),
+        rentCents: 150_000,
+        // The FALLBACK's day-of-month, and it deliberately reproduces the
+        // NEWER period only — which is exactly what the old reading could
+        // see, and what this fixture proves is no longer the answer.
+        rentDueDay: newest.getUTCDate(),
+      },
+    })
+    leaseIds.push(lease.id)
+    await prisma.leaseTenant.create({ data: { leaseId: lease.id, tenantId: tenant.id } })
+    await prisma.leasePayer.create({
+      data: {
+        leaseId: lease.id,
+        propertyId: property.id,
+        payerType: 'TENANT',
+        tenantId: tenant.id,
+        stripeCustomerId: `cus_${randomUUID().replace(/-/g, '').slice(0, 14)}`,
+      },
+    })
+    for (const dueDate of [older, newest]) {
+      await prisma.ledgerEntry.create({
+        data: {
+          propertyId: property.id,
+          leaseId: lease.id,
+          chargeId: null,
+          type: 'CHARGE',
+          amountCents: 150_000,
+          occurredAt: finalizedAt(dueDate),
+          description: 'Rent',
+        },
+      })
+    }
+    return { tenant, lease, unit }
+  }
+
   // ONE day late. Texas's seeded rule grants exactly one day of grace
   // (Property Code §92.019 requires rent be a full day late before a fee), so
   // this tenancy is in the 0–5 bucket AND still within grace — which is the
@@ -299,6 +398,10 @@ async function seedPropertyWithTenancies(
   // second tenancy, and the send tests count rows.
   const stalePaid = options.includeStalePaidCharge
     ? await unlinkedRentTenancy('Stale', 1, 400)
+    : null
+  // R-206. Twenty days late on the newer period, fifty on the older.
+  const twoMonths = options.includeTwoMonthsBehind
+    ? await twoMonthsBehindTenancy('Behind', 20)
     : null
 
   // R-179: the roommate holding the money, and the co-signer on the hook for
@@ -333,7 +436,7 @@ async function seedPropertyWithTenancies(
       })
     : null
 
-  return { property, within, past, unlinkedRent, stalePaid, roommate, guarantor }
+  return { property, within, past, unlinkedRent, stalePaid, twoMonths, roommate, guarantor }
 }
 
 /// A manager SCOPED TO ONE PROPERTY.
@@ -481,6 +584,28 @@ test.describe('rent roll and delinquency aging (PAY-06)', () => {
         name: new RegExp(`Chase ${unlinkedRent.tenant.firstName}`),
       }),
     ).toBeVisible()
+  })
+
+  test('TWO UNPAID MONTHS AGE FROM THE OLDER PERIOD, NOT THE NEWER — R-206', async ({
+    page,
+  }) => {
+    // The defect the row is written from: the rent half of the debt list was
+    // one synthetic month, so a second unpaid month outran it and the anchor
+    // fell back to whatever was newest — twenty days here, fifty in fact.
+    // Reverting `rentDebts` in `rent-roll.ts` turns this line red with
+    // "16–30 days", which is the number an operator would have planned a
+    // filing around.
+    const { property, twoMonths } = await seedPropertyWithTenancies({
+      includeTwoMonthsBehind: true,
+    })
+    if (!twoMonths) throw new Error('seeded with includeTwoMonthsBehind: true')
+    const staff = await seedScopedManager(property.id)
+    await signIn(page, staff)
+    await page.goto('/money/rent-roll')
+
+    const row = page.getByRole('row', { name: new RegExp(twoMonths.tenant.firstName) })
+    await expect(row.getByText('Over 30 days')).toBeVisible()
+    await expect(row.getByText('past grace')).toBeVisible()
   })
 
   test('"select all" selects everyone PAST GRACE, not every row', async ({ page }) => {

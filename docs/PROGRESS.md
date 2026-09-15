@@ -12257,3 +12257,130 @@ build` and `End-to-end, axe, Lighthouse` — read on the run after it completed
 rather than copied forward from R-204's entry. It covers the push carrying
 both `958b499` and the `record the SHA` commit `e082064`; GitHub runs one job
 per push, on its head.
+
+## R-206 — the aging anchors to the oldest unpaid PERIOD, not the oldest charge on file
+
+**Commit:** `PENDING`
+
+**What it built.** The second half of R-205's root, and the half that is read
+on a screen.
+
+`oldestUnsettled` built its debt list as the unwaived `Charge` rows plus
+**one** synthetic month of rent at `nearestRentDueOn`, allocated newest-first,
+and fell back to `newestFirst[last].dueOn` when the balance outran the list.
+A second unpaid month outruns a one-month list **by construction**, so the
+fallback branch was not an edge case — it was the ordinary state of every
+tenancy two months behind. And on a tenancy holding a move-in proration paid
+on time a year ago, `newestFirst[last]` *is* that proration: the R-118 defect
+returning through the fallback, on the tenancy that matters most.
+
+`DelinquencyFacts` now carries `rentDebts` — `rentPeriodDebts(ledgerRows,
+propertyZone)`, the per-period list R-205 built out of the unlinked `CHARGE`
+entries `invoice.finalized` projects — and `nearestRentDueOn`/
+`monthlyRentCents` demote to a fallback used only when that list is empty (a
+tenancy Stripe has not billed, or a balance moved by an `ADJUSTMENT` alone).
+`rentDebtsFor` holds that precedence in one place, exported and read by both
+`delinquencyFor` and the cure notice's `cureDemandFor`, for the same reason
+`allocateBalance` is shared: the two allocate the same balance, so a
+difference in which rent debts they allocate over is a notice demanding a
+period the rent roll thinks is paid. `rentRoll`, `pastGraceLeaseIds` and
+`cureDemandFor` each select `chargeId` on their ledger read so the
+subscription's own rent line can be told from a `Charge` row's projection.
+
+Measured on the unit fixture — a $726 proration paid on time 15 Jul 2025,
+rent $1,500, three months unpaid at 20 May 2026: **309 days late before, 80
+after**. With no charge history at all the same arrears read **19 days** and
+put a sixty-day tenancy in `16–30`, emptying `30+` on a portfolio full of
+them. Both numbers are asserted against the reverted fix (D-197), in the same
+block as the fix's own assertion.
+
+The cure notice's demand gets the same list, so a notice served on a tenancy
+three months behind now itemises three dated rent periods instead of one due
+date plus an undated *"Rent from earlier periods"* lump. A tenant can dispute
+a lump and a judge cannot check it against a statement.
+
+**What it decided.** D-224. Two things in it are corrections to the backlog
+row rather than confirmations of it, and both are written down because the
+next session will otherwise re-derive them:
+
+- **The row's chase-ladder claim does not survive as stated.** A 309-day
+  anchor can indeed match no rung of `[1, 5, 15]`, but with the anchor
+  corrected the rungs for the *oldest* unpaid period fell before the next
+  invoice finalized — so no rung is recovered on the day the second month
+  lapses. What the fix restores is the **date, the bucket and the sort**: the
+  oldest-unpaid date the CSV hands a hearing, the `30+` bucket, and "worst
+  first". The real ladder limitation is one anchor per lease with exact-match
+  rungs, so the ladder fires **once per arrears episode, not once per unpaid
+  period** — now uniformly, where before it was uniform only for leases
+  holding a charge row. Left as a leftover, not smuggled into this row.
+- **The fallback fires only on an EMPTY period list, never beside one.**
+  `rentPeriodDebts` already carries the current period once its invoice has
+  finalized, so adding the synthetic month alongside would count that month's
+  rent twice, absorb balance a real older debt should have taken, and move the
+  anchor newer. There is a unit test on exactly that.
+
+**Nothing is backfilled** (D-201, D-222). The aging is computed on read, so
+every screen corrects itself the moment it is opened; no stored notice, task
+or ledger row is rewritten.
+
+**What it left behind.**
+
+- **The e2e fixture was writing an instant production cannot produce.**
+  `rent-roll.spec.ts` stamped its unlinked rent entries `occurredAt: <UTC
+  midnight>`, which `businessDate(…, 'America/Chicago')` reads as the
+  *previous* day — so with R-206 live the one-day-late tenancies would have
+  landed two days late, past Texas's one day of grace, inverting the grace
+  assertions the whole file exists for. `billingCycleAnchor` stamps 09:00
+  property-local (`BILLING_HOUR_LOCAL`) precisely so that read lands on the
+  due day, and the fixture's new `finalizedAt` does the same. CLAUDE.md's "a
+  fixture simpler than the real input" rule, second payoff in two items.
+- **The file's own "keep `dueDaysAgo` under ~28" ceiling is gone**, and it was
+  a ceiling on the product rather than on the fixture. A new opt-in
+  `twoMonthsBehindTenancy` seeds two billed periods thirty days apart and
+  asserts `Over 30 days` on the row — red with `Over 30 days` → `16–30 days`
+  when `rentDebts` is reverted in `rent-roll.ts`.
+- The chase ladder firing once per arrears episode rather than once per unpaid
+  period (above) — nobody owns it.
+- A tenancy whose balance moved by an `ADJUSTMENT` with no charge behind it
+  still falls through to the oldest *known* debt, the same understating
+  direction as before. Unchanged and deliberate.
+- `late-fees.ts` pass 2 deliberately does **not** use `rentDebtsFor`: it
+  assesses only periods that were actually billed, so an empty list is a
+  `continue` there rather than a fallback.
+- **`evictions.spec.ts`'s cure-notice fixture was writing a shape production
+  cannot produce, and it was the one red test in the gate.** It wrote the late
+  fee as an UNLINKED `CHARGE` ledger entry beside its own `Charge` row —
+  `chargeId: null`, the exact marker `rentPeriodDebts` uses to mean *this is
+  the subscription's rent line*. So the fee's $75 was folded into the rent
+  period, the allocation was exhausted before it reached the `Charge` row, the
+  demand lost its fee line, and with it the page lost the fee warning
+  (`page.tsx:300` renders `feeDemandWarning` only beside a `FEE` line) —
+  `expect(getByText(/may demand fees as well as rent is state law/))` timed
+  out on both projects. `webhook.ts:296-337` writes one *linked* row per
+  `Charge` on the invoice and exactly one unlinked remainder, so the fixture
+  now carries the `chargeId` and stamps 09:00 property-local, like
+  `rent-roll.spec.ts`. Third payoff in two items for the same rule, and the
+  first time it surfaced as a defect in a spec the item never opened.
+- **One production path CAN put fee money in an unlinked entry, and nothing
+  owns it.** `webhook.ts:296` sets `fits = linkedTotal <= movedCents` and
+  writes NO linked rows when that is false, so a part-paid invoice whose
+  charges outrun the amount moved becomes a single unlinked remainder that
+  includes fee money — which `rentPeriodDebts` then reads as rent while the
+  `Charge` row is still in the list on its own. The debit side is
+  double-counted there, so the allocation absorbs more balance and the anchor
+  moves NEWER: understating, the safe half, and the same direction everything
+  else in this module errs in. Inherited from R-205, not introduced here.
+
+**Gate run:** `npm run lint` clean (16 pre-existing warnings, 0 errors);
+`npm run typecheck` clean; `npm test` **3,185 passed / 4 skipped in 24.6s**.
+The first `npm test` of the session came back with five files red on `Hook
+timed out in 10000ms` in files this item never opened — the contention
+signature, not a regression: the five passed in 1.6s alone, `pg_stat_activity`
+was empty, `kern.memorystatus_level` 54 and `vm.memory_pressure` 0, and the
+clean re-run is the number above. Targeted e2e **84 passed, 0 failed, 0
+flaky, 0 skipped**, reconciling exactly against `npx playwright test --list`
+(`Total: 84 tests in 8 files`) across `jobs`, `fee-waiver`, `rent-roll`,
+`evictions`, `payment-plans`, `golden-path-5`, `dashboard` and `reports`,
+both projects. No migration, so no `db:ci`. **Both new assertions were proven
+against the reverted fix** (D-197), recorded above: `rentDebts: []` in the
+unit test returns 309 days and `16–30 days` in the e2e.

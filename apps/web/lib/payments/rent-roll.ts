@@ -1,6 +1,12 @@
 import 'server-only'
 
-import { agingTotals, balanceCents, delinquencyFor, depositLiabilityCents } from '@rental/core/ledger'
+import {
+  agingTotals,
+  balanceCents,
+  delinquencyFor,
+  depositLiabilityCents,
+  rentPeriodDebts,
+} from '@rental/core/ledger'
 import { type CollectionMethod, debitsAutomatically } from '@rental/core/payments'
 import type { AgingBucket } from '@rental/core/ledger'
 import { businessDate, dueDateOnOrBefore, utcToBusinessDate } from '@rental/core/scheduling'
@@ -156,6 +162,9 @@ export async function rentRoll(
         id: true,
         leaseId: true,
         type: true,
+        // R-206: an UNLINKED `CHARGE` entry is the subscription's own rent
+        // line, one per billed period - the rent half of the debt list.
+        chargeId: true,
         amountCents: true,
         occurredAt: true,
         description: true,
@@ -235,12 +244,20 @@ export async function rentRoll(
         dueOn: utcToBusinessDate(charge.dueOn),
         amountCents: charge.amountCents,
       })),
+      // One dated debt per rent period Stripe has billed (R-206). Before
+      // this, the rent half of the list was a single synthetic month, so a
+      // second unpaid month outran the whole list and the anchor fell back
+      // to the oldest charge on file - printing a 2025 date as the oldest
+      // unpaid rent on the row somebody reads out in a hearing.
+      rentDebts: rentPeriodDebts(ledger, zone),
       balanceCents: balance,
       // The PROPERTY's today, not the server's (D-3). A portfolio spanning
       // timezones has more than one "today", and using the server's would
       // report a Texas tenancy late from a machine in Europe.
       asOf: today,
       graceDays: rule?.graceDays ?? null,
+      // Fallback only - see `DelinquencyFacts`. Used when Stripe has billed
+      // this tenancy no period at all.
       nearestRentDueOn: dueDateOnOrBefore(today, rentDueDay),
       // The size of the rent debt those charges sit behind (R-118). Without
       // it every balance is attributed to the oldest charge row on file,
@@ -396,6 +413,9 @@ export async function pastGraceLeaseIds(
         id: true,
         leaseId: true,
         type: true,
+        // R-206: an UNLINKED `CHARGE` entry is the subscription's own rent
+        // line, one per billed period - the rent half of the debt list.
+        chargeId: true,
         amountCents: true,
         occurredAt: true,
         description: true,
@@ -423,12 +443,17 @@ export async function pastGraceLeaseIds(
     )
     const today = businessDate(asOf, lease.property.timezone)
     const rentDueDay = lease.leasePayers[0]?.debitDay ?? lease.rentDueDay
+    const ledger = entriesByLease.get(lease.id) ?? []
     const delinquency = delinquencyFor({
       charges: (chargesByLease.get(lease.id) ?? []).map((charge) => ({
         dueOn: utcToBusinessDate(charge.dueOn),
         amountCents: charge.amountCents,
       })),
-      balanceCents: balanceCents(entriesByLease.get(lease.id) ?? []),
+      // R-206, exactly as the screen above computes it. This function exists
+      // so the re-check and the screen cannot disagree; a debt list built
+      // two ways here would be the disagreement it was written to prevent.
+      rentDebts: rentPeriodDebts(ledger, lease.property.timezone),
+      balanceCents: balanceCents(ledger),
       asOf: today,
       graceDays: rule?.graceDays ?? null,
       nearestRentDueOn: dueDateOnOrBefore(today, rentDueDay),

@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { createTotpEnrolment, hashPassword, sealSecret } from '@rental/core/auth'
 import { Secret, TOTP } from 'otpauth'
+import { utcToBusinessDate, wallClockToUtc } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
 
@@ -402,13 +403,19 @@ test('a cure notice drafted from the case stores what it demanded, and the case 
   // allocated from - with the fee also a Charge row, which is what itemises it
   // as a fee rather than as rent. The fee's date is fixed; the total does not
   // depend on which month's rent it sits behind.
-  await prisma.ledgerEntry.createMany({
-    data: [
-      { propertyId: property.id, leaseId: lease.id, type: 'CHARGE', amountCents: 150_000, description: 'Rent', occurredAt: new Date() },
-      { propertyId: property.id, leaseId: lease.id, type: 'CHARGE', amountCents: 7_500, description: 'Late fee', occurredAt: new Date() },
-    ],
-  })
-  await prisma.charge.create({
+  //
+  // THE FEE'S LEDGER ENTRY CARRIES ITS `chargeId` AND THE RENT'S DOES NOT,
+  // because that is the only thing telling them apart (R-206). `webhook.ts`
+  // writes one linked row per `Charge` on the invoice and ONE unlinked
+  // remainder - the subscription's own rent line - so an unlinked `CHARGE`
+  // entry IS rent to `rentPeriodDebts`. This fixture used to leave the fee
+  // unlinked, which production cannot produce: the fee's $75 was folded into
+  // the rent period, the allocation ran out before reaching the `Charge` row,
+  // and the demand lost its fee line - taking the fee warning off the page
+  // with it. The instant is 09:00 property-local for the same reason
+  // `rent-roll.spec.ts` stamps its own: UTC midnight reads as the previous
+  // day in America/Chicago.
+  const feeCharge = await prisma.charge.create({
     data: {
       propertyId: property.id,
       leaseId: lease.id,
@@ -417,6 +424,13 @@ test('a cure notice drafted from the case stores what it demanded, and the case 
       description: 'Late fee',
       dueOn: new Date('2026-09-06'),
     },
+  })
+  const finalizedAt = wallClockToUtc(`${utcToBusinessDate(new Date())}T09:00`, 'America/Chicago')
+  await prisma.ledgerEntry.createMany({
+    data: [
+      { propertyId: property.id, leaseId: lease.id, type: 'CHARGE', amountCents: 150_000, description: 'Rent', occurredAt: finalizedAt },
+      { propertyId: property.id, leaseId: lease.id, chargeId: feeCharge.id, type: 'CHARGE', amountCents: 7_500, description: 'Late fee', occurredAt: finalizedAt },
+    ],
   })
 
   await signIn(page, staff.email)

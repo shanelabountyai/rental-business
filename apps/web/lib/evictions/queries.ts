@@ -11,7 +11,7 @@ import {
   type DemandLine,
   type ServiceEvent,
 } from '@rental/core/evictions'
-import { balanceCents } from '@rental/core/ledger'
+import { balanceCents, rentDebtsFor, rentPeriodDebts } from '@rental/core/ledger'
 import {
   businessDate,
   type DayCountRule,
@@ -206,8 +206,12 @@ export async function cureClockFor(evictionCase: EvictionCaseDetail) {
  * figure shown before the press is the figure computed at it.
  *
  * The facts are the rent roll's own: ledger balance, unwaived charges, and
- * the current period's rent dated by the payer's debit day or the lease's due
- * day - the same precedence `rentRoll` reads.
+ * the rent periods Stripe has billed - `rentDebtsFor`, the same rent half of
+ * the debt list `delinquencyFor` allocates over (R-206). Before that the
+ * demand carried ONE month of rent and folded every earlier period into a
+ * single undated "Rent from earlier periods" line, so a notice served on a
+ * tenancy three months behind named one due date and a lump; a tenant can
+ * dispute a lump and a judge cannot check it against a statement.
  */
 export async function cureDemandFor(evictionCase: EvictionCaseDetail) {
   const lease = await prisma.lease.findUniqueOrThrow({
@@ -217,7 +221,17 @@ export async function cureDemandFor(evictionCase: EvictionCaseDetail) {
       rentDueDay: true,
       leasePayers: { where: { active: true }, select: { debitDay: true }, take: 1 },
       ledgerEntries: {
-        select: { id: true, type: true, amountCents: true, occurredAt: true, description: true, reversesId: true },
+        // `chargeId` so the unlinked rent lines can be told from a `Charge`
+        // row's own projection (R-206).
+        select: {
+          id: true,
+          type: true,
+          chargeId: true,
+          amountCents: true,
+          occurredAt: true,
+          description: true,
+          reversesId: true,
+        },
       },
       charges: {
         where: { waivedAt: null },
@@ -251,12 +265,11 @@ export async function cureDemandFor(evictionCase: EvictionCaseDetail) {
           label: charge.description,
           kind: demandKind(charge.type),
         })),
-        {
-          dueOn: dueDateOnOrBefore(today, rentDueDay),
-          amountCents: lease.rentCents,
-          label: 'Rent',
-          kind: 'RENT' as const,
-        },
+        ...rentDebtsFor(
+          rentPeriodDebts(lease.ledgerEntries, evictionCase.property.timezone),
+          dueDateOnOrBefore(today, rentDueDay),
+          lease.rentCents,
+        ).map((period) => ({ ...period, label: 'Rent', kind: 'RENT' as const })),
       ],
       mayIncludeFees,
     }),
