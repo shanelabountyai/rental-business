@@ -21,6 +21,7 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { audit } from '@/lib/audit/index.ts'
 import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
+import { getBillingProvider } from '@/lib/billing/provider.ts'
 import { generateStorageKey, storage } from '@/lib/storage/index.ts'
 import { completeTaskWork } from '@/lib/tasks/complete.ts'
 import { createTask } from '@/lib/tasks/create.ts'
@@ -226,12 +227,25 @@ export async function finalizeDisposition(
             take: 1,
             select: { tenant: { select: { firstName: true, lastName: true } } },
           },
+          // R-209: who the applied deposit is paid ON BEHALF OF. Same shape
+          // as `waiveCharge`'s own lookup - one active payer, because that
+          // is the payer whose Stripe customer holds the arrears being
+          // settled.
+          leasePayers: {
+            where: { active: true },
+            take: 1,
+            select: {
+              id: true,
+              stripeCustomerId: true,
+              stripeSubscriptionId: true,
+            },
+          },
         },
       },
       deductions: { select: { id: true, description: true, amountCents: true } },
     },
   })
-  await requirePermission('ledger.adjust', propertyResource(deposit.property))
+  const actor = await requirePermission('ledger.adjust', propertyResource(deposit.property))
   if (deposit.dispositionSentAt) return { error: 'This disposition has already been finalized.' }
   if (!deposit.lease.moveOutAt) {
     return { error: 'No move-out date is on record for this tenancy yet.' }
@@ -269,6 +283,144 @@ export async function finalizeDisposition(
     deductions: deposit.deductions,
     totals,
   })
+
+  // ==========================================================================
+  // THE APPLIED DEPOSIT HAS TO REACH THE LEDGER (R-209).
+  //
+  // This used to write `appliedCents` onto the Deposit row, into the letter,
+  // and nowhere else. A tenant moving out owing $1,500 with $1,500 held got
+  // a letter correctly saying the deposit had settled it - and
+  // `balanceCents()` went on reporting $1,500 for ever, so the lease page,
+  // `statementForPeriod`, R-083's attorney packet and anything handed to a
+  // collections agency all disagreed with the letter the tenant was holding.
+  // Demanding money already taken out of the deposit is how a clean move-out
+  // becomes a counterclaim.
+  //
+  // IT IS A PAYMENT, NOT A LEDGER WRITE. `LedgerEntry` is an append-only
+  // projection and the webhook is its ONLY production writer (D-11) - a row
+  // inserted here is a row Stripe does not know about, which the schema's own
+  // comment calls a reconciliation bug rather than a shortcut. And a payment
+  // is what this actually is: the money genuinely arrived, at move-in, and
+  // has been sitting as a liability ever since; the disposition is the act
+  // that converts part of it into satisfaction of a receivable. So it goes
+  // out the same way a check handed over at the counter does - our Payment
+  // row first, then `recordOutOfBandPayment`, then the projection arrives on
+  // the event (`recordOfflinePayment` in lib/payments/offline.ts is the
+  // worked example, and D-177 is why the row is written BEFORE the push).
+  //
+  // A customer-balance credit would have been the shorter call and cannot
+  // work: `interpretStripeEvent` reads `amount_due`, which a balance credit
+  // is deliberately outside of, so it would never project at all. A negative
+  // invoice item - `waiveCharge`'s shape - cannot work either, because it
+  // only lands on a FUTURE invoice and this tenancy's subscription is over.
+  //
+  // BEFORE the letter, so a push that fails leaves nothing at all: no
+  // disposition, no Task, nothing to reconcile, and an error staff can act
+  // on. Same posture as `waiveCharge` and `recordOfflinePayment`.
+  const payer = deposit.lease.leasePayers[0]
+  if (totals.ledgerAppliedCents > 0) {
+    if (!payer?.stripeCustomerId || !payer.stripeSubscriptionId) {
+      return {
+        error:
+          'Billing is not set up for this tenancy, so the outstanding balance cannot be settled from the deposit. Sort the billing link out first — finalizing now would send a letter the ledger disagrees with.',
+      }
+    }
+
+    const provider = getBillingProvider()
+    const invoice = await provider
+      .getOpenInvoice({ stripeSubscriptionId: payer.stripeSubscriptionId })
+      .catch((error) => {
+        console.error(`[deposits] could not read the open invoice for ${payer.id}`, error)
+        return null
+      })
+
+    // CAPPED BY WHAT ONE INVOICE CAN ABSORB, and it refuses rather than
+    // paying part. `recordOutOfBandPayment` attaches to a single invoice,
+    // so arrears spread over three unpaid months are three invoices and
+    // this can only settle the first - which would put the letter and the
+    // ledger back in exactly the disagreement this item exists to remove,
+    // just by a smaller number. Refusing is loud and recoverable; a silent
+    // partial is the bug wearing a smaller hat. Against the simulator the
+    // cap can never bite (`getOpenInvoice` reports the whole lease balance
+    // as one invoice), so this is a real-Stripe-only path and is stated as
+    // such rather than tested into existence.
+    if (!invoice || invoice.amountRemainingCents < totals.ledgerAppliedCents) {
+      return {
+        error: `The ${formatCents(totals.ledgerAppliedCents)} outstanding balance is spread across more than one unpaid invoice, so it cannot be settled from the deposit in one step. Record it against those invoices first, then finalize.`,
+      }
+    }
+
+    // WRITTEN FIRST so the event the push fires claims this row instead of
+    // minting a second one (D-177). `receivedByStaffId` is the discriminator
+    // the webhook keys on and this is the second place in the codebase to
+    // set it; `OTHER` is the channel because the money did not arrive on a
+    // rail today - it arrived at move-in.
+    const payment = await prisma.payment.create({
+      data: {
+        propertyId: deposit.propertyId,
+        leaseId: deposit.leaseId,
+        leasePayerId: payer.id,
+        channel: 'OTHER',
+        status: 'SETTLED',
+        amountCents: totals.ledgerAppliedCents,
+        receivedAt: new Date(),
+        receivedByStaffId: actor.id,
+        stripeInvoiceId: invoice.stripeInvoiceId,
+      },
+    })
+
+    try {
+      await provider.recordOutOfBandPayment({
+        stripeInvoiceId: invoice.stripeInvoiceId,
+        stripeCustomerId: payer.stripeCustomerId,
+        amountCents: totals.ledgerAppliedCents,
+        receivedAt: payment.receivedAt,
+        reference: `security deposit applied at disposition by ${actor.id}`,
+        instrument: 'Security deposit',
+        // KEYED ON THE DEPOSIT, which is disposed of exactly once. A retry
+        // after the transaction below threw reports the SAME payment record
+        // and Stripe refuses to attach it twice, so the money cannot move
+        // twice; what it does leave is a second unclaimed Payment row, which
+        // is debris rather than a wrong balance. That window - push landed,
+        // local transaction failed - is the known ceiling here, and closing
+        // it properly needs a column on Payment naming the deposit.
+        idempotencyKey: `deposit-disposition:${deposit.id}`,
+      })
+    } catch (error) {
+      console.error(`[deposits] could not apply deposit ${deposit.id} to the ledger`, error)
+      // Backed out for the same reason `recordOfflinePayment` backs its row
+      // out: nothing can be pinning it, because the only thing that ever
+      // projects against it is the event that just failed to fire.
+      await prisma.payment.delete({ where: { id: payment.id } }).catch((cleanupError) => {
+        console.error(
+          `[deposits] could not back out payment ${payment.id} after a failed push`,
+          cleanupError,
+        )
+      })
+      return {
+        error:
+          'The deposit could not be applied to the outstanding balance at the billing provider, so nothing has been sent. Try again shortly.',
+      }
+    }
+
+    // AFTER the push, never beside the row: `AuditLog` is append-only, so an
+    // entry naming a payment cannot be withdrawn when that payment is.
+    await audit({
+      action: 'payment.recorded',
+      entityType: 'Payment',
+      entityId: payment.id,
+      propertyId: deposit.propertyId,
+      after: {
+        channel: 'OTHER',
+        amountCents: totals.ledgerAppliedCents,
+        depositId: deposit.id,
+        receivedByStaffId: actor.id,
+        stripeInvoiceId: invoice.stripeInvoiceId,
+        provider: provider.name,
+      },
+      reason: 'Security deposit applied to the outstanding balance at disposition',
+    })
+  }
 
   const notice = await prisma.$transaction(async (tx) => {
     const created = await tx.notice.create({

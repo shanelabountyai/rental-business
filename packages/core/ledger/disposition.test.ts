@@ -16,6 +16,7 @@ describe('computeDisposition', () => {
       deductedCents: 50_000,
       outstandingLedgerCents: 0,
       appliedCents: 50_000,
+      ledgerAppliedCents: 0,
       refundedCents: 150_000,
       additionalOwedCents: 0,
     })
@@ -39,6 +40,43 @@ describe('computeDisposition', () => {
     expect(totals.appliedCents).toBe(100_000)
     expect(totals.refundedCents).toBe(0)
     expect(totals.additionalOwedCents).toBe(50_000)
+  })
+
+  // R-209. `ledgerAppliedCents` is the number the disposition pushes to
+  // Stripe as money received; everything else applied is a deduction, which
+  // never was on the ledger and must not be credited against it.
+  describe('ledgerAppliedCents', () => {
+    it('is the whole outstanding balance when the deposit covers it', () => {
+      const totals = computeDisposition(200_000, 50_000, 30_000)
+      expect(totals.ledgerAppliedCents).toBe(30_000)
+    })
+
+    it('is zero when nothing is outstanding, however large the deductions', () => {
+      expect(computeDisposition(200_000, 150_000, 0).ledgerAppliedCents).toBe(0)
+    })
+
+    it('is zero on a credit balance rather than negative', () => {
+      expect(computeDisposition(200_000, 0, -10_000).ledgerAppliedCents).toBe(0)
+    })
+
+    it('takes the ledger FIRST when the deposit cannot cover both', () => {
+      // $1,000 held, $800 of damage, $400 of arrears. The letter says the
+      // $400 outstanding balance "was also applied" unconditionally, so the
+      // arrears have to be the part that is actually settled - deductions
+      // first would print $400 and settle $200.
+      const totals = computeDisposition(100_000, 80_000, 40_000)
+      expect(totals.appliedCents).toBe(100_000)
+      expect(totals.ledgerAppliedCents).toBe(40_000)
+      expect(totals.additionalOwedCents).toBe(20_000)
+    })
+
+    it('never exceeds what was actually held', () => {
+      // Nothing deducted, $2,000 of arrears, only $500 held.
+      const totals = computeDisposition(50_000, 0, 200_000)
+      expect(totals.appliedCents).toBe(50_000)
+      expect(totals.ledgerAppliedCents).toBe(50_000)
+      expect(totals.additionalOwedCents).toBe(150_000)
+    })
   })
 })
 

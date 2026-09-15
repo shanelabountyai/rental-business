@@ -20,6 +20,21 @@ export interface DispositionTotals {
   /// Kept against the liability - deductions plus any outstanding balance,
   /// never more than what was actually held.
   appliedCents: Cents
+  /// The part of `appliedCents` that satisfies the ORDINARY LEDGER - unpaid
+  /// rent and fees - rather than the deductions. R-209: the disposition has
+  /// to push this to Stripe as money received, or the letter says the
+  /// arrears were settled and `balanceCents()` goes on reporting them for
+  /// ever.
+  ///
+  /// LEDGER FIRST, DEDUCTIONS SECOND, and that ordering is what keeps the
+  /// letter true rather than a preference. No statute orders the two, but
+  /// `dispositionLetterText` states the outstanding balance "was also
+  /// applied" unconditionally whenever there is one - so on a deposit too
+  /// small to cover both, satisfying the deductions first would print a
+  /// sentence that is false by the difference. Ledger first makes that
+  /// sentence exact in every case, and the shortfall lands in
+  /// `additionalOwedCents`, which names no particular debt.
+  ledgerAppliedCents: Cents
   /// Given back to the tenant.
   refundedCents: Cents
   /// What deductions and the outstanding balance together exceed the
@@ -52,8 +67,17 @@ export function computeDisposition(
   const appliedCents = Math.min(heldCents, owedByTenant)
   const refundedCents = Math.max(0, heldCents - appliedCents)
   const additionalOwedCents = Math.max(0, owedByTenant - heldCents)
+  const ledgerAppliedCents = Math.min(appliedCents, Math.max(0, outstandingLedgerCents))
 
-  return { heldCents, deductedCents, outstandingLedgerCents, appliedCents, refundedCents, additionalOwedCents }
+  return {
+    heldCents,
+    deductedCents,
+    outstandingLedgerCents,
+    appliedCents,
+    ledgerAppliedCents,
+    refundedCents,
+    additionalOwedCents,
+  }
 }
 
 export interface DepreciationGuidance {

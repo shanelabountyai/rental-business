@@ -358,3 +358,158 @@ test('an owner who has not proved a second factor is sent to enrol, not told the
   await page.goto('/money/deposits')
   await expect(page).toHaveURL(/\/account\?mfa=required/)
 })
+
+// ==========================================================================
+// R-209: THE APPLIED DEPOSIT REACHES THE LEDGER.
+//
+// `finalizeDisposition` wrote `appliedCents` onto the Deposit row and into
+// the letter and nowhere else, so a tenant who moved out owing the deposit
+// exactly got a letter saying it was settled while `balanceCents()` went on
+// reporting the whole arrears - to the lease page, to `statementForPeriod`,
+// to R-083's attorney packet, and to anyone handed the file for collection.
+//
+// DRIVEN THROUGH THE BROWSER, not against the action, because
+// `finalizeDisposition` is session-dependent (`requirePermission`) - the
+// same split `delist.test.ts` documents. It asserts the PROJECTION rather
+// than the letter: the letter was always right, and the ledger is the half
+// that was missing.
+// ==========================================================================
+
+async function seedDisposableDeposit(heldCents: number) {
+  const seeded = await seedLeaseWithBalance()
+  await prisma.lease.update({
+    where: { id: seeded.lease.id },
+    data: { status: 'ENDED', moveOutAt: new Date('2026-09-30T12:00:00Z') },
+  })
+  const deposit = await prisma.deposit.create({
+    data: {
+      propertyId: seeded.property.id,
+      leaseId: seeded.lease.id,
+      heldCents,
+      receivedAt: new Date('2026-01-01T12:00:00Z'),
+      dispositionDueOn: new Date('2026-10-30T00:00:00Z'),
+    },
+  })
+  return { ...seeded, deposit }
+}
+
+test('finalizing a disposition settles the arrears on the ledger, not just in the letter', async ({
+  page,
+}) => {
+  // Held exactly covers the $1,500 the fixture leaves outstanding, so the
+  // letter's own words are "your deposit has been fully applied; no refund
+  // is due" - and nothing is owed back, which is what sends the page on to
+  // the notice once it is written.
+  const { lease, deposit } = await seedDisposableDeposit(150_000)
+  const owner = await seedOwner()
+  await signIn(page, owner)
+
+  await page.goto(`/leases/${lease.id}/deposit`)
+  await expect(page.getByRole('heading', { name: 'Totals' })).toBeVisible()
+  await expect(page.getByText('Outstanding balance')).toBeVisible()
+
+  await page.getByLabel('Forwarding address').fill('19 Somewhere Else, Houston TX 77002')
+  await page.getByLabel(/cannot be undone/).check()
+  await page.getByRole('button', { name: 'Finalize disposition' }).click()
+
+  // The letter exists: a disposition that refunds nothing has nothing left
+  // to do on this screen and hands off to R-051's notice page.
+  await page.waitForURL(/\/notices\/[a-z0-9]+$/)
+
+  // THE ASSERTION THIS ITEM EXISTS FOR. Polled rather than read once: the
+  // simulator projects inside the push, but real Stripe delivers the event
+  // afterwards, and an assertion that only holds against the simulator is
+  // not the one to write.
+  await expect
+    .poll(async () => {
+      const rows = await prisma.ledgerEntry.findMany({
+        where: { leaseId: lease.id },
+        select: { amountCents: true },
+      })
+      return rows.reduce((total, row) => total + row.amountCents, 0)
+    })
+    .toBe(0)
+
+  // ...and it got there as a PAYMENT off a real Payment row, never as a
+  // hand-written credit. `LedgerEntry` is an append-only projection of
+  // Stripe (D-11) and the webhook is its only production writer; a row here
+  // that no payment produced would be the reconciliation bug the schema
+  // comment names.
+  //
+  // Summed rather than counted: `planAllocation` splits a payment into one
+  // entry per debt it lands on, so the NUMBER of rows is a property of
+  // whatever charges the fixture happens to carry. What must hold either way
+  // is the total and the fact that every one of them names a Payment.
+  const credits = await prisma.ledgerEntry.findMany({
+    where: { leaseId: lease.id, type: 'PAYMENT' },
+    select: { amountCents: true, paymentId: true },
+  })
+  expect(credits.reduce((total, row) => total + row.amountCents, 0)).toBe(-150_000)
+  expect(credits.every((row) => row.paymentId !== null)).toBe(true)
+
+  // EXACTLY ONE Payment row. D-169's duplicate - our row plus one minted by
+  // the event - doubled every counter payment in the dashboard's collected
+  // tile before D-177 fixed the ordering, and this path writes its row in
+  // the same order for the same reason.
+  const payments = await prisma.payment.findMany({
+    where: { leaseId: lease.id },
+    select: { channel: true, amountCents: true, receivedByStaffId: true },
+  })
+  expect(payments).toHaveLength(1)
+  expect(payments[0]).toMatchObject({ channel: 'OTHER', amountCents: 150_000 })
+  expect(payments[0].receivedByStaffId).toBe(owner.id)
+
+  // The Deposit row and the ledger now agree, which is the whole point.
+  const after = await prisma.deposit.findUniqueOrThrow({
+    where: { id: deposit.id },
+    select: { appliedCents: true, refundedCents: true },
+  })
+  expect(after).toEqual({ appliedCents: 150_000, refundedCents: 0 })
+})
+
+test('a disposition with nothing outstanding touches the ledger not at all', async ({ page }) => {
+  // The negative case, and it is not decoration: `ledgerAppliedCents` is
+  // `min(applied, outstanding)`, so a deposit consumed entirely by DAMAGE
+  // must credit nothing - deductions were never on the ledger, and paying
+  // them down against it would forgive rent nobody paid.
+  const { lease, property } = await seedDisposableDeposit(300_000)
+  // Clear the arrears the fixture seeds, so the only thing left to apply is
+  // the deduction below.
+  await prisma.ledgerEntry.create({
+    data: {
+      propertyId: property.id,
+      leaseId: lease.id,
+      type: 'PAYMENT',
+      amountCents: -150_000,
+      description: 'September rent paid',
+      occurredAt: new Date('2026-09-02T00:00:00Z'),
+    },
+  })
+  const owner = await seedOwner()
+  await signIn(page, owner)
+
+  await page.goto(`/leases/${lease.id}/deposit`)
+  await page.getByLabel('Description').fill('Replace the kitchen worktop')
+  await page.getByLabel('Amount ($)').fill('900')
+  await page.getByRole('button', { name: 'Add deduction' }).click()
+  // `exact: true` because `getByText` is a case-insensitive SUBSTRING match
+  // and the remove button carries an sr-only " the <description> deduction".
+  // The more specific locator, never a relaxed assertion (CLAUDE.md).
+  await expect(page.getByText('Replace the kitchen worktop', { exact: true })).toBeVisible()
+
+  await page.getByLabel('Forwarding address').fill('19 Somewhere Else, Houston TX 77002')
+  await page.getByLabel(/cannot be undone/).check()
+  await page.getByRole('button', { name: 'Finalize disposition' }).click()
+
+  // `finalizeDisposition` redirects to the letter whatever the totals say -
+  // the deposit screen's own `refundedCents === 0` redirect is about a later
+  // GET, not about where the action lands.
+  await page.waitForURL(/\/notices\/[a-z0-9]+$/)
+
+  expect(await prisma.payment.count({ where: { leaseId: lease.id } })).toBe(0)
+  const rows = await prisma.ledgerEntry.findMany({
+    where: { leaseId: lease.id },
+    select: { amountCents: true },
+  })
+  expect(rows.reduce((total, row) => total + row.amountCents, 0)).toBe(0)
+})
