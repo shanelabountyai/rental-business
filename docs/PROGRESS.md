@@ -12556,7 +12556,7 @@ commit touched before reading it as a dead pipeline.
 ---
 
 ## R-210 — a `Notice` records the service that happened, not the one intended
-**Commit:** `PENDING`  ·  **Date:** 2026-09-15
+**Commit:** `623a4a0`  ·  **Date:** 2026-09-15
 
 **What it built.** `canReceiveAuthLink(recipient)` in [delivery.ts](apps/web/lib/auth/delivery.ts) — one predicate, sitting next to the send it is a claim about — now gates every PORTAL service claim on a `Notice`. Five call sites take it: work-order scheduling ([scheduling.ts](apps/web/lib/workorders/scheduling.ts)), inspection scheduling ([scheduling.ts](apps/web/lib/inspections/scheduling.ts)), showings ([actions.ts](apps/web/lib/showings/actions.ts)), non-renewal ([leases/actions.ts](apps/web/lib/leases/actions.ts)) and repair-charge chargebacks ([chargeback-actions.ts](apps/web/lib/workorders/chargeback-actions.ts)). When the tenant has no route into the portal the notice is still generated and still sent on every channel the engine can reach, but it is recorded **unserved** — null `serviceMethod`/`servedAt`/`servedByStaffId`, no `NoticeDelivery` row, and `notice.drafted` instead of `notice.served`, carrying `unservedReason: 'no_portal_sign_in'`. The FCRA adverse-action notice ([screening/staff-actions.ts](apps/web/lib/screening/staff-actions.ts)) is the same defect on a different channel and is fixed from the other end: the `Notice` is created unserved inside the transaction, and `serviceMethod: 'EMAIL'` plus its delivery row and `notice.served` audit are written **after** `dispatchPendingNotifications`, from the `NotificationDelivery` the adapter actually marked `SENT`.
 
