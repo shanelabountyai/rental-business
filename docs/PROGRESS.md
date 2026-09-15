@@ -12480,4 +12480,19 @@ no `db:ci`. **Both halves proven against the reverted fix** (D-197): with
 unconditional sentence, 4 tests go red — the quiet-hours one and 3 of the 4
 notice assertions, the QUEUED branch correctly still passing.
 
-**CI run:** PENDING.
+**CI run `35002916707` is GREEN on both jobs** — `Lint, types, unit tests,
+build` and `End-to-end, axe, Lighthouse` — read on the run itself, not copied
+forward from R-206's entry. It covers `cb07374`, the commit carrying every
+source change in this item.
+
+**`183937b` and `64dde74` have NO RUN, and that is correct, not a dead
+pipeline.** `.github/workflows/ci.yml` carries `paths-ignore: ['**.md',
+'docs/**']`, so a docs-only push runs nothing deliberately. R-206's entry
+records a run against its own `record the SHA` commit (`770ea18`) because that
+push carried BOTH commits, making the docs commit the head SHA of a push whose
+changed-file set included code — the same mechanism CLAUDE.md documents for
+Vercel, where 132 of 145 items deployed only the SHA commit. This item pushed
+the three commits separately, so the code got its own run and the two docs
+commits correctly got none. **A `NO RUN` for a docs-only commit is not the
+"64 consecutive pushes failed in 3–7 seconds" signature**; check what the
+commit touched before reading it as a dead pipeline.
