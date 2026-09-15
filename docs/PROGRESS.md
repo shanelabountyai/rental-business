@@ -12500,7 +12500,7 @@ commit touched before reading it as a dead pipeline.
 ---
 
 ## R-208 — a tenancy going live opens its own move-in condition report
-**Commit:** `_pending_`  ·  **Date:** 2026-09-15
+**Commit:** `d7b3105`  ·  **Date:** 2026-09-15
 
 **What it built.** A new outbox consumer, [move-in-consumer.ts](apps/web/lib/inspections/move-in-consumer.ts), on `lease.activated`: it opens a `selfGuided` `MOVE_IN` `Inspection` for the new tenancy from the checklist a PM designated `defaultForType: 'MOVE_IN'`, audits it `SYSTEM / lease-activated`, and notifies the primary tenant through R-074's existing `inspection.move_in_ready` template with a deep link to their own portal walk page. `InspectionTemplate.defaultForType` now accepts `MOVE_IN` alongside the three periodic types — `DEFAULTABLE_TYPES`/`isDefaultableType` in [validate.ts](packages/core/inspections/validate.ts) replace `isPeriodicType` at the one form guard that read it, and the checklist form offers the option (its select label is deliberately 38 characters, see below). The second half is in [deposit-clearing-job.ts](apps/web/lib/leases/deposit-clearing-job.ts): the Task that hands over the access codes now reads the lease's newest `MOVE_IN` inspection and appends one of two sentences — `NO MOVE-IN REPORT: open one before the codes go out` or `MOVE-IN WALK NOT DONE: chase it before the codes go out` — at `URGENT` rather than `ROUTINE`. The demo seed gains a second checklist, `Move-in condition walk`, so the demo shows the configured state.
 
