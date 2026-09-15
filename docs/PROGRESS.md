@@ -12389,3 +12389,95 @@ unit test returns 309 days and `16–30 days` in the e2e.
 build` and `End-to-end, axe, Lighthouse` — read on the run itself once it
 completed, not copied forward from R-205's entry. It covers the push carrying
 `ef39547` and the `record the SHA` commit `770ea18`.
+
+---
+
+## R-207 — an emergency vendor dispatch goes out at 22:40, and the screen says what actually happened
+
+**Commit:** `PENDING`
+
+**What it built.** `NotifyInput.urgent` on the notification engine
+(`apps/web/lib/notifications/send.ts`), consulted beside
+`bypassesQuietHours(input.category)` and affecting quiet hours and nothing
+else. Both vendor-dispatch callers set it from the work order —
+`urgent: workOrder.priority === 'EMERGENCY'` in
+`apps/web/lib/workorders/actions.ts` and `apps/web/lib/vendors/reissue.ts`.
+`ChannelOutcome` gains `sendAfter`, returned from `record()`, and the new
+`apps/web/lib/workorders/dispatch-notice.ts` turns the outcomes into the
+sentence the PM reads: a send, a named hour, or "not sent".
+
+The defect: `EMERGENCY_CATEGORIES` holds exactly one member and
+`work_order_assigned` is not it, so a dispatch carrying a `propertyId` got
+`deferUntil = quietHoursEndAfter(...)` and status `DEFERRED`, and the drain
+takes only `sendAfter: { lte: now }`. Default quiet hours are 21:00–08:00 —
+**eleven hours**. A tenant reports a sewage backup at 22:40, the on-call PM is
+correctly paged, the PM assigns the 24-hour plumber, and the plumber's text
+was scheduled for 08:00 while the screen said `Link sent to Ace Plumbing.`
+
+**What it decided.** **The review's alternative — bypass for a VENDOR
+recipient at all — is deliberately refused** (D-225). In this market a
+vendor's number is a one-man shop's personal mobile, and a routine
+dripping-tap dispatch texted at 02:00 is precisely what quiet hours exist for;
+that option would have traded one defect for a smaller, quieter one, and it
+would have taken the bid-request send with it. The category cannot answer the
+question at all — `work_order_assigned` carries both the dripping tap and the
+sewage backup — so the caller holding the priority answers it, and
+`EMERGENCY_CATEGORIES` stays honest about being a list of emergencies.
+
+**`urgent` moves quiet hours only.** Not the kill switch, not a carrier STOP,
+not TCPA consent, not a preference. An emergency is a reason to wake somebody,
+never a reason to text a number that told us to stop.
+
+**The screen half is what makes the first half falsifiable.** `Link sent to
+${vendor}.` was returned unconditionally — over the eleven-hour deferral, and
+over a vendor with neither an email nor a phone, where both channels came back
+`no_address`. The precedence is QUEUED beats DEFERRED beats suppressed, and a
+`duplicate` outcome carries no status at all, so a resend the engine swallowed
+as already-decided is not reported as a new send. The deferred sentence names
+the hour property-local and zone-labelled (`friendlyTimestamp`), because the
+decision it informs is whether to phone the vendor instead, and that depends
+on how long the wait is.
+
+**`vendorDispatchNotice` is its own module, not a helper inside
+`actions.ts`.** That file is `'use server'` and may export only async
+functions — a sync export there passes typecheck and vitest and fails
+`npm run build`, which CLAUDE.md already documents. Being pure and out of that
+file, its branches are held by four unit-test assertions rather than by an
+e2e that would have had to put the wall clock inside quiet hours to reach the
+middle one.
+
+**What it left behind.**
+
+- **`urgent` does not reach `scheduleRetry`, so a bounced emergency is still
+  retried at 08:00.** The flag is a fact about the SEND and nothing persists
+  it; a retry runs from the stored row, which knows only its category. An
+  emergency dispatch whose first attempt a provider refused at 22:40 comes
+  back at the next 08:00. Narrower than what this item fixed — that held
+  *every* emergency dispatch, this holds only the ones a provider bounced —
+  and closing it means a column on `Notification` plus a migration. The
+  comment at `scheduleRetry` names it; owned by nobody.
+- **The bid-request send in `approvals.ts` sets no `urgent` and still
+  defers.** Deliberate: collecting quotes is not dispatching somebody, and
+  there is no emergency in which the right move is to gather three bids.
+- **No e2e drives `dispatchToVendor`'s notice.** `vendor-link.spec.ts` presses
+  the button and reads the token out of the notification body, but asserts
+  nothing about the sentence; the deferred branch needs the wall clock inside
+  quiet hours, which is why the cover is a unit test on the pure function.
+- **`plan-actions.ts:258` counts a DEFERRED outcome as "on its way"** and
+  says `The written schedule is on its way to …` for a message held until
+  08:00. Same shape, different screen, out of this row's scope. R-211 owns the
+  neighbouring `sendReminders` version of it.
+
+**Gate run:** `npm run lint` clean (16 pre-existing warnings, 0 errors);
+`npm run typecheck` clean; `npm test` **3,190 passed / 4 skipped**, which is
+R-206's 3,185 plus this item's five new assertions, reconciling exactly.
+`npm run build` clean — run because a `'use server'` module's exports changed.
+`npm run check:ship-deps` clean. Targeted e2e `e2e/vendor-link.spec.ts`
+**24 passed, 0 failed, 0 flaky, 0 skipped**, reconciling against
+`npx playwright test --list` (`Total: 24 tests in 1 file`). No migration, so
+no `db:ci`. **Both halves proven against the reverted fix** (D-197): with
+`!input.urgent` removed and `vendorDispatchNotice` stubbed back to the
+unconditional sentence, 4 tests go red — the quiet-hours one and 3 of the 4
+notice assertions, the QUEUED branch correctly still passing.
+
+**CI run:** PENDING.

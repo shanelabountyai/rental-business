@@ -24,6 +24,7 @@ import { dispatchPendingNotifications, notify } from '@/lib/notifications/send.t
 import { completeTaskWork } from '@/lib/tasks/complete.ts'
 import { createTask } from '@/lib/tasks/create.ts'
 import { issueVendorLink, revokeVendorLinks } from '@/lib/vendors/link.ts'
+import { vendorDispatchNotice } from './dispatch-notice.ts'
 import { policyFor } from './queries.ts'
 import { vendorWorkOrderThread } from './timeline.ts'
 import { requestVerification } from './verify.ts'
@@ -376,6 +377,7 @@ export async function dispatchToVendor(
 
   const { token, expiresAt } = await issueVendorLink(workOrder.id, workOrder.vendorId)
   const link = `${process.env.AUTH_URL ?? ''}/vendor/${token}`
+  let sendNotice = `Link sent to ${workOrder.vendor.name}.`
 
   await prisma.$transaction(async (tx) => {
     await tx.workOrder.update({
@@ -422,6 +424,9 @@ export async function dispatchToVendor(
         link,
       },
       propertyId: workOrder.propertyId,
+      // An emergency job goes out at 22:40, not at 08:00 (R-207). Quiet hours
+      // still hold a routine dispatch, and the notice below says so.
+      urgent: workOrder.priority === 'EMERGENCY',
       // Keyed on the TOKEN's own expiry, not on the work order alone: a
       // resend is a genuinely new message that must actually go out, and a
       // key of just the work order id would make the engine swallow every
@@ -435,6 +440,7 @@ export async function dispatchToVendor(
     await dispatchPendingNotifications(new Date(), 100, {
       deliveryIds: outcomes.map((o) => o.deliveryId).filter((id): id is string => id != null),
     })
+    sendNotice = vendorDispatchNotice(outcomes, workOrder.vendor.name, workOrder.property.timezone)
   } catch (error) {
     console.error(`[dispatch] failed to send vendor link for ${workOrder.id}`, error)
     return {
@@ -443,8 +449,9 @@ export async function dispatchToVendor(
   }
 
   revalidatePath(`/workorders/${workOrder.id}`)
-  return { notice: `Link sent to ${workOrder.vendor.name}.` }
+  return { notice: sendNotice }
 }
+
 
 /**
  * Marks the work finished and asks the tenant (MAINT-07, R-030).

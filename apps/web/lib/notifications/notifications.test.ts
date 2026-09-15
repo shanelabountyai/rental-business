@@ -319,6 +319,36 @@ describe('quiet hours', () => {
     expect(bypassesQuietHours('maintenance_emergency')).toBe(true)
     expect(bypassesQuietHours('unit_make_ready')).toBe(false)
   })
+
+  it('does not defer an urgent send in a category that otherwise defers', async () => {
+    // R-207. `work_order_assigned` carries both a dripping tap and a 22:40
+    // sewage backup, so the category cannot answer this - the caller holding
+    // the work order's priority does, with `urgent`. Same instant as the
+    // deferring test above: 22:00 in Chicago.
+    const key = `test:${randomUUID()}`
+    await notify({
+      category: 'unit_make_ready',
+      templateKey: 'unit.make_ready',
+      recipient: recipient(),
+      context: { propertyName: 'Test House', unitName: 'ADU' },
+      propertyId,
+      urgent: true,
+      idempotencyKey: key,
+      now: new Date('2026-08-05T03:00:00Z'),
+    })
+
+    const rows = await prisma.notification.findMany({
+      where: { idempotencyKey: { startsWith: key } },
+      include: { delivery: true },
+    })
+    notificationIds.push(...rows.map((r) => r.id))
+
+    expect(rows.length).toBeGreaterThan(0)
+    for (const row of rows) {
+      expect(row.delivery?.status).toBe('QUEUED')
+      expect(row.delivery?.sendAfter).toBeNull()
+    }
+  })
 })
 
 describe('dispatch', () => {

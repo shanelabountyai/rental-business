@@ -70,6 +70,24 @@ export interface NotifyInput {
   /// Drives quiet hours, which are property-local (D-3). A notification with
   /// no property never defers.
   propertyId?: string | null
+  /**
+   * This PARTICULAR send is an emergency, whatever its category is (R-207).
+   *
+   * `EMERGENCY_CATEGORIES` answers "is this kind of message ever urgent", and
+   * for `work_order_assigned` the honest answer is *sometimes*: the same
+   * category carries a routine dripping tap and a 22:40 sewage backup. A
+   * category cannot tell those apart, so the caller that holds the work
+   * order's priority says so here.
+   *
+   * ONLY QUIET HOURS. It does not override the kill switch, a carrier STOP, a
+   * preference, or consent - an emergency is a reason to wake somebody, not a
+   * reason to text a number that told us to stop.
+   *
+   * Deliberately NOT a blanket "vendors never defer": review finding 3
+   * offered that, and an SFR vendor's phone is a one-man shop's personal
+   * cell. Quiet hours are for exactly that number on a routine job.
+   */
+  urgent?: boolean
   /// The OutboxEvent that caused this, when one did.
   eventId?: string | null
   /**
@@ -91,6 +109,11 @@ export interface ChannelOutcome {
   outcome: 'recorded' | 'duplicate'
   status?: 'QUEUED' | 'SUPPRESSED' | 'DEFERRED'
   reason?: SuppressionReason
+  /// When a DEFERRED row will actually go out. Returned so a caller can say
+  /// so on the screen instead of reporting a send that has not happened
+  /// (R-207) - the defect that made quiet hours worth fixing was not the
+  /// delay, it was "Link sent to Ace Plumbing." over an eleven-hour wait.
+  sendAfter?: Date | null
   /// The delivery row just written, when one was. Exists so a caller that
   /// needs its OWN messages sent immediately can hand exactly those ids to
   /// `dispatchPendingNotifications()` instead of flushing the global queue -
@@ -178,7 +201,7 @@ export async function notify(
   // Quiet hours need the property's own timezone (D-3). Loaded once for the
   // whole fan-out rather than per channel.
   const timezone =
-    input.propertyId && !bypassesQuietHours(input.category)
+    input.propertyId && !bypassesQuietHours(input.category) && !input.urgent
       ? (
           await db.property.findUnique({
             where: { id: input.propertyId },
@@ -449,6 +472,15 @@ function baseKeyOf(idempotencyKey: string): string {
  * automated outbound message, and NOTIF-05 does not stop applying because the
  * first attempt failed. Without this a send that fails at 8:55pm comes back
  * four hours later as a text at one in the morning.
+ *
+ * KNOWN GAP (R-207): `NotifyInput.urgent` does not reach here. It is a fact
+ * about the SEND and nothing persists it, while a retry runs from the stored
+ * row, which knows only its category - so an emergency vendor dispatch whose
+ * first attempt was refused by the provider at 22:40 is retried at 08:00
+ * after all. Narrower than the defect R-207 fixed (that one held EVERY
+ * emergency dispatch; this one holds only the ones a provider bounced), and
+ * closing it means a column on `Notification` plus a migration. Whichever
+ * item adds one reads it here.
  */
 async function scheduleRetry(args: {
   attempts: number
@@ -522,6 +554,7 @@ async function record(db: Db, args: RecordInput): Promise<ChannelOutcome> {
       outcome: 'recorded',
       status: args.status,
       reason: args.reason,
+      sendAfter: args.sendAfter,
       deliveryId: created.delivery?.id,
     }
   } catch (error) {

@@ -122,6 +122,10 @@ export async function reissueOnExpiry(
         link: authUrl(`/vendor/${token}`),
       },
       propertyId: workOrder.propertyId,
+      // Same rule as the first dispatch (R-207): a vendor tapping a dead link
+      // for an emergency job at 23:10 is the one case where waiting for 08:00
+      // is worse than the text.
+      urgent: workOrder.priority === 'EMERGENCY',
       // Keyed on the EXPIRY INSTANT of the token that was used, so one dead
       // link produces one text however many times it is tapped — a vendor
       // refreshing the page must not send themselves five messages — while a
