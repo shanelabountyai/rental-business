@@ -12394,7 +12394,7 @@ completed, not copied forward from R-205's entry. It covers the push carrying
 
 ## R-207 — an emergency vendor dispatch goes out at 22:40, and the screen says what actually happened
 
-**Commit:** `PENDING`
+**Commit:** `cb07374`
 
 **What it built.** `NotifyInput.urgent` on the notification engine
 (`apps/web/lib/notifications/send.ts`), consulted beside
