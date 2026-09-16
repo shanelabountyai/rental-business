@@ -6,8 +6,15 @@ R-211 shipped as `11f9d16` (SHA recorded in the follow-up commit). **CI: read it
 on the run itself — `gh run list --limit 5` and look at the titles.** Do not
 copy a CI line forward; that error cost eleven items (R-130–R-140). R-211's own
 run is `35107573413` on *"R-211: record the SHA"*; its neighbour `35107572503`
-was **cancelled in 2s by the second push**, which is Vercel-style auto job
-cancellation and is not a failure. Three separate ways to read a green pipeline
+was **cancelled in 2s by the second push**, which is auto job cancellation and
+is not a failure. **R-211's run went red on its first attempt and green on a
+rerun, and the red was the RUNNER, not the code**: `Install Playwright
+browsers` died in `apt-get update` with `403 Forbidden` from
+`packages.microsoft.com`, a third-party repo unrelated to Playwright's
+dependencies that `--with-deps` still treats as fatal. No test ran. A step that
+cannot start looks exactly like a step that ran and failed — read the failing
+step's log, not just the job's conclusion. If it recurs, fix the step rather
+than re-running it. Three separate ways to read a green pipeline
 as dead, all still true: both commits go up in one push so the run is attributed
 to the HEAD (docs-only) sha and `--commit <work sha>` returns EMPTY; `--commit`
 matches only a FULL sha (R-207); and `paths-ignore: ['**.md', 'docs/**']` means
