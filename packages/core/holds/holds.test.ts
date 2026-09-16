@@ -37,6 +37,14 @@ describe('the effect table itself', () => {
   })
 })
 
+describe('notice_served (R-213)', () => {
+  // The whole point: a served cure notice froze its demand, so the nightly
+  // fee must not grow the ledger past it. And nothing more - it is not a stay.
+  it('halts late fees and nothing else', () => {
+    expect([...effectsInForce([active('notice_served')])]).toEqual(['halt_late_fees'])
+  })
+})
+
 describe('effectsInForce', () => {
   it('is empty with no holds', () => {
     expect([...effectsInForce([])]).toEqual([])
@@ -86,5 +94,6 @@ describe('privileged lifts', () => {
     expect(liftIsPrivileged('dispute')).toBe(false)
     expect(liftIsPrivileged('payment_plan')).toBe(false)
     expect(liftIsPrivileged('do_not_contact')).toBe(false)
+    expect(liftIsPrivileged('notice_served')).toBe(false)
   })
 })

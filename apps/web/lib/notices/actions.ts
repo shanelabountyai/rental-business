@@ -2,7 +2,8 @@
 
 import { createHash } from 'node:crypto'
 import { CURE_NOTICE_TYPES } from '@rental/core/evictions'
-import { NOTICE_SERVICE_METHODS, servicePermitted } from '@rental/core/notices'
+import { HOLD_DEFINITIONS } from '@rental/core/holds'
+import { NOTICE_SERVICE_METHODS, noticeTypeLabel, servicePermitted } from '@rental/core/notices'
 import type { NoticeServiceMethodName } from '@rental/core/notices'
 import { businessDate, wallClockToUtc } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
@@ -353,22 +354,84 @@ export async function recordNoticeService(
   // ALREADY RECORDED above whatever happens here: a hold that could not be
   // placed must never cost the owner the record of a service that physically
   // happened.
+  //
+  // R-213. The late-fee halt runs FIRST and on its own: it is one insert with
+  // no provider round trip, and a payment hold that fails at Stripe must not
+  // take the fee halt down with it - the notice's demand goes stale by the
+  // next morning either way.
+  let feesHalted = ''
+  if (formData.get('haltLateFees') === 'on') {
+    const outcome = await placeNoticeServedHold(notice, actor.id)
+    if (!outcome.ok) {
+      return { error: `Service recorded — but late fees are NOT stopped: ${outcome.error}` }
+    }
+    feesHalted = ' Late fees are stopped while the notice runs.'
+  }
+
   if (formData.get('placeHold') === 'on') {
     const outcome = await placeServiceHold(notice, formData, actor.id)
     if (!outcome.ok) {
       return {
-        error: `Service recorded — but the payment hold is NOT in force: ${outcome.error}`,
+        error: `Service recorded — but the payment hold is NOT in force: ${outcome.error}${feesHalted}`,
       }
     }
     return {
       notice:
         outcome.linksRevoked > 0
-          ? `Service recorded, and the payment hold is in force — confirmed with the payment provider. ${outcome.linksRevoked} live pay-now ${outcome.linksRevoked === 1 ? 'link was' : 'links were'} revoked.`
-          : 'Service recorded, and the payment hold is in force — confirmed with the payment provider.',
+          ? `Service recorded, and the payment hold is in force — confirmed with the payment provider. ${outcome.linksRevoked} live pay-now ${outcome.linksRevoked === 1 ? 'link was' : 'links were'} revoked.${feesHalted}`
+          : `Service recorded, and the payment hold is in force — confirmed with the payment provider.${feesHalted}`,
     }
   }
 
-  return { notice: 'Service recorded.' }
+  return { notice: `Service recorded.${feesHalted}` }
+}
+
+/// R-213 (review finding 9). A served cure notice froze `demandedCents`; the
+/// nightly late-fee job skips any lease with an active hold claiming
+/// `halt_late_fees`, and `notice_served` is the type that claims it. A second
+/// service method on the same notice finds the hold already in force and
+/// places nothing - "at most one active hold of a type", as `placeLeaseHold`
+/// enforces it.
+async function placeNoticeServedHold(
+  notice: { id: string; type: string; leaseId: string | null; propertyId: string; property: { id: string; legalEntityId: string } },
+  actorStaffId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!notice.leaseId) return { ok: false, error: 'This notice has no lease to stop late fees on.' }
+  if (!CURE_NOTICE_TYPES.includes(notice.type)) {
+    return { ok: false, error: 'Only a cure-starting notice stops late fees at service.' }
+  }
+  if (!(await actorCan('hold.manage', propertyResource(notice.property)))) {
+    return { ok: false, error: 'Stopping late fees needs the hold permission.' }
+  }
+  const leaseId = notice.leaseId
+
+  const existing = await prisma.leaseHold.findFirst({
+    where: { leaseId, type: 'NOTICE_SERVED', liftedAt: null },
+    select: { id: true },
+  })
+  if (existing) return { ok: true }
+
+  const reason = `${noticeTypeLabel(notice.type)} served — late fees stopped so the ledger matches the sum the notice demanded.`
+  await prisma.$transaction(async (tx) => {
+    const hold = await tx.leaseHold.create({
+      data: { leaseId, propertyId: notice.propertyId, type: 'NOTICE_SERVED', reason, placedByStaffId: actorStaffId },
+    })
+    await audit(
+      {
+        action: 'lease.hold_placed',
+        entityType: 'Lease',
+        entityId: leaseId,
+        propertyId: notice.propertyId,
+        reason,
+        // Snapshotted, as `placeLeaseHold` does - what this hold stopped must
+        // not become a question about what a later build thinks it stops.
+        after: { holdId: hold.id, type: 'notice_served', effects: HOLD_DEFINITIONS.notice_served.effects, noticeId: notice.id },
+      },
+      tx,
+    )
+  })
+  revalidatePath(`/leases/${leaseId}`)
+  return { ok: true }
 }
 
 /// The inline serve-and-hold (R-156). Placing a hold is `ledger.adjust`

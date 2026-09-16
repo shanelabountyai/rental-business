@@ -121,7 +121,7 @@ async function seedOverdueLease(dueOn: string) {
   return { leaseId: lease.id, rentChargeId: rent.id }
 }
 
-async function placeHold(leaseId: string, type: 'BANKRUPTCY' | 'DO_NOT_CONTACT') {
+async function placeHold(leaseId: string, type: 'BANKRUPTCY' | 'DO_NOT_CONTACT' | 'NOTICE_SERVED') {
   return prisma.leaseHold.create({
     data: { leaseId, propertyId, type, reason: 'test fixture', placedByStaffId: staffId },
   })
@@ -179,6 +179,19 @@ describe('the late-fee sweep', () => {
       await prisma.charge.count({
         where: { assessedOnChargeId: held.rentChargeId, type: 'LATE_FEE' },
       }),
+    ).toBe(0)
+  }, 30_000)
+
+  it('skips a tenancy under a served cure notice (R-213)', async () => {
+    // Review finding 9: the fee kept growing past the sum the notice froze.
+    // Through the real sweep and the real enum mapping, not core's table.
+    const { leaseId, rentChargeId } = await seedOverdueLease('2026-05-01')
+    await placeHold(leaseId, 'NOTICE_SERVED')
+
+    await assessLateFees(propertyId, new Date('2026-05-20T12:00:00Z'))
+
+    expect(
+      await prisma.charge.count({ where: { assessedOnChargeId: rentChargeId, type: 'LATE_FEE' } }),
     ).toBe(0)
   }, 30_000)
 

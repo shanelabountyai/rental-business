@@ -475,6 +475,25 @@ test('a cure notice drafted from the case stores what it demanded, and the case 
     ),
   ).toBeVisible()
   await expect(page.getByText(/Whether a partial payment cures the notice/)).toBeVisible()
+
+  // R-213. A late fee posted after the notice was drafted - what the nightly
+  // job did before a served notice could stop it. The demand stays frozen at
+  // $1,575.00; the ledger does not, and the page now says both.
+  await prisma.ledgerEntry.create({
+    data: {
+      propertyId: property.id,
+      leaseId: lease.id,
+      type: 'CHARGE',
+      amountCents: 2_500,
+      description: 'Daily late fee',
+      occurredAt: new Date(notice.generatedAt.getTime() + 60_000),
+    },
+  })
+  await page.goto(`/evictions/${evictionCase.id}`)
+  await expect(
+    page.getByText('Ledger balance today: $1,600.00 — the notice demanded $1,575.00.'),
+  ).toBeVisible()
+  await expect(page.getByText(/has been charged since the notice was drafted, and none of it is in the demand/)).toBeVisible()
 })
 
 test('serving a pay-or-quit places the hold in the same press, and proves it reached the payer row', async ({ page }) => {
@@ -531,10 +550,17 @@ test('serving a pay-or-quit places the hold in the same press, and proves it rea
   await expect(
     page.getByLabel('Also place a payment hold when this service is recorded'),
   ).toBeChecked()
+  // R-213: the late-fee halt rides the same press, also pre-set.
+  await expect(page.getByLabel('Stop late fees while this notice runs')).toBeChecked()
   await page.getByLabel('When was it served?').fill('2026-08-30T10:00')
   await page.getByRole('button', { name: 'Serve and hold' }).click()
 
   await expect(page.getByText(/payment hold is in force/)).toBeVisible()
+  await expect(page.getByText(/Late fees are stopped while the notice runs/)).toBeVisible()
+  // The row the nightly late-fee job reads through `haltedLeasesInProperty`.
+  const feeHold = await prisma.leaseHold.findFirstOrThrow({ where: { leaseId: lease.id, liftedAt: null } })
+  expect(feeHold.type).toBe('NOTICE_SERVED')
+  expect(feeHold.placedByStaffId).toBe(holder.id)
   // The row the pay screen, the pay-link page and the counter all read.
   const held = await prisma.leasePayer.findUniqueOrThrow({ where: { id: payer.id } })
   expect(held.collectionPaused).toBe(true)

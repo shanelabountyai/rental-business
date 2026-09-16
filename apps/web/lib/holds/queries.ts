@@ -28,6 +28,7 @@ const TO_CORE: Record<LeaseHoldType, HoldType> = {
   DISPUTE: 'dispute',
   PAYMENT_PLAN: 'payment_plan',
   DO_NOT_CONTACT: 'do_not_contact',
+  NOTICE_SERVED: 'notice_served',
 }
 
 const TO_DB: Record<HoldType, LeaseHoldType> = {
@@ -37,6 +38,7 @@ const TO_DB: Record<HoldType, LeaseHoldType> = {
   dispute: 'DISPUTE',
   payment_plan: 'PAYMENT_PLAN',
   do_not_contact: 'DO_NOT_CONTACT',
+  notice_served: 'NOTICE_SERVED',
 }
 
 export function toCoreHoldType(type: LeaseHoldType): HoldType {

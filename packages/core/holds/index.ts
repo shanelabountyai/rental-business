@@ -33,6 +33,7 @@ export const HOLD_TYPES = [
   'dispute',
   'payment_plan',
   'do_not_contact',
+  'notice_served',
 ] as const
 
 export type HoldType = (typeof HOLD_TYPES)[number]
@@ -146,6 +147,20 @@ export const HOLD_DEFINITIONS: Record<HoldType, HoldDefinition> = {
     // them about it. An operator who wants the meter off as well places a
     // `dispute` or `payment_plan` hold beside this one.
     effects: ['halt_dunning', 'suppress_marketing'],
+    liftIsPrivileged: false,
+  },
+
+  notice_served: {
+    label: 'Cure notice served',
+    banner:
+      'A pay-or-quit or notice to vacate has been served. The notice froze the sum it demanded, so the late-fee meter is off while it runs — a charge added after service is a number the notice does not state.',
+    // ONLY `halt_late_fees` (R-213, review finding 9). The daily fee grew the
+    // ledger past the frozen `demandedCents` by the next morning. Rent
+    // reminders and announcements are not what made the demand stale, and a
+    // hold that over-reaches is one an operator stops placing. Whether
+    // post-service accrual defeats a notice is for counsel; stopping it
+    // cannot be the wrong direction.
+    effects: ['halt_late_fees'],
     liftIsPrivileged: false,
   },
 }

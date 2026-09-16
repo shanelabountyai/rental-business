@@ -97,6 +97,7 @@ export default async function EvictionCasePage({ params }: { params: Promise<{ i
     acceptanceWaiverNote,
     partialPaymentCures,
     demand,
+    ledgerToday,
   } = await cureClockFor(evictionCase)
   const stage = evictionCase.stage as EvictionStageValue
   // R-194: what a notice drafted now would demand. Only before filing - a
@@ -193,6 +194,21 @@ export default async function EvictionCasePage({ params }: { params: Promise<{ i
                   </li>
                 ))}
               </ul>
+            )}
+            {ledgerToday && (
+              <p className="text-sm tabular-nums">
+                Ledger balance today: {formatCents(ledgerToday.balanceCents)}
+                {demand.verdict.demandedCents != null &&
+                  ` — the notice demanded ${formatCents(demand.verdict.demandedCents)}`}
+                .
+              </p>
+            )}
+            {ledgerToday && ledgerToday.chargedSinceDraftingCents > 0 && (
+              <p className="text-sm text-amber-800">
+                {formatCents(ledgerToday.chargedSinceDraftingCents)} has been charged since the notice was drafted, and
+                none of it is in the demand. Whether a charge added after service affects the notice is a question for
+                your attorney.
+              </p>
             )}
             {demand.verdict.state === 'part_cured' && (
               <p className="text-sm text-amber-800">{partialCureWarning(partialPaymentCures)}</p>

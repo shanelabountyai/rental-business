@@ -2795,6 +2795,7 @@ enum LeaseHoldType {
   DISPUTE
   PAYMENT_PLAN
   DO_NOT_CONTACT
+  NOTICE_SERVED
 }
 
 /// A declared reason the automation must not act on a tenancy (RISK-11,
@@ -5400,6 +5401,7 @@ model Notification {
   @@index([recipientType, recipientId, createdAt])
   @@index([propertyId, createdAt])
   @@index([category, createdAt])
+  @@index([eventId])
 }
 
 /// The mutable half: what happened after the decision. Separated so the body

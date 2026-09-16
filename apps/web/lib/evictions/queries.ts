@@ -176,9 +176,29 @@ export async function cureClockFor(evictionCase: EvictionCaseDetail) {
     cureNotices[0] ??
     null
 
+  // R-213 (review finding 9). The demand is frozen at drafting; the ledger is
+  // not. Shown side by side so a divergence is read off the page rather than
+  // inferred from two screens. Only charges count as "added since": a payment
+  // since drafting is already the verdict's `keptCents`.
+  const ledger = demandNotice
+    ? await prisma.ledgerEntry.findMany({
+        where: { leaseId: evictionCase.leaseId },
+        select: { id: true, type: true, amountCents: true, occurredAt: true, description: true },
+      })
+    : []
+  const ledgerToday = demandNotice
+    ? {
+        balanceCents: balanceCents(ledger),
+        chargedSinceDraftingCents: ledger
+          .filter((entry) => entry.type === 'CHARGE' && entry.occurredAt > demandNotice.generatedAt)
+          .reduce((sum, entry) => sum + entry.amountCents, 0),
+      }
+    : null
+
   return {
     clock,
     hasNotice,
+    ledgerToday,
     paymentsSinceService: paymentsSinceService(services, payments),
     acceptanceWaivesNotice,
     acceptanceWaiverNote,

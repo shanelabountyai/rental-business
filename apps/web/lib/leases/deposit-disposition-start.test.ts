@@ -7,19 +7,24 @@ import { startDepositDisposition } from './deposit-disposition-start.ts'
 // (INSP-03, R-071) - frozen once, from `Lease.moveOutAt`, never
 // recomputed (D-12).
 
-const STATE = 'XY' // isolated from every other test's own state fixture.
+const STATE = 'XY' // the only file writing `XY` RULES; four others use it for properties.
 const CHICAGO = 'America/Chicago'
 const HELD_CENTS = 200_000
 
 let entityId: string
 const propertyIds: string[] = []
-const ruleIds: string[] = []
 const unitIds: string[] = []
 const tenantIds: string[] = []
 const leaseIds: string[] = []
 const depositIds: string[] = []
 
 beforeAll(async () => {
+  // Retire any rule an earlier run left behind. `afterEach` used to delete by
+  // collected id, so a run that timed out mid-test orphaned its rule, and
+  // every later run of this file then read two `XY` rules and failed on its
+  // own (R-213 hit it under sibling-project load). This file is the only one
+  // that writes `XY` rules - the others use `XY` for properties alone.
+  await prisma.jurisdictionRule.deleteMany({ where: { state: STATE } })
   const entity = await prisma.legalEntity.create({
     data: { name: `Disposition LLC-${Date.now()}`, type: 'LLC' },
   })
@@ -32,13 +37,12 @@ afterEach(async () => {
   await prisma.lease.deleteMany({ where: { id: { in: leaseIds } } })
   await prisma.tenant.deleteMany({ where: { id: { in: tenantIds } } })
   await prisma.unit.deleteMany({ where: { id: { in: unitIds } } })
-  await prisma.jurisdictionRule.deleteMany({ where: { id: { in: ruleIds } } })
+  await prisma.jurisdictionRule.deleteMany({ where: { state: STATE } })
   await prisma.property.deleteMany({ where: { id: { in: propertyIds } } })
   depositIds.length = 0
   leaseIds.length = 0
   tenantIds.length = 0
   unitIds.length = 0
-  ruleIds.length = 0
   propertyIds.length = 0
 })
 
@@ -122,7 +126,6 @@ async function seedRule(
       ...dayCount,
     },
   })
-  ruleIds.push(rule.id)
   return rule
 }
 

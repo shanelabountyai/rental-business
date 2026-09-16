@@ -81,6 +81,17 @@ export default async function NoticePage({
     }
   }
 
+  // R-213. The late-fee halt is offered on its own, to anybody who could
+  // place a hold from the lease page - it is not `ledger.adjust` work and
+  // needs no provider, so it must not hide behind the payment hold's bar.
+  const feeHaltOffer =
+    canSend &&
+    notice.lease != null &&
+    CURE_NOTICE_TYPES.includes(notice.type) &&
+    (await actorCan('hold.manage', { propertyId: notice.propertyId, legalEntityId: undefined }))
+      ? { alreadyHalted: holds.some((hold) => hold.liftedAt === null && hold.type === 'notice_served') }
+      : null
+
   // EITHER a lease or an applicant (R-061's either/or).
   const tenants = notice.lease
     ? notice.lease.leaseTenants.map((lt) => `${lt.tenant.firstName} ${lt.tenant.lastName}`)
@@ -250,6 +261,7 @@ export default async function NoticePage({
             propertyTimezone={notice.property.timezone}
             alreadyServed={notice.deliveries.length > 0}
             holdOffer={holdOffer}
+            feeHaltOffer={feeHaltOffer}
           />
         </section>
       )}

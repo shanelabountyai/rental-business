@@ -40,12 +40,16 @@ export function ServeForm({
   propertyTimezone,
   alreadyServed,
   holdOffer = null,
+  feeHaltOffer = null,
 }: {
   action: (previous: FormState, formData: FormData) => Promise<FormState>
   permittedMethods: NoticeServiceMethodName[] | null
   propertyTimezone: string
   alreadyServed: boolean
   holdOffer?: HoldOffer | null
+  /// R-213. Present only for a cure-starting notice whose reader holds
+  /// `hold.manage` - the server re-checks both.
+  feeHaltOffer?: { alreadyHalted: boolean } | null
 }) {
   const [state, formAction, pending] = useActionState(action, {})
   const [method, setMethod] = useState<NoticeServiceMethodName>('PERSONAL')
@@ -202,6 +206,27 @@ export function ServeForm({
           className="border-input focus-visible:ring-ring rounded-md border px-3 py-2 text-sm focus-visible:ring-2 focus-visible:outline-none"
         />
       </div>
+
+      {feeHaltOffer?.alreadyHalted && (
+        <p className="text-muted-foreground text-sm">
+          Late fees are already stopped on this lease by an earlier service.
+        </p>
+      )}
+      {feeHaltOffer && !feeHaltOffer.alreadyHalted && (
+        // Pre-set, for the same reason the payment hold is: the demand is
+        // frozen at drafting, and the nightly fee makes it stale by morning.
+        <label className="flex min-h-11 items-start gap-2 text-sm">
+          <input type="checkbox" name="haltLateFees" className="mt-1 size-5" defaultChecked />
+          <span>
+            <span className="font-medium">Stop late fees while this notice runs</span>
+            <span className="text-muted-foreground block text-xs">
+              The notice states the sum demanded on the day it was drafted. A
+              late fee added after service makes the ledger say something the
+              notice does not. Places a lift-able hold on the lease.
+            </span>
+          </span>
+        </label>
+      )}
 
       {holdOffer?.alreadyHeld && (
         <p className="text-muted-foreground text-sm">
