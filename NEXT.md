@@ -1,16 +1,28 @@
 # Next session
 
-## R-213 is done. Pick up R-214 — a vendor with no COI reads like one whose COI is current.
+## R-214 is done. Pick up R-215: money owed by a moved-out tenant leaves the product.
 
-R-213 shipped as `69f29bf` (SHA recorded in the follow-up commit). **CI: read it
-on the run itself — `gh run list --limit 5`.** Do not copy a CI line forward.
-Both commits go up in one push, so the run is attributed to the docs-only HEAD
-sha; `--commit` matches only a FULL sha.
+R-214 shipped as `3484f78` (SHA recorded in `1ad0a59`). **CI: read it on the run
+itself with `gh run list --limit 5`.** Do not copy a CI line forward.
 
-**Start here:** `docs/prds/06-backlog.md` → row 201 / **R-214**. Review finding
-10 at `docs/reviews/2026-09-13-operator-review.md`; D-222 holds the binding
-"do not build" list. Re-verify the finding before touching anything — nine for
-nine so far (R-213's said "seven hold types"; there were six).
+**Start here:** `docs/prds/06-backlog.md`, row 202 / **R-215**. Re-verify the
+finding before touching anything. The record is ten for ten.
+
+## What R-214 established (D-232)
+
+`coiMissing` on `RankedVendor`. "no COI" shows in the assign dropdown and on
+`/vendors`. The `vendor.coi_check` job raises `vendor_coi_lapsed` or
+`vendor_coi_expiring` Tasks with subject type `Vendor`. Dispatch warns and
+audits `coiGap`, and never refuses. **`/vendors` renders ~2,000 rows in
+`rental_test`**, so a span per row is ~9s of axe scan. Keep the flags in one span.
+
+## What R-214 left behind
+
+- No test drives the dispatch COI warning or the flag-close on vendor save.
+- A COI Task is visible only to staff scoped to the property it landed on
+  (`Task.propertyId` is required).
+- Preventive-maintenance auto-assign picks `ranked[0]` with no COI check.
+- "COI expired" compares a `@db.Date` against the wall clock.
 
 ## What R-213 established
 
