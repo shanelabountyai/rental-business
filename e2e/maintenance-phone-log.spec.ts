@@ -233,6 +233,10 @@ test.describe('logging a phone-reported request', () => {
     // 16.2.12 -> 16.3.3 bump with nothing else on this page changed, so what
     // moved is what Next puts in that announcer.
     await expect(page.getByText('Habitability', { exact: true })).toBeVisible()
+    // R-217: a habitability request shows its derived repair deadline. The
+    // value depends on whichever TX rule the shared database resolves, so
+    // this asserts the row, and case-stall-job.test.ts owns the arithmetic.
+    await expect(page.getByText('Repair due', { exact: true })).toBeVisible()
   })
 
   test('rejects whitespace-only notes without creating a ticket', async ({ page }) => {

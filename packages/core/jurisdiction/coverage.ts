@@ -38,6 +38,7 @@ export interface RuleCoverageLike {
   observedHolidays: readonly string[]
   depositEscrowRequired: boolean
   depositInterestRequired: boolean
+  habitabilityRepairDays: number | null
 }
 
 export interface CoverageGap {
@@ -113,6 +114,14 @@ export function computeCoverage(
       ...(rule.depositInterestRequired
         ? [
             'deposit interest is required here and nothing computes or accrues it, so a disposition letter would go out short by the interest owed (PAY-11)',
+          ]
+        : []),
+      // R-217 (review finding 13). A limit rather than an unreviewed field,
+      // named where it breaks: with no period on file the stall sweep watches
+      // nothing, so the one clock that runs against the owner runs unseen.
+      ...(rule.habitabilityRepairDays == null
+        ? [
+            'no habitability repair deadline is on file, so a no-heat or mould complaint is never measured against one (MAINT-01)',
           ]
         : []),
       ...(rule.depositEscrowRequired

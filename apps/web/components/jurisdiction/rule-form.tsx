@@ -91,6 +91,7 @@ export interface RuleFormDefaults {
   belongingsStorageDays?: number | ''
   belongingsNoticeDays?: number | ''
   leaseViolationCureDays?: number | ''
+  habitabilityRepairDays?: number | ''
   nsfFeePermitted?: boolean
   nsfFeeMaxDollars?: number | ''
   cardSurchargePolicy?: string
@@ -529,6 +530,17 @@ export function RuleForm({
             defaultValue={defaults.retaliationWindowDays}
             error={errors.retaliationWindowDays}
             hint="Commonly ~180 (six months). Left blank, the retaliation guard (RISK-06) stays silent for this state rather than assuming a number."
+          />
+          <TextField
+            label="Habitability repair deadline, days (optional)"
+            name="habitabilityRepairDays"
+            type="number"
+            inputMode="numeric"
+            min={0}
+            max={365}
+            defaultValue={defaults.habitabilityRepairDays}
+            error={errors.habitabilityRepairDays}
+            hint="Days to repair a condition affecting health or safety after the tenant's complaint (Texas presumes 7). Counted from the day the request came in. Left blank, no habitability request is measured against a deadline."
           />
         </div>
         <CheckboxField

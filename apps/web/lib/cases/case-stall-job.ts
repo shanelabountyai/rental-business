@@ -2,6 +2,7 @@ import 'server-only'
 
 import { responseClock } from '@rental/core/accommodations'
 import { mitigationClock } from '@rental/core/insurance'
+import { habitabilityRepairClock } from '@rental/core/maintenance'
 import {
   type BusinessDate,
   businessDate,
@@ -13,6 +14,7 @@ import { planTurn, TURN_STALL_DAYS } from '@rental/core/turnover'
 import { prisma } from '@rental/db'
 import { rulesFor } from '@/lib/jurisdiction/queries.ts'
 import { SCHEDULED_JOBS } from '@/lib/jobs/runner.ts'
+import { REPAIR_CLOCK_RUNNING } from '@/lib/maintenance/habitability-clock.ts'
 import { alreadyFlagged } from '@/lib/tasks/already-flagged.ts'
 import { createTask } from '@/lib/tasks/create.ts'
 
@@ -21,6 +23,8 @@ import { createTask } from '@/lib/tasks/create.ts'
 // unserved violation-cure notices, silent insurance-claim mitigation, and
 // unsigned party-change amendments with an unscreened incoming occupant.
 // R-178 (review §10) adds a SIXTH: a make-ready with nothing moving on it.
+// R-217 (review §13) adds a SEVENTH: a habitability complaint against the
+// state's repair deadline.
 //
 // All six raise the SAME `Task` queue - D-9 forbids a second one - and all
 // six are flagged ONCE while the flag is open, not every day the condition
@@ -325,11 +329,70 @@ async function checkTurnovers(propertyId: string, today: BusinessDate, timezone:
   return { checked: projects.length, flagged }
 }
 
+// ---------------------------------------------------------------------------
+// 7. Habitability complaint against the state's repair deadline (MAINT-01/
+//    RISK-06; R-217, review §13)
+//
+// The one statutory clock here that runs AGAINST the owner. Two Tasks, not
+// one: URGENT at halfway, while there is still time to get a vendor out, and
+// EMERGENCY once the period has run - they are different types, so an open
+// halfway Task never swallows the overdue one.
+//
+// "Still running" lives in lib/maintenance/habitability-clock.ts, shared with
+// the ticket page, so the two never disagree - including that a MERGE does
+// not stop the clock.
+//
+// No rule, or no `habitabilityRepairDays` on it, watches nothing: D-4 refuses
+// to invent the deadline, and `computeCoverage` names that state's gap.
+// ---------------------------------------------------------------------------
+async function checkHabitabilityRepairs(
+  propertyId: string,
+  today: BusinessDate,
+  property: { state: string; county: string | null; timezone: string },
+) {
+  const tickets = await prisma.ticket.findMany({
+    where: { propertyId, ...REPAIR_CLOCK_RUNNING },
+    select: { id: true, createdAt: true },
+  })
+  if (tickets.length === 0) return { checked: 0, flagged: 0 }
+
+  const rule = await rulesFor(property, new Date()).catch(() => null)
+  if (rule?.habitabilityRepairDays == null) return { checked: tickets.length, flagged: 0 }
+  const days = rule.habitabilityRepairDays
+
+  let flagged = 0
+  for (const ticket of tickets) {
+    const clock = habitabilityRepairClock(
+      businessDate(ticket.createdAt, property.timezone),
+      days,
+      rule,
+      today,
+    )
+    if (!clock || clock.stage === 'ON_TRACK') continue
+    const overdue = clock.stage === 'OVERDUE'
+    const type = overdue ? 'ticket.habitability_repair_overdue' : 'ticket.habitability_repair_halfway'
+    if (await alreadyFlagged(type, ticket.id, today)) continue
+    await createTask(prisma, {
+      propertyId,
+      type,
+      subjectType: 'Ticket',
+      subjectId: ticket.id,
+      businessDate: today,
+      priority: overdue ? 'EMERGENCY' : 'URGENT',
+      title: overdue
+        ? `Habitability repair overdue — was due ${friendlyBusinessDate(clock.dueOn)}, a ${days}-day period`
+        : `Habitability repair due ${friendlyBusinessDate(clock.dueOn)} and not yet done`,
+    })
+    flagged++
+  }
+  return { checked: tickets.length, flagged }
+}
+
 SCHEDULED_JOBS.push({
   type: 'cases.stalled',
   localHour: LOCAL_HOUR,
   description:
-    'One stall sweep for the case types nothing else watches (review §7, §10): accommodation response clocks, quiet abandonment cases, unserved violation-cure notices, silent insurance-claim mitigation, unsigned/unscreened party-change amendments, and make-readies with nothing moving on them.',
+    'One stall sweep for the case types nothing else watches (review §7, §10): accommodation response clocks, quiet abandonment cases, unserved violation-cure notices, silent insurance-claim mitigation, unsigned/unscreened party-change amendments, make-readies with nothing moving on them, and habitability complaints against the state repair deadline.',
   run: async ({ propertyId, businessDate: today, now }) => {
     const property = await prisma.property.findUniqueOrThrow({
       where: { id: propertyId },
@@ -343,6 +406,7 @@ SCHEDULED_JOBS.push({
       insuranceClaims: await checkInsuranceClaims(propertyId, today, now),
       partyChanges: await checkPartyChanges(propertyId, today, property.timezone),
       turnovers: await checkTurnovers(propertyId, today, property.timezone),
+      habitabilityRepairs: await checkHabitabilityRepairs(propertyId, today, property),
     }
   },
 })

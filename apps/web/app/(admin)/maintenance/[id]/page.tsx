@@ -3,7 +3,7 @@ import {
   emergencyDefinition,
   ticketReference,
 } from '@rental/core/maintenance'
-import { friendlyTimestamp } from '@rental/core/scheduling'
+import { businessDate, friendlyBusinessDate, friendlyTimestamp } from '@rental/core/scheduling'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { EmergencyResponsePanel } from '@/components/maintenance/emergency-response-panel.tsx'
@@ -13,6 +13,7 @@ import {
   setVendorEmergencyAvailability,
 } from '@/lib/maintenance/actions.ts'
 import { emergencyVendorsForTrade } from '@/lib/maintenance/emergency.ts'
+import { repairDeadlineFor } from '@/lib/maintenance/habitability-clock.ts'
 import { getStaffTicket } from '@/lib/maintenance/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 
@@ -70,6 +71,9 @@ export default async function StaffTicketDetailPage({
   const [vendors, canEditVendors] = isEmergency
     ? await Promise.all([emergencyVendorsForTrade(trade), actorCan('vendor.write')])
     : [[], false]
+  // R-217: the derived repair deadline. Never stored - a rule correction
+  // re-dates every open ticket, which is what a derived date is for.
+  const repair = await repairDeadlineFor(ticket.id, businessDate(new Date(), ticket.property.timezone))
 
   return (
     <div className="flex max-w-2xl flex-col gap-6">
@@ -105,6 +109,16 @@ export default async function StaffTicketDetailPage({
         <dd className="col-span-1 sm:col-span-2">
           {STATUS_LABELS[ticket.status] ?? ticket.status}
         </dd>
+        {repair.kind !== 'not_applicable' && (
+          <>
+            <dt className="text-muted-foreground">Repair due</dt>
+            <dd className="col-span-1 sm:col-span-2">
+              {repair.kind === 'no_rule'
+                ? `No habitability repair deadline is on file for ${repair.state}`
+                : `${friendlyBusinessDate(repair.clock.dueOn)} (${repair.days}-day period)${repair.clock.stage === 'OVERDUE' ? ' — overdue' : ''}`}
+            </dd>
+          </>
+        )}
         <dt className="text-muted-foreground">Source</dt>
         <dd className="col-span-1 sm:col-span-2">
           {SOURCE_LABELS[ticket.source] ?? ticket.source}

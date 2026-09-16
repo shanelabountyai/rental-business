@@ -6283,6 +6283,13 @@ model JurisdictionRule {
   /// running with NO deadline rather than as expired, because a deadline this
   /// product invented is what gets a case dismissed and started over.
   leaseViolationCureDays Int?
+  /// R-217 (MAINT-01/RISK-06, D-4): days an owner has to repair a condition
+  /// affecting health or safety after the tenant's complaint - the one
+  /// statutory clock here that runs AGAINST the owner. Texas presumes seven
+  /// days reasonable (Tex. Prop. Code §92.056(d)). Null means not configured:
+  /// no deadline is invented, and `computeCoverage` names the gap. Needs
+  /// counsel per state, including what counts as the notice that starts it.
+  habitabilityRepairDays Int?
   /// WHICH SERVICE METHODS THE STATE ALLOWS, PER NOTICE TYPE (R-051, COMM-02).
   ///
   /// `NoticeServiceMethod` lists the mechanics this product can record proof

@@ -139,6 +139,7 @@ function ruleInputFrom(formData: FormData): JurisdictionRuleInput {
     belongingsStorageDays: optionalNumber(formData, 'belongingsStorageDays'),
     belongingsNoticeDays: optionalNumber(formData, 'belongingsNoticeDays'),
     leaseViolationCureDays: optionalNumber(formData, 'leaseViolationCureDays'),
+    habitabilityRepairDays: optionalNumber(formData, 'habitabilityRepairDays'),
     dayCountBasis: str(formData, 'dayCountBasis') || null,
     // Split on any newline, trimmed, blanks dropped. Deliberately NOT
     // deduplicated here: `validateJurisdictionRule` reports a day listed
@@ -265,6 +266,7 @@ export async function createRuleVersion(
         belongingsStorageDays: input.belongingsStorageDays,
         belongingsNoticeDays: input.belongingsNoticeDays,
         leaseViolationCureDays: input.leaseViolationCureDays,
+        habitabilityRepairDays: input.habitabilityRepairDays,
         dayCountBasis: (input.dayCountBasis ?? null) as never,
         observedHolidays: [...(input.observedHolidays ?? [])],
         acceptanceWaivesNotice: input.acceptanceWaivesNotice,

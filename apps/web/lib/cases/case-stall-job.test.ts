@@ -36,6 +36,7 @@ const partyChangeIds: string[] = []
 const incomingTenantIds: string[] = []
 const applicantIds: string[] = []
 const turnoverLeaseIds: string[] = []
+const ticketIds: string[] = []
 
 beforeAll(async () => {
   const stamp = `stall-${randomUUID().slice(0, 8)}`
@@ -110,6 +111,7 @@ beforeAll(async () => {
       lateFeeType: 'NONE',
       paymentAllocationOrder: [],
       leaseViolationCureDays: 5,
+      habitabilityRepairDays: 7,
     },
   })
   ruleId = rule.id
@@ -122,6 +124,7 @@ afterEach(async () => {
     ...violationCaseIds,
     ...claimIds,
     ...partyChangeIds,
+    ...ticketIds,
   ]
   await prisma.task.deleteMany({ where: { subjectId: { in: subjectIds } } })
   await prisma.accommodationRequest.deleteMany({ where: { id: { in: accommodationIds } } })
@@ -145,6 +148,10 @@ afterEach(async () => {
   })
   await prisma.turnoverProject.deleteMany({ where: { leaseId: { in: turnoverLeaseIds } } })
   await prisma.lease.deleteMany({ where: { id: { in: turnoverLeaseIds } } })
+  await prisma.workOrder.deleteMany({ where: { ticketId: { in: ticketIds } } })
+  await prisma.ticket.updateMany({ where: { id: { in: ticketIds } }, data: { mergedIntoTicketId: null } })
+  await prisma.ticket.deleteMany({ where: { id: { in: ticketIds } } })
+  ticketIds.length = 0
   turnoverLeaseIds.length = 0
   accommodationIds.length = 0
   abandonmentCaseIds.length = 0
@@ -472,6 +479,77 @@ describe('turn stalled with nothing moving', () => {
 // the FIRST of the three below goes red, alone. The other two are R-158's
 // rule and stay green either way - they are here so a future widening of the
 // cool-off cannot quietly turn "one Task, not thirty" back on.
+describe('habitability complaint against the repair deadline (R-217)', () => {
+  async function flaggedTicket(openedAt: string, habitabilityFlag = true) {
+    const ticket = await prisma.ticket.create({
+      data: {
+        propertyId,
+        unitId,
+        leaseId,
+        source: 'PORTAL',
+        category: 'HVAC',
+        description: 'No heat in the house.',
+        habitabilityFlag,
+        status: 'CONVERTED',
+        createdAt: new Date(openedAt),
+      },
+    })
+    ticketIds.push(ticket.id)
+    return ticket
+  }
+  const taskFor = (type: string, subjectId: string) =>
+    prisma.task.findFirst({ where: { type, subjectId } })
+
+  it('raises URGENT at halfway and EMERGENCY once the seven days have run, and nothing before', async () => {
+    const overdue = await flaggedTicket('2026-08-20T15:00:00Z') // due 08-27
+    const halfway = await flaggedTicket('2026-08-28T15:00:00Z') // halfway 08-31, due 09-04
+    const fresh = await flaggedTicket('2026-08-31T15:00:00Z') // halfway 09-03
+    const ordinary = await flaggedTicket('2026-08-01T15:00:00Z', false)
+
+    await run()
+
+    expect((await taskFor('ticket.habitability_repair_overdue', overdue.id))?.priority).toBe('EMERGENCY')
+    // Overdue replaces halfway rather than stacking a stale nudge under it.
+    expect(await taskFor('ticket.habitability_repair_halfway', overdue.id)).toBeNull()
+    expect((await taskFor('ticket.habitability_repair_halfway', halfway.id))?.priority).toBe('URGENT')
+    expect(await taskFor('ticket.habitability_repair_overdue', halfway.id)).toBeNull()
+    expect(await prisma.task.findFirst({ where: { subjectId: { in: [fresh.id, ordinary.id] }, type: { startsWith: 'ticket.habitability' } } })).toBeNull()
+  })
+
+  it('stops the clock once a work order off the ticket is complete - converted is not repaired', async () => {
+    const repaired = await flaggedTicket('2026-08-20T15:00:00Z')
+    const booked = await flaggedTicket('2026-08-20T15:00:00Z')
+    await prisma.workOrder.create({
+      data: { propertyId, unitId, ticketId: repaired.id, scope: 'Replace igniter', status: 'WORK_COMPLETE' },
+    })
+    await prisma.workOrder.create({
+      data: { propertyId, unitId, ticketId: booked.id, scope: 'Replace igniter', status: 'SCHEDULED' },
+    })
+
+    await run()
+
+    expect(await taskFor('ticket.habitability_repair_overdue', repaired.id)).toBeNull()
+    expect(await taskFor('ticket.habitability_repair_overdue', booked.id)).not.toBeNull()
+  })
+
+  it('keeps a merged duplicate on its own earlier clock until the survivor is repaired', async () => {
+    const survivor = await flaggedTicket('2026-08-31T15:00:00Z', false)
+    const repairedSurvivor = await flaggedTicket('2026-08-31T15:00:00Z', false)
+    const duplicate = await flaggedTicket('2026-08-20T15:00:00Z')
+    const settled = await flaggedTicket('2026-08-20T15:00:00Z')
+    await prisma.ticket.update({ where: { id: duplicate.id }, data: { status: 'MERGED', mergedIntoTicketId: survivor.id } })
+    await prisma.ticket.update({ where: { id: settled.id }, data: { status: 'MERGED', mergedIntoTicketId: repairedSurvivor.id } })
+    await prisma.workOrder.create({
+      data: { propertyId, unitId, ticketId: repairedSurvivor.id, scope: 'Replace igniter', status: 'VERIFIED' },
+    })
+
+    await run()
+
+    expect(await taskFor('ticket.habitability_repair_overdue', duplicate.id)).not.toBeNull()
+    expect(await taskFor('ticket.habitability_repair_overdue', settled.id)).toBeNull()
+  })
+})
+
 describe('the already-flagged guard', () => {
   async function overdueRequest() {
     const request = await prisma.accommodationRequest.create({

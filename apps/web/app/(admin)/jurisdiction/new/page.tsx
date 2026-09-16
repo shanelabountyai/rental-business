@@ -149,6 +149,7 @@ export default async function NewJurisdictionRulePage({
           // round trip - see the schema's own comment on the column.
           belongingsNoticeDays: source?.belongingsNoticeDays ?? '',
           leaseViolationCureDays: source?.leaseViolationCureDays ?? '',
+          habitabilityRepairDays: source?.habitabilityRepairDays ?? '',
           nsfFeePermitted: source?.nsfFeePermitted ?? true,
           nsfFeeMaxDollars: source?.nsfFeeMaxCents
             ? source.nsfFeeMaxCents / 100

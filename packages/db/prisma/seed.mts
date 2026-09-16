@@ -217,6 +217,11 @@ async function seedJurisdictionRules() {
       // if the landlord acts within six months of the tenant's good-faith
       // complaint or exercise of rights (RISK-06, R-055).
       retaliationWindowDays: 180,
+      // Tex. Prop. Code §92.056(d): a rebuttable presumption that seven days
+      // is a reasonable time to repair a condition materially affecting
+      // health or safety (MAINT-01, R-217). Existing rows are backfilled by
+      // that item's migration, not by a branch above.
+      habitabilityRepairDays: 7,
 
       // WHICH METHODS SERVE WHICH NOTICE (R-051, COMM-02, D-4).
       //

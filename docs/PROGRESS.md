@@ -12720,3 +12720,28 @@ commit touched before reading it as a dead pipeline.
 - **Nothing is backfilled** (D-201/D-222). Notices already marked unserved for phone-only tenants with consent stay unserved.
 
 **Gate.** `lint` 0 errors (16 pre-existing warnings). `typecheck` clean. `check:ship-deps` clean. No migration. `npm test`: **3,226 passed / 4 skipped** (238 files + 1 skipped). e2e for the five affected specs (`auth`, `portal-guarantor`, `portal-account`, `csp-browser`, `smoke`), both projects: **106 passed** against `--list`'s 106. **Reverted-fix check (D-197):** with the phone branch stubbed to `(false as boolean) ? … : null`, the new spec went red in both projects and the other tests stayed green. The full sweep is left to CI; read it with `gh run list`.
+
+## R-217 — a habitability complaint is measured against the state's repair deadline
+**Commit:** `PENDING`  ·  **Date:** 2026-09-16
+
+**What it built.** A new column, `JurisdictionRule.habitabilityRepairDays`: nullable, with a non-negative CHECK. It is on the rule form, in validation, and copied forward by `/jurisdiction/new`. Texas is seeded, and existing current TX statewide rows are backfilled by the migration, at **7** (Tex. Prop. Code §92.056(d)). `habitabilityRepairClock` in [habitability.ts](packages/core/maintenance/habitability.ts) derives `dueOn` and `halfwayOn` through `statutoryDeadline`, so the state's day-count basis and holidays apply. The `cases.stalled` sweep gets a seventh check. It raises `ticket.habitability_repair_halfway` (URGENT) and `ticket.habitability_repair_overdue` (EMERGENCY) through R-191's `alreadyFlagged`. [habitability-clock.ts](apps/web/lib/maintenance/habitability-clock.ts) holds `REPAIR_CLOCK_RUNNING`, the one definition of "still unrepaired". The sweep and a new "Repair due" row on `/maintenance/[id]` both read it. `computeCoverage` lists a `productLimits` line for any rule with no period on file.
+
+**Finding re-verified before touching anything.** The flag was set at all four intake doors and read in three places (priority, the triage Task title, the retaliation guard). No `JurisdictionRule` column and no job measured elapsed time on it. It was correct as written. Thirteen for thirteen.
+
+**What it decided.** Recorded as **D-235**.
+- **The clock starts when the ticket was opened.** It does not wait for a later written or certified notice. An alarm about the owner's own exposure should only ever be early.
+- **Halfway and overdue are separate Task types**, so an open halfway Task cannot suppress the escalation. An overdue ticket skips the halfway Task.
+- **The due date is derived, never stored.** Correcting a rule re-dates every open ticket.
+- **A merge does not stop the clock.** See the bug below.
+- **A missing period is a product limit, not an unreviewed field**, as the row specified (D-195's shape).
+
+**A real bug, in this item's own first draft.** The first predicate treated MERGED like CLOSED. A flagged duplicate merged into an unflagged ticket would have ended the one clock that runs against the owner with a single triage click, and lost the earlier complaint date. The duplicate now runs until the ticket it merged into is repaired or closed. **Reverted-fix check (D-197):** with `status: { not: MERGED }` put back into `REPAIR_CLOCK_RUNNING`, the merge test went red, and it is green with the fix.
+
+**What it left behind.**
+- **No acknowledgement window.** The row mentioned "whatever acknowledgement window counsel names", and no state has named one to this product. Owned by nobody until counsel does.
+- **Only Texas has a period.** Every other state's rule shows the gap on `/jurisdiction`. **Needs counsel**, per state, on the period and on what counts as notice.
+- **Nothing tenant-facing.** The deadline is staff-only.
+- **A flagged duplicate and a flagged survivor can each raise a Task** for one physical problem. Accepted rather than deduplicated.
+- **Nothing is backfilled into Tasks** (D-201/D-222). Open flagged tickets pick up the clock on the next sweep, which is the intended behaviour, not a backfill.
+
+**Gate.** `lint` 0 errors (16 pre-existing warnings). `typecheck` clean. `check:ship-deps` clean. `db:ci`: every migration applied from scratch, seeded, **no drift**. `npm test`: **3,233 passed / 4 skipped**, R-216's 3,226 plus the 7 new tests. **`npm run build` and the e2e spec were NOT verified locally.** Another project (`alongside/backend`) had about 50 vitest processes holding the CPU. The e2e `webServer` build timed out at 300s with no test run, and a standalone build stalled in "Running TypeScript" for over an hour, so it was stopped. The owner chose to push and let CI verify the build and the sweep, including the new "Repair due" assertion in `maintenance-phone-log.spec.ts`. Read the result on the run with `gh run list`.

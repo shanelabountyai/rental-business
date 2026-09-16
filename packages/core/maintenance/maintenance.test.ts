@@ -9,6 +9,7 @@ import {
   applicableTroubleshootingSteps,
   canMergeTicket,
   detectHabitabilityLanguage,
+  habitabilityRepairClock,
   firstResponseSlaState,
   formatMaintenanceDescription,
   formatPhoneLoggedDescription,
@@ -77,6 +78,28 @@ describe('applicableTroubleshootingSteps', () => {
     expect(applicableTroubleshootingSteps('PEST', {})).toEqual([])
     expect(applicableTroubleshootingSteps('EXTERIOR', {})).toEqual([])
     expect(applicableTroubleshootingSteps('LOCKS', {})).toEqual([])
+  })
+})
+
+describe('habitabilityRepairClock (R-217)', () => {
+  const calendar = { dayCountBasis: 'CALENDAR' as const, observedHolidays: [] }
+
+  it('invents no deadline for a state with no configured period', () => {
+    expect(habitabilityRepairClock('2026-09-04', null, calendar, '2026-09-30')).toBeNull()
+  })
+
+  it('runs on track, then halfway, then overdue only the day AFTER the due date', () => {
+    // Texas's seven days from a Friday: halfway on day 3, due the next Friday.
+    const at = (today: string) => habitabilityRepairClock('2026-09-04', 7, calendar, today)
+    expect(at('2026-09-06')).toEqual({ dueOn: '2026-09-11', halfwayOn: '2026-09-07', stage: 'ON_TRACK' })
+    expect(at('2026-09-07')?.stage).toBe('HALFWAY')
+    expect(at('2026-09-11')?.stage).toBe('HALFWAY')
+    expect(at('2026-09-12')?.stage).toBe('OVERDUE')
+  })
+
+  it('counts the way the state counts - a business-day period skips the long weekend', () => {
+    const business = { dayCountBasis: 'BUSINESS' as const, observedHolidays: ['2026-09-07'] }
+    expect(habitabilityRepairClock('2026-09-04', 2, business, '2026-09-04')?.dueOn).toBe('2026-09-09')
   })
 })
 

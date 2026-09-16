@@ -102,6 +102,12 @@ describe('validateJurisdictionRule', () => {
     ).toContainEqual(expect.objectContaining({ field: 'leaseViolationCureDays' }))
   })
 
+  it('rejects a negative habitability repair deadline (R-217)', () => {
+    expect(
+      validateJurisdictionRule(baseInput({ habitabilityRepairDays: -1 })),
+    ).toContainEqual(expect.objectContaining({ field: 'habitabilityRepairDays' }))
+  })
+
   // R-156: a counsel note with no stance recorded is a half-finished edit -
   // the case page's warning hangs off the stance, so the note would never
   // show anywhere.
@@ -391,6 +397,7 @@ describe('computeCoverage', () => {
       // unnoticed for as long as it did.
       depositEscrowRequired: false,
       depositInterestRequired: false,
+      habitabilityRepairDays: 7,
       ...overrides,
     }
   }
@@ -427,6 +434,14 @@ describe('computeCoverage', () => {
     expect(gaps[0]!.unreviewedFields).toEqual([
       'retaliation window (RISK-06)',
       'early-termination right (RISK-04)',
+    ])
+  })
+
+  it("names a missing habitability repair deadline where it breaks (R-217)", () => {
+    const { gaps } = computeCoverage(['TX'], [rule({ habitabilityRepairDays: null })])
+    expect(gaps[0]!.unreviewedFields).toEqual([])
+    expect(gaps[0]!.productLimits).toEqual([
+      expect.stringContaining('no habitability repair deadline is on file'),
     ])
   })
 

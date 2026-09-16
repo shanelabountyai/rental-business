@@ -160,6 +160,9 @@ export interface JurisdictionRuleInput {
   /// distinct from `payOrQuitDays`, the nonpayment clock. Null means not
   /// configured; `cureClock` then reports a clock with no deadline.
   leaseViolationCureDays?: number | null
+  /// R-217. Days to repair a habitability complaint - the clock that runs
+  /// against the owner. Null means not configured; nothing is measured.
+  habitabilityRepairDays?: number | null
 
   /// PAY-02's returned-payment fee (R-039). Whether the state permits one at
   /// all, and the statutory ceiling core clamps to (D-12) where it does.
@@ -332,6 +335,7 @@ export function validateJurisdictionRule(
     'belongingsStorageDays',
     'belongingsNoticeDays',
     'leaseViolationCureDays',
+    'habitabilityRepairDays',
   ] as const) {
     const value = input[field]
     if (value != null && !isWholeNumberInRange(value, 365)) {
