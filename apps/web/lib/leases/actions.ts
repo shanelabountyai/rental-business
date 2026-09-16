@@ -830,9 +830,9 @@ export async function recordLeaseNotice(
     if (by === 'LANDLORD' && primaryTenant) {
       // R-210. A non-renewal is the notice a holdover case is built on, so a
       // service claim it cannot support is the most expensive kind. Same
-      // predicate as the entry-notice sites: no email, no route into the
+      // predicate as the entry-notice sites: no reachable sign-in link, no route into the
       // portal, no PORTAL service.
-      const servedToPortal = canReceiveAuthLink(primaryTenant.tenant)
+      const servedToPortal = await canReceiveAuthLink('TENANT', primaryTenant.tenant)
       const notice = await tx.notice.create({
         data: {
           propertyId: lease.propertyId,

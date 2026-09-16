@@ -172,10 +172,10 @@ export async function scheduleInspectionEntry(
     let noticeId: string | null = null
     if (leaseId && tenant) {
       // R-210, and the same check for the same reason as
-      // `workorders/scheduling.ts` - a tenant with no email has no route into
+      // `workorders/scheduling.ts` - a tenant no sign-in link can reach has no route into
       // the portal, so PORTAL service claimed for them is a false entry in
       // the record an unlawful-entry claim is argued off.
-      const servedToPortal = canReceiveAuthLink(tenant)
+      const servedToPortal = await canReceiveAuthLink('TENANT', tenant)
       const notice = await tx.notice.create({
         data: {
           propertyId: inspection.propertyId,

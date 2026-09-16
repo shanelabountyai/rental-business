@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { hashPassword } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { afterAll, describe, expect, it } from 'vitest'
-import { deliverAuthLink } from './delivery.ts'
+import { canReceiveAuthLink, deliverAuthLink } from './delivery.ts'
 import { issueToken } from './store.ts'
 
 // R-139. The claim under test is the one that was false for seventeen months:
@@ -132,5 +132,45 @@ describe('deliverAuthLink', () => {
     // that lets them sign in could never sign in to unmute it.
     expect(notification.delivery?.suppressedReason).toBeNull()
     expect(notification.delivery?.status).not.toBe('SUPPRESSED')
+  })
+})
+
+// R-216. The predicate the five PORTAL service claims read. A phone counts
+// only where the sign-in text would really go - the engine suppresses one to a
+// number we hold no consent for, so the portal claim must not be made there.
+describe('canReceiveAuthLink', () => {
+  const tenantIds: string[] = []
+
+  afterAll(async () => {
+    // A consented tenant is referenced ON DELETE RESTRICT by an append-only
+    // row, so everything this block made is deactivated rather than deleted.
+    await prisma.tenant.updateMany({ where: { id: { in: tenantIds } }, data: { active: false } })
+  })
+
+  async function tenant(data: { email?: string; phone?: string }) {
+    const row = await prisma.tenant.create({ data: { firstName: 'Dana', lastName: 'Reyes', ...data } })
+    tenantIds.push(row.id)
+    return row
+  }
+
+  it('is true for an email, false for nothing on file', async () => {
+    expect(await canReceiveAuthLink('TENANT', await tenant({ email: `r216-${randomUUID()}@example.test` }))).toBe(true)
+    expect(await canReceiveAuthLink('TENANT', await tenant({}))).toBe(false)
+  })
+
+  it('counts a phone only once SMS consent is on file', async () => {
+    const phoneOnly = await tenant({ phone: `+1512${String(Date.now()).slice(-7)}` })
+    expect(await canReceiveAuthLink('TENANT', phoneOnly)).toBe(false)
+
+    await prisma.tenantConsent.create({
+      data: {
+        tenantId: phoneOnly.id,
+        channel: 'SMS',
+        basis: 'EXISTING_RELATIONSHIP',
+        source: 'STAFF_RECORDED',
+        note: 'test fixture',
+      },
+    })
+    expect(await canReceiveAuthLink('TENANT', phoneOnly)).toBe(true)
   })
 })

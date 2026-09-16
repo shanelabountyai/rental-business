@@ -60,6 +60,19 @@ beforeAll(async () => {
     data: { firstName: 'Opt', lastName: `Out-${randomUUID().slice(0, 6)}`, phone: uniquePhone() },
   })
   tenantId = tenant.id
+  // SMS consent, so the texts below are really attempted. Until R-216 the
+  // refused-notice test passed without it, on the PORTAL row: a phone-only
+  // tenant counted as able to sign in whether or not we could text them the
+  // link. Their portal row is now `no_address`, which is the truth.
+  await prisma.tenantConsent.create({
+    data: {
+      tenantId,
+      channel: 'SMS',
+      basis: 'EXISTING_RELATIONSHIP',
+      source: 'STAFF_RECORDED',
+      note: 'test fixture',
+    },
+  })
 })
 
 afterAll(async () => {

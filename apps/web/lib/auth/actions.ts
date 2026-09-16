@@ -15,6 +15,7 @@ import {
   verifyTotp,
 } from '@rental/core/auth'
 import { recordAudit } from '@rental/core/audit'
+import { normalizePhone } from '@rental/core/comms'
 import { prisma } from '@rental/db'
 import { cookies, headers } from 'next/headers'
 import { redirect } from 'next/navigation'
@@ -432,17 +433,66 @@ export async function completePasswordReset(
 // Tenant magic link
 // ---------------------------------------------------------------------------
 
+/**
+ * WHO IS ASKING, AND WHERE DOES THEIR LINK GO? (R-216.)
+ *
+ * The sign-in forms take an email OR a mobile number in one field. Until
+ * R-216 they took only an email, so a tenant or guarantor with a phone and no
+ * email had no route into their portal at all - the persona R-021's SMS
+ * intake and D-190's consent work exist for.
+ *
+ * An `@` means email, and the link goes by email - never by text, so asking
+ * by email cannot make us text anybody.
+ *
+ * Anything else is a phone, and a phone is honoured ONLY for somebody with no
+ * email on file. That is the backlog row's own scope ("when that is the only
+ * address"), and it keeps the recycled-number risk - a carrier reissuing a
+ * departed tenant's number to a stranger - to the people with no other way
+ * in. Phones are stored as typed, so the match is on digits and confirmed
+ * through `normalizePhone`, the same canonical form SMS routing trusts.
+ *
+ * TWO MATCHES SEND NOTHING. A shared household phone on two tenant rows
+ * would otherwise sign whoever asked in as whichever row came back first -
+ * `candidatesForPhone` refuses the same ambiguity for the same reason. The
+ * neutral notice hides it, exactly as it hides no match at all.
+ */
+async function findByContact(
+  table: 'Tenant' | 'Guarantor',
+  raw: string,
+): Promise<{ id: string; firstName: string; to: string; channel: 'EMAIL' | 'SMS' } | null> {
+  const input = raw.trim()
+  if (input.includes('@')) {
+    const email = input.toLowerCase()
+    const where = { email, active: true }
+    const row =
+      table === 'Tenant'
+        ? await prisma.tenant.findFirst({ where })
+        : await prisma.guarantor.findFirst({ where })
+    return row?.email ? { id: row.id, firstName: row.firstName, to: row.email, channel: 'EMAIL' } : null
+  }
+
+  const e164 = normalizePhone(input)
+  if (!e164) return null
+  // `table` is one of two literals from this file, never user input.
+  const rows = await prisma.$queryRawUnsafe<{ id: string; firstName: string; phone: string }[]>(
+    `SELECT "id", "firstName", "phone" FROM "${table}"
+      WHERE "active" AND ("email" IS NULL OR btrim("email") = '')
+        AND right(regexp_replace("phone", '\\D', '', 'g'), 10) = $1`,
+    e164.slice(-10),
+  )
+  const matches = rows.filter((row) => normalizePhone(row.phone) === e164)
+  return matches.length === 1
+    ? { id: matches[0].id, firstName: matches[0].firstName, to: e164, channel: 'SMS' }
+    : null
+}
+
 const MAGIC_LINK_NOTICE =
-  'If that address is on a lease, a sign-in link is on its way. It expires in 15 minutes.'
+  'If that email or mobile number is on a lease, a sign-in link is on its way. It expires in 15 minutes.'
 
 export async function requestTenantMagicLink(
   _previous: FormState,
   formData: FormData,
 ): Promise<FormState> {
-  const email = String(formData.get('email') ?? '')
-    .trim()
-    .toLowerCase()
-
   const ip = await clientIp()
   const limit = await consumeRateLimit(
     `magiclink:${ip}`,
@@ -450,10 +500,8 @@ export async function requestTenantMagicLink(
   )
   if (!limit.allowed) return { notice: MAGIC_LINK_NOTICE }
 
-  const tenant = await prisma.tenant.findFirst({
-    where: { email, active: true },
-  })
-  if (tenant?.email) {
+  const tenant = await findByContact('Tenant', String(formData.get('contact') ?? ''))
+  if (tenant) {
     const issued = await issueToken(
       'TENANT_MAGIC_LINK',
       { type: 'Tenant', id: tenant.id },
@@ -462,7 +510,8 @@ export async function requestTenantMagicLink(
     await deliverAuthLink({
       kind: 'tenant_magic_link',
       recipient: { type: 'TENANT', id: tenant.id, name: tenant.firstName },
-      to: tenant.email,
+      to: tenant.to,
+      channel: tenant.channel,
       url: authUrl(`/portal/verify?token=${issued.token}`),
       expiresAt: issued.expiresAt,
       tokenId: issued.id,
@@ -477,16 +526,12 @@ export async function requestTenantMagicLink(
 // ---------------------------------------------------------------------------
 
 const GUARANTOR_MAGIC_LINK_NOTICE =
-  'If that address is on a guarantee, a sign-in link is on its way. It expires in 15 minutes.'
+  'If that email or mobile number is on a guarantee, a sign-in link is on its way. It expires in 15 minutes.'
 
 export async function requestGuarantorMagicLink(
   _previous: FormState,
   formData: FormData,
 ): Promise<FormState> {
-  const email = String(formData.get('email') ?? '')
-    .trim()
-    .toLowerCase()
-
   const ip = await clientIp()
   // Same shared bucket as the tenant flow: both are "somebody asking for a
   // sign-in link from this IP", and a separate budget per flow would just
@@ -497,10 +542,8 @@ export async function requestGuarantorMagicLink(
   )
   if (!limit.allowed) return { notice: GUARANTOR_MAGIC_LINK_NOTICE }
 
-  const guarantor = await prisma.guarantor.findFirst({
-    where: { email, active: true },
-  })
-  if (guarantor?.email) {
+  const guarantor = await findByContact('Guarantor', String(formData.get('contact') ?? ''))
+  if (guarantor) {
     const issued = await issueToken(
       'GUARANTOR_MAGIC_LINK',
       { type: 'Guarantor', id: guarantor.id },
@@ -509,7 +552,8 @@ export async function requestGuarantorMagicLink(
     await deliverAuthLink({
       kind: 'guarantor_magic_link',
       recipient: { type: 'GUARANTOR', id: guarantor.id, name: guarantor.firstName },
-      to: guarantor.email,
+      to: guarantor.to,
+      channel: guarantor.channel,
       url: authUrl(`/portal/guarantor/verify?token=${issued.token}`),
       expiresAt: issued.expiresAt,
       tokenId: issued.id,

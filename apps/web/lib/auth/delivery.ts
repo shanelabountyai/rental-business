@@ -1,6 +1,8 @@
 import 'server-only'
 
-import { dispatchPendingNotifications, notify } from '@/lib/notifications/send.ts'
+import { prisma } from '@rental/db'
+
+import { canTextAuthLink, dispatchPendingNotifications, notify } from '@/lib/notifications/send.ts'
 
 // The seam where auth links leave the system.
 //
@@ -30,9 +32,11 @@ import { dispatchPendingNotifications, notify } from '@/lib/notifications/send.t
 //   The explanation next to it says why, because they would also lose the
 //   page they would need to turn it back on.
 //
-//   EMAIL only. PORTAL would deliver a sign-in link to a surface you must
-//   already be signed in to read. SMS is not offered yet only because this
-//   function has only ever taken one address.
+//   EMAIL or SMS, never PORTAL - PORTAL would deliver a sign-in link to a
+//   surface you must already be signed in to read. SMS arrived with R-216,
+//   for the tenant or guarantor with a phone and no email, who until then had
+//   no route in at all. The caller picks ONE channel - the one the person
+//   typed at the sign-in form - so asking by email never texts anybody.
 //
 //   NO PROPERTY, so quiet hours never defer it - `notify()`'s own rule, not
 //   an exemption written here. A link that expires in fifteen minutes cannot
@@ -58,9 +62,10 @@ export interface AuthLinkDelivery {
   /// against a person rather than against an address, which is what lets
   /// "did we ever actually send them one" be answered from the delivery log.
   recipient: { type: 'STAFF' | 'TENANT' | 'GUARANTOR'; id: string; name: string }
-  /// Email address or phone number, depending on the recipient's preference.
-  /// R-030 resolves the channel; R-003 only knows who to hand it to.
+  /// An email address, or a phone number when `channel` is SMS.
   to: string
+  /// R-216. EMAIL unless the person asked for the link by phone.
+  channel?: 'EMAIL' | 'SMS'
   url: string
   expiresAt: Date
   /// The AuthToken row this link came from. It is the idempotency key, and it
@@ -92,7 +97,7 @@ export async function deliverAuthLink(delivery: AuthLinkDelivery): Promise<void>
     recipient: {
       type: delivery.recipient.type,
       id: delivery.recipient.id,
-      email: delivery.to,
+      ...(delivery.channel === 'SMS' ? { phone: delivery.to } : { email: delivery.to }),
     },
     context: {
       name: delivery.recipient.name,
@@ -148,18 +153,17 @@ export function authUrl(path: string): string {
  * the tenant has no route into is worse than claiming nothing, because the
  * record cannot be falsified - there is no `lastSignedInAt` on `Tenant`.
  *
- * EMAIL, not email-or-phone, and that is the difference from
- * `reachableElectronically`. That predicate asks whether the notification
- * engine can reach them at all; this one asks whether they can get INTO the
- * portal, and every portal in this product is entered by a link
- * `deliverAuthLink` above sends on `account_access` - declared EMAIL only, for
- * the reason written at the top of this file. A phone-only tenant is perfectly
- * reachable by SMS and cannot sign in at all.
- *
- * R-216 IS THE ITEM THAT GIVES THEM A ROUTE IN. When it lands, this is the one
- * line that widens - deliberately here, next to the send it is a claim about,
- * rather than beside each notice that relies on it.
+ * R-216 WIDENED IT TO THE PHONE, AND ONLY WHERE THE TEXT WOULD REALLY GO. A
+ * sign-in link now goes by SMS to somebody with no email, so a phone counts -
+ * but a blocked number or one we hold no consent to text gets a suppressed
+ * row and no link, and `canTextAuthLink` asks exactly the engine's two gates.
+ * That is the difference from `reachableElectronically`, which asks only
+ * whether an address is on file.
  */
-export function canReceiveAuthLink(recipient: { email?: string | null }): boolean {
-  return Boolean(recipient.email?.trim())
+export async function canReceiveAuthLink(
+  type: 'TENANT' | 'GUARANTOR',
+  recipient: { id: string; email?: string | null; phone?: string | null },
+): Promise<boolean> {
+  if (recipient.email?.trim()) return true
+  return canTextAuthLink(prisma, { type, ...recipient })
 }

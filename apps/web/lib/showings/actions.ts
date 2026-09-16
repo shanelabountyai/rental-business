@@ -108,12 +108,12 @@ export async function bookShowing(
     }
 
     // R-210, same check and same reason as the two scheduling modules: a
-    // tenant with no email has no route into the portal, so PORTAL service
+    // tenant no sign-in link can reach has no route into the portal, so PORTAL service
     // recorded for them is a false entry in the one record an unlawful-entry
     // claim is argued off. The showing still goes ahead - the decision above
     // is unchanged - and the notice still goes out on every channel the
     // engine can reach; only the SERVICE columns wait for real service.
-    const servedToPortal = canReceiveAuthLink(tenant)
+    const servedToPortal = await canReceiveAuthLink('TENANT', tenant)
     const notice = await prisma.notice.create({
       data: {
         propertyId: link.propertyId,

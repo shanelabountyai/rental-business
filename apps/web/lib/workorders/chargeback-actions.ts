@@ -204,7 +204,7 @@ export async function postChargeback(
 
   // R-210. No email, no route into the portal, so no PORTAL service claim -
   // and this notice is the one a tenant disputes a damage charge against.
-  const servedToPortal = context.tenant != null && canReceiveAuthLink(context.tenant)
+  const servedToPortal = context.tenant != null && (await canReceiveAuthLink('TENANT', context.tenant))
 
   await prisma.$transaction(async (tx) => {
     const servedAt = new Date()

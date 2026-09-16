@@ -13,9 +13,9 @@ export const metadata = { title: 'Sign in — Rental Operations' }
 // why they have an account at all.
 const LINK_ERRORS: Record<string, string> = {
   invalid:
-    'That sign-in link has stopped working. Links only work once and they expire after a while - and some email apps open them before you do. Enter your email below and we will send a fresh one.',
+    'That sign-in link has stopped working. Links only work once and they expire after a while - and some email apps open them before you do. Enter your email or mobile number below and we will send a fresh one.',
   missing:
-    'That sign-in link was incomplete - some email apps cut long links in half. Enter your email below and we will send a fresh one.',
+    'That sign-in link was incomplete - some email apps cut long links in half. Enter your email or mobile number below and we will send a fresh one.',
 }
 
 export default async function GuarantorLoginPage({
@@ -29,7 +29,7 @@ export default async function GuarantorLoginPage({
   return (
     <AuthCard
       title="Sign in"
-      description="Enter the email address on file for your guarantee and we will send you a sign-in link. There is no password to remember."
+      description="Enter the email address or mobile number on file for your guarantee and we will send you a sign-in link. There is no password to remember."
     >
       {message && (
         <p
@@ -39,13 +39,11 @@ export default async function GuarantorLoginPage({
           {message}
         </p>
       )}
-      <AuthForm action={requestGuarantorMagicLink} submitLabel="Email me a link">
+      <AuthForm action={requestGuarantorMagicLink} submitLabel="Send me a link">
         <Field
-          label="Email"
-          name="email"
-          type="email"
-          autoComplete="email"
-          inputMode="email"
+          label="Email or mobile number"
+          name="contact"
+          autoComplete="username"
           autoFocus={!message}
         />
       </AuthForm>

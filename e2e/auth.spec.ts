@@ -35,6 +35,9 @@ function uniqueEmail(prefix: string) {
 
 const createdStaffIds: string[] = []
 const createdTenantIds: string[] = []
+/// Tenants holding a `TenantConsent` row, which references them ON DELETE
+/// RESTRICT and is append-only - so they are deactivated, never deleted.
+const consentedTenantIds: string[] = []
 
 async function createStaffUser(options: { active?: boolean } = {}) {
   const email = uniqueEmail('staff')
@@ -142,6 +145,11 @@ test.afterAll(async () => {
     where: { tenantId: { in: createdTenantIds } },
   })
   await prisma.tenant.deleteMany({ where: { id: { in: createdTenantIds } } })
+  await prisma.authToken.deleteMany({ where: { subjectId: { in: consentedTenantIds } } })
+  await prisma.tenant.updateMany({
+    where: { id: { in: consentedTenantIds } },
+    data: { active: false },
+  })
   await prisma.$disconnect()
 })
 
@@ -586,12 +594,70 @@ test.describe('tenant magic link', () => {
 
   test('does not reveal whether an address is on a lease', async ({ page }) => {
     await page.goto('/portal/login')
-    await page.getByLabel('Email').fill(uniqueEmail('nobody'))
-    await page.getByRole('button', { name: 'Email me a link' }).click()
+    await page.getByLabel('Email or mobile number').fill(uniqueEmail('nobody'))
+    await page.getByRole('button', { name: 'Send me a link' }).click()
 
     await expect(page.getByRole('status')).toContainText(
-      'If that address is on a lease',
+      'If that email or mobile number is on a lease',
     )
+  })
+
+  // R-216. Until then the form took only an email, so a tenant with a phone
+  // and no email had no route into the portal at all. The proof is the whole
+  // loop: ask by phone, receive a TEXT, and sign in with the link in it.
+  test('a tenant with a phone and no email signs in by text', async ({ page }) => {
+    // NOT `uniquePhone()`: that yields eleven digits after +1, which is valid
+    // E.164 but not a NANP number, and the sign-in form - rightly - refuses
+    // to guess at one. A random line keeps it clear of other runs' rows.
+    const e164 = `+1512${String(Math.floor(Math.random() * 1e7)).padStart(7, '0')}`
+    const tenant = await prisma.tenant.create({
+      data: {
+        firstName: 'Dana',
+        lastName: 'Reyes',
+        // Stored the way staff type it, and asked for below in a third shape:
+        // phones are not normalised on write, so the match must be on digits.
+        phone: `(${e164.slice(2, 5)}) ${e164.slice(5, 8)}-${e164.slice(8)}`,
+      },
+    })
+    consentedTenantIds.push(tenant.id)
+    await prisma.tenantConsent.create({
+      data: {
+        tenantId: tenant.id,
+        channel: 'SMS',
+        basis: 'EXISTING_RELATIONSHIP',
+        source: 'STAFF_RECORDED',
+        note: 'test fixture',
+      },
+    })
+
+    await page.goto('/portal/login')
+    await page.getByLabel('Email or mobile number').fill(e164.slice(2))
+    await page.getByRole('button', { name: 'Send me a link' }).click()
+    await expect(page.getByRole('status')).toContainText('If that email or mobile number')
+
+    const sms = await prisma.notification.findFirstOrThrow({
+      where: { recipientType: 'TENANT', recipientId: tenant.id, channel: 'SMS' },
+      include: { delivery: true },
+    })
+    expect(sms.category).toBe('account_access')
+    expect(sms.toAddress).toBe(e164)
+    expect(sms.delivery?.status).not.toBe('SUPPRESSED')
+    // Nothing went by email - there is no address, and asking by phone must
+    // never be answered anywhere else.
+    expect(
+      await prisma.notification.count({
+        where: {
+          recipientId: tenant.id,
+          channel: 'EMAIL',
+          delivery: { status: { not: 'SUPPRESSED' } },
+        },
+      }),
+    ).toBe(0)
+
+    const link = /\/portal\/verify\?token=[^\s]+/.exec(sms.body)?.[0]
+    expect(link).toBeTruthy()
+    await page.goto(link!)
+    await expect(page).toHaveURL(/\/portal$/)
   })
 })
 

@@ -186,7 +186,7 @@ export async function scheduleEntry(
     if (decision.basis === 'notice_served' || decision.basis === 'insufficient_notice') {
       if (leaseId && tenant) {
         // R-210. SERVICE IS A CLAIM, AND THIS ONE WAS NEVER CHECKED.
-        // See `canReceiveAuthLink`'s own comment: a tenant with no email has
+        // See `canReceiveAuthLink`'s own comment: a tenant no sign-in link can reach has
         // no route into the portal at all, so PORTAL service recorded for
         // them is a false entry in the one record an unlawful-entry claim is
         // argued off. The notice is still generated and still sent on every
@@ -195,7 +195,7 @@ export async function scheduleEntry(
         // sorts to the top of `/notices`, which is the screen that exists to
         // make sure it is not forgotten, and staff close it through
         // `recordNoticeService` once they have posted or handed it over.
-        const servedToPortal = canReceiveAuthLink(tenant)
+        const servedToPortal = await canReceiveAuthLink('TENANT', tenant)
         const notice = await tx.notice.create({
           data: {
             propertyId: workOrder.propertyId,

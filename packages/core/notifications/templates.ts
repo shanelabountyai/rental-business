@@ -2138,19 +2138,26 @@ export interface AuthLinkContext {
 export const tenantMagicLinkTemplate: NotificationTemplate<AuthLinkContext> = {
   key: 'auth.tenant_magic_link',
   category: 'account_access',
-  channels: ['EMAIL'],
-  render: (context) => ({
-    subject: 'Sign in to your home',
-    body: [
-      `Hi ${context.name},`,
-      '',
-      'Here is your sign-in link. It works once and expires in ' + context.expiresIn + '.',
-      '',
-      context.url,
-      '',
-      'If you did not ask to sign in, you can ignore this - the link only works from this message.',
-    ].join('\n'),
-  }),
+  // SMS for the tenant with a phone and no email (R-216). Says who it is from
+  // before the link for the same phishing reason as the email.
+  channels: ['EMAIL', 'SMS'],
+  render: (context, channel) =>
+    channel === 'SMS'
+      ? {
+          body: `Your sign-in link for your home. It works once and expires in ${context.expiresIn}: ${context.url} Did not ask? Ignore this.`,
+        }
+      : {
+          subject: 'Sign in to your home',
+          body: [
+            `Hi ${context.name},`,
+            '',
+            'Here is your sign-in link. It works once and expires in ' + context.expiresIn + '.',
+            '',
+            context.url,
+            '',
+            'If you did not ask to sign in, you can ignore this - the link only works from this message.',
+          ].join('\n'),
+        },
 }
 
 /**
@@ -2161,19 +2168,24 @@ export const tenantMagicLinkTemplate: NotificationTemplate<AuthLinkContext> = {
 export const guarantorMagicLinkTemplate: NotificationTemplate<AuthLinkContext> = {
   key: 'auth.guarantor_magic_link',
   category: 'account_access',
-  channels: ['EMAIL'],
-  render: (context) => ({
-    subject: 'Sign in to view what you guarantee',
-    body: [
-      `Hi ${context.name},`,
-      '',
-      'Here is your sign-in link. It works once and expires in ' + context.expiresIn + '.',
-      '',
-      context.url,
-      '',
-      'If you did not ask to sign in, you can ignore this - the link only works from this message.',
-    ].join('\n'),
-  }),
+  channels: ['EMAIL', 'SMS'],
+  render: (context, channel) =>
+    channel === 'SMS'
+      ? {
+          body: `Your sign-in link to view what you guarantee. It works once and expires in ${context.expiresIn}: ${context.url} Did not ask? Ignore this.`,
+        }
+      : {
+          subject: 'Sign in to view what you guarantee',
+          body: [
+            `Hi ${context.name},`,
+            '',
+            'Here is your sign-in link. It works once and expires in ' + context.expiresIn + '.',
+            '',
+            context.url,
+            '',
+            'If you did not ask to sign in, you can ignore this - the link only works from this message.',
+          ].join('\n'),
+        },
 }
 
 /// A staff member resetting their own forgotten password.

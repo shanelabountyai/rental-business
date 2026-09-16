@@ -186,14 +186,11 @@ export function isDigestEligible(category: NotificationCategory): boolean {
  */
 const CATEGORY_CHANNELS: Partial<Record<NotificationCategory, readonly NotificationChannel[]>> = {
   digest_daily: ['EMAIL'],
-  /// R-139. EMAIL only, and PORTAL in particular is a contradiction: the
-  /// portal is what the link exists to let them into, so a sign-in link
-  /// delivered there could only be read by somebody who did not need it. SMS
-  /// is deliberately not offered YET - `deliverAuthLink` has only ever taken
-  /// one address and every live caller passes an email - rather than being
-  /// ruled out on principle; an SMS magic link is the obvious thing R-021's
-  /// phone-only tenant wants next.
-  account_access: ['EMAIL'],
+  /// R-139. Never PORTAL, which is a contradiction: the portal is what the
+  /// link exists to let them into, so a sign-in link delivered there could
+  /// only be read by somebody who did not need it. SMS since R-216, for the
+  /// tenant or guarantor with a phone and no email.
+  account_access: ['EMAIL', 'SMS'],
   /// Never PORTAL - a prospect has no account and no portal to read one in
   /// (NotificationRecipientType.PROSPECT's own schema comment).
   prospect_prescreening: ['EMAIL', 'SMS'],

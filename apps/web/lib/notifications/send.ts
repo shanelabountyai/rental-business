@@ -177,8 +177,16 @@ export async function notify(
   // channel they could have had; it is not a channel for them at all, and a
   // row saying `no_address` would read as something somebody could fix.
   const channels = channelsFor(template.channels, input.recipient)
+
+  // R-216. Only a phone-only recipient needs the question asked: an email
+  // always carries a sign-in link, and neither address carries nothing.
+  const portalReachable =
+    channels.includes('PORTAL') && !input.recipient.email?.trim()
+      ? await canTextAuthLink(db, input.recipient)
+      : Boolean(input.recipient.email?.trim())
+
   const addressable = channels.filter(
-    (channel) => addressFor(channel, input.recipient) !== null,
+    (channel) => addressFor(channel, input.recipient, portalReachable) !== null,
   )
 
   const preferences = await db.notificationPreference.findMany({
@@ -220,8 +228,8 @@ export async function notify(
   // the number, so it outranks every preference - including the ones
   // LOCKED_CATEGORIES refuses to let a tenant set.
   const smsBlocked =
-    template.channels.includes('SMS') && addressFor('SMS', input.recipient) !== null
-      ? await isOptedOut(addressFor('SMS', input.recipient))
+    template.channels.includes('SMS') && input.recipient.phone?.trim()
+      ? await isOptedOut(input.recipient.phone)
       : false
 
   // TCPA CONSENT (R-051b). Asked once, alongside the carrier block above and
@@ -243,22 +251,9 @@ export async function notify(
   // nothing, and every guarantor SMS was `no_consent` for ever with no way to
   // record otherwise. A guarantor with no row is still refused - there is no
   // backfill for them (D-211) - but it is now a gap somebody can close.
-  const smsConsent =
-    template.channels.includes('SMS') &&
-    (input.recipient.type === 'TENANT' || input.recipient.type === 'GUARANTOR') &&
-    addressFor('SMS', input.recipient) !== null
-      ? consentVerdict(
-          await db.tenantConsent.findMany({
-            where:
-              input.recipient.type === 'GUARANTOR'
-                ? { guarantorId: input.recipient.id }
-                : { tenantId: input.recipient.id },
-            select: { channel: true, basis: true, revokedAt: true },
-          }),
-          'SMS',
-          categoryPurpose(input.category),
-        )
-      : { allowed: true, reason: null }
+  const smsConsent = template.channels.includes('SMS')
+    ? await smsConsentVerdict(db, input.recipient, input.category)
+    : { allowed: true, reason: null }
 
   // NOTIF-04: this recipient asked for eligible categories batched into one
   // daily email instead of sent as they happen. The same `digest_daily`
@@ -268,7 +263,7 @@ export async function notify(
   const digestBatchedEmail =
     template.channels.includes('EMAIL') &&
     isDigestEligible(input.category) &&
-    addressFor('EMAIL', input.recipient) !== null
+    input.recipient.email?.trim()
       ? (
           await db.notificationPreference.findFirst({
             where: {
@@ -285,7 +280,7 @@ export async function notify(
   const outcomes: ChannelOutcome[] = []
 
   for (const channel of channels) {
-    const address = addressFor(channel, input.recipient)
+    const address = addressFor(channel, input.recipient, portalReachable)
     const decision = decisions.get(channel)
 
     const rendered = renderTemplate(input.templateKey, input.context, channel)
@@ -791,19 +786,64 @@ function channelsFor(
 /// column meaningful rather than blank for a third of all rows.
 ///
 /// BUT AN ACCOUNT IS ONLY AN ADDRESS IF THE PERSON CAN GET INTO IT (R-173).
-/// Every portal in this product is entered by a link we send somewhere else -
-/// `tenant-magic-link` and `guarantor-magic-link` both mail a token to an
-/// email address, and R-025's vendor link is mailed or texted. A recipient
-/// with neither an email nor a phone on file has no way in, ever, so a PORTAL
-/// row reading SENT would record a delivery to a screen they cannot open -
-/// which is worse than no record, because the send log is the evidence that
-/// answers "did they get it". `no_address` is the truth, and it is what
-/// raises the offline-service task in `notify()`.
+/// Every portal in this product is entered by a sign-in link we send
+/// somewhere else, so a PORTAL row reading SENT for somebody that link cannot
+/// reach records a delivery to a screen they cannot open - which is worse than
+/// no record, because the send log is the evidence that answers "did they get
+/// it". `no_address` is the truth.
+///
+/// R-216 made the phone half real and made it conditional: the link now goes
+/// by SMS when there is no email, which is only a route in if the number is
+/// not blocked and we hold consent to text it. `portalReachable` is that
+/// answer, from `canTextAuthLink`.
 function addressFor(
   channel: NotificationChannel,
   recipient: NotificationRecipient,
+  portalReachable: boolean,
 ): string | null {
   if (channel === 'EMAIL') return recipient.email?.trim() || null
   if (channel === 'SMS') return recipient.phone?.trim() || null
-  return reachableElectronically(recipient) ? recipient.id : null
+  return portalReachable ? recipient.id : null
+}
+
+/// TCPA consent for one SMS (R-051b), looked up on the key for the
+/// recipient's type (R-196). Staff and vendors are not residential consumers
+/// and are not gated.
+async function smsConsentVerdict(
+  db: Db,
+  recipient: NotificationRecipient,
+  category: NotificationCategory,
+): Promise<{ allowed: boolean; reason: string | null }> {
+  if (recipient.type !== 'TENANT' && recipient.type !== 'GUARANTOR') {
+    return { allowed: true, reason: null }
+  }
+  if (!recipient.phone?.trim()) return { allowed: true, reason: null }
+  return consentVerdict(
+    await db.tenantConsent.findMany({
+      where:
+        recipient.type === 'GUARANTOR'
+          ? { guarantorId: recipient.id }
+          : { tenantId: recipient.id },
+      select: { channel: true, basis: true, revokedAt: true },
+    }),
+    'SMS',
+    categoryPurpose(category),
+  )
+}
+
+/**
+ * Would a sign-in link sent by SMS actually go out? (R-216.)
+ *
+ * The same two gates `notify()` applies to that send - the carrier block and
+ * consent - asked ahead of time, so a caller claiming "they can get into the
+ * portal" and the engine deciding "this text is suppressed" read one answer.
+ * Before R-216 the portal claim was made on the phone column alone.
+ */
+export async function canTextAuthLink(
+  db: Db,
+  recipient: NotificationRecipient,
+): Promise<boolean> {
+  if (!recipient.phone?.trim()) return false
+  if (await isOptedOut(recipient.phone)) return false
+  return (await smsConsentVerdict(db, recipient, 'account_access')).allowed
 }
