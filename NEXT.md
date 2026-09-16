@@ -1,42 +1,46 @@
 # Next session
 
-## R-212 is done. Pick up R-213 — serving a cure notice stops nothing.
+## R-213 is done. Pick up R-214 — a vendor with no COI reads like one whose COI is current.
 
-R-212 shipped as `84def57` (SHA recorded in the follow-up commit). **CI: read it
+R-213 shipped as `69f29bf` (SHA recorded in the follow-up commit). **CI: read it
 on the run itself — `gh run list --limit 5`.** Do not copy a CI line forward.
 Both commits go up in one push, so the run is attributed to the docs-only HEAD
 sha; `--commit` matches only a FULL sha.
 
-**Start here:** `docs/prds/06-backlog.md` → row 200 / **R-213** (Needs counsel).
-Review finding 9 at `docs/reviews/2026-09-13-operator-review.md`; D-222 holds the
-binding "do not build" list. Re-verify the finding before touching anything —
-eight for eight so far.
+**Start here:** `docs/prds/06-backlog.md` → row 201 / **R-214**. Review finding
+10 at `docs/reviews/2026-09-13-operator-review.md`; D-222 holds the binding
+"do not build" list. Re-verify the finding before touching anything — nine for
+nine so far (R-213's said "seven hold types"; there were six).
 
-## What R-212 established that R-213 can use
+## What R-213 established
 
-**`retaliationGateFor` + `retaliationAckAudit` in
-`apps/web/lib/leases/retaliation-check.ts` are the one retaliation gate** (D-230).
-Any new adverse act — a cure-notice service hold, a lockout, a fee — is four
-lines: gate, `if (gate.refusal) return {...gate.refusal, values}`, and
-`audit(retaliationAckAudit(...), tx)`. `RetaliationAck` is the one banner; give
-it a label unique on the whole assembled page.
+**`notice_served` is a hold type claiming only `halt_late_fees`** (D-231). The
+serve form places it, pre-checked, for a cure notice (`hold.manage`), before and
+independent of R-156's payment hold. `/evictions/[id]` shows "Ledger balance
+today" beside the demand plus an amber "charged since drafting" line. **Adding
+a hold type is four edits**: `HOLD_TYPES` + `HOLD_DEFINITIONS`, the two maps in
+`lib/holds/queries.ts`, the Prisma enum, and an `ALTER TYPE ... ADD VALUE`
+migration. Every guard reads effects, so none of them change.
 
-**When two warnings can fire on one press, return BOTH with both reasons
-echoed.** R-212 found the notice-to-vacate form looping forever on a short
-notice inside the window because each refusal unmounted the other's field.
+**The `Notification.eventId` index is IN** (same migration). That NEXT item is
+closed.
 
-## What R-212 left behind
+## What R-213 left behind
 
-- **The D-197 reverted-fix check was NOT run** — the auto-mode classifier
-  refused the temporary edit disabling the gate, and also refused `npm test`
-  from the session; the owner ran `npm test` by hand. If the permission is
-  granted, stub the three new call sites and confirm the renewal, open-case and
-  cure-notice specs in `e2e/retaliation-guard.spec.ts` go red.
-- **A code-enforcement complaint or a written repair demand filed as an ordinary
-  ticket still opens no window.** Product call. Owned by nobody.
-- **Pre-R-212 ack rows carry `complaintTicketId`; later ones
-  `complaintSource`/`complaintSourceId`.** Not backfilled.
-- **No e2e for a same-rent renewal staying silent.**
+- **Nothing lifts a `notice_served` hold** — a cured or withdrawn notice leaves
+  fees off until somebody lifts it on the lease page. Owned by nobody.
+- **Opening an eviction case places no hold**; only service in the product does.
+- **R-212's own D-197 reverted-fix check is still not run.**
+
+## A trap R-213 paid for
+
+**A unit-test file that cleans up by collected id orphans its rows the moment a
+sibling project's sweep starves it into a timeout, and then fails ALONE for
+ever.** `deposit-disposition-start.test.ts` did exactly this with `XY` rules;
+fixed by ownership. Under load, 71 timeout-shaped failures across unrelated
+files were environmental — `pgrep -f vitest` + `lsof -d cwd` names whose they
+are. Rerun the failed files when the siblings finish; anything still red on its
+own is real.
 
 ## What R-211 established (still true)
 
@@ -87,7 +91,7 @@ D-132's `from: 'tenant@example.test'`.
 
 ## REAL DEFECTS nobody owns
 
-**`Notification.eventId` references `OutboxEvent` `ON DELETE SET NULL` and has
+**(CLOSED by R-213 — the index exists.)** `Notification.eventId` references `OutboxEvent` `ON DELETE SET NULL` and had
 NO INDEX, against 500k+ `Notification` rows in `rental_test`.** Every
 `outboxEvent.deleteMany` in a teardown seq-scans half a million rows per deleted
 event, which is why `sms-intake.test.ts`, `triage-consumer.test.ts` and
@@ -143,7 +147,7 @@ MINUTE**, never just existence.
 - **Re-verify every finding against the code before touching anything.** Seven
   for seven correct so far, one of them larger than the row said.
 - **Never backfill.** D-201/D-222 already paid for this lesson.
-- **Two rows still Needs counsel** (R-213, R-217).
+- **One row still Needs counsel** (R-217). R-213 shipped the product fix; its counsel question stays open (D-231).
 - **D-222's "do not build" list is binding**: no Stripe Connect, no house-rules
   settings screen, no second queue (D-9), no deposit interest engine, no
   `businessDaysBetween` rewrite.
