@@ -12556,7 +12556,7 @@ commit touched before reading it as a dead pipeline.
 ---
 
 ## R-211 — a suppressed notification is no longer reported to the operator as sent
-**Commit:** `PENDING`  ·  **Date:** 2026-09-16
+**Commit:** `11f9d16`  ·  **Date:** 2026-09-16
 
 **What it built.** `reachOf(outcomes)` in [reach.ts](apps/web/lib/notifications/reach.ts) — one decision function turning `notify()`'s `ChannelOutcome[]` into `SENT | ALREADY_SENT | DEFERRED | NOT_SENT` with a plain-English `why` and the property-local `sendAfter`. Five call sites read it: the rent chase ([reminders.ts](apps/web/lib/payments/reminders.ts)), work-order entry scheduling ([scheduling.ts](apps/web/lib/workorders/scheduling.ts)), inspection entry scheduling ([scheduling.ts](apps/web/lib/inspections/scheduling.ts)), the payment-plan schedule ([plan-actions.ts](apps/web/lib/payments/plan-actions.ts)) and R-207's vendor dispatch ([dispatch-notice.ts](apps/web/lib/workorders/dispatch-notice.ts)), which is rewritten on top of it rather than left as a second copy of the rule. The two entry-notice sites share `entryNoticeClause` because they carried the byte-identical sentence.
 
