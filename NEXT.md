@@ -1,22 +1,24 @@
 # Next session
 
-## R-216 is done. Pick up R-217: nothing measures a habitability complaint against a repair deadline.
+## R-217 shipped as `f8eaa2c`, and its CI run MUST be read first
 
-R-216 shipped as `7f227f7`. **Read CI on the run itself with `gh run list --limit 5`.** Do not copy a CI line forward.
+**R-217's build and e2e were never verified locally.** About 50 vitest processes from `alongside/backend` held the CPU, the e2e build timed out, and a standalone `next build` stalled in "Running TypeScript" for over an hour. The owner chose to push and let CI verify. **First move: `gh run list --limit 5`, and read the run for `f8eaa2c` / its record-the-SHA commit.** If it is red, fix it before starting anything else. The new assertion to watch is `maintenance-phone-log.spec.ts`'s "Repair due" row, in both projects.
 
-**Start here:** `docs/prds/06-backlog.md`, row 204 / **R-217**. Re-verify the finding before touching anything. The record is twelve for twelve. R-217 **needs a migration** (`habitabilityRepairDays` on `JurisdictionRule`), so run `npm run db:ci` before pushing, and it is the row that still **Needs counsel**.
+Before any local build, check `ps -Ao pid,etime,command | grep vitest`. Leaked `alongside/backend` vitest workers will starve it.
 
-## What R-216 established (D-234)
+## Then: the next ⬜ row in `docs/prds/06-backlog.md` after R-217 (row 204)
 
-- The sign-in forms take an email or a mobile number. **A phone signs in only somebody with no email on file, and only when exactly one active row matches.**
-- **`canTextAuthLink` (send.ts) is the one answer to "can this person get into the portal"**: an email, or a phone that is not blocked and has SMS consent. `notify()`'s PORTAL address and `canReceiveAuthLink` (async, takes the recipient type) both read it.
-- **The consent gate is not bypassed for a sign-in text.** A phone-only tenant without consent still cannot sign in.
-- **`uniquePhone()` is not a NANP number** (eleven digits after +1). Any test that types a phone into a form needs a real ten-digit number.
+Re-verify the finding before touching anything. The record is thirteen for thirteen.
 
-## What R-216 left behind
+## What R-217 established (D-235)
 
-- No staff-issued code for a tenant with neither an email nor a phone.
-- No e2e for the guarantor phone path or for the no-consent refusal.
-- Nothing prompts staff to record consent for a phone-only tenant who cannot sign in.
+- `JurisdictionRule.habitabilityRepairDays`, with TX at 7. **`REPAIR_CLOCK_RUNNING`** in `apps/web/lib/maintenance/habitability-clock.ts` is the one "still unrepaired" predicate. The sweep and the ticket page both read it.
+- The clock starts when the ticket was opened. **A merge does not stop a duplicate's clock**; it stops when the ticket it merged into is repaired or closed.
+- Halfway (URGENT) and overdue (EMERGENCY) are separate Task types.
 
-Everything else in the previous NEXT.md (the R-215 and earlier leftovers, the standing traps, and R-220's demo-walk debts) still stands. It is in git history at `7fb5ffb:NEXT.md`.
+## What R-217 left behind
+
+- No acknowledgement window, no tenant-facing deadline, and only TX has a period (**needs counsel**).
+- A flagged duplicate and a flagged survivor can each raise a Task for one problem.
+
+Everything older still stands; it is in git history at `7fb5ffb:NEXT.md` and `3f56889:NEXT.md`.
