@@ -119,6 +119,14 @@ export const SUBJECT_ROUTES: Record<TaskSubjectType, SubjectRoute | null> = {
     hrefs: (s) =>
       byId(prisma.showing.findMany({ where: ids(s), select: { id: true, prospectId: true } }), s, (row) => `/prospects/${row.prospectId}#showings`),
   },
+  // Portfolio-wide: `/vendors/[id]` is guarded by a resource-less
+  // `requirePermission('vendor.read')`, because `Vendor` has no property.
+  Vendor: {
+    permission: 'vendor.read',
+    portfolioWide: true,
+    label: 'Open the vendor',
+    hrefs: direct((id) => `/vendors/${id}`),
+  },
   Unit: {
     permission: 'unit.read',
     label: 'Open the unit',

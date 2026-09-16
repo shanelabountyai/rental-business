@@ -102,6 +102,10 @@ export interface RankedVendor extends VendorCandidate {
   /// point; silently hiding that vendor would leave them wondering why the
   /// list is short.
   w9Missing: boolean
+  /// No certificate of insurance on file at all. Kept apart from
+  /// `coiExpired` because a null date used to read as current cover (R-214):
+  /// never having been sent one is the WORSE gap, not the absence of one.
+  coiMissing: boolean
   coiExpired: boolean
 }
 
@@ -129,6 +133,7 @@ export function fallbackVendorsForTrade(
     .map((v) => ({
       ...v,
       w9Missing: !v.w9OnFile,
+      coiMissing: v.coiExpiresOn == null,
       coiExpired: v.coiExpiresOn != null && v.coiExpiresOn < now,
     }))
     .sort((a, b) => {

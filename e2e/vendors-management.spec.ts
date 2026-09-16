@@ -71,6 +71,8 @@ test('a PM adds a vendor with no W-9, sees it flagged on the list, then fixes it
   await page.goto('/vendors')
   const row = page.getByRole('link', { name: new RegExp(`Ace Plumbing ${stamp}`) })
   await expect(row.getByText(/no W-9/)).toBeVisible()
+  // R-214: no COI date entered reads as missing cover, not as current cover.
+  await expect(row.getByText(/no COI/)).toBeVisible()
 
   const a11y = await axeScan(page)
   expect(a11y.violations).toEqual([])
@@ -142,6 +144,10 @@ test('an assignment picker shows a preferred vendor first and flags a lapsed COI
   expect(lapsedIndex).toBeGreaterThan(-1)
   expect(preferredIndex).toBeLessThan(lapsedIndex)
   expect(options[lapsedIndex]).toContain('COI expired')
+  expect(options[lapsedIndex]).not.toContain('no COI')
+  // R-214: the preferred vendor has never sent a COI, which used to render
+  // exactly like a vendor whose cover is current.
+  expect(options[preferredIndex]).toContain('no COI')
 
   await prisma.workOrder.deleteMany({ where: { id: workOrder.id } })
   await prisma.unit.deleteMany({ where: { id: unit.id } })

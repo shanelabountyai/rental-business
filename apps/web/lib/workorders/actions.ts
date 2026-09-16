@@ -375,6 +375,18 @@ export async function dispatchToVendor(
     return { error: 'This work order is already resolved.' }
   }
 
+  // Warned and logged, never refused (R-214, D-187's posture): the only
+  // plumber who answers at 2am still goes out, but the PM is told at the
+  // moment of sending and the audit row records what cover was on file.
+  const coiExpiresOn = workOrder.vendor.coiExpiresOn
+  const coiGap = coiExpiresOn == null ? 'missing' : coiExpiresOn < new Date() ? 'expired' : null
+  const coiWarning =
+    coiGap === 'missing'
+      ? ` No certificate of insurance is on file for ${workOrder.vendor.name}.`
+      : coiGap === 'expired'
+        ? ` ${workOrder.vendor.name}'s certificate of insurance has expired.`
+        : ''
+
   const { token, expiresAt } = await issueVendorLink(workOrder.id, workOrder.vendorId)
   const link = `${process.env.AUTH_URL ?? ''}/vendor/${token}`
   let sendNotice = `Link sent to ${workOrder.vendor.name}.`
@@ -399,6 +411,8 @@ export async function dispatchToVendor(
           // credential store should be. That a link was issued, to whom, and
           // when it dies is the auditable fact; its value is not.
           resend: workOrder.dispatchedAt != null,
+          coiGap,
+          w9OnFile: workOrder.vendor!.w9OnFile,
         },
       },
       tx,
@@ -444,12 +458,12 @@ export async function dispatchToVendor(
   } catch (error) {
     console.error(`[dispatch] failed to send vendor link for ${workOrder.id}`, error)
     return {
-      notice: 'The link was created, but sending it failed. Copy it from the work order and send it yourself.',
+      notice: `The link was created, but sending it failed. Copy it from the work order and send it yourself.${coiWarning}`,
     }
   }
 
   revalidatePath(`/workorders/${workOrder.id}`)
-  return { notice: sendNotice }
+  return { notice: `${sendNotice}${coiWarning}` }
 }
 
 

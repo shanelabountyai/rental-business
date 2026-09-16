@@ -30,7 +30,15 @@ export default async function VendorsPage() {
       ) : (
         <ul className="flex flex-col divide-y rounded-md border">
           {vendors.map((vendor) => {
-            const coiExpired = vendor.coiExpiresOn != null && vendor.coiExpiresOn < today
+            // One span for every flag, not one each: `/vendors` renders every
+            // vendor, and in the test database that is ~2,000 rows - a second
+            // span per row cost 9s of axe scan and timed the spec out (R-214).
+            const flags = [
+              !vendor.w9OnFile && 'no W-9',
+              // R-214: no date on file is missing cover, never current cover.
+              vendor.coiExpiresOn == null && 'no COI',
+              vendor.coiExpiresOn != null && vendor.coiExpiresOn < today && 'COI expired',
+            ].filter(Boolean)
             return (
               <li key={vendor.id}>
                 <Link
@@ -43,12 +51,7 @@ export default async function VendorsPage() {
                   </span>
                   <span className="text-muted-foreground text-sm">
                     {vendor.trades.join(', ') || 'No trades on file'}
-                    {!vendor.w9OnFile && (
-                      <span className="text-amber-800"> · no W-9</span>
-                    )}
-                    {coiExpired && (
-                      <span className="text-amber-800"> · COI expired</span>
-                    )}
+                    {flags.length > 0 && <span className="text-amber-800"> · {flags.join(' · ')}</span>}
                   </span>
                 </Link>
               </li>

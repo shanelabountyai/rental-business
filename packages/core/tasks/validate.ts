@@ -71,6 +71,7 @@ export const TASK_SUBJECT_TYPES = [
   'Ticket',
   'TurnoverProject',
   'Unit',
+  'Vendor',
   'ViolationCase',
   'WorkOrder',
 ] as const

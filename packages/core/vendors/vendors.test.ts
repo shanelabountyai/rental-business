@@ -216,6 +216,10 @@ describe('fallbackVendorsForTrade', () => {
     const alpha = ranked.find((v) => v.id === 'v2')!
     expect(alpha.w9Missing).toBe(true)
     expect(alpha.coiExpired).toBe(true)
+    expect(alpha.coiMissing).toBe(false)
+    // R-214: a vendor who never sent a COI is not one whose COI is current.
+    expect(ranked.find((v) => v.id === 'v1')!.coiMissing).toBe(true)
+    expect(ranked.find((v) => v.id === 'v1')!.coiExpired).toBe(false)
     expect(ranked.find((v) => v.id === 'v1')!.w9Missing).toBe(false)
   })
 

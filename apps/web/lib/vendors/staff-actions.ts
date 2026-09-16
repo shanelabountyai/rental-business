@@ -79,6 +79,19 @@ export async function saveVendorRecord(
     const saved = vendorId
       ? await tx.vendor.update({ where: { id: vendorId }, data })
       : await tx.vendor.create({ data })
+    // A new certificate date answers any open COI flag, the way a new renter's
+    // policy closes its own (insurance-actions.ts). Only a date still in the
+    // future does: re-saving a lapsed date must leave the flag where it is.
+    if (vendorId && data.coiExpiresOn && data.coiExpiresOn > new Date()) {
+      await tx.task.updateMany({
+        where: {
+          type: { in: ['vendor_coi_expiring', 'vendor_coi_lapsed'] },
+          subjectId: vendorId,
+          status: { in: ['OPEN', 'IN_PROGRESS', 'BLOCKED'] },
+        },
+        data: { status: 'DONE' },
+      })
+    }
     await audit(
       {
         action: 'vendor.record_saved',
