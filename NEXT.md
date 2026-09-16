@@ -1,12 +1,33 @@
 # Next session
 
-## R-214 is done. Pick up R-215: money owed by a moved-out tenant leaves the product.
+## R-215 is done. Pick up R-216: a phone-only tenant or guarantor can never sign in.
 
-R-214 shipped as `3484f78` (SHA recorded in `1ad0a59`). **CI: read it on the run
+R-215 shipped as `7f994ab` (SHA recorded in `3528b8a`). **CI: read it on the run
 itself with `gh run list --limit 5`.** Do not copy a CI line forward.
 
-**Start here:** `docs/prds/06-backlog.md`, row 202 / **R-215**. Re-verify the
-finding before touching anything. The record is ten for ten.
+**Start here:** `docs/prds/06-backlog.md`, row 203 / **R-216**. Re-verify the
+finding before touching anything. The record is eleven for eleven.
+
+## What R-215 established (D-233)
+
+`/money/former-tenants` is `rentRoll(scope, asOf, ['ENDED','TERMINATED'])` plus
+unbilled damages and write-offs. **A write-off is `ReceivableWriteOff`
+(append-only) and is NOT a ledger event** — the debt stays owed (owner's call).
+**Damage beyond the deposit is billed in Stripe** (owner's call):
+`uncoveredDeductionsCents` becomes a `Charge` with `depositId`, pushed by
+`invoiceOneOffCharge` (`send_invoice`) after the letter, non-fatal.
+
+**The simulator's event ids are now HASHED (`simKey`).** Truncating
+`deposit-disposition:<cuid>` to 32 chars made two same-millisecond deposits
+collide, and the second payment was silently deduped. Any new simulated event
+id must go through `simKey`.
+
+## What R-215 left behind
+
+- **On real Stripe a cheque toward the damages invoice cannot be recorded**:
+  `getOpenInvoice` filters `subscription=`. Fix: look up by customer.
+- Nothing retries an unbilled damages charge; a write-off has no undo.
+- `in_sim${payer.id.slice(0, 16)}` still truncates (harmless today).
 
 ## What R-214 established (D-232)
 
@@ -188,7 +209,7 @@ vendor-gated.
 - **The finalized deposit screen no longer shows the outstanding balance it
   applied** — recomputed from a ledger that is now zero. The letter holds the
   record.
-- **`additionalOwedCents` is disclosed and never collected** — R-071's gap.
+- **(CLOSED by R-215)** `additionalOwedCents` is now billed (damage half) and listed on `/money/former-tenants`.
 
 ## Still outstanding from R-208
 
