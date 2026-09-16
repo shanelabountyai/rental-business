@@ -13,8 +13,9 @@ describe('retaliationWarning', () => {
       retaliationWarning({
         actionDate: new Date('2026-08-17'),
         mostRecentComplaint: {
-          ticketId: 't1',
-          category: 'no heat',
+          source: 'habitability_ticket',
+          sourceId: 't1',
+          description: 'no heat complaint',
           occurredAt: new Date('2026-08-01'),
         },
         windowDays: null,
@@ -36,15 +37,17 @@ describe('retaliationWarning', () => {
     const warning = retaliationWarning({
       actionDate: new Date('2026-08-17T00:00:00Z'),
       mostRecentComplaint: {
-        ticketId: 't1',
-        category: 'no heat',
+        source: 'habitability_ticket',
+        sourceId: 't1',
+        description: 'no heat complaint',
         occurredAt: new Date('2026-07-17T00:00:00Z'),
       },
       windowDays: 180,
     })
     expect(warning).toEqual({
-      ticketId: 't1',
-      category: 'no heat',
+      source: 'habitability_ticket',
+      sourceId: 't1',
+      description: 'no heat complaint',
       occurredAt: new Date('2026-07-17T00:00:00Z'),
       daysAgo: 31,
       windowDays: 180,
@@ -54,8 +57,9 @@ describe('retaliationWarning', () => {
   it('is silent once the complaint is outside the window', () => {
     const actionDate = new Date('2026-08-17T00:00:00Z')
     const complaint = {
-      ticketId: 't1',
-      category: 'mold',
+      source: 'habitability_ticket' as const,
+      sourceId: 't1',
+      description: 'mold complaint',
       occurredAt: new Date(actionDate.getTime() - 181 * DAY),
     }
     expect(
@@ -66,8 +70,9 @@ describe('retaliationWarning', () => {
   it('warns on the exact boundary day (inclusive)', () => {
     const actionDate = new Date('2026-08-17T00:00:00Z')
     const complaint = {
-      ticketId: 't1',
-      category: 'sewage',
+      source: 'habitability_ticket' as const,
+      sourceId: 't1',
+      description: 'sewage complaint',
       occurredAt: new Date(actionDate.getTime() - 180 * DAY),
     }
     expect(
@@ -78,8 +83,9 @@ describe('retaliationWarning', () => {
   it('is silent for a complaint dated after the action - it cannot be what the action retaliated against', () => {
     const actionDate = new Date('2026-08-01T00:00:00Z')
     const complaint = {
-      ticketId: 't1',
-      category: 'leak',
+      source: 'habitability_ticket' as const,
+      sourceId: 't1',
+      description: 'leak complaint',
       occurredAt: new Date('2026-08-10T00:00:00Z'),
     }
     expect(

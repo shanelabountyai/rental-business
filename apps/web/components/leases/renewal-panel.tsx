@@ -4,6 +4,7 @@ import { useActionState } from 'react'
 import { FormAlerts, LiveRegion, SubmitButton } from '@/components/auth-form.tsx'
 import { TextField, TextareaField } from '@/components/form/field.tsx'
 import type { RenewalFormState } from '@/lib/leases/renewal-actions.ts'
+import { RetaliationAck } from './retaliation-ack.tsx'
 
 // The renewal-offer section (LEASE-09, R-065): "the owner sees current vs.
 // proposed rent" and, when a rent increase runs into a jurisdiction rule,
@@ -137,11 +138,21 @@ export function RenewalPanel({
                 name="overrideReason"
                 required
                 idPrefix="renewal"
+                defaultValue={state.values?.overrideReason}
+                key={`override-${state.values?.overrideReason ?? ''}`}
                 error={errors.overrideReason}
                 rows={2}
               />
             )}
           </LiveRegion>
+          <RetaliationAck
+            view={state.needsRetaliationAck}
+            label="Why offer this increase now?"
+            defending="increase"
+            idPrefix="renewal"
+            defaultValue={state.values?.retaliationReason}
+            error={errors.retaliationReason}
+          />
           <SubmitButton label="Create renewal offer" />
         </form>
       )}

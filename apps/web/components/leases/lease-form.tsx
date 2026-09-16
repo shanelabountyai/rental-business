@@ -1,11 +1,11 @@
 'use client'
 
 import { UTILITIES, UTILITY_PAYERS } from '@rental/core/leases'
-import { friendlyBusinessDate } from '@rental/core/scheduling'
 import { useActionState, useState } from 'react'
 import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
 import { CheckboxField, SelectField, TextField } from '@/components/form/field.tsx'
 import type { LeaseFormState } from '@/lib/leases/actions.ts'
+import { RetaliationAck } from './retaliation-ack.tsx'
 
 // The lease terms form (LEASE-06, R-033), shared by create and edit.
 //
@@ -330,26 +330,13 @@ export function LeaseForm({
         </div>
       </fieldset>
 
-      {retaliation && (
-        <div className="flex flex-col gap-2 rounded-md border-2 border-amber-500 p-3">
-          <p className="text-sm font-medium">
-            {retaliation.daysAgo} day{retaliation.daysAgo === 1 ? '' : 's'} after this
-            tenant&rsquo;s {retaliation.category} complaint ({friendlyBusinessDate(retaliation.occurredOn)}) — inside
-            the {retaliation.windowDays}-day retaliation-presumption window
-          </p>
-          <p className="text-muted-foreground text-sm">
-            You can go ahead, but the business reason is recorded permanently and is what
-            this increase would be defended with.
-          </p>
-          <TextField
-            label="Why are you raising rent now?"
-            name="retaliationReason"
-            idPrefix="lease"
-            required
-            error={errors.retaliationReason}
-          />
-        </div>
-      )}
+      <RetaliationAck
+        view={retaliation}
+        label="Why are you raising rent now?"
+        defending="increase"
+        idPrefix="lease"
+        error={errors.retaliationReason}
+      />
 
       <SubmitButton label={retaliation ? 'Save anyway, with this reason' : submitLabel} />
     </form>

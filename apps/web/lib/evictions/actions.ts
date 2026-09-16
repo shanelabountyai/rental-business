@@ -24,6 +24,11 @@ import { propertyResource, requirePermission, requireScope } from '@/lib/auth/gu
 import { currentScope } from '@/lib/scope/current-scope.ts'
 import { cureClockFor, cureDemandFor, getEvictionCase } from '@/lib/evictions/queries.ts'
 import { affidavitLookupFor } from '@/lib/scra/queries.ts'
+import {
+  retaliationAckAudit,
+  retaliationGateFor,
+  type RetaliationAckView,
+} from '@/lib/leases/retaliation-check.ts'
 
 // Writes for eviction case files (PAY-14, R-083).
 //
@@ -37,6 +42,13 @@ export interface EvictionFormState {
   fieldErrors?: Record<string, string>
   notice?: string
   documentId?: string
+  /// RISK-06 (R-212). Opening a case and drafting a cure notice are both
+  /// adverse acts inside a retaliation window - nothing was written.
+  needsRetaliationAck?: RetaliationAckView
+  /// Echoed on that refusal: React 19 resets uncontrolled fields once the
+  /// action returns, and the lease picked and the reason typed are exactly
+  /// what the second press needs.
+  values?: Record<string, string>
 }
 
 function str(formData: FormData, name: string): string {
@@ -62,10 +74,16 @@ export async function openEvictionCase(
 ): Promise<EvictionFormState> {
   const leaseId = str(formData, 'leaseId')
   const reason = str(formData, 'reason')
+  const retaliationReason = str(formData, 'retaliationReason') || null
 
   const lease = await prisma.lease.findUnique({
     where: { id: leaseId },
-    select: { id: true, propertyId: true, unitId: true, property: { select: { id: true, legalEntityId: true } } },
+    select: {
+      id: true,
+      propertyId: true,
+      unitId: true,
+      property: { select: { id: true, legalEntityId: true, state: true, county: true, timezone: true } },
+    },
   })
   if (!lease) return { error: 'That lease no longer exists.' }
 
@@ -89,6 +107,21 @@ export async function openEvictionCase(
   })
   if (existing) return { error: 'This lease already has an open eviction case.' }
 
+  // RISK-06 (R-212). The `reason` above is WHY THIS CASE; the ack is WHY
+  // NOW, inside the window - two different questions, and a delinquency
+  // reason written without knowing a repair complaint came in three weeks
+  // earlier is not a considered answer to the second.
+  const gate = await retaliationGateFor({
+    leaseId: lease.id,
+    property: lease.property,
+    actionDate: new Date(),
+    action: 'eviction case',
+    reason: retaliationReason,
+  })
+  if (gate.refusal) {
+    return { ...gate.refusal, values: { leaseId, reason, retaliationReason: retaliationReason ?? '' } }
+  }
+
   const created = await prisma.$transaction(async (tx) => {
     const evictionCase = await tx.evictionCase.create({
       data: {
@@ -110,6 +143,19 @@ export async function openEvictionCase(
       },
       tx,
     )
+    if (gate.warning) {
+      await audit(
+        retaliationAckAudit({
+          warning: gate.warning,
+          reason: retaliationReason!,
+          leaseId: lease.id,
+          propertyId: lease.propertyId,
+          trigger: 'eviction_case_opened',
+          details: { evictionCaseId: evictionCase.id },
+        }),
+        tx,
+      )
+    }
     return evictionCase
   })
 
@@ -184,6 +230,7 @@ export async function draftCureNotice(
   formData: FormData,
 ): Promise<EvictionFormState> {
   const type = str(formData, 'noticeType')
+  const retaliationReason = str(formData, 'retaliationReason') || null
   // R-103: `requireScope`, then the property-scoped check once the case is
   // known - the same pair `attachNoticeToCase` uses.
   const { actor: guarded } = await requireScope('eviction.manage')
@@ -209,6 +256,19 @@ export async function draftCureNotice(
           ? 'Only fees are owed on this lease, and this state’s rule says a cure notice may demand rent only.'
           : 'Nothing is owed on this lease, so there is nothing to demand.',
     }
+  }
+
+  // RISK-06 (R-212). After the demand checks, so nobody is asked to justify
+  // a notice that was about to be refused for owing nothing.
+  const gate = await retaliationGateFor({
+    leaseId: evictionCase.leaseId,
+    property: evictionCase.property,
+    actionDate: new Date(),
+    action: 'cure notice',
+    reason: retaliationReason,
+  })
+  if (gate.refusal) {
+    return { ...gate.refusal, values: { noticeType: type, retaliationReason: retaliationReason ?? '' } }
   }
 
   const notice = await prisma.$transaction(async (tx) => {
@@ -248,6 +308,19 @@ export async function draftCureNotice(
       },
       tx,
     )
+    if (gate.warning) {
+      await audit(
+        retaliationAckAudit({
+          warning: gate.warning,
+          reason: retaliationReason!,
+          leaseId: evictionCase.leaseId,
+          propertyId: evictionCase.propertyId,
+          trigger: 'cure_notice_drafted',
+          details: { evictionCaseId: caseId, noticeId: created.id, noticeType: type },
+        }),
+        tx,
+      )
+    }
     return created
   })
 

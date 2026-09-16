@@ -48,6 +48,7 @@ afterAll(async () => {
   // referenced by Message/WorkOrder relations in general - deleting only
   // what this file created, none of which has either.
   await prisma.ticket.deleteMany({ where: { id: { in: ticketIds } } })
+  await prisma.accommodationRequest.deleteMany({ where: { propertyId } })
   await prisma.leaseTenant.deleteMany({ where: { leaseId: { in: leaseIds } } })
   await prisma.lease.deleteMany({ where: { id: { in: leaseIds } } })
   await prisma.tenant.deleteMany({ where: { id: tenantId } })
@@ -105,7 +106,8 @@ describe('retaliationCheckFor', () => {
 
     expect(warning).not.toBeNull()
     expect(warning?.windowDays).toBe(180)
-    expect(warning?.category).toBe('no heat')
+    expect(warning?.description).toBe('no heat complaint')
+    expect(warning?.source).toBe('habitability_ticket')
   })
 
   it('is silent when there is no habitability ticket on this lease', async () => {
@@ -177,5 +179,66 @@ describe('retaliationCheckFor', () => {
     })
 
     expect(warning).toBeNull()
+  })
+
+  // R-212. A fair-housing accommodation request is protected activity in
+  // its own right; before this the guard read only the habitability flag, so
+  // a rent rise three weeks after an assistance-animal request warned nobody.
+  it('warns on an accommodation request inside the window, with no habitability ticket at all', async () => {
+    const lease = await seedLease()
+    const receivedOn = new Date()
+    receivedOn.setUTCDate(receivedOn.getUTCDate() - 21)
+    const request = await prisma.accommodationRequest.create({
+      data: {
+        propertyId,
+        leaseId: lease.id,
+        tenantId,
+        kind: 'ASSISTANCE_ANIMAL',
+        requestText: 'May I keep my emotional support dog?',
+        // @db.Date: the calendar day, as UTC midnight.
+        receivedOn: new Date(`${receivedOn.toISOString().slice(0, 10)}T00:00:00Z`),
+      },
+    })
+
+    const warning = await retaliationCheckFor({
+      leaseId: lease.id,
+      propertyState: 'TX',
+      propertyCounty: null,
+      actionDate: new Date(),
+    })
+
+    expect(warning).toMatchObject({
+      source: 'accommodation_request',
+      sourceId: request.id,
+      description: 'accommodation request',
+      daysAgo: 21,
+    })
+  })
+
+  it('names whichever protected act is more recent when both exist', async () => {
+    const lease = await seedLease()
+    const now = new Date()
+    await seedHabitabilityTicket(lease.id, new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000))
+    const older = new Date(now.getTime() - 40 * 24 * 60 * 60 * 1000)
+    await prisma.accommodationRequest.create({
+      data: {
+        propertyId,
+        leaseId: lease.id,
+        tenantId,
+        kind: 'POLICY_EXCEPTION',
+        requestText: 'A reserved parking space near the door.',
+        receivedOn: new Date(`${older.toISOString().slice(0, 10)}T00:00:00Z`),
+      },
+    })
+
+    const warning = await retaliationCheckFor({
+      leaseId: lease.id,
+      propertyState: 'TX',
+      propertyCounty: null,
+      actionDate: now,
+    })
+
+    expect(warning?.source).toBe('habitability_ticket')
+    expect(warning?.daysAgo).toBe(5)
   })
 })

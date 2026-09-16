@@ -1,10 +1,10 @@
 'use client'
 
-import { friendlyBusinessDate } from '@rental/core/scheduling'
 import { useActionState, useState } from 'react'
 import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
 import { SelectField, TextareaField, TextField } from '@/components/form/field.tsx'
 import type { LeaseFormState } from '@/lib/leases/actions.ts'
+import { RetaliationAck } from './retaliation-ack.tsx'
 
 // Moving a lease through its lifecycle (LEASE-06, R-033).
 //
@@ -214,31 +214,21 @@ function NoticeForm({ action }: { action: Action }) {
               name="noticePeriodReason"
               idPrefix="notice"
               required
+              defaultValue={echoed.noticePeriodReason}
+              key={`notice-period-${echoed.noticePeriodReason ?? ''}`}
               error={errors.noticePeriodReason}
             />
           </div>
         )}
 
-        {retaliation && (
-          <div className="flex flex-col gap-2 rounded-md border-2 border-amber-500 p-3">
-            <p className="text-sm font-medium">
-              {retaliation.daysAgo} day{retaliation.daysAgo === 1 ? '' : 's'} after this
-              tenant&rsquo;s {retaliation.category} complaint ({friendlyBusinessDate(retaliation.occurredOn)}) —
-              inside the {retaliation.windowDays}-day retaliation-presumption window
-            </p>
-            <p className="text-muted-foreground text-sm">
-              You can go ahead, but the business reason is recorded permanently and is
-              what this notice would be defended with.
-            </p>
-            <TextField
-              label="Why is this notice going out now?"
-              name="retaliationReason"
-              idPrefix="notice"
-              required
-              error={errors.retaliationReason}
-            />
-          </div>
-        )}
+        <RetaliationAck
+          view={retaliation}
+          label="Why is this notice going out now?"
+          defending="notice"
+          idPrefix="notice"
+          defaultValue={echoed.retaliationReason}
+          error={errors.retaliationReason}
+        />
 
         <SubmitButton
           label={

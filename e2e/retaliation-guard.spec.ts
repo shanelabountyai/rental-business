@@ -22,6 +22,11 @@ test.beforeEach(async ({ page }) => {
 // blocks the save, shows the specific complaint, and that "save anyway"
 // requires and records a reason - against the REAL seeded Texas window (180
 // days), not a fixture number.
+//
+// R-212 armed the guard on three more paths - the renewal offer, opening an
+// eviction case and drafting a cure notice - and widened the signal to a
+// fair-housing accommodation request. Each path has its own test below,
+// because the defect was precisely a path nobody had walked.
 
 const PASSWORD = 'correct-horse-battery-staple'
 
@@ -73,7 +78,9 @@ function isoDaysFromToday(days: number): string {
   return date.toISOString().slice(0, 10)
 }
 
-async function seedActiveLease(options: { habitabilityDaysAgo?: number } = {}) {
+async function seedActiveLease(
+  options: { habitabilityDaysAgo?: number; accommodationDaysAgo?: number } = {},
+) {
   const unique = randomUUID().slice(0, 8)
   const entity = await prisma.legalEntity.create({
     data: { name: `Retaliation LLC-${unique}`, type: 'LLC' },
@@ -138,6 +145,20 @@ async function seedActiveLease(options: { habitabilityDaysAgo?: number } = {}) {
       },
     })
     ticketIds.push(ticket.id)
+  }
+
+  if (options.accommodationDaysAgo != null) {
+    await prisma.accommodationRequest.create({
+      data: {
+        propertyId: property.id,
+        leaseId: lease.id,
+        tenantId: tenant.id,
+        kind: 'ASSISTANCE_ANIMAL',
+        requestText: 'May I keep my emotional support dog?',
+        // @db.Date - the calendar day, as UTC midnight.
+        receivedOn: new Date(`${isoDaysFromToday(-options.accommodationDaysAgo)}T00:00:00Z`),
+      },
+    })
   }
 
   return { property, unit, tenant, lease }
@@ -214,7 +235,8 @@ test('a rent increase inside the window is blocked, warns with the specific comp
   })
   expect(audited).not.toBeNull()
   expect(audited?.reason).toContain('Portfolio-wide increase')
-  expect((audited?.after as { complaintTicketId?: string })?.complaintTicketId).toBeTruthy()
+  expect(audited?.after).toMatchObject({ trigger: 'rent_increase', complaintSource: 'habitability_ticket' })
+  expect((audited?.after as { complaintSourceId?: string })?.complaintSourceId).toBeTruthy()
 })
 
 test('a rent increase with no recent complaint saves immediately, no warning', async ({ page }) => {
@@ -302,4 +324,133 @@ test('the tenant giving their own notice is never a retaliation claim', async ({
     where: { action: 'lease.retaliation_window_acknowledged', entityId: lease.id },
   })
   expect(audited).toBeNull()
+})
+
+// R-212. The loop this found: each warning's refusal carried only its own
+// warning, so a short notice inside the window alternated between asking for
+// one reason and asking for the other, dropping whichever was typed last.
+test('a short landlord notice inside the window asks for BOTH reasons at once, and records with both', async ({
+  page,
+}) => {
+  const staff = await createStaff()
+  const { lease } = await seedActiveLease({ habitabilityDaysAgo: 10 })
+
+  await signIn(page, staff.email)
+  await page.goto(`/leases/${lease.id}`)
+
+  await page.getByText('Record notice to end the tenancy').click()
+  await page.getByLabel('Who gave notice').selectOption('LANDLORD')
+  await page.getByLabel('Date notice was given').fill(isoDaysFromToday(0))
+  // 10 days out - 20 short of TX's 30-day noticeToVacateDays.
+  await page.getByLabel('Date the tenancy actually ends').fill(isoDaysFromToday(10))
+  await page.getByRole('button', { name: 'Record notice' }).click()
+
+  await expect(page.getByLabel('Why is this notice this short?')).toBeVisible()
+  await expect(page.getByLabel('Why is this notice going out now?')).toBeVisible()
+
+  await page.getByLabel('Why is this notice this short?').fill('Tenant agreed in writing to an early end date.')
+  await page.getByLabel('Why is this notice going out now?').fill('Owner is selling the house; listing agreement signed.')
+  await page.getByRole('button', { name: /Record notice anyway/ }).click()
+
+  await expect.poll(async () => (await prisma.lease.findUniqueOrThrow({ where: { id: lease.id } })).noticeGivenAt).not.toBeNull()
+  const audited = await prisma.auditLog.findFirst({
+    where: { action: 'lease.retaliation_window_acknowledged', entityId: lease.id },
+  })
+  expect(audited?.reason).toContain('selling the house')
+})
+
+// R-212 - the path that produces nearly every rent increase in a portfolio.
+test('a renewal offer with an increase inside the window is refused until a reason is given, and the ack is on the lease the complaint was made under', async ({
+  page,
+}) => {
+  const staff = await createStaff()
+  const { lease } = await seedActiveLease({ habitabilityDaysAgo: 20 })
+
+  await signIn(page, staff.email)
+  await page.goto(`/leases/${lease.id}`)
+
+  // 45 days out - clear of TX's 30-day rentIncreaseNoticeDays, so only the
+  // retaliation guard is under test.
+  await page.getByLabel('New start date').fill(isoDaysFromToday(45))
+  await page.getByLabel('New end date').fill(isoDaysFromToday(410))
+  await page.getByLabel('Proposed rent ($/mo)').fill('1625')
+  await page.getByRole('button', { name: 'Create renewal offer' }).click()
+
+  await expect(page.getByText(/20 days after this tenant.s no heat complaint \(/)).toBeVisible()
+  await expect(page.getByLabel('Why offer this increase now?')).toBeVisible()
+  // NOTHING was written.
+  expect(await prisma.lease.count({ where: { renewedFromLeaseId: lease.id } })).toBe(0)
+
+  await page.getByLabel('Why offer this increase now?').fill('Every renewal this quarter moves to the county market survey.')
+  await page.getByRole('button', { name: 'Create renewal offer' }).click()
+  await page.waitForURL((url) => url.pathname.startsWith('/leases/') && !url.pathname.endsWith(lease.id))
+
+  const successor = await prisma.lease.findFirstOrThrow({ where: { renewedFromLeaseId: lease.id } })
+  expect(successor.rentCents).toBe(162_500)
+  const audited = await prisma.auditLog.findFirst({
+    where: { action: 'lease.retaliation_window_acknowledged', entityId: lease.id },
+  })
+  expect(audited?.reason).toContain('county market survey')
+  expect(audited?.after).toMatchObject({ trigger: 'renewal_increase', renewalLeaseId: successor.id })
+})
+
+// R-212 - through an ACCOMMODATION REQUEST, not a ticket: the signal R-212
+// widened, walked where an owner would actually meet it.
+test('opening an eviction case after an accommodation request is refused until a reason is given', async ({
+  page,
+}) => {
+  const staff = await createStaff()
+  const { lease } = await seedActiveLease({ accommodationDaysAgo: 14 })
+
+  await signIn(page, staff.email)
+  await page.goto('/evictions/new')
+
+  await page.getByLabel('Tenancy').selectOption(lease.id)
+  await page.getByLabel('Why is this case being opened?').fill('Two months of rent unpaid since July.')
+  await page.getByRole('button', { name: 'Open case' }).click()
+
+  await expect(page.getByText(/14 days after this tenant.s accommodation request \(/)).toBeVisible()
+  expect(await prisma.evictionCase.count({ where: { leaseId: lease.id } })).toBe(0)
+
+  // The lease picked and the case reason both survive the refusal.
+  await expect(page.getByLabel('Tenancy')).toHaveValue(lease.id)
+  await expect(page.getByLabel('Why is this case being opened?')).toHaveValue('Two months of rent unpaid since July.')
+
+  await page.getByLabel('Why open a case now, inside the window?').fill('The arrears began in July, before the request.')
+  await page.getByRole('button', { name: /Open case anyway/ }).click()
+  await page.waitForURL(/\/evictions\/(?!new$)[a-z0-9]+$/)
+
+  const audited = await prisma.auditLog.findFirst({
+    where: { action: 'lease.retaliation_window_acknowledged', entityId: lease.id },
+  })
+  expect(audited?.after).toMatchObject({ trigger: 'eviction_case_opened', complaintSource: 'accommodation_request' })
+})
+
+test('drafting a cure notice inside the window is refused until a reason is given', async ({ page }) => {
+  const staff = await createStaff()
+  const { property, unit, lease } = await seedActiveLease({ habitabilityDaysAgo: 7 })
+  const evictionCase = await prisma.evictionCase.create({
+    data: { propertyId: property.id, unitId: unit.id, leaseId: lease.id, openedByStaffId: staff.id, notes: 'Rent unpaid.' },
+  })
+  // A month's rent owed, as the unlinked CHARGE row webhook.ts writes for a
+  // subscription's rent line - the balance the demand is allocated from.
+  await prisma.ledgerEntry.create({
+    data: { propertyId: property.id, leaseId: lease.id, type: 'CHARGE', amountCents: 150_000, description: 'Rent', occurredAt: new Date() },
+  })
+
+  await signIn(page, staff.email)
+  await page.goto(`/evictions/${evictionCase.id}`)
+  await page.getByRole('button', { name: 'Draft the cure notice' }).click()
+
+  await expect(page.getByText(/7 days after this tenant.s no heat complaint \(/)).toBeVisible()
+  expect(await prisma.notice.count({ where: { evictionCaseId: evictionCase.id } })).toBe(0)
+
+  await page.getByLabel('Why serve a cure notice now, inside the window?').fill('Rent for this month is unpaid; the repair was completed.')
+  await page.getByRole('button', { name: /Draft it anyway/ }).click()
+  await page.waitForURL(/\/notices\/[a-z0-9]+$/)
+
+  const audited = await prisma.auditLog.findFirst({
+    where: { action: 'lease.retaliation_window_acknowledged', entityId: lease.id },
+  })
+  expect(audited?.after).toMatchObject({ trigger: 'cure_notice_drafted', evictionCaseId: evictionCase.id })
 })

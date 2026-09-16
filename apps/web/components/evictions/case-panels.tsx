@@ -3,6 +3,7 @@
 import { useActionState } from 'react'
 import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
 import { FieldError, SelectField, TextField } from '@/components/form/field.tsx'
+import { RetaliationAck } from '@/components/leases/retaliation-ack.tsx'
 import type { EvictionFormState } from '@/lib/evictions/actions.ts'
 
 type Action = (state: EvictionFormState, formData: FormData) => Promise<EvictionFormState>
@@ -204,6 +205,7 @@ export function DraftCureNoticePanel({
   types: readonly { value: string; label: string }[]
 }) {
   const [state, formAction] = useActionState<EvictionFormState, FormData>(action, {})
+  const echoed = state.values ?? {}
 
   return (
     <form action={formAction} className="flex max-w-sm flex-col gap-3">
@@ -213,10 +215,21 @@ export function DraftCureNoticePanel({
         name="noticeType"
         idPrefix="draft"
         required
-        defaultValue={types[0]?.value}
+        defaultValue={echoed.noticeType ?? types[0]?.value}
+        key={`type-${echoed.noticeType ?? ''}`}
         options={types}
       />
-      <SubmitButton label="Draft the cure notice" />
+      <RetaliationAck
+        view={state.needsRetaliationAck}
+        label="Why serve a cure notice now, inside the window?"
+        defending="notice"
+        idPrefix="draft"
+        defaultValue={echoed.retaliationReason}
+        error={state.fieldErrors?.retaliationReason}
+      />
+      <SubmitButton
+        label={state.needsRetaliationAck ? 'Draft it anyway, with this reason' : 'Draft the cure notice'}
+      />
     </form>
   )
 }

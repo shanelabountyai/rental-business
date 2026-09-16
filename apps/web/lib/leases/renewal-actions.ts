@@ -8,6 +8,12 @@ import { redirect } from 'next/navigation'
 import { audit } from '@/lib/audit/index.ts'
 import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
 import { renewalRentCheckFor } from './renewal-check.ts'
+import {
+  retaliationAckAudit,
+  retaliationAckView,
+  retaliationGateFor,
+  type RetaliationAckView,
+} from './retaliation-check.ts'
 
 // Offering a renewal (LEASE-09, R-065). A fixed-term renewal is a NEW Lease
 // row, never a mutation of the one it replaces - packages/core/leases/status.ts's
@@ -20,6 +26,12 @@ import { renewalRentCheckFor } from './renewal-check.ts'
 // The rent-increase check is the one thing genuinely new here - see
 // packages/core/leases/renewal.ts's own header for why a statutory CAP
 // blocks outright while a NOTICE-PERIOD shortfall only warns.
+//
+// R-212: and the RETALIATION guard, which this path went without for its
+// first year while the direct rent edit had it. That was backwards - the
+// renewal offer is how nearly every rent increase in a portfolio reaches a
+// tenant, so the guard was armed on the rare path and off on the routine
+// one.
 
 export interface RenewalFormState {
   error?: string
@@ -29,11 +41,19 @@ export interface RenewalFormState {
   capped?: { capPercentBps: number; maxAllowedCents: number }
   /// A notice-period shortfall - staff may proceed with a stated reason.
   needsOverride?: { requiredNoticeDays: number; noticeDaysGiven: number; shortfallDays: number }
+  /// RISK-06 (R-055, R-212) - an increase inside the retaliation window.
+  needsRetaliationAck?: RetaliationAckView
   /// Echoed back on every early return - React 19 resets uncontrolled
   /// fields once a form action completes (ScheduleForm's own comment on the
   /// identical fact), which would otherwise wipe the very rent the warning
   /// is about.
-  values?: { startsOn: string; endsOn: string; rentDollars: string }
+  values?: {
+    startsOn: string
+    endsOn: string
+    rentDollars: string
+    overrideReason?: string
+    retaliationReason?: string
+  }
 }
 
 function str(formData: FormData, name: string): string {
@@ -102,6 +122,7 @@ export async function offerRenewal(
   const startsOn = parseLeaseDate(input.startsOn)!
   const rentCents = Math.round(Number(input.rentDollars) * 100)
   const overrideReason = str(formData, 'overrideReason') || null
+  const retaliationReason = str(formData, 'retaliationReason') || null
   const now = new Date()
 
   // R-200: both ends read into the property's own calendar before the check,
@@ -124,23 +145,54 @@ export async function offerRenewal(
       values,
     }
   }
-  if (decision.needsOverride) {
-    const overrideViolations = validateRenewalOverride(overrideReason)
-    if (overrideViolations.length > 0) {
-      // NOTHING is written - same posture as R-027's entry-notice override
-      // and R-055's retaliation ack: saving the offer and asking for the
-      // reason afterwards would leave an unexplained short-notice increase
-      // on the record if the second step never happened.
-      return {
-        error: `This offer gives ${decision.noticeDaysGiven} days' notice, ${decision.shortfallDays} short of the ${decision.requiredNoticeDays}-day requirement for ${lease.property.state}.`,
-        fieldErrors: Object.fromEntries(overrideViolations.map((v) => [v.field, v.message])),
-        needsOverride: {
-          requiredNoticeDays: decision.requiredNoticeDays!,
-          noticeDaysGiven: decision.noticeDaysGiven!,
-          shortfallDays: decision.shortfallDays!,
-        },
-        values,
-      }
+  const overrideViolations = decision.needsOverride ? validateRenewalOverride(overrideReason) : []
+
+  // An INCREASE only - a renewal at the same rent or lower is not the
+  // adverse action the guard exists for, and warning on every routine
+  // renewal would train staff to type through it. `now`, not `startsOn`: the
+  // act a retaliation claim is about is making the offer.
+  const gate =
+    rentCents > lease.rentCents
+      ? await retaliationGateFor({
+          leaseId,
+          property: lease.property,
+          actionDate: now,
+          action: 'renewal increase',
+          reason: retaliationReason,
+        })
+      : { warning: null, refusal: null }
+
+  // NOTHING is written on either refusal - same posture as R-027's
+  // entry-notice override: saving the offer and asking for the reason
+  // afterwards would leave an unexplained increase on the record if the
+  // second step never happened. And BOTH warnings come back whenever either
+  // refuses, with both reasons echoed, or each press drops the field the
+  // other one asked for (the loop R-212 found on the notice path).
+  if (overrideViolations.length > 0 || gate.refusal) {
+    return {
+      error:
+        overrideViolations.length > 0
+          ? `This offer gives ${decision.noticeDaysGiven} days' notice, ${decision.shortfallDays} short of the ${decision.requiredNoticeDays}-day requirement for ${lease.property.state}.`
+          : gate.refusal!.error,
+      fieldErrors: {
+        ...Object.fromEntries(overrideViolations.map((v) => [v.field, v.message])),
+        ...gate.refusal?.fieldErrors,
+      },
+      needsOverride: decision.needsOverride
+        ? {
+            requiredNoticeDays: decision.requiredNoticeDays!,
+            noticeDaysGiven: decision.noticeDaysGiven!,
+            shortfallDays: decision.shortfallDays!,
+          }
+        : undefined,
+      needsRetaliationAck: gate.warning
+        ? retaliationAckView(gate.warning, lease.property.timezone)
+        : undefined,
+      values: {
+        ...values,
+        overrideReason: overrideReason ?? '',
+        retaliationReason: retaliationReason ?? '',
+      },
     }
   }
 
@@ -211,6 +263,26 @@ export async function offerRenewal(
           reasonCode: 'owner_directive',
           reason: overrideReason!,
         },
+        tx,
+      )
+    }
+    if (gate.warning) {
+      // Against the PREDECESSOR: it is the tenancy the complaint was made
+      // under, and the lease a retaliation defence will be asked about. The
+      // successor is a DRAFT that may never be signed.
+      await audit(
+        retaliationAckAudit({
+          warning: gate.warning,
+          reason: retaliationReason!,
+          leaseId: lease.id,
+          propertyId: lease.propertyId,
+          trigger: 'renewal_increase',
+          details: {
+            renewalLeaseId: created.id,
+            fromCents: lease.rentCents,
+            toCents: rentCents,
+          },
+        }),
         tx,
       )
     }
