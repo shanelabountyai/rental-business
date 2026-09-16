@@ -513,3 +513,80 @@ test('a disposition with nothing outstanding touches the ledger not at all', asy
   })
   expect(rows.reduce((total, row) => total + row.amountCents, 0)).toBe(0)
 })
+
+test('damage beyond the deposit becomes a receivable on the former-tenants screen, and can be written off', async ({
+  page,
+}) => {
+  // R-215. $1,000 held against $1,500 of arrears (the fixture's) and $900 of
+  // damage. Ledger first (R-209): the deposit settles $1,000 of the arrears,
+  // so ALL $900 of damage is uncovered and $500 of arrears is left. The
+  // tenant owes $1,400 - and before this item $900 of it existed only as a
+  // sentence in the letter.
+  const { lease, property, deposit, tenant } = await seedDisposableDeposit(100_000)
+  const owner = await seedOwner()
+  await signIn(page, owner)
+
+  await page.goto(`/leases/${lease.id}/deposit`)
+  await page.getByLabel('Description').fill('Replace the scorched countertop')
+  await page.getByLabel('Amount ($)').fill('900')
+  await page.getByRole('button', { name: 'Add deduction' }).click()
+  await expect(page.getByText('Replace the scorched countertop', { exact: true })).toBeVisible()
+
+  await page.getByLabel('Forwarding address').fill('19 Somewhere Else, Houston TX 77002')
+  await page.getByLabel(/cannot be undone/).check()
+  await page.getByRole('button', { name: 'Finalize disposition' }).click()
+  await page.waitForURL(/\/notices\/[a-z0-9]+$/)
+
+  // Billed through Stripe as its own charge, linked, never hand-written onto
+  // the ledger (D-11). Polled: real Stripe projects after the push returns.
+  await expect
+    .poll(async () => {
+      const rows = await prisma.ledgerEntry.findMany({
+        where: { leaseId: lease.id },
+        select: { amountCents: true },
+      })
+      return rows.reduce((total, row) => total + row.amountCents, 0)
+    })
+    .toBe(140_000)
+  const charge = await prisma.charge.findUniqueOrThrow({
+    where: { depositId: deposit.id },
+    select: { amountCents: true, stripeInvoiceId: true, ledgerEntries: { select: { type: true } } },
+  })
+  expect(charge.amountCents).toBe(90_000)
+  expect(charge.stripeInvoiceId).not.toBeNull()
+  expect(charge.ledgerEntries).toEqual([{ type: 'CHARGE' }])
+
+  // Narrowed to this property: `rental_test` holds thousands of ended leases.
+  await page.context().addCookies([
+    { name: 'rental_scope', value: `property:${property.id}`, url: page.url() },
+  ])
+  await page.goto('/money/former-tenants')
+  const tenantName = `${tenant.firstName} ${tenant.lastName}`
+  const row = page.getByRole('row', { name: new RegExp(tenantName) })
+  await expect(row).toContainText('$1,400.00')
+
+  await row.locator('summary').click()
+  await row.getByLabel(`Why ${tenantName}'s balance is being written off`).fill('Skipped to another state; not worth a filing')
+  await row.getByRole('button', { name: `Write off ${tenantName}'s balance` }).click()
+
+  // A signal only the returned action can produce: the row under its new
+  // heading, carrying the reason.
+  await expect(
+    page.getByRole('region', { name: 'Written off' }).getByText(/Skipped to another state/),
+  ).toBeVisible()
+
+  // Recorded, not deleted: the ledger still says $1,400 is owed.
+  const writeOff = await prisma.receivableWriteOff.findFirstOrThrow({
+    where: { leaseId: lease.id },
+    select: { amountCents: true, staffUserId: true },
+  })
+  expect(writeOff).toEqual({ amountCents: 140_000, staffUserId: owner.id })
+  const balance = await prisma.ledgerEntry.aggregate({
+    where: { leaseId: lease.id },
+    _sum: { amountCents: true },
+  })
+  expect(balance._sum.amountCents).toBe(140_000)
+  expect(
+    await prisma.auditLog.count({ where: { action: 'receivable.written_off', propertyId: property.id } }),
+  ).toBe(1)
+})

@@ -107,6 +107,9 @@ export const AUDIT_ACTIONS = [
   'ledger.adjusted',
   'fee.waived',
   'payment.recorded',
+  /// R-215: the owner stopped pursuing a former tenant's balance. Not a
+  /// ledger event - the debt is still owed (D-233).
+  'receivable.written_off',
   'payment.reversed',
   /// R-037: a tenant asked to pay, and what they were charged for the
   /// privilege. Recorded at the INTENT, not the outcome - whether the money

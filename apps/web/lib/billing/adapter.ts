@@ -290,6 +290,29 @@ export interface BillingProvider {
   }): Promise<{ stripeInvoiceItemId: string }>
 
   /**
+   * Bills one charge on an invoice of its own, issued now (R-215, D-233).
+   *
+   * FOR A TENANCY WITH NO NEXT INVOICE. `addInvoiceItem` rides along with the
+   * next rent bill, and a former tenant has none - the item would sit pending
+   * for ever and never reach the ledger, the same dead end R-209 recorded for
+   * a negative item. So this creates the invoice, puts exactly this one line
+   * on it, and finalizes it; `invoice.finalized` then projects the CHARGE
+   * linked to `chargeId` like any other.
+   *
+   * SENT, NEVER CHARGED AUTOMATICALLY. The customer may still hold the card
+   * they paid rent with, and debiting a former tenant for damages they have
+   * not agreed to is not what a disposition letter authorises.
+   */
+  invoiceOneOffCharge(input: {
+    stripeCustomerId: string
+    amountCents: number
+    currency: string
+    description: string
+    chargeId: string
+    idempotencyKey: string
+  }): Promise<{ stripeInvoiceId: string }>
+
+  /**
    * Adds a monthly line beside the rent (PAY-08, R-042).
    *
    * PET RENT AND A FLAT UTILITY FEE, and nothing whose amount a statute could

@@ -558,6 +558,7 @@ model Property {
   payments            Payment[]
   ledgerEntries       LedgerEntry[]
   deposits            Deposit[]
+  receivableWriteOffs ReceivableWriteOff[]
   depositDeductions   DepositDeduction[]
   complianceItems     ComplianceItem[]
   recurringCharges    RecurringCharge[]
@@ -2058,6 +2059,7 @@ model StaffUser {
   mortgageStatementsRecorded              MortgageAnnualStatement[]       @relation("MortgageAnnualStatementRecordedBy")
   depositDeductionsCreated                DepositDeduction[]              @relation("DepositDeductionCreatedBy")
   depositRefundsRecorded                  Deposit[]                       @relation("DepositRefundRecordedBy")
+  receivableWriteOffs                     ReceivableWriteOff[]
   entitySettlementsRecorded               EntitySettlement[]              @relation("EntitySettlementRecordedBy")
   complianceCompletionsRecorded           ComplianceCompletion[]
   translationsApproved                    MessageTemplateTranslation[]    @relation("TranslationApprovedBy")
@@ -2511,6 +2513,7 @@ model Lease {
   envelopes                  LeaseEnvelope[]
   leasePayers                LeasePayer[]
   charges                    Charge[]                @relation("ChargeLease")
+  receivableWriteOffs        ReceivableWriteOff[]
   /// Late fees assessed against this lease's own unlinked-rent balance,
   /// rather than against a specific Charge (R-050b). See `Charge.assessedOnLeaseId`.
   assessedLateFees           Charge[]                @relation("ChargeAssessedOnLease")
@@ -4270,6 +4273,11 @@ model Charge {
   /// next month. `Charge.dueOn` on THIS row is already the day the fee
   /// itself was assessed, not this.
   assessedForDueOn    DateTime?  @db.Date
+  /// The disposition whose deductions outran the deposit (R-215). The part
+  /// the deposit could not cover is billed as its own invoice so it is a
+  /// receivable Stripe knows about (D-11), and a former tenant's cheque for it
+  /// has an invoice to land on. Unique: one disposition, one such charge.
+  depositId           String?    @unique
   waivedAt            DateTime?
   waivedByStaffId     String?
   waiveReason         String?
@@ -4296,6 +4304,8 @@ model Charge {
   /// Restrict, like every other evidence-trail key: the lease a fee was
   /// assessed against cannot be deleted out from under the fee.
   assessedOnLease   Lease?            @relation("ChargeAssessedOnLease", fields: [assessedOnLeaseId], references: [id], onDelete: Restrict)
+  /// Restrict: the disposition letter is the defence of this charge.
+  deposit           Deposit?          @relation(fields: [depositId], references: [id], onDelete: Restrict)
   assessedFees      Charge[]          @relation("ChargeAssessedOn")
   allocations       PayerAllocation[]
   ledgerEntries     LedgerEntry[]
@@ -4622,6 +4632,7 @@ model Deposit {
   refundDocument   Document?          @relation("DepositRefundDocument", fields: [refundDocumentId], references: [id], onDelete: Restrict)
   refundRecordedBy StaffUser?         @relation("DepositRefundRecordedBy", fields: [refundRecordedById], references: [id])
   deductions       DepositDeduction[]
+  uncoveredCharge  Charge?
 
   @@index([leaseId])
   @@index([propertyId])
@@ -6554,4 +6565,34 @@ enum ProrationMethod {
   /// Divide by a flat 30, whatever the month. A convention that has to be
   /// chosen deliberately.
   BANKER30
+}
+
+/// A former tenant's balance the owner has stopped pursuing (R-215, D-233).
+///
+/// NOT A LEDGER EVENT, and that is the decision rather than a shortcut. The
+/// debt is still owed - to Stripe, on the ledger, in a small-claims filing,
+/// and to a tenant who pays it three years later - so nothing here moves a
+/// balance. What it records is the owner's dated, reasoned decision to stop
+/// chasing it, which is what takes it off the list somebody works from.
+///
+/// APPEND-ONLY by trigger, like every other evidence table. There is no undo;
+/// a write-off is a decision somebody signed, not a flag.
+model ReceivableWriteOff {
+  id           String   @id @default(cuid())
+  propertyId   String
+  leaseId      String
+  /// The balance written off, as it stood when the decision was made.
+  amountCents  Int
+  /// Property-local calendar day of the decision.
+  writtenOffOn DateTime @db.Date
+  reason       String
+  staffUserId  String
+  createdAt    DateTime @default(now())
+
+  property  Property  @relation(fields: [propertyId], references: [id], onDelete: Restrict)
+  lease     Lease     @relation(fields: [leaseId], references: [id], onDelete: Restrict)
+  staffUser StaffUser @relation(fields: [staffUserId], references: [id], onDelete: Restrict)
+
+  @@index([leaseId])
+  @@index([propertyId])
 }

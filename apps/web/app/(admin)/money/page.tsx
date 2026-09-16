@@ -71,6 +71,12 @@ export default async function MoneyPage() {
             Rent roll and delinquency aging
           </Link>
           <Link
+            href="/money/former-tenants"
+            className="focus-visible:ring-ring w-fit text-sm underline underline-offset-4 focus-visible:ring-2 focus-visible:outline-none"
+          >
+            Former tenants
+          </Link>
+          <Link
             href="/money/vendor-invoices"
             className="focus-visible:ring-ring w-fit text-sm underline underline-offset-4 focus-visible:ring-2 focus-visible:outline-none"
           >

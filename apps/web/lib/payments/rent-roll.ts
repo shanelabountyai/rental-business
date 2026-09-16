@@ -11,7 +11,7 @@ import { type CollectionMethod, debitsAutomatically } from '@rental/core/payment
 import type { AgingBucket } from '@rental/core/ledger'
 import { businessDate, dueDateOnOrBefore, utcToBusinessDate } from '@rental/core/scheduling'
 import { planProgress } from '@rental/core/payments'
-import { prisma } from '@rental/db'
+import { type LeaseStatus, prisma } from '@rental/db'
 import { selectApplicableRule } from '@rental/core/jurisdiction'
 import { leasesHalted } from '@/lib/holds/queries.ts'
 import { type PlanRecord, activePlansByLease, paidTowardPlan } from '@/lib/payments/plans.ts'
@@ -106,6 +106,10 @@ export interface RentRoll {
 export async function rentRoll(
   scope: Pick<ResolvedScope, 'propertyIds'>,
   asOfDate?: Date,
+  // R-215: the former-tenants screen reads ENDED and TERMINATED tenancies
+  // through this same arithmetic rather than a second copy of it. Every
+  // other caller - the chase included - keeps the live default.
+  statuses: readonly LeaseStatus[] = ['ACTIVE', 'MONTH_TO_MONTH'],
 ): Promise<RentRoll> {
   const asOf = asOfDate ?? new Date()
 
@@ -113,7 +117,7 @@ export async function rentRoll(
     prisma.lease.findMany({
       where: {
         propertyId: { in: scope.propertyIds },
-        status: { in: ['ACTIVE', 'MONTH_TO_MONTH'] },
+        status: { in: [...statuses] },
       },
       select: {
         id: true,

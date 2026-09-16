@@ -545,6 +545,53 @@ export class StripeBillingProvider implements BillingProvider {
     return { stripeInvoiceItemId: item.id as string }
   }
 
+  async invoiceOneOffCharge(input: {
+    stripeCustomerId: string
+    amountCents: number
+    currency: string
+    description: string
+    chargeId: string
+    idempotencyKey: string
+  }): Promise<{ stripeInvoiceId: string }> {
+    // `exclude`, so a stray pending item - a fee somebody pushed that is
+    // waiting for a rent bill that will never come - cannot ride onto this
+    // invoice and change the amount the caller decided.
+    const invoice = await this.#post(
+      '/invoices',
+      {
+        customer: input.stripeCustomerId,
+        collection_method: 'send_invoice',
+        days_until_due: 30,
+        pending_invoice_items_behavior: 'exclude',
+        description: input.description,
+        'metadata[chargeId]': input.chargeId,
+      },
+      `${input.idempotencyKey}:invoice`,
+    )
+    const stripeInvoiceId = invoice.id as string
+    await this.#post(
+      '/invoiceitems',
+      {
+        customer: input.stripeCustomerId,
+        invoice: stripeInvoiceId,
+        amount: input.amountCents,
+        currency: input.currency,
+        description: input.description,
+        // Rides to the invoice LINE, which is what `chargeIdsOf` reads.
+        'metadata[chargeId]': input.chargeId,
+      },
+      `${input.idempotencyKey}:item`,
+    )
+    // Keyed too: Stripe refuses to finalize an invoice twice, and a retry
+    // should replay the first answer rather than throw on it.
+    await this.#post(
+      `/invoices/${stripeInvoiceId}/finalize`,
+      {},
+      `${input.idempotencyKey}:finalize`,
+    )
+    return { stripeInvoiceId }
+  }
+
   async addSubscriptionItem(input: {
     stripeSubscriptionId: string
     amountCents: number

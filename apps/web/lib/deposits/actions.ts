@@ -422,6 +422,7 @@ export async function finalizeDisposition(
     })
   }
 
+  let uncoveredCharge: { id: string; amountCents: number; description: string } | null = null
   const notice = await prisma.$transaction(async (tx) => {
     const created = await tx.notice.create({
       data: {
@@ -452,6 +453,29 @@ export async function finalizeDisposition(
       },
       tx,
     )
+    // R-215: DAMAGE THE DEPOSIT COULD NOT COVER BECOMES A RECEIVABLE. Until
+    // this it existed only as a sentence in the letter ("we will contact you
+    // separately"), and left every list an operator reads the day the
+    // tenancy ended. In the same transaction as the letter, so the two cannot
+    // disagree; billed to Stripe AFTER it (below) so a provider outage cannot
+    // strand a disposition whose R-209 payment already moved - a retry would
+    // recompute from a ledger that payment has since changed.
+    if (totals.uncoveredDeductionsCents > 0) {
+      uncoveredCharge = await tx.charge.create({
+        data: {
+          propertyId: deposit.propertyId,
+          leaseId: deposit.leaseId,
+          type: 'OTHER',
+          amountCents: totals.uncoveredDeductionsCents,
+          description: 'Damages and deductions beyond the security deposit',
+          // Property-local today, for the same reason chargebacks read it so.
+          dueOn: businessDateToUtc(businessDate(new Date(), deposit.property.timezone)),
+          depositId: deposit.id,
+        },
+        select: { id: true, amountCents: true, description: true },
+      })
+    }
+
     // R-170: the letter promises money back; SOMEBODY HAS TO CUT THE CHEQUE.
     // Raised here, in the same transaction as the letter, because a letter
     // without the obligation behind it is exactly the state this item
@@ -490,6 +514,26 @@ export async function finalizeDisposition(
     }
     return created
   })
+
+  // NOT FATAL, the same posture a chargeback takes: the Charge stands and the
+  // letter is out, and an unbilled charge is shown as such on the former-
+  // tenants screen rather than lost. No payer means nothing to bill yet.
+  if (uncoveredCharge && payer?.stripeCustomerId) {
+    const charge: { id: string; amountCents: number; description: string } = uncoveredCharge
+    try {
+      const { stripeInvoiceId } = await getBillingProvider().invoiceOneOffCharge({
+        stripeCustomerId: payer.stripeCustomerId,
+        amountCents: charge.amountCents,
+        currency: 'usd',
+        description: charge.description,
+        chargeId: charge.id,
+        idempotencyKey: `deposit-uncovered:${deposit.id}`,
+      })
+      await prisma.charge.update({ where: { id: charge.id }, data: { stripeInvoiceId } })
+    } catch (error) {
+      console.error(`[deposits] could not bill uncovered deductions charge ${charge.id}`, error)
+    }
+  }
 
   revalidatePath(`/leases/${deposit.leaseId}/deposit`)
   redirect(`/notices/${notice.id}`)

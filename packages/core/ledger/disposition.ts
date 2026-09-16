@@ -39,9 +39,14 @@ export interface DispositionTotals {
   refundedCents: Cents
   /// What deductions and the outstanding balance together exceed the
   /// deposit by, if anything - money still owed AFTER the full deposit is
-  /// applied. Disclosed in the letter; collecting it is a separate,
-  /// deliberately out-of-scope concern (see this item's own PROGRESS entry).
+  /// applied. Disclosed in the letter.
   additionalOwedCents: Cents
+  /// The DEDUCTION half of `additionalOwedCents` (R-215). The ledger half is
+  /// already a receivable - it is still on the ledger - but damage beyond the
+  /// deposit exists nowhere except this arithmetic until something bills it,
+  /// so this is the number finalize raises as its own charge (D-233).
+  /// `additionalOwedCents` always equals this plus the arrears left unpaid.
+  uncoveredDeductionsCents: Cents
 }
 
 /**
@@ -68,6 +73,7 @@ export function computeDisposition(
   const refundedCents = Math.max(0, heldCents - appliedCents)
   const additionalOwedCents = Math.max(0, owedByTenant - heldCents)
   const ledgerAppliedCents = Math.min(appliedCents, Math.max(0, outstandingLedgerCents))
+  const uncoveredDeductionsCents = Math.max(0, deductedCents) - (appliedCents - ledgerAppliedCents)
 
   return {
     heldCents,
@@ -77,6 +83,7 @@ export function computeDisposition(
     ledgerAppliedCents,
     refundedCents,
     additionalOwedCents,
+    uncoveredDeductionsCents,
   }
 }
 

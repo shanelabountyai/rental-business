@@ -232,6 +232,44 @@ export class SimulatedBillingProvider implements BillingProvider {
     return { stripeInvoiceItemId }
   }
 
+  /**
+   * Emits the `invoice.finalized` real Stripe would, through the same
+   * `processStripeEvent` the webhook route drives - so the CHARGE lands on
+   * the ledger here exactly as it would in production. Synchronous, as
+   * `recordOutOfBandPayment` is; the same caveat applies.
+   */
+  async invoiceOneOffCharge(input: {
+    stripeCustomerId: string
+    amountCents: number
+    currency: string
+    description: string
+    chargeId: string
+    idempotencyKey: string
+  }): Promise<{ stripeInvoiceId: string }> {
+    const key = input.idempotencyKey.replace(/[^a-zA-Z0-9]/g, '').slice(0, 32)
+    const stripeInvoiceId = `in_sim${key}`
+    console.info(
+      `[billing:simulated] one-off invoice ${stripeInvoiceId} for ${input.amountCents}c ` +
+        `on ${input.stripeCustomerId} - ${input.description}`,
+    )
+    const { processStripeEvent } = await import('./webhook.ts')
+    await processStripeEvent({
+      id: `evt_simfin${key}`,
+      type: 'invoice.finalized',
+      created: Math.floor(Date.now() / 1000),
+      data: {
+        object: {
+          id: stripeInvoiceId,
+          customer: input.stripeCustomerId,
+          amount_due: input.amountCents,
+          description: input.description,
+          lines: { data: [{ metadata: { chargeId: input.chargeId } }] },
+        },
+      },
+    })
+    return { stripeInvoiceId }
+  }
+
   async addSubscriptionItem(input: {
     stripeSubscriptionId: string
     amountCents: number

@@ -19,7 +19,25 @@ describe('computeDisposition', () => {
       ledgerAppliedCents: 0,
       refundedCents: 150_000,
       additionalOwedCents: 0,
+      uncoveredDeductionsCents: 0,
     })
+  })
+
+  // R-215. Ledger first (R-209), so a small deposit is spent on the arrears
+  // and the damage is what is left uncovered - the part only a new charge
+  // can make a receivable.
+  it('splits the shortfall into uncovered damage and arrears the deposit could not reach', () => {
+    const arrearsExceedDeposit = computeDisposition(100_000, 40_000, 130_000)
+    expect(arrearsExceedDeposit.ledgerAppliedCents).toBe(100_000)
+    expect(arrearsExceedDeposit.uncoveredDeductionsCents).toBe(40_000)
+    expect(arrearsExceedDeposit.additionalOwedCents).toBe(70_000)
+
+    const damageOutrunsDeposit = computeDisposition(100_000, 150_000, 30_000)
+    expect(damageOutrunsDeposit.ledgerAppliedCents).toBe(30_000)
+    expect(damageOutrunsDeposit.uncoveredDeductionsCents).toBe(80_000)
+    expect(damageOutrunsDeposit.additionalOwedCents).toBe(80_000)
+
+    expect(computeDisposition(200_000, 50_000, 30_000).uncoveredDeductionsCents).toBe(0)
   })
 
   it('applies an outstanding ledger balance alongside deductions', () => {
