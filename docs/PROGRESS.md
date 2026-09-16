@@ -12693,3 +12693,30 @@ commit touched before reading it as a dead pipeline.
 - `in_sim${payer.id.slice(0, 16)}` in `getOpenInvoice` truncates the same way. It is harmless today because nothing dedupes on it.
 
 **Gate.** `lint` 0 errors (16 pre-existing warnings). `typecheck` clean. `check:ship-deps` clean. `npm run db:ci` passed: migrations from scratch, seed, and no drift. `db:drift` clean on `rental_test`. `npm test` **3,224 passed / 4 skipped** (238 files + 1 skipped) before the simulator fix. After it, a second full run hit **24 timeouts across 17 unrelated files** (`Hook timed out`, `Test timed out`). No Jetsam report covered that time. Rerun alone, those files gave **17/17 files, 198/198 tests**. `npm run test:e2e -- e2e/deposits.spec.ts --repeat-each=2`: **28 passed**, reconciling against `--list`'s `Total: 14 tests` × 2, in both projects. **D-197 reverted-fix check, run:** with the charge creation stubbed to `if (false as boolean)`, exactly the new spec went red in both projects (`Expected: 140000`), and the other 12 stayed green. Restored. CI: read it on the run itself.
+
+## R-216 — a tenant or guarantor with a phone and no email can sign in
+**Commit:** `7f227f7`  ·  **Date:** 2026-09-16
+
+**What it built.** `/portal/login` and `/portal/guarantor/login` now ask for "Email or mobile number" in one field, and the button reads "Send me a link". `findByContact` in [actions.ts](apps/web/lib/auth/actions.ts) handles both. An `@` means email. Anything else goes through `normalizePhone` and is matched on the last ten digits in SQL, then confirmed in canonical form, because `Tenant.phone` and `Guarantor.phone` are stored exactly as staff typed them. `account_access` allows `EMAIL` and `SMS`. The tenant and guarantor magic-link templates have an SMS variant. `deliverAuthLink` takes a `channel`. `canTextAuthLink` in [send.ts](apps/web/lib/notifications/send.ts) checks the carrier block and SMS consent. `notify()`'s PORTAL address now uses it, and `canReceiveAuthLink` (now async) uses it for the five PORTAL `Notice` service claims. The consent lookup that `notify()` did inline is now `smsConsentVerdict`, so both paths share it.
+
+**Finding re-verified before touching anything.** `deliverAuthLink` passed `notify()` an email and nothing else, `account_access` was `['EMAIL']`, and both request actions looked people up by email only. It was correct as written. Twelve for twelve.
+
+**What it decided.** Recorded as **D-234**.
+- **A phone is a route in only if the text would really be sent.** The row asked for `reachableElectronically`'s predicate in front of every PORTAL claim. That predicate is only "is an address on file", and it would have repeated R-210's overclaim for a phone-only tenant with no SMS consent. The claim now uses the engine's own two gates.
+- **The TCPA consent gate is not bypassed for a self-requested sign-in text.** A phone-only tenant with no consent row still cannot sign in until staff record consent on the lease page.
+- **Phone sign-in is only for people with no email on file**, as the row scoped it. That limits exposure to recycled numbers.
+- **Two active rows on one number send nothing**, the same refusal as `candidatesForPhone`. The neutral notice covers every refusal.
+- **Asking by email never texts, and asking by phone never emails.** `deliverAuthLink` gives `notify()` only the address that was typed.
+
+**A test that passed on the defect.** `opt-out.test.ts`'s "never retries it, and puts a human on it instead" used a phone-only tenant with no SMS consent. It passed only because that tenant's PORTAL row counted as a live delivery. Once that row became `no_address`, nothing was queued and the test went red. The fixture now records consent, which is what the test assumed all along.
+
+**A fixture trap.** `uniquePhone()` returns `+1512555` plus six digits, which is eleven digits after `+1`. That is valid E.164 but not a NANP number, and `normalizePhone` correctly refuses it. The new spec builds a random ten-digit 512 number instead. Any future test that types a phone into a form will hit the same thing.
+
+**What it left behind.**
+- **No printed or staff-issued one-time code** for a tenant with neither an email nor a phone. R-173's print-and-post task still covers notices for them. Owned by nobody.
+- **No e2e for the guarantor phone path**, and none for the no-consent refusal. The guarantor path shares `findByContact` and the unit tests on `canReceiveAuthLink`, but no browser test walks it.
+- **Nothing tells a phone-only tenant without consent why no text came.** The neutral notice is deliberate (no enumeration). The way out is staff recording consent, and nothing prompts staff to do it.
+- **Every email sign-in link now also records a suppressed `no_address` SMS row**, because the template declares SMS. That is the engine's normal behaviour, and it adds one extra row per sign-in.
+- **Nothing is backfilled** (D-201/D-222). Notices already marked unserved for phone-only tenants with consent stay unserved.
+
+**Gate.** `lint` 0 errors (16 pre-existing warnings). `typecheck` clean. `check:ship-deps` clean. No migration. `npm test`: **3,226 passed / 4 skipped** (238 files + 1 skipped). e2e for the five affected specs (`auth`, `portal-guarantor`, `portal-account`, `csp-browser`, `smoke`), both projects: **106 passed** against `--list`'s 106. **Reverted-fix check (D-197):** with the phone branch stubbed to `(false as boolean) ? … : null`, the new spec went red in both projects and the other tests stayed green. The full sweep is left to CI; read it with `gh run list`.
