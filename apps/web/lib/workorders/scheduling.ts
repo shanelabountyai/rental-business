@@ -14,6 +14,7 @@ import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
 import { canReceiveAuthLink } from '@/lib/auth/delivery.ts'
 import { rulesFor } from '@/lib/jurisdiction/queries.ts'
 import { dispatchPendingNotifications, notify } from '@/lib/notifications/send.ts'
+import { type Reach, entryNoticeClause, reachOf } from '@/lib/notifications/reach.ts'
 import type { WorkOrderFormState } from './actions.ts'
 
 // Scheduling a visit, with entry-notice compliance (MAINT-05, COMM-02,
@@ -305,6 +306,14 @@ export async function scheduleEntry(
   // Tell the tenant, outside the transaction (R-016's own rule: notify
   // decides and records, dispatch sends, and neither belongs inside a
   // transaction that is holding row locks).
+  // R-211: what actually happened, not what was attempted. The unconditional
+  // "and the tenant has been told" below was returned over a suppressed
+  // delivery AND over a thrown send, and this screen is the only place
+  // anybody would learn the notice never went.
+  let reach: Reach = {
+    status: 'NOT_SENT',
+    why: 'there is nobody on this tenancy to write to',
+  }
   if (tenant) {
     try {
       const outcomes = await notify({
@@ -329,16 +338,19 @@ export async function scheduleEntry(
       await dispatchPendingNotifications(new Date(), 100, {
         deliveryIds: outcomes.map((o) => o.deliveryId).filter((id): id is string => id != null),
       })
+      reach = reachOf(outcomes)
     } catch (error) {
       console.error(`[entry] failed to notify tenant for ${workOrderId}`, error)
+      reach = { status: 'NOT_SENT', why: 'the send failed' }
     }
   }
 
   revalidatePath(`/workorders/${workOrderId}`)
+  const scheduled = decision.permitted
+    ? 'Scheduled'
+    : 'Scheduled with a logged override - the reason is on the record'
   return {
-    notice: decision.permitted
-      ? 'Scheduled, and the tenant has been told.'
-      : 'Scheduled with a logged override - the reason is on the record.',
+    notice: `${scheduled}, ${entryNoticeClause(reach, workOrder.property.timezone)}.`,
   }
 }
 

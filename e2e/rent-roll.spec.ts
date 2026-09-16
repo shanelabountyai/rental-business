@@ -87,6 +87,15 @@ async function seedPropertyWithTenancies(
     /// past-grace tenancy. Opt-in, because every other test in this file
     /// counts the people a send reached.
     includeExtraParties?: boolean
+    /// R-211: a SECOND guarantor on the past-grace tenancy with NEITHER an
+    /// email nor a phone. Opt-in for the same reason as the rest, and its own
+    /// option rather than a shape change to `includeExtraParties`, whose
+    /// three-person count is the assertion of another test.
+    ///
+    /// EVERY OTHER FIXTURE PARTY IN THIS SUITE HAS AN EMAIL, which is the
+    /// whole reason the defect survived: the product only ever ran the branch
+    /// where its optimism happened to be right. Same class as D-132.
+    includeUnreachableGuarantor?: boolean
     /// R-206: TWO billed rent periods, neither paid. Opt-in for the same
     /// reason as the two above — it is another chaseable row.
     includeTwoMonthsBehind?: boolean
@@ -436,7 +445,32 @@ async function seedPropertyWithTenancies(
       })
     : null
 
-  return { property, within, past, unlinkedRent, stalePaid, twoMonths, roommate, guarantor }
+  const unreachable = options.includeUnreachableGuarantor
+    ? await prisma.guarantor.create({
+        data: {
+          leaseId: past.lease.id,
+          firstName: `NoWay${stamp}`,
+          lastName: `Roll-${stamp}`,
+          // NOTHING ON FILE. Not a STOP and not a missing consent — those
+          // still leave email live, so they are suppressions the tenant would
+          // never notice. This is the one that reaches nobody at all.
+          email: null,
+          phone: null,
+        },
+      })
+    : null
+
+  return {
+    property,
+    within,
+    past,
+    unlinkedRent,
+    stalePaid,
+    twoMonths,
+    roommate,
+    guarantor,
+    unreachable,
+  }
 }
 
 /// A manager SCOPED TO ONE PROPERTY.
@@ -729,6 +763,67 @@ test.describe('rent roll and delinquency aging (PAY-06)', () => {
     await expect(history.getByText(guarantor!.firstName).first()).toBeVisible()
     await expect(history.getByText(roommate!.firstName).first()).toBeVisible()
     await expect(history.getByText(/Not sent — no consent/).first()).toBeVisible()
+  })
+
+  test('A PARTY NOTHING REACHED IS NOT COUNTED AS SENT (R-211)', async ({ page }) => {
+    // Review finding 7. `sentTo.push(party.id)` ran the moment `notify()`
+    // returned, so the screen and the `message.bulk_sent` audit row counted a
+    // guarantor with no address at all - while the append-only `Notification`
+    // row for that same send said SUPPRESSED. Two records of one event, and
+    // the one a PM or an attorney reads was the wrong one.
+    const { property, past, roommate, guarantor, unreachable } =
+      await seedPropertyWithTenancies({
+        includeExtraParties: true,
+        includeUnreachableGuarantor: true,
+      })
+    const staff = await seedScopedManager(property.id)
+    const template = await seedTemplate(staff.id)
+
+    await signIn(page, staff)
+    await page.goto('/money/rent-roll')
+
+    await page.getByRole('checkbox', { name: /Select all/ }).check()
+    await page.getByLabel('Template').selectOption(template.id)
+    await page.getByRole('button', { name: /Send reminder/ }).click()
+
+    // FOUR PARTIES ON THE TENANCY, THREE REACHED. Before the fix this said
+    // four, because the fourth's suppression was never read.
+    await expect(page.getByText(/Reminder sent to 3 people on 1 tenancy/)).toBeVisible()
+
+    // AND IT NAMES WHY, which is the difference between a number a PM can act
+    // on and one they cannot: `no_address` is a gap to fill, `no_consent` is a
+    // permission to go and ask for, and the old `skipped` list only ever held
+    // template failures.
+    await expect(page.getByText(/no email or phone we may use/)).toBeVisible()
+
+    // The engine did decide for them - the row exists and says SUPPRESSED.
+    // The defect was never a missing record, it was a screen contradicting
+    // the record it already had.
+    const decided = await prisma.notification.findFirst({
+      where: { recipientId: unreachable!.id, channel: 'EMAIL' },
+      include: { delivery: true },
+    })
+    expect(decided?.delivery?.status).toBe('SUPPRESSED')
+    expect(decided?.delivery?.suppressedReason).toBe('no_address')
+
+    // THE AUDIT ROW AGREES WITH THE SCREEN. This is the record an attorney
+    // reads three weeks later, and it is the half a Playwright assertion on
+    // the toast alone would leave broken.
+    const entry = await prisma.auditLog.findFirstOrThrow({
+      where: { entityId: template.id, action: 'message.bulk_sent' },
+    })
+    expect(entry.after).toMatchObject({ sentToPeople: 3 })
+    expect(JSON.stringify(entry.after)).toContain(unreachable!.firstName)
+
+    // The three who were reachable still were - the fix must not cost the
+    // roommate and the guarantor their chase (R-179).
+    for (const recipientId of [past.tenant.id, roommate!.id, guarantor!.id]) {
+      expect(
+        await prisma.notification.count({
+          where: { recipientId, templateKey: 'comms.managed_template' },
+        }),
+      ).toBeGreaterThan(0)
+    }
   })
 
   test('DOUBLE-PRESSING SENDS ONCE', async ({ page }) => {

@@ -9,6 +9,7 @@ import { audit } from '@/lib/audit/index.ts'
 import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
 import { authUrl } from '@/lib/auth/delivery.ts'
 import { dispatchPendingNotifications, notify } from '@/lib/notifications/send.ts'
+import { reachOf } from '@/lib/notifications/reach.ts'
 import { chaseParties } from './chase-parties.ts'
 import { voidPlanEnvelope } from './plan-envelope.ts'
 import { sendPlanForSignature } from './plan-esign.ts'
@@ -235,7 +236,11 @@ async function sendPlanSchedule(
     return ' Nobody active on this tenancy to send the schedule to — give them a copy yourself.'
   }
   const reached: string[] = []
-  const unreached: string[] = []
+  /// R-211 splits these out of `reached`. R-207 recorded the gap: a DEFERRED
+  /// schedule is not on its way, it is waiting for quiet hours to end, and
+  /// the tenant who rang to agree the plan is owed the difference.
+  const deferred: string[] = []
+  const unreached: { name: string; why: string }[] = []
   try {
     const deliveryIds: string[] = []
     for (const party of parties) {
@@ -255,12 +260,10 @@ async function sendPlanSchedule(
         // one tenancy are two different messages.
         idempotencyKey: `payment-plan-agreed:${planId}:${party.type}:${party.id}`,
       })
-      const delivered = outcomes.some(
-        (outcome) =>
-          outcome.channel !== 'PORTAL' &&
-          (outcome.status === 'QUEUED' || outcome.status === 'DEFERRED'),
-      )
-      ;(delivered ? reached : unreached).push(party.name)
+      const reach = reachOf(outcomes)
+      if (reach.status === 'DEFERRED') deferred.push(party.name)
+      else if (reach.status === 'NOT_SENT') unreached.push({ name: party.name, why: reach.why! })
+      else reached.push(party.name)
       for (const outcome of outcomes) {
         if (outcome.deliveryId) deliveryIds.push(outcome.deliveryId)
       }
@@ -274,9 +277,15 @@ async function sendPlanSchedule(
   }
   return [
     reached.length > 0 ? ` The written schedule is on its way to ${reached.join(', ')}.` : '',
-    unreached.length > 0
-      ? ` Not sent to ${unreached.join(', ')} — no email or phone we may use; give them a copy yourself.`
+    deferred.length > 0
+      ? ` Quiet hours at the property for ${deferred.join(', ')} — the schedule goes out when they end.`
       : '',
+    // THE REASON, not just the name. `no_address` and `no_consent` need
+    // different things from the operator: one is a gap to fill, the other is
+    // a permission to go and ask for.
+    ...unreached.map(
+      (party) => ` Not sent to ${party.name} — ${party.why}; give them a copy yourself.`,
+    ),
   ].join('')
 }
 

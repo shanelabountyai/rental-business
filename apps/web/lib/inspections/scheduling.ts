@@ -15,6 +15,7 @@ import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
 import { canReceiveAuthLink } from '@/lib/auth/delivery.ts'
 import { rulesFor } from '@/lib/jurisdiction/queries.ts'
 import { dispatchPendingNotifications, notify } from '@/lib/notifications/send.ts'
+import { type Reach, entryNoticeClause, reachOf } from '@/lib/notifications/reach.ts'
 import type { InspectionFormState } from './actions.ts'
 
 // Scheduling an inspection visit, with entry-notice compliance (R-157,
@@ -265,6 +266,13 @@ export async function scheduleInspectionEntry(
   })
 
   // Tell the tenant, outside the transaction (R-016's rule).
+  //
+  // R-211: the notice below said "the tenant has been told" whatever the
+  // engine decided, and whether or not the call threw.
+  let reach: Reach = {
+    status: 'NOT_SENT',
+    why: 'there is nobody on this tenancy to write to',
+  }
   if (tenant) {
     try {
       const outcomes = await notify({
@@ -288,15 +296,18 @@ export async function scheduleInspectionEntry(
       await dispatchPendingNotifications(new Date(), 100, {
         deliveryIds: outcomes.map((o) => o.deliveryId).filter((id): id is string => id != null),
       })
+      reach = reachOf(outcomes)
     } catch (error) {
       console.error(`[inspections] failed to notify tenant for ${inspectionId}`, error)
+      reach = { status: 'NOT_SENT', why: 'the send failed' }
     }
   }
 
   revalidatePath(`/inspections/${inspectionId}`)
+  const scheduled = decision.permitted
+    ? 'Scheduled'
+    : 'Scheduled with a logged override - the reason is on the record'
   return {
-    notice: decision.permitted
-      ? 'Scheduled, and the tenant has been told.'
-      : 'Scheduled with a logged override - the reason is on the record.',
+    notice: `${scheduled}, ${entryNoticeClause(reach, timezone)}.`,
   }
 }

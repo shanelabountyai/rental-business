@@ -8,6 +8,7 @@ import { renderForRecipient } from '@/lib/comms/templates.ts'
 import { getTemplate } from '@/lib/comms/templates.ts'
 import { leasesHalted } from '@/lib/holds/queries.ts'
 import { dispatchPendingNotifications, notify } from '@/lib/notifications/send.ts'
+import { reachOf } from '@/lib/notifications/reach.ts'
 import { businessDate } from '@rental/core/scheduling'
 import { chaseParties } from './chase-parties.ts'
 import { pastGraceLeaseIds } from './rent-roll.ts'
@@ -132,6 +133,8 @@ export async function sendReminders(
   /// counting either one alone hides the other.
   const sent = new Set<string>()
   const sentTo: string[] = []
+  /// R-211: reached, but not yet - held for quiet hours.
+  const deferredTo: string[] = []
   const skipped: { leaseId: string; who: string; why: string }[] = []
   const deliveryIds: string[] = []
 
@@ -216,8 +219,29 @@ export async function sendReminders(
         )}`,
       })
 
-      sent.add(lease.id)
-      sentTo.push(party.id)
+      // R-211. `sentTo.push(party.id)` used to run HERE, unconditionally, so
+      // the screen and the `message.bulk_sent` audit row both counted a
+      // guarantor with no TCPA consent, a tenant who texted STOP and a
+      // recipient with no address at all - while the append-only
+      // `Notification` row for that same send said SUPPRESSED. Two records of
+      // one event, and the one a PM or an attorney reads was the wrong one.
+      const reached = reachOf(outcomes)
+      if (reached.status === 'NOT_SENT') {
+        // Its rows are SUPPRESSED, so there is nothing for the dispatcher to
+        // pick up either - skip the ids as well as the count.
+        skipped.push({ leaseId: lease.id, who: party.name, why: reached.why! })
+        continue
+      }
+      if (reached.status === 'DEFERRED') {
+        // NOT counted as sent. R-207 already recorded the gap in the
+        // neighbouring `plan-actions.ts`: a deferred message is scheduled,
+        // not delivered, and a PM deciding whether to phone somebody needs
+        // that distinction more than a tidier number.
+        deferredTo.push(party.name)
+      } else {
+        sent.add(lease.id)
+        sentTo.push(party.id)
+      }
       for (const outcome of outcomes) {
         if (outcome.deliveryId) deliveryIds.push(outcome.deliveryId)
       }
@@ -244,6 +268,10 @@ export async function sendReminders(
       // that says the chase reached roommates and guarantors rather than the
       // one name at the top of each lease.
       sentToPeople: sentTo.length,
+      // R-211: separate from `sentToPeople`, because "we told them" and "we
+      // will tell them at 08:00" are different answers to the question this
+      // row exists to answer three weeks later.
+      deferredToPeople: deferredTo.length,
       // THE SKIPS ARE RECORDED, not just counted. "Why did this tenant not
       // get the reminder we sent everybody" is the question somebody asks
       // three weeks later, and a bare count cannot answer it.
@@ -256,7 +284,7 @@ export async function sendReminders(
 
   revalidatePath('/money/rent-roll')
 
-  if (sentTo.length === 0) {
+  if (sentTo.length === 0 && deferredTo.length === 0) {
     return { error: `Nothing was sent. ${describeSkips(skipped)}` }
   }
   // PEOPLE AND TENANCIES, both counted. The old copy said "sent to N tenants"
@@ -265,11 +293,23 @@ export async function sendReminders(
   const reach = `${sentTo.length} ${sentTo.length === 1 ? 'person' : 'people'} on ${sent.size} ${
     sent.size === 1 ? 'tenancy' : 'tenancies'
   }`
+  // THREE SENTENCES, EACH OPTIONAL, rather than one that averages them. A PM
+  // who sent 40 of 45 needs the five named; a PM whose whole batch was held
+  // for quiet hours must not read the word "sent" at all.
   return {
-    notice:
-      skipped.length === 0
-        ? `Reminder sent to ${reach}.`
-        : `Reminder sent to ${reach}, of ${leaseIds.length} selected. ${describeSkips(skipped)}`,
+    notice: [
+      sentTo.length > 0
+        ? skipped.length === 0 && deferredTo.length === 0
+          ? `Reminder sent to ${reach}.`
+          : `Reminder sent to ${reach}, of ${leaseIds.length} selected.`
+        : '',
+      deferredTo.length > 0
+        ? `Quiet hours at the property for ${deferredTo.join(', ')} — held, and sent when they end.`
+        : '',
+      skipped.length > 0 ? describeSkips(skipped) : '',
+    ]
+      .filter(Boolean)
+      .join(' '),
   }
 }
 

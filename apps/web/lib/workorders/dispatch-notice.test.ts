@@ -49,13 +49,12 @@ describe('vendorDispatchNotice (R-207)', () => {
     expect(notice).toContain('Not sent to Ace Plumbing')
   })
 
-  it('does not claim a send for a duplicate, which carries no status', () => {
-    // A resend the engine swallowed as already-decided is not a new send.
-    const notice = vendorDispatchNotice(
-      [outcome({ outcome: 'duplicate' })],
-      'Ace Plumbing',
-      ZONE,
-    )
-    expect(notice).toContain('Not sent to Ace Plumbing')
+  it('does not claim a NEW send for a duplicate, which carries no status', () => {
+    // A resend the engine swallowed as already-decided is not a new send -
+    // but R-211 corrected R-207's wording here: it is not a FAILURE either,
+    // and "Not sent" told the PM to go and call a vendor who already had the
+    // link.
+    const notice = vendorDispatchNotice([outcome({ outcome: 'duplicate' })], 'Ace Plumbing', ZONE)
+    expect(notice).toBe('Link already sent to Ace Plumbing.')
   })
 })
