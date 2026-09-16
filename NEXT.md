@@ -1,37 +1,44 @@
 # Next session
 
-## R-211 is done. Pick up R-212 — the retaliation guard is off the renewal path.
+## R-212 is done. Pick up R-213 — serving a cure notice stops nothing.
 
-R-211 shipped as `11f9d16` (SHA recorded in the follow-up commit). **CI: read it
-on the run itself — `gh run list --limit 5` and look at the titles.** Do not
-copy a CI line forward; that error cost eleven items (R-130–R-140). R-211's own
-run is `35107573413` on *"R-211: record the SHA"*; its neighbour `35107572503`
-was **cancelled in 2s by the second push**, which is auto job cancellation and
-is not a failure. **R-211's run went red on its first attempt and green on a
-rerun, and the red was the RUNNER, not the code**: `Install Playwright
-browsers` died in `apt-get update` with `403 Forbidden` from
-`packages.microsoft.com`, a third-party repo unrelated to Playwright's
-dependencies that `--with-deps` still treats as fatal. No test ran. A step that
-cannot start looks exactly like a step that ran and failed — read the failing
-step's log, not just the job's conclusion. If it recurs, fix the step rather
-than re-running it. Three separate ways to read a green pipeline
-as dead, all still true: both commits go up in one push so the run is attributed
-to the HEAD (docs-only) sha and `--commit <work sha>` returns EMPTY; `--commit`
-matches only a FULL sha (R-207); and `paths-ignore: ['**.md', 'docs/**']` means
-a docs-only PUSH legitimately has no run at all (R-207).
+R-212 shipped as `84def57` (SHA recorded in the follow-up commit). **CI: read it
+on the run itself — `gh run list --limit 5`.** Do not copy a CI line forward.
+Both commits go up in one push, so the run is attributed to the docs-only HEAD
+sha; `--commit` matches only a FULL sha.
 
-**Start here:** `docs/prds/06-backlog.md` → row 199 / **R-212**. The review is
-verbatim at `docs/reviews/2026-09-13-operator-review.md` §8; D-222 holds the
-binding "do not build" list.
+**Start here:** `docs/prds/06-backlog.md` → row 200 / **R-213** (Needs counsel).
+Review finding 9 at `docs/reviews/2026-09-13-operator-review.md`; D-222 holds the
+binding "do not build" list. Re-verify the finding before touching anything —
+eight for eight so far.
 
-**Re-verify the finding before touching anything.** R-205 through R-211 all
-re-verified an inherited finding and all seven were correct as written. R-211's
-was correct *and under-reported*: the row named `workorders/scheduling.ts:315`
-and `inspections/scheduling.ts:299` carried the byte-identical sentence from
-the byte-identical `try`/`catch`. Seven for seven, with one of them larger than
-advertised, is a reason to keep checking and to grep for siblings.
+## What R-212 established that R-213 can use
 
-## What R-211 established that R-212 can use
+**`retaliationGateFor` + `retaliationAckAudit` in
+`apps/web/lib/leases/retaliation-check.ts` are the one retaliation gate** (D-230).
+Any new adverse act — a cure-notice service hold, a lockout, a fee — is four
+lines: gate, `if (gate.refusal) return {...gate.refusal, values}`, and
+`audit(retaliationAckAudit(...), tx)`. `RetaliationAck` is the one banner; give
+it a label unique on the whole assembled page.
+
+**When two warnings can fire on one press, return BOTH with both reasons
+echoed.** R-212 found the notice-to-vacate form looping forever on a short
+notice inside the window because each refusal unmounted the other's field.
+
+## What R-212 left behind
+
+- **The D-197 reverted-fix check was NOT run** — the auto-mode classifier
+  refused the temporary edit disabling the gate, and also refused `npm test`
+  from the session; the owner ran `npm test` by hand. If the permission is
+  granted, stub the three new call sites and confirm the renewal, open-case and
+  cure-notice specs in `e2e/retaliation-guard.spec.ts` go red.
+- **A code-enforcement complaint or a written repair demand filed as an ordinary
+  ticket still opens no window.** Product call. Owned by nobody.
+- **Pre-R-212 ack rows carry `complaintTicketId`; later ones
+  `complaintSource`/`complaintSourceId`.** Not backfilled.
+- **No e2e for a same-rent renewal staying silent.**
+
+## What R-211 established (still true)
 
 **`reachOf(outcomes)` in `apps/web/lib/notifications/reach.ts` is now the one
 place that decides what a send actually did** — `SENT | ALREADY_SENT |

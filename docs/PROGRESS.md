@@ -12610,7 +12610,7 @@ commit touched before reading it as a dead pipeline.
 **Asserted against the reverted fix (D-197), both halves separately.** With `canReceiveAuthLink` stubbed out of the chargeback site, the unserved test goes red and the served one stays green; with the `NoticeDelivery` write removed instead, the served test goes red and the unserved one stays green. Each assertion fails for its own reason and nothing else.
 
 ## R-212 — the retaliation guard is on the renewal path, and on every other adverse act
-**Commit:** `PENDING`  ·  **Date:** 2026-09-16
+**Commit:** `84def57`  ·  **Date:** 2026-09-16
 
 **What it built.** One gate, `retaliationGateFor` in [retaliation-check.ts](apps/web/lib/leases/retaliation-check.ts): check, ack validation and refusal shape. Alongside it, `retaliationAckAudit` builds the audit row and [retaliation-ack.tsx](apps/web/components/leases/retaliation-ack.tsx) is the one warning component. Five paths use it. The two it already guarded (direct rent raise, landlord notice to vacate) lost about forty lines each. The three it did not guard now use it: **the renewal offer** (increase only), **opening an eviction case** and **drafting a cure notice**. The signal widened from a habitability-flagged `Ticket` to the more recent of that or any `AccommodationRequest`.
 
