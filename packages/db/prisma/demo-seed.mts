@@ -708,7 +708,9 @@ async function reset() {
     const entity = await prisma.legalEntity.findUniqueOrThrow({ where: { id: entityId } })
     await prisma.legalEntity.update({
       where: { id: entityId },
-      data: { name: retiredName(entity.name, stamp) },
+      // Inactive too, like every other row retired above - a renamed but active
+      // entity is still offered as an owner on /properties/new (R-220).
+      data: { active: false, name: retiredName(entity.name, stamp) },
     })
   }
 
@@ -744,6 +746,9 @@ interface UnitPlan {
       isMonthToMonth?: boolean
       moveOutAt?: Date
       noticeGivenAt?: Date
+      /// Required alongside `noticeGivenAt` - every writer of a notice sets
+      /// both (R-220), and R-219's listing job skips a notice without it.
+      noticeEffectiveOn?: Date
       /// The tenancy's prior term, where this lease is a renewal successor
       /// (R-154). Seeds an ENDED predecessor lease linked via
       /// `renewedFromLeaseId`, with the `Deposit` on THIS lease and
@@ -1576,6 +1581,7 @@ export function buildPlan(): PropertyPlan[] {
               rentCents: 160000,
               depositCents: 160000,
               noticeGivenAt: daysFrom(-10),
+              noticeEffectiveOn: daysFrom(20),
               moveOutAt: daysFrom(20),
             },
           },
@@ -2861,6 +2867,10 @@ async function seedLeasing(
           propertyId: context.propertyId,
           leaseId: context.leaseId,
           violationCaseId: violation.id,
+          // The tenant asked. `receiveAccommodationRequest` refuses a request
+          // with neither a tenant nor a name, and without one the panel read
+          // "Documentation for Not recorded" (R-220).
+          tenantId: context.tenantId,
           kind: request.kind,
           // UNDECIDED, and the violation page's own panel filters to exactly
           // RECEIVED and INFO_REQUESTED - so an APPROVED or DENIED one here
@@ -3831,6 +3841,7 @@ async function seedDemoData() {
           isMonthToMonth: tenantPlan.lease.isMonthToMonth ?? false,
           moveOutAt: tenantPlan.lease.moveOutAt,
           noticeGivenAt: tenantPlan.lease.noticeGivenAt,
+          noticeEffectiveOn: tenantPlan.lease.noticeEffectiveOn,
           // R-033/RISK-08. The inherited tenancy in this seed is the whole
           // reason the lifecycle list includes one - it must actually carry
           // the origin, or the demo shows a tenancy that looks like every

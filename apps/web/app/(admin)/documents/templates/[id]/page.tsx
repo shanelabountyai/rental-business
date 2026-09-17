@@ -1,3 +1,4 @@
+import { DOCUMENT_TYPE_LABELS, type DocumentTypeValue } from '@rental/core/documents'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { DocumentTemplateForm } from '@/components/documents/document-template-form.tsx'
@@ -38,7 +39,7 @@ export default async function DocumentTemplatePage({
         </Link>
         <h1 className="text-2xl font-semibold tracking-tight">{template.name}</h1>
         <p className="text-muted-foreground text-sm">
-          {template.documentType}
+          {DOCUMENT_TYPE_LABELS[template.documentType as DocumentTypeValue] ?? template.documentType}
           {!template.active && ' · retired'}
         </p>
       </header>

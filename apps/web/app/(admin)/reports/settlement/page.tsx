@@ -116,12 +116,12 @@ export default async function SettlementReportPage({
         >
           Show range
         </button>
-        <Link
+        <a
           href={`/api/reports/settlement?from=${from}&to=${to}`}
           className="focus-visible:ring-ring h-10 rounded-md border px-4 text-sm leading-10 font-medium underline-offset-2 hover:underline focus-visible:ring-2 focus-visible:outline-none"
         >
           Download CSV
-        </Link>
+        </a>
       </form>
 
       {/* NAMED, NOT SHOWN AS A ZERO (R-078's rule). Both of these change what

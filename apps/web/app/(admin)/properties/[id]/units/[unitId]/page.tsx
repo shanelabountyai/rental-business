@@ -14,6 +14,7 @@ import { revokeShowingAccess, syncLockEvents } from '@/lib/showings/staff-action
 import { friendlyTimestamp } from '@rental/core/scheduling'
 import { markTurnoverRentReady, setTurnoverTargetDate } from '@/lib/turnover/actions.ts'
 import { getTurnoverForUnit } from '@/lib/turnover/queries.ts'
+import { LeasesSection, MaintenanceSection } from '@/components/properties/leases-and-work-orders.tsx'
 import { getUnitDetail } from '@/lib/units/queries.ts'
 import { createWorkOrder } from '@/lib/workorders/actions.ts'
 
@@ -90,28 +91,6 @@ function ListingSection({
   )
 }
 
-/// Same convention as the property detail page: a section this item does not
-/// fill in names the item that will, so a half-built product explains itself.
-function EmptySection({
-  title,
-  ownedBy,
-  description,
-}: {
-  title: string
-  ownedBy: string
-  description: string
-}) {
-  return (
-    <section className="flex flex-col gap-1 rounded-md border p-4">
-      <h2 className="text-sm font-semibold">{title}</h2>
-      <p className="text-muted-foreground text-sm">{description}</p>
-      <p className="text-muted-foreground text-xs">
-        Built by <code className="font-mono">{ownedBy}</code>.
-      </p>
-    </section>
-  )
-}
-
 export default async function UnitDetailPage({
   params,
 }: {
@@ -136,6 +115,8 @@ export default async function UnitDetailPage({
     turnover,
     lockPanel,
     canRevokeAccess,
+    canReadLeases,
+    canReadWorkOrders,
   ] = await Promise.all([
     actorCan('unit.write', propertyResource(unit.property)),
     listDocuments(propertyId, scope, unitId),
@@ -150,6 +131,8 @@ export default async function UnitDetailPage({
     // keeps self-showings opt-in per unit.
     smartLockPanel(unitId),
     actorCan('lease.write', propertyResource(unit.property)),
+    actorCan('lease.read', propertyResource(unit.property)),
+    actorCan('workorder.read', propertyResource(unit.property)),
   ])
 
   // R-148: PROP-03's "history log", unread since it was written. One query
@@ -319,16 +302,16 @@ export default async function UnitDetailPage({
             syncAction={syncLockEvents.bind(null, unitId)}
           />
         )}
-        <EmptySection
-          title="Lease"
-          ownedBy="R-033"
-          description="The current and past tenancies at this unit."
-        />
-        <EmptySection
-          title="Maintenance"
-          ownedBy="R-022"
-          description="Tickets and work orders for this unit."
-        />
+        {canReadLeases && (
+          <LeasesSection where={{ propertyId, unitId }} showUnit={false} title="Lease" />
+        )}
+        {canReadWorkOrders && (
+          <MaintenanceSection
+            where={{ propertyId, unitId }}
+            zone={unit.property.timezone}
+            showUnit={false}
+          />
+        )}
       </div>
     </div>
   )

@@ -52,12 +52,12 @@ export function JobPanel({
           <ul className="flex flex-col gap-1 text-sm">
             {context.photos.map((photo) => (
               <li key={photo.id}>
-                <Link
+                <a
                   href={`/api/documents/${photo.id}/file`}
                   className="underline underline-offset-4"
                 >
                   {photo.fileName}
-                </Link>
+                </a>
               </li>
             ))}
           </ul>

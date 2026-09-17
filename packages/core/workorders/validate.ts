@@ -145,4 +145,26 @@ export const OPEN_WORK_ORDER_STATUSES = [
   'WAITING_ON_TENANT',
 ] as const
 
-
+/// What each work-order status is called on a staff screen. Moved here from
+/// /workorders when the property and unit pages became its second reader
+/// (R-220).
+export const WORK_ORDER_STATUS_LABELS: Record<string, string> = {
+  SUBMITTED: 'Submitted',
+  TRIAGED: 'Triaged',
+  PENDING_APPROVAL: 'Pending approval',
+  APPROVED: 'Approved',
+  ASSIGNED: 'Assigned',
+  SCHEDULED: 'Scheduled',
+  IN_PROGRESS: 'In progress',
+  WORK_COMPLETE: 'Work complete',
+  // Says what is WAITING, not what happened. A PM scanning this list needs to
+  // know which rows are theirs to act on, and "Verified" reads as done.
+  VERIFIED: 'Tenant confirmed — ready to close',
+  ON_HOLD_WARRANTY: 'On hold — warranty claim',
+  WAITING_ON_TENANT: 'Waiting on tenant',
+  // Not in OPEN_STATUSES, so unreachable from the open list. Here so that a
+  // status leak renders as a sentence rather than a raw enum.
+  INVOICED: 'Invoiced',
+  CLOSED: 'Closed',
+  CANCELED: 'Canceled',
+}

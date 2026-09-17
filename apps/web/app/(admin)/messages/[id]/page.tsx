@@ -142,12 +142,12 @@ export default async function ThreadPage({
                   <ul className="flex flex-col gap-1 pt-1">
                     {message.documents.map((document) => (
                       <li key={document.id} className="text-xs">
-                        <Link
+                        <a
                           href={`/api/documents/${document.id}/file`}
                           className="underline underline-offset-4"
                         >
                           {document.fileName}
-                        </Link>{' '}
+                        </a>{' '}
                         <span className="text-muted-foreground">
                           ({Math.max(1, Math.round(document.sizeBytes / 1024))} KB)
                         </span>

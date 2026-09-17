@@ -1,3 +1,4 @@
+import { DOCUMENT_TYPE_LABELS, type DocumentTypeValue } from '@rental/core/documents'
 import Link from 'next/link'
 import { requirePermission } from '@/lib/auth/guard.ts'
 import { listDocumentTemplates } from '@/lib/documents/template-queries.ts'
@@ -47,7 +48,7 @@ export default async function DocumentTemplatesPage() {
                   {template.name}
                 </Link>
                 <p className="text-muted-foreground mt-1 text-sm">
-                  {template.documentType}
+                  {DOCUMENT_TYPE_LABELS[template.documentType as DocumentTypeValue] ?? template.documentType}
                   {!template.active && ' · retired'}
                 </p>
               </li>

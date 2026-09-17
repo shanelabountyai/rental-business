@@ -1,15 +1,10 @@
+import { INSPECTION_TYPE_LABELS } from '@rental/core/inspections'
 import Link from 'next/link'
 import { requirePermission } from '@/lib/auth/guard.ts'
 import { listInspectionTemplates } from '@/lib/inspections/template-queries.ts'
 import { PRIMARY_BUTTON_CLASSES } from '@/components/ui-classes.ts'
 
 export const metadata = { title: 'Inspection checklists — Rental Operations' }
-
-const TYPE_LABEL: Record<string, string> = {
-  PERIODIC: 'Periodic',
-  SEASONAL: 'Seasonal',
-  DRIVE_BY: 'Drive-by',
-}
 
 // The checklist template library (INSP-01, R-068) - the same shape
 // /documents/templates gives its own library, one level over.
@@ -54,7 +49,7 @@ export default async function InspectionTemplatesPage() {
                   {(template.items as unknown as unknown[]).length} item
                   {(template.items as unknown as unknown[]).length === 1 ? '' : 's'}
                   {!template.active && ' · retired'}
-                  {template.defaultForType && ` · default for ${TYPE_LABEL[template.defaultForType]}`}
+                  {template.defaultForType && ` · default for ${INSPECTION_TYPE_LABELS[template.defaultForType] ?? template.defaultForType}`}
                 </p>
               </li>
             ))}

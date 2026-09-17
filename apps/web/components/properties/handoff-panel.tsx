@@ -1,6 +1,5 @@
 'use client'
 
-import Link from 'next/link'
 import { useActionState } from 'react'
 import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
 import type { HandoffState } from '@/lib/properties/handoff-actions.ts'
@@ -83,12 +82,12 @@ export function HandoffPanel({
           <ul className="flex flex-col gap-1 text-sm">
             {packets.map((packet) => (
               <li key={packet.id}>
-                <Link
+                <a
                   href={`/api/documents/${packet.id}/file`}
                   className="underline underline-offset-4"
                 >
                   {packet.fileName}
-                </Link>{' '}
+                </a>{' '}
                 <span className="text-muted-foreground">— {packet.createdOn}</span>
               </li>
             ))}

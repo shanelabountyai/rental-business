@@ -35,7 +35,11 @@ SCHEDULED_JOBS.push({
     'Flags a fixed-term lease once it enters its 120/90-day renewal window (LEASE-09).',
   run: async ({ propertyId, businessDate: today }) => {
     const leases = await prisma.lease.findMany({
-      where: { propertyId, status: 'ACTIVE', endsOn: { not: null } },
+      // noticeGivenAt: null - a tenancy under notice from either party is
+      // ending, so there is nothing to renew. The MTM rollover job has
+      // excluded it since R-066; this one offered a leaving tenant a renewal
+      // until R-220's demo walk saw it.
+      where: { propertyId, status: 'ACTIVE', endsOn: { not: null }, noticeGivenAt: null },
       select: { id: true, endsOn: true, rentCents: true, unit: { select: { name: true } } },
     })
 

@@ -1,5 +1,6 @@
 import { businessDate, businessDaysBetween, friendlyDate } from '@rental/core/scheduling'
 import { priorityRank } from '@rental/core/tasks'
+import { WORK_ORDER_STATUS_LABELS } from '@rental/core/workorders'
 import Link from 'next/link'
 import { requirePermission, requireScope } from '@/lib/auth/guard.ts'
 import { listOpenWorkOrders } from '@/lib/workorders/queries.ts'
@@ -12,27 +13,6 @@ const PRIORITY_LABELS: Record<string, string> = {
   URGENT: 'Urgent',
   ROUTINE: 'Routine',
 }
-const STATUS_LABELS: Record<string, string> = {
-  SUBMITTED: 'Submitted',
-  TRIAGED: 'Triaged',
-  PENDING_APPROVAL: 'Pending approval',
-  APPROVED: 'Approved',
-  ASSIGNED: 'Assigned',
-  SCHEDULED: 'Scheduled',
-  IN_PROGRESS: 'In progress',
-  WORK_COMPLETE: 'Work complete',
-  // Says what is WAITING, not what happened. A PM scanning this list needs to
-  // know which rows are theirs to act on, and "Verified" reads as done.
-  VERIFIED: 'Tenant confirmed — ready to close',
-  ON_HOLD_WARRANTY: 'On hold — warranty claim',
-  WAITING_ON_TENANT: 'Waiting on tenant',
-  // Not in OPEN_STATUSES, so unreachable from this list today. Here so that a
-  // status leak renders as a sentence rather than a raw enum.
-  INVOICED: 'Invoiced',
-  CLOSED: 'Closed',
-  CANCELED: 'Canceled',
-}
-
 /**
  * The PM's oversight view of every open work order, assigned or not, staff
  * or vendor (MAINT-03) - and RPT-04's own "open work orders by age and
@@ -98,7 +78,7 @@ export default async function WorkOrdersPage() {
                 <span className="text-muted-foreground text-sm">
                   {wo.property.name} — {wo.unit.name} ·{' '}
                   {PRIORITY_LABELS[wo.priority] ?? wo.priority} ·{' '}
-                  {STATUS_LABELS[wo.status] ?? wo.status} ·{' '}
+                  {WORK_ORDER_STATUS_LABELS[wo.status] ?? wo.status} ·{' '}
                   {wo.assignedTo?.name ?? wo.vendor?.name ?? 'Unassigned'} ·{' '}
                   {friendlyDate(wo.createdAt, wo.property.timezone)} (
                   {ageInDays(wo.createdAt, wo.property.timezone)}d)

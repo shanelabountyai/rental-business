@@ -8,6 +8,7 @@ import { DocumentsSection } from '@/components/documents/documents-section.tsx'
 import { FilingCabinetSection } from '@/components/filing-cabinet/filing-cabinet-section.tsx'
 import { OpenClaimPanel } from '@/components/insurance/open-claim-panel.tsx'
 import { HandoffPanel } from '@/components/properties/handoff-panel.tsx'
+import { LeasesSection, MaintenanceSection } from '@/components/properties/leases-and-work-orders.tsx'
 import {
   archiveHandoffPacket,
   generateEstoppelCertificates,
@@ -42,30 +43,6 @@ const PROPERTY_TYPE_LABELS: Record<string, string> = {
   MANUFACTURED: 'Manufactured',
 }
 
-/// PROP-01: "Given a created property, when I view it, then I see sections
-/// for units, leases, tickets, documents, and financials (empty states OK)."
-/// Each names the item that fills it in, same convention as the shell's
-/// section placeholders - a half-built product should explain itself.
-function EmptySection({
-  title,
-  ownedBy,
-  description,
-}: {
-  title: string
-  ownedBy: string
-  description: string
-}) {
-  return (
-    <section className="flex flex-col gap-1 rounded-md border p-4">
-      <h2 className="text-sm font-semibold">{title}</h2>
-      <p className="text-muted-foreground text-sm">{description}</p>
-      <p className="text-muted-foreground text-xs">
-        Built by <code className="font-mono">{ownedBy}</code>.
-      </p>
-    </section>
-  )
-}
-
 export default async function PropertyDetailPage({
   params,
 }: {
@@ -87,6 +64,15 @@ export default async function PropertyDetailPage({
   // manager's Edit button was wrongly hidden here until this fix, the same
   // gap as the edit page's own guard.
   const canWrite = await actorCan('property.write', propertyResource(property))
+  const [canReadLeases, canReadWorkOrders] = await Promise.all([
+    actorCan('lease.read', propertyResource(property)),
+    actorCan('workorder.read', propertyResource(property)),
+  ])
+  // The entity's own edit page has existed since R-008 and nothing linked to
+  // it (R-220). Checked against the ENTITY, as that page checks it.
+  const canWriteEntity = await actorCan('property.write', {
+    legalEntityId: property.legalEntity.id,
+  })
   const [
     units,
     canWriteUnits,
@@ -173,6 +159,17 @@ export default async function PropertyDetailPage({
         <dt className="text-muted-foreground">Entity</dt>
         <dd className="col-span-1 sm:col-span-2">
           {property.legalEntity.name}
+          {canWriteEntity && (
+            <>
+              {' · '}
+              <Link
+                href={`/properties/entities/${property.legalEntity.id}/edit`}
+                className="underline underline-offset-2"
+              >
+                Edit entity
+              </Link>
+            </>
+          )}
         </dd>
         <dt className="text-muted-foreground">Type</dt>
         <dd className="col-span-1 sm:col-span-2">
@@ -266,16 +263,16 @@ export default async function PropertyDetailPage({
             </ul>
           )}
         </section>
-        <EmptySection
-          title="Leases"
-          ownedBy="R-016"
-          description="Tenancies at this property, current and past."
-        />
-        <EmptySection
-          title="Maintenance"
-          ownedBy="R-022"
-          description="Tickets and work orders for this property."
-        />
+        {canReadLeases && (
+          <LeasesSection where={{ propertyId: property.id }} showUnit title="Leases" />
+        )}
+        {canReadWorkOrders && (
+          <MaintenanceSection
+            where={{ propertyId: property.id }}
+            zone={property.timezone}
+            showUnit
+          />
+        )}
         <MaintenanceSpendSection jobs={maintenanceSpend} timeZone={property.timezone} />
         <section className="flex flex-col gap-1 rounded-md border p-4">
           <h2 className="text-sm font-semibold">Utility bills</h2>
@@ -331,11 +328,26 @@ export default async function PropertyDetailPage({
             archiveAction={archiveHandoffPacket.bind(null, id)}
           />
         )}
-        <EmptySection
-          title="Financials"
-          ownedBy="R-035"
-          description="Rent roll and ledger for this property. Nothing posted yet."
-        />
+        {/* PROP-01 names a financials section. It used to be R-009's
+            placeholder claiming "Nothing posted yet" on a property billing
+            rent every month (R-220) - the money itself lives per tenancy on
+            the ledger, and portfolio-wide on the two reports linked here. */}
+        <section className="flex flex-col gap-2 rounded-md border p-4">
+          <h2 className="text-sm font-semibold">Financials</h2>
+          <p className="text-muted-foreground text-sm">
+            Each tenancy&rsquo;s charges and payments are on its own lease
+            ledger, above. What this house earned and cost is in the operating
+            report; what is owed today is on the rent roll.
+          </p>
+          <p className="flex flex-wrap gap-3 text-sm">
+            <Link href="/reports/operating" className="underline underline-offset-4">
+              Operating report
+            </Link>
+            <Link href="/money/rent-roll" className="underline underline-offset-4">
+              Rent roll
+            </Link>
+          </p>
+        </section>
       </div>
     </div>
   )

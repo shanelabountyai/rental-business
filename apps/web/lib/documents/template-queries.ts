@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { DOCUMENT_TYPES } from '@rental/core/documents'
+import { DOCUMENT_TYPE_LABELS, DOCUMENT_TYPES } from '@rental/core/documents'
 import { prisma } from '@rental/db'
 
 // Reads for document templates (DOC-04, R-062) - portfolio-wide, the same
@@ -25,4 +25,7 @@ export async function getDocumentTemplate(id: string) {
 /// OUT of template-actions.ts - a 'use server' file may only export async
 /// functions (CLAUDE.md's own trap: passes typecheck and vitest, fails
 /// `next build`).
-export const DOCUMENT_TYPE_OPTIONS = DOCUMENT_TYPES.map((value) => ({ value, label: value }))
+export const DOCUMENT_TYPE_OPTIONS = DOCUMENT_TYPES.map((value) => ({
+  value,
+  label: DOCUMENT_TYPE_LABELS[value],
+}))

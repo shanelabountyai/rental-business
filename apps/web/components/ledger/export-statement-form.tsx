@@ -1,6 +1,5 @@
 'use client'
 
-import Link from 'next/link'
 import { useActionState } from 'react'
 import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
 import type { FormState } from '@/lib/ledger/statement.ts'
@@ -66,12 +65,12 @@ export function ExportStatementForm({
       </div>
       <SubmitButton label="Produce statement" />
       {state.documentId && (
-        <Link
+        <a
           href={`/api/documents/${state.documentId}/file`}
           className="focus-visible:ring-ring w-fit text-sm underline underline-offset-2 focus-visible:ring-2 focus-visible:outline-none"
         >
           Open the statement
-        </Link>
+        </a>
       )}
     </form>
   )

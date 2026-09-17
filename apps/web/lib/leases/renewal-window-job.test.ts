@@ -106,6 +106,27 @@ describe('the renewal-window job', () => {
     expect(task).toBeNull()
   })
 
+  // R-220's demo walk: a tenant who had given notice to leave was offered a
+  // renewal. The MTM rollover job has excluded a tenancy under notice since
+  // R-066; this one never did.
+  it('never flags a lease under notice, from either party', async () => {
+    const unit = await makeUnit('U-notice')
+    const lease = await makeLease(unit.id, '2026-10-30')
+    await prisma.lease.update({
+      where: { id: lease.id },
+      data: {
+        noticeGivenAt: new Date('2026-06-20T15:00:00Z'),
+        noticeGivenBy: 'TENANT',
+        noticeEffectiveOn: new Date('2026-07-31T00:00:00Z'),
+      },
+    })
+
+    await runAt('2026-07-03T09:00:00Z')
+
+    const task = await prisma.task.findFirst({ where: { type: 'lease_renewal', subjectId: lease.id } })
+    expect(task).toBeNull()
+  })
+
   it('flags once, not again on a later day inside the same window', async () => {
     const unit = await makeUnit('U4')
     const lease = await makeLease(unit.id, '2026-10-30')

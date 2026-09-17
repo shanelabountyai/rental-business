@@ -560,7 +560,12 @@ test.describe('editing a property', () => {
 
     // The Edit button itself must be offered, not just the route reachable.
     await page.goto(`/properties/${property.id}`)
-    await expect(page.getByRole('link', { name: 'Edit' })).toBeVisible()
+    await expect(page.getByRole('link', { name: 'Edit', exact: true })).toBeVisible()
+    // And the entity's own edit page, which nothing linked to until R-220.
+    await expect(page.getByRole('link', { name: 'Edit entity' })).toHaveAttribute(
+      'href',
+      `/properties/entities/${entity.id}/edit`,
+    )
 
     await page.goto(`/properties/${property.id}/edit`)
     await expect(page).not.toHaveURL(/\/no-access/)

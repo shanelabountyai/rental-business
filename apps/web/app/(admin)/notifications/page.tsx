@@ -1,3 +1,4 @@
+import { CATEGORY_LABELS, isNotificationCategory } from '@rental/core/notifications'
 import { friendlyTimestamp } from '@rental/core/scheduling'
 import Link from 'next/link'
 import { requireScope } from '@/lib/auth/guard.ts'
@@ -118,7 +119,12 @@ export default async function NotificationsPage() {
               >
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="font-medium">
-                    {notification.subject ?? notification.category}
+                    {notification.subject ??
+                      // An SMS has no subject; the category is a stored
+                      // string, so an unknown one still prints (R-220).
+                      (isNotificationCategory(notification.category)
+                        ? CATEGORY_LABELS[notification.category]
+                        : notification.category)}
                   </span>
                   <span
                     className={`rounded-md px-2 py-0.5 text-xs font-medium ${statusClasses(status)}`}
