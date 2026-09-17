@@ -1,14 +1,12 @@
 # Next session
 
-## R-217 shipped as `f8eaa2c`, and its CI run MUST be read first
+## R-217 is done and CI is green. Pick up R-218: a deposit-dispute packet
 
-**R-217's build and e2e were never verified locally.** About 50 vitest processes from `alongside/backend` held the CPU, the e2e build timed out, and a standalone `next build` stalled in "Running TypeScript" for over an hour. The owner chose to push and let CI verify. **First move: `gh run list --limit 5`, and read the run for `f8eaa2c` / its record-the-SHA commit.** If it is red, fix it before starting anything else. The new assertion to watch is `maintenance-phone-log.spec.ts`'s "Repair due" row, in both projects.
+R-217 shipped as `f8eaa2c`. CI run `35160625191` passed both jobs (verify, and e2e/axe/Lighthouse). That run is where R-217's build and its "Repair due" e2e assertion were first verified, because they could not run locally. **Read CI on the run itself with `gh run list --limit 5`.** Do not copy a CI line forward.
 
-Before any local build, check `ps -Ao pid,etime,command | grep vitest`. Leaked `alongside/backend` vitest workers will starve it.
+**Start here:** `docs/prds/06-backlog.md`, row 205 / **R-218**. Re-verify the finding before touching anything. The record is thirteen for thirteen.
 
-## Then: the next ⬜ row in `docs/prds/06-backlog.md` after R-217 (row 204)
-
-Re-verify the finding before touching anything. The record is thirteen for thirteen.
+Before any local build, check `ps -Ao pid,etime,command | grep vitest`. Leaked `alongside/backend` vitest workers starved R-217's build for over an hour.
 
 ## What R-217 established (D-235)
 
