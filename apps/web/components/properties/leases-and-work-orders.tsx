@@ -74,13 +74,20 @@ export async function MaintenanceSection({
   where,
   zone,
   showUnit,
+  excludeIds = [],
 }: {
   where: Where
   zone: string
   showUnit: boolean
+  /// Jobs a panel ABOVE this one already lists by the same name: the unit
+  /// page's turnover panel links every job in the turn, and the property
+  /// page's maintenance-spend panel links every CLOSED one. Two links with
+  /// one accessible name is an ambiguity for anyone navigating by label -
+  /// caught in CI as a strict-mode violation on `turnover.spec.ts` (R-220).
+  excludeIds?: string[]
 }) {
   const workOrders = await prisma.workOrder.findMany({
-    where,
+    where: { ...where, ...(excludeIds.length > 0 ? { id: { notIn: excludeIds } } : {}) },
     orderBy: { createdAt: 'desc' },
     take: LIMIT,
     select: { id: true, scope: true, status: true, createdAt: true, unit: { select: { name: true } } },
@@ -90,7 +97,11 @@ export async function MaintenanceSection({
     <section className="flex flex-col gap-2 rounded-md border p-4">
       <h2 className="text-sm font-semibold">Maintenance</h2>
       {workOrders.length === 0 ? (
-        <p className="text-muted-foreground text-sm">No work orders yet.</p>
+        <p className="text-muted-foreground text-sm">
+          {excludeIds.length > 0
+            ? 'Nothing beyond the jobs listed above.'
+            : 'No work orders yet.'}
+        </p>
       ) : (
         <ul className="flex flex-col gap-1 text-sm break-words">
           {workOrders.map((workOrder) => (

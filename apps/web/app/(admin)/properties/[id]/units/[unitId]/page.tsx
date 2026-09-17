@@ -310,6 +310,7 @@ export default async function UnitDetailPage({
             where={{ propertyId, unitId }}
             zone={unit.property.timezone}
             showUnit={false}
+            excludeIds={turnover?.items.map((item) => item.id) ?? []}
           />
         )}
       </div>

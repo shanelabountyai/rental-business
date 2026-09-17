@@ -271,6 +271,7 @@ export default async function PropertyDetailPage({
             where={{ propertyId: property.id }}
             zone={property.timezone}
             showUnit
+            excludeIds={maintenanceSpend.map((job) => job.id)}
           />
         )}
         <MaintenanceSpendSection jobs={maintenanceSpend} timeZone={property.timezone} />
