@@ -56,6 +56,24 @@ function ledgerPayment(overrides: Partial<IncomeFact> = {}): IncomeFact {
   }
 }
 
+/**
+ * The accrual half of the ledger (R-221): the subscription's own rent line,
+ * which carries no `Charge` and so no `chargeType`, signed the way an
+ * obligation is - positive, because it INCREASES what is owed.
+ */
+function ledgerRentBilled(overrides: Partial<IncomeFact> = {}): IncomeFact {
+  return {
+    source: 'ledger',
+    sourceId: 'led_rent_1',
+    propertyId: PROPERTY,
+    bookedOn: '2026-03-01',
+    chargeType: null,
+    amountCents: 145_000,
+    description: 'Rent - March',
+    ...overrides,
+  }
+}
+
 function job(overrides: Partial<WorkOrderFact> = {}): WorkOrderFact {
   return {
     id: 'wo_1',
@@ -201,6 +219,58 @@ describe('income', () => {
       'cash',
     )
     expect(result.incomeCents).toBe(-50_000)
+  })
+
+  // ==========================================================================
+  // R-221. The subscription's rent line mints no `Charge` (D-11/D-40), so it
+  // reaches accrual as an UNLINKED ledger `CHARGE` row - an obligation
+  // raised, already signed positive. Flipping it the way a cash receipt is
+  // flipped reports negative rent, which is worse than the missing rent it
+  // replaced.
+  // ==========================================================================
+  it('books an unlinked ledger charge as positive accrual income', () => {
+    const result = buildTaxExport(
+      facts({
+        income: [
+          ledgerRentBilled(),
+          {
+            source: 'charge',
+            sourceId: 'chg_1',
+            propertyId: PROPERTY,
+            bookedOn: '2026-03-01',
+            chargeType: 'LATE_FEE',
+            amountCents: 7_500,
+            description: 'Late fee - March',
+          },
+        ],
+      }),
+      'accrual',
+    )
+    // The rent AND the fee. Before R-221 this was 7,500.
+    expect(result.incomeCents).toBe(152_500)
+    expect(result.lines.every((line) => line.scheduleELine === 3)).toBe(true)
+  })
+
+  it('nets a voided invoice off accrual income instead of adding it', () => {
+    // The ledger's spelling of a waiver: append-only, so a void is a negative
+    // REVERSAL row rather than an amendment to the row it retracts.
+    const result = buildTaxExport(
+      facts({
+        income: [
+          ledgerRentBilled(),
+          ledgerRentBilled({ sourceId: 'led_2', amountCents: -145_000 }),
+        ],
+      }),
+      'accrual',
+    )
+    expect(result.incomeCents).toBe(0)
+  })
+
+  it('still flips a cash receipt after the accrual rule was added', () => {
+    // The flip is now conditioned on the basis, so the cash half needs its
+    // own assertion or the condition can be inverted without anything going
+    // red.
+    expect(buildTaxExport(facts({ income: [ledgerPayment()] }), 'cash').incomeCents).toBe(145_000)
   })
 
   it('holds a deposit off the income total and on its own schedule', () => {
@@ -477,6 +547,10 @@ describe('the reconciliation', () => {
         ledgerPayment({ sourceId: 'led_2', chargeType: 'OTHER' }),
         ledgerPayment({ sourceId: 'led_3', chargeType: 'DEPOSIT' }),
         ledgerPayment({ sourceId: 'led_4', chargeType: null }),
+        // R-221's accrual rows travel the same doors, including the negative
+        // one a voided invoice writes.
+        ledgerRentBilled(),
+        ledgerRentBilled({ sourceId: 'led_rent_2', amountCents: -145_000 }),
       ],
       workOrders: [
         job(),

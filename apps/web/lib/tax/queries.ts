@@ -8,7 +8,7 @@ import {
   buildTaxExport,
 } from '@rental/core/tax'
 import { businessDate, utcToBusinessDate } from '@rental/core/scheduling'
-import { prisma } from '@rental/db'
+import { type Prisma, prisma } from '@rental/db'
 import type { ResolvedScope } from '@/lib/scope/current-scope.ts'
 
 // Reads for the year-end tax export (RPT-03, R-078). Fetch here, decide in
@@ -18,22 +18,53 @@ import type { ResolvedScope } from '@/lib/scope/current-scope.ts'
 // THE BASIS PICKS THE INCOME TABLE, and that is the only place in this file
 // where it matters. Cash-basis income is money that MOVED, which lives in
 // `LedgerEntry` as the Stripe projection (D-11). Accrual-basis income is the
-// obligation, which lives in `Charge`. They are genuinely different tables,
-// so the choice is made once, here, and everything downstream sees one
-// uniform `IncomeFact` list.
+// obligation - which lives in `Charge` for everything the product raises
+// itself, AND in `LedgerEntry` for the one obligation it does not: the
+// subscription's own rent line, which mints no `Charge` at all (D-11/D-40).
+// R-221 is that second half; accrual read `Charge` alone for three items and
+// so could not see rent.
 // ===========================================================================
 
 /**
- * Cash-basis income is exactly the ledger rows that CARRY A PAYMENT.
+ * The ledger rows each basis counts, and the partition that stops them
+ * double-counting each other.
  *
- * Not a filter on `LedgerEntryType`, which would need three values and get
- * one of them wrong: `webhook.ts` sets `paymentId` on every row that
- * represents money arriving or being clawed back - the charge-linked rows,
- * the unlinked subscription remainder, and the reversals a return produces -
- * and on nothing else. A `CHARGE` row raised when an invoice is posted has
- * no payment and no business on a cash-basis return.
+ * CASH is exactly the rows that CARRY A PAYMENT. Not a filter on
+ * `LedgerEntryType`, which would need three values and get one of them
+ * wrong: `webhook.ts` sets `paymentId` on every row that represents money
+ * arriving or being clawed back - the charge-linked rows, the unlinked
+ * subscription remainder, and the reversals a return produces - and on
+ * nothing else. A `CHARGE` row raised when an invoice is posted has no
+ * payment and no business on a cash-basis return.
+ *
+ * ACCRUAL is the complement of that, narrowed twice (R-221):
+ *
+ * - `paymentId: null` - money moving is the cash question. What is left is
+ *   an obligation arising or being retracted.
+ * - `chargeId: null` - AND THIS IS THE WHOLE NO-DOUBLE-COUNT ARGUMENT, not
+ *   an estimate of one. `webhook.ts` writes one LINKED entry per `Charge`
+ *   row it raised plus a single UNLINKED remainder for subscription rent,
+ *   so a linked entry is a projection OF a row the accrual branch already
+ *   reads out of the `Charge` table. Excluding it is an exact partition:
+ *   every ledger row is linked or it is not, and the `Charge` table holds
+ *   the linked side by construction. `rentPeriodDebts` in
+ *   `packages/core/ledger/aging.ts` stands on the same predicate for the
+ *   same reason - an unlinked `CHARGE` entry IS one billed rent period.
+ * - `REVERSAL` rides along with `CHARGE` because it is the ledger's spelling
+ *   of a waiver. A waived `Charge` is excluded by `waivedAt`; a voided
+ *   invoice cannot be amended (the table is append-only), so it writes a
+ *   negative unlinked REVERSAL instead, and netting it is what makes the
+ *   two sides mean the same thing. A returned payment's reversal carries a
+ *   `paymentId` and is therefore already out.
+ *
+ * The type list is closed rather than "everything unlinked": `CREDIT` and
+ * `ADJUSTMENT` exist in the enum and nothing writes them, and a value
+ * nobody has defined should not become rent income the day somebody does.
  */
-const CASH_INCOME_WHERE = { paymentId: { not: null } } as const
+const LEDGER_INCOME_WHERE: Record<AccountingBasis, Prisma.LedgerEntryWhereInput> = {
+  cash: { paymentId: { not: null } },
+  accrual: { paymentId: null, chargeId: null, type: { in: ['CHARGE', 'REVERSAL'] } },
+}
 
 export interface EntityChoice {
   id: string
@@ -112,23 +143,21 @@ export async function taxExportFacts(
     insuranceProceeds,
     propertyExpenses,
   ] = await Promise.all([
-      basis === 'cash'
-        ? prisma.ledgerEntry.findMany({
-            where: {
-              propertyId: { in: propertyIds },
-              occurredAt: { gte: windowStart, lte: windowEnd },
-              ...CASH_INCOME_WHERE,
-            },
-            select: {
-              id: true,
-              propertyId: true,
-              occurredAt: true,
-              amountCents: true,
-              description: true,
-              charge: { select: { type: true } },
-            },
-          })
-        : Promise.resolve([]),
+      prisma.ledgerEntry.findMany({
+        where: {
+          propertyId: { in: propertyIds },
+          occurredAt: { gte: windowStart, lte: windowEnd },
+          ...LEDGER_INCOME_WHERE[basis],
+        },
+        select: {
+          id: true,
+          propertyId: true,
+          occurredAt: true,
+          amountCents: true,
+          description: true,
+          charge: { select: { type: true } },
+        },
+      }),
       basis === 'accrual'
         ? prisma.charge.findMany({
             where: {

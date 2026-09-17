@@ -45,6 +45,14 @@ export function isAccountingBasis(value: string): value is AccountingBasis {
  * Normalising that here rather than at the query is deliberate: a sign flip
  * applied in the wrong place is invisible in every screenshot and wrong in
  * every total, so it happens once, in a function with a test on it.
+ *
+ * WHICH LEDGER ROWS ARRIVE DEPENDS ON THE BASIS, AND SO DOES THE FLIP
+ * (R-221). Cash sends the rows that carry a payment - money received,
+ * negative, flipped to positive income. Accrual sends the subscription's
+ * own unlinked rent line, which is a CHARGE - an obligation raised,
+ * already positive, and flipping it would report negative rent. A
+ * REVERSAL is negative on both sides and stays negative on both: a
+ * returned payment takes income back, and so does a voided invoice.
  */
 export interface IncomeFact {
   source: 'ledger' | 'charge'
@@ -351,9 +359,10 @@ export function buildTaxExport(facts: TaxExportFacts, basis: AccountingBasis): T
 
   // -- Income ---------------------------------------------------------------
   //
-  // The caller picked the source table from the basis (ledger for cash,
-  // charges for accrual) because they are genuinely different tables; the
-  // sign normalisation and the mapping are here.
+  // The caller picked the source table from the basis (payments off the
+  // ledger for cash; charges PLUS the ledger's own unlinked rent line for
+  // accrual, R-221) because they are genuinely different tables; the sign
+  // normalisation and the mapping are here.
   for (const row of facts.income) {
     // The caller fetches a generous window and every year decision is made
     // here, so there is exactly one place that knows what "in 2026" means.
@@ -361,7 +370,9 @@ export function buildTaxExport(facts: TaxExportFacts, basis: AccountingBasis): T
       outOfYear += 1
       continue
     }
-    const amountCents = row.source === 'ledger' ? -row.amountCents : row.amountCents
+    // See `IncomeFact`: only a CASH ledger row is signed the receipt way.
+    const amountCents =
+      row.source === 'ledger' && basis === 'cash' ? -row.amountCents : row.amountCents
     const mapping = ledgerIncomeMapping(row.chargeType)
     const common = {
       bookedOn: row.bookedOn,
