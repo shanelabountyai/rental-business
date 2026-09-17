@@ -12786,7 +12786,7 @@ commit touched before reading it as a dead pipeline.
 
 ## R-220 — the Arc 5 demo walk (D-28)
 
-**Commit:** `PENDING`  ·  **Date:** 2026-09-17
+**Commit:** `1807fcd`  ·  **Date:** 2026-09-17
 
 **What it built.** Not a feature — a walk, and the eight defects it found. Milestone 15 closed at R-219, and D-28's rule is that a walk catches what no test is looking for. This one crawled **140 staff routes across 92 route patterns** as `owner@demo.test` against the local `rental_demo`, **all of them again at a 412px phone**, the **tenant portal through five tenants' magic links** at both widths (80 pages each), and the **eleven public token surfaces** the seed prints — apply, pay, prescreen, showing, self-showing access, sign, two vendor jobs, two bid requests and the tenant verify link — also at both widths. **Every page returned 200, nothing overflowed the phone at 412px, and no page printed `undefined`, `NaN`, `Invalid Date` or `[object Object]` — except one, which is the first defect below.** R-184's D-197 discipline holds. What was wrong was wrong in words, in reachability, or in the seed.
 
