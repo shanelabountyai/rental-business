@@ -12819,7 +12819,7 @@ Then it drove the flows the seed has never written — a property expense, a rep
 
 ## R-221 — accrual-basis income can see subscription rent
 
-**Commit:** `PENDING`  ·  **Date:** 2026-09-17
+**Commit:** `deed6de`  ·  **Date:** 2026-09-17
 
 **What it built.** Two lines of behaviour and the argument behind them. `taxExportFacts` picked the income table off the basis — cash from `LedgerEntry`, accrual from `Charge` — and D-11/D-40 settled that the subscription's rent line mints **no `Charge` row**, so accrual income was late fees, prorations and nothing else. The accrual read now takes the `Charge` table **plus the ledger's own unlinked rows**: `LEDGER_INCOME_WHERE` in [apps/web/lib/tax/queries.ts](apps/web/lib/tax/queries.ts) is keyed by basis, cash keeping `paymentId: { not: null }` and accrual taking `{ paymentId: null, chargeId: null, type: { in: ['CHARGE','REVERSAL'] } }`, and the ledger query is no longer cash-only. `ledgerIncomeMapping(null)` already returned `RENTS_RECEIVED`, so nothing in the Schedule E mapping changed. Bluebonnet Lane House, 2026, accrual: **`$851.61` → `$7,451.61`** — the backlog's own measured number, plus three months at $2,200.
 
