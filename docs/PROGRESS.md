@@ -12765,7 +12765,7 @@ commit touched before reading it as a dead pipeline.
 **Gate.** `lint` 0 errors (16 pre-existing warnings). `typecheck` clean. `check:ship-deps` clean. `npm test`: **3,238 passed / 4 skipped, 1 failed**. The failure is the flaky audit-store test above; it passed 5 of 5 on rerun. `PORT=3100 npm run test:e2e -- e2e/deposit-disposition.spec.ts e2e/evictions.spec.ts` against the production build: **18 passed**, matching `--list`'s 18, on both desktop-chrome and mobile-chrome. No schema change, so no `db:ci`. CI: read it on this item's own run.
 
 ## R-219 — a notice to vacate starts the marketing clock
-**Commit:** `PENDING`  ·  **Date:** 2026-09-17
+**Commit:** `213bfa0`  ·  **Date:** 2026-09-17
 
 **What it built.** A daily job, `listing.prepare` ([prepare-job.ts](apps/web/lib/listings/prepare-job.ts)), raises a `listing.prepare` Task for any unit whose ACTIVE or MONTH_TO_MONTH lease has a notice on file. The Task's subject is the Unit, its date is the notice day in the property's zone, and it is skipped when the unit already has a PUBLISHED listing or one created since the notice. `/properties/[id]/units/[unitId]/listing/new` now pre-fills rent (market rent, else the outgoing lease's rent) and available-on (the day after move-out) from the lease under notice. `/reports/leasing` shows "listed after N days" per vacancy, plus a median days-to-list counted from the notice (or from move-out where no notice was recorded) to the first publish of a listing for that unit.
 
