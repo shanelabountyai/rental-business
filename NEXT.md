@@ -1,27 +1,27 @@
 # Next session
 
-## R-220 is pushed. First confirm its CI run went green, then pick up R-221: accrual-basis income is missing every month of subscription rent
+## R-221 is pushed. Confirm its CI run, then pick the next Arc 5 row
 
-R-220 shipped as `1807fcd`, with a follow-up fix in `5fc9fc9` — **R-220's own first CI run failed** (`turnover.spec.ts`, both projects: the new unit-page Maintenance section repeated a link the turnover panel above it already carried, and `getByRole` matches a name by substring). `5fc9fc9` fixes it with `excludeIds` and 194 local tests across the 16 specs that visit a property or unit page. **Read CI on `5fc9fc9`'s own run with `gh run list --limit 5` before starting.** If it is red, fix that first. Do not copy a CI line forward.
+R-221 shipped as `deed6de`, SHA recorded in `209d0b4`. **Read CI with `gh run list --limit 5` before starting** — do not copy a CI line forward from here; this file's claim is only that the push happened.
 
-**Start here:** `docs/prds/06-backlog.md`, row 208 / **R-221**.
+**Start here:** `docs/prds/06-backlog.md`, the first ⬜ row after 208.
 
-## What R-221 is, in one paragraph
+## What R-221 established (D-239)
 
-`taxExportFacts` ([apps/web/lib/tax/queries.ts](apps/web/lib/tax/queries.ts), ~line 106) picks the income table off the basis: cash reads `LedgerEntry` rows carrying a payment, accrual reads the `Charge` table. D-11/D-40 settled that the subscription's rent line mints **no `Charge` row**, so accrual income is only late fees, prorations and other charge-minting extras. Measured on `rental_demo` at R-220: **14 `LedgerEntry` rows of type `CHARGE` with no `chargeId` carry $26,550 of rent that accrual cannot see**, against 5 charge-linked rows worth $4,770.75 that it can. On screen: an operating report reading `$851.61` income for a house billing $2,200/month, economic occupancy of **2%**, and a Schedule E accrual line that understates rent income.
+- **Accrual income = the `Charge` table + the ledger's unlinked `CHARGE`/`REVERSAL` rows.** `LEDGER_INCOME_WHERE` in [apps/web/lib/tax/queries.ts](apps/web/lib/tax/queries.ts) is keyed by basis. The accrual filter is the exact complement of the cash one, so double-counting is impossible by construction rather than by care: `webhook.ts` writes one LINKED entry per `Charge` it raised plus one UNLINKED remainder, and the `Charge` table owns the linked side.
+- **`buildTaxExport`'s ledger sign flip is now conditioned on the basis.** A cash receipt is negative (it reduces what is owed); an accrual charge is positive (it raises the obligation). Anything that adds a new ledger-sourced income fact must say which of those it is, or it reports rent with the wrong sign — which is what the first draft of this fix did.
+- **`CREDIT` and `ADJUSTMENT` are in `LedgerEntryType` and nothing writes them.** All six `ledgerEntry.create` calls live in `webhook.ts`. If you add a writer, the accrual type list in `LEDGER_INCOME_WHERE` is one of the places that has to know.
+- **`operatingReport` re-groups the export's lines, it does not re-fetch.** Money fixed in `taxExportFacts` reaches both the Schedule E export and the operating report; do not add a second income pipeline.
 
-The candidate source is the ledger's own `CHARGE` rows. **The real work is the argument that the charge-linked ones are not then counted twice**, plus deciding what a waived charge means on the ledger side (accrual currently excludes `waivedAt`; the ledger records a reversing entry instead). `packages/core/tax` already asserts a reconciliation identity — extend that test rather than writing a second one.
+## Standing gaps R-221 left
 
-## What R-220 established (D-238)
+- **No demo `REVERSAL` rows exist**, so the void/waiver half of the accrual read is covered by unit test only, never walked.
+- **Nothing backfills or re-reports.** An export archived under R-081d keeps its old figure, and no screen says an accrual run today will differ from last year's packet.
+- **`/reports/operating` was verified by SQL, not in a browser.** Bluebonnet Lane House 2026 went $851.61 → $7,451.61; the screen itself belongs to the next D-28 walk.
 
-- Section names on the property and unit pages are a **contract**: PROP-01 and PROP-02 name Units, Leases, Maintenance, Documents and Financials, and two e2e tests assert them. Renaming one goes red on both projects.
-- `WORK_ORDER_STATUS_LABELS` now lives in `packages/core/workorders`. Do not make a fifth local copy.
-- A `next/link` to an `/api/…` byte route makes Next prefetch the bytes on every render. Download links are `<a>`.
-- The demo seed must only write states the product can produce. Three did not.
+## Still open from R-220
 
-## Standing gaps R-220 could not close
-
-- **The deposit-slip and offline-payment flows need proved MFA**, which `db:seed:demo-access` cannot mint, so `/money/deposits` has still never been seen with a batch in it.
+- **Deposit-slip and offline-payment flows need proved MFA**, which `db:seed:demo-access` cannot mint, so `/money/deposits` has never been seen with a batch in it.
 - **No demo rows** for `/abandonment/[id]`, `/claims/[id]`, `/confidential/[id]`, `/portal/papers/inspections/[id]`, and **no guarantor portal login**.
 - **Whether a deploy ever re-runs `db:seed`** — and so whether production's roles gain a permission a release adds — is unknown, and recorded as unknown.
 
