@@ -2,7 +2,7 @@
 
 ## R-220 is pushed. First confirm its CI run went green, then pick up R-221: accrual-basis income is missing every month of subscription rent
 
-R-220 shipped as `1807fcd` (SHA recorded in the follow-up commit). **Read CI on the run itself with `gh run list --limit 5`.** If it is red, fix that first. Do not copy a CI line forward.
+R-220 shipped as `1807fcd`, with a follow-up fix in `5fc9fc9` — **R-220's own first CI run failed** (`turnover.spec.ts`, both projects: the new unit-page Maintenance section repeated a link the turnover panel above it already carried, and `getByRole` matches a name by substring). `5fc9fc9` fixes it with `excludeIds` and 194 local tests across the 16 specs that visit a property or unit page. **Read CI on `5fc9fc9`'s own run with `gh run list --limit 5` before starting.** If it is red, fix that first. Do not copy a CI line forward.
 
 **Start here:** `docs/prds/06-backlog.md`, row 208 / **R-221**.
 
