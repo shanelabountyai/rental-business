@@ -1,22 +1,19 @@
 # Next session
 
-## R-217 is done and CI is green. Pick up R-218: a deposit-dispute packet
+## R-218 is pushed. First confirm its CI run went green, then pick up R-219: start the marketing clock when a notice to vacate lands
 
-R-217 shipped as `f8eaa2c`. CI run `35160625191` passed both jobs (verify, and e2e/axe/Lighthouse). That run is where R-217's build and its "Repair due" e2e assertion were first verified, because they could not run locally. **Read CI on the run itself with `gh run list --limit 5`.** Do not copy a CI line forward.
+R-218 shipped as `166ab96` (SHA recorded in `5198483`). **Read CI on the run itself with `gh run list --limit 5`.** If it is red, fix that first. Do not copy a CI line forward.
 
-**Start here:** `docs/prds/06-backlog.md`, row 205 / **R-218**. Re-verify the finding before touching anything. The record is thirteen for thirteen.
+**Start here:** `docs/prds/06-backlog.md`, row 206 / **R-219**. Re-verify the finding before touching anything. The record is fourteen for fourteen.
 
-Before any local build, check `ps -Ao pid,etime,command | grep vitest`. Leaked `alongside/backend` vitest workers starved R-217's build for over an hour.
+## What R-218 established (D-236)
 
-## What R-217 established (D-235)
+- `assemblePacket` in `apps/web/lib/pdf/packet.ts` is the one place a packet fetches, appends and re-renders its index (D-50). The eviction and deposit packets both use it. A third packet uses it too; do not copy it.
+- The deposit packet button is on the **lease** page, because a fully-kept deposit redirects away from `/leases/[id]/deposit`.
 
-- `JurisdictionRule.habitabilityRepairDays`, with TX at 7. **`REPAIR_CLOCK_RUNNING`** in `apps/web/lib/maintenance/habitability-clock.ts` is the one "still unrepaired" predicate. The sweep and the ticket page both read it.
-- The clock starts when the ticket was opened. **A merge does not stop a duplicate's clock**; it stops when the ticket it merged into is repaired or closed.
-- Halfway (URGENT) and overdue (EMERGENCY) are separate Task types.
+## What R-218 left behind
 
-## What R-217 left behind
+- **Photographs are listed but not embedded** in either packet (`appendPdfs` takes PDFs only). That is the obvious follow-up for deposit disputes.
+- `apps/web/lib/audit/audit-store.test.ts` "oldest-first" is flaky: its rows share `occurredAt` inside one transaction, so their order is not guaranteed.
 
-- No acknowledgement window, no tenant-facing deadline, and only TX has a period (**needs counsel**).
-- A flagged duplicate and a flagged survivor can each raise a Task for one problem.
-
-Everything older still stands; it is in git history at `7fb5ffb:NEXT.md` and `3f56889:NEXT.md`.
+Everything older still stands; it is in git history at `9b9a10d:NEXT.md`.
