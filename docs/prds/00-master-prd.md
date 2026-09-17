@@ -193,6 +193,7 @@ Foundation entity model: **Entity (LLC) → Property → Unit(s) → Lease → T
 **LEASE-11 [S]** As a PM, I can intake a tenant's notice to vacate via portal form (date, forwarding address, lease-notice-period check), timestamped; and issue owner non-renewal notices with delivery logging and just-cause-jurisdiction flags.
 
 **LEASE-12 [S]** As a PM, I can run turnover/make-ready as a mini-project: templated checklist (trash-out → repairs → paint → floors → clean → **re-key, logged**), tasks assignable to vendors in sequence, target rent-ready date, actual costs rolled up per turn, and a days-vacant clock from move-out to new move-in.
+- Given a lease under notice to vacate, when the notice is on file, then a listing-preparation Task dated on the notice day appears in the staff queue, the new-listing form is pre-filled from the outgoing tenancy, and the leasing report shows days from notice to listing beside days to fill. Publishing stays manual (R-219, D-237).
 - Given a move-out, when the turn starts, then a re-key work order is opened with it at urgent priority, without anybody having to remember (R-176).
 - Given a turn with no completed re-key, when a PM marks the unit rent-ready, then they are warned once and can proceed anyway; the override is recorded. Never a hard block — a PM who re-keyed it themselves is doing nothing wrong, and a unit that cannot be listed over a paperwork gap costs real rent (R-027's posture, D-182).
 

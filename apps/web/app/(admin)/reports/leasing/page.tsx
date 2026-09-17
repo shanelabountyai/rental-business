@@ -232,6 +232,17 @@ export default async function LeasingFunnelPage({
           number that has not finished happening.
           {stillVacant > 0 && ` ${stillVacant} still vacant, counting.`}
         </p>
+        <p className="text-sm">
+          Days to list —{' '}
+          {report.medianDaysToList == null
+            ? 'nothing listed for these vacancies'
+            : `${report.medianDaysToList} days from notice, typical`}
+          .{' '}
+          <span className="text-muted-foreground text-xs">
+            Counted from the notice to vacate, or from move-out where none was recorded. The notice
+            period is the only time a home can be marketed without paying for an empty one.
+          </span>
+        </p>
         {report.fills.length === 0 ? (
           <p className="text-muted-foreground text-sm">No vacancies started in this window.</p>
         ) : (
@@ -246,6 +257,9 @@ export default async function LeasingFunnelPage({
                   <span className="text-muted-foreground block text-xs">
                     Vacated {friendlyBusinessDate(fill.vacatedOn)}
                     {fill.filledOn ? ` · filled ${friendlyBusinessDate(fill.filledOn)}` : ' · still vacant'}
+                    {fill.daysToList == null
+                      ? ' · never listed'
+                      : ` · listed after ${fill.daysToList} ${fill.daysToList === 1 ? 'day' : 'days'}`}
                   </span>
                 </span>
                 <span className="tabular-nums">

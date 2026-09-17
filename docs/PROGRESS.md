@@ -12763,3 +12763,23 @@ commit touched before reading it as a dead pipeline.
 - **Flaky unit test, not touched:** `audit-store.test.ts` "returns one record's history oldest-first" failed once in the full run, then passed 5 of 5 alone. The three rows are inserted in one transaction, so they share `occurredAt` and their order is not guaranteed. Owned by nobody.
 
 **Gate.** `lint` 0 errors (16 pre-existing warnings). `typecheck` clean. `check:ship-deps` clean. `npm test`: **3,238 passed / 4 skipped, 1 failed**. The failure is the flaky audit-store test above; it passed 5 of 5 on rerun. `PORT=3100 npm run test:e2e -- e2e/deposit-disposition.spec.ts e2e/evictions.spec.ts` against the production build: **18 passed**, matching `--list`'s 18, on both desktop-chrome and mobile-chrome. No schema change, so no `db:ci`. CI: read it on this item's own run.
+
+## R-219 — a notice to vacate starts the marketing clock
+**Commit:** `PENDING`  ·  **Date:** 2026-09-17
+
+**What it built.** A daily job, `listing.prepare` ([prepare-job.ts](apps/web/lib/listings/prepare-job.ts)), raises a `listing.prepare` Task for any unit whose ACTIVE or MONTH_TO_MONTH lease has a notice on file. The Task's subject is the Unit, its date is the notice day in the property's zone, and it is skipped when the unit already has a PUBLISHED listing or one created since the notice. `/properties/[id]/units/[unitId]/listing/new` now pre-fills rent (market rent, else the outgoing lease's rent) and available-on (the day after move-out) from the lease under notice. `/reports/leasing` shows "listed after N days" per vacancy, plus a median days-to-list counted from the notice (or from move-out where no notice was recorded) to the first publish of a listing for that unit.
+
+**What it verified first.** The finding was correct: `createListing` has one caller, the staff form, and nothing on any notice path mentions a listing. Fifteen for fifteen.
+
+**What it decided.** D-237.
+- **Pull, not push.** Four writers set `noticeGivenAt`: the tenant portal, staff notice or non-renewal, SCRA termination and confidential early termination. One job reading the column covers all four. The Task can appear up to a day late, but it is still dated on the notice day.
+- **"A renewal lapsing into non-renewal" is not a separate trigger.** An unrenewed term rolls to month-to-month (R-065), and an owner's non-renewal sets the same column.
+- **A draft left over from the previous vacancy does not suppress the Task.**
+- **Publishing stays manual.**
+
+**What it left behind.**
+- **The Task is not auto-completed when a listing is created**; staff close it. Owned by nobody.
+- **Days to list reads `Listing.publishedAt`, which holds the latest publish**, so a listing that was unpublished and republished reads late. A publish history would fix it; not built.
+- **No backfill.** Leases already under notice get their Task on the job's next run, dated on their original notice day, as intended.
+
+**Gate.** `lint` 0 errors (16 pre-existing warnings). `typecheck` clean. `check:ship-deps` clean. `npm test`: **3,243 passed / 4 skipped**, R-218's run plus its flaky failure passing plus the 4 new job tests. `PORT=3100 npm run test:e2e -- e2e/leasing-analytics.spec.ts e2e/listings.spec.ts` against the production build: **28 passed**, matching `--list`, on desktop-chrome and mobile-chrome, including the new days-to-list assertion. No schema change, so no `db:ci`. CI: read it on this item's own run.

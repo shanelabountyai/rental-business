@@ -161,6 +161,7 @@ test.afterAll(async () => {
     data: { mergedIntoTicketId: null },
   })
   await prisma.ticket.deleteMany({ where: { id: { in: ticketIds } } })
+  await prisma.lease.deleteMany({ where: { unitId: { in: unitIds } } })
   await prisma.unit.deleteMany({ where: { id: { in: unitIds } } })
 
   const auditedProperties = new Set(
@@ -347,6 +348,32 @@ test.describe('the leasing funnel (RPT-06)', () => {
     await expect(
       funnel.getByRole('listitem').filter({ hasText: 'Approved' }),
     ).toContainText('nobody reached the previous stage')
+  })
+
+  test('counts days to list from the notice to vacate, not from move-out (R-219)', async ({ page }) => {
+    const { property, unit, listing } = await seedProperty('ToList')
+    await prisma.lease.create({
+      data: {
+        propertyId: property.id,
+        unitId: unit.id,
+        status: 'ENDED',
+        startsOn: new Date('2025-04-01T00:00:00.000Z'),
+        endsOn: new Date('2026-03-31T00:00:00.000Z'),
+        rentCents: 175_000,
+        noticeGivenAt: at('2026-03-01'),
+        noticeGivenBy: 'TENANT',
+        noticeEffectiveOn: new Date('2026-03-31T00:00:00.000Z'),
+      },
+    })
+    // Published three days into the notice, while the home was still occupied.
+    await prisma.listing.update({ where: { id: listing.id }, data: { publishedAt: at('2026-03-04') } })
+    const staff = await createStaff()
+    await signIn(page, staff.email)
+    await scopeTo(page, property.id)
+    await page.goto(`/reports/leasing?from=${FROM}&to=${TO}`)
+
+    await expect(page.getByText('Days to list — 3 days from notice, typical')).toBeVisible()
+    await expect(page.getByText(/listed after 3 days/)).toBeVisible()
   })
 
   test('names the cost-per-channel gap instead of showing a zero', async ({ page }) => {

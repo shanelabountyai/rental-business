@@ -10,7 +10,7 @@ import {
   leadsBySource,
   sourceQuality,
 } from '@rental/core/metrics'
-import { businessDate, utcToBusinessDate } from '@rental/core/scheduling'
+import { businessDate, businessDaysBetween, utcToBusinessDate } from '@rental/core/scheduling'
 import type { BusinessDate } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import type { ResolvedScope } from '@/lib/scope/current-scope.ts'
@@ -35,6 +35,11 @@ export interface VacancyFill {
   filledOn: BusinessDate | null
   days: number
   isFinal: boolean
+  /// Days from the notice to vacate (or from move-out, where no notice was
+  /// recorded) to the first publish of a listing for this unit. Null means
+  /// it has not been listed for this vacancy. Zero or small is the goal: the
+  /// notice period is the only time a unit can be marketed for free (R-219).
+  daysToList: number | null
 }
 
 export interface LeasingFunnelReport {
@@ -54,6 +59,8 @@ export interface LeasingFunnelReport {
   /// and including it would make the headline improve every time a new
   /// vacancy opened. The still-vacant ones are in `fills`, flagged.
   medianDaysToFill: number | null
+  /// Median of the vacancies that WERE listed; same reasoning as above.
+  medianDaysToList: number | null
 }
 
 export async function leasingFunnel(
@@ -63,7 +70,7 @@ export async function leasingFunnel(
 ): Promise<LeasingFunnelReport> {
   const propertyIds = scope.propertyIds
   if (propertyIds.length === 0) {
-    return { from, to, steps: funnelSteps([]), sources: [], leads: [], fills: [], medianDaysToFill: null }
+    return { from, to, steps: funnelSteps([]), sources: [], leads: [], fills: [], medianDaysToFill: null, medianDaysToList: null }
   }
 
   const windowStart = new Date(`${from}T00:00:00.000Z`)
@@ -122,8 +129,12 @@ export async function leasingFunnel(
             id: true,
             name: true,
             leases: {
-              select: { startsOn: true, endsOn: true, moveInAt: true, moveOutAt: true },
+              select: { startsOn: true, endsOn: true, moveInAt: true, moveOutAt: true, noticeGivenAt: true },
             },
+            // `publishedAt` is the latest publish, so a listing unpublished
+            // and republished reads late here. ponytail: add a publish
+            // history if republishing turns out to be common.
+            listings: { where: { publishedAt: { not: null } }, select: { publishedAt: true } },
           },
         },
       },
@@ -170,8 +181,11 @@ export async function leasingFunnel(
               : lease.endsOn != null
                 ? utcToBusinessDate(lease.endsOn)
                 : null,
+          noticeOn: lease.noticeGivenAt != null ? businessDate(lease.noticeGivenAt, zone) : null,
         }))
-        .filter((row): row is { vacatedOn: BusinessDate } => row.vacatedOn != null)
+        .filter((row): row is { vacatedOn: BusinessDate; noticeOn: BusinessDate | null } => row.vacatedOn != null)
+
+      const published = unit.listings.map((listing) => businessDate(listing.publishedAt!, zone)).sort()
 
       const starts = unit.leases
         .map((lease) =>
@@ -179,7 +193,7 @@ export async function leasingFunnel(
         )
         .sort()
 
-      for (const { vacatedOn } of ends) {
+      for (const { vacatedOn, noticeOn } of ends) {
         if (vacatedOn < from || vacatedOn > to) continue
         // The next tenancy to START after this one ended. Not "the newest
         // lease": a unit turned twice in a year has two vacancies, and
@@ -187,6 +201,8 @@ export async function leasingFunnel(
         // vacancy's answer for the first one too.
         const filledOn = starts.find((start) => start >= vacatedOn) ?? null
         const fill = daysToFill({ vacatedOn, filledOn, asOf: to })
+        const clockFrom = noticeOn ?? vacatedOn
+        const listedOn = published.find((on) => on >= clockFrom && (filledOn == null || on <= filledOn))
         fills.push({
           unitId: unit.id,
           unitName: unit.name,
@@ -195,6 +211,7 @@ export async function leasingFunnel(
           filledOn,
           days: fill.days,
           isFinal: fill.isFinal,
+          daysToList: listedOn != null ? businessDaysBetween(clockFrom, listedOn) : null,
         })
       }
     }
@@ -202,13 +219,10 @@ export async function leasingFunnel(
 
   fills.sort((a, b) => b.days - a.days || a.propertyName.localeCompare(b.propertyName))
 
-  const final = fills.filter((fill) => fill.isFinal).map((fill) => fill.days).sort((a, b) => a - b)
-  const medianDaysToFill =
-    final.length === 0
-      ? null
-      : final.length % 2 === 1
-        ? final[(final.length - 1) / 2]
-        : (final[final.length / 2 - 1] + final[final.length / 2]) / 2
+  const medianDaysToFill = median(fills.filter((fill) => fill.isFinal).map((fill) => fill.days))
+  const medianDaysToList = median(
+    fills.map((fill) => fill.daysToList).filter((days): days is number => days != null),
+  )
 
   return {
     from,
@@ -218,5 +232,13 @@ export async function leasingFunnel(
     leads: leadsBySource(leads),
     fills,
     medianDaysToFill,
+    medianDaysToList,
   }
+}
+
+function median(values: number[]): number | null {
+  const sorted = [...values].sort((a, b) => a - b)
+  if (sorted.length === 0) return null
+  const mid = sorted.length / 2
+  return sorted.length % 2 === 1 ? sorted[mid - 0.5] : (sorted[mid - 1] + sorted[mid]) / 2
 }
