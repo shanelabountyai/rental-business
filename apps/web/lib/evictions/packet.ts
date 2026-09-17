@@ -15,7 +15,8 @@ import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { audit } from '@/lib/audit/index.ts'
 import { propertyResource, requirePermission, requireScope } from '@/lib/auth/guard.ts'
-import { appendPdfs, renderBlocksPdf } from '@/lib/pdf/render.ts'
+import { assemblePacket } from '@/lib/pdf/packet.ts'
+import { renderBlocksPdf } from '@/lib/pdf/render.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 import { cureClockFor, getEvictionCase } from '@/lib/evictions/queries.ts'
 import { generateStorageKey, storage } from '@/lib/storage/index.ts'
@@ -200,33 +201,6 @@ export async function exportAttorneyPacket(
     })
   }
 
-  // Storage is keyed by `Document.storageKey`, not by document id - resolved
-  // in one query rather than one per exhibit, since a packet routinely cites
-  // dozens of photographs.
-  const keyById = new Map(
-    (
-      await prisma.document.findMany({
-        where: { id: { in: candidates.map((c) => c.documentId) } },
-        select: { id: true, storageKey: true },
-      })
-    ).map((d) => [d.id, d.storageKey]),
-  )
-
-  // Fetch every candidate's bytes. A storage miss is a named gap, never a
-  // failed export - one unreadable photograph must not cost the owner the
-  // whole packet.
-  const fetched = await Promise.all(
-    candidates.map(async (candidate) => {
-      const key = keyById.get(candidate.documentId)
-      if (!key) return { candidate, bytes: null }
-      try {
-        return { candidate, bytes: await storage.get(key) }
-      } catch {
-        return { candidate, bytes: null }
-      }
-    }),
-  )
-
   return finish({
     evictionCase,
     zone,
@@ -239,12 +213,10 @@ export async function exportAttorneyPacket(
     cureVerdict: demand ? cureVerdictSentence(demand.verdict, clock.state) : null,
     closingBalanceCents: period.closingBalanceCents,
     statementPdf,
-    fetched,
+    candidates,
     actorId: actor.id,
   })
 }
-
-type Fetched = { candidate: Candidate; bytes: Buffer | null }
 
 async function finish(args: {
   evictionCase: NonNullable<Awaited<ReturnType<typeof getEvictionCase>>>
@@ -258,13 +230,10 @@ async function finish(args: {
   cureVerdict: string | null
   closingBalanceCents: number
   statementPdf: Uint8Array
-  fetched: Fetched[]
+  candidates: Candidate[]
   actorId: string
 }): Promise<EvictionFormState> {
-  const { evictionCase, zone, generatedAt, generatedBy, tenantNames, clock, statementPdf, fetched } = args
-
-  const available = fetched.filter((row): row is { candidate: Candidate; bytes: Buffer } => row.bytes !== null)
-  const unreadable = new Set(fetched.filter((row) => row.bytes === null).map((row) => row.candidate.documentId))
+  const { evictionCase, zone, generatedAt, generatedBy, tenantNames, clock, statementPdf, candidates } = args
 
   const totals = costTotals(evictionCase.costs)
   const asDate = (value: Date | null) => (value ? friendlyDate(value, zone) : null)
@@ -273,84 +242,69 @@ async function finish(args: {
   // same shape `exportLedgerStatement` uses, and for the same reason: two
   // copies of the fact-building drift, and the second render silently prints
   // a stale index.
-  const buildExhibits = (failed: ReadonlySet<string>): PacketExhibit[] => [
-    { label: 'Statement of account', kind: 'Ledger', occurredOn: friendlyDate(generatedAt, zone), attached: true },
-    ...fetched.map(({ candidate }) => ({
+  const buildExhibits = (isAttached: (documentId: string) => boolean): PacketExhibit[] => [
+    {
+      label: 'Statement of account',
+      kind: 'Ledger',
+      occurredOn: friendlyDate(generatedAt, zone),
+      attached: isAttached('statement'),
+    },
+    ...candidates.map((candidate) => ({
       label: candidate.label,
       kind: candidate.kind,
       occurredOn: candidate.occurredAt ? friendlyDate(candidate.occurredAt, zone) : null,
-      attached: !unreadable.has(candidate.documentId) && !failed.has(candidate.documentId),
+      attached: isAttached(candidate.documentId),
     })),
   ]
 
-  const render = (failed: ReadonlySet<string>) =>
-    renderBlocksPdf(
-      packetBlocks({
-        propertyName: evictionCase.property.name,
-        addressLine1: evictionCase.property.addressLine1,
-        unitName: evictionCase.unit.name,
-        tenantNames,
-        stage: evictionCase.stage,
-        outcome: evictionCase.outcome,
-        openedOn: friendlyDate(evictionCase.openedAt, zone),
-        closedOn: asDate(evictionCase.closedAt),
-        filedOn: asDate(evictionCase.filedOn),
-        courtDate: evictionCase.courtDate ? friendlyTimestamp(evictionCase.courtDate, zone) : null,
-        judgmentOn: asDate(evictionCase.judgmentOn),
-        writOn: asDate(evictionCase.writOn),
-        lockoutOn: asDate(evictionCase.lockoutOn),
-        clock,
-        // R-156: named on the cover sheet, never omitted (D-50). Dates are
-        // formatted here because the packet quotes them as prose.
-        paymentsSinceService: args.paymentsSinceService.map((payment) => ({
-          receivedOn: friendlyBusinessDate(payment.receivedOn),
-          amountCents: payment.amountCents,
-          channelLabel: payment.channelLabel,
-        })),
-        acceptanceWarning: acceptanceWarning(args.acceptanceWaivesNotice),
-        cureVerdict: args.cureVerdict,
-        costs: totals,
-        ledgerBalanceCents: args.closingBalanceCents,
-        exhibits: buildExhibits(failed),
-        generatedAt: friendlyTimestamp(generatedAt, zone),
-        generatedBy,
-        timezone: zone,
-      }),
-      { title: `Eviction case file — ${evictionCase.property.name}` },
-    )
+  const {
+    bytes: buffer,
+    attachedCount,
+    notAttached,
+  } = await assemblePacket({
+    candidates,
+    leading: [{ label: 'statement', bytes: new Uint8Array(statementPdf) }],
+    render: (isAttached) =>
+      renderBlocksPdf(
+        packetBlocks({
+          propertyName: evictionCase.property.name,
+          addressLine1: evictionCase.property.addressLine1,
+          unitName: evictionCase.unit.name,
+          tenantNames,
+          stage: evictionCase.stage,
+          outcome: evictionCase.outcome,
+          openedOn: friendlyDate(evictionCase.openedAt, zone),
+          closedOn: asDate(evictionCase.closedAt),
+          filedOn: asDate(evictionCase.filedOn),
+          courtDate: evictionCase.courtDate ? friendlyTimestamp(evictionCase.courtDate, zone) : null,
+          judgmentOn: asDate(evictionCase.judgmentOn),
+          writOn: asDate(evictionCase.writOn),
+          lockoutOn: asDate(evictionCase.lockoutOn),
+          clock,
+          // R-156: named on the cover sheet, never omitted (D-50). Dates are
+          // formatted here because the packet quotes them as prose.
+          paymentsSinceService: args.paymentsSinceService.map((payment) => ({
+            receivedOn: friendlyBusinessDate(payment.receivedOn),
+            amountCents: payment.amountCents,
+            channelLabel: payment.channelLabel,
+          })),
+          acceptanceWarning: acceptanceWarning(args.acceptanceWaivesNotice),
+          cureVerdict: args.cureVerdict,
+          costs: totals,
+          ledgerBalanceCents: args.closingBalanceCents,
+          exhibits: buildExhibits(isAttached),
+          generatedAt: friendlyTimestamp(generatedAt, zone),
+          generatedBy,
+          timezone: zone,
+        }),
+        { title: `Eviction case file — ${evictionCase.property.name}` },
+      ),
+  })
 
-  const attachments = [
-    { label: 'statement', bytes: new Uint8Array(statementPdf) },
-    ...available.map((row) => ({ label: row.candidate.documentId, bytes: new Uint8Array(row.bytes) })),
-  ]
-
-  const first = await appendPdfs(await render(new Set()), attachments)
-
-  // AN EXHIBIT THAT ARRIVED BUT WOULD NOT PARSE IS AS ABSENT AS ONE THAT
-  // NEVER ARRIVED - and the index has already been rendered claiming it was
-  // attached. Photographs make this the common case rather than the rare
-  // one: a JPEG is not a PDF and `appendPdfs` correctly refuses it, so the
-  // second render is what keeps the index honest about every image in the
-  // bundle. One extra pass; the alternative is a document that names
-  // attachments it does not contain.
-  let bytes = first.bytes
-  const failed = new Set(first.failed.filter((label) => label !== 'statement'))
-  if (first.failed.length > 0) {
-    const parsed = available.filter((row) => !failed.has(row.candidate.documentId))
-    const corrected = await appendPdfs(await render(failed), [
-      ...(first.failed.includes('statement') ? [] : [{ label: 'statement', bytes: new Uint8Array(statementPdf) }]),
-      ...parsed.map((row) => ({ label: row.candidate.documentId, bytes: new Uint8Array(row.bytes) })),
-    ])
-    bytes = corrected.bytes
-  }
-
-  const buffer = Buffer.from(bytes)
   const sha256 = createHash('sha256').update(buffer).digest('hex')
   const fileName = `eviction-packet-${businessDate(generatedAt, zone)}.pdf`
   const storageKey = generateStorageKey(evictionCase.propertyId, fileName)
   await storage.put(storageKey, buffer, 'application/pdf')
-
-  const notAttached = [...new Set([...unreadable, ...failed])]
 
   const documentId = await prisma.$transaction(async (tx) => {
     const document = await tx.document.create({
@@ -379,7 +333,7 @@ async function finish(args: {
           documentId: document.id,
           // The TRUE outcome, not the hoped-for one. The audit row and the
           // packet's own index must agree about what is in the file.
-          exhibitsAttached: attachments.length - notAttached.length,
+          exhibitsAttached: attachedCount,
           exhibitsNotAttached: notAttached,
           sha256,
         },

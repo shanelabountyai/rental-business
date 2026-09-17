@@ -12745,3 +12745,21 @@ commit touched before reading it as a dead pipeline.
 - **Nothing is backfilled into Tasks** (D-201/D-222). Open flagged tickets pick up the clock on the next sweep, which is the intended behaviour, not a backfill.
 
 **Gate.** `lint` 0 errors (16 pre-existing warnings). `typecheck` clean. `check:ship-deps` clean. `db:ci`: every migration applied from scratch, seeded, **no drift**. `npm test`: **3,233 passed / 4 skipped**, R-216's 3,226 plus the 7 new tests. **`npm run build` and the e2e spec were NOT verified locally.** Another project (`alongside/backend`) had about 50 vitest processes holding the CPU. The e2e `webServer` build timed out at 300s with no test run, and a standalone build stalled in "Running TypeScript" for over an hour, so it was stopped. The owner chose to push and let CI verify the build and the sweep, including the new "Repair due" assertion in `maintenance-phone-log.spec.ts`. **CI run `35160625191` on `fa1d91e` passed both jobs**, so the build and e2e are verified there.
+
+## R-218 — a deposit dispute has its own one-click packet
+**Commit:** `PENDING`  ·  **Date:** 2026-09-17
+
+**What it built.** "Produce deposit dispute packet" on the lease page's Deposit row, once a disposition letter exists. `exportDepositPacket` ([deposits/packet.ts](apps/web/lib/deposits/packet.ts)) renders a cover sheet from `depositPacketBlocks` ([deposit-packet.ts](packages/core/ledger/deposit-packet.ts)). The cover sheet has the dates (due, written, each service, refund paid, with any date after the due date flagged), the totals, both inspections with the tenant's signature or its absence, the per-item move-in → move-out comparison, and each deduction with its evidence and its depreciation guidance, or a statement that none was applied. After it come the letter PDF, each proof of service, the refund proof, the executed lease, condition baselines, move-in and move-out photographs, deduction evidence, and the linked work orders' invoices and completion photos. It is archived as `DEPOSIT_PACKET` with a `deposit.packet_exported` audit row. `assemblePacket` ([pdf/packet.ts](apps/web/lib/pdf/packet.ts)) is R-083's fetch/append/re-render logic lifted out; the eviction packet now uses it.
+
+**What it verified first.** The finding was correct: nothing under `apps/web/lib` produced a packet on the deposit path. It is fourteen for fourteen now.
+
+**What it decided.** D-236. The button is on the lease page because a disposition that refunds nothing redirects away from `/leases/[id]/deposit`. A letter never rendered to PDF is listed as NOT ATTACHED rather than dropped. The totals are the stored ones; the packet does not split what was kept between deductions and arrears.
+
+**Real defect found, fixed in passing.** The eviction packet always marked its statement of account attached, even if it failed to parse. The shared helper now marks it not attached. Its audit count `attachments.length - notAttached.length` also subtracted unreadable files that were never in `attachments`, which undercounted what was attached. It now subtracts only the parse failures.
+
+**What it left behind.**
+- **Photographs are listed but not embedded**, same as the eviction packet: `appendPdfs` takes PDFs only. For a deposit dispute the photos are the evidence, so embedding JPEG/PNG pages is the obvious next item. Owned by nobody.
+- The per-item comparison reads only the latest MOVE_OUT inspection's pairings. Items added at move-out with no move-in pair print "Not rated" on the move-in side.
+- **Flaky unit test, not touched:** `audit-store.test.ts` "returns one record's history oldest-first" failed once in the full run, then passed 5 of 5 alone. The three rows are inserted in one transaction, so they share `occurredAt` and their order is not guaranteed. Owned by nobody.
+
+**Gate.** `lint` 0 errors (16 pre-existing warnings). `typecheck` clean. `check:ship-deps` clean. `npm test`: **3,238 passed / 4 skipped, 1 failed**. The failure is the flaky audit-store test above; it passed 5 of 5 on rerun. `PORT=3100 npm run test:e2e -- e2e/deposit-disposition.spec.ts e2e/evictions.spec.ts` against the production build: **18 passed**, matching `--list`'s 18, on both desktop-chrome and mobile-chrome. No schema change, so no `db:ci`. CI: read it on this item's own run.

@@ -260,6 +260,10 @@ export const AUDIT_ACTIONS = [
   /// the owner produces when a former tenant says the deposit was never
   /// refunded, so it is worth auditing every single time.
   'deposit.refund_recorded',
+  /// R-218: the deposit-dispute packet was produced. Records what went in and
+  /// what could not be attached, because the packet's index makes that claim
+  /// and the two must agree (D-50).
+  'deposit.packet_exported',
 
   // Compliance calendar (PROP-05, R-077).
   'compliance.item_created',

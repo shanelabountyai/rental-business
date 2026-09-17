@@ -19,6 +19,8 @@ import {
 } from '@rental/core/scheduling'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { ExportDepositPacketPanel } from '@/components/deposits/export-packet-panel.tsx'
+import { exportDepositPacket } from '@/lib/deposits/packet.ts'
 import { AccessCodesPanel } from '@/components/leases/access-codes-panel.tsx'
 import { OpenAbandonmentCasePanel } from '@/components/abandonment/open-case-panel.tsx'
 import { AccommodationsPanel } from '@/components/accommodations/accommodations-panel.tsx'
@@ -452,6 +454,10 @@ export default async function LeaseDetailPage({
                 Deposit disposition
               </Link>
             </p>
+          )}
+          {/* R-218: once there is a letter there is something to dispute. */}
+          {lease.deposits[0]?.dispositionSentAt && (
+            <ExportDepositPacketPanel action={exportDepositPacket.bind(null, lease.id)} />
           )}
         </dd>
         {Object.keys(utilities).length > 0 && (

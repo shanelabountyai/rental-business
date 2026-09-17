@@ -150,6 +150,10 @@ export const DOCUMENT_TYPES = [
   /// Its retention follows the lease's, because a broken plan is argued from
   /// it years later.
   'PAYMENT_PLAN',
+  /// R-218: the deposit-dispute file for one lease - the disposition letter,
+  /// its service, the refund, both inspections and each deduction's evidence
+  /// behind a cover sheet. Minted by the product, like ATTORNEY_PACKET.
+  'DEPOSIT_PACKET',
   'OTHER',
 ] as const
 export type DocumentTypeValue = (typeof DOCUMENT_TYPES)[number]
@@ -197,6 +201,7 @@ export const DOCUMENT_TYPE_LABELS: Record<DocumentTypeValue, string> = {
   DEPOSIT_SLIP: 'Deposit slip',
   SETTLEMENT_REPORT: 'Settlement report',
   PAYMENT_PLAN: 'Repayment agreement',
+  DEPOSIT_PACKET: 'Deposit dispute packet',
   OTHER: 'Other',
 }
 
@@ -216,6 +221,7 @@ export const DOCUMENT_TYPE_LABELS: Record<DocumentTypeValue, string> = {
 /// real upload lives on the inherited-lease intake panel.
 export const UNUPLOADABLE_DOCUMENT_TYPES: readonly DocumentTypeValue[] = [
   'ATTORNEY_PACKET',
+  'DEPOSIT_PACKET',
   'TAX_PACKET',
   'HANDOFF_PACKET',
   'COMMS_TRANSCRIPT',

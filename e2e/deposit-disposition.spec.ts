@@ -293,4 +293,28 @@ test('a PM itemizes deductions, sees the unsupported flag and depreciation guida
 
   // Write-once: a second attempt is refused, not silently applied again.
   await expect(page.getByRole('button', { name: 'Record refund payment' })).toHaveCount(0)
+
+  // ==========================================================================
+  // R-218: the whole record, handed over as one file. From the LEASE page,
+  // because a deposit kept in full redirects away from the deposit screen.
+  // ==========================================================================
+  await page.goto(`/leases/${lease.id}`)
+  await page.getByRole('button', { name: 'Produce deposit dispute packet' }).click()
+  // Only a returned action can paint this sentence, so it is a real wait.
+  await expect(page.getByText(/^Deposit packet produced\./)).toBeVisible()
+
+  const packet = await prisma.document.findFirstOrThrow({ where: { leaseId: lease.id, type: 'DEPOSIT_PACKET' } })
+  expect(packet.contentType).toBe('application/pdf')
+  expect(packet.sizeBytes).toBeGreaterThan(0)
+  // Never in the former tenant's own portal (R-083's call).
+  expect(packet.tenantId).toBeNull()
+
+  const packetAudit = await prisma.auditLog.findFirstOrThrow({
+    where: { action: 'deposit.packet_exported', entityId: deposit.id },
+  })
+  // The letter was never rendered to PDF in this flow, so it is NAMED as not
+  // attached rather than silently absent (D-50) - and the audit row says so.
+  const after = packetAudit.after as { documentId: string; exhibitsNotAttached: string[] }
+  expect(after.documentId).toBe(packet.id)
+  expect(after.exhibitsNotAttached).toContain(`notice-without-pdf:${notice.id}`)
 })

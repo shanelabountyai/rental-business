@@ -83,6 +83,10 @@ export const RETENTION_RULES: Record<DocumentTypeValue, RetentionRule> = {
     years: null,
     note: 'R-083: what was handed to counsel, and when - kept indefinitely, for the same reason LEDGER_STATEMENT is. It carries the notices and photographs inside it (D-50), so purging it would discard the underlying evidence too.',
   },
+  DEPOSIT_PACKET: {
+    years: null,
+    note: 'R-218: what was assembled to answer a deposit claim, and when - kept indefinitely for ATTORNEY_PACKET\'s reason. It carries the letter, its proof of service and the photographs inside it (D-50).',
+  },
   TAX_PACKET: {
     years: null,
     note: 'R-081d: what the preparer was given for a tax year. Kept indefinitely - a return is examinable for years afterwards and this is the record of what it was filed from.',
