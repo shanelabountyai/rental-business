@@ -12880,7 +12880,7 @@ All three were confirmed red against the previous job before the fix was kept. T
 
 ## R-223 — an emergency that arrives by text, email or phone can page somebody
 
-**Commit:** `SHA-PENDING`  ·  **Date:** 2026-09-18
+**Commit:** `deb9357`  ·  **Date:** 2026-09-18
 
 **What it built.**
 - **Staff can mark any open ticket an emergency.** Two places do it: a "Mark as emergency and page on-call" button on `/maintenance/[id]` ([mark-emergency-form.tsx](apps/web/components/maintenance/mark-emergency-form.tsx)), and a new "Emergency — pages on-call now" option in the triage priority select. Both call one `declareEmergency` in [actions.ts](apps/web/lib/maintenance/actions.ts). It sets EMERGENCY, moves NEW to TRIAGED, stamps `firstResponseAt`, audits `ticket.marked_emergency` with the actor, and then runs the portal's own page.
