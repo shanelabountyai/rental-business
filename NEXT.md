@@ -1,12 +1,12 @@
 # Next session
 
-## Arc 6 is planned. Start R-222.
+## R-222 is done (`3ce9299`, SHA recorded in `e4b6a00`). Start R-223.
 
-Milestone 16 ("Arc 6") is rows 209–222 / R-222–R-235 in `docs/prds/06-backlog.md`, sourced from `docs/reviews/2026-09-17-operator-review.md` (D-240). **Read the review's section for the row before touching code** — the file-and-line evidence lives there, not in the row.
+**First: read CI on `e4b6a00`** with `gh run list --limit 5`. R-222 was pushed without a Playwright run, because no spec reaches the job.
 
-**Start here: R-222** — the 03:00 `unit.auto_make_ready` job marks an occupied house vacant on the morning its lease lapses to month-to-month; `lease.mtm_rollover` at 04:00 keeps billing it. Files: `apps/web/lib/units/auto-make-ready.ts`, `apps/web/lib/leases/renewal-rollover-job.ts`. The row's acceptance is one test that runs both jobs against one lease on one business date. **Needs counsel** on the self-help reading; the engineering does not wait for it. No backfill of `moveOutAt`.
+**R-223**: an emergency that comes in by text, email or phone can never page anybody, and staff cannot mark a ticket as an emergency. Row 210 in `docs/prds/06-backlog.md`. Read review finding 2 in `docs/reviews/2026-09-17-operator-review.md` first. Files: `apps/web/lib/maintenance/actions.ts`, `packages/core/maintenance/priority.ts`, `apps/web/lib/maintenance/triage-consumer.ts`. **Needs counsel** is not on this row. **Do not** auto-page on keywords.
 
-Confirm the planning commit's CI with `gh run list --limit 5` rather than trusting this file — it is docs-only, so `paths-ignore` may give it no run at all, which is expected.
+**Unit-suite trap seen in R-222:** orphaned `node (vitest N)` workers survive a `pkill -f "$PWD.*vitest"`, because their command line is renamed. They hold `rental_test` connections and caused 20–30s timeouts in unrelated files. Find them by cwd (`lsof -a -p PID -d cwd`) before trusting a timeout.
 
 ## Still open, carried from earlier handoffs
 
