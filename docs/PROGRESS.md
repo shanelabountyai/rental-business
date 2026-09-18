@@ -13032,3 +13032,29 @@ All three were confirmed red against the previous job before the fix was kept. T
 - `npm test`: **3,271 passed / 4 skipped**. That is R-226's 3,263 plus five core `lateFeeOutsideHolds` tests and three `holds.test.ts` tests (cure lifts with no backfill; stays on while the clock runs and lifts at expiry; a closed case lifts).
 - e2e `evictions`, `lease-holds`, `payment-plans` and `scra` against the production build, both projects: **52 passed**, matching `--list` (52). No spec asserted the banner's placed line, so none changed.
 - CI: R-226's run `35376170871` was still in progress at 25 minutes when this was pushed, and the push cancels it. R-227's run is the first to cover R-224 to R-227. R-223's (`35371468362`) is the last that finished green.
+
+## R-228 — an entry is judged against the notice's real service, and a ticketless work order serves the tenant who lives there
+
+**Commit:** `PENDING`  ·  **Date:** 2026-09-18
+
+**What it built.** Review finding 7 (MAINT-05, COMM-02, RISK-06).
+- **Judged against real service.** `scheduleEntry` ([scheduling.ts](apps/web/lib/workorders/scheduling.ts)) and `scheduleInspectionEntry` ([inspections/scheduling.ts](apps/web/lib/inspections/scheduling.ts)) used to pass `noticeServedAt: now` on the argument that serving happens in the same action. R-210 made that untrue: a tenant with no portal sign-in gets a notice with empty service columns, and the decision had already called it `notice_served, permitted`. Both now ask `canReceiveAuthLink` before the decision and pass `null` when the portal cannot serve. So an unserved notice needs the override reason, however early the window. The audit row records `after.noticeServed`. The form heading says "The notice cannot be served through the portal", and the error comes from `unservedEntryWarning` in core, not an hour count.
+- **The tenancy comes from the unit, not the ticket.** A work order's lease is now the unit's newest ACTIVE or MONTH_TO_MONTH lease, with its primary tenant. A work order with no ticket used to resolve to nobody. That covers every R-080 preventive work order and any work order a PM raised directly. It generated no notice and was labelled `notice_served`. It now generates the notice and sends it.
+- **The self-serve showing** ([showings/actions.ts](apps/web/lib/showings/actions.ts)) uses the same predicate. A prospect has no override path, so the booking is refused ("Contact us") when the tenant cannot be served.
+- Two e2e tests in `entry-notice.spec.ts`: a ticketless work order generates a served notice to the lease's tenant and notifies them; for an unreachable tenant, a 48-hour window writes nothing until a reason is given, then schedules with the notice unserved and `noticeServed: false` on the override.
+
+**What it decided** (D-247).
+- Unserved means the existing warn-and-override, not a block. A notice posted on the door is real service the product cannot see, and the reason is where staff say so.
+- No separate hold for preventive work. `scheduleEntry` is the only writer of a work order's window, and preventive work orders are created unscheduled, so they stay unscheduled until this check passes or is overridden.
+- Unchanged: a jurisdiction with no stated period still permits an unserved notice (R-027's tested rule), and an inspection keeps its own lease.
+
+**What it left behind.**
+- Recording a hand service on `/notices` afterwards does not re-judge the scheduled window; the override reason is the record.
+- No backfill or report of past entries made on the old path. **Needs counsel** on damages for those.
+- The showing slot list still offers slots for a tenant who cannot be served. The refusal comes only at submit.
+
+**Gate.**
+- `lint`: 0 errors (16 warnings already there). `typecheck`: clean. `check:ship-deps`: clean. No schema change.
+- `npm test`: **3,271 passed / 4 skipped**. Unchanged from R-227; the new coverage is e2e.
+- e2e `entry-notice`, `inspections`, `showings` and `unreachable-notice` against the production build, both projects: **42 passed**, matching `--list` (42).
+- CI: R-227's run `35377407186` was still in progress when this was pushed.

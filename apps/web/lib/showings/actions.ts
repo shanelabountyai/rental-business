@@ -91,29 +91,33 @@ export async function bookShowing(
       return { error: 'This unit is not available for self-serve booking right now. Contact us.' }
     }
 
+    // R-210, same check and same reason as the two scheduling modules: a
+    // tenant no sign-in link can reach has no route into the portal, so PORTAL service
+    // recorded for them is a false entry in the one record an unlawful-entry
+    // claim is argued off. R-228: and it is asked BEFORE the decision, which
+    // used to count the notice as served this instant either way.
+    const servedToPortal = await canReceiveAuthLink('TENANT', tenant)
     const rule = await rulesFor({ state: link.state, county: link.county }, now)
     const decision = entryDecision({
       scheduledStart: requested,
-      noticeServedAt: now,
+      noticeServedAt: servedToPortal ? now : null,
       entryNoticeHours: rule.entryNoticeHours,
       isEmergency: false,
       tenantPermissionGrantedAt: null,
     })
     if (!decision.permitted) {
-      // Would only happen if a rule tightened between the slot list being
-      // computed (which already excludes anything short of
-      // earliestCompliantStart) and this submit - the same staleness
-      // `slots.some(...)` above guards, belt and braces.
-      return { error: 'That time is no longer available. Pick another.' }
+      // A prospect has no override path and cannot serve a notice, so a
+      // tenant the portal cannot reach means staff book this one by hand
+      // (R-228). Otherwise it would only happen if a rule tightened between
+      // the slot list being computed (which already excludes anything short
+      // of earliestCompliantStart) and this submit - belt and braces.
+      return {
+        error: servedToPortal
+          ? 'That time is no longer available. Pick another.'
+          : 'This unit is not available for self-serve booking right now. Contact us.',
+      }
     }
 
-    // R-210, same check and same reason as the two scheduling modules: a
-    // tenant no sign-in link can reach has no route into the portal, so PORTAL service
-    // recorded for them is a false entry in the one record an unlawful-entry
-    // claim is argued off. The showing still goes ahead - the decision above
-    // is unchanged - and the notice still goes out on every channel the
-    // engine can reach; only the SERVICE columns wait for real service.
-    const servedToPortal = await canReceiveAuthLink('TENANT', tenant)
     const notice = await prisma.notice.create({
       data: {
         propertyId: link.propertyId,

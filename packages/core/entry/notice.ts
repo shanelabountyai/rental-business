@@ -118,6 +118,14 @@ export function entryDecision(facts: EntryFacts): EntryDecision {
   }
 }
 
+/// The override warning when a notice CANNOT be served by the product -
+/// the tenant has no portal sign-in (R-210) - as opposed to one served too
+/// late. Nothing is written until staff give a reason, so the reason is
+/// where a notice posted or handed over by hand is recorded (R-228).
+export function unservedEntryWarning(requiredHours: number, state: string): string {
+  return `The tenant cannot sign in to the portal, so the product cannot serve this notice, and ${state} requires ${requiredHours} hours' notice. If you have posted it or handed it over, say when and how; otherwise say why you are going ahead.`
+}
+
 /// The earliest a visit may START given when notice goes out. What the
 /// scheduling form offers as "the soonest compliant window", so staff are
 /// steered to a lawful time rather than told off after choosing one.

@@ -3,6 +3,7 @@
 import {
   entryDecision,
   entryNoticeText,
+  unservedEntryWarning,
   validateOverride,
   validateSchedule,
 } from '@rental/core/entry'
@@ -39,7 +40,7 @@ export interface InspectionScheduleResult extends InspectionFormState {
   /// Set when the window is inside the notice period and staff have not yet
   /// stated a reason - the form re-renders with the warning and an override
   /// field (the same warn-and-requires shape scheduleEntry gives MAINT-05).
-  needsOverride?: { requiredHours: number; shortfallHours: number }
+  needsOverride?: { requiredHours: number; shortfallHours: number; unserved?: boolean }
   /// What was submitted, echoed back - React 19 resets uncontrolled fields
   /// once a form action completes, and the warn-and-override path must not
   /// wipe the window the user just typed.
@@ -135,11 +136,15 @@ export async function scheduleInspectionEntry(
     now,
   )
 
+  // R-228: judged against the service that will actually happen, not `now`
+  // regardless - see `workorders/scheduling.ts`, which carried the same line.
+  const tenant = inspection.lease?.leaseTenants[0]?.tenant ?? null
+  const leaseId = inspection.lease?.id ?? null
+  const servedToPortal = leaseId != null && tenant != null && (await canReceiveAuthLink('TENANT', tenant))
+
   const decision = entryDecision({
     scheduledStart,
-    // Serving happens as part of this same action, so "when would notice be
-    // served" is now - the decision is made BEFORE anything is written.
-    noticeServedAt: now,
+    noticeServedAt: servedToPortal ? now : null,
     entryNoticeHours: rule.entryNoticeHours,
     // An inspection is never an emergency and has no logged
     // permission-to-enter flow (a tenant who says "come today" is the
@@ -154,19 +159,19 @@ export async function scheduleInspectionEntry(
       // NOTHING is written - saving the window first would leave a
       // scheduled unlawful entry on the record if the reason never came.
       return {
-        error: `This is ${decision.shortfallHours} hour${decision.shortfallHours === 1 ? '' : 's'} inside the ${decision.requiredHours}-hour notice period for ${inspection.property.state}.`,
+        error: servedToPortal
+          ? `This is ${decision.shortfallHours} hour${decision.shortfallHours === 1 ? '' : 's'} inside the ${decision.requiredHours}-hour notice period for ${inspection.property.state}.`
+          : unservedEntryWarning(decision.requiredHours!, inspection.property.state),
         fieldErrors: Object.fromEntries(overrideViolations.map((v) => [v.field, v.message])),
         needsOverride: {
           requiredHours: decision.requiredHours!,
           shortfallHours: decision.shortfallHours!,
+          unserved: !servedToPortal,
         },
         values,
       }
     }
   }
-
-  const tenant = inspection.lease?.leaseTenants[0]?.tenant ?? null
-  const leaseId = inspection.lease?.id ?? null
 
   await prisma.$transaction(async (tx) => {
     let noticeId: string | null = null
@@ -175,7 +180,6 @@ export async function scheduleInspectionEntry(
       // `workorders/scheduling.ts` - a tenant no sign-in link can reach has no route into
       // the portal, so PORTAL service claimed for them is a false entry in
       // the record an unlawful-entry claim is argued off.
-      const servedToPortal = await canReceiveAuthLink('TENANT', tenant)
       const notice = await tx.notice.create({
         data: {
           propertyId: inspection.propertyId,
@@ -254,6 +258,7 @@ export async function scheduleInspectionEntry(
             scheduledStart: scheduledStart.toISOString(),
             requiredHours: decision.requiredHours,
             shortfallHours: decision.shortfallHours,
+            noticeServed: servedToPortal,
             state: inspection.property.state,
             jurisdictionRuleId: rule.id,
           },

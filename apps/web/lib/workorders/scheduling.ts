@@ -3,6 +3,7 @@
 import {
   entryDecision,
   entryNoticeText,
+  unservedEntryWarning,
   validateOverride,
   validateSchedule,
 } from '@rental/core/entry'
@@ -49,9 +50,24 @@ async function entryContextFor(workOrderId: string) {
     include: {
       property: true,
       unit: true,
-      ticket: {
+    },
+  })
+
+  // R-228. THE TENANCY IS THE UNIT'S, NOT THE TICKET'S. This used to read
+  // `workOrder.ticket.leaseId` and `.tenant`, so a work order with no ticket
+  // - every one R-080's preventive maintenance opens, and any a PM raises by
+  // hand - resolved to nobody, generated no notice, and was judged as served.
+  // The furnace service on an occupied house went in with no notice at all.
+  // Whoever lives there is who is owed the notice, whoever opened the ticket.
+  const lease = await prisma.lease.findFirst({
+    where: { unitId: workOrder.unitId, status: { in: ['ACTIVE', 'MONTH_TO_MONTH'] } },
+    orderBy: { startsOn: 'desc' },
+    select: {
+      id: true,
+      leaseTenants: {
+        orderBy: { isPrimary: 'desc' },
+        take: 1,
         select: {
-          leaseId: true,
           tenant: { select: { id: true, firstName: true, lastName: true, email: true, phone: true } },
         },
       },
@@ -63,14 +79,21 @@ async function entryContextFor(workOrderId: string) {
     new Date(),
   )
 
-  return { workOrder, rule }
+  return {
+    workOrder,
+    rule,
+    leaseId: lease?.id ?? null,
+    tenant: lease?.leaseTenants[0]?.tenant ?? null,
+  }
 }
 
 export interface ScheduleResult extends WorkOrderFormState {
   /// Set when the window is inside the notice period and staff have not yet
   /// stated a reason. The form re-renders with the warning and an override
   /// field rather than silently failing - MAINT-05's "warns and requires".
-  needsOverride?: { requiredHours: number; shortfallHours: number }
+  /// `unserved`: the portal cannot reach the tenant, so there is no service
+  /// to count from at all (R-228) - a different warning from "too soon".
+  needsOverride?: { requiredHours: number; shortfallHours: number; unserved?: boolean }
   /// What was submitted, echoed back so the form can re-render with it.
   ///
   /// React 19 RESETS uncontrolled fields once a form action completes, so
@@ -100,7 +123,7 @@ export async function scheduleEntry(
   _previous: ScheduleResult,
   formData: FormData,
 ): Promise<ScheduleResult> {
-  const { workOrder, rule } = await entryContextFor(workOrderId)
+  const { workOrder, rule, leaseId, tenant } = await entryContextFor(workOrderId)
   const actor = await requirePermission('workorder.write', propertyResource(workOrder.property))
 
   if (workOrder.status === 'CLOSED' || workOrder.status === 'CANCELED') {
@@ -142,14 +165,20 @@ export async function scheduleEntry(
   const scheduledEnd = wallClockToUtc(input.scheduledEnd, timezone)
   const now = new Date()
 
+  // R-228. WHEN THE NOTICE IS ACTUALLY SERVED, decided before anything is
+  // written. This used to pass `now` unconditionally, on the argument that
+  // serving happens in this same action - which R-210 made untrue: a tenant
+  // no sign-in link can reach gets a notice with empty service columns, and
+  // the decision had already called it `notice_served, permitted`. So
+  // PORTAL service is now known up front, and an unserved notice is judged
+  // as what it is - no notice yet - which routes it through the override
+  // with its reason on the record. The notice is still generated and sent
+  // on every channel the engine has; staff close service on `/notices`.
+  const servedToPortal = leaseId != null && tenant != null && (await canReceiveAuthLink('TENANT', tenant))
+
   const decision = entryDecision({
     scheduledStart,
-    // Serving happens as part of this same action, so "when would notice be
-    // served" is now. Written this way rather than passing the eventual
-    // Notice row's timestamp because the decision has to be made BEFORE
-    // anything is written - a notice recorded and then judged insufficient
-    // would be a served notice we then decided not to honour.
-    noticeServedAt: now,
+    noticeServedAt: servedToPortal ? now : null,
     entryNoticeHours: rule.entryNoticeHours,
     isEmergency: workOrder.priority === 'EMERGENCY',
     tenantPermissionGrantedAt: workOrder.entryPermissionGrantedAt,
@@ -163,19 +192,19 @@ export async function scheduleEntry(
       // asking for the reason afterwards would leave a scheduled unlawful
       // entry on the record if the second step were never completed.
       return {
-        error: `This is ${decision.shortfallHours} hour${decision.shortfallHours === 1 ? '' : 's'} inside the ${decision.requiredHours}-hour notice period for ${workOrder.property.state}.`,
+        error: servedToPortal
+          ? `This is ${decision.shortfallHours} hour${decision.shortfallHours === 1 ? '' : 's'} inside the ${decision.requiredHours}-hour notice period for ${workOrder.property.state}.`
+          : unservedEntryWarning(decision.requiredHours!, workOrder.property.state),
         fieldErrors: Object.fromEntries(overrideViolations.map((v) => [v.field, v.message])),
         needsOverride: {
           requiredHours: decision.requiredHours!,
           shortfallHours: decision.shortfallHours!,
+          unserved: !servedToPortal,
         },
         values,
       }
     }
   }
-
-  const tenant = workOrder.ticket?.tenant ?? null
-  const leaseId = workOrder.ticket?.leaseId ?? null
 
   await prisma.$transaction(async (tx) => {
     // The notice, when the basis is notice at all. An emergency or a logged
@@ -195,7 +224,6 @@ export async function scheduleEntry(
         // sorts to the top of `/notices`, which is the screen that exists to
         // make sure it is not forgotten, and staff close it through
         // `recordNoticeService` once they have posted or handed it over.
-        const servedToPortal = await canReceiveAuthLink('TENANT', tenant)
         const notice = await tx.notice.create({
           data: {
             propertyId: workOrder.propertyId,
@@ -290,6 +318,7 @@ export async function scheduleEntry(
             scheduledStart: scheduledStart.toISOString(),
             requiredHours: decision.requiredHours,
             shortfallHours: decision.shortfallHours,
+            noticeServed: servedToPortal,
             state: workOrder.property.state,
             jurisdictionRuleId: rule.id,
           },

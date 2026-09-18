@@ -110,9 +110,9 @@ export function ScheduleForm({
       {state.needsOverride && (
         <div className="flex flex-col gap-2 rounded-md border-2 border-amber-500 p-3">
           <p className="text-sm font-medium">
-            {state.needsOverride.shortfallHours} hour
-            {state.needsOverride.shortfallHours === 1 ? '' : 's'} inside the{' '}
-            {state.needsOverride.requiredHours}-hour notice period
+            {state.needsOverride.unserved
+              ? 'The notice cannot be served through the portal'
+              : `${state.needsOverride.shortfallHours} hour${state.needsOverride.shortfallHours === 1 ? '' : 's'} inside the ${state.needsOverride.requiredHours}-hour notice period`}
           </p>
           <p className="text-muted-foreground text-sm">
             You can go ahead, but the reason is recorded permanently and is what this

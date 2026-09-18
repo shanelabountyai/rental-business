@@ -35,7 +35,9 @@ async function createStaff() {
   return staff
 }
 
-async function seedWorkOrder(options: { priority?: string } = {}) {
+async function seedWorkOrder(
+  options: { priority?: string; withTicket?: boolean; portalReachable?: boolean } = {},
+) {
   const unique = randomUUID().slice(0, 8)
   const entity = await prisma.legalEntity.create({
     data: { name: `Entry LLC-${unique}`, type: 'LLC' },
@@ -60,7 +62,12 @@ async function seedWorkOrder(options: { priority?: string } = {}) {
     data: { propertyId: property.id, name: `U-${unique}`, status: 'OCCUPIED' },
   })
   const tenant = await prisma.tenant.create({
-    data: { firstName: 'Nadia', lastName: `Entry-${unique}`, phone: uniquePhone(), email: `t-${unique}@example.test` },
+    // No email and no phone is a tenant no sign-in link can reach, so the
+    // product cannot serve them through the portal (R-210, R-228).
+    data:
+      options.portalReachable === false
+        ? { firstName: 'Nadia', lastName: `Entry-${unique}` }
+        : { firstName: 'Nadia', lastName: `Entry-${unique}`, phone: uniquePhone(), email: `t-${unique}@example.test` },
   })
   tenantIds.push(tenant.id)
   const lease = await prisma.lease.create({
@@ -72,7 +79,22 @@ async function seedWorkOrder(options: { priority?: string } = {}) {
       rentCents: 150_000,
     },
   })
-  await prisma.leaseTenant.create({ data: { leaseId: lease.id, tenantId: tenant.id } })
+  await prisma.leaseTenant.create({ data: { leaseId: lease.id, tenantId: tenant.id, isPrimary: true } })
+  // Preventive maintenance (R-080) and a PM's own work orders have no
+  // ticket, and so no lease or tenant on one (R-228).
+  if (options.withTicket === false) {
+    const workOrder = await prisma.workOrder.create({
+      data: {
+        propertyId: property.id,
+        unitId: unit.id,
+        scope: 'Annual furnace service.',
+        priority: 'ROUTINE',
+        status: 'APPROVED',
+      },
+    })
+    workOrderIds.push(workOrder.id)
+    return { property, unit, tenant, lease, workOrder }
+  }
   const ticket = await prisma.ticket.create({
     data: {
       propertyId: property.id,
@@ -98,7 +120,7 @@ async function seedWorkOrder(options: { priority?: string } = {}) {
     },
   })
   workOrderIds.push(workOrder.id)
-  return { property, unit, tenant, workOrder }
+  return { property, unit, tenant, lease, workOrder }
 }
 
 /// `datetime-local` value N hours from now. The input is naive wall-clock,
@@ -430,6 +452,86 @@ test.describe('entry-notice compliance', () => {
 
     const updated = await prisma.workOrder.findUniqueOrThrow({ where: { id: workOrder.id } })
     expect(updated.entryOverrideReason, 'permission is a basis, not an override').toBeNull()
+  })
+
+  test('a work order with no ticket still serves the tenant who lives there', async ({ page }) => {
+    // R-228. The tenancy used to come off the ticket, so preventive work on
+    // an occupied house generated no notice and was labelled as served.
+    const { workOrder, property, tenant, lease } = await seedWorkOrder({ withTicket: false })
+    const staff = await createStaff()
+    await signIn(page, staff.email)
+
+    await page.goto(`/workorders/${workOrder.id}`)
+    await page.getByLabel('Window starts').fill(localDateTime(48))
+    await page.getByLabel('Window ends').fill(localDateTime(51))
+    await page.getByLabel('What the visit is for').fill('Annual furnace service')
+    await page.getByRole('button', { name: 'Schedule and notify' }).click()
+
+    await expect
+      .poll(
+        async () => (await prisma.workOrder.findUnique({ where: { id: workOrder.id } }))?.entryNoticeId,
+        { timeout: 15_000 },
+      )
+      .not.toBeNull()
+    const notice = await prisma.notice.findFirstOrThrow({
+      where: { propertyId: property.id, type: 'ENTRY_NOTICE' },
+    })
+    noticeIds.push(notice.id)
+    expect(notice.leaseId).toBe(lease.id)
+    expect(notice.servedAt).not.toBeNull()
+    await expect
+      .poll(
+        async () =>
+          prisma.notification.count({
+            where: { recipientType: 'TENANT', recipientId: tenant.id, templateKey: 'entry.notice' },
+          }),
+        { timeout: 15_000 },
+      )
+      .toBeGreaterThan(0)
+  })
+
+  test('a notice the portal cannot serve is not notice, however early', async ({ page }) => {
+    // R-228. Forty-eight hours ahead clears a 24-hour rule only if the notice
+    // is served now; for a tenant with no portal sign-in it is not, so the
+    // decision used to say `notice_served` over a notice `/notices` lists as
+    // unserved.
+    const { workOrder, property } = await seedWorkOrder({
+      withTicket: false,
+      portalReachable: false,
+    })
+    const staff = await createStaff()
+    await signIn(page, staff.email)
+
+    await page.goto(`/workorders/${workOrder.id}`)
+    await page.getByLabel('Window starts').fill(localDateTime(48))
+    await page.getByLabel('Window ends').fill(localDateTime(51))
+    await page.getByLabel('What the visit is for').fill('Annual furnace service')
+    await page.getByRole('button', { name: 'Schedule and notify' }).click()
+
+    await expect(page.getByLabel('Why are you going ahead?')).toBeVisible()
+    await expect(page.getByText('The notice cannot be served through the portal')).toBeVisible()
+    const untouched = await prisma.workOrder.findUniqueOrThrow({ where: { id: workOrder.id } })
+    expect(untouched.status, 'nothing is written without a reason').toBe('APPROVED')
+
+    await page.getByLabel('Why are you going ahead?').fill('Posted on the front door at 9am today')
+    await page.getByRole('button', { name: /Schedule anyway/ }).click()
+    await expect
+      .poll(
+        async () => (await prisma.workOrder.findUnique({ where: { id: workOrder.id } }))?.status,
+        { timeout: 15_000 },
+      )
+      .toBe('SCHEDULED')
+
+    const notice = await prisma.notice.findFirstOrThrow({
+      where: { propertyId: property.id, type: 'ENTRY_NOTICE' },
+    })
+    noticeIds.push(notice.id)
+    expect(notice.servedAt, 'still waiting on /notices for real service').toBeNull()
+    const override = await prisma.auditLog.findFirstOrThrow({
+      where: { action: 'entry_notice.overridden', entityId: workOrder.id },
+    })
+    expect(override.reason).toContain('Posted on the front door')
+    expect((override.after as { noticeServed?: boolean }).noticeServed).toBe(false)
   })
 
   test('records a tenant no-show as trip-charge evidence', async ({ page }) => {
