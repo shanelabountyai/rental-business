@@ -239,40 +239,56 @@ describe('paymentView', () => {
 })
 
 describe('the open-invoice read the offline path depends on', () => {
-  it('reports the outstanding balance under a stable, Stripe-shaped id', async () => {
-    // R-038 marks an INVOICE paid out of band, so it needs an invoice id -
-    // not just an amount. The simulator derives both from the ledger, so a
-    // retry finds the same invoice rather than inventing a second one.
-    await prisma.leasePayer.update({
+  async function payerRow() {
+    return prisma.leasePayer.findUniqueOrThrow({
       where: { id: leasePayerId },
-      data: { stripeSubscriptionId: `sub_${randomUUID().replace(/-/g, '').slice(0, 14)}` },
+      select: { leaseId: true, stripeCustomerId: true },
     })
-    const payer = await prisma.leasePayer.findUniqueOrThrow({
-      where: { id: leasePayerId },
-      select: { stripeSubscriptionId: true },
-    })
+  }
 
+  it('reports ONE INVOICE PER BILLED PERIOD, oldest first, summing to the balance (R-224)', async () => {
+    // R-038 marks an INVOICE paid out of band, so it needs invoice ids - not
+    // just an amount. It used to report the whole balance as one invoice,
+    // which made a two-month cure tender unrefusable here while real Stripe
+    // refused every one. The simulator derives the periods from the ledger,
+    // so a retry finds the same invoices rather than inventing new ones.
+    const payer = await payerRow()
     const provider = new SimulatedBillingProvider()
-    const first = await provider.getOpenInvoice({
-      stripeSubscriptionId: payer.stripeSubscriptionId!,
-    })
-    expect(first).not.toBeNull()
-    expect(first!.stripeInvoiceId).toMatch(/^in_/)
-    expect(first!.amountRemainingCents).toBeGreaterThan(0)
+    const before = await provider.getOpenInvoices({ stripeCustomerId: payer.stripeCustomerId! })
 
-    const second = await provider.getOpenInvoice({
-      stripeSubscriptionId: payer.stripeSubscriptionId!,
+    await prisma.ledgerEntry.create({
+      data: {
+        propertyId,
+        leaseId: payer.leaseId,
+        leasePayerId,
+        type: 'CHARGE',
+        amountCents: 150_000,
+        description: 'March rent',
+        occurredAt: new Date('2026-03-01T12:00:00Z'),
+      },
     })
-    expect(second!.stripeInvoiceId).toBe(first!.stripeInvoiceId)
+
+    const first = await provider.getOpenInvoices({ stripeCustomerId: payer.stripeCustomerId! })
+    expect(first!.length).toBe(before!.length + 1)
+    expect(first!.every((invoice) => invoice.stripeInvoiceId.startsWith('in_'))).toBe(true)
+    expect(new Set(first!.map((invoice) => invoice.stripeInvoiceId)).size).toBe(first!.length)
+    expect(first!.at(-1)).toMatchObject({ amountRemainingCents: 150_000 })
+    const created = first!.map((invoice) => invoice.createdAt.getTime())
+    expect(created).toEqual([...created].sort((a, b) => a - b))
+    expect(first!.reduce((total, invoice) => total + invoice.amountRemainingCents, 0)).toBe(
+      await leaseBalanceCents(payer.leaseId),
+    )
+
+    const second = await provider.getOpenInvoices({ stripeCustomerId: payer.stripeCustomerId! })
+    expect(second!.map((invoice) => invoice.stripeInvoiceId)).toEqual(
+      first!.map((invoice) => invoice.stripeInvoiceId),
+    )
   })
 
   it('reports nothing open when the balance is clear', async () => {
     // The `no_open_invoice` refusal has to be reachable, or the branch is
     // dead code no test can exercise.
-    const payer = await prisma.leasePayer.findUniqueOrThrow({
-      where: { id: leasePayerId },
-      select: { leaseId: true, stripeSubscriptionId: true },
-    })
+    const payer = await payerRow()
     const outstanding = await leaseBalanceCents(payer.leaseId)
     await prisma.ledgerEntry.create({
       data: {
@@ -287,8 +303,8 @@ describe('the open-invoice read the offline path depends on', () => {
     })
 
     const provider = new SimulatedBillingProvider()
-    expect(
-      await provider.getOpenInvoice({ stripeSubscriptionId: payer.stripeSubscriptionId! }),
-    ).toBeNull()
+    expect(await provider.getOpenInvoices({ stripeCustomerId: payer.stripeCustomerId! })).toEqual(
+      [],
+    )
   })
 })

@@ -2,6 +2,7 @@
 
 import { createHash } from 'node:crypto'
 import { balanceCents } from '@rental/core/ledger'
+import { formatCents } from '@rental/core/money'
 import {
   OFFLINE_INSTRUMENTS,
   OFFLINE_REFUSALS,
@@ -16,6 +17,7 @@ import { revalidatePath } from 'next/cache'
 import { audit } from '@/lib/audit/index.ts'
 import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
 import { getBillingProvider } from '@/lib/billing/provider.ts'
+import { recordAcrossInvoices } from '@/lib/payments/out-of-band.ts'
 import { renderBlocksPdf } from '@/lib/pdf/render.ts'
 import { generateStorageKey, storage } from '@/lib/storage/index.ts'
 
@@ -53,9 +55,10 @@ export interface OfflineFormState {
   error?: string
   fieldErrors?: Record<string, string>
   notice?: string
-  /// R-166: the counter receipt, once recorded. Absent on every error return
-  /// — a receipt for a payment that was refused would be evidence of money
-  /// that never actually changed hands.
+  /// R-166: the counter receipt, once recorded. Absent on every refusal — a
+  /// receipt for a payment that was refused would be evidence of money that
+  /// never actually changed hands. Present beside the error when only part of
+  /// a cheque landed (R-224): it receipts the part that did, and no more.
   receiptDocumentId?: string
 }
 
@@ -127,22 +130,24 @@ export async function recordOfflinePayment(
     }
   }
 
-  if (!payer.stripeSubscriptionId) {
+  // The customer, not the subscription: the invoices are listed by customer
+  // (R-224), and the attach needs it anyway - Stripe refuses a payment record
+  // whose customer is not the invoice's.
+  const stripeCustomerId = payer.stripeCustomerId
+  if (!payer.stripeSubscriptionId || !stripeCustomerId) {
     return { error: 'Billing is not set up for this payer yet, so there is nothing to apply this to.' }
   }
 
   const provider = getBillingProvider()
-  const [entries, invoice] = await Promise.all([
+  const [entries, invoices] = await Promise.all([
     prisma.ledgerEntry.findMany({
       where: { leaseId: payer.leaseId },
       select: { id: true, amountCents: true },
     }),
-    provider
-      .getOpenInvoice({ stripeSubscriptionId: payer.stripeSubscriptionId })
-      .catch((error) => {
-        console.error(`[payments] could not read the open invoice for ${payer.id}`, error)
-        return null
-      }),
+    provider.getOpenInvoices({ stripeCustomerId }).catch((error) => {
+      console.error(`[payments] could not read the open invoices for ${payer.id}`, error)
+      return null
+    }),
   ])
 
   const decision = offlinePaymentDecision(
@@ -150,7 +155,8 @@ export async function recordOfflinePayment(
       balanceCents: balanceCents(
         entries.map((row) => ({ ...row, type: '', occurredAt: new Date(0), description: '' })),
       ),
-      openInvoiceAmountCents: invoice?.amountRemainingCents ?? null,
+      openInvoiceAmountCents:
+        invoices?.reduce((total, invoice) => total + invoice.amountRemainingCents, 0) ?? null,
       blockPartial: payer.blockPartialPayments,
       certifiedFundsOnly: payer.certifiedFundsOnly,
       // Safe cast: `validateOfflinePayment` above refused anything that is
@@ -161,10 +167,6 @@ export async function recordOfflinePayment(
   )
   if (!decision.allowed) {
     return { error: OFFLINE_REFUSALS[decision.refusal!] }
-  }
-
-  if (!payer.stripeCustomerId) {
-    return { error: 'Billing is not set up for this payer yet, so there is nothing to apply this to.' }
   }
 
   // What Stripe is told this was. Not free text a staff member types - it is
@@ -184,11 +186,14 @@ export async function recordOfflinePayment(
   // through the webhook like every other payment, so there stays exactly
   // one way money enters the projection (D-11).
   //
-  // BEFORE the push, and that is load-bearing rather than incidental - see
-  // this file's header. `receivedByStaffId` is what the webhook recognises
-  // this row by, and this is the only place in the codebase that writes it.
-  const payment = await prisma.payment.create({
-    data: {
+  // Written BEFORE the push, with one split per invoice it covers - see
+  // `recordAcrossInvoices` and this file's header. `receivedByStaffId` is
+  // what the webhook recognises this row by.
+  const outcome = await recordAcrossInvoices({
+    provider,
+    // Non-null: the decision above refused a null list as `no_open_invoice`.
+    invoices: invoices!,
+    payment: {
       propertyId: payer.propertyId,
       leaseId: payer.leaseId,
       leasePayerId: payer.id,
@@ -202,45 +207,28 @@ export async function recordOfflinePayment(
       receivedAt,
       receivedByStaffId: actor.id,
       checkNumber: input.checkNumber,
-      stripeInvoiceId: invoice!.stripeInvoiceId,
     },
+    stripeCustomerId,
+    reference,
+    instrument,
+    // KEYED ON THE FACT, not on the attempt: this payer, this instrument,
+    // this amount, this day. A part-payment has no "already paid" state to
+    // save it - R-038's whole-invoice call was protected by Stripe simply
+    // refusing to pay a paid invoice, and attaching half of one twice is
+    // money the tenant never handed over. A double submission now reports
+    // the SAME payment record, which Stripe then refuses to attach twice.
+    idempotencyKey: `offline:${payer.id}:${input.receivedOn}:${input.channel}:${input.checkNumber ?? ''}:${input.amountCents}`,
+    logTag: 'payments',
   })
 
-  try {
-    await provider.recordOutOfBandPayment({
-      stripeInvoiceId: invoice!.stripeInvoiceId,
-      stripeCustomerId: payer.stripeCustomerId,
-      amountCents: input.amountCents,
-      receivedAt,
-      reference,
-      instrument,
-      // KEYED ON THE FACT, not on the attempt: this payer, this instrument,
-      // this amount, this day. A part-payment has no "already paid" state to
-      // save it - R-038's whole-invoice call was protected by Stripe simply
-      // refusing to pay a paid invoice, and attaching half of one twice is
-      // money the tenant never handed over. A double submission now reports
-      // the SAME payment record, which Stripe then refuses to attach twice.
-      idempotencyKey: `offline:${payer.id}:${input.receivedOn}:${input.channel}:${input.checkNumber ?? ''}:${input.amountCents}`,
-    })
-  } catch (error) {
-    console.error(`[payments] out-of-band push failed for ${payer.id}`, error)
-    // BACKED OUT, so a failed push still leaves no record of money nobody can
-    // see on the provider's side. Nothing can be pinning this row: the only
-    // thing that ever projects a ledger entry against it is the event the
-    // push just failed to fire, so the RESTRICT foreign key cannot bite. A
-    // cleanup that fails anyway is logged and swallowed - the error the staff
-    // member needs to read is the push failure, not a delete.
-    await prisma.payment.delete({ where: { id: payment.id } }).catch((cleanupError) => {
-      console.error(
-        `[payments] could not back out payment ${payment.id} after a failed push`,
-        cleanupError,
-      )
-    })
+  if (outcome.recorded === 'none') {
     return {
       error:
         'That could not be recorded against the billing provider, so nothing has been saved. Try again shortly — do not record it twice.',
     }
   }
+  const payment = { id: outcome.paymentId }
+  const recordedCents = outcome.recorded === 'part' ? outcome.recordedCents : input.amountCents
 
   // AFTER the push, not beside the row. `AuditLog` is append-only, so an
   // entry saying a payment was recorded cannot be withdrawn when the row it
@@ -252,11 +240,10 @@ export async function recordOfflinePayment(
     propertyId: payer.propertyId,
     after: {
       channel: input.channel,
-      amountCents: input.amountCents,
+      amountCents: recordedCents,
       receivedOn: input.receivedOn,
       checkNumber: input.checkNumber,
       receivedByStaffId: actor.id,
-      stripeInvoiceId: invoice!.stripeInvoiceId,
       provider: provider.name,
     },
   })
@@ -283,7 +270,7 @@ export async function recordOfflinePayment(
         propertyName: payer.property.name,
         unitName: payer.lease.unit.name,
         payerName,
-        amountCents: input.amountCents,
+        amountCents: recordedCents,
         channel: input.channel,
         checkNumber: input.checkNumber,
         receivedOn: friendlyDate(receivedAt, payer.property.timezone),
@@ -334,6 +321,15 @@ export async function recordOfflinePayment(
 
   revalidatePath(`/leases/${payer.leaseId}`)
   revalidatePath('/money')
+  if (outcome.recorded === 'part') {
+    // Some invoices took their share and one refused. What landed is real
+    // money at the provider and stays recorded; the rest is not, and saying
+    // "recorded" would send the tenant home owing it (R-224).
+    return {
+      error: `Only ${formatCents(recordedCents)} of ${formatCents(input.amountCents)} could be recorded against the billing provider. Record the remaining ${formatCents(input.amountCents - recordedCents)} again shortly, on the same form.`,
+      receiptDocumentId,
+    }
+  }
   return {
     notice: 'Recorded. The tenant will get a receipt once it posts.',
     receiptDocumentId,

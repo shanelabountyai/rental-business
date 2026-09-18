@@ -242,6 +242,37 @@ describe('what the driver actually sends', () => {
     )
   })
 
+  it('lists EVERY open invoice by CUSTOMER for a counter payment, not the first by subscription (R-224)', async () => {
+    // `subscription=…&limit=1` found one month of a two-month arrears, so a
+    // cure tender for both was refused, and it never found a one-off damages
+    // invoice at all, which has no subscription.
+    const calls = captureFetch()
+    globalThis.fetch = (async (url: string | URL) => {
+      calls.push({ url: String(url), init: {} })
+      return new Response(
+        JSON.stringify({
+          data: [
+            { id: 'in_apr', amount_remaining: 150_000, created: 1_775_000_000 },
+            { id: 'in_mar', amount_remaining: 150_000, created: 1_772_000_000 },
+            { id: 'in_paid', amount_remaining: 0, created: 1_770_000_000 },
+          ],
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      )
+    }) as typeof fetch
+
+    const invoices = await provider().getOpenInvoices({ stripeCustomerId: 'cus_1' })
+    expect(calls[0]!.url).toContain('customer=cus_1')
+    expect(calls[0]!.url).toContain('status=open')
+    expect(calls[0]!.url).not.toContain('subscription=')
+    expect(calls[0]!.url).toContain('limit=100')
+    expect(invoices!.map((i) => [i.stripeInvoiceId, i.amountRemainingCents])).toEqual([
+      ['in_apr', 150_000],
+      ['in_mar', 150_000],
+    ])
+    expect(invoices![1]!.createdAt).toEqual(new Date(1_772_000_000_000))
+  })
+
   it('charges the TOTAL core computed, and carries the caller’s idempotency key', async () => {
     // D-12: the card fee is core's arithmetic, and Stripe is handed a
     // finished number. The key is the caller's because a retried request

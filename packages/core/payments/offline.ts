@@ -1,3 +1,4 @@
+import { allocatePayment } from '../ledger/allocation.ts'
 import type { BusinessDate } from '../scheduling/local-time.ts'
 
 // Money that arrives off the rails (PAY-05, R-038).
@@ -127,11 +128,14 @@ export type OfflineRefusal =
   /// the debt in front of us - measured, not assumed (R-038a): a credit
   /// posted against an open invoice leaves `amount_remaining` untouched.
   | 'no_open_invoice'
-  /// More than the invoice in front of us still asks for. LESS is fine now
-  /// (R-038a) - a part-payment is attached and the invoice stays open. More
-  /// is not: Stripe itself refuses to attach a payment larger than the
-  /// remainder, and the surplus belongs to a period that has not been billed
-  /// yet, where allocation order is jurisdiction configuration.
+  /// More than every issued invoice together still asks for. LESS is fine
+  /// (R-038a) - a part-payment is attached and an invoice stays open. More is
+  /// not: Stripe refuses to attach more than an invoice's remainder, and the
+  /// surplus belongs to a period that has not been billed yet, where
+  /// allocation order is jurisdiction configuration. Summed over ALL open
+  /// invoices since R-224 - against the oldest one alone, a tenant two months
+  /// behind could pay neither the whole arrears nor, under a part-payment
+  /// hold, one month of it, so no cure tender could be taken at all.
   | 'more_than_invoiced'
   /// A part-payment on a tenancy the operator has put a hold on (PAY-12).
   /// NEW WITH R-038a AND NOT OPTIONAL: R-038 could not take a part-payment
@@ -158,9 +162,10 @@ export interface OfflineFacts {
   /// The instrument in hand. In the facts rather than a separate argument
   /// because the decision is about WHAT arrived, not only how much.
   channel: OfflineChannel
-  /// What Stripe says is still owed on issued invoices. Null means we could
-  /// not ask, which refuses - the same rule the collection-method switch
-  /// follows, and for the same reason.
+  /// What Stripe says is still owed across EVERY open invoice for this
+  /// customer - summed, not the first one (R-224). Null means we could not
+  /// ask, which refuses - the same rule the collection-method switch follows,
+  /// and for the same reason.
   openInvoiceAmountCents: number | null
 }
 
@@ -219,7 +224,7 @@ export const OFFLINE_REFUSALS: Record<OfflineRefusal, string> = {
   no_open_invoice:
     'There is no issued invoice to apply this to yet. Once this period is billed, record it against that.',
   more_than_invoiced:
-    'That is more than the current invoice still asks for. Record what this invoice covers; anything beyond it belongs to a period that has not been billed yet.',
+    'That is more than the issued invoices still ask for. Record what they cover; anything beyond it belongs to a period that has not been billed yet.',
   // Says what to do, and does NOT say why - PAY-12's neutrality rule applies
   // to the staff-facing sentence too, because this one gets read aloud to
   // the person standing at the counter.
@@ -231,4 +236,48 @@ export const OFFLINE_REFUSALS: Record<OfflineRefusal, string> = {
   // both instruments.
   not_certified_funds:
     'This tenancy is set to take certified funds only. Accept a cashier’s cheque or money order — record either as a money order — or lift the hold first if that is the intention.',
+}
+
+export interface OpenInvoice {
+  stripeInvoiceId: string
+  amountRemainingCents: number
+  /// When Stripe issued it. Only ever compared, oldest first.
+  createdAt: Date
+}
+
+/**
+ * How a payment spreads over the open invoices it is attached to (R-224).
+ *
+ * OLDEST INVOICE FIRST, through `allocatePayment` - the same walk a charge
+ * list gets, with every invoice ranked alike so the date decides. Stripe
+ * attaches money to a whole invoice, not to a line on one, so the
+ * jurisdiction's type order cannot reach inside an invoice from here;
+ * oldest-first is the tiebreak `allocatePayment` already calls universally
+ * defensible, and it is what stops the oldest month's days-past-due growing
+ * while a newer one is settled.
+ *
+ * Throws on a remainder rather than returning one: `offlinePaymentDecision`
+ * has already refused anything the invoices cannot absorb, so money left over
+ * here is a caller that skipped the decision.
+ */
+export function splitAcrossInvoices(
+  amountCents: number,
+  invoices: readonly OpenInvoice[],
+): { stripeInvoiceId: string; amountCents: number }[] {
+  const { applications, unappliedCents } = allocatePayment(
+    amountCents,
+    invoices.map((invoice) => ({
+      id: invoice.stripeInvoiceId,
+      type: 'INVOICE',
+      outstandingCents: invoice.amountRemainingCents,
+      // A sort key, never a date anybody reads - an instant compares
+      // correctly as its ISO string.
+      dueOn: invoice.createdAt.toISOString(),
+    })),
+    [],
+  )
+  if (unappliedCents > 0) {
+    throw new RangeError(`${unappliedCents}c is more than the open invoices can absorb`)
+  }
+  return applications.map((a) => ({ stripeInvoiceId: a.chargeId, amountCents: a.appliedCents }))
 }

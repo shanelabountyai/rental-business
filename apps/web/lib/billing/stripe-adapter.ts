@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { randomUUID } from 'node:crypto'
-import type { CollectionMethod, PaymentRail } from '@rental/core/payments'
+import type { CollectionMethod, OpenInvoice, PaymentRail } from '@rental/core/payments'
 import type {
   BillingProvider,
   CustomerInput,
@@ -665,19 +665,24 @@ export class StripeBillingProvider implements BillingProvider {
     return new Uint8Array(await response.arrayBuffer())
   }
 
-  async getOpenInvoice(
-    input: SubscriptionRef,
-  ): Promise<{ stripeInvoiceId: string; amountRemainingCents: number } | null> {
+  async getOpenInvoices(input: { stripeCustomerId: string }): Promise<OpenInvoice[] | null> {
+    // `limit=100` is Stripe's page maximum. A tenancy with more than a
+    // hundred open invoices is not a counter payment, and a truncated list
+    // under-states what is owed, which refuses rather than overpays.
     const list = await this.#get(
-      `/invoices?subscription=${encodeURIComponent(input.stripeSubscriptionId)}&status=open&limit=1`,
+      `/invoices?customer=${encodeURIComponent(input.stripeCustomerId)}&status=open&limit=100`,
     )
-    const data = list?.data as { id?: string; amount_remaining?: number }[] | undefined
-    const invoice = Array.isArray(data) ? data[0] : undefined
-    if (!invoice?.id) return null
-    return {
-      stripeInvoiceId: invoice.id,
-      amountRemainingCents: invoice.amount_remaining ?? 0,
-    }
+    const data = list?.data as
+      | { id?: string; amount_remaining?: number; created?: number }[]
+      | undefined
+    if (!Array.isArray(data)) return null
+    return data
+      .filter((invoice) => invoice.id && (invoice.amount_remaining ?? 0) > 0)
+      .map((invoice) => ({
+        stripeInvoiceId: invoice.id!,
+        amountRemainingCents: invoice.amount_remaining!,
+        createdAt: new Date((invoice.created ?? 0) * 1000),
+      }))
   }
 
   async createPaymentIntent(input: {

@@ -547,14 +547,21 @@ async function writePayment(
     intent.stripePaymentIntentId == null &&
     intent.stripeInvoiceId != null
   ) {
+    //
+    // CLAIMED PER SPLIT since R-224. One cheque can cover several invoices,
+    // each pushed separately and each coming back as its own event, so the
+    // match is a split naming this invoice and this amount, and "unclaimed"
+    // means no ledger entry yet for THIS invoice on the row - not no entry at
+    // all, which the first slice's event would already have written.
     const recorded = await tx.payment.findFirst({
       where: {
         leasePayerId: payer.id,
-        stripeInvoiceId: intent.stripeInvoiceId,
-        amountCents: intent.amountCents,
+        invoiceSplits: {
+          some: { stripeInvoiceId: intent.stripeInvoiceId, amountCents: intent.amountCents },
+        },
         status: 'SETTLED',
         receivedByStaffId: { not: null },
-        ledgerEntries: { none: {} },
+        ledgerEntries: { none: { stripeObjectId: intent.stripeInvoiceId } },
         createdAt: { gte: new Date(intent.occurredAt.getTime() - COUNTER_CLAIM_WINDOW_MS) },
       },
       orderBy: { receivedAt: 'asc' },
@@ -602,15 +609,22 @@ const COUNTER_CLAIM_WINDOW_MS = 2 * 86_400_000
 /// takes them off this count. Invisible to `reconcileLedger`, because the
 /// event it would have checked is the one that is missing.
 export async function unclaimedCounterPayments(propertyIds: string[], now = new Date()) {
-  return prisma.payment.count({
-    where: {
-      propertyId: { in: propertyIds },
-      status: 'SETTLED',
-      receivedByStaffId: { not: null },
-      ledgerEntries: { none: {} },
-      createdAt: { lt: new Date(now.getTime() - COUNTER_CLAIM_WINDOW_MS) },
-    },
-  })
+  // Per split, not per row (R-224): a cheque over two invoices whose second
+  // event never came back has one ledger entry, and "no entries" would miss
+  // it. A split is claimed when an entry for its payment carries its invoice.
+  const [{ count }] = await prisma.$queryRaw<[{ count: bigint }]>`
+    SELECT count(DISTINCT p."id") AS count
+    FROM "Payment" p
+    JOIN "PaymentInvoiceSplit" s ON s."paymentId" = p."id"
+    WHERE p."propertyId" = ANY(${propertyIds})
+      AND p."status" = 'SETTLED'
+      AND p."receivedByStaffId" IS NOT NULL
+      AND p."createdAt" < ${new Date(now.getTime() - COUNTER_CLAIM_WINDOW_MS)}
+      AND NOT EXISTS (
+        SELECT 1 FROM "LedgerEntry" l
+        WHERE l."paymentId" = p."id" AND l."stripeObjectId" = s."stripeInvoiceId"
+      )`
+  return Number(count)
 }
 
 /// The recent event log, for the operational screen R-036 will build out.

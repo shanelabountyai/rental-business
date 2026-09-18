@@ -4469,21 +4469,48 @@ model Payment {
   createdAt             DateTime       @default(now())
   updatedAt             DateTime       @updatedAt
 
-  property            Property      @relation(fields: [propertyId], references: [id])
-  lease               Lease         @relation(fields: [leaseId], references: [id])
-  leasePayer          LeasePayer    @relation(fields: [leasePayerId], references: [id])
-  receivedBy          StaffUser?    @relation("PaymentReceivedBy", fields: [receivedByStaffId], references: [id])
+  property            Property              @relation(fields: [propertyId], references: [id])
+  lease               Lease                 @relation(fields: [leaseId], references: [id])
+  leasePayer          LeasePayer            @relation(fields: [leasePayerId], references: [id])
+  receivedBy          StaffUser?            @relation("PaymentReceivedBy", fields: [receivedByStaffId], references: [id])
   ledgerEntries       LedgerEntry[]
   /// Fees assessed because this payment came back (R-039a).
-  assessedCharges     Charge[]      @relation("ChargeAssessedOnPayment")
-  receiptDocument     Document?     @relation("PaymentReceipt", fields: [receiptDocumentId], references: [id], onDelete: Restrict)
-  depositSlipDocument Document?     @relation("PaymentDepositSlip", fields: [depositSlipDocumentId], references: [id], onDelete: Restrict)
+  assessedCharges     Charge[]              @relation("ChargeAssessedOnPayment")
+  receiptDocument     Document?             @relation("PaymentReceipt", fields: [receiptDocumentId], references: [id], onDelete: Restrict)
+  depositSlipDocument Document?             @relation("PaymentDepositSlip", fields: [depositSlipDocumentId], references: [id], onDelete: Restrict)
+  invoiceSplits       PaymentInvoiceSplit[]
 
   @@unique([stripePaymentIntentId])
   @@index([leaseId, receivedAt])
   @@index([propertyId, receivedAt])
   @@index([status])
   @@index([depositBatchId])
+}
+
+/**
+ * How one payment we recorded ourselves was spread over Stripe's open
+ * invoices (R-224).
+ * One cheque is one Payment - one receipt, one line on the deposit slip, one
+ * acceptance in the eviction packet - but Stripe attaches money to ONE
+ * invoice at a time, so a cheque covering two unpaid months is two
+ * attachments and comes back as two `invoice.updated` events. This is what
+ * the webhook claims each event against: the split names the invoice and the
+ * amount, and a split is claimed once a ledger entry for its payment carries
+ * its invoice.
+ * Not append-only. A split whose push failed is deleted, and a Payment that
+ * is backed out takes its splits with it.
+ */
+model PaymentInvoiceSplit {
+  id              String   @id @default(cuid())
+  paymentId       String
+  stripeInvoiceId String
+  amountCents     Int
+  createdAt       DateTime @default(now())
+
+  payment Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+
+  @@unique([paymentId, stripeInvoiceId])
+  @@index([stripeInvoiceId])
 }
 
 /**

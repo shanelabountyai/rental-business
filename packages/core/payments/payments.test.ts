@@ -9,6 +9,7 @@ import {
   isCollectionMethod,
   nsfFeeFor,
   offlinePaymentDecision,
+  splitAcrossInvoices,
   payable,
   returnAction,
   reversalAmountCents,
@@ -540,6 +541,47 @@ describe('offlinePaymentDecision', () => {
     expect(
       offlinePaymentDecision({ ...owing, openInvoiceAmountCents: null }, 150_000).refusal,
     ).toBe('no_open_invoice')
+  })
+})
+
+describe('splitAcrossInvoices (R-224)', () => {
+  const march = {
+    stripeInvoiceId: 'in_mar',
+    amountRemainingCents: 150_000,
+    createdAt: new Date('2026-03-01T06:00:00Z'),
+  }
+  const april = {
+    stripeInvoiceId: 'in_apr',
+    amountRemainingCents: 150_000,
+    createdAt: new Date('2026-04-01T05:00:00Z'),
+  }
+
+  it('cures two months of arrears with one money order, oldest invoice first, whatever order Stripe listed them in', () => {
+    // Review finding 3's worked example: two months behind under a
+    // part-payment hold, and the full $3,000 is the tender.
+    const held = {
+      balanceCents: 300_000,
+      blockPartial: true,
+      certifiedFundsOnly: false,
+      channel: 'MONEY_ORDER' as const,
+      openInvoiceAmountCents: 300_000,
+    }
+    expect(offlinePaymentDecision(held, 300_000)).toEqual({ allowed: true })
+    expect(splitAcrossInvoices(300_000, [april, march])).toEqual([
+      { stripeInvoiceId: 'in_mar', amountCents: 150_000 },
+      { stripeInvoiceId: 'in_apr', amountCents: 150_000 },
+    ])
+  })
+
+  it('pays the oldest month down first and leaves the newest open', () => {
+    expect(splitAcrossInvoices(200_000, [april, march])).toEqual([
+      { stripeInvoiceId: 'in_mar', amountCents: 150_000 },
+      { stripeInvoiceId: 'in_apr', amountCents: 50_000 },
+    ])
+  })
+
+  it('refuses money the invoices cannot absorb rather than dropping it', () => {
+    expect(() => splitAcrossInvoices(300_001, [march, april])).toThrow(RangeError)
   })
 })
 

@@ -396,8 +396,8 @@ export function dueDateInMonth(year: number, month: number, dueDay: number): Bus
  * the per-invoice detail, we hold the projected total). Reporting the nearer
  * date is still a real improvement on reporting "current", and it is stated
  * here rather than left to look more precise than it is. Itemizing every
- * unpaid period would need the billing provider to list every open invoice,
- * not the one `getOpenInvoice` returns today.
+ * unpaid period needs the billing provider's list of every open invoice -
+ * `getOpenInvoices` returns it since R-224, and nothing here reads it yet.
  * ==========================================================================
  */
 export function dueDateOnOrBefore(reference: BusinessDate, dueDay: number): BusinessDate {

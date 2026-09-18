@@ -1,9 +1,9 @@
 import 'server-only'
 
-import { randomBytes } from 'node:crypto'
+import { createHash, randomBytes } from 'node:crypto'
 import { prisma } from '@rental/db'
 import { leaseBalanceCents } from '@/lib/ledger/queries.ts'
-import type { CollectionMethod, PaymentRail } from '@rental/core/payments'
+import type { CollectionMethod, OpenInvoice, PaymentRail } from '@rental/core/payments'
 import type {
   BillingProvider,
   CustomerInput,
@@ -342,7 +342,13 @@ export class SimulatedBillingProvider implements BillingProvider {
       // Keyed on the caller's idempotency key, so a retried submission is
       // caught by the pipeline's own duplicate guard exactly as a redelivered
       // Stripe event would be.
-      id: `evt_sim${input.idempotencyKey.replace(/[^a-zA-Z0-9]/g, '').slice(0, 32)}`,
+      //
+      // HASHED, not truncated (R-224). The truncated form kept 32 characters,
+      // and `offline:` plus a payer id is 32 - so every counter payment from
+      // one payer got the same event id, and the second one was dropped as a
+      // duplicate with no ledger entry. The per-invoice slices of one cheque
+      // are that case every time.
+      id: `evt_sim${createHash('sha256').update(input.idempotencyKey).digest('hex').slice(0, 32)}`,
       type: 'invoice.updated',
       created: Math.floor(input.receivedAt.getTime() / 1000),
       data: {
@@ -357,35 +363,70 @@ export class SimulatedBillingProvider implements BillingProvider {
   }
 
   /**
-   * A stand-in for the open invoice.
+   * The open invoices, ONE PER BILLED PERIOD (R-224).
    *
-   * Reports the lease's outstanding balance as a single invoice, with a
-   * SYNTHETIC id - deliberately Stripe-shaped so everything downstream is
-   * exercised against a realistic value, and deliberately derived from the
-   * balance rather than from anything the caller passes, so the caller
-   * cannot make it agree with itself (D-27).
+   * Derived from the LEDGER, never from anything the caller passes (D-27).
+   * The lease's charges are grouped into the invoice that carried them -
+   * `stripeObjectId` when an invoice event wrote the row, otherwise the
+   * calendar month the charge landed in - and the lease balance is laid over
+   * those periods NEWEST first, which is where money still owed sits when
+   * everything paid went to the oldest debt first.
    *
-   * Coarser than real Stripe, which issues an invoice per period. Stated
-   * rather than hidden: against the simulator, "the open invoice" and "the
-   * whole balance" are the same number, so a part-payment refusal here fires
-   * on the balance where production would fire on the period.
+   * It used to report the whole balance as one invoice, which made "the open
+   * invoice" and "the balance" the same number, so a cure tender spanning two
+   * months could never be refused here while real Stripe refused every one
+   * (review 2026-09-17, finding 3). Per period is what makes the
+   * multi-invoice split reachable in a test at all.
+   *
+   * The month key reads UTC, which can put a charge posted late on the last
+   * local evening of a month into the next period. It only has to be a stable
+   * grouping, never a date anybody reads.
    */
-  async getOpenInvoice(
-    input: SubscriptionRef,
-  ): Promise<{ stripeInvoiceId: string; amountRemainingCents: number } | null> {
+  async getOpenInvoices(input: { stripeCustomerId: string }): Promise<OpenInvoice[] | null> {
     const payer = await prisma.leasePayer.findFirst({
-      where: { stripeSubscriptionId: input.stripeSubscriptionId },
+      where: { stripeCustomerId: input.stripeCustomerId },
       select: { id: true, leaseId: true },
     })
     if (!payer) return null
-    const amountRemainingCents = await leaseBalanceCents(payer.leaseId)
-    if (amountRemainingCents <= 0) return null
-    return {
-      // Stable per payer, so a retry finds the same invoice rather than
-      // inventing a second one.
-      stripeInvoiceId: `in_sim${payer.id.slice(0, 16)}`,
-      amountRemainingCents,
+
+    const [owed, charges] = await Promise.all([
+      leaseBalanceCents(payer.leaseId),
+      prisma.ledgerEntry.findMany({
+        where: { leaseId: payer.leaseId, amountCents: { gt: 0 } },
+        select: { amountCents: true, occurredAt: true, stripeObjectId: true },
+      }),
+    ])
+
+    const periods = new Map<string, OpenInvoice>()
+    for (const charge of charges) {
+      const stripeInvoiceId = charge.stripeObjectId?.startsWith('in_')
+        ? charge.stripeObjectId
+        : `in_sim${payer.id.slice(0, 16)}${charge.occurredAt.toISOString().slice(0, 7).replace('-', '')}`
+      const period = periods.get(stripeInvoiceId)
+      if (period) {
+        period.amountRemainingCents += charge.amountCents
+        if (charge.occurredAt < period.createdAt) period.createdAt = charge.occurredAt
+      } else {
+        periods.set(stripeInvoiceId, {
+          stripeInvoiceId,
+          amountRemainingCents: charge.amountCents,
+          createdAt: charge.occurredAt,
+        })
+      }
     }
+
+    const open: OpenInvoice[] = []
+    let left = owed
+    const newestFirst = [...periods.values()].sort(
+      (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
+    )
+    for (const period of newestFirst) {
+      if (left <= 0) break
+      const remaining = Math.min(left, period.amountRemainingCents)
+      open.push({ ...period, amountRemainingCents: remaining })
+      left -= remaining
+    }
+    return open.reverse()
   }
 
   async createPaymentIntent(input: {
@@ -473,7 +514,7 @@ export class SimulatedBillingProvider implements BillingProvider {
  * answered from the same place the decision reads from - say, a fixed offset
  * from `createdAt` - the "it is expiring" branch could never fail to fire and
  * no test could tell a real check from a tautology. Hashing the id gives an
- * oracle nothing in this codebase chose, the same move `getOpenInvoice` above
+ * oracle nothing in this codebase chose, the same move `getOpenInvoices` above
  * makes by answering from the ledger rather than from the payer row the
  * switch is about.
  *

@@ -943,6 +943,7 @@ describe('out-of-band money already recorded at the counter (D-177)', () => {
         receivedByStaffId: staff.id,
         checkNumber: '1041',
         stripeInvoiceId,
+        invoiceSplits: { create: { stripeInvoiceId, amountCents } },
       },
     })
     return { lease, payer, payment, stripeInvoiceId, customerId: stripeCustomerId! }
@@ -1001,6 +1002,7 @@ describe('out-of-band money already recorded at the counter (D-177)', () => {
         receivedByStaffId: first.receivedByStaffId,
         checkNumber: '1042',
         stripeInvoiceId,
+        invoiceSplits: { create: { stripeInvoiceId, amountCents: 150_000 } },
       },
     })
 
@@ -1108,8 +1110,67 @@ describe('out-of-band money already recorded at the counter (D-177)', () => {
         receivedAt: new Date(),
         receivedByStaffId: stale.receivedByStaffId,
         stripeInvoiceId,
+        invoiceSplits: { create: { stripeInvoiceId, amountCents: 20_000 } },
       },
     })
     expect(await unclaimedCounterPayments([lease.propertyId])).toBe(1)
+  }, 30_000)
+
+  it('claims each invoice of a cheque that covers two, on the ONE row, and counts a half-claimed one as unclaimed (R-224)', async () => {
+    // A $3,000 money order for two months: one Payment, two splits, two
+    // attachments at Stripe and so two `invoice.updated` events. Before R-224
+    // the claim read "no ledger entries at all", so the second event minted a
+    // generic row beside the cheque.
+    const { lease, payer, payment, customerId } = await counterPayment(300_000)
+    const [march, april] = [`in_mar${payer.id.slice(0, 12)}`, `in_apr${payer.id.slice(0, 12)}`]
+    await prisma.paymentInvoiceSplit.deleteMany({ where: { paymentId: payment.id } })
+    await prisma.paymentInvoiceSplit.createMany({
+      data: [
+        { paymentId: payment.id, stripeInvoiceId: march, amountCents: 150_000 },
+        { paymentId: payment.id, stripeInvoiceId: april, amountCents: 150_000 },
+      ],
+    })
+
+    await processStripeEvent(
+      invoiceEvent({
+        customer: customerId,
+        invoiceId: march,
+        amountPaid: 150_000,
+        paymentIntentId: null,
+        created: Math.floor(payment.receivedAt.getTime() / 1000),
+      }),
+    )
+
+    // Half-claimed and past the window: the april event never came back, so
+    // $1,500 the tenant handed over is on no balance. /money has to see it.
+    // Counted from a baseline, because the file's earlier R-192 test leaves a
+    // deliberately stale row on the same property.
+    const baseline = await unclaimedCounterPayments([lease.propertyId])
+    await prisma.payment.update({
+      where: { id: payment.id },
+      data: { createdAt: new Date(Date.now() - 3 * 86_400_000) },
+    })
+    expect(await unclaimedCounterPayments([lease.propertyId])).toBe(baseline + 1)
+    await prisma.payment.update({ where: { id: payment.id }, data: { createdAt: new Date() } })
+
+    await processStripeEvent(
+      invoiceEvent({
+        customer: customerId,
+        invoiceId: april,
+        amountPaid: 150_000,
+        paymentIntentId: null,
+        created: Math.floor(payment.receivedAt.getTime() / 1000),
+      }),
+    )
+
+    expect(await prisma.payment.count({ where: { leaseId: lease.id } })).toBe(1)
+    const entries = await prisma.ledgerEntry.findMany({
+      where: { leaseId: lease.id, type: 'PAYMENT' },
+      orderBy: { stripeObjectId: 'asc' },
+    })
+    expect(entries.map((e) => [e.paymentId, e.stripeObjectId])).toEqual([
+      [payment.id, april],
+      [payment.id, march],
+    ])
   }, 30_000)
 })

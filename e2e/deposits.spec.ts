@@ -203,6 +203,60 @@ test('recording a counter payment produces a printable receipt', async ({ page }
   await assertRealPdf(page, href!)
 })
 
+test('a tenant two months behind under a part-payment hold can cure with one money order (R-224)', async ({
+  page,
+}) => {
+  // Review 2026-09-17, finding 3's worked example. Real Stripe issues one
+  // invoice per month, and the counter compared the tender against the first
+  // one only: $3,000 was refused as more than invoiced and $1,500 as a
+  // blocked part-payment, so NO amount could be accepted. The simulator used
+  // to report the balance as one invoice, which is why no test ever saw it.
+  const { lease, property } = await seedLeaseWithBalance()
+  await prisma.ledgerEntry.create({
+    data: {
+      propertyId: property.id,
+      leaseId: lease.id,
+      type: 'CHARGE',
+      amountCents: 150_000,
+      description: 'August rent',
+      occurredAt: new Date('2026-08-01T00:00:00Z'),
+    },
+  })
+  await prisma.leasePayer.updateMany({
+    where: { leaseId: lease.id },
+    data: { blockPartialPayments: true, certifiedFundsOnly: true },
+  })
+  const owner = await seedOwner()
+  await signIn(page, owner)
+
+  await page.goto(`/leases/${lease.id}`)
+  await page.waitForLoadState('networkidle')
+  // The radio is `sr-only` and its styled label takes the press, as it does
+  // for a person. `exact` because the certified-funds switch on this page
+  // names money orders in its own label.
+  await page.getByText('Money order', { exact: true }).click()
+  await expect(page.getByRole('radio', { name: 'Money order' })).toBeChecked()
+  await page.getByLabel('Amount', { exact: true }).fill('3000.00')
+  await page.getByRole('button', { name: 'Record this payment' }).click()
+  await expect(page.getByText('Recorded. The tenant will get a receipt once it posts.')).toBeVisible()
+
+  // ONE payment - one receipt, one slip line, one acceptance in the packet -
+  // attached to both months, oldest first, and both on the ledger.
+  const payments = await prisma.payment.findMany({
+    where: { leaseId: lease.id },
+    include: {
+      invoiceSplits: { orderBy: { stripeInvoiceId: 'asc' } },
+      ledgerEntries: true,
+    },
+  })
+  expect(payments).toHaveLength(1)
+  expect(payments[0]!.amountCents).toBe(300_000)
+  expect(payments[0]!.invoiceSplits.map((split) => split.amountCents)).toEqual([150_000, 150_000])
+  expect(payments[0]!.ledgerEntries.map((entry) => entry.amountCents).sort()).toEqual([
+    -150_000, -150_000,
+  ])
+})
+
 test('the deposit screen groups undeposited payments and produces a slip', async ({ page }) => {
   const { lease, property, tenant } = await seedLeaseWithBalance()
   const owner = await seedOwner()

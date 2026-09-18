@@ -1,6 +1,6 @@
 import 'server-only'
 
-import type { CollectionMethod, PaymentRail } from '@rental/core/payments'
+import type { CollectionMethod, OpenInvoice, PaymentRail } from '@rental/core/payments'
 
 // The billing provider seam (D-11, D-15's pattern, R-034).
 //
@@ -353,12 +353,18 @@ export interface BillingProvider {
    */
   endSubscriptionItem(input: { stripeSubscriptionItemId: string }): Promise<void>
 
-  /// The open invoice to apply an offline payment to, with its id - the
-  /// amount alone is not enough here, because the caller has to name the
-  /// invoice it is marking paid.
-  getOpenInvoice(
-    input: SubscriptionRef,
-  ): Promise<{ stripeInvoiceId: string; amountRemainingCents: number } | null>
+  /**
+   * Every open invoice for this customer, to apply offline money across
+   * (R-224). Ids and not only amounts, because the caller has to name each
+   * invoice it attaches to.
+   *
+   * BY CUSTOMER, not by subscription: a one-off damages invoice (R-215) has no
+   * subscription and a subscription filter never finds it. ALL of them, not
+   * the first: a tenancy two months behind has two, and a cure tender for
+   * both was refused against one. Null when we could not ask; an empty list
+   * when nothing is open.
+   */
+  getOpenInvoices(input: { stripeCustomerId: string }): Promise<OpenInvoice[] | null>
 
   createPaymentIntent(input: {
     stripeCustomerId: string

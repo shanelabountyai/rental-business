@@ -12906,3 +12906,33 @@ All three were confirmed red against the previous job before the fix was kept. T
 - `lint`: 0 errors (16 warnings that were already there; I removed one unused import on a line I touched). `typecheck`: clean. `check:ship-deps`: clean (756 dev packages). `db:ci`: migrations from scratch, seed, and no drift.
 - `npm test`: **3,252 passed / 4 skipped**, which is R-222's 3,250 plus two new tests: the late-escalation clock and "no suggestion without habitability language". The habitability SMS test now also asserts the suggestion.
 - `PORT=3100 npm run test:e2e -- maintenance-phone-log triage emergency` against the production build, both projects: **54 passed, 0 flaky** in 49.8s, matching `--list` (54). The new spec marks a three-hour-old SMS ticket as an emergency and checks that `emergencyAt` is later than creation, the actor on the audit row, the page, and axe.
+
+## R-224 — a tenant can cure a pay-or-quit at the counter
+
+**Commit:** _recorded in the follow-up commit._
+
+**What it built.**
+- **Every open invoice, not the first one.** `BillingProvider.getOpenInvoice(subscription)` is replaced by `getOpenInvoices({ stripeCustomerId })`. The live driver lists `customer=…&status=open&limit=100`, so a one-off damages invoice with no subscription (R-215's case) is found too. `offlinePaymentDecision` now compares the tender against the sum of those invoices.
+- **The split.** `splitAcrossInvoices` (`packages/core/payments/offline.ts`) spreads a tender oldest invoice first through `allocatePayment`. `recordAcrossInvoices` (`apps/web/lib/payments/out-of-band.ts`) writes one Payment with one `PaymentInvoiceSplit` per invoice before pushing, then pushes each split. If nothing lands, it deletes the row. If the pushes stop part-way, it shrinks the row to what landed and the form says how much is left to record.
+- **Both paths use it.** `recordOfflinePayment` (the counter) and deposit-to-arrears at disposition (`deposits/actions.ts`). The disposition's "arrears span more than one invoice" refusal (R-209's recorded gap) is gone.
+- **The webhook claims per split.** A counter event claims the row holding a split for its invoice and amount, where that row has no ledger entry for that invoice yet. `unclaimedCounterPayments` now counts a half-claimed cheque too (raw SQL, per split).
+- **Migration** `20260918180000_r224_payment_invoice_split`: the table, plus a backfill of one split for every existing counter row.
+- **The simulator reports one open invoice per billed period**, derived from the ledger (D-27): charges are grouped by `stripeObjectId`, or by month, and the balance is laid over them newest first. The multi-invoice branch can now be reached in a test.
+
+**What it decided** (D-243).
+- **The owner chose one Payment row per tender**, with splits, over one row per invoice. That keeps one receipt, one deposit-slip line and one acceptance in the eviction packet.
+- **Oldest invoice first, not the jurisdiction's type order.** Stripe attaches money to a whole invoice. Under a part-payment hold the tender is the whole balance, so order changes nothing there.
+- **Counsel is still needed** on whether refusing a tendered cure was defensible. The arithmetic no longer refuses one.
+
+**Bug found on the way.** The simulator built its `invoice.updated` event id by stripping and truncating the idempotency key to 32 characters. `offline:` plus a payer id is exactly 32, so every counter payment from one payer shared an event id, and the second one was dropped as a duplicate with no ledger entry. Only the simulator and demo were affected. The id is now a hash of the key.
+
+**What it left behind.**
+- A deposit disposition whose pushes stop part-way refuses and says so, but cannot resume. A retry re-applies the whole amount and is refused against the smaller balance. It is marked `ponytail:` in `deposits/actions.ts`.
+- `dueDateOnOrBefore` still anchors days-past-due to the latest due date. The per-invoice list exists now, and nothing reads it for lateness yet.
+- The migration is not on the Neon dev branch (`db:migrate:dev`), and neither is R-223's.
+
+**Gate.**
+- `lint`: 0 errors (the warnings were already there). `typecheck`: clean. `check:ship-deps`: clean (756 dev packages). `db:ci`: migrations from scratch, seed, and no drift.
+- `npm test`: **3,257 passed / 4 skipped**, which is R-223's 3,252 plus five new tests: three in core for the split, one webhook test for two splits claimed on one row plus the half-claimed count, and one live-driver test for the by-customer list. The simulator's open-invoice test was rewritten for per-period invoices.
+- `PORT=3100 npm run test:e2e -- deposits insurance-claims` against the production build, both projects: **24 passed, 0 flaky**, matching `--list` (24). The new spec covers review finding 3's worked example: two months behind, both PAY-12 switches on, and one $3,000 money order that records as one Payment, two splits and two ledger entries.
+- CI: R-223's run `35371468362` was green (R-222's was cancelled when R-223's replaced it).
