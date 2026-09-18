@@ -12909,7 +12909,7 @@ All three were confirmed red against the previous job before the fix was kept. T
 
 ## R-224 — a tenant can cure a pay-or-quit at the counter
 
-**Commit:** _recorded in the follow-up commit._
+**Commit:** `5df46c0`
 
 **What it built.**
 - **Every open invoice, not the first one.** `BillingProvider.getOpenInvoice(subscription)` is replaced by `getOpenInvoices({ stripeCustomerId })`. The live driver lists `customer=…&status=open&limit=100`, so a one-off damages invoice with no subscription (R-215's case) is found too. `offlinePaymentDecision` now compares the tender against the sum of those invoices.

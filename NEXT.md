@@ -1,12 +1,16 @@
 # Next session
 
-## R-223 is done (`deb9357`, SHA recorded in `dfb66c6`). Start R-224.
+## R-224 is done (`5df46c0`). Start R-225.
 
-**First: read CI** with `gh run list --limit 5`. When R-223 was pushed, R-222's run (`35369885736`) was still in progress and R-223's (`35371468362`) was queued. Neither had been read.
+**First: read CI** with `gh run list --limit 3`. R-224's run had not been read when this was written. R-223's (`35371468362`) was green.
 
-**R-224**: in live mode a tenant cannot cure a pay-or-quit at the counter. Row 211 in `docs/prds/06-backlog.md`; review finding 3 in `docs/reviews/2026-09-17-operator-review.md`. Money path, so Opus.
+**R-225**: a rent increase typed on the lease edit form reaches Stripe with no notice period, no cap check and no notice document. Row 212 in `docs/prds/06-backlog.md`; review finding 4 in `docs/reviews/2026-09-17-operator-review.md`. Statute-driven money path, so Opus.
 
-**R-223 left behind** (see its PROGRESS entry): no shutoff reply to a texted emergency, and no row owns it; no suggestion on phone-logged tickets or on later threaded messages; the new migration is not on the Neon dev branch yet (`db:migrate:dev`).
+**R-224 left behind** (see its PROGRESS entry): a deposit disposition whose pushes stop part-way cannot resume; days-past-due does not read the per-invoice list yet; the R-223 and R-224 migrations are not on the Neon dev branch (`db:migrate:dev`).
+
+**Traps seen in R-224:**
+- There is **no prettier config** in this repo. `npx prettier --write` reformats to defaults (double quotes, semicolons). Never run it.
+- On `/leases/[id]`, `getByLabel('Money order')` also matches the certified-funds switch. Press `getByText('Money order', { exact: true })`, because the radio is `sr-only` and its label takes the press.
 
 **Unit-suite trap seen in R-222:** orphaned `node (vitest N)` workers survive a `pkill -f "$PWD.*vitest"`, because their command line is renamed. Find them by cwd (`lsof -a -p PID -d cwd`) before trusting a timeout.
 
