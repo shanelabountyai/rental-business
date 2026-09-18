@@ -13057,4 +13057,4 @@ All three were confirmed red against the previous job before the fix was kept. T
 - `lint`: 0 errors (16 warnings already there). `typecheck`: clean. `check:ship-deps`: clean. No schema change.
 - `npm test`: **3,271 passed / 4 skipped**. Unchanged from R-227; the new coverage is e2e.
 - e2e `entry-notice`, `inspections`, `showings` and `unreachable-notice` against the production build, both projects: **42 passed**, matching `--list` (42).
-- CI: R-227's run `35377407186` was still in progress when this was pushed.
+- CI: R-227's run `35377407186` finished **green** (25 min) before this was pushed, so R-224 to R-227 are covered. R-228's own run follows this push.
