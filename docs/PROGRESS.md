@@ -13000,7 +13000,7 @@ All three were confirmed red against the previous job before the fix was kept. T
 
 ## R-227 — a served notice's fee stop comes off when the notice is settled
 
-**Commit:** `PENDING`  ·  **Date:** 2026-09-18
+**Commit:** `d325095`  ·  **Date:** 2026-09-18
 
 **What it built.**
 - **`LeaseHold.noticeId`** (migration `20260918220000_r227_notice_hold_link`, FK `RESTRICT`). The serve action writes it. Existing `NOTICE_SERVED` holds are linked from their `lease.hold_placed` audit row's `after.noticeId`; a hold with no such row was placed by hand and stays unlinked.
