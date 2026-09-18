@@ -12852,7 +12852,7 @@ Then it drove the flows the seed has never written — a property expense, a rep
 
 ## R-222 — a passed end date is not a move-out
 
-**Commit:** `PENDING`  ·  **Date:** 2026-09-18
+**Commit:** `3ce9299`  ·  **Date:** 2026-09-18
 
 **What it built.** `unit.auto_make_ready` ([apps/web/lib/units/auto-make-ready.ts](apps/web/lib/units/auto-make-ready.ts)) now selects only in-force leases with a **recorded `moveOutAt`**. Before this, a lease whose `endsOn` had passed was taken as a move-out. The block that stamped `moveOutAt = endsOn` is deleted. On the morning a term lapses, the 03:00 job no longer marks the house `MAKE_READY`, stamps a move-out, retires the door codes, opens R-178's turn with its re-key or emails staff. The 04:00 `lease.mtm_rollover` then rolls the lease as before. A tenant under notice who holds over past `endsOn` is left alone too. The rollover skips that lease by design, so the make-ready job was the only thing that would have acted on it. Three new tests in [auto-make-ready.test.ts](apps/web/lib/units/auto-make-ready.test.ts):
 - a lapsed lease with no move-out;
