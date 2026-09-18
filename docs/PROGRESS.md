@@ -12939,7 +12939,7 @@ All three were confirmed red against the previous job before the fix was kept. T
 
 ## R-225 — a rent increase waits for its notice
 
-**Commit:** `SHA-PENDING`
+**Commit:** `655d2f7`
 
 **What it built.**
 - **A raise on a running lease is scheduled, not written.** On an ACTIVE or MONTH_TO_MONTH lease, a raise on the terms form now needs a "Rent increase effective date" after today. `updateLeaseTerms` leaves `Lease.rentCents` alone and writes a SCHEDULED `RentChange` (new table, migration `20260918200000_r225_rent_change`) plus a `RENT_INCREASE` `Notice`. The notice is served through the portal when the tenant can reach it (R-210's predicate) and the tenant gets `lease.rent_increase` by SMS/email under `legal_notice`. A decrease, and any change on a DRAFT or PENDING_SIGNATURE lease, still applies at once and syncs to Stripe as before.
