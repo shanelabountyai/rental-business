@@ -49,6 +49,9 @@ export interface RentRollRow {
   /// in a late bucket. See `delinquencyFor`.
   pastGrace: boolean
   oldestDueOn: string | null
+  /// The newest rent period still unpaid - what the chase ladder counts
+  /// from (R-229). See `Delinquency.newestRentDueOn`.
+  newestRentDueOn: string | null
   /// True when the payer is on `charge_automatically` (D-29).
   autopay: boolean
   /// Deposit held as a liability (PAY-07). Shown because a lender asks, and
@@ -290,6 +293,7 @@ export async function rentRoll(
       bucket: delinquency.bucket,
       pastGrace: delinquency.pastGrace,
       oldestDueOn: delinquency.oldestDueOn,
+      newestRentDueOn: delinquency.newestRentDueOn,
       // Any active payer on autopay counts: what the question is really
       // asking is "will money arrive without somebody chasing it".
       autopay: lease.leasePayers.some((payer) => debitsAutomatically(payer.collectionMethod as CollectionMethod)),

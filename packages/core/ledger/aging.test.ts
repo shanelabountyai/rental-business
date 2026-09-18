@@ -4,6 +4,8 @@ import {
   CHASE_RUNG_LABELS,
   agingTotals,
   bucketFor,
+  CHASE_DECISION_DAYS,
+  chaseDecisionDue,
   chaseRungDue,
   delinquencyFor,
   rentDebtsFor,
@@ -56,6 +58,7 @@ describe('delinquencyFor', () => {
       bucket: '6-15',
       pastGrace: true,
       oldestDueOn: '2026-08-01',
+      newestRentDueOn: '2026-08-01',
     })
   })
 
@@ -339,6 +342,67 @@ describe('agingTotals', () => {
     const totals = agingTotals([])
     expect(Object.keys(totals)).toEqual(['current', '0-5', '6-15', '16-30', '30+'])
     expect(totals['16-30']).toEqual({ count: 0, balanceCents: 0 })
+  })
+})
+
+describe('newestRentDueOn — what the ladder counts from (R-229)', () => {
+  const periods: DelinquencyFacts = {
+    ...owing,
+    rentDebts: [
+      { dueOn: '2026-03-01', amountCents: 150_000 },
+      { dueOn: '2026-04-01', amountCents: 150_000 },
+      { dueOn: '2026-05-01', amountCents: 150_000 },
+    ],
+    asOf: '2026-05-20',
+    nearestRentDueOn: '2026-05-01',
+  }
+
+  it('is the NEWEST unpaid period, while the aging stays on the oldest', () => {
+    // The defect: a ladder counted from `oldestDueOn` passed its rungs once
+    // in March and never again, while April and May went unpaid on top.
+    const result = delinquencyFor({ ...periods, balanceCents: 450_000 })
+    expect(result.oldestDueOn).toBe('2026-03-01')
+    expect(result.newestRentDueOn).toBe('2026-05-01')
+  })
+
+  it('skips a fee charge that is newer than the rent', () => {
+    // A late fee's `dueOn` is the day it was assessed. Counted from it, the
+    // ladder would restart every time a fee posted.
+    const result = delinquencyFor({
+      ...periods,
+      charges: [{ dueOn: '2026-05-07', amountCents: 5_000 }],
+      balanceCents: 155_000,
+    })
+    expect(result.newestRentDueOn).toBe('2026-05-01')
+  })
+
+  it('is null when the balance is only a charge the rent does not reach', () => {
+    const result = delinquencyFor({
+      ...periods,
+      charges: [{ dueOn: '2026-05-10', amountCents: 5_000 }],
+      balanceCents: 5_000,
+    })
+    expect(result.oldestDueOn).toBe('2026-05-10')
+    expect(result.newestRentDueOn).toBeNull()
+  })
+
+  it('is null when nothing is owed', () => {
+    expect(delinquencyFor({ ...periods, balanceCents: 0 }).newestRentDueOn).toBeNull()
+  })
+})
+
+describe('chaseDecisionDue (R-229)', () => {
+  it('fires from CHASE_DECISION_DAYS past grace and on every day after', () => {
+    // A standing condition, not a rung: the job's `alreadyFlagged` is what
+    // keeps it to one open Task, so `>=` is right here where it is wrong
+    // for the ladder.
+    expect(chaseDecisionDue(CHASE_DECISION_DAYS + 4, 5)).toBe(false)
+    expect(chaseDecisionDue(CHASE_DECISION_DAYS + 5, 5)).toBe(true)
+    expect(chaseDecisionDue(CHASE_DECISION_DAYS + 90, 5)).toBe(true)
+  })
+
+  it('NEVER FIRES WHEN NO RULE IS CONFIGURED', () => {
+    expect(chaseDecisionDue(365, null)).toBe(false)
   })
 })
 

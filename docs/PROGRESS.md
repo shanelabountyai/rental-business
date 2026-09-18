@@ -13058,3 +13058,27 @@ All three were confirmed red against the previous job before the fix was kept. T
 - `npm test`: **3,271 passed / 4 skipped**. Unchanged from R-227; the new coverage is e2e.
 - e2e `entry-notice`, `inspections`, `showings` and `unreachable-notice` against the production build, both projects: **42 passed**, matching `--list` (42).
 - CI: R-227's run `35377407186` finished **green** (25 min) before this was pushed, so R-224 to R-227 are covered. R-228's own run follows this push.
+
+## R-229 — the chase ladder climbs again for every unpaid period, and long arrears raise a standing decision
+
+**Commit:** `PENDING`  ·  **Date:** 2026-09-18
+
+**What it built.** Review finding 8 (PAY-06, PAY-07).
+- **The ladder re-arms.** `payments.chase` ([chase-job.ts](apps/web/lib/payments/chase-job.ts)) matched rungs exactly against `daysLate`, which is counted on the OLDEST debt. That number only grows, so a tenancy that stopped paying in March got rungs 1, 5 and 15 once and was never chased again while April and May went unpaid. `delinquencyFor` ([aging.ts](packages/core/ledger/aging.ts)) now also returns `newestRentDueOn`, the newest rent period the balance still sits on, and the ladder counts from it. It falls back to `oldestDueOn` when no rent is owed. The rent-roll row carries the field.
+- **A standing decision.** Once the oldest debt is `CHASE_DECISION_DAYS` (30) past grace, the job raises an URGENT `rent.decide` Task: "Decide on arrears — …: payment plan, notice or write-off". It goes through R-191's `alreadyFlagged`, so there is one while it is open, and it is raised again a week after someone closes it without the balance changing. `halt_dunning` skips it as it skips the ladder.
+- Tests: core covers newest-vs-oldest, a newer fee not restarting the ladder, a fee-only balance, and the decision threshold including null grace. `chase-job.test.ts` covers a second period climbing rung 1 again (**red with the ladder reverted to `oldestDueOn`**, checked), the decision raised once while open and again after close plus the cool-off, and a hold suppressing the decision.
+
+**What it decided** (D-248).
+- Count from the newest unpaid RENT period, not the newest debt. A late fee is dated the day it was assessed and would otherwise restart the ladder on every fee.
+- The decision threshold is measured on the oldest debt and is a standing condition (`>=`), unlike the exact-match rungs. It is a queue item, not a tenant message.
+- Thirty days is a house heuristic. There is still no settings screen for either number.
+
+**What it left behind.**
+- `rent.decide` Tasks have no special rendering. They sit in the ordinary queue with the lease as subject, like `rent.chase`.
+- **A real bug found, not fixed.** On the first full run, three R-217 tests in `case-stall-job.test.ts` failed. They pass alone every time, and the next full run was green. `checkHabitabilityRepairs` calls `rulesFor(...).catch(() => null)` ([case-stall-job.ts](apps/web/lib/cases/case-stall-job.ts)). A database error under load is therefore indistinguishable from "no rule configured", and the job silently flags no habitability deadline at all. That is a probable mechanism, not a proven one. In production it would mean a missed EMERGENCY Task with nothing in the logs. It needs a backlog row.
+
+**Gate.**
+- `lint`: 0 errors (16 warnings already there). `typecheck`: clean. `check:ship-deps`: clean. No schema change.
+- `npm test`: **3,279 passed / 4 skipped** of 3,283 on the second run. The first run had the 3 R-217 failures above.
+- e2e: none. No spec touches the chase job or the rent-roll row shape.
+- CI: R-228's run `35379859666` was **green** (22 min) before this started.

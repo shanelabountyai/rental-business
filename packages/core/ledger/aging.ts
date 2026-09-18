@@ -126,6 +126,18 @@ export interface Delinquency {
   /// The due date the aging is counted from, so a screen can show it and a
   /// dispute can be argued from it.
   oldestDueOn: BusinessDate | null
+  /// The NEWEST rent period the balance still sits on - what the chase
+  /// ladder counts from (R-229). Null when no rent debt is owed, which
+  /// includes a balance made only of fees or other charges.
+  ///
+  /// NOT `oldestDueOn`, and the difference is the defect R-229 fixed. The
+  /// ladder read the oldest debt, and the oldest debt only ever gets older:
+  /// a tenancy that stopped paying in March passed rungs 1, 5 and 15 once
+  /// and was never chased again, through April, May and June, while the
+  /// arrears grew. Each newly billed period that goes unpaid is a new thing
+  /// to ask for, and counting from the newest one re-arms the ladder on
+  /// every such period.
+  newestRentDueOn: BusinessDate | null
 }
 
 /**
@@ -206,10 +218,11 @@ export function delinquencyFor(facts: DelinquencyFacts): Delinquency {
       bucket: 'current',
       pastGrace: false,
       oldestDueOn: null,
+      newestRentDueOn: null,
     }
   }
 
-  const oldestDueOn = oldestUnsettled(facts)
+  const { oldestDueOn, newestRentDueOn } = unsettled(facts)
   if (!oldestDueOn) {
     // Owes money with nothing dated at all - no charge, no lease to read a
     // rent due day from. Real (a manual adjustment with no charge behind it)
@@ -221,6 +234,7 @@ export function delinquencyFor(facts: DelinquencyFacts): Delinquency {
       bucket: 'current',
       pastGrace: false,
       oldestDueOn: null,
+      newestRentDueOn: null,
     }
   }
 
@@ -236,29 +250,38 @@ export function delinquencyFor(facts: DelinquencyFacts): Delinquency {
     // was written to kill, one level up.
     pastGrace: facts.graceDays != null && daysLate > facts.graceDays,
     oldestDueOn,
+    newestRentDueOn,
   }
 }
 
 /**
- * The oldest debt the balance can still be sitting on. Null when there is
- * nothing dated to sit on at all.
+ * The oldest debt the balance can still be sitting on, and the newest RENT
+ * debt it is sitting on. Both null when there is nothing dated at all.
  *
  * Newest-first, because payments settle oldest-first: what remains owed is
  * the most recent end of the list. See the header on `delinquencyFor`.
  */
-function oldestUnsettled(facts: DelinquencyFacts): BusinessDate | null {
-  const debts: DatedCharge[] = [
-    ...facts.charges,
-    ...rentDebtsFor(facts.rentDebts, facts.nearestRentDueOn, facts.monthlyRentCents),
-  ]
-  if (debts.length === 0) return null
+function unsettled(facts: DelinquencyFacts): {
+  oldestDueOn: BusinessDate | null
+  newestRentDueOn: BusinessDate | null
+} {
+  const rent = rentDebtsFor(facts.rentDebts, facts.nearestRentDueOn, facts.monthlyRentCents)
+  const debts: DatedCharge[] = [...facts.charges, ...rent]
+  if (debts.length === 0) return { oldestDueOn: null, newestRentDueOn: null }
 
   const { owed, unallocatedCents, newestFirst } = allocateBalance(debts, facts.balanceCents)
-  // Covered: the debt the balance ran out on. Not covered: the balance
-  // outruns every debt on file - a debit neither the `Charge` table nor the
-  // billed periods carry - so the oldest thing we CAN name is the anchor,
-  // which understates rather than inventing a date.
-  return unallocatedCents === 0 ? owed[owed.length - 1]!.debt.dueOn : newestFirst[newestFirst.length - 1]!.dueOn
+  // By identity, not by date: a fee charge dated on a rent due day is not
+  // a rent period, and `allocateBalance` hands back the objects it was given.
+  const rentDebts = new Set(rent)
+  return {
+    // Covered: the debt the balance ran out on. Not covered: the balance
+    // outruns every debt on file - a debit neither the `Charge` table nor
+    // the billed periods carry - so the oldest thing we CAN name is the
+    // anchor, which understates rather than inventing a date.
+    oldestDueOn:
+      unallocatedCents === 0 ? owed[owed.length - 1]!.debt.dueOn : newestFirst[newestFirst.length - 1]!.dueOn,
+    newestRentDueOn: owed.find(({ debt }) => rentDebts.has(debt))?.debt.dueOn ?? null,
+  }
 }
 
 /**
@@ -347,6 +370,26 @@ export const CHASE_RUNG_LABELS: Record<number, string> = {
   1: 'first chase — grace has run out',
   5: 'second chase — five days past grace and nothing has arrived',
   15: 'final chase before a notice — fifteen days past grace',
+}
+
+/**
+ * Days past grace, counted on the OLDEST unpaid debt, at which the ladder
+ * stops being enough and somebody has to decide: a payment plan, a notice,
+ * or a write-off (R-229).
+ *
+ * A house heuristic like the ladder itself - see `CHASE_LADDER_DAYS`. Thirty
+ * days past grace is a second rent period unpaid, which is the point at
+ * which a nudge has plainly not worked. The job raises it as a STANDING
+ * decision, re-raised under R-191's cool-off while the balance stands, not
+ * on one exact day: this is not a message to the tenant, so repeating it is
+ * a queue doing its job rather than harassment.
+ */
+export const CHASE_DECISION_DAYS = 30
+
+/// Whether a tenancy is past the point where the ladder alone will do.
+/// False whenever grace is unknown (D-4), the same as `chaseRungDue`.
+export function chaseDecisionDue(daysLate: number, graceDays: number | null): boolean {
+  return graceDays != null && daysLate - graceDays >= CHASE_DECISION_DAYS
 }
 
 /**

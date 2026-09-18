@@ -1,10 +1,11 @@
 import 'server-only'
 
-import { CHASE_LADDER_DAYS, CHASE_RUNG_LABELS, chaseRungDue } from '@rental/core/ledger'
-import { formatCents } from '@rental/core/money'
+import { CHASE_LADDER_DAYS, CHASE_RUNG_LABELS, chaseDecisionDue, chaseRungDue } from '@rental/core/ledger'
+import { daysPastDue, formatCents } from '@rental/core/money'
 import { prisma } from '@rental/db'
 import { SCHEDULED_JOBS } from '@/lib/jobs/runner.ts'
 import { rentRoll } from '@/lib/payments/rent-roll.ts'
+import { alreadyFlagged } from '@/lib/tasks/already-flagged.ts'
 import { createTask } from '@/lib/tasks/create.ts'
 
 // The delinquency ladder (PAY-06, PAY-07; R-179, review finding 11).
@@ -29,6 +30,18 @@ import { createTask } from '@/lib/tasks/create.ts'
 // the deliberate press D-9 keeps in the queue — a Task points a person at
 // the rent roll with the tenancy already named, and they press the button
 // this product has had all along.
+//
+// RE-ARMED PER UNPAID PERIOD (R-229). The ladder counts from the NEWEST
+// rent period still owed, not the oldest debt. Counted from the oldest, a
+// tenancy that stopped paying in March passed rungs 1, 5 and 15 once and was
+// never chased again while April, May and June went unpaid on top of it.
+// Each new unpaid period now climbs the ladder again.
+//
+// AND A STANDING DECISION PAST THE LADDER. Once the OLDEST debt is
+// `CHASE_DECISION_DAYS` past grace, nudging has plainly not worked, and the
+// queue carries an URGENT "decide: plan, notice or write-off" Task, raised
+// again a week after it is closed while the balance stands (R-191's
+// `alreadyFlagged`). A human closing it without acting must not silence it.
 //
 // COUNTED FROM THE END OF GRACE, never from the due date — see
 // `CHASE_LADDER_DAYS`. And EXACTLY ON the rung day, never at-or-past: a
@@ -57,6 +70,7 @@ SCHEDULED_JOBS.push({
     const roll = await rentRoll({ propertyIds: [propertyId] }, now)
 
     let flagged = 0
+    let decisions = 0
     for (const row of roll.rows) {
       // A hold carrying `halt_dunning` (R-084): a bankruptcy stay, a
       // disputed balance, a payment plan that is holding. The debt is still
@@ -68,25 +82,42 @@ SCHEDULED_JOBS.push({
       // because if the two ever disagree the conservative one must win.
       if (!row.pastGrace) continue
 
-      const rung = chaseRungDue(row.daysLate, row.graceDays)
-      if (rung == null) continue
+      // Rent first. A balance made only of fees or other charges has no
+      // unpaid period, and ages from the oldest of those as it always did.
+      const ladderFrom = row.newestRentDueOn ?? row.oldestDueOn
+      const rung = ladderFrom == null ? null : chaseRungDue(daysPastDue(ladderFrom, today), row.graceDays)
+      if (rung != null) {
+        const { created } = await createTask(prisma, {
+          propertyId,
+          type: 'rent.chase',
+          subjectType: 'Lease',
+          subjectId: row.leaseId,
+          businessDate: today,
+          // The LAST rung, read off the ladder rather than written as a
+          // number: adding a fourth rung must not silently demote the final
+          // chase back to routine. It is the one that usually precedes a
+          // notice, and the window to act on it is short.
+          priority: rung === CHASE_LADDER_DAYS[CHASE_LADDER_DAYS.length - 1] ? 'URGENT' : 'ROUTINE',
+          title: `Chase rent — ${row.unitName}, ${formatCents(row.balanceCents)} owed, ${CHASE_RUNG_LABELS[rung]}`,
+        })
+        if (created) flagged++
+      }
 
+      if (!chaseDecisionDue(row.daysLate, row.graceDays)) continue
+      if (await alreadyFlagged('rent.decide', row.leaseId, today)) continue
       const { created } = await createTask(prisma, {
         propertyId,
-        type: 'rent.chase',
+        type: 'rent.decide',
         subjectType: 'Lease',
         subjectId: row.leaseId,
         businessDate: today,
-        // The LAST rung, read off the ladder rather than written as a
-        // number: adding a fourth rung must not silently demote the final
-        // chase back to routine. It is the one that usually precedes a
-        // notice, and the window to act on it is short.
-        priority: rung === CHASE_LADDER_DAYS[CHASE_LADDER_DAYS.length - 1] ? 'URGENT' : 'ROUTINE',
-        title: `Chase rent — ${row.unitName}, ${formatCents(row.balanceCents)} owed, ${CHASE_RUNG_LABELS[rung]}`,
+        priority: 'URGENT',
+        title: `Decide on arrears — ${row.unitName}, ${formatCents(row.balanceCents)} owed, ${row.daysLate - row.graceDays!} days past grace: payment plan, notice or write-off`,
       })
-      if (created) flagged++
+      if (created) decisions++
     }
 
-    return { checked: roll.rows.length, flagged }
+    return { checked: roll.rows.length, flagged, decisions }
   },
 })
+

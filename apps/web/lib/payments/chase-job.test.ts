@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { CHASE_LADDER_DAYS, CHASE_RUNG_LABELS } from '@rental/core/ledger'
+import { CHASE_DECISION_DAYS, CHASE_LADDER_DAYS, CHASE_RUNG_LABELS } from '@rental/core/ledger'
 import { businessDate, businessDateToUtc } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
@@ -159,6 +159,24 @@ async function chaseTasks(leaseId: string) {
   return prisma.task.findMany({ where: { subjectId: leaseId, type: 'rent.chase' } })
 }
 
+async function decisionTasks(leaseId: string) {
+  return prisma.task.findMany({ where: { subjectId: leaseId, type: 'rent.decide' } })
+}
+
+/// Another billed rent period on the same tenancy, unpaid.
+async function billAnotherMonth(leaseId: string, month: string) {
+  await prisma.ledgerEntry.create({
+    data: {
+      propertyId,
+      leaseId,
+      type: 'CHARGE',
+      amountCents: 150_000,
+      description: 'Rent',
+      occurredAt: new Date(`${month}-01${AFTERNOON}`),
+    },
+  })
+}
+
 describe('the chase ladder sweep', () => {
   it('raises nothing while the tenancy is still inside its grace period', async () => {
     const leaseId = await seedArrears('2026-03')
@@ -205,6 +223,50 @@ describe('the chase ladder sweep', () => {
 
     await runOn(dayOfRung('2026-03', 1))
     expect(await chaseTasks(leaseId)).toHaveLength(0)
+    // Nor the standing decision: deciding to serve a notice under a stay is
+    // the asking in its most serious form.
+    await runOn(dayOfRung('2026-03', CHASE_DECISION_DAYS))
+    expect(await decisionTasks(leaseId)).toHaveLength(0)
+  })
+
+  // R-229. THE LADDER USED TO GO SILENT AFTER THE FIRST EPISODE. It counted
+  // from the oldest debt, so by April's rung-1 day March's rent was thirty-
+  // odd days past grace, on no rung at all - and it stayed on none for the
+  // life of the arrears.
+  it('climbs the ladder again for a second unpaid period', async () => {
+    const leaseId = await seedArrears('2026-03')
+    await billAnotherMonth(leaseId, '2026-04')
+
+    await runOn(dayOfRung('2026-04', 1))
+
+    const tasks = await chaseTasks(leaseId)
+    expect(tasks).toHaveLength(1)
+    expect(tasks[0]!.title).toContain(CHASE_RUNG_LABELS[1])
+    expect(tasks[0]!.title).toContain('$3,000.00')
+  })
+
+  it('raises a standing decision at the threshold, and again a week after it is closed', async () => {
+    const leaseId = await seedArrears('2026-03')
+    await billAnotherMonth(leaseId, '2026-04')
+    const first = dayOfRung('2026-03', CHASE_DECISION_DAYS)
+
+    await runOn(shiftDay(first, -1))
+    expect(await decisionTasks(leaseId)).toHaveLength(0)
+
+    await runOn(first)
+    await runOn(shiftDay(first, 1))
+    // One while it is open, however many mornings pass.
+    const open = await decisionTasks(leaseId)
+    expect(open).toHaveLength(1)
+    expect(open[0]!.priority).toBe('URGENT')
+    expect(open[0]!.title).toContain('payment plan, notice or write-off')
+
+    // Ticked off without the balance moving. That must not silence it.
+    await prisma.task.update({ where: { id: open[0]!.id }, data: { status: 'DONE' } })
+    await runOn(shiftDay(first, 3))
+    expect(await decisionTasks(leaseId)).toHaveLength(1)
+    await runOn(shiftDay(first, 10))
+    expect(await decisionTasks(leaseId)).toHaveLength(2)
   })
 
   it('raises nothing for a tenancy that owes nothing', async () => {
