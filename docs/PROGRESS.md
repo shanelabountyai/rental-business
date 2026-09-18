@@ -13061,7 +13061,7 @@ All three were confirmed red against the previous job before the fix was kept. T
 
 ## R-229 — the chase ladder climbs again for every unpaid period, and long arrears raise a standing decision
 
-**Commit:** `PENDING`  ·  **Date:** 2026-09-18
+**Commit:** `09b365a`  ·  **Date:** 2026-09-18
 
 **What it built.** Review finding 8 (PAY-06, PAY-07).
 - **The ladder re-arms.** `payments.chase` ([chase-job.ts](apps/web/lib/payments/chase-job.ts)) matched rungs exactly against `daysLate`, which is counted on the OLDEST debt. That number only grows, so a tenancy that stopped paying in March got rungs 1, 5 and 15 once and was never chased again while April and May went unpaid. `delinquencyFor` ([aging.ts](packages/core/ledger/aging.ts)) now also returns `newestRentDueOn`, the newest rent period the balance still sits on, and the ladder counts from it. It falls back to `oldestDueOn` when no rent is owed. The rent-roll row carries the field.

@@ -1,15 +1,15 @@
 # Next session
 
-## R-228 is done (`4f93663`). Start R-229.
+## R-229 is done (`09b365a`). Start R-230.
 
-**First: read CI** with `gh run list --limit 3`. R-228 was pushed only after R-227's run `35377407186` finished, so both runs should be complete.
+**First: read CI** with `gh run list --limit 3`. R-229's run follows its push.
 
-**R-229**: the chase ladder speaks three times in a tenancy's first arrears episode and never again. Row 216 in `docs/prds/06-backlog.md`; review finding 8. It is money- and collections-critical, so Opus. **Not** a settings screen for `CHASE_LADDER_DAYS`.
+**R-230**: a vacant unit with no asking rent counts as $0 of vacancy loss. Row 217 in `docs/prds/06-backlog.md`; review finding 9. It is reporting, so Sonnet is enough.
 
-**R-228 left behind** (see its PROGRESS entry and D-247):
-- An unserved entry notice now needs the override reason. Recording hand service on `/notices` later does not re-judge the window.
-- A self-serve showing is refused at submit when the tenant cannot be served, but the slot list still offers slots.
-- **Needs counsel:** damages for entries already made on the old path. There is no backfill or report of them.
+**R-229 left behind** (see its PROGRESS entry and D-248):
+- **Needs a backlog row:** `checkHabitabilityRepairs` in `apps/web/lib/cases/case-stall-job.ts` uses `rulesFor(...).catch(() => null)`. A DB error reads as "no rule", so the job silently flags no habitability deadline. The probable cause of 3 R-217 test failures under full-suite load; they pass alone.
+- `rent.decide` Tasks have no special rendering in the queue.
+- Carried from R-228: an unserved entry notice needs the override reason, and a hand service recorded later does not re-judge the window. The showing slot list still offers slots for a tenant who cannot be served. **Needs counsel:** damages for entries already made on the old path.
 - Carried from R-227: `payment-plan-job.ts` stamps `liftedAt: new Date()` (R-190's class); the suppressed-fee report is only `heldBackCents`.
 - Carried from R-226: whether the portal's `scope.leaseIds` includes a renewed tenant's ended predecessor. R-234 is unblocked.
 - Carried from R-225: no cap check on the MTM rollover rate, no tenant message when an increase is withdrawn, and the R-223 to R-227 migrations are not on the Neon dev branch.
