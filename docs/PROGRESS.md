@@ -13035,7 +13035,7 @@ All three were confirmed red against the previous job before the fix was kept. T
 
 ## R-228 — an entry is judged against the notice's real service, and a ticketless work order serves the tenant who lives there
 
-**Commit:** `PENDING`  ·  **Date:** 2026-09-18
+**Commit:** `4f93663`  ·  **Date:** 2026-09-18
 
 **What it built.** Review finding 7 (MAINT-05, COMM-02, RISK-06).
 - **Judged against real service.** `scheduleEntry` ([scheduling.ts](apps/web/lib/workorders/scheduling.ts)) and `scheduleInspectionEntry` ([inspections/scheduling.ts](apps/web/lib/inspections/scheduling.ts)) used to pass `noticeServedAt: now` on the argument that serving happens in the same action. R-210 made that untrue: a tenant with no portal sign-in gets a notice with empty service columns, and the decision had already called it `notice_served, permitted`. Both now ask `canReceiveAuthLink` before the decision and pass `null` when the portal cannot serve. So an unserved notice needs the override reason, however early the window. The audit row records `after.noticeServed`. The form heading says "The notice cannot be served through the portal", and the error comes from `unservedEntryWarning` in core, not an hour count.
