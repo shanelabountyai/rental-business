@@ -12968,7 +12968,7 @@ All three were confirmed red against the previous job before the fix was kept. T
 
 ## R-226 — a tenant who renewed has a move-in side to their deposit case
 
-**Commit:** `PENDING`  ·  **Date:** 2026-09-18
+**Commit:** `1e9f285`  ·  **Date:** 2026-09-18
 
 **What it built.**
 - **`tenancyLeaseIds` and `baselineMoveInFor`** in [move-out-copy.ts](apps/web/lib/inspections/move-out-copy.ts). The first walks `renewedFromLeaseId` back to the tenancy's first lease, oldest first, with a cycle guard. The second returns the move-in report from the earliest lease in that chain that has one.
