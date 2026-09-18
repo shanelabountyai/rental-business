@@ -26,18 +26,71 @@ export interface MoveInCopy {
 }
 
 /**
- * The lease's own most recent MOVE_IN inspection, copied into fresh items -
- * or `null` when there is nothing to copy: no `leaseId` resolved, or a
- * lease with no move-in inspection on record (an inherited tenancy with no
- * application-derived baseline, R-033, or a unit inspected before any
- * lease existed). The caller falls back to a template in that case, same as
- * every inspection type before this item.
+ * Every lease in this tenancy, OLDEST FIRST - `leaseId` itself last. A
+ * fixed-term renewal is a new `Lease` row (D-54) linked back through
+ * `renewedFromLeaseId`, so a tenant three renewals in lives on the fourth row
+ * of a chain whose first row holds everything that happened at move-in.
+ */
+export async function tenancyLeaseIds(db: Db, leaseId: string): Promise<string[]> {
+  const chain = [leaseId]
+  for (let id: string | null = leaseId; id; ) {
+    const lease: { renewedFromLeaseId: string | null } | null = await db.lease.findUnique({
+      where: { id },
+      select: { renewedFromLeaseId: true },
+    })
+    id = lease?.renewedFromLeaseId ?? null
+    if (!id || chain.includes(id)) break
+    chain.unshift(id)
+  }
+  return chain
+}
+
+/**
+ * The move-in report a deposit case is measured from (R-226): the one taken
+ * at the TRUE start of occupancy, on the tenancy's first lease - not the
+ * current lease's, which for a renewal is none at all, because
+ * `move-in-consumer.ts` deliberately opens no report for a renewal and
+ * `endRenewalPredecessor` moves the Deposit rows across without it. Every
+ * reader used to query `{ leaseId, type: 'MOVE_IN' }` on the current lease,
+ * so a tenant who renewed even once reached move-out with a blank left-hand
+ * side and every deduction flagged unsupported.
+ *
+ * The earliest lease in the chain that HAS one wins; within a lease, the
+ * newest report, as before. A later lease's report only answers when every
+ * earlier lease has none - a staff member opening one by hand on a renewal
+ * of a tenancy that predates R-208.
+ */
+export async function baselineMoveInFor(
+  db: Db,
+  leaseId: string,
+): Promise<{ id: string; leaseId: string; performedAt: Date | null } | null> {
+  const chain = await tenancyLeaseIds(db, leaseId)
+  const reports = await db.inspection.findMany({
+    where: { leaseId: { in: chain }, type: 'MOVE_IN' },
+    orderBy: { createdAt: 'desc' },
+    select: { id: true, leaseId: true, performedAt: true },
+  })
+  for (const id of chain) {
+    const report = reports.find((row) => row.leaseId === id)
+    if (report) return { id: report.id, leaseId: id, performedAt: report.performedAt }
+  }
+  return null
+}
+
+/**
+ * The tenancy's baseline MOVE_IN inspection (`baselineMoveInFor`), copied
+ * into fresh items - or `null` when there is nothing to copy: no `leaseId`
+ * resolved, or a tenancy with no move-in inspection on record (an inherited
+ * tenancy with no application-derived baseline, R-033, or a unit inspected
+ * before any lease existed). The caller falls back to a template in that
+ * case, same as every inspection type before this item.
  */
 export async function itemsFromMoveIn(db: Db, leaseId: string | null): Promise<MoveInCopy | null> {
   if (!leaseId) return null
-  const moveIn = await db.inspection.findFirst({
-    where: { leaseId, type: 'MOVE_IN' },
-    orderBy: { createdAt: 'desc' },
+  const baseline = await baselineMoveInFor(db, leaseId)
+  if (!baseline) return null
+  const moveIn = await db.inspection.findUnique({
+    where: { id: baseline.id },
     select: {
       id: true,
       items: {

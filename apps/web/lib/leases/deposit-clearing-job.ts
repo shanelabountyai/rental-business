@@ -3,6 +3,7 @@ import 'server-only'
 import { balanceCents } from '@rental/core/ledger'
 import { fundsCleared } from '@rental/core/payments'
 import { prisma } from '@rental/db'
+import { baselineMoveInFor } from '@/lib/inspections/move-out-copy.ts'
 import { createTask } from '@/lib/tasks/create.ts'
 import { SCHEDULED_JOBS } from '@/lib/jobs/runner.ts'
 
@@ -49,18 +50,6 @@ SCHEDULED_JOBS.push({
         depositCents: true,
         unit: { select: { name: true } },
         charges: { where: { type: 'DEPOSIT' }, select: { id: true }, take: 1 },
-        // R-208. Releasing the access codes is the last moment anybody can
-        // record what this house looked like before the tenant's furniture
-        // is in it - after that the baseline is gone for good and every
-        // deduction at move-out trips `isUnsupportedDeduction`. So the Task
-        // that hands over the codes says whether a walk is on record.
-        // WARN, NEVER BLOCK (D-187, D-222): the codes go out either way.
-        inspections: {
-          where: { type: 'MOVE_IN' },
-          select: { performedAt: true },
-          orderBy: { createdAt: 'desc' },
-          take: 1,
-        },
       },
     })
 
@@ -104,7 +93,14 @@ SCHEDULED_JOBS.push({
       // checklist so `move-in-consumer.ts` opens the next one by itself. An
       // unwalked one means the tenant has been asked and has not gone round
       // yet, which is a chase, not a setup problem.
-      const moveIn = lease.inspections[0]
+      //
+      // R-208 put this warning here: releasing the codes is the last moment
+      // anybody can record the house before the furniture is in it. R-226
+      // reads the TENANCY's baseline rather than this lease's own, so a
+      // renewal that carries a deposit charge is not told to open a move-in
+      // report its tenant walked three years ago. WARN, NEVER BLOCK (D-187,
+      // D-222): the codes go out either way.
+      const moveIn = await baselineMoveInFor(prisma, lease.id)
       const moveInWarning = !moveIn
         ? ' — NO MOVE-IN REPORT: open one before the codes go out'
         : !moveIn.performedAt

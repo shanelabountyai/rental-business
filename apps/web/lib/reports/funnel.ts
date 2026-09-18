@@ -129,7 +129,15 @@ export async function leasingFunnel(
             id: true,
             name: true,
             leases: {
-              select: { startsOn: true, endsOn: true, moveInAt: true, moveOutAt: true, noticeGivenAt: true },
+              select: {
+                startsOn: true,
+                endsOn: true,
+                moveInAt: true,
+                moveOutAt: true,
+                noticeGivenAt: true,
+                // R-226: a renewal is the same tenancy on a new row (D-54).
+                renewalLeases: { where: { status: { notIn: ['DRAFT', 'PENDING_SIGNATURE'] } }, select: { id: true } },
+              },
             },
             // `publishedAt` is the latest publish, so a listing unpublished
             // and republished reads late here. ponytail: add a publish
@@ -173,7 +181,12 @@ export async function leasingFunnel(
   for (const property of properties) {
     const zone = property.timezone
     for (const unit of property.units) {
+      // A lease a renewal took over did not vacate anything - the tenant is
+      // still in the house - so it must not be counted as a vacancy "filled"
+      // the next day by its own successor, which would drag the median
+      // toward zero by one per renewal.
       const ends = unit.leases
+        .filter((lease) => lease.renewalLeases.length === 0)
         .map((lease) => ({
           vacatedOn:
             lease.moveOutAt != null

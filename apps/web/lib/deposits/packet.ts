@@ -12,6 +12,7 @@ import type { DepositFormState } from '@/lib/deposits/actions.ts'
 import { assemblePacket, type PacketCandidate } from '@/lib/pdf/packet.ts'
 import { renderBlocksPdf } from '@/lib/pdf/render.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
+import { baselineMoveInFor, tenancyLeaseIds } from '@/lib/inspections/move-out-copy.ts'
 import { generateStorageKey, storage } from '@/lib/storage/index.ts'
 
 // The deposit-dispute packet (INSP-03/INSP-05/PAY-11, R-218).
@@ -141,9 +142,14 @@ export async function exportDepositPacket(
   const generatedAt = new Date()
   const day = (instant: Date | null) => (instant ? businessDate(instant, zone) : null)
 
-  const inspection = (type: 'MOVE_IN' | 'MOVE_OUT') =>
+  // R-226. The move-in side is the TENANCY's, not this lease's: a renewal
+  // carries no move-in report of its own and an inherited tenancy's R-116
+  // baseline sits on the lease it was imported as. The move-out is this
+  // lease's own - it is the end of the tenancy, which is always the newest row.
+  const [chain, baseline] = await Promise.all([tenancyLeaseIds(prisma, leaseId), baselineMoveInFor(prisma, leaseId)])
+  const inspection = (where: { leaseId: string; type: 'MOVE_OUT' } | { id: string }) =>
     prisma.inspection.findFirst({
-      where: { leaseId, type },
+      where,
       orderBy: { createdAt: 'desc' },
       select: {
         performedAt: true,
@@ -170,8 +176,8 @@ export async function exportDepositPacket(
       },
     })
   const [moveIn, moveOut, envelope, baselines, staff] = await Promise.all([
-    inspection('MOVE_IN'),
-    inspection('MOVE_OUT'),
+    baseline ? inspection({ id: baseline.id }) : null,
+    inspection({ leaseId, type: 'MOVE_OUT' }),
     // R-090: `kind: 'LEASE'`, or an executed amendment is labelled the lease.
     prisma.leaseEnvelope.findFirst({
       where: { leaseId, kind: 'LEASE', executedDocumentId: { not: null } },
@@ -180,7 +186,7 @@ export async function exportDepositPacket(
     }),
     // R-116: an inherited tenancy's only baseline.
     prisma.document.findMany({
-      where: { leaseId, type: 'CONDITION_BASELINE', deletedAt: null },
+      where: { leaseId: { in: chain }, type: 'CONDITION_BASELINE', deletedAt: null },
       orderBy: { createdAt: 'asc' },
       select: { id: true, fileName: true, capturedAt: true, createdAt: true },
     }),

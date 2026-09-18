@@ -19,7 +19,7 @@ import type { TemplateChecklistItem } from '@rental/core/inspections'
 // inspection automatically and there was no move-in equivalent.
 //
 // WHAT IT COST. The whole deposit case. `itemsFromMoveIn` builds R-070/
-// R-151's side-by-side from `{ leaseId, type: 'MOVE_IN' }`, so with none the
+// R-151's side-by-side from the tenancy's MOVE_IN report, so with none the
 // comparison has nothing on the left and every deduction trips
 // `isUnsupportedDeduction` (packages/core/ledger/disposition.ts) - which is
 // the correct answer to an unevidenced deduction and the wrong answer to a
@@ -62,10 +62,13 @@ CONSUMERS.push({
     // year; asking them to photograph it as though they had just arrived
     // records the wrong fact, and the overdue job would then nag them for
     // seven days about a walk that should never have been asked for. The
-    // successor's deposit case reads the PREDECESSOR's move-in report, which
-    // is the correct baseline - `endRenewalPredecessor` moves the Deposit
-    // rows across and the condition at the true start of occupancy is what a
-    // deduction has to be measured from.
+    // successor's deposit case reads the tenancy's FIRST lease's move-in
+    // report through `baselineMoveInFor` (move-out-copy.ts), which is the
+    // correct baseline: the condition at the true start of occupancy is what
+    // a deduction has to be measured from. Until R-226 this sentence said so
+    // and nothing did it - `endRenewalPredecessor` moves the Deposit rows
+    // across, the report stayed behind, and every reader queried the current
+    // lease's own id.
     //
     // INHERITED is deliberately NOT excluded. The tenant did not move in
     // either, but nobody has ever recorded what this house looked like - it

@@ -12965,3 +12965,35 @@ All three were confirmed red against the previous job before the fix was kept. T
 - `npm test`: **3,259 passed / 4 skipped**. That is R-224's 3,257 plus two new tests: the notice text, and the cutover job across six cases (applied in time, applied late with an override, held unserved, held served late, held after a hand edit, not yet due).
 - `PORT=3100 npm run test:e2e -- leases retaliation-guard` against the production build, both projects: **60 passed, 0 flaky**, matching `--list` (60). `leases.spec.ts` has a new test that covers a short-notice refusal, the override, the notice, an unchanged Stripe amount, and the withdrawal. "A rent change reaches Stripe" is now a decrease. Both raises in `retaliation-guard.spec.ts` now give an effective date, and one of them asserts a scheduled change instead of a new `rentCents`. `afterAll` treats a lease with a `Notice` as pinned.
 - CI: R-224's run `35374322666` was still in progress when this was written. R-223's (`35371468362`) was green.
+
+## R-226 — a tenant who renewed has a move-in side to their deposit case
+
+**Commit:** `PENDING`  ·  **Date:** 2026-09-18
+
+**What it built.**
+- **`tenancyLeaseIds` and `baselineMoveInFor`** in [move-out-copy.ts](apps/web/lib/inspections/move-out-copy.ts). The first walks `renewedFromLeaseId` back to the tenancy's first lease, oldest first, with a cycle guard. The second returns the move-in report from the earliest lease in that chain that has one.
+- **Every deposit-evidence reader now goes through it.**
+  - `itemsFromMoveIn`, which covers both a staff-started move-out or pre-move-out walk and `pre-move-out-scheduling-job.ts`.
+  - The R-218 dispute packet ([packet.ts](apps/web/lib/deposits/packet.ts)). It also reads R-116's `CONDITION_BASELINE` documents across the chain, so an inherited tenancy that later renewed keeps its only baseline.
+  - The move-in warning on the codes-release Task in `deposit-clearing-job.ts`.
+- **RPT-06 days-to-fill** ([funnel.ts](apps/web/lib/reports/funnel.ts)) no longer counts a lease that a renewal took over as a vacancy. Before, it did, and its own successor "filled" it the next day, one false near-zero fill per renewal. This was the one `Lease.moveInAt` reader that gave a renewal a wrong answer.
+- **The comment in `move-in-consumer.ts`** used to claim the successor already read the predecessor's report. It now says how that happens, and that before R-226 nothing did.
+- **Four tests** in [move-out-copy.test.ts](apps/web/lib/inspections/move-out-copy.test.ts):
+  - a report found two renewals back;
+  - the first lease's report beating one opened by hand on a renewal;
+  - the fallback to a renewal's own report when the first lease has none;
+  - null when no lease in the chain has a report.
+
+**What it decided** (D-245). The earliest lease that holds a report wins. Within one lease, the newest report still wins. `Lease.moveInAt` is not propagated or copied. A renewal's null falls back to its own `startsOn`, which is correct for occupancy and turnover. No new inspection is asked of a renewing tenant (R-208's exclusion stands).
+
+**What it left behind.**
+- The tenant portal (`lib/portal/inspection-queries.ts`) still scopes reports by `scope.leaseIds`. Whether a renewed tenant can still open their original move-in report there depends on that scope including the ended predecessor. Not checked here, and no row owns it.
+- R-234 (photos inside the packet) was waiting on this item and is now unblocked.
+- **Needs counsel** on the penalty exposure for deposit cases already closed without a move-in side, per the review. No backfill.
+
+**Gate.**
+- `lint`: 0 errors (the 16 warnings already there). `typecheck`: clean. `check:ship-deps`: clean.
+- `npm test`: **3,263 passed / 4 skipped**.
+- e2e `deposit-disposition`, `leasing-analytics` and `inspections` on both Playwright projects: **38 passed**, matching the 38 from `--list`.
+- No schema change, so no `db:ci`.
+- CI at commit time: R-224's run was cancelled when R-225 was pushed on top of it, and R-225's run was still in progress.
