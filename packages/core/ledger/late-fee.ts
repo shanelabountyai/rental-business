@@ -13,7 +13,7 @@
 // damages; some cities cap them lower than their state. A hardcoded 5% would
 // be an illegal charge in a jurisdiction nobody remembered to check.
 
-import { type BusinessDate } from '../scheduling/local-time.ts'
+import { type BusinessDate, addBusinessDays } from '../scheduling/local-time.ts'
 import { type Cents, assertCents, daysPastDue } from '../money/money.ts'
 
 /// Mirrors the Prisma enum. Declared rather than imported for the same
@@ -248,4 +248,55 @@ export function lateFeeDeltaCents(
 ): Cents {
   if (decision.basis !== 'assessed') return 0
   return Math.max(0, decision.amountCents - alreadyAssessedCents)
+}
+
+/// A span a fee-halting hold was in force, in property-local days. Held on
+/// `from`, and on every day before `until`; the day it was lifted is NOT held,
+/// because the nightly job lifts before it assesses (R-227). `until` null is a
+/// hold still in force.
+export interface HeldSpan {
+  from: BusinessDate
+  until: BusinessDate | null
+}
+
+export function isHeldOn(spans: readonly HeldSpan[], day: BusinessDate): boolean {
+  return spans.some((span) => span.from <= day && (span.until == null || day < span.until))
+}
+
+/**
+ * `lateFeeFor`, less every day a hold was in force (R-227).
+ *
+ * THE LIFT MUST NOT BACKFILL. `lateFeeFor` is cumulative, so the night a
+ * `halt_late_fees` hold came off, the delta arithmetic used to charge every
+ * day it had covered - a $10/day fee held for thirty days arrived as $300 in
+ * one line, and a flat fee whose grace ended under the hold arrived the
+ * morning after. The hold's whole meaning is that the meter was OFF.
+ *
+ * So the fee is rebuilt day by day: the cumulative figure's increment on each
+ * day, kept only where no span covered that day. That one rule is right for
+ * every rate shape without naming any of them - a flat or percentage fee
+ * increments once, on the first day past grace, and is lost for good if that
+ * day was held; a daily fee loses exactly the held days; a capped fee stops
+ * incrementing at the cap whichever days were held.
+ *
+ * `heldBackCents` is what the holds cost on THIS debt as of `asOf` - never
+ * charged, never to be. Reported, not backfilled (D-240).
+ */
+export function lateFeeOutsideHolds(
+  rule: LateFeeRule,
+  facts: LateFeeFacts,
+  held: readonly HeldSpan[],
+): { decision: LateFeeDecision; heldBackCents: Cents } {
+  const full = lateFeeFor(rule, facts)
+  if (full.basis !== 'assessed' || held.length === 0) return { decision: full, heldBackCents: 0 }
+
+  let kept = 0
+  let previous = 0
+  // From the first day past grace: every day before it increments nothing.
+  for (let day = addBusinessDays(facts.dueOn, rule.graceDays + 1); day <= facts.asOf; day = addBusinessDays(day, 1)) {
+    const cumulative = lateFeeFor(rule, { ...facts, asOf: day }).amountCents
+    if (!isHeldOn(held, day)) kept += cumulative - previous
+    previous = cumulative
+  }
+  return { decision: { ...full, amountCents: kept }, heldBackCents: full.amountCents - kept }
 }

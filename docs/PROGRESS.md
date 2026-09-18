@@ -12997,3 +12997,38 @@ All three were confirmed red against the previous job before the fix was kept. T
 - e2e `deposit-disposition`, `leasing-analytics` and `inspections` on both Playwright projects: **38 passed**, matching the 38 from `--list`.
 - No schema change, so no `db:ci`.
 - CI at commit time: R-224's run was cancelled when R-225 was pushed on top of it, and R-225's run was still in progress.
+
+## R-227 — a served notice's fee stop comes off when the notice is settled
+
+**Commit:** `PENDING`  ·  **Date:** 2026-09-18
+
+**What it built.**
+- **`LeaseHold.noticeId`** (migration `20260918220000_r227_notice_hold_link`, FK `RESTRICT`). The serve action writes it. Existing `NOTICE_SERVED` holds are linked from their `lease.hold_placed` audit row's `after.noticeId`; a hold with no such row was placed by hand and stays unlinked.
+- **`liftSettledNoticeHolds`** ([notice-hold-lift.ts](apps/web/lib/holds/notice-hold-lift.ts)), run at the top of `assessLateFees`. For each live linked hold, it lifts when:
+  - the notice's case has closed;
+  - R-194's verdict is `cured`;
+  - or the cure clock has expired (part-cured or not cured).
+
+  It records `liftedBySystem: 'job:ledger.late_fees'`, a reason giving the verdict sentence, the resume date and the days held, and a SYSTEM `lease.hold_lifted` audit row. The update is guarded on `liftedAt: null`, so a hand lift made in between keeps its own name and reason.
+- **`lateFeeOutsideHolds`** in core ([late-fee.ts](packages/core/ledger/late-fee.ts)) with `HeldSpan`/`isHeldOn`. It rebuilds the cumulative fee day by day and keeps only the increments on unheld days. Both passes of the late-fee job use it, with `heldSpansInProperty` supplying every `halt_late_fees` span, lifted ones included. The job record gains `heldBackCents` and `noticeHoldsLifted`.
+- **Serving a second cure notice** while an earlier notice's hold is live now lifts the old hold ("Superseded", audited) and places a new one linked to the new notice, in one transaction.
+- **`/leases/[id]`'s hold banner** shows each hold's age ("in force for N days").
+- **A display fix:** a system-lifted hold is named by the job that lifted it. `toView` used to call every system lift "the nightly payment-plan sweep".
+
+**What it decided** (D-246, reversing D-231's "never lifted automatically").
+- An expired cure period lifts the stop whatever the verdict, not only a cure.
+- **The held days are never charged, for every hold type, not only `notice_served`.** Found while building this: `lateFeeFor` is cumulative, so lifting ANY fee-stopping hold used to charge every held day the next night. A bankruptcy stay lifted after 30 days on a $10/day rule posted $300 in one line. A flat or percentage fee whose first chargeable day fell under the hold posted the morning after. That would have made this item's own lift the backfill the row forbids. The core test and `holds.test.ts`'s cure test both assert it, and the cure test **goes red with the spans switched off** (checked before it was trusted).
+- A hand-placed `NOTICE_SERVED` hold is still lifted only by a person.
+
+**What it left behind.**
+- **The report of what forgotten holds suppressed is the job record's `heldBackCents`.** It is a nightly snapshot of fees on still-open debts, not a list of tenancies or a screen. Fees on debts already paid off while a hold was forgotten are not reported anywhere; recomputing them would mean replaying history. No backfill (D-240).
+- The lift waits for the next 06:00 run. Closing a case does not lift the hold at the moment of closing.
+- `payment-plan-job.ts` still stamps `liftedAt: new Date()` rather than the job's `now`, so a caught-up date records today's instant (R-190's class, not fixed here).
+- **Needs counsel**, unchanged: whether post-service accrual defeats a notice, and whether a stay's or plan's held days may be charged after it ends. The product takes the conservative answer to the second.
+- The migration is not on the Neon dev branch, nor are R-223's, R-224's or R-225's.
+
+**Gate.**
+- `lint`: 0 errors (the 16 warnings already there). `typecheck`: clean. `check:ship-deps`: clean. `db:ci`: migrations from scratch, seed, no drift.
+- `npm test`: **3,271 passed / 4 skipped**. That is R-226's 3,263 plus five core `lateFeeOutsideHolds` tests and three `holds.test.ts` tests (cure lifts with no backfill; stays on while the clock runs and lifts at expiry; a closed case lifts).
+- e2e `evictions`, `lease-holds`, `payment-plans` and `scra` against the production build, both projects: **52 passed**, matching `--list` (52). No spec asserted the banner's placed line, so none changed.
+- CI: R-226's run `35376170871` was still in progress at 25 minutes when this was pushed, and the push cancels it. R-227's run is the first to cover R-224 to R-227. R-223's (`35371468362`) is the last that finished green.

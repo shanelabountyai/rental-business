@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { type LateFeeRule, lateFeeFor,
-  lateFeeDeltaCents, statutoryCeiling } from './index.ts'
+  lateFeeDeltaCents, lateFeeOutsideHolds, statutoryCeiling } from './index.ts'
 
 // The single most legally-sensitive calculation in the product (PAY-04,
 // D-4, D-12). Every number below comes from a rule object; there is not one
@@ -304,5 +304,46 @@ describe('lateFeeDeltaCents', () => {
     // with a reason on it rather than an arithmetic side effect.
     const decision = lateFeeFor(rule, facts)
     expect(lateFeeDeltaCents(decision, decision.amountCents + 99_999)).toBe(0)
+  })
+})
+
+// R-227. Lifting a fee-halting hold must not charge the days it covered.
+// Grace 2 on a 1 August due date: the first chargeable day is 4 August.
+describe('lateFeeOutsideHolds', () => {
+  const daily = rule({ lateFeeType: 'DAILY', lateFeeFlatCents: null, lateFeeDailyCents: 1_000 })
+
+  it('is lateFeeFor exactly when nothing was held', () => {
+    const { decision, heldBackCents } = lateFeeOutsideHolds(daily, facts(), [])
+    expect(decision).toEqual(lateFeeFor(daily, facts()))
+    expect(heldBackCents).toBe(0)
+  })
+
+  it('charges a daily fee for the unheld days only, and resumes on the day of the lift', () => {
+    // 4-10 Aug is 7 chargeable days; held 5, 6 and 7 Aug, lifted on the 8th.
+    const { decision, heldBackCents } = lateFeeOutsideHolds(daily, facts(), [
+      { from: '2026-08-05', until: '2026-08-08' },
+    ])
+    expect(decision.amountCents).toBe(4_000)
+    expect(heldBackCents).toBe(3_000)
+  })
+
+  it('never charges a flat fee whose first chargeable day was held', () => {
+    const { decision, heldBackCents } = lateFeeOutsideHolds(rule(), facts(), [
+      { from: '2026-08-03', until: '2026-08-06' },
+    ])
+    expect(decision.amountCents).toBe(0)
+    expect(heldBackCents).toBe(5_000)
+  })
+
+  it('still charges a flat fee that fell due before the hold', () => {
+    const { decision } = lateFeeOutsideHolds(rule(), facts(), [{ from: '2026-08-05', until: null }])
+    expect(decision.amountCents).toBe(5_000)
+  })
+
+  it('stays under the ceiling whichever days were held', () => {
+    const capped = rule({ lateFeeType: 'DAILY', lateFeeFlatCents: null, lateFeeDailyCents: 1_000, lateFeeMaxCents: 3_000 })
+    // Cap reached on 6 Aug; 4 Aug held, so 5 and 6 Aug are charged and nothing after.
+    const { decision } = lateFeeOutsideHolds(capped, facts(), [{ from: '2026-08-04', until: '2026-08-05' }])
+    expect(decision.amountCents).toBe(2_000)
   })
 })

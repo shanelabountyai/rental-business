@@ -1,6 +1,8 @@
 import 'server-only'
 
-import { type HoldEffect, type HoldType, type PlacedHold, isHalted } from '@rental/core/holds'
+import { HOLD_DEFINITIONS, type HoldEffect, type HoldType, type PlacedHold, isHalted } from '@rental/core/holds'
+import type { HeldSpan } from '@rental/core/ledger'
+import { businessDate } from '@rental/core/scheduling'
 import { type LeaseHoldType, prisma } from '@rental/db'
 
 // Reading lease holds (R-084).
@@ -75,6 +77,13 @@ const HOLD_SELECT = {
   liftedBy: { select: { name: true } },
 } as const
 
+/// The jobs that lift holds, by the ref they write to `liftedBySystem`.
+const SYSTEM_LIFTERS: Record<string, string> = {
+  'job:payment_plan.check': 'the nightly payment-plan sweep',
+  // R-227: a served notice cured, ran out, or its case closed.
+  'job:ledger.late_fees': 'the nightly late-fee job',
+}
+
 function toView(row: {
   id: string
   type: LeaseHoldType
@@ -98,7 +107,7 @@ function toView(row: {
     // sweep" is the honest answer to who resumed collection.
     liftedByName:
       row.liftedBy?.name ??
-      (row.liftedBySystem ? 'the nightly payment-plan sweep' : null),
+      (row.liftedBySystem ? (SYSTEM_LIFTERS[row.liftedBySystem] ?? row.liftedBySystem) : null),
     liftReason: row.liftReason,
   }
 }
@@ -178,4 +187,33 @@ export function haltedLeasesInProperty(
   effect: HoldEffect,
 ): Promise<ReadonlySet<string>> {
   return haltedBy({ propertyId }, effect)
+}
+
+/**
+ * Every span a hold with this effect was in force, live AND lifted, by lease,
+ * in property-local days (R-227). What the late-fee job needs to leave the
+ * held days out of a fee once the hold is off - `haltedLeasesInProperty`
+ * answers only "is it held now", and a lifted hold's days still must never
+ * be charged.
+ */
+export async function heldSpansInProperty(
+  propertyId: string,
+  effect: HoldEffect,
+  timeZone: string,
+): Promise<ReadonlyMap<string, HeldSpan[]>> {
+  const rows = await prisma.leaseHold.findMany({
+    where: { propertyId },
+    select: { leaseId: true, type: true, placedAt: true, liftedAt: true },
+  })
+  const spans = new Map<string, HeldSpan[]>()
+  for (const row of rows) {
+    if (!HOLD_DEFINITIONS[TO_CORE[row.type]].effects.includes(effect)) continue
+    const list = spans.get(row.leaseId) ?? []
+    list.push({
+      from: businessDate(row.placedAt, timeZone),
+      until: row.liftedAt ? businessDate(row.liftedAt, timeZone) : null,
+    })
+    spans.set(row.leaseId, list)
+  }
+  return spans
 }

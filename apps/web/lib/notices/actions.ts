@@ -405,16 +405,40 @@ async function placeNoticeServedHold(
   }
   const leaseId = notice.leaseId
 
+  // R-227: a hold belongs to ONE notice, because the nightly job lifts it on
+  // that notice's verdict. A second service of the same notice, or a hold
+  // placed by hand, keeps the stop in force as it is. A DIFFERENT notice
+  // served while an earlier one's hold is live - a re-draft after defective
+  // service - takes the stop over in the same transaction, or the earlier
+  // notice's clock running out would restart the fees under the new demand.
   const existing = await prisma.leaseHold.findFirst({
     where: { leaseId, type: 'NOTICE_SERVED', liftedAt: null },
-    select: { id: true },
+    select: { id: true, noticeId: true },
   })
-  if (existing) return { ok: true }
+  if (existing && (existing.noticeId === null || existing.noticeId === notice.id)) return { ok: true }
 
   const reason = `${noticeTypeLabel(notice.type)} served — late fees stopped so the ledger matches the sum the notice demanded.`
   await prisma.$transaction(async (tx) => {
+    if (existing) {
+      const liftReason = `Superseded: a later ${noticeTypeLabel(notice.type).toLowerCase()} was served, and its own hold carries the late-fee stop from here.`
+      await tx.leaseHold.update({
+        where: { id: existing.id },
+        data: { liftedAt: new Date(), liftedByStaffId: actorStaffId, liftReason },
+      })
+      await audit(
+        {
+          action: 'lease.hold_lifted',
+          entityType: 'Lease',
+          entityId: leaseId,
+          propertyId: notice.propertyId,
+          reason: liftReason,
+          after: { holdId: existing.id, type: 'notice_served', noticeId: existing.noticeId, supersededBy: notice.id },
+        },
+        tx,
+      )
+    }
     const hold = await tx.leaseHold.create({
-      data: { leaseId, propertyId: notice.propertyId, type: 'NOTICE_SERVED', reason, placedByStaffId: actorStaffId },
+      data: { leaseId, propertyId: notice.propertyId, type: 'NOTICE_SERVED', reason, placedByStaffId: actorStaffId, noticeId: notice.id },
     })
     await audit(
       {

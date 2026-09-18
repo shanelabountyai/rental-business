@@ -5,7 +5,7 @@ import {
   allocateBalance,
   balanceCents,
   lateFeeDeltaCents,
-  lateFeeFor,
+  lateFeeOutsideHolds,
   rentPeriodDebts,
 } from '@rental/core/ledger'
 import type { LateFeeDecision } from '@rental/core/ledger'
@@ -13,7 +13,8 @@ import { businessDate, utcToBusinessDate } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { auditAsSystem } from '@/lib/audit/system.ts'
 import { getBillingProvider } from '@/lib/billing/provider.ts'
-import { haltedLeasesInProperty } from '@/lib/holds/queries.ts'
+import { liftSettledNoticeHolds } from '@/lib/holds/notice-hold-lift.ts'
+import { haltedLeasesInProperty, heldSpansInProperty } from '@/lib/holds/queries.ts'
 import { rulesFor } from '@/lib/jurisdiction/queries.ts'
 
 // Assessing late fees (PAY-04; D-4, D-12, R-040, R-050b).
@@ -69,6 +70,13 @@ export interface AssessmentResult {
   /// not see the lease" look identical on a ledger and are very different
   /// problems.
   heldLeases: number
+  /// R-227: fees on today's open debts that fell on days a hold covered and
+  /// so will never be charged - the report the backlog asked for in place of
+  /// a backfill. A snapshot as of this run, NOT a sum: tomorrow's run reports
+  /// the same held days again for any debt still open.
+  heldBackCents: number
+  /// R-227: served notices' fee stops lifted this run.
+  noticeHoldsLifted: number
 }
 
 /// Charge types a late fee is assessed ON. Rent, and deliberately nothing
@@ -178,6 +186,11 @@ export async function assessLateFees(
   })
   const today = businessDate(now, property.timezone)
 
+  // R-227: before the rule, so a notice in a state with no fee rule is still
+  // lifted on its verdict - and before `heldFromFees` below, so the night a
+  // notice is settled is the first night its tenancy is assessed again.
+  const noticeHoldsLifted = await liftSettledNoticeHolds(propertyId, now)
+
   const rule = await rulesFor({ state: property.state, county: property.county }, now).catch(
     () => null,
   )
@@ -186,7 +199,7 @@ export async function assessLateFees(
   // and inventing one for an unconfigured state is how a product charges an
   // unlawful fee in a market nobody has set up yet.
   if (!rule) {
-    return { assessedCents: 0, chargesAssessed: 0, leasesChecked: 0, failed: 0, heldLeases: 0 }
+    return { assessedCents: 0, chargesAssessed: 0, leasesChecked: 0, failed: 0, heldLeases: 0, heldBackCents: 0, noticeHoldsLifted }
   }
 
   const result: AssessmentResult = {
@@ -195,6 +208,8 @@ export async function assessLateFees(
     leasesChecked: 0,
     failed: 0,
     heldLeases: 0,
+    heldBackCents: 0,
+    noticeHoldsLifted,
   }
 
   // R-084. ONE QUERY FOR THE WHOLE PROPERTY, read before either pass, and
@@ -203,6 +218,10 @@ export async function assessLateFees(
   // a hold type: a seventh type that halts late fees is covered here on the
   // day it is added to packages/core/holds.
   const heldFromFees = await haltedLeasesInProperty(propertyId, 'halt_late_fees')
+  // R-227: and every span one WAS in force, so a lifted hold's days stay
+  // uncharged - the fee is cumulative, and without this the first night after
+  // a lift charged every day the hold had covered.
+  const heldSpans = await heldSpansInProperty(propertyId, 'halt_late_fees', property.timezone)
 
   // ---- Pass 1: dated RENT charges (unchanged) ----
 
@@ -253,15 +272,20 @@ export async function assessLateFees(
     const outstandingCents = charge.amountCents + applied
     if (outstandingCents <= 0) continue
 
-    const decision = lateFeeFor(rule, {
-      outstandingCents,
-      monthlyRentCents: charge.lease.rentCents,
-      // `@db.Date` comes back as UTC midnight; reading it with local getters
-      // is off by one for any server west of UTC, which is exactly how
-      // `daysPastDue` once reported a day late ON the due date.
-      dueOn: utcToBusinessDate(charge.dueOn),
-      asOf: today,
-    })
+    const { decision, heldBackCents } = lateFeeOutsideHolds(
+      rule,
+      {
+        outstandingCents,
+        monthlyRentCents: charge.lease.rentCents,
+        // `@db.Date` comes back as UTC midnight; reading it with local getters
+        // is off by one for any server west of UTC, which is exactly how
+        // `daysPastDue` once reported a day late ON the due date.
+        dueOn: utcToBusinessDate(charge.dueOn),
+        asOf: today,
+      },
+      heldSpans.get(charge.leaseId) ?? [],
+    )
+    result.heldBackCents += heldBackCents
 
     // A WAIVED fee still counts as assessed. Waiving is a decision to forgive
     // a fee that was correctly charged (PAY-04), not a statement that it was
@@ -412,13 +436,18 @@ export async function assessLateFees(
     for (const { debt, owedCents } of owed) {
       if (!debt.rentPeriod) continue
 
-      const decision = lateFeeFor(rule, {
-        // THIS PERIOD's unpaid rent, never the whole arrears.
-        outstandingCents: owedCents,
-        monthlyRentCents: lease.rentCents,
-        dueOn: debt.dueOn,
-        asOf: today,
-      })
+      const { decision, heldBackCents } = lateFeeOutsideHolds(
+        rule,
+        {
+          // THIS PERIOD's unpaid rent, never the whole arrears.
+          outstandingCents: owedCents,
+          monthlyRentCents: lease.rentCents,
+          dueOn: debt.dueOn,
+          asOf: today,
+        },
+        heldSpans.get(lease.id) ?? [],
+      )
+      result.heldBackCents += heldBackCents
 
       // Scoped to THIS due cycle, not every fee this lease has ever
       // attracted - see the migration's own note on why `assessedForDueOn`

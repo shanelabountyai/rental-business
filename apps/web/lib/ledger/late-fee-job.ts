@@ -37,6 +37,10 @@ SCHEDULED_JOBS.push({
       // R-084: on the job's own record, so a month with no fees on a
       // property is distinguishable from a month the job did not run.
       heldLeases: result.heldLeases,
+      // R-227: fees the holds' days cost on today's open debts (reported,
+      // never backfilled), and notice fee stops lifted before assessing.
+      heldBackCents: result.heldBackCents,
+      noticeHoldsLifted: result.noticeHoldsLifted,
     }
   },
 })

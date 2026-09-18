@@ -12,6 +12,7 @@ import { depositObligations } from '@rental/core/ledger'
 import { formatCents } from '@rental/core/money'
 import {
   businessDate,
+  businessDaysBetween,
   friendlyBusinessDate,
   friendlyDate,
   friendlyTimestamp,
@@ -406,6 +407,11 @@ export default async function LeaseDetailPage({
             // person reads, not a key anything is computed from.
             placedOn: friendlyDate(hold.placedAt, lease.property.timezone),
             placedByName: hold.placedByName,
+            // R-227: how long it has been on, in the property's days.
+            daysInForce: businessDaysBetween(
+              businessDate(hold.placedAt, lease.property.timezone),
+              businessDate(new Date(), lease.property.timezone),
+            ),
           }))}
       />
 

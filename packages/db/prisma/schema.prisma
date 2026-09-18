@@ -2856,6 +2856,13 @@ model LeaseHold {
   /// longer the only record of it.
   paymentPlanId String? @unique
 
+  /// The cure notice a `NOTICE_SERVED` hold was placed for (R-227), so the
+  /// nightly late-fee job can lift it when that notice is cured, its cure
+  /// period runs out, or its case closes. Null on every other type, and on a
+  /// `NOTICE_SERVED` hold placed by hand from the lease panel for a notice
+  /// served outside the product - which only a person can lift.
+  noticeId String?
+
   createdAt DateTime @default(now())
 
   lease       Lease        @relation(fields: [leaseId], references: [id])
@@ -2869,6 +2876,9 @@ model LeaseHold {
   /// plan is never deleted in practice (it is cancelled), so this is the
   /// cleanup path a test fixture uses rather than an operational one.
   paymentPlan PaymentPlan? @relation(fields: [paymentPlanId], references: [id], onDelete: Cascade)
+  /// Restrict, not the SetNull an optional relation defaults to - the same
+  /// call `Notice` makes for its own evidence links.
+  notice      Notice?      @relation(fields: [noticeId], references: [id], onDelete: Restrict)
 
   @@index([leaseId, liftedAt])
   @@index([propertyId, liftedAt])
@@ -5778,6 +5788,7 @@ model Notice {
   // quietly losing its case link is the same evidence loss the lease and
   // applicant relations above are explicit about.
   evictionCase       EvictionCase?    @relation(fields: [evictionCaseId], references: [id], onDelete: Restrict)
+  feeHolds           LeaseHold[]
 
   @@index([leaseId])
   @@index([applicantId])

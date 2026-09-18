@@ -3,6 +3,7 @@ import { prisma } from '@rental/db'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { assessLateFees } from '@/lib/ledger/late-fees.ts'
 import { pastGraceLeaseIds } from '@/lib/payments/rent-roll.ts'
+import { NOTICE_HOLD_LIFTER } from './notice-hold-lift.ts'
 import { activeHoldsForLease, leasesHalted } from './queries.ts'
 
 // Lease holds, against a real database (RISK-11, RISK-12; R-084).
@@ -83,7 +84,7 @@ async function seedOverdueLease(dueOn: string) {
   })
   leaseIds.push(lease.id)
   await prisma.leaseTenant.create({ data: { leaseId: lease.id, tenantId: tenant.id } })
-  await prisma.leasePayer.create({
+  const payer = await prisma.leasePayer.create({
     data: {
       leaseId: lease.id,
       propertyId,
@@ -118,7 +119,7 @@ async function seedOverdueLease(dueOn: string) {
       occurredAt: new Date(`${dueOn}T00:00:00.000Z`),
     },
   })
-  return { leaseId: lease.id, rentChargeId: rent.id }
+  return { leaseId: lease.id, rentChargeId: rent.id, payerId: payer.id }
 }
 
 async function placeHold(leaseId: string, type: 'BANKRUPTCY' | 'DO_NOT_CONTACT' | 'NOTICE_SERVED') {
@@ -206,6 +207,104 @@ describe('the late-fee sweep', () => {
     expect(
       await prisma.charge.count({ where: { assessedOnChargeId: rentChargeId, type: 'LATE_FEE' } }),
     ).toBeGreaterThan(0)
+  }, 30_000)
+})
+
+// R-227 (review 2026-09-17 finding 6). A served notice's fee stop used to
+// stay on for the rest of the tenancy. Texas here: 1-day grace, a percentage
+// fee whose one chargeable day is due + 2, and a 3-day cure period.
+describe('a served notice\'s fee stop', () => {
+  async function servedNotice(leaseId: string, servedAt: string) {
+    const notice = await prisma.notice.create({
+      data: {
+        propertyId,
+        leaseId,
+        type: 'PAY_OR_QUIT',
+        addressOfRecord: '9 Hold Court',
+        demandedCents: 150_000,
+        demandComposition: [{ label: 'Rent', amountCents: 150_000 }],
+        generatedAt: new Date(servedAt),
+        servedAt: new Date(servedAt),
+      },
+    })
+    await prisma.noticeDelivery.create({
+      data: { noticeId: notice.id, method: 'PERSONAL', servedAt: new Date(servedAt), permittedByJurisdiction: true },
+    })
+    const hold = await prisma.leaseHold.create({
+      data: {
+        leaseId,
+        propertyId,
+        type: 'NOTICE_SERVED',
+        reason: 'test fixture',
+        placedByStaffId: staffId,
+        noticeId: notice.id,
+        placedAt: new Date(servedAt),
+      },
+    })
+    return { notice, hold }
+  }
+
+  it('lifts on a cure, and never charges the fee that fell due under it', async () => {
+    const { leaseId, rentChargeId, payerId } = await seedOverdueLease('2026-06-01')
+    const { hold } = await servedNotice(leaseId, '2026-06-01T15:00:00Z')
+    await prisma.payment.create({
+      data: {
+        propertyId,
+        leaseId,
+        leasePayerId: payerId,
+        channel: 'OFFLINE_CASH',
+        status: 'SETTLED',
+        amountCents: 150_000,
+        receivedAt: new Date('2026-06-02T15:00:00Z'),
+      },
+    })
+
+    const result = await assessLateFees(propertyId, new Date('2026-06-10T12:00:00Z'))
+
+    const lifted = await prisma.leaseHold.findUniqueOrThrow({ where: { id: hold.id } })
+    expect(lifted.liftedBySystem).toBe(NOTICE_HOLD_LIFTER)
+    expect(lifted.liftReason).toMatch(/^Cured: /)
+    // The rent charge is still open on its own ledger line, so before R-227
+    // the first night after a lift charged the fee due on 3 June outright.
+    expect(
+      await prisma.charge.count({ where: { assessedOnChargeId: rentChargeId, type: 'LATE_FEE' } }),
+    ).toBe(0)
+    expect(result.heldBackCents).toBeGreaterThan(0)
+  }, 30_000)
+
+  it('stays on while the cure period runs, and lifts once it has ended', async () => {
+    const { leaseId } = await seedOverdueLease('2026-07-01')
+    const { hold } = await servedNotice(leaseId, '2026-07-06T15:00:00Z')
+
+    await assessLateFees(propertyId, new Date('2026-07-07T12:00:00Z'))
+    expect((await prisma.leaseHold.findUniqueOrThrow({ where: { id: hold.id } })).liftedAt).toBeNull()
+
+    await assessLateFees(propertyId, new Date('2026-07-20T12:00:00Z'))
+    const lifted = await prisma.leaseHold.findUniqueOrThrow({ where: { id: hold.id } })
+    expect(lifted.liftedBySystem).toBe(NOTICE_HOLD_LIFTER)
+    expect(lifted.liftReason).toMatch(/^The cure period ended on .*Not cured/)
+  }, 30_000)
+
+  it('lifts when the notice\'s case closes, cure or no cure', async () => {
+    const { leaseId } = await seedOverdueLease('2026-08-01')
+    const { notice, hold } = await servedNotice(leaseId, '2026-08-03T15:00:00Z')
+    const lease = await prisma.lease.findUniqueOrThrow({ where: { id: leaseId }, select: { unitId: true } })
+    const evictionCase = await prisma.evictionCase.create({
+      data: {
+        propertyId,
+        unitId: lease.unitId,
+        leaseId,
+        openedByStaffId: staffId,
+        closedAt: new Date('2026-08-04T15:00:00Z'),
+      },
+    })
+    await prisma.notice.update({ where: { id: notice.id }, data: { evictionCaseId: evictionCase.id } })
+
+    // Still inside the cure period, so only the closed case can lift it.
+    await assessLateFees(propertyId, new Date('2026-08-05T12:00:00Z'))
+
+    const lifted = await prisma.leaseHold.findUniqueOrThrow({ where: { id: hold.id } })
+    expect(lifted.liftReason).toMatch(/^The eviction case this notice belongs to closed on /)
   }, 30_000)
 })
 

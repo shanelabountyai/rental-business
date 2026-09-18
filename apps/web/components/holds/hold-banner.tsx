@@ -25,6 +25,9 @@ export interface BannerHold {
   reason: string
   placedOn: string
   placedByName: string
+  /// R-227: whole days since placement, where the page knows today. A fee
+  /// stop nobody lifted reads as its age, not only as a date to subtract.
+  daysInForce?: number
 }
 
 export function HoldBanner({
@@ -66,7 +69,10 @@ export function HoldBanner({
                 {definition.banner}
               </span>
               <span className="text-xs text-amber-800">
-                Placed {hold.placedOn} by {hold.placedByName} — “{hold.reason}”
+                Placed {hold.placedOn} by {hold.placedByName}
+                {hold.daysInForce != null &&
+                  `, in force ${hold.daysInForce === 0 ? 'since today' : `for ${hold.daysInForce} day${hold.daysInForce === 1 ? '' : 's'}`}`}{' '}
+                — “{hold.reason}”
               </span>
               <span className="text-xs text-amber-800">
                 In force: {effectLabels(hold.type).join('; ')}.
