@@ -17,7 +17,12 @@ import {
   validateNoticePeriodOverride,
 } from '@rental/core/leases'
 import { validateDepositAmount } from '@rental/core/ledger'
-import { UNREVIEWED_DAY_COUNT, businessDate, utcToBusinessDate } from '@rental/core/scheduling'
+import {
+  UNREVIEWED_DAY_COUNT,
+  businessDate,
+  friendlyBusinessDate,
+  utcToBusinessDate,
+} from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
@@ -42,6 +47,12 @@ import {
   retaliationGateFor,
   type RetaliationAckView,
 } from './retaliation-check.ts'
+import {
+  notifyRentIncrease,
+  planRentIncrease,
+  scheduleRentIncrease,
+  type ScheduledRaise,
+} from './rent-change.ts'
 
 // Writes for lease records (LEASE-06, RISK-08, R-033). Same shape as every
 // other lib/*/actions.ts in this repo: a resource-carrying permission check
@@ -68,6 +79,14 @@ export interface LeaseFormState {
   needsNoticePeriodAck?: {
     daysGiven: number
     requiredDays: number
+    shortfallDays: number
+  }
+  /// R-225 (LEASE-09). A rent increase whose effective date gives less than
+  /// the jurisdiction's `rentIncreaseNoticeDays` - staff may proceed with a
+  /// recorded reason, same posture as the renewal offer.
+  needsRentNoticeOverride?: {
+    requiredNoticeDays: number
+    noticeDaysGiven: number
     shortfallDays: number
   }
   /// What was actually typed, echoed back on the retaliation early return.
@@ -289,7 +308,7 @@ export async function updateLeaseTerms(
   _previous: LeaseFormState,
   formData: FormData,
 ): Promise<LeaseFormState> {
-  const { lease } = await leaseForWrite(leaseId)
+  const { lease, actor } = await leaseForWrite(leaseId)
 
   const isMonthToMonth = formData.get('isMonthToMonth') === 'yes'
   const input = {
@@ -337,44 +356,75 @@ export async function updateLeaseTerms(
     mtmRentCents: leaseCents(input.mtmRentDollars),
   }
 
+  const values = {
+    startsOn: input.startsOn,
+    endsOn: input.endsOn ?? '',
+    rentDollars: input.rentDollars,
+    depositDollars: input.depositDollars ?? '',
+    nsfFeeDollars: input.nsfFeeDollars ?? '',
+    depositArrangement: input.depositArrangement,
+    rentDueDay: input.rentDueDay,
+    mtmRentDollars: input.mtmRentDollars ?? '',
+    rentEffectiveOn: str(formData, 'rentEffectiveOn'),
+    rentNoticeReason: str(formData, 'rentNoticeReason'),
+    retaliationReason: retaliationReason ?? '',
+  }
+  const isRaise = after.rentCents > before.rentCents
+
+  // R-225 (LEASE-09): a raise on a RUNNING tenancy is scheduled, not
+  // written. `rentCents` is what Stripe bills, so writing it here put the
+  // new price on the next invoice with however little notice was left, no
+  // cap check and no notice document. A draft has no invoice yet and keeps
+  // the direct edit; a decrease is not the adverse act either check exists
+  // for, and still applies at once.
+  const schedulesRaise = isRaise && (lease.status === 'ACTIVE' || lease.status === 'MONTH_TO_MONTH')
+  const planned = schedulesRaise
+    ? await planRentIncrease({
+        lease,
+        toCents: after.rentCents,
+        effectiveOn: values.rentEffectiveOn,
+        noticeReason: values.rentNoticeReason || null,
+      })
+    : null
+
   // RISK-06 (R-055): a RAISE, not any rent change - a correction or a
   // decrease is not the adverse action the guard exists to catch, and
   // warning on one would train staff to click through it on every edit.
-  let retaliation: RetaliationWarning | null = null
-  if (after.rentCents > before.rentCents) {
-    // NOTHING is written on a refusal - same posture as R-027's entry-notice
-    // override. Saving the raise and asking for the reason afterwards would
-    // leave an unexplained retaliatory-looking increase on the record if the
-    // second step never happened.
-    const gate = await retaliationGateFor({
-      leaseId,
-      property: lease.property,
-      actionDate: new Date(),
-      action: 'rent increase',
-      reason: retaliationReason,
-    })
-    if (gate.refusal) {
-      return {
-        ...gate.refusal,
-        values: {
-          startsOn: input.startsOn,
-          endsOn: input.endsOn ?? '',
-          rentDollars: input.rentDollars,
-          depositDollars: input.depositDollars ?? '',
-          nsfFeeDollars: input.nsfFeeDollars ?? '',
-          depositArrangement: input.depositArrangement,
-          rentDueDay: input.rentDueDay,
-          mtmRentDollars: input.mtmRentDollars ?? '',
-        },
-      }
-    }
-    retaliation = gate.warning
-  }
+  const gate = isRaise
+    ? await retaliationGateFor({
+        leaseId,
+        property: lease.property,
+        actionDate: new Date(),
+        action: 'rent increase',
+        reason: retaliationReason,
+      })
+    : { warning: null, refusal: null }
 
+  // NOTHING is written on either refusal - same posture as R-027's
+  // entry-notice override: saving the raise and asking for the reason
+  // afterwards would leave an unexplained increase on the record if the
+  // second step never happened. Both warnings come back together, with both
+  // reasons echoed, or each press drops the field the other asked for
+  // (R-212's loop on the renewal path).
+  if (planned?.refusal || gate.refusal) {
+    return {
+      error: planned?.refusal?.error ?? gate.refusal!.error,
+      fieldErrors: { ...planned?.refusal?.fieldErrors, ...gate.refusal?.fieldErrors },
+      needsRentNoticeOverride: planned?.noticeShortfall,
+      needsRetaliationAck: gate.refusal?.needsRetaliationAck,
+      values,
+    }
+  }
+  const increase = planned?.raise ?? null
+  const retaliation: RetaliationWarning | null = gate.warning
+
+  // The lease keeps billing the OLD rent until the cutover job applies it.
+  const written = increase ? { ...after, rentCents: before.rentCents } : after
+  let rentChangeId: string | null = null
   await prisma.$transaction(async (tx) => {
     await tx.lease.update({
       where: { id: leaseId },
-      data: { ...after, utilityResponsibility: readUtilities(formData) },
+      data: { ...written, utilityResponsibility: readUtilities(formData) },
     })
     await audit(
       {
@@ -384,13 +434,20 @@ export async function updateLeaseTerms(
         propertyId: lease.propertyId,
         before,
         after: {
-          ...after,
-          startsOn: after.startsOn.toISOString(),
-          endsOn: after.endsOn?.toISOString() ?? null,
+          ...written,
+          startsOn: written.startsOn.toISOString(),
+          endsOn: written.endsOn?.toISOString() ?? null,
         },
       },
       tx,
     )
+    if (increase) {
+      rentChangeId = await scheduleRentIncrease(tx, {
+        lease,
+        raise: increase,
+        actorStaffId: actor.id,
+      })
+    }
     if (retaliation) {
       await audit(
         retaliationAckAudit({
@@ -406,10 +463,18 @@ export async function updateLeaseTerms(
     }
   })
 
+  if (rentChangeId) {
+    await notifyRentIncrease(rentChangeId)
+    revalidatePath(`/leases/${leaseId}`)
+    return {
+      notice: `Saved. The new rent starts on ${friendlyBusinessDate(increase!.effectiveOn)}; until then the tenant is billed the current rent.`,
+    }
+  }
+
   // A rent change has to reach Stripe, or the tenant keeps being billed the
   // old amount indefinitely (D-11, R-036). Only when it actually moved -
   // an edit that did not touch the rent should not burn an API round trip.
-  if (after.rentCents !== before.rentCents) {
+  if (written.rentCents !== before.rentCents) {
     await syncLease(leaseId).catch((error) => {
       console.error(`[lease] billing sync failed after a rent change on ${leaseId}`, error)
     })
@@ -417,6 +482,56 @@ export async function updateLeaseTerms(
 
   revalidatePath(`/leases/${leaseId}`)
   return { notice: 'Saved.' }
+}
+
+/**
+ * Withdraws a scheduled rent increase (R-225). The notice it produced stays
+ * on the record - `Notice` is append-only, and what the tenant was handed is
+ * evidence whether or not it went ahead - so the reason is required.
+ */
+export async function cancelRentChange(
+  leaseId: string,
+  _previous: LeaseFormState,
+  formData: FormData,
+): Promise<LeaseFormState> {
+  const { lease } = await leaseForWrite(leaseId)
+  const reason = str(formData, 'cancelReason')
+  if (!reason) {
+    return {
+      error: 'Fix the highlighted fields.',
+      fieldErrors: { cancelReason: 'Say why - the tenant already has the notice.' },
+    }
+  }
+  const cancelled = await prisma.$transaction(async (tx) => {
+    // At most one is ever SCHEDULED (`planRentIncrease` refuses a second).
+    const pending = await tx.rentChange.findFirst({
+      where: { leaseId, status: 'SCHEDULED' },
+      select: { id: true },
+    })
+    if (!pending) return false
+    const { count } = await tx.rentChange.updateMany({
+      where: { id: pending.id, status: 'SCHEDULED' },
+      data: { status: 'CANCELLED' },
+    })
+    if (count === 0) return false
+    const rentChangeId = pending.id
+    await audit(
+      {
+        action: 'lease.rent_increase_cancelled',
+        entityType: 'Lease',
+        entityId: leaseId,
+        propertyId: lease.propertyId,
+        after: { rentChangeId },
+        reasonCode: 'other',
+        reason,
+      },
+      tx,
+    )
+    return true
+  })
+  if (!cancelled) return { error: 'That increase is no longer scheduled.' }
+  revalidatePath(`/leases/${leaseId}`)
+  return { notice: 'Rent increase cancelled.' }
 }
 
 /**

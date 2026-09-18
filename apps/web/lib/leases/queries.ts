@@ -235,3 +235,17 @@ export async function screenedApplicants(scope: ResolvedScope) {
     orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
   })
 }
+
+/// The lease's one SCHEDULED rent increase (R-225), with its notice's service
+/// state - the page says whether the tenant has actually been told.
+export async function scheduledRentChange(leaseId: string) {
+  return prisma.rentChange.findFirst({
+    where: { leaseId, status: 'SCHEDULED' },
+    select: {
+      toCents: true,
+      effectiveOn: true,
+      noticeId: true,
+      notice: { select: { servedAt: true } },
+    },
+  })
+}

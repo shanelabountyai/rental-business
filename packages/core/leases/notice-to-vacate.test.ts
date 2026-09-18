@@ -3,6 +3,7 @@ import type { DayCountRule } from '../scheduling/deadline.ts'
 import {
   noticePeriodCheck,
   nonRenewalNoticeText,
+  rentIncreaseNoticeText,
   validateJustCauseStatement,
   validateNoticePeriodOverride,
 } from './notice-to-vacate.ts'
@@ -252,5 +253,23 @@ describe('nonRenewalNoticeText', () => {
     })
     expect(text).toContain('Reason for non-renewal: Owner is moving into the unit.')
     expect(text).toContain("at least 60 days' notice")
+  })
+})
+
+describe('rentIncreaseNoticeText', () => {
+  it('states both amounts and the effective day as the day it is', () => {
+    const text = rentIncreaseNoticeText({
+      tenantName: 'Jordan Rivera',
+      addressLine1: '12 Oak St',
+      unitName: '',
+      fromCents: 150_000,
+      toCents: 162_500,
+      effectiveOn: '2026-11-01',
+      rentIncreaseNoticeDays: 30,
+    })
+    expect(text).toContain('from $1,500.00 to $1,625.00, starting Sunday, November 1, 2026.')
+    expect(text).toContain("at least 30 days' written notice")
+    expect(text).not.toContain('()')
+    expect(text.endsWith('It is not legal advice.')).toBe(true)
   })
 })

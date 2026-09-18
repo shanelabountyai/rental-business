@@ -12936,3 +12936,32 @@ All three were confirmed red against the previous job before the fix was kept. T
 - `npm test`: **3,257 passed / 4 skipped**, which is R-223's 3,252 plus five new tests: three in core for the split, one webhook test for two splits claimed on one row plus the half-claimed count, and one live-driver test for the by-customer list. The simulator's open-invoice test was rewritten for per-period invoices.
 - `PORT=3100 npm run test:e2e -- deposits insurance-claims` against the production build, both projects: **24 passed, 0 flaky**, matching `--list` (24). The new spec covers review finding 3's worked example: two months behind, both PAY-12 switches on, and one $3,000 money order that records as one Payment, two splits and two ledger entries.
 - CI: R-223's run `35371468362` was green (R-222's was cancelled when R-223's replaced it).
+
+## R-225 — a rent increase waits for its notice
+
+**Commit:** `SHA-PENDING`
+
+**What it built.**
+- **A raise on a running lease is scheduled, not written.** On an ACTIVE or MONTH_TO_MONTH lease, a raise on the terms form now needs a "Rent increase effective date" after today. `updateLeaseTerms` leaves `Lease.rentCents` alone and writes a SCHEDULED `RentChange` (new table, migration `20260918200000_r225_rent_change`) plus a `RENT_INCREASE` `Notice`. The notice is served through the portal when the tenant can reach it (R-210's predicate) and the tenant gets `lease.rent_increase` by SMS/email under `legal_notice`. A decrease, and any change on a DRAFT or PENDING_SIGNATURE lease, still applies at once and syncs to Stripe as before.
+- **The same checks the renewal offer runs.** `planRentIncrease` (`apps/web/lib/leases/rent-change.ts`) calls `renewalRentCheck`. A statutory cap blocks with the highest lawful rent under the rent field. A notice shortfall asks "Why raise the rent with less than the required notice?" and records `lease.rent_increase_notice_overridden`. The retaliation guard is unchanged, and both warnings come back on one press.
+- **The cutover job.** `lease.rent_change_cutover` (`rent-change-job.ts`, 03:00 local, before the 09:00 billing anchor) writes the new rent and calls `syncLease` on the effective date. It holds the change and opens an URGENT `rent_increase_held` Task if the notice was never served, if it was served too late with no override, if the rent was edited by hand since, or if the tenancy has ended.
+- **`/leases/[id]`** shows a scheduled increase (amount, date, whether the notice has been served, a link to it) with "Withdraw the increase", which needs a reason (`lease.rent_increase_cancelled`, REASON_REQUIRED). The notice stays on the record.
+- `rentIncreaseNoticeText` in core, beside `nonRenewalNoticeText`, sharing its zone-free date formatter.
+
+**What it decided** (D-244).
+- The notice period is re-checked at cutover against the notice's real `servedAt`. The form can only judge against the day it was typed. An override given at scheduling covers a later service too.
+- A held change is terminal. Staff re-issue with a new date and a new notice, so the date the tenant was told never moves.
+- One SCHEDULED change per lease, enforced by the action, not a partial index (the `LeaseHold` precedent).
+
+**What it left behind.**
+- The MTM rollover rate (`renewal-rollover-job.ts:76`) is still not checked against a cap (review finding 4's last sentence; not in the backlog row's fix).
+- The tenant is not told when an increase is withdrawn.
+- No list of past increases on `/leases/[id]`; the audit log and the notices list hold them.
+- **Needs counsel**, unchanged: each state's period. The seeded TX value (30 days) is configuration, not advice.
+- The migration is not on the Neon dev branch (`db:migrate:dev`), nor are R-223's and R-224's.
+
+**Gate.**
+- `lint`: 0 errors (the warnings were already there). `typecheck`: clean. `check:ship-deps`: clean (756 dev packages). `db:ci`: migrations from scratch, seed, and no drift.
+- `npm test`: **3,259 passed / 4 skipped**. That is R-224's 3,257 plus two new tests: the notice text, and the cutover job across six cases (applied in time, applied late with an override, held unserved, held served late, held after a hand edit, not yet due).
+- `PORT=3100 npm run test:e2e -- leases retaliation-guard` against the production build, both projects: **60 passed, 0 flaky**, matching `--list` (60). `leases.spec.ts` has a new test that covers a short-notice refusal, the override, the notice, an unchanged Stripe amount, and the withdrawal. "A rent change reaches Stripe" is now a decrease. Both raises in `retaliation-guard.spec.ts` now give an effective date, and one of them asserts a scheduled change instead of a new `rentCents`. `afterAll` treats a lease with a `Notice` as pinned.
+- CI: R-224's run `35374322666` was still in progress when this was written. R-223's (`35371468362`) was green.

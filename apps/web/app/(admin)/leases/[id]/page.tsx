@@ -41,6 +41,7 @@ import { uploadConditionBaseline } from '@/lib/leases/condition-baseline-actions
 import { LedgerPanel } from '@/components/leases/ledger-panel.tsx'
 import { ExportStatementForm } from '@/components/ledger/export-statement-form.tsx'
 import { LeaseForm } from '@/components/leases/lease-form.tsx'
+import { RentChangePanel } from '@/components/leases/rent-change-panel.tsx'
 import { LifecyclePanel } from '@/components/leases/lifecycle-panel.tsx'
 import { FeesPanel } from '@/components/leases/fees-panel.tsx'
 import { RecurringChargesPanel } from '@/components/leases/recurring-panel.tsx'
@@ -89,6 +90,7 @@ import {
   recordLeaseNotice,
   removeLeaseTenant,
   resolveIntakeItem,
+  cancelRentChange,
   updateLeaseTerms,
 } from '@/lib/leases/actions.ts'
 import { generateAndSendLease, voidEnvelope } from '@/lib/leases/esign-staff-actions.ts'
@@ -105,7 +107,12 @@ import { outstandingIntakeGaps } from '@/lib/leases/intake.ts'
 import { recordRenterInsurance } from '@/lib/leases/insurance-actions.ts'
 import { offerRenewal } from '@/lib/leases/renewal-actions.ts'
 import { recordOfflinePayment } from '@/lib/payments/offline.ts'
-import { getLease, screenedApplicants, selectableTenants } from '@/lib/leases/queries.ts'
+import {
+  getLease,
+  scheduledRentChange,
+  screenedApplicants,
+  selectableTenants,
+} from '@/lib/leases/queries.ts'
 import { releaseGuarantor, startPartyChange, voidPartyChange } from '@/lib/leases/party-change-actions.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 
@@ -181,6 +188,8 @@ export default async function LeaseDetailPage({
     : []
 
   const canWrite = await actorCan('lease.write', propertyResource(lease.property))
+  const isRunning = lease.status === 'ACTIVE' || lease.status === 'MONTH_TO_MONTH'
+  const pendingRaise = canWrite && isRunning ? await scheduledRentChange(lease.id) : null
   // Recording money that arrived off the rails is the most forgeable action
   // in the product - there is no processor on the other side to disagree -
   // so it sits behind the privileged permission, not behind lease.write.
@@ -1129,8 +1138,27 @@ export default async function LeaseDetailPage({
           <h2 id="terms" className="text-lg font-semibold">
             Terms
           </h2>
+          {isRunning && (
+            <RentChangePanel
+              cancel={cancelRentChange.bind(null, lease.id)}
+              scheduled={
+                pendingRaise
+                  ? {
+                      summary: `Rent goes up to ${formatCents(pendingRaise.toCents)}/mo on ${friendlyBusinessDate(
+                        utcToBusinessDate(pendingRaise.effectiveOn),
+                      )}. Until then the tenant is billed ${formatCents(lease.rentCents)}.`,
+                      noticeLine: pendingRaise.notice.servedAt
+                        ? `The rent increase notice was served on ${friendlyDate(pendingRaise.notice.servedAt, lease.property.timezone)}.`
+                        : 'The rent increase notice has not been served yet, and an increase whose notice is never served is not applied.',
+                      noticeHref: `/notices/${pendingRaise.noticeId}`,
+                    }
+                  : null
+              }
+            />
+          )}
           <LeaseForm
             action={updateLeaseTerms.bind(null, lease.id)}
+            schedulesRaise={isRunning}
             submitLabel="Save terms"
             defaults={{
               startsOn: lease.startsOn.toISOString().slice(0, 10),

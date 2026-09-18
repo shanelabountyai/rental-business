@@ -624,6 +624,30 @@ export const AUDIT_ACTIONS = [
   /// matching dates.
   'lease.renewed',
 
+  /// R-225 (LEASE-09): a rent increase on a running tenancy was scheduled
+  /// from the lease edit form, with its RENT_INCREASE notice. Nothing reaches
+  /// Stripe until `lease.rent_increase_applied`.
+  'lease.rent_increase_scheduled',
+
+  /// R-225: the scheduled increase gave less than the jurisdiction's
+  /// `rentIncreaseNoticeDays` and staff proceeded. Same shape and reasoning
+  /// as `lease.renewal_rent_check_overridden`, for the other raise path.
+  'lease.rent_increase_notice_overridden',
+
+  /// R-225: the cutover job wrote the new rent onto the lease on its
+  /// effective date, with the notice served in time.
+  'lease.rent_increase_applied',
+
+  /// R-225: the effective date arrived and the increase was NOT applied -
+  /// the notice was never served, or was served too late. The reason is on
+  /// the entry; a Task tells somebody.
+  'lease.rent_increase_held',
+
+  /// R-225: staff withdrew a scheduled increase. REASON_REQUIRED - the
+  /// notice already went to the tenant, and withdrawing it is an act a
+  /// dispute will ask about.
+  'lease.rent_increase_cancelled',
+
   /// R-065: a fixed-term lease reached its end date with no successor lease
   /// in flight, and rolled itself to MONTH_TO_MONTH at the configured MTM
   /// rate with no staff action - LEASE-09's "MTM rollover applying the
@@ -1058,6 +1082,8 @@ export const REASON_REQUIRED: ReadonlySet<AuditAction> = new Set([
   'consent.withdrawn',
   'lease.retaliation_window_acknowledged',
   'lease.renewal_rent_check_overridden',
+  'lease.rent_increase_notice_overridden',
+  'lease.rent_increase_cancelled',
   'lease.notice_period_overridden',
   'envelope.voided',
   // R-083. See the two events' own comments: opening an eviction and settling

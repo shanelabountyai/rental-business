@@ -165,14 +165,21 @@ test.afterAll(async () => {
   // refuses. So only the leases carrying NO ledger rows can go; the ones
   // this spec's ledger tests wrote against stay, deactivated by their
   // property below like every other append-only remnant.
+  // R-225: a scheduled rent increase serves an append-only `Notice`, which
+  // pins its lease the same way.
   const pinned = new Set(
-    (
-      await prisma.ledgerEntry.findMany({
+    [
+      ...(await prisma.ledgerEntry.findMany({
         where: { leaseId: { in: allLeaseIds } },
         select: { leaseId: true },
         distinct: ['leaseId'],
-      })
-    ).map((row) => row.leaseId),
+      })),
+      ...(await prisma.notice.findMany({
+        where: { leaseId: { in: allLeaseIds } },
+        select: { leaseId: true },
+        distinct: ['leaseId'],
+      })),
+    ].map((row) => row.leaseId),
   )
   const removable = allLeaseIds.filter((id) => !pinned.has(id))
   await prisma.leasePayer.deleteMany({ where: { leaseId: { in: removable } } })
@@ -760,7 +767,9 @@ test.describe('the subscription lifecycle (R-036, D-11)', () => {
       .toBe('cancelled')
   })
 
-  test('a rent change reaches Stripe', async ({ page }) => {
+  // A DECREASE, since R-225: it still reaches Stripe at once, while a raise
+  // on a running lease is scheduled (next test).
+  test('a rent decrease reaches Stripe', async ({ page }) => {
     // Otherwise the tenant keeps being billed the old amount indefinitely.
     const seed = await seedUnit()
     const lease = await seedLease(seed, { status: 'ACTIVE' })
@@ -780,7 +789,7 @@ test.describe('the subscription lifecycle (R-036, D-11)', () => {
     await signIn(page, staff.email)
     await page.goto(`/leases/${lease.id}`)
 
-    await page.getByRole('spinbutton', { name: 'Monthly rent (dollars)' }).fill('1725')
+    await page.getByRole('spinbutton', { name: 'Monthly rent (dollars)' }).fill('1425')
     await page.getByRole('button', { name: 'Save terms' }).click()
 
     await expect
@@ -788,7 +797,69 @@ test.describe('the subscription lifecycle (R-036, D-11)', () => {
         const after = await prisma.leasePayer.findUniqueOrThrow({ where: { id: payer.id } })
         return after.stripeAmountCents
       })
-      .toBe(172_500)
+      .toBe(142_500)
+  })
+
+  // R-225 (LEASE-09): a raise on a running tenancy used to reach the next
+  // invoice with no notice period, no cap check and no notice document.
+  test('a rent increase is scheduled behind a notice, checked against the notice period, and can be withdrawn', async ({
+    page,
+  }) => {
+    const seed = await seedUnit()
+    const lease = await seedLease(seed, { status: 'MONTH_TO_MONTH', isMonthToMonth: true })
+    const payer = await prisma.leasePayer.create({
+      data: {
+        leaseId: lease.id,
+        propertyId: seed.property.id,
+        payerType: 'TENANT',
+        tenantId: seed.tenant.id,
+        stripeCustomerId: `cus_${randomUUID().replace(/-/g, '').slice(0, 24)}`,
+        stripeSubscriptionId: `sub_${randomUUID().replace(/-/g, '').slice(0, 24)}`,
+        stripeAmountCents: 150_000,
+      },
+    })
+    const daysOut = (days: number) => {
+      const date = new Date()
+      date.setUTCDate(date.getUTCDate() + days)
+      return date.toISOString().slice(0, 10)
+    }
+
+    const staff = await createStaff()
+    await signIn(page, staff.email)
+    await page.goto(`/leases/${lease.id}`)
+
+    // Ten days is short of TX's configured 30: nothing is written until a
+    // reason is given.
+    await page.getByRole('spinbutton', { name: 'Monthly rent (dollars)' }).fill('1600')
+    await page.getByLabel('Rent increase effective date').fill(daysOut(10))
+    await page.getByRole('button', { name: 'Save terms' }).click()
+    await expect(page.getByText(/short of the 30-day requirement for TX/)).toBeVisible()
+    expect(await prisma.rentChange.count({ where: { leaseId: lease.id } })).toBe(0)
+
+    await page
+      .getByLabel('Why raise the rent with less than the required notice?')
+      .fill('Tenant asked for the new rate to start with their new parking space.')
+    await page.getByRole('button', { name: 'Save anyway, with this reason' }).click()
+    await expect(page.getByText(/until then the tenant is billed the current rent/)).toBeVisible()
+
+    const change = await prisma.rentChange.findFirstOrThrow({ where: { leaseId: lease.id } })
+    expect(change).toMatchObject({ status: 'SCHEDULED', fromCents: 150_000, toCents: 160_000 })
+    expect(change.overrideReason).toContain('parking space')
+    // The lease - and so Stripe - still bills the old rent.
+    expect((await prisma.lease.findUniqueOrThrow({ where: { id: lease.id } })).rentCents).toBe(150_000)
+    expect((await prisma.leasePayer.findUniqueOrThrow({ where: { id: payer.id } })).stripeAmountCents).toBe(150_000)
+    // The notice exists, served through the portal (the tenant has an email).
+    const notice = await prisma.notice.findUniqueOrThrow({ where: { id: change.noticeId } })
+    expect(notice).toMatchObject({ type: 'RENT_INCREASE', serviceMethod: 'PORTAL' })
+    expect(notice.bodyText).toContain('from $1,500.00 to $1,600.00')
+
+    await expect(page.getByText(/Rent goes up to \$1,600\.00\/mo on/)).toBeVisible()
+    await page.getByLabel('Why withdraw this rent increase?').fill('Agreed to hold rent for another year.')
+    await page.getByRole('button', { name: 'Withdraw the increase' }).click()
+    await expect(page.getByText('Rent increase cancelled.')).toBeVisible()
+    expect((await prisma.rentChange.findUniqueOrThrow({ where: { id: change.id } })).status).toBe('CANCELLED')
+    // Append-only: the notice the tenant was handed stays on the record.
+    expect(await prisma.notice.count({ where: { id: notice.id } })).toBe(1)
   })
 
   test('the lease page offers a re-sync and says which provider it used', async ({

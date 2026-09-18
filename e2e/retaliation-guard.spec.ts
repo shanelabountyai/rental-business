@@ -206,6 +206,9 @@ test('a rent increase inside the window is blocked, warns with the specific comp
   await page.goto(`/leases/${lease.id}`)
 
   await page.getByLabel('Monthly rent (dollars)').fill('1800')
+  // Clear of TX's 30-day rent-increase notice (R-225), so only the
+  // retaliation guard is under test here.
+  await page.getByLabel('Rent increase effective date').fill(isoDaysFromToday(45))
   await page.getByRole('button', { name: 'Save terms' }).click()
 
   // The specific complaint and date, not a generic refusal (RISK-06's own
@@ -227,8 +230,12 @@ test('a rent increase inside the window is blocked, warns with the specific comp
     .fill('Portfolio-wide increase to match market rent, unrelated to the furnace repair.')
   await page.getByRole('button', { name: /Save anyway/ }).click()
 
-  await expect(page.getByText('Saved.')).toBeVisible()
-  await expect.poll(async () => (await prisma.lease.findUniqueOrThrow({ where: { id: lease.id } })).rentCents).toBe(180_000)
+  await expect(page.getByText(/^Saved\./)).toBeVisible()
+  // Scheduled, not billed (R-225): the lease keeps its rent until the
+  // effective date.
+  await expect
+    .poll(async () => (await prisma.rentChange.findFirst({ where: { leaseId: lease.id, status: 'SCHEDULED' } }))?.toCents)
+    .toBe(180_000)
 
   const audited = await prisma.auditLog.findFirst({
     where: { action: 'lease.retaliation_window_acknowledged', entityId: lease.id },
@@ -247,9 +254,10 @@ test('a rent increase with no recent complaint saves immediately, no warning', a
   await page.goto(`/leases/${lease.id}`)
 
   await page.getByLabel('Monthly rent (dollars)').fill('1700')
+  await page.getByLabel('Rent increase effective date').fill(isoDaysFromToday(45))
   await page.getByRole('button', { name: 'Save terms' }).click()
 
-  await expect(page.getByText('Saved.')).toBeVisible()
+  await expect(page.getByText(/^Saved\./)).toBeVisible()
   await expect(page.getByLabel('Why are you raising rent now?')).toHaveCount(0)
 })
 

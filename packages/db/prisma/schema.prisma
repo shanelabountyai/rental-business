@@ -569,6 +569,7 @@ model Property {
   inspections         Inspection[]
   threads             Thread[]
   notices             Notice[]
+  rentChanges         RentChange[]
   evictionCases       EvictionCase[]
   tasks               Task[]
   documents           Document[]
@@ -2526,6 +2527,7 @@ model Lease {
   inspections                Inspection[]
   threads                    Thread[]
   notices                    Notice[]
+  rentChanges                RentChange[]
   evictionCases              EvictionCase[]
   documents                  Document[]
   turnoverProject            TurnoverProject?
@@ -5769,6 +5771,7 @@ model Notice {
   violationCaseId    String?
   violationCase      ViolationCase?   @relation(fields: [violationCaseId], references: [id], onDelete: Restrict)
   deliveries         NoticeDelivery[]
+  rentChanges        RentChange[]
   adverseActionFor   ScreeningReport?
   depositDisposition Deposit?
   // Restrict, not the SetNull an optional relation defaults to: a notice
@@ -5781,6 +5784,52 @@ model Notice {
   @@index([evictionCaseId])
   @@index([violationCaseId])
   @@index([propertyId, servedAt])
+}
+
+enum RentChangeStatus {
+  SCHEDULED
+  APPLIED
+  /// The effective date arrived and the change was NOT applied - the notice
+  /// was never served, or was served too late for the statutory period and
+  /// nobody overrode it. Terminal: staff re-raise with a new date.
+  HELD
+  CANCELLED
+}
+
+/// A rent INCREASE on a running tenancy, waiting for its effective date
+/// (LEASE-09, R-225). `Lease.rentCents` is what Stripe bills, so a raise
+/// cannot be written there on the day it is typed - it would reach the next
+/// invoice with whatever notice happened to be left. It lives here until
+/// `lease.rent_change_cutover` applies it on `effectiveOn`, and only if its
+/// `RENT_INCREASE` notice was served in time.
+///
+/// At most one SCHEDULED row per lease, enforced by `updateLeaseTerms`
+/// rather than a partial unique index - the same call `LeaseHold` makes, and
+/// for the same drift reason.
+model RentChange {
+  id             String           @id @default(cuid())
+  leaseId        String
+  propertyId     String
+  fromCents      Int
+  toCents        Int
+  /// A calendar day, property-local.
+  effectiveOn    DateTime         @db.Date
+  noticeId       String
+  /// Set when staff proceeded with less than the jurisdiction's notice
+  /// period. The cutover then applies it whatever the service date; without
+  /// it, the period is re-checked against the notice's real `servedAt`.
+  overrideReason String?
+  status         RentChangeStatus @default(SCHEDULED)
+  heldReason     String?
+  appliedAt      DateTime?
+  createdAt      DateTime         @default(now())
+
+  lease    Lease    @relation(fields: [leaseId], references: [id], onDelete: Restrict)
+  property Property @relation(fields: [propertyId], references: [id])
+  notice   Notice   @relation(fields: [noticeId], references: [id], onDelete: Restrict)
+
+  @@index([leaseId])
+  @@index([propertyId, status, effectiveOn])
 }
 
 /// One service event, with its own proof (R-051, COMM-02).

@@ -2,8 +2,8 @@
 
 import { UTILITIES, UTILITY_PAYERS } from '@rental/core/leases'
 import { useActionState, useState } from 'react'
-import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
-import { CheckboxField, SelectField, TextField } from '@/components/form/field.tsx'
+import { FormAlerts, LiveRegion, SubmitButton } from '@/components/auth-form.tsx'
+import { CheckboxField, SelectField, TextField, TextareaField } from '@/components/form/field.tsx'
 import type { LeaseFormState } from '@/lib/leases/actions.ts'
 import { RetaliationAck } from './retaliation-ack.tsx'
 
@@ -67,6 +67,7 @@ export function LeaseForm({
   defaults,
   submitLabel,
   showOrigin = false,
+  schedulesRaise = false,
 }: {
   action: (state: LeaseFormState, formData: FormData) => Promise<LeaseFormState>
   /// Empty on the edit form - the unit is not something a lease moves
@@ -75,6 +76,9 @@ export function LeaseForm({
   defaults?: LeaseDefaults
   submitLabel: string
   showOrigin?: boolean
+  /// R-225: the lease is running, so a raise is scheduled for a date rather
+  /// than written now - the form asks for that date.
+  schedulesRaise?: boolean
 }) {
   const [state, formAction] = useActionState<LeaseFormState, FormData>(action, {})
   const errors = state.fieldErrors ?? {}
@@ -211,6 +215,18 @@ export function LeaseForm({
           key={`rent-${echoed.rentDollars ?? ''}`}
           error={errors.rentDollars}
         />
+        {schedulesRaise && (
+          <TextField
+            label="Rent increase effective date"
+            name="rentEffectiveOn"
+            type="date"
+            idPrefix="lease"
+            defaultValue={echoed.rentEffectiveOn}
+            key={`rent-effective-${echoed.rentEffectiveOn ?? ''}`}
+            error={errors.rentEffectiveOn}
+            hint="Only for a raise. The tenant keeps paying the current rent until this day, and gets a written notice now."
+          />
+        )}
         {/* THE ARRANGEMENT SITS BESIDE THE AMOUNT, not in some other section,
             because the two contradict each other in a way that only shows up
             at move-out: a surety bond recorded with a cash amount sends
@@ -330,15 +346,37 @@ export function LeaseForm({
         </div>
       </fieldset>
 
+      {/* Mounted before it has anything to say, so the field is announced
+          when the notice period comes up short (R-116). */}
+      <LiveRegion>
+        {state.needsRentNoticeOverride && (
+          <TextareaField
+            label="Why raise the rent with less than the required notice?"
+            name="rentNoticeReason"
+            required
+            idPrefix="lease"
+            defaultValue={echoed.rentNoticeReason}
+            key={`rent-notice-${echoed.rentNoticeReason ?? ''}`}
+            error={errors.rentNoticeReason}
+            rows={2}
+          />
+        )}
+      </LiveRegion>
+
       <RetaliationAck
         view={retaliation}
         label="Why are you raising rent now?"
         defending="increase"
         idPrefix="lease"
+        defaultValue={echoed.retaliationReason}
         error={errors.retaliationReason}
       />
 
-      <SubmitButton label={retaliation ? 'Save anyway, with this reason' : submitLabel} />
+      <SubmitButton
+        label={
+          retaliation || state.needsRentNoticeOverride ? 'Save anyway, with this reason' : submitLabel
+        }
+      />
     </form>
   )
 }
