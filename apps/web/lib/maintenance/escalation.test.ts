@@ -44,7 +44,9 @@ async function acknowledgeStaleEmergencies() {
     where: {
       priority: 'EMERGENCY',
       acknowledgedAt: null,
-      createdAt: { lt: new Date(Date.now() - 3_600_000) },
+      // `emergencyAt`, not `createdAt` (R-223): a ticket opened hours ago and
+      // escalated a second ago is a live fixture, not debris.
+      emergencyAt: { lt: new Date(Date.now() - 3_600_000) },
     },
     data: { acknowledgedAt: new Date() },
   })
@@ -290,6 +292,44 @@ describe('sweepEmergencyEscalations', { timeout: 90_000 }, () => {
 
     await sweepEmergencyEscalations(now, { ticketIds: [ticket.id] })
     expect(await escalationsSentFor(ticket.id)).toHaveLength(0)
+  })
+
+  it('measures from when a ticket BECAME an emergency, not from when it came in (R-223)', async () => {
+    // A text at 20:00 that staff escalate at 23:10. Measured from creation it
+    // was "unacknowledged" for three hours and the owner would be paged on the
+    // very next tick; a day later it would never escalate at all.
+    await clearRota()
+    const created = new Date(Date.now() - 3 * HOUR)
+    const ticket = await prisma.ticket.create({
+      data: {
+        propertyId,
+        unitId,
+        tenantId,
+        source: 'SMS',
+        category: 'UNCATEGORIZED',
+        description: 'sewage coming up through the tub',
+        priority: 'URGENT',
+        status: 'NEW',
+        createdAt: created,
+      },
+    })
+    ticketIds.push(ticket.id)
+    // The trigger stamps the clock on this UPDATE; no application code does.
+    const { emergencyAt } = await prisma.ticket.update({
+      where: { id: ticket.id },
+      data: { priority: 'EMERGENCY' },
+    })
+    expect(emergencyAt!.getTime()).toBeGreaterThan(created.getTime() + 2 * HOUR)
+
+    await sweepEmergencyEscalations(new Date(emergencyAt!.getTime() + 14 * 60_000), {
+      ticketIds: [ticket.id],
+    })
+    expect(await escalationsSentFor(ticket.id)).toHaveLength(0)
+
+    await sweepEmergencyEscalations(new Date(emergencyAt!.getTime() + 16 * 60_000), {
+      ticketIds: [ticket.id],
+    })
+    expect((await escalationsSentFor(ticket.id)).length).toBeGreaterThan(0)
   })
 
   it('ignores a routine ticket, however long it sits', async () => {

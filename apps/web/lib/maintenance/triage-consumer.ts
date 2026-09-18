@@ -17,9 +17,13 @@ import { createTask } from '@/lib/tasks/create.ts'
 // this bus (R-006's own "fine for nightly work, not fine for an emergency"
 // framing) - so a triage Task can lag its Ticket by up to an hour. The
 // Ticket itself is never hidden in the meantime; it is already live on
-// /maintenance the instant it is created (R-022). A genuine emergency never
-// arrives this way at all - R-020's own intake pages on-call directly, in
-// the same request, bypassing this bus entirely.
+// /maintenance the instant it is created (R-022). An emergency does NOT wait
+// on this Task: the portal's emergency intake pages on-call in the same
+// request, a text or email with habitability language suggests an emergency
+// to on-call in the same request, and staff mark one from the ticket page,
+// which exists before this Task does (R-223). This comment used to say an
+// emergency "never arrives this way at all" - it does, from the tenant who
+// texts at night and never logs in, and that sentence hid it.
 
 CONSUMERS.push({
   name: 'create-ticket-triage-task',

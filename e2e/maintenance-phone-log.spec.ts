@@ -239,6 +239,75 @@ test.describe('logging a phone-reported request', () => {
     await expect(page.getByText('Repair due', { exact: true })).toBeVisible()
   })
 
+  test('staff mark a texted request as an emergency, which pages on-call and starts the clock (R-223)', async ({
+    page,
+  }) => {
+    // The review's own case: a tenant texts "sewage coming up through the
+    // tub" at 20:00, and a PM reading it at 23:10 had no control that woke
+    // anybody. The ticket is seeded as the SMS path leaves it - URGENT,
+    // uncategorized, three hours old.
+    const caller = await seedCaller()
+    const { property } = caller
+    const staff = await createStaff('manager', { propertyId: property.id })
+    // On call, so the rota narrows to this one person. With nobody on call it
+    // pages every portfolio-wide grant in the shared database, which is the
+    // correct production fallback and a very slow test.
+    await prisma.staffUser.update({
+      where: { id: staff.id },
+      data: {
+        onCallFrom: new Date(Date.now() - 3_600_000),
+        onCallUntil: new Date(Date.now() + 3_600_000),
+      },
+    })
+    const createdAt = new Date(Date.now() - 3 * 3_600_000)
+    const ticket = await prisma.ticket.create({
+      data: {
+        propertyId: property.id,
+        unitId: caller.unit.id,
+        leaseId: caller.lease.id,
+        tenantId: caller.tenant.id,
+        source: 'SMS',
+        category: 'UNCATEGORIZED',
+        description: 'sewage coming up through the tub',
+        priority: 'URGENT',
+        habitabilityFlag: true,
+        createdAt,
+      },
+    })
+    ticketIds.push(ticket.id)
+    await signIn(page, staff.email)
+
+    await page.goto(`/maintenance/${ticket.id}`)
+    const results = await axeScan(page)
+    expect(results.violations).toEqual([])
+
+    await page.getByRole('button', { name: 'Mark as emergency and page on-call' }).click()
+    // The action's own returned notice - false before the press, and only a
+    // RETURNED action can render it, so the reads below cannot race the write.
+    await expect(
+      page.getByText('Marked as an emergency. Whoever is on call has been paged.'),
+    ).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Emergency response' })).toBeVisible()
+    await expect(
+      page.getByRole('button', { name: 'Mark as emergency and page on-call' }),
+    ).toHaveCount(0)
+
+    const after = await prisma.ticket.findUniqueOrThrow({ where: { id: ticket.id } })
+    expect(after.priority).toBe('EMERGENCY')
+    // The escalation clock starts at the decision, not at the text.
+    expect(after.emergencyAt!.getTime()).toBeGreaterThan(createdAt.getTime() + 2 * 3_600_000)
+
+    const decided = await prisma.auditLog.findFirstOrThrow({
+      where: { entityId: ticket.id, action: 'ticket.marked_emergency' },
+    })
+    expect(decided.actorStaffId).toBe(staff.id)
+
+    const pages = await prisma.notification.count({
+      where: { idempotencyKey: { startsWith: `emergency:${ticket.id}:${staff.id}` } },
+    })
+    expect(pages).toBeGreaterThan(0)
+  })
+
   test('rejects whitespace-only notes without creating a ticket', async ({ page }) => {
     // Every field the browser marks `required` is filled - a blank one would
     // never leave the browser at all. Whitespace passes HTML5's `required`

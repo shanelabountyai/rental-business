@@ -403,6 +403,11 @@ export const AUDIT_ACTIONS = [
   /// the rota was configured at all when it happened.
   'ticket.escalated',
 
+  /// R-223: a person decided this ticket is an emergency - the staff-side
+  /// writer of EMERGENCY. Its actor is the answer to "who escalated", and
+  /// its `emergencyAt` is when R-029's clock started.
+  'ticket.marked_emergency',
+
   /// R-029: somebody changed who is on call, or the order the chain runs in.
   /// A rota that quietly narrowed to one unreachable person is a paging
   /// failure waiting to happen, and the trail should say who narrowed it.

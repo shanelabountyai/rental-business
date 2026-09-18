@@ -98,7 +98,7 @@ export function EmergencyResponsePanel({
         <div className="flex flex-col gap-2">
           <p className="text-sm">
             Nobody has acknowledged this yet. If it is still unacknowledged 15
-            minutes after it came in, everybody else with authority over the
+            minutes after it became an emergency, everybody else with authority over the
             property gets paged too.
           </p>
           <form action={ackAction}>

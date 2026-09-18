@@ -4714,6 +4714,11 @@ model Ticket {
   /// stopped by ordinary daytime queue work.
   acknowledgedAt        DateTime?
   acknowledgedByStaffId String?
+  /// R-223: when this ticket became EMERGENCY - the start of R-029's
+  /// escalation clock. Stamped by a trigger (see its migration), never by
+  /// application code: createdAt for a born emergency, now() for one staff
+  /// escalated later.
+  emergencyAt           DateTime?
   mergedIntoTicketId    String?
   closedAt              DateTime?
   createdAt             DateTime     @default(now())

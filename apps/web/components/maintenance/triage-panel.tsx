@@ -8,6 +8,8 @@ import type { MaintenanceFormState } from '@/lib/maintenance/actions.ts'
 import type { SlaState } from '@rental/core/maintenance'
 
 const PRIORITY_OPTIONS = [
+  // R-223: choosing this pages on-call, so the label says so.
+  { value: 'EMERGENCY', label: 'Emergency — pages on-call now' },
   { value: 'URGENT', label: 'Urgent' },
   { value: 'ROUTINE', label: 'Routine' },
 ]
@@ -156,11 +158,7 @@ export function TriagePanel({
               name="priority"
               idPrefix="triage"
               required
-              defaultValue={
-                ticket.priority === 'URGENT' || ticket.priority === 'ROUTINE'
-                  ? ticket.priority
-                  : undefined
-              }
+              defaultValue={ticket.priority}
               options={PRIORITY_OPTIONS}
             />
             <SubmitButton label="Set priority" />

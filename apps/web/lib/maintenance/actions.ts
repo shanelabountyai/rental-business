@@ -25,11 +25,10 @@ import { redirect } from 'next/navigation'
 import { audit } from '@/lib/audit/index.ts'
 import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
 import { emitEvent } from '@/lib/jobs/outbox.ts'
-import { dispatchPendingNotifications, notify } from '@/lib/notifications/send.ts'
 import { requireTenantWithScope } from '@/lib/portal/guard.ts'
 import { generateStorageKey, storage } from '@/lib/storage/index.ts'
 import { completeTaskWork } from '@/lib/tasks/complete.ts'
-import { emergencyPagingPlan, unitForEmergency } from './emergency.ts'
+import { pageOnCall, unitForEmergency } from './emergency.ts'
 import { getTenantCurrentHome } from './queries.ts'
 
 // Writes for the tenant maintenance flow (MAINT-01, R-019).
@@ -44,6 +43,7 @@ import { getTenantCurrentHome } from './queries.ts'
 
 export interface MaintenanceFormState {
   error?: string
+  notice?: string
   fieldErrors?: Record<string, string>
 }
 
@@ -446,104 +446,10 @@ export async function submitEmergencyRequest(
   })
 
   if (definition.pagesOnCall) {
-    await pageOnCall(ticket.id, home, category, tenant, args)
+    await pageOnCall(ticket.id)
   }
 
   return { ticketId: ticket.id }
-}
-
-/**
- * Pages everyone on call for this property, then flushes the queue in the
- * same request.
- *
- * Wrapped in its own try/catch and never allowed to fail the submission: the
- * ticket is already committed at this point, and a provider outage must not
- * turn "we recorded your emergency" into an error screen that makes a tenant
- * think nothing was reported. A failed page is recorded on the notification's
- * own delivery row (R-016), which is where a support conversation looks.
- */
-async function pageOnCall(
-  ticketId: string,
-  home: NonNullable<Awaited<ReturnType<typeof unitForEmergency>>>,
-  category: EmergencyCategory,
-  tenant: { id: string; name: string },
-  args: EmergencyRequestInput,
-): Promise<void> {
-  try {
-    const [plan, tenantRecord] = await Promise.all([
-      emergencyPagingPlan(home.propertyId),
-      prisma.tenant.findUnique({
-        where: { id: tenant.id },
-        select: { phone: true },
-      }),
-    ])
-
-    // WHO, decided by the rota (R-029) rather than by paging everybody. When
-    // nobody is on call this is still everybody - see packages/core/oncall
-    // for why that fallback is the safe direction and not an oversight.
-    const recipients = plan.recipients
-
-    // In PARALLEL, not one recipient after another. Every page is
-    // independent, and a tenant standing in sewage is waiting on this whole
-    // function: paging four people sequentially costs four round trips of
-    // latency for no reason. `allSettled`, so one recipient with a broken
-    // record cannot stop the others being paged - which is the entire
-    // difference between a bad address and nobody being told.
-    const results = await Promise.allSettled(
-      recipients.map((staff) =>
-        notify({
-          category: 'maintenance_emergency',
-          templateKey: 'maintenance.emergency',
-          recipient: {
-            type: 'STAFF',
-            id: staff.id,
-            email: staff.email,
-            phone: staff.phone,
-          },
-          context: {
-            emergencyLabel: EMERGENCY_DEFINITIONS[category].label,
-            propertyName: home.property.name,
-            addressLine1: home.property.addressLine1,
-            unitName: home.unit.name,
-            tenantName: tenant.name,
-            tenantPhone: tenantRecord?.phone ?? null,
-            petWarning: args.petWarning === true,
-            entryPermission: args.entryPermission === true,
-          },
-          propertyId: home.propertyId,
-          // Keyed on the ticket: one page per emergency per recipient, however
-          // many times a jittery tenant taps Send.
-          idempotencyKey: `emergency:${ticketId}:${staff.id}`,
-        }),
-      ),
-    )
-
-    for (const result of results) {
-      if (result.status === 'rejected') {
-        console.error(`[emergency] a page could not be recorded for ${ticketId}`, result.reason)
-      }
-    }
-
-    const deliveryIds = results
-      .filter((r): r is PromiseFulfilledResult<Awaited<ReturnType<typeof notify>>> => r.status === 'fulfilled')
-      .flatMap((r) => r.value)
-      .map((outcome) => outcome.deliveryId)
-      .filter((id): id is string => id != null)
-
-    // The "immediately" half, scoped to THIS emergency's own pages.
-    //
-    // An unscoped sweep here was a real bug, not a style point: it sends the
-    // oldest queued deliveries in the whole system, so an emergency page
-    // could sit behind up to a hundred unrelated notifications while the
-    // tenant waited on the response - and the wait grew with a backlog that
-    // has nothing to do with this property. R-020 asked for "paged
-    // immediately"; this is the version that actually delivers that, and it
-    // is bounded by the number of people on call rather than by whatever
-    // else the product happens to owe.
-    await dispatchPendingNotifications(new Date(), 100, { deliveryIds })
-  } catch (error) {
-    console.error(`[emergency] failed to page on-call for ticket ${ticketId}`, error)
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -680,7 +586,7 @@ export async function logPhoneMaintenanceRequest(
 // Triage (MAINT-02, RISK-05, R-023)
 // ---------------------------------------------------------------------------
 
-const TRIAGE_PRIORITY_OPTIONS = ['URGENT', 'ROUTINE'] as const
+const TRIAGE_PRIORITY_OPTIONS = ['EMERGENCY', 'URGENT', 'ROUTINE'] as const
 
 /// A ticket-triage Task's linked Ticket, with the permission check every
 /// other write in this file opens with. Not `getStaffTicket` (R-022's own
@@ -712,12 +618,12 @@ function firstResponseStamp(ticket: { firstResponseAt: Date | null }): Date | un
 
 /**
  * Overrides the suggested priority (MAINT-02: "suggested priority from
- * category... with override"). Deliberately cannot set EMERGENCY: that
- * priority pages on-call the moment it is chosen (R-020's own intake), and
- * this action has no paging behind it - letting a PM set it here would look
- * like escalating when nothing downstream reacts to it. A ticket that turns
- * out to be a real emergency after the fact needs a human phone call, not a
- * status field.
+ * category... with override"). EMERGENCY is one of the options (R-223) and
+ * goes through `declareEmergency`, so choosing it here pages on-call exactly
+ * as the portal's own emergency intake does. It used to be refused, on the
+ * reasoning that this action had no paging behind it - which left a PM
+ * reading "sewage coming up through the tub" at 23:10 with no control that
+ * woke anybody.
  *
  * The first override also moves a NEW ticket to TRIAGED and stamps
  * firstResponseAt if unset - looking at a ticket and deciding its priority
@@ -738,12 +644,18 @@ export async function setTicketPriority(
   if (isTicketTriageResolved(ticket.status)) {
     return { error: 'This ticket is already resolved.' }
   }
+  if (priority === 'EMERGENCY') {
+    const refused = await declareEmergency(ticket.id)
+    if (refused) return refused
+    revalidatePath(`/tasks/${taskId}`)
+    return {}
+  }
 
   await prisma.$transaction(async (tx) => {
     const updated = await tx.ticket.update({
       where: { id: ticket.id },
       data: {
-        priority: priority as never,
+        priority: priority as 'URGENT' | 'ROUTINE',
         status: ticket.status === 'NEW' ? 'TRIAGED' : undefined,
         firstResponseAt: firstResponseStamp(ticket),
       },
@@ -765,6 +677,97 @@ export async function setTicketPriority(
   revalidatePath('/maintenance')
   revalidatePath(`/maintenance/${ticket.id}`)
   return {}
+}
+
+/**
+ * A person decides this ticket is an emergency (R-223, MAINT-01/NOTIF-05).
+ *
+ * The staff-side writer of EMERGENCY, for every ticket that did not come
+ * through the portal's emergency intake - a text, an email, a phone call, or
+ * a routine request that turned out not to be. Runs the same page the portal
+ * runs, and from that moment R-029's escalation chain and R-207's
+ * after-hours vendor dispatch treat it exactly like a born emergency.
+ *
+ * Reachable from the ticket page, not only the triage Task: that Task is
+ * created by the hourly outbox (triage-consumer.ts), and an emergency cannot
+ * wait an hour for a control to exist. The suggestion page links here.
+ *
+ * Audited with the escalating staff member (`audit()` records the actor) -
+ * the evidence trail has to say who decided, not only that it changed.
+ */
+export async function markTicketEmergency(
+  _previous: MaintenanceFormState,
+  formData: FormData,
+): Promise<MaintenanceFormState> {
+  const ticketId = String(formData.get('ticketId') ?? '')
+  const refused = await declareEmergency(ticketId)
+  if (refused) return refused
+  return { notice: 'Marked as an emergency. Whoever is on call has been paged.' }
+}
+
+/// The one path that makes an existing ticket EMERGENCY. Returns a refusal,
+/// or undefined once the ticket is an emergency and on-call has been paged.
+async function declareEmergency(ticketId: string): Promise<MaintenanceFormState | undefined> {
+  const ticket = await prisma.ticket.findUnique({
+    where: { id: ticketId },
+    select: {
+      id: true,
+      priority: true,
+      status: true,
+      firstResponseAt: true,
+      propertyId: true,
+      property: { select: { id: true, legalEntityId: true } },
+    },
+  })
+  if (!ticket) return { error: 'That ticket could not be found.' }
+  await requirePermission('ticket.write', propertyResource(ticket.property))
+
+  // Already one: nothing to declare, and re-paging would be noise. The
+  // idempotency key would deduplicate the sends anyway; this saves the trip.
+  if (ticket.priority === 'EMERGENCY') return undefined
+  // A closed or merged ticket is not somewhere a response can happen. The
+  // tenant's next message opens a new one.
+  if (ticket.status === 'CLOSED' || ticket.status === 'MERGED') {
+    return { error: 'This ticket is closed. Open a new one for the emergency.' }
+  }
+
+  await prisma.$transaction(async (tx) => {
+    // `emergencyAt` is stamped by the database trigger (R-223's migration),
+    // which is what starts the escalation clock from NOW rather than from
+    // whenever the text arrived.
+    const updated = await tx.ticket.update({
+      where: { id: ticket.id },
+      data: {
+        priority: 'EMERGENCY',
+        status: ticket.status === 'NEW' ? 'TRIAGED' : undefined,
+        firstResponseAt: firstResponseStamp(ticket),
+      },
+    })
+    await audit(
+      {
+        action: 'ticket.marked_emergency',
+        entityType: 'Ticket',
+        entityId: ticket.id,
+        propertyId: ticket.propertyId,
+        before: { priority: ticket.priority, status: ticket.status },
+        after: {
+          priority: updated.priority,
+          status: updated.status,
+          emergencyAt: updated.emergencyAt?.toISOString() ?? null,
+        },
+      },
+      tx,
+    )
+  })
+
+  // After the commit, never inside it - a page talks to a provider, and
+  // `pageOnCall` swallows its own failures for the same reason the portal's
+  // does.
+  await pageOnCall(ticket.id)
+
+  revalidatePath('/maintenance')
+  revalidatePath(`/maintenance/${ticket.id}`)
+  return undefined
 }
 
 const TRIAGE_RESOLUTIONS = {

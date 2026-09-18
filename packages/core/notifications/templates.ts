@@ -153,6 +153,71 @@ export const maintenanceEmergencyTemplate: NotificationTemplate<MaintenanceEmerg
     },
   }
 
+/// Context for `maintenance.emergency_suggested` (R-223).
+export interface EmergencySuggestedContext extends MaintenanceEmergencyContext {
+  /// The ticket's description - for a text or an email, the tenant's own
+  /// words verbatim. The whole point: the on-call person decides from what
+  /// the tenant wrote, not from which keyword matched.
+  tenantWords: string
+  ticketUrl: string
+}
+
+/// SMS is a lock screen, not a transcript. Enough of the tenant's words to
+/// decide whether to get up; the rest is one tap away.
+const SUGGESTED_SMS_WORDS = 240
+
+/**
+ * A text or email MIGHT be an emergency (R-223). Staff-facing.
+ *
+ * Leads with POSSIBLE EMERGENCY, never EMERGENCY: a keyword matched, nobody
+ * has decided anything, and somebody half-awake must be able to tell this
+ * apart from a confirmed page on the first line. The tenant's words come
+ * next, because they are the evidence; then how to confirm it. Same category
+ * as a real page, so it reaches the on-call person at night (D-242).
+ */
+export const emergencySuggestedTemplate: NotificationTemplate<EmergencySuggestedContext> = {
+  key: 'maintenance.emergency_suggested',
+  category: 'maintenance_emergency',
+  channels: ['SMS', 'EMAIL', 'PORTAL'],
+  render: (context, channel) => {
+    const where = `${context.addressLine1}${context.unitName ? ` (${context.unitName})` : ''}`
+    const contact = context.tenantPhone
+      ? `${context.tenantName} ${context.tenantPhone}`
+      : `${context.tenantName} (no phone on file)`
+
+    if (channel === 'SMS') {
+      const words =
+        context.tenantWords.length > SUGGESTED_SMS_WORDS
+          ? `${context.tenantWords.slice(0, SUGGESTED_SMS_WORDS - 1)}…`
+          : context.tenantWords
+      return {
+        body: [
+          `POSSIBLE EMERGENCY at ${where}`,
+          `"${words}"`,
+          contact,
+          `Not paged as an emergency yet. Mark it one: ${context.ticketUrl}`,
+        ].join('\n'),
+      }
+    }
+
+    return {
+      subject: `POSSIBLE EMERGENCY — ${where}`,
+      body: [
+        `${context.tenantName} sent a message about ${where} that may be an emergency.`,
+        '',
+        'What they wrote:',
+        context.tenantWords,
+        '',
+        `Reach them on: ${context.tenantPhone ?? 'no phone on file'}`,
+        `Property: ${context.propertyName}`,
+        '',
+        'Nobody has confirmed this is an emergency, so no escalation is running.',
+        `If it is one, open the ticket and mark it an emergency: ${context.ticketUrl}`,
+      ].join('\n'),
+    }
+  },
+}
+
 /// Context for `workorder.vendor_dispatch` (R-025).
 export interface VendorDispatchContext {
   vendorName: string
@@ -2262,6 +2327,8 @@ export const TEMPLATES: Readonly<Record<string, NotificationTemplate<never>>> = 
     entryNoticeTemplate as unknown as NotificationTemplate<never>,
   [emergencyEscalationTemplate.key]:
     emergencyEscalationTemplate as unknown as NotificationTemplate<never>,
+  [emergencySuggestedTemplate.key]:
+    emergencySuggestedTemplate as unknown as NotificationTemplate<never>,
   [verifyRequestTemplate.key]:
     verifyRequestTemplate as unknown as NotificationTemplate<never>,
   [clarifyRequestTemplate.key]:

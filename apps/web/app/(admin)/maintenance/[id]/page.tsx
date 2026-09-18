@@ -7,9 +7,11 @@ import { businessDate, friendlyBusinessDate, friendlyTimestamp } from '@rental/c
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { EmergencyResponsePanel } from '@/components/maintenance/emergency-response-panel.tsx'
-import { actorCan, requirePermission, requireScope } from '@/lib/auth/guard.ts'
+import { MarkEmergencyForm } from '@/components/maintenance/mark-emergency-form.tsx'
+import { actorCan, propertyResource, requireScope } from '@/lib/auth/guard.ts'
 import {
   acknowledgeEmergency,
+  markTicketEmergency,
   setVendorEmergencyAvailability,
 } from '@/lib/maintenance/actions.ts'
 import { emergencyVendorsForTrade } from '@/lib/maintenance/emergency.ts'
@@ -71,6 +73,12 @@ export default async function StaffTicketDetailPage({
   const [vendors, canEditVendors] = isEmergency
     ? await Promise.all([emergencyVendorsForTrade(trade), actorCan('vendor.write')])
     : [[], false]
+  // R-223. Offered on any open ticket, not only a habitability one: the
+  // keyword scan is a prompt for a person, never the gate on their decision.
+  const canMarkEmergency =
+    ticket.status !== 'CLOSED' &&
+    ticket.status !== 'MERGED' &&
+    (await actorCan('ticket.write', propertyResource(ticket.property)))
   // R-217: the derived repair deadline. Never stored - a rule correction
   // re-dates every open ticket, which is what a derived date is for.
   const repair = await repairDeadlineFor(ticket.id, businessDate(new Date(), ticket.property.timezone))
@@ -138,6 +146,14 @@ export default async function StaffTicketDetailPage({
         <dt className="text-muted-foreground">Pet at home</dt>
         <dd className="col-span-1 sm:col-span-2">{ticket.petWarning ? 'Yes' : 'No'}</dd>
       </dl>
+
+      {canMarkEmergency && (
+        <MarkEmergencyForm
+          ticketId={ticket.id}
+          isEmergency={isEmergency}
+          action={markTicketEmergency}
+        />
+      )}
 
       {isEmergency && (
         <EmergencyResponsePanel

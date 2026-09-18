@@ -101,14 +101,14 @@ describe('shouldEscalate', () => {
 
   it('holds off before the deadline', () => {
     const at14 = new Date(created.getTime() + 14 * 60_000)
-    expect(shouldEscalate({ createdAt: created, acknowledgedAt: null }, at14)).toBe(
+    expect(shouldEscalate({ emergencyAt: created, acknowledgedAt: null }, at14)).toBe(
       false,
     )
   })
 
   it('fires exactly at the deadline', () => {
     const at15 = new Date(created.getTime() + ESCALATE_AFTER_MINUTES * 60_000)
-    expect(shouldEscalate({ createdAt: created, acknowledgedAt: null }, at15)).toBe(
+    expect(shouldEscalate({ emergencyAt: created, acknowledgedAt: null }, at15)).toBe(
       true,
     )
   })
@@ -118,7 +118,7 @@ describe('shouldEscalate', () => {
     // the property must not cause the owner to be woken up as well.
     const at60 = new Date(created.getTime() + 60 * 60_000)
     expect(
-      shouldEscalate({ createdAt: created, acknowledgedAt: new Date() }, at60),
+      shouldEscalate({ emergencyAt: created, acknowledgedAt: new Date() }, at60),
     ).toBe(false)
   })
 })
@@ -127,6 +127,6 @@ describe('minutesUnacknowledged', () => {
   it('floors, so a message never overstates how long somebody waited', () => {
     const created = new Date('2026-08-06T03:00:00Z')
     const later = new Date('2026-08-06T03:15:59Z')
-    expect(minutesUnacknowledged({ createdAt: created }, later)).toBe(15)
+    expect(minutesUnacknowledged({ emergencyAt: created }, later)).toBe(15)
   })
 })

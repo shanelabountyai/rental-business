@@ -4,9 +4,10 @@
 // already put it plainly: "a category is weak evidence for priority." This
 // gives every new ticket a real, non-default starting point instead of
 // sitting at the schema's ROUTINE default regardless of what it's about, but
-// a PM can always override it during triage. Category alone never reaches
-// EMERGENCY - that word is earned only through R-020's own emergency intake,
-// where the tenant read a real warning and chose it deliberately.
+// a PM can always override it during triage. Nothing here ever returns
+// EMERGENCY: a keyword is not a decision. EMERGENCY is chosen by a person -
+// the tenant on R-020's emergency intake, or staff marking a ticket (R-223),
+// often prompted by the on-call suggestion habitability language sends.
 
 import type { MaintenanceCategory } from './categories.ts'
 

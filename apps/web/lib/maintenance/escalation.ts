@@ -1,6 +1,5 @@
 import 'server-only'
 
-import { EMERGENCY_DEFINITIONS, isEmergencyCategory } from '@rental/core/maintenance'
 import { minutesUnacknowledged, shouldEscalate } from '@rental/core/oncall'
 // Imported from system.ts directly, NOT the audit barrel: index.ts pulls in
 // Auth.js to resolve a session, and this sweep runs from a cron with nobody
@@ -9,6 +8,7 @@ import { auditAsSystem } from '@/lib/audit/system.ts'
 import { dispatchPendingNotifications, notify } from '@/lib/notifications/send.ts'
 import {
   alreadyEscalatedTicketIds,
+  emergencyLabelFor,
   emergencyPagingPlan,
   unacknowledgedEmergencies,
 } from './emergency.ts'
@@ -41,7 +41,11 @@ export async function sweepEmergencyEscalations(
   /// `unacknowledgedEmergencies` for why this exists; the cron passes nothing.
   only?: { ticketIds: readonly string[] },
 ): Promise<EscalationSweep> {
-  const open = await unacknowledgedEmergencies(now, only)
+  // The query filters on `emergencyAt`, so null cannot reach here; the
+  // narrowing is for the type.
+  const open = (await unacknowledgedEmergencies(now, only)).flatMap((ticket) =>
+    ticket.emergencyAt ? [{ ...ticket, emergencyAt: ticket.emergencyAt }] : [],
+  )
   const due = open.filter((ticket) => shouldEscalate(ticket, now))
   // One query, not one per tick per ticket forever - see
   // alreadyEscalatedTicketIds() for why this is not a `lastEscalatedAt`
@@ -65,9 +69,7 @@ export async function sweepEmergencyEscalations(
     if (recipients.length === 0) continue
 
     const minutes = minutesUnacknowledged(ticket, now)
-    const label = isEmergencyCategory(ticket.category)
-      ? EMERGENCY_DEFINITIONS[ticket.category].label
-      : ticket.category
+    const label = emergencyLabelFor(ticket.category)
 
     const sends = await Promise.allSettled(
       recipients.map((staff) =>

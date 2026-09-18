@@ -1,9 +1,16 @@
 import 'server-only'
 
-import { EMERGENCY_DEFINITIONS, type EmergencyCategory } from '@rental/core/maintenance'
+import {
+  CATEGORY_LABELS,
+  EMERGENCY_DEFINITIONS,
+  type EmergencyCategory,
+  type MaintenanceCategory,
+  isEmergencyCategory,
+} from '@rental/core/maintenance'
 import { prisma } from '@rental/db'
 import { type OnCallCandidate, pagingPlan } from '@rental/core/oncall'
 import type { TenantScope } from '@rental/core/portal'
+import { dispatchPendingNotifications, notify } from '@/lib/notifications/send.ts'
 
 // Reads for the emergency intake path (MAINT-01, PROP-03, R-020).
 
@@ -153,16 +160,18 @@ export async function unacknowledgedEmergencies(
       ...(only ? { id: { in: [...only.ticketIds] } } : {}),
       priority: 'EMERGENCY',
       acknowledgedAt: null,
-      createdAt: { gte: new Date(now.getTime() - 24 * 3_600_000), lte: now },
+      // From when it BECAME an emergency (R-223), which is its creation only
+      // for the portal's own intake.
+      emergencyAt: { gte: new Date(now.getTime() - 24 * 3_600_000), lte: now },
       status: { notIn: ['CLOSED', 'MERGED'] },
     },
     // A tick that could pick up an unbounded number of rows is the shape
     // R-026 measured the cost of. Nothing real reaches this; a runaway does.
     take: 100,
-    orderBy: { createdAt: 'asc' },
+    orderBy: { emergencyAt: 'asc' },
     select: {
       id: true,
-      createdAt: true,
+      emergencyAt: true,
       acknowledgedAt: true,
       category: true,
       propertyId: true,
@@ -243,4 +252,121 @@ export async function emergencyVendorsForTrade(trade: string | null) {
   return vendors.sort(
     (a, b) => Number(b.emergencyAvailable) - Number(a.emergencyAvailable),
   )
+}
+
+/// What a page calls this emergency. The tenant's own words for one of
+/// MAINT-01's emergency categories ("I smell gas"); the ordinary category
+/// label for a ticket staff escalated (R-223), which can be anything,
+/// including a text nobody has categorised yet.
+export function emergencyLabelFor(category: string): string {
+  if (isEmergencyCategory(category)) return EMERGENCY_DEFINITIONS[category].label
+  return CATEGORY_LABELS[category as MaintenanceCategory] ?? 'Maintenance request'
+}
+
+const PAGE_SELECT = {
+  id: true,
+  propertyId: true,
+  category: true,
+  description: true,
+  petWarning: true,
+  entryPermission: true,
+  property: { select: { name: true, addressLine1: true } },
+  unit: { select: { name: true } },
+  tenant: { select: { firstName: true, lastName: true, phone: true } },
+} as const
+
+/**
+ * Sends one template to everybody the rota says to wake for this ticket,
+ * then flushes exactly those sends in the same request.
+ *
+ * Never throws: every caller has already committed the ticket, and a
+ * provider outage must not turn "we recorded your emergency" into an error
+ * screen. A failed page is recorded on the notification's own delivery row
+ * (R-016), which is where a support conversation looks.
+ */
+async function pageRota(
+  ticketId: string,
+  templateKey: 'maintenance.emergency' | 'maintenance.emergency_suggested',
+): Promise<void> {
+  try {
+    const ticket = await prisma.ticket.findUniqueOrThrow({
+      where: { id: ticketId },
+      select: PAGE_SELECT,
+    })
+    // WHO, decided by the rota (R-029) rather than by paging everybody. When
+    // nobody is on call this is still everybody - see packages/core/oncall
+    // for why that fallback is the safe direction and not an oversight.
+    const { recipients } = await emergencyPagingPlan(ticket.propertyId)
+    const context = {
+      emergencyLabel: emergencyLabelFor(ticket.category),
+      propertyName: ticket.property.name,
+      addressLine1: ticket.property.addressLine1,
+      unitName: ticket.unit?.name ?? '',
+      tenantName: ticket.tenant
+        ? `${ticket.tenant.firstName} ${ticket.tenant.lastName}`
+        : 'the reporter',
+      tenantPhone: ticket.tenant?.phone ?? null,
+      petWarning: ticket.petWarning,
+      entryPermission: ticket.entryPermission,
+      tenantWords: ticket.description,
+      ticketUrl: `${process.env.AUTH_URL ?? ''}/maintenance/${ticket.id}`,
+    }
+
+    // In PARALLEL, and `allSettled`: every page is independent, a tenant
+    // standing in sewage is waiting on this whole function, and one
+    // recipient with a broken record must not stop the others being paged.
+    const results = await Promise.allSettled(
+      recipients.map((staff) =>
+        notify({
+          category: 'maintenance_emergency',
+          templateKey,
+          recipient: { type: 'STAFF', id: staff.id, email: staff.email, phone: staff.phone },
+          context,
+          propertyId: ticket.propertyId,
+          // Keyed on the ticket: one page per ticket per recipient, however
+          // many times a jittery tenant taps Send or a PM re-saves.
+          idempotencyKey: `${templateKey === 'maintenance.emergency' ? 'emergency' : 'emergency-suggested'}:${ticket.id}:${staff.id}`,
+        }),
+      ),
+    )
+    const deliveryIds: string[] = []
+    for (const result of results) {
+      if (result.status === 'rejected') {
+        console.error(`[emergency] a page could not be recorded for ${ticketId}`, result.reason)
+        continue
+      }
+      for (const outcome of result.value) {
+        if (outcome.deliveryId) deliveryIds.push(outcome.deliveryId)
+      }
+    }
+
+    // The "immediately" half, scoped to THIS ticket's own pages. An
+    // unscoped sweep here was a real bug (R-020): it sent the oldest queued
+    // deliveries in the whole system first, so a page could sit behind a
+    // hundred unrelated notifications.
+    await dispatchPendingNotifications(new Date(), 100, { deliveryIds })
+  } catch (error) {
+    console.error(`[emergency] failed to page on-call for ticket ${ticketId}`, error)
+  }
+}
+
+/// A ticket IS an emergency - the portal's own intake (R-020) or a person
+/// who escalated one (R-023). Wakes the rota; R-029's escalation chain
+/// follows from `Ticket.emergencyAt` if nobody acknowledges.
+export async function pageOnCall(ticketId: string): Promise<void> {
+  await pageRota(ticketId, 'maintenance.emergency')
+}
+
+/**
+ * A ticket MIGHT be an emergency (R-223): a text or email whose words
+ * matched habitability language. Tells whoever is on call, with the tenant's
+ * own words, so a person decides - it does not make the ticket EMERGENCY,
+ * so no escalation chain runs behind it and nobody past the rota is woken.
+ *
+ * Night delivery is deliberate (owner decision, D-242): `maintenance_emergency`
+ * bypasses quiet hours, because the case this exists for is the tenant who
+ * texts at 23:10 and will never open the portal.
+ */
+export async function suggestEmergencyToOnCall(ticketId: string): Promise<void> {
+  await pageRota(ticketId, 'maintenance.emergency_suggested')
 }

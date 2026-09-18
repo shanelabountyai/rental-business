@@ -111,7 +111,10 @@ export function pagingPlan(
 export const ESCALATE_AFTER_MINUTES = 15
 
 export interface EscalationState {
-  createdAt: Date
+  /// When the ticket BECAME an emergency (R-223), not when it was opened - a
+  /// text from 20:00 that staff escalate at 23:10 has been unacknowledged
+  /// for zero minutes, not three hours.
+  emergencyAt: Date
   acknowledgedAt: Date | null
 }
 
@@ -130,8 +133,8 @@ export function shouldEscalate(state: EscalationState, now: Date): boolean {
 }
 
 export function minutesUnacknowledged(
-  state: Pick<EscalationState, 'createdAt'>,
+  state: Pick<EscalationState, 'emergencyAt'>,
   now: Date,
 ): number {
-  return Math.floor((now.getTime() - state.createdAt.getTime()) / 60_000)
+  return Math.floor((now.getTime() - state.emergencyAt.getTime()) / 60_000)
 }

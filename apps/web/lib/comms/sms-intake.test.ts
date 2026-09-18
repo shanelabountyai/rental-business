@@ -17,6 +17,7 @@ let propertyId: string
 let unitId: string
 let tenantId: string
 let vendorId: string
+let onCallId: string
 
 const ticketIds: string[] = []
 const tenantIds: string[] = []
@@ -85,6 +86,25 @@ beforeAll(async () => {
   await prisma.workOrder.create({
     data: { propertyId, unitId, vendorId: vendor.id, scope: 'Test work order' },
   })
+
+  // R-223: a habitability text suggests an emergency to whoever is ON CALL.
+  // Somebody has to be, or the rota's fallback pages every portfolio-wide
+  // grant in the shared database (191 of them when this was written) on
+  // every text in this file that says "leak".
+  const onCall = await prisma.staffUser.create({
+    data: {
+      email: `sms-oncall-${randomUUID()}@example.test`,
+      name: 'SMS On Call',
+      phone: `+1512558${RUN}`,
+      onCallFrom: new Date(Date.now() - 3_600_000),
+      onCallUntil: new Date(Date.now() + 3_600_000),
+    },
+  })
+  onCallId = onCall.id
+  const manager = await prisma.role.findUniqueOrThrow({ where: { key: 'manager' } })
+  await prisma.staffAssignment.create({
+    data: { staffUserId: onCallId, roleId: manager.id, propertyId },
+  })
 })
 
 afterAll(async () => {
@@ -100,6 +120,11 @@ afterAll(async () => {
     where: { fromAddress: { in: [UNKNOWN_PHONE] } },
   })
   await prisma.workOrder.deleteMany({ where: { vendorId } })
+  await prisma.notificationDelivery.deleteMany({
+    where: { notification: { recipientId: onCallId } },
+  })
+  await prisma.staffAssignment.deleteMany({ where: { staffUserId: onCallId } })
+  await prisma.staffUser.updateMany({ where: { id: onCallId }, data: { active: false } })
   await prisma.vendor.updateMany({ where: { id: vendorId }, data: { active: false } })
   await prisma.property.updateMany({
     where: { id: { in: propertyIds } },
@@ -209,6 +234,33 @@ describe('a text from a known tenant', () => {
     // MAINT-02/RISK-05: the response clock must start whichever way the
     // words arrived.
     expect(ticket.habitabilityFlag).toBe(true)
+
+    // R-223: and whoever is on call is told NOW, with the tenant's words -
+    // but it is a suggestion. The ticket is not an emergency until a person
+    // says so, so no escalation clock is running behind it.
+    expect(ticket.priority).toBe('URGENT')
+    expect(ticket.emergencyAt).toBeNull()
+    const suggestions = await prisma.notification.findMany({
+      where: { idempotencyKey: { startsWith: `emergency-suggested:${ticket.id}:` } },
+      select: { recipientId: true, category: true, body: true },
+    })
+    // One row per channel, all to the one person on call.
+    expect(new Set(suggestions.map((n) => n.recipientId))).toEqual(new Set([onCallId]))
+    expect(suggestions.every((n) => n.category === 'maintenance_emergency')).toBe(true)
+    expect(suggestions.map((n) => n.body).join('\n')).toContain(
+      'There is mold all over the bathroom ceiling',
+    )
+  })
+
+  it('suggests nothing when the words are not habitability language', async () => {
+    await closeOpenTickets()
+    const result = await text('Can someone look at the garage door opener')
+    if (result.outcome !== 'ticket_opened') throw new Error('expected a ticket')
+    expect(
+      await prisma.notification.count({
+        where: { idempotencyKey: { startsWith: `emergency-suggested:${result.ticketId}:` } },
+      }),
+    ).toBe(0)
   })
 })
 

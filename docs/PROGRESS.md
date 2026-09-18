@@ -12877,3 +12877,32 @@ All three were confirmed red against the previous job before the fix was kept. T
 - `npm test`: **3,250 passed / 4 skipped**, which is R-221's 3,247 plus the three new tests.
 - **The first unit run was killed.** A timeout alarm fired in `verify.test.ts` (20s), then in five `sendCardExpiringNotices` tests (30s each). Neither file touches this item. `pg_stat_activity` showed `rental_test` at 29–39 connections, with seven orphaned `vitest` workers in this repo that the `$PWD`-anchored `pkill` does not match, because their command line is renamed to `node (vitest N)`. They were identified by `lsof` cwd and killed. The re-run was clean.
 - No e2e spec reaches this job (grepped `e2e`, `apps/web/e2e` and the seeds), so no Playwright run. No schema change, so no `db:ci`.
+
+## R-223 — an emergency that arrives by text, email or phone can page somebody
+
+**Commit:** `SHA-PENDING`  ·  **Date:** 2026-09-18
+
+**What it built.**
+- **Staff can mark any open ticket an emergency.** Two places do it: a "Mark as emergency and page on-call" button on `/maintenance/[id]` ([mark-emergency-form.tsx](apps/web/components/maintenance/mark-emergency-form.tsx)), and a new "Emergency — pages on-call now" option in the triage priority select. Both call one `declareEmergency` in [actions.ts](apps/web/lib/maintenance/actions.ts). It sets EMERGENCY, moves NEW to TRIAGED, stamps `firstResponseAt`, audits `ticket.marked_emergency` with the actor, and then runs the portal's own page.
+- **One paging function.** `pageOnCall(ticketId)` moved into [emergency.ts](apps/web/lib/maintenance/emergency.ts) and reads everything off the ticket. The portal, staff escalation and the new suggestion all go through `pageRota`, with the same rota, parallel sends, per-ticket idempotency and scoped dispatch as before.
+- **`Ticket.emergencyAt`**, stamped by a database trigger (migration `20260918120000_r223_ticket_emergency_at`, backfilled from `createdAt`). R-029's 15-minute escalation and its 24-hour window now measure from it (`packages/core/oncall/rota.ts`, `unacknowledgedEmergencies`). Measured from `createdAt`, a text that staff escalate three hours later would have paged the owner on the next tick, and one escalated after a day would never escalate at all.
+- **The on-call suggestion.** An SMS or email ticket with habitability language sends `maintenance.emergency_suggested` to the rota's recipients, in the same request. It carries the tenant's words and a link to the ticket. The ticket stays URGENT, so no escalation runs behind it.
+- Stale comments corrected: the `triage-consumer.ts` sentence the review named, the header of `priority.ts`, the doc comment on `setTicketPriority`, and the emergency panel's "15 minutes after it came in".
+
+**What it decided** (D-242).
+- **A person chooses EMERGENCY; a keyword only suggests it.** The owner chose night delivery for the suggestion, over holding it until 08:00 or not sending one. The accepted cost: a "faucet leaks" text at 23:00 wakes one on-call person, and nobody past them.
+- **The button lives on the ticket page, not only in triage.** The triage Task comes from the hourly outbox, so an emergency cannot wait for it to exist.
+- **The clock is stamped by a trigger, not by each writer.** The first version used a bare `now()`. In a Chicago session, Postgres stored that five hours early in the zoneless column, which would have paged the owner immediately. The new escalation test caught it, and the trigger now uses `now() AT TIME ZONE 'UTC'`. The migration had been applied only to local `rental_test`, so I fixed it in place and re-applied it rather than stacking a second migration.
+
+**What it left behind.**
+- No suggestion on a **phone-logged** ticket: the staff member logging it is already the person deciding, and they land on the button.
+- No suggestion on a **later message** threaded into an already-open ticket.
+- The **shutoff-instruction reply** to a texted emergency (review finding 2's third bullet, and the PRD's 11pm story) is not built, and no row owns it yet.
+- When a ticket is escalated, **its open triage Task keeps its old priority**.
+- R-233 (retrying a bounced night dispatch) is next in line behind this item, as its row says.
+- The migration has not been applied to the Neon dev branch (`db:migrate:dev`).
+
+**Gate.**
+- `lint`: 0 errors (16 warnings that were already there; I removed one unused import on a line I touched). `typecheck`: clean. `check:ship-deps`: clean (756 dev packages). `db:ci`: migrations from scratch, seed, and no drift.
+- `npm test`: **3,252 passed / 4 skipped**, which is R-222's 3,250 plus two new tests: the late-escalation clock and "no suggestion without habitability language". The habitability SMS test now also asserts the suggestion.
+- `PORT=3100 npm run test:e2e -- maintenance-phone-log triage emergency` against the production build, both projects: **54 passed, 0 flaky** in 49.8s, matching `--list` (54). The new spec marks a three-hour-old SMS ticket as an emergency and checks that `emergencyAt` is later than creation, the actor on the audit row, the page, and axe.

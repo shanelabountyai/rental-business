@@ -15,6 +15,7 @@ import { auditAsSystem } from '@/lib/audit/system.ts'
 import { emitEvent } from '@/lib/jobs/outbox.ts'
 import { notificationAdapter } from '@/lib/notifications/provider.ts'
 import { inviteToClarify } from '@/lib/maintenance/clarify-link.ts'
+import { suggestEmergencyToOnCall } from '@/lib/maintenance/emergency.ts'
 import {
   type InboundAttachment,
   attachMessageDocumentsToTicket,
@@ -230,6 +231,12 @@ export async function handleInboundSms(args: {
   // It swallows its own failures for the same reason - a throw here becomes a
   // 500 for Twilio, which retries, which duplicates a message we have already
   // recorded.
+  // R-223: habitability language suggests an emergency to whoever is on
+  // call, in this request - not via the hourly triage Task, and never by
+  // making the ticket EMERGENCY. A person reads the tenant's words and
+  // decides (D-242). Never throws: the ticket is already committed.
+  if (ticket.habitabilityFlag) await suggestEmergencyToOnCall(ticket.id)
+
   await inviteToClarify(ticket.id)
 
   return { outcome: 'ticket_opened', threadId: thread.id, ticketId: ticket.id }

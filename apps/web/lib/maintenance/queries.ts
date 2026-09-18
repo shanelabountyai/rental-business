@@ -89,7 +89,9 @@ const OPEN_STATUSES = [...OPEN_TICKET_STATUSES]
 const staffTicketInclude = {
   // timezone: a ticket's date is rendered in the PROPERTY's zone, not the
   // server's (R-101c). Cheap column on a row already being fetched.
-  property: { select: { id: true, name: true, timezone: true } },
+  // legalEntityId: R-223's "Mark as emergency" checks `ticket.write` against
+  // this property, which needs its entity.
+  property: { select: { id: true, name: true, timezone: true, legalEntityId: true } },
   unit: { select: { id: true, name: true } },
   tenant: { select: { id: true, firstName: true, lastName: true, phone: true } },
   // R-029's emergency panel: who took responsibility, and when. Cheap
