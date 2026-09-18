@@ -424,9 +424,9 @@ export async function updateLeaseTerms(
  *
  * The unit's own status is coupled here rather than left to a nightly job:
  * activating a lease occupies the unit NOW, and recording a move-out frees
- * it NOW. R-009's `unit.auto_make_ready` remains the backstop for the case
- * nobody touches - a fixed term that simply runs out - and its own comment
- * already names this item as the process that would take over.
+ * it NOW. This is the only path that ends a tenancy: a fixed term that simply
+ * runs out rolls to month-to-month (R-065), and R-222 stopped
+ * `unit.auto_make_ready` from reading a passed `endsOn` as a move-out.
  */
 export async function changeLeaseStatus(
   leaseId: string,

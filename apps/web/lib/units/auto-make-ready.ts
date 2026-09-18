@@ -34,6 +34,17 @@ import { startTurnoverProjectForLease } from '@/lib/turnover/start.ts'
 // check is exercised only against directly-seeded Lease rows, exactly as
 // R-006's own scheduled-job tests exercised jobs before any real consumer
 // existed.
+//
+// R-222: A PASSED `endsOn` IS NOT A MOVE-OUT. A fixed term that runs out with
+// no renewal does not end - `lease.mtm_rollover` (renewal-rollover-job.ts)
+// rolls it to month-to-month an hour after this job, and a lease under notice
+// whose tenant has not left is a holdover, not a vacancy. This job used to
+// take the passed date as the move-out: it stamped a `moveOutAt` that never
+// happened, retired the family's door codes and opened a re-key turn on an
+// occupied house while Stripe kept billing it. Only a RECORDED move-out may
+// make the unit ready; an ENDED or TERMINATED lease already did so on the
+// manual path (`changeLeaseStatus`). Existing false `moveOutAt` stamps are
+// deliberately not backfilled (review 2026-09-17, "Do not build").
 const LOCAL_HOUR = 3
 
 const IN_FORCE: LeaseStatus[] = ['ACTIVE', 'MONTH_TO_MONTH']
@@ -60,9 +71,10 @@ SCHEDULED_JOBS.push({
         propertyId,
         status: { in: IN_FORCE },
         endsOn: { not: null, lt: asOf },
+        moveOutAt: { not: null },
         unit: { status: 'OCCUPIED' },
       },
-      select: { id: true, unitId: true, endsOn: true, moveOutAt: true },
+      select: { id: true, unitId: true, endsOn: true },
     })
 
     let transitioned = 0
@@ -88,19 +100,6 @@ SCHEDULED_JOBS.push({
           data: { status: 'MAKE_READY' },
         })
         if (updated.count === 0) return false
-
-        // The move-out fact `vacancy.ts`'s own comment already claims this
-        // job records - true from here on. `leases/actions.ts` stamps the
-        // exact instant a PM clicked a button; this lease never got one, so
-        // its own contractual `endsOn` is the honest date instead. Guarded
-        // on null so a lease somebody DID record a move-out for already
-        // (an edge nothing above rules out) keeps that answer.
-        if (!lease.moveOutAt) {
-          await tx.lease.update({
-            where: { id: lease.id },
-            data: { moveOutAt: lease.endsOn! },
-          })
-        }
 
         await emitEvent(tx, {
           type: 'unit.became_make_ready',

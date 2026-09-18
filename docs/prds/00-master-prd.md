@@ -119,7 +119,7 @@ Foundation entity model: **Entity (LLC) → Property → Unit(s) → Lease → T
 
 **PROP-02 [M]** As an owner, I can attach one or more units to a property (main house, ADU, duplex side).
 - Given a property, when I add a unit, then the unit has its own status (occupied/vacant/make-ready/down), market rent, and attributes.
-- Given a unit whose lease ends without renewal, when the end date passes, then unit status auto-transitions to make-ready and appears on the vacancy board.
+- Given a unit whose lease ends without renewal, when the end date passes, then unit status auto-transitions to make-ready and appears on the vacancy board. *(2026-09-18, D-241: "ends" means a recorded move-out or an ENDED/TERMINATED lease. A term whose end date merely passes rolls to month-to-month (LEASE-09) and a tenant under notice who has not left is a holdover; neither makes the unit ready.)*
 
 **PROP-03 [M]** As a PM, I can store unit-level operational data: lock/smart-lock and lockbox codes (with code history log), appliance makes/models/serials/install dates, HVAC filter sizes, paint colors, utility accounts (provider, account #, name-on-account during tenancy vs. vacancy, landlord-revert agreement y/n), and **shutoff locations (water main, breaker panel, gas) with photos**.
 - Given a work order on a unit, when the assigned tech opens it, then unit operational data is visible inline without navigation.

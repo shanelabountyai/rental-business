@@ -12849,3 +12849,31 @@ Then it drove the flows the seed has never written — a property expense, a rep
 **What it decided.** Arc 6's theme is **two automated paths that each pass their own tests contradict each other on the same tenancy, and nothing runs both** — sharpest in R-222, where the 03:00 `unit.auto_make_ready` job marks a house vacant, stamps a false `moveOutAt`, retires the family's access codes and opens a turn one hour before `lease.mtm_rollover` keeps the same lease billing. Findings 1 and 2 were spot-checked against source before their rows were written and both confirmed (D-240 names the lines). Four rows are **Needs counsel**: R-222, R-224, R-225, R-228. The review's "do not build" list is binding and carried in D-240 — above all **no backfill**: report the false stamps, suppressed fees and unserved entries, fix the writer.
 
 **What it left behind.** One of the review's four unknowns was settled in this session: `Notification_eventId_idx` exists in `rental_test`. Three stay unknown on purpose — whether a deploy re-runs `db:seed`, where live Stripe finalizes a rent invoice, and whether a physical lock ever follows a retired `AccessCode`. The review judged four `NEXT.md` leftovers deliberate and worth leaving alone: no demo `REVERSAL` rows (now folded into R-235's walk), no re-report of archived exports, the demo seed gaps, and the flaky `audit-store.test.ts` ordering.
+
+## R-222 — a passed end date is not a move-out
+
+**Commit:** `PENDING`  ·  **Date:** 2026-09-18
+
+**What it built.** `unit.auto_make_ready` ([apps/web/lib/units/auto-make-ready.ts](apps/web/lib/units/auto-make-ready.ts)) now selects only in-force leases with a **recorded `moveOutAt`**. Before this, a lease whose `endsOn` had passed was taken as a move-out. The block that stamped `moveOutAt = endsOn` is deleted. On the morning a term lapses, the 03:00 job no longer marks the house `MAKE_READY`, stamps a move-out, retires the door codes, opens R-178's turn with its re-key or emails staff. The 04:00 `lease.mtm_rollover` then rolls the lease as before. A tenant under notice who holds over past `endsOn` is left alone too. The rollover skips that lease by design, so the make-ready job was the only thing that would have acted on it. Three new tests in [auto-make-ready.test.ts](apps/web/lib/units/auto-make-ready.test.ts):
+- a lapsed lease with no move-out;
+- a holdover under notice, with its codes and no turn;
+- **the row's acceptance**: both jobs registered in one file, run at 03:00 then 04:00 CDT against one lease on one business date. The result is `MONTH_TO_MONTH`, the unit still `OCCUPIED`, the code live, and no turn and no event.
+
+All three were confirmed red against the previous job before the fix was kept. The transition-path tests that already existed now seed a recorded `moveOutAt`, and the one that asserted the `endsOn` stamp now asserts the recorded date is kept.
+
+**What it decided** (D-241).
+- **Only a recorded move-out makes an in-force lease's unit ready.** I chose that over the review's other wording ("exclude what the rollover will keep, and any lease under notice"), because that version couples two jobs' predicates that have already drifted apart once. It would also need a second exclusion for the holdover.
+- **No ENDED/TERMINATED branch in the job.** `changeLeaseStatus` already flips the unit in the same transaction. A job branch over old ended leases would re-flip the unit when an early termination's successor started before the old contractual `endsOn`, because the successor check keys on `startsOn >= endsOn`.
+- **Plainly: the job is now inert.** Nothing in the app records `moveOutAt` on a lease that is still in force; the only writers are `changeLeaseStatus` (on ENDED/TERMINATED) and this job's own deleted stamp. It stays registered as the backstop for the rule D-241 states. It is not deleted.
+- D-21 and D-62 described the old reading, and they are superseded by D-241, not edited. The PROP-02 acceptance line in `00-master-prd.md` carries a dated note. The comment in `changeLeaseStatus` that called the job "the backstop for a fixed term that simply runs out" has been rewritten.
+
+**What it left behind.**
+- **Needs counsel:** the self-help-eviction exposure of codes already retired and re-keys already opened on occupied houses.
+- **No backfill** of false `moveOutAt` stamps, and **no reset** of units already flipped to `MAKE_READY` while a tenancy continued. That was deliberate (review "Do not build"). The `Unit.status` correction is its own decision row. Nothing yet *reports* those rows on a screen either, and no row owns that.
+- `lease-form.tsx`'s header comment still says the job "keys on" `endsOn`. It is now only half the predicate. The validation rule it justifies is unchanged, so I left the comment alone.
+
+**Gate.**
+- `lint`: 0 errors (16 warnings that were already there). `typecheck`: clean. `check:ship-deps`: clean (756 dev packages).
+- `npm test`: **3,250 passed / 4 skipped**, which is R-221's 3,247 plus the three new tests.
+- **The first unit run was killed.** A timeout alarm fired in `verify.test.ts` (20s), then in five `sendCardExpiringNotices` tests (30s each). Neither file touches this item. `pg_stat_activity` showed `rental_test` at 29–39 connections, with seven orphaned `vitest` workers in this repo that the `$PWD`-anchored `pkill` does not match, because their command line is renamed to `node (vitest N)`. They were identified by `lsof` cwd and killed. The re-run was clean.
+- No e2e spec reaches this job (grepped `e2e`, `apps/web/e2e` and the seeds), so no Playwright run. No schema change, so no `db:ci`.

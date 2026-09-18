@@ -6,6 +6,9 @@ import { runDueJobs } from '../jobs/runner.ts'
 // SCHEDULED_JOBS (Vitest isolates modules per test file, so this does not
 // collide with jobs.test.ts's synthetic test jobs in R-006's own suite).
 import './auto-make-ready.ts'
+// R-222: the 04:00 rollover too, so one test can drive both jobs against the
+// same lease on the same business date - the collision neither file saw alone.
+import '../leases/renewal-rollover-job.ts'
 
 // PROP-02: "Given a unit whose lease ends without renewal, when the end date
 // passes, then unit status auto-transitions to make-ready." Tested the same
@@ -94,6 +97,8 @@ async function makeLease(
     status: 'DRAFT' | 'PENDING_SIGNATURE' | 'ACTIVE' | 'MONTH_TO_MONTH' | 'ENDED' | 'TERMINATED'
     startsOn: string
     endsOn: string | null
+    moveOutAt: string
+    noticeGivenAt: string
   }> = {},
 ) {
   const lease = await prisma.lease.create({
@@ -108,6 +113,10 @@ async function makeLease(
           ? new Date(`${overrides.endsOn}T00:00:00Z`)
           : null,
       rentCents: 185_000,
+      moveOutAt: overrides.moveOutAt ? new Date(`${overrides.moveOutAt}T00:00:00Z`) : null,
+      ...(overrides.noticeGivenAt
+        ? { noticeGivenAt: new Date(`${overrides.noticeGivenAt}T00:00:00Z`), noticeGivenBy: 'TENANT' as const }
+        : {}),
     },
   })
   leaseIds.push(lease.id)
@@ -120,9 +129,9 @@ async function runAt(isoInstant: string) {
 }
 
 describe('the auto-make-ready job', () => {
-  it('flips an occupied unit to MAKE_READY once its lease has ended with no renewal', async () => {
+  it('flips an occupied unit to MAKE_READY once its term has passed and a move-out is recorded', async () => {
     const unit = await makeUnit('OCCUPIED')
-    await makeLease(unit.id, { endsOn: '2026-06-30' })
+    await makeLease(unit.id, { endsOn: '2026-06-30', moveOutAt: '2026-06-29' })
 
     // 07:00 UTC = 02:00 CDT, past the job's 03:00 target the FOLLOWING day.
     await runAt('2026-07-02T08:00:00Z')
@@ -204,7 +213,7 @@ describe('the auto-make-ready job', () => {
 
   it('records what it did in the JobRun result', async () => {
     const unit = await makeUnit('OCCUPIED')
-    await makeLease(unit.id, { endsOn: '2026-06-30' })
+    await makeLease(unit.id, { endsOn: '2026-06-30', moveOutAt: '2026-06-29' })
 
     await runAt('2026-07-02T08:00:00Z')
 
@@ -216,7 +225,7 @@ describe('the auto-make-ready job', () => {
 
   it('emits unit.became_make_ready and an audit entry for a real transition', async () => {
     const unit = await makeUnit('OCCUPIED')
-    await makeLease(unit.id, { endsOn: '2026-06-30' })
+    await makeLease(unit.id, { endsOn: '2026-06-30', moveOutAt: '2026-06-29' })
 
     await runAt('2026-07-02T08:00:00Z')
 
@@ -234,14 +243,14 @@ describe('the auto-make-ready job', () => {
     expect(entry?.after).toMatchObject({ status: 'MAKE_READY' })
   })
 
-  it('stamps moveOutAt from endsOn and starts a turnover project (LEASE-12, R-072)', async () => {
+  it('keeps the recorded moveOutAt and starts a turnover project (LEASE-12, R-072)', async () => {
     const unit = await makeUnit('OCCUPIED')
-    const lease = await makeLease(unit.id, { endsOn: '2026-06-30' })
+    const lease = await makeLease(unit.id, { endsOn: '2026-06-30', moveOutAt: '2026-06-29' })
 
     await runAt('2026-07-02T08:00:00Z')
 
     const updated = await prisma.lease.findUniqueOrThrow({ where: { id: lease.id } })
-    expect(updated.moveOutAt?.toISOString()).toBe(lease.endsOn?.toISOString())
+    expect(updated.moveOutAt?.toISOString()).toBe('2026-06-29T00:00:00.000Z')
 
     const project = await prisma.turnoverProject.findUnique({ where: { leaseId: lease.id } })
     expect(project).not.toBeNull()
@@ -258,9 +267,9 @@ describe('the auto-make-ready job', () => {
   // R-176. A lease that lapsed unattended is the case nobody walked out of,
   // so nothing else prompts anybody to think about the keypad - and the code
   // is revealed to any vendor with a job here until it is retired.
-  it('retires the unit access codes when the tenancy lapses', async () => {
+  it('retires the unit access codes once the recorded move-out makes the unit ready', async () => {
     const unit = await makeUnit('OCCUPIED')
-    const lease = await makeLease(unit.id, { endsOn: '2026-06-30' })
+    const lease = await makeLease(unit.id, { endsOn: '2026-06-30', moveOutAt: '2026-06-29' })
     const code = await prisma.accessCode.create({
       data: {
         unitId: unit.id,
@@ -311,5 +320,64 @@ describe('the auto-make-ready job', () => {
         where: { type: 'unit.became_make_ready', aggregateId: unit.id },
       }),
     ).toBe(0)
+  })
+
+  // R-222. A passed `endsOn` with no recorded move-out is a tenancy that is
+  // continuing (rollover) or holding over (under notice) - never a vacancy.
+  it('leaves a lapsed lease with no recorded move-out alone', async () => {
+    const unit = await makeUnit('OCCUPIED')
+    const lease = await makeLease(unit.id, { endsOn: '2026-06-30' })
+
+    await runAt('2026-07-02T08:00:00Z')
+
+    expect((await prisma.unit.findUniqueOrThrow({ where: { id: unit.id } })).status).toBe('OCCUPIED')
+    expect((await prisma.lease.findUniqueOrThrow({ where: { id: lease.id } })).moveOutAt).toBeNull()
+  })
+
+  // The holdover: the rollover skips a lease under notice, so nothing else
+  // would ever have kept this one away from the job. Retiring a holdover's
+  // codes and opening a re-key is self-help eviction as the record reads it.
+  it('leaves a holdover under notice alone, codes and all', async () => {
+    const unit = await makeUnit('OCCUPIED')
+    const lease = await makeLease(unit.id, { endsOn: '2026-06-30', noticeGivenAt: '2026-05-01' })
+    const code = await prisma.accessCode.create({
+      data: { unitId: unit.id, type: 'LOCKBOX', sealedCode: sealSecret('7392', 'access-code'), version: 1 },
+    })
+
+    await runAt('2026-07-02T08:00:00Z')
+
+    expect((await prisma.unit.findUniqueOrThrow({ where: { id: unit.id } })).status).toBe('OCCUPIED')
+    expect((await prisma.accessCode.findUniqueOrThrow({ where: { id: code.id } })).effectiveTo).toBeNull()
+    expect(await prisma.turnoverProject.count({ where: { leaseId: lease.id } })).toBe(0)
+  })
+})
+
+// R-222's acceptance: both jobs, one lease, one business date. 08:00Z is
+// 03:00 CDT (only auto_make_ready is due); 09:00Z is 04:00 CDT (the rollover).
+describe('the 03:00 make-ready and the 04:00 rollover on the morning a term lapses', () => {
+  it('rolls the tenancy to month-to-month and leaves the house occupied', async () => {
+    const unit = await makeUnit('OCCUPIED')
+    const lease = await makeLease(unit.id, { endsOn: '2026-06-30' })
+    const code = await prisma.accessCode.create({
+      data: { unitId: unit.id, type: 'LOCKBOX', sealedCode: sealSecret('7392', 'access-code'), version: 1 },
+    })
+
+    await runAt('2026-07-01T08:00:00Z')
+    await runAt('2026-07-01T09:00:00Z')
+
+    const after = await prisma.lease.findUniqueOrThrow({ where: { id: lease.id } })
+    expect(after.status).toBe('MONTH_TO_MONTH')
+    expect(after.moveOutAt).toBeNull()
+    expect((await prisma.unit.findUniqueOrThrow({ where: { id: unit.id } })).status).toBe('OCCUPIED')
+    expect((await prisma.accessCode.findUniqueOrThrow({ where: { id: code.id } })).effectiveTo).toBeNull()
+    expect(await prisma.turnoverProject.count({ where: { leaseId: lease.id } })).toBe(0)
+    expect(
+      await prisma.outboxEvent.count({ where: { type: 'unit.became_make_ready', aggregateId: unit.id } }),
+    ).toBe(0)
+    expect(
+      await prisma.jobRun.count({
+        where: { propertyId, jobType: { in: ['unit.auto_make_ready', 'lease.mtm_rollover'] } },
+      }),
+    ).toBe(2)
   })
 })
