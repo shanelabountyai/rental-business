@@ -1,22 +1,22 @@
 # Next session
 
-## R-225 is done (`655d2f7`). Start R-226.
+## R-226 is done (`1e9f285`). Start R-227.
 
-**First: read CI** with `gh run list --limit 3`. Neither R-224's run (`35374322666`) nor R-225's had finished when this was written. R-223's was green.
+**First: read CI** with `gh run list --limit 3`. R-224's run was cancelled when R-225 was pushed on top of it. R-225's and R-226's had not finished when this was written. The last run that finished green was R-223's.
 
-**R-226**: a tenant who renewed has no move-in side to their deposit case. Row 213 in `docs/prds/06-backlog.md`; review finding 5 in `docs/reviews/2026-09-17-operator-review.md`. The fix is one `baselineMoveInFor(leaseId)` that walks `renewedFromLeaseId` back to the first lease, read by `itemsFromMoveIn`, the dispute packet, `deposit-clearing-job.ts`'s warning and `Lease.moveInAt`'s readers. This is deposit and evidence correctness, so Opus.
+**R-227**: serving a cure notice switches late fees off for the rest of the tenancy, because the `NOTICE_SERVED` hold is never lifted. Row 214 in `docs/prds/06-backlog.md`; review finding 6 in `docs/reviews/2026-09-17-operator-review.md`. It is late-fee correctness, so Opus.
 
-**R-225 left behind** (see its PROGRESS entry and D-244): no cap check on the MTM rollover rate; the tenant is not told when an increase is withdrawn; the R-223, R-224 and R-225 migrations are not on the Neon dev branch (`db:migrate:dev`).
+**R-226 left behind** (see its PROGRESS entry and D-245):
+- Unchecked: whether the tenant portal's `scope.leaseIds` includes a renewed tenant's ended predecessor, i.e. whether they can still open their original move-in report.
+- R-234 is now unblocked.
+- R-225's leftovers still stand: no cap check on the month-to-month rollover rate, no tenant message when an increase is withdrawn, and the R-223, R-224 and R-225 migrations are not on the Neon dev branch.
 
-**Traps seen in R-225:**
-- Run e2e through `npm run test:e2e -- <specs>`, never bare `npx playwright test`. The bare command loads no `.env.test`, so every fixture dies with `PrismaClientInitializationError`.
-- A lease whose raise was scheduled carries an append-only `Notice`, so any `afterAll` that hard-deletes leases has to treat it as pinned (`leases.spec.ts` shows how).
-- On `/leases/[id]`, "Starts on" is a substring of any label containing "starts on". The new field is "Rent increase effective date" for that reason.
-
-**Carried from R-224:**
-- There is **no prettier config** in this repo. Never run `npx prettier --write`.
-- On `/leases/[id]`, `getByLabel('Money order')` also matches the certified-funds switch. Use `getByText('Money order', { exact: true })`.
-- Orphaned `node (vitest N)` workers survive `pkill -f "$PWD.*vitest"`. Find them by cwd (`lsof -a -p PID -d cwd`).
+**Traps (carried):**
+- Run e2e through `npm run test:e2e -- <specs>`, never bare `npx playwright test`. The bare command loads no `.env.test`.
+- There is no prettier config. Never run `npx prettier --write`.
+- On `/leases/[id]`, "Starts on" and "Money order" are substring traps.
+- Orphaned `node (vitest N)` workers survive a `$PWD`-anchored `pkill`. Find them by cwd.
+- zsh treats a bare `=====` as a command (`=cmd` expansion). Use `echo '---'` as a separator.
 
 ## Still open, carried from earlier handoffs
 
