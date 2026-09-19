@@ -1,12 +1,12 @@
 # Next session
 
-## R-230 is done (`5ac3e28`). Start R-231.
+## R-231 is done (`d0eee75`). Start R-232.
 
-**First: read CI** with `gh run list --limit 3`. R-230's run follows its push.
+**First: read CI** with `gh run list --limit 3`. R-230's run (`35459089141`) was still in progress when R-231 started; R-229's and R-228's are green.
 
-**R-231**: the rent roll, the waiver-pattern report and the plan report each name whichever tenant the database returns first on a shared lease. Row 218 in `docs/prds/06-backlog.md`; review finding 10. Fix is `orderBy: { isPrimary: 'desc' }` on all three plus `lastContactOn` computed across every party — reporting correctness, not money/security-critical, so Sonnet is enough.
+**R-232**: preventive maintenance auto-assigns an uninsured vendor. R-080's recurring job writes `fallbackVendorsForTrade(...)[0]` onto every generated work order (`apps/web/lib/maintenance/preventive-actions.ts:114-127`) with no COI check — R-214's warn-and-log only runs at dispatch, after the work order already carries the vendor. Row 219 in `docs/prds/06-backlog.md`; review finding 11. Fix: skip COI-missing or lapsed vendors when ranking, and raise a Task naming the skip (D-232). Reporting/assignment correctness, not a schema change unless the Task type needs one — Sonnet is enough.
 
-**R-230 left behind:**
+**R-231 left behind:**
 - Nothing new. `rent.decide` Tasks still have no special queue rendering (carried from R-229, still unowned).
 
 **Carried from R-229:**
