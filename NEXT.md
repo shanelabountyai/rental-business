@@ -1,12 +1,12 @@
 # Next session
 
-## R-231 is done (`d0eee75`). Start R-232.
+## R-232 is done (`23ae30a`, SHA recorded in `ae429c9`). Start R-233.
 
-**First: read CI** with `gh run list --limit 3`. R-230's run (`35459089141`) was still in progress when R-231 started; R-229's and R-228's are green.
+**First: read CI** with `gh run list --limit 3` and confirm R-232's push run went green.
 
-**R-232**: preventive maintenance auto-assigns an uninsured vendor. R-080's recurring job writes `fallbackVendorsForTrade(...)[0]` onto every generated work order (`apps/web/lib/maintenance/preventive-actions.ts:114-127`) with no COI check — R-214's warn-and-log only runs at dispatch, after the work order already carries the vendor. Row 219 in `docs/prds/06-backlog.md`; review finding 11. Fix: skip COI-missing or lapsed vendors when ranking, and raise a Task naming the skip (D-232). Reporting/assignment correctness, not a schema change unless the Task type needs one — Sonnet is enough.
+**R-233**: an emergency dispatch the provider bounces at night is retried after quiet hours. R-207's `NotifyInput.urgent` is never persisted (its own `KNOWN GAP` at `apps/web/lib/notifications/send.ts:471-479`), so `scheduleRetry` always defers to 08:00 even for an emergency page that should retry immediately. Row 220 in `docs/prds/06-backlog.md`; review finding 12. Fix: a column on `Notification` plus a migration, read by `scheduleRetry`. Its depends-on, R-223, is already ✅, so it is unblocked. This is a schema change (new migration, hand-written per this repo's rule) — Sonnet is fine for the column and the read; run `npm run db:drift` after touching `schema.prisma`, not just `tail`, per the repo's own warning about silent `prisma generate` failures.
 
-**R-231 left behind:**
+**R-232 left behind:**
 - Nothing new. `rent.decide` Tasks still have no special queue rendering (carried from R-229, still unowned).
 
 **Carried from R-229:**
