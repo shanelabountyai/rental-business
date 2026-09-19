@@ -13108,7 +13108,7 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 
 ## R-231 — the rent roll, the waiver-pattern report and the plan report now name the PRIMARY tenant, not whichever row comes back first
 
-**Commit:** _pending_  ·  **Date:** 2026-09-19
+**Commit:** `d0eee75`  ·  **Date:** 2026-09-19
 
 **What it built.** Review finding 10 (PAY-04/PAY-06/PAY-08). All three fetched `lease.leaseTenants` with no `orderBy` and read `[0]?.tenant` as the row's tenant — on a joint lease, that is whichever order Postgres happens to return, not the household's primary tenant, and the identity is what a fair-housing reviewer reads off `waiverPatternByTenant` and `planOfferPatternByTenant`. Fixed with `orderBy: { isPrimary: 'desc' }` on the `leaseTenants` select in [rent-roll.ts](apps/web/lib/payments/rent-roll.ts), [waiver-report.ts](apps/web/lib/ledger/waiver-report.ts) and [plan-report.ts](apps/web/lib/payments/plan-report.ts). The rent roll's `lastContactOn` had the same bug from the other side — it only ever checked the one tenant landing in `[0]` — so it now takes the latest outbound message across every party on the lease.
 
