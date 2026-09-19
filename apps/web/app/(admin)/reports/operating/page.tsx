@@ -57,11 +57,14 @@ export default async function OperatingReportPage({
   const entityVacancyLoss = report?.snapshot.reduce((t, row) => t + row.vacancyLossCents, 0) ?? 0
   const entityScheduled = report?.snapshot.reduce((t, row) => t + row.scheduledRentCents, 0) ?? 0
   const entityConcessions = report?.snapshot.reduce((t, row) => t + row.concessionCents, 0) ?? 0
+  const entityUnpriced =
+    report?.snapshot.reduce((t, row) => t + row.unpricedVacantUnitCount, 0) ?? 0
   const entityEconomicOcc = economicOccupancy({
     collectedCents: entityIncome,
     scheduledRentCents: entityScheduled,
     vacancyLossCents: entityVacancyLoss,
     concessionCents: entityConcessions,
+    unpricedVacantUnitCount: entityUnpriced,
   })
 
   return (
@@ -230,6 +233,7 @@ export default async function OperatingReportPage({
                           scheduledRentCents: row.scheduledRentCents,
                           vacancyLossCents: row.vacancyLossCents,
                           concessionCents: row.concessionCents,
+                          unpricedVacantUnitCount: row.unpricedVacantUnitCount,
                         })
                         return (
                           <tr key={row.propertyId} className="border-b last:border-0">
@@ -275,9 +279,24 @@ export default async function OperatingReportPage({
                             </td>
                             <td className="py-2 pr-4 text-right tabular-nums">
                               {formatCents(row.vacancyLossCents)}
+                              {row.unpricedVacantUnitCount > 0 && (
+                                <span className="text-muted-foreground block text-xs">
+                                  +{row.unpricedVacantUnitCount} unpriced
+                                </span>
+                              )}
                             </td>
                             <td className="py-2 pr-4 text-right tabular-nums">
-                              {economicOcc != null ? `${Math.round(economicOcc * 100)}%` : '—'}
+                              {economicOcc != null ? (
+                                `${Math.round(economicOcc * 100)}%`
+                              ) : row.unpricedVacantUnitCount > 0 ? (
+                                <span
+                                  title={`${row.unpricedVacantUnitCount} vacant unit(s) with no rent on file`}
+                                >
+                                  —
+                                </span>
+                              ) : (
+                                '—'
+                              )}
                             </td>
                             <td className="py-2 text-right tabular-nums">{row.ticketCount}</td>
                           </tr>
@@ -368,10 +387,23 @@ export default async function OperatingReportPage({
                   <dt className="text-muted-foreground">Turn cost</dt>
                   <dd className="text-right tabular-nums">{formatCents(entityTurn)}</dd>
                   <dt className="text-muted-foreground">Vacancy loss</dt>
-                  <dd className="text-right tabular-nums">{formatCents(entityVacancyLoss)}</dd>
+                  <dd className="text-right tabular-nums">
+                    {formatCents(entityVacancyLoss)}
+                    {entityUnpriced > 0 && (
+                      <span className="text-muted-foreground block text-xs">
+                        +{entityUnpriced} unpriced
+                      </span>
+                    )}
+                  </dd>
                   <dt className="text-muted-foreground">Economic occupancy</dt>
                   <dd className="text-right tabular-nums">
-                    {entityEconomicOcc != null ? `${Math.round(entityEconomicOcc * 100)}%` : '—'}
+                    {entityEconomicOcc != null ? (
+                      `${Math.round(entityEconomicOcc * 100)}%`
+                    ) : entityUnpriced > 0 ? (
+                      <span title={`${entityUnpriced} vacant unit(s) with no rent on file`}>—</span>
+                    ) : (
+                      '—'
+                    )}
                   </dd>
                   <dt className="text-muted-foreground">
                     Renewal rate ({report.renewal.renewed} renewed ·{' '}

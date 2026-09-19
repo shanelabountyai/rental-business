@@ -17,7 +17,7 @@ import type { OccupiedInterval, RentedInterval, RenewalRate } from '@rental/core
 import { businessDate, businessDaysBetween, utcToBusinessDate } from '@rental/core/scheduling'
 import type { BusinessDate } from '@rental/core/scheduling'
 import type { AccountingBasis, ExportLine } from '@rental/core/tax'
-import { dailyCostOfVacancyCents } from '@rental/core/units'
+import { dailyCostOfVacancyCents, effectiveMarketRentCents } from '@rental/core/units'
 import { prisma } from '@rental/db'
 import type { ResolvedScope } from '@/lib/scope/current-scope.ts'
 import { taxExportFacts } from '@/lib/tax/queries.ts'
@@ -198,6 +198,7 @@ export async function operatingReport(
   const unitCounts = new Map<string, number>()
   const vacancyLoss = new Map<string, number>()
   const scheduledRent = new Map<string, number>()
+  const unpricedVacantUnits = new Map<string, number>()
   const windowLength = businessDaysBetween(from, to) + 1
 
   for (const unit of units) {
@@ -240,9 +241,23 @@ export async function operatingReport(
     // A unit off the market for repairs was never available to rent, so it
     // is neither losing the owner a tenant nor scheduled to bill one.
     if (unit.status !== 'DOWN') {
-      const dailyCost = dailyCostOfVacancyCents(unit.marketRentCents)
+      // No asking rent on file: price it from the unit's own last lease
+      // before giving up (review finding 9) - a unit that has sat empty
+      // longest is often the one nobody priced, and treating that as $0 of
+      // vacancy loss understates the report in the direction that hides it.
+      const lastLease = unit.leases.reduce<(typeof unit.leases)[number] | null>(
+        (latest, lease) => (latest == null || lease.startsOn > latest.startsOn ? lease : latest),
+        null,
+      )
+      const effectiveRentCents = effectiveMarketRentCents(
+        unit.marketRentCents,
+        lastLease?.rentCents ?? null,
+      )
+      const dailyCost = dailyCostOfVacancyCents(effectiveRentCents)
       if (dailyCost != null) {
         vacancyLoss.set(unit.propertyId, (vacancyLoss.get(unit.propertyId) ?? 0) + dailyCost * days)
+      } else if (days > 0) {
+        unpricedVacantUnits.set(unit.propertyId, (unpricedVacantUnits.get(unit.propertyId) ?? 0) + 1)
       }
       const rentedIntervals: RentedInterval[] = unit.leases.map((lease) => ({
         ...occupiedInterval(lease, zone),
@@ -309,6 +324,7 @@ export async function operatingReport(
       vacancyLoss,
       scheduledRent,
       concessions,
+      unpricedVacantUnits,
     }),
     tradeSpend,
     renewal: renewalRate(renewalLeases),

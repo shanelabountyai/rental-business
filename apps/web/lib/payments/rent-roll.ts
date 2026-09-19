@@ -13,6 +13,7 @@ import { businessDate, dueDateOnOrBefore, utcToBusinessDate } from '@rental/core
 import { planProgress } from '@rental/core/payments'
 import { type LeaseStatus, prisma } from '@rental/db'
 import { selectApplicableRule } from '@rental/core/jurisdiction'
+import { effectiveMarketRentCents } from '@rental/core/units'
 import { leasesHalted } from '@/lib/holds/queries.ts'
 import { type PlanRecord, activePlansByLease, paidTowardPlan } from '@/lib/payments/plans.ts'
 import type { ResolvedScope } from '@/lib/scope/types.ts'
@@ -98,6 +99,10 @@ export interface RentRoll {
   /// `billedCents` beside it. DOWN units are excluded: a unit off the market
   /// for repairs was never available to rent this month either.
   vacancyLossCents: number
+  /// Vacant/make-ready units with no asking rent AND no prior lease to price
+  /// them from (review finding 9) - real money missing from `vacancyLossCents`
+  /// above, not zero.
+  unpricedVacantCount: number
 }
 
 // `Pick<..., 'propertyIds'>` rather than the whole `ResolvedScope`: the only
@@ -149,14 +154,32 @@ export async function rentRoll(
     }),
     prisma.unit.findMany({
       where: { propertyId: { in: scope.propertyIds }, status: { in: ['VACANT', 'MAKE_READY'] } },
-      select: { marketRentCents: true },
+      select: {
+        marketRentCents: true,
+        leases: { orderBy: { startsOn: 'desc' }, take: 1, select: { rentCents: true } },
+      },
     }),
   ])
 
-  const vacancyLossCents = vacantUnits.reduce((sum, unit) => sum + (unit.marketRentCents ?? 0), 0)
+  let unpricedVacantCount = 0
+  const vacancyLossCents = vacantUnits.reduce((sum, unit) => {
+    const rent = effectiveMarketRentCents(unit.marketRentCents, unit.leases[0]?.rentCents ?? null)
+    if (rent == null) {
+      unpricedVacantCount += 1
+      return sum
+    }
+    return sum + rent
+  }, 0)
 
   if (leases.length === 0) {
-    return { rows: [], totals: agingTotals([]), billedCents: 0, outstandingCents: 0, vacancyLossCents }
+    return {
+      rows: [],
+      totals: agingTotals([]),
+      billedCents: 0,
+      outstandingCents: 0,
+      vacancyLossCents,
+      unpricedVacantCount,
+    }
   }
 
   const leaseIds = leases.map((lease) => lease.id)
@@ -327,6 +350,7 @@ export async function rentRoll(
     billedCents: rows.reduce((sum, row) => sum + row.rentCents, 0),
     outstandingCents: rows.reduce((sum, row) => sum + Math.max(0, row.balanceCents), 0),
     vacancyLossCents,
+    unpricedVacantCount,
   }
 }
 

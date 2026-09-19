@@ -6,7 +6,7 @@ import { OPEN_TICKET_GLOW_HOURS, ticketGlows } from '@rental/core/maintenance'
 import { renewalRate, type RenewalRate } from '@rental/core/metrics'
 import { businessDate, businessDateToUtc, utcToBusinessDate } from '@rental/core/scheduling'
 import { priorityRank } from '@rental/core/tasks'
-import { dailyCostOfVacancyCents, daysOnMarket } from '@rental/core/units'
+import { dailyCostOfVacancyCents, daysOnMarket, effectiveMarketRentCents } from '@rental/core/units'
 import { prisma } from '@rental/db'
 import { filingCabinetAlertsDue } from '@/lib/filing-cabinet/queries.ts'
 import { rentRoll } from '@/lib/payments/rent-roll.ts'
@@ -188,6 +188,10 @@ export interface VacancySummary {
   /// sitting" - a count alone hides whether it is five units at three days
   /// each or one unit at ninety.
   longestDaysOnMarket: number
+  /// Vacant units with no asking rent AND no prior lease to price them from
+  /// (review finding 9) - real dollars missing from `totalDailyCostCents`
+  /// above, not zero.
+  unpricedCount: number
 }
 
 export interface VacantUnit {
@@ -217,7 +221,7 @@ export async function vacantUnits(scope: ResolvedScope, asOf: Date): Promise<Vac
         where: { moveOutAt: { not: null } },
         orderBy: { moveOutAt: 'desc' },
         take: 1,
-        select: { moveOutAt: true },
+        select: { moveOutAt: true, rentCents: true },
       },
     },
   })
@@ -237,7 +241,11 @@ export async function vacantUnits(scope: ResolvedScope, asOf: Date): Promise<Vac
         unitCreatedAt: businessDate(unit.createdAt, zone),
         asOf: businessDate(asOf, zone),
       }),
-      dailyCostCents: dailyCostOfVacancyCents(unit.marketRentCents),
+      // No asking rent on file: price it from the unit's own last lease
+      // before giving up (review finding 9).
+      dailyCostCents: dailyCostOfVacancyCents(
+        effectiveMarketRentCents(unit.marketRentCents, unit.leases[0]?.rentCents ?? null),
+      ),
     }
   })
 }
@@ -248,6 +256,7 @@ export async function vacancySummary(scope: ResolvedScope, asOf: Date): Promise<
     count: units.length,
     totalDailyCostCents: units.reduce((sum, u) => sum + (u.dailyCostCents ?? 0), 0),
     longestDaysOnMarket: units.reduce((max, u) => Math.max(max, u.daysOnMarket), 0),
+    unpricedCount: units.filter((u) => u.dailyCostCents == null).length,
   }
 }
 

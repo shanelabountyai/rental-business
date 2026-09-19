@@ -13082,3 +13082,26 @@ All three were confirmed red against the previous job before the fix was kept. T
 - `npm test`: **3,279 passed / 4 skipped** of 3,283 on the second run. The first run had the 3 R-217 failures above.
 - e2e: none. No spec touches the chase job or the rent-roll row shape.
 - CI: R-228's run `35379859666` was **green** (22 min) before this started.
+
+## R-230 — a vacant unit with no asking rent no longer prices as $0 of vacancy loss
+
+**Commit:** `PENDING`  ·  **Date:** 2026-09-19
+
+**What it built.** Review finding 9 (RPT-01/RPT-05/LEASE-12). Three sites silently added a null asking rent as zero:
+- `rentRoll()`'s `vacancyLossCents` ([rent-roll.ts](apps/web/lib/payments/rent-roll.ts)) summed `unit.marketRentCents ?? 0`.
+- The dashboard's vacancy tile ([queries.ts](apps/web/lib/dashboard/queries.ts)) summed `dailyCostCents ?? 0`.
+- The operating report ([operating.ts](apps/web/lib/reports/operating.ts)) skipped the unit correctly, but `economicOccupancy` then divided by a denominator that unit's missing loss should have been in, pushing the rate **up** — the direction that hides the problem.
+
+New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) falls back to the unit's own last lease's rent before giving up; still null with neither, which is the case all three sites still have to handle. All three now count unpriced vacant units instead of folding them into zero, and show it ("+N unpriced") beside the total. `PropertySnapshot` carries `unpricedVacantUnitCount`, and `economicOccupancy` takes it as a fact and returns null — with a `title` naming the count — whenever it is above zero, the same posture the function already had for a zero denominator.
+
+**What it decided.**
+- "Last lease" means the unit's own most recently STARTED lease (`operating.ts`, `rent-roll.ts`) or most recently ENDED one (`dashboard/queries.ts`, reusing the query already fetching it for `daysOnMarket`) — two orderings for the same concept, not unified into one query, because both already exist and a currently-vacant unit's leases agree on which one is "last" in the ordinary case.
+- The fallback is not a new fact source: it is a lease that has already ended, on the same unit, so pricing from it is not a guess the way inventing a market comp would be.
+
+**What it left behind.** `rent.decide` Tasks still have no special rendering in the queue (carried from R-229, unowned). Nothing else new.
+
+**Gate.**
+- `lint`: 0 errors (16 warnings already there, none new). `typecheck`: clean. `check:ship-deps`: clean. `build`: clean. No schema change.
+- `npm test`: **3,284 passed / 4 skipped** (full sweep, up from 3,283 — three new pure-function tests).
+- e2e `operating-report`, `rent-roll`, `dashboard` against the production build, both projects: **40 passed**, matching `--list` (40). Includes the operating report's own axe pass.
+- CI: R-229's run `35387587323` finished **green** (24 min) before this was pushed.

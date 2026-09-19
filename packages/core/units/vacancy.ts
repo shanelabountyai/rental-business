@@ -52,3 +52,18 @@ export function dailyCostOfVacancyCents(marketRentCents: number | null): number 
   if (marketRentCents == null) return null
   return Math.round(marketRentCents / 30)
 }
+
+/**
+ * The rent to price a vacancy figure from, when the unit has no asking rent
+ * on file (review finding 9). A unit arrives unpriced from import or from
+ * anybody adding it in a hurry - the house that has sat empty longest is
+ * often the one nobody priced - and the LAST lease it actually had is a real
+ * number, not a guess. Still null with neither, which callers must keep
+ * treating as "not priced" rather than folding into a total as zero.
+ */
+export function effectiveMarketRentCents(
+  marketRentCents: number | null,
+  lastLeaseRentCents: number | null,
+): number | null {
+  return marketRentCents ?? lastLeaseRentCents
+}

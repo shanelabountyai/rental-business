@@ -299,6 +299,12 @@ export interface PropertySnapshot {
   /// as a positive figure - added back on the economic-occupancy denominator
   /// because `incomeCents` above already nets it out.
   concessionCents: number
+  /// Vacant, non-DOWN units in the window with no asking rent AND no prior
+  /// lease to price them from (review finding 9) - so `vacancyLossCents`
+  /// above is missing real money for them. Shown beside the total rather
+  /// than folded in silently, and `economicOccupancy` refuses to answer
+  /// while this is above zero.
+  unpricedVacantUnitCount: number
 }
 
 /// The Schedule E lines that are maintenance. Both, not just repairs: a
@@ -325,6 +331,7 @@ export function operatingSnapshot(input: {
   vacancyLoss?: ReadonlyMap<string, number>
   scheduledRent?: ReadonlyMap<string, number>
   concessions?: ReadonlyMap<string, number>
+  unpricedVacantUnits?: ReadonlyMap<string, number>
 }): PropertySnapshot[] {
   const maintenance = new Map<string, number>()
   for (const line of input.lines) {
@@ -349,6 +356,7 @@ export function operatingSnapshot(input: {
       vacancyLossCents: input.vacancyLoss?.get(property.propertyId) ?? 0,
       scheduledRentCents: input.scheduledRent?.get(property.propertyId) ?? 0,
       concessionCents: input.concessions?.get(property.propertyId) ?? 0,
+      unpricedVacantUnitCount: input.unpricedVacantUnits?.get(property.propertyId) ?? 0,
     }))
     .sort((a, b) => a.netCents - b.netCents || a.propertyName.localeCompare(b.propertyName))
 }
@@ -359,13 +367,21 @@ export function operatingSnapshot(input: {
  * with nothing in the denominator, the same "not priced" reasoning
  * `dailyCostOfVacancyCents` uses - 0% would read as "earned nothing" rather
  * than "cannot be answered".
+ *
+ * Also null whenever an unpriced vacant unit sits in the window (review
+ * finding 9): `vacancyLossCents` is then missing real money, which shrinks
+ * this denominator and pushes the rate UP - the direction that hides the
+ * problem from the owner reading it. Answering with a wrong-but-plausible
+ * number is worse than refusing, the same posture as a zero denominator.
  */
 export function economicOccupancy(facts: {
   collectedCents: number
   scheduledRentCents: number
   vacancyLossCents: number
   concessionCents: number
+  unpricedVacantUnitCount?: number
 }): number | null {
+  if ((facts.unpricedVacantUnitCount ?? 0) > 0) return null
   const denominator = facts.scheduledRentCents + facts.vacancyLossCents + facts.concessionCents
   if (denominator <= 0) return null
   return facts.collectedCents / denominator

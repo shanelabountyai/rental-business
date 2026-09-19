@@ -104,6 +104,9 @@ export default async function RentRollPage({
               rent on vacant and make-ready units; units marked Down are excluded)
             </>
           )}
+          {fullRoll.unpricedVacantCount > 0 && (
+            <> (+{fullRoll.unpricedVacantCount} unpriced, not counted)</>
+          )}
           .
         </p>
         {(validBucket || pastGrace === '1') && (

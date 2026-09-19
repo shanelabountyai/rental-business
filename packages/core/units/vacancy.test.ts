@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { dailyCostOfVacancyCents, daysOnMarket } from './vacancy.ts'
+import { dailyCostOfVacancyCents, daysOnMarket, effectiveMarketRentCents } from './vacancy.ts'
 
 describe('daysOnMarket', () => {
   it('counts from the most recent move-out', () => {
@@ -37,5 +37,19 @@ describe('dailyCostOfVacancyCents', () => {
 
   it('rounds to the nearest cent', () => {
     expect(dailyCostOfVacancyCents(100_000)).toBe(3_333)
+  })
+})
+
+describe('effectiveMarketRentCents', () => {
+  it('prefers the asking rent when there is one', () => {
+    expect(effectiveMarketRentCents(150_000, 120_000)).toBe(150_000)
+  })
+
+  it('falls back to the last lease rent when unpriced', () => {
+    expect(effectiveMarketRentCents(null, 120_000)).toBe(120_000)
+  })
+
+  it('is still NULL with neither - review finding 9 must not turn into a guess', () => {
+    expect(effectiveMarketRentCents(null, null)).toBeNull()
   })
 })

@@ -215,8 +215,12 @@ describe('dashboardSummary', () => {
 
     expect(summary.vacancies).toEqual({
       count: 2, // vacant + make-ready; the two occupied term units don't count
-      totalDailyCostCents: 3_000, // 90_000 / 30, the make-ready unit has no asking rent
+      // vacant: 90_000 / 30 = 3_000. make-ready has no asking rent, but its
+      // last (ended) lease priced it at rentBase (150_000) / 30 = 5_000 -
+      // review finding 9's fallback, not the $0 it used to silently add.
+      totalDailyCostCents: 8_000,
       longestDaysOnMarket: 10,
+      unpricedCount: 0,
     })
 
     expect(summary.leaseExpiry).toEqual({ within90: 1, within120: 2 })
@@ -235,7 +239,12 @@ describe('dashboardSummary', () => {
     const summary = await dashboardSummary(scopeOf([]), asOf)
     expect(summary.collectedVsBilled).toEqual({ billedCents: 0, collectedCents: 0, periodLabel: '' })
     expect(summary.tickets).toEqual({ openCount: 0, glowingCount: 0 })
-    expect(summary.vacancies).toEqual({ count: 0, totalDailyCostCents: 0, longestDaysOnMarket: 0 })
+    expect(summary.vacancies).toEqual({
+      count: 0,
+      totalDailyCostCents: 0,
+      longestDaysOnMarket: 0,
+      unpricedCount: 0,
+    })
     expect(summary.leaseExpiry).toEqual({ within90: 0, within120: 0 })
     expect(summary.pendingApprovals).toEqual({ count: 0 })
   })

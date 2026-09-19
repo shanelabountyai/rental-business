@@ -319,6 +319,21 @@ describe('the lemon view', () => {
     expect(rows.map((row) => row.propertyId)).toEqual(['lemon', 'good'])
   })
 
+  it('carries the unpriced-vacant-unit count through, defaulting to zero', () => {
+    const rows = operatingSnapshot({
+      pandl,
+      lines: [],
+      unitCounts: new Map(),
+      vacantDays: new Map(),
+      availableDays: new Map(),
+      ticketCounts: new Map(),
+      turnCosts: new Map(),
+      unpricedVacantUnits: new Map([['good', 2]]),
+    })
+    expect(rows.find((r) => r.propertyId === 'good')?.unpricedVacantUnitCount).toBe(2)
+    expect(rows.find((r) => r.propertyId === 'lemon')?.unpricedVacantUnitCount).toBe(0)
+  })
+
   it('counts repairs and turn cleaning as maintenance spend, and nothing else', () => {
     const rows = operatingSnapshot({
       pandl: [pandl[0]],
@@ -409,6 +424,20 @@ describe('economicOccupancy', () => {
       scheduledRentCents: 0,
       vacancyLossCents: 0,
       concessionCents: 0,
+    })
+    expect(rate).toBeNull()
+  })
+
+  it('is null, not a flattering number, when a vacant unit in the window is unpriced', () => {
+    // review finding 9: an unpriced vacant day shrinks vacancyLossCents,
+    // which shrinks this denominator and pushes the rate UP - the direction
+    // that hides the problem. Refuse to answer instead.
+    const rate = economicOccupancy({
+      collectedCents: 90_000,
+      scheduledRentCents: 80_000,
+      vacancyLossCents: 15_000,
+      concessionCents: 5_000,
+      unpricedVacantUnitCount: 1,
     })
     expect(rate).toBeNull()
   })

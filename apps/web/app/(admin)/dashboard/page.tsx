@@ -108,7 +108,7 @@ export default async function DashboardPage() {
           value={String(summary.vacancies.count)}
           detail={
             summary.vacancies.count > 0
-              ? `${formatCents(summary.vacancies.totalDailyCostCents)}/day · oldest ${summary.vacancies.longestDaysOnMarket}d`
+              ? `${formatCents(summary.vacancies.totalDailyCostCents)}/day · oldest ${summary.vacancies.longestDaysOnMarket}d${summary.vacancies.unpricedCount > 0 ? ` · +${summary.vacancies.unpricedCount} unpriced` : ''}`
               : undefined
           }
         />
