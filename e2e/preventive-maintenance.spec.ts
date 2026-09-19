@@ -90,6 +90,7 @@ async function scopeTo(page: import('@playwright/test').Page, propertyId: string
 }
 
 test.afterAll(async () => {
+  await prisma.task.deleteMany({ where: { propertyId: { in: propertyIds } } })
   await prisma.workOrder.deleteMany({ where: { propertyId: { in: propertyIds } } })
   await prisma.preventiveMaintenanceTemplate.updateMany({ where: { id: { in: templateIds } }, data: { active: false } })
   await prisma.vendor.updateMany({ where: { id: { in: vendorIds } }, data: { active: false } })
@@ -107,7 +108,15 @@ test('a PM creates a template and runs the batch, auto-assigning by territory', 
   // ranking instead of this test's own.
   const trade = `hvac-${randomUUID().slice(0, 8)}`
   const vendor = await prisma.vendor.create({
-    data: { name: `Territory HVAC-${randomUUID().slice(0, 6)}`, trades: [trade], serviceAreas: ['Houston'], active: true },
+    data: {
+      name: `Territory HVAC-${randomUUID().slice(0, 6)}`,
+      trades: [trade],
+      serviceAreas: ['Houston'],
+      active: true,
+      // Current COI required to auto-assign since R-232 - a null date reads
+      // as no certificate on file, not as current cover (D-232).
+      coiExpiresOn: new Date('2099-01-01'),
+    },
   })
   vendorIds.push(vendor.id)
 
@@ -146,6 +155,55 @@ test('a PM creates a template and runs the batch, auto-assigning by territory', 
   expect(workOrder.propertyId).toBe(property.id)
   expect(workOrder.vendorId).toBe(vendor.id)
   expect(workOrder.status).toBe('SUBMITTED')
+})
+
+test('a batch run skips a vendor with no current COI and raises a Task naming it', async ({ page }) => {
+  const { property, unit } = await seedPropertyAndUnit()
+  const trade = `plumbing-${randomUUID().slice(0, 8)}`
+  const vendor = await prisma.vendor.create({
+    data: {
+      name: `Lapsed Plumbing-${randomUUID().slice(0, 6)}`,
+      trades: [trade],
+      serviceAreas: ['Houston'],
+      active: true,
+      // Never certified - reads as "no COI", not as current cover (D-232).
+      coiExpiresOn: null,
+    },
+  })
+  vendorIds.push(vendor.id)
+
+  const staff = await seedOwner()
+  await signIn(page, staff.email)
+  await scopeTo(page, property.id)
+
+  const templateName = `Water heater flush ${randomUUID().slice(0, 6)}`
+  await page.goto('/maintenance/preventive/new')
+  await page.locator('#field-name').fill(templateName)
+  await page.getByLabel('Trade (optional)').fill(trade)
+  await page.getByLabel('Repeats every (months)').fill('12')
+  await page.getByRole('button', { name: 'Save' }).click()
+  await page.waitForURL(/\/maintenance\/preventive$/)
+
+  const template = await prisma.preventiveMaintenanceTemplate.findFirstOrThrow({
+    where: { name: templateName },
+  })
+  templateIds.push(template.id)
+
+  const row = page.locator('li', { hasText: templateName })
+  await row.getByRole('button', { name: /^Run .* batch \(/ }).click()
+  await expect(row.getByText('Created 1 work order')).toBeVisible()
+  await expect(row.getByText('1 skipped an uninsured vendor')).toBeVisible()
+
+  const workOrder = await prisma.workOrder.findFirstOrThrow({
+    where: { pmTemplateId: template.id, unitId: unit.id },
+  })
+  expect(workOrder.vendorId).toBeNull()
+
+  const task = await prisma.task.findFirstOrThrow({
+    where: { type: 'workorder_vendor_coi_skipped', subjectId: workOrder.id },
+  })
+  expect(task.title).toContain(vendor.name)
+  expect(task.propertyId).toBe(property.id)
 })
 
 test('a batch run leaves a unit unassigned when no vendor works its trade', async ({ page }) => {

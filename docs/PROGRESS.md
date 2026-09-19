@@ -13121,3 +13121,19 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 - `npm test`: added 3 tests (rent roll's primary-tenant + cross-party `lastContactOn`, the waiver report's and the plan report's primary-tenant attribution, each on its own isolated joint-lease fixture with the co-tenant inserted first) — **3,287 passed / 4 skipped** (full sweep, up from 3,284).
 - e2e `reports`, `rent-roll` against the production build, both projects: **22 passed**, matching `--list` (22).
 - CI: R-230's run `35459089141` was in progress when this started; R-229's (`35387587323`) and R-228's (`35379859666`) were green.
+
+## R-232 — preventive maintenance no longer auto-assigns an uninsured or lapsed vendor
+
+**Commit:** (pending — recorded in the follow-up commit)  ·  **Date:** 2026-09-19
+
+**What it built.** Review finding 11 (MAINT-03/MAINT-11). `runPreventiveBatch` picked `fallbackVendorsForTrade(...)[0]` for every generated work order with no COI check at all — R-214/D-232's flagging and warn-and-log both live at dispatch, after the vendor is already on the work order, and a preventive batch is created with nobody reviewing the pick first. [preventive-actions.ts](apps/web/lib/maintenance/preventive-actions.ts) now filters the ranked list to `!coiMissing && !coiExpired` before taking the top candidate; when that changes who gets picked (`ranked[0]` had a COI gap), a `workorder_vendor_coi_skipped` Task names the skipped vendor and lands on the new work order, raised outside the work order's own transaction (same reasoning as the chargeback Task in `workorders/actions.ts`). The batch's notice line now also says how many units were skipped that way. D-249.
+
+**What it decided.** Skip, don't refuse the whole unit: a unit with a COI-gapped vendor as its only match still gets an unassigned work order, same as a unit with no matching trade at all — a PM assigns it by hand either way, now with a Task explaining why nobody was auto-picked. Only the vendor that would have won the ranking is reported; a vendor already ranked below the actual pick was never going to be assigned regardless of its COI, so naming it would be noise.
+
+**What it left behind.** Nothing new. Carried from R-229: `rent.decide` Tasks still have no special queue rendering.
+
+**Gate.**
+- `lint`: 0 errors (16 pre-existing warnings, none new, none in touched files). `typecheck`: clean. No schema change.
+- `npm test`: **3,287 passed / 4 skipped** (unchanged — no new unit tests; the coverage is e2e because the defect is in a server action's ranking, not a pure function).
+- e2e `preventive-maintenance` against the production build, both projects: **6 passed**, matching `--list` (6). Added a case seeding a vendor with `coiExpiresOn: null` and asserting both the unassigned work order and the raised Task's title and property. Updated the existing auto-assign case's vendor fixture to carry a future COI date, since a null one is exactly what this fix now excludes.
+- CI: to be confirmed green after push.

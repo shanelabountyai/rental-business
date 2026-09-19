@@ -2,12 +2,14 @@
 
 import { fallbackVendorsForTrade, vendorCoversProperty } from '@rental/core/vendors'
 import { validatePreventiveTemplate } from '@rental/core/workorders'
+import { businessDate } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { audit } from '@/lib/audit/index.ts'
 import { requirePermission } from '@/lib/auth/guard.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
+import { createTask } from '@/lib/tasks/create.ts'
 import { dueUnitsForTemplate } from '@/lib/maintenance/preventive-queries.ts'
 
 // Writes for preventive-maintenance batch templates (MAINT-08, R-080).
@@ -107,14 +109,22 @@ export async function runPreventiveBatch(
   })
 
   let autoAssigned = 0
+  let coiSkipped = 0
   for (const unit of due) {
     const inTerritory = vendors.filter((v) =>
       vendorCoversProperty(v, { city: unit.propertyCity, postalCode: unit.propertyPostalCode }),
     )
     const ranked = fallbackVendorsForTrade(inTerritory, template.trade, new Date())
-    const vendorId = ranked[0]?.id ?? null
+    // D-232's warn-and-log is right for a human choosing at dispatch; a
+    // batch nobody looks at before the work order exists must not hand an
+    // uninsured or lapsed vendor a job unreviewed (review finding 11).
+    const eligible = ranked.filter((v) => !v.coiMissing && !v.coiExpired)
+    const vendorId = eligible[0]?.id ?? null
     if (vendorId) autoAssigned++
+    // The vendor ranking would have picked, had COI not ruled them out.
+    const skippedVendor = ranked[0] && ranked[0].id !== vendorId ? ranked[0] : null
 
+    let workOrderId = ''
     await prisma.$transaction(async (tx) => {
       const created = await tx.workOrder.create({
         data: {
@@ -126,6 +136,7 @@ export async function runPreventiveBatch(
           vendorId,
         },
       })
+      workOrderId = created.id
       await audit(
         {
           action: 'workorder.created',
@@ -137,11 +148,32 @@ export async function runPreventiveBatch(
         tx,
       )
     })
+
+    if (skippedVendor) {
+      coiSkipped++
+      // Outside the transaction, same reasoning as the chargeback task in
+      // workorders/actions.ts: createTask catches its own unique violation,
+      // and the work order is already committed and must stay that way.
+      await createTask(prisma, {
+        propertyId: unit.propertyId,
+        type: 'workorder_vendor_coi_skipped',
+        subjectType: 'WorkOrder',
+        subjectId: workOrderId,
+        businessDate: businessDate(new Date(), unit.propertyTimezone),
+        priority: 'ROUTINE',
+        title: `${skippedVendor.name} skipped — no current COI on file`,
+      }).catch((error) => {
+        console.error(`[preventive] failed to raise COI-skip task for work order ${workOrderId}`, error)
+      })
+    }
   }
 
   revalidatePath('/workorders')
   revalidatePath('/maintenance/preventive')
   return {
-    notice: `Created ${due.length} work order${due.length === 1 ? '' : 's'} — ${autoAssigned} auto-assigned by territory, ${due.length - autoAssigned} left for you to assign.`,
+    notice:
+      `Created ${due.length} work order${due.length === 1 ? '' : 's'} — ${autoAssigned} auto-assigned by territory, ${due.length - autoAssigned} left for you to assign` +
+      (coiSkipped > 0 ? `, ${coiSkipped} skipped an uninsured vendor` : '') +
+      '.',
   }
 }
