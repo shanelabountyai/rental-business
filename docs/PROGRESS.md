@@ -13124,7 +13124,7 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 
 ## R-232 — preventive maintenance no longer auto-assigns an uninsured or lapsed vendor
 
-**Commit:** (pending — recorded in the follow-up commit)  ·  **Date:** 2026-09-19
+**Commit:** `23ae30a`  ·  **Date:** 2026-09-19
 
 **What it built.** Review finding 11 (MAINT-03/MAINT-11). `runPreventiveBatch` picked `fallbackVendorsForTrade(...)[0]` for every generated work order with no COI check at all — R-214/D-232's flagging and warn-and-log both live at dispatch, after the vendor is already on the work order, and a preventive batch is created with nobody reviewing the pick first. [preventive-actions.ts](apps/web/lib/maintenance/preventive-actions.ts) now filters the ranked list to `!coiMissing && !coiExpired` before taking the top candidate; when that changes who gets picked (`ranked[0]` had a COI gap), a `workorder_vendor_coi_skipped` Task names the skipped vendor and lands on the new work order, raised outside the work order's own transaction (same reasoning as the chargeback Task in `workorders/actions.ts`). The batch's notice line now also says how many units were skipped that way. D-249.
 
