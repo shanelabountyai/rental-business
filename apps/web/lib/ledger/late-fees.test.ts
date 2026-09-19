@@ -465,4 +465,69 @@ describe('waiverPatternByTenant (PAY-04, fair housing)', () => {
     expect(row.feesWaived).toBe(1)
     expect(row.waivedShare).toBeGreaterThan(0)
   }, 20_000)
+
+  it('attributes a joint lease to the PRIMARY tenant, not whichever row comes back first (R-231)', async () => {
+    // Own property so this is isolated from the fixture above - the point is
+    // insertion order, so a shared lease would let the earlier test's rows
+    // decide this one's outcome.
+    const stamp = `waiver-joint-${Date.now()}`
+    const entity = await prisma.legalEntity.create({ data: { name: stamp, type: 'LLC' } })
+    const property = await prisma.property.create({
+      data: {
+        legalEntityId: entity.id,
+        name: `${stamp}-house`,
+        addressLine1: '11 Waiver Way',
+        city: 'Houston',
+        state: 'TX',
+        postalCode: '77002',
+        timezone: 'America/Chicago',
+        propertyType: 'SINGLE_FAMILY',
+      },
+    })
+    const unit = await prisma.unit.create({
+      data: { propertyId: property.id, name: `U-${randomUUID().slice(0, 6)}`, status: 'OCCUPIED' },
+    })
+    const jointLease = await prisma.lease.create({
+      data: {
+        propertyId: property.id,
+        unitId: unit.id,
+        status: 'ACTIVE',
+        startsOn: new Date('2026-01-01'),
+        rentCents: 150_000,
+      },
+    })
+    const coTenant = await prisma.tenant.create({
+      data: { firstName: 'Zed', lastName: `CoTenant-${randomUUID().slice(0, 6)}` },
+    })
+    const primaryTenant = await prisma.tenant.create({
+      data: { firstName: 'Ann', lastName: `Primary-${randomUUID().slice(0, 6)}` },
+    })
+    // Co-tenant inserted FIRST and is not primary.
+    await prisma.leaseTenant.create({
+      data: { leaseId: jointLease.id, tenantId: coTenant.id, isPrimary: false },
+    })
+    await prisma.leaseTenant.create({
+      data: { leaseId: jointLease.id, tenantId: primaryTenant.id, isPrimary: true },
+    })
+    await prisma.charge.create({
+      data: {
+        propertyId: property.id,
+        leaseId: jointLease.id,
+        type: 'LATE_FEE',
+        amountCents: 5_000,
+        description: 'late fee',
+        dueOn: new Date('2026-02-01'),
+      },
+    })
+
+    const rows = await waiverPatternByTenant([property.id])
+    expect(rows).toHaveLength(1)
+    expect(rows[0].tenantId).toBe(primaryTenant.id)
+
+    await prisma.tenant.updateMany({
+      where: { id: { in: [coTenant.id, primaryTenant.id] } },
+      data: { active: false },
+    })
+    await prisma.property.updateMany({ where: { id: property.id }, data: { active: false } })
+  }, 20_000)
 })

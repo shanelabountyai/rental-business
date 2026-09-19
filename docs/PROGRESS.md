@@ -13105,3 +13105,19 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 - `npm test`: **3,284 passed / 4 skipped** (full sweep, up from 3,283 — three new pure-function tests).
 - e2e `operating-report`, `rent-roll`, `dashboard` against the production build, both projects: **40 passed**, matching `--list` (40). Includes the operating report's own axe pass.
 - CI: R-229's run `35387587323` finished **green** (24 min) before this was pushed.
+
+## R-231 — the rent roll, the waiver-pattern report and the plan report now name the PRIMARY tenant, not whichever row comes back first
+
+**Commit:** _pending_  ·  **Date:** 2026-09-19
+
+**What it built.** Review finding 10 (PAY-04/PAY-06/PAY-08). All three fetched `lease.leaseTenants` with no `orderBy` and read `[0]?.tenant` as the row's tenant — on a joint lease, that is whichever order Postgres happens to return, not the household's primary tenant, and the identity is what a fair-housing reviewer reads off `waiverPatternByTenant` and `planOfferPatternByTenant`. Fixed with `orderBy: { isPrimary: 'desc' }` on the `leaseTenants` select in [rent-roll.ts](apps/web/lib/payments/rent-roll.ts), [waiver-report.ts](apps/web/lib/ledger/waiver-report.ts) and [plan-report.ts](apps/web/lib/payments/plan-report.ts). The rent roll's `lastContactOn` had the same bug from the other side — it only ever checked the one tenant landing in `[0]` — so it now takes the latest outbound message across every party on the lease.
+
+**What it decided.** The fix is ordering, not a schema change: `isPrimary` already exists on `LeaseTenant` and nothing forced the query to respect it. No new column, no migration.
+
+**What it left behind.** Nothing new. `rent.decide` Tasks still have no special queue rendering (carried from R-229, still unowned).
+
+**Gate.**
+- `lint`: 0 errors (16 warnings already there, none new). `typecheck`: clean. No schema change.
+- `npm test`: added 3 tests (rent roll's primary-tenant + cross-party `lastContactOn`, the waiver report's and the plan report's primary-tenant attribution, each on its own isolated joint-lease fixture with the co-tenant inserted first) — **3,287 passed / 4 skipped** (full sweep, up from 3,284).
+- e2e `reports`, `rent-roll` against the production build, both projects: **22 passed**, matching `--list` (22).
+- CI: R-230's run `35459089141` was in progress when this started; R-229's (`35387587323`) and R-228's (`35379859666`) were green.

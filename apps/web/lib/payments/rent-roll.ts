@@ -135,6 +135,7 @@ export async function rentRoll(
         property: { select: { name: true, state: true, county: true, timezone: true } },
         unit: { select: { name: true } },
         leaseTenants: {
+          orderBy: { isPrimary: 'desc' },
           select: { tenant: { select: { id: true, firstName: true, lastName: true } } },
         },
         leasePayers: {
@@ -330,9 +331,17 @@ export async function rentRoll(
         0,
       ),
       subsidyCents: subsidy,
-      lastContactOn: tenant && lastContact.has(tenant.id)
-        ? businessDate(lastContact.get(tenant.id)!, zone)
-        : null,
+      // Across EVERY party on the lease, not just the primary tenant - a
+      // household where the co-tenant was texted yesterday and the primary
+      // was last reached in March has been contacted yesterday.
+      lastContactOn: (() => {
+        let latest: Date | null = null
+        for (const lt of lease.leaseTenants) {
+          const contact = lastContact.get(lt.tenant.id)
+          if (contact && (!latest || contact > latest)) latest = contact
+        }
+        return latest ? businessDate(latest, zone) : null
+      })(),
       graceUnknown: rule == null,
       graceDays: rule?.graceDays ?? null,
       chaseHeld: chaseHeldLeases.has(lease.id),

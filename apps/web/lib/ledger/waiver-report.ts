@@ -54,6 +54,7 @@ export async function waiverPatternByTenant(
       lease: {
         select: {
           leaseTenants: {
+            orderBy: { isPrimary: 'desc' },
             select: { tenant: { select: { id: true, firstName: true, lastName: true } } },
           },
         },
@@ -63,10 +64,12 @@ export async function waiverPatternByTenant(
 
   const byTenant = new Map<string, WaiverPatternRow>()
   for (const fee of fees) {
-    // Attributed to the FIRST tenant on the lease. A joint tenancy shares one
-    // ledger, so a per-tenant split would be inventing an attribution the
-    // money does not have - and for the purpose of this report, what matters
-    // is that the household appears once.
+    // Attributed to the PRIMARY tenant on the lease (ordered `isPrimary:
+    // desc`, so this is deterministic rather than whichever row the database
+    // returns first). A joint tenancy shares one ledger, so a per-tenant
+    // split would be inventing an attribution the money does not have - and
+    // for the purpose of this report, what matters is that the household
+    // appears once.
     const tenant = fee.lease.leaseTenants[0]?.tenant
     if (!tenant) continue
 

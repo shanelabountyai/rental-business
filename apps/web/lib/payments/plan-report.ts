@@ -100,6 +100,7 @@ export async function planOfferPatternByTenant(
     select: {
       id: true,
       leaseTenants: {
+        orderBy: { isPrimary: 'desc' },
         select: { tenant: { select: { id: true, firstName: true, lastName: true } } },
       },
     },
@@ -120,10 +121,10 @@ export async function planOfferPatternByTenant(
 
   const rows: PlanOfferRow[] = []
   for (const lease of leases) {
-    // Attributed to the FIRST tenant on the lease, the same call the waiver
-    // report makes: a joint tenancy shares one ledger, so a per-tenant split
-    // would invent an attribution the money does not have, and what matters
-    // here is that the household appears exactly once.
+    // Attributed to the PRIMARY tenant on the lease, the same call the
+    // waiver report makes: a joint tenancy shares one ledger, so a
+    // per-tenant split would invent an attribution the money does not have,
+    // and what matters here is that the household appears exactly once.
     const tenant = lease.leaseTenants[0]?.tenant
     if (!tenant) continue
 
