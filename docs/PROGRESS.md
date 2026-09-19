@@ -13085,7 +13085,7 @@ All three were confirmed red against the previous job before the fix was kept. T
 
 ## R-230 — a vacant unit with no asking rent no longer prices as $0 of vacancy loss
 
-**Commit:** `PENDING`  ·  **Date:** 2026-09-19
+**Commit:** `5ac3e28`  ·  **Date:** 2026-09-19
 
 **What it built.** Review finding 9 (RPT-01/RPT-05/LEASE-12). Three sites silently added a null asking rent as zero:
 - `rentRoll()`'s `vacancyLossCents` ([rent-roll.ts](apps/web/lib/payments/rent-roll.ts)) summed `unit.marketRentCents ?? 0`.
