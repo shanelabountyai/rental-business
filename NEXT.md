@@ -1,12 +1,12 @@
 # Next session
 
-## R-232 is done (`23ae30a`, SHA recorded in `ae429c9`). Start R-233.
+## R-233 is done (`4c93e96`, SHA recorded in `7215f98`). Start R-234.
 
-**First: read CI** with `gh run list --limit 3` and confirm R-232's push run went green.
+**First: read CI** with `gh run list --limit 3` and confirm R-233's push run went green.
 
-**R-233**: an emergency dispatch the provider bounces at night is retried after quiet hours. R-207's `NotifyInput.urgent` is never persisted (its own `KNOWN GAP` at `apps/web/lib/notifications/send.ts:471-479`), so `scheduleRetry` always defers to 08:00 even for an emergency page that should retry immediately. Row 220 in `docs/prds/06-backlog.md`; review finding 12. Fix: a column on `Notification` plus a migration, read by `scheduleRetry`. Its depends-on, R-223, is already ✅, so it is unblocked. This is a schema change (new migration, hand-written per this repo's rule) — Sonnet is fine for the column and the read; run `npm run db:drift` after touching `schema.prisma`, not just `tail`, per the repo's own warning about silent `prisma generate` failures.
+**R-234**: the deposit-dispute packet lists the photographs instead of containing them. `appendPdfs` in `apps/web/lib/deposits/packet.ts:157-166` takes PDFs only, so a JPEG/PNG move-in or move-out photo is named in the packet's text but never appears as a page. Row 221 in `docs/prds/06-backlog.md`; review finding 13. Fix: render JPEG and PNG as pages, move-in above move-out per item, carrying capture time and R-068's stored geotag, limited to D-137's allowlist (never trust `Document.contentType` for what to render — sniff it, same reasoning as `documentResponse`). Its depends-on, R-226, is already ✅ (`baselineMoveInFor` walks a renewal chain to the first lease), so R-234 is unblocked. Size S–M, no schema change expected — Sonnet is fine.
 
-**R-232 left behind:**
+**R-233 left behind:**
 - Nothing new. `rent.decide` Tasks still have no special queue rendering (carried from R-229, still unowned).
 
 **Carried from R-229:**
@@ -22,7 +22,7 @@
 - Whether the portal's `scope.leaseIds` includes a renewed tenant's ended predecessor. R-234 is unblocked.
 
 **Carried from R-225:**
-- No cap check on the MTM rollover rate, no tenant message when an increase is withdrawn, and the R-223 to R-227 migrations are not on the Neon dev branch.
+- No cap check on the MTM rollover rate, no tenant message when an increase is withdrawn, and the R-223 to R-233 migrations are not on the Neon dev branch.
 
 **Traps (carried):**
 - Run e2e through `npm run test:e2e -- <specs>`, never bare `npx playwright test`. The bare command loads no `.env.test`.
