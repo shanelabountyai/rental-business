@@ -13137,3 +13137,20 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 - `npm test`: **3,287 passed / 4 skipped** (unchanged — no new unit tests; the coverage is e2e because the defect is in a server action's ranking, not a pure function).
 - e2e `preventive-maintenance` against the production build, both projects: **6 passed**, matching `--list` (6). Added a case seeding a vendor with `coiExpiresOn: null` and asserting both the unassigned work order and the raised Task's title and property. Updated the existing auto-assign case's vendor fixture to carry a future COI date, since a null one is exactly what this fix now excludes.
 - CI: to be confirmed green after push.
+
+## R-233 — a bounced emergency dispatch retries immediately, not at the next quiet-hours boundary
+
+**Commit:** _pending_  ·  **Date:** 2026-09-20
+
+**What it built.** Review finding 12 (MAINT-03/NOTIF-05), closing R-207's own `KNOWN GAP` comment at `scheduleRetry`. `NotifyInput.urgent` was never persisted, so a retry — which runs off the stored `Notification` row — only ever knew the category, and `scheduleRetry` pushed a bounced emergency dispatch's backoff past quiet hours exactly like a routine one. Added `Notification.urgent Boolean @default(false)` (hand-written migration `20260920120000_r233_notification_urgent`, a plain `ALTER TABLE ... ADD COLUMN`, no trigger needed), written in `record()` from `NotifyInput.urgent`, and read back in `scheduleRetry`'s caller inside `dispatchPendingNotifications` so the quiet-hours push is skipped exactly as `notify()`'s first attempt already skips it.
+
+**What it decided.** No new parameter threading beyond the column — `scheduleRetry` takes `urgent: boolean` the same way it already takes `category` and `propertyId`. Existing callers (`vendors/reissue.ts`, `workorders/actions.ts`) already pass `urgent: workOrder.priority === 'EMERGENCY'` on the first send, so the fix takes effect for them with no caller changes.
+
+**What it left behind.** Nothing new. Carried from R-229: `rent.decide` Tasks still have no special queue rendering.
+
+**Gate.**
+- `lint`: 0 errors (16 pre-existing warnings, none new). `typecheck`: clean. `build`: clean. `check:ship-deps`: clean.
+- `db:drift`: clean after `db:migrate:test` applied the new migration — confirmed by re-running the diff before committing, not just `tail`.
+- `npm test`: **3,288 passed / 4 skipped** (full sweep, up from 3,287 — one new test: a bounced urgent send retries at the plain backoff instant inside quiet hours, mirroring the existing "does not let a retry land inside quiet hours" case with `urgent: true`).
+- No route or UI changed — schema and a server-only module only — so no e2e spec added; `npm test` and `build` are the coverage.
+- CI: to be confirmed green after push.

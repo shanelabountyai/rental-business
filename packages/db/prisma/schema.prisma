@@ -5447,6 +5447,12 @@ model Notification {
   /// staff member's direct action has none.
   eventId    String?
 
+  /// NotifyInput.urgent, persisted (R-233). A fact about the SEND, not the
+  /// category - `mayAutoRetry`/`scheduleRetry` reads it back so a provider
+  /// bounce on an emergency dispatch retries immediately instead of waiting
+  /// for quiet hours to end. See R-207's gap noted at send.ts's scheduleRetry.
+  urgent Boolean @default(false)
+
   createdAt DateTime @default(now())
 
   property Property?             @relation(fields: [propertyId], references: [id])

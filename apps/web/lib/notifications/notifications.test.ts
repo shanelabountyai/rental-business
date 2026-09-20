@@ -749,4 +749,36 @@ describe('retrying a failed delivery', () => {
       )
     }
   })
+
+  it('retries an urgent send immediately, even inside quiet hours', async () => {
+    // R-233, closing R-207's gap: `urgent` is now on the Notification row, so
+    // a provider bounce on an emergency dispatch retries at the backoff
+    // instant instead of waiting for quiet hours to end. Same instant as the
+    // test above, same three-attempt setup - only `urgent` differs.
+    const key = `test:retry-urgent:${randomUUID()}`
+    const outcomes = await notifyOnce({ idempotencyKey: key, urgent: true })
+    const deliveryIds = outcomes
+      .map((o) => o.deliveryId)
+      .filter((id): id is string => id !== undefined)
+    await prisma.notificationDelivery.updateMany({
+      where: { id: { in: deliveryIds } },
+      data: { attempts: 2 },
+    })
+
+    vi.spyOn(notificationAdapter, 'send').mockRejectedValue(
+      new ChannelSendError('http_503', 'still down'),
+    )
+    const failedAt = new Date('2026-08-06T01:55:00Z')
+    await dispatchPendingNotifications(failedAt, 100, { deliveryIds })
+    const deliveries = await prisma.notificationDelivery.findMany({
+      where: { id: { in: deliveryIds } },
+    })
+    for (const delivery of deliveries) {
+      expect(delivery.status).toBe('DEFERRED')
+      // The plain four-hour backoff, not pushed to the next local 08:00.
+      expect(delivery.sendAfter).toEqual(
+        new Date(failedAt.getTime() + 4 * 60 * 60_000),
+      )
+    }
+  })
 })

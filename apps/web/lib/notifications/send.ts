@@ -468,26 +468,22 @@ function baseKeyOf(idempotencyKey: string): string {
  * first attempt failed. Without this a send that fails at 8:55pm comes back
  * four hours later as a text at one in the morning.
  *
- * KNOWN GAP (R-207): `NotifyInput.urgent` does not reach here. It is a fact
- * about the SEND and nothing persists it, while a retry runs from the stored
- * row, which knows only its category - so an emergency vendor dispatch whose
- * first attempt was refused by the provider at 22:40 is retried at 08:00
- * after all. Narrower than the defect R-207 fixed (that one held EVERY
- * emergency dispatch; this one holds only the ones a provider bounced), and
- * closing it means a column on `Notification` plus a migration. Whichever
- * item adds one reads it here.
+ * `urgent` (R-233, closing R-207's gap here) skips that push, same as the
+ * first attempt does in `notify()` above - an emergency vendor dispatch a
+ * provider bounced at 22:40 retries at the backoff instant, not at 08:00.
  */
 async function scheduleRetry(args: {
   attempts: number
   category: NotificationCategory
   propertyId: string | null
+  urgent: boolean
   now: Date
 }): Promise<Date | null> {
   const delay = retryDelayMinutes(args.attempts)
   if (delay === null) return null
 
   const at = new Date(args.now.getTime() + delay * 60_000)
-  if (!args.propertyId || bypassesQuietHours(args.category)) return at
+  if (!args.propertyId || args.urgent || bypassesQuietHours(args.category)) return at
 
   const timezone = (
     await prisma.property.findUnique({
@@ -534,6 +530,7 @@ async function record(db: Db, args: RecordInput): Promise<ChannelOutcome> {
         body: args.body,
         propertyId: args.input.propertyId ?? null,
         eventId: args.input.eventId ?? null,
+        urgent: args.input.urgent ?? false,
         delivery: {
           create: {
             status: args.status,
@@ -694,6 +691,7 @@ export async function dispatchPendingNotifications(
               attempts: delivery.attempts + 1,
               category,
               propertyId: notification.propertyId,
+              urgent: notification.urgent,
               now,
             })
           : null
