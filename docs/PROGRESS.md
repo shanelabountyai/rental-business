@@ -13157,7 +13157,7 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 
 ## R-234 — the deposit-dispute packet now contains its photographs, not just their names
 
-**Commit:** (pending)  ·  **Date:** 2026-09-20
+**Commit:** `67ce6ed`  ·  **Date:** 2026-09-20
 
 **What it built.** Review finding 13 (INSP-05/PAY-11). `appendPdfs` only ever tried `PDFDocument.load` on an exhibit's bytes, so every move-in/move-out photograph R-218 cited fell into `notAttached` by construction — the packet named `IMG_4411.jpg, captured 14 Mar 2024` and never showed it. Fixed in the shared `assemblePacket` (`apps/web/lib/pdf/packet.ts`), not in the deposit packet alone: `sniffPdfEmbeddableFormat` (`apps/web/lib/pdf/render.ts`) identifies an exhibit's real bytes by magic number — never a candidate's `kind` or a stored `Document.contentType`, the same reasoning `documentResponse`'s `nosniff` already applies — and `renderImagePage` embeds a JPEG or PNG as its own captioned page (scaled to fit the margins, never upscaled) before it reaches the existing `appendPdfs`, so the "re-render the index if anything failed" logic needed no change at all. `exportDepositPacket` now pairs each move-out `InspectionItem`'s own baseline photos above its own, joined by `moveInItem`'s id exactly as the comparison table already does — never by matching room/item text — and a move-in item with no move-out counterpart still gets its photos in, unpaired, rather than dropped. Each photo's caption reads `Captured <timestamp> · <lat, lng>` (or `· not geotagged`) off `InspectionPhoto.latitude`/`longitude` (R-068). D-250.
 
