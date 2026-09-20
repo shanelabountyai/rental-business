@@ -13140,7 +13140,7 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 
 ## R-233 — a bounced emergency dispatch retries immediately, not at the next quiet-hours boundary
 
-**Commit:** _pending_  ·  **Date:** 2026-09-20
+**Commit:** `4c93e96`  ·  **Date:** 2026-09-20
 
 **What it built.** Review finding 12 (MAINT-03/NOTIF-05), closing R-207's own `KNOWN GAP` comment at `scheduleRetry`. `NotifyInput.urgent` was never persisted, so a retry — which runs off the stored `Notification` row — only ever knew the category, and `scheduleRetry` pushed a bounced emergency dispatch's backoff past quiet hours exactly like a routine one. Added `Notification.urgent Boolean @default(false)` (hand-written migration `20260920120000_r233_notification_urgent`, a plain `ALTER TABLE ... ADD COLUMN`, no trigger needed), written in `record()` from `NotifyInput.urgent`, and read back in `scheduleRetry`'s caller inside `dispatchPendingNotifications` so the quiet-hours push is skipped exactly as `notify()`'s first attempt already skips it.
 
