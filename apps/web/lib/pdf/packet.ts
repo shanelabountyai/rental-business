@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@rental/db'
-import { appendPdfs } from '@/lib/pdf/render.ts'
+import { appendPdfs, renderImagePage, sniffPdfEmbeddableFormat } from '@/lib/pdf/render.ts'
 import { storage } from '@/lib/storage/index.ts'
 
 // Assembling a packet of archived documents behind a rendered cover sheet
@@ -15,6 +15,10 @@ export interface PacketCandidate {
   label: string
   kind: string
   occurredAt: Date | null
+  /// A second line drawn under a JPEG/PNG exhibit once it is rendered as its
+  /// own page (R-234) - e.g. "Captured Mar 14, 2024 9:12 AM · 30.267100,
+  /// -97.743100". Ignored for anything that does not sniff as an image.
+  imageCaption?: string
 }
 
 /**
@@ -62,12 +66,28 @@ export async function assemblePacket(args: {
   const render = (failed: ReadonlySet<string>) =>
     args.render((documentId) => !unreadable.has(documentId) && !failed.has(documentId))
 
+  // A JPEG or PNG is rendered into its own single-page PDF before it ever
+  // reaches `appendPdfs` (R-234) - identified by its own bytes, never by the
+  // candidate's declared kind or a stored `Document.contentType`, for the
+  // reason `documentResponse` already sniffs rather than trusts. Anything
+  // that fails to embed (or sniffs as neither a PDF nor an image) is handed
+  // through unchanged, so `appendPdfs`'s own parse attempt still names it
+  // not-attached exactly as it does today.
   const attachments = [
     ...leading,
-    ...available.map((row) => ({
-      label: row.candidate.documentId,
-      bytes: new Uint8Array(row.bytes),
-    })),
+    ...(await Promise.all(
+      available.map(async (row) => {
+        const bytes = new Uint8Array(row.bytes)
+        const format = sniffPdfEmbeddableFormat(bytes)
+        if (format !== 'jpg' && format !== 'png') return { label: row.candidate.documentId, bytes }
+        try {
+          const caption = [row.candidate.label, row.candidate.imageCaption].filter(Boolean).join(' — ')
+          return { label: row.candidate.documentId, bytes: await renderImagePage(bytes, format, caption) }
+        } catch {
+          return { label: row.candidate.documentId, bytes }
+        }
+      }),
+    )),
   ]
 
   const first = await appendPdfs(await render(new Set()), attachments)

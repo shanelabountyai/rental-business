@@ -13154,3 +13154,19 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 - `npm test`: **3,288 passed / 4 skipped** (full sweep, up from 3,287 — one new test: a bounced urgent send retries at the plain backoff instant inside quiet hours, mirroring the existing "does not let a retry land inside quiet hours" case with `urgent: true`).
 - No route or UI changed — schema and a server-only module only — so no e2e spec added; `npm test` and `build` are the coverage.
 - CI: to be confirmed green after push.
+
+## R-234 — the deposit-dispute packet now contains its photographs, not just their names
+
+**Commit:** (pending)  ·  **Date:** 2026-09-20
+
+**What it built.** Review finding 13 (INSP-05/PAY-11). `appendPdfs` only ever tried `PDFDocument.load` on an exhibit's bytes, so every move-in/move-out photograph R-218 cited fell into `notAttached` by construction — the packet named `IMG_4411.jpg, captured 14 Mar 2024` and never showed it. Fixed in the shared `assemblePacket` (`apps/web/lib/pdf/packet.ts`), not in the deposit packet alone: `sniffPdfEmbeddableFormat` (`apps/web/lib/pdf/render.ts`) identifies an exhibit's real bytes by magic number — never a candidate's `kind` or a stored `Document.contentType`, the same reasoning `documentResponse`'s `nosniff` already applies — and `renderImagePage` embeds a JPEG or PNG as its own captioned page (scaled to fit the margins, never upscaled) before it reaches the existing `appendPdfs`, so the "re-render the index if anything failed" logic needed no change at all. `exportDepositPacket` now pairs each move-out `InspectionItem`'s own baseline photos above its own, joined by `moveInItem`'s id exactly as the comparison table already does — never by matching room/item text — and a move-in item with no move-out counterpart still gets its photos in, unpaired, rather than dropped. Each photo's caption reads `Captured <timestamp> · <lat, lng>` (or `· not geotagged`) off `InspectionPhoto.latitude`/`longitude` (R-068). D-250.
+
+**What it decided.** The fix lives where both packets already route every exhibit through the same helper, so the eviction packet's identical gap (its own inspection/maintenance/completion/unit photographs) closes for free rather than needing its own row later. D-250 records this as a deliberate, not incidental, behaviour change to R-083. GIF/WEBP/HEIC still report NOT ATTACHED — D-137's browser-render allowlist is broader than what pdf-lib's `embedJpg`/`embedPng` can embed, and that gap is unchanged by this item, not introduced by it.
+
+**What it left behind.** No caption on the eviction packet's own photos — `PacketCandidate.imageCaption` is optional and unset there, since no geotag is plumbed through its candidates today. Nothing new otherwise; carried from R-229: `rent.decide` Tasks still have no special queue rendering.
+
+**Gate.**
+- `lint`: 0 errors (16 pre-existing warnings, none new). `typecheck`: clean. `build`: clean. `check:ship-deps`: clean. No schema change.
+- `npm test`: added 10 tests in `apps/web/lib/pdf/render.test.ts` (`sniffPdfEmbeddableFormat` against real magic bytes for pdf/jpg/png plus a non-match; `renderImagePage` against a hand-built, genuinely valid 1x1 PNG — `node:zlib`'s `deflateSync`/`crc32`, not a committed binary — asserting a real one-page PDF comes back, and that bytes claiming a format they are not throws) — **3,298 passed / 4 skipped** (full sweep, up from 3,288).
+- e2e `deposit-disposition` against the production build, desktop project: **1 passed**, matching `--list` (1) — its fixtures carry no inspection, so the pairing loop runs empty and the existing assertions are unchanged.
+- CI: R-233's push run (`35542717312`) confirmed green (`gh run list`) before this item's own push.

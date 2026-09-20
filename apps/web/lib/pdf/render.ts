@@ -292,6 +292,59 @@ export async function renderBlocksPdf(
 }
 
 /**
+ * Identifies bytes by their magic number, never by a caller's declared type
+ * (R-234, same reasoning as `documentResponse`'s `nosniff`: a `Document`'s
+ * stored `contentType` is whatever the uploader's browser claimed).
+ */
+export function sniffPdfEmbeddableFormat(bytes: Uint8Array): 'pdf' | 'jpg' | 'png' | null {
+  if (bytes.length >= 4 && bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46) {
+    return 'pdf' // %PDF
+  }
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'jpg'
+  if (bytes.length >= 8 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) {
+    return 'png'
+  }
+  return null
+}
+
+/**
+ * Renders one JPEG or PNG as its own single-page PDF, image scaled to fit
+ * within the margins (never upscaled) and captioned below (R-234).
+ *
+ * Returns a real PDF so the caller can hand it to `appendPdfs` exactly like
+ * any other exhibit - no second code path for "the packet contains a page
+ * that happens to be a photograph".
+ */
+export async function renderImagePage(bytes: Uint8Array, format: 'jpg' | 'png', caption: string): Promise<Uint8Array> {
+  const pdf = await PDFDocument.create()
+  const font = await pdf.embedFont(StandardFonts.Helvetica)
+  const image = format === 'jpg' ? await pdf.embedJpg(bytes) : await pdf.embedPng(bytes)
+
+  const maxWidth = PAGE_WIDTH - MARGIN * 2
+  const captionSize = SIZES.footer
+  const captionLines = wrap(caption, font, captionSize, maxWidth)
+  const captionHeight = captionLines.length * captionSize * LINE_HEIGHT
+
+  const maxImageHeight = PAGE_HEIGHT - MARGIN * 2 - captionHeight - 8
+  const scale = Math.min(maxWidth / image.width, maxImageHeight / image.height, 1)
+  const width = image.width * scale
+  const height = image.height * scale
+
+  const page = pdf.addPage([PAGE_WIDTH, PAGE_HEIGHT])
+  const imageY = PAGE_HEIGHT - MARGIN - height
+  page.drawImage(image, { x: MARGIN + (maxWidth - width) / 2, y: imageY, width, height })
+
+  let y = imageY - captionSize * LINE_HEIGHT
+  for (const line of captionLines) {
+    page.drawText(line, { x: MARGIN, y, size: captionSize, font, color: rgb(0.35, 0.35, 0.35) })
+    y -= captionSize * LINE_HEIGHT
+  }
+
+  pdf.setProducer('Rental Operations')
+  return pdf.save()
+}
+
+/**
  * Appends whole PDFs to the end of a rendered document.
  *
  * This is how PAY-09's "Stripe invoice PDFs attached as the underlying

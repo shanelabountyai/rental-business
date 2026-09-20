@@ -1,7 +1,8 @@
+import { deflateSync, crc32 } from 'node:zlib'
 import type { DocumentBlock } from '@rental/core/documents'
 import { PDFArray, PDFDict, PDFDocument, PDFName, PDFString } from 'pdf-lib'
 import { describe, expect, it } from 'vitest'
-import { MONO_LINE_CHARS, renderBlocksPdf } from './render.ts'
+import { MONO_LINE_CHARS, renderBlocksPdf, renderImagePage, sniffPdfEmbeddableFormat } from './render.ts'
 
 // The renderer's own contract (R-051, generalized R-052, tagged R-062).
 // `MONO_LINE_CHARS` is pinned against `packages/core/ledger/statement-document.test.ts`'s
@@ -28,6 +29,28 @@ async function structTreeOf(bytes: Uint8Array) {
 async function languageOf(bytes: Uint8Array): Promise<string | undefined> {
   const pdf = await PDFDocument.load(bytes)
   return pdf.catalog.lookup(PDFName.of('Lang'), PDFString)?.asString()
+}
+
+/// A real, minimal PNG (1x1 RGB) built by hand rather than committed as a
+/// binary - same reasoning as `exif.test.ts`'s fixtures. Deflate + CRC32 come
+/// from `node:zlib` so the bytes are genuinely valid, not merely PNG-shaped.
+function tinyPng(): Buffer {
+  const chunk = (type: string, data: Buffer) => {
+    const typeBuf = Buffer.from(type, 'ascii')
+    const length = Buffer.alloc(4)
+    length.writeUInt32BE(data.length)
+    const crc = Buffer.alloc(4)
+    crc.writeUInt32BE(crc32(Buffer.concat([typeBuf, data])) >>> 0)
+    return Buffer.concat([length, typeBuf, data, crc])
+  }
+  const signature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+  const ihdrData = Buffer.alloc(13)
+  ihdrData.writeUInt32BE(1, 0) // width
+  ihdrData.writeUInt32BE(1, 4) // height
+  ihdrData[8] = 8 // bit depth
+  ihdrData[9] = 2 // color type: RGB
+  const raw = Buffer.from([0, 200, 30, 30]) // filter byte + one RGB pixel
+  return Buffer.concat([signature, chunk('IHDR', ihdrData), chunk('IDAT', deflateSync(raw)), chunk('IEND', Buffer.alloc(0))])
 }
 
 describe('renderBlocksPdf', () => {
@@ -100,5 +123,28 @@ describe('renderBlocksPdf', () => {
     // column widths; this just proves the boundary case doesn't crash the
     // renderer, since mono lines are drawn verbatim, never wrapped.
     expect(Buffer.from(bytes).toString('ascii', 0, 5)).toBe('%PDF-')
+  })
+})
+
+describe('sniffPdfEmbeddableFormat', () => {
+  it('identifies by magic bytes, not by a caller-supplied label (R-234)', () => {
+    expect(sniffPdfEmbeddableFormat(Buffer.from('%PDF-1.7'))).toBe('pdf')
+    expect(sniffPdfEmbeddableFormat(Buffer.from([0xff, 0xd8, 0xff, 0xe0]))).toBe('jpg')
+    expect(sniffPdfEmbeddableFormat(tinyPng())).toBe('png')
+    expect(sniffPdfEmbeddableFormat(Buffer.from('<svg xmlns="…">'))).toBeNull()
+    expect(sniffPdfEmbeddableFormat(Buffer.alloc(0))).toBeNull()
+  })
+})
+
+describe('renderImagePage', () => {
+  it('embeds a real PNG as its own page with a drawn caption', async () => {
+    const bytes = await renderImagePage(tinyPng(), 'png', 'Kitchen — Floor (photo.png)')
+    expect(Buffer.from(bytes).toString('ascii', 0, 5)).toBe('%PDF-')
+    const pdf = await PDFDocument.load(bytes)
+    expect(pdf.getPageCount()).toBe(1)
+  })
+
+  it('rejects bytes that do not decode as the declared format', async () => {
+    await expect(renderImagePage(Buffer.from('not a png'), 'png', 'caption')).rejects.toThrow()
   })
 })

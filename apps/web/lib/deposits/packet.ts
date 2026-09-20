@@ -25,6 +25,18 @@ import { generateStorageKey, storage } from '@/lib/storage/index.ts'
 // every exhibit that could not be included is named on the index, in the
 // document and on the audit row, and the three agree.
 
+/// A move-in/move-out photo's fields for both the packet exhibit and its
+/// caption once R-234 renders it as its own page - capture time and R-068's
+/// stored geotag, shared so the two `photos` selects below cannot drift.
+const PHOTO_SELECT = {
+  id: true,
+  fileName: true,
+  capturedAt: true,
+  createdAt: true,
+  latitude: true,
+  longitude: true,
+} as const
+
 /**
  * Produces and archives the deposit-dispute packet for a lease.
  *
@@ -157,19 +169,28 @@ export async function exportDepositPacket(
         items: {
           orderBy: { order: 'asc' },
           select: {
+            id: true,
             room: true,
             item: true,
             condition: true,
-            moveInItem: { select: { condition: true } },
+            // R-234: id + photos, so a move-out item's own baseline photos
+            // pair above it by the FK - never by matching room/item text,
+            // which a re-labeled room would break.
+            moveInItem: {
+              select: {
+                id: true,
+                condition: true,
+                photos: {
+                  where: { deletedAt: null },
+                  orderBy: { createdAt: 'asc' },
+                  select: PHOTO_SELECT,
+                },
+              },
+            },
             photos: {
               where: { deletedAt: null },
               orderBy: { createdAt: 'asc' },
-              select: {
-                id: true,
-                fileName: true,
-                capturedAt: true,
-                createdAt: true,
-              },
+              select: PHOTO_SELECT,
             },
           },
         },
@@ -247,20 +268,38 @@ export async function exportDepositPacket(
       occurredAt: doc.capturedAt ?? doc.createdAt,
     })
   }
-  for (const [kind, walk] of [
-    ['Move-in photograph', moveIn],
-    ['Move-out photograph', moveOut],
-  ] as const) {
-    for (const item of walk?.items ?? []) {
-      for (const photo of item.photos) {
-        candidates.push({
-          documentId: photo.id,
-          label: `${item.room} — ${item.item} (${photo.fileName})`,
-          kind,
-          occurredAt: photo.capturedAt ?? photo.createdAt,
-        })
-      }
+  // R-234: paired move-in above move-out for the same item, by the item's
+  // own FK - never by matching room/item text (a re-labeled room would
+  // break that), which is why the join walks `moveOut.items[].moveInItem`
+  // rather than the two inspections' item lists side by side.
+  type Photo = { id: string; fileName: string; capturedAt: Date | null; createdAt: Date; latitude: unknown; longitude: unknown }
+  const geotagLabel = (latitude: unknown, longitude: unknown) =>
+    latitude != null && longitude != null ? `${Number(latitude).toFixed(6)}, ${Number(longitude).toFixed(6)}` : 'not geotagged'
+  const photoCandidate = (item: { room: string; item: string }, photo: Photo, kind: 'Move-in photograph' | 'Move-out photograph') => {
+    const occurredAt = photo.capturedAt ?? photo.createdAt
+    return {
+      documentId: photo.id,
+      label: `${item.room} — ${item.item} (${photo.fileName})`,
+      kind,
+      occurredAt,
+      imageCaption: `Captured ${friendlyTimestamp(occurredAt, zone)} · ${geotagLabel(photo.latitude, photo.longitude)}`,
     }
+  }
+
+  const pairedMoveInIds = new Set<string>()
+  for (const item of moveOut?.items ?? []) {
+    if (item.moveInItem) {
+      pairedMoveInIds.add(item.moveInItem.id)
+      for (const photo of item.moveInItem.photos) candidates.push(photoCandidate(item, photo, 'Move-in photograph'))
+    }
+    for (const photo of item.photos) candidates.push(photoCandidate(item, photo, 'Move-out photograph'))
+  }
+  // A move-in item with no move-out counterpart (removed, merged, never
+  // re-inspected) still gets its photographs into the packet - unpaired
+  // rather than dropped.
+  for (const item of moveIn?.items ?? []) {
+    if (pairedMoveInIds.has(item.id)) continue
+    for (const photo of item.photos) candidates.push(photoCandidate(item, photo, 'Move-in photograph'))
   }
   for (const deduction of deposit.deductions) {
     for (const doc of deduction.evidence) {
