@@ -15,7 +15,7 @@ import { auditAsSystem } from '@/lib/audit/system.ts'
 import { getBillingProvider } from '@/lib/billing/provider.ts'
 import { liftSettledNoticeHolds } from '@/lib/holds/notice-hold-lift.ts'
 import { haltedLeasesInProperty, heldSpansInProperty } from '@/lib/holds/queries.ts'
-import { rulesFor } from '@/lib/jurisdiction/queries.ts'
+import { rulesForConfigured } from '@/lib/jurisdiction/queries.ts'
 
 // Assessing late fees (PAY-04; D-4, D-12, R-040, R-050b).
 //
@@ -191,9 +191,7 @@ export async function assessLateFees(
   // notice is settled is the first night its tenancy is assessed again.
   const noticeHoldsLifted = await liftSettledNoticeHolds(propertyId, now)
 
-  const rule = await rulesFor({ state: property.state, county: property.county }, now).catch(
-    () => null,
-  )
+  const rule = await rulesForConfigured({ state: property.state, county: property.county }, now)
   // No configured rule means no fee. NOT a default fee, and not an error:
   // D-4's whole point is that a statutory number comes from configuration,
   // and inventing one for an unconfigured state is how a product charges an

@@ -4,7 +4,7 @@ import { addBusinessDays, businessDateToUtc, utcToBusinessDate } from '@rental/c
 import { prisma } from '@rental/db'
 import { auditAsSystem } from '@/lib/audit/system.ts'
 import { SCHEDULED_JOBS } from '@/lib/jobs/runner.ts'
-import { rulesFor } from '@/lib/jurisdiction/queries.ts'
+import { rulesForConfigured } from '@/lib/jurisdiction/queries.ts'
 import { itemsFromMoveIn } from '@/lib/inspections/move-out-copy.ts'
 import { createTask } from '@/lib/tasks/create.ts'
 
@@ -39,7 +39,7 @@ SCHEDULED_JOBS.push({
     // state yet, both read the same way here: nothing is scheduled. Neither
     // is an error - see JurisdictionRuleNotFoundError's own comment and the
     // schema's "null means unreviewed" posture on this column.
-    const rule = await rulesFor(property, new Date()).catch(() => null)
+    const rule = await rulesForConfigured(property, new Date())
     if (!rule?.preMoveOutWalkthroughRequired) return { checked: 0, scheduled: 0 }
     const daysBefore = rule.preMoveOutWalkthroughDaysBefore ?? 0
 

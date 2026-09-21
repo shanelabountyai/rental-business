@@ -44,6 +44,30 @@ export async function rulesFor(
   return rule
 }
 
+/**
+ * `rulesFor`, but an unconfigured state reads as `null` instead of throwing -
+ * for the many callers whose documented behaviour for "no rule configured"
+ * is a fallback (no fee, no schedule, not-yet-reviewed) rather than an error.
+ *
+ * ONLY `JurisdictionRuleNotFoundError` is swallowed. Anything else - a real
+ * database failure - propagates, so the job run that hit it is recorded
+ * `failed` and shows up on `/jobs` instead of silently doing nothing (R-238).
+ * A bare `.catch(() => null)` at the call site cannot make that distinction;
+ * that was R-238's actual bug, duplicated at all eight call sites this
+ * replaces.
+ */
+export async function rulesForConfigured(
+  property: { state: string; county?: string | null },
+  asOf: Date,
+): Promise<JurisdictionRule | null> {
+  try {
+    return await rulesFor(property, asOf)
+  } catch (error) {
+    if (error instanceof JurisdictionRuleNotFoundError) return null
+    throw error
+  }
+}
+
 /// One row per configured (state, jurisdiction) pair - whichever version is
 /// in force on `asOf`. Powers the admin list; not exercised by any other
 /// consumer, so it stays a plain JS group-by rather than a query built for a

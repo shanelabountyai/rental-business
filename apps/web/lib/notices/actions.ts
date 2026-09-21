@@ -12,7 +12,7 @@ import { audit } from '@/lib/audit/index.ts'
 import { actorCan, propertyResource, requirePermission } from '@/lib/auth/guard.ts'
 import { applyPaymentHold } from '@/lib/payments/legal-hold.ts'
 import { extractCapturedAt } from '@/lib/documents/exif.ts'
-import { rulesFor } from '@/lib/jurisdiction/queries.ts'
+import { rulesForConfigured } from '@/lib/jurisdiction/queries.ts'
 import { generateStorageKey, storage } from '@/lib/storage/index.ts'
 import { renderNoticePdf } from './pdf.ts'
 
@@ -93,10 +93,10 @@ export async function generateNoticePdf(noticeId: string): Promise<FormState> {
     return { error: 'This notice has no body text to render.' }
   }
 
-  const rule = await rulesFor(
+  const rule = await rulesForConfigured(
     { state: notice.property.state, county: notice.property.county },
     new Date(),
-  ).catch(() => null)
+  )
 
   // EITHER a lease or an applicant, never both (the CHECK constraint, R-061)
   // - `notice.lease`/`notice.applicant` are the two names on the letter's
@@ -250,10 +250,10 @@ export async function recordNoticeService(
     }
   }
 
-  const rule = await rulesFor(
+  const rule = await rulesForConfigured(
     { state: notice.property.state, county: notice.property.county },
     servedAt,
-  ).catch(() => null)
+  )
   // Recorded as it stood AT SERVICE, never recomputed later: D-4 says rules
   // apply prospectively and changing one never rewrites what it produced, so
   // a state that legalises door-posting next year must not retroactively make

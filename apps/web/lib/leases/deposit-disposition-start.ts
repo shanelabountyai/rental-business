@@ -8,7 +8,7 @@ import {
 } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { createTask } from '@/lib/tasks/create.ts'
-import { rulesFor } from '@/lib/jurisdiction/queries.ts'
+import { rulesForConfigured } from '@/lib/jurisdiction/queries.ts'
 
 // Starts the statutory countdown "from the recorded move-out date" (INSP-03,
 // R-071) - `Lease.moveOutAt`, the real fact `changeLeaseStatus` stamps on
@@ -43,7 +43,7 @@ export async function startDepositDisposition(leaseId: string): Promise<StartDis
   if (!deposit || !lease.moveOutAt) return { reason: 'no_deposit' }
   if (deposit.dispositionDueOn != null) return { reason: 'already_started' }
 
-  const rule = await rulesFor(lease.property, new Date()).catch(() => null)
+  const rule = await rulesForConfigured(lease.property, new Date())
   if (!rule?.depositDispositionDays) return { reason: 'no_rule_configured' }
 
   // `moveOutAt` is a real TIMESTAMP (`changeLeaseStatus` stamps `new Date()`),

@@ -21,7 +21,7 @@ import { redirect } from 'next/navigation'
 import { audit } from '@/lib/audit/index.ts'
 import { propertyResource, requirePermission, requireScope } from '@/lib/auth/guard.ts'
 import { extractCapturedAt } from '@/lib/documents/exif.ts'
-import { rulesFor } from '@/lib/jurisdiction/queries.ts'
+import { rulesForConfigured } from '@/lib/jurisdiction/queries.ts'
 import { getAbandonmentCase } from '@/lib/abandonment/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 import { generateStorageKey, storage } from '@/lib/storage/index.ts'
@@ -259,10 +259,10 @@ export async function recordEntry(
     ? wallClockToUtc(noticeServedAtLocal, found.timezone)
     : null
 
-  const rule = await rulesFor(
+  const rule = await rulesForConfigured(
     { state: found.state, county: found.county },
     enteredAt,
-  ).catch(() => null)
+  )
 
   const decision = entryDecision({
     scheduledStart: enteredAt,
@@ -473,9 +473,7 @@ export async function disposeBelongings(
     return { error: 'Nothing is recorded as held on this case.' }
   }
 
-  const rule = await rulesFor({ state: found.state, county: found.county }, new Date()).catch(
-    () => null,
-  )
+  const rule = await rulesForConfigured({ state: found.state, county: found.county }, new Date())
   const today = businessDate(new Date(), found.timezone)
 
   const decision = disposalReadiness({

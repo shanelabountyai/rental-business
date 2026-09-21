@@ -10,7 +10,7 @@ import {
 import type { CollectionMethod } from '@rental/core/payments'
 import { getBillingProvider } from '@/lib/billing/provider.ts'
 import { createPaymentMethodSetup } from '@/lib/billing/provision.ts'
-import { rulesFor } from '@/lib/jurisdiction/queries.ts'
+import { rulesForConfigured } from '@/lib/jurisdiction/queries.ts'
 import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { audit } from '@/lib/audit/index.ts'
@@ -102,10 +102,10 @@ export async function setDebitDay(
   })
   if (!payer) return { error: 'There is no account set up to pay against yet.' }
 
-  const rule = await rulesFor(
+  const rule = await rulesForConfigured(
     { state: payer.lease.property.state, county: payer.lease.property.county },
     new Date(),
-  ).catch(() => null)
+  )
 
   const decision = debitDayDecision({
     debitDay,

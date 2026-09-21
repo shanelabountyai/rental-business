@@ -12,7 +12,7 @@ import {
 } from '@rental/core/scheduling'
 import { planTurn, TURN_STALL_DAYS } from '@rental/core/turnover'
 import { prisma } from '@rental/db'
-import { rulesFor } from '@/lib/jurisdiction/queries.ts'
+import { rulesForConfigured } from '@/lib/jurisdiction/queries.ts'
 import { SCHEDULED_JOBS } from '@/lib/jobs/runner.ts'
 import { REPAIR_CLOCK_RUNNING } from '@/lib/maintenance/habitability-clock.ts'
 import { alreadyFlagged } from '@/lib/tasks/already-flagged.ts'
@@ -154,7 +154,7 @@ async function checkViolations(
 
   // Configuration failure falls to the fallback number, same posture
   // `violations/queries.ts`'s own `cureFor` takes for a missing rule row.
-  const rule = await rulesFor(property, new Date()).catch(() => null)
+  const rule = await rulesForConfigured(property, new Date())
   const stallDays = rule?.leaseViolationCureDays ?? VIOLATION_UNSERVED_STALL_DAYS_FALLBACK
 
   let flagged = 0
@@ -356,7 +356,7 @@ async function checkHabitabilityRepairs(
   })
   if (tickets.length === 0) return { checked: 0, flagged: 0 }
 
-  const rule = await rulesFor(property, new Date()).catch(() => null)
+  const rule = await rulesForConfigured(property, new Date())
   if (rule?.habitabilityRepairDays == null) return { checked: tickets.length, flagged: 0 }
   const days = rule.habitabilityRepairDays
 

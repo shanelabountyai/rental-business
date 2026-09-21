@@ -36,7 +36,7 @@ import { retireUnitAccessCodes } from '@/lib/locks/access-codes.ts'
 import { startTurnoverProjectForLease } from '@/lib/turnover/start.ts'
 import { authUrl, canReceiveAuthLink } from '@/lib/auth/delivery.ts'
 import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
-import { rulesFor } from '@/lib/jurisdiction/queries.ts'
+import { rulesForConfigured } from '@/lib/jurisdiction/queries.ts'
 import { dispatchPendingNotifications, notify } from '@/lib/notifications/send.ts'
 import { activateLeaseSideEffects } from './activate.ts'
 import { raiseIntakeTasks } from './intake.ts'
@@ -289,10 +289,10 @@ async function depositCapViolations(
   })
   if (!property) return []
 
-  const rule = await rulesFor(
+  const rule = await rulesForConfigured(
     { state: property.state, county: property.county },
     new Date(),
-  ).catch(() => null)
+  )
   if (!rule) return []
 
   return validateDepositAmount({
@@ -806,10 +806,10 @@ export async function recordLeaseNotice(
   const decision = canGiveNotice({ status: lease.status, noticeGivenAt: lease.noticeGivenAt })
   if (!decision.allowed) return { error: decision.message }
 
-  const rule = await rulesFor(
+  const rule = await rulesForConfigured(
     { state: lease.property.state, county: lease.property.county },
     givenOn,
-  ).catch(() => null)
+  )
 
   // PRD §7's "just-cause jurisdiction flag" - required BEFORE either warning
   // below, because it is not conditional on timing the way they are: a

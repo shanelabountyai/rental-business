@@ -13,7 +13,7 @@ import {
 import { prisma, type Prisma } from '@rental/db'
 import { audit } from '@/lib/audit/index.ts'
 import { authUrl, canReceiveAuthLink } from '@/lib/auth/delivery.ts'
-import { rulesFor } from '@/lib/jurisdiction/queries.ts'
+import { rulesForConfigured } from '@/lib/jurisdiction/queries.ts'
 import { dispatchPendingNotifications, notify } from '@/lib/notifications/send.ts'
 
 // A rent increase on a running tenancy (LEASE-09, R-225; review 2026-09-17
@@ -102,10 +102,10 @@ export async function planRentIncrease(args: {
 
   // An unconfigured jurisdiction fails OPEN, same as `renewalRentCheckFor`:
   // no rule means neither statutory number is on file.
-  const rule = await rulesFor(
+  const rule = await rulesForConfigured(
     { state: lease.property.state, county: lease.property.county },
     businessDateToUtc(today),
-  ).catch(() => null)
+  )
   const decision = renewalRentCheck({
     currentRentCents: lease.rentCents,
     proposedRentCents: args.toCents,

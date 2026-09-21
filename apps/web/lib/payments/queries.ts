@@ -12,7 +12,7 @@ import {
 import type { CollectionMethod, PaymentRail } from '@rental/core/payments'
 import { businessDate } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
-import { rulesFor } from '@/lib/jurisdiction/queries.ts'
+import { rulesForConfigured } from '@/lib/jurisdiction/queries.ts'
 import type { ResolvedScope } from '@/lib/scope/types.ts'
 import type { TenantScope } from '@rental/core/portal'
 
@@ -150,10 +150,10 @@ export async function paymentView(scope: TenantScope): Promise<PaymentView | nul
       where: { leasePayerId: payer.id, status: 'PENDING' },
       _sum: { amountCents: true },
     }),
-    rulesFor(
+    rulesForConfigured(
       { state: payer.lease.property.state, county: payer.lease.property.county },
       new Date(),
-    ).catch(() => null),
+    ),
   ])
 
   const balance = balanceCents(

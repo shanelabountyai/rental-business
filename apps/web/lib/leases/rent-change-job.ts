@@ -13,7 +13,7 @@ import {
 import { prisma } from '@rental/db'
 import { syncLease } from '@/lib/billing/lifecycle.ts'
 import { SCHEDULED_JOBS } from '@/lib/jobs/runner.ts'
-import { rulesFor } from '@/lib/jurisdiction/queries.ts'
+import { rulesForConfigured } from '@/lib/jurisdiction/queries.ts'
 import { createTask } from '@/lib/tasks/create.ts'
 
 // The rent-increase cutover (LEASE-09, R-225). A raise typed on the lease
@@ -75,10 +75,10 @@ SCHEDULED_JOBS.push({
         if (!change.notice.servedAt) return 'The rent increase notice was never served.'
         if (change.overrideReason) return null
         const servedOn = businessDateOf(change.notice.servedAt, lease.property.timezone)
-        const rule = await rulesFor(
+        const rule = await rulesForConfigured(
           { state: lease.property.state, county: lease.property.county },
           change.notice.servedAt,
-        ).catch(() => null)
+        )
         const decision = renewalRentCheck({
           currentRentCents: change.fromCents,
           proposedRentCents: change.toCents,

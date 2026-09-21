@@ -10,7 +10,7 @@ import {
 } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { auditAsSystem } from '@/lib/audit/system.ts'
-import { rulesFor } from '@/lib/jurisdiction/queries.ts'
+import { rulesForConfigured } from '@/lib/jurisdiction/queries.ts'
 
 // Lifting a served notice's late-fee stop (R-227, review 2026-09-17 finding 6).
 //
@@ -63,15 +63,9 @@ export async function liftSettledNoticeHolds(propertyId: string, now: Date): Pro
   })
   // Resolved as `cureClockFor` resolves it: an unconfigured state has no cure
   // period, so its clock never expires and only a cure or a closed case lifts.
-  let payOrQuitDays: number | null = null
-  let dayCount: DayCountRule = UNREVIEWED_DAY_COUNT
-  try {
-    const rule = await rulesFor(property, now)
-    payOrQuitDays = rule.payOrQuitDays
-    dayCount = rule
-  } catch {
-    payOrQuitDays = null
-  }
+  const rule = await rulesForConfigured(property, now)
+  const payOrQuitDays: number | null = rule?.payOrQuitDays ?? null
+  const dayCount: DayCountRule = rule ?? UNREVIEWED_DAY_COUNT
   const today = businessDate(now, property.timezone)
 
   let lifted = 0

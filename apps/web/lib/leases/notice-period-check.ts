@@ -2,7 +2,7 @@ import 'server-only'
 
 import { noticePeriodCheck, type NoticePeriodDecision } from '@rental/core/leases'
 import { UNREVIEWED_DAY_COUNT, businessDateToUtc, type BusinessDate } from '@rental/core/scheduling'
-import { rulesFor } from '@/lib/jurisdiction/queries.ts'
+import { rulesForConfigured } from '@/lib/jurisdiction/queries.ts'
 
 // The database half of the notice-period guard (LEASE-11, R-066; D-4).
 // packages/core/leases/notice-to-vacate.ts decides; this fetches the one
@@ -29,10 +29,10 @@ export async function noticePeriodCheckFor(args: {
   // Effective-dated on the DAY notice was given rather than on the instant
   // this runs: which version of a statute governs a notice is a question
   // about the day it was served.
-  const rule = await rulesFor(
+  const rule = await rulesForConfigured(
     { state: args.propertyState, county: args.propertyCounty },
     businessDateToUtc(args.givenOn),
-  ).catch(() => null)
+  )
 
   return noticePeriodCheck({
     givenOn: args.givenOn,

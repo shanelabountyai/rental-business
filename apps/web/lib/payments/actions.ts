@@ -14,7 +14,7 @@ import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { audit } from '@/lib/audit/index.ts'
 import { getBillingProvider } from '@/lib/billing/provider.ts'
-import { rulesFor } from '@/lib/jurisdiction/queries.ts'
+import { rulesForConfigured } from '@/lib/jurisdiction/queries.ts'
 import { requireTenantWithScope } from '@/lib/portal/guard.ts'
 import { payLinkRejection, verifyPayLink } from '@/lib/portal/pay-link.ts'
 import { holdFrom, recordHoldRefusal } from './legal-hold.ts'
@@ -177,10 +177,10 @@ async function chargeResolvedPayer(
       where: { leasePayerId: payer.id, status: 'PENDING' },
       _sum: { amountCents: true },
     }),
-    rulesFor(
+    rulesForConfigured(
       { state: payer.lease.property.state, county: payer.lease.property.county },
       new Date(),
-    ).catch(() => null),
+    ),
   ])
 
   const facts = {

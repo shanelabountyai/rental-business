@@ -7,6 +7,7 @@ import {
   listCurrentRules,
   listRuleVersions,
   rulesFor,
+  rulesForConfigured,
 } from './queries.ts'
 
 // Against a real database, and a fake state code ("ZZ") rather than a real
@@ -88,6 +89,37 @@ describe('rulesFor', () => {
     await expect(rulesFor({ state: UNCONFIGURED }, new Date())).rejects.toThrow(
       JurisdictionRuleNotFoundError,
     )
+  })
+})
+
+describe('rulesForConfigured', () => {
+  it('resolves the configured rule, exactly like rulesFor', async () => {
+    const rule = await rulesForConfigured({ state: 'ZZ' }, new Date('2026-06-01'))
+    expect(rule?.graceDays).toBe(2)
+  })
+
+  it('returns null, not a throw, for a state with no configuration at all', async () => {
+    await expect(rulesForConfigured({ state: UNCONFIGURED }, new Date())).resolves.toBeNull()
+  })
+
+  // R-238: the bug this exists to fix. A bare `.catch(() => null)` at the
+  // call site could not tell "unconfigured state" apart from "the query
+  // itself failed" - both read as null. Only JurisdictionRuleNotFoundError
+  // may be swallowed; anything else must still surface as a failed job run.
+  // A manual swap-and-restore of the model method, not `vi.spyOn` - spying on
+  // this Prisma client's delegate leaves `findMany` permanently undefined for
+  // every test after it in the same file, even through `vi.restoreAllMocks`.
+  it('propagates a real database error rather than reading it as no rule configured', async () => {
+    const original = prisma.jurisdictionRule.findMany
+    prisma.jurisdictionRule.findMany = (() =>
+      Promise.reject(new Error('connection reset'))) as typeof original
+    try {
+      await expect(rulesForConfigured({ state: 'ZZ' }, new Date())).rejects.toThrow(
+        'connection reset',
+      )
+    } finally {
+      prisma.jurisdictionRule.findMany = original
+    }
   })
 })
 

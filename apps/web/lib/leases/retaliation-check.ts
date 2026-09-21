@@ -9,7 +9,7 @@ import {
 } from '@rental/core/leases'
 import { businessDate } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
-import { rulesFor } from '@/lib/jurisdiction/queries.ts'
+import { rulesForConfigured } from '@/lib/jurisdiction/queries.ts'
 
 // The database half of the retaliation-claim guard (RISK-06, R-055; D-4).
 // packages/core/leases/retaliation.ts decides; this fetches the two facts
@@ -32,10 +32,12 @@ import { rulesFor } from '@/lib/jurisdiction/queries.ts'
  * is outside the window, every earlier one necessarily is too.
  *
  * A missing JurisdictionRule (an unconfigured state) fails CLOSED for this
- * check specifically - `.catch(() => null)` - rather than throwing the way
- * `rulesFor` does for a fee or a grace period: those numbers are required to
- * compute a bill at all, but a guard with nothing to warn about is simply
- * silent, the same posture a null `retaliationWindowDays` already takes.
+ * check specifically - `rulesForConfigured`, not `rulesFor` - rather than
+ * throwing the way `rulesFor` does for a fee or a grace period: those numbers
+ * are required to compute a bill at all, but a guard with nothing to warn
+ * about is simply silent, the same posture a null `retaliationWindowDays`
+ * already takes. A real database error still propagates (R-238) - only an
+ * unconfigured state reads as null.
  */
 export async function retaliationCheckFor(args: {
   leaseId: string
@@ -43,10 +45,10 @@ export async function retaliationCheckFor(args: {
   propertyCounty: string | null
   actionDate: Date
 }): Promise<RetaliationWarning | null> {
-  const rule = await rulesFor(
+  const rule = await rulesForConfigured(
     { state: args.propertyState, county: args.propertyCounty },
     args.actionDate,
-  ).catch(() => null)
+  )
   if (!rule?.retaliationWindowDays) return null
 
   const [ticket, accommodation] = await Promise.all([

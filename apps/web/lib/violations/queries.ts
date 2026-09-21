@@ -10,7 +10,7 @@ import type {
   ViolationStatus,
 } from '@rental/core/violations'
 import { prisma } from '@rental/db'
-import { rulesFor } from '@/lib/jurisdiction/queries.ts'
+import { rulesForConfigured } from '@/lib/jurisdiction/queries.ts'
 import type { ResolvedScope } from '@/lib/scope/types.ts'
 
 // Reads for lease-violation case files (RISK-02, RISK-03; R-088).
@@ -134,10 +134,10 @@ async function cureFor(row: NonNullable<CaseRow>): Promise<CureClock> {
   // Throws when this state has no rule row at all, which is a configuration
   // failure rather than a case-file one - the clock then reports "not
   // configured" instead of taking the page down with it.
-  const rule = await rulesFor(
+  const rule = await rulesForConfigured(
     { state: row.property.state, county: row.property.county },
     new Date(),
-  ).catch(() => null)
+  )
   const services = row.notices.flatMap((notice) =>
     notice.deliveries.map((delivery) => ({
       servedOn: utcToBusinessDate(delivery.servedAt),

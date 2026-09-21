@@ -5,7 +5,7 @@ import { formatCents } from '@rental/core/money'
 import { utcToBusinessDate } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { auditAsSystem } from '@/lib/audit/system.ts'
-import { rulesFor } from '@/lib/jurisdiction/queries.ts'
+import { rulesForConfigured } from '@/lib/jurisdiction/queries.ts'
 import { getBillingProvider } from './provider.ts'
 
 // Charging a utility bill on to the tenants (PAY-08, R-042; D-4, D-12).
@@ -104,10 +104,10 @@ export async function allocateBill(
   // D-4: the statutory question is asked of the versioned rule, never of a
   // literal. A state nobody has configured is a real gap and fails loudly
   // rather than defaulting to "yes, charge it on".
-  const rule = await rulesFor(
+  const rule = await rulesForConfigured(
     { state: bill.property.state, county: bill.property.county },
     new Date(),
-  ).catch(() => null)
+  )
   if (!rule) {
     return {
       outcome: 'no_rule',

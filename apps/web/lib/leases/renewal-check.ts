@@ -2,7 +2,7 @@ import 'server-only'
 
 import { renewalRentCheck, type RenewalRentDecision } from '@rental/core/leases'
 import { UNREVIEWED_DAY_COUNT, businessDateToUtc, type BusinessDate } from '@rental/core/scheduling'
-import { rulesFor } from '@/lib/jurisdiction/queries.ts'
+import { rulesForConfigured } from '@/lib/jurisdiction/queries.ts'
 
 // The database half of the renewal rent-increase guard (LEASE-09, R-065;
 // D-4). packages/core/leases/renewal.ts decides; this fetches the one fact
@@ -25,10 +25,10 @@ export async function renewalRentCheckFor(args: {
   // `retaliationCheckFor` takes: a missing rule means neither statutory
   // number is on file, not that the offer should be refused outright over a
   // gap in this product's own configuration.
-  const rule = await rulesFor(
+  const rule = await rulesForConfigured(
     { state: args.propertyState, county: args.propertyCounty },
     businessDateToUtc(args.offeredOn),
-  ).catch(() => null)
+  )
 
   return renewalRentCheck({
     currentRentCents: args.currentRentCents,

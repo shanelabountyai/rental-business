@@ -19,7 +19,7 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { audit } from '@/lib/audit/index.ts'
 import { propertyResource, requirePermission, requireScope } from '@/lib/auth/guard.ts'
-import { rulesFor } from '@/lib/jurisdiction/queries.ts'
+import { rulesForConfigured } from '@/lib/jurisdiction/queries.ts'
 import { retireUnitAccessCodes } from '@/lib/locks/access-codes.ts'
 import { issueTenantLockCodeFor, revokeTenantLockCodes } from '@/lib/locks/tenant-codes.ts'
 import {
@@ -586,10 +586,10 @@ export async function recordEarlyTermination(
   // rather than throwing, so the operator gets the sentence that says what to
   // do instead of a 500. Failing OPEN in the sense that matters: nothing
   // about the case, the lock change or the retired codes waits on this.
-  const rule = await rulesFor(
+  const rule = await rulesForConfigured(
     { state: found.lease.property.state, county: found.lease.property.county },
     businessDateToUtc(deliveredOn),
-  ).catch(() => null)
+  )
 
   const decision = earlyTermination({
     deliveredOn,

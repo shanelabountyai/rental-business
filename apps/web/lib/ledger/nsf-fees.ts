@@ -6,7 +6,7 @@ import { businessDate, businessDateToUtc } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { auditAsSystem } from '@/lib/audit/system.ts'
 import { getBillingProvider } from '@/lib/billing/provider.ts'
-import { rulesFor } from '@/lib/jurisdiction/queries.ts'
+import { rulesForConfigured } from '@/lib/jurisdiction/queries.ts'
 
 // The returned-payment fee (PAY-02, R-039a; D-4, D-12).
 //
@@ -75,9 +75,7 @@ export async function assessNsfFee(args: {
   // whole point is that a statutory number comes from configuration, and
   // inventing one for an unconfigured state is how a product charges an
   // unlawful fee in a market nobody has set up yet.
-  const rule = await rulesFor({ state: property.state, county: property.county }, now).catch(
-    () => null,
-  )
+  const rule = await rulesForConfigured({ state: property.state, county: property.county }, now)
   if (!rule) {
     return { chargeId: null, amountCents: 0, reason: 'not_permitted_here' }
   }

@@ -3,7 +3,7 @@ import 'server-only'
 import { type HabitabilityRepairClock, habitabilityRepairClock } from '@rental/core/maintenance'
 import { type BusinessDate, businessDate } from '@rental/core/scheduling'
 import { type Prisma, prisma, TicketStatus, WorkOrderStatus } from '@rental/db'
-import { rulesFor } from '@/lib/jurisdiction/queries.ts'
+import { rulesForConfigured } from '@/lib/jurisdiction/queries.ts'
 
 // R-217: what "repaired" means for the habitability repair clock, shared by
 // the stall sweep (lib/cases/case-stall-job.ts) and the ticket page so the
@@ -53,7 +53,7 @@ export async function repairDeadlineFor(ticketId: string, today: BusinessDate): 
     },
   })
   if (!ticket) return { kind: 'not_applicable' }
-  const rule = await rulesFor(ticket.property, new Date()).catch(() => null)
+  const rule = await rulesForConfigured(ticket.property, new Date())
   const clock = habitabilityRepairClock(
     businessDate(ticket.createdAt, ticket.property.timezone),
     rule?.habitabilityRepairDays ?? null,

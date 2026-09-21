@@ -7,7 +7,7 @@ import {
 } from '@rental/core/ledger'
 import { businessDate, dueDateOnOrBefore } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
-import { rulesFor } from '@/lib/jurisdiction/queries.ts'
+import { rulesForConfigured } from '@/lib/jurisdiction/queries.ts'
 import { leaseBalanceCents, outstandingCharges } from '@/lib/ledger/queries.ts'
 
 // WHICH DEBT DID THIS PAYMENT PAY OFF? (PAY-03, D-4, D-12, R-035.)
@@ -90,10 +90,10 @@ export async function planAllocation(args: {
   // `allocationOrderFor` supplies core's documented default, which is
   // RENT-first precisely because it is the reading least likely to leave
   // rent looking unpaid.
-  const rule = await rulesFor(
+  const rule = await rulesForConfigured(
     { state: payer.property.state, county: payer.property.county },
     args.occurredAt,
-  ).catch(() => null)
+  )
   const order = allocationOrderFor(rule ?? { paymentAllocationOrder: [] })
 
   // The part of the balance no `Charge` row accounts for. That is ordinary

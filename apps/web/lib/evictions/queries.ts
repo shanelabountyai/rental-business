@@ -20,7 +20,7 @@ import {
   utcToBusinessDate,
 } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
-import { rulesFor } from '@/lib/jurisdiction/queries.ts'
+import { rulesForConfigured } from '@/lib/jurisdiction/queries.ts'
 import type { ResolvedScope } from '@/lib/scope/current-scope.ts'
 
 // Reads for eviction case files (PAY-14, R-083). Scoped by ResolvedScope,
@@ -108,15 +108,13 @@ export async function cureClockFor(evictionCase: EvictionCaseDetail) {
   // is. An unconfigured state has neither, and `UNREVIEWED_DAY_COUNT` is what
   // that absence looks like - `cureClock` reports no deadline at all there.
   let dayCount: DayCountRule = UNREVIEWED_DAY_COUNT
-  try {
-    const rule = await rulesFor(evictionCase.property, new Date())
+  const rule = await rulesForConfigured(evictionCase.property, new Date())
+  if (rule) {
     payOrQuitDays = rule.payOrQuitDays
     acceptanceWaivesNotice = rule.acceptanceWaivesNotice
     acceptanceWaiverNote = rule.acceptanceWaiverNote
     partialPaymentCures = rule.partialPaymentCures
     dayCount = rule
-  } catch {
-    payOrQuitDays = null
   }
 
   // `CURE_NOTICE_TYPES` is the one list, shared with `attachableNotices`
@@ -263,12 +261,7 @@ export async function cureDemandFor(evictionCase: EvictionCaseDetail) {
   // Same resolver and same "no rule is not an error" posture as
   // `cureClockFor`: an unconfigured state has an unreviewed fee rule and an
   // unknown cure period, both of which the caller states rather than guesses.
-  let rule: { id: string; payOrQuitDays: number | null; cureDemandMayIncludeFees: boolean | null } | null = null
-  try {
-    rule = await rulesFor(evictionCase.property, new Date())
-  } catch {
-    rule = null
-  }
+  const rule = await rulesForConfigured(evictionCase.property, new Date())
 
   const today = businessDate(new Date(), evictionCase.property.timezone)
   const rentDueDay = lease.leasePayers[0]?.debitDay ?? lease.rentDueDay
