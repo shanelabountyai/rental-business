@@ -13265,7 +13265,7 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 
 ## R-240 — the audit-store.test.ts "oldest-first" flake, root-caused and fixed
 
-**Commit:** _pending_  ·  **Date:** 2026-09-21
+**Commit:** `775e3b3`  ·  **Date:** 2026-09-21
 
 **What it built.** Scoped from R-239's carried note (backlog #227) rather than starting from a one-liner. Root-caused by reading `auditTrailFor` (`packages/core/audit/record.ts`) and the migration SQL together rather than trying to reproduce a race first: `AuditLog.occurredAt` is `DEFAULT CURRENT_TIMESTAMP`, and Postgres's `CURRENT_TIMESTAMP` is stable for the whole transaction (equivalent to `transaction_timestamp()`) — it does not advance between statements. The test's three `recordAudit` calls all run inside one `inRollback` transaction (the transaction rule the file itself documents: callers pass the transaction the action runs in), so all three rows get the **exact same** `occurredAt` on **every** run, not intermittently. `auditTrailFor`'s `orderBy: { occurredAt: 'asc' }` had no secondary key, so which tied row came back first was left to the query planner — stable in isolation (confirmed 15/15 clean runs on unmodified `main`, matching this file's own note that it passes alone), but exposed to drift once a full-suite run puts concurrent load on the shared `rental_test` database and the planner's scan behavior varies.
 
