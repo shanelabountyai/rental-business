@@ -13173,7 +13173,7 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 
 ## R-235 — the Arc 6 demo walk (D-28)
 
-**Commit:** `PENDING`  ·  **Date:** 2026-09-20
+**Commit:** `4e3ffc4`  ·  **Date:** 2026-09-20
 
 **What it built.** A walk, what it found, and two seed states the demo had never held. Milestone 16 closed at R-234. Crawled **144 staff pages across 92 route patterns** as `owner@demo.test` against the local `rental_demo`, each at 1280px and 412px; the **tenant portal through all five tenants' magic links** (80 pages, both widths); **all eleven public token surfaces**; and **the guarantor portal for the first time**. Every page returned 200, nothing overflowed the phone (`documentElement.scrollWidth`, per D-197), and no visible text held a raw `YYYY-MM-DD`, `undefined`, `NaN`, `Invalid Date` or `[object Object]`. The text hits that remained were correct: merge-field syntax on template editors, import column names, job keys on `/jobs`.
 
