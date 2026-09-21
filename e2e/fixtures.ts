@@ -1,8 +1,35 @@
 // Shared fixture helpers for the end-to-end suite.
 
 import { randomUUID } from 'node:crypto'
+import { withinQuietHours } from '@rental/core/notifications'
 
 let counter = 0
+
+/**
+ * An IANA zone where "right now" is outside the product's 21:00-08:00 quiet
+ * hours (NOTIF-05) - so a spec that seeds a property with this zone and then
+ * asserts an immediate "sent" confirmation is not gambling on the wall clock
+ * the suite happens to run under.
+ *
+ * R-237: R-235's CI push landed at 22:59 Central and eight specs that
+ * hardcoded `timezone: 'America/Chicago'` all timed out waiting for text the
+ * notification engine correctly never sent - it deferred, which is correct,
+ * and the specs were wrong to assume the client's clock. Rather than pin the
+ * server's actual Date (which every OTHER spec's fixtures also read, via
+ * plain `new Date()`), this picks whichever zone is currently safe.
+ *
+ * Etc/GMT zones only: fixed offset, never DST, so there is no transition to
+ * reason about. One of every whole-hour offset from +12 to -14 exists, which
+ * is every offset a real zone can have, so a safe one always exists (quiet
+ * hours are 11 of 24).
+ */
+export function safeTimeZone(now: Date = new Date()): string {
+  for (let offset = 12; offset >= -14; offset--) {
+    const zone = offset === 0 ? 'Etc/GMT' : `Etc/GMT${offset > 0 ? '+' : '-'}${Math.abs(offset)}`
+    if (!withinQuietHours(now, zone)) return zone
+  }
+  throw new Error('every Etc/GMT zone is in quiet hours - DEFAULT_QUIET_HOURS must have widened')
+}
 
 /**
  * A phone number no other fixture in this run is holding.

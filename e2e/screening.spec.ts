@@ -3,6 +3,7 @@ import { createTotpEnrolment, hashPassword, sealSecret } from '@rental/core/auth
 import { Secret, TOTP } from 'otpauth'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
+import { safeTimeZone } from './fixtures.ts'
 
 // Screening accept/decline (LEASE-04, R-060) - the one surface everything
 // else in this item feeds: criteria comparison and report ordering are
@@ -76,7 +77,9 @@ async function seedScreenedApplicant(
       city: 'Houston',
       state: 'TX',
       postalCode: '77002',
-      timezone: 'America/Chicago',
+      // R-237: safe from quiet hours right now, so the auto-served
+      // adverse-action notice below is not gambling on the wall clock.
+      timezone: safeTimeZone(),
       propertyType: 'SINGLE_FAMILY',
     },
   })

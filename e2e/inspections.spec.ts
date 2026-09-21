@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { hashPassword, mintToken } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
-import { uniqueClientHeaders, uniqueStateCode } from './fixtures.ts'
+import { safeTimeZone, uniqueClientHeaders, uniqueStateCode } from './fixtures.ts'
 
 // R-003's login limiter is ten attempts per IP per five minutes, and local
 // e2e traffic carries no x-forwarded-for - so without this every spec shares
@@ -574,7 +574,9 @@ async function seedOccupiedUnitWithEntryRule(staffId: string) {
       city: 'Houston',
       state,
       postalCode: '77002',
-      timezone: 'America/Chicago',
+      // R-237: safe from quiet hours right now, so "Scheduled, and the
+      // tenant has been told." below is not gambling on the wall clock.
+      timezone: safeTimeZone(),
       propertyType: 'SINGLE_FAMILY',
     },
   })

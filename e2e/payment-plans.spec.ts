@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { hashPassword, mintToken } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
-import { axeScan, uniqueClientHeaders } from './fixtures.ts'
+import { axeScan, safeTimeZone, uniqueClientHeaders } from './fixtures.ts'
 
 // Repayment plans (PAY-08, PAY-12; R-175).
 //
@@ -49,7 +49,9 @@ async function seedTenancy({ contact = true }: { contact?: boolean } = {}) {
       city: 'Houston',
       state: 'TX',
       postalCode: '77002',
-      timezone: 'America/Chicago',
+      // R-237: safe from quiet hours right now, so "is on its way to Plan
+      // ..." below is not gambling on the wall clock.
+      timezone: safeTimeZone(),
       propertyType: 'SINGLE_FAMILY',
     },
   })

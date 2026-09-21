@@ -3,7 +3,16 @@ import { hashPassword } from '@rental/core/auth'
 import { businessDate, businessDateToUtc, utcToBusinessDate, wallClockToUtc } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
-import { uniquePhone } from './fixtures.ts'
+import { safeTimeZone, uniquePhone } from './fixtures.ts'
+
+/// R-237: computed once, at file load, rather than 'America/Chicago' - a
+/// zone the property's own 21:00-08:00 quiet hours are safely clear of right
+/// now, so "Reminder sent" assertions below are not gambling on the wall
+/// clock the suite happens to run under. `daysAgo`/`finalizedAt` and the
+/// seeded property all have to agree on the SAME zone (D-3, and see
+/// `daysAgo`'s own comment) - which one it is does not matter, so long as
+/// it's the one everything below reads.
+const ZONE = safeTimeZone()
 
 // The Monday-morning report, and the one press that chases everybody on it
 // (PAY-06, RPT-02, R-044).
@@ -44,11 +53,11 @@ const templateIds: string[] = []
 /// `current`, and failed the grace assertions. Three consecutive sweeps
 /// wrote it off as flakiness before the claim in this comment was checked.
 ///
-/// The seeded property is America/Chicago, and `delinquencyFor` ages against
-/// the PROPERTY's today (D-3), so the fixture has to be built from the same
+/// The seeded property is `ZONE`, and `delinquencyFor` ages against the
+/// PROPERTY's today (D-3), so the fixture has to be built from the same
 /// clock the assertion is judged by.
 function daysAgo(n: number): Date {
-  const d = businessDateToUtc(businessDate(new Date(), 'America/Chicago'))
+  const d = businessDateToUtc(businessDate(new Date(), ZONE))
   d.setUTCDate(d.getUTCDate() - n)
   return d
 }
@@ -76,7 +85,7 @@ function daysAgo(n: number): Date {
  * ==========================================================================
  */
 function finalizedAt(dueDate: Date): Date {
-  return wallClockToUtc(`${utcToBusinessDate(dueDate)}T09:00`, 'America/Chicago')
+  return wallClockToUtc(`${utcToBusinessDate(dueDate)}T09:00`, ZONE)
 }
 
 async function seedPropertyWithTenancies(
@@ -117,7 +126,7 @@ async function seedPropertyWithTenancies(
       // distinction under test would collapse.
       state: 'TX',
       postalCode: '77002',
-      timezone: 'America/Chicago',
+      timezone: ZONE,
       propertyType: 'SINGLE_FAMILY',
     },
   })

@@ -3,7 +3,7 @@ import { createTotpEnrolment, hashPassword, sealSecret } from '@rental/core/auth
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
 import { Secret, TOTP } from 'otpauth'
-import { uniqueClientHeaders, uniquePhone } from './fixtures.ts'
+import { safeTimeZone, uniqueClientHeaders, uniquePhone } from './fixtures.ts'
 
 // GOLDEN PATH 5 — the money path (Demo checkpoint 5, D-28).
 //
@@ -160,7 +160,10 @@ test('Golden Path 5: what the fence stops, and what it must not forgive', async 
       // file invented (D-4).
       state: 'TX',
       postalCode: '76541',
-      timezone: 'America/Chicago',
+      // R-237: a zone safe from the property's own 21:00-08:00 quiet hours
+      // right now, not a fixed zone - so "Reminder sent" below is not
+      // gambling on the wall clock the suite happens to run under.
+      timezone: safeTimeZone(),
       propertyType: 'SINGLE_FAMILY',
     },
   })
