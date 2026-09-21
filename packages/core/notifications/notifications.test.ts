@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  CATEGORY_AUDIENCE,
   DEFAULT_QUIET_HOURS,
   DIGEST_ELIGIBLE_CATEGORIES,
   LOCKED_CATEGORIES,
@@ -8,6 +9,7 @@ import {
   channelsFor,
   defaultEnabled,
   isDigestEligible,
+  isInAudience,
   isLockedCategory,
   isNotificationCategory,
   mayAutoRetry,
@@ -54,6 +56,34 @@ describe('the category vocabulary', () => {
     expect(defaultEnabled('rent_reminder', 'EMAIL')).toBe(true)
     expect(defaultEnabled('payment_failed', 'SMS')).toBe(true)
     expect(defaultEnabled('legal_notice', 'SMS')).toBe(true)
+  })
+})
+
+describe('R-236 category audience', () => {
+  it('offers a category only to the recipient type it is actually sent to', () => {
+    expect(isInAudience('rent_reminder', 'TENANT')).toBe(true)
+    expect(isInAudience('rent_reminder', 'GUARANTOR')).toBe(true)
+    // The bug R-236 fixes: a category that sounds general but is never
+    // actually sent to this recipient type.
+    expect(isInAudience('rent_reminder', 'STAFF')).toBe(false)
+    expect(isInAudience('legal_notice', 'STAFF')).toBe(false)
+    expect(isInAudience('maintenance_emergency', 'TENANT')).toBe(false)
+    expect(isInAudience('maintenance_emergency', 'STAFF')).toBe(true)
+  })
+
+  it('gives an unsent category no audience at all, rather than a guess', () => {
+    // move_out, approval_needed, task_assigned and compliance_due have no
+    // notify() call site anywhere in the product today (R-235's demo walk).
+    // A toggle for a send that never happens is worse than no toggle.
+    for (const category of ['move_out', 'approval_needed', 'task_assigned', 'compliance_due'] as const) {
+      expect(CATEGORY_AUDIENCE[category].size).toBe(0)
+    }
+  })
+
+  it('is exhaustive over the vocabulary', () => {
+    for (const category of NOTIFICATION_CATEGORIES) {
+      expect(CATEGORY_AUDIENCE[category]).toBeDefined()
+    }
   })
 })
 

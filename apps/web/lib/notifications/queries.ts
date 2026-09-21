@@ -6,6 +6,7 @@ import {
   type NotificationChannel,
   channelsFor,
   defaultEnabled,
+  isInAudience,
   isLockedCategory,
   lockedReason,
 } from '@rental/core/notifications'
@@ -91,6 +92,9 @@ export async function getPreferences(
 
   const rows: PreferenceRow[] = []
   for (const category of NOTIFICATION_CATEGORIES) {
+    // R-236: only what this recipient type is ever actually sent - not the
+    // whole vocabulary. See CATEGORY_AUDIENCE's own comment for why.
+    if (!isInAudience(category, recipientType)) continue
     for (const channel of channelsFor(category)) {
       const locked = isLockedCategory(category)
       rows.push({

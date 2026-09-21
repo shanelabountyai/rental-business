@@ -2,6 +2,7 @@
 
 import {
   channelsFor,
+  isInAudience,
   isLockedCategory,
   isNotificationCategory,
   type NotificationChannel,
@@ -33,6 +34,12 @@ async function writePreference(
 
   if (!isNotificationCategory(category)) {
     return { error: 'Unknown notification category.' }
+  }
+  // R-236: a crafted submission naming a real category this recipient type
+  // is simply never sent must be refused the same way a locked one is - a
+  // stored override the engine will never read is a stored lie either way.
+  if (!isInAudience(category, recipientType)) {
+    return { error: 'That category is never sent to this kind of recipient.' }
   }
   if (!(channelsFor(category) as readonly string[]).includes(channel)) {
     return { error: 'Unknown channel.' }

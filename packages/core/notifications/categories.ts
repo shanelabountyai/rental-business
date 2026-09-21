@@ -18,7 +18,7 @@
 /// drags the whole client into any client component that touches this file,
 /// which is the bundle crash R-010 and R-012 both hit. `satisfies` gives the
 /// same compile-time guarantee with none of the runtime weight.
-import type { MessageChannel } from '@rental/db'
+import type { MessageChannel, NotificationRecipientType } from '@rental/db'
 
 export const NOTIFICATION_CHANNELS = [
   'EMAIL',
@@ -438,4 +438,77 @@ export const NEVER_AUTO_RETRY_CATEGORIES: ReadonlySet<NotificationCategory> = ne
 
 export function mayAutoRetry(category: NotificationCategory): boolean {
   return !NEVER_AUTO_RETRY_CATEGORIES.has(category)
+}
+
+/**
+ * WHICH RECIPIENT TYPES A CATEGORY IS EVER ACTUALLY SENT TO (R-236).
+ *
+ * Ground truth, not taxonomy: measured by reading every real `notify()` call
+ * site (apps/web/lib/**, never a test or seed) and its `recipient.type`, not
+ * derived from what "sounds like" it should apply to whom. `getPreferences`
+ * (apps/web/lib/notifications/queries.ts) reads this to stop offering a
+ * tenant "Approvals waiting on you" or a staff member "Legal notices" -
+ * categories that were never their own to begin with, discovered by R-235's
+ * demo walk. The save action refuses a write outside a recipient's own
+ * audience for the same reason LOCKED_CATEGORIES refuses one on a locked
+ * category: a stored preference the engine can never honour is a stored lie.
+ *
+ * FOUR CATEGORIES HAVE NO SENDER AT ALL TODAY (`move_out`, `approval_needed`,
+ * `task_assigned`, `compliance_due`) - staff-facing renewal/approval work
+ * routes through the `Task` queue instead of this engine (D-9's one queue),
+ * and nothing has ever been wired to send these. An empty set is correct for
+ * them: a toggle promising to control a send that never happens is worse
+ * than no toggle. Wire a real `notify()` call before giving one an audience.
+ *
+ * `digest_daily`'s audience is DERIVED, not a literal at any one call site -
+ * `digest-job.ts` forwards a suppressed row under whatever recipientType it
+ * was already recorded under, so its real audience is whoever receives a
+ * `DIGEST_ELIGIBLE_CATEGORIES` category with a live sender: TENANT
+ * (`rent_reminder`, `maintenance_update`, `lease_renewal`, `announcement`),
+ * GUARANTOR (`rent_reminder`, when a lease has one), and STAFF
+ * (`unit_make_ready`). If a digest-eligible category's own senders change,
+ * this needs a look too.
+ *
+ * Adding a category's first `notify()` call for a new recipient type is not
+ * one edit - add the type here or that recipient never sees the toggle for a
+ * message they are now getting.
+ */
+export const CATEGORY_AUDIENCE: Record<
+  NotificationCategory,
+  ReadonlySet<NotificationRecipientType>
+> = {
+  rent_reminder: new Set(['TENANT', 'GUARANTOR']),
+  payment_receipt: new Set(['TENANT']),
+  payment_failed: new Set(['TENANT']),
+  autopay_predebit: new Set(['TENANT']),
+  payment_plan: new Set(['TENANT', 'GUARANTOR']),
+  legal_notice: new Set(['TENANT']),
+  entry_notice: new Set(['TENANT']),
+  maintenance_update: new Set(['TENANT']),
+  maintenance_clarify: new Set(['TENANT']),
+  maintenance_ack: new Set(['TENANT']),
+  maintenance_emergency: new Set(['STAFF']),
+  work_order_assigned: new Set(['VENDOR']),
+  lease_renewal: new Set(['TENANT']),
+  move_out: new Set(),
+  lease_signature: new Set(['TENANT', 'GUARANTOR']),
+  announcement: new Set(['TENANT']),
+  approval_needed: new Set(),
+  task_assigned: new Set(),
+  unit_make_ready: new Set(['STAFF']),
+  compliance_due: new Set(),
+  vendor_response: new Set(['STAFF']),
+  digest_daily: new Set(['TENANT', 'GUARANTOR', 'STAFF']),
+  prospect_prescreening: new Set(['PROSPECT']),
+  prospect_application: new Set(['APPLICANT']),
+  prospect_showing: new Set(['PROSPECT']),
+  inspection_signature: new Set(['TENANT']),
+  account_access: new Set(['STAFF', 'TENANT', 'GUARANTOR']),
+}
+
+export function isInAudience(
+  category: NotificationCategory,
+  recipientType: NotificationRecipientType,
+): boolean {
+  return CATEGORY_AUDIENCE[category].has(recipientType)
 }

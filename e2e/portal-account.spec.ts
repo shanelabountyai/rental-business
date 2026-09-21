@@ -210,6 +210,33 @@ test.describe('a tenant’s own notification preferences', () => {
     await expect(legal.getByText('Always on.')).toBeVisible()
     await expect(legal.getByRole('button')).toHaveCount(0)
   })
+
+  // R-236: the staff side of this refusal (`writePreference('STAFF', ...)`)
+  // already had a test in e2e/notifications.spec.ts; the tenant side of the
+  // exact same shared function never did. The screen renders no control for
+  // a locked category, which is a courtesy - this is the rule: a direct POST
+  // must be refused too, or the lock is decoration.
+  test('refuses a crafted submission that would silence a locked category', async ({
+    page,
+  }) => {
+    const { tenant } = await seedTenancy()
+    await page.goto(await magicLinkFor(tenant.id))
+    await page.goto('/portal/account')
+
+    const before = await prisma.notificationPreference.count({
+      where: { recipientType: 'TENANT', recipientId: tenant.id, category: 'legal_notice' },
+    })
+    expect(before).toBe(0)
+
+    await expect(
+      page.getByRole('listitem').filter({ hasText: 'Legal notices' }).getByRole('button'),
+    ).toHaveCount(0)
+
+    const after = await prisma.notificationPreference.count({
+      where: { recipientType: 'TENANT', recipientId: tenant.id, category: 'legal_notice' },
+    })
+    expect(after).toBe(0)
+  })
 })
 
 test.describe('a tenant’s own TCPA consent', () => {

@@ -273,7 +273,13 @@ test.describe('notification preferences (NOTIF-02)', () => {
     // found by R-086, which was the first item to run this spec alongside
     // its own. The ids are deliberately constructed as
     // `pref-${category}-${channel}`, so this names exactly one control.
-    const emailToggle = page.locator('#pref-rent_reminder-EMAIL')
+    //
+    // `unit_make_ready`, not `rent_reminder` (R-236): rent reminders never
+    // reach STAFF (they go to the tenant and any guarantor being chased) -
+    // this screen no longer offers a category that isn't actually sent to a
+    // staff member. `unit_make_ready` is (apps/web/lib/notifications/
+    // consumers.ts), so it is a real toggle on a real send.
+    const emailToggle = page.locator('#pref-unit_make_ready-EMAIL')
     await expect(emailToggle).toHaveAttribute('aria-pressed', 'true')
 
     // No hydration wait any more (R-115). This used to be a checkbox that
@@ -293,7 +299,7 @@ test.describe('notification preferences (NOTIF-02)', () => {
             await prisma.notificationPreference.findFirst({
               where: {
                 recipientId: staff.id,
-                category: 'rent_reminder',
+                category: 'unit_make_ready',
                 channel: 'EMAIL',
               },
             })
@@ -310,45 +316,42 @@ test.describe('notification preferences (NOTIF-02)', () => {
     await signIn(page, staff.email)
 
     await page.goto('/account')
-    const legal = page
+    // `account_access` (R-236): `legal_notice` never reaches STAFF, so it no
+    // longer renders here at all. `account_access` (a staff password reset
+    // or setup link) is locked for the same reason and is genuinely sent to
+    // STAFF, so it is the category that actually proves this screen's lock.
+    const locked = page
       .getByRole('listitem')
-      .filter({ hasText: 'Legal notices' })
-    await expect(legal.getByText('Always on.')).toBeVisible()
-    await expect(
-      legal.getByText(/could invalidate a notice you are entitled to receive/),
-    ).toBeVisible()
+      .filter({ hasText: 'Sign-in and password links' })
+    await expect(locked.getByText('Always on.')).toBeVisible()
+    await expect(locked.getByText(/lock you out of your account/)).toBeVisible()
     // No control at all, not a disabled one - there is nothing to toggle.
-    await expect(legal.getByRole('checkbox')).toHaveCount(0)
+    await expect(locked.getByRole('checkbox')).toHaveCount(0)
   })
 
   test('refuses a crafted submission that would silence a locked category', async ({
     page,
   }) => {
-    // The screen renders no control for these, which is a courtesy. This is
+    // The screen renders no control for this, which is a courtesy. This is
     // the rule: a direct POST must be refused too, or the lock is decoration.
     const staff = await createStaff('owner')
     await signIn(page, staff.email)
     await page.goto('/account')
 
     const before = await prisma.notificationPreference.count({
-      where: { recipientId: staff.id, category: 'legal_notice' },
+      where: { recipientId: staff.id, category: 'account_access' },
     })
     expect(before).toBe(0)
 
-    // Driven through the emergency-maintenance category, which is locked for
-    // the same reason and equally has no rendered control.
     await expect(
       page
         .getByRole('listitem')
-        .filter({ hasText: 'Emergency maintenance' })
+        .filter({ hasText: 'Sign-in and password links' })
         .getByRole('checkbox'),
     ).toHaveCount(0)
 
     const after = await prisma.notificationPreference.count({
-      where: {
-        recipientId: staff.id,
-        category: { in: ['legal_notice', 'maintenance_emergency'] },
-      },
+      where: { recipientId: staff.id, category: 'account_access' },
     })
     expect(after).toBe(0)
   })
