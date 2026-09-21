@@ -13225,7 +13225,7 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 
 ## R-237 — the five e2e specs quiet hours could fail no longer gamble on the wall clock
 
-**Commit:** _pending_  ·  **Date:** 2026-09-21
+**Commit:** `470348d`  ·  **Date:** 2026-09-21
 
 **What it built.** `safeTimeZone(now?)` in `e2e/fixtures.ts`: given the real instant, walks every whole-hour `Etc/GMT` offset (+12 down to -14 — fixed-offset zones, never DST, so there is no transition to reason about) and returns the first one `withinQuietHours` (from `@rental/core/notifications`) says is *not* inside the product's 21:00–08:00 quiet window right now. Since quiet hours are only 11 of 24 hours, a safe offset always exists. The six property-creation sites the backlog row named (`golden-path-5.spec.ts`, the second property in `inspections.spec.ts`, `payment-plans.spec.ts`, `screening.spec.ts`, `rent-roll.spec.ts`) now seed `timezone: safeTimeZone()` instead of a hardcoded `'America/Chicago'`. `inspections.spec.ts`'s *first* property (used by the four tests the backlog did not flag) was left untouched — no assertion there depends on an immediate-send confirmation.
 
