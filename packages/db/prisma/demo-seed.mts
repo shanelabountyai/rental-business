@@ -603,6 +603,7 @@ async function reset() {
     })
     await prisma.deposit.deleteMany({ where: { leaseId: { in: leaseIds } } })
     await prisma.leaseTenant.deleteMany({ where: { leaseId: { in: leaseIds } } })
+    await prisma.guarantor.deleteMany({ where: { leaseId: { in: leaseIds } } })
     // The renewal self-FK is RESTRICT, and one deleteMany's internal row
     // order is unspecified - unlink predecessors before deleting both rows.
     await prisma.lease.updateMany({
@@ -756,6 +757,10 @@ interface UnitPlan {
       /// renewal cutover's `endRenewalPredecessor` writer produces, so the
       /// demo walk can see a renewed tenancy whose deposit clock works.
       renewedPriorTerm?: { startsOn: Date; endsOn: Date; rentCents: number }
+      /// A guarantor on the tenancy (R-235). The guarantor portal (R-165)
+      /// had never been walked because no demo lease carried one, so
+      /// `db:seed:demo-access` had nobody to print a sign-in link for.
+      guarantor?: { firstName: string; lastName: string; email: string }
       /// A single overdue rent charge, standing in for "late" - no Payment
       /// or LedgerEntry rows here (D-11: those are a Stripe-webhook
       /// projection, never written directly). A Charge is fair game - it is
@@ -1559,6 +1564,9 @@ export function buildPlan(): PropertyPlan[] {
               rentCents: 165000,
               depositCents: 165000,
               overdueCharge: true,
+              // The late tenancy with a served notice - what a guarantor's
+              // portal exists to show them.
+              guarantor: { firstName: 'Loretta', lastName: 'Holt', email: 'loretta.holt@example.test' },
             },
           },
         },
@@ -2955,6 +2963,12 @@ interface InvoicePlan {
   /// Payment and NO ledger movement, which is exactly what a decline is:
   /// nothing has changed about what is owed.
   declinedAfterDays?: number
+  /// The settled payment came BACK this many days after it arrived - an ACH
+  /// return, the one path that writes a `REVERSAL` (R-235: the demo held
+  /// none, so no screen had ever shown one). A failure dated after the
+  /// settlement is what the pipeline reads as a return rather than a stale
+  /// decline, and the rent is owed again.
+  returnedAfterDays?: number
   /// Carries the lease's seeded overdue `Charge` on its line metadata - the
   /// same round trip R-040 stamps going out and `chargeIdsOf` reads coming
   /// back. Without it the two money screens disagree: the balance is a sum
@@ -3044,7 +3058,7 @@ export const MONEY: Record<string, MoneyPlan> = {
   late: {
     invoices: [
       { daysAgo: 90, paidCents: 'full' },
-      { daysAgo: 60, paidCents: 'full' },
+      { daysAgo: 60, paidCents: 'full', returnedAfterDays: 5 },
       {
         daysAgo: SINCE_MONTH_START,
         paidCents: [],
@@ -3518,6 +3532,22 @@ async function seedMoney(
         )
         events++
       }
+
+      // No `payment_intent`: the settled row was written from
+      // `invoice.updated`, which carries none, so the pipeline finds it by
+      // invoice - the same fallback a bounced check takes.
+      if (invoice.returnedAfterDays != null) {
+        await push(
+          stripeEvent('invoice.payment_failed', daysFrom(-invoice.daysAgo + 1 + invoice.returnedAfterDays), {
+            id: invoiceId,
+            customer,
+            amount_due: target.rentCents,
+          }),
+          'projected',
+          `the returned payment on the invoice ${invoice.daysAgo} days ago`,
+        )
+        events++
+      }
     }
 
     // ---- AN ACH DEBIT STILL IN FLIGHT ----
@@ -3863,6 +3893,9 @@ async function seedDemoData() {
       await prisma.leaseTenant.create({
         data: { leaseId: lease.id, tenantId: tenant.id, isPrimary: true },
       })
+      if (tenantPlan.lease.guarantor) {
+        await prisma.guarantor.create({ data: { leaseId: lease.id, ...tenantPlan.lease.guarantor } })
+      }
 
       if (tenantPlan.lease.renewedPriorTerm) {
         const prior = tenantPlan.lease.renewedPriorTerm

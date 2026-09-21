@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { hashPassword } from '@rental/core/auth'
+import { addBusinessDays, businessDate, businessDaysBetween } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
 import { axeScan } from './fixtures.ts'
@@ -246,6 +247,32 @@ test.describe('the lemon view', () => {
 
     const steadyRow = snapshot.getByRole('row').filter({ hasText: 'Steady House' })
     await expect(steadyRow.getByRole('cell').nth(4)).toContainText('0')
+  })
+})
+
+test.describe('the year in progress', () => {
+  test('stops counting vacancy at today, not at 31 December', async ({ page }) => {
+    // The houses' own clock, as property-expenses.spec.ts reads it.
+    const today = businessDate(new Date(), 'America/Chicago')
+    const movedOut = addBusinessDays(today, -10)
+    test.skip(movedOut.slice(0, 4) !== today.slice(0, 4), 'the move-out would fall in last year')
+    const { entity } = await seedEntity('InProgress')
+    const emptied = await seedProperty(entity.id, 'Emptied House')
+    await seedTenancy(emptied.property.id, emptied.unit.id, emptied.stamp, '2024-01-01', movedOut)
+
+    const staff = await createStaff('owner')
+    await signIn(page, staff.email)
+    await page.goto(`/reports/operating?entity=${entity.id}&year=${today.slice(0, 4)}&basis=accrual`)
+
+    // Move-out day through today, inclusive. Before R-235 this ran on to
+    // 31 December and counted days that had not happened yet.
+    const row = page
+      .getByRole('table', { name: /Per-property operating snapshot/ })
+      .getByRole('row')
+      .filter({ hasText: 'Emptied House' })
+    // The cell is the day count with its share of the year-to-date nested in.
+    const available = businessDaysBetween(`${today.slice(0, 4)}-01-01`, today) + 1
+    await expect(row.getByRole('cell').nth(4)).toHaveText(`11${Math.round((11 / available) * 100)}%`)
   })
 })
 

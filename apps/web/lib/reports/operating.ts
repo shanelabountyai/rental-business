@@ -229,9 +229,18 @@ export async function operatingReport(
       property.historyStartsOn != null ? utcToBusinessDate(property.historyStartsOn) : null
     const from0 = historyStartsOn && historyStartsOn > computedFrom0 ? historyStartsOn : computedFrom0
 
-    const days = vacantDaysInWindow({ intervals, from, to, availableFrom: from0 })
+    // The year in progress ends TODAY, not on 31 December: a vacant unit is
+    // not yet vacant in November, and an occupied one has not yet been
+    // scheduled November's rent, while income only runs to date. Counting the
+    // rest of the year understated economic occupancy all year, worst in
+    // January.
+    const today = businessDate(new Date(), zone)
+    const unitTo = today < to ? today : to
+    const days = vacantDaysInWindow({ intervals, from, to: unitTo, availableFrom: from0 })
     const available =
-      from0 > to ? 0 : Math.min(windowLength, businessDaysBetween(from0 > from ? from0 : from, to) + 1)
+      from0 > unitTo || from > unitTo
+        ? 0
+        : Math.min(windowLength, businessDaysBetween(from0 > from ? from0 : from, unitTo) + 1)
 
     vacantDays.set(unit.propertyId, (vacantDays.get(unit.propertyId) ?? 0) + days)
     availableDays.set(unit.propertyId, (availableDays.get(unit.propertyId) ?? 0) + available)
@@ -266,7 +275,7 @@ export async function operatingReport(
       scheduledRent.set(
         unit.propertyId,
         (scheduledRent.get(unit.propertyId) ?? 0) +
-          scheduledRentCentsInWindow({ intervals: rentedIntervals, from, to }),
+          scheduledRentCentsInWindow({ intervals: rentedIntervals, from, to: unitTo }),
       )
     }
   }

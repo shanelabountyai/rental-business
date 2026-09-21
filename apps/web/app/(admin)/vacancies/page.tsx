@@ -75,8 +75,10 @@ export default async function VacanciesPage() {
                 </span>
                 <span className="text-muted-foreground text-sm tabular-nums">
                   {unit.daysOnMarket} day{unit.daysOnMarket === 1 ? '' : 's'} on market
-                  {unit.dailyCostCents != null && (
+                  {unit.dailyCostCents != null ? (
                     <> · {formatCents(unit.dailyCostCents)}/day</>
+                  ) : (
+                    <> · no asking rent set</>
                   )}
                   {unit.currentStage && (
                     <>

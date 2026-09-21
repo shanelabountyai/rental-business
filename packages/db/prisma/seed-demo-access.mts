@@ -158,6 +158,20 @@ async function magicLinkFor(tenantId: string): Promise<string> {
   return `/portal/verify?token=${minted.token}`
 }
 
+async function guarantorLinkFor(guarantorId: string): Promise<string> {
+  const minted = mintToken('GUARANTOR_MAGIC_LINK')
+  await prisma.authToken.create({
+    data: {
+      purpose: 'GUARANTOR_MAGIC_LINK',
+      tokenHash: minted.tokenHash,
+      subjectType: 'Guarantor',
+      subjectId: guarantorId,
+      expiresAt: minted.expiresAt,
+    },
+  })
+  return `/portal/guarantor/verify?token=${minted.token}`
+}
+
 /// The same revoke-then-issue shape as apps/web/lib/vendors/link.ts, which
 /// cannot be imported from here (apps/web is not a dependency of packages/db).
 /// A work order holds at most one live link at a time, and re-running this
@@ -220,6 +234,19 @@ async function main() {
   for (const tenant of tenants) {
     const link = await magicLinkFor(tenant.id)
     out.push(`  ${`${tenant.firstName} ${tenant.lastName}`.padEnd(18)} ${new URL(link, base)}`)
+  }
+
+  const guarantors = await prisma.guarantor.findMany({
+    where: { active: true, lease: { status: { in: ['ACTIVE', 'MONTH_TO_MONTH'] }, property: { active: true } } },
+    select: { id: true, firstName: true, lastName: true },
+    orderBy: { lastName: 'asc' },
+  })
+  out.push('')
+  out.push('GUARANTORS - magic link only, same as a tenant. Balance and notices, nothing else (R-165).')
+  out.push('')
+  for (const guarantor of guarantors) {
+    const link = await guarantorLinkFor(guarantor.id)
+    out.push(`  ${`${guarantor.firstName} ${guarantor.lastName}`.padEnd(18)} ${new URL(link, base)}`)
   }
 
   const job = await prisma.workOrder.findFirst({

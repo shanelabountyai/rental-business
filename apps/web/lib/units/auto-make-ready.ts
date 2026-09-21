@@ -59,7 +59,7 @@ SCHEDULED_JOBS.push({
   type: 'unit.auto_make_ready',
   localHour: LOCAL_HOUR,
   description:
-    'Flips a unit to MAKE_READY once its lease has ended without a renewal in place (PROP-02).',
+    'Flips a unit to MAKE_READY once a recorded move-out has passed with no renewal in place (PROP-02). A term that merely runs out rolls to month-to-month instead.',
   run: async ({ propertyId, businessDate }) => {
     // Strictly BEFORE today, not on-or-before: a lease ending today is not
     // yet over, and treating its last day as already-vacant would flip the

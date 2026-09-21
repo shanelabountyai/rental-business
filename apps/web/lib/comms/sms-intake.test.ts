@@ -271,9 +271,15 @@ describe('a text from a known tenant', () => {
 describe('the clarify invitation', () => {
   afterEach(() => {
     vi.restoreAllMocks()
+    vi.useRealTimers()
   })
 
   it('texts back one link into the same wizard the portal runs', async () => {
+    // Midday at the property. Quiet hours (9pm-8am, America/Chicago) defer
+    // the text, so without a pinned clock this failed every evening (R-235).
+    const midday = new Date()
+    midday.setUTCHours(18, 0, 0, 0)
+    vi.useFakeTimers({ toFake: ['Date'], now: midday })
     await closeOpenTickets()
     // TCPA CONSENT IS STILL THE GATE (R-051b), and this fixture has to
     // satisfy it rather than route around it. A tenant texting us in is not

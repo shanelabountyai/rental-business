@@ -220,6 +220,12 @@ test.describe('owner dashboard (RPT-01, R-050)', () => {
     await expect(row).toBeVisible()
     await expect(row.getByText(/14 days on market/)).toBeVisible()
     await expect(row.getByText('$30.00/day')).toBeVisible() // 90,000 cents rent / 30
+
+    // Unpriced, with no prior lease to price it from: the row says so rather
+    // than silently dropping the cost the dashboard counts as "+1 unpriced".
+    await prisma.unit.update({ where: { id: vacant.id }, data: { marketRentCents: null } })
+    await page.reload()
+    await expect(row.getByText(/no asking rent set/)).toBeVisible()
   })
 
   test('the lease-expiry tile matches the /leases drill-down', async ({ page }) => {

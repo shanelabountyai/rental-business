@@ -348,7 +348,7 @@ function owedCents(lifecycle: string, rentCents: number): number {
       invoice.paidCents === 'full'
         ? rentCents
         : invoice.paidCents.reduce((sum, part) => sum + part, 0)
-    return owed + rentCents - paid
+    return owed + rentCents - paid + (invoice.returnedAfterDays != null ? paid : 0)
   }, 0)
 }
 
@@ -456,6 +456,20 @@ describe('the money story is internally consistent', () => {
         if (invoice.declinedAfterDays == null) continue
         expect(invoice.declinedAfterDays).toBeLessThan(invoice.daysAgo)
       }
+    }
+  })
+
+  it('returns a payment only after it settled, and only one that was paid', () => {
+    // A return dated before the settlement is a stale decline, which the
+    // pipeline ignores - the demo would then show no REVERSAL at all.
+    const returned = Object.values(MONEY).flatMap((plan) =>
+      plan.invoices.filter((invoice) => invoice.returnedAfterDays != null),
+    )
+    expect(returned.length).toBeGreaterThan(0)
+    for (const invoice of returned) {
+      expect(invoice.paidCents).toBe('full')
+      expect(invoice.returnedAfterDays!).toBeGreaterThan(0)
+      expect(invoice.returnedAfterDays! + 1).toBeLessThan(invoice.daysAgo)
     }
   })
 
