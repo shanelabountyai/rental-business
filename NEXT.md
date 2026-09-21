@@ -1,12 +1,16 @@
 # Next session
 
-## R-234 is done (`67ce6ed`, SHA recorded in `344b061`). Start R-235.
+## R-235 is done (`4e3ffc4`). Start R-236.
 
-**First: read CI** with `gh run list --limit 3` and confirm R-234's push run went green.
+**First: read CI** with `gh run list --limit 3` and confirm R-235's push run went green.
 
-**R-235**: the Arc 6 demo walk (D-28). Every row R-222 through R-234 is now ✅ — Milestone 16 is exhausted. The review said what it could not see from source, and two findings need a browser to confirm fixed: finding 1 (a lease that rolls to month-to-month should never show as a vacant house on `/vacancies`) and finding 9 (the dashboard's vacancy-loss tile, now null-with-a-reason for an unpriced unit rather than a cheerful $0). Walk desktop and 412px, both Playwright projects — this is exactly the review posture that found seven defects across 88 pages that all returned 200 last time (R-105). Also carries the standing seed gaps this file has tracked for a while (see below): no demo `REVERSAL` rows, no deposit batch, no guarantor portal login. Size M — this is a review/correctness pass across the whole shipped surface, not a build task, so **Opus** is the right tier; Sonnet is fine if you'd rather trade thoroughness for speed on a walk this large.
+**R-236**: a recipient's notification settings offer only what the product actually sends them. The backlog row carries the evidence and the measured audience (`rental_test`'s `Notification` rows by category × recipient type). Core map in `packages/core/notifications/categories.ts`, read by `getPreferences`; the save action refuses out-of-audience categories; three `notifications.spec.ts` lock tests move from staff `/account` to the tenant portal. Size S–M. Mechanical but touches a locked-category rule, so **Sonnet** is fine.
 
-**R-234 left behind:**
+**R-235 left behind:**
+- `/money/deposits` has still never shown a batch. The block is not MFA (the walk enrolled TOTP in minutes). The demo's arrears have no open Stripe invoice, so a check is correctly refused. Needs an invoice at Stripe or a simulator demo run. Owned by nobody.
+- The demo seed writes a future `moveOutAt` on two ACTIVE leases, a state the product cannot produce. Harmless today (see PROGRESS).
+
+**Carried from R-234:**
 - No caption on the eviction packet's own photographs (inspection/maintenance/completion/unit) — `PacketCandidate.imageCaption` is optional and unset there, since no geotag is plumbed through its candidates today. It still gets the R-234 fix's main benefit: those photos now actually embed as pages instead of reporting NOT ATTACHED, just uncaptioned.
 - GIF/WEBP/HEIC exhibits still report NOT ATTACHED on both packets — D-137's browser-render allowlist is wider than what pdf-lib's `embedJpg`/`embedPng` can embed. Unchanged by this item, not a new gap.
 - `rent.decide` Tasks still have no special queue rendering (carried from R-229, still unowned).
@@ -32,8 +36,7 @@
 
 ## Still open, carried from earlier handoffs
 
-- Deposit-slip and offline-payment flows need proved MFA, which `db:seed:demo-access` cannot mint — `/money/deposits` has never been seen with a batch (R-235's walk).
-- No demo rows for `/abandonment/[id]`, `/claims/[id]`, `/confidential/[id]`, `/portal/papers/inspections/[id]`, and no guarantor portal login (R-235).
+- No demo rows for `/abandonment/[id]`, `/claims/[id]`, `/confidential/[id]`, `/portal/papers/inspections/[id]`. (Guarantor login and a REVERSAL now seeded, R-235.)
 - Whether a deploy re-runs `db:seed` — unknown, must be answered before go-live (D-240).
 - `apps/web/lib/audit/audit-store.test.ts` "oldest-first" is flaky (rows share `occurredAt`).
 
