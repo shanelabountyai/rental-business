@@ -1,43 +1,36 @@
 # Next session
 
-## R-235 is done (`4e3ffc4`). Start R-236.
+## R-236 is done (`75de1b5`). THE NUMBERED BACKLOG IS EMPTY.
 
-**First: read CI** with `gh run list --limit 3` and confirm R-235's push run went green.
+**First: read CI** with `gh run list --limit 3` and confirm R-236's push run went green.
 
-**R-236**: a recipient's notification settings offer only what the product actually sends them. The backlog row carries the evidence and the measured audience (`rental_test`'s `Notification` rows by category × recipient type). Core map in `packages/core/notifications/categories.ts`, read by `getPreferences`; the save action refuses out-of-audience categories; three `notifications.spec.ts` lock tests move from staff `/account` to the tenant portal. Size S–M. Mechanical but touches a locked-category rule, so **Sonnet** is fine.
+`docs/prds/06-backlog.md` has no `⬜` or `🟡` rows left — every item from R-1 through R-236, across all 16 milestones (Foundation through Arc 6), is `✅`. This is the first time that has been true. There is no "next item" to hand off; the session that opens this needs a direction from Shane before picking up tools, not a `go`.
 
-**R-235 left behind:**
-- `/money/deposits` has still never shown a batch. The block is not MFA (the walk enrolled TOTP in minutes). The demo's arrears have no open Stripe invoice, so a check is correctly refused. Needs an invoice at Stripe or a simulator demo run. Owned by nobody.
-- The demo seed writes a future `moveOutAt` on two ACTIVE leases, a state the product cannot produce. Harmless today (see PROGRESS).
+**What's actually left**, none of it a queued backlog row:
 
-**Carried from R-234:**
-- No caption on the eviction packet's own photographs (inspection/maintenance/completion/unit) — `PacketCandidate.imageCaption` is optional and unset there, since no geotag is plumbed through its candidates today. It still gets the R-234 fix's main benefit: those photos now actually embed as pages instead of reporting NOT ATTACHED, just uncaptioned.
-- GIF/WEBP/HEIC exhibits still report NOT ATTACHED on both packets — D-137's browser-render allowlist is wider than what pdf-lib's `embedJpg`/`embedPng` can embed. Unchanged by this item, not a new gap.
-- `rent.decide` Tasks still have no special queue rendering (carried from R-229, still unowned).
+1. **Three unresolved owner questions at the bottom of `06-backlog.md`** ("Flagged gaps & conflicts", items 4-6): screening criteria must exist in writing before OQ-6 is truly closed (check whether R-060's build already covers this or the question is still live); OQ-9 (is Spanish a Must, not Phase 3?); legal review of each jurisdiction config as a release gate (R-071/R-010) — a process requirement, not code.
+2. **Carried defects, none owned**, accumulated across the last several items (full detail in git history's prior `NEXT.md` versions and each item's own `PROGRESS.md` "what it left behind"):
+   - `/money/deposits` has never shown a batch in the demo (needs a real open Stripe invoice or a simulator run).
+   - No GUARANTOR notification-preferences screen exists at all (R-236/D-252) even though GUARANTOR is a real audience for four categories.
+   - `plan-esign.ts` hardcodes TENANT for a payment-plan signature invite even though a `LeaseSigner` could be a guarantor (flagged during R-236's audience sweep, not fixed).
+   - `checkHabitabilityRepairs` swallows a DB error as "no rule" (R-229).
+   - Unserved entry notice + later hand service does not re-judge the window (R-228); needs counsel on damages for entries already made.
+   - `payment-plan-job.ts` / suppressed-fee report gap (R-227).
+   - No MTM rollover rate cap, no withdrawn-increase tenant message, R-223–R-233 migrations not on the Neon dev branch (R-225).
+   - Demo seed writes a future `moveOutAt` on two ACTIVE leases, a state the product cannot produce (harmless today, R-235).
+   - Whether a deploy re-runs `db:seed` is unknown (D-240) — must be answered before go-live.
+   - No demo rows for `/abandonment/[id]`, `/claims/[id]`, `/confidential/[id]`, `/portal/papers/inspections/[id]`.
+   - `apps/web/lib/audit/audit-store.test.ts` "oldest-first" is flaky (rows share `occurredAt`).
+3. **8 e2e specs are wall-clock-dependent on Central quiet hours** (found this session, not fixed): `golden-path-5`, `inspections` (R-157), `payment-plans`, `screening`, `rent-roll` (×4) all assert an immediate "sent" confirmation with no clock control, and fail if CI runs 21:00-08:00 Central. Real, will recur. Worth its own item (inject a controllable clock, or pick fixture times outside the window) if it fires again.
+4. **Go-live readiness generally** hasn't been scoped as backlog rows: deploy checklist, a real production Stripe/Twilio/Resend cutover plan, jurisdiction-rule legal sign-off (item 6 above), and whatever the owner wants for a beta.
 
-**Carried from R-229:**
-- **Needs a backlog row:** `checkHabitabilityRepairs` in `apps/web/lib/cases/case-stall-job.ts` uses `rulesFor(...).catch(() => null)`. A DB error reads as "no rule", so the job silently flags no habitability deadline. The probable cause of 3 R-217 test failures under full-suite load; they pass alone.
+**The actual next step is a conversation with Shane, not a `go`:** is this backlog reopened with a new arc of items (what kind — more defect-hunting, or new features), or does the project move to go-live hardening (the four things above), or is v1 considered feature-complete and paused? Ask before starting work.
 
-**Carried from R-228:**
-- An unserved entry notice needs the override reason, and a hand service recorded later does not re-judge the window. The showing slot list still offers slots for a tenant who cannot be served. **Needs counsel:** damages for entries already made on the old path.
-
-**Carried from R-227:**
-- `payment-plan-job.ts` stamps `liftedAt: new Date()` (R-190's class); the suppressed-fee report is only `heldBackCents`.
-
-**Carried from R-225:**
-- No cap check on the MTM rollover rate, no tenant message when an increase is withdrawn, and the R-223 to R-233 migrations are not on the Neon dev branch.
-
-**Traps (carried):**
-- Run e2e through `npm run test:e2e -- <specs>`, never bare `npx playwright test`. The bare command loads no `.env.test`.
+**Traps (carried, still true):**
+- Run e2e through `npm run test:e2e -- <specs>`, never bare `npx playwright test`.
 - There is no prettier config. Never run `npx prettier --write`.
 - On `/leases/[id]`, "Starts on" and "Money order" are substring traps.
-- Orphaned `node (vitest N)` workers survive a `$PWD`-anchored `pkill`. Find them by cwd.
 - zsh treats a bare `=====` as a command (`=cmd` expansion). Use `echo '---'` as a separator.
+- A CI run that fails only on notification-confirmation text during evening hours is very likely the quiet-hours clock issue above, not a regression — check the wall-clock time of the run before assuming code broke.
 
-## Still open, carried from earlier handoffs
-
-- No demo rows for `/abandonment/[id]`, `/claims/[id]`, `/confidential/[id]`, `/portal/papers/inspections/[id]`. (Guarantor login and a REVERSAL now seeded, R-235.)
-- Whether a deploy re-runs `db:seed` — unknown, must be answered before go-live (D-240).
-- `apps/web/lib/audit/audit-store.test.ts` "oldest-first" is flaky (rows share `occurredAt`).
-
-Everything older is in git history at `b9a353d:NEXT.md` and `e9352b8:NEXT.md`.
+Everything older is in git history at `b9a353d:NEXT.md`, `e9352b8:NEXT.md` and `11a7d81:NEXT.md`.
