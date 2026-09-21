@@ -13207,7 +13207,7 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 
 ## R-236 — a recipient's notification settings offer only what the product actually sends them
 
-**Commit:** `PENDING`  ·  **Date:** 2026-09-21
+**Commit:** `75de1b5`  ·  **Date:** 2026-09-21
 
 **What it built.** `CATEGORY_AUDIENCE` in `packages/core/notifications/categories.ts` (D-252): a `NotificationCategory` → `Set<NotificationRecipientType>` map, measured by reading every real `notify()` call site in `apps/web/lib/**` (never a guess from a category's name). `getPreferences` (`apps/web/lib/notifications/queries.ts`) now skips a category outside the recipient's audience instead of walking the whole vocabulary for everyone; `writePreference` (`apps/web/lib/notifications/actions.ts`) refuses a crafted write for one, the same shape as its existing locked-category refusal. Four categories — `move_out`, `approval_needed`, `task_assigned`, `compliance_due` — have no `notify()` call site anywhere and get an **empty** audience, so their toggle disappears from every screen rather than lying about controlling a send that never happens.
 
