@@ -123,7 +123,13 @@ export async function auditTrailFor(
 ) {
   return db.auditLog.findMany({
     where: { entityType, entityId },
-    orderBy: { occurredAt: 'asc' },
+    // `occurredAt` defaults to Postgres's CURRENT_TIMESTAMP, which is stable
+    // for the whole transaction - entries written in the same transaction
+    // (recordAudit calls are meant to share one, per the transaction rule
+    // above) get the IDENTICAL timestamp, so occurredAt alone cannot break
+    // the tie. `id` (a cuid, monotonic per process) breaks it in creation
+    // order instead.
+    orderBy: [{ occurredAt: 'asc' }, { id: 'asc' }],
     include: {
       actorStaff: { select: { id: true, name: true, email: true } },
     },
