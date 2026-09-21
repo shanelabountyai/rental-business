@@ -1,8 +1,8 @@
 # Next session
 
-## R-239 is done (`16059c5`, SHA recorded in `e23145d`). Push landed; CI not yet confirmed for this push.
+## R-239 is done (`16059c5`, SHA recorded in `e23145d`). CI green (`35633158400`).
 
-**First: read CI** with `gh run list --limit 3` and confirm this push's run (top of the list, commit `e23145d` or `16059c5`) is the one that shows green — this handoff was written right after the push, before that run finished.
+**First: read CI** with `gh run list --limit 3` and confirm this push's run is the one that shows green (it is, as of this handoff — reconfirm before assuming so days later).
 
 **What R-239 built:** root-caused and fixed the `case-stall-job.test.ts` R-217 habitability flake R-238 found and carried. Reproduced it in a loop (~1-in-3 failures running the file alone), then instrumented `checkHabitabilityRepairs` to print the rule it resolved. Found a **leftover `JurisdictionRule` row for state `QZ`** (`habitabilityRepairDays: null`) orphaned in `rental_test` by some past run that never reached its own `afterAll` — it tied with the test's own fresh fixture on `(state, jurisdiction=null, effectiveFrom=2020-01-01)`, so the nullable-jurisdiction unique-constraint gap `CLAUDE.md` already documents let both rows coexist, and `rulesFor`'s `findMany` has no `ORDER BY` — so which of the two tied rows `selectApplicableRule` picked was query-planner-order-dependent, not stable across runs. Fix: swapped the test's fixed `STATE = 'QZ'` literal for `` `Q${randomUUID().slice(0, 8)}` `` — genuinely unique per run, mirroring `e2e/fixtures.ts`'s `uniqueStateCode()`, which already exists for this exact bug class. Deleted the one orphaned row as immediate cleanup. Verified 10/10 clean runs after the fix; full `npm test` 3298 passed / 4 skipped, exit 0. Backlog row #226; full detail in `docs/PROGRESS.md`'s R-239 entry.
 
