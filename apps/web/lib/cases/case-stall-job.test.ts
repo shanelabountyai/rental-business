@@ -14,7 +14,16 @@ import './case-stall-job.ts'
 // 2026-09-01 throughout.
 
 const NOW = '2026-09-01T12:00:00Z'
-const STATE = 'QZ' // isolated from every other test's own state fixture (TX/ZZ/XY/ZY/XW/NY/YQ).
+// Genuinely unique, not a fixed literal (mirrors e2e/fixtures.ts's
+// uniqueStateCode): a fixed 'QZ' here was found orphaned in rental_test from
+// a run that never reached its own afterAll (a kill, a crash, a CI abort),
+// with habitabilityRepairDays left null. selectApplicableRule's tie-break
+// among same-effectiveFrom candidates is unordered-query dependent, so the
+// habitability suite silently read that dead row's statute instead of its
+// own roughly one run in several - "wrong data, no thrown error" exactly as
+// CLAUDE.md's nullable-unique-constraint warning describes. A random code
+// can never collide with debris any past run left behind.
+const STATE = `Q${randomUUID().slice(0, 8)}`
 const CHICAGO = 'America/Chicago'
 
 let entityId: string
