@@ -77,6 +77,13 @@ export const PERMISSIONS = [
   /// failure mode a resource-less check usually is.
   'jurisdiction.read',
   'jurisdiction.write',
+  /// Versioning ScreeningCriteria (LEASE-04, R-060, R-242; OQ-6). Same
+  /// portfolio-wide shape as jurisdiction.read/write and the same reason:
+  /// criteria apply to every applicant across the whole portfolio at once
+  /// (ScreeningCriteria's own doc comment), so there is no property or
+  /// entity to scope a change against.
+  'screening.criteria.read',
+  'screening.criteria.write',
   /// Managed message templates (COMM-03, R-049). Authoring one is portfolio-
   /// wide work, like a jurisdiction rule: a template is not owned by a
   /// property, and the same violation notice is sent from all of them.
@@ -315,6 +322,9 @@ export const ROLE_DEFINITIONS: Record<
       /// Read, not write: a jurisdiction config change is a legal release
       /// gate (D-4), not day-to-day portfolio work.
       'jurisdiction.read',
+      /// Same split, same reason: reviewing screening criteria is a legal
+      /// release gate (OQ-6), not day-to-day portfolio work.
+      'screening.criteria.read',
       /// Running the eviction path is squarely a property manager's job
       /// (PAY-14, R-083) - they serve the notices and attend the hearing.
       'eviction.manage',
@@ -379,6 +389,7 @@ export const ROLE_DEFINITIONS: Record<
       'task.read',
       'report.financial',
       'jurisdiction.read',
+      'screening.criteria.read',
     ],
     defaultApproveWorkOrderCents: 0,
     defaultWaiveFeeCents: 0,

@@ -213,6 +213,11 @@ const RESOURCE_LESS_GUARDS: Record<string, string> = {
   'app/(admin)/jurisdiction/new/page.tsx': 'Same as the jurisdiction list above.',
   'lib/jurisdiction/actions.ts':
     'Same as the jurisdiction pages. Also a legal-release gate: a rule change alters the law this product believes in for every property in a state at once.',
+  'app/(admin)/screening-criteria/page.tsx':
+    'ScreeningCriteria applies to every applicant across the whole portfolio at once (the model\'s own doc comment) - owner policy, not law, but the same "no scoped resource" shape jurisdiction/page.tsx is exempted for.',
+  'app/(admin)/screening-criteria/new/page.tsx': 'Same as the screening-criteria list above.',
+  'lib/screening/criteria-actions.ts':
+    'Same as the screening-criteria pages. Also a legal-release gate (OQ-6): a criteria change is the fair-housing standard every applicant in the portfolio is compared against.',
   'app/(admin)/messages/templates/page.tsx':
     'A managed message template is portfolio-wide (COMM-03, R-049): the same notice goes out from every property, and there is nothing property-shaped to scope it to. Refusing a property-scoped manager is the intended answer, not an accident.',
   'app/(admin)/messages/templates/new/page.tsx': 'Same as the template list above.',

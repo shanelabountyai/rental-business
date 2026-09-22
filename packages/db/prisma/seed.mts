@@ -295,10 +295,12 @@ async function seedJurisdictionRules() {
   console.info('Seeded 1 jurisdiction rule (TX, statewide, v1).')
 }
 
-/// LEASE-04's own gate (OQ-6 in 07-decisions.md, still an open hard block):
-/// screening cannot start with nothing written to version. `reviewedBy` is
-/// null and `notes` says so plainly - these are placeholder defaults
-/// authored by this build, not criteria an attorney has reviewed, the same
+/// LEASE-04's own gate (OQ-6 in 07-decisions.md - no longer a hard BUILD
+/// block since 2026-08-18, still open for real use): screening cannot start
+/// with nothing written to version. `reviewedBy` is null and `notes` says so
+/// plainly - these are placeholder defaults authored by this build, not
+/// criteria an attorney has reviewed. `/screening-criteria` (R-242) is where
+/// that review gets recorded - a new version with `reviewedBy` set, the same
 /// honestly-flagged posture seedJurisdictionRules() already gives its own
 /// un-reviewed seed.
 async function seedScreeningCriteria() {

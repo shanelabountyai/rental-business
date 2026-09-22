@@ -118,6 +118,13 @@ export const NAV_ITEMS: readonly NavItem[] = [
     ownedBy: 'R-010',
   },
   {
+    href: '/screening-criteria',
+    label: 'Screening criteria',
+    permission: 'screening.criteria.read',
+    portfolioOnly: true,
+    ownedBy: 'R-242',
+  },
+  {
     href: '/jobs',
     label: 'Scheduled jobs',
     permission: 'job.manage',

@@ -354,6 +354,11 @@ export const AUDIT_ACTIONS = [
   /// (D-4), so there is no separate "updated" action.
   'jurisdiction_rule.versioned',
 
+  /// R-242 (OQ-6): a new effective-dated version of ScreeningCriteria. Same
+  /// shape as jurisdiction_rule.versioned - the one mutation this entity
+  /// gets, since old versions are never edited in place.
+  'screening_criteria.versioned',
+
   /// R-011 (D-9): resolution (completed or canceled) of a task whose TYPE is
   /// in AUDITED_TASK_TYPES - not every task, just the ones a later item marks
   /// as needing to show up in the evidence trail on top of the Task row's own
