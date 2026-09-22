@@ -13279,7 +13279,7 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 
 ## R-241 — deploy checklist + Stripe/Twilio/Resend production-cutover plan
 
-**Commit:** _pending_  ·  **Date:** 2026-09-22
+**Commit:** `148704f`  ·  **Date:** 2026-09-22
 
 **What it built.** Scoped from Milestone 17's "Not yet scoped" list, first item, per NEXT.md's instruction to scope a candidate into a real row rather than start from a one-liner. Surveyed the actual cutover surface (Stripe adapter, notification provider seam, env inventory, existing `docs/DEPLOYMENT.md`, CI env) before writing anything, rather than assuming what was missing. Added a "Production cutover: Stripe, Twilio, Resend" section to `docs/DEPLOYMENT.md` with per-provider steps (precondition, env vars, verification, rollback) and closed one of D-240's three unknowns.
 
