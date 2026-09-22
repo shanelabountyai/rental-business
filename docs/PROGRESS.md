@@ -13293,7 +13293,7 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 
 ## R-242 — screening-criteria review UI; OQ-6/OQ-9 staleness resolved
 
-**Date:** 2026-09-22
+**Commit:** `56592f2`  ·  **Date:** 2026-09-22
 
 **What it built.** Scoped from Milestone 17's "Not yet scoped" list, item 2 (R-241's own note named this as still open). Re-read `docs/prds/07-decisions.md`'s OQ-6 and OQ-9 rows against the "Flagged gaps & conflicts" section (items 4-5) that named them as open. OQ-9 turned out to be pure staleness — D-122 answered and cut R-096 on 2026-08-24, a month before this session, and the flagged-gaps write-up simply never got updated; fixed with an edit, no code. OQ-6 was correctly described as open but the flagged-gaps text undersold what D-52's precedent had already answered (2026-08-18): R-060 shipped with a seeded, deliberately-unreviewed `ScreeningCriteria` v1 rather than blocking on real criteria, the same "draft now, review before real use" call the lease template made. What was actually missing: `JurisdictionRule` has a full admin surface (`/jurisdiction`, `/jurisdiction/new`) for recording a reviewer and citation; `ScreeningCriteria` had none — the only way to touch it was `seed.mts` or a database client. Built `/screening-criteria` (list, with an explicit unreviewed-by-an-attorney warning while the current version has no `reviewedBy`) and `/screening-criteria/new` (versioned create, append-only like `JurisdictionRule` — no edit or delete), backed by `packages/core/screening/criteria.ts`'s `validateCriteriaInput` (own unit tests) and gated by two new permissions, `screening.criteria.read`/`.write`.
 
