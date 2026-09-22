@@ -214,12 +214,21 @@ and a fresh prod database is the only time changing it is free.
   recording the address it *would* have used.
 
 Notifications default to **enabled**, deliberately (a missing variable meaning
-"off" would be a silent portfolio-wide outage). Today nothing actually leaves
-the process, because `lib/notifications/provider.ts` still wires
-`LoggingChannelAdapter` — that is D-15's seam, and Resend/Twilio are a change to
-**one assignment**. The day that assignment changes, an unset
-`NOTIFICATIONS_SANDBOX_TO` in any non-production environment means real texts to
-whoever is in the database. Set it before that line changes, not with it.
+"off" would be a silent portfolio-wide outage). **Corrected 2026-09-22 (R-241):
+the line below was stale.** `lib/notifications/provider.ts` has wired
+`LiveChannelAdapter` since R-104 closed D-15's seam — not
+`LoggingChannelAdapter` as this file said for five weeks. That does not mean
+real sends are happening: `LiveChannelAdapter` itself falls back to the
+console per-channel when `RESEND_API_KEY`/`RESEND_FROM` or
+`TWILIO_ACCOUNT_SID`/`TWILIO_AUTH_TOKEN`/`TWILIO_MESSAGING_SERVICE_SID` are
+absent, and **on a production deployment (`VERCEL_ENV === 'production'`) an
+unconfigured channel is refused rather than logged** — the send is recorded
+`SUPPRESSED` / `unsupported_channel` instead of a false `SENT`
+(`live-adapter.ts:18-26`). Neither set is in Vercel Production today (see
+"Set in Vercel Production" above), so **every email and SMS this deployment
+has ever tried to send has been suppressed, correctly and visibly, not
+silently swallowed** — check `Notification.status = 'SUPPRESSED'` if that
+needs confirming. See "Production cutover" below for what actually flips it.
 
 ## Uploads need a Blob store attached
 
@@ -247,3 +256,93 @@ var — otherwise looks exactly like everything working.
 Blobs are written with `access: 'private'` (D-37). Reads stay authenticated
 against the store token and go through the same routes as before, so nothing
 about who may see a document changed.
+
+## A deploy never re-runs `db:seed`
+
+**D-240's unknown, answered (D-254).** `vercel-build` in
+`apps/web/package.json` is exactly `npx prisma generate ... && next build` —
+no seed script anywhere in it, and Vercel runs nothing else. A deploy applies
+no migration and writes no row; both are manual laptop steps against the
+production env file, as this document already says above. Nothing about that
+changes at go-live.
+
+## Production cutover: Stripe, Twilio, Resend
+
+Everything today runs in test/simulated mode **by design** (D-26 for Stripe,
+D-15/D-38 for Twilio and Resend) — this is the plan for the owner decision
+that turns each one on for real, not a step to run now. Do the three
+independently; nothing here requires flipping them together, and each has its
+own external precondition outside this repo.
+
+### Stripe — real money
+
+1. **Owner decision first, recorded as a new D-number.** `StripeBillingProvider`
+   (`apps/web/lib/billing/stripe-adapter.ts:104-116`) throws
+   `LiveModeRefusedError` at construction on any `sk_live_`/`rk_live_` key —
+   on purpose, per its own comment: "the owner authorised test mode
+   specifically." There is no env flag that lifts this; the constructor has
+   to be edited, reviewed and merged as its own deliberate PR. Do not do this
+   speculatively ahead of the decision.
+2. Get live keys from the Stripe dashboard (Live mode toggle), set
+   `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`,
+   `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` in Vercel Production.
+3. **Register a new, separate webhook endpoint in Live mode.** The endpoint
+   documented above (`we_1U47bfJ7dm36XvZPk4ekxGak`) is test-mode only —
+   Stripe does not carry a test-mode endpoint over to live. Subscribe to the
+   same ten event types listed above (`packages/core/billing/events.ts`) and
+   set the new live `STRIPE_WEBHOOK_SECRET` in Vercel.
+4. Verify the same way test mode was verified: a correctly-signed live
+   request returns 200, a tampered one returns 400. A 400 alone proves
+   nothing, per the note above.
+5. Run one real transaction for a real cent amount before onboarding a real
+   tenant, and confirm it lands in `LedgerEntry` as a projection, per D-11 —
+   this is the one path that moves real money and the one place a webhook
+   miss is invisible until a tenant disputes a charge.
+6. **Rollback:** revert the constructor PR, swap the Vercel keys back to
+   test. Stripe is the source of money (D-11) — a live charge Stripe already
+   processed cannot be undone by a code revert; it needs a real Stripe refund
+   or dispute action, same as any other day-two Stripe operation.
+
+### Twilio — real SMS
+
+1. Confirm the 10DLC brand/campaign registration (D-15) has cleared —
+   external, days to weeks, tracked outside this repo. Outbound SMS to US
+   mobiles does not work without it regardless of what is set below.
+2. Set `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_MESSAGING_SERVICE_SID`
+   in Vercel Production.
+3. **Set `NOTIFICATIONS_SANDBOX_TO` before step 2, not after** — the moment a
+   real `TWILIO_MESSAGING_SERVICE_SID` is present, `LiveChannelAdapter` sends
+   real texts to whoever is in the database, non-negotiably, the instant a
+   test suite or a stray dev deploy points at this project. There is no code
+   change to make: `apps/web/lib/notifications/provider.ts` has wired
+   `LiveChannelAdapter` since R-104 already (see the correction above) — this
+   is purely the three env vars.
+4. Send one real SMS to a phone the team controls, confirm the delivery
+   status callback lands (`StatusCallback` → `/api/sms/status`, wired only
+   when `AUTH_URL` is set) and the `Notification` row reads `SENT` then
+   `DELIVERED`, not `SUPPRESSED`.
+5. **Rollback:** unset any one of the three Twilio vars — `LiveChannelAdapter`
+   falls back to `SUPPRESSED` in production immediately, no deploy needed for
+   Vercel env var changes to take effect (next request re-reads
+   `process.env`, per `live-adapter.ts`'s own "read per call, never captured"
+   comment).
+
+### Resend — real email
+
+1. Verify the sending domain in the Resend dashboard (SPF/DKIM published) —
+   external, D-15.
+2. Set `RESEND_API_KEY` and `RESEND_FROM` in Vercel Production.
+3. Set `RESEND_WEBHOOK_SECRET` and register the delivery webhook
+   (`/api/webhooks/resend`, Svix-signed) so bounces and complaints land as
+   `Notification` status rather than a permanent `SENT` lie.
+4. Send one real email to an address the team controls, confirm it arrives
+   and the delivery webhook updates the row.
+5. **Rollback:** same shape as Twilio — unset `RESEND_API_KEY` or
+   `RESEND_FROM`, `LiveChannelAdapter` falls back to `SUPPRESSED` on the next
+   request.
+
+### What this plan deliberately does not cover
+
+Legal review of each jurisdiction config before activating deposit-deadline
+automation is its own release gate (06-backlog.md's Flagged gaps & conflicts,
+item 6) — not a technical step and not satisfied by anything above.
