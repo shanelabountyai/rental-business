@@ -231,7 +231,9 @@ describe('the payment-plan sweep', () => {
     expect(plan.brokenOn?.toISOString().slice(0, 10)).toBe('2026-03-01')
 
     const hold = await prisma.leaseHold.findUniqueOrThrow({ where: { id: holdId } })
-    expect(hold.liftedAt).not.toBeNull()
+    // Stamped from the job's own clock (`now`), not the wall clock.
+    expect(hold.liftedAt?.toISOString()).toBe('2026-03-05T13:00:00.000Z')
+    expect(plan.brokenAt?.toISOString()).toBe('2026-03-05T13:00:00.000Z')
     // NOBODY decided this. An instalment date passed.
     expect(hold.liftedByStaffId).toBeNull()
 

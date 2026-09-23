@@ -48,7 +48,7 @@ SCHEDULED_JOBS.push({
   localHour: LOCAL_HOUR,
   description:
     'Breaks a repayment plan whose instalment went unpaid, completes one that is paid off, and lifts the hold either way (PAY-08).',
-  run: async ({ propertyId, timezone, businessDate: today }) => {
+  run: async ({ propertyId, timezone, businessDate: today, now }) => {
     const plans = await prisma.paymentPlan.findMany({
       where: { propertyId, status: 'ACTIVE' },
       select: {
@@ -103,13 +103,13 @@ SCHEDULED_JOBS.push({
             ended === 'BROKEN'
               ? {
                   status: 'BROKEN',
-                  brokenAt: new Date(),
+                  brokenAt: now,
                   // The instalment it broke ON, not today. "You missed the
                   // April payment" is the sentence; "the system noticed on
                   // the 7th of May" is not.
                   brokenOn: businessDateToUtc(progress.missedDueOn!),
                 }
-              : { status: 'COMPLETED', completedAt: new Date() },
+              : { status: 'COMPLETED', completedAt: now },
         })
         // `liftedBySystem`, NOT `liftedByStaffId`. Nobody decided this - an
         // instalment date passed - and attributing it to whoever agreed the
@@ -119,7 +119,7 @@ SCHEDULED_JOBS.push({
         if (plan.hold && plan.hold.liftedAt === null) {
           await tx.leaseHold.update({
             where: { id: plan.hold.id },
-            data: { liftedAt: new Date(), liftedBySystem: 'job:payment_plan.check', liftReason },
+            data: { liftedAt: now, liftedBySystem: 'job:payment_plan.check', liftReason },
           })
         }
       })

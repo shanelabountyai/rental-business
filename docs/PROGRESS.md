@@ -13324,3 +13324,13 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 **What it left behind.** Nothing is deferred, but the four pages were **not walked in a browser** this session. The seed runs and re-runs clean against local `rental_demo` (second `--reset` retired the first generation, as it does for evictions), and `demo-seed.test.ts` passes, but a page rendering these rows is unverified. Each reset leaves one retired row per type under the retired properties, the same behaviour as the existing cases.
 
 **Gate.** `typecheck` clean; `demo-seed.test.ts` 37 passed; `db:seed:demo -- --reset` twice, exit 0. No app code changed, so lint, build and the e2e sweep were not run.
+
+## R-245 — payment-plan sweep uses the job's clock
+
+**What it built.** `payment-plan-job.ts` now stamps `liftedAt`, `brokenAt` and `completedAt` from the job context's `now` instead of `new Date()`. The `broken` test asserts both stamps equal the run instant and **goes red with the change reverted** (checked).
+
+**What it decided.** Only the timestamps. R-227's other carried item, a report of fees suppressed on debts paid off during a forgotten hold, is not built: it would mean replaying ledger history, and R-227 already chose the nightly `heldBackCents` snapshot as the report. Left as is, not owed to a later row.
+
+**What it left behind.** Nothing new. The R-227 report gap stays a known limit.
+
+**Gate.** `lint` 0 errors, `typecheck` clean, `npm test` **3,310 passed / 4 skipped**. No schema, route or UI change, so build and e2e were not run.
