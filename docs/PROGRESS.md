@@ -13363,7 +13363,7 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 
 ## R-248 — demo seed: no future `moveOutAt` on ACTIVE leases
 
-**Commit:** `(pending)`  ·  **Date:** 2026-09-23
+**Commit:** `5ed3295`  ·  **Date:** 2026-09-23
 
 **What it built.** Nothing new: four lines deleted from [demo-seed.mts](packages/db/prisma/demo-seed.mts) — the `moveOutAt` on the `in-notice` and `moving-out` leases, the optional `moveOutAt` field on the lease plan type, and the line that passed it to `lease.create`.
 
