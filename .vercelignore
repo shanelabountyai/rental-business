@@ -8,3 +8,5 @@
 **/node_modules
 test-results
 playwright-report
+# Generated at build time by `prisma generate`; a local copy is never what Git deploys.
+packages/db/generated
