@@ -106,10 +106,13 @@ async function seedMessageDelivery(status: 'SENT' | 'DELIVERED', externalId: str
   return message
 }
 
-function post(payload: unknown, opts: { badSignature?: boolean; noSignature?: boolean } = {}) {
+function post(
+  payload: unknown,
+  opts: { badSignature?: boolean; noSignature?: boolean; ageSeconds?: number } = {},
+) {
   const rawBody = JSON.stringify(payload)
   const svixId = `msg_${randomUUID()}`
-  const svixTimestamp = String(Math.floor(Date.now() / 1000))
+  const svixTimestamp = String(Math.floor(Date.now() / 1000) - (opts.ageSeconds ?? 0))
   const signedContent = `${svixId}.${svixTimestamp}.${rawBody}`
   const signature = createHmac('sha256', SECRET_RAW).update(signedContent).digest('base64')
 
@@ -136,6 +139,23 @@ describe('the Resend delivery webhook', () => {
       { badSignature: true },
     )
     expect(response.status).toBe(403)
+  })
+
+  // SEC-04: a correctly signed callback is still refused once it is older
+  // than the window, so a captured request cannot be replayed later.
+  it('REFUSES a correctly signed callback with a stale timestamp', async () => {
+    const id = `re_${randomUUID()}`
+    const notification = await seedNotificationDelivery('SENT', id)
+
+    const stale = await post({ type: 'email.delivered', data: { email_id: id } }, { ageSeconds: 301 })
+    expect(stale.status).toBe(403)
+    const untouched = await prisma.notificationDelivery.findUniqueOrThrow({
+      where: { notificationId: notification.id },
+    })
+    expect(untouched.status).toBe('SENT')
+
+    const edge = await post({ type: 'email.delivered', data: { email_id: id } }, { ageSeconds: 290 })
+    expect(edge.status).toBe(204)
   })
 
   it('records DELIVERED on a NotificationDelivery row', async () => {

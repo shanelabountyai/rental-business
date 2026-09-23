@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from 'node:crypto'
+import { SIGNATURE_TOLERANCE_SECONDS } from '../billing/webhook-signature.ts'
 
 // Twilio webhook signature verification (R-021).
 //
@@ -76,6 +77,10 @@ export function verifyTwilioSignature(args: {
 //   3. HMAC-SHA256 that content with the decoded key, base64 the result.
 //   4. The header can carry several space-separated `v1,<signature>` pairs
 //      (a key rotation in progress) - a match against ANY of them is valid.
+//   5. Reject a timestamp outside the Stripe verifier's window (SEC-04).
+//      The signature covers the timestamp but proves nothing about WHEN it
+//      was sent, so without the window one captured callback replays for
+//      ever - a stale `email.bounced` re-raising a Task, say.
 //
 // Implemented here rather than pulling the `svix` package, for the same
 // reason `verifyTwilioSignature` above is hand-rolled: it is the entire
@@ -105,8 +110,18 @@ export function verifyResendSignature(args: {
   /// and re-serializing a parsed JSON object is not guaranteed to reproduce
   /// it byte for byte.
   rawBody: string
+  /// Seconds since the epoch. Injected so the window is testable.
+  nowSeconds?: number
 }): boolean {
   if (!args.secret || !args.svixId || !args.svixTimestamp || !args.signatureHeader) {
+    return false
+  }
+
+  // `Number('')`/`Number('abc')` is NaN, and NaN > anything is false - so
+  // test the digits first rather than trust the comparison to refuse it.
+  if (!/^\d+$/.test(args.svixTimestamp)) return false
+  const now = args.nowSeconds ?? Math.floor(Date.now() / 1000)
+  if (Math.abs(now - Number(args.svixTimestamp)) > SIGNATURE_TOLERANCE_SECONDS) {
     return false
   }
 

@@ -13429,3 +13429,15 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 **What it left behind.** Pages still offer read-only houses in write forms (for example the vendor-invoice property picker). Submitting one is now refused with "No property you can see has that ID", which is accurate enough but not ideal. SEC-04 to SEC-07. The NSF-fee audit row with no `reason` is still unowned.
 
 **Gate.** `lint` 0 errors (warnings unchanged), `typecheck` clean. Unit: `vitest related` over the changed files, 4/4. The actions have no unit tests, so the full `npm test` was not rerun (load average 23 from another project's sweep). e2e `vendor-invoice-splits`, `property-expenses`, `deposits`, `deposit-disposition`, desktop-chrome: **19/19** against `--list`. Full sweep left to CI.
+
+## SEC-04 — the Resend webhook refuses stale timestamps
+
+**Commit:** `PENDING`  ·  **Date:** 2026-09-23
+
+**What it built.** `verifyResendSignature` in [packages/core/comms/webhook-signature.ts](packages/core/comms/webhook-signature.ts) now refuses a `svix-timestamp` more than `SIGNATURE_TOLERANCE_SECONDS` (300, imported from the Stripe verifier) from now in either direction, and refuses a non-numeric one before the comparison, because a `NaN` comparison would not refuse it. Optional `nowSeconds` for tests, same as the Stripe verifier. [route.test.ts](apps/web/app/api/webhooks/resend/route.test.ts) posts a correctly signed `email.delivered` 301s old: 403, and the delivery row stays `SENT`. The same callback at 290s is accepted. With the fix reverted, that case fails and the other 7 pass.
+
+**What it decided.** D-261: a stale callback gets 403, the same as a forged one (the row said 400). The window is shared with Stripe, not copied.
+
+**What it left behind.** SEC-05 to SEC-07. The NSF-fee audit row with no `reason` is still unowned.
+
+**Gate.** `lint` 0 errors (warnings unchanged), `typecheck` clean. Unit: the Resend route test plus `packages/core/billing`, 116/116. Full `npm test` not rerun (load average ~20 from another project's sweep). The route has no e2e. Full sweep left to CI.
