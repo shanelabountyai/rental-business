@@ -343,7 +343,8 @@ describe('the leasing story lands on screens that render it', () => {
 function owedCents(lifecycle: string, rentCents: number): number {
   const plan = MONEY[lifecycle]
   if (!plan) return 0
-  return plan.invoices.reduce((owed, invoice) => {
+  const counter = (plan.counterPayments ?? []).reduce((sum, c) => sum + c.cents, 0)
+  return -counter + plan.invoices.reduce((owed, invoice) => {
     const paid =
       invoice.paidCents === 'full'
         ? rentCents

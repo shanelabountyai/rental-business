@@ -1,5 +1,7 @@
 # Next session
 
+## R-247 is done (`/money/deposits` demo batch). Next candidate: the demo seed's future `moveOutAt` on two ACTIVE leases, or the Milestone 17 legal-review gate. Scope a real row first.
+
 ## R-246 is done (MTM rollover cap + withdrawn-increase message, D-256). Next candidate: `/money/deposits` demo batch, or the Milestone 17 legal-review gate. Scope a real row first.
 
 ## R-245 is done.
@@ -24,7 +26,7 @@
 
 **Carried defects (unowned, still true):**
 - ~~`plan-esign.ts` hardcodes TENANT~~ — **not a defect** (checked 2026-09-23). Tenants sign and guarantors deliberately do not (`guarantors: []`, rationale in the file header, lines 34-41): a guarantor's signature could read as reaffirming the debt. Every signer is a tenant, so `type: 'TENANT'` is correct. Changing it needs counsel, not a code fix.
-- `/money/deposits` has never shown a batch in the demo — needs a real open Stripe invoice or a simulator run.
+- ~~`/money/deposits` has never shown a batch~~ — fixed R-247 (counter payments in the seed; not browser-walked).
 - Demo seed writes a future `moveOutAt` on two ACTIVE leases, a state the product cannot produce (harmless today).
 - Unserved entry notice + later hand service does not re-judge the window; needs counsel on damages for entries already made (R-228).
 - ~~`payment-plan-job.ts` stamps~~ — fixed R-245. The suppressed-fee report gap (paid-off debts) stays a known limit; not worth building.

@@ -13348,3 +13348,15 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 **What it left behind.** **Needs counsel** on clamping versus refusing. The Task has no resolve-by-editing flow, staff simply close it. No migration on Neon was needed (no schema change).
 
 **Gate.** `lint` 0 errors, `typecheck` clean, `npm test` **3,312 passed / 4 skipped**. No schema, route or UI change, so build and e2e were not run.
+
+## R-247 — `/money/deposits` demo batch
+
+**Commit:** SHA below  ·  **Date:** 2026-09-23
+
+**What it built.** A `counterPayments` field on `MoneyPlan` in [demo-seed.mts](packages/db/prisma/demo-seed.mts). The `in-notice` tenancy now holds a $120 cheque and an $80 money order against its newest invoice, so `/money/deposits` shows one batch of two. The `owedCents` helper in `demo-seed.test.ts` subtracts them.
+
+**What it decided.** The seed writes the `Payment` and its `PaymentInvoiceSplit` directly and then replays an authored `invoice.updated` to claim them, instead of calling `recordAcrossInvoices`: the invoice is authored and the provider has never heard of it. The $200 owed and the total paid are unchanged; the second instalment was split rather than added to.
+
+**What it left behind.** Not walked in a browser (D-28 walks belong to a milestone close). No app code changed.
+
+**Gate.** `lint` 0 errors, `typecheck` clean, `npm test` **3,312 passed / 4 skipped**, `db:seed:demo -- --reset` exit 0 with one ledger entry per instrument and no duplicate row. No schema, route or UI change, so build and e2e were not run.

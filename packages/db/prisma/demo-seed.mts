@@ -3211,6 +3211,10 @@ interface MoneyPlan {
   /// and crediting it early is how a tenant is told they are square days
   /// before the return comes back.
   inFlight?: { daysAgo: number; amountCents: number }
+  /// Cheques and money orders handed over at the counter against the NEWEST
+  /// invoice. They stay UNDEPOSITED, which is the only reason `/money/deposits`
+  /// (R-166) has anything to group.
+  counterPayments?: { channel: 'OFFLINE_CHECK' | 'MONEY_ORDER'; cents: number; checkNumber?: string }[]
 }
 
 /**
@@ -3292,9 +3296,17 @@ export const MONEY: Record<string, MoneyPlan> = {
     invoices: [
       { daysAgo: 90, paidCents: 'full' },
       { daysAgo: 60, paidCents: 'full' },
-      { daysAgo: SINCE_MONTH_START, paidCents: [80_000, 60_000] },
+      { daysAgo: SINCE_MONTH_START, paidCents: [80_000, 40_000] },
     ],
     collectionMethod: 'send_invoice',
+    // The last $200 of the original second instalment, now handed over at
+    // the counter as two instruments on one day - one entity, one day, one
+    // person, so `/money/deposits` shows a single batch of two. Still $200
+    // owed in total: the story is unchanged, only how it arrived.
+    counterPayments: [
+      { channel: 'OFFLINE_CHECK', cents: 12_000, checkNumber: '4471' },
+      { channel: 'MONEY_ORDER', cents: 8_000 },
+    ],
   },
 
   /// AN ACH DEBIT STILL IN FLIGHT. Three to five days, and until it settles
@@ -3578,6 +3590,7 @@ async function replay(
 async function seedMoney(
   targets: MoneyTarget[],
   demoLinks: DemoLink[],
+  staffId: string,
 ): Promise<{ payers: number; events: number }> {
   const planned = targets.filter((target) => MONEY[target.lifecycle])
   if (planned.length === 0) return { payers: 0, events: 0 }
@@ -3746,6 +3759,53 @@ async function seedMoney(
           `rent payment ${index + 1} of ${parts.length} on the invoice ${invoice.daysAgo} days ago`,
         )
         events++
+      }
+
+      // COUNTER PAYMENTS: the row first, then the event that claims it - the
+      // order `recordOfflinePayment` keeps (D-177), because the webhook
+      // recognises a counter payment by `receivedByStaffId` and a split
+      // naming this invoice and amount. What the seed cannot do is push to
+      // the provider: this invoice is authored, so Stripe has never heard
+      // of it and `getOpenInvoices` is empty. The event stands in for that
+      // push, exactly as the instalments above do.
+      if (invoice === plan.invoices.at(-1) && plan.counterPayments) {
+        const payer = await prisma.leasePayer.findFirstOrThrow({
+          where: { leaseId: target.leaseId, tenantId: target.tenantId, active: true },
+          select: { id: true },
+        })
+        const receivedAt = new Date(`${daysFrom(-1).toISOString().slice(0, 10)}T12:00:00Z`)
+        for (const counter of plan.counterPayments) {
+          await prisma.payment.create({
+            data: {
+              propertyId: target.propertyId,
+              leaseId: target.leaseId,
+              leasePayerId: payer.id,
+              channel: counter.channel,
+              status: 'SETTLED',
+              amountCents: counter.cents,
+              receivedAt,
+              receivedByStaffId: staffId,
+              checkNumber: counter.checkNumber ?? null,
+              stripeInvoiceId: invoiceId,
+              invoiceSplits: {
+                create: [{ stripeInvoiceId: invoiceId, amountCents: counter.cents }],
+              },
+            },
+          })
+          const before = paidSoFar
+          paidSoFar += counter.cents
+          await push(
+            stripeEvent(
+              'invoice.updated',
+              receivedAt,
+              { id: invoiceId, customer, amount_paid: paidSoFar, description: 'Rent payment', lines },
+              { amount_paid: before },
+            ),
+            'projected',
+            `the ${counter.channel.toLowerCase()} at the counter`,
+          )
+          events++
+        }
       }
 
       // No `payment_intent`: the settled row was written from
@@ -4296,7 +4356,7 @@ async function seedDemoData() {
   // LAST OF THE THREE STORIES AND DELIBERATELY SO. It reads the overdue
   // `Charge` written above, and it is the only section here that can make a
   // property permanently undeletable - see `reset()`'s sticky set.
-  const money = await seedMoney(moneyTargets, demoLinks)
+  const money = await seedMoney(moneyTargets, demoLinks, staff.id)
 
   // ---- The staff queue, LAST: it is derived from everything above ----
   const taskCount = await seedTasks(
