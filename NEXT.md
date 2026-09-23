@@ -4,7 +4,7 @@
 
 - CI run `35927022398` covers it. Confirm green: `gh run list --limit 2`. The previous run (`35924753371`) failed only on the 4 no-JS specs this fixes.
 - Exec brief refreshed 2026-09-23 (290 items, 4,623 tests, 262 decisions, security-review line): https://claude.ai/artifact/GSG4tVzFVzbgD4m5eacsrB
-- LinkedIn post 54 (SEC-01 forged read receipt, Rental/Impact) is drafted but NOT in the Ledger: publishing was blocked by the permission check (the Ledger is link-shared). Built file: session scratchpad `ledger/index.html`; text is in the session transcript. Shane decides.
+- LinkedIn post 54 (SEC-01 forged read receipt, Rental/Impact) is in the Ledger, queued last: https://claude.ai/artifact/Ai5xKScgT2sWtqXRQ1ZA8i
 - Backlog has no open rows. Remaining needs a person: legal review, R-228.
 
 ## R-249 is done (`dac6dbe`, NSF fees get an audit row). The backlog has no open rows.
