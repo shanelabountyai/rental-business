@@ -13317,7 +13317,7 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 
 ## R-244 — Demo rows for four detail pages
 
-**What it built.** Seed data only, in `packages/db/prisma/demo-seed.mts`. Riverside Court Duplex Unit B has a MONITORING abandonment case with four contact attempts. Bluebonnet Lane House has an open WATER `InsuranceClaim` (with an `InsurancePolicy`, which no demo property carried) with two events and loss-of-rents evidence, and a performed-but-unlocked periodic inspection awaiting the tenant's signature. Magnolia Drive House has a `ConfidentialCase`. `reset()` deletes the four new row types before the leases and units they name.
+**What it built (`a849c44`).** Seed data only, in `packages/db/prisma/demo-seed.mts`. Riverside Court Duplex Unit B has a MONITORING abandonment case with four contact attempts. Bluebonnet Lane House has an open WATER `InsuranceClaim` (with an `InsurancePolicy`, which no demo property carried) with two events and loss-of-rents evidence, and a performed-but-unlocked periodic inspection awaiting the tenant's signature. Magnolia Drive House has a `ConfidentialCase`. `reset()` deletes the four new row types before the leases and units they name.
 
 **What it decided.** The abandonment case stops at MONITORING: `ENTERED` and `BELONGINGS_HELD` each need a served entry notice, and a demo opening on an entry misrepresents how early the process starts. The inspection uses a new `awaitingSignature` flag rather than a second inspection path, because every other performed inspection is locked and lands the tenant on the read-only "finalized without a signature" branch.
 
