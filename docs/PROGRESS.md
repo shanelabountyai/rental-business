@@ -13351,7 +13351,7 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 
 ## R-247 — `/money/deposits` demo batch
 
-**Commit:** SHA below  ·  **Date:** 2026-09-23
+**Commit:** `7ee74d0`  ·  **Date:** 2026-09-23
 
 **What it built.** A `counterPayments` field on `MoneyPlan` in [demo-seed.mts](packages/db/prisma/demo-seed.mts). The `in-notice` tenancy now holds a $120 cheque and an $80 money order against its newest invoice, so `/money/deposits` shows one batch of two. The `owedCents` helper in `demo-seed.test.ts` subtracts them.
 
