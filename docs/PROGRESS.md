@@ -8573,7 +8573,7 @@ a payment that was then deleted could never be withdrawn.
 
 **A real bug found and deliberately left, recorded as UNKNOWN rather than
 guessed.** The same `stripePaymentIntentId`-only dedup means an ACH payment on
-an invoice may write a `PENDING` row from `payment_intent.processing` and then
+an invoice may write a `dac6dbe` row from `payment_intent.processing` and then
 a separate `SETTLED` row from `invoice.updated` — which would leave
 `inFlightCents` never clearing and the payment twice on a tenant's history.
 It hinges entirely on whether the invoice object carries `payment_intent`;
@@ -10935,7 +10935,7 @@ the count lives on the existing drift panel.
 - **Production frequency is unknown.** How often a real out-of-band
   `invoice.updated` goes missing is not known here, and none is stated.
 - **R-171's ACH leftover is untouched and is a different line**:
-  `writePayment`'s PaymentIntent-only dedup may still write a `PENDING` and a
+  `writePayment`'s PaymentIntent-only dedup may still write a `dac6dbe` and a
   `SETTLED` row for one ACH payment. Still recorded as unknown.
 - **No e2e seeds a stale counter row.** The count is covered by the unit test
   and the panel's render by `ops-visibility.spec.ts`. Nothing asserts the red
@@ -13481,7 +13481,7 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 
 ## R-249 — NSF fees get an audit row
 
-**Commit:** `PENDING`  ·  **Date:** 2026-09-23
+**Commit:** `dac6dbe`  ·  **Date:** 2026-09-23
 
 **What it built.** [`assessNsfFee`](apps/web/lib/ledger/nsf-fees.ts) now passes `reasonCode: 'other'` and the fee's description as `reason` on its `ledger.adjusted` audit. That action is on `REASON_REQUIRED`, so before this `recordAudit` threw, the `.catch` logged it, and **no NSF fee has ever had an audit row**. The same hole `billing/proration.ts` closed earlier. [nsf-fees.test.ts](apps/web/lib/ledger/nsf-fees.test.ts) now asserts the row exists and its reason is the fee description.
 
