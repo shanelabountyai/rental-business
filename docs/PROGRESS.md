@@ -13444,7 +13444,7 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 
 ## SEC-05 — the inbound-email secret is header only
 
-**Commit:** `PENDING`  ·  **Date:** 2026-09-23
+**Commit:** `e23883e`  ·  **Date:** 2026-09-23
 
 **What it built.** [app/api/email/inbound/route.ts](apps/web/app/api/email/inbound/route.ts) reads the shared secret from `x-inbound-secret` and nothing else; the `?secret=` fallback is gone. New [route.test.ts](apps/web/app/api/email/inbound/route.test.ts): the right secret as a query string gets 403, the same secret in the header gets past auth to the 400 for a bad body. Neither case touches the database. With the fix reverted, the query-string case fails.
 
