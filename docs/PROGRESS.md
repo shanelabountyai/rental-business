@@ -13404,7 +13404,7 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 
 ## SEC-02 — `addLeaseTenant` resolves the tenant through the actor's scope
 
-**Commit:** `PENDING`  ·  **Date:** 2026-09-23
+**Commit:** `22ff4db`  ·  **Date:** 2026-09-23
 
 **What it built.** `tenantWhere(scope)` in [lib/auth/scope.ts](apps/web/lib/auth/scope.ts), next to `propertyWhere` and following the same `null` rule (an empty scope returns no rows, never "no filter"). A tenant is in scope when they are a party to a lease at a property in scope. `addLeaseTenant` now looks the tenant up with `findFirst({ id, ...tenantWhere(propertyScope(actor, 'tenant.read')) })`, and an out-of-scope id gets the same "could not be found" as an id that does not exist. `selectableTenants` takes the same scope. Four new cases in [lib/auth/scoping.test.ts](apps/web/lib/auth/scoping.test.ts) run against real rows: portfolio-wide, property-scoped, entity-scoped and deactivated.
 
