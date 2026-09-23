@@ -17,6 +17,7 @@ import {
   validateNoticePeriodOverride,
 } from '@rental/core/leases'
 import { validateDepositAmount } from '@rental/core/ledger'
+import { propertyScope } from '@rental/core/rbac'
 import {
   UNREVIEWED_DAY_COUNT,
   businessDate,
@@ -36,6 +37,7 @@ import { retireUnitAccessCodes } from '@/lib/locks/access-codes.ts'
 import { startTurnoverProjectForLease } from '@/lib/turnover/start.ts'
 import { authUrl, canReceiveAuthLink } from '@/lib/auth/delivery.ts'
 import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
+import { tenantWhere } from '@/lib/auth/scope.ts'
 import { rulesForConfigured } from '@/lib/jurisdiction/queries.ts'
 import { dispatchPendingNotifications, notify } from '@/lib/notifications/send.ts'
 import { activateLeaseSideEffects } from './activate.ts'
@@ -1076,11 +1078,14 @@ export async function addLeaseTenant(
   _previous: LeaseFormState,
   formData: FormData,
 ): Promise<LeaseFormState> {
-  const { lease } = await leaseForWrite(leaseId)
+  const { lease, actor } = await leaseForWrite(leaseId)
   const tenantId = str(formData, 'tenantId')
   if (!tenantId) return { error: 'Choose who is on the lease.' }
 
-  const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } })
+  // SEC-02: the lease check says nothing about the tenant, and `Tenant` is
+  // global. Out of scope reads exactly like nonexistent, as ROLE-01 wants.
+  const scoped = tenantWhere(propertyScope(actor, 'tenant.read'))
+  const tenant = scoped && (await prisma.tenant.findFirst({ where: { id: tenantId, ...scoped } }))
   if (!tenant) return { error: 'That person could not be found.' }
 
   const existing = await prisma.leaseTenant.count({ where: { leaseId } })

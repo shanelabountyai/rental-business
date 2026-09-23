@@ -1,7 +1,9 @@
 import 'server-only'
 
 import { CONDITION_BASELINE_DOCUMENT_TYPE } from '@rental/core/leases'
+import type { PropertyScope } from '@rental/core/rbac'
 import { prisma } from '@rental/db'
+import { tenantWhere } from '@/lib/auth/scope.ts'
 import type { ResolvedScope } from '@/lib/scope/current-scope.ts'
 
 // Reads for lease records (LEASE-06, R-033). Scoped by ResolvedScope - the
@@ -192,10 +194,13 @@ export async function unitsForNewLease(scope: ResolvedScope) {
 
 /// Tenants who could be added to a lease. A 10-50 unit portfolio's tenant
 /// list is short enough to offer whole; a search box over a few hundred
-/// names is UI nobody needs yet.
-export async function selectableTenants() {
+/// names is UI nobody needs yet. Scoped (SEC-02): the picker must not be a
+/// directory of every tenant in the portfolio for somebody scoped to one house.
+export async function selectableTenants(scope: PropertyScope) {
+  const where = tenantWhere(scope)
+  if (where === null) return []
   return prisma.tenant.findMany({
-    where: { active: true },
+    where: { active: true, ...where },
     select: { id: true, firstName: true, lastName: true, email: true, phone: true },
     orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
   })

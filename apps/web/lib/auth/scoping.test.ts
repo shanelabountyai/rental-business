@@ -1,7 +1,7 @@
 import { type Actor, propertyScope } from '@rental/core/rbac'
 import { prisma } from '@rental/db'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { propertyWhere, scopedByProperty } from './scope.ts'
+import { propertyWhere, scopedByProperty, tenantWhere } from './scope.ts'
 
 // ROLE-01: "Authorization enforced server-side per role and record scope."
 //
@@ -21,8 +21,14 @@ let propB: string
 let propC: string
 let ticketA: string
 let ticketC: string
-const created: { properties: string[]; entities: string[]; tickets: string[] } =
-  { properties: [], entities: [], tickets: [] }
+let tenantA: string
+let tenantC: string
+const created: {
+  properties: string[]
+  entities: string[]
+  tickets: string[]
+  tenants: string[]
+} = { properties: [], entities: [], tickets: [], tenants: [] }
 
 beforeAll(async () => {
   const stamp = `rbac-${Date.now()}`
@@ -77,9 +83,27 @@ beforeAll(async () => {
   ticketA = (await makeTicket(propA)).id
   ticketC = (await makeTicket(propC)).id
   created.tickets.push(ticketA, ticketC)
+
+  // SEC-02: Tenant is global, so a tenant's scope is the leases they are on.
+  const makeTenancy = async (propertyId: string) => {
+    const unit = await prisma.unit.create({ data: { propertyId, name: 'Tenancy' } })
+    const lease = await prisma.lease.create({
+      data: { propertyId, unitId: unit.id, startsOn: new Date('2026-01-01'), rentCents: 150000 },
+    })
+    const tenant = await prisma.tenant.create({
+      data: { firstName: 'Scoped', lastName: stamp, leaseTenants: { create: { leaseId: lease.id } } },
+    })
+    created.tenants.push(tenant.id)
+    return tenant.id
+  }
+  tenantA = await makeTenancy(propA)
+  tenantC = await makeTenancy(propC)
 })
 
 afterAll(async () => {
+  await prisma.leaseTenant.deleteMany({ where: { tenantId: { in: created.tenants } } })
+  await prisma.tenant.deleteMany({ where: { id: { in: created.tenants } } })
+  await prisma.lease.deleteMany({ where: { propertyId: { in: created.properties } } })
   await prisma.ticket.deleteMany({ where: { id: { in: created.tickets } } })
   await prisma.unit.deleteMany({
     where: { propertyId: { in: created.properties } },
@@ -320,5 +344,34 @@ describe('assignment integrity', () => {
 
     await prisma.staffAssignment.deleteMany({ where: { staffUserId: staff.id } })
     await prisma.staffUser.delete({ where: { id: staff.id } })
+  })
+})
+
+describe('scoping tenants through their leases (SEC-02)', () => {
+  async function visibleTenants(actor: Actor) {
+    const where = tenantWhere(propertyScope(actor, 'property.read'))
+    if (where === null) return []
+    const rows = await prisma.tenant.findMany({
+      where: { AND: [where, { id: { in: created.tenants } }] },
+      select: { id: true },
+    })
+    return rows.map((row) => row.id).sort()
+  }
+
+  it('shows a portfolio-wide actor every tenant', async () => {
+    expect(await visibleTenants(readerOf('all'))).toEqual([tenantA, tenantC].sort())
+  })
+
+  it('hides a tenant on another entity from a property-scoped actor', async () => {
+    expect(await visibleTenants(readerOf({ propertyId: propA }))).toEqual([tenantA])
+  })
+
+  it('reaches tenants through an entity-scoped grant', async () => {
+    expect(await visibleTenants(readerOf({ legalEntityId: entityTwo }))).toEqual([tenantC])
+  })
+
+  it('shows nothing to a deactivated actor', async () => {
+    const gone: Actor = { ...readerOf('all'), active: false }
+    expect(tenantWhere(propertyScope(gone, 'property.read'))).toBeNull()
   })
 })

@@ -13401,3 +13401,17 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 **What it left behind.** SEC-02 to SEC-07 (backlog, security findings). **Found, not fixed:** `lib/ledger/nsf-fees.ts:167` audits `ledger.adjusted` with no `reason`, which is on `REASON_REQUIRED`, so every NSF fee is written with **no audit row** (the error is caught and logged). The full unit run logs it for each NSF test. Probably the same shape in `opening-balance-charge.ts`, `deposit-charge.ts` and `proration.ts` (same catch-and-log pattern; not checked).
 
 **Gate.** `lint` 0 errors (16 warnings, same as `main`), `typecheck` clean, `npm run build` green. `npm test`: 3,254 passed / 27 skipped / 39 failed = 3,320. All 39 were timeouts while the storage-business project ran a Playwright sweep at the same moment (load average 63), and the 23 failing files rerun alone pass **245/245**. e2e: the five specs over the moved code (`notices`, `portal-guarantor`, `self-showing`, `prospects`, `showings`), desktop-chrome, **27/27 passed** against `--list`. Full sweep left to CI.
+
+## SEC-02 — `addLeaseTenant` resolves the tenant through the actor's scope
+
+**Commit:** `PENDING`  ·  **Date:** 2026-09-23
+
+**What it built.** `tenantWhere(scope)` in [lib/auth/scope.ts](apps/web/lib/auth/scope.ts), next to `propertyWhere` and following the same `null` rule (an empty scope returns no rows, never "no filter"). A tenant is in scope when they are a party to a lease at a property in scope. `addLeaseTenant` now looks the tenant up with `findFirst({ id, ...tenantWhere(propertyScope(actor, 'tenant.read')) })`, and an out-of-scope id gets the same "could not be found" as an id that does not exist. `selectableTenants` takes the same scope. Four new cases in [lib/auth/scoping.test.ts](apps/web/lib/auth/scoping.test.ts) run against real rows: portfolio-wide, property-scoped, entity-scoped and deactivated.
+
+**What it found.** The audit named the action, but the read side had the same hole. `selectableTenants()` had no filter at all, so the "Add somebody to the lease" picker showed a manager scoped to one house the name, email and phone of every active tenant in the portfolio.
+
+**What it decided.** D-259: tenant scope comes through `LeaseTenant → Lease → Property`, and the permission is `tenant.read`, which every role holding `lease.write` also holds. Every app path creates a tenant onto a lease (import, party change), so no tenant is left unreachable.
+
+**What it left behind.** SEC-03 to SEC-07. The NSF-fee audit row with no `reason` (found in SEC-01) is still unowned.
+
+**Gate.** `lint` 0 errors (16 warnings, same as `main`), `typecheck` clean. `npm test`: 3,320 passed / 4 skipped = 3,324, exit 0. e2e `leases.spec.ts`, both projects: **44/44** against `--list` (the run built the app first). Full sweep left to CI.

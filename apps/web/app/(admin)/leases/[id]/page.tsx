@@ -1,3 +1,4 @@
+import { propertyScope } from '@rental/core/rbac'
 import { formatPhone, normalizePhone } from '@rental/core/comms'
 import { blockedNumbers } from '@/lib/comms/opt-out-store.ts'
 import {
@@ -299,7 +300,7 @@ export default async function LeaseDetailPage({
     chaseHistory,
   ] = await Promise.all([
     outstandingIntakeGaps(lease),
-    canWrite ? selectableTenants() : Promise.resolve([]),
+    canWrite ? selectableTenants(propertyScope(actor, 'tenant.read')) : Promise.resolve([]),
     leaseBillingState(lease.id),
     leaseStatement(lease.id, scope),
     waivableFees(lease.id),

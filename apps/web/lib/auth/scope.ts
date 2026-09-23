@@ -38,6 +38,22 @@ export function propertyWhere(
 }
 
 /**
+ * Tenant rows within a scope (SEC-02). `Tenant` is global - it carries no
+ * property - so a tenant is in scope when they are a party to a lease at a
+ * property the actor can see. Every tenant is created onto a lease (import,
+ * party change), so none is stranded by this. Same `null` contract as
+ * `propertyWhere`.
+ */
+export function tenantWhere(
+  scope: PropertyScope,
+): Prisma.TenantWhereInput | null {
+  const property = propertyWhere(scope)
+  if (property === null) return null
+  if (scope.everything) return {}
+  return { leaseTenants: { some: { lease: { property } } } }
+}
+
+/**
  * The same restriction for any row carrying `propertyId` directly - which is
  * every operational and financial entity, because R-002 denormalized it for
  * exactly this reason (schema.prisma, "Scoping").
