@@ -1,12 +1,11 @@
 # Next session
 
-## SEC-06 is done (`ead3cf1`). Next: SEC-07 (`/api/documents/[id]/file`: `private, no-store` + guarantor branch `deletedAt` check), backlog "Security findings".
+## SEC-07 is done (`c854d2e`). The Security findings rows are all done, and the backlog has no open rows.
 
-- `Referrer-Policy: no-referrer` set in `next.config.ts` `headers()`, not the proxy (proxy skips /api and document routes).
-- CI for SEC-03..06 not yet confirmed green: `gh run list --limit 3` (earlier runs were cancelled by the next push).
-- **Carried defect, unowned:** `apps/web/lib/ledger/nsf-fees.ts:167` audits `ledger.adjusted` with no `reason` (on `REASON_REQUIRED`), so no NSF fee gets an audit row. Check `opening-balance-charge.ts:81`, `deposit-charge.ts:116`, `proration.ts:174` too.
-- Full unit runs time out broadly while the storage project runs a sweep. Check `uptime` before reading timeouts.
-- Lint shows ~16 unused-var warnings (pre-existing since SEC-03); harmless, cleanable.
+- **Next candidate: the carried NSF-fee audit defect.** It needs scoping into a row first. `apps/web/lib/ledger/nsf-fees.ts:167` audits `ledger.adjusted` with no `reason`, but that action is on `REASON_REQUIRED`, so no NSF fee gets an audit row. Check `opening-balance-charge.ts:81`, `deposit-charge.ts:116` and `proration.ts:174` for the same shape.
+- CI for SEC-03..07 is not confirmed green yet: `gh run list --limit 3`.
+- `writeStorageBytes` now lives in `e2e/fixtures.ts`. Use it; do not copy it into a spec.
+- Full unit runs time out broadly while the storage project runs a sweep. Check `uptime` before reading timeouts (load was ~17-25 on 2026-09-23).
 
 ## rent.labintelligence.co is live and walked (D-257, 2026-09-23). Project is at closure.
 
