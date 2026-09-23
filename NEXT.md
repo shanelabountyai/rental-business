@@ -1,5 +1,7 @@
 # Next session
 
+## R-245 is done. Next candidate: MTM rollover rate cap / withdrawn-increase message (R-225), `/money/deposits` demo batch, or the Milestone 17 legal-review gate. Scope a real row first.
+
 ## R-244 is done and walked (2026-09-23). Nothing outstanding on it.
 
 **Browser walk (headless Chromium, `dev:demo`, reseeded):** `/abandonment`, `/claims`, `/confidential` and one detail page each, as `owner@demo.test`, plus `/portal/papers` and the tenant inspection report (`/portal/papers/inspections/[id]`, reached from Papers - there is no list route, so `/portal/papers/inspections` is a correct 404) through all five tenant links. All 200 at 1280px and 412px, `documentElement.scrollWidth` == viewport, no `undefined`/`NaN`/`Invalid Date`/raw `YYYY-MM-DD`. Screenshots read correctly. The "1 Issue" badge in them is the dev-only `eval()` CSP warning from headless Chromium, not an app defect.
@@ -23,7 +25,7 @@
 - `/money/deposits` has never shown a batch in the demo — needs a real open Stripe invoice or a simulator run.
 - Demo seed writes a future `moveOutAt` on two ACTIVE leases, a state the product cannot produce (harmless today).
 - Unserved entry notice + later hand service does not re-judge the window; needs counsel on damages for entries already made (R-228).
-- `payment-plan-job.ts` / suppressed-fee report gap (R-227).
+- ~~`payment-plan-job.ts` stamps~~ — fixed R-245. The suppressed-fee report gap (paid-off debts) stays a known limit; not worth building.
 - No MTM rollover rate cap, no withdrawn-increase tenant message, R-223-R-233 migrations not on the Neon dev branch (R-225).
 - ~~No demo rows for the four detail pages~~ — seeded in R-244, walked in a browser 2026-09-23, clean.
 - **The vitest suite has no shared `uniqueStateCode()`-equivalent helper.** Every job/unit test file that needs a `JurisdictionRule` picks its own hardcoded 2-letter state code and tracks collisions by a manually maintained comment list (TX/ZZ/XY/ZY/XW/NY/YQ, and until R-239, QZ). Not yet a real fix — worth one (a shared helper in a vitest test-utils module) only if a second file ever shows the same flake; none has.

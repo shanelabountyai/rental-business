@@ -13327,6 +13327,8 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 
 ## R-245 — payment-plan sweep uses the job's clock
 
+**Commit:** `74381cd`  ·  **Date:** 2026-09-23
+
 **What it built.** `payment-plan-job.ts` now stamps `liftedAt`, `brokenAt` and `completedAt` from the job context's `now` instead of `new Date()`. The `broken` test asserts both stamps equal the run instant and **goes red with the change reverted** (checked).
 
 **What it decided.** Only the timestamps. R-227's other carried item, a report of fees suppressed on debts paid off during a forgotten hold, is not built: it would mean replaying ledger history, and R-227 already chose the nightly `heldBackCents` snapshot as the report. Left as is, not owed to a later row.
