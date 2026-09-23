@@ -2,7 +2,7 @@
 
 ## SEC-08 is done (`dcd4e6b`): SEC-06's `no-referrer` broke every no-JS form (Origin: null → Next refused the action). Now `same-origin`.
 
-- CI run `35927022398` covers it. Confirm green: `gh run list --limit 2`. The previous run (`35924753371`) failed only on the 4 no-JS specs this fixes.
+- CI run `35927022398` is **green** (confirmed 2026-09-23); it covers SEC-03..08 and R-249.
 - Exec brief refreshed 2026-09-23 (290 items, 4,623 tests, 262 decisions, security-review line): https://claude.ai/artifact/GSG4tVzFVzbgD4m5eacsrB
 - LinkedIn post 54 (SEC-01 forged read receipt, Rental/Impact) is in the Ledger, queued last: https://claude.ai/artifact/Ai5xKScgT2sWtqXRQ1ZA8i
 - Backlog has no open rows. Remaining needs a person: legal review, R-228.
