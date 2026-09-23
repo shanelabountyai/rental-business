@@ -61,8 +61,15 @@ export async function GET(
     })
     // NOTICE only, and only on the guaranteed lease - a guarantor guessing
     // another document's id must not reach the executed lease, an
-    // inspection photo, or anything else LEASE-06 excludes.
-    if (!guarantor || document.leaseId !== guarantor.leaseId || document.type !== 'NOTICE') {
+    // inspection photo, or anything else LEASE-06 excludes. And not a
+    // deleted one: tenantCanSeeDocument refuses those first, and this branch
+    // hand-writes its own rule, so it has to say so too (SEC-07).
+    if (
+      !guarantor ||
+      document.deletedAt !== null ||
+      document.leaseId !== guarantor.leaseId ||
+      document.type !== 'NOTICE'
+    ) {
       return new Response('Not found', { status: 404 })
     }
     return serve(document)
@@ -94,8 +101,9 @@ async function serve(document: {
   contentType: string
   fileName: string
 }) {
-  // No Cache-Control: this route answers for every document in the product,
-  // scoped per request by session and permission, so there is no one cache
-  // policy that is right for all of them.
-  return documentFileResponse(document)
+  // Every answer here is scoped per request by session and permission, so no
+  // cache - shared or the browser's own - may keep one (SEC-07). Without a
+  // header a browser may heuristically cache a lease on a shared machine
+  // after its user signs out.
+  return documentFileResponse(document, { cacheControl: 'private, no-store' })
 }

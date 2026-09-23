@@ -1,6 +1,8 @@
 // Shared fixture helpers for the end-to-end suite.
 
 import { randomUUID } from 'node:crypto'
+import { mkdir, writeFile } from 'node:fs/promises'
+import { dirname, join, resolve } from 'node:path'
 import { withinQuietHours } from '@rental/core/notifications'
 
 let counter = 0
@@ -232,4 +234,23 @@ export async function axeScan(
   return new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'best-practice'])
     .analyze()
+}
+
+/**
+ * Mirrors LocalDiskStorageAdapter's own path resolution (D-14).
+ *
+ * `apps/web`, not the repo root: the Next dev server runs with its own
+ * package as the working directory, so `process.cwd()` inside the server and
+ * inside this test are DIFFERENT directories. Writing to the test's cwd
+ * produced a file the server could not find - a 500 that looked like an
+ * authorization failure until both `.data` directories turned up on disk.
+ */
+export async function writeStorageBytes(storageKey: string, contents: string) {
+  const root = resolve(
+    process.env.DOCUMENT_STORAGE_PATH ??
+      join(process.cwd(), 'apps', 'web', '.data', 'documents'),
+  )
+  const path = resolve(root, storageKey)
+  await mkdir(dirname(path), { recursive: true })
+  await writeFile(path, Buffer.from(contents))
 }

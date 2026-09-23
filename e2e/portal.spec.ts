@@ -1,10 +1,8 @@
 import { randomUUID } from 'node:crypto'
-import { mkdir, writeFile } from 'node:fs/promises'
-import { dirname, join, resolve } from 'node:path'
 import { hashPassword, mintToken } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
-import { axeScan } from './fixtures.ts'
+import { axeScan, writeStorageBytes } from './fixtures.ts'
 
 // The tenant portal shell (R-018, PRD §6.4, DOC-03, D-8, D-10).
 //
@@ -110,25 +108,6 @@ async function magicLinkFor(tenantId: string) {
     },
   })
   return `/portal/verify?token=${minted.token}`
-}
-
-/**
- * Mirrors LocalDiskStorageAdapter's own path resolution (D-14).
- *
- * `apps/web`, not the repo root: the Next dev server runs with its own
- * package as the working directory, so `process.cwd()` inside the server and
- * inside this test are DIFFERENT directories. Writing to the test's cwd
- * produced a file the server could not find - a 500 that looked like an
- * authorization failure until both `.data` directories turned up on disk.
- */
-async function writeStorageBytes(storageKey: string, contents: string) {
-  const root = resolve(
-    process.env.DOCUMENT_STORAGE_PATH ??
-      join(process.cwd(), 'apps', 'web', '.data', 'documents'),
-  )
-  const path = resolve(root, storageKey)
-  await mkdir(dirname(path), { recursive: true })
-  await writeFile(path, Buffer.from(contents))
 }
 
 const STAFF_PASSWORD = 'correct-horse-battery-staple'

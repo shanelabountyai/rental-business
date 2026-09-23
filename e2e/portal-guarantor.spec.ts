@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { hashPassword, mintToken } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
-import { axeScan, uniqueClientHeaders, uniquePhone } from './fixtures.ts'
+import { axeScan, uniqueClientHeaders, uniquePhone, writeStorageBytes } from './fixtures.ts'
 
 // The guarantor portal (R-165, LEASE-06, ROLE-01).
 //
@@ -238,6 +238,34 @@ test.describe('a guarantor sees their own lease and nobody else’s', () => {
     await page.goto(await guarantorMagicLinkFor(guarantor.id))
     const response = await page.request.get(`/api/documents/${executedLease.id}/file`)
     expect(response.status()).toBe(404)
+  })
+
+  test('opens their own notice uncached, and not once it is deleted (SEC-07)', async ({
+    page,
+  }) => {
+    const { lease, property, guarantor } = await seedGuaranteedLease()
+    const notice = await prisma.document.create({
+      data: {
+        propertyId: property.id,
+        leaseId: lease.id,
+        type: 'NOTICE',
+        fileName: 'notice.pdf',
+        contentType: 'application/pdf',
+        sizeBytes: 5,
+        storageKey: `guarantor-test/${randomUUID()}`,
+      },
+    })
+    // Real bytes, or a missing file's 404 would pass the deleted case alone.
+    await writeStorageBytes(notice.storageKey, 'hello')
+
+    await page.goto(await guarantorMagicLinkFor(guarantor.id))
+    const served = await page.request.get(`/api/documents/${notice.id}/file`)
+    expect(served.status()).toBe(200)
+    expect(served.headers()['cache-control']).toBe('private, no-store')
+
+    await prisma.document.update({ where: { id: notice.id }, data: { deletedAt: new Date() } })
+    const deleted = await page.request.get(`/api/documents/${notice.id}/file`)
+    expect(deleted.status()).toBe(404)
   })
 
   test('is refused by the tenant portal, and a tenant session is refused here', async ({

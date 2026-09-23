@@ -13465,3 +13465,16 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 **What it left behind.** SEC-07. The NSF-fee audit row with no `reason` is still unowned.
 
 **Gate.** `lint` 0 errors, `typecheck` clean. e2e on a production build: `csp`, `calendar-feed` and `pay-link` specs, 32/32 on both projects, matching `--list`. The fix was not reverted to confirm the new test fails, but without it the header is missing and the assertion has nothing to match. Full sweep left to CI.
+
+## SEC-07 — document bytes uncached, and not a deleted notice to a guarantor
+
+**Commit:** `PENDING`  ·  **Date:** 2026-09-23
+
+**What it built.** [`/api/documents/[id]/file`](apps/web/app/api/documents/[id]/file/route.ts) now sends `Cache-Control: private, no-store` on every document it serves. Its guarantor branch now refuses a document with `deletedAt` set, the same way `tenantCanSeeDocument` already did for tenants. New test in [e2e/portal-guarantor.spec.ts](e2e/portal-guarantor.spec.ts): the guarantor gets their notice with a 200 and the header, and a 404 once it is soft-deleted. The spec writes real bytes, so the 404 comes from the guard and not from a missing file. `writeStorageBytes` moved out of `portal.spec.ts` into [e2e/fixtures.ts](e2e/fixtures.ts) so both specs share it.
+
+**What it decided.** One policy, `private, no-store`, for all three principals. The old comment said no single policy fits every document, but every response here is scoped to the session, so none of them may be cached. **The staff branch still serves deleted documents, on purpose.** Staff can restore a deleted document (`restoreDocument`, `lib/documents/actions.ts`), and they need to open it to decide whether to.
+
+**What it left behind.** The Security findings rows are done. The NSF-fee audit row with no `reason` is still unowned (`lib/ledger/nsf-fees.ts:167`).
+
+**Gate.** `lint` 0 errors (16 warnings, all there before this item), `typecheck` clean. e2e on a production build: `portal-guarantor` and `portal`, 46/46 on both projects, matching `--list`. **Checked by reverting the guard:** without it the new test fails, expecting 404 and getting 200. Full sweep left to CI.
+
