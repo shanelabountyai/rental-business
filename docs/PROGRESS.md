@@ -13305,7 +13305,7 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 
 ## R-243 — GUARANTOR notification-preferences screen
 
-**Commit:** (pending)  ·  **Date:** 2026-09-23
+**Commit:** `36b80f4`  ·  **Date:** 2026-09-23
 
 **What it built.** Scoped from the carried-defects list (D-252: "no GUARANTOR notification-preferences screen exists at all," though GUARANTOR has been a real audience for `rent_reminder`/`payment_plan`/`lease_signature`/`account_access` since R-236). The read/write plumbing needed zero changes — `NotificationRecipientType.GUARANTOR` already existed in the schema, `CATEGORY_AUDIENCE` already listed it for those four categories, and `getPreferences`/`writePreference` were already generic over recipient type, with the shared `NotificationPreferencesSection` component already built to host a third derivation (its own comment named "own-staff, own-tenant, staff-on-behalf-of-tenant"). Added a fourth: `setOwnGuarantorNotificationPreference` in `apps/web/lib/notifications/actions.ts`, gated by `requireGuarantor()` exactly like the tenant version is gated by `requireTenant()` — the recipient id always comes from the session, never the form. New page `apps/web/app/portal/guarantor/(signed-in)/account/page.tsx`, mirroring the tenant account page minus its autopay section (a guarantor pays nothing directly, so there is no debit day to pick). New "Account" entry in `GUARANTOR_NAV_ITEMS`.
 
