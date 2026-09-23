@@ -13468,7 +13468,7 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 
 ## SEC-07 — document bytes uncached, and not a deleted notice to a guarantor
 
-**Commit:** `PENDING`  ·  **Date:** 2026-09-23
+**Commit:** `c854d2e`  ·  **Date:** 2026-09-23
 
 **What it built.** [`/api/documents/[id]/file`](apps/web/app/api/documents/[id]/file/route.ts) now sends `Cache-Control: private, no-store` on every document it serves. Its guarantor branch now refuses a document with `deletedAt` set, the same way `tenantCanSeeDocument` already did for tenants. New test in [e2e/portal-guarantor.spec.ts](e2e/portal-guarantor.spec.ts): the guarantor gets their notice with a 200 and the header, and a 404 once it is soft-deleted. The spec writes real bytes, so the 404 comes from the guard and not from a missing file. `writeStorageBytes` moved out of `portal.spec.ts` into [e2e/fixtures.ts](e2e/fixtures.ts) so both specs share it.
 
