@@ -281,3 +281,35 @@ controls at all, which is its own point worth making.
 - **The demo database drifts** — `--reset` retires rather than deletes,
   because append-only tables reference those rows, so retired properties and
   entities accumulate. Harmless; they are filtered out of every screen.
+
+---
+
+## What to concede before you are asked
+
+Say these first. Volunteering a caveat reads as confidence; having it pulled
+out of you does not.
+
+- **Nothing here touches real money.** Stripe runs in test mode only (D-26);
+  there is no live key anywhere by design. The ledger is a projection of Stripe
+  test events.
+- **Screening and e-signature are simulated adapters** (PRD 00 §14), built not
+  to agree with us by construction (D-27). No real vendor API was ever called.
+- **The legal wording is draft-only and is not legal advice.** The seeded Texas
+  jurisdiction rules have **not been reviewed by an attorney** — that gate is
+  open, and `docs/LEGAL-REVIEW-CHECKLIST.md` is the hand-off for it.
+- **One known legal gap:** an entry notice that goes unserved and is later
+  served by hand does not re-judge the entry window (R-228). It needs counsel
+  on damages for entries already made, so it is deliberately unbuilt.
+- **Demo data is synthetic and local.** `rental_demo` is seeded, and the demo
+  password `demo-rental-2026` exists only because both demo seeds refuse any
+  database but a local `rental_demo`.
+- **The production deployment is public but empty of real tenants**
+  (`https://rental-business-red.vercel.app`); the R-223 to R-233 migrations
+  are not on the Neon dev branch.
+- **Acts 1-6 were written at R-138.** Later work (deposits, MTM notices,
+  guarantor account, abandonment and claims) is real and browser-walked but
+  not scripted here.
+
+**Verified 2026-09-23:** every setup command in §0 ran clean against
+`rental_demo`, and every route named in the acts returned 200 as
+`owner@demo.test` with no `undefined`, `NaN` or `Invalid Date` on the page.
