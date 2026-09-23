@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { hashPassword, mintToken } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
-import { uniqueClientHeaders, uniquePhone } from './fixtures.ts'
+import { axeScan, uniqueClientHeaders, uniquePhone } from './fixtures.ts'
 
 // The guarantor portal (R-165, LEASE-06, ROLE-01).
 //
@@ -282,9 +282,99 @@ test.describe('a guarantor sees their own lease and nobody else’s', () => {
   })
 
   test('sends an anonymous visitor to sign in', async ({ page }) => {
-    for (const url of ['/portal/guarantor', '/portal/guarantor/notices']) {
+    for (const url of ['/portal/guarantor', '/portal/guarantor/notices', '/portal/guarantor/account']) {
       await page.goto(url)
       await expect(page, url).toHaveURL(/\/portal\/guarantor\/login/)
     }
+  })
+})
+
+// D-252: GUARANTOR's own notification preferences. The read/write plumbing
+// (getPreferences, writePreference, CATEGORY_AUDIENCE) is already fully
+// generic and shared with the tenant and staff screens - notifications.spec.ts
+// covers the toggle/lock/refusal mechanics there, so this only proves the
+// guarantor-specific wiring: the page renders for a guarantor, the one
+// unlocked category for this audience actually saves, and a guarantor cannot
+// write another guarantor's preferences.
+test.describe('a guarantor’s own notification preferences (NOTIF-02, D-252)', () => {
+  test('toggles rent reminders and stores the override', async ({ page }) => {
+    const { guarantor } = await seedGuaranteedLease()
+    await page.goto(await guarantorMagicLinkFor(guarantor.id))
+
+    await page.goto('/portal/guarantor/account')
+    await expect(page.getByRole('heading', { name: 'Notifications' })).toBeVisible()
+
+    // `rent_reminder`, not `payment_plan`/`lease_signature`/`account_access` -
+    // those three are locked for this audience too (see LOCKED_CATEGORIES),
+    // so rent_reminder is the only real toggle a guarantor's screen offers.
+    const emailToggle = page.locator('#pref-rent_reminder-EMAIL')
+    await expect(emailToggle).toHaveAttribute('aria-pressed', 'true')
+    await emailToggle.click()
+
+    await expect
+      .poll(
+        async () =>
+          (
+            await prisma.notificationPreference.findFirst({
+              where: { recipientId: guarantor.id, category: 'rent_reminder', channel: 'EMAIL' },
+            })
+          )?.enabled,
+        { timeout: 10_000 },
+      )
+      .toBe(false)
+  })
+
+  test('locks payment-plan preferences and explains why', async ({ page }) => {
+    const { guarantor } = await seedGuaranteedLease()
+    await page.goto(await guarantorMagicLinkFor(guarantor.id))
+    await page.goto('/portal/guarantor/account')
+
+    const locked = page.getByRole('listitem').filter({ hasText: 'Repayment plan schedules' })
+    await expect(locked.getByText('Always on.')).toBeVisible()
+    await expect(locked.getByRole('checkbox')).toHaveCount(0)
+  })
+
+  test('cannot write another guarantor’s preferences', async ({ browser }) => {
+    const mine = await seedGuaranteedLease()
+    const theirs = await seedGuaranteedLease()
+
+    const context = await browser.newContext({ extraHTTPHeaders: uniqueClientHeaders() })
+    try {
+      const page = await context.newPage()
+      await page.goto(await guarantorMagicLinkFor(mine.guarantor.id))
+      await page.goto('/portal/guarantor/account')
+
+      // The action derives the recipient from the session (requireGuarantor),
+      // never from form data - there is no field to craft this through from
+      // the UI, so this proves the page only ever shows and writes the
+      // signed-in guarantor's own row, not a neighbour's.
+      const before = await prisma.notificationPreference.count({
+        where: { recipientId: theirs.guarantor.id },
+      })
+      await page.locator('#pref-rent_reminder-EMAIL').click()
+      await expect
+        .poll(
+          async () =>
+            prisma.notificationPreference.count({ where: { recipientId: mine.guarantor.id } }),
+          { timeout: 10_000 },
+        )
+        .toBeGreaterThan(0)
+
+      const after = await prisma.notificationPreference.count({
+        where: { recipientId: theirs.guarantor.id },
+      })
+      expect(after).toBe(before)
+    } finally {
+      await context.close()
+    }
+  })
+
+  test('the account page has no detectable violations', async ({ page }) => {
+    const { guarantor } = await seedGuaranteedLease()
+    await page.goto(await guarantorMagicLinkFor(guarantor.id))
+    await page.goto('/portal/guarantor/account')
+
+    const results = await axeScan(page)
+    expect(results.violations).toEqual([])
   })
 })

@@ -12,6 +12,7 @@ import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { propertyResource, requirePermission, requireStaff } from '@/lib/auth/guard.ts'
 import { propertyForTenant } from '@/lib/consent/actions.ts'
+import { requireGuarantor } from '@/lib/portal/guarantor-guard.ts'
 import { requireTenant } from '@/lib/portal/guard.ts'
 
 // Writes for notification preferences (NOTIF-02). One table, one refusal
@@ -100,6 +101,22 @@ export async function setOwnNotificationPreference(
   const tenant = await requireTenant()
   const result = await writePreference('TENANT', tenant.id, formData)
   revalidatePath('/portal/account')
+  return result
+}
+
+/// A guarantor's OWN preferences (D-252). Same derivation as the tenant
+/// version - GUARANTOR is already a real audience in `CATEGORY_AUDIENCE` for
+/// `rent_reminder`/`payment_plan`/`lease_signature`/`account_access`, and
+/// `writePreference` already refuses anything outside that audience, so this
+/// is the same shape as `setOwnNotificationPreference` with a different
+/// guard and recipient type.
+export async function setOwnGuarantorNotificationPreference(
+  _previous: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const guarantor = await requireGuarantor()
+  const result = await writePreference('GUARANTOR', guarantor.id, formData)
+  revalidatePath('/portal/guarantor/account')
   return result
 }
 
