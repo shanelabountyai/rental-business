@@ -1,9 +1,9 @@
 # Next session
 
-## SEC-04 is done (`d4a8c68`, D-261). Next: SEC-05 (inbound-email secret accepted as `?secret=`; header only), backlog "Security findings".
+## SEC-05 is done (`e23883e`, D-262). Next: SEC-06 (no Referrer-Policy header while bearer tokens live in URL paths), backlog "Security findings".
 
-- Resend verifier now shares Stripe's `SIGNATURE_TOLERANCE_SECONDS`; stale → 403 like a forged one.
-- CI for SEC-03/SEC-04 not yet checked: `gh run list --limit 3`.
+- Inbound-email secret is `x-inbound-secret` header only; `?secret=` → 403.
+- CI for SEC-03/04/05 not yet confirmed green: `gh run list --limit 3`.
 - **Carried defect, unowned:** `apps/web/lib/ledger/nsf-fees.ts:167` audits `ledger.adjusted` with no `reason` (on `REASON_REQUIRED`), so no NSF fee gets an audit row. Check `opening-balance-charge.ts:81`, `deposit-charge.ts:116`, `proration.ts:174` too.
 - Full unit runs time out broadly while the storage project runs a sweep. Check `uptime` before reading timeouts.
 - Lint shows ~10 `'requirePermission' is defined but never used` warnings (pre-existing since SEC-03); harmless, cleanable.
