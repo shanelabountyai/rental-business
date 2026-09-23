@@ -13432,7 +13432,7 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 
 ## SEC-04 — the Resend webhook refuses stale timestamps
 
-**Commit:** `PENDING`  ·  **Date:** 2026-09-23
+**Commit:** `d4a8c68`  ·  **Date:** 2026-09-23
 
 **What it built.** `verifyResendSignature` in [packages/core/comms/webhook-signature.ts](packages/core/comms/webhook-signature.ts) now refuses a `svix-timestamp` more than `SIGNATURE_TOLERANCE_SECONDS` (300, imported from the Stripe verifier) from now in either direction, and refuses a non-numeric one before the comparison, because a `NaN` comparison would not refuse it. Optional `nowSeconds` for tests, same as the Stripe verifier. [route.test.ts](apps/web/app/api/webhooks/resend/route.test.ts) posts a correctly signed `email.delivered` 301s old: 403, and the delivery row stays `SENT`. The same callback at 290s is accepted. With the fix reverted, that case fails and the other 7 pass.
 
