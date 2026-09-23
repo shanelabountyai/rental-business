@@ -13339,7 +13339,7 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 
 ## R-246 — MTM rollover respects the rent cap; a withdrawn increase is told
 
-**Commit:** `SHA_PENDING`  ·  **Date:** 2026-09-23
+**Commit:** `a30403c`  ·  **Date:** 2026-09-23
 
 **What it built.** `lease.mtm_rollover` ([renewal-rollover-job.ts](apps/web/lib/leases/renewal-rollover-job.ts)) now runs `renewalRentCheckFor` on the agreed MTM rate. Over a statutory cap, the lease rolls at the highest lawful rent, the audit row carries `rentCappedFromCents`, and an URGENT `mtm_rate_capped` Task opens. `cancelRentChange` now sends `lease.rent_increase_withdrawn` (new `legal_notice` template) through the new [rent-increase-withdrawn.ts](apps/web/lib/leases/rent-increase-withdrawn.ts) when the increase's notice had been served. Two new tests: a capped rollover against its own state code and rule, and served versus never-served withdrawal notification.
 
