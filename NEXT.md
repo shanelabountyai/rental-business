@@ -1,5 +1,7 @@
 # Next session
 
+## Legal-review gate prep is done: `docs/LEGAL-REVIEW-CHECKLIST.md` (docs only, no code). Hand it to Shane/attorney; the gate closes when v2 rows with `reviewedBy` exist. Next candidates: project-closure deliverables (DEMO.md check, exec-brief, LinkedIn posts) or R-228 (needs counsel).
+
 ## R-248 is done (`5ed3295`, demo seed drops future `moveOutAt` on ACTIVE leases). Next candidate: the Milestone 17 legal-review gate (a human/attorney step, not code) or the unserved-entry-notice re-judging gap (needs counsel). Nothing code-shaped is left that is not blocked on a human - ask Shane which.
 
 **Known flake, unfixed:** full `npm test` timed out 9 tests across 7 notification-dispatch files under load (R-248's run); all 119 pass alone. If it recurs, time them before touching them (see 'A timeout set at the measured cost').
