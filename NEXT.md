@@ -1,19 +1,11 @@
 # Next session
 
-## In flight: rent.labintelligence.co (D-257). Blocked on Shane for two things.
+## rent.labintelligence.co is live (D-257, 2026-09-23). Loose ends, shortest first:
 
-Done: domain attached to Vercel project `rental-business` (verified on Vercel's side); `DEMO_ACCESS_PASSWORD` was ALREADY set in Production, so the gate is live today (`realm="Demo"` 401); `refuseUnlessDemoDatabase` takes `DEMO_SEED_ALLOW_HOST=<exact host>` (tested).
-
-Waiting on Shane:
-~~1. Cloudflare DNS~~ - DONE 2026-09-23 via API (`CLOUDFLARE_API_TOKEN` in `~/.zshrc`, scoped to Zone:DNS:Edit on labintelligence.co; the first value leaked into chat and was rolled). Record is on Cloudflare's nameservers; public resolvers had negative-cached `rent` for up to 1800s, and Vercel issues the TLS cert only after it resolves.
-2. The production `DATABASE_URL` in `/tmp/prod.env` (never in chat, never in the repo). Also: does Shane know the current `DEMO_ACCESS_PASSWORD`? It is Sensitive in Vercel and cannot be read back - if not, rotate it.
-
-Then, in order:
-- `npx dotenv -e /tmp/prod.env -- npx prisma migrate status --schema packages/db/prisma/schema.prisma`. Production was last migrated 2026-08-12 at 24 of 115 migrations; if it is behind, the live site is probably 500ing on anything newer (Countertop's "36 behind" outage). `migrate deploy` it.
-- Set production `AUTH_URL` to `https://rent.labintelligence.co` (magic links are built from it) and redeploy - only AFTER DNS resolves.
-- Seed with `DEMO_SEED_ALLOW_HOST=<prod host>` in front, `-e /tmp/prod.env`: seed:base (roles already exist - check it is idempotent), create-owner owner@demo.test, lease-templates, demo, demo-access. Check `NOTIFICATIONS_ENABLED`/`NOTIFICATIONS_SANDBOX_TO` in production first - the seed queues notifications to @demo.test addresses.
-- Verify: `curl -sI https://rent.labintelligence.co/login` = 401 Basic; with `-u demo:$PASS` = 200; sign in as owner@demo.test.
-- Add the port-table row's cousin: the domain column in `~/.claude/CLAUDE.md`'s table mentions deployed hosts for reserve - add rent.labintelligence.co to this project's row.
+- **The shared password** is Sensitive in Vercel and unreadable. If Shane does not know it, rotate `DEMO_ACCESS_PASSWORD` (production) and redeploy.
+- Walk the demo on the live domain as owner@demo.test (password `demo-rental-2026`) - not yet done; sign-in through the new `AUTH_URL` is the thing to prove.
+- Delete `/tmp/prod.env`; remove the `Bash(npx dotenv -e /tmp/prod.env:*)` allow rule.
+- Full record in `docs/PROGRESS.md` -> D-257 entry.
 
 ## Closure deliverables are done (2026-09-23).
 

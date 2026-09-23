@@ -1,0 +1,10 @@
+# A `vercel deploy` from a laptop uploads the working tree. Without this file it
+# would carry the local .env files (dev secrets, read by `next build`) and a
+# multi-GB .next into a production deployment (D-257). Git deploys never see
+# untracked files; this only governs the CLI path.
+.env*
+!.env.example
+**/.next
+**/node_modules
+test-results
+playwright-report

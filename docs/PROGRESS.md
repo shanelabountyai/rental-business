@@ -13373,3 +13373,17 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 
 **Gate.** `lint` 0 errors, `typecheck` clean. `npm test` **3,280 passed / 27 skipped / 9 failed**: all nine are timeouts in notification-dispatch files (`delivery`, `due-notices`, `sms-intake`, `notifications`, `opt-out`, `follow-up`, `verify`) under full-suite load, none touching the seed. Those seven files rerun alone: **119 passed**. Not fixed here.
 
+## D-257 — rent.labintelligence.co, production migrated and seeded as the demo
+
+**Commit:** `a6daf17` (guard override, D-257)  ·  **Date:** 2026-09-23
+
+**What it built.** The domain `rent.labintelligence.co`, attached to the `rental-business` Vercel project, with a Cloudflare `CNAME rent → 4e7d0f3b916b9516.vercel-dns-016.com` (DNS only) created through the API. `refuseUnlessDemoDatabase` gained `DEMO_SEED_ALLOW_HOST`, which admits exactly one named host (two new tests). Production `AUTH_URL` now names the new domain. The password gate itself was already built and already on: `DEMO_ACCESS_PASSWORD` had been set in Production for 25 days.
+
+**What it found.** **Production was 91 migrations behind** — 23 of 114 applied, nothing since 2026-08-12 — while every push since then deployed current code against it. D-254 had already recorded that a deploy runs no migration; nothing checked that someone did. Now `migrate deploy`ed. And `DEPLOYMENT.md`, the demo script and the brief each described production's 401 as Vercel Authentication; it is the app's own gate (`realm="Demo"`). Corrected in all three.
+
+**What it decided.** D-257: production's database holds the demo portfolio on purpose, seeded with the local test-mode Stripe key (same account as production, per `DEPLOYMENT.md`). Base seed, `create-owner --force` for `owner@demo.test` (production already had two owners), lease templates, `demo-seed`, `seed-demo-access` with `AUTH_URL` set so the printed links name the new domain. A redeploy of an unchanged commit is cancelled by this repo's own `ignoreCommand` (correctly: an env change is not a code change), so the env change shipped through `vercel deploy --prod` from a clean checkout.
+
+**What it left behind.** The shared password is Sensitive in Vercel and cannot be read back; whoever demos needs it or a rotation. `/tmp/prod.env` holds production's connection string and should be deleted when done. Credentials leaked into chat during setup and were rotated: the first Cloudflare token (rolled) and an Anthropic key (already disabled). The `Bash(npx dotenv -e /tmp/prod.env:*)` allow rule should be removed from local settings.
+
+**Gate.** `lint` 0, `typecheck` clean, guard tests 10/10. `prisma migrate status` against production: up to date. `https://rent.labintelligence.co/login` answers 401 `Basic realm="Demo"` over a valid certificate.
+
