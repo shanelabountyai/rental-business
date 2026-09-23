@@ -13390,7 +13390,7 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 
 ## SEC-01 — no unguarded helpers in `'use server'` modules
 
-**Commit:** `PENDING`  ·  **Date:** 2026-09-23
+**Commit:** `e1312c5`  ·  **Date:** 2026-09-23
 
 **What it built.** Five helpers moved out of `'use server'` files into plain `server-only` modules: `markNoticeRead` → [lib/notices/read-receipt.ts](apps/web/lib/notices/read-receipt.ts), `sendPrescreenInvite` → [lib/prospects/invite.ts](apps/web/lib/prospects/invite.ts), `sendShowingInvite` → [lib/showings/invite.ts](apps/web/lib/showings/invite.ts), `propertyForTenant` → [lib/consent/property-for-tenant.ts](apps/web/lib/consent/property-for-tenant.ts), `revealShowingCode` → [lib/showings/reveal-code.ts](apps/web/lib/showings/reveal-code.ts). No behavior change; callers re-pointed. New static test [lib/server-actions.test.ts](apps/web/lib/server-actions.test.ts) inventories every export of all 94 `'use server'` files (260 exports) and fails on any that reaches no session guard unless it is allowlisted with its reason (29 are: token links, rate-limited sign-in, the scope cookie, and three that guard in an imported helper).
 
