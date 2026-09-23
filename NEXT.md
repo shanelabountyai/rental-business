@@ -1,11 +1,11 @@
 # Next session
 
-## SEC-07 is done (`c854d2e`). The Security findings rows are all done, and the backlog has no open rows.
+## R-249 is done (`dac6dbe`, NSF fees get an audit row). The backlog has no open rows.
 
-- **Next candidate: the carried NSF-fee audit defect.** It needs scoping into a row first. `apps/web/lib/ledger/nsf-fees.ts:167` audits `ledger.adjusted` with no `reason`, but that action is on `REASON_REQUIRED`, so no NSF fee gets an audit row. Check `opening-balance-charge.ts:81`, `deposit-charge.ts:116` and `proration.ts:174` for the same shape.
-- CI for SEC-03..07 is not confirmed green yet: `gh run list --limit 3`.
-- `writeStorageBytes` now lives in `e2e/fixtures.ts`. Use it; do not copy it into a spec.
-- Full unit runs time out broadly while the storage project runs a sweep. Check `uptime` before reading timeouts (load was ~17-25 on 2026-09-23).
+- A sweep of every `REASON_REQUIRED` call site found no other audit missing a reason.
+- No code item is unblocked. What is left needs a person: legal review (`docs/LEGAL-REVIEW-CHECKLIST.md`) and R-228 (counsel). Ask Shane before starting anything new.
+- CI for SEC-03..07 and R-249 is not confirmed yet: `gh run list --limit 3`.
+- Full `npm test` under load (27-31) timed out 16 notification/dispatch tests; they all pass alone. Check `uptime` before reading timeouts.
 
 ## rent.labintelligence.co is live and walked (D-257, 2026-09-23). Project is at closure.
 
