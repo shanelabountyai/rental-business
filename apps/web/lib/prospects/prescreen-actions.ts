@@ -5,7 +5,7 @@ import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { auditAsSystem } from '@/lib/audit/system.ts'
 import { redeemToken } from '@/lib/auth/store.ts'
-import { sendShowingInvite } from '@/lib/showings/actions.ts'
+import { sendShowingInvite } from '@/lib/showings/invite.ts'
 import { prescreenLinkStatus } from './prescreen-link.ts'
 
 // Recording a prospect's answers (LEASE-07, R-058).

@@ -11,7 +11,7 @@ import type { NotificationRecipientType } from '@rental/db'
 import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { propertyResource, requirePermission, requireStaff } from '@/lib/auth/guard.ts'
-import { propertyForTenant } from '@/lib/consent/actions.ts'
+import { propertyForTenant } from '@/lib/consent/property-for-tenant.ts'
 import { requireGuarantor } from '@/lib/portal/guarantor-guard.ts'
 import { requireTenant } from '@/lib/portal/guard.ts'
 

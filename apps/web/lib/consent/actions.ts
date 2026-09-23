@@ -7,6 +7,7 @@ import { revalidatePath } from 'next/cache'
 import { audit } from '@/lib/audit/index.ts'
 import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
 import { requireTenant } from '@/lib/portal/guard.ts'
+import { propertyForTenant } from './property-for-tenant.ts'
 
 // Recording and withdrawing TCPA consent (COMM-02, R-051b).
 //
@@ -24,24 +25,6 @@ export interface ConsentFormState {
 function str(formData: FormData, name: string): string {
   const value = formData.get(name)
   return typeof value === 'string' ? value.trim() : ''
-}
-
-/// The property a tenant's consent is authorised against: any property they
-/// hold a lease at. A tenant with no lease at all has no property to scope
-/// the check to, so there is nobody who may edit them - which is the correct
-/// refusal rather than an oversight.
-///
-/// Exported: the same derivation authorizes the staff-side notification
-/// mirror in lib/notifications/actions.ts. "Consent" in this file's name is
-/// history, not scope - this helper answers "which property may staff edit
-/// this tenant through", which is the same question for either table.
-export async function propertyForTenant(tenantId: string) {
-  const leaseTenant = await prisma.leaseTenant.findFirst({
-    where: { tenantId },
-    orderBy: { createdAt: 'desc' },
-    select: { leaseId: true, lease: { select: { property: true } } },
-  })
-  return leaseTenant ? { property: leaseTenant.lease.property, leaseId: leaseTenant.leaseId } : null
 }
 
 /// Whose consent this is, and the property staff are authorised through

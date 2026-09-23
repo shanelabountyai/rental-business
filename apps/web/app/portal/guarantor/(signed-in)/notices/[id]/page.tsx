@@ -1,7 +1,7 @@
 import { friendlyDate } from '@rental/core/scheduling'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { markNoticeRead } from '@/lib/notices/actions.ts'
+import { markNoticeRead } from '@/lib/notices/read-receipt.ts'
 import { listTenantNotices } from '@/lib/notices/queries.ts'
 import { requireGuarantorWithScope } from '@/lib/portal/guarantor-guard.ts'
 

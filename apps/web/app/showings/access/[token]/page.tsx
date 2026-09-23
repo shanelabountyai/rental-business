@@ -4,7 +4,8 @@ import {
   friendlyTimestamp,
 } from '@rental/core/scheduling'
 import { SelfShowingIdentityForm } from '@/components/showings/self-showing-form.tsx'
-import { revealShowingCode, verifyIdentityForShowing } from '@/lib/showings/access-actions.ts'
+import { verifyIdentityForShowing } from '@/lib/showings/access-actions.ts'
+import { revealShowingCode } from '@/lib/showings/reveal-code.ts'
 import { showingAccessLinkStatus } from '@/lib/showings/access-link.ts'
 
 export const metadata = {

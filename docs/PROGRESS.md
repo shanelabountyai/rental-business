@@ -13387,3 +13387,17 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 
 **Gate.** `lint` 0, `typecheck` clean, guard tests 10/10. `prisma migrate status` against production: up to date. `https://rent.labintelligence.co/login` answers 401 `Basic realm="Demo"` over a valid certificate. After rotating `DEMO_ACCESS_PASSWORD` (build `6c6135b`): no password 401, correct password 200, and a Playwright walk through the gate signed in as `owner@demo.test` on the new domain and loaded `/dashboard`, `/leases`, `/money`, `/properties`, `/workorders` — all 200, demo portfolio present, no `undefined`/`NaN`/`Invalid Date`.
 
+
+## SEC-01 — no unguarded helpers in `'use server'` modules
+
+**Commit:** `PENDING`  ·  **Date:** 2026-09-23
+
+**What it built.** Five helpers moved out of `'use server'` files into plain `server-only` modules: `markNoticeRead` → [lib/notices/read-receipt.ts](apps/web/lib/notices/read-receipt.ts), `sendPrescreenInvite` → [lib/prospects/invite.ts](apps/web/lib/prospects/invite.ts), `sendShowingInvite` → [lib/showings/invite.ts](apps/web/lib/showings/invite.ts), `propertyForTenant` → [lib/consent/property-for-tenant.ts](apps/web/lib/consent/property-for-tenant.ts), `revealShowingCode` → [lib/showings/reveal-code.ts](apps/web/lib/showings/reveal-code.ts). No behavior change; callers re-pointed. New static test [lib/server-actions.test.ts](apps/web/lib/server-actions.test.ts) inventories every export of all 94 `'use server'` files (260 exports) and fails on any that reaches no session guard unless it is allowlisted with its reason (29 are: token links, rate-limited sign-in, the scope cookie, and three that guard in an imported helper).
+
+**What it found.** `revealShowingCode(rawToken, now)` was not in the audit and was the sharpest of the five: `now` came from the caller, so a prospect holding a valid access link could have asked for the door code with any `now` inside the booked window. As a plain module the page supplies `new Date()` and nothing else can.
+
+**What it decided.** D-258: a `'use server'` module exports only actions. The acceptance moved from "every export rejects an anonymous call" to the static inventory, because calling 260 exports with guessed arguments proves little about any one of them. The inventory is a regex, not an AST (a `ponytail:` note says so), and a guard in a comment would satisfy it.
+
+**What it left behind.** SEC-02 to SEC-07 (backlog, security findings). **Found, not fixed:** `lib/ledger/nsf-fees.ts:167` audits `ledger.adjusted` with no `reason`, which is on `REASON_REQUIRED`, so every NSF fee is written with **no audit row** (the error is caught and logged). The full unit run logs it for each NSF test. Probably the same shape in `opening-balance-charge.ts`, `deposit-charge.ts` and `proration.ts` (same catch-and-log pattern; not checked).
+
+**Gate.** `lint` 0 errors (16 warnings, same as `main`), `typecheck` clean, `npm run build` green. `npm test`: 3,254 passed / 27 skipped / 39 failed = 3,320. All 39 were timeouts while the storage-business project ran a Playwright sweep at the same moment (load average 63), and the 23 failing files rerun alone pass **245/245**. e2e: the five specs over the moved code (`notices`, `portal-guarantor`, `self-showing`, `prospects`, `showings`), desktop-chrome, **27/27 passed** against `--list`. Full sweep left to CI.
