@@ -13493,7 +13493,7 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 
 ## SEC-08 — Referrer-Policy `same-origin`, so no-JavaScript forms work again
 
-**Commit:** `PENDING`  ·  **Date:** 2026-09-23
+**Commit:** `dcd4e6b`  ·  **Date:** 2026-09-23
 
 **What it built.** [next.config.ts](apps/web/next.config.ts) sends `Referrer-Policy: same-origin` instead of SEC-06's `no-referrer`; [e2e/csp.spec.ts](e2e/csp.spec.ts) asserts the new value.
 
