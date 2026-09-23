@@ -1,6 +1,10 @@
 # Next session
 
-## R-243 is done (`36b80f4`, SHA recorded in `0a851f0`). Push touched `apps/web` — a real CI run.
+## R-244 is done (demo rows for four detail pages, seed only). Not yet walked in a browser.
+
+**Next candidate:** walk `/abandonment`, `/claims`, `/confidential` and `/portal/papers/inspections` in a browser against `npm run dev:demo` (reseed first) — that is the D-28 check R-244 did not do.
+
+## R-243 (previous) is done (`36b80f4`, SHA recorded in `0a851f0`).
 
 **CI run `35892321181` finished green** (confirmed 2026-09-23) — R-243's code changes are verified on `main`.
 
@@ -19,7 +23,7 @@
 - Unserved entry notice + later hand service does not re-judge the window; needs counsel on damages for entries already made (R-228).
 - `payment-plan-job.ts` / suppressed-fee report gap (R-227).
 - No MTM rollover rate cap, no withdrawn-increase tenant message, R-223-R-233 migrations not on the Neon dev branch (R-225).
-- No demo rows for `/abandonment/[id]`, `/claims/[id]`, `/confidential/[id]`, `/portal/papers/inspections/[id]`.
+- ~~No demo rows for the four detail pages~~ — seeded in R-244, browser walk outstanding.
 - **The vitest suite has no shared `uniqueStateCode()`-equivalent helper.** Every job/unit test file that needs a `JurisdictionRule` picks its own hardcoded 2-letter state code and tracks collisions by a manually maintained comment list (TX/ZZ/XY/ZY/XW/NY/YQ, and until R-239, QZ). Not yet a real fix — worth one (a shared helper in a vitest test-utils module) only if a second file ever shows the same flake; none has.
 
 **Traps (carried):**

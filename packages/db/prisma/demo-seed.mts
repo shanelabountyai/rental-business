@@ -525,6 +525,19 @@ async function reset() {
     })
     await prisma.violationCase.deleteMany({ where: { propertyId: { in: deletableProperties } } })
     await prisma.evictionCase.deleteMany({ where: { propertyId: { in: deletableProperties } } })
+    // Cases hanging off a lease or unit (R-244). Contact attempts and claim
+    // events cascade, but payments are deleted explicitly so a claim a demo
+    // walk recorded a cheque on cannot block its own reset. Policy after the
+    // claims that name it.
+    await prisma.abandonmentCase.deleteMany({ where: { propertyId: { in: deletableProperties } } })
+    await prisma.insuranceClaimPayment.deleteMany({
+      where: { claim: { propertyId: { in: deletableProperties } } },
+    })
+    await prisma.insuranceClaim.deleteMany({ where: { propertyId: { in: deletableProperties } } })
+    await prisma.insurancePolicy.deleteMany({ where: { propertyId: { in: deletableProperties } } })
+    await prisma.confidentialCase.deleteMany({
+      where: { leaseId: { in: leaseIds } },
+    })
 
     // Envelope before lease (LeaseEnvelope.leaseId is onDelete: Restrict),
     // signers before envelope.
@@ -854,6 +867,12 @@ interface InspectionPlan {
   /// carries its checklist unanswered, which is what makes the "due" state
   /// look like anything on screen.
   performed?: boolean
+  /// Performed but NOT yet locked or signed - the state `/portal/papers/
+  /// inspections/[id]` exists for, where the tenant reviews the report and
+  /// signs it. Every other performed inspection here is locked, which lands
+  /// the tenant on the read-only "finalized without a signature" branch and
+  /// leaves the review-and-sign form unreachable from the demo.
+  awaitingSignature?: boolean
   items: { room: string; item: string; condition?: 'GOOD' | 'FAIR' | 'POOR' | 'DAMAGED' }[]
 }
 
@@ -1004,6 +1023,47 @@ interface LeasingPlan {
   /// on a courthouse step misrepresents what this product is for.
   eviction?: { stage: 'NOTICE'; daysAgo: number }
   violation?: ViolationPlan
+  abandonment?: AbandonmentPlan
+  claim?: ClaimPlan
+  confidentialCase?: ConfidentialCasePlan
+}
+
+/// A tenant who has gone quiet. MONITORING and never further: `ENTERED` and
+/// `BELONGINGS_HELD` each need a served entry notice behind them, and a demo
+/// that opens on a welfare-check entry misrepresents how early this starts.
+interface AbandonmentPlan {
+  lastContactDaysAgo: number
+  attempts: {
+    method: 'PHONE_CALL' | 'TEXT' | 'EMAIL' | 'LETTER' | 'DOOR_KNOCK' | 'EMERGENCY_CONTACT'
+    outcome: 'NO_ANSWER' | 'REACHED' | 'UNDELIVERABLE' | 'INFORMATION'
+    daysAgo: number
+    note: string
+  }[]
+}
+
+/// An open water claim with the loss-of-rents evidence pointed at the sitting
+/// lease. The policy is written here too: no demo property carries one, and a
+/// claim cannot exist without it.
+interface ClaimPlan {
+  policy: { carrier: string; policyNumber: string; limitsCents: number; deductibleCents: number }
+  cause: 'WATER' | 'FIRE' | 'WIND_HAIL' | 'THEFT_VANDALISM' | 'LIABILITY' | 'OTHER'
+  description: string
+  incidentDaysAgo: number
+  /// Hours between the loss and somebody starting to dry it - what a disputed
+  /// water claim turns on.
+  mitigationAfterHours: number
+  claimNumber: string
+  adjuster: { name: string; company: string }
+  lossOfRents: { fromDaysAgo: number; toInDays: number }
+}
+
+/// RISK-04. The summary is the owner's own words and is restricted; nothing
+/// here is a real person's account of anything.
+interface ConfidentialCasePlan {
+  summary: string
+  restrictedPartyName: string
+  documentationType: 'PROTECTIVE_ORDER' | 'POLICE_REPORT' | 'PROVIDER_STATEMENT'
+  documentedDaysAgo: number
 }
 
 export const LEASING: Record<string, LeasingPlan> = {
@@ -1130,6 +1190,54 @@ export const LEASING: Record<string, LeasingPlan> = {
       cureDays: 3,
     },
     eviction: { stage: 'NOTICE', daysAgo: 3 },
+  },
+
+  // THE TENANT WHO STOPPED ANSWERING (RISK-01). Unit B is already in notice,
+  // so silence here reads as a tenant who has left rather than one who is
+  // merely slow - and no eviction is opened, because the point of the case
+  // file is what was tried BEFORE anyone entered.
+  'Riverside Court Duplex::Unit B': {
+    abandonment: {
+      lastContactDaysAgo: 12,
+      attempts: [
+        { method: 'PHONE_CALL', outcome: 'NO_ANSWER', daysAgo: 9, note: 'Rang six times, voicemail box full.' },
+        { method: 'TEXT', outcome: 'UNDELIVERABLE', daysAgo: 8, note: 'Carrier returned the message undelivered.' },
+        { method: 'DOOR_KNOCK', outcome: 'NO_ANSWER', daysAgo: 6, note: 'No answer; post visible through the glass, blinds drawn.' },
+        { method: 'EMERGENCY_CONTACT', outcome: 'INFORMATION', daysAgo: 4, note: 'Sister says she has not heard from them in two weeks.' },
+      ],
+    },
+  },
+
+  // THE WATER CLAIM (RISK-07): a burst supply line at a sitting tenancy,
+  // reported, an adjuster assigned, and the rent lost while the floor dries.
+  'Bluebonnet Lane House::Main house': {
+    claim: {
+      policy: {
+        carrier: 'Lone Star Mutual',
+        policyNumber: 'DEMO-LSM-4471',
+        limitsCents: 30_000_000,
+        deductibleCents: 250_000,
+      },
+      cause: 'WATER',
+      description: 'Braided supply line failed behind the upstairs washer and ran through the hall ceiling below.',
+      incidentDaysAgo: 11,
+      mitigationAfterHours: 30,
+      claimNumber: 'LSM-2026-118204',
+      adjuster: { name: 'Priya Venkataraman', company: 'Summit Claims Group' },
+      lossOfRents: { fromDaysAgo: 11, toInDays: 20 },
+    },
+  },
+
+  // THE RESTRICTED FILE (RISK-04, ROLE-05). Named for nothing it protects:
+  // the route, the audit actions and every column outside the table say only
+  // that a case exists.
+  'Magnolia Drive House::Main house': {
+    confidentialCase: {
+      summary: 'Tenant has asked for the locks to be re-keyed and for a former partner to be barred from the property.',
+      restrictedPartyName: 'Former partner (not on the lease)',
+      documentationType: 'PROTECTIVE_ORDER',
+      documentedDaysAgo: 5,
+    },
   },
 
   // THE FAIR-HOUSING PAIR, and the most instructive thing in the seed. An
@@ -1275,6 +1383,20 @@ export const MAINTENANCE: Record<string, MaintenancePlan> = {
   // A JOB BOOKED AND CONFIRMED, with the vendor's acceptance on the record.
   // The calendar and the entry-notice path both need one of these to render.
   'Bluebonnet Lane House::Main house': {
+    inspections: [
+      {
+        type: 'PERIODIC',
+        inDays: -6,
+        performed: true,
+        awaitingSignature: true,
+        items: [
+          { room: 'Kitchen', item: 'Countertops', condition: 'GOOD' },
+          { room: 'Living room', item: 'Walls and paint', condition: 'FAIR' },
+          { room: 'Primary bedroom', item: 'Flooring', condition: 'GOOD' },
+          { room: 'Bathroom', item: 'Tub and surround', condition: 'FAIR' },
+        ],
+      },
+    ],
     tickets: [
       {
         category: 'HVAC',
@@ -2357,7 +2479,7 @@ async function seedInspection(plan: InspectionPlan, context: SeedContext) {
       // the move-out comparison is only worth something if the record cannot
       // be edited after the damage is found. A demo showing an editable
       // completed inspection would misrepresent the one guarantee it makes.
-      lockedAt: plan.performed ? when : null,
+      lockedAt: plan.performed && !plan.awaitingSignature ? when : null,
     },
   })
 
@@ -2889,6 +3011,99 @@ async function seedLeasing(
         },
       })
     }
+  }
+
+  if (plan.abandonment) {
+    const abandonment = await prisma.abandonmentCase.create({
+      data: {
+        propertyId: context.propertyId,
+        unitId: context.unitId,
+        leaseId: context.leaseId,
+        openedAt: daysFrom(-plan.abandonment.attempts[0]!.daysAgo),
+        openedByStaffId: context.staffId,
+        lastContactOn: daysFrom(-plan.abandonment.lastContactDaysAgo),
+      },
+    })
+    await prisma.abandonmentContactAttempt.createMany({
+      data: plan.abandonment.attempts.map((attempt) => ({
+        caseId: abandonment.id,
+        method: attempt.method,
+        outcome: attempt.outcome,
+        attemptedOn: daysFrom(-attempt.daysAgo),
+        note: attempt.note,
+        recordedByStaffId: context.staffId,
+      })),
+    })
+    cases++
+  }
+
+  if (plan.claim) {
+    const { claim } = plan
+    const policy = await prisma.insurancePolicy.create({
+      data: {
+        propertyId: context.propertyId,
+        ...claim.policy,
+        lossOfRents: true,
+        renewsOn: daysFrom(140),
+      },
+    })
+    const incidentAt = daysFrom(-claim.incidentDaysAgo)
+    const reportedAt = minutesFrom(incidentAt, 24 * 60)
+    const insuranceClaim = await prisma.insuranceClaim.create({
+      data: {
+        propertyId: context.propertyId,
+        policyId: policy.id,
+        claimNumber: claim.claimNumber,
+        cause: claim.cause,
+        description: claim.description,
+        incidentAt,
+        mitigationStartedAt: minutesFrom(incidentAt, claim.mitigationAfterHours * 60),
+        reportedAt,
+        adjusterName: claim.adjuster.name,
+        adjusterCompany: claim.adjuster.company,
+        lossOfRentsUnitId: context.unitId,
+        lossOfRentsLeaseId: context.leaseId,
+        lossOfRentsFromOn: daysFrom(-claim.lossOfRents.fromDaysAgo),
+        lossOfRentsToOn: daysFrom(claim.lossOfRents.toInDays),
+        openedAt: reportedAt,
+        openedByStaffId: context.staffId,
+      },
+    })
+    await prisma.insuranceClaimEvent.createMany({
+      data: [
+        {
+          claimId: insuranceClaim.id,
+          kind: 'REPORTED' as const,
+          occurredAt: reportedAt,
+          note: 'Reported to the carrier by phone; claim number issued the same day.',
+          recordedByStaffId: context.staffId,
+        },
+        {
+          claimId: insuranceClaim.id,
+          kind: 'ADJUSTER_ASSIGNED' as const,
+          occurredAt: minutesFrom(reportedAt, 48 * 60),
+          note: `${claim.adjuster.name} of ${claim.adjuster.company} assigned; inspection to be scheduled.`,
+          recordedByStaffId: context.staffId,
+        },
+      ],
+    })
+    cases++
+  }
+
+  if (plan.confidentialCase) {
+    const restricted = plan.confidentialCase
+    await prisma.confidentialCase.create({
+      data: {
+        leaseId: context.leaseId,
+        summary: restricted.summary,
+        restrictedPartyName: restricted.restrictedPartyName,
+        documentationType: restricted.documentationType,
+        documentedOn: daysFrom(-restricted.documentedDaysAgo),
+        documentationSeenByStaffId: context.staffId,
+        openedByStaffId: context.staffId,
+      },
+    })
+    cases++
   }
 
   return { photos, prospects, cases }
