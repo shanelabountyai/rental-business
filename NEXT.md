@@ -5,7 +5,7 @@
 Done: domain attached to Vercel project `rental-business` (verified on Vercel's side); `DEMO_ACCESS_PASSWORD` was ALREADY set in Production, so the gate is live today (`realm="Demo"` 401); `refuseUnlessDemoDatabase` takes `DEMO_SEED_ALLOW_HOST=<exact host>` (tested).
 
 Waiting on Shane:
-1. Cloudflare DNS for labintelligence.co: `CNAME rent -> 4e7d0f3b916b9516.vercel-dns-016.com`, **DNS only (grey cloud)**.
+~~1. Cloudflare DNS~~ - DONE 2026-09-23 via API (`CLOUDFLARE_API_TOKEN` in `~/.zshrc`, scoped to Zone:DNS:Edit on labintelligence.co; the first value leaked into chat and was rolled). Record is on Cloudflare's nameservers; public resolvers had negative-cached `rent` for up to 1800s, and Vercel issues the TLS cert only after it resolves.
 2. The production `DATABASE_URL` in `/tmp/prod.env` (never in chat, never in the repo). Also: does Shane know the current `DEMO_ACCESS_PASSWORD`? It is Sensitive in Vercel and cannot be read back - if not, rotate it.
 
 Then, in order:
