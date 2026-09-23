@@ -195,3 +195,91 @@ describe('the MTM auto-rollover job', () => {
     expect(entry?.after).toMatchObject({ rentCents: 175_000 })
   })
 })
+
+// R-225 follow-up: the MTM rate is pre-agreed, but a statutory cap is a
+// ceiling whatever the lease says. Own state code and rule - `rulesFor`
+// reads every rule for a state, so the TX property above must not see a cap.
+describe('the MTM auto-rollover job against a rent-increase cap', () => {
+  const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+  const state = Array.from({ length: 2 }, () => letters[Math.floor(Math.random() * 26)]).join('')
+  let capEntityId: string
+  let capPropertyId: string
+  let capRuleId: string
+  let capUnitId: string
+  let capLeaseId: string
+
+  afterAll(async () => {
+    await prisma.leaseTenant.deleteMany({ where: { leaseId: capLeaseId } })
+    await prisma.lease.deleteMany({ where: { id: capLeaseId } })
+    await prisma.unit.deleteMany({ where: { id: capUnitId } })
+    await prisma.jobRun.deleteMany({ where: { propertyId: capPropertyId } })
+    await prisma.jurisdictionRule.update({
+      where: { id: capRuleId },
+      data: { effectiveTo: new Date('2020-01-02') },
+    })
+    // Audit and Task rows reference the property, so it is retired, not deleted.
+    await prisma.property.update({ where: { id: capPropertyId }, data: { active: false } })
+    await prisma.legalEntity.update({ where: { id: capEntityId }, data: { active: false } })
+  })
+
+  it('rolls at the highest lawful rent and opens a task when the MTM rate is over the cap', async () => {
+    const stamp = `mtmcap-${Date.now()}`
+    capEntityId = (await prisma.legalEntity.create({ data: { name: stamp, type: 'LLC' } })).id
+    capPropertyId = (
+      await prisma.property.create({
+        data: {
+          legalEntityId: capEntityId,
+          name: stamp,
+          addressLine1: '2 Test St',
+          city: 'Houston',
+          state,
+          postalCode: '77002',
+          timezone: CHICAGO,
+          propertyType: 'SINGLE_FAMILY',
+        },
+      })
+    ).id
+    capRuleId = (
+      await prisma.jurisdictionRule.create({
+        data: {
+          state,
+          jurisdiction: null,
+          version: 1,
+          effectiveFrom: new Date('2020-01-01'),
+          graceDays: 3,
+          lateFeeType: 'NONE',
+          depositEscrowRequired: false,
+          depositInterestRequired: false,
+          justCauseRequired: false,
+          paymentAllocationOrder: ['RENT'],
+          rubsPermitted: true,
+          rentIncreaseCapPercentBps: 500,
+        },
+      })
+    ).id
+    capUnitId = (
+      await prisma.unit.create({ data: { propertyId: capPropertyId, name: 'C1', status: 'OCCUPIED' } })
+    ).id
+    const lease = await prisma.lease.create({
+      data: {
+        propertyId: capPropertyId,
+        unitId: capUnitId,
+        status: 'ACTIVE',
+        startsOn: new Date('2026-01-01T00:00:00Z'),
+        endsOn: new Date('2026-06-30T00:00:00Z'),
+        rentCents: 150_000,
+        mtmRentCents: 175_000,
+      },
+    })
+    capLeaseId = lease.id
+
+    await runDueJobs(new Date('2026-07-02T09:00:00Z'), { propertyIds: [capPropertyId] })
+
+    // 5% over $1,500 is $1,575, not the $1,750 the lease agreed.
+    const updated = await prisma.lease.findUniqueOrThrow({ where: { id: lease.id } })
+    expect(updated.status).toBe('MONTH_TO_MONTH')
+    expect(updated.rentCents).toBe(157_500)
+    const tasks = await prisma.task.findMany({ where: { propertyId: capPropertyId, type: 'mtm_rate_capped' } })
+    expect(tasks).toHaveLength(1)
+  })
+})

@@ -1203,6 +1203,37 @@ export const rentIncreaseTemplate: NotificationTemplate<RentIncreaseContext> = {
   },
 }
 
+/// Context for `lease.rent_increase_withdrawn` (LEASE-09, R-225 follow-up).
+export interface RentIncreaseWithdrawnContext {
+  tenantName: string
+  addressLine1: string
+  /// The effective date the withdrawn notice gave.
+  effectiveOn: BusinessDate
+}
+
+/// `legal_notice`, same locked category as `lease.rent_increase`: it undoes a
+/// written notice, so a tenant who could opt out of it could be left
+/// believing the higher rent still applies.
+export const rentIncreaseWithdrawnTemplate: NotificationTemplate<RentIncreaseWithdrawnContext> = {
+  key: 'lease.rent_increase_withdrawn',
+  category: 'legal_notice',
+  channels: ['SMS', 'EMAIL', 'PORTAL'],
+  render: (context, channel) => {
+    const change = `the rent increase we told you about for ${context.addressLine1}, due to start ${friendlyBusinessDate(context.effectiveOn)}, has been withdrawn. Your rent stays as it is`
+    if (channel === 'SMS') return { body: `Notice: ${change}.` }
+    return {
+      subject: `Rent increase withdrawn — ${context.addressLine1}`,
+      body: [
+        `Hello ${context.tenantName},`,
+        '',
+        `This is to let you know that ${change}.`,
+        '',
+        'If you have questions, reply to this message.',
+      ].join('\n'),
+    }
+  },
+}
+
 /// Context for `inspection.signature_needed` (INSP-01, R-068 phase 2) - the
 /// walk is done and waiting on the tenant's own review.
 export interface InspectionSignatureNeededContext {
@@ -2411,6 +2442,8 @@ export const TEMPLATES: Readonly<Record<string, NotificationTemplate<never>>> = 
   [showingInviteTemplate.key]: showingInviteTemplate as unknown as NotificationTemplate<never>,
   [nonRenewalTemplate.key]: nonRenewalTemplate as unknown as NotificationTemplate<never>,
   [rentIncreaseTemplate.key]: rentIncreaseTemplate as unknown as NotificationTemplate<never>,
+  [rentIncreaseWithdrawnTemplate.key]:
+    rentIncreaseWithdrawnTemplate as unknown as NotificationTemplate<never>,
   [inspectionSignatureNeededTemplate.key]:
     inspectionSignatureNeededTemplate as unknown as NotificationTemplate<never>,
   [inspectionAutoFinalizedTemplate.key]:

@@ -1,11 +1,14 @@
 import 'server-only'
 
 import { recordAudit } from '@rental/core/audit'
+import { formatCents } from '@rental/core/money'
 import { businessDateToUtc } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { syncLease } from '@/lib/billing/lifecycle.ts'
 import { SCHEDULED_JOBS } from '@/lib/jobs/runner.ts'
+import { renewalRentCheckFor } from '@/lib/leases/renewal-check.ts'
 import { dispatchPendingNotifications, notify } from '@/lib/notifications/send.ts'
+import { createTask } from '@/lib/tasks/create.ts'
 
 // The automatic MTM rollover (LEASE-09, R-065): "Month-to-month rollovers
 // apply the configured MTM rate automatically." The real, fully-automatic
@@ -50,7 +53,7 @@ SCHEDULED_JOBS.push({
         rentCents: true,
         mtmRentCents: true,
         endsOn: true,
-        property: { select: { addressLine1: true, timezone: true } },
+        property: { select: { addressLine1: true, timezone: true, state: true, county: true } },
         unit: { select: { name: true } },
         leaseTenants: {
           where: { isPrimary: true },
@@ -73,7 +76,22 @@ SCHEDULED_JOBS.push({
       })
       if (successor) continue
 
-      const newRentCents = lease.mtmRentCents ?? lease.rentCents
+      // The MTM rate is pre-agreed in the lease, so the notice-period half of
+      // `renewalRentCheck` does not apply - but a statutory CAP is a ceiling
+      // whatever the lease says (R-065 blocks it with no override), and this
+      // job is the one path that raises rent with nobody looking. A capped
+      // rate rolls at the highest lawful rent instead, and a Task tells staff.
+      const agreedRentCents = lease.mtmRentCents ?? lease.rentCents
+      const rentCheck = await renewalRentCheckFor({
+        propertyState: lease.property.state,
+        propertyCounty: lease.property.county,
+        currentRentCents: lease.rentCents,
+        proposedRentCents: agreedRentCents,
+        effectiveOn: businessDate,
+        offeredOn: businessDate,
+      })
+      const capped = rentCheck.blocked && rentCheck.maxAllowedCents != null
+      const newRentCents = capped ? rentCheck.maxAllowedCents! : agreedRentCents
 
       await prisma.$transaction(async (tx) => {
         await tx.lease.update({
@@ -96,9 +114,26 @@ SCHEDULED_JOBS.push({
           entityId: lease.id,
           propertyId,
           before: { status: 'ACTIVE', rentCents: lease.rentCents, endsOn: lease.endsOn!.toISOString() },
-          after: { status: 'MONTH_TO_MONTH', rentCents: newRentCents, endsOn: null },
+          after: {
+            status: 'MONTH_TO_MONTH',
+            rentCents: newRentCents,
+            endsOn: null,
+            ...(capped && { rentCappedFromCents: agreedRentCents }),
+          },
         })
       })
+
+      if (capped) {
+        await createTask(prisma, {
+          propertyId,
+          type: 'mtm_rate_capped',
+          subjectType: 'Lease',
+          subjectId: lease.id,
+          businessDate,
+          priority: 'URGENT',
+          title: `The month-to-month rate of ${formatCents(agreedRentCents)} exceeds the statutory cap, so the lease rolled at ${formatCents(newRentCents)}. Review the lease's MTM rate.`,
+        })
+      }
 
       // Billing follows the tenancy (D-11) - AFTER the commit, same posture
       // every other status-driven billing call in this codebase takes.

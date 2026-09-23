@@ -5,6 +5,7 @@ import { runDueJobs } from '../jobs/runner.ts'
 // Side-effect import: registers the real job into this file's own
 // SCHEDULED_JOBS, same isolation `renewal-cutover-job.test.ts` relies on.
 import './rent-change-job.ts'
+import { notifyRentIncreaseWithdrawn } from './rent-increase-withdrawn.ts'
 
 // R-225 (LEASE-09): a scheduled rent increase reaches the lease - and so
 // Stripe - on its effective date only when its notice was served in time.
@@ -168,5 +169,29 @@ describe('the rent-increase cutover', () => {
       [unserved.lease.id, late.lease.id, edited.lease.id].sort(),
     )
     expect(tasks.every((t) => t.priority === 'URGENT')).toBe(true)
+  })
+})
+
+describe('telling the tenant an increase was withdrawn', () => {
+  async function withTenant(servedAt: Date | null) {
+    const made = await scheduled({ servedAt })
+    const tenant = await prisma.tenant.create({
+      data: { firstName: 'Pat', lastName: 'Renter', email: `pat-${randomUUID()}@example.test` },
+    })
+    await prisma.leaseTenant.create({ data: { leaseId: made.lease.id, tenantId: tenant.id, isPrimary: true } })
+    return made.change
+  }
+  const sent = (changeId: string) =>
+    prisma.notification.count({ where: { idempotencyKey: { startsWith: `rent-increase-withdrawn:${changeId}` } } })
+
+  it('notifies a tenant who was served, and stays silent for one who never was', async () => {
+    const served = await withTenant(new Date('2026-05-01T15:00:00Z'))
+    const unserved = await withTenant(null)
+
+    await notifyRentIncreaseWithdrawn(served.id)
+    await notifyRentIncreaseWithdrawn(unserved.id)
+
+    expect(await sent(served.id)).toBeGreaterThan(0)
+    expect(await sent(unserved.id)).toBe(0)
   })
 })

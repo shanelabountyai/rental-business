@@ -41,6 +41,7 @@ import { dispatchPendingNotifications, notify } from '@/lib/notifications/send.t
 import { activateLeaseSideEffects } from './activate.ts'
 import { raiseIntakeTasks } from './intake.ts'
 import { chargeOpeningBalance } from './opening-balance-charge.ts'
+import { notifyRentIncreaseWithdrawn } from './rent-increase-withdrawn.ts'
 import {
   retaliationAckAudit,
   retaliationAckView,
@@ -502,6 +503,7 @@ export async function cancelRentChange(
       fieldErrors: { cancelReason: 'Say why - the tenant already has the notice.' },
     }
   }
+  let cancelledId: string | null = null
   const cancelled = await prisma.$transaction(async (tx) => {
     // At most one is ever SCHEDULED (`planRentIncrease` refuses a second).
     const pending = await tx.rentChange.findFirst({
@@ -515,6 +517,7 @@ export async function cancelRentChange(
     })
     if (count === 0) return false
     const rentChangeId = pending.id
+    cancelledId = rentChangeId
     await audit(
       {
         action: 'lease.rent_increase_cancelled',
@@ -530,6 +533,7 @@ export async function cancelRentChange(
     return true
   })
   if (!cancelled) return { error: 'That increase is no longer scheduled.' }
+  if (cancelledId) await notifyRentIncreaseWithdrawn(cancelledId)
   revalidatePath(`/leases/${leaseId}`)
   return { notice: 'Rent increase cancelled.' }
 }

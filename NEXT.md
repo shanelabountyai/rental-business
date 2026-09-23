@@ -1,6 +1,8 @@
 # Next session
 
-## R-245 is done. Next candidate: MTM rollover rate cap / withdrawn-increase message (R-225), `/money/deposits` demo batch, or the Milestone 17 legal-review gate. Scope a real row first.
+## R-246 is done (MTM rollover cap + withdrawn-increase message, D-256). Next candidate: `/money/deposits` demo batch, or the Milestone 17 legal-review gate. Scope a real row first.
+
+## R-245 is done.
 
 ## R-244 is done and walked (2026-09-23). Nothing outstanding on it.
 
@@ -26,7 +28,7 @@
 - Demo seed writes a future `moveOutAt` on two ACTIVE leases, a state the product cannot produce (harmless today).
 - Unserved entry notice + later hand service does not re-judge the window; needs counsel on damages for entries already made (R-228).
 - ~~`payment-plan-job.ts` stamps~~ — fixed R-245. The suppressed-fee report gap (paid-off debts) stays a known limit; not worth building.
-- No MTM rollover rate cap, no withdrawn-increase tenant message, R-223-R-233 migrations not on the Neon dev branch (R-225).
+- ~~No MTM rollover rate cap, no withdrawn-increase tenant message~~ — fixed R-246. R-223-R-233 migrations are still not on the Neon dev branch.
 - ~~No demo rows for the four detail pages~~ — seeded in R-244, walked in a browser 2026-09-23, clean.
 - **The vitest suite has no shared `uniqueStateCode()`-equivalent helper.** Every job/unit test file that needs a `JurisdictionRule` picks its own hardcoded 2-letter state code and tracks collisions by a manually maintained comment list (TX/ZZ/XY/ZY/XW/NY/YQ, and until R-239, QZ). Not yet a real fix — worth one (a shared helper in a vitest test-utils module) only if a second file ever shows the same flake; none has.
 
