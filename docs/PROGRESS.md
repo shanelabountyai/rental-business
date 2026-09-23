@@ -13456,7 +13456,7 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 
 ## SEC-06 — no Referer on token routes
 
-**Commit:** _pending_  ·  **Date:** 2026-09-23
+**Commit:** `ead3cf1`  ·  **Date:** 2026-09-23
 
 **What it built.** `Referrer-Policy: no-referrer` on every response, from `headers()` in [next.config.ts](apps/web/next.config.ts). New test in [e2e/csp.spec.ts](e2e/csp.spec.ts): `/pay/<token>` and `/api/calendar/<token>` both carry the header.
 
