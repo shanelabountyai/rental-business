@@ -1,10 +1,10 @@
 # Next session
 
-## SEC-02 is done (`22ff4db`, D-259). Next: SEC-03 (write actions scoped from `property.read`), backlog "Security findings".
+## SEC-03 is done (`e930068`, D-260). Next: SEC-04 (Resend webhook timestamp tolerance), backlog "Security findings".
 
-- CI for `b4af510` not yet checked: `gh run list --limit 2`.
-- `tenantWhere(scope)` in `apps/web/lib/auth/scope.ts` is the one tenant-scope predicate. Reuse it; do not write another.
-- **Carried defect, unowned:** `apps/web/lib/ledger/nsf-fees.ts:167` audits `ledger.adjusted` with no `reason` (it is on `REASON_REQUIRED`), so no NSF fee gets an audit row. The error is caught and logged. Check `opening-balance-charge.ts:81`, `deposit-charge.ts:116` and `proration.ts:174` for the same thing. Worth a row before SEC-03.
+- `currentScope(actor, permission)` now takes the permission; write actions pass their own. Reuse it; do not build a second scope builder.
+- CI for SEC-03 not yet checked: `gh run list --limit 2`.
+- **Carried defect, unowned:** `apps/web/lib/ledger/nsf-fees.ts:167` audits `ledger.adjusted` with no `reason` (on `REASON_REQUIRED`), so no NSF fee gets an audit row. Check `opening-balance-charge.ts:81`, `deposit-charge.ts:116`, `proration.ts:174` too.
 - Full unit runs time out broadly while the storage project runs a sweep. Check `uptime` before reading timeouts.
 
 ## rent.labintelligence.co is live and walked (D-257, 2026-09-23). Project is at closure.
