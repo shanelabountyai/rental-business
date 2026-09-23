@@ -16,7 +16,7 @@ the repo alone — a dashboard setting is invisible to `git log`.
 | Build | `vercel-build` in `apps/web/package.json` |
 | Neon `production` | `ep-cool-rain-aygtz3n8` — **Vercel reads this** |
 | Neon `dev` | `ep-gentle-cell-ayd8m0qg` — **`.env.local` reads this** |
-| Production URL | `https://rental-business-red.vercel.app` — **public** |
+| Production URL | `https://rental-business-red.vercel.app` — **not public**: returns 401 behind Vercel Authentication (checked 2026-09-23) |
 | Deployment URLs | `rental-business-*-projects.vercel.app` — behind Vercel Authentication |
 
 ## Three things that are not obvious and each break the build

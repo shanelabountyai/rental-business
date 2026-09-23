@@ -1,5 +1,12 @@
 # Next session
 
+## Closure deliverables are done (2026-09-23). Next: rent.labintelligence.co with a shared password (Shane asked, mid-session).
+
+- `docs/DEMO-SCRIPT.md` re-verified: §0 commands ran clean against `rental_demo`; the 8 owner routes the acts name all 200. Added *What to concede before you are asked*. Acts 2-5 (tenant/vendor/narrow roles) not re-walked.
+- Exec brief: **Rental Business in Brief** https://claude.ai/artifact/GSG4tVzFVzbgD4m5eacsrB (numbers refreshed: 4,604 tests = 3,312 unit + 1,292 e2e, D-256, 282 items, 54 days).
+- LinkedIn: posts 41-44 in the Lab Intelligence Ledger https://claude.ai/artifact/Ai5xKScgT2sWtqXRQ1ZA8i (AI, Impact, Scale, MarTech).
+- Fixed a stale claim: `docs/DEPLOYMENT.md` said production was **public**; it returns 401 behind Vercel Authentication.
+
 ## Legal-review gate prep is done: `docs/LEGAL-REVIEW-CHECKLIST.md` (docs only, no code). Hand it to Shane/attorney; the gate closes when v2 rows with `reviewedBy` exist. Next candidates: project-closure deliverables (DEMO.md check, exec-brief, LinkedIn posts) or R-228 (needs counsel).
 
 ## R-248 is done (`5ed3295`, demo seed drops future `moveOutAt` on ACTIVE leases). Next candidate: the Milestone 17 legal-review gate (a human/attorney step, not code) or the unserved-entry-notice re-judging gap (needs counsel). Nothing code-shaped is left that is not blocked on a human - ask Shane which.

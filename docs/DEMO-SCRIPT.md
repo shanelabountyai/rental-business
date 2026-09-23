@@ -303,9 +303,9 @@ out of you does not.
 - **Demo data is synthetic and local.** `rental_demo` is seeded, and the demo
   password `demo-rental-2026` exists only because both demo seeds refuse any
   database but a local `rental_demo`.
-- **The production deployment is public but empty of real tenants**
-  (`https://rental-business-red.vercel.app`); the R-223 to R-233 migrations
-  are not on the Neon dev branch.
+- **The production deployment is not public.** It returns 401 behind
+  Vercel's own login (checked 2026-09-23), and it holds no real tenants. The
+  R-223 to R-233 migrations are not on the Neon dev branch either.
 - **Acts 1-6 were written at R-138.** Later work (deposits, MTM notices,
   guarantor account, abandonment and claims) is real and browser-walked but
   not scripted here.
