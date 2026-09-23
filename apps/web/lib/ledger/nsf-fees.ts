@@ -177,6 +177,12 @@ export async function assessNsfFee(args: {
       jurisdictionRuleId: rule.id,
       paymentId: args.paymentId,
     },
+    // `ledger.adjusted` is in REASON_REQUIRED. Without a reason `recordAudit`
+    // threw, the `.catch` below logged it, and no NSF fee ever had an audit
+    // row - the same hole `billing/proration.ts` closed. The description is
+    // the defence the tenant's ledger already shows, so the two agree.
+    reasonCode: 'other',
+    reason: description,
   }).catch((error) => {
     console.error(`[nsf-fee] failed to audit charge ${fee.id}`, error)
   })

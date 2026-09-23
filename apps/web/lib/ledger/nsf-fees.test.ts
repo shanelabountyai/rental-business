@@ -124,6 +124,12 @@ describe('assessNsfFee', () => {
     expect(fee.jurisdictionRuleId).not.toBeNull()
     // The description defends the charge rather than merely naming it.
     expect(fee.description).toContain('lease provides')
+    // `ledger.adjusted` is REASON_REQUIRED: without one the audit threw into
+    // a swallowing `.catch` and no NSF fee was ever audited.
+    const audit = await prisma.auditLog.findFirst({
+      where: { entityId: fee.id, action: 'ledger.adjusted' },
+    })
+    expect(audit?.reason).toBe(fee.description)
   }, 20_000)
 
   it('dates the fee in the PROPERTY\'s calendar, not UTC\'s', async () => {

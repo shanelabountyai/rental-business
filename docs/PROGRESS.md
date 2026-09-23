@@ -13478,3 +13478,15 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 
 **Gate.** `lint` 0 errors (16 warnings, all there before this item), `typecheck` clean. e2e on a production build: `portal-guarantor` and `portal`, 46/46 on both projects, matching `--list`. **Checked by reverting the guard:** without it the new test fails, expecting 404 and getting 200. Full sweep left to CI.
 
+
+## R-249 — NSF fees get an audit row
+
+**Commit:** `PENDING`  ·  **Date:** 2026-09-23
+
+**What it built.** [`assessNsfFee`](apps/web/lib/ledger/nsf-fees.ts) now passes `reasonCode: 'other'` and the fee's description as `reason` on its `ledger.adjusted` audit. That action is on `REASON_REQUIRED`, so before this `recordAudit` threw, the `.catch` logged it, and **no NSF fee has ever had an audit row**. The same hole `billing/proration.ts` closed earlier. [nsf-fees.test.ts](apps/web/lib/ledger/nsf-fees.test.ts) now asserts the row exists and its reason is the fee description.
+
+**What it decided.** The reason is the fee's own description, so the audit and the tenant's ledger say the same thing (the `proration.ts` pattern). `'other'` because no reason code describes an automatic fee. **Swept the class, not just the instance:** a script over every non-test `action: '<x>'` whose action is in `REASON_REQUIRED` found no other call without a `reason`/`reasonCode`. The three siblings NEXT.md named (`opening-balance-charge.ts`, `deposit-charge.ts`, `proration.ts`) already had one.
+
+**What it left behind.** Fees raised before this commit have no audit row, and they cannot be backfilled honestly (`AuditLog` is append-only, and a row written today would claim a time it did not happen). The `Charge` row, with its `jurisdictionRuleId`, is still the evidence for those.
+
+**Gate.** `lint` 0 errors, `typecheck` clean. `nsf-fees.test.ts` 6/6. **Checked by reverting the fix:** the new assertion fails. Full `npm test`: 3288 passed, 16 failed, 27 skipped of 3331. All 16 were timeouts at their 20s/30s ceilings in notification/dispatch files, with load at 27-31. Those 14 files re-run alone: 185/185. No e2e. Nothing a spec reaches changed.
