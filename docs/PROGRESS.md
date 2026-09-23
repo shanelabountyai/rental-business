@@ -13418,7 +13418,7 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 
 ## SEC-03 — write actions build their scope from the write permission
 
-**Commit:** `PENDING`  ·  **Date:** 2026-09-23
+**Commit:** `e930068`  ·  **Date:** 2026-09-23
 
 **What it built.** `currentScope(actor, permission = 'property.read')` in [lib/scope/current-scope.ts](apps/web/lib/scope/current-scope.ts). Every `'use server'` caller (14 call sites in 13 modules) now passes the permission it just required. [lib/scope/current-scope.test.ts](apps/web/lib/scope/current-scope.test.ts) runs against real rows: an actor with write on A and read on B sees both under read, and only A under `property.write`, `vendor.write` and `ledger.adjust`. With the fix reverted, 3 of its 4 cases fail.
 
