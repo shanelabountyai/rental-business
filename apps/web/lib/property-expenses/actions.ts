@@ -64,7 +64,7 @@ export async function recordPropertyExpense(
   formData: FormData,
 ): Promise<FormState> {
   const { actor } = await requireScope('property.write')
-  const scope = await currentScope(actor)
+  const scope = await currentScope(actor, 'property.write')
 
   const propertyChoice = str(formData, 'propertyId')
   const input: PropertyExpenseInput = {
@@ -170,7 +170,7 @@ export async function recordPropertyExpense(
  */
 export async function stopExpenseRecurrence(expenseId: string): Promise<void> {
   const { actor } = await requireScope('property.write')
-  const scope = await currentScope(actor)
+  const scope = await currentScope(actor, 'property.write')
 
   const expense = await prisma.propertyExpense.findUnique({
     where: { id: expenseId },

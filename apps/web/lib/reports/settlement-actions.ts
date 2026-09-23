@@ -71,7 +71,7 @@ export async function recordSettlementTransfer(
   // is not a one-house act. Privileged, so an owner without a second factor is
   // sent to enrol (ROLE-05).
   const actor = await requirePermission('ledger.adjust', { legalEntityId })
-  const scope = await currentScope(actor)
+  const scope = await currentScope(actor, 'ledger.adjust')
 
   // THE WHOLE ENTITY, NOT THE CURRENT SELECTION. The switcher can narrow the
   // page to one house, and a share worked out from some of an LLC's houses is

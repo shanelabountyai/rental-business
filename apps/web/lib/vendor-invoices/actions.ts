@@ -59,7 +59,7 @@ export async function recordVendorInvoice(
   formData: FormData,
 ): Promise<FormState> {
   const { actor } = await requireScope('vendor.write')
-  const scope = await currentScope(actor)
+  const scope = await currentScope(actor, 'vendor.write')
 
   const rows = Array.from({ length: splitRowCount(formData) }, (_, index) => ({
     propertyId: str(formData, `splits.${index}.propertyId`),

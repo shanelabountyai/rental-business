@@ -45,7 +45,7 @@ async function propertyForExport(propertyId: string) {
   // `requireScope` first, never a resource-less `requirePermission` - R-103's
   // lesson, and the scoped read is what decides.
   const { actor } = await requireScope('property.export')
-  const scope = await currentScope(actor)
+  const scope = await currentScope(actor, 'property.export')
   const source = await handoffSource(propertyId, scope)
   if (!source) return null
   // THEN the real authorization, against this property.

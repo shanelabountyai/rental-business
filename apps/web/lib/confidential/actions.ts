@@ -86,7 +86,7 @@ async function caseForWrite(caseId: string) {
   // working for them. It shipped that way here and the e2e scoping test is
   // what found it.
   const { actor } = await requireScope('confidential.manage')
-  const scope = await currentScope(actor)
+  const scope = await currentScope(actor, 'confidential.manage')
   const found = await getConfidentialCase(caseId, scope)
   if (!found) return null
   // THEN the real authorization, against this case's own property.

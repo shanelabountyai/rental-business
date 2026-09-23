@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { type Actor, propertyScope } from '@rental/core/rbac'
+import { type Actor, type Permission, propertyScope } from '@rental/core/rbac'
 import { prisma } from '@rental/db'
 import { cookies } from 'next/headers'
 import { cache } from 'react'
@@ -34,10 +34,14 @@ function parseCookie(raw: string | undefined): ScopeSelection {
  * Memoized per request, because the layout renders the switcher and the page
  * below it runs scoped queries - both need this and neither should pay for it
  * twice.
+ *
+ * A write action passes the permission it acts under (SEC-03). The default is
+ * what the actor may SEE, and an action that checks its record against that
+ * lets a manager with write on A and read on B write on B.
  */
 export const currentScope = cache(
-  async (actor: Actor): Promise<ResolvedScope> => {
-    const scope = propertyScope(actor, 'property.read')
+  async (actor: Actor, permission: Permission = 'property.read'): Promise<ResolvedScope> => {
+    const scope = propertyScope(actor, permission)
 
     const properties = await prisma.property.findMany({
       where: {

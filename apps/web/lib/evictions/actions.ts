@@ -177,7 +177,7 @@ export async function attachNoticeToCase(
   // guard locks out every entity- and property-scoped actor. See
   // `requireScope`'s own comment.
   const { actor: guarded } = await requireScope('eviction.manage')
-  const scope = await currentScope(guarded)
+  const scope = await currentScope(guarded, 'eviction.manage')
   const evictionCase = await getEvictionCase(caseId, scope)
   if (!evictionCase) return { error: 'That case no longer exists.' }
   await requirePermission('eviction.manage', propertyResource(evictionCase.property))
@@ -234,7 +234,7 @@ export async function draftCureNotice(
   // R-103: `requireScope`, then the property-scoped check once the case is
   // known - the same pair `attachNoticeToCase` uses.
   const { actor: guarded } = await requireScope('eviction.manage')
-  const scope = await currentScope(guarded)
+  const scope = await currentScope(guarded, 'eviction.manage')
   const evictionCase = await getEvictionCase(caseId, scope)
   if (!evictionCase) return { error: 'That case no longer exists.' }
   await requirePermission('eviction.manage', propertyResource(evictionCase.property))
@@ -349,7 +349,7 @@ export async function advanceEvictionStage(
   // guard locks out every entity- and property-scoped actor. See
   // `requireScope`'s own comment.
   const { actor: guarded } = await requireScope('eviction.manage')
-  const scope = await currentScope(guarded)
+  const scope = await currentScope(guarded, 'eviction.manage')
   const evictionCase = await getEvictionCase(caseId, scope)
   if (!evictionCase) return { error: 'That case no longer exists.' }
   await requirePermission('eviction.manage', propertyResource(evictionCase.property))
@@ -486,7 +486,7 @@ export async function recordEvictionCost(
   // guard locks out every entity- and property-scoped actor. See
   // `requireScope`'s own comment.
   const { actor: guarded } = await requireScope('eviction.manage')
-  const scope = await currentScope(guarded)
+  const scope = await currentScope(guarded, 'eviction.manage')
   const evictionCase = await getEvictionCase(caseId, scope)
   if (!evictionCase) return { error: 'That case no longer exists.' }
   const actor = await requirePermission('eviction.manage', propertyResource(evictionCase.property))

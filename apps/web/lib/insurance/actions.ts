@@ -61,7 +61,7 @@ async function claimForWrite(claimId: string) {
   // guard locks out every entity- and property-scoped actor. See
   // `requireScope`'s own comment.
   const { actor } = await requireScope('property.write')
-  const scope = await currentScope(actor)
+  const scope = await currentScope(actor, 'property.write')
   const found = await getClaim(claimId, scope)
   if (!found) return null
   const property = await prisma.property.findUniqueOrThrow({

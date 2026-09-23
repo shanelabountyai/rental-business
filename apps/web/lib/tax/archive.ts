@@ -50,7 +50,7 @@ export async function archiveTaxPacket(
   formData: FormData,
 ): Promise<ArchiveState> {
   const { actor } = await requireScope('report.financial')
-  const scope = await currentScope(actor)
+  const scope = await currentScope(actor, 'report.financial')
 
   const legalEntityId = String(formData.get('entity') ?? '')
   const year = Number(formData.get('year'))

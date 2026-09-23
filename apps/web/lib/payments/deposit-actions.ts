@@ -44,7 +44,7 @@ export async function createDepositBatch(
   }
 
   const { actor } = await requireScope('ledger.adjust')
-  const scope = await currentScope(actor)
+  const scope = await currentScope(actor, 'ledger.adjust')
 
   const payments = await prisma.payment.findMany({
     where: { id: { in: paymentIds } },

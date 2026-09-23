@@ -77,7 +77,7 @@ export async function exportAttorneyPacket(
   // guard locks out every entity- and property-scoped actor. See
   // `requireScope`'s own comment.
   const { actor: guarded } = await requireScope('eviction.manage')
-  const scope = await currentScope(guarded)
+  const scope = await currentScope(guarded, 'eviction.manage')
   const evictionCase = await getEvictionCase(caseId, scope)
   if (!evictionCase) return { error: 'That case no longer exists.' }
 

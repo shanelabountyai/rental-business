@@ -54,7 +54,7 @@ async function caseForWrite(caseId: string) {
   // guard locks out every entity- and property-scoped actor. See
   // `requireScope`'s own comment.
   const { actor } = await requireScope('lease.write')
-  const scope = await currentScope(actor)
+  const scope = await currentScope(actor, 'lease.write')
   const found = await getViolationCase(caseId, scope)
   if (!found) return null
   const property = await prisma.property.findUniqueOrThrow({

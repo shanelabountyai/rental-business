@@ -90,7 +90,7 @@ export async function runPreventiveBatch(
   const template = await prisma.preventiveMaintenanceTemplate.findUnique({ where: { id: templateId } })
   if (!template || !template.active) return { error: 'This template is no longer active.' }
 
-  const scope = await currentScope(actor)
+  const scope = await currentScope(actor, 'workorder.write')
   const due = await dueUnitsForTemplate(templateId, template, scope)
   if (due.length === 0) return { notice: 'Nothing due right now.' }
 

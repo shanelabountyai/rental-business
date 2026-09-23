@@ -13415,3 +13415,17 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 **What it left behind.** SEC-03 to SEC-07. The NSF-fee audit row with no `reason` (found in SEC-01) is still unowned.
 
 **Gate.** `lint` 0 errors (16 warnings, same as `main`), `typecheck` clean. `npm test`: 3,320 passed / 4 skipped = 3,324, exit 0. e2e `leases.spec.ts`, both projects: **44/44** against `--list` (the run built the app first). Full sweep left to CI.
+
+## SEC-03 — write actions build their scope from the write permission
+
+**Commit:** `PENDING`  ·  **Date:** 2026-09-23
+
+**What it built.** `currentScope(actor, permission = 'property.read')` in [lib/scope/current-scope.ts](apps/web/lib/scope/current-scope.ts). Every `'use server'` caller (14 call sites in 13 modules) now passes the permission it just required. [lib/scope/current-scope.test.ts](apps/web/lib/scope/current-scope.test.ts) runs against real rows: an actor with write on A and read on B sees both under read, and only A under `property.write`, `vendor.write` and `ledger.adjust`. With the fix reverted, 3 of its 4 cases fail.
+
+**What it found.** The row named three actions (deposit batch, property expenses, vendor invoices). `runPreventiveTemplate` in `lib/maintenance/preventive-actions.ts` had the same gap: it bounded work-order creation by the read scope. The other callers already re-checked the record with `requirePermission`, so they were not exploitable. They pass the permission anyway, to keep the pattern uniform.
+
+**What it decided.** D-260: one parameter on the shared builder, not a second builder. No seeded role holds any of those write permissions without `property.read`, so no actor's scope got wider.
+
+**What it left behind.** Pages still offer read-only houses in write forms (for example the vendor-invoice property picker). Submitting one is now refused with "No property you can see has that ID", which is accurate enough but not ideal. SEC-04 to SEC-07. The NSF-fee audit row with no `reason` is still unowned.
+
+**Gate.** `lint` 0 errors (warnings unchanged), `typecheck` clean. Unit: `vitest related` over the changed files, 4/4. The actions have no unit tests, so the full `npm test` was not rerun (load average 23 from another project's sweep). e2e `vendor-invoice-splits`, `property-expenses`, `deposits`, `deposit-disposition`, desktop-chrome: **19/19** against `--list`. Full sweep left to CI.

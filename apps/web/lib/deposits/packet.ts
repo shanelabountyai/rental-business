@@ -51,7 +51,7 @@ export async function exportDepositPacket(
   // R-103: `requireScope` first, never a resource-less `requirePermission`.
   // `ledger.adjust`, the permission the disposition itself is written under.
   const { actor: guarded } = await requireScope('ledger.adjust')
-  const scope = await currentScope(guarded)
+  const scope = await currentScope(guarded, 'ledger.adjust')
 
   const lease = await prisma.lease.findUnique({
     where: { id: leaseId },
