@@ -13385,5 +13385,5 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 
 **What it left behind.** The shared password is Sensitive in Vercel and cannot be read back; whoever demos needs it or a rotation. `/tmp/prod.env` holds production's connection string and should be deleted when done. Credentials leaked into chat during setup and were rotated: the first Cloudflare token (rolled) and an Anthropic key (already disabled). The `Bash(npx dotenv -e /tmp/prod.env:*)` allow rule should be removed from local settings.
 
-**Gate.** `lint` 0, `typecheck` clean, guard tests 10/10. `prisma migrate status` against production: up to date. `https://rent.labintelligence.co/login` answers 401 `Basic realm="Demo"` over a valid certificate.
+**Gate.** `lint` 0, `typecheck` clean, guard tests 10/10. `prisma migrate status` against production: up to date. `https://rent.labintelligence.co/login` answers 401 `Basic realm="Demo"` over a valid certificate. After rotating `DEMO_ACCESS_PASSWORD` (build `6c6135b`): no password 401, correct password 200, and a Playwright walk through the gate signed in as `owner@demo.test` on the new domain and loaded `/dashboard`, `/leases`, `/money`, `/properties`, `/workorders` — all 200, demo portfolio present, no `undefined`/`NaN`/`Invalid Date`.
 

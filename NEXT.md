@@ -1,11 +1,10 @@
 # Next session
 
-## rent.labintelligence.co is live (D-257, 2026-09-23). Loose ends, shortest first:
+## rent.labintelligence.co is live and walked (D-257, 2026-09-23). Project is at closure.
 
-- **The shared password** is Sensitive in Vercel and unreadable. If Shane does not know it, rotate `DEMO_ACCESS_PASSWORD` (production) and redeploy.
-- Walk the demo on the live domain as owner@demo.test (password `demo-rental-2026`) - not yet done; sign-in through the new `AUTH_URL` is the thing to prove.
-- Delete `/tmp/prod.env`; remove the `Bash(npx dotenv -e /tmp/prod.env:*)` allow rule.
-- Full record in `docs/PROGRESS.md` -> D-257 entry.
+- Shared password rotated 2026-09-23 (Sensitive in Vercel; Shane holds it). Walked through the gate as owner@demo.test: sign-in lands on /dashboard at the new domain; /dashboard, /leases, /money, /properties, /workorders all 200 with the demo portfolio.
+- Only loose end: remove the `Bash(npx dotenv -e /tmp/prod.env:*)` allow rule (`/permissions`). `/tmp/prod.env` is deleted.
+- No backlog item is unblocked. Open human steps: legal review (`docs/LEGAL-REVIEW-CHECKLIST.md`), R-228 (needs counsel).
 
 ## Closure deliverables are done (2026-09-23).
 
