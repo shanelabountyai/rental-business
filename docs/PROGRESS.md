@@ -13453,3 +13453,15 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 **What it left behind.** SEC-06 and SEC-07. The NSF-fee audit row with no `reason` is still unowned.
 
 **Gate.** `lint` 0 errors, `typecheck` clean. Unit: the new route test (2/2) plus `route-guards.test.ts` (168/168). Full `npm test` not rerun; one-line change to a route nothing else calls. The route has no e2e. Full sweep left to CI.
+
+## SEC-06 — no Referer on token routes
+
+**Commit:** _pending_  ·  **Date:** 2026-09-23
+
+**What it built.** `Referrer-Policy: no-referrer` on every response, from `headers()` in [next.config.ts](apps/web/next.config.ts). New test in [e2e/csp.spec.ts](e2e/csp.spec.ts): `/pay/<token>` and `/api/calendar/<token>` both carry the header.
+
+**What it decided.** It goes in `next.config.ts` and not in `proxy.ts`, which the row offered as an option. The proxy's matcher skips `/api` and the document-byte routes on purpose, and `/api/calendar`, `/sign/[token]/document` and `/vendor/[token]/documents` all carry tokens. `no-referrer` rather than `strict-origin-when-cross-origin`, because nothing in the app reads Referer (Server Actions check Origin).
+
+**What it left behind.** SEC-07. The NSF-fee audit row with no `reason` is still unowned.
+
+**Gate.** `lint` 0 errors, `typecheck` clean. e2e on a production build: `csp`, `calendar-feed` and `pay-link` specs, 32/32 on both projects, matching `--list`. The fix was not reverted to confirm the new test fails, but without it the header is missing and the assertion has nothing to match. Full sweep left to CI.

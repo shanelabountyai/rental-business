@@ -7,6 +7,14 @@ const nextConfig: NextConfig = {
   // (R-120). tsconfig.build.json says why, and the reason is a two-day
   // outage rather than a preference.
   typescript: { tsconfigPath: 'tsconfig.build.json' },
+  // Bearer tokens live in URL PATHS here - /pay, /sign, /vendor, /verify,
+  // /api/calendar - so a Referer is a copy of the credential (SEC-06).
+  // Set here rather than in proxy.ts because the proxy deliberately skips
+  // /api and the document-byte routes, and both carry tokens. No code in
+  // this app reads Referer; Server Actions check Origin.
+  async headers() {
+    return [{ source: '/:path*', headers: [{ key: 'Referrer-Policy', value: 'no-referrer' }] }]
+  },
   experimental: {
     // Next caps a Server Action body at 1 MB by default, and every photo
     // upload in this product goes through one - inspections, notice service,

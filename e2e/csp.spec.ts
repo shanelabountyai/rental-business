@@ -71,6 +71,16 @@ test('Stripe is admitted deliberately and nothing else is', async ({ request }) 
   expect(csp).not.toContain('fonts.googleapis.com')
 })
 
+test('token routes send no Referer, including the ones the proxy skips', async ({ request }) => {
+  // SEC-06. The token is the path, so a Referer would hand it to whatever
+  // the page links to. /api/calendar is outside the proxy's matcher, which
+  // is why the header lives in next.config.ts - assert that route too.
+  for (const path of ['/pay/not-a-token', '/api/calendar/not-a-token']) {
+    const response = await request.get(path)
+    expect(response.headers()['referrer-policy'], path).toBe('no-referrer')
+  }
+})
+
 test('the page policy does not reach the routes that serve document bytes', async ({
   request,
 }) => {
