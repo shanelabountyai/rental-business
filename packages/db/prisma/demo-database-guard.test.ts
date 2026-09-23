@@ -80,4 +80,23 @@ describe('refuseUnlessDemoDatabase', () => {
     expect(output).toContain('neon.tech')
     expect(output).not.toContain('hunter2')
   })
+
+  describe('DEMO_SEED_ALLOW_HOST (D-257)', () => {
+    const PROD = 'postgresql://u:p@ep-cool-rain-aygtz3n8-pooler.c-5.us-east-2.aws.neon.tech/neondb?sslmode=require'
+    afterEach(() => {
+      delete process.env.DEMO_SEED_ALLOW_HOST
+    })
+
+    it('allows exactly the named host', () => {
+      process.env.DEMO_SEED_ALLOW_HOST = 'ep-cool-rain-aygtz3n8-pooler.c-5.us-east-2.aws.neon.tech'
+      expect(run(PROD).exited).toBe(false)
+    })
+
+    // The override exists for one database; the dev branch is the one it
+    // must never reach.
+    it('still refuses a different host with the override set', () => {
+      process.env.DEMO_SEED_ALLOW_HOST = 'ep-cool-rain-aygtz3n8-pooler.c-5.us-east-2.aws.neon.tech'
+      expect(run(NEON).exited).toBe(true)
+    })
+  })
 })

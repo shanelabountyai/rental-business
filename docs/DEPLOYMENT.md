@@ -16,7 +16,8 @@ the repo alone — a dashboard setting is invisible to `git log`.
 | Build | `vercel-build` in `apps/web/package.json` |
 | Neon `production` | `ep-cool-rain-aygtz3n8` — **Vercel reads this** |
 | Neon `dev` | `ep-gentle-cell-ayd8m0qg` — **`.env.local` reads this** |
-| Production URL | `https://rental-business-red.vercel.app` — **not public**: returns 401 behind Vercel Authentication (checked 2026-09-23) |
+| Production URL | `https://rental-business-red.vercel.app` — **not public**: 401 from the app's own shared-password gate, `DEMO_ACCESS_PASSWORD` (checked 2026-09-23) |
+| Custom domain | `rent.labintelligence.co` — attached 2026-09-23 (D-257); needs a Cloudflare `CNAME rent → 4e7d0f3b916b9516.vercel-dns-016.com`, DNS only |
 | Deployment URLs | `rental-business-*-projects.vercel.app` — behind Vercel Authentication |
 
 ## Three things that are not obvious and each break the build
@@ -172,6 +173,8 @@ that session. Putting the dashboard secret in `.env.local` will not make local
 forwarding work.
 
 ## The production alias is public
+
+**Superseded (checked 2026-09-23):** the alias is now behind `apps/web/lib/demo-gate.ts`, HTTP Basic on `DEMO_ACCESS_PASSWORD`, which Production has set. It is the app's gate, not Vercel Authentication, so webhooks still reach `/api/`. The section below is the 2026-08-12 state.
 
 `rental-business-red.vercel.app` serves the real login page with **no** Vercel
 Authentication. That is how Vercel works — protection covers preview and

@@ -1,6 +1,21 @@
 # Next session
 
-## Closure deliverables are done (2026-09-23). Next: rent.labintelligence.co with a shared password (Shane asked, mid-session).
+## In flight: rent.labintelligence.co (D-257). Blocked on Shane for two things.
+
+Done: domain attached to Vercel project `rental-business` (verified on Vercel's side); `DEMO_ACCESS_PASSWORD` was ALREADY set in Production, so the gate is live today (`realm="Demo"` 401); `refuseUnlessDemoDatabase` takes `DEMO_SEED_ALLOW_HOST=<exact host>` (tested).
+
+Waiting on Shane:
+1. Cloudflare DNS for labintelligence.co: `CNAME rent -> 4e7d0f3b916b9516.vercel-dns-016.com`, **DNS only (grey cloud)**.
+2. The production `DATABASE_URL` in `/tmp/prod.env` (never in chat, never in the repo). Also: does Shane know the current `DEMO_ACCESS_PASSWORD`? It is Sensitive in Vercel and cannot be read back - if not, rotate it.
+
+Then, in order:
+- `npx dotenv -e /tmp/prod.env -- npx prisma migrate status --schema packages/db/prisma/schema.prisma`. Production was last migrated 2026-08-12 at 24 of 115 migrations; if it is behind, the live site is probably 500ing on anything newer (Countertop's "36 behind" outage). `migrate deploy` it.
+- Set production `AUTH_URL` to `https://rent.labintelligence.co` (magic links are built from it) and redeploy - only AFTER DNS resolves.
+- Seed with `DEMO_SEED_ALLOW_HOST=<prod host>` in front, `-e /tmp/prod.env`: seed:base (roles already exist - check it is idempotent), create-owner owner@demo.test, lease-templates, demo, demo-access. Check `NOTIFICATIONS_ENABLED`/`NOTIFICATIONS_SANDBOX_TO` in production first - the seed queues notifications to @demo.test addresses.
+- Verify: `curl -sI https://rent.labintelligence.co/login` = 401 Basic; with `-u demo:$PASS` = 200; sign in as owner@demo.test.
+- Add the port-table row's cousin: the domain column in `~/.claude/CLAUDE.md`'s table mentions deployed hosts for reserve - add rent.labintelligence.co to this project's row.
+
+## Closure deliverables are done (2026-09-23).
 
 - `docs/DEMO-SCRIPT.md` re-verified: §0 commands ran clean against `rental_demo`; the 8 owner routes the acts name all 200. Added *What to concede before you are asked*. Acts 2-5 (tenant/vendor/narrow roles) not re-walked.
 - Exec brief: **Rental Business in Brief** https://claude.ai/artifact/GSG4tVzFVzbgD4m5eacsrB (numbers refreshed: 4,604 tests = 3,312 unit + 1,292 e2e, D-256, 282 items, 54 days).

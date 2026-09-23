@@ -20,6 +20,24 @@ export function refuseUnlessDemoDatabase(writes: string, howToRun: string): void
   const isDemo = /\/rental_demo(\?|$)/.test(url)
   if (isLocal && isDemo) return
 
+  // D-257: rent.labintelligence.co's production database is a demo database
+  // on purpose. The override names the HOST it is allowed to write, exactly -
+  // a boolean flag left in a shell would also have let the Neon dev branch
+  // through, which is the R-137 accident this file exists to stop.
+  const allowedHost = process.env.DEMO_SEED_ALLOW_HOST
+  if (allowedHost) {
+    let host = ''
+    try {
+      host = new URL(url).hostname
+    } catch {
+      // An unparseable URL matches nothing and falls through to the refusal.
+    }
+    if (host === allowedHost) {
+      console.warn(`\nDEMO_SEED_ALLOW_HOST matches: this script ${writes} on ${host}.\n`)
+      return
+    }
+  }
+
   console.error(
     [
       '',
