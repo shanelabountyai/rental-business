@@ -1,8 +1,10 @@
 # Next session
 
-## R-244 is done (demo rows for four detail pages, seed only). Not yet walked in a browser.
+## R-244 is done and walked (2026-09-23). Nothing outstanding on it.
 
-**Next candidate:** walk `/abandonment`, `/claims`, `/confidential` and `/portal/papers/inspections` in a browser against `npm run dev:demo` (reseed first) — that is the D-28 check R-244 did not do.
+**Browser walk (headless Chromium, `dev:demo`, reseeded):** `/abandonment`, `/claims`, `/confidential` and one detail page each, as `owner@demo.test`, plus `/portal/papers` and the tenant inspection report (`/portal/papers/inspections/[id]`, reached from Papers - there is no list route, so `/portal/papers/inspections` is a correct 404) through all five tenant links. All 200 at 1280px and 412px, `documentElement.scrollWidth` == viewport, no `undefined`/`NaN`/`Invalid Date`/raw `YYYY-MM-DD`. Screenshots read correctly. The "1 Issue" badge in them is the dev-only `eval()` CSP warning from headless Chromium, not an app defect.
+
+**Next candidate:** pick one carried defect below (or the Milestone 17 legal-review gate), scope it into a real backlog row, build it.
 
 ## R-243 (previous) is done (`36b80f4`, SHA recorded in `0a851f0`).
 
