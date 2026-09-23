@@ -13360,3 +13360,16 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 **What it left behind.** Not walked in a browser (D-28 walks belong to a milestone close). No app code changed.
 
 **Gate.** `lint` 0 errors, `typecheck` clean, `npm test` **3,312 passed / 4 skipped**, `db:seed:demo -- --reset` exit 0 with one ledger entry per instrument and no duplicate row. No schema, route or UI change, so build and e2e were not run.
+
+## R-248 — demo seed: no future `moveOutAt` on ACTIVE leases
+
+**Commit:** `(pending)`  ·  **Date:** 2026-09-23
+
+**What it built.** Nothing new: four lines deleted from [demo-seed.mts](packages/db/prisma/demo-seed.mts) — the `moveOutAt` on the `in-notice` and `moving-out` leases, the optional `moveOutAt` field on the lease plan type, and the line that passed it to `lease.create`.
+
+**What it decided.** `moveOutAt` is a fact about a move-out that has happened; the product stamps it only on the move to ENDED or TERMINATED. A seed must not author a state the product cannot reach. The notice and end dates still carry the "leaving soon" story.
+
+**What it left behind.** Not walked in a browser. App code untouched.
+
+**Gate.** `lint` 0 errors, `typecheck` clean. `npm test` **3,280 passed / 27 skipped / 9 failed**: all nine are timeouts in notification-dispatch files (`delivery`, `due-notices`, `sms-intake`, `notifications`, `opt-out`, `follow-up`, `verify`) under full-suite load, none touching the seed. Those seven files rerun alone: **119 passed**. Not fixed here.
+

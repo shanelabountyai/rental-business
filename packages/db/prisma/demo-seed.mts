@@ -758,7 +758,6 @@ interface UnitPlan {
       rentCents: number
       depositCents: number
       isMonthToMonth?: boolean
-      moveOutAt?: Date
       noticeGivenAt?: Date
       /// Required alongside `noticeGivenAt` - every writer of a notice sets
       /// both (R-220), and R-219's listing job skips a notice without it.
@@ -1712,7 +1711,6 @@ export function buildPlan(): PropertyPlan[] {
               depositCents: 160000,
               noticeGivenAt: daysFrom(-10),
               noticeEffectiveOn: daysFrom(20),
-              moveOutAt: daysFrom(20),
             },
           },
         },
@@ -1749,7 +1747,6 @@ export function buildPlan(): PropertyPlan[] {
               endsOn: daysFrom(5),
               rentCents: 195000,
               depositCents: 195000,
-              moveOutAt: daysFrom(5),
             },
           },
         },
@@ -4144,7 +4141,6 @@ async function seedDemoData() {
           rentCents: tenantPlan.lease.rentCents,
           depositCents: tenantPlan.lease.depositCents,
           isMonthToMonth: tenantPlan.lease.isMonthToMonth ?? false,
-          moveOutAt: tenantPlan.lease.moveOutAt,
           noticeGivenAt: tenantPlan.lease.noticeGivenAt,
           noticeEffectiveOn: tenantPlan.lease.noticeEffectiveOn,
           // R-033/RISK-08. The inherited tenancy in this seed is the whole
