@@ -20,7 +20,8 @@ import type { InboundAttachment } from '@/lib/comms/inbound-attachments.ts'
 // stating rather than glossing: Twilio signs its payload, so that route can
 // verify the request came from Twilio. Inbound-email providers vary - some
 // sign, most offer only a secret in the URL or a header - so this takes the
-// lowest common denominator and compares it in constant time. It is weaker,
+// lowest common denominator (the header; never the URL, SEC-05) and compares
+// it in constant time. It is weaker,
 // and the mitigation is what the endpoint can DO: it files a message into an
 // existing conversation, or into the unrouted queue. It cannot create a
 // tenancy, move money, or say who somebody is.
@@ -109,8 +110,9 @@ export async function POST(request: Request) {
     return new Response('Not configured', { status: 503 })
   }
 
-  const provided =
-    request.headers.get('x-inbound-secret') ?? new URL(request.url).searchParams.get('secret') ?? ''
+  // Header only (SEC-05, D-262). A `?secret=` query string lands in every
+  // access log and proxy between the provider and here.
+  const provided = request.headers.get('x-inbound-secret') ?? ''
   if (!secretMatches(provided, expected)) {
     // 403, not 503: this one must NOT be retried. A wrong secret is wrong
     // every time, and telling the provider to try again turns a
