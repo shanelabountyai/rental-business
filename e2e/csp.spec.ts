@@ -77,7 +77,7 @@ test('token routes send no Referer, including the ones the proxy skips', async (
   // is why the header lives in next.config.ts - assert that route too.
   for (const path of ['/pay/not-a-token', '/api/calendar/not-a-token']) {
     const response = await request.get(path)
-    expect(response.headers()['referrer-policy'], path).toBe('no-referrer')
+    expect(response.headers()['referrer-policy'], path).toBe('same-origin')
   }
 })
 

@@ -13490,3 +13490,17 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 **What it left behind.** Fees raised before this commit have no audit row, and they cannot be backfilled honestly (`AuditLog` is append-only, and a row written today would claim a time it did not happen). The `Charge` row, with its `jurisdictionRuleId`, is still the evidence for those.
 
 **Gate.** `lint` 0 errors, `typecheck` clean. `nsf-fees.test.ts` 6/6. **Checked by reverting the fix:** the new assertion fails. Full `npm test`: 3288 passed, 16 failed, 27 skipped of 3331. All 16 were timeouts at their 20s/30s ceilings in notification/dispatch files, with load at 27-31. Those 14 files re-run alone: 185/185. No e2e. Nothing a spec reaches changed.
+
+## SEC-08 — Referrer-Policy `same-origin`, so no-JavaScript forms work again
+
+**Commit:** `PENDING`  ·  **Date:** 2026-09-23
+
+**What it built.** [next.config.ts](apps/web/next.config.ts) sends `Referrer-Policy: same-origin` instead of SEC-06's `no-referrer`; [e2e/csp.spec.ts](e2e/csp.spec.ts) asserts the new value.
+
+**What it found.** SEC-06 broke every Server Action submitted without JavaScript. Under `no-referrer` a browser serializes the request's `Origin` as `null` on a native form POST, and Next's action CSRF check refuses it with "Invalid Server Actions request". A JS-driven action was unaffected, which is why SEC-06's own specs passed. CI run `35924753371` (the first run to cover SEC-03..07 and R-249, the earlier ones having been cancelled by later pushes) was 1289 passed / 3 skipped / **4 failed** of 1296: `maintenance.spec.ts:158` (tenant files a maintenance request with no JS) and `vendor-link.spec.ts:376` (vendor reveals a door code with no JS), on both projects. SEC-06 deployed to production, so both no-JS paths were broken there from SEC-06's deploy until this one.
+
+**What it decided.** `same-origin`, never `no-referrer` (the comment in `next.config.ts` says why). It still sends no Referer to another site, which is all SEC-06 needed; the token URLs only leak cross-site. SEC-06's comment claimed "Server Actions check Origin" as the reason the header was safe — true, and exactly why `no-referrer` was not.
+
+**What it left behind.** Nothing owned. Lesson for the next header change: a response header that changes what the browser sends on its NEXT request is only exercised by a spec that submits a native form; SEC-06 was gated on `csp.spec.ts` alone and pushed without the no-JS specs.
+
+**Gate.** `lint` 0 errors (16 warnings, same as `main`), `typecheck` clean. e2e `maintenance`, `vendor-link`, `csp`, both projects: **52/52** against `--list`. Full sweep left to CI.
