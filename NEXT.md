@@ -1,5 +1,12 @@
 # Next session
 
+## R-250 is done (`99647a3`): rent roll "autopay" now needs a card on file. Demo acts 2-5 walked in a browser (2026-09-23).
+
+- CI for R-250 is not confirmed yet: `gh run list --limit 3`. The only spec near it is `rent-roll.spec.ts` (CSV `,yes,` is the Past-grace column, unaffected).
+- DEMO-SCRIPT.md acts 2-3 corrected (Derrick owes $3,300 over 30 days; wizard at `/portal/maintenance/new`; vendor window shows only once proposed/booked). Acts 4-5 matched as written.
+- Acts 1, 3.5 and 6 were not re-walked this session (Act 1 was verified at closure).
+- Backlog has no open rows. Remaining needs a person: legal review, R-228. Ask Shane before starting anything new.
+
 ## SEC-08 is done (`dcd4e6b`): SEC-06's `no-referrer` broke every no-JS form (Origin: null → Next refused the action). Now `same-origin`.
 
 - CI run `35927022398` is **green** (confirmed 2026-09-23); it covers SEC-03..08 and R-249.
