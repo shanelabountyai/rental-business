@@ -1,6 +1,6 @@
 import { ROLE_DEFINITIONS, type RoleKey } from '@rental/core/rbac'
 import Link from 'next/link'
-import { actorCan, requirePermission } from '@/lib/auth/guard.ts'
+import { actorDecision, requirePermission } from '@/lib/auth/guard.ts'
 import { listStaff } from '@/lib/staff/queries.ts'
 
 export const metadata = { title: 'Staff — Rental Operations' }
@@ -20,10 +20,15 @@ export default async function StaffPage({
 }) {
   await requirePermission('staff.read')
   const includeInactive = (await searchParams).show === 'all'
-  const [staff, canManage] = await Promise.all([
+  const [staff, manage] = await Promise.all([
     listStaff({ includeInactive }),
-    actorCan('staff.manage'),
+    actorDecision('staff.manage'),
   ])
+  const canManage = manage.allowed
+  // R-251: an owner without a second factor holds `staff.manage` by role but
+  // ROLE-05 withholds it, so every control vanishes. Say why, or the demo's
+  // owner (whose MFA `db:seed:demo-access` clears) sees a manager's screen.
+  const needsMfa = !manage.allowed && manage.reason === 'mfa_required'
 
   return (
     <div className="flex max-w-2xl flex-col gap-6">
@@ -38,6 +43,15 @@ export default async function StaffPage({
           </Link>
         )}
       </div>
+
+      {needsMfa && (
+        <p className="text-sm">
+          <Link href="/account" className="underline underline-offset-4">
+            Set up your second factor
+          </Link>{' '}
+          to add staff or change access. Managing staff is a privileged action (ROLE-05).
+        </p>
+      )}
 
       <ul className="flex flex-col divide-y rounded-md border">
         {staff.map((member) => {

@@ -4,7 +4,7 @@ import { prisma } from '@rental/db'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { StaffControls } from '@/components/staff/staff-controls.tsx'
-import { actorCan, requirePermission } from '@/lib/auth/guard.ts'
+import { actorDecision, requirePermission } from '@/lib/auth/guard.ts'
 import { manageStaff } from '@/lib/staff/actions.ts'
 import { roleOptions, scopeOptions } from '@/lib/staff/options.ts'
 import { staffDetail } from '@/lib/staff/queries.ts'
@@ -35,13 +35,14 @@ export default async function StaffMemberPage({
 }) {
   await requirePermission('staff.read')
   const { id } = await params
-  const [member, canManage, zone, scopes] = await Promise.all([
+  const [member, manage, zone, scopes] = await Promise.all([
     staffDetail(id),
-    actorCan('staff.manage'),
+    actorDecision('staff.manage'),
     portfolioZone(),
     scopeOptions(),
   ])
   if (!member) notFound()
+  const canManage = manage.allowed
 
   const assignments = member.assignments.map((assignment) => {
     const key = assignment.role.key as RoleKey
@@ -103,9 +104,18 @@ export default async function StaffMemberPage({
                 </li>
               ))}
           </ul>
-          <p className="text-muted-foreground text-sm">
-            Changing access needs the Owner role.
-          </p>
+          {!manage.allowed && manage.reason === 'mfa_required' ? (
+            <p className="text-sm">
+              <Link href="/account" className="underline underline-offset-4">
+                Set up your second factor
+              </Link>{' '}
+              to change access. Managing staff is a privileged action (ROLE-05).
+            </p>
+          ) : (
+            <p className="text-muted-foreground text-sm">
+              Changing access needs the Owner role.
+            </p>
+          )}
         </section>
       )}
     </div>

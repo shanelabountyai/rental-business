@@ -123,6 +123,7 @@ test('an owner invites a colleague, and the setup link actually signs them in', 
 
   await page.goto('/staff')
   await expect(page.getByRole('heading', { name: 'Staff', exact: true })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Set up your second factor' })).toHaveCount(0)
   await page.getByRole('link', { name: 'Add staff member' }).click()
 
   const email = `invited-${randomUUID()}@example.test`
@@ -310,10 +311,31 @@ test('a manager reads the directory and is offered no controls', async ({ page }
   await page.goto('/staff')
   await expect(page.getByRole('heading', { name: 'Staff', exact: true })).toBeVisible()
   await expect(page.getByRole('link', { name: 'Add staff member' })).toHaveCount(0)
+  await expect(page.getByRole('link', { name: 'Set up your second factor' })).toHaveCount(0)
 
   await page.goto(`/staff/${manager.id}`)
   await expect(page.getByRole('button', { name: 'Grant access' })).toHaveCount(0)
   await expect(page.getByText('Changing access needs the Owner role.')).toBeVisible()
+})
+
+// R-251: `db:seed:demo-access` clears MFA, so this is the demo owner's first
+// view. Without the hint it is indistinguishable from the manager's above.
+test('an owner without a second factor is told why there are no controls', async ({ page }) => {
+  const owner = await createStaff('owner')
+  await signIn(page, owner)
+
+  await page.goto('/staff')
+  await expect(page.getByRole('heading', { name: 'Staff', exact: true })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Add staff member' })).toHaveCount(0)
+  await expect(page.getByRole('link', { name: 'Set up your second factor' })).toHaveAttribute(
+    'href',
+    '/account',
+  )
+
+  await page.goto(`/staff/${owner.id}`)
+  await expect(page.getByRole('button', { name: 'Grant access' })).toHaveCount(0)
+  await expect(page.getByRole('link', { name: 'Set up your second factor' })).toBeVisible()
+  await expect(page.getByText('Changing access needs the Owner role.')).toHaveCount(0)
 })
 
 test('a property-scoped manager cannot reach the directory at all', async ({ page }) => {

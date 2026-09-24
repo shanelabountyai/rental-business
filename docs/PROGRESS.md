@@ -13518,3 +13518,17 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 **What it left behind.** Nothing owned. `MONEY.late` in the demo seed says "two clean months" above a plan whose second invoice has `returnedAfterDays: 5`; the comment is stale, not the data.
 
 **Gate.** `rent-roll.test.ts` 2/2. **Checked by reverting the fix:** the new assertion fails (`expected true to be false`). `lint` 0 errors (16 warnings, same as `main`), `typecheck` clean. No e2e run locally: `rent-roll.spec.ts`'s CSV assertion reads the Past-grace column, which this does not change. The full sweep is left to CI.
+
+## R-251 — `/staff` tells an owner without MFA why there are no controls
+
+**Commit:** `PENDING`  ·  **Date:** 2026-09-24
+
+**What it built.** [staff/page.tsx](apps/web/app/(admin)/staff/page.tsx) reads `actorDecision('staff.manage')` instead of `actorCan`, and when the denial is `mfa_required` shows one line, *Set up your second factor to add staff or change access*, linking to `/account`. A role without the permission still sees nothing; the controls are unchanged. [e2e/staff.spec.ts](e2e/staff.spec.ts) has a new test for the MFA-less owner, and the manager and MFA owner tests now assert the hint is absent.
+
+**What it found.** The same defect one page deeper, fixed with it: [staff/[id]/page.tsx](apps/web/app/(admin)/staff/[id]/page.tsx) told an MFA-less owner *"Changing access needs the Owner role."*, which is false for an owner. It now shows the same MFA line in that case and keeps the Owner-role sentence for everyone else. Both follow the approval panel's wording (R-026), which already solved this with `actorDecision`.
+
+**What it decided.** Nothing new. `actorDecision` is the existing answer for any screen whose explanation depends on why a check failed.
+
+**What it left behind.** Nothing owned. R-252 (demo filing-cabinet seed) is next.
+
+**Gate.** `lint` 0 errors (17 warnings, same count as `main`), `typecheck` clean. `staff.spec.ts` on both projects: 14 passed; the axe test timed out on both at load average 47 (VS Code renderers, not this repo) and passed 2/2 alone at load 16 — it signs in the MFA owner, so the new line never renders there. `npm test` not run: no unit-reachable code changed. Full sweep left to CI.
