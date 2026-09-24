@@ -1,5 +1,13 @@
 # Next session
 
+## Refresh closure artifacts (chosen 2026-09-24, Sonnet)
+
+- Exec brief https://claude.ai/artifact/GSG4tVzFVzbgD4m5eacsrB: refresh the numbers (items, tests, decisions) to cover R-250 to R-252.
+- LinkedIn Ledger https://claude.ai/artifact/Ai5xKScgT2sWtqXRQ1ZA8i: draft posts from R-250 (autopay claim without a card), R-251 (MFA-less owner sees a bare directory), R-252 (/renewals said 30 days; the real windows are 60/180/60). Mine Defects Found first; keep adjacent pillars different.
+- R-252 CI run `36020127954` was in progress at handoff: `gh run list --limit 3`.
+
+# Next session
+
 ## R-252 is done (`1ae6ce2`): demo seed has an ARM mortgage on Bluebonnet Lane; `/renewals` now states the real 60/180/60 windows (it said 30). **Backlog has no open rows.** Remaining needs a person: legal review, R-228. Ask Shane before starting anything new.
 
 - R-251 CI run `36009439866` is **green**. R-252 CI not confirmed yet: `gh run list --limit 3`.
