@@ -1,5 +1,6 @@
 import { renderTemplate, unknownMergeFields, OPEN_TICKET_STATUSES } from '@rental/core/comms'
 import { OPEN_WORK_ORDER_STATUSES } from '@rental/core/workorders'
+import { ARM_ADJUSTMENT_ALERT_DAYS } from '@rental/core/filing-cabinet'
 import { describe, expect, it } from 'vitest'
 import {
   COMPLIANCE,
@@ -42,6 +43,11 @@ const workOrderPlans = Object.values(MAINTENANCE).flatMap((plan) => [
 const ticketPlans = Object.values(MAINTENANCE).flatMap((plan) => plan.tickets ?? [])
 
 describe('the demo seed lands on screens that render it', () => {
+  it('seeds an ARM mortgage inside the alert window, so Renewals & alerts is not 0 (R-252)', () => {
+    const arms = Object.values(LEASING).flatMap((plan) => (plan.claim ? [plan.claim.mortgage] : []))
+    expect(arms.some((m) => m.armAdjustsInDays >= 0 && m.armAdjustsInDays <= ARM_ADJUSTMENT_ALERT_DAYS)).toBe(true)
+  })
+
   it('seeds no work order in a status the open board filters out', () => {
     const open: readonly string[] = OPEN_WORK_ORDER_STATUSES
     const invisible = workOrderPlans.filter((plan) => !open.includes(plan.status))

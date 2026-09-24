@@ -1,3 +1,8 @@
+import {
+  ARM_ADJUSTMENT_ALERT_DAYS,
+  BALLOON_MATURITY_ALERT_DAYS,
+  INSURANCE_RENEWAL_ALERT_DAYS,
+} from '@rental/core/filing-cabinet'
 import { friendlyBusinessDate, utcToBusinessDate } from '@rental/core/scheduling'
 import Link from 'next/link'
 import { requireScope } from '@/lib/auth/guard.ts'
@@ -37,14 +42,15 @@ export default async function RenewalsPage() {
         </Link>
         <h1 className="text-2xl font-semibold tracking-tight">Renewals & alerts</h1>
         <p className="text-muted-foreground text-sm">
-          Mortgage rate adjustments, balloon maturities and insurance renewals due within
-          30 days. Not a statutory compliance calendar — permits, certificates and mandated
+          Mortgage rate adjustments due within {ARM_ADJUSTMENT_ALERT_DAYS} days, balloon
+          maturities within {BALLOON_MATURITY_ALERT_DAYS} days and insurance renewals within{' '}
+          {INSURANCE_RENEWAL_ALERT_DAYS} days. Not a statutory compliance calendar — permits, certificates and mandated
           inspections aren&apos;t tracked here yet.
         </p>
       </header>
 
       {sorted.length === 0 ? (
-        <p className="text-muted-foreground text-sm">Nothing due in the next 30 days.</p>
+        <p className="text-muted-foreground text-sm">Nothing due inside those windows.</p>
       ) : (
         <ul className="flex flex-col divide-y rounded-md border">
           {sorted.map((alert, i) => (

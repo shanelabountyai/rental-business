@@ -13532,3 +13532,17 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 **What it left behind.** Nothing owned. R-252 (demo filing-cabinet seed) is next.
 
 **Gate.** `lint` 0 errors (17 warnings, same count as `main`), `typecheck` clean. `staff.spec.ts` on both projects: 14 passed; the axe test timed out on both at load average 47 (VS Code renderers, not this repo) and passed 2/2 alone at load 16 — it signs in the MFA owner, so the new line never renders there. `npm test` not run: no unit-reachable code changed. Full sweep left to CI.
+
+## R-252 — the demo seed's filing cabinet has an ARM mortgage in the alert window
+
+**Commit:** `(pending)`  ·  **Date:** 2026-09-24
+
+**What it built.** [demo-seed.mts](packages/db/prisma/demo-seed.mts) writes one ARM `Mortgage` on Bluebonnet Lane House, the one property that already carries an insurance policy, adjusting 34 days out (inside `ARM_ADJUSTMENT_ALERT_DAYS`, 60). It lives on `ClaimPlan` next to the policy. `--reset` now deletes `MortgageAnnualStatement` and `Mortgage` on deletable properties, before `Document` (a 1098 names its document). [demo-seed.test.ts](packages/db/prisma/demo-seed.test.ts) asserts the planned adjustment is inside the window.
+
+**What it found.** [/renewals](apps/web/app/(admin)/renewals/page.tsx) said *"due within 30 days"* and *"Nothing due in the next 30 days"*, while the windows are 60 (ARM), 180 (balloon) and 60 (insurance). The seeded ARM, 34 days out, showed under a heading that ruled it out. The copy now reads the three constants from `@rental/core/filing-cabinet`.
+
+**What it decided.** Nothing new. Bluebonnet Lane is a sticky property under `--reset` (it holds audited rows), so each reset leaves the old mortgage on the retired, inactive copy; scope reads active properties only, so the count stays 1.
+
+**What it left behind.** No warranty or capital improvement is seeded (the row asked for a mortgage only). DEMO-SCRIPT.md says so.
+
+**Gate.** Walked in a browser against `rental_demo` after two `--reset` runs: the dashboard tile reads 1, `/renewals` lists the ARM, the property page shows *ARM adjusts 28 Oct 2026*, `/renewals` is 412px at 412px. `lint` 0 errors, `typecheck` clean, `demo-seed.test.ts` 38 passed, `dashboard.spec.ts` 10/10 on both projects (reconciled against `--list`). Full sweep left to CI.

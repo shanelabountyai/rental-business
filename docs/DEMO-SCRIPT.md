@@ -79,10 +79,11 @@ On a property page, the things worth naming:
 - **Maintenance spend** read straight off the work orders. There is no
   second store of the same money.
 - **The filing cabinet**: mortgages with ARM-adjustment and balloon alerts,
-  insurance renewals, warranties and capital improvements. **The seed puts
-  nothing in it** (walked 2026-09-23: no property has a mortgage, a warranty
-  or a capital improvement, and the dashboard's *Renewals & alerts* reads 0).
-  Add a mortgage live, or say so. Every date in the product reads as
+  insurance renewals, warranties and capital improvements. The seed puts one
+  ARM mortgage on **Bluebonnet Lane House** (Gulf Coast Federal Credit Union,
+  adjusting about five weeks out), so *Renewals & alerts* reads 1 and drills
+  into it (R-252). No warranty or capital improvement is seeded; add one live
+  if you want to show them. Every date in the product reads as
   `2 May 2026`, not `2026-05-02`, internal screens included since R-129, and
   a calendar day never passes through a timezone (R-121).
 - **Claims** sit below the filing cabinet on purpose: a claim is opened

@@ -535,6 +535,11 @@ async function reset() {
     })
     await prisma.insuranceClaim.deleteMany({ where: { propertyId: { in: deletableProperties } } })
     await prisma.insurancePolicy.deleteMany({ where: { propertyId: { in: deletableProperties } } })
+    // A 1098 a walk recorded names the loan, so statements first (R-252).
+    await prisma.mortgageAnnualStatement.deleteMany({
+      where: { mortgage: { propertyId: { in: deletableProperties } } },
+    })
+    await prisma.mortgage.deleteMany({ where: { propertyId: { in: deletableProperties } } })
     await prisma.confidentialCase.deleteMany({
       where: { leaseId: { in: leaseIds } },
     })
@@ -1045,6 +1050,10 @@ interface AbandonmentPlan {
 /// claim cannot exist without it.
 interface ClaimPlan {
   policy: { carrier: string; policyNumber: string; limitsCents: number; deductibleCents: number }
+  /// The filing cabinet's one loan (R-252). An ARM, so Act 1's *Renewals &
+  /// alerts* has something to show; it rides on the claim property because
+  /// that is the one with a policy already, which makes it the complete file.
+  mortgage: { lender: string; currentBalanceCents: number; interestRateBps: number; armAdjustsInDays: number }
   cause: 'WATER' | 'FIRE' | 'WIND_HAIL' | 'THEFT_VANDALISM' | 'LIABILITY' | 'OTHER'
   description: string
   incidentDaysAgo: number
@@ -1224,6 +1233,13 @@ export const LEASING: Record<string, LeasingPlan> = {
       claimNumber: 'LSM-2026-118204',
       adjuster: { name: 'Priya Venkataraman', company: 'Summit Claims Group' },
       lossOfRents: { fromDaysAgo: 11, toInDays: 20 },
+      mortgage: {
+        lender: 'Gulf Coast Federal Credit Union',
+        currentBalanceCents: 18_640_000,
+        interestRateBps: 675,
+        // Inside ARM_ADJUSTMENT_ALERT_DAYS (60) with room either side.
+        armAdjustsInDays: 34,
+      },
     },
   },
 
@@ -3042,6 +3058,15 @@ async function seedLeasing(
         ...claim.policy,
         lossOfRents: true,
         renewsOn: daysFrom(140),
+      },
+    })
+    const { armAdjustsInDays, ...mortgage } = claim.mortgage
+    await prisma.mortgage.create({
+      data: {
+        propertyId: context.propertyId,
+        ...mortgage,
+        rateType: 'ARM',
+        armAdjustmentDate: daysFrom(armAdjustsInDays),
       },
     })
     const incidentAt = daysFrom(-claim.incidentDaysAgo)
