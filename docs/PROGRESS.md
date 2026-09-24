@@ -13521,7 +13521,7 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 
 ## R-251 — `/staff` tells an owner without MFA why there are no controls
 
-**Commit:** `PENDING`  ·  **Date:** 2026-09-24
+**Commit:** `86883c4`  ·  **Date:** 2026-09-24
 
 **What it built.** [staff/page.tsx](apps/web/app/(admin)/staff/page.tsx) reads `actorDecision('staff.manage')` instead of `actorCan`, and when the denial is `mfa_required` shows one line, *Set up your second factor to add staff or change access*, linking to `/account`. A role without the permission still sees nothing; the controls are unchanged. [e2e/staff.spec.ts](e2e/staff.spec.ts) has a new test for the MFA-less owner, and the manager and MFA owner tests now assert the hint is absent.
 
