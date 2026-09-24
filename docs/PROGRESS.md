@@ -13535,7 +13535,7 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 
 ## R-252 — the demo seed's filing cabinet has an ARM mortgage in the alert window
 
-**Commit:** `(pending)`  ·  **Date:** 2026-09-24
+**Commit:** `1ae6ce2`  ·  **Date:** 2026-09-24
 
 **What it built.** [demo-seed.mts](packages/db/prisma/demo-seed.mts) writes one ARM `Mortgage` on Bluebonnet Lane House, the one property that already carries an insurance policy, adjusting 34 days out (inside `ARM_ADJUSTMENT_ALERT_DAYS`, 60). It lives on `ClaimPlan` next to the policy. `--reset` now deletes `MortgageAnnualStatement` and `Mortgage` on deletable properties, before `Document` (a 1098 names its document). [demo-seed.test.ts](packages/db/prisma/demo-seed.test.ts) asserts the planned adjustment is inside the window.
 

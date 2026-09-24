@@ -1,5 +1,9 @@
 # Next session
 
+## R-252 is done (`1ae6ce2`): demo seed has an ARM mortgage on Bluebonnet Lane; `/renewals` now states the real 60/180/60 windows (it said 30). **Backlog has no open rows.** Remaining needs a person: legal review, R-228. Ask Shane before starting anything new.
+
+- CI for R-251 and R-252 not confirmed yet: `gh run list --limit 3`.
+
 ## R-251 is done (`86883c4`): `/staff` and `/staff/[id]` tell an MFA-less owner to set up a second factor. **Next item: R-252** (demo seed: one ARM mortgage inside the alert window, idempotent under `--reset`).
 
 - CI for R-251 not confirmed yet: `gh run list --limit 3`. `staff.spec.ts` passed locally on both projects (axe test needed a re-run alone; load average was 47).
