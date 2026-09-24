@@ -1,5 +1,9 @@
 # Next session
 
+## R-251 is done (`86883c4`): `/staff` and `/staff/[id]` tell an MFA-less owner to set up a second factor. **Next item: R-252** (demo seed: one ARM mortgage inside the alert window, idempotent under `--reset`).
+
+- CI for R-251 not confirmed yet: `gh run list --limit 3`. `staff.spec.ts` passed locally on both projects (axe test needed a re-run alone; load average was 47).
+
 ## Demo acts 1, 3.5 and 6 walked in a browser (2026-09-23). Every act has now been walked.
 
 - All routes 200 at 1280px, no overflow, no raw dates. DEMO-SCRIPT.md fixed: two properties are in Florida, not Texas; the filing cabinet is empty in the seed (no mortgage, warranty or capex anywhere); the one claim is on Bluebonnet Lane; Wanda's lease ends 28 Sept with no move-out date; stale R-129/R-139 caveats removed; Riley Chen is already scoped by the seed.
