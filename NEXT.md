@@ -4,7 +4,7 @@
 
 - All routes 200 at 1280px, no overflow, no raw dates. DEMO-SCRIPT.md fixed: two properties are in Florida, not Texas; the filing cabinet is empty in the seed (no mortgage, warranty or capex anywhere); the one claim is on Bluebonnet Lane; Wanda's lease ends 28 Sept with no move-out date; stale R-129/R-139 caveats removed; Riley Chen is already scoped by the seed.
 - Scoped as backlog rows (Shane chose both, 2026-09-23). **Next item: R-251**, then R-252. Found: `/staff` without MFA shows the owner a bare directory with no hint that MFA is the missing step. Also the seed has no filing-cabinet rows, so Act 1 cannot show ARM/balloon alerts without adding a mortgage live.
-- R-250 CI: run `35949297553`. Check `gh run list --limit 3`.
+- R-250 CI run `35949297553` is **green** (confirmed 2026-09-23).
 
 ## R-250 is done (`99647a3`): rent roll "autopay" now needs a card on file. Demo acts 2-5 walked in a browser (2026-09-23).
 
