@@ -13507,7 +13507,7 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 
 ## R-250 — the rent roll's "autopay" needs a card on file
 
-**Commit:** `<sha>`  ·  **Date:** 2026-09-23
+**Commit:** `99647a3`  ·  **Date:** 2026-09-23
 
 **What it built.** [rent-roll.ts](apps/web/lib/payments/rent-roll.ts) now reports `autopay` only when a payer debits automatically **and** has `defaultPaymentMethodId`. Before, it checked `collectionMethod` alone, and that column defaults to `charge_automatically`, so every payer who never saved a card read *autopay* on `/money/rent-roll` and in its CSV export. [rent-roll.test.ts](apps/web/lib/payments/rent-roll.test.ts) asserts both states.
 
