@@ -140,7 +140,13 @@ export async function rentRoll(
         },
         leasePayers: {
           where: { active: true },
-          select: { payerType: true, collectionMethod: true, portionCents: true, debitDay: true },
+          select: {
+            payerType: true,
+            collectionMethod: true,
+            defaultPaymentMethodId: true,
+            portionCents: true,
+            debitDay: true,
+          },
         },
         deposits: {
           select: {
@@ -319,8 +325,15 @@ export async function rentRoll(
       oldestDueOn: delinquency.oldestDueOn,
       newestRentDueOn: delinquency.newestRentDueOn,
       // Any active payer on autopay counts: what the question is really
-      // asking is "will money arrive without somebody chasing it".
-      autopay: lease.leasePayers.some((payer) => debitsAutomatically(payer.collectionMethod as CollectionMethod)),
+      // asking is "will money arrive without somebody chasing it". A payer
+      // set to debit automatically with no card or bank on file will not be
+      // debited, so both are required - the same test the tenant's own
+      // portal and the due-notice job apply. The seed's Derrick Holt read
+      // "autopay" here while his portal offered to turn autopay on.
+      autopay: lease.leasePayers.some(
+        (payer) =>
+          debitsAutomatically(payer.collectionMethod as CollectionMethod) && payer.defaultPaymentMethodId != null,
+      ),
       // The LIABILITY still owed back — the number PAY-07 says must never be
       // mixed with income and the number a lender is asking for. R-170: a
       // refund the letter promised and nobody has paid is still owed, so

@@ -13504,3 +13504,17 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 **What it left behind.** Nothing owned. Lesson for the next header change: a response header that changes what the browser sends on its NEXT request is only exercised by a spec that submits a native form; SEC-06 was gated on `csp.spec.ts` alone and pushed without the no-JS specs.
 
 **Gate.** `lint` 0 errors (16 warnings, same as `main`), `typecheck` clean. e2e `maintenance`, `vendor-link`, `csp`, both projects: **52/52** against `--list`. Full sweep left to CI.
+
+## R-250 — the rent roll's "autopay" needs a card on file
+
+**Commit:** `<sha>`  ·  **Date:** 2026-09-23
+
+**What it built.** [rent-roll.ts](apps/web/lib/payments/rent-roll.ts) now reports `autopay` only when a payer debits automatically **and** has `defaultPaymentMethodId`. Before, it checked `collectionMethod` alone, and that column defaults to `charge_automatically`, so every payer who never saved a card read *autopay* on `/money/rent-roll` and in its CSV export. [rent-roll.test.ts](apps/web/lib/payments/rent-roll.test.ts) asserts both states.
+
+**What it found.** The browser walk of demo acts 2-5 (the tenant, vendor, narrow-role and scoped-manager acts, never re-walked at closure). Derrick Holt's portal offered **Turn on automatic payments** while the owner's rent roll called him `autopay`. The portal was right. The other readers, `queries.ts` (portal), `due-notices.ts`, `predebit.ts` and `card-expiry.ts`, already require both halves; the rent roll was the only one without. The walk also found three stale claims in [DEMO-SCRIPT.md](docs/DEMO-SCRIPT.md), all fixed: Derrick owes **$3,300 over 30 days** (a returned July payment plus September), not "exactly this month's rent, 1-5 days late"; the maintenance wizard is at `/portal/maintenance/new`, not the landing page; and the vendor page shows no time window until one is proposed or booked. Everything else held: `Hello, Maria`; the tech and read-only navs match the script exactly; scoped Riley sees 1 property, and all five out-of-scope `/properties/[id]` answer **404** (ROLE-01). No page overflowed at 412px or 1280px, and none showed `undefined`, `NaN`, `Invalid Date` or a raw date.
+
+**What it decided.** Autopay means money will arrive without a chase, which needs a method Stripe can debit. That is the rent roll's own comment, now matched by its code.
+
+**What it left behind.** Nothing owned. `MONEY.late` in the demo seed says "two clean months" above a plan whose second invoice has `returnedAfterDays: 5`; the comment is stale, not the data.
+
+**Gate.** `rent-roll.test.ts` 2/2. **Checked by reverting the fix:** the new assertion fails (`expected true to be false`). `lint` 0 errors (16 warnings, same as `main`), `typecheck` clean. No e2e run locally: `rent-roll.spec.ts`'s CSV assertion reads the Past-grace column, which this does not change. The full sweep is left to CI.

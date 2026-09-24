@@ -105,4 +105,18 @@ describe('rentRoll (R-231, review finding 10)', () => {
     // The co-tenant's later message, not the primary's earlier one.
     expect(row!.lastContactOn).toBe('2026-03-10')
   }, 20_000)
+
+  // `collectionMethod` defaults to charge_automatically, so a payer who never
+  // saved a card read "autopay" to staff while their portal offered to turn it
+  // on. Autopay needs the saved method too, as `queries.ts` already says.
+  it('reports autopay only when a payer debits automatically AND has a payment method on file', async () => {
+    const payer = await prisma.leasePayer.create({
+      data: { leaseId, propertyId, payerType: 'TENANT', tenantId: primaryTenantId, collectionMethod: 'charge_automatically' },
+    })
+    const autopay = async () => (await rentRoll({ propertyIds: [propertyId] })).rows.find((r) => r.leaseId === leaseId)!.autopay
+
+    expect(await autopay()).toBe(false)
+    await prisma.leasePayer.update({ where: { id: payer.id }, data: { defaultPaymentMethodId: `pm_${randomUUID()}` } })
+    expect(await autopay()).toBe(true)
+  }, 20_000)
 })

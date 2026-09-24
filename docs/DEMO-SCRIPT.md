@@ -103,27 +103,35 @@ never sent. That is the RBAC point made in one move.
 
 Paste **Maria Alvarez's** link. She lands on `/portal` — "Hello, Maria".
 
-- **`/portal/maintenance`** — the seven-step wizard. Worth pointing at because
-  it works **before hydration**: it is a real `<form action>`, not an
-  `onClick`, so it functions on the first paint on a bad phone connection
-  (R-112 fixed the opposite).
+- **`/portal/maintenance`** → **Report a problem** (`/portal/maintenance/new`)
+  — the seven-step wizard. Worth pointing at because it works **before
+  hydration**: each step is a real `<form method="get">`, not an `onClick`, so
+  it functions on the first paint on a bad phone connection (R-112 fixed the
+  opposite). The landing page itself is the list of what she has sent.
 - **`/portal/pay`** — what is owed and why, in plain language, with the due
   date as a calendar day.
 - **`/portal/notices`** — anything served on them, with proof of delivery.
 
-Use **Derrick Holt's** link for the delinquency story instead: he owes exactly
-this month's rent. Point out he reads as **1–5 days late, still within grace**
-— he used to read *"Over 30 days"* because the system aged him from a move-in
-proration he had paid on time in 2025. That defect also gated who could be
-chased, so a tenant one day late was chaseable on day one whatever the statute
-said (R-118, D-151).
+Use **Derrick Holt's** link for the delinquency story instead. He owes
+**$3,300.00 — two months**: his July payment was **returned by the bank** a
+few days after it landed, and this month's invoice was declined. The rent
+roll reads him as **Over 30 days, past grace**, aged from the returned July
+rent, which is the oldest money he actually owes. Aging is from the oldest
+*unpaid* charge; it used to be the move-in proration he paid on time in 2025,
+and that defect also gated who could be chased, so a tenant one day late was
+chaseable on day one whatever the statute said (R-118, D-151). His portal
+offers **Turn on automatic payments** because he has no card on file, and the
+rent roll agrees: until R-250 it labelled him *autopay* from the collection
+method alone.
 
 ---
 
 ## Act 3 — the vendor gets a text (the vendor link)
 
-Paste the vendor link. It opens **one job** — "Quarterly HVAC filter
-replacement" for Lone Star Heating & Air.
+Paste the vendor link. It opens **one job**: "Quarterly HVAC filter
+replacement" at Coral Way Condo, assigned to Lone Star Heating & Air. The page
+names the job and the address, not the vendor, because whoever holds the link
+already knows who they are.
 
 - **No account, no password, no sign-up.** The link is signed, expiring, and
   scoped to that one work order.
@@ -132,8 +140,9 @@ replacement" for Lone Star Heating & Air.
 - Reassigning the job or resending the link **kills the old one** in the same
   transaction, so "resend" is also "revoke the one I texted to the wrong
   number".
-- The entry-notice line computes in the **property's** timezone, not the
-  server's.
+- Any proposed or booked window reads in the **property's** timezone, not the
+  server's. The seeded job is `ASSIGNED` and not yet booked, so no window
+  shows until you press **Propose a different time**.
 
 ---
 
