@@ -68,25 +68,27 @@ purpose, `DEMO-LOGINS.md` → *Walking `/login/mfa` without a phone*.
 - **Open tickets**, flagged against the emergency/urgent 48-hour mark.
 - **Leases expiring ≤90 days**, renewal rate, pending approvals.
 
-**`/properties`.** Six houses across **two LLCs** — Bluebonnet Holdings and
-Sunshine Coast Holdings — in Texas. Open **Riverside Court Duplex**: a duplex
-with two units, so it shows the multi-unit case without needing an apartment
-building.
+**`/properties`.** Six properties (houses, a condo and a townhouse) held by
+**two LLCs**: Bluebonnet Holdings has four in **Texas**, and Sunshine Coast
+Holdings has two in **Florida**. Two states is the point of D-4: every
+deadline and cap is read from that state's jurisdiction rule. Open
+**Riverside Court Duplex**. It has two units, so it shows the multi-unit case
+without needing an apartment building.
 
 On a property page, the things worth naming:
-- **The filing cabinet** — mortgages with ARM-adjustment and balloon alerts,
-  insurance renewals, warranties, capital improvements. Every date here reads
-  as `2 May 2026`, not `2026-05-02`, and a calendar day never passes through a
-  timezone (R-121). **Everything a tenant or vendor receives** — a served
-  notice, a generated lease, an amendment, a chargeback notice, the handoff
-  packet, every emailed and texted notification — reads the same way since
-  R-128. **A handful of internal screens still show the ISO form** (the rent
-  roll's *Last contacted* column is the one you are most likely to open in
-  front of somebody); that is R-129 and it is filed, not forgotten.
 - **Maintenance spend** read straight off the work orders. There is no
   second store of the same money.
+- **The filing cabinet**: mortgages with ARM-adjustment and balloon alerts,
+  insurance renewals, warranties and capital improvements. **The seed puts
+  nothing in it** (walked 2026-09-23: no property has a mortgage, a warranty
+  or a capital improvement, and the dashboard's *Renewals & alerts* reads 0).
+  Add a mortgage live, or say so. Every date in the product reads as
+  `2 May 2026`, not `2026-05-02`, internal screens included since R-129, and
+  a calendar day never passes through a timezone (R-121).
 - **Claims** sit below the filing cabinet on purpose: a claim is opened
-  against a policy that lives up there.
+  against a policy that lives up there. Riverside has no policy, so its page
+  says a claim cannot be opened. The one seeded claim is on **Bluebonnet Lane
+  House**.
 
 **`/money`.** Stripe is the system of record; `LedgerEntry` is an append-only
 projection built from webhooks (D-11). Corrections are reversing entries —
@@ -170,7 +172,9 @@ late, paid partially, or moved out has a lease number and a held number that
 differ, and only one of them is defensible in a dispute.
 
 **`/leases` → Wanda Combs → Deposit disposition.** Magnolia Drive House, main
-house, moving out **3 Sept 2026**, **$1,950.00 held**.
+house, lease ending **28 Sept 2026**, **$1,950.00 held**. There is no
+recorded move-out date yet: R-248 stopped the seed writing a future one on an
+active lease.
 
 - **Deductions are evidence, not line items.** Each one can be backed by the
   **work order** whose actual cost it is, and by a **move-out photo** from the
@@ -253,14 +257,14 @@ the server.
   without that default the first screenful is eventually last year's leavers.
 - **Add staff member** creates the account and mints a **single-use setup
   link**. No password is ever chosen for somebody else. The link is shown on
-  screen as well as emailed — say why, because it is the honest version: auth
-  links are printed to the terminal in development and **dropped entirely in
-  production** today (R-139), so an invite that could only be emailed would be
-  an invite that does not work where it matters.
+  screen as well as emailed, a choice made while auth links were **dropped
+  entirely in production**. R-139 fixed that, so the email now arrives too,
+  and the on-screen copy is a fallback.
 - **Grant access** is where ROLE-04 stops being an abstraction: the scope
-  select offers all properties, any legal entity, or **one property**. Grant
-  Riley Chen the Riverside Court Duplex and Act 5 is something you built in
-  front of the room rather than something the seed prepared.
+  select offers all properties, any legal entity, or **one property**. The
+  seed already scopes Riley Chen to the Riverside Court Duplex, so to build
+  Act 5 in front of the room, grant the same scope to a person you have just
+  added.
 - **Revoke** writes a timestamp, never a delete — the revoked row is the
   evidence the access existed. It moves to a *Revoked access* list below.
 - **Deactivate** ends their sessions within a minute. Auth.js sessions are
@@ -276,8 +280,15 @@ confirm dialogs.
 **You need a second factor to press any of it.** `staff.manage` is on
 `PRIVILEGED_PERMISSIONS`, and `db:seed:demo-access` clears MFA on every run —
 so enrol first (`DEMO-LOGINS.md` → *Walking `/login/mfa` without a phone*) or
-this act is a locked door. A manager signs in and sees the directory with no
-controls at all, which is its own point worth making.
+this act is a locked door. **The door has no sign on it**: without MFA the
+owner sees the same bare directory a manager does, with no *Add staff member*
+button and no hint about why (walked 2026-09-23). A manager signing in and
+seeing no controls is its own point worth making, but only after you have
+enrolled the owner.
+
+A local `rental_demo` created before 2026-08-27 lists **two Dana Reyes**
+rows. `owner@example.test` is a leftover from before the `@demo.test`
+convention. A database set up fresh from `DEMO-LOGINS.md` has only one.
 
 ---
 
