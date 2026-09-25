@@ -10,7 +10,7 @@ import {
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
 import { Secret, TOTP } from 'otpauth'
-import { axeScan } from './fixtures.ts'
+import { axeScan, signInWithLink } from './fixtures.ts'
 
 // End-to-end coverage of R-003. Two things here cannot be tested any other
 // way, and both are load-bearing:
@@ -544,7 +544,7 @@ test.describe('session revocation (ROLE-06)', () => {
 test.describe('tenant magic link', () => {
   test('signs a tenant in and lands them in the portal', async ({ page }) => {
     const tenant = await createTenant()
-    await page.goto(await magicLinkFor(tenant.id))
+    await signInWithLink(page, await magicLinkFor(tenant.id))
 
     await expect(page).toHaveURL(/\/portal$/)
     // "Hello, Dana", not "Welcome, Dana Reyes": R-018 replaced the R-003
@@ -556,24 +556,46 @@ test.describe('tenant magic link', () => {
     ).toBeVisible()
   })
 
+  // K1: a mail scanner or link preview follows every GET. Opening the link
+  // must therefore change nothing, and only the button may spend it.
+  test('opening the link does not spend it; pressing Continue does', async ({ page }) => {
+    const tenant = await createTenant()
+    const link = await magicLinkFor(tenant.id)
+    const hash = hashToken(link.split('token=')[1]!)
+
+    const response = await page.goto(link)
+    expect(response?.status()).toBe(200)
+    await expect(page.getByRole('button', { name: 'Continue' })).toBeVisible()
+    expect((await prisma.authToken.findUnique({ where: { tokenHash: hash } }))?.consumedAt).toBeNull()
+    await page.goto('/portal')
+    await expect(page).toHaveURL(/\/portal\/login/)
+
+    await page.goto(link)
+    await page.getByRole('button', { name: 'Continue' }).click()
+    await expect(page).toHaveURL(/\/portal$/)
+    expect((await prisma.authToken.findUnique({ where: { tokenHash: hash } }))?.consumedAt).not.toBeNull()
+  })
+
   // §6.1: "short-lived and single-use". A forwarded link must be spent.
   test('refuses the same link a second time', async ({ page, context }) => {
     const tenant = await createTenant()
     const link = await magicLinkFor(tenant.id)
 
-    await page.goto(link)
+    await signInWithLink(page, link)
     await expect(page).toHaveURL(/\/portal$/)
 
     // A different browser context, so the second attempt carries no session
     // and has to stand on the token alone.
     const fresh = await context.browser()!.newPage()
     await fresh.goto(`${page.url().replace(/\/portal$/, '')}${link}`)
+    await fresh.getByRole('button', { name: 'Continue' }).click()
     await expect(fresh).toHaveURL(/\/portal\/login/)
     await fresh.close()
   })
 
   test('refuses a token that was never issued, and says so', async ({ page }) => {
     await page.goto('/portal/verify?token=not-a-real-token')
+    await page.getByRole('button', { name: 'Continue' }).click()
     await expect(page).toHaveURL(/\/portal\/login/)
     // R-114 (audit angle 9). The redirect has carried `?error=` since the
     // route was written; the page it redirects TO never read it, so the two
@@ -656,7 +678,7 @@ test.describe('tenant magic link', () => {
 
     const link = /\/portal\/verify\?token=[^\s]+/.exec(sms.body)?.[0]
     expect(link).toBeTruthy()
-    await page.goto(link!)
+    await signInWithLink(page, link!)
     await expect(page).toHaveURL(/\/portal$/)
   })
 })

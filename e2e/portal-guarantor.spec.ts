@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { hashPassword, mintToken } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
-import { axeScan, uniqueClientHeaders, uniquePhone, writeStorageBytes } from './fixtures.ts'
+import { axeScan, uniqueClientHeaders, uniquePhone, writeStorageBytes, signInWithLink } from './fixtures.ts'
 
 // The guarantor portal (R-165, LEASE-06, ROLE-01).
 //
@@ -137,7 +137,7 @@ test.describe('a guarantor sees their own lease and nobody else’s', () => {
       },
     })
 
-    await page.goto(await guarantorMagicLinkFor(guarantor.id))
+    await signInWithLink(page, await guarantorMagicLinkFor(guarantor.id))
     await expect(page).toHaveURL(/\/portal\/guarantor$/)
     await expect(page.getByRole('heading', { name: 'What you guarantee' })).toBeVisible()
     // Scoped to the balance card, not a bare getByText: with one line on the
@@ -174,7 +174,7 @@ test.describe('a guarantor sees their own lease and nobody else’s', () => {
     const context = await browser.newContext({ extraHTTPHeaders: uniqueClientHeaders() })
     try {
       const page = await context.newPage()
-      await page.goto(await guarantorMagicLinkFor(mine.guarantor.id))
+      await signInWithLink(page, await guarantorMagicLinkFor(mine.guarantor.id))
 
       // 404, not 403 (ROLE-01): a status that distinguished "forbidden" from
       // "does not exist" would confirm a guessed id belongs to somebody.
@@ -210,7 +210,7 @@ test.describe('a guarantor sees their own lease and nobody else’s', () => {
       data: { serviceMethod: 'PORTAL', servedAt: new Date() },
     })
 
-    await page.goto(await guarantorMagicLinkFor(guarantor.id))
+    await signInWithLink(page, await guarantorMagicLinkFor(guarantor.id))
     await page.goto('/portal/guarantor/notices')
     await page.getByRole('link', { name: /About this lease/ }).click()
     await expect(page.getByText(/must vacate/)).toBeVisible()
@@ -235,7 +235,7 @@ test.describe('a guarantor sees their own lease and nobody else’s', () => {
       },
     })
 
-    await page.goto(await guarantorMagicLinkFor(guarantor.id))
+    await signInWithLink(page, await guarantorMagicLinkFor(guarantor.id))
     const response = await page.request.get(`/api/documents/${executedLease.id}/file`)
     expect(response.status()).toBe(404)
   })
@@ -258,7 +258,7 @@ test.describe('a guarantor sees their own lease and nobody else’s', () => {
     // Real bytes, or a missing file's 404 would pass the deleted case alone.
     await writeStorageBytes(notice.storageKey, 'hello')
 
-    await page.goto(await guarantorMagicLinkFor(guarantor.id))
+    await signInWithLink(page, await guarantorMagicLinkFor(guarantor.id))
     const served = await page.request.get(`/api/documents/${notice.id}/file`)
     expect(served.status()).toBe(200)
     expect(served.headers()['cache-control']).toBe('private, no-store')
@@ -278,7 +278,7 @@ test.describe('a guarantor sees their own lease and nobody else’s', () => {
     })
     try {
       const page = await guarantorContext.newPage()
-      await page.goto(await guarantorMagicLinkFor(guarantor.id))
+      await signInWithLink(page, await guarantorMagicLinkFor(guarantor.id))
       // A guarantor session has no tenantId to scope by - requireTenant
       // refuses rather than upgrading it (same rule requireGuarantor takes
       // the other direction).
@@ -301,7 +301,7 @@ test.describe('a guarantor sees their own lease and nobody else’s', () => {
           expiresAt: minted.expiresAt,
         },
       })
-      await page.goto(`/portal/verify?token=${minted.token}`)
+      await signInWithLink(page, `/portal/verify?token=${minted.token}`)
       await page.goto('/portal/guarantor')
       await expect(page).toHaveURL(/\/portal\/guarantor\/login/)
     } finally {
@@ -327,7 +327,7 @@ test.describe('a guarantor sees their own lease and nobody else’s', () => {
 test.describe('a guarantor’s own notification preferences (NOTIF-02, D-252)', () => {
   test('toggles rent reminders and stores the override', async ({ page }) => {
     const { guarantor } = await seedGuaranteedLease()
-    await page.goto(await guarantorMagicLinkFor(guarantor.id))
+    await signInWithLink(page, await guarantorMagicLinkFor(guarantor.id))
 
     await page.goto('/portal/guarantor/account')
     await expect(page.getByRole('heading', { name: 'Notifications' })).toBeVisible()
@@ -354,7 +354,7 @@ test.describe('a guarantor’s own notification preferences (NOTIF-02, D-252)', 
 
   test('locks payment-plan preferences and explains why', async ({ page }) => {
     const { guarantor } = await seedGuaranteedLease()
-    await page.goto(await guarantorMagicLinkFor(guarantor.id))
+    await signInWithLink(page, await guarantorMagicLinkFor(guarantor.id))
     await page.goto('/portal/guarantor/account')
 
     const locked = page.getByRole('listitem').filter({ hasText: 'Repayment plan schedules' })
@@ -369,7 +369,7 @@ test.describe('a guarantor’s own notification preferences (NOTIF-02, D-252)', 
     const context = await browser.newContext({ extraHTTPHeaders: uniqueClientHeaders() })
     try {
       const page = await context.newPage()
-      await page.goto(await guarantorMagicLinkFor(mine.guarantor.id))
+      await signInWithLink(page, await guarantorMagicLinkFor(mine.guarantor.id))
       await page.goto('/portal/guarantor/account')
 
       // The action derives the recipient from the session (requireGuarantor),
@@ -399,7 +399,7 @@ test.describe('a guarantor’s own notification preferences (NOTIF-02, D-252)', 
 
   test('the account page has no detectable violations', async ({ page }) => {
     const { guarantor } = await seedGuaranteedLease()
-    await page.goto(await guarantorMagicLinkFor(guarantor.id))
+    await signInWithLink(page, await guarantorMagicLinkFor(guarantor.id))
     await page.goto('/portal/guarantor/account')
 
     const results = await axeScan(page)

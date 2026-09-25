@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { hashPassword, mintToken } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
-import { axeScan, writeStorageBytes } from './fixtures.ts'
+import { axeScan, writeStorageBytes, signInWithLink } from './fixtures.ts'
 
 // The tenant portal shell (R-018, PRD §6.4, DOC-03, D-8, D-10).
 //
@@ -181,7 +181,7 @@ test.describe('the portal shell', () => {
     page,
   }) => {
     const { tenant } = await seedTenancy('Dana')
-    await page.goto(await magicLinkFor(tenant.id))
+    await signInWithLink(page, await magicLinkFor(tenant.id))
     await expect(page).toHaveURL(/\/portal$/)
 
     await expect(
@@ -201,7 +201,7 @@ test.describe('the portal shell', () => {
     // §6.4: "every tenant flow has a staff-mediated fallback (P4 Gene is the
     // acid test)."
     const { tenant } = await seedTenancy('Gene')
-    await page.goto(await magicLinkFor(tenant.id))
+    await signInWithLink(page, await magicLinkFor(tenant.id))
     await expect(
       page.getByText(/you do not have to use this site/i),
     ).toBeVisible()
@@ -294,7 +294,7 @@ test.describe('a tenant sees only their own papers (DOC-03)', () => {
       fileName: 'the-deed.pdf',
     })
 
-    await page.goto(await magicLinkFor(mine.tenant.id))
+    await signInWithLink(page, await magicLinkFor(mine.tenant.id))
     await page.goto('/portal/papers')
 
     await expect(page.getByText('my-lease.pdf')).toBeVisible()
@@ -329,7 +329,7 @@ test.describe('a tenant sees only their own papers (DOC-03)', () => {
     // is the same variable the server reads.
     await writeStorageBytes(doc.storageKey, 'hello')
 
-    await page.goto(await magicLinkFor(mine.tenant.id))
+    await signInWithLink(page, await magicLinkFor(mine.tenant.id))
     const response = await page.request.get(`/api/documents/${doc.id}/file`)
     expect(response.ok()).toBe(true)
     expect(await response.text()).toBe('hello')
@@ -358,7 +358,7 @@ test.describe('messages', () => {
       },
     })
 
-    await page.goto(await magicLinkFor(mine.tenant.id))
+    await signInWithLink(page, await magicLinkFor(mine.tenant.id))
     await page.goto('/portal/messages')
     await page.getByRole('link', { name: /Portal House/ }).click()
 
@@ -403,7 +403,7 @@ test.describe('messages', () => {
     })
     threadIds.push(theirThread.id)
 
-    await page.goto(await magicLinkFor(mine.tenant.id))
+    await signInWithLink(page, await magicLinkFor(mine.tenant.id))
     const response = await page.goto(`/portal/messages/${theirThread.id}`)
     expect(response?.status()).toBe(404)
   })
@@ -426,7 +426,7 @@ test.describe('accessibility (§6.4, WCAG 2.1 AA)', () => {
     })
     threadIds.push(thread.id)
 
-    await page.goto(await magicLinkFor(mine.tenant.id))
+    await signInWithLink(page, await magicLinkFor(mine.tenant.id))
 
     // THE MONEY SCREENS WERE MISSING FROM THIS LIST, AND THAT IS WHY
     // MILESTONE 11'S WALK FOUND A SERIOUS VIOLATION ON `/portal/pay/history`
@@ -457,7 +457,7 @@ test.describe('accessibility (§6.4, WCAG 2.1 AA)', () => {
     page,
   }) => {
     const { tenant } = await seedTenancy('Gus')
-    await page.goto(await magicLinkFor(tenant.id))
+    await signInWithLink(page, await magicLinkFor(tenant.id))
 
     // Disabling zoom is the most common mobile accessibility failure and
     // fails WCAG 1.4.4 outright. Assert the meta tag never acquires it.
@@ -478,7 +478,7 @@ test.describe('accessibility (§6.4, WCAG 2.1 AA)', () => {
 
   test('offers a skip link before the navigation', async ({ page }) => {
     const { tenant } = await seedTenancy('Hana')
-    await page.goto(await magicLinkFor(tenant.id))
+    await signInWithLink(page, await magicLinkFor(tenant.id))
 
     await page.keyboard.press('Tab')
     const focused = page.locator(':focus')

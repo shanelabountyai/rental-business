@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { mintToken } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
-import { axeScan, uniqueClientHeaders } from './fixtures.ts'
+import { axeScan, uniqueClientHeaders, signInWithLink } from './fixtures.ts'
 
 // The tenant maintenance request flow (MAINT-01, R-019): category → 2-3
 // clarifying prompts → troubleshooting script (logging tried/declined) →
@@ -108,7 +108,7 @@ test.afterAll(async () => {
 test.describe('submitting a request', () => {
   test('walks the flow end to end and creates a real ticket', async ({ page }) => {
     const { tenant } = await seedTenancy('Priya')
-    await page.goto(await magicLinkFor(tenant.id))
+    await signInWithLink(page, await magicLinkFor(tenant.id))
     await page.goto('/portal/maintenance/new')
     await page.waitForTimeout(500)
 
@@ -175,7 +175,7 @@ test.describe('submitting a request', () => {
     })
     const page = await context.newPage()
     const { tenant } = await seedTenancy('Nolan')
-    await page.goto(await magicLinkFor(tenant.id))
+    await signInWithLink(page, await magicLinkFor(tenant.id))
     await page.goto('/portal/maintenance/new')
 
     await page.getByRole('radio', { name: 'Locks & doors' }).check()
@@ -224,7 +224,7 @@ test.describe('submitting a request', () => {
     // own "why you cannot continue" text is already on screen - derived from
     // the same answers, so it needs no round trip.
     const { tenant } = await seedTenancy('Ada')
-    await page.goto(await magicLinkFor(tenant.id))
+    await signInWithLink(page, await magicLinkFor(tenant.id))
     await page.goto('/portal/maintenance/new?step=review&category=LOCKS')
 
     await expect(page.getByText('A few questions about it')).toBeVisible()
@@ -235,7 +235,7 @@ test.describe('submitting a request', () => {
     page,
   }) => {
     const { tenant } = await seedTenancy('Devon')
-    await page.goto(await magicLinkFor(tenant.id))
+    await signInWithLink(page, await magicLinkFor(tenant.id))
     await page.goto('/portal/maintenance/new')
     await page.waitForTimeout(500)
 
@@ -271,7 +271,7 @@ test.describe('submitting a request', () => {
     page,
   }) => {
     const { tenant } = await seedTenancy('Kim')
-    await page.goto(await magicLinkFor(tenant.id))
+    await signInWithLink(page, await magicLinkFor(tenant.id))
     await page.goto('/portal/maintenance/new')
     await page.waitForTimeout(500)
 
@@ -309,7 +309,7 @@ test.describe('submitting a request', () => {
 
   test('attaches a photo selected mid-flow to the finished ticket', async ({ page }) => {
     const { tenant } = await seedTenancy('Sam')
-    await page.goto(await magicLinkFor(tenant.id))
+    await signInWithLink(page, await magicLinkFor(tenant.id))
     await page.goto('/portal/maintenance/new')
     await page.waitForTimeout(500)
 
@@ -373,7 +373,7 @@ test.describe('submitting a request', () => {
     })
     ticketIds.push(ticket.id)
 
-    await page.goto(await magicLinkFor(tenant.id))
+    await signInWithLink(page, await magicLinkFor(tenant.id))
     await page.goto(`/portal/maintenance/${ticket.id}`)
     await expect(page.getByText('No photos yet.')).toBeVisible()
 
@@ -408,7 +408,7 @@ test.describe('scoping (DOC-03-style)', () => {
     })
     ticketIds.push(theirTicket.id)
 
-    await page.goto(await magicLinkFor(mine.tenant.id))
+    await signInWithLink(page, await magicLinkFor(mine.tenant.id))
     await page.goto('/portal/maintenance')
     await expect(page.getByText('Not yours.')).toHaveCount(0)
 
@@ -434,7 +434,7 @@ test.describe('accessibility (§6.4, WCAG 2.1 AA)', () => {
     })
     ticketIds.push(ticket.id)
 
-    await page.goto(await magicLinkFor(tenant.id))
+    await signInWithLink(page, await magicLinkFor(tenant.id))
 
     for (const url of [
       '/portal/maintenance',

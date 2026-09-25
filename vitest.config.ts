@@ -18,6 +18,8 @@ export default defineConfig({
     },
   },
   test: {
+    // K12: refuses a non-local DATABASE_URL before any test file loads.
+    globalSetup: ['./vitest.global-setup.ts'],
     // Node by default - the tests this product actually demands (late-fee caps,
     // proration, RUBS allocation, days-past-due) are pure functions in
     // packages/core. Add jsdom + the React plugin when the first component

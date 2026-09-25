@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { mintToken } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
-import { uniquePhone } from './fixtures.ts'
+import { uniquePhone, signInWithLink } from './fixtures.ts'
 
 // PAY-12's legal-action payment controls, from the tenant's side (R-047).
 //
@@ -142,7 +142,7 @@ test.afterAll(async () => {
 test.describe('what a held tenant sees (PAY-12)', () => {
   test('BLOCKED ONLINE: no payment form, and the reason is never named', async ({ page }) => {
     const { tenant } = await seed({ collectionPaused: true })
-    await page.goto(await magicLinkFor(tenant.id))
+    await signInWithLink(page, await magicLinkFor(tenant.id))
     await page.goto('/portal/pay')
 
     await expect(page.getByText(/Online payments are not available on this account/i)).toBeVisible()
@@ -157,7 +157,7 @@ test.describe('what a held tenant sees (PAY-12)', () => {
     // "Not available" alone would send somebody back to the portal to try
     // again. This one has a real alternative, so it says so.
     const { tenant } = await seed({ certifiedFundsOnly: true })
-    await page.goto(await magicLinkFor(tenant.id))
+    await signInWithLink(page, await magicLinkFor(tenant.id))
     await page.goto('/portal/pay')
 
     await expect(page.getByText(/cashier|money order/i)).toBeVisible()
@@ -171,7 +171,7 @@ test.describe('what a held tenant sees (PAY-12)', () => {
     // The tenant may still cure — in full. Closing the screen entirely would
     // take away the very thing that ends the case.
     const { tenant } = await seed({ blockPartialPayments: true })
-    await page.goto(await magicLinkFor(tenant.id))
+    await signInWithLink(page, await magicLinkFor(tenant.id))
     await page.goto('/portal/pay')
 
     await expect(page.locator('main').getByRole('button', { name: /^Pay \$/ }).first()).toBeVisible()
@@ -182,7 +182,7 @@ test.describe('what a held tenant sees (PAY-12)', () => {
 
   test('an unheld tenancy is unaffected', async ({ page }) => {
     const { tenant } = await seed()
-    await page.goto(await magicLinkFor(tenant.id))
+    await signInWithLink(page, await magicLinkFor(tenant.id))
     await page.goto('/portal/pay')
 
     await expect(page.locator('main').getByRole('button', { name: /^Pay \$/ }).first()).toBeVisible()
@@ -200,7 +200,7 @@ test.describe('what a held tenant sees (PAY-12)', () => {
     // screen deliberately renders no form to submit — the refusal that gets
     // logged is the one a stale page or a crafted request produces.
     const { tenant, payer } = await seed()
-    await page.goto(await magicLinkFor(tenant.id))
+    await signInWithLink(page, await magicLinkFor(tenant.id))
     await page.goto('/portal/pay')
     await expect(page.locator('main').getByRole('button', { name: /^Pay \$/ }).first()).toBeVisible()
 

@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { hashPassword, mintToken } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
-import { axeScan, uniqueClientHeaders, uniquePhone } from './fixtures.ts'
+import { axeScan, uniqueClientHeaders, uniquePhone, signInWithLink } from './fixtures.ts'
 
 // Notice delivery proof, end to end (COMM-02, R-051).
 //
@@ -332,7 +332,7 @@ test.describe('notice delivery proof (COMM-02)', () => {
     const context = await browser.newContext({ extraHTTPHeaders: uniqueClientHeaders() })
     try {
       const page = await context.newPage()
-      await page.goto(await magicLinkFor(tenant.id))
+      await signInWithLink(page, await magicLinkFor(tenant.id))
       await page.goto('/portal/notices')
       await expect(page.getByText('New')).toBeVisible()
 
@@ -394,7 +394,7 @@ test.describe('notice delivery proof (COMM-02)', () => {
     const context = await browser.newContext({ extraHTTPHeaders: uniqueClientHeaders() })
     try {
       const page = await context.newPage()
-      await page.goto(await magicLinkFor(mine.tenant.id))
+      await signInWithLink(page, await magicLinkFor(mine.tenant.id))
 
       // 404, not 403 (ROLE-01): "forbidden" would confirm the record exists.
       const response = await page.request.get(`/portal/notices/${theirs.notice.id}`)

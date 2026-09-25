@@ -100,6 +100,15 @@ describe('publicListing', () => {
     expect(found?.property.state).toBe('TX')
   })
 
+  it('returns an allowlisted projection, never the whole row (K6)', async () => {
+    const listing = await seedListing({ status: 'PUBLISHED' })
+    const found = await publicListing(listing.id)
+    expect(Object.keys(found ?? {}).sort()).toEqual([
+      'availableOn', 'depositCents', 'description', 'headline', 'id', 'petPolicyText',
+      'petsAllowed', 'property', 'rentCents', 'requirements', 'unit', 'unitId',
+    ])
+  })
+
   it('is null for a DRAFT listing - not yours and does not exist read the same', async () => {
     const listing = await seedListing({ status: 'DRAFT' })
     expect(await publicListing(listing.id)).toBeNull()

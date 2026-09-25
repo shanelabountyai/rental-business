@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { hashPassword, mintToken } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
-import { axeScan, uniquePhone } from './fixtures.ts'
+import { axeScan, uniquePhone, signInWithLink } from './fixtures.ts'
 
 // Verify & close through the browser (MAINT-07, R-030).
 //
@@ -178,7 +178,7 @@ test.afterAll(async () => {
 test.describe('the tenant answers', () => {
   test('one tap says it is fixed, and the job moves to verified', async ({ page }) => {
     const { tenant, ticket, workOrder, vendor } = await seed()
-    await page.goto(await magicLinkFor(tenant.id))
+    await signInWithLink(page, await magicLinkFor(tenant.id))
     await page.goto(`/portal/maintenance/${ticket.id}`)
 
     await expect(page.getByRole('heading', { name: 'Is it fixed?' })).toBeVisible()
@@ -210,7 +210,7 @@ test.describe('the tenant answers', () => {
 
   test('carries a rating and a comment when the tenant gives them', async ({ page }) => {
     const { tenant, ticket, workOrder } = await seed()
-    await page.goto(await magicLinkFor(tenant.id))
+    await signInWithLink(page, await magicLinkFor(tenant.id))
     await page.goto(`/portal/maintenance/${ticket.id}`)
 
     await page.getByRole('button', { name: '4', exact: true }).click()
@@ -229,7 +229,7 @@ test.describe('the tenant answers', () => {
     page,
   }) => {
     const { tenant, ticket, workOrder } = await seed()
-    await page.goto(await magicLinkFor(tenant.id))
+    await signInWithLink(page, await magicLinkFor(tenant.id))
     await page.goto(`/portal/maintenance/${ticket.id}`)
 
     await page.getByLabel(/Anything we should know/).fill('Still dripping.')
@@ -258,7 +258,7 @@ test.describe('the tenant answers', () => {
 
   test('is not asked about a job that is not finished', async ({ page }) => {
     const { tenant, ticket } = await seed({ status: 'IN_PROGRESS' })
-    await page.goto(await magicLinkFor(tenant.id))
+    await signInWithLink(page, await magicLinkFor(tenant.id))
     await page.goto(`/portal/maintenance/${ticket.id}`)
 
     await expect(page.getByRole('heading', { name: 'Is it fixed?' })).toHaveCount(0)
@@ -271,7 +271,7 @@ test.describe('the tenant answers', () => {
     const mine = await seed()
     const theirs = await seed()
 
-    await page.goto(await magicLinkFor(mine.tenant.id))
+    await signInWithLink(page, await magicLinkFor(mine.tenant.id))
     await page.goto(`/portal/maintenance/${theirs.ticket.id}`)
     // Not yours and does not exist are indistinguishable.
     await expect(page.getByRole('heading', { name: 'Is it fixed?' })).toHaveCount(0)
@@ -288,7 +288,7 @@ test.describe('the PM closes', () => {
     // The single worst outcome this item can produce: a live complaint
     // recorded as resolved is what a tenant later shows a judge.
     const { tenant, ticket, workOrder, staff } = await seed()
-    await page.goto(await magicLinkFor(tenant.id))
+    await signInWithLink(page, await magicLinkFor(tenant.id))
     await page.goto(`/portal/maintenance/${ticket.id}`)
     await page.getByRole('button', { name: 'No, it is not' }).click()
     await expect(page.getByText(/reopened it/i)).toBeVisible()
@@ -318,7 +318,7 @@ test.describe('the PM closes', () => {
     // The chain: typed once here, read everywhere else. No re-keying is the
     // whole requirement.
     const { tenant, ticket, workOrder, property, staff } = await seed()
-    await page.goto(await magicLinkFor(tenant.id))
+    await signInWithLink(page, await magicLinkFor(tenant.id))
     await page.goto(`/portal/maintenance/${ticket.id}`)
     await page.getByRole('button', { name: 'Yes, it is fixed' }).click()
     await expect(page.getByRole('heading', { name: 'Thank you' })).toBeVisible()
@@ -456,7 +456,7 @@ test.describe('accessibility (§6.4, WCAG 2.1 AA)', () => {
   test('the tenant question and the close panel have no violations', async ({ page }) => {
     const { tenant, ticket, workOrder, staff } = await seed()
 
-    await page.goto(await magicLinkFor(tenant.id))
+    await signInWithLink(page, await magicLinkFor(tenant.id))
     await page.goto(`/portal/maintenance/${ticket.id}`)
     let results = await axeScan(page)
     expect(results.violations, 'tenant question').toEqual([])

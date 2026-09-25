@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { withinQuietHours } from '@rental/core/notifications'
+import type { Page } from '@playwright/test'
 
 let counter = 0
 
@@ -253,4 +254,17 @@ export async function writeStorageBytes(storageKey: string, contents: string) {
   const path = resolve(root, storageKey)
   await mkdir(dirname(path), { recursive: true })
   await writeFile(path, Buffer.from(contents))
+}
+
+/**
+ * Signs a tenant or guarantor in from a magic link (K1). The link now lands
+ * on a page that changes nothing, and the button on it spends the token, so a
+ * test that used to `goto(link)` has to press it too. Waits for the URL to
+ * leave `/verify`: a following `goto` would otherwise cancel the POST in
+ * flight and leave the spec on the login page with no session.
+ */
+export async function signInWithLink(page: Page, link: string): Promise<void> {
+  await page.goto(link)
+  await page.getByRole('button', { name: 'Continue' }).click()
+  await page.waitForURL((url) => !url.pathname.includes('/verify'))
 }

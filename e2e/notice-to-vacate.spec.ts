@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { hashPassword, mintToken } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
-import { uniquePhone, uniqueClientHeaders, uniqueStateCode } from './fixtures.ts'
+import { uniquePhone, uniqueClientHeaders, uniqueStateCode, signInWithLink } from './fixtures.ts'
 
 // R-003's login limiter is ten attempts per IP per five minutes, and local
 // e2e traffic carries no x-forwarded-for - so without this every spec shares
@@ -213,7 +213,7 @@ test('an owner non-renewal in a just-cause jurisdiction requires a stated cause,
 test("a tenant gives their own notice to vacate from the portal", async ({ page }) => {
   const { lease, tenant } = await seedLease('TX')
 
-  await page.goto(await magicLinkFor(tenant.id))
+  await signInWithLink(page, await magicLinkFor(tenant.id))
   await page.goto('/portal/papers/notice')
   await expect(page.getByRole('heading', { name: 'Give notice to vacate' })).toBeVisible()
 

@@ -29,11 +29,15 @@ const PUBLIC_ROUTES: Record<string, string> = {
   'reset-password/page.tsx':
     'The single-use token in the link is the credential; demanding a session would defeat the purpose.',
   'portal/login/page.tsx': 'Tenant sign-in.',
-  'portal/verify/route.ts':
-    'Where a magic link lands. The token is redeemed inside the Auth.js provider.',
+  'portal/verify/page.tsx':
+    'Where a magic link lands (K1). Changes nothing on GET; the token is the credential and is spent by the POST below.',
+  'portal/verify/redeem/route.ts':
+    'POST-only redemption of a tenant magic link (K1). The token is redeemed inside the Auth.js provider.',
   'portal/guarantor/login/page.tsx': 'Guarantor sign-in (R-165), same reason as tenant sign-in.',
-  'portal/guarantor/verify/route.ts':
-    'Where a guarantor magic link lands (R-165). Same shape as portal/verify/route.ts.',
+  'portal/guarantor/verify/page.tsx':
+    'Where a guarantor magic link lands (R-165, K1). Same shape as portal/verify/page.tsx.',
+  'portal/guarantor/verify/redeem/route.ts':
+    'POST-only redemption of a guarantor magic link (R-165, K1). Same shape as portal/verify/redeem/route.ts.',
   'api/auth/[...nextauth]/route.ts': 'Auth.js owns its own endpoints.',
   'api/cron/route.ts':
     'Authorized by a constant-time CRON_SECRET bearer check rather than a session - no human is signed in.',

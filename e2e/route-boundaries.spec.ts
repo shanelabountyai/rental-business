@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { hashPassword, mintToken } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
-import { uniquePhone } from './fixtures.ts'
+import { signInWithLink, uniquePhone } from './fixtures.ts'
 
 // The screens a person actually lands on when something goes wrong (U1, R-099).
 //
@@ -115,7 +115,7 @@ test.describe('a link that goes nowhere', () => {
     page,
   }) => {
     const { link } = await seedTenant()
-    await page.goto(link)
+    await signInWithLink(page, link)
 
     // A well-formed id that is nobody's record - the shape of a stale link
     // out of an old text message, which is how this screen is actually

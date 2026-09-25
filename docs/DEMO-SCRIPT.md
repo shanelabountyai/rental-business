@@ -44,7 +44,7 @@ Sign in at `http://localhost:3100/login`. **Password for all five:
 **Tenants have no password and that is the product working correctly.** The
 only tenant provider wired in `auth.ts` is `tenant-magic-link`; the
 `TenantCredential.passwordHash` column is schema-only today. The script prints
-a single-use magic link per tenant — paste one into the address bar. They are
+a single-use magic link per tenant — paste one into the address bar, then press *Continue* (the link no longer signs in on open). They are
 short-lived, so re-run the script if a link has gone stale mid-demo.
 
 **Vendors never get an account at all, ever (D-6).** The script prints one

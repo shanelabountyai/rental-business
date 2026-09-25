@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { hashPassword, mintToken } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
-import { axeScan, uniqueClientHeaders, uniquePhone } from './fixtures.ts'
+import { axeScan, uniqueClientHeaders, uniquePhone, signInWithLink } from './fixtures.ts'
 
 // R-164: `/portal/account` - the tenant's own say over how they are
 // contacted and billed, plus the staff mirror for the counter.
@@ -180,7 +180,7 @@ test.describe('a tenant’s own notification preferences', () => {
     page,
   }) => {
     const { tenant } = await seedTenancy()
-    await page.goto(await magicLinkFor(tenant.id))
+    await signInWithLink(page, await magicLinkFor(tenant.id))
     await page.goto('/portal/account')
     const toggle = page.locator('#pref-rent_reminder-EMAIL')
     await expect(toggle).toHaveAttribute('aria-pressed', 'true')
@@ -203,7 +203,7 @@ test.describe('a tenant’s own notification preferences', () => {
     page,
   }) => {
     const { tenant } = await seedTenancy()
-    await page.goto(await magicLinkFor(tenant.id))
+    await signInWithLink(page, await magicLinkFor(tenant.id))
     await page.goto('/portal/account')
 
     const legal = page.getByRole('listitem').filter({ hasText: 'Legal notices' })
@@ -220,7 +220,7 @@ test.describe('a tenant’s own notification preferences', () => {
     page,
   }) => {
     const { tenant } = await seedTenancy()
-    await page.goto(await magicLinkFor(tenant.id))
+    await signInWithLink(page, await magicLinkFor(tenant.id))
     await page.goto('/portal/account')
 
     const before = await prisma.notificationPreference.count({
@@ -243,7 +243,7 @@ test.describe('a tenant’s own TCPA consent', () => {
   test('sees what is on file and withdraws it', async ({ page }) => {
     const { tenant } = await seedTenancy()
     await seedConsent(tenant.id)
-    await page.goto(await magicLinkFor(tenant.id))
+    await signInWithLink(page, await magicLinkFor(tenant.id))
     await page.goto('/portal/account')
 
     // "Text message" appears in both the record and the withdraw form's own
@@ -280,7 +280,7 @@ test.describe('a tenant’s own TCPA consent', () => {
     await seedConsent(theirs.id, { channel: 'VOICE' })
     await seedConsent(mine.id, { channel: 'SMS' })
 
-    await page.goto(await magicLinkFor(mine.id))
+    await signInWithLink(page, await magicLinkFor(mine.id))
     await page.goto('/portal/account')
 
     // Only my own channel is offered - "Phone call" (VOICE) never appears.
@@ -294,7 +294,7 @@ test.describe('a tenant turns autopay off', () => {
     page,
   }) => {
     const { tenant, payer } = await seedTenancy({ withSubscription: true, autopayOn: true })
-    await page.goto(await magicLinkFor(tenant.id))
+    await signInWithLink(page, await magicLinkFor(tenant.id))
     await page.goto('/portal/pay')
 
     await expect(page.getByRole('heading', { name: 'Automatic payments are on' })).toBeVisible()
@@ -316,7 +316,7 @@ test.describe('a tenant turns autopay off', () => {
       autopayOn: true,
       withEmail: false,
     })
-    await page.goto(await magicLinkFor(tenant.id))
+    await signInWithLink(page, await magicLinkFor(tenant.id))
     await page.goto('/portal/pay')
 
     await page.getByRole('button', { name: 'Turn off automatic payments' }).click()
@@ -358,7 +358,7 @@ test.describe('accessibility', () => {
   test('the tenant account page has no detectable violations', async ({ page }) => {
     const { tenant } = await seedTenancy()
     await seedConsent(tenant.id)
-    await page.goto(await magicLinkFor(tenant.id))
+    await signInWithLink(page, await magicLinkFor(tenant.id))
     await page.goto('/portal/account')
 
     const results = await axeScan(page)

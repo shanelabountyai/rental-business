@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { mintToken } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
-import { axeScan, expectAnnouncedInPlace, uniquePhone } from './fixtures.ts'
+import { axeScan, expectAnnouncedInPlace, uniquePhone, signInWithLink } from './fixtures.ts'
 
 // The tenant pays (PAY-01, R-037, D-29).
 //
@@ -154,7 +154,7 @@ test.afterAll(async () => {
 test.describe('the tenant pay screen', () => {
   test('shows what is owed and what it is made of, before paying', async ({ page }) => {
     const { tenant } = await seed()
-    await page.goto(await magicLinkFor(tenant.id))
+    await signInWithLink(page, await magicLinkFor(tenant.id))
     await page.goto('/portal/pay')
 
     await expect(page.getByRole('heading', { name: 'Pay rent' })).toBeVisible()
@@ -175,7 +175,7 @@ test.describe('the tenant pay screen', () => {
     // Seeded into a jurisdiction that permits a surcharge on every card, so
     // there IS a fee to disclose - Texas charges none (see the test below).
     const { tenant } = await seed({ surchargesEveryCard: true })
-    await page.goto(await magicLinkFor(tenant.id))
+    await signInWithLink(page, await magicLinkFor(tenant.id))
     await page.goto('/portal/pay')
 
     const rails = page.getByRole('radio')
@@ -218,7 +218,7 @@ test.describe('the tenant pay screen', () => {
     // are not available for this property" - turning a fee question into a
     // rail outage. Not surcharging means the owner absorbs the cost.
     const { tenant } = await seed()
-    await page.goto(await magicLinkFor(tenant.id))
+    await signInWithLink(page, await magicLinkFor(tenant.id))
     await page.goto('/portal/pay')
 
     const card = page.getByRole('radio', { name: /Card/ })
@@ -232,7 +232,7 @@ test.describe('the tenant pay screen', () => {
 
   test('never offers retail cash, and says why', async ({ page }) => {
     const { tenant } = await seed()
-    await page.goto(await magicLinkFor(tenant.id))
+    await signInWithLink(page, await magicLinkFor(tenant.id))
     await page.goto('/portal/pay')
 
     const cash = page.getByRole('radio', { name: /Cash at a store/ })
@@ -257,7 +257,7 @@ test.describe('the tenant pay screen', () => {
       },
     })
 
-    await page.goto(await magicLinkFor(tenant.id))
+    await signInWithLink(page, await magicLinkFor(tenant.id))
     await page.goto('/portal/pay')
 
     await expect(page.getByText('already on its way', { exact: false })).toBeVisible()
@@ -269,14 +269,14 @@ test.describe('the tenant pay screen', () => {
     // D-29: Stripe cannot take a partial payment on `charge_automatically`,
     // so the screen must not offer one it would have to refuse.
     const { tenant } = await seed({ collectionMethod: 'charge_automatically' })
-    await page.goto(await magicLinkFor(tenant.id))
+    await signInWithLink(page, await magicLinkFor(tenant.id))
     await page.goto('/portal/pay')
     await expect(page.getByText('pays the full amount', { exact: false })).toBeVisible()
   })
 
   test('offers an invoiced tenant the choice to pay part of it', async ({ page }) => {
     const { tenant } = await seed({ collectionMethod: 'send_invoice' })
-    await page.goto(await magicLinkFor(tenant.id))
+    await signInWithLink(page, await magicLinkFor(tenant.id))
     await page.goto('/portal/pay')
     await expect(page.getByText('pay part of it', { exact: false })).toBeVisible()
   })
@@ -286,7 +286,7 @@ test.describe('the tenant pay screen', () => {
     // amount. Typed into the real field, so this exercises the actual path a
     // stale page or a hand-crafted request would take.
     const { tenant, payer } = await seed({ collectionMethod: 'send_invoice' })
-    await page.goto(await magicLinkFor(tenant.id))
+    await signInWithLink(page, await magicLinkFor(tenant.id))
     await page.goto('/portal/pay')
 
     await page.getByLabel('How much are you paying?').fill('99999')
@@ -315,7 +315,7 @@ test.describe('the tenant pay screen', () => {
       collectionMethod: 'send_invoice',
       surchargesEveryCard: true,
     })
-    await page.goto(await magicLinkFor(tenant.id))
+    await signInWithLink(page, await magicLinkFor(tenant.id))
     await page.goto('/portal/pay')
 
     await page.getByLabel('How much are you paying?').fill('500')
@@ -358,7 +358,7 @@ test.describe('the tenant pay screen', () => {
     // are different defences. Without the policy and the funding on the row
     // they are the same silence.
     const { tenant, payer } = await seed({ collectionMethod: 'send_invoice' })
-    await page.goto(await magicLinkFor(tenant.id))
+    await signInWithLink(page, await magicLinkFor(tenant.id))
     await page.goto('/portal/pay')
 
     await page.getByLabel('How much are you paying?').fill('500')
@@ -394,7 +394,7 @@ test.describe('the tenant pay screen', () => {
 
   test('accessibility (§6.4, WCAG 2.1 AA)', async ({ page }) => {
     const { tenant } = await seed()
-    await page.goto(await magicLinkFor(tenant.id))
+    await signInWithLink(page, await magicLinkFor(tenant.id))
     await page.goto('/portal/pay')
     await expect(page.getByRole('heading', { name: 'Pay rent' })).toBeVisible()
 
@@ -438,7 +438,7 @@ test.describe('the tenant\'s own statement (R-043)', () => {
     page,
   }) => {
     const { tenant } = await seedWithHistory()
-    await page.goto(await magicLinkFor(tenant.id))
+    await signInWithLink(page, await magicLinkFor(tenant.id))
     await page.goto('/portal/pay')
 
     // Reachable from the pay screen without hunting.
@@ -457,7 +457,7 @@ test.describe('the tenant\'s own statement (R-043)', () => {
     // sees a payment listed and then reversed has to be told which, or the
     // statement reads as though it double-counted.
     const { tenant } = await seedWithHistory()
-    await page.goto(await magicLinkFor(tenant.id))
+    await signInWithLink(page, await magicLinkFor(tenant.id))
     await page.goto('/portal/pay/history')
 
     await expect(page.getByText('Card payment returned')).toBeVisible()
@@ -470,7 +470,7 @@ test.describe('the tenant\'s own statement (R-043)', () => {
     // dispute this feature exists to prevent, and it would be a worse bug
     // than showing nothing.
     const { tenant, lease } = await seedWithHistory()
-    await page.goto(await magicLinkFor(tenant.id))
+    await signInWithLink(page, await magicLinkFor(tenant.id))
     await page.goto('/portal/pay/history')
 
     await expect(page.getByText('$1,500.00').first()).toBeVisible()
@@ -484,7 +484,7 @@ test.describe('the tenant\'s own statement (R-043)', () => {
 
   test('accessibility', async ({ page }) => {
     const { tenant } = await seedWithHistory()
-    await page.goto(await magicLinkFor(tenant.id))
+    await signInWithLink(page, await magicLinkFor(tenant.id))
     await page.goto('/portal/pay/history')
 
     const results = await axeScan(page)

@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { hashPassword, mintToken } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
-import { axeScan, safeTimeZone, uniqueClientHeaders } from './fixtures.ts'
+import { axeScan, safeTimeZone, signInWithLink, uniqueClientHeaders } from './fixtures.ts'
 
 // Repayment plans (PAY-08, PAY-12; R-175).
 //
@@ -226,7 +226,7 @@ test('the tenant sees the plan they are keeping on their portal', async ({ page 
       expiresAt: minted.expiresAt,
     },
   })
-  await page.goto(`/portal/verify?token=${minted.token}`)
+  await signInWithLink(page, `/portal/verify?token=${minted.token}`)
   await expect(page).toHaveURL(/\/portal$/)
 
   const plan = page.getByRole('region', { name: 'Your repayment plan' })

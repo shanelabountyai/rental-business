@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { hashPassword, mintToken } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
-import { safeTimeZone, uniqueClientHeaders, uniqueStateCode } from './fixtures.ts'
+import { safeTimeZone, uniqueClientHeaders, uniqueStateCode, signInWithLink } from './fixtures.ts'
 
 // R-003's login limiter is ten attempts per IP per five minutes, and local
 // e2e traffic carries no x-forwarded-for - so without this every spec shares
@@ -313,7 +313,7 @@ test('a photo attaches to an item, and the tenant reviews and signs the report f
 
   const anon = await browser.newContext({ extraHTTPHeaders: uniqueClientHeaders() })
   const tenantPage = await anon.newPage()
-  await tenantPage.goto(await magicLinkFor(tenant.id))
+  await signInWithLink(tenantPage, await magicLinkFor(tenant.id))
   await tenantPage.goto('/portal/papers')
   await expect(
     tenantPage.getByRole('link', { name: /Review and sign your inspection report/ }),
@@ -402,7 +402,7 @@ test('a tenant self-guides a move-in walkthrough from their own portal (INSP-05)
 
   const anon = await browser.newContext({ extraHTTPHeaders: uniqueClientHeaders() })
   const tenantPage = await anon.newPage()
-  await tenantPage.goto(await magicLinkFor(tenant.id))
+  await signInWithLink(tenantPage, await magicLinkFor(tenant.id))
   await tenantPage.goto('/portal/papers')
   await expect(
     tenantPage.getByRole('link', { name: /Complete your move-in walkthrough/ }),
@@ -465,7 +465,7 @@ test('a tenant self-guides a move-in walkthrough from their own portal (INSP-05)
   })
   const blocked = await browser.newContext({ extraHTTPHeaders: uniqueClientHeaders() })
   const blockedPage = await blocked.newPage()
-  await blockedPage.goto(await magicLinkFor(tenant.id))
+  await signInWithLink(blockedPage, await magicLinkFor(tenant.id))
   await blockedPage.goto(`/portal/papers/inspections/${staffInspection.id}`)
   await expect(blockedPage.getByText('Bedroom — Closet')).toBeVisible()
   await expect(blockedPage.getByRole('button', { name: 'Save' })).toHaveCount(0)

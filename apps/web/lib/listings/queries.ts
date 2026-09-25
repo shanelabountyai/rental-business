@@ -30,10 +30,27 @@ export async function listingForUnit(
   return listing
 }
 
-export interface PublicListing extends Listing {
-  property: { addressLine1: string; city: string; state: string; postalCode: string; timezone: string; county: string | null }
-  unit: { name: string; bedrooms: number | null; bathrooms: Prisma.Decimal | null; squareFeet: number | null }
-}
+/// An ALLOWLIST, not the row: a listing is served to anyone, so a column
+/// added to Listing later (createdByStaffId, internal notes) must not reach
+/// the page just because `include` returns everything (K6).
+const PUBLIC_LISTING_SELECT = {
+  id: true,
+  unitId: true,
+  headline: true,
+  description: true,
+  rentCents: true,
+  depositCents: true,
+  availableOn: true,
+  requirements: true,
+  petsAllowed: true,
+  petPolicyText: true,
+  property: {
+    select: { addressLine1: true, city: true, state: true, postalCode: true, timezone: true, county: true },
+  },
+  unit: { select: { name: true, bedrooms: true, bathrooms: true, squareFeet: true } },
+} satisfies Prisma.ListingSelect
+
+export type PublicListing = Prisma.ListingGetPayload<{ select: typeof PUBLIC_LISTING_SELECT }>
 
 /// The hosted page's own read - PUBLISHED ONLY, no actor, no scope. A
 /// DRAFT or UNPUBLISHED listing must be indistinguishable from one that does
@@ -42,16 +59,10 @@ export interface PublicListing extends Listing {
 /// product already follows (ROLE-01's own 404-not-403 posture, applied here
 /// to "not public" rather than "not yours").
 export async function publicListing(id: string): Promise<PublicListing | null> {
-  const listing = await prisma.listing.findFirst({
+  return prisma.listing.findFirst({
     where: { id, status: 'PUBLISHED' },
-    include: {
-      property: {
-        select: { addressLine1: true, city: true, state: true, postalCode: true, timezone: true, county: true },
-      },
-      unit: { select: { name: true, bedrooms: true, bathrooms: true, squareFeet: true } },
-    },
+    select: PUBLIC_LISTING_SELECT,
   })
-  return listing
 }
 
 /// Live from the unit's own photo library (R-012), never copied onto the

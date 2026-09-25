@@ -13546,3 +13546,15 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 **What it left behind.** No warranty or capital improvement is seeded (the row asked for a mortgage only). DEMO-SCRIPT.md says so.
 
 **Gate.** Walked in a browser against `rental_demo` after two `--reset` runs: the dashboard tile reads 1, `/renewals` lists the ARM, the property page shows *ARM adjusts 28 Oct 2026*, `/renewals` is 412px at 412px. `lint` 0 errors, `typecheck` clean, `demo-seed.test.ts` 38 passed, `dashboard.spec.ts` 10/10 on both projects (reconciled against `--list`). Full sweep left to CI.
+
+## R-253 to R-257 — the foundation scorecard's five gaps (K7, K6, K12, K11, K1)
+
+**Commit:** `SHA-PENDING`  ·  **Date:** 2026-09-25
+
+**What it built.** Shane chose all five gaps on the rental row (9/14 → 14/14). **K7:** [next.config.ts](apps/web/next.config.ts) sets `nosniff`, `X-Frame-Options: DENY` and HSTS on every path, and `X-Robots-Tag: noindex` on the token paths and `/api/calendar`; `/listings` stays indexable. **K6:** `publicListing` is an allowlisted `select`. **K12:** [vitest.global-setup.ts](vitest.global-setup.ts) refuses a non-loopback `DATABASE_URL`. **K11:** [lib/env.ts](apps/web/lib/env.ts) (no new dependency) runs from [instrumentation.ts](apps/web/instrumentation.ts); `.env.example` gains five names and loses a stale `?secret=` claim. **K1:** `/portal/verify` and `/portal/guarantor/verify` are pages that change nothing; their button POSTs to `…/redeem`.
+
+**What it decided.** D-264. The redirect after the POST is a 303 built in [redeem-magic-link.ts](apps/web/lib/auth/redeem-magic-link.ts), because a route handler's `redirect()` is a 307 and re-POSTs to the portal page. `env.ts` requires only `DATABASE_URL` and `AUTH_SECRET`.
+
+**What it left behind.** The scorecard artifact still needs its rental row re-scored (K4 and K10 were carried forward from baseline, not re-traced). The scorecard's re-check button runs from the foundation repo, not here.
+
+**Gate.** `lint` 0 errors, `typecheck` clean, `npm test` 3,341 passed / 4 skipped (252 files), `check:ship-deps` clean, `npm run build` ok. e2e on every spec that signs in by magic link, desktop-chrome: 59/59 (auth, route-boundaries, portal-guarantor, portal) and 87/87 (ten more), each matching `--list`; mobile-chrome on auth and route-boundaries 36/36. Full sweep left to CI. **Found on the way:** running `npx playwright test` directly skips `.env.test`, so every DB-touching spec fails in ~100ms with `DATABASE_URL not found`; use `npm run test:e2e`.

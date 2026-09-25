@@ -17,8 +17,37 @@ const nextConfig: NextConfig = {
   // check refuses it ("Invalid Server Actions request"), and every
   // no-JavaScript form in the product stops working. `same-origin` still
   // sends nothing to another site, which is all SEC-06 needed.
+  //
+  // Everything else a scanner asks of "global" (K7) lives here for the same
+  // reason - the proxy skips /api and the document routes, so a header that
+  // must cover them cannot be set there. HSTS and nosniff are safe on every
+  // response; `frame-ancestors 'none'` stays with the page CSP in proxy.ts,
+  // and X-Frame-Options DENY is its header-level twin for the routes the
+  // proxy does not run on.
+  //
+  // NOINDEX covers the token paths as a header, not just page metadata,
+  // because /api/calendar and the document-byte routes have no metadata to
+  // carry it. The hosted listing (/listings) is public and indexable ON
+  // PURPOSE and is deliberately not in this list.
   async headers() {
-    return [{ source: '/:path*', headers: [{ key: 'Referrer-Policy', value: 'same-origin' }] }]
+    const NOINDEX = [
+      'pay', 'sign', 'vendor', 'verify', 'apply', 'prescreen', 'clarify', 'showings', 'portal',
+    ].map((segment) => `/${segment}/:path*`)
+    return [
+      {
+        source: '/:path*',
+        headers: [
+          { key: 'Referrer-Policy', value: 'same-origin' },
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+          { key: 'X-Frame-Options', value: 'DENY' },
+          { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains' },
+        ],
+      },
+      ...[...NOINDEX, '/api/calendar/:path*'].map((source) => ({
+        source,
+        headers: [{ key: 'X-Robots-Tag', value: 'noindex, nofollow' }],
+      })),
+    ]
   },
   experimental: {
     // Next caps a Server Action body at 1 MB by default, and every photo

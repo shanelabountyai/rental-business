@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { hashPassword, mintToken } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
-import { axeScan, uniquePhone } from './fixtures.ts'
+import { axeScan, uniquePhone, signInWithLink } from './fixtures.ts'
 
 // The emergency intake path (MAINT-01's emergency criterion, PROP-03, R-020).
 //
@@ -160,7 +160,7 @@ test.describe('safety-first instructions', () => {
     // The single most important test in this file. The unit record HAS a gas
     // shutoff on file; the screen must still not send them looking for it.
     const { tenant } = await seedEmergencyTenancy()
-    await page.goto(await magicLinkFor(tenant.id))
+    await signInWithLink(page, await magicLinkFor(tenant.id))
     await page.goto('/portal/maintenance/emergency')
 
     await expect(page.getByText(/call 911 first/i)).toBeVisible()
@@ -182,7 +182,7 @@ test.describe('safety-first instructions', () => {
     // displays". This is R-014's data reaching the tenant at the moment it
     // matters.
     const { tenant } = await seedEmergencyTenancy()
-    await page.goto(await magicLinkFor(tenant.id))
+    await signInWithLink(page, await magicLinkFor(tenant.id))
     await page.goto('/portal/maintenance/emergency')
 
     await page.getByRole('link', { name: 'Water is flooding in right now' }).click()
@@ -194,7 +194,7 @@ test.describe('safety-first instructions', () => {
     const { tenant, unit } = await seedEmergencyTenancy()
     await prisma.shutoffLocation.deleteMany({ where: { unitId: unit.id } })
 
-    await page.goto(await magicLinkFor(tenant.id))
+    await signInWithLink(page, await magicLinkFor(tenant.id))
     await page.goto('/portal/maintenance/emergency')
     await page.getByRole('link', { name: 'Water is flooding in right now' }).click()
 
@@ -218,7 +218,7 @@ test.describe('safety-first instructions', () => {
     })
     documentIds.push(photo.id)
 
-    await page.goto(await magicLinkFor(tenant.id))
+    await signInWithLink(page, await magicLinkFor(tenant.id))
     await page.goto('/portal/maintenance/emergency')
     await page.getByRole('link', { name: 'Water is flooding in right now' }).click()
 
@@ -260,7 +260,7 @@ test.describe('submitting an emergency', () => {
     page,
   }) => {
     const { tenant, staff } = await seedEmergencyTenancy()
-    await page.goto(await magicLinkFor(tenant.id))
+    await signInWithLink(page, await magicLinkFor(tenant.id))
     await page.goto('/portal/maintenance/emergency')
 
     await page.getByRole('link', { name: 'Sewage is backing up' }).click()
@@ -331,7 +331,7 @@ test.describe('submitting an emergency', () => {
 
   test('records the submission in the audit trail', async ({ page }) => {
     const { tenant } = await seedEmergencyTenancy()
-    await page.goto(await magicLinkFor(tenant.id))
+    await signInWithLink(page, await magicLinkFor(tenant.id))
     await page.goto('/portal/maintenance/emergency')
 
     await page.getByRole('link', { name: /carbon monoxide/i }).click()
@@ -376,7 +376,7 @@ test.describe('submitting an emergency', () => {
     // verification rather than blocking on it - and "I am not sure" is an
     // explicit third answer rather than a thing you discover by giving up.
     const { tenant } = await seedEmergencyTenancy()
-    await page.goto(await magicLinkFor(tenant.id))
+    await signInWithLink(page, await magicLinkFor(tenant.id))
     await page.goto('/portal/maintenance/emergency')
 
     await page
@@ -403,7 +403,7 @@ test.describe('submitting an emergency', () => {
 
   test('offers "I am not sure" as a real answer to both questions', async ({ page }) => {
     const { tenant } = await seedEmergencyTenancy()
-    await page.goto(await magicLinkFor(tenant.id))
+    await signInWithLink(page, await magicLinkFor(tenant.id))
     await page.goto('/portal/maintenance/emergency')
     await page
       .getByRole('link', { name: 'A break-in, or a door or window will not secure' })
@@ -421,7 +421,7 @@ test.describe('submitting an emergency', () => {
     const context = await browser.newContext({ javaScriptEnabled: false })
     const page = await context.newPage()
     const { tenant } = await seedEmergencyTenancy()
-    await page.goto(await magicLinkFor(tenant.id))
+    await signInWithLink(page, await magicLinkFor(tenant.id))
     await page.goto('/portal/maintenance/emergency?c=GAS_SMELL')
 
     await expect(page.getByRole('heading', { name: 'Do this now' })).toBeVisible()
@@ -431,7 +431,7 @@ test.describe('submitting an emergency', () => {
 
   test('the OLD disabled-send behaviour is gone', async ({ page }) => {
     const { tenant } = await seedEmergencyTenancy()
-    await page.goto(await magicLinkFor(tenant.id))
+    await signInWithLink(page, await magicLinkFor(tenant.id))
     await page.goto('/portal/maintenance/emergency')
 
     await page
@@ -446,7 +446,7 @@ test.describe('submitting an emergency', () => {
 test.describe('reaching the emergency path', () => {
   test('is the first thing on the maintenance screen', async ({ page }) => {
     const { tenant } = await seedEmergencyTenancy()
-    await page.goto(await magicLinkFor(tenant.id))
+    await signInWithLink(page, await magicLinkFor(tenant.id))
     await page.goto('/portal/maintenance')
 
     await expect(
@@ -456,7 +456,7 @@ test.describe('reaching the emergency path', () => {
 
   test('offers an escape hatch from the ordinary flow', async ({ page }) => {
     const { tenant } = await seedEmergencyTenancy()
-    await page.goto(await magicLinkFor(tenant.id))
+    await signInWithLink(page, await magicLinkFor(tenant.id))
     await page.goto('/portal/maintenance/new')
 
     await expect(
@@ -468,7 +468,7 @@ test.describe('reaching the emergency path', () => {
 test.describe('accessibility (§6.4, WCAG 2.1 AA)', () => {
   test('the emergency screens have no detectable violations', async ({ page }) => {
     const { tenant } = await seedEmergencyTenancy()
-    await page.goto(await magicLinkFor(tenant.id))
+    await signInWithLink(page, await magicLinkFor(tenant.id))
     await page.goto('/portal/maintenance/emergency')
 
     let results = await axeScan(page)
