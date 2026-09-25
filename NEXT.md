@@ -3,7 +3,7 @@
 ## R-253..R-257 are done (`681fbb4`): scorecard gaps K7, K6, K12, K11, K1 closed (D-264). **Backlog has no open rows.** Remaining needs a person: legal review, R-228. Ask Shane before starting anything new.
 
 - CI run `36191480549` on `2cb5ba3` is **green** (the first push, `681fbb4`, failed on a Stripe-key shape check in `env.ts`, fixed in `2cb5ba3`). Local gate: lint, typecheck, 3,341 unit, ship-deps, build, 146 e2e on touched specs all green.
-- **Scorecard artifact https://claude.ai/artifact/TognMvisj8T9GNQGtE9MbJ still shows rental at 9/14.** Its rental row (K1, K6, K7, K11, K12) needs re-scoring to ✔ after CI is green; it is re-checked from the foundation repo, not here.
+- Scorecard https://claude.ai/artifact/TognMvisj8T9GNQGtE9MbJ: rental row re-scored to 14/14 (Version 6, 2026-09-25). K4 and K10 remain baseline carry-forwards, not freshly re-traced.
 - Never run `npx playwright test` bare: it skips `.env.test`. Use `npm run test:e2e -- <files>`.
 
 ## Closure artifacts are refreshed (2026-09-25). Nothing is queued. **Backlog has no open rows.** Remaining needs a person: legal review (`docs/LEGAL-REVIEW-CHECKLIST.md`), R-228 (counsel). Ask Shane before starting anything new.
