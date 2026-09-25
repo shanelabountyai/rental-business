@@ -13549,7 +13549,7 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 
 ## R-253 to R-257 — the foundation scorecard's five gaps (K7, K6, K12, K11, K1)
 
-**Commit:** `SHA-PENDING`  ·  **Date:** 2026-09-25
+**Commit:** `681fbb4`  ·  **Date:** 2026-09-25
 
 **What it built.** Shane chose all five gaps on the rental row (9/14 → 14/14). **K7:** [next.config.ts](apps/web/next.config.ts) sets `nosniff`, `X-Frame-Options: DENY` and HSTS on every path, and `X-Robots-Tag: noindex` on the token paths and `/api/calendar`; `/listings` stays indexable. **K6:** `publicListing` is an allowlisted `select`. **K12:** [vitest.global-setup.ts](vitest.global-setup.ts) refuses a non-loopback `DATABASE_URL`. **K11:** [lib/env.ts](apps/web/lib/env.ts) (no new dependency) runs from [instrumentation.ts](apps/web/instrumentation.ts); `.env.example` gains five names and loses a stale `?secret=` claim. **K1:** `/portal/verify` and `/portal/guarantor/verify` are pages that change nothing; their button POSTs to `…/redeem`.
 
