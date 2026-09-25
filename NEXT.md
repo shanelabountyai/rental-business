@@ -4,7 +4,8 @@
 
 - Exec brief https://claude.ai/artifact/GSG4tVzFVzbgD4m5eacsrB: refresh the numbers (items, tests, decisions) to cover R-250 to R-252.
 - LinkedIn Ledger https://claude.ai/artifact/Ai5xKScgT2sWtqXRQ1ZA8i: draft posts from R-250 (autopay claim without a card), R-251 (MFA-less owner sees a bare directory), R-252 (/renewals said 30 days; the real windows are 60/180/60). Mine Defects Found first; keep adjacent pillars different.
-- R-252 CI run `36020127954` was in progress at handoff: `gh run list --limit 3`.
+- R-252 CI run `36020127954` is **green** (confirmed 2026-09-25).
+- **Run this in a `claude` terminal session.** The VS Code session has no Artifact tool, and the Docs connector refuses both links (Shane chose the terminal, 2026-09-25).
 
 # Next session
 
