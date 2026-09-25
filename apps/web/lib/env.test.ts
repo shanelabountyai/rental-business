@@ -13,13 +13,17 @@ describe('envProblems', () => {
   })
 
   it('treats an empty optional variable as unset, and an empty required one as missing', () => {
-    expect(envProblems({ ...good, STRIPE_SECRET_KEY: '' })).toEqual([])
+    expect(envProblems({ ...good, PORT: '' })).toEqual([])
     expect(envProblems({ ...good, AUTH_SECRET: '' })).toHaveLength(1)
   })
 
+  it('does not shape-check the Stripe keys, which have a supported degraded state', () => {
+    expect(envProblems({ ...good, NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: 'placeholder' })).toEqual([])
+  })
+
   it('flags a malformed optional variable without printing its value', () => {
-    const [problem] = envProblems({ ...good, STRIPE_SECRET_KEY: 'not-a-key-SECRETVALUE' })
-    expect(problem).toContain('STRIPE_SECRET_KEY')
+    const [problem] = envProblems({ ...good, PORT: 'not-a-port-SECRETVALUE' })
+    expect(problem).toContain('PORT')
     expect(problem).not.toContain('SECRETVALUE')
   })
 

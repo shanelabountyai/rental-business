@@ -11,6 +11,12 @@
 // variable that is set and malformed, which today surfaces as a confusing
 // failure deep inside whichever request reads it first.
 //
+// The Stripe keys are deliberately NOT shape-checked. CI writes
+// NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY from a secret that may be absent or a
+// placeholder, and the app treats any non-key as "no Stripe" (`?? null`, then
+// the simulator) - so a `pk_` check turned a supported degraded state into a
+// boot failure in CI's e2e job. Check only what the app cannot run without.
+//
 // An empty string counts as unset: vitest.config blanks the provider keys
 // that way, and a `NAME=` line in .env.example means "not filled in yet".
 
@@ -32,9 +38,6 @@ const CHECKS: Check[] = [
   { name: 'AUTH_URL', ok: isUrl, want: 'an absolute URL' },
   { name: 'NEXT_PUBLIC_APP_URL', ok: isUrl, want: 'an absolute URL' },
   { name: 'PORT', ok: (v) => /^\d{2,5}$/.test(v), want: 'a port number' },
-  { name: 'STRIPE_SECRET_KEY', ok: (v) => /^(sk|rk)_/.test(v), want: 'a key starting sk_ or rk_' },
-  { name: 'STRIPE_WEBHOOK_SECRET', ok: (v) => v.startsWith('whsec_'), want: 'a secret starting whsec_' },
-  { name: 'NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY', ok: (v) => v.startsWith('pk_'), want: 'a key starting pk_' },
 ]
 
 /** Every problem with `env`, as sentences naming the variable. Empty means fine. */
