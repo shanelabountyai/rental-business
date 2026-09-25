@@ -1,7 +1,9 @@
 import { sweepEmergencyEscalations } from '@/lib/maintenance/escalation.ts'
 import { isAuthorizedCron } from '@/lib/cron/authorize.ts'
 
-// The five-minute tick (NOTIF-05, R-029).
+// The escalation tick (NOTIF-05, R-029). Every fifteen minutes in
+// production since D-263 - a five-minute tick kept the demo's Neon database
+// from ever suspending. A deployment serving real tenants wants `*/5` back.
 //
 // SEPARATE FROM /api/cron ON PURPOSE. That one is hourly and measures
 // calendar days - late fees, renewals, entry reminders. NOTIF-05 asks for an
