@@ -1,11 +1,11 @@
 # Next session
 
-## Refresh closure artifacts (chosen 2026-09-24, Sonnet)
+## Closure artifacts are refreshed (2026-09-25). Nothing is queued. **Backlog has no open rows.** Remaining needs a person: legal review (`docs/LEGAL-REVIEW-CHECKLIST.md`), R-228 (counsel). Ask Shane before starting anything new.
 
-- Exec brief https://claude.ai/artifact/GSG4tVzFVzbgD4m5eacsrB: refresh the numbers (items, tests, decisions) to cover R-250 to R-252.
-- LinkedIn Ledger https://claude.ai/artifact/Ai5xKScgT2sWtqXRQ1ZA8i: draft posts from R-250 (autopay claim without a card), R-251 (MFA-less owner sees a bare directory), R-252 (/renewals said 30 days; the real windows are 60/180/60). Mine Defects Found first; keep adjacent pillars different.
-- R-252 CI run `36020127954` is **green** (confirmed 2026-09-25).
-- **Run this in a `claude` terminal session.** The VS Code session has no Artifact tool, and the Docs connector refuses both links (Shane chose the terminal, 2026-09-25).
+- Exec brief https://claude.ai/artifact/GSG4tVzFVzbgD4m5eacsrB already showed 293 items, 4,627 tests, 263 decisions, so it covers R-250 to R-252; no edit was needed.
+- LinkedIn Ledger https://claude.ai/artifact/Ai5xKScgT2sWtqXRQ1ZA8i: posts 69 (MarTech, R-250 autopay), 70 (Impact, R-251 MFA-less owner), 71 (Scale, R-252 renewals windows) added at the end of the queue (Version 40). None posted yet.
+- R-252 CI run `36020127954` is green. The D-263 run `36152831804` was still in progress: `gh run list --limit 3`.
+- Shane's Claude Code now runs on the subscription, not API credits: the key left `~/.zshrc` and lives in each app's own `.env`.
 
 # Next session
 
