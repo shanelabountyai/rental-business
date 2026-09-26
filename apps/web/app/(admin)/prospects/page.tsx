@@ -21,7 +21,7 @@ const STATUS_LABELS: Record<string, string> = {
 // schema comment for which later items own the rest.
 export default async function ProspectsPage() {
   const { actor } = await requireScope('lease.read')
-  const scope = await currentScope(actor)
+  const scope = await currentScope(actor, 'lease.read')
   const prospects = await prospectsForScope(scope)
 
   return (

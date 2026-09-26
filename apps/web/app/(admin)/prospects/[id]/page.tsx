@@ -61,7 +61,7 @@ export default async function ProspectDetailPage({
 }) {
   const { id } = await params
   const { actor } = await requireScope('lease.read')
-  const scope = await currentScope(actor)
+  const scope = await currentScope(actor, 'lease.read')
 
   const prospect = await prospectForWrite(id, scope)
   if (!prospect) notFound()

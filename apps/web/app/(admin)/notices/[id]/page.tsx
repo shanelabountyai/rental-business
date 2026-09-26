@@ -37,7 +37,7 @@ export default async function NoticePage({
 }) {
   const { id } = await params
   const { actor } = await requireScope('notice.read')
-  const scope = await currentScope(actor)
+  const scope = await currentScope(actor, 'notice.read')
   const notice = await getNotice(id, scope)
   if (!notice) notFound()
 

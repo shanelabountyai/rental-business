@@ -14,7 +14,7 @@ export const metadata = { title: 'Critical dates — Rental Operations' }
 // else rather than this page reading it a second, separate way.
 export default async function CriticalDatesPage() {
   const { actor } = await requireScope('property.read')
-  const scope = await currentScope(actor)
+  const scope = await currentScope(actor, 'property.read')
   const dates = await upcomingCriticalDates(scope, new Date())
 
   return (

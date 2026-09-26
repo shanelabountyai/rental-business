@@ -62,7 +62,7 @@ export default async function TasksPage({
   searchParams: Promise<{ type?: string }>
 }) {
   const { actor } = await requireScope('task.read')
-  const scope = await currentScope(actor)
+  const scope = await currentScope(actor, 'task.read')
   const now = new Date()
   const { type } = await searchParams
   // R-050's dashboard drills the "pending approvals" tile in here rather

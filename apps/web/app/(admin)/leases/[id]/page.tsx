@@ -156,7 +156,7 @@ export default async function LeaseDetailPage({
 }) {
   const { id } = await params
   const { actor } = await requireScope('lease.read')
-  const scope = await currentScope(actor)
+  const scope = await currentScope(actor, 'lease.read')
 
   const lease = await getLease(id, scope)
   // Out of scope and does not exist are indistinguishable - the same call
@@ -315,7 +315,7 @@ export default async function LeaseDetailPage({
     violationCasesForLease(lease.id),
     // R-090: only fetched for somebody who could actually send an amendment.
     execDecision.allowed && leaseIsInForce(lease.status)
-      ? screenedApplicants(scope)
+      ? screenedApplicants(lease.property.id)
       : Promise.resolve([]),
     canManageConfidential
       ? confidentialCaseCount(lease.id)

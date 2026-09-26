@@ -10,7 +10,7 @@ export const metadata = { title: 'New inspection — Rental Operations' }
 
 export default async function NewInspectionPage() {
   const { actor } = await requireScope('inspection.write')
-  const scope = await currentScope(actor)
+  const scope = await currentScope(actor, 'inspection.write')
   const [units, templates] = await Promise.all([
     unitsForNewInspection(scope),
     listInspectionTemplates(),

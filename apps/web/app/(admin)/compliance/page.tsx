@@ -13,7 +13,7 @@ export const metadata = { title: 'Compliance calendar — Rental Operations' }
 // completion date; the full history lives on the item's own page.
 export default async function CompliancePage() {
   const { actor } = await requireScope('property.read')
-  const scope = await currentScope(actor)
+  const scope = await currentScope(actor, 'property.read')
   const items = await listComplianceItems(scope)
 
   return (

@@ -33,7 +33,7 @@ function participantName(thread: {
 
 export default async function MessagesPage() {
   const { actor } = await requireScope('message.read')
-  const scope = await currentScope(actor)
+  const scope = await currentScope(actor, 'message.read')
   const [threads, unrouted, canWriteTemplates] = await Promise.all([
     listThreads(scope),
     unroutedCount(),

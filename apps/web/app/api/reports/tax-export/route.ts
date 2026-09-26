@@ -12,7 +12,7 @@ import { exportableEntities, taxExportFacts } from '@/lib/tax/queries.ts'
 
 export async function GET(request: Request) {
   const { actor } = await requireScope('report.financial')
-  const scope = await currentScope(actor)
+  const scope = await currentScope(actor, 'report.financial')
 
   const params = new URL(request.url).searchParams
   const entities = exportableEntities(scope)

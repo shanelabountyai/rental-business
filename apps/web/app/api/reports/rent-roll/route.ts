@@ -25,7 +25,7 @@ export async function GET() {
   // a report endpoint that is laxer than the page it mirrors is the classic
   // way scoping gets bypassed.
   const { actor } = await requireScope('ledger.read')
-  const scope = await currentScope(actor)
+  const scope = await currentScope(actor, 'ledger.read')
   const roll = await rentRoll(scope)
 
   const csv = toCsv(

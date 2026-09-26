@@ -27,7 +27,7 @@ function dollars(cents: number | null | undefined): string {
 
 export default async function ReservesPage() {
   const { actor } = await requireScope('report.financial')
-  const scope = await currentScope(actor)
+  const scope = await currentScope(actor, 'report.financial')
   const report = await reserveReport(scope, new Date())
 
   const entityTotals = new Map<string, { name: string; target: number; balance: number | null }>()

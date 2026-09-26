@@ -35,7 +35,7 @@ export default async function LeasingFunnelPage({
   searchParams: Promise<{ from?: string; to?: string }>
 }) {
   const { actor } = await requireScope('property.read')
-  const scope = await currentScope(actor)
+  const scope = await currentScope(actor, 'property.read')
   const params = await searchParams
 
   // The latest local day in scope, not a UTC one - see `reportToday`.

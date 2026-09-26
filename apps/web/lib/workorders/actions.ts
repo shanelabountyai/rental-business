@@ -123,6 +123,17 @@ export async function createWorkOrder(
   }
   const violations = validateWorkOrder(input)
   if (violations.length > 0) return violationsToState(violations)
+  // SEC-13: a hidden field is still a form field. Another unit's turnover
+  // would let this work order satisfy that turnover's re-key safety gate.
+  if (
+    turnoverProjectId &&
+    !(await prisma.turnoverProject.findFirst({
+      where: { id: turnoverProjectId, unitId },
+      select: { id: true },
+    }))
+  ) {
+    return { error: 'That turnover could not be found.' }
+  }
 
   const workOrder = await prisma.$transaction(async (tx) => {
     const created = await tx.workOrder.create({

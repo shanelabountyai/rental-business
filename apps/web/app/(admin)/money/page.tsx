@@ -37,7 +37,7 @@ export default async function MoneyPage() {
   // guard locks out every entity- and property-scoped actor. See
   // `requireScope`'s own comment.
   const { actor, scope: permissionScope } = await requireScope('ledger.read')
-  const scope = await currentScope(actor)
+  const scope = await currentScope(actor, 'ledger.read')
   const [rows, waiverRows, planRows] = await Promise.all([
     billingRunRows(scope.propertyIds),
     waiverPatternByTenant(scope.propertyIds),

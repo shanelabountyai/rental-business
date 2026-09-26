@@ -42,7 +42,7 @@ export default async function MaintenancePage({
   searchParams: Promise<{ glowing?: string }>
 }) {
   const { actor } = await requireScope('ticket.read')
-  const [scope, { glowing }] = await Promise.all([currentScope(actor), searchParams])
+  const [scope, { glowing }] = await Promise.all([currentScope(actor, 'ticket.read'), searchParams])
   const allTickets = await listOpenTickets(scope)
 
   // R-050's dashboard drills in with `?glowing=1` for "emergency/urgent open

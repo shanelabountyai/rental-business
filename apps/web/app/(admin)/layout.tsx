@@ -25,7 +25,7 @@ export default async function AdminLayout({
   children: React.ReactNode
 }) {
   const actor = await requireStaff()
-  const scope = await currentScope(actor)
+  const scope = await currentScope(actor, 'property.read')
 
   // Filtered on the server: a maintenance tech is never sent the markup for a
   // financial section, so there is nothing to reveal in the DOM.

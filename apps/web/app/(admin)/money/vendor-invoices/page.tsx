@@ -22,7 +22,7 @@ const RECENT_LIMIT = 20
 
 export default async function VendorInvoicesPage() {
   const { actor } = await requireScope('vendor.write')
-  const scope = await currentScope(actor)
+  const scope = await currentScope(actor, 'vendor.write')
 
   const entityIds = [...new Set(scope.availableProperties.map((p) => p.legalEntityId))]
   const [vendors, invoices] = await Promise.all([

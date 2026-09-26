@@ -112,7 +112,9 @@ export async function updateUnit(
 ): Promise<FormState> {
   const [property, existing] = await Promise.all([
     prisma.property.findUniqueOrThrow({ where: { id: propertyId } }),
-    prisma.unit.findUniqueOrThrow({ where: { id: unitId } }),
+    // SEC-10: the unit must belong to the property the permission is checked
+    // on. By id alone, `unit.write` on A rewrote B's unit, audited under A.
+    prisma.unit.findFirstOrThrow({ where: { id: unitId, propertyId } }),
   ])
   await requirePermission('unit.write', propertyResource(property))
 

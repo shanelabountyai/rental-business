@@ -10,7 +10,7 @@ export const metadata = { title: 'New task — Rental Operations' }
 // specific property picked in the form is re-checked by addTask() itself.
 export default async function NewTaskPage() {
   const { actor } = await requireScope('task.write')
-  const scope = await currentScope(actor)
+  const scope = await currentScope(actor, 'task.write')
 
   return (
     <div className="flex flex-col gap-6">

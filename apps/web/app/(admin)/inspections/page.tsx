@@ -13,7 +13,7 @@ export const metadata = { title: 'Inspections — Rental Operations' }
 
 export default async function InspectionsPage() {
   const { actor } = await requireScope('inspection.read')
-  const scope = await currentScope(actor)
+  const scope = await currentScope(actor, 'inspection.read')
   const inspections = await inspectionsForScope(scope)
 
   return (

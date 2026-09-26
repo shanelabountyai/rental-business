@@ -343,11 +343,20 @@ export async function closeViolationCase(
 
   let screened = false
   if (legitimizedApplicantId) {
-    const report = await prisma.screeningReport.findUnique({
-      where: { applicantId: legitimizedApplicantId },
-      select: { decision: true },
+    // SEC-15: only an applicant who applied at this case's property - the
+    // same set the page offers. Another property's screened applicant is
+    // not-found, not a legitimized occupant here.
+    const applicant = await prisma.applicant.findFirst({
+      where: { id: legitimizedApplicantId, application: { propertyId: found.propertyId } },
+      select: { screeningReport: { select: { decision: true } } },
     })
-    screened = Boolean(report?.decision)
+    if (!applicant) {
+      return {
+        error: 'Fix the highlighted fields.',
+        fieldErrors: { legitimizedApplicantId: 'That applicant was not found.' },
+      }
+    }
+    screened = Boolean(applicant.screeningReport?.decision)
   }
 
   const { violations, warnings } = validateClosure({

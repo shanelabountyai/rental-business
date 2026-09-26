@@ -147,6 +147,17 @@ export async function receiveAccommodationRequest(
   if (!tenantId && !requestedByName) {
     fieldErrors.requestedByName = 'Who asked? Pick a tenant, or type the name.'
   }
+  // SEC-14: the tenant must be on THIS lease, or the determination reaches a
+  // stranger's portal.
+  if (
+    tenantId &&
+    !(await prisma.leaseTenant.findUnique({
+      where: { leaseId_tenantId: { leaseId, tenantId } },
+      select: { id: true },
+    }))
+  ) {
+    fieldErrors.tenantId = 'That tenant is not on this lease.'
+  }
   if (Object.keys(fieldErrors).length > 0) {
     return { error: 'Fix the highlighted fields.', fieldErrors }
   }

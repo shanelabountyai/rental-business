@@ -20,7 +20,7 @@ export default async function PropertiesPage({
 }) {
   const { actor } = await requireScope('property.read')
   const [scope, { entityCreated }, canCreateEntity] = await Promise.all([
-    switcherScope(actor),
+    switcherScope(actor, 'property.read'),
     searchParams,
     // Bare permission check: per R-004 this only clears for a portfolio-wide
     // grant, which is exactly who may create a NEW entity.

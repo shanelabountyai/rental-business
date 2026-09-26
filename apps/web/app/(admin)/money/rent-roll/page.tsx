@@ -28,7 +28,7 @@ export default async function RentRollPage({
   // trap the messages inbox documents, and the rent roll is exactly the same
   // shape: a list filtered to what you may see, not a single record.
   const { actor } = await requireScope('ledger.read')
-  const [scope, { bucket, pastGrace }] = await Promise.all([currentScope(actor), searchParams])
+  const [scope, { bucket, pastGrace }] = await Promise.all([currentScope(actor, 'ledger.read'), searchParams])
 
   // SCOPED, for the same reason the guard above is. `actorCan('message.send')`
   // with no resource asks "may you message everywhere", which a

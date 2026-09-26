@@ -20,7 +20,7 @@ export const metadata = { title: 'Notices — Rental Operations' }
 
 export default async function NoticesPage() {
   const { actor } = await requireScope('notice.read')
-  const scope = await currentScope(actor)
+  const scope = await currentScope(actor, 'notice.read')
   const notices = await listNotices(scope)
 
   const unserved = notices.filter((notice) => !notice.servedAt)

@@ -16,7 +16,7 @@ export const metadata = { title: 'Vacancies — Rental Operations' }
 // week's leasing activity feeding the pipeline behind them.
 export default async function VacanciesPage() {
   const { actor } = await requireScope('property.read')
-  const scope = await currentScope(actor)
+  const scope = await currentScope(actor, 'property.read')
   const now = new Date()
   const [units, activity] = await Promise.all([
     vacantUnitsWithTurnover(scope, now),

@@ -69,7 +69,7 @@ describe('currentScope (SEC-03)', () => {
     scope.availableProperties.map((p) => p.id).filter((id) => id === propA || id === propB)
 
   it('shows both houses to read', async () => {
-    expect(ids(await currentScope(writerOnAReaderOnB())).sort()).toEqual([propA, propB].sort())
+    expect(ids(await currentScope(writerOnAReaderOnB(), 'property.read')).sort()).toEqual([propA, propB].sort())
   })
 
   it.each(['property.write', 'vendor.write', 'ledger.adjust'] as const)(

@@ -41,7 +41,7 @@ export async function GET(
 ) {
   const { id } = await params
   const { actor } = await requireScope('task.read')
-  const scope = await currentScope(actor)
+  const scope = await currentScope(actor, 'task.read')
 
   // 404 rather than 403 for a task outside this actor's scope - `getTask`
   // already applies that rule (ROLE-01), and this route must not become the

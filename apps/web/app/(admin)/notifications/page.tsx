@@ -64,7 +64,7 @@ export default async function NotificationsPage() {
   // and a resource-less check would deny them this page entirely rather than
   // letting the scoped query decide which rows they see.
   const { actor, scope: permissionScope } = await requireScope('message.read')
-  const scope = await currentScope(actor)
+  const scope = await currentScope(actor, 'message.read')
   const notifications = await listNotifications(scope)
 
   // R-147: an event that exhausted its retries is the most upstream "it did

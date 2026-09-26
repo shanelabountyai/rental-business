@@ -26,7 +26,7 @@ export default async function DocumentTemplatePage({
   const template = await getDocumentTemplate(id)
   if (!template) notFound()
 
-  const scope = await currentScope(actor)
+  const scope = await currentScope(actor, 'template.write')
 
   return (
     <div className="flex max-w-3xl flex-col gap-6">

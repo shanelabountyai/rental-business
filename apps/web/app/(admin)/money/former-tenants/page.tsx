@@ -19,7 +19,7 @@ export const metadata = { title: 'Former tenants — Rental Operations' }
 
 export default async function FormerTenantsPage() {
   const { actor } = await requireScope('ledger.read')
-  const scope = await currentScope(actor)
+  const scope = await currentScope(actor, 'ledger.read')
   const canWriteOff = !scopeIsEmpty(propertyScope(actor, 'ledger.adjust'))
   const receivables = await formerTenantReceivables(scope)
 

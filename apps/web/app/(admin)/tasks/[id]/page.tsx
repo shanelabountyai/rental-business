@@ -55,7 +55,7 @@ export default async function TaskDetailPage({
 }) {
   const { id } = await params
   const { actor } = await requireScope('task.read')
-  const scope = await currentScope(actor)
+  const scope = await currentScope(actor, 'task.read')
 
   const task = await getTask(id, scope)
   if (!task) notFound()

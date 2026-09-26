@@ -16,7 +16,7 @@ export const metadata = { title: 'New lease — Rental Operations' }
 
 export default async function NewLeasePage() {
   const { actor } = await requireScope('lease.write')
-  const scope = await currentScope(actor)
+  const scope = await currentScope(actor, 'lease.write')
   const units = await unitsForNewLease(scope)
 
   return (

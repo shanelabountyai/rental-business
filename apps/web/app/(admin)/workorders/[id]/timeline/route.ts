@@ -20,7 +20,7 @@ export async function GET(
 ) {
   const { id } = await params
   const { actor } = await requireScope('workorder.read')
-  const scope = await currentScope(actor)
+  const scope = await currentScope(actor, 'workorder.read')
 
   // `getWorkOrder`'s own scope filter IS the authorization here - same as
   // the work order detail page's own guard - so a work order outside this

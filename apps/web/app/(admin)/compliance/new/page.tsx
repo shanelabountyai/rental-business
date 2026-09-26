@@ -9,7 +9,7 @@ export const metadata = { title: 'New compliance item — Rental Operations' }
 
 export default async function NewComplianceItemPage() {
   const { actor } = await requireScope('property.read')
-  const scope = await currentScope(actor)
+  const scope = await currentScope(actor, 'property.read')
   const { properties, entities } = await complianceScopeOptions(scope)
 
   return (

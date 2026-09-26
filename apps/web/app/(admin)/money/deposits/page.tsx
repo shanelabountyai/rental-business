@@ -21,7 +21,7 @@ export default async function DepositsPage() {
   // own page takes - the layout proves the visitor is staff; this proves
   // they may see THIS section.
   const { actor } = await requireScope('ledger.adjust')
-  const scope = await currentScope(actor)
+  const scope = await currentScope(actor, 'ledger.adjust')
   const groups = await listUndepositedDepositGroups(scope)
 
   return (

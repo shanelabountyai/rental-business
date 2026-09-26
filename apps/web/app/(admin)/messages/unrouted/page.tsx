@@ -27,7 +27,7 @@ const REASON_LABELS: Record<string, string> = {
 
 export default async function UnroutedMessagesPage() {
   const { actor } = await requireScope('message.read')
-  const scope = await currentScope(actor)
+  const scope = await currentScope(actor, 'message.read')
 
   const [unrouted, sendScope] = await Promise.all([
     listUnroutedMessages(),

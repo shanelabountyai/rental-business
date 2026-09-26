@@ -93,6 +93,26 @@ export async function addDeduction(
   if (!Number.isInteger(amountCents) || amountCents <= 0) {
     fieldErrors.amountDollars = 'Enter how much to deduct.'
   }
+  // SEC-12: both ids come off the form, and the packet embeds whatever they
+  // point at. Another property's work order or inspection item is not-found.
+  const [workOrder, inspectionItem] = await Promise.all([
+    workOrderId
+      ? prisma.workOrder.findFirst({
+          where: { id: workOrderId, propertyId: deposit.propertyId },
+          select: { id: true },
+        })
+      : null,
+    inspectionItemId
+      ? prisma.inspectionItem.findFirst({
+          where: { id: inspectionItemId, inspection: { propertyId: deposit.propertyId } },
+          select: { id: true },
+        })
+      : null,
+  ])
+  if (workOrderId && !workOrder) fieldErrors.workOrderId = 'That work order was not found.'
+  if (inspectionItemId && !inspectionItem) {
+    fieldErrors.inspectionItemId = 'That inspection item was not found.'
+  }
   if (Object.keys(fieldErrors).length > 0) {
     return { error: 'Fix the highlighted fields.', fieldErrors }
   }

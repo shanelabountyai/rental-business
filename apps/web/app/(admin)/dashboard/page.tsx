@@ -55,7 +55,7 @@ export default async function DashboardPage() {
   // EVERYTHING", which a property-scoped manager cannot answer yes to, and
   // this is the one screen every scoped manager is expected to land on.
   const { actor } = await requireScope('property.read')
-  const scope = await currentScope(actor)
+  const scope = await currentScope(actor, 'property.read')
   const now = new Date()
   const summary = await dashboardSummary(scope, now)
 

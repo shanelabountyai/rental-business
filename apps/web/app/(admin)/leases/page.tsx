@@ -49,7 +49,7 @@ export default async function LeasesPage({
   searchParams: Promise<{ expiresWithin?: string }>
 }) {
   const { actor } = await requireScope('lease.read')
-  const scope = await currentScope(actor)
+  const scope = await currentScope(actor, 'lease.read')
   const [{ expiresWithin }, allLeases, canWrite] = await Promise.all([
     searchParams,
     listLeases(scope),

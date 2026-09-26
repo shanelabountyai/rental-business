@@ -19,7 +19,7 @@ const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 export async function GET(request: Request) {
   // Same permission as the screen. An export is a read of the same data.
   const { actor } = await requireScope('report.financial')
-  const scope = await currentScope(actor)
+  const scope = await currentScope(actor, 'report.financial')
 
   const url = new URL(request.url)
   const today = reportToday(scope, new Date())

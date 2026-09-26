@@ -17,7 +17,7 @@ const CATEGORY_OPTIONS = MAINTENANCE_CATEGORIES.map((category) => ({
 // form is re-checked by logPhoneMaintenanceRequest() itself (R-022).
 export default async function NewPhoneRequestPage() {
   const { actor } = await requireScope('ticket.write')
-  const scope = await currentScope(actor)
+  const scope = await currentScope(actor, 'ticket.write')
   const leaseTenants = await listLoggableLeaseTenants(scope)
 
   const callers = leaseTenants.map((lt) => ({

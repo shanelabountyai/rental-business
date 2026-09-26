@@ -84,7 +84,7 @@ export default async function EvictionCasePage({ params }: { params: Promise<{ i
   // guard locks out every entity- and property-scoped actor. See
   // `requireScope`'s own comment.
   const { actor } = await requireScope('eviction.manage')
-  const scope = await currentScope(actor)
+  const scope = await currentScope(actor, 'eviction.manage')
   const evictionCase = await getEvictionCase(id, scope)
   if (!evictionCase) notFound()
 

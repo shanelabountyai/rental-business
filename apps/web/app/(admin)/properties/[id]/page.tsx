@@ -55,7 +55,7 @@ export default async function PropertyDetailPage({
   // page entirely rather than letting getPropertyDetail's scoped lookup
   // decide per-property.
   const { actor } = await requireScope('property.read')
-  const scope = await switcherScope(actor)
+  const scope = await switcherScope(actor, 'property.read')
 
   const property = await getPropertyDetail(id, scope)
   if (!property) notFound()

@@ -25,7 +25,7 @@ const KIND_LABELS: Record<string, string> = {
 // R-015 and had no caller until this page.
 export default async function RenewalsPage() {
   const { actor } = await requireScope('property.read')
-  const scope = await currentScope(actor)
+  const scope = await currentScope(actor, 'property.read')
   const alerts = await filingCabinetAlertsDue(scope, new Date())
   const propertyName = (propertyId: string) =>
     scope.availableProperties.find((p) => p.id === propertyId)?.name ?? 'Unknown property'

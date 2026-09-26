@@ -40,7 +40,7 @@ export default async function MaintenanceAnalyticsPage({
   searchParams: Promise<{ from?: string; to?: string }>
 }) {
   const { actor } = await requireScope('property.read')
-  const scope = await currentScope(actor)
+  const scope = await currentScope(actor, 'property.read')
   const params = await searchParams
 
   // The range ends on the LATEST local day in scope, not on a UTC one - see

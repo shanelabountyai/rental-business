@@ -66,7 +66,7 @@ export default async function ThreadPage({
 }) {
   const { id } = await params
   const { actor } = await requireScope('message.read')
-  const scope = await currentScope(actor)
+  const scope = await currentScope(actor, 'message.read')
 
   const thread = await getThread(id, scope)
   // A thread outside the actor's scope is indistinguishable from one that

@@ -20,7 +20,7 @@ export default async function ComplianceItemPage({
 }) {
   const { id } = await params
   const { actor } = await requireScope('property.read')
-  const scope = await currentScope(actor)
+  const scope = await currentScope(actor, 'property.read')
   const item = await getComplianceItem(id, scope)
   if (!item) notFound()
 

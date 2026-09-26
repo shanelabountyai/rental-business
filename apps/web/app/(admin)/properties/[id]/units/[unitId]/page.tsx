@@ -98,7 +98,7 @@ export default async function UnitDetailPage({
 }) {
   const { id: propertyId, unitId } = await params
   const { actor } = await requireScope('unit.read')
-  const scope = await switcherScope(actor)
+  const scope = await switcherScope(actor, 'unit.read')
 
   const unit = await getUnitDetail(propertyId, unitId, scope)
   if (!unit) notFound()

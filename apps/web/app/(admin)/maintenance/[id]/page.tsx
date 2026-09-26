@@ -60,7 +60,7 @@ export default async function StaffTicketDetailPage({
   // guard locks out every entity- and property-scoped actor. See
   // `requireScope`'s own comment.
   const { actor } = await requireScope('ticket.read')
-  const scope = await currentScope(actor)
+  const scope = await currentScope(actor, 'ticket.read')
 
   const ticket = await getStaffTicket(id, scope)
   if (!ticket) notFound()

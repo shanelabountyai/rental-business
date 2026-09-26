@@ -23,7 +23,7 @@ export default async function AbandonmentPage() {
   // guard locks out every entity- and property-scoped actor. See
   // `requireScope`'s own comment.
   const { actor } = await requireScope('eviction.manage')
-  const scope = await currentScope(actor)
+  const scope = await currentScope(actor, 'eviction.manage')
   const cases = await listAbandonmentCases(scope)
   const open = cases.filter((row) => row.status !== 'CLOSED')
 

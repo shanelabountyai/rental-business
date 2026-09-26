@@ -11,7 +11,7 @@ export const metadata = { title: 'Cash summary — Rental Operations' }
 // tile already shows (R-076).
 export default async function CashSummaryPage() {
   const { actor } = await requireScope('ledger.read')
-  const scope = await currentScope(actor)
+  const scope = await currentScope(actor, 'ledger.read')
   const summaries = await cashSummaryByEntity(scope, new Date())
 
   return (

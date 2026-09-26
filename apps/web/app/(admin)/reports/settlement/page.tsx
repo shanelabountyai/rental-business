@@ -50,7 +50,7 @@ export default async function SettlementReportPage({
   searchParams: Promise<{ from?: string; to?: string }>
 }) {
   const { actor } = await requireScope('report.financial')
-  const scope = await currentScope(actor)
+  const scope = await currentScope(actor, 'report.financial')
   const params = await searchParams
   const today = reportToday(scope, new Date())
   const { from, to } = readRange(params, today)

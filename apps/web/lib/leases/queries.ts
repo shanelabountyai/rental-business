@@ -216,14 +216,16 @@ export async function selectableTenants(scope: PropertyScope) {
  * answer to "why was this person not added" should never be "the form let
  * me try".
  *
- * Scoped to the properties the actor can see. An applicant reaches this list
- * through the property their application was made against, which is the same
- * scoping every other staff read here uses.
+ * Scoped to the lease's property. An applicant reaches this list through the
+ * property their application was made against; the page is already guarded
+ * on that property.
  */
-export async function screenedApplicants(scope: ResolvedScope) {
+export async function screenedApplicants(propertyId: string) {
   return prisma.applicant.findMany({
     where: {
-      application: { propertyId: { in: scope.propertyIds } },
+      // The lease's own property (SEC-09): the builder refuses anyone else,
+      // so the picker must not offer them.
+      application: { propertyId },
       screeningReport: { decision: { in: ['APPROVED', 'CONDITIONAL'] } },
       // Already on a live tenancy through an earlier change - offering them
       // again would only produce the "already on this lease" refusal, or

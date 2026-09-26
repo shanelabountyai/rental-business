@@ -36,7 +36,7 @@ export default async function ConfidentialPage() {
   // already (R-007's section placeholders) and it landed here too; the e2e
   // scoping test is what found it.
   const { actor } = await requireScope('confidential.read')
-  const scope = await currentScope(actor)
+  const scope = await currentScope(actor, 'confidential.read')
   const cases = await listConfidentialCases(scope)
 
   return (

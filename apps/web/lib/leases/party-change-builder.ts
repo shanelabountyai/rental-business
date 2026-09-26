@@ -155,7 +155,14 @@ export async function buildPartyChange(
   const applicants =
     input.incomingApplicantIds.length > 0
       ? await prisma.applicant.findMany({
-          where: { id: { in: [...input.incomingApplicantIds] } },
+          // SEC-09: only applicants who applied at THIS lease's property. The
+          // ids come off a form, and unscoped this copied another property's
+          // applicant (and their PII) onto this lease as a tenant and signer.
+          // A foreign id reads as not-found, below.
+          where: {
+            id: { in: [...input.incomingApplicantIds] },
+            application: { propertyId: lease.property.id },
+          },
           select: {
             id: true,
             firstName: true,

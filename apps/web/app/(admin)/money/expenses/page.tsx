@@ -25,7 +25,7 @@ const RECENT_LIMIT = 20
 
 export default async function PropertyExpensesPage() {
   const { actor } = await requireScope('property.write')
-  const scope = await currentScope(actor)
+  const scope = await currentScope(actor, 'property.write')
 
   const entities = exportableEntities(scope)
   const properties = scope.availableProperties.filter((p) => scope.propertyIds.includes(p.id))

@@ -15,7 +15,7 @@ export const metadata = { title: 'Preventive maintenance — Rental Operations' 
 // table.
 export default async function PreventiveMaintenancePage() {
   const actor = await requirePermission('workorder.write')
-  const scope = await currentScope(actor)
+  const scope = await currentScope(actor, 'workorder.write')
   const templates = await listPreventiveTemplates()
 
   const withCounts = await Promise.all(

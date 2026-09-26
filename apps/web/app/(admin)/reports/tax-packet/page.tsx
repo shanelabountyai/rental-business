@@ -26,7 +26,7 @@ export default async function TaxPacketPage({
   searchParams: Promise<{ entity?: string; year?: string; basis?: string }>
 }) {
   const { actor } = await requireScope('report.financial')
-  const scope = await currentScope(actor)
+  const scope = await currentScope(actor, 'report.financial')
   const params = await searchParams
 
   const entities = exportableEntities(scope)

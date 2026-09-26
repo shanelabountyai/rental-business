@@ -48,7 +48,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ tok
   // the token.
   if (!actor || !actor.active) return notFound()
 
-  const scope = await currentScope(actor)
+  const scope = await currentScope(actor, 'property.read')
   const now = new Date()
   const events = await calendarEventsFor(scope.propertyIds, feedWindow(now))
 

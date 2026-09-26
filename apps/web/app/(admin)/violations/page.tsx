@@ -23,7 +23,7 @@ export default async function ViolationsPage() {
   // guard locks out every entity- and property-scoped actor. See
   // `requireScope`'s own comment.
   const { actor } = await requireScope('lease.read')
-  const scope = await currentScope(actor)
+  const scope = await currentScope(actor, 'lease.read')
   const cases = await listViolationCases(scope)
 
   return (

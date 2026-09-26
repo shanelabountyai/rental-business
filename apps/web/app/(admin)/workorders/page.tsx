@@ -35,7 +35,7 @@ export default async function WorkOrdersPage() {
   // guard locks out every entity- and property-scoped actor. See
   // `requireScope`'s own comment.
   const { actor } = await requireScope('workorder.read')
-  const scope = await currentScope(actor)
+  const scope = await currentScope(actor, 'workorder.read')
   const unsorted = await listOpenWorkOrders(scope)
   const workOrders = [...unsorted].sort(
     (a, b) => priorityRank(a.priority) - priorityRank(b.priority) || a.createdAt.getTime() - b.createdAt.getTime(),

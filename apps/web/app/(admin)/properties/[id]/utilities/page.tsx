@@ -31,7 +31,7 @@ export default async function PropertyUtilitiesPage({
 }) {
   const { id } = await params
   const { actor } = await requireScope('property.read')
-  const scope = await currentScope(actor)
+  const scope = await currentScope(actor, 'property.read')
 
   const property = await getPropertyDetail(id, scope)
   if (!property) notFound()

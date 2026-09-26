@@ -39,7 +39,7 @@ export default async function DepositDispositionPage({
 }) {
   const { id } = await params
   const { actor } = await requireScope('lease.read')
-  const scope = await currentScope(actor)
+  const scope = await currentScope(actor, 'lease.read')
 
   const lease = await getDepositForLease(id, scope)
   if (!lease) notFound()

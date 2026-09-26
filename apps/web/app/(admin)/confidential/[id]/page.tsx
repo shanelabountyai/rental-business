@@ -49,7 +49,7 @@ export default async function ConfidentialCasePage({
   // is worse still and simply broken, refusing every scoped actor (see
   // `requireScope`'s own comment).
   const { actor } = await requireScope('confidential.read')
-  const scope = await currentScope(actor)
+  const scope = await currentScope(actor, 'confidential.read')
   const found = await getConfidentialCase(id, scope)
   if (!found) notFound()
 

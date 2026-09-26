@@ -23,7 +23,7 @@ export default async function SearchPage({
   // guard locks out every entity- and property-scoped actor. See
   // `requireScope`'s own comment.
   const { actor } = await requireScope('property.read')
-  const [{ q }, scope] = await Promise.all([searchParams, currentScope(actor)])
+  const [{ q }, scope] = await Promise.all([searchParams, currentScope(actor, 'property.read')])
   const query = q?.trim()
 
   return (

@@ -108,7 +108,7 @@ export default async function WorkOrderDetailPage({
 }) {
   const { id } = await params
   const { actor } = await requireScope('workorder.read')
-  const scope = await currentScope(actor)
+  const scope = await currentScope(actor, 'workorder.read')
 
   const workOrder = await getWorkOrder(id, scope)
   if (!workOrder) notFound()

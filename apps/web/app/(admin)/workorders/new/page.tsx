@@ -21,7 +21,7 @@ export default async function NewWorkOrderPage({
 }) {
   const { ticketId } = await searchParams
   const { actor } = await requireScope('workorder.write')
-  const scope = await currentScope(actor)
+  const scope = await currentScope(actor, 'workorder.write')
 
   // workorder.write does not imply ticket.read - every role today happens
   // to grant both together, but this page has no reason to lean on that

@@ -35,12 +35,16 @@ function parseCookie(raw: string | undefined): ScopeSelection {
  * below it runs scoped queries - both need this and neither should pay for it
  * twice.
  *
- * A write action passes the permission it acts under (SEC-03). The default is
- * what the actor may SEE, and an action that checks its record against that
- * lets a manager with write on A and read on B write on B.
+ * The permission is REQUIRED, and it is the one the caller was guarded with:
+ * a write action passes the permission it acts under (SEC-03), a page guarded
+ * by `requireScope('lease.read')` passes `'lease.read'` (SEC-11). There used to
+ * be a `'property.read'` default, and ~70 read pages guarded by a narrower
+ * permission fell through to it, so a portfolio-wide maintenance tech with a
+ * manager grant on one house read every lease, rent roll and confidential
+ * case. `current-scope-callers.test.ts` holds every caller to its guard.
  */
 export const currentScope = cache(
-  async (actor: Actor, permission: Permission = 'property.read'): Promise<ResolvedScope> => {
+  async (actor: Actor, permission: Permission): Promise<ResolvedScope> => {
     const scope = propertyScope(actor, permission)
 
     const properties = await prisma.property.findMany({

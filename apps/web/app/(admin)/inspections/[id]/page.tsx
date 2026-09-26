@@ -38,7 +38,7 @@ export default async function InspectionPage({
 }) {
   const { id } = await params
   const { actor } = await requireScope('inspection.read')
-  const scope = await currentScope(actor)
+  const scope = await currentScope(actor, 'inspection.read')
 
   const inspection = await getInspection(id, scope)
   if (!inspection) notFound()

@@ -37,7 +37,7 @@ export default async function ClaimPage({ params }: { params: Promise<{ id: stri
   // guard locks out every entity- and property-scoped actor. See
   // `requireScope`'s own comment.
   const { actor } = await requireScope('property.read')
-  const scope = await currentScope(actor)
+  const scope = await currentScope(actor, 'property.read')
   const claim = await getClaim(id, scope)
   if (!claim) notFound()
 

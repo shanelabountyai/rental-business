@@ -14,7 +14,7 @@ export const metadata = { title: 'Retention review — Rental Operations' }
 // see, nothing else.
 export default async function RetentionReviewPage() {
   const { actor } = await requireScope('document.read')
-  const scope = await currentScope(actor)
+  const scope = await currentScope(actor, 'document.read')
   const due = await documentsPastRetention(scope, new Date())
   const propertyNames = new Map(scope.availableProperties.map((p) => [p.id, p.name]))
 
