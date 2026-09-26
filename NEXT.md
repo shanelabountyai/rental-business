@@ -1,5 +1,11 @@
 # Next session
 
+## PROJECT CLOSED / SHIPPED (2026-09-25, Shane). Nothing queued; do not start new work without Shane.
+
+- Live: https://rent.labintelligence.co (shared password). Repo: https://github.com/shanelabountyai/rental-business
+- Exec brief https://claude.ai/artifact/GSG4tVzFVzbgD4m5eacsrB · LinkedIn Ledger https://claude.ai/artifact/Ai5xKScgT2sWtqXRQ1ZA8i · Scorecard https://claude.ai/artifact/TognMvisj8T9GNQGtE9MbJ
+- Only human steps remain: legal review (`docs/LEGAL-REVIEW-CHECKLIST.md`), R-228 (counsel).
+
 ## R-253..R-257 are done (`681fbb4`): scorecard gaps K7, K6, K12, K11, K1 closed (D-264). **Backlog has no open rows.** Remaining needs a person: legal review, R-228. Ask Shane before starting anything new.
 
 - CI run `36191480549` on `2cb5ba3` is **green** (the first push, `681fbb4`, failed on a Stripe-key shape check in `env.ts`, fixed in `2cb5ba3`). Local gate: lint, typecheck, 3,341 unit, ship-deps, build, 146 e2e on touched specs all green.
