@@ -4,11 +4,11 @@
   "crons": [
     {
       "path": "/api/cron",
-      "schedule": "0 * * * *"
+      "schedule": "0 6 * * *"
     },
     {
       "path": "/api/cron/escalations",
-      "schedule": "*/15 * * * *"
+      "schedule": "0 6 * * *"
     }
   ]
 }
