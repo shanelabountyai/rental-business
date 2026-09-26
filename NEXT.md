@@ -1,5 +1,7 @@
 # Next session
 
+## SEC-09..15 are done (`6d75d45`, 2026-09-26): the foundation K4 sweep's three HIGHs and four MEDs. **SEC-16 (who triages the unrouted inbox) is a design question for Shane**; the K4 LOWs are not filed. CI not confirmed yet: `gh run list --limit 3`. Otherwise still closed: ask Shane before starting anything new.
+
 ## PROJECT CLOSED / SHIPPED (2026-09-25, Shane). Nothing queued; do not start new work without Shane.
 
 - Live: https://rent.labintelligence.co (shared password). Repo: https://github.com/shanelabountyai/rental-business

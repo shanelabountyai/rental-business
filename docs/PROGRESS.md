@@ -13563,7 +13563,7 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 
 ## SEC-09 to SEC-15 — K4 sweep: second ids off the form, and read pages scoped by the wrong permission
 
-**Commit:** `PENDING`  ·  **Date:** 2026-09-26
+**Commit:** `6d75d45`  ·  **Date:** 2026-09-26
 
 **What it built.** Fixes for the rental findings of the foundation's K4 authorization sweep (`~/Projects/saas foundation/audit/K4-SWEEP-2026-09-26.md`). **SEC-09:** `buildPartyChange` loads incoming applicants only from the lease's property, and the lease page's picker (`screenedApplicants`) offers only that set. **SEC-10:** `updateUnit` loads the unit by `{ id, propertyId }`. **SEC-11:** `currentScope`'s `'property.read'` default is gone; every one of the ~75 callers passes the permission it was guarded with (`requireScope('lease.read')` → `currentScope(actor, 'lease.read')`), the layout switcher and the calendar feed pass `'property.read'` explicitly. **SEC-12..15:** `addDeduction` (work order, inspection item), `createWorkOrder` (turnover), `receiveAccommodationRequest` (tenant) and `closeViolationCase` (legitimized applicant) each verify the second id belongs to the same property, lease or unit; a foreign id is a field error. Tests: [lib/auth/cross-property-ids.test.ts](apps/web/lib/auth/cross-property-ids.test.ts) (SEC-09, SEC-10, real RBAC against a property-scoped owner) and [lib/scope/current-scope-callers.test.ts](apps/web/lib/scope/current-scope-callers.test.ts) (SEC-11, static: every caller names a permission the file is guarded with).
 
