@@ -36,7 +36,7 @@ export default async function MessagesPage() {
   const scope = await currentScope(actor, 'message.read')
   const [threads, unrouted, canWriteTemplates] = await Promise.all([
     listThreads(scope),
-    unroutedCount(),
+    unroutedCount(actor),
     // Portfolio-wide and resource-less, like the templates page itself: a
     // template belongs to no property (R-049).
     actorCan('template.write'),

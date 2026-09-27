@@ -1,5 +1,6 @@
 import 'server-only'
 
+import { type Actor, propertyScope } from '@rental/core/rbac'
 import { prisma } from '@rental/db'
 import type { ResolvedScope } from '@/lib/scope/current-scope.ts'
 
@@ -96,7 +97,21 @@ export async function getThread(threadId: string, scope: ResolvedScope) {
  * The page guards on `message.send`, which is the permission that lets
  * somebody file one, rather than pretending a scope check happened.
  */
-export async function listUnroutedMessages(limit = 50) {
+/**
+ * SEC-16 / D-266: only PORTFOLIO-WIDE staff triage the unrouted inbox. An
+ * unrouted message has no property, so no property or entity grant can
+ * authorize reading it - a stranger's text stays with whoever holds
+ * `message.read` over the whole portfolio (a null-scope assignment,
+ * `propertyScope(...).everything`). Filing also needs `message.send` at the
+ * same level. The one gate for the page, its badge, both reads and the action.
+ */
+export function triagesUnrouted(actor: Actor, filing = false): boolean {
+  const needed = filing ? (['message.read', 'message.send'] as const) : (['message.read'] as const)
+  return needed.every((permission) => propertyScope(actor, permission).everything)
+}
+
+export async function listUnroutedMessages(actor: Actor, limit = 50) {
+  if (!triagesUnrouted(actor)) return []
   return prisma.unroutedMessage.findMany({
     where: { routedAt: null },
     orderBy: { receivedAt: 'asc' },
@@ -104,6 +119,7 @@ export async function listUnroutedMessages(limit = 50) {
   })
 }
 
-export async function unroutedCount(): Promise<number> {
+export async function unroutedCount(actor: Actor): Promise<number> {
+  if (!triagesUnrouted(actor)) return 0
   return prisma.unroutedMessage.count({ where: { routedAt: null } })
 }

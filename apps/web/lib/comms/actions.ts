@@ -9,8 +9,9 @@ import { wallClockToUtc } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
-import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
+import { propertyResource, requirePermission, requireStaff } from '@/lib/auth/guard.ts'
 import { logCall, routeUnroutedMessage, sendThreadMessage } from './messages.ts'
+import { triagesUnrouted } from './queries.ts'
 import { propertyForTenant, resolveThread } from './threads.ts'
 
 // Writes for comms threading (COMM-01, R-017). Same shape as every other
@@ -146,12 +147,19 @@ export async function logCallInThread(
  * responsibility for the association. The permission check runs against the
  * TARGET thread's property, so somebody cannot file a stray text into a
  * property they have no access to.
+ *
+ * And before any of that, the SEC-16 / D-266 gate: only portfolio-wide
+ * `message.read` + `message.send` may file at all, since the unrouted row
+ * itself has no property any narrower grant could cover.
  */
 export async function fileUnroutedMessage(
   unroutedId: string,
   _previous: FormState,
   formData: FormData,
 ): Promise<FormState> {
+  if (!triagesUnrouted(await requireStaff(), true)) {
+    redirect('/no-access?permission=message.send&reason=no_permission')
+  }
   const tenantId = str(formData, 'tenantId')
   if (!tenantId) {
     return { error: 'Choose who this message is from.' }

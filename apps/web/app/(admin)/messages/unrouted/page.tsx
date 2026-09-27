@@ -1,12 +1,12 @@
 import { friendlyTimestamp } from '@rental/core/scheduling'
 import { formatPhone } from '@rental/core/comms'
-import { scopeIsEmpty } from '@rental/core/rbac'
 import { prisma } from '@rental/db'
 import Link from 'next/link'
+import { redirect } from 'next/navigation'
 import { FileUnroutedForm } from '@/components/comms/file-unrouted-form.tsx'
-import { currentScope as writeScope, requireScope } from '@/lib/auth/guard.ts'
+import { requireScope } from '@/lib/auth/guard.ts'
 import { fileUnroutedMessage } from '@/lib/comms/actions.ts'
-import { listUnroutedMessages } from '@/lib/comms/queries.ts'
+import { listUnroutedMessages, triagesUnrouted } from '@/lib/comms/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 
 export const metadata = { title: 'Unsorted messages — Rental Operations' }
@@ -27,13 +27,15 @@ const REASON_LABELS: Record<string, string> = {
 
 export default async function UnroutedMessagesPage() {
   const { actor } = await requireScope('message.read')
+  // SEC-16 / D-266: portfolio-wide staff only. A one-house manager gets the
+  // same /no-access a missing permission gets.
+  if (!triagesUnrouted(actor)) {
+    redirect('/no-access?permission=message.read&reason=no_permission')
+  }
   const scope = await currentScope(actor, 'message.read')
 
-  const [unrouted, sendScope] = await Promise.all([
-    listUnroutedMessages(),
-    writeScope('message.send'),
-  ])
-  const canFile = !scopeIsEmpty(sendScope)
+  const unrouted = await listUnroutedMessages(actor)
+  const canFile = triagesUnrouted(actor, true)
 
   // Only tenants at properties this actor can see - the filing dropdown must
   // not become a directory of every tenant in the portfolio for somebody
