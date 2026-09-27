@@ -13577,7 +13577,7 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 
 ## SEC-16 — the unrouted inbox is portfolio-wide only
 
-**Commit:** `PENDING`  ·  **Date:** 2026-09-26
+**Commit:** `58a0b5b`  ·  **Date:** 2026-09-26
 
 **What it built.** `triagesUnrouted(actor, filing?)` in [lib/comms/queries.ts](apps/web/lib/comms/queries.ts): true only when `message.read` (and, for filing, `message.send`) comes from a null-scope assignment (`propertyScope(...).everything`). It gates `listUnroutedMessages` and `unroutedCount` (both now take the actor and return empty/zero otherwise), the `/messages/unrouted` page (redirect to `/no-access`), the "could not place" banner on `/messages` (it reads the gated count), and `fileUnroutedMessage` (redirect to `/no-access` before any tenant is looked up). The action's existing `message.send` check on the destination tenant's property stays. Tests: [lib/comms/unrouted-access.test.ts](apps/web/lib/comms/unrouted-access.test.ts), six cases against real grants.
 
