@@ -95,6 +95,18 @@ export function proxy(request: NextRequest) {
   const locked = demoGate(request)
   if (locked) return locked
 
+  // Prefetches and client-side navigations return RSC payloads rather than a
+  // document, so there is nothing to nonce. This used to be a matcher `missing`
+  // rule, which skipped the proxy - demo gate included - for any request whose
+  // client chose to send `Purpose: prefetch`: a one-header bypass of the gate.
+  // The check lives here so the gate has already run.
+  if (
+    request.headers.has('next-router-prefetch') ||
+    request.headers.get('purpose') === 'prefetch'
+  ) {
+    return NextResponse.next()
+  }
+
   const nonce = crypto.randomUUID().replace(/-/g, '')
   const csp = policy(nonce)
 
@@ -134,12 +146,6 @@ export const config = {
     {
       source:
         '/((?!api/|_next/static|_next/image|icon.svg|listings/[^/]+/photos/|sign/[^/]+/document|vendor/[^/]+/documents/).*)',
-      missing: [
-        // Not on prefetches and client-side navigations: those return RSC
-        // payloads rather than a document, so there is nothing to nonce.
-        { type: 'header', key: 'next-router-prefetch' },
-        { type: 'header', key: 'purpose', value: 'prefetch' },
-      ],
     },
   ],
 }
