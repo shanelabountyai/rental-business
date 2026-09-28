@@ -816,6 +816,59 @@ describe('processStripeEvent', () => {
     expect(await prisma.ledgerEntry.count({ where: { leaseId: lease.id } })).toBe(1)
   })
 
+  it('REPLAYS an event whose projection threw after the claim, exactly once (MONEY-02)', async () => {
+    // The throw lands AFTER the ledger rows are written, inside the
+    // transaction - the rollback is what has to be undone, not a no-op.
+    const { lease, customerId } = await provisionedLease()
+    const event = invoiceEvent({ customer: customerId })
+    // Swapped by assignment, not `vi.spyOn`: the client is a Proxy whose
+    // property descriptor reads `value: undefined`, so `mockRestore` writes
+    // that back and breaks `$transaction` for every later test in the file.
+    const client = prisma as unknown as { $transaction: (fn: (tx: unknown) => Promise<unknown>) => Promise<unknown> }
+    const original = client.$transaction
+    client.$transaction = (fn) =>
+      original.call(prisma, async (tx) => {
+        await fn(tx)
+        throw new Error('connection reset mid-projection')
+      })
+    try {
+      await expect(processStripeEvent(event)).rejects.toThrow(/mid-projection/)
+    } finally {
+      client.$transaction = original
+    }
+    expect(await prisma.ledgerEntry.count({ where: { leaseId: lease.id } })).toBe(0)
+    expect(
+      (await prisma.processedStripeEvent.findUniqueOrThrow({ where: { stripeEventId: event.id } })).outcome,
+    ).toBe('failed')
+
+    // Stripe's retry after the 500. It used to answer `duplicate` here.
+    expect((await processStripeEvent(event)).outcome).toBe('projected')
+    expect(await processStripeEvent(event)).toEqual({ outcome: 'duplicate' })
+    expect(await prisma.ledgerEntry.count({ where: { leaseId: lease.id } })).toBe(1)
+    expect(await prisma.payment.count({ where: { leaseId: lease.id } })).toBe(1)
+  }, 20_000)
+
+  it('takes over a claim a dead process left `received`, but not a live one (MONEY-02)', async () => {
+    const { lease, customerId } = await provisionedLease()
+    const live = invoiceEvent({ customer: customerId })
+    const dead = invoiceEvent({ customer: customerId })
+    for (const [event, ageMs] of [[live, 0], [dead, 20 * 60_000]] as const) {
+      await prisma.processedStripeEvent.create({
+        data: {
+          stripeEventId: event.id,
+          type: event.type,
+          outcome: 'received',
+          occurredAt: new Date(),
+          processedAt: new Date(Date.now() - ageMs),
+        },
+      })
+    }
+
+    expect(await processStripeEvent(live)).toEqual({ outcome: 'duplicate' })
+    expect((await processStripeEvent(dead)).outcome).toBe('projected')
+    expect(await prisma.ledgerEntry.count({ where: { leaseId: lease.id } })).toBe(1)
+  }, 20_000)
+
   it('records a failed payment WITHOUT moving the balance', async () => {
     // Nothing has changed about what is owed - the charge is still owed.
     const { lease, customerId } = await provisionedLease()

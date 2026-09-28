@@ -102,7 +102,9 @@ export function detectDrift(
   const knownEvents = new Set(events.map((e) => e.stripeEventId))
 
   for (const event of events) {
-    if (event.outcome === 'received') {
+    // `failed` too (MONEY-02): a retry takes it back and resolves it, so one
+    // still standing is an event Stripe stopped retrying before it landed.
+    if (event.outcome === 'received' || event.outcome === 'failed') {
       drift.push({
         kind: 'stuck_claim',
         stripeEventId: event.stripeEventId,

@@ -94,10 +94,57 @@ export async function processStripeEvent(
       },
     })
   } catch (error) {
-    if (isUniqueViolation(error)) return { outcome: 'duplicate' }
-    throw error
+    if (!isUniqueViolation(error)) throw error
+    if (!(await retakeClaim(event.id))) return { outcome: 'duplicate' }
   }
 
+  // A THROW RELEASES THE CLAIM (MONEY-02). Without this the 500 made Stripe
+  // retry, the retry lost on the primary key and returned 200 `duplicate`, and
+  // an event whose projection rolled back was gone for good. `failed` is what
+  // `retakeClaim` lets the retry take back. Only a claim still `received` is
+  // marked: once the projection transaction commits the row says `projected`,
+  // and nothing may make committed money replayable.
+  try {
+    return await projectClaimed(event, interpretation)
+  } catch (error) {
+    await prisma.processedStripeEvent
+      .updateMany({
+        where: { stripeEventId: event.id, outcome: 'received' },
+        data: { outcome: 'failed', detail: String(error).slice(0, 500) },
+      })
+      .catch(() => {})
+    throw error
+  }
+}
+
+/// Past any function's run time (the route declares none; Vercel's ceiling is
+/// 800s). A `received` claim older than this belongs to a process that died
+/// without reaching its catch - a timeout or a crash - so a retry may take it.
+const STALE_CLAIM_MS = 15 * 60_000
+
+/**
+ * Takes back a claim whose projection did not land (MONEY-02): one marked
+ * `failed`, or one left `received` by a process that never came back.
+ * Conditional, so two concurrent retries cannot both win it.
+ */
+async function retakeClaim(stripeEventId: string): Promise<boolean> {
+  const { count } = await prisma.processedStripeEvent.updateMany({
+    where: {
+      stripeEventId,
+      OR: [
+        { outcome: 'failed' },
+        { outcome: 'received', processedAt: { lt: new Date(Date.now() - STALE_CLAIM_MS) } },
+      ],
+    },
+    data: { outcome: 'received', detail: null, processedAt: new Date() },
+  })
+  return count === 1
+}
+
+async function projectClaimed(
+  event: StripeEventEnvelope,
+  interpretation: ReturnType<typeof interpretStripeEvent>,
+): Promise<PipelineResult> {
   if (interpretation.outcome === 'ignore') {
     await recordOutcome(event.id, 'ignored', interpretation.reason)
     return { outcome: 'ignored', detail: interpretation.reason }
@@ -217,9 +264,23 @@ export async function processStripeEvent(
         })
       : null
 
+  // One name for the outcome, used for the recorded row and the returned
+  // value alike. Two spellings of the same fact is how a caller and a log
+  // end up disagreeing about what happened.
+  const outcomeDetail = action === 'reverse' ? 'payment_returned' : intent.kind
+
   // Assigned inside the transaction's callback, which narrowing cannot see.
   let paymentId = null as string | null
   await prisma.$transaction(async (tx) => {
+    // THE OUTCOME COMMITS WITH THE MONEY (MONEY-02). Written first only because
+    // the branches below return early; inside the transaction, order does not
+    // matter. The claim reads `projected` exactly when the rows exist, so a
+    // failure after this commit can never be replayed into a second credit.
+    await tx.processedStripeEvent.update({
+      where: { stripeEventId: event.id },
+      data: { outcome: 'projected', detail: outcomeDetail },
+    })
+
     if (action === 'reverse' && settled) {
       await reverseSettledPayment(tx, event, intent, payer, settled)
       return
@@ -370,12 +431,6 @@ export async function processStripeEvent(
       })
     }
   })
-
-  // One name for the outcome, used for the recorded row and the returned
-  // value alike. Two spellings of the same fact is how a caller and a log
-  // end up disagreeing about what happened.
-  const outcomeDetail = action === 'reverse' ? 'payment_returned' : intent.kind
-  await recordOutcome(event.id, 'projected', outcomeDetail)
 
   // THE INVOICE, TOO (MONEY-01). Only an intent this product created carries
   // a principal, and only its settlement is applied - Stripe must stop
@@ -652,11 +707,15 @@ async function claimPortalEcho(
   ) {
     return false
   }
+  // OURS COUNTS AS UNCLAIMED (MONEY-02). The claim commits on its own, so a
+  // replay of an event that failed after taking it must find it again - or it
+  // falls through and credits the tenant's money a second time.
+  const unclaimed = { OR: [{ claimedByEventId: null }, { claimedByEventId: stripeEventId }] }
   const split = await prisma.paymentInvoiceSplit.findFirst({
     where: {
       stripeInvoiceId: intent.stripeInvoiceId,
       amountCents: intent.amountCents,
-      claimedByEventId: null,
+      ...unclaimed,
       createdAt: { gte: new Date(intent.occurredAt.getTime() - COUNTER_CLAIM_WINDOW_MS) },
       payment: { leasePayerId, stripePaymentIntentId: { not: null } },
     },
@@ -665,7 +724,7 @@ async function claimPortalEcho(
   })
   if (!split) return false
   const { count } = await prisma.paymentInvoiceSplit.updateMany({
-    where: { id: split.id, claimedByEventId: null },
+    where: { id: split.id, ...unclaimed },
     data: { claimedByEventId: stripeEventId },
   })
   return count === 1
