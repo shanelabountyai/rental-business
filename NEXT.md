@@ -7,7 +7,6 @@
 - **CI**: runs for `c437056` (MONEY-04) and `89aa89c` (SEC-18, which also covers MONEY-03/07/08) were in flight at handoff. Check with `gh run list --limit 3`.
 - **Local `rental_test` has leftover data**: 4 unit tests fail on `main` too (`comms.test.ts` inbound routing ×2, `pre-move-out-scheduling-job.test.ts` ×2), while CI is green.
 - **Next item: LEGAL-01 (HIGH)**, where screening lookback windows are configured but never applied. LEGAL-02 is also HIGH. The earlier "no HIGH rows open" line was wrong. Model: **Opus** (fair-housing correctness).
-- SEC-17's backlog row has no ✅ although D-267 fixed it (`0200b54`). Mark it when next in the file.
 - **Roll the Stripe TEST secret key**: a masking regex printed it into the 2026-09-28 session transcript. Test mode only, not sent anywhere.
 - SEC-17 reconfirmed in production 2026-09-28 (prefetch → 401).
 - **Not done, needs Shane:** rotate the demo password (`demo-rental-2026`, tracked in `seed-demo-access.mts` and D-257) — repo is PUBLIC so it's exposed regardless of code fixes. Consider making the repo private too.
