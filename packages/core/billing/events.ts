@@ -602,7 +602,11 @@ export function ledgerAmountCents(intent: ProjectionIntent): number {
       // retracts, so the pair nets to nothing on the statement.
       return -intent.amountCents
     case 'payment_succeeded':
-      return -intent.amountCents
+      // THE PRINCIPAL, NOT THE CARD FEE ON TOP (MONEY-07). The fee is the
+      // processor's price for the rail, not a debt this ledger ever raised,
+      // so crediting it left the tenant in credit by every fee paid. The
+      // Payment row still records the whole amount Stripe collected.
+      return -(intent.principalCents ?? intent.amountCents)
     case 'refund':
       // Money going back out re-opens the balance it had closed.
       return intent.amountCents

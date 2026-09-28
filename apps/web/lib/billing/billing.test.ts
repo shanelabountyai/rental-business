@@ -1282,7 +1282,10 @@ describe('a portal payment reaches the invoice (MONEY-01)', () => {
       select: { amountCents: true, stripeObjectId: true },
     })
     expect(credits.every((row) => row.stripeObjectId === paymentIntentId)).toBe(true)
-    expect(credits.reduce((total, row) => total + row.amountCents, 0)).toBe(-103_000)
+    // The PRINCIPAL is credited, not the $30 fee on top (MONEY-07); the
+    // Payment row still records all that Stripe collected.
+    expect(credits.reduce((total, row) => total + row.amountCents, 0)).toBe(-100_000)
+    expect((await prisma.payment.findUniqueOrThrow({ where: { id: payment.id } })).amountCents).toBe(103_000)
 
     // A genuine payment of the SAME amount on the same invoice - Stripe's
     // retry collecting the rest - is money, not an echo, and is credited.
@@ -1294,5 +1297,9 @@ describe('a portal payment reaches the invoice (MONEY-01)', () => {
       _sum: { amountCents: true },
     })
     expect(after._sum.amountCents).toBe(-100_000)
+
+    // $2,000 owed, $2,000 of principal paid: square, not $30 in credit.
+    const balance = await prisma.ledgerEntry.aggregate({ where: { leaseId: lease.id }, _sum: { amountCents: true } })
+    expect(balance._sum.amountCents).toBe(0)
   })
 })

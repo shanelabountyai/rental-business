@@ -13614,3 +13614,15 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 **What it left behind.** On the applicant-fee path, a replay after a partial failure sees the fee as already recorded and skips its audit row, notification and completion check. No money moves there; noted in D-269.
 
 **Gate.** `lint` 0 errors (16 warnings, same as `main`), `typecheck` clean. `billing.test.ts` plus the core and web ledger tests: **232 passed** of 232. **Mutation-checked:** against the unfixed `webhook.ts`, both new tests go red. **The full `npm test` did not run clean locally.** Four other projects were running test sweeps at the same time and it collapsed into 20-second timeouts and one expired 5-second Prisma transaction, 58 failures across unrelated suites with no assertion failure among the billing ones. The run was stopped. CI owns the full unit and e2e sweep for this push. No UI changed, so no e2e specs were touched.
+
+## MONEY-07 — the card fee is no longer credited as rent
+
+**Commit:** `PENDING`  ·  **Date:** 2026-09-28
+
+**What it built.** `ledgerAmountCents` ([packages/core/billing/events.ts](packages/core/billing/events.ts)) returns `-(principalCents ?? amountCents)` for `payment_succeeded`. The allocation plan, the ledger rows and MONEY-01's invoice push all read that one number, so all three now move the same principal. The `Payment` row still records the whole amount Stripe collected. MONEY-01's webhook test used to assert the bug (`-103_000` credited on a $1,000 + $30 payment). It now asserts `-100_000` credited, `103_000` on the Payment row, and a lease balance of exactly zero once the $2,000 invoice is paid in full. The core test asserts the principal-only ledger amount.
+
+**What it decided.** D-270. Credit the principal only; don't post the fee as a charge. There is no fee `ChargeType`. The fee is the processor's price for the rail and not a debt this ledger raised. It stays visible on the `payment.intent_created` audit row and on the receipt. Also moved D-269, which the previous session had written above the log's title, down to the end where it belongs.
+
+**What it left behind.** MONEY-10 (new row): a full card refund debits `amount_refunded`, which includes the fee, so it re-opens the fee as owed. It overlaps MONEY-03.
+
+**Gate.** `lint` 0 errors (16 warnings, same as `main`), `typecheck` clean. Both billing test files: **81 passed** of 81. Full `npm test`: 3442 passed, 4 skipped, **4 failed**: 2 in `comms.test.ts` (inbound routing answers `unrouted`) and 2 in `pre-move-out-scheduling-job.test.ts`. **The same 4 fail on `main` with this change stashed**, and CI was green on that code against a fresh database, so they come from leftover data in the local `rental_test` database and not from this change. Not chased here.

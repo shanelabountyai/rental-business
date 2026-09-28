@@ -541,6 +541,9 @@ describe('interpretStripeEvent', () => {
       // The fee stays with the payment; only the principal goes to invoices.
       principalCents: 150_000,
     })
+    // ...and only the principal reaches the ledger (MONEY-07). Crediting the
+    // fee left the tenant in credit by it.
+    expect(ledgerAmountCents(result.intent)).toBe(-150_000)
   })
 
   it('REFUSES an autopay intent under dahlia, where `invoice` is not on the object at all', () => {
