@@ -13629,7 +13629,7 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 
 ## MONEY-08 — an autopay ACH debit no longer leaves a PENDING row behind
 
-**Commit:** `PENDING_SHA`  ·  **Date:** 2026-09-28
+**Commit:** `ab9e0ad`  ·  **Date:** 2026-09-28
 
 **What it built.** `writePayment` ([apps/web/lib/billing/webhook.ts](apps/web/lib/billing/webhook.ts)) now matches an invoice event with no PaymentIntent to the PENDING row it finishes before creating a new one. The match (`pendingAutopayDebit`) is same payer, same amount, from the last 10 days, and an intent the portal did not create. It covers `invoice.payment_failed` too, so a failed autopay debit ends `FAILED` instead of leaving the PENDING row beside a new FAILED one. The adopted row gets the invoice id, so a later ACH return, which arrives keyed by invoice alone, now finds it to reverse. New test in `billing.test.ts`: a portal ACH and an autopay ACH of the same amount are both in flight, and the invoice settles the autopay row and leaves the portal row alone.
 
