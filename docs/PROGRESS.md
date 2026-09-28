@@ -13653,7 +13653,7 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 
 ## SEC-18 — the MFA rate limit guards the callback route, not just the form
 
-**Commit:** `SHA-PENDING`  ·  **Date:** 2026-09-28
+**Commit:** `89aa89c`  ·  **Date:** 2026-09-28
 
 **What it built.** `consumeRateLimit(\`mfa:<challenge>\`, RATE_LIMITS.mfaVerify)` moved from `completeStaffMfa` in [apps/web/lib/auth/actions.ts](apps/web/lib/auth/actions.ts) into the `staff-challenge` provider's `authorize` in [apps/web/auth.ts](apps/web/auth.ts). A direct `POST /api/auth/callback/staff-challenge` now spends the same 8-per-5-minutes budget as the form. When the limit trips, `authorize` throws `MfaRateLimited`, and `signInOrFormError` turns that into the existing "Too many attempts" message.
 
