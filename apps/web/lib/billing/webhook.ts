@@ -650,6 +650,30 @@ async function writePayment(
     if (recorded) return recorded
   }
 
+  // AN AUTOPAY DEBIT FINISHING (MONEY-08). Its `payment_intent.processing` is
+  // projected as a PENDING row keyed by the intent, but under the account's
+  // API version the invoice event that settles or fails it carries no
+  // `payment_intent`, so the dedupe above cannot find that row. Without this
+  // it stayed PENDING for ever beside a second row, and `startPayment` counted
+  // it as in flight, shrinking what the tenant could pay.
+  if (
+    (intent.kind === 'payment_succeeded' || intent.kind === 'payment_failed') &&
+    intent.stripePaymentIntentId == null &&
+    intent.stripeInvoiceId != null
+  ) {
+    const pending = await pendingAutopayDebit(tx, payer.id, intent)
+    // Conditional, so two invoice events cannot both take the same row.
+    if (pending) {
+      const { count } = await tx.payment.updateMany({
+        where: { id: pending.id, status: 'PENDING' },
+        // The invoice is stamped so a later ACH return, which arrives keyed
+        // by invoice alone, finds this row to reverse (`findSettledPayment`).
+        data: { status, stripeInvoiceId: intent.stripeInvoiceId },
+      })
+      if (count === 1) return pending
+    }
+  }
+
   return tx.payment.create({
     data: {
       propertyId: payer.propertyId,
@@ -666,6 +690,45 @@ async function writePayment(
       stripeInvoiceId: intent.stripeInvoiceId,
     },
   })
+}
+
+/**
+ * The oldest PENDING row this invoice event is finishing: same payer, same
+ * amount, keyed by an intent this product did NOT create.
+ *
+ * A portal intent is excluded because it settles through its own
+ * `payment_intent.succeeded`; handing its row to an autopay invoice of the
+ * same amount would settle the wrong payment and leave the autopay row stuck.
+ * The portal is told apart by the `payment.intent_created` audit row it
+ * writes for every intent, the same row the receipt reads its fee from.
+ */
+async function pendingAutopayDebit(tx: Tx, leasePayerId: string, intent: ProjectionIntent) {
+  const candidates = await tx.payment.findMany({
+    where: {
+      leasePayerId,
+      status: 'PENDING',
+      amountCents: intent.amountCents,
+      stripePaymentIntentId: { not: null },
+      receivedAt: { gte: new Date(intent.occurredAt.getTime() - PENDING_DEBIT_WINDOW_MS) },
+    },
+    orderBy: { receivedAt: 'asc' },
+    select: { id: true, status: true, stripePaymentIntentId: true },
+  })
+  if (candidates.length === 0) return null
+  const portal = await tx.auditLog.findMany({
+    where: {
+      action: 'payment.intent_created',
+      entityId: leasePayerId,
+      OR: candidates.map((row) => ({
+        after: { path: ['stripePaymentIntentId'], equals: row.stripePaymentIntentId! },
+      })),
+    },
+    select: { after: true },
+  })
+  const ours = new Set(
+    portal.map((row) => (row.after as { stripePaymentIntentId?: string } | null)?.stripePaymentIntentId),
+  )
+  return candidates.find((row) => !ours.has(row.stripePaymentIntentId!)) ?? null
 }
 
 async function applySettledPortalPayment(paymentId: string, intent: ProjectionIntent) {
@@ -741,6 +804,12 @@ async function recordOutcome(stripeEventId: string, outcome: string, detail?: st
 /// The push is synchronous, so the real gap is seconds; two days is slack for
 /// clocks and time zones, not for delivery - redelivery keeps its `created`.
 const COUNTER_CLAIM_WINDOW_MS = 2 * 86_400_000
+
+/// How far back an invoice event looks for the PENDING autopay row it
+/// finishes (MONEY-08). An ACH debit settles in about four business days, so
+/// ten calendar days is holiday slack - and shorter than a month, so last
+/// month's row (stranded before this fix) is never taken for this month's.
+const PENDING_DEBIT_WINDOW_MS = 10 * 86_400_000
 
 /// Counter payments whose own `invoice.updated` never came back (R-192,
 /// D-207): money staff took that no ledger entry shows. Past the claim window

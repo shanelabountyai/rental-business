@@ -1303,3 +1303,57 @@ describe('a portal payment reaches the invoice (MONEY-01)', () => {
     expect(balance._sum.amountCents).toBe(0)
   })
 })
+
+describe('an autopay ACH debit settles its own pending row (MONEY-08)', () => {
+  // Stripe's own intent reports `processing` keyed by the intent; the invoice
+  // event that settles it carries no `payment_intent` under the account's API
+  // version, so it used to write a second row and leave the first PENDING.
+  it('ends with one SETTLED row, and leaves a portal payment of the same amount alone', async () => {
+    const lease = await seedActiveLease()
+    await provisionLeaseBilling(lease.id)
+    const payer = await prisma.leasePayer.findFirstOrThrow({ where: { leaseId: lease.id } })
+    const customer = payer.stripeCustomerId!
+    const invoiceId = `in_${randomUUID().replace(/-/g, '').slice(0, 14)}`
+    const now = Math.floor(Date.now() / 1000)
+    const processing = (id: string, metadata: Record<string, string>) =>
+      processStripeEvent({
+        id: `evt_${randomUUID().replace(/-/g, '')}`,
+        type: 'payment_intent.processing',
+        created: now,
+        data: { object: { id, customer, amount: 150_000, payment_method_types: ['us_bank_account'], metadata } },
+      })
+
+    // A portal ACH payment of the same amount, in flight first. Its intent
+    // was audited by `startPayment`, which is what marks it as ours.
+    const portalIntent = `pi_${randomUUID().replace(/-/g, '').slice(0, 16)}`
+    await prisma.auditLog.create({
+      data: {
+        actorType: 'SYSTEM',
+        entityType: 'LeasePayer',
+        entityId: payer.id,
+        action: 'payment.intent_created',
+        after: { stripePaymentIntentId: portalIntent },
+      },
+    })
+    await processing(portalIntent, { leasePayerId: payer.id })
+
+    const autopayIntent = `pi_${randomUUID().replace(/-/g, '').slice(0, 16)}`
+    await processing(autopayIntent, {})
+    await processStripeEvent(
+      invoiceEvent({ customer, invoiceId, amountPaid: 150_000, paymentIntentId: null, created: now + 60 }),
+    )
+
+    const rows = await prisma.payment.findMany({
+      where: { leasePayerId: payer.id },
+      select: { stripePaymentIntentId: true, stripeInvoiceId: true, status: true, amountCents: true },
+      orderBy: { stripePaymentIntentId: 'asc' },
+    })
+    expect(rows).toEqual(
+      expect.arrayContaining([
+        { stripePaymentIntentId: autopayIntent, stripeInvoiceId: invoiceId, status: 'SETTLED', amountCents: 150_000 },
+        { stripePaymentIntentId: portalIntent, stripeInvoiceId: null, status: 'PENDING', amountCents: 150_000 },
+      ]),
+    )
+    expect(rows).toHaveLength(2)
+  })
+})

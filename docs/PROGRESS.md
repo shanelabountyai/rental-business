@@ -13626,3 +13626,15 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 **What it left behind.** MONEY-10 (new row): a full card refund debits `amount_refunded`, which includes the fee, so it re-opens the fee as owed. It overlaps MONEY-03.
 
 **Gate.** `lint` 0 errors (16 warnings, same as `main`), `typecheck` clean. Both billing test files: **81 passed** of 81. Full `npm test`: 3442 passed, 4 skipped, **4 failed**: 2 in `comms.test.ts` (inbound routing answers `unrouted`) and 2 in `pre-move-out-scheduling-job.test.ts`. **The same 4 fail on `main` with this change stashed**, and CI was green on that code against a fresh database, so they come from leftover data in the local `rental_test` database and not from this change. Not chased here.
+
+## MONEY-08 — an autopay ACH debit no longer leaves a PENDING row behind
+
+**Commit:** `PENDING_SHA`  ·  **Date:** 2026-09-28
+
+**What it built.** `writePayment` ([apps/web/lib/billing/webhook.ts](apps/web/lib/billing/webhook.ts)) now matches an invoice event with no PaymentIntent to the PENDING row it finishes before creating a new one. The match (`pendingAutopayDebit`) is same payer, same amount, from the last 10 days, and an intent the portal did not create. It covers `invoice.payment_failed` too, so a failed autopay debit ends `FAILED` instead of leaving the PENDING row beside a new FAILED one. The adopted row gets the invoice id, so a later ACH return, which arrives keyed by invoice alone, now finds it to reverse. New test in `billing.test.ts`: a portal ACH and an autopay ACH of the same amount are both in flight, and the invoice settles the autopay row and leaves the portal row alone.
+
+**What it decided.** D-271. Kept projecting `processing` for Stripe's own intents rather than dropping it, because it is what keeps an in-flight autopay debit in `inFlightCents`. The portal is told apart by its `payment.intent_created` audit row, so no schema change.
+
+**What it left behind.** PENDING rows stranded before this fix stay PENDING; how many exist was not measured.
+
+**Gate.** `lint` and `typecheck` clean. `billing.test.ts` and the core billing tests: **149 passed** of 149. **Mutation-checked:** with `webhook.ts` reverted, the new test goes red (three rows instead of two). Full `npm test`: 3443 passed, 4 skipped, **4 failed**, the same 4 as on `main` (`comms.test.ts` inbound routing ×2, `pre-move-out-scheduling-job.test.ts` ×2), which CI passes against a fresh database. No e2e spec touched; CI owns the sweep.
