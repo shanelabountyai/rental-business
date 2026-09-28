@@ -13641,7 +13641,7 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 
 ## MONEY-03 + MONEY-10 — refunds book their increment and never re-open the card fee
 
-**Commit:** `PENDING`  ·  **Date:** 2026-09-28
+**Commit:** `8177006`  ·  **Date:** 2026-09-28
 
 **What it built.** `charge.refunded` in [packages/core/billing/events.ts](packages/core/billing/events.ts) now projects `amount_refunded` less `previous_attributes.amount_refunded`, so a $200 then a $300 refund book +$200 and +$300 (previously +$200 and +$500). In [apps/web/lib/billing/webhook.ts](apps/web/lib/billing/webhook.ts) a refund's debit is capped at the refunded Payment's net ledger credit, so a full refund of a $1,000 + $30 card payment re-opens $1,000, not $1,030.
 
