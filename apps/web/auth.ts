@@ -1,14 +1,15 @@
 import { recordAudit } from '@rental/core/audit'
 import {
+  RATE_LIMITS,
   isLockedOut,
   matchRecoveryCode,
   openSecret,
   verifyTotp,
 } from '@rental/core/auth'
 import { prisma } from '@rental/db'
-import NextAuth from 'next-auth'
+import NextAuth, { CredentialsSignin } from 'next-auth'
 import Credentials from 'next-auth/providers/credentials'
-import { redeemToken } from './lib/auth/store.ts'
+import { consumeRateLimit, redeemToken } from './lib/auth/store.ts'
 
 // Auth.js v5, JWT sessions, no database adapter.
 //
@@ -58,6 +59,12 @@ declare module 'next-auth' {
 
 const SESSION_MAX_AGE_SECONDS = 60 * 60 * 12
 
+/// Thrown rather than returning null so the MFA form can say "wait" instead of
+/// "wrong code". `code` lands in a redirect URL, so it names nothing sensitive.
+export class MfaRateLimited extends CredentialsSignin {
+  code = 'rate_limited'
+}
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
   trustHost: true,
   session: { strategy: 'jwt', maxAge: SESSION_MAX_AGE_SECONDS },
@@ -101,6 +108,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         if (enrolled) {
           const code = asString(raw.code)
           if (!code) return null
+
+          // SEC-18: the limit lives HERE, not in the server action, because
+          // this provider is reachable directly at
+          // POST /api/auth/callback/staff-challenge. Keyed on the challenge,
+          // not the IP: a six-digit code is only a million wide, and this is
+          // the window in which an attacker already holds a valid password.
+          const limit = await consumeRateLimit(
+            `mfa:${challengeToken.slice(0, 16)}`,
+            RATE_LIMITS.mfaVerify,
+          )
+          if (!limit.allowed) throw new MfaRateLimited()
 
           const accepted = await verifySecondFactor(
             staffUser.credential.id,

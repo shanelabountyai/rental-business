@@ -371,6 +371,42 @@ test.describe('staff MFA', () => {
     expect(credential!.mfaRecoveryCodes).toHaveLength(2)
     expect(credential!.mfaRecoveryCodes).not.toContain(hashToken(used))
   })
+
+  // SEC-18: the limit used to live only in the `completeStaffMfa` server
+  // action, while the provider behind it is a public route. Hitting the route
+  // directly skipped it, so one challenge's five-minute life was a brute-force
+  // window. The correct code on the ninth try is what proves the limit holds:
+  // without it, that request signs in.
+  test('rate-limits a staff-challenge callback posted directly', async ({ page }) => {
+    const staff = await createEnrolledStaff()
+    await submitPassword(page, staff.email)
+    await expect(page).toHaveURL(/\/login\/mfa/)
+
+    const challengeToken = (await page.context().cookies()).find(
+      (c) => c.name === 'rental_mfa_challenge',
+    )!.value
+    const { csrfToken } = await (await page.request.get('/api/auth/csrf')).json()
+    const post = (code: string) =>
+      page.request.post('/api/auth/callback/staff-challenge', {
+        form: { csrfToken, challengeToken, code },
+        maxRedirects: 0,
+      })
+
+    // RATE_LIMITS.mfaVerify is 8 per five minutes.
+    for (let attempt = 0; attempt < 8; attempt++) await post('000000')
+    await post(currentCode(staff.secret))
+
+    await page.goto('/dashboard')
+    await expect(page).toHaveURL(/\/login/)
+
+    // And the form shares the same budget, and says why.
+    await page.goto('/login/mfa')
+    await page.getByLabel(/code/i).fill(currentCode(staff.secret))
+    await page.getByRole('button', { name: 'Verify' }).click()
+    await expect(formAlert(page)).toHaveText(
+      'Too many attempts. Wait a few minutes and try again.',
+    )
+  })
 })
 
 test.describe('authorization (R-004)', () => {

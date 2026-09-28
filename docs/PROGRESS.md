@@ -13650,3 +13650,15 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 **What it left behind.** A refund of an invoice-paid payment (no PaymentIntent on our row under dahlia) still lands on a fresh `REFUNDED` row and is not capped. A partial refund still marks the Payment `REFUNDED`.
 
 **Gate.** `lint` and `typecheck` clean. `billing.test.ts` and the core billing tests: **84 passed** of 84. **Mutation-checked:** with either `events.ts` or `webhook.ts` reverted, the new app test goes red. Full `npm test`: 3445 passed, 4 skipped, **4 failed**, the same 4 as on `main` (`comms.test.ts` inbound routing ×2, `pre-move-out-scheduling-job.test.ts` ×2). No e2e spec touched; CI owns the sweep.
+
+## SEC-18 — the MFA rate limit guards the callback route, not just the form
+
+**Commit:** `SHA-PENDING`  ·  **Date:** 2026-09-28
+
+**What it built.** `consumeRateLimit(\`mfa:<challenge>\`, RATE_LIMITS.mfaVerify)` moved from `completeStaffMfa` in [apps/web/lib/auth/actions.ts](apps/web/lib/auth/actions.ts) into the `staff-challenge` provider's `authorize` in [apps/web/auth.ts](apps/web/auth.ts). A direct `POST /api/auth/callback/staff-challenge` now spends the same 8-per-5-minutes budget as the form. When the limit trips, `authorize` throws `MfaRateLimited`, and `signInOrFormError` turns that into the existing "Too many attempts" message.
+
+**What it decided.** D-273. The check was moved, not copied, so the form still gets 8 tries rather than 4. A wrong code still does not count toward account lockout.
+
+**What it left behind.** Nothing owned elsewhere.
+
+**Gate.** `lint` and `typecheck` clean (only the existing `requirePermission` warnings). Auth unit tests: **100 passed** of 100. `e2e/auth.spec.ts` staff sign-in, MFA and brute-force blocks, both projects: **24 passed** of 24 (`--list` Total: 24). **Mutation-checked:** with the provider's limit disabled, the new spec goes red on both projects, because the ninth direct post (the correct code) signs in. CI owns the full sweep.

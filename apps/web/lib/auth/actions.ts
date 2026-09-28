@@ -19,7 +19,7 @@ import { normalizePhone } from '@rental/core/comms'
 import { prisma } from '@rental/db'
 import { cookies, headers } from 'next/headers'
 import { redirect } from 'next/navigation'
-import { auth, signIn, signOut } from '@/auth.ts'
+import { MfaRateLimited, auth, signIn, signOut } from '@/auth.ts'
 import { currentAuditActor } from '@/lib/audit/index.ts'
 import { authUrl, deliverAuthLink } from './delivery.ts'
 import { consumeRateLimit, issueToken, redeemToken, revokeTokens } from './store.ts'
@@ -65,6 +65,7 @@ async function signInOrFormError(
     return {}
   } catch (error) {
     if (isRedirectError(error)) throw error
+    if (error instanceof MfaRateLimited) return { error: GENERIC_RATE_LIMIT_ERROR }
     return { error: GENERIC_SIGN_IN_ERROR }
   }
 }
@@ -198,15 +199,8 @@ export async function completeStaffMfa(
     return { error: 'That sign-in attempt expired. Start again.' }
   }
 
-  // Keyed on the challenge, not the IP: a six-digit code is only a million
-  // wide, and this is the window in which an attacker already holds a valid
-  // password.
-  const limit = await consumeRateLimit(
-    `mfa:${challengeToken.slice(0, 16)}`,
-    RATE_LIMITS.mfaVerify,
-  )
-  if (!limit.allowed) return { error: GENERIC_RATE_LIMIT_ERROR }
-
+  // Rate limiting happens in the provider itself (SEC-18), so a direct POST
+  // to the Auth.js callback pays the same budget as this form.
   const result = await signInOrFormError('staff-challenge', {
     challengeToken,
     code,
@@ -214,6 +208,7 @@ export async function completeStaffMfa(
   })
   // The challenge survives a wrong code on purpose - it is burned only after
   // the factor verifies - so the message says "try again", not "start over".
+  if (result.error === GENERIC_RATE_LIMIT_ERROR) return result
   return result.error
     ? { error: 'That code was not right. Check your authenticator app.' }
     : result
