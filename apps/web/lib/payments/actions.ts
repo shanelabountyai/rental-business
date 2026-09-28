@@ -254,6 +254,7 @@ async function chargeResolvedPayer(
     const intent = await getBillingProvider().createPaymentIntent({
       stripeCustomerId: payer.stripeCustomerId,
       amountCents: totalCents,
+      principalCents: amountCents,
       currency: 'usd',
       rail,
       leasePayerId: payer.id,

@@ -224,8 +224,9 @@ export async function reconcileLedger(
  *     decline. Keyed on the type, this said "no row expected" in both
  *     cases - so **a lost reversal, the most serious drift there is, was
  *     invisible to the check built to catch exactly that.**
- *   - `payment_intent.succeeded` projects only when it carries no invoice;
- *     the invoiced ones are ignored to avoid double-counting.
+ *   - `payment_intent.succeeded` projects only when this product created
+ *     the intent (MONEY-01); Stripe's own, raised for an invoice, are
+ *     ignored to avoid double-counting.
  *   - `invoice.finalized` writes the CHARGE half (R-040b) and was simply
  *     missing.
  *

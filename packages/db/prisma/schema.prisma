@@ -4509,15 +4509,23 @@ model Payment {
  * the webhook claims each event against: the split names the invoice and the
  * amount, and a split is claimed once a ledger entry for its payment carries
  * its invoice.
+ * A PORTAL payment has splits too (MONEY-01): its money was already
+ * projected from its own PaymentIntent, and the splits are what we then told
+ * Stripe to apply to the open invoices. Their `invoice.updated` echoes are
+ * claimed by `claimedByEventId` instead of a ledger entry, because a ledger
+ * entry is exactly what an echo must not write.
  * Not append-only. A split whose push failed is deleted, and a Payment that
  * is backed out takes its splits with it.
  */
 model PaymentInvoiceSplit {
-  id              String   @id @default(cuid())
-  paymentId       String
-  stripeInvoiceId String
-  amountCents     Int
-  createdAt       DateTime @default(now())
+  id               String   @id @default(cuid())
+  paymentId        String
+  stripeInvoiceId  String
+  amountCents      Int
+  /// The `invoice.updated` a portal split was pushed as (MONEY-01). Null on a
+  /// counter split, which is claimed by its ledger entry instead.
+  claimedByEventId String?  @unique
+  createdAt        DateTime @default(now())
 
   payment Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
 

@@ -389,8 +389,24 @@ export class SimulatedBillingProvider implements BillingProvider {
     })
     if (!payer) return null
 
-    const [owed, charges] = await Promise.all([
+    // STRIPE'S VIEW, NOT OURS (MONEY-01, D-27). A portal payment is credited
+    // in our ledger from its PaymentIntent the moment it settles, and a
+    // PaymentIntent touches no invoice - so an answer read off the ledger
+    // balance showed the invoice paid before anything had told Stripe so, and
+    // no test could see that nothing ever did. Money from an intent is added
+    // back; what it was then pushed onto an invoice (its splits) is taken off.
+    // ponytail: a refund of a portal payment reads as re-opening the invoice
+    // here, which Stripe does not do.
+    const [owed, fromIntents, pushed, charges] = await Promise.all([
       leaseBalanceCents(payer.leaseId),
+      prisma.ledgerEntry.aggregate({
+        where: { leaseId: payer.leaseId, stripeObjectId: { startsWith: 'pi_' } },
+        _sum: { amountCents: true },
+      }),
+      prisma.paymentInvoiceSplit.aggregate({
+        where: { payment: { leaseId: payer.leaseId, stripePaymentIntentId: { not: null } } },
+        _sum: { amountCents: true },
+      }),
       prisma.ledgerEntry.findMany({
         where: { leaseId: payer.leaseId, amountCents: { gt: 0 } },
         select: { amountCents: true, occurredAt: true, stripeObjectId: true },
@@ -416,7 +432,7 @@ export class SimulatedBillingProvider implements BillingProvider {
     }
 
     const open: OpenInvoice[] = []
-    let left = owed
+    let left = owed - (fromIntents._sum.amountCents ?? 0) - (pushed._sum.amountCents ?? 0)
     const newestFirst = [...periods.values()].sort(
       (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
     )
@@ -432,6 +448,7 @@ export class SimulatedBillingProvider implements BillingProvider {
   async createPaymentIntent(input: {
     stripeCustomerId: string
     amountCents: number
+    principalCents: number
     currency: string
     rail: PaymentRail
     leasePayerId: string

@@ -204,6 +204,10 @@ export interface ProjectionIntent {
   /// projector, so an event that reports a negative amount for its own
   /// reasons cannot flip a credit into a charge.
   amountCents: number
+  /// A portal payment's `amountCents` less the card fee (MONEY-01): what is
+  /// applied to the payer's open Stripe invoices once it settles. Set only
+  /// on a PaymentIntent this product created.
+  principalCents?: number
   /// Stripe's own timestamp for the money event, not when we projected it.
   occurredAt: Date
   description: string
@@ -480,6 +484,25 @@ export function interpretStripeEvent(event: StripeEventEnvelope): InterpretResul
         }
       }
 
+      // ...AND `invoice` IS NOT THERE TO READ under the account's API version
+      // (MONEY-01, D-268). `2026-07-29.dahlia` dropped it from the
+      // PaymentIntent - measured against the test account, on the object and
+      // on the event alike - so the check above never fired and every
+      // autopay payment was credited twice: once here and once by its
+      // `invoice.updated`. What survives every version is OUR metadata: an
+      // intent this product created carries `leasePayerId` (the portal) or
+      // `applicantId` (an application fee), and one Stripe raised for an
+      // invoice carries neither. Kept alongside the `invoice` read, not in
+      // place of it, so an older-versioned endpoint is refused for either.
+      const metadata = (object.metadata ?? {}) as Record<string, unknown>
+      const ours = str(metadata, 'leasePayerId') ?? str(metadata, 'applicantId')
+      if (!ours && event.type !== 'payment_intent.processing') {
+        return {
+          outcome: 'ignore',
+          reason: `${event.type} was not created by this product, so its invoice reports this money`,
+        }
+      }
+
       const amount = int(object, 'amount')
       if (amount == null || amount <= 0) {
         return { outcome: 'ignore', reason: 'payment intent reported no amount' }
@@ -502,6 +525,7 @@ export function interpretStripeEvent(event: StripeEventEnvelope): InterpretResul
           stripePaymentIntentId: stripeObjectId,
           rail: railOf(object),
           amountCents: amount,
+          principalCents: principalOf(metadata, amount),
           occurredAt,
           description:
             kind === 'payment_pending'
@@ -539,6 +563,16 @@ function chargeIdsOf(object: Record<string, unknown>): string[] {
     if (id) ids.push(id)
   }
   return ids
+}
+
+/// What of a portal payment is owed money rather than the card fee on top
+/// (MONEY-01). Stamped as metadata when the intent is created, because
+/// Stripe metadata is strings. An intent from before the stamp existed, or
+/// one carrying a value that cannot be the principal, reads as the whole
+/// amount - the open invoices cap what is applied either way.
+function principalOf(metadata: Record<string, unknown>, amount: number): number {
+  const stamped = Number(str(metadata, 'principalCents'))
+  return Number.isInteger(stamped) && stamped > 0 && stamped <= amount ? stamped : amount
 }
 
 function railOf(object: Record<string, unknown>): 'ACH' | 'CARD' | null {

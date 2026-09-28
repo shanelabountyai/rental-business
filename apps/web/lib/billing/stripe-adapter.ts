@@ -688,6 +688,7 @@ export class StripeBillingProvider implements BillingProvider {
   async createPaymentIntent(input: {
     stripeCustomerId: string
     amountCents: number
+    principalCents: number
     currency: string
     rail: PaymentRail
     leasePayerId: string
@@ -705,6 +706,7 @@ export class StripeBillingProvider implements BillingProvider {
         'payment_method_types[0]': STRIPE_PAYMENT_METHOD[input.rail],
         'metadata[leaseId]': input.leaseId,
         'metadata[leasePayerId]': input.leasePayerId,
+        'metadata[principalCents]': String(input.principalCents),
       },
       input.idempotencyKey,
     )

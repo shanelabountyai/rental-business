@@ -281,6 +281,7 @@ describe('what the driver actually sends', () => {
     await provider().createPaymentIntent({
       stripeCustomerId: 'cus_1',
       amountCents: 154_512,
+      principalCents: 150_000,
       currency: 'usd',
       rail: 'CARD',
       leasePayerId: 'payer_1',
@@ -292,6 +293,9 @@ describe('what the driver actually sends', () => {
     const body = String(calls[0]!.init.body)
     expect(body).toContain('amount=154512')
     expect(body).toContain('payment_method_types%5B0%5D=card')
+    // The fee-free part, read back by the webhook to settle open invoices
+    // (MONEY-01).
+    expect(body).toContain('metadata%5BprincipalCents%5D=150000')
   })
 
   it('sends ACH as us_bank_account, the free rail', async () => {
@@ -299,6 +303,7 @@ describe('what the driver actually sends', () => {
     await provider().createPaymentIntent({
       stripeCustomerId: 'cus_1',
       amountCents: 150_000,
+      principalCents: 150_000,
       currency: 'usd',
       rail: 'ACH',
       leasePayerId: 'payer_1',

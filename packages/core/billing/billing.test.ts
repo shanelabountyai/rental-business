@@ -528,6 +528,7 @@ describe('interpretStripeEvent', () => {
         invoice: null,
         amount: 154_512,
         payment_method_types: ['card'],
+        metadata: { leasePayerId: 'lp_1', principalCents: '150000' },
       }),
     )
     expect(result.outcome).toBe('project')
@@ -537,7 +538,38 @@ describe('interpretStripeEvent', () => {
       stripePaymentIntentId: 'pi_456',
       rail: 'CARD',
       amountCents: 154_512,
+      // The fee stays with the payment; only the principal goes to invoices.
+      principalCents: 150_000,
     })
+  })
+
+  it('REFUSES an autopay intent under dahlia, where `invoice` is not on the object at all', () => {
+    // MONEY-01, D-268. Measured against the test account: an intent raised
+    // for an invoice carries no `invoice` field under 2026-07-29.dahlia, so
+    // the guard above never fired and every autopay payment was credited by
+    // this event AND by its invoice.updated. What tells them apart is that
+    // Stripe's own intent carries none of our metadata.
+    for (const type of ['payment_intent.succeeded', 'payment_intent.payment_failed']) {
+      const result = interpretStripeEvent(
+        event(type, { id: 'pi_auto', customer: 'cus_123', amount: 150_000, metadata: {} }),
+      )
+      expect(result.outcome, type).toBe('ignore')
+    }
+  })
+
+  it('reads the principal as the whole amount when the stamp is missing or impossible', () => {
+    for (const principalCents of [undefined, 'abc', '0', '999999']) {
+      const result = interpretStripeEvent(
+        event('payment_intent.succeeded', {
+          id: 'pi_old',
+          customer: 'cus_1',
+          amount: 1_000,
+          metadata: { leasePayerId: 'lp_1', ...(principalCents ? { principalCents } : {}) },
+        }),
+      )
+      if (result.outcome !== 'project') throw new Error('expected a projection')
+      expect(result.intent.principalCents, String(principalCents)).toBe(1_000)
+    }
   })
 
   it('projects `processing` EVEN on an invoiced payment, because nothing else reports it', () => {
@@ -585,6 +617,7 @@ describe('interpretStripeEvent', () => {
         customer: 'cus_1',
         amount: 150_000,
         payment_method_types: ['us_bank_account'],
+        metadata: { leasePayerId: 'lp_1' },
       }),
     )
     if (result.outcome !== 'project') throw new Error('expected a projection')
@@ -596,7 +629,12 @@ describe('interpretStripeEvent', () => {
     // Better an honest `OTHER` on the Payment row than a rail nobody can
     // confirm was used.
     const result = interpretStripeEvent(
-      event('payment_intent.succeeded', { id: 'pi_1', customer: 'cus_1', amount: 1_000 }),
+      event('payment_intent.succeeded', {
+        id: 'pi_1',
+        customer: 'cus_1',
+        amount: 1_000,
+        metadata: { leasePayerId: 'lp_1' },
+      }),
     )
     if (result.outcome !== 'project') throw new Error('expected a projection')
     expect(result.intent.rail).toBeNull()

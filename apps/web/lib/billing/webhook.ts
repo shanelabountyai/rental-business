@@ -21,6 +21,7 @@ import { isUniqueViolation } from '@/lib/db/unique-violation.ts'
 import { auditAsSystem } from '@/lib/audit/system.ts'
 import { getBillingProvider } from '@/lib/billing/provider.ts'
 import { planAllocation } from '@/lib/ledger/allocate.ts'
+import { applyPortalPayment } from '@/lib/payments/out-of-band.ts'
 import { assessNsfFee } from '@/lib/ledger/nsf-fees.ts'
 import { leaseBalanceCents } from '@/lib/ledger/queries.ts'
 import { dispatchPendingNotifications, notify } from '@/lib/notifications/send.ts'
@@ -138,6 +139,15 @@ export async function processStripeEvent(
     return { outcome: 'ignored', detail }
   }
 
+  // OUR OWN PUSH, COMING BACK (MONEY-01). A portal payment was projected from
+  // its PaymentIntent and then applied to the open invoices; each application
+  // echoes here as an `invoice.updated` carrying the same money a second time.
+  if (await claimPortalEcho(event.id, payer.id, intent)) {
+    const detail = 'portal payment applied to its invoice'
+    await recordOutcome(event.id, 'ignored', detail)
+    return { outcome: 'ignored', detail }
+  }
+
   // A FAILURE THAT MIGHT BE A RETURN (PAY-02, R-039).
   //
   // `invoice.payment_failed` arrives both when a first attempt is declined
@@ -207,6 +217,8 @@ export async function processStripeEvent(
         })
       : null
 
+  // Assigned inside the transaction's callback, which narrowing cannot see.
+  let paymentId = null as string | null
   await prisma.$transaction(async (tx) => {
     if (action === 'reverse' && settled) {
       await reverseSettledPayment(tx, event, intent, payer, settled)
@@ -214,6 +226,7 @@ export async function processStripeEvent(
     }
 
     const payment = await writePayment(tx, event, intent, payer)
+    paymentId = payment?.id ?? null
 
     if (plan) {
       // ONE ENTRY PER DEBT THE ALLOCATION LANDED ON, plus one unlinked entry
@@ -363,6 +376,15 @@ export async function processStripeEvent(
   // end up disagreeing about what happened.
   const outcomeDetail = action === 'reverse' ? 'payment_returned' : intent.kind
   await recordOutcome(event.id, 'projected', outcomeDetail)
+
+  // THE INVOICE, TOO (MONEY-01). Only an intent this product created carries
+  // a principal, and only its settlement is applied - Stripe must stop
+  // collecting what the tenant has just paid. Outside the transaction and
+  // never throwing: the ledger row is the fact, and a Stripe hiccup here must
+  // not make Stripe redeliver money we have already counted.
+  if (intent.kind === 'payment_succeeded' && intent.principalCents != null && paymentId) {
+    await applySettledPortalPayment(paymentId, intent)
+  }
 
   // The receipt (PAY-01), OUTSIDE the transaction and only on settlement.
   //
@@ -589,6 +611,64 @@ async function writePayment(
       stripeInvoiceId: intent.stripeInvoiceId,
     },
   })
+}
+
+async function applySettledPortalPayment(paymentId: string, intent: ProjectionIntent) {
+  try {
+    await applyPortalPayment({
+      provider: getBillingProvider(),
+      paymentId,
+      stripeCustomerId: intent.stripeCustomerId!,
+      stripePaymentIntentId: intent.stripePaymentIntentId!,
+      principalCents: intent.principalCents!,
+      receivedAt: intent.occurredAt,
+    })
+  } catch (error) {
+    // ponytail: logged only. A payment whose splits fall short of its
+    // principal is the drift to count on /money if this ever fires.
+    console.error(`[stripe] could not apply portal payment ${paymentId} to its invoices`, error)
+  }
+}
+
+/**
+ * Absorbs the `invoice.updated` a portal payment's own push fired (MONEY-01).
+ *
+ * The match is a portal split - one whose payment came from a PaymentIntent -
+ * naming this invoice and this amount, not yet claimed. Claimed by writing
+ * the event id, conditionally, so two deliveries cannot both take it; and
+ * bounded in time the way the counter claim is (D-207), so a split whose
+ * echo was lost cannot swallow a genuine payment of the same amount weeks
+ * later.
+ */
+async function claimPortalEcho(
+  stripeEventId: string,
+  leasePayerId: string,
+  intent: ProjectionIntent,
+): Promise<boolean> {
+  if (
+    intent.kind !== 'payment_succeeded' ||
+    intent.stripePaymentIntentId != null ||
+    intent.stripeInvoiceId == null
+  ) {
+    return false
+  }
+  const split = await prisma.paymentInvoiceSplit.findFirst({
+    where: {
+      stripeInvoiceId: intent.stripeInvoiceId,
+      amountCents: intent.amountCents,
+      claimedByEventId: null,
+      createdAt: { gte: new Date(intent.occurredAt.getTime() - COUNTER_CLAIM_WINDOW_MS) },
+      payment: { leasePayerId, stripePaymentIntentId: { not: null } },
+    },
+    orderBy: { createdAt: 'asc' },
+    select: { id: true },
+  })
+  if (!split) return false
+  const { count } = await prisma.paymentInvoiceSplit.updateMany({
+    where: { id: split.id, claimedByEventId: null },
+    data: { claimedByEventId: stripeEventId },
+  })
+  return count === 1
 }
 
 async function recordOutcome(stripeEventId: string, outcome: string, detail?: string) {

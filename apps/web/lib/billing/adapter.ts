@@ -369,6 +369,10 @@ export interface BillingProvider {
   createPaymentIntent(input: {
     stripeCustomerId: string
     amountCents: number
+    /// `amountCents` less the card fee: what settles the payer's open
+    /// invoices once the money arrives (MONEY-01). Stamped on the intent as
+    /// metadata so the webhook reads it back without trusting a screen.
+    principalCents: number
     currency: string
     rail: PaymentRail
     leasePayerId: string

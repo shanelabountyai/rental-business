@@ -3,6 +3,7 @@ import { prisma } from '@rental/db'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { leaseBillingState, provisionLeaseBilling } from './provision.ts'
 import { leaseBalanceCents, outstandingCharges } from '@/lib/ledger/queries.ts'
+import { getBillingProvider } from './provider.ts'
 import { processStripeEvent, unclaimedCounterPayments } from './webhook.ts'
 
 // Provisioning and the projection pipeline against a real database
@@ -1173,4 +1174,72 @@ describe('out-of-band money already recorded at the counter (D-177)', () => {
       [payment.id, march],
     ])
   }, 30_000)
+})
+
+describe('a portal payment reaches the invoice (MONEY-01)', () => {
+  // A standalone PaymentIntent touches no invoice. Before this, the portal's
+  // money reached our ledger and never Stripe's invoice, so a declined
+  // autopay, a portal payment and then Stripe's own retry took rent twice.
+  // Against the old simulator this was invisible: it read "open" off our
+  // ledger balance, which the portal payment had already reduced (D-27).
+  it('applies the principal to the open invoice, absorbs the echo, and still counts a later genuine payment', async () => {
+    const lease = await seedActiveLease()
+    await provisionLeaseBilling(lease.id)
+    const payer = await prisma.leasePayer.findFirstOrThrow({ where: { leaseId: lease.id } })
+    const customer = payer.stripeCustomerId!
+    const invoiceId = `in_${randomUUID().replace(/-/g, '').slice(0, 14)}`
+    const now = Math.floor(Date.now() / 1000)
+
+    await processStripeEvent(
+      invoiceEvent({ customer, type: 'invoice.finalized', amountDue: 200_000, invoiceId, created: now }),
+    )
+
+    // $1,000 of principal and a $30 card fee on top.
+    const paymentIntentId = `pi_${randomUUID().replace(/-/g, '').slice(0, 16)}`
+    await processStripeEvent({
+      id: `evt_${randomUUID().replace(/-/g, '')}`,
+      type: 'payment_intent.succeeded',
+      created: now,
+      data: {
+        object: {
+          id: paymentIntentId,
+          customer,
+          amount: 103_000,
+          payment_method_types: ['card'],
+          metadata: { leasePayerId: payer.id, principalCents: '100000' },
+        },
+      },
+    })
+
+    // Stripe was told, for the principal only, against the open invoice...
+    const payment = await prisma.payment.findUniqueOrThrow({
+      where: { stripePaymentIntentId: paymentIntentId },
+      select: { id: true, invoiceSplits: { select: { stripeInvoiceId: true, amountCents: true, claimedByEventId: true } } },
+    })
+    expect(payment.invoiceSplits).toEqual([
+      { stripeInvoiceId: invoiceId, amountCents: 100_000, claimedByEventId: expect.stringMatching(/^evt_/) },
+    ])
+    const [open] = (await getBillingProvider().getOpenInvoices({ stripeCustomerId: customer }))!
+    expect(open).toMatchObject({ stripeInvoiceId: invoiceId, amountRemainingCents: 100_000 })
+
+    // ...and its echo credited nothing: the intent's own event is the only
+    // payment in the ledger.
+    const credits = await prisma.ledgerEntry.findMany({
+      where: { leaseId: lease.id, type: 'PAYMENT' },
+      select: { amountCents: true, stripeObjectId: true },
+    })
+    expect(credits.every((row) => row.stripeObjectId === paymentIntentId)).toBe(true)
+    expect(credits.reduce((total, row) => total + row.amountCents, 0)).toBe(-103_000)
+
+    // A genuine payment of the SAME amount on the same invoice - Stripe's
+    // retry collecting the rest - is money, not an echo, and is credited.
+    await processStripeEvent(
+      invoiceEvent({ customer, invoiceId, amountPaid: 100_000, paidBefore: 100_000, paymentIntentId: null, created: now }),
+    )
+    const after = await prisma.ledgerEntry.aggregate({
+      where: { leaseId: lease.id, type: 'PAYMENT', stripeObjectId: invoiceId },
+      _sum: { amountCents: true },
+    })
+    expect(after._sum.amountCents).toBe(-100_000)
+  })
 })

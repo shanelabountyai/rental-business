@@ -56,26 +56,7 @@ export async function recordAcrossInvoices(input: {
     select: { id: true },
   })
 
-  let landedCents = 0
-  const landed: string[] = []
-  for (const split of splits) {
-    try {
-      await input.provider.recordOutOfBandPayment({
-        stripeInvoiceId: split.stripeInvoiceId,
-        stripeCustomerId: input.stripeCustomerId,
-        amountCents: split.amountCents,
-        receivedAt: input.payment.receivedAt,
-        reference: input.reference,
-        instrument: input.instrument,
-        idempotencyKey: `${input.idempotencyKey}:${split.stripeInvoiceId}`,
-      })
-    } catch (error) {
-      console.error(`[${input.logTag}] out-of-band push failed on ${split.stripeInvoiceId}`, error)
-      break
-    }
-    landedCents += split.amountCents
-    landed.push(split.stripeInvoiceId)
-  }
+  const { landed, landedCents } = await pushSplits({ ...input, splits })
 
   if (landed.length === splits.length) return { recorded: 'all', paymentId: payment.id }
 
@@ -102,4 +83,97 @@ export async function recordAcrossInvoices(input: {
     }),
   ])
   return { recorded: 'part', paymentId: payment.id, recordedCents: landedCents }
+}
+
+/**
+ * A settled PORTAL payment, applied to the payer's open invoices (MONEY-01).
+ *
+ * The money is already in the ledger - its own `payment_intent.succeeded`
+ * projected it. What was missing is Stripe's side: a standalone PaymentIntent
+ * touches no invoice, so the invoice stayed open and Stripe went on
+ * collecting it. A declined autopay, a portal payment, then Stripe's own
+ * retry succeeding was rent taken twice.
+ *
+ * SAME PUSH AS THE COUNTER, same order (D-177): splits first, on the
+ * EXISTING row, then one payment record per invoice. Each push echoes back
+ * as an `invoice.updated`, which `claimPortalEcho` absorbs against its split
+ * without a second ledger entry. A payment record rather than attaching the
+ * PaymentIntent itself, because Stripe refuses an intent larger than what the
+ * invoice has left - which every card payment with a fee is - and one intent
+ * cannot be spread over two invoices (both measured, D-268). The intent id is
+ * the record's reference, so Stripe's side still names the money.
+ *
+ * Only the PRINCIPAL is applied. The card fee paid for the privilege of
+ * paying by card and settles no invoice.
+ */
+export async function applyPortalPayment(input: {
+  provider: BillingProvider
+  paymentId: string
+  stripeCustomerId: string
+  stripePaymentIntentId: string
+  principalCents: number
+  receivedAt: Date
+}): Promise<{ appliedCents: number }> {
+  const invoices = await input.provider.getOpenInvoices({ stripeCustomerId: input.stripeCustomerId })
+  if (!invoices) throw new Error(`could not list open invoices for ${input.stripeCustomerId}`)
+  const open = invoices.reduce((total, invoice) => total + invoice.amountRemainingCents, 0)
+  // ponytail: money beyond the open invoices (a prepayment) stays a ledger
+  // credit Stripe cannot see, so next month's invoice is collected in full.
+  const splits = splitAcrossInvoices(Math.min(input.principalCents, open), invoices)
+  if (splits.length === 0) return { appliedCents: 0 }
+
+  await prisma.paymentInvoiceSplit.createMany({
+    data: splits.map((split) => ({ ...split, paymentId: input.paymentId })),
+  })
+  const { landed, landedCents } = await pushSplits({
+    provider: input.provider,
+    splits,
+    stripeCustomerId: input.stripeCustomerId,
+    payment: { receivedAt: input.receivedAt },
+    reference: input.stripePaymentIntentId,
+    instrument: 'Portal payment',
+    idempotencyKey: `portal:${input.stripePaymentIntentId}`,
+    logTag: 'portal-payment',
+  })
+  if (landed.length < splits.length) {
+    await prisma.paymentInvoiceSplit.deleteMany({
+      where: { paymentId: input.paymentId, stripeInvoiceId: { notIn: landed } },
+    })
+  }
+  return { appliedCents: landedCents }
+}
+
+/// One push per split, oldest first, stopping at the first refusal: what
+/// landed is real money at Stripe, what did not is the caller's to back out.
+async function pushSplits(input: {
+  provider: BillingProvider
+  splits: readonly { stripeInvoiceId: string; amountCents: number }[]
+  stripeCustomerId: string
+  payment: { receivedAt: Date }
+  reference: string
+  instrument: string
+  idempotencyKey: string
+  logTag: string
+}): Promise<{ landed: string[]; landedCents: number }> {
+  let landedCents = 0
+  const landed: string[] = []
+  for (const split of input.splits) {
+    try {
+      await input.provider.recordOutOfBandPayment({
+        stripeInvoiceId: split.stripeInvoiceId,
+        stripeCustomerId: input.stripeCustomerId,
+        amountCents: split.amountCents,
+        receivedAt: input.payment.receivedAt,
+        reference: input.reference,
+        instrument: input.instrument,
+        idempotencyKey: `${input.idempotencyKey}:${split.stripeInvoiceId}`,
+      })
+    } catch (error) {
+      console.error(`[${input.logTag}] out-of-band push failed on ${split.stripeInvoiceId}`, error)
+      break
+    }
+    landedCents += split.amountCents
+    landed.push(split.stripeInvoiceId)
+  }
+  return { landed, landedCents }
 }
