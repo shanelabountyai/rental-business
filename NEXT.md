@@ -4,7 +4,7 @@
 
 - **Done 2026-09-28:** MONEY-01, -02, -03, -07, -08, -10, SEC-18, and **MONEY-04** (`4c23965`, D-274: `charge.dispute.closed` with `status: lost` reverses the payment).
 - **Shane: subscribe the test webhook endpoint to `charge.dispute.closed`.** Endpoint `we_1U47bfJ7dm36XvZPk4ekxGak` still lists `charge.dispute.created`. Swap it in the Stripe dashboard (Developers → Webhooks), or MONEY-04 never receives its event. The target set is in `docs/DEPLOYMENT.md`. The in-session edit was refused as a shared-resource change.
-- **CI**: runs for `c437056` (MONEY-04) and `89aa89c` (SEC-18, which also covers MONEY-03/07/08) were in flight at handoff. Check with `gh run list --limit 3`.
+- **CI green** for `c437056` (run 36470684616, both jobs), which covers MONEY-03/04/07/08/10 and SEC-18.
 - **Local `rental_test` has leftover data**: 4 unit tests fail on `main` too (`comms.test.ts` inbound routing ×2, `pre-move-out-scheduling-job.test.ts` ×2), while CI is green.
 - **Next item: LEGAL-01 (HIGH)**, where screening lookback windows are configured but never applied. LEGAL-02 is also HIGH. The earlier "no HIGH rows open" line was wrong. Model: **Opus** (fair-housing correctness).
 - **Roll the Stripe TEST secret key**: a masking regex printed it into the 2026-09-28 session transcript. Test mode only, not sent anywhere.
