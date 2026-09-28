@@ -13589,7 +13589,7 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 
 ## MONEY-01 — portal payments reach the invoice; autopay no longer credited twice
 
-**Commit:** `TBD`  ·  **Date:** 2026-09-28
+**Commit:** `90c4539`  ·  **Date:** 2026-09-28
 
 **What it built.** A settled portal payment is now applied to the payer's open Stripe invoices. `createPaymentIntent` stamps `metadata[principalCents]` (the amount without the card fee); core reads it back as `ProjectionIntent.principalCents`. After the `payment_intent.succeeded` transaction, the webhook calls `applyPortalPayment` ([lib/payments/out-of-band.ts](apps/web/lib/payments/out-of-band.ts)). It writes one `PaymentInvoiceSplit` per open invoice on the existing Payment row, then pushes each as a payment record through the same loop the counter uses (now the shared `pushSplits`). Each push's `invoice.updated` echo is absorbed by `claimPortalEcho`, which sets the new `PaymentInvoiceSplit.claimedByEventId` (migration `20260928120000_money01_portal_split_claim`) and writes no ledger entry. `interpretStripeEvent` now ignores a terminal PaymentIntent event unless it carries `leasePayerId` or `applicantId` metadata. The simulator's `getOpenInvoices` now reports Stripe's view instead of our ledger balance: PaymentIntent-sourced credits are added back and portal splits are taken off.
 
