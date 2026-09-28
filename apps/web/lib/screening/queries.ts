@@ -1,5 +1,6 @@
 import 'server-only'
 
+import { businessDate, utcToBusinessDate } from '@rental/core/scheduling'
 import { evaluateCriteria, type CriterionEvaluation } from '@rental/core/screening'
 import { prisma } from '@rental/db'
 import type { ResolvedScope } from '@/lib/scope/current-scope.ts'
@@ -48,6 +49,7 @@ export async function screeningForApplication(
     where: { id: applicationId, propertyId: { in: scope.propertyIds } },
     include: {
       listing: { select: { rentCents: true } },
+      property: { select: { timezone: true } },
       applicants: {
         include: {
           screeningReport: { include: { adverseActionNotice: { select: { id: true, servedAt: true } } } },
@@ -95,6 +97,10 @@ export async function screeningForApplication(
         creditScore: report?.creditScore ?? null,
         evictionRecordFound: report?.evictionRecordFound ?? null,
         criminalRecordFound: report?.criminalRecordFound ?? null,
+        evictionRecordOn: report?.evictionRecordOn ? utcToBusinessDate(report.evictionRecordOn) : null,
+        criminalRecordOn: report?.criminalRecordOn ? utcToBusinessDate(report.criminalRecordOn) : null,
+        // A decided applicant keeps the window the decision was made in.
+        asOf: businessDate(report?.decidedAt ?? new Date(), application.property.timezone),
       }),
       decision: report?.decision ?? null,
       decisionNotes: report?.decisionNotes ?? null,

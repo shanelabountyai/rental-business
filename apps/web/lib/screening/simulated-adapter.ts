@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { createHash, randomBytes } from 'node:crypto'
+import { subtractMonths, utcToBusinessDate, type BusinessDate } from '@rental/core/scheduling'
 import type {
   ScreeningAdapter,
   ScreeningAgency,
@@ -50,17 +51,28 @@ export const SIMULATED_AGENCY: ScreeningAgency = {
   phone: '(800) 555-0100',
 }
 
-function factsFor(applicantId: string): {
+function factsFor(
+  applicantId: string,
+  today: BusinessDate,
+): {
   creditScore: number
   evictionRecordFound: boolean
   criminalRecordFound: boolean
+  evictionRecordOn?: BusinessDate
+  criminalRecordOn?: BusinessDate
 } {
   const digest = createHash('sha256').update(applicantId).digest()
+  const evictionRecordFound = digest[1] % 5 === 0 // ~20% of the time.
+  const criminalRecordFound = digest[2] % 8 === 0 // ~12.5% of the time.
+  // A record 1-180 months old - deliberately NOT limited to the window the
+  // order asked for (D-27), so records outside it reach core's own check.
   return {
     // 500-849, a realistic FICO-shaped range.
     creditScore: 500 + (digest[0] % 350),
-    evictionRecordFound: digest[1] % 5 === 0, // ~20% of the time.
-    criminalRecordFound: digest[2] % 8 === 0, // ~12.5% of the time.
+    evictionRecordFound,
+    criminalRecordFound,
+    ...(evictionRecordFound && { evictionRecordOn: subtractMonths(today, 1 + (digest[3] % 180)) }),
+    ...(criminalRecordFound && { criminalRecordOn: subtractMonths(today, 1 + (digest[4] % 180)) }),
   }
 }
 
@@ -83,7 +95,7 @@ export class SimulatedScreeningAdapter implements ScreeningAdapter {
       return { providerId: id, status: 'FAILED', faultCode: fault }
     }
 
-    const facts = factsFor(input.applicantId)
+    const facts = factsFor(input.applicantId, utcToBusinessDate(new Date()))
     console.info(`[screening:simulated] completed order ${id} for ${input.applicantId}`)
     return { providerId: id, status: 'COMPLETE', ...facts, agency: SIMULATED_AGENCY }
   }
@@ -93,6 +105,9 @@ export class SimulatedScreeningAdapter implements ScreeningAdapter {
 // the same facts the simulator will return, without re-deriving the hash
 // logic. Never used by the evaluator itself: that reads ScreeningReport's
 // own persisted columns, not this function (D-27 again).
-export function simulatedScreeningFacts(applicantId: string) {
-  return factsFor(applicantId)
+export function simulatedScreeningFacts(
+  applicantId: string,
+  today: BusinessDate = utcToBusinessDate(new Date()),
+) {
+  return factsFor(applicantId, today)
 }

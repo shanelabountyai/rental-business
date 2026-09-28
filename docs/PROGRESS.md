@@ -13688,3 +13688,28 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 - **Mutation-checked:** with the `lost` check broken, 3 tests go red.
 - Full `npm test`: 3448 passed, 4 skipped, **4 failed**. They are the same 4 as on `main` (`comms.test.ts` inbound routing ×2, `pre-move-out-scheduling-job.test.ts` ×2).
 - No e2e spec touched; CI owns the sweep.
+
+## LEGAL-01 — a screening record is "within the lookback" only when its date says so
+
+**Commit:** `PENDING`  ·  **Date:** 2026-09-28
+
+**What it built.** `ScreeningReport` gains `evictionRecordOn` and `criminalRecordOn` (`@db.Date`, migration `20260928130000_legal01_screening_record_dates`). The adapter contract ([apps/web/lib/screening/adapter.ts](apps/web/lib/screening/adapter.ts)) returns the most recent record's date and takes `evictionSince`/`criminalSince` on the order. [packages/core/screening/evaluate.ts](packages/core/screening/evaluate.ts) now takes those dates plus an `asOf` day and classifies each record through one `recordCriterion` function. `subtractMonths` joins [packages/core/scheduling/local-time.ts](packages/core/scheduling/local-time.ts) and clamps to month end. Both callers ([queries.ts](apps/web/lib/screening/queries.ts), [staff-actions.ts](apps/web/lib/screening/staff-actions.ts)) pass the dates and measure from the decision date in the property's zone.
+
+**What it decided.** D-275:
+- Inside the window is FAILS and cites the record's date.
+- Older than the window is MEETS ("outside the lookback").
+- Found but undated is UNKNOWN, which keeps it out of the adverse-action notice.
+- The simulator ignores the requested window (D-27), so core's check is the one tested.
+
+**What it left behind.**
+- Reports ordered before this change have no dates. Any of them with a record found now shows UNKNOWN until the report is re-ordered, and there is still no re-order path (R-060's gap).
+- The FCRA credit-score disclosure block is LEGAL-02, next.
+
+**Gate.**
+- `lint` and `typecheck` clean. Lint shows the same pre-existing warnings as `main`.
+- Screening and scheduling unit tests: **144 passed** of 144. The dated fixture puts a 2014 record against an 84-month window, and a boundary test checks the exact cut-off day.
+- **Mutation-checked:** with the window comparison removed, 2 tests go red.
+- Full `npm test`: 3453 passed, 4 skipped, **4 failed**. They are the same 4 as on `main` (`comms.test.ts` inbound routing ×2, `pre-move-out-scheduling-job.test.ts` ×2).
+- `e2e/screening.spec.ts`, both projects: **8 passed** of 8. The decline spec now seeds a dated record and asserts the notice cites it.
+- `db:drift`: no difference.
+

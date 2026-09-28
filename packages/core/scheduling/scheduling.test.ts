@@ -10,6 +10,7 @@ import {
   dueDateOnOrBefore,
   friendlyBusinessDate,
   friendlyDate,
+  subtractMonths,
   isDue,
   utcToWallClock,
   wallClockToUtc,
@@ -475,3 +476,13 @@ describe('friendlyTimestamp', () => {
     expect(friendlyTimestamp(instant, 'UTC')).toContain('15:14')
   })
 })
+
+describe('subtractMonths', () => {
+  it('crosses years and clamps to a shorter month', () => {
+    expect(subtractMonths('2026-09-28', 84)).toBe('2019-09-28')
+    expect(subtractMonths('2026-01-15', 1)).toBe('2025-12-15')
+    expect(subtractMonths('2026-03-31', 1)).toBe('2026-02-28')
+    expect(subtractMonths('2024-03-31', 1)).toBe('2024-02-29')
+  })
+})
+

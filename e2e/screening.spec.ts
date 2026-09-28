@@ -58,7 +58,7 @@ async function createStaff() {
  */
 async function seedScreenedApplicant(
   monthlyIncomeCents: number,
-  reportFacts: { evictionRecordFound: boolean; criminalRecordFound: boolean } = {
+  reportFacts: { evictionRecordFound: boolean; criminalRecordFound: boolean; evictionRecordOn?: Date } = {
     evictionRecordFound: false,
     criminalRecordFound: false,
   },
@@ -148,6 +148,7 @@ async function seedScreenedApplicant(
       creditScore: 720,
       evictionRecordFound: reportFacts.evictionRecordFound,
       criminalRecordFound: reportFacts.criminalRecordFound,
+      evictionRecordOn: reportFacts.evictionRecordOn ?? null,
       // What SimulatedScreeningAdapter's own agency renders to (order.ts's
       // join) - hand-seeded here since this fixture bypasses
       // orderScreeningForApplicant, the same wall screening.test.ts's own
@@ -274,7 +275,8 @@ test('a decline generates and auto-serves an FCRA adverse-action notice by email
   const staff = await createStaff()
   const { prospect, applicant } = await seedScreenedApplicant(
     600_000,
-    { evictionRecordFound: true, criminalRecordFound: false },
+    // Dated inside the lookback: an undated record is never cited (LEGAL-01).
+    { evictionRecordFound: true, criminalRecordFound: false, evictionRecordOn: new Date(Date.now() - 365 * 86_400_000) },
     { withEmailAndAddress: true },
   )
 
@@ -296,7 +298,7 @@ test('a decline generates and auto-serves an FCRA adverse-action notice by email
   expect(notice?.applicantId).toBe(applicant.id)
   expect(notice?.bodyText).toContain('Simulated Consumer Reporting Agency')
   expect(notice?.bodyText).toMatch(/free copy of your report/)
-  expect(notice?.bodyText).toContain('A record was found')
+  expect(notice?.bodyText).toMatch(/A record dated .* was found within the \d+-month lookback/)
   // Auto-served by EMAIL, the moment the decision was recorded - no separate
   // staff click.
   expect(notice?.servedAt).not.toBeNull()

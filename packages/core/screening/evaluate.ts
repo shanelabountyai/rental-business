@@ -13,6 +13,17 @@
 // screening is why ScreeningReport carries a required `decisionNotes` field
 // for anything but a plain approval: nature, severity and time elapsed have
 // to be weighed by a person looking at this table, not by this function.
+//
+// "WITHIN THE LOOKBACK" IS SAID ONLY WHEN A DATE BACKS IT (LEGAL-01). The
+// window is configured on ScreeningCriteria, but a bare "record found"
+// boolean carries no date, and this function used to write "found within
+// the 84-month lookback" for it anyway - straight into the FCRA notice. A
+// 12-year-old eviction was described as inside a 7-year window. The
+// provider now returns the date of the most recent record and the window is
+// checked HERE (D-12's "core decides"), not trusted to the provider: an
+// undated record is UNKNOWN, a record older than the window is MEETS.
+
+import { friendlyBusinessDate, subtractMonths, type BusinessDate } from '../scheduling/local-time.ts'
 
 export interface ScreeningCriteriaConfig {
   version: number
@@ -28,6 +39,13 @@ export interface ScreeningFacts {
   creditScore: number | null
   evictionRecordFound: boolean | null
   criminalRecordFound: boolean | null
+  /// The most recent record's date, as the provider reported it. Null when
+  /// no record was found, or when one was found with no date.
+  evictionRecordOn: BusinessDate | null
+  criminalRecordOn: BusinessDate | null
+  /// The day the lookback is measured back from - the decision date, or
+  /// today for an undecided applicant.
+  asOf: BusinessDate
 }
 
 export type CriterionResult = 'MEETS' | 'FAILS' | 'UNKNOWN'
@@ -80,37 +98,38 @@ export function evaluateCriteria(
     })
   }
 
-  results.push({
-    key: 'eviction',
-    result:
-      facts.evictionRecordFound == null
-        ? 'UNKNOWN'
-        : facts.evictionRecordFound
-          ? 'FAILS'
-          : 'MEETS',
-    detail:
-      facts.evictionRecordFound == null
-        ? 'No report yet.'
-        : facts.evictionRecordFound
-          ? `A record was found within the ${criteria.evictionLookbackMonths}-month lookback - requires individualized assessment.`
-          : `No record within the ${criteria.evictionLookbackMonths}-month lookback.`,
-  })
-
-  results.push({
-    key: 'criminal',
-    result:
-      facts.criminalRecordFound == null
-        ? 'UNKNOWN'
-        : facts.criminalRecordFound
-          ? 'FAILS'
-          : 'MEETS',
-    detail:
-      facts.criminalRecordFound == null
-        ? 'No report yet.'
-        : facts.criminalRecordFound
-          ? `A record was found within the ${criteria.criminalLookbackMonths}-month lookback - requires individualized assessment, not an automatic decline.`
-          : `No record within the ${criteria.criminalLookbackMonths}-month lookback.`,
-  })
+  results.push(
+    recordCriterion('eviction', facts.evictionRecordFound, facts.evictionRecordOn, criteria.evictionLookbackMonths, facts.asOf, ' - requires individualized assessment.'),
+  )
+  results.push(
+    recordCriterion('criminal', facts.criminalRecordFound, facts.criminalRecordOn, criteria.criminalLookbackMonths, facts.asOf, ' - requires individualized assessment, not an automatic decline.'),
+  )
 
   return results
+}
+
+function recordCriterion(
+  key: 'eviction' | 'criminal',
+  found: boolean | null,
+  recordOn: BusinessDate | null,
+  lookbackMonths: number,
+  asOf: BusinessDate,
+  assessment: string,
+): CriterionEvaluation {
+  const window = `${lookbackMonths}-month lookback`
+  if (found == null) return { key, result: 'UNKNOWN', detail: 'No report yet.' }
+  if (!found) return { key, result: 'MEETS', detail: `No record within the ${window}.` }
+  if (recordOn == null) {
+    return {
+      key,
+      result: 'UNKNOWN',
+      detail: `A record was reported without a date, so it cannot be placed inside or outside the ${window}. Check the report itself.`,
+    }
+  }
+  const on = friendlyBusinessDate(recordOn)
+  // BusinessDate strings compare correctly as strings.
+  if (recordOn < subtractMonths(asOf, lookbackMonths)) {
+    return { key, result: 'MEETS', detail: `The most recent record (${on}) is outside the ${window}.` }
+  }
+  return { key, result: 'FAILS', detail: `A record dated ${on} was found within the ${window}${assessment}` }
 }

@@ -5,6 +5,8 @@ import { SIMULATED_AGENCY, SimulatedScreeningAdapter, simulatedScreeningFacts } 
 // adapter's own contract, exercised the way listings/simulated-adapter.test.ts
 // exercises its sibling.
 
+const since = { evictionSince: '2019-09-28', criminalSince: '2019-09-28' }
+
 describe('SimulatedScreeningAdapter', () => {
   it('says what it is', () => {
     expect(new SimulatedScreeningAdapter().name).toBe('simulated')
@@ -12,16 +14,16 @@ describe('SimulatedScreeningAdapter', () => {
 
   it('mints a realistic-shaped provider id, different each call', async () => {
     const adapter = new SimulatedScreeningAdapter()
-    const first = await adapter.order({ applicantId: 'app_1' })
-    const second = await adapter.order({ applicantId: 'app_1' })
+    const first = await adapter.order({ applicantId: 'app_1', ...since })
+    const second = await adapter.order({ applicantId: 'app_1', ...since })
     expect(first.providerId).toMatch(/^scr_[a-f0-9]{24}$/)
     expect(first.providerId).not.toBe(second.providerId)
   })
 
   it('returns report facts DETERMINISTIC from the applicant id - same id, same facts, every time', async () => {
     const adapter = new SimulatedScreeningAdapter()
-    const first = await adapter.order({ applicantId: 'app_stable' })
-    const second = await adapter.order({ applicantId: 'app_stable' })
+    const first = await adapter.order({ applicantId: 'app_stable', ...since })
+    const second = await adapter.order({ applicantId: 'app_stable', ...since })
     expect(first.status).toBe('COMPLETE')
     expect(first.creditScore).toBe(second.creditScore)
     expect(first.evictionRecordFound).toBe(second.evictionRecordFound)
@@ -30,21 +32,21 @@ describe('SimulatedScreeningAdapter', () => {
 
   it('matches the exported simulatedScreeningFacts() helper', async () => {
     const adapter = new SimulatedScreeningAdapter()
-    const result = await adapter.order({ applicantId: 'app_predict' })
+    const result = await adapter.order({ applicantId: 'app_predict', ...since })
     expect(result).toMatchObject(simulatedScreeningFacts('app_predict'))
   })
 
   it('a different applicant id gets different facts', async () => {
     const adapter = new SimulatedScreeningAdapter()
-    const a = await adapter.order({ applicantId: 'app_a' })
-    const b = await adapter.order({ applicantId: 'app_b' })
+    const a = await adapter.order({ applicantId: 'app_a', ...since })
+    const b = await adapter.order({ applicantId: 'app_b', ...since })
     expect(a.creditScore).not.toBe(b.creditScore)
   })
 
   it('a credit score always lands in a realistic FICO-shaped range', async () => {
     const adapter = new SimulatedScreeningAdapter()
     for (const id of ['x1', 'x2', 'x3', 'x4', 'x5']) {
-      const result = await adapter.order({ applicantId: id })
+      const result = await adapter.order({ applicantId: id, ...since })
       expect(result.creditScore).toBeGreaterThanOrEqual(500)
       expect(result.creditScore).toBeLessThanOrEqual(849)
     }
@@ -52,7 +54,7 @@ describe('SimulatedScreeningAdapter', () => {
 
   it('faults with the injected code and no report facts', async () => {
     const adapter = new SimulatedScreeningAdapter({ fault: () => 'timeout' })
-    const result = await adapter.order({ applicantId: 'app_1' })
+    const result = await adapter.order({ applicantId: 'app_1', ...since })
     expect(result.status).toBe('FAILED')
     expect(result.faultCode).toBe('timeout')
     expect(result.creditScore).toBeUndefined()
@@ -60,12 +62,12 @@ describe('SimulatedScreeningAdapter', () => {
 
   it('names its own (fake) agency on a completed order, and none on a fault', async () => {
     const adapter = new SimulatedScreeningAdapter()
-    const result = await adapter.order({ applicantId: 'app_1' })
+    const result = await adapter.order({ applicantId: 'app_1', ...since })
     expect(result.agency).toEqual(SIMULATED_AGENCY)
     expect(result.agency?.name).toMatch(/not a real bureau/)
 
     const faulted = new SimulatedScreeningAdapter({ fault: () => 'timeout' })
-    const failedResult = await faulted.order({ applicantId: 'app_1' })
+    const failedResult = await faulted.order({ applicantId: 'app_1', ...since })
     expect(failedResult.agency).toBeUndefined()
   })
 })

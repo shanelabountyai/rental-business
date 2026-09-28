@@ -338,6 +338,18 @@ export function startOfMonth(date: BusinessDate): BusinessDate {
   return `${date.slice(0, 7)}-01`
 }
 
+/// The same calendar day `months` months earlier, clamped to the last day of
+/// a shorter month: 31 March minus one month is 28 (or 29) February, never
+/// 3 March. Pure string arithmetic, like `startOfMonth` (D-3).
+export function subtractMonths(date: BusinessDate, months: number): BusinessDate {
+  const [year, month, day] = date.split('-').map(Number) as [number, number, number]
+  const index = year * 12 + (month - 1) - months
+  const y = Math.floor(index / 12)
+  const m = index - y * 12 + 1
+  const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate()
+  return `${String(y).padStart(4, '0')}-${String(m).padStart(2, '0')}-${String(Math.min(day, lastDay)).padStart(2, '0')}`
+}
+
 /**
  * Every calendar month touched by `[from, to]`, as that month's first day,
  * oldest first.

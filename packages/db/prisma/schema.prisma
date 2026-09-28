@@ -1463,6 +1463,12 @@ model ScreeningReport {
   creditScore         Int?
   evictionRecordFound Boolean?
   criminalRecordFound Boolean?
+  /// The most recent record's date, as the provider reported it (LEGAL-01).
+  /// Null when none was found or the provider gave no date - and an undated
+  /// record is never described as inside the lookback window
+  /// (packages/core/screening/evaluate.ts).
+  evictionRecordOn    DateTime? @db.Date
+  criminalRecordOn    DateTime? @db.Date
 
   criteriaVersion Int
 

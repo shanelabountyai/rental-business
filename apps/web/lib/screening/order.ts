@@ -1,5 +1,6 @@
 import 'server-only'
 
+import { businessDateToUtc, subtractMonths, utcToBusinessDate } from '@rental/core/scheduling'
 import { earlierUndecidedApplications } from '@rental/core/screening'
 import { prisma } from '@rental/db'
 import { auditAsSystem } from '@/lib/audit/system.ts'
@@ -53,7 +54,14 @@ export async function orderScreeningForApplicant(applicant: ApplicantToScreen): 
   if (existing) return
 
   const criteria = await currentScreeningCriteria()
-  const result = await screeningAdapter.order({ applicantId: applicant.id })
+  // A hint to the provider only; the UTC day is close enough to limit a
+  // search, and evaluate.ts re-checks every returned date anyway.
+  const today = utcToBusinessDate(new Date())
+  const result = await screeningAdapter.order({
+    applicantId: applicant.id,
+    evictionSince: subtractMonths(today, criteria.evictionLookbackMonths),
+    criminalSince: subtractMonths(today, criteria.criminalLookbackMonths),
+  })
 
   // Rendered here, once, and frozen onto the row - the notice generator
   // (R-061) reproduces this text verbatim rather than re-formatting a
@@ -77,6 +85,8 @@ export async function orderScreeningForApplicant(applicant: ApplicantToScreen): 
       creditScore: result.creditScore ?? null,
       evictionRecordFound: result.evictionRecordFound ?? null,
       criminalRecordFound: result.criminalRecordFound ?? null,
+      evictionRecordOn: result.evictionRecordOn ? businessDateToUtc(result.evictionRecordOn) : null,
+      criminalRecordOn: result.criminalRecordOn ? businessDateToUtc(result.criminalRecordOn) : null,
       agencyContact,
       criteriaVersion: criteria.version,
       completedAt: result.status === 'COMPLETE' ? new Date() : null,

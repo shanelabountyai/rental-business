@@ -134,6 +134,8 @@ describe('orderScreeningForApplicant', () => {
     expect(report.creditScore).toBe(expected.creditScore)
     expect(report.evictionRecordFound).toBe(expected.evictionRecordFound)
     expect(report.criminalRecordFound).toBe(expected.criminalRecordFound)
+    expect(report.evictionRecordOn?.toISOString().slice(0, 10)).toBe(expected.evictionRecordOn)
+    expect(report.criminalRecordOn?.toISOString().slice(0, 10)).toBe(expected.criminalRecordOn)
   })
 
   it('is idempotent - a second call for the same applicant creates nothing new', async () => {

@@ -1,5 +1,6 @@
 'use server'
 
+import { businessDate, utcToBusinessDate } from '@rental/core/scheduling'
 import { adverseActionNoticeText, adverseActionOwed, evaluateCriteria } from '@rental/core/screening'
 import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
@@ -160,6 +161,9 @@ export async function recordScreeningDecision(
       creditScore: applicant.screeningReport!.creditScore,
       evictionRecordFound: applicant.screeningReport!.evictionRecordFound,
       criminalRecordFound: applicant.screeningReport!.criminalRecordFound,
+      evictionRecordOn: recordOn(applicant.screeningReport!.evictionRecordOn),
+      criminalRecordOn: recordOn(applicant.screeningReport!.criminalRecordOn),
+      asOf: businessDate(new Date(), application.property.timezone),
     })
       .filter((c) => c.result === 'FAILS')
       .map((c) => c.detail)
@@ -335,4 +339,8 @@ export async function recordScreeningDecision(
 
   revalidatePath(`/prospects/${application.prospectId}`)
   return {}
+}
+
+function recordOn(value: Date | null): string | null {
+  return value ? utcToBusinessDate(value) : null
 }

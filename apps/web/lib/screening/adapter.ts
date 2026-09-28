@@ -1,3 +1,5 @@
+import type { BusinessDate } from '@rental/core/scheduling'
+
 // The screening provider contract (LEASE-04, R-060; D-7: the second of the
 // three named simulated adapters, after SimulatedSyndicationAdapter). One
 // seam, matching the shape lib/listings/adapter.ts already gives its own
@@ -11,6 +13,11 @@
 /// interface has no wider a surface than that.
 export interface ScreeningOrderInput {
   applicantId: string
+  /// The start of each configured lookback window (LEGAL-01), so a real
+  /// provider can limit its search. We never rely on it doing so: the
+  /// returned record date is checked against the window again in core.
+  evictionSince: BusinessDate
+  criminalSince: BusinessDate
 }
 
 /// The reporting agency's own identity - 15 U.S.C. § 1681m(a)(1) requires
@@ -40,6 +47,10 @@ export interface ScreeningOrderResult {
   creditScore?: number
   evictionRecordFound?: boolean
   criminalRecordFound?: boolean
+  /// The most recent record's date, when one was found and the provider
+  /// dated it (LEGAL-01).
+  evictionRecordOn?: BusinessDate
+  criminalRecordOn?: BusinessDate
   /// Present only when status is COMPLETE. Frozen onto
   /// ScreeningReport.agencyContact at order time (R-061) - see that
   /// column's own schema comment for why.
