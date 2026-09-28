@@ -13665,7 +13665,7 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 
 ## MONEY-04 — a lost chargeback reverses the payment it took back
 
-**Commit:** `(pending)`  ·  **Date:** 2026-09-28
+**Commit:** `4c23965`  ·  **Date:** 2026-09-28
 
 **What it built.** [packages/core/billing/events.ts](packages/core/billing/events.ts) now handles `charge.dispute.closed` instead of `charge.dispute.created`. Only `status: lost` projects, as the new `dispute_lost` kind. In [apps/web/lib/billing/webhook.ts](apps/web/lib/billing/webhook.ts), `projectLostDispute` finds the SETTLED Payment by its PaymentIntent. If there is none (card autopay rows carry only the invoice), it asks the new `findInvoiceForPaymentIntent` provider method (`/invoice_payments`) and matches the invoice and amount. It then runs the existing `reverseSettledPayment`, with the reason "Chargeback lost". `dispute_lost` joined `LEDGER_MOVING_KINDS` in [apps/web/lib/ledger/reconcile.ts](apps/web/lib/ledger/reconcile.ts).
 
