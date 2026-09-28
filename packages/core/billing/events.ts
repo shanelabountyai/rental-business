@@ -426,9 +426,16 @@ export function interpretStripeEvent(event: StripeEventEnvelope): InterpretResul
     }
 
     case 'charge.refunded': {
-      const amount = int(object, 'amount_refunded')
+      // THE DELTA, NEVER THE TOTAL (MONEY-03), exactly as `invoice.updated`.
+      // `amount_refunded` is the charge's running total, so a $200 refund
+      // followed by a $300 one reported 20000 then 50000 and booked $700.
+      // Absent `previous_attributes` means nothing was refunded before.
+      const total = int(object, 'amount_refunded')
+      const previous = event.data?.previous_attributes
+      const before = (previous ? int(previous, 'amount_refunded') : null) ?? 0
+      const amount = total == null ? null : total - before
       if (amount == null || amount <= 0) {
-        return { outcome: 'ignore', reason: 'charge reported no refunded amount' }
+        return { outcome: 'ignore', reason: 'charge reported no newly refunded amount' }
       }
       return {
         outcome: 'project',

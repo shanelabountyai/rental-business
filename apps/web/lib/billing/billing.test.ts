@@ -1357,3 +1357,73 @@ describe('an autopay ACH debit settles its own pending row (MONEY-08)', () => {
     expect(rows).toHaveLength(2)
   })
 })
+
+describe('a refund of a fee-bearing card payment (MONEY-03, MONEY-10)', () => {
+  // Stripe reports `amount_refunded` as the charge's running total and
+  // refunds the card fee with the principal; the ledger only ever credited
+  // the principal (MONEY-07). Two partial refunds covering the whole $1,030
+  // must put the balance back exactly where it was before the payment.
+  it('books each refund as its increment and never re-opens the fee', async () => {
+    const lease = await seedActiveLease()
+    await provisionLeaseBilling(lease.id)
+    const payer = await prisma.leasePayer.findFirstOrThrow({ where: { leaseId: lease.id } })
+    const customer = payer.stripeCustomerId!
+    const now = Math.floor(Date.now() / 1000)
+    const balance = async () =>
+      (await prisma.ledgerEntry.aggregate({ where: { leaseId: lease.id }, _sum: { amountCents: true } }))
+        ._sum.amountCents ?? 0
+
+    await processStripeEvent(
+      invoiceEvent({ customer, type: 'invoice.finalized', amountDue: 200_000, created: now }),
+    )
+    const before = await balance()
+
+    const paymentIntentId = `pi_${randomUUID().replace(/-/g, '').slice(0, 16)}`
+    await processStripeEvent({
+      id: `evt_${randomUUID().replace(/-/g, '')}`,
+      type: 'payment_intent.succeeded',
+      created: now,
+      data: {
+        object: {
+          id: paymentIntentId,
+          customer,
+          amount: 103_000,
+          payment_method_types: ['card'],
+          metadata: { leasePayerId: payer.id, principalCents: '100000' },
+        },
+      },
+    })
+    expect(await balance()).toBe(before - 100_000)
+
+    const chargeId = `ch_${randomUUID().replace(/-/g, '').slice(0, 14)}`
+    const refund = (total: number, previous: number) =>
+      processStripeEvent({
+        id: `evt_${randomUUID().replace(/-/g, '')}`,
+        type: 'charge.refunded',
+        created: now + 60,
+        data: {
+          object: { id: chargeId, customer, amount_refunded: total, payment_intent: paymentIntentId },
+          previous_attributes: { amount_refunded: previous },
+        },
+      })
+
+    // $200 then $300 back: each books its increment, not the running total
+    // (which would have been +$200 then +$500).
+    await refund(20_000, 0)
+    expect(await balance()).toBe(before - 80_000)
+    await refund(50_000, 20_000)
+    expect(await balance()).toBe(before - 50_000)
+
+    // The remaining $530 - $500 principal and the $30 fee. Only the
+    // principal re-opens; the fee was never owed.
+    await refund(103_000, 50_000)
+    expect(await balance()).toBe(before)
+
+    const reversals = await prisma.ledgerEntry.findMany({
+      where: { leaseId: lease.id, type: 'REVERSAL' },
+      select: { amountCents: true },
+      orderBy: { createdAt: 'asc' },
+    })
+    expect(reversals.map((row) => row.amountCents)).toEqual([20_000, 30_000, 50_000])
+  }, 30_000)
+})

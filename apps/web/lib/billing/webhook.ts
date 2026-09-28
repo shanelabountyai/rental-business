@@ -354,7 +354,26 @@ async function projectClaimed(
         : []
       const linkedTotal = linked.reduce((total, row) => total + row.amountCents, 0)
       const sign = ledgerAmountCents(intent) < 0 ? -1 : 1
-      const movedCents = Math.abs(ledgerAmountCents(intent))
+      let movedCents = Math.abs(ledgerAmountCents(intent))
+
+      // A REFUND GIVES BACK AT MOST WHAT ITS PAYMENT STILL HAS CREDITED
+      // (MONEY-10). Stripe refunds the card fee too, but MONEY-07 never
+      // credited the fee, so debiting it re-opened $30 the tenant never owed.
+      // Capping at the payment's net ledger credit treats the fee as refunded
+      // last. Only a payment with ledger rows is capped: a refund for money
+      // this ledger never saw arrive (a fresh row from `writePayment`) has
+      // nothing to cap against.
+      if (intent.kind === 'refund' && payment) {
+        const { _sum, _count } = await tx.ledgerEntry.aggregate({
+          where: { paymentId: payment.id },
+          _sum: { amountCents: true },
+          _count: true,
+        })
+        if (_count > 0) {
+          movedCents = Math.min(movedCents, Math.max(0, -(_sum.amountCents ?? 0)))
+          if (movedCents === 0) return
+        }
+      }
 
       // LINKED ROWS MUST NOT EXCEED WHAT MOVED. A partial payment reports
       // only what arrived, while the charges named on the invoice carry their

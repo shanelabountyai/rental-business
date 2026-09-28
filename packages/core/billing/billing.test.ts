@@ -427,6 +427,23 @@ describe('interpretStripeEvent', () => {
     expect(ledgerAmountCents(result.intent)).toBe(25_000)
   })
 
+  it('projects each partial refund as its own increment, not the running total (MONEY-03)', () => {
+    // `amount_refunded` is cumulative on the charge: $200 then $300 must book
+    // +$200 and +$300, never +$200 and +$500.
+    const first = interpretStripeEvent(
+      event('charge.refunded', { id: 'ch_1', customer: 'c', amount_refunded: 20_000 }, {
+        amount_refunded: 0,
+      }),
+    )
+    const second = interpretStripeEvent(
+      event('charge.refunded', { id: 'ch_1', customer: 'c', amount_refunded: 50_000 }, {
+        amount_refunded: 20_000,
+      }),
+    )
+    expect(first.outcome === 'project' && ledgerAmountCents(first.intent)).toBe(20_000)
+    expect(second.outcome === 'project' && ledgerAmountCents(second.intent)).toBe(30_000)
+  })
+
   it('gets the SIGNS the right way round', () => {
     // Inverting these would tell somebody they owe rent they already paid.
     const paid = interpretStripeEvent(

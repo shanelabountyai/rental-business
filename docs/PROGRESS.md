@@ -13638,3 +13638,15 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 **What it left behind.** PENDING rows stranded before this fix stay PENDING; how many exist was not measured.
 
 **Gate.** `lint` and `typecheck` clean. `billing.test.ts` and the core billing tests: **149 passed** of 149. **Mutation-checked:** with `webhook.ts` reverted, the new test goes red (three rows instead of two). Full `npm test`: 3443 passed, 4 skipped, **4 failed**, the same 4 as on `main` (`comms.test.ts` inbound routing ×2, `pre-move-out-scheduling-job.test.ts` ×2), which CI passes against a fresh database. No e2e spec touched; CI owns the sweep.
+
+## MONEY-03 + MONEY-10 — refunds book their increment and never re-open the card fee
+
+**Commit:** `PENDING`  ·  **Date:** 2026-09-28
+
+**What it built.** `charge.refunded` in [packages/core/billing/events.ts](packages/core/billing/events.ts) now projects `amount_refunded` less `previous_attributes.amount_refunded`, so a $200 then a $300 refund book +$200 and +$300 (previously +$200 and +$500). In [apps/web/lib/billing/webhook.ts](apps/web/lib/billing/webhook.ts) a refund's debit is capped at the refunded Payment's net ledger credit, so a full refund of a $1,000 + $30 card payment re-opens $1,000, not $1,030.
+
+**What it decided.** D-272. The cap is the payment's own ledger sum, not a fee subtraction, so the fee falls out as refunded last with no fee lookup. A Payment with no ledger rows is left uncapped.
+
+**What it left behind.** A refund of an invoice-paid payment (no PaymentIntent on our row under dahlia) still lands on a fresh `REFUNDED` row and is not capped. A partial refund still marks the Payment `REFUNDED`.
+
+**Gate.** `lint` and `typecheck` clean. `billing.test.ts` and the core billing tests: **84 passed** of 84. **Mutation-checked:** with either `events.ts` or `webhook.ts` reverted, the new app test goes red. Full `npm test`: 3445 passed, 4 skipped, **4 failed**, the same 4 as on `main` (`comms.test.ts` inbound routing ×2, `pre-move-out-scheduling-job.test.ts` ×2). No e2e spec touched; CI owns the sweep.
