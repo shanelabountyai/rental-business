@@ -13603,7 +13603,7 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 
 ## MONEY-02 — a webhook event that throws after its claim is replayed, not lost
 
-**Commit:** `PENDING`  ·  **Date:** 2026-09-28
+**Commit:** `da1541f`  ·  **Date:** 2026-09-28
 
 **What it built.** `processStripeEvent` ([lib/billing/webhook.ts](apps/web/lib/billing/webhook.ts)) now wraps everything after the claim. On a throw it marks a claim that is still `received` as `failed` and rethrows, so the route answers 500 as before. On a duplicate claim, `retakeClaim` takes the row back with one conditional `updateMany` if it is `failed`, or `received` and older than 15 minutes (a process that died before reaching its catch). `projected` is now written inside the projection transaction rather than after it. `claimPortalEcho` treats a split already claimed by the same event id as unclaimed. `detectDrift` reports a standing `failed` claim as `stuck_claim`.
 
