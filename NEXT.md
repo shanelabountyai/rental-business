@@ -6,7 +6,9 @@
 - **Shane: subscribe the test webhook endpoint to `charge.dispute.closed`.** Endpoint `we_1U47bfJ7dm36XvZPk4ekxGak` still lists `charge.dispute.created`. Swap it in the Stripe dashboard (Developers → Webhooks), or MONEY-04 never receives its event. The target set is in `docs/DEPLOYMENT.md`. The in-session edit was refused as a shared-resource change.
 - **CI green** for `c437056` (run 36470684616, both jobs), which covers MONEY-03/04/07/08/10 and SEC-18.
 - **Local `rental_test` has leftover data**: 4 unit tests fail on `main` too (`comms.test.ts` inbound routing ×2, `pre-move-out-scheduling-job.test.ts` ×2), while CI is green.
-- **Next item: LEGAL-01 (HIGH)**, where screening lookback windows are configured but never applied. LEGAL-02 is also HIGH. The earlier "no HIGH rows open" line was wrong. Model: **Opus** (fair-housing correctness).
+- **Done 2026-09-28: LEGAL-01** (`911b03c`, D-275): a screening record is cited as within the lookback only when a provider-reported date puts it there.
+- **Shane: production needs `migrate deploy`.** A deploy runs no migration (D-254). LEGAL-01 adds `ScreeningReport.evictionRecordOn`/`criminalRecordOn`, so production's screening pages will 500 until migration `20260928130000_legal01_screening_record_dates` is applied (`docs/DEPLOYMENT.md` has the command). Check `migrate status` for MONEY-01's `20260928120000` at the same time.
+- **Next item: LEGAL-02 (HIGH)**, the FCRA credit-score disclosure block in the adverse-action notice. Model: **Opus** (legal correctness). Final wording still needs counsel.
 - **Roll the Stripe TEST secret key**: a masking regex printed it into the 2026-09-28 session transcript. Test mode only, not sent anywhere.
 - SEC-17 reconfirmed in production 2026-09-28 (prefetch → 401).
 - **Not done, needs Shane:** rotate the demo password (`demo-rental-2026`, tracked in `seed-demo-access.mts` and D-257) — repo is PUBLIC so it's exposed regardless of code fixes. Consider making the repo private too.
