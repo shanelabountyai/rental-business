@@ -13617,7 +13617,7 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 
 ## MONEY-07 — the card fee is no longer credited as rent
 
-**Commit:** `PENDING`  ·  **Date:** 2026-09-28
+**Commit:** `10a74ee`  ·  **Date:** 2026-09-28
 
 **What it built.** `ledgerAmountCents` ([packages/core/billing/events.ts](packages/core/billing/events.ts)) returns `-(principalCents ?? amountCents)` for `payment_succeeded`. The allocation plan, the ledger rows and MONEY-01's invoice push all read that one number, so all three now move the same principal. The `Payment` row still records the whole amount Stripe collected. MONEY-01's webhook test used to assert the bug (`-103_000` credited on a $1,000 + $30 payment). It now asserts `-100_000` credited, `103_000` on the Payment row, and a lease balance of exactly zero once the $2,000 invoice is paid in full. The core test asserts the principal-only ledger amount.
 
