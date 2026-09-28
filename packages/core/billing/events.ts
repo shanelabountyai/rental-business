@@ -101,9 +101,19 @@ export const HANDLED_EVENTS = [
   'invoice.payment_failed',
   /// Money went back. A refund, or an ACH return after settlement.
   'charge.refunded',
-  /// A dispute. Recorded so it is visible; the money movement itself
-  /// arrives as its own balance transaction later.
-  'charge.dispute.created',
+  /**
+   * A CHARGEBACK THE TENANT WON (MONEY-04, D-274). Only the close is handled,
+   * and only when `status` is `lost`: the funds leave at `created` but come
+   * back on a win, so the debt is re-opened once, when it is final.
+   *
+   * Measured on the test account under `2026-07-29.dahlia`: a Dispute has NO
+   * `customer`, and the invoice it paid stays `paid` with no `invoice.updated`
+   * after the loss - so nothing else will ever take the credit back. The
+   * payer is resolved from our own Payment row, never from a customer id.
+   * `charge.dispute.created` used to be here and was refused on every
+   * delivery for that missing `customer`.
+   */
+  'charge.dispute.closed',
 
   // ---- Tenant-initiated payments (R-037, PAY-01) ----
   //
@@ -177,8 +187,9 @@ export type ProjectionKind =
   | 'payment_failed'
   /// Money back out. Writes a positive LedgerEntry reversing the payment.
   | 'refund'
-  /// Recorded for visibility. No ledger movement here.
-  | 'dispute'
+  /// A lost chargeback. Reverses the disputed payment's own ledger entries,
+  /// exactly as a bank return does.
+  | 'dispute_lost'
 
 export interface ProjectionIntent {
   kind: ProjectionKind
@@ -268,12 +279,38 @@ export function interpretStripeEvent(event: StripeEventEnvelope): InterpretResul
     return { outcome: 'ignore', reason: 'object had no id' }
   }
 
+  const occurredAt = new Date(event.created * 1000)
+
+  // Before the customer check, because a Dispute never carries one.
+  if (event.type === 'charge.dispute.closed') {
+    if (str(object, 'status') !== 'lost') {
+      return { outcome: 'ignore', reason: `dispute closed ${str(object, 'status') ?? 'unknown'}` }
+    }
+    const amount = int(object, 'amount')
+    const paymentIntent = str(object, 'payment_intent')
+    if (amount == null || amount <= 0 || !paymentIntent) {
+      return { outcome: 'ignore', reason: 'lost dispute named no amount or payment intent' }
+    }
+    return {
+      outcome: 'project',
+      intent: {
+        kind: 'dispute_lost',
+        stripeObjectId,
+        stripeCustomerId: null,
+        stripeInvoiceId: null,
+        stripePaymentIntentId: paymentIntent,
+        rail: null,
+        amountCents: amount,
+        occurredAt,
+        description: 'Chargeback lost',
+      },
+    }
+  }
+
   const stripeCustomerId = str(object, 'customer')
   if (!stripeCustomerId) {
     return { outcome: 'ignore', reason: 'object named no customer' }
   }
-
-  const occurredAt = new Date(event.created * 1000)
 
   switch (event.type) {
     case 'setup_intent.succeeded': {
@@ -453,27 +490,6 @@ export function interpretStripeEvent(event: StripeEventEnvelope): InterpretResul
       }
     }
 
-    case 'charge.dispute.created': {
-      const amount = int(object, 'amount')
-      if (amount == null || amount <= 0) {
-        return { outcome: 'ignore', reason: 'dispute reported no amount' }
-      }
-      return {
-        outcome: 'project',
-        intent: {
-          kind: 'dispute',
-          stripeObjectId,
-          stripeCustomerId,
-          stripeInvoiceId: null,
-          stripePaymentIntentId: str(object, 'payment_intent'),
-          rail: null,
-          amountCents: amount,
-          occurredAt,
-          description: 'Payment disputed',
-        },
-      }
-    }
-
     case 'payment_intent.processing':
     case 'payment_intent.succeeded':
     case 'payment_intent.payment_failed': {
@@ -615,7 +631,11 @@ export function ledgerAmountCents(intent: ProjectionIntent): number {
       // Payment row still records the whole amount Stripe collected.
       return -(intent.principalCents ?? intent.amountCents)
     case 'refund':
-      // Money going back out re-opens the balance it had closed.
+    case 'dispute_lost':
+      // Money going back out re-opens the balance it had closed. A lost
+      // dispute is reversed from its payment's own entries (the app's
+      // `reverseSettledPayment`), so the card fee MONEY-07 never credited is
+      // never debited either; this is its sign, not its size.
       return intent.amountCents
     case 'payment_pending':
       // MONEY IN FLIGHT IS NOT MONEY RECEIVED. An ACH debit takes three to
@@ -626,10 +646,7 @@ export function ledgerAmountCents(intent: ProjectionIntent): number {
       // balance does not move until it settles.
       return 0
     case 'payment_failed':
-    case 'dispute':
-      // Neither moves the balance. A failed attempt leaves the charge
-      // exactly as owed as it already was; a dispute is recorded for
-      // visibility and its money movement arrives as its own event.
+      // A failed attempt leaves the charge exactly as owed as it already was.
       return 0
   }
 }

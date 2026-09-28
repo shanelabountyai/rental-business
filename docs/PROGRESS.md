@@ -13662,3 +13662,29 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 **What it left behind.** Nothing owned elsewhere.
 
 **Gate.** `lint` and `typecheck` clean (only the existing `requirePermission` warnings). Auth unit tests: **100 passed** of 100. `e2e/auth.spec.ts` staff sign-in, MFA and brute-force blocks, both projects: **24 passed** of 24 (`--list` Total: 24). **Mutation-checked:** with the provider's limit disabled, the new spec goes red on both projects, because the ninth direct post (the correct code) signs in. CI owns the full sweep.
+
+## MONEY-04 — a lost chargeback reverses the payment it took back
+
+**Commit:** `(pending)`  ·  **Date:** 2026-09-28
+
+**What it built.** [packages/core/billing/events.ts](packages/core/billing/events.ts) now handles `charge.dispute.closed` instead of `charge.dispute.created`. Only `status: lost` projects, as the new `dispute_lost` kind. In [apps/web/lib/billing/webhook.ts](apps/web/lib/billing/webhook.ts), `projectLostDispute` finds the SETTLED Payment by its PaymentIntent. If there is none (card autopay rows carry only the invoice), it asks the new `findInvoiceForPaymentIntent` provider method (`/invoice_payments`) and matches the invoice and amount. It then runs the existing `reverseSettledPayment`, with the reason "Chargeback lost". `dispute_lost` joined `LEDGER_MOVING_KINDS` in [apps/web/lib/ledger/reconcile.ts](apps/web/lib/ledger/reconcile.ts).
+
+**What it decided.** D-274. Measured on the test account under `2026-07-29.dahlia`, not assumed:
+- A Dispute has no `customer`.
+- The charge has no `invoice`.
+- `/invoice_payments?payment[payment_intent]=` resolves the invoice.
+- The invoice stays `paid` after a loss.
+
+**Real bug found:** because a Dispute has no `customer`, the old `charge.dispute.created` case had been refused on every delivery as "object named no customer".
+
+**What it left behind.**
+- No Task or tenant notice on a dispute opening or being lost.
+- A payment partly refunded before its dispute is `REFUNDED`, so the close is ignored and the remainder stays credited.
+- **The test-mode webhook endpoint `we_1U47bfJ7dm36XvZPk4ekxGak` still subscribes to `charge.dispute.created`, not `.closed`.** Changing it was refused in-session as a shared-resource edit, so it needs Shane. Until then this code never receives its event. `docs/DEPLOYMENT.md` already lists the target set.
+
+**Gate.**
+- `lint` and `typecheck` clean. Lint shows the same 16 warnings as `main`.
+- `billing.test.ts` plus the core billing tests: **87 passed** of 87.
+- **Mutation-checked:** with the `lost` check broken, 3 tests go red.
+- Full `npm test`: 3448 passed, 4 skipped, **4 failed**. They are the same 4 as on `main` (`comms.test.ts` inbound routing ×2, `pre-move-out-scheduling-job.test.ts` ×2).
+- No e2e spec touched; CI owns the sweep.

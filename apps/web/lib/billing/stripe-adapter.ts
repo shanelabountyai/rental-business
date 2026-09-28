@@ -665,6 +665,16 @@ export class StripeBillingProvider implements BillingProvider {
     return new Uint8Array(await response.arrayBuffer())
   }
 
+  async findInvoiceForPaymentIntent(stripePaymentIntentId: string): Promise<string | null> {
+    // Measured on the test account: returns the one invoice payment an
+    // autopay charge made, keyed by its intent.
+    const list = await this.#get(
+      `/invoice_payments?payment[type]=payment_intent&payment[payment_intent]=${encodeURIComponent(stripePaymentIntentId)}`,
+    )
+    const first = (list?.data as { invoice?: unknown }[] | undefined)?.[0]
+    return typeof first?.invoice === 'string' ? first.invoice : null
+  }
+
   async getOpenInvoices(input: { stripeCustomerId: string }): Promise<OpenInvoice[] | null> {
     // `limit=100` is Stripe's page maximum. A tenancy with more than a
     // hundred open invoices is not a counter payment, and a truncated list

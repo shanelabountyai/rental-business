@@ -461,4 +461,12 @@ export interface BillingProvider {
    * (see `attachmentBlocks` for why silence there would be a false claim).
    */
   getInvoicePdf(stripeInvoiceId: string): Promise<Uint8Array | null>
+
+  /**
+   * The invoice a PaymentIntent paid, or null (MONEY-04). Under
+   * `2026-07-29.dahlia` neither the intent nor its charge names the invoice,
+   * and an autopay Payment row carries only the invoice - so a dispute, which
+   * names only the intent, reaches its payment through this.
+   */
+  findInvoiceForPaymentIntent(stripePaymentIntentId: string): Promise<string | null>
 }

@@ -240,6 +240,7 @@ const LEDGER_MOVING_KINDS: ReadonlySet<string> = new Set([
   'payment_succeeded',
   'refund',
   'payment_returned',
+  'dispute_lost',
 ])
 
 /// The old type-keyed answer, kept ONLY for rows with no recorded detail.

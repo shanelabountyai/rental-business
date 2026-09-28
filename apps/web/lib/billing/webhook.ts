@@ -161,6 +161,10 @@ async function projectClaimed(
 
   const intent = interpretation.intent
 
+  // A LOST CHARGEBACK (MONEY-04). A Dispute names no customer, so the payer
+  // lookups below would find nobody; it is resolved from its Payment instead.
+  if (intent.kind === 'dispute_lost') return projectLostDispute(event, intent)
+
   // Application-fee customers are Applicants (R-059), not LeasePayers.
   // Checked FIRST, because the LeasePayer lookup below finds nothing for
   // one of these and would otherwise silently "ignore" the one event that
@@ -552,7 +556,6 @@ async function writePayment(
   intent: ProjectionIntent,
   payer: { id: string; leaseId: string; propertyId: string },
 ) {
-  if (intent.kind === 'dispute') return null
   // A CHARGE is not a payment. Nobody has paid anything - a bill was issued -
   // so there is no Payment row to write, and falling through would have
   // created one in the `REFUNDED` state, which is nonsense that would then
@@ -1047,6 +1050,58 @@ async function findSettledPayment(intent: ProjectionIntent) {
 }
 
 /**
+ * A chargeback the tenant won takes the payment's credit back (MONEY-04).
+ *
+ * The payment is found by its intent (a portal payment, or an ACH autopay row
+ * MONEY-08 adopted), else by the invoice Stripe says that intent paid - a
+ * card autopay row carries only the invoice. Only a SETTLED row is reversed:
+ * one already REVERSED or REFUNDED has had its credit given back already, and
+ * reversing again would double the debt.
+ */
+async function projectLostDispute(
+  event: StripeEventEnvelope,
+  intent: ProjectionIntent,
+): Promise<PipelineResult> {
+  const select = {
+    id: true,
+    amountCents: true,
+    leasePayerId: true,
+    leaseId: true,
+    propertyId: true,
+  } as const
+  const paymentIntentId = intent.stripePaymentIntentId!
+  let settled = await prisma.payment.findFirst({
+    where: { stripePaymentIntentId: paymentIntentId, status: 'SETTLED' },
+    select,
+  })
+  if (!settled) {
+    const invoiceId = await getBillingProvider().findInvoiceForPaymentIntent(paymentIntentId)
+    settled = invoiceId
+      ? await prisma.payment.findFirst({
+          where: { stripeInvoiceId: invoiceId, status: 'SETTLED', amountCents: intent.amountCents },
+          select,
+          orderBy: { receivedAt: 'desc' },
+        })
+      : null
+  }
+  if (!settled) {
+    const detail = `no settled payment for disputed intent ${paymentIntentId}`
+    await recordOutcome(event.id, 'ignored', detail)
+    return { outcome: 'ignored', detail }
+  }
+
+  const payer = { id: settled.leasePayerId, leaseId: settled.leaseId, propertyId: settled.propertyId }
+  await prisma.$transaction(async (tx) => {
+    await tx.processedStripeEvent.update({
+      where: { stripeEventId: event.id },
+      data: { outcome: 'projected', detail: intent.kind },
+    })
+    await reverseSettledPayment(tx, event, intent, payer, settled)
+  })
+  return { outcome: 'projected', detail: intent.kind }
+}
+
+/**
  * Takes back a credit that turned out not to be money (PAY-02).
  *
  * A REVERSING ENTRY, never an edit or a delete - `LedgerEntry` is append-only
@@ -1074,12 +1129,17 @@ async function reverseSettledPayment(
   payer: { id: string; leaseId: string; propertyId: string },
   settled: { id: string; amountCents: number },
 ) {
+  const [reason, description] =
+    intent.kind === 'dispute_lost'
+      ? ['Chargeback lost', 'Chargeback lost']
+      : ['Returned by the bank', 'Payment returned by the bank']
+
   await tx.payment.update({
     where: { id: settled.id },
     data: {
       status: 'REVERSED',
       reversedAt: intent.occurredAt,
-      reversalReason: 'Returned by the bank',
+      reversalReason: reason,
     },
   })
 
@@ -1109,7 +1169,7 @@ async function reverseSettledPayment(
         leasePayerId: payer.id,
         type: 'REVERSAL',
         amountCents: reversalAmountCents(settled.amountCents),
-        description: 'Payment returned by the bank',
+        description,
         occurredAt: intent.occurredAt,
         paymentId: settled.id,
         stripeEventId: event.id,
@@ -1129,7 +1189,7 @@ async function reverseSettledPayment(
         // From the ORIGINAL row, so a partial payment gives back exactly what
         // it gave - an invoice total is a different number.
         amountCents: reversalAmountCents(original.amountCents),
-        description: 'Payment returned by the bank',
+        description,
         occurredAt: intent.occurredAt,
         paymentId: settled.id,
         chargeId: original.chargeId,

@@ -137,11 +137,13 @@ invoice.finalized          payment_intent.succeeded
 invoice.updated            payment_intent.processing
 invoice.payment_failed     payment_intent.payment_failed
 invoice.voided             charge.refunded
-setup_intent.succeeded     charge.dispute.created
+setup_intent.succeeded     charge.dispute.closed
 ```
 
 `setup_intent.succeeded` was added with R-039a and is the only one that moves
 no money — it is how a tenant's saved card becomes working autopay.
+`charge.dispute.closed` replaced `charge.dispute.created` with MONEY-04 on
+2026-09-28: only a close with `status: lost` moves the ledger.
 
 **`invoice.updated` replaced `invoice.payment_succeeded` on 2026-08-25
 (R-038a, D-141), and swapping them back would reintroduce a shipped bug.**

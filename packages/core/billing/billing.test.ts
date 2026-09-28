@@ -444,6 +444,23 @@ describe('interpretStripeEvent', () => {
     expect(second.outcome === 'project' && ledgerAmountCents(second.intent)).toBe(30_000)
   })
 
+  it('projects only a LOST dispute, with no customer to read (MONEY-04)', () => {
+    // A Dispute carries no `customer` under the account's API version; the
+    // payer is resolved from our Payment row by the intent.
+    const dispute = (status: string) =>
+      interpretStripeEvent(
+        event('charge.dispute.closed', { id: 'du_1', amount: 103_000, payment_intent: 'pi_1', status }),
+      )
+    const lost = dispute('lost')
+    expect(lost.outcome).toBe('project')
+    if (lost.outcome !== 'project') return
+    expect(lost.intent).toMatchObject({ kind: 'dispute_lost', stripePaymentIntentId: 'pi_1', stripeCustomerId: null })
+    expect(ledgerAmountCents(lost.intent)).toBe(103_000)
+    expect(dispute('won').outcome).toBe('ignore')
+    expect(dispute('warning_closed').outcome).toBe('ignore')
+    expect(interpretStripeEvent(event('charge.dispute.created', { id: 'du_1', amount: 1 })).outcome).toBe('ignore')
+  })
+
   it('gets the SIGNS the right way round', () => {
     // Inverting these would tell somebody they owe rent they already paid.
     const paid = interpretStripeEvent(

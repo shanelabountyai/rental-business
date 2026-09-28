@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { prisma } from '@rental/db'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { leaseBillingState, provisionLeaseBilling } from './provision.ts'
 import { leaseBalanceCents, outstandingCharges } from '@/lib/ledger/queries.ts'
 import { getBillingProvider } from './provider.ts'
@@ -1425,5 +1425,85 @@ describe('a refund of a fee-bearing card payment (MONEY-03, MONEY-10)', () => {
       orderBy: { createdAt: 'asc' },
     })
     expect(reversals.map((row) => row.amountCents)).toEqual([20_000, 30_000, 50_000])
+  }, 30_000)
+})
+
+describe('a lost chargeback (MONEY-04)', () => {
+  // Measured on the test account: a Dispute names no customer, and the
+  // invoice it paid stays `paid` after the loss, so this event is the only
+  // thing that can take the credit back.
+  const closed = (paymentIntent: string, status: string, amount: number, created: number) =>
+    processStripeEvent({
+      id: `evt_${randomUUID().replace(/-/g, '')}`,
+      type: 'charge.dispute.closed',
+      created,
+      data: { object: { id: `du_${randomUUID().slice(0, 12)}`, amount, payment_intent: paymentIntent, status } },
+    })
+
+  async function setup() {
+    const lease = await seedActiveLease()
+    await provisionLeaseBilling(lease.id)
+    const payer = await prisma.leasePayer.findFirstOrThrow({ where: { leaseId: lease.id } })
+    const balance = async () =>
+      (await prisma.ledgerEntry.aggregate({ where: { leaseId: lease.id }, _sum: { amountCents: true } }))
+        ._sum.amountCents ?? 0
+    return { lease, payer, customer: payer.stripeCustomerId!, balance }
+  }
+
+  it('reverses a portal card payment, principal only, and only once', async () => {
+    const { lease, payer, customer, balance } = await setup()
+    const now = Math.floor(Date.now() / 1000)
+    await processStripeEvent(invoiceEvent({ customer, type: 'invoice.finalized', amountDue: 200_000, created: now }))
+    const before = await balance()
+
+    const paymentIntentId = `pi_${randomUUID().replace(/-/g, '').slice(0, 16)}`
+    await processStripeEvent({
+      id: `evt_${randomUUID().replace(/-/g, '')}`,
+      type: 'payment_intent.succeeded',
+      created: now,
+      data: {
+        object: {
+          id: paymentIntentId,
+          customer,
+          amount: 103_000,
+          payment_method_types: ['card'],
+          metadata: { leasePayerId: payer.id, principalCents: '100000' },
+        },
+      },
+    })
+    expect(await balance()).toBe(before - 100_000)
+
+    // Won: the funds came back, nothing to reverse.
+    expect((await closed(paymentIntentId, 'won', 103_000, now + 60)).outcome).toBe('ignored')
+    expect(await balance()).toBe(before - 100_000)
+
+    // Lost: the $1,000 credit comes back off; the $30 fee was never credited.
+    expect((await closed(paymentIntentId, 'lost', 103_000, now + 120)).outcome).toBe('projected')
+    expect(await balance()).toBe(before)
+    const payment = await prisma.payment.findUniqueOrThrow({ where: { stripePaymentIntentId: paymentIntentId } })
+    expect(payment).toMatchObject({ status: 'REVERSED', reversalReason: 'Chargeback lost', leaseId: lease.id })
+
+    // A second close for the same intent finds nothing SETTLED to reverse.
+    expect((await closed(paymentIntentId, 'lost', 103_000, now + 180)).outcome).toBe('ignored')
+    expect(await balance()).toBe(before)
+  }, 30_000)
+
+  it('reaches a card autopay payment through the invoice Stripe says its intent paid', async () => {
+    const { customer, balance } = await setup()
+    const now = Math.floor(Date.now() / 1000)
+    const invoiceId = `in_${randomUUID().replace(/-/g, '').slice(0, 14)}`
+    await processStripeEvent(invoiceEvent({ customer, invoiceId, type: 'invoice.finalized', amountDue: 150_000, created: now }))
+    const before = await balance()
+    await processStripeEvent(invoiceEvent({ customer, invoiceId, amountPaid: 150_000, paymentIntentId: null, created: now }))
+    expect(await balance()).toBe(before - 150_000)
+
+    const paymentIntentId = `pi_${randomUUID().replace(/-/g, '').slice(0, 16)}`
+    const lookup = vi
+      .spyOn(getBillingProvider(), 'findInvoiceForPaymentIntent')
+      .mockResolvedValueOnce(invoiceId)
+    expect((await closed(paymentIntentId, 'lost', 150_000, now + 60)).outcome).toBe('projected')
+    expect(lookup).toHaveBeenCalledWith(paymentIntentId)
+    lookup.mockRestore()
+    expect(await balance()).toBe(before)
   }, 30_000)
 })

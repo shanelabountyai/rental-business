@@ -520,6 +520,12 @@ export class SimulatedBillingProvider implements BillingProvider {
   async getInvoicePdf(): Promise<Uint8Array | null> {
     return null
   }
+
+  /// The simulator never raises a PaymentIntent for an invoice, so there is
+  /// no invoice to find.
+  async findInvoiceForPaymentIntent(): Promise<string | null> {
+    return null
+  }
 }
 
 /**
