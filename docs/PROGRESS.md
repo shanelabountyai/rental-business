@@ -13718,7 +13718,7 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 
 ## LEGAL-02 — the adverse-action notice discloses the credit score
 
-**Commit:** `PENDING`  ·  **Date:** 2026-09-29
+**Commit:** `8963909`  ·  **Date:** 2026-09-29
 
 **What it built.** [packages/core/screening/adverse-action.ts](packages/core/screening/adverse-action.ts) renders a "Your credit score" block (15 U.S.C. § 1681m(a)(2)): score, range, date, source and key factors. `disclosedKeyFactors` caps the factors at four, adding inquiries as a fifth only when it falls outside the first four. `ScreeningReport` gains `creditScoreRangeLow/High`, `creditScoreFactors`, `creditScoreOn` and `creditScoreSource` (migration `20260929120000_legal02_credit_score_disclosure`). The adapter contract, the simulator (300–850, today, a self-naming simulated source, 2–6 factors hashed from the applicant id), [order.ts](apps/web/lib/screening/order.ts) and [staff-actions.ts](apps/web/lib/screening/staff-actions.ts) carry them through.
 
