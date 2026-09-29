@@ -1,23 +1,27 @@
 # Next session
 
-## 7-agent review sweep is done and scoped (2026-09-27/28, `90956f0`, `2c30266`). SEC-17 (demo-gate bypass) is fixed (`0200b54`, D-267). All 37 findings are now backlog rows, none dropped: MONEY-01..06, SEC-17(done)..20, LEGAL-01..05, A11Y-01..11, UX-01..10, OPS-01. See `docs/prds/06-backlog.md` → "Review findings — 7-agent read-only sweep".
+## Done 2026-09-29: A11Y-01 (`500c51a`, `9ebf254`, D-281). Tenant bottom nav no longer overflows/collides on a phone.
 
-- **Done 2026-09-28:** MONEY-01, -02, -03, -07, -08, -10, SEC-18, and **MONEY-04** (`4c23965`, D-274: `charge.dispute.closed` with `status: lost` reverses the payment).
-- **Shane: subscribe the test webhook endpoint to `charge.dispute.closed`.** Endpoint `we_1U47bfJ7dm36XvZPk4ekxGak` still lists `charge.dispute.created`. Swap it in the Stripe dashboard (Developers → Webhooks), or MONEY-04 never receives its event. The target set is in `docs/DEPLOYMENT.md`. The in-session edit was refused as a shared-resource change.
-- **CI green** for `c437056` (run 36470684616, both jobs), which covers MONEY-03/04/07/08/10 and SEC-18.
-- **Local `rental_test` has leftover data**: up to 4 unit tests fail on `main` too (`comms.test.ts` inbound routing ×2, `pre-move-out-scheduling-job.test.ts` ×2), while CI is green.
-- **Done 2026-09-28: LEGAL-01** (`911b03c`, D-275): a screening record is cited as within the lookback only when a provider-reported date puts it there.
-- **Production migrated 2026-09-29** through LEGAL-01, MONEY-01's migration included. The recipe that works (Neon CLI, not `vercel env pull`) is in `docs/DEPLOYMENT.md`.
-- **Done 2026-09-29: LEGAL-02** (`8963909`, D-276): the adverse-action notice discloses score, range, key factors, date and source. Wording still needs counsel. **Production needs migrating** (`20260929120000_legal02_credit_score_disclosure` pending) via the `docs/DEPLOYMENT.md` recipe.
-- **Done 2026-09-29: LEGAL-03** (`8ae6056`, D-278): prospect/applicant texts need consent; inquiry form has an optional texting checkbox; co-applicant invites require an email. **Production needs migrating**: `20260929120000` (LEGAL-02) and `20260929180000` (LEGAL-03) both pending, via the `docs/DEPLOYMENT.md` recipe. Per-push deploys are now off (`bf30ca7`), so a deploy is manual too.
-- **Done 2026-09-29: LEGAL-04** (`2f91930`, D-279): SMS opts out on the FCC per-se words and a closed list of revocation sentences ("please stop texting me"); a bare YES no longer resubscribes. No migration.
-- **Done 2026-09-29: LEGAL-05** (`2c97b1c`, D-280): on any Vercel deployment the logging adapter logs `CHANNEL logged as log_<id>` only; a laptop still prints the body (the demo walk reads magic links from it). No migration.
-- **Next item: A11Y-01 (HIGH)**: tenant bottom nav (7 items, `components/portal/portal-nav.tsx`) likely overflows 320/412px phones. Screenshot first, then wrap or move "Account" to the header; add a `shell.spec.ts`-style overflow check. Run `--project=mobile-chrome`. Model: **Sonnet** (UI layout, no money/permission logic). Still open lower-severity: MONEY-05/06/09, SEC-19/20.
-- **Local unit runs time out when a sibling project's sweep overlaps** (2026-09-29: 52 timeouts with `onsitestaffing`/`tradepost` running; rerun at `--maxWorkers=2` went 422/424). Check `ps aux | grep -E "vitest|playwright"` before a full `npm test`.
+- Confirmed the defect by screenshot before fixing, at 320px and 412px: "Messages"/"Account" ran together with no gap at 320px, and "Account" was pushed fully off-screen and unreachable at 412px. Neither showed as `documentElement.scrollWidth` overflow, because the nav is `position: fixed` — a fixed box's own overflow doesn't widen the document, so the `shell.spec.ts`-style check the backlog row proposed would have missed both.
+- Root cause was two separate `min-width: auto` floors: the `<li>` itself, and the bare `{item.label}` text becoming an *anonymous* flex item inside the `flex-col` link (an anonymous flex item can't be targeted by a class on its parent). Fix: `min-w-0` on the `<li>`, and the label wrapped in its own `<span className="w-full min-w-0 break-words">`.
+- New regression test in `e2e/portal.spec.ts` ("keeps every bottom-nav item on screen and separate on a phone") asserts every link's own `getBoundingClientRect` at 320px/412px — verified it actually fails against the pre-fix component before restoring the fix.
+- Gate green: lint/typecheck clean, `npm test` 3469 passed/4 skipped/4 failed (the same known local-data failures noted below, unchanged count), `e2e/portal.spec.ts` + `e2e/shell.spec.ts` against a production build on both projects: 52 passed/2 skipped.
+- **CI was still in flight for `9ebf254` when this session ended** (`gh run list --limit 3` showed `in_progress` at push time). Check `gh run list --limit 3` before starting the next item — don't assume green from the local gate alone (see the CLAUDE.md warning about copying that sentence forward unchecked).
+
+## Next item: A11Y-02 (MED)
+
+`disabled={busy}` (the R-107a defect) is back at 7 sites (`autopay-panel.tsx`, `fee-payment.tsx`, `maintenance-wizard.tsx`, `translations-panel.tsx`, `rent-roll-table.tsx`) — drops focus to `<body>`, "Paying…"/"Sending…" unannounced, and `disabled:opacity-60` drops contrast to ~2.2:1. Fix: spread `pendingButtonProps(busy)` at all 7 sites; drop the opacity class. Acceptance: axe sweep of these 7 components has no `disabled`-on-pending violation. Model: **Sonnet** (mechanical, spec-following — apply an existing helper at named sites, no new logic).
+
+Still open lower-severity from the review sweep: MONEY-05/06/09, SEC-19/20, A11Y-03, UX-01..10, OPS-01.
+
+## Carried forward, unchanged:
+
+- **Shane: subscribe the test webhook endpoint to `charge.dispute.closed`.** Endpoint `we_1U47bfJ7dm36XvZPk4ekxGak` still lists `charge.dispute.created`. Swap it in the Stripe dashboard (Developers → Webhooks), or MONEY-04 never receives its event. Target set in `docs/DEPLOYMENT.md`.
+- **Local `rental_test` has leftover data**: up to 4 unit tests fail on `main` too (`comms.test.ts` inbound routing ×2, `pre-move-out-scheduling-job.test.ts` ×2), while CI is green. Confirmed again this session — same 4, unrelated to A11Y-01.
+- **Production needs migrating**: `20260929120000` (LEGAL-02) and `20260929180000` (LEGAL-03) both pending, via the `docs/DEPLOYMENT.md` recipe. Per-push deploys are off (`bf30ca7`), so a deploy is manual too. A11Y-01 has no migration.
 - **Roll the Stripe TEST secret key**: a masking regex printed it into the 2026-09-28 session transcript. Test mode only, not sent anywhere.
-- SEC-17 reconfirmed in production 2026-09-28 (prefetch → 401).
 - **Not done, needs Shane:** rotate the demo password (`demo-rental-2026`, tracked in `seed-demo-access.mts` and D-257) — repo is PUBLIC so it's exposed regardless of code fixes. Consider making the repo private too.
 - Cost review baseline recorded verbally (2026-09-26) but **not yet written into `07-decisions.md`**: Neon `rentalbusiness` 41.6 CU-h / 161.2 active-h since 2026-09-17; Vercel rental-business build CPU $6.76 effective / $1.41 billed for 09-01..09-26. Worth a small follow-up commit.
 - Legal review and R-228 still need a person (unchanged).
 
-## Prior: R-253..R-257 done (`681fbb4`, CI green). Backlog had no open rows before this sweep.
+## Prior: 7-agent review sweep scoped 2026-09-27/28 into 37 backlog rows (`90956f0`, `2c30266`). Done since: SEC-17, MONEY-01/02/03/04/07/08/10, SEC-18, LEGAL-01/02/03/04/05, A11Y-01. See `docs/prds/06-backlog.md` → "Review findings — 7-agent read-only sweep".
