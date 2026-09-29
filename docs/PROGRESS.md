@@ -13787,7 +13787,7 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 
 ## LEGAL-05 — the logging adapter keeps notification bodies out of runtime logs
 
-**Commit:** `PENDING`  ·  **Date:** 2026-09-29
+**Commit:** `2c97b1c`  ·  **Date:** 2026-09-29
 
 **What it built.** `LoggingChannelAdapter.send` in [logging-adapter.ts](apps/web/lib/notifications/logging-adapter.ts) checks `process.env.VERCEL`: on any Vercel deployment it logs `[notifications] <CHANNEL> logged as log_<uuid>` and nothing else — no recipient, subject or body. The `log_…` id is the `externalId` already stored on `NotificationDelivery`, so the line still finds the row. Off Vercel the full print is unchanged. New `logging-adapter.test.ts` covers both branches.
 
