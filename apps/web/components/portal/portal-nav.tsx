@@ -22,7 +22,7 @@ export function PortalNav({ items }: { items: readonly PortalNavItem[] }) {
       aria-label="Sections"
       className="border-border bg-background fixed inset-x-0 bottom-0 z-40 border-t sm:static sm:border-t-0 sm:border-b"
     >
-      <ul className="mx-auto flex w-full max-w-2xl">
+      <ul className="mx-auto flex w-full max-w-2xl gap-x-1.5">
         {items.map((item) => {
           // Exact match for the portal root, prefix for the rest - otherwise
           // /portal would light up on every page.
@@ -32,17 +32,29 @@ export function PortalNav({ items }: { items: readonly PortalNavItem[] }) {
               : pathname === item.href || pathname.startsWith(`${item.href}/`)
 
           return (
-            <li key={item.href} className="flex-1">
+            <li key={item.href} className="min-w-0 flex-1">
               <Link
                 href={item.href}
                 aria-current={active ? 'page' : undefined}
-                className={`focus-visible:ring-ring flex min-h-14 flex-col items-center justify-center gap-0.5 border-t-2 px-3 py-2 text-base focus-visible:ring-2 focus-visible:-outline-offset-2 focus-visible:outline-none sm:min-h-12 sm:border-t-0 sm:border-b-2 ${
+                className={`focus-visible:ring-ring flex min-h-14 min-w-0 flex-col items-center justify-center gap-0.5 border-t-2 px-1 py-2 text-center text-[11px] leading-tight focus-visible:ring-2 focus-visible:-outline-offset-2 focus-visible:outline-none sm:min-h-12 sm:border-t-0 sm:border-b-2 sm:px-3 sm:text-base ${
                   active
                     ? 'border-foreground text-foreground font-semibold'
                     : 'text-muted-foreground hover:text-foreground border-transparent'
                 }`}
               >
-                {item.label}
+                {/*
+                  A bare text node inside a `flex-col` Link becomes an
+                  anonymous flex item, and an anonymous flex item still gets
+                  `min-width: auto` - `min-w-0` on the Link itself can't
+                  reach it. Wrapping the label gives an element to target,
+                  but `items-center` sizes a flex item's cross axis to its
+                  own fit-content by default, which paints wider than the
+                  40px-ish column at 320px/7 items and bleeds into the next
+                  one - `w-full` is what actually clamps it back to the
+                  column's width (same `min-w-0`/cap pairing as the
+                  `<select>` case in ui-classes.ts).
+                */}
+                <span className="w-full min-w-0 break-words">{item.label}</span>
                 <span className="sr-only">. {item.description}</span>
               </Link>
             </li>

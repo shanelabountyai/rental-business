@@ -248,6 +248,64 @@ test.describe('the portal shell', () => {
     expect(manifest.display).toBe('standalone')
     expect(manifest.icons.length).toBeGreaterThan(0)
   })
+
+  /**
+   * A11Y-01: all seven bottom-nav items must stay ON SCREEN and SEPARATE on
+   * a narrow phone.
+   *
+   * The nav is `position: fixed`, so an item pushed past the right edge
+   * never widens `document.documentElement.scrollWidth` - the check
+   * `e2e/shell.spec.ts` uses for the admin shell's overflow (R-170a) reads
+   * this page as fine while "Account" is entirely off-screen and
+   * unreachable, because a fixed box's overflow doesn't inflate the
+   * document. Assert directly on the links' own bounding rects instead:
+   * every one must be within the viewport, and none may overlap its
+   * neighbour - which is what "Messages" bleeding into "Account" with no
+   * gap looked like before the fix (a bare text node inside a `flex-col`
+   * link becomes an anonymous flex item that ignores `min-w-0`).
+   */
+  test('keeps every bottom-nav item on screen and separate on a phone', async ({
+    page,
+  }, testInfo) => {
+    test.skip(
+      testInfo.project.name !== 'mobile-chrome',
+      'a desktop viewport shows this nav as a normal top row',
+    )
+
+    const { tenant } = await seedTenancy('Reflow')
+    await signInWithLink(page, await magicLinkFor(tenant.id))
+    await expect(page).toHaveURL(/\/portal$/)
+
+    for (const width of [320, 412]) {
+      await page.setViewportSize({ width, height: 800 })
+      const nav = page.getByRole('navigation', { name: 'Sections' })
+      const links = nav.getByRole('link')
+      const count = await links.count()
+      expect(count).toBe(7)
+
+      const rects = []
+      for (let i = 0; i < count; i++) {
+        const box = await links.nth(i).boundingBox()
+        expect(box, `link ${i} at ${width}px`).not.toBeNull()
+        rects.push(box!)
+      }
+      rects.sort((a, b) => a.x - b.x)
+
+      for (const rect of rects) {
+        expect(rect.x, `a nav item left of the viewport at ${width}px`).toBeGreaterThanOrEqual(0)
+        expect(
+          rect.x + rect.width,
+          `a nav item past the ${width}px viewport`,
+        ).toBeLessThanOrEqual(width)
+      }
+      for (let i = 0; i < rects.length - 1; i++) {
+        expect(
+          rects[i].x + rects[i].width,
+          `nav items ${i} and ${i + 1} overlap at ${width}px`,
+        ).toBeLessThanOrEqual(rects[i + 1].x)
+      }
+    }
+  })
 })
 
 test.describe('a tenant sees only their own papers (DOC-03)', () => {

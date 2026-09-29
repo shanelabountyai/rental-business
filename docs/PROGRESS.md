@@ -13803,3 +13803,25 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 - `lint` (0 errors, pre-existing `requirePermission` warnings only) and `typecheck` clean.
 - `logging-adapter.test.ts`: 2 new cases; notifications folder plus `live-adapter.test.ts` green (30/30 on the rerun).
 - Full `npm test`: 3398 passed, 27 skipped, 52 failed (= 3477). The run overlapped two sibling projects' sweeps (`onsitestaffing` Playwright, `tradepost`) while `rental_test` sat idle: the failures were all 10–90s timeouts across unrelated domains. Rerun of the 45 failing files at `--maxWorkers=2`: **422 of 424 passed**; the 2 left are the known local-data `comms.test.ts` inbound-routing failures that also fail on `main`.
+
+## A11Y-01 — the tenant bottom nav no longer overflows/collides on a phone
+
+**Commit:** `PENDING`  ·  **Date:** 2026-09-29
+
+**What it built.** `PortalNav` ([portal-nav.tsx](apps/web/components/portal/portal-nav.tsx)) got three changes: `min-w-0` on each `<li>`, the label wrapped in its own `<span className="w-full min-w-0 break-words">` instead of bare text, and the mobile-only text/padding shrunk (`text-[11px] px-1`, unchanged from `sm:` up). Confirmed by screenshot before touching the CSS: at 412px (Pixel 7) "Account" was pushed fully off-screen with no way to reach it; at 320px "Messages" and "Account" ran together with no visible gap. Neither showed up as `documentElement.scrollWidth` overflow, because the nav is `position: fixed` and a fixed box's own overflow doesn't widen the document — the `shell.spec.ts`-style check the backlog row proposed would have passed against both defects.
+
+**What it decided.** D-281:
+- Root cause was two flex-min-content gaps, not one: the `<li>` itself (fixed by `min-w-0`), and separately the bare `{item.label}` text becoming an *anonymous* flex item inside the `flex-col` link — anonymous flex items get `min-width: auto` too, and there's no element to put `min-w-0` on until the label is wrapped in a real `<span>`.
+- The span also needed `w-full`: without it, a non-stretched flex item's cross-axis size defaults to its own fit-content (full unbroken word width), which painted past the column into the next item — the same bleed, one layer up.
+- Took "let the bar wrap" over the backlog row's other option ("move Account into the header"), which would have been a separate, larger design change to the header.
+- New `e2e/portal.spec.ts` test asserts every link's own `getBoundingClientRect` (not `documentElement.scrollWidth`) at 320px and 412px: nothing left of 0 or past the viewport, and no two adjacent items overlap. Verified it actually catches the regression: reverted the component, watched the test fail on the overlap assertion, restored the fix.
+
+**What it left behind.**
+- Wording, item count and D-10's lexicon are unchanged — only the CSS.
+- No icon set was added; the fix is text-only, which is why the mobile font had to shrink as far as 11px. If a redesign ever adds icons, this className stack can likely simplify.
+- A11Y-02 and A11Y-03 (pending-button focus/contrast, form value echo on refusal) are unrelated open rows in the same review sweep.
+
+**Gate.**
+- `lint` (0 errors, pre-existing warnings only) and `typecheck` clean.
+- Full `npm test`: 3469 passed, 4 skipped, 4 failed — the known local-data failures that also fail on `main` (`comms.test.ts` inbound routing ×2, `pre-move-out-scheduling-job.test.ts` ×2; unchanged file count from before this item).
+- `e2e/portal.spec.ts` and `e2e/shell.spec.ts` against a production build, both projects: 52 passed, 2 skipped (the new test and `shell.spec.ts`'s own phone-viewport test both correctly skip on `desktop-chrome`).
