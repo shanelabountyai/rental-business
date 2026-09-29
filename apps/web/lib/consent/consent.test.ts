@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { prisma } from '@rental/db'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { INQUIRY_SMS_DISCLOSURE } from '@rental/core/consent'
 import { dispatchPendingNotifications, notify } from '@/lib/notifications/send.ts'
 
 // TCPA consent against a real database (COMM-02, R-051b).
@@ -359,5 +360,91 @@ describe('a guarantor can be reached (R-196)', () => {
     // a screen that does not exist.
     const { outcomes } = await guarantorOutcomes(unconsentedGuarantorId, `g-portal-${randomUUID()}`)
     expect(outcomes.map((outcome) => outcome.channel).sort()).toEqual(['EMAIL', 'SMS'])
+  })
+})
+
+describe('prospects and applicants are gated too (LEGAL-03)', () => {
+  // Rows are left behind on purpose: TenantConsent RESTRICTs its prospect
+  // and is append-only, and the property is deactivated in afterAll.
+  let prospectId: string
+  let prospectPhone: string
+  let unconsentedProspectId: string
+  let applicationId: string
+
+  const phone = () => `+1512557${String(Math.floor(Math.random() * 9000) + 1000)}`
+
+  beforeAll(async () => {
+    const unit = await prisma.unit.create({ data: { propertyId, name: `legal03-${randomUUID().slice(0, 6)}` } })
+    const listing = await prisma.listing.create({
+      data: { propertyId, unitId: unit.id, status: 'PUBLISHED', rentCents: 150_000, availableOn: new Date('2026-10-01') },
+    })
+    const makeProspect = (number: string) =>
+      prisma.prospect.create({
+        data: { propertyId, listingId: listing.id, firstName: 'Pia', lastName: 'Lead', phone: number, source: 'direct' },
+      })
+    prospectPhone = phone()
+    const consented = await makeProspect(prospectPhone)
+    prospectId = consented.id
+    unconsentedProspectId = (await makeProspect(phone())).id
+    // What submitInquiry writes when the box is ticked.
+    await prisma.tenantConsent.create({
+      data: {
+        prospectId,
+        channel: 'SMS',
+        basis: 'EXPRESS_WRITTEN',
+        source: 'WEB_FORM',
+        disclosureText: INQUIRY_SMS_DISCLOSURE,
+      },
+    })
+    applicationId = (
+      await prisma.application.create({ data: { propertyId, listingId: listing.id, prospectId } })
+    ).id
+  })
+
+  async function smsReason(
+    recipient: { type: 'PROSPECT' | 'APPLICANT'; id: string; phone: string },
+  ): Promise<string | null> {
+    const outcomes = await notify({
+      category: recipient.type === 'PROSPECT' ? 'prospect_prescreening' : 'prospect_application',
+      templateKey: recipient.type === 'PROSPECT' ? 'prospect.prescreen_invite' : 'application.invite',
+      recipient: { ...recipient, email: null },
+      context: { firstName: 'Pia', addressLine1: '3 Consent Court', url: 'https://example.test/x' },
+      propertyId,
+      idempotencyKey: `legal03-${randomUUID()}`,
+    })
+    const sms = outcomes.find((outcome) => outcome.channel === 'SMS')
+    expect(sms?.deliveryId, 'the SMS row must exist').toBeTruthy()
+    const delivery = await prisma.notificationDelivery.findUniqueOrThrow({ where: { id: sms!.deliveryId! } })
+    return delivery.suppressedReason
+  }
+
+  const applicant = (isLead: boolean, number: string) =>
+    prisma.applicant.create({
+      data: { applicationId, isLead, firstName: 'Pia', lastName: 'Lead', phone: number },
+    })
+
+  it('texts a prospect who ticked the box on the inquiry form', async () => {
+    expect(await smsReason({ type: 'PROSPECT', id: prospectId, phone: prospectPhone })).not.toBe('no_consent')
+  })
+
+  it('REFUSES a prospect with no consent on file', async () => {
+    const reason = await smsReason({ type: 'PROSPECT', id: unconsentedProspectId, phone: phone() })
+    expect(reason).toBe('no_consent')
+  })
+
+  it('texts the lead applicant at the number the prospect consented on', async () => {
+    const lead = await applicant(true, prospectPhone)
+    expect(await smsReason({ type: 'APPLICANT', id: lead.id, phone: prospectPhone })).not.toBe('no_consent')
+  })
+
+  it('REFUSES the lead applicant at a different number', async () => {
+    const number = phone()
+    const lead = await applicant(true, number)
+    expect(await smsReason({ type: 'APPLICANT', id: lead.id, phone: number })).toBe('no_consent')
+  })
+
+  it('REFUSES a co-applicant, even at the consented number - nobody consents for another', async () => {
+    const co = await applicant(false, prospectPhone)
+    expect(await smsReason({ type: 'APPLICANT', id: co.id, phone: prospectPhone })).toBe('no_consent')
   })
 })

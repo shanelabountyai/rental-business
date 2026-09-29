@@ -41,10 +41,11 @@ export function CoApplicantInviteForm({
           name="email"
           type="email"
           idPrefix="coapplicant"
+          required
           error={errors.email}
-          hint="Give an email or a phone - that's how their link gets sent."
+          hint="Their link goes by email. We can't text a number someone else gave us."
         />
-        <TextField label="Phone" name="phone" type="tel" idPrefix="coapplicant" />
+        <TextField label="Phone (optional)" name="phone" type="tel" idPrefix="coapplicant" />
       </div>
       <SubmitButton label="Add co-applicant" />
     </form>

@@ -118,3 +118,10 @@ export function consentVerdict(
     ? { allowed: true, reason: null }
     : { allowed: false, reason: 'basis_too_weak' }
 }
+
+/// The words beside the texting checkbox on the public inquiry form
+/// (LEGAL-03), stored verbatim as the consent row's `disclosureText` - the
+/// record has to be able to show what was agreed to. Draft wording, not
+/// legal advice: counsel should review it before a real prospect sees it.
+export const INQUIRY_SMS_DISCLOSURE =
+  'You agree to get text messages at this number about this listing, a showing, and any application, including automated texts. Message and data rates may apply. Reply STOP to opt out. Agreeing is not a condition of renting.'

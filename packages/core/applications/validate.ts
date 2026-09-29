@@ -32,10 +32,13 @@ export function validateCoApplicantInvite(input: CoApplicantInviteInput): Violat
   if (!input.lastName.trim()) {
     violations.push({ field: 'lastName', message: 'Enter a last name.' })
   }
-  if (!input.email?.trim() && !input.phone?.trim()) {
+  // Email only (LEGAL-03). A co-applicant's number is typed by the lead, and
+  // one person cannot consent to texts for another, so their link can never
+  // go by SMS - a phone-only invite would be accepted and never arrive.
+  if (!input.email?.trim()) {
     violations.push({
       field: 'email',
-      message: 'Enter an email or a phone number - that is how their link gets sent.',
+      message: "Enter their email - that is how their link gets sent. We can't text a number someone else gave us.",
     })
   }
 

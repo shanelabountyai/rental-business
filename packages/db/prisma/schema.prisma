@@ -339,6 +339,8 @@ enum ConsentSource {
   STAFF_RECORDED
   PORTAL
   BACKFILL
+  /// LEGAL-03. The public listing-inquiry form's texting checkbox.
+  WEB_FORM
 }
 
 enum MessageDirection {
@@ -1460,7 +1462,7 @@ model ScreeningReport {
   status      String
   faultCode   String?
 
-  creditScore         Int?
+  creditScore          Int?
   /// The score's own disclosure facts, as the provider reported them -
   /// 15 U.S.C. § 1681m(a)(2) puts every one in the adverse-action notice
   /// when a score was used (LEGAL-02). Null/empty on reports ordered
@@ -1471,14 +1473,14 @@ model ScreeningReport {
   creditScoreFactors   String[]  @default([])
   creditScoreOn        DateTime? @db.Date
   creditScoreSource    String?
-  evictionRecordFound Boolean?
-  criminalRecordFound Boolean?
+  evictionRecordFound  Boolean?
+  criminalRecordFound  Boolean?
   /// The most recent record's date, as the provider reported it (LEGAL-01).
   /// Null when none was found or the provider gave no date - and an undated
   /// record is never described as inside the lookback window
   /// (packages/core/screening/evaluate.ts).
-  evictionRecordOn    DateTime? @db.Date
-  criminalRecordOn    DateTime? @db.Date
+  evictionRecordOn     DateTime? @db.Date
+  criminalRecordOn     DateTime? @db.Date
 
   criteriaVersion Int
 
@@ -1596,6 +1598,7 @@ model Prospect {
   applications   Application[]
   showings       Showing[]
   identityChecks IdentityCheck[]
+  consents       TenantConsent[]
 
   @@index([propertyId, status])
   @@index([listingId])
@@ -6613,6 +6616,10 @@ model TenantConsent {
   /// person, and a polymorphic `subjectId` would give up both foreign keys.
   tenantId          String?
   guarantorId       String?
+  /// LEGAL-03. Widened a third time, same CHECK: consent ticked on the
+  /// public inquiry form. The lead applicant reads it too (see
+  /// `smsConsentVerdict`).
+  prospectId        String?
   channel           ConsentChannel
   basis             ConsentBasis
   source            ConsentSource
@@ -6629,10 +6636,12 @@ model TenantConsent {
 
   tenant     Tenant?    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   guarantor  Guarantor? @relation(fields: [guarantorId], references: [id], onDelete: Restrict)
+  prospect   Prospect?  @relation(fields: [prospectId], references: [id], onDelete: Restrict)
   recordedBy StaffUser? @relation("TenantConsentRecordedBy", fields: [recordedByStaffId], references: [id], onDelete: Restrict)
 
   @@index([tenantId, channel])
   @@index([guarantorId, channel])
+  @@index([prospectId, channel])
 }
 
 model SmsOptOut {

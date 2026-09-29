@@ -2,7 +2,8 @@ import { randomUUID } from 'node:crypto'
 import { hashPassword, mintToken } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
-import { uniqueClientHeaders } from './fixtures.ts'
+import { INQUIRY_SMS_DISCLOSURE } from '@rental/core/consent'
+import { uniqueClientHeaders, uniquePhone } from './fixtures.ts'
 
 // The prospect pipeline (LEASE-07, R-058).
 //
@@ -109,10 +110,13 @@ test.beforeAll(async () => {
 })
 
 test.afterAll(async () => {
-  await prisma.prospect.deleteMany({ where: { id: { in: prospectIds } } })
+  // A prospect who consented to texts (LEGAL-03) cannot be deleted: its
+  // TenantConsent row is append-only and RESTRICTs it. It stays, and so do
+  // the listing and unit it hangs off; the property is deactivated below.
+  await prisma.prospect.deleteMany({ where: { id: { in: prospectIds }, consents: { none: {} } } })
   await prisma.listingLead.deleteMany({ where: { listingId: { in: listingIds } } })
-  await prisma.listing.deleteMany({ where: { id: { in: listingIds } } })
-  await prisma.unit.deleteMany({ where: { id: { in: unitIds } } })
+  await prisma.listing.deleteMany({ where: { id: { in: listingIds }, prospects: { none: {} } } })
+  await prisma.unit.deleteMany({ where: { id: { in: unitIds }, listings: { none: {} } } })
   await prisma.property.updateMany({ where: { id: { in: propertyIds } }, data: { active: false } })
   await prisma.staffUser.updateMany({ where: { id: { in: staffIds } }, data: { active: false } })
 })
@@ -187,6 +191,39 @@ test('an anonymous visitor inquires, and the pipeline shows the inquiry', async 
   await page.getByRole('link', { name: new RegExp(lastName) }).click()
   await expect(page.getByRole('heading', { name: `Priya ${lastName}` })).toBeVisible()
   await expect(page.getByText('Not sent yet.')).toHaveCount(0)
+})
+
+// LEGAL-03: the texting checkbox is the only way a prospect's number becomes
+// textable, and what it stores is the exact wording shown beside it.
+test('a phone-only visitor who ticks the texting box is recorded as consenting', async ({
+  browser,
+}) => {
+  const { listing } = await seedPublishedListing()
+  const phone = uniquePhone()
+
+  const anon = await browser.newContext({ extraHTTPHeaders: uniqueClientHeaders() })
+  const anonPage = await anon.newPage()
+  await anonPage.goto(`/listings/${listing.id}`)
+  await anonPage.getByLabel('First name').fill('Tomas')
+  await anonPage.getByLabel('Last name').fill(`Texter-${randomUUID().slice(0, 8)}`)
+  await anonPage.getByLabel('Phone', { exact: true }).fill(phone)
+  await anonPage.getByLabel('Text me at this phone number').check()
+  await anonPage.getByRole('button', { name: 'Send my question' }).click()
+  await expect(anonPage.getByText(/check your email or phone/)).toBeVisible()
+  await anon.close()
+
+  const prospect = await prisma.prospect.findFirstOrThrow({
+    where: { listingId: listing.id },
+    include: { consents: true },
+  })
+  prospectIds.push(prospect.id)
+  expect(prospect.consents).toHaveLength(1)
+  expect(prospect.consents[0]).toMatchObject({
+    channel: 'SMS',
+    basis: 'EXPRESS_WRITTEN',
+    source: 'WEB_FORM',
+    disclosureText: INQUIRY_SMS_DISCLOSURE,
+  })
 })
 
 test('a prospect answers the identical five questions, and staff moves the pipeline forward', async ({

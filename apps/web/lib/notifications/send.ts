@@ -807,26 +807,48 @@ function addressFor(
 /// TCPA consent for one SMS (R-051b), looked up on the key for the
 /// recipient's type (R-196). Staff and vendors are not residential consumers
 /// and are not gated.
+///
+/// PROSPECT and APPLICANT were ungated until LEGAL-03. A prospect consents on
+/// the inquiry form. The lead applicant IS that prospect, so reads the same
+/// rows - but only while the number is the one the prospect ticked the box
+/// for. A co-applicant's number was typed by somebody else, and a person
+/// cannot consent for another, so no row can ever match one: never texted.
 async function smsConsentVerdict(
   db: Db,
   recipient: NotificationRecipient,
   category: NotificationCategory,
 ): Promise<{ allowed: boolean; reason: string | null }> {
-  if (recipient.type !== 'TENANT' && recipient.type !== 'GUARANTOR') {
+  if (recipient.type === 'STAFF' || recipient.type === 'VENDOR') {
     return { allowed: true, reason: null }
   }
-  if (!recipient.phone?.trim()) return { allowed: true, reason: null }
+  const phone = recipient.phone?.trim()
+  if (!phone) return { allowed: true, reason: null }
   return consentVerdict(
     await db.tenantConsent.findMany({
-      where:
-        recipient.type === 'GUARANTOR'
-          ? { guarantorId: recipient.id }
-          : { tenantId: recipient.id },
+      where: await consentSubject(db, recipient.type, recipient.id, phone),
       select: { channel: true, basis: true, revokedAt: true },
     }),
     'SMS',
     categoryPurpose(category),
   )
+}
+
+async function consentSubject(
+  db: Db,
+  type: 'TENANT' | 'GUARANTOR' | 'PROSPECT' | 'APPLICANT',
+  id: string,
+  phone: string,
+): Promise<Prisma.TenantConsentWhereInput> {
+  if (type === 'TENANT') return { tenantId: id }
+  if (type === 'GUARANTOR') return { guarantorId: id }
+  if (type === 'PROSPECT') return { prospectId: id }
+  const applicant = await db.applicant.findUnique({
+    where: { id },
+    select: { isLead: true, application: { select: { prospect: { select: { id: true, phone: true } } } } },
+  })
+  const prospect = applicant?.isLead ? applicant.application.prospect : null
+  // `id: ''` matches nothing, so the verdict is `no_consent_on_file`.
+  return prospect && prospect.phone?.trim() === phone ? { prospectId: prospect.id } : { id: '' }
 }
 
 /**

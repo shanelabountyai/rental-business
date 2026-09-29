@@ -7,7 +7,8 @@ import {
   useFocusWhen,
   useFormVersion,
 } from '@/components/auth-form.tsx'
-import { TextField, TextareaField } from '@/components/form/field.tsx'
+import { CheckboxField, TextField, TextareaField } from '@/components/form/field.tsx'
+import { INQUIRY_SMS_DISCLOSURE } from '@rental/core/consent'
 import type { InquiryFormState } from '@/lib/prospects/actions.ts'
 
 // The public inquiry form (LEASE-07, R-058) - what turns an anonymous
@@ -92,6 +93,14 @@ export function ListingInquiryForm({
           defaultValue={echoed.phone}
         />
       </div>
+      {/* LEGAL-03. Unticked by default, and optional: the hint is the exact
+          text stored as the consent record's disclosure. */}
+      <CheckboxField
+        label="Text me at this phone number"
+        name="smsConsent"
+        defaultChecked={echoed.smsConsent === 'on'}
+        hint={INQUIRY_SMS_DISCLOSURE}
+      />
       <TextareaField
         label="Anything you'd like us to know? (optional)"
         name="message"

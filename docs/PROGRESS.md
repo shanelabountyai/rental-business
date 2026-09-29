@@ -13738,3 +13738,28 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 - `e2e/screening.spec.ts`, both projects: **8 passed** of 8. The decline spec asserts the score line and the "not reported" range line.
 - `db:ci` (migrations from scratch, seed, drift) clean.
 - **Production not migrated**: `20260929120000` is pending there until Shane runs the `docs/DEPLOYMENT.md` recipe.
+
+## LEGAL-03 — prospects and applicants need consent before they are texted
+
+**Commit:** `PENDING`  ·  **Date:** 2026-09-29
+
+**What it built.** `smsConsentVerdict` in [send.ts](apps/web/lib/notifications/send.ts) now gates PROSPECT and APPLICANT recipients; only STAFF and VENDOR are exempt. `TenantConsent` gains `prospectId` under the same one-subject CHECK, and `ConsentSource` gains `WEB_FORM` (migration `20260929180000_legal03_prospect_sms_consent`). The public inquiry form has an optional "Text me at this phone number" checkbox whose hint is `INQUIRY_SMS_DISCLOSURE` ([packages/core/consent/consent.ts](packages/core/consent/consent.ts)). `submitInquiry` writes the consent row in the same transaction as the prospect. A phone-only inquiry without the box ticked gets "we'll call you back". The co-applicant invite requires an email.
+
+**What it decided.** D-277:
+- The lead applicant reads the prospect's consent only at the same number; a co-applicant is never texted.
+- The box is optional, because consent must not be a condition of inquiring.
+- Phone-only co-applicant invites are refused rather than accepted and never delivered.
+
+**What it left behind.**
+- Counsel must confirm `INQUIRY_SMS_DISCLOSURE`.
+- A co-applicant has no way to consent to texts. It would need a checkbox on the applicant form and an `applicantId` on `TenantConsent`.
+- Prospects created before this item have no consent rows, so their showing reminders and application invites now go by email only.
+- A prospect with a consent row cannot be deleted (append-only, RESTRICT). `e2e/prospects.spec.ts` cleanup now skips them and the listing and unit they hang off.
+
+**Gate.**
+- `lint` (0 errors, the 16 pre-existing warnings) and `typecheck` clean.
+- `consent.test.ts`: 5 new cases (prospect with and without consent, lead at the consented and at a different number, co-applicant at the consented number). The three refusals fail against the old `send.ts`.
+- Full `npm test`: 3464 passed, 4 skipped, **4 failed**. All 4 are the known local-data failures that also fail on `main` (`comms.test.ts` inbound routing ×2, `pre-move-out-scheduling-job.test.ts` ×2).
+- `e2e/prospects.spec.ts` and `e2e/applications.spec.ts`, both projects: **12 passed** of 12 (listed total 12), including the new texting-box spec.
+- `db:drift` and `db:ci` clean.
+- **Production not migrated**: `20260929120000` (LEGAL-02) and `20260929180000` (LEGAL-03) are both pending until Shane runs the `docs/DEPLOYMENT.md` recipe.

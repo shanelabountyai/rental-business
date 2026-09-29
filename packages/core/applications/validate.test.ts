@@ -23,14 +23,15 @@ describe('validateCoApplicantInvite', () => {
     expect(violations.map((v) => v.field)).toEqual(['lastName'])
   })
 
-  it('requires an email or a phone', () => {
+  it('requires an email', () => {
     const violations = validateCoApplicantInvite({ ...valid, email: null })
     expect(violations.map((v) => v.field)).toEqual(['email'])
   })
 
-  it('accepts a phone with no email', () => {
+  // LEGAL-03: the lead cannot consent to texts on a co-applicant's behalf.
+  it('refuses a phone with no email', () => {
     const violations = validateCoApplicantInvite({ ...valid, email: null, phone: '555-1234' })
-    expect(violations).toEqual([])
+    expect(violations.map((v) => v.field)).toEqual(['email'])
   })
 })
 

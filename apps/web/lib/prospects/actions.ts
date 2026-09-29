@@ -1,6 +1,7 @@
 'use server'
 
 import { validateProspectInquiry } from '@rental/core/prospects'
+import { INQUIRY_SMS_DISCLOSURE } from '@rental/core/consent'
 import { RATE_LIMITS } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { headers } from 'next/headers'
@@ -57,7 +58,7 @@ function str(formData: FormData, name: string): string {
 /// those lose exactly as much typing as a validation failure does.
 function typed(formData: FormData): Record<string, string> {
   return Object.fromEntries(
-    ['firstName', 'lastName', 'email', 'phone', 'message'].map((name) => [
+    ['firstName', 'lastName', 'email', 'phone', 'message', 'smsConsent'].map((name) => [
       name,
       str(formData, name),
     ]),
@@ -119,11 +120,16 @@ export async function submitInquiry(
       lastName: input.lastName,
       email: input.email ?? '',
       phone: input.phone ?? '',
+      smsConsent: str(formData, 'smsConsent'),
       message: input.message ?? '',
     })
   }
 
   const source = str(formData, 'source') || 'direct'
+  // LEGAL-03. Only a ticked box beside a number is consent to text it. An
+  // unticked phone-only inquiry is still accepted - consent must not be a
+  // condition of asking - and gets a call back rather than a text.
+  const smsConsent = Boolean(input.phone) && formData.get('smsConsent') === 'on'
 
   const prospect = await prisma.$transaction(async (tx) => {
     const created = await tx.prospect.create({
@@ -138,6 +144,17 @@ export async function submitInquiry(
         source,
       },
     })
+    if (smsConsent) {
+      await tx.tenantConsent.create({
+        data: {
+          prospectId: created.id,
+          channel: 'SMS',
+          basis: 'EXPRESS_WRITTEN',
+          source: 'WEB_FORM',
+          disclosureText: INQUIRY_SMS_DISCLOSURE,
+        },
+      })
+    }
     // SYSTEM, not audit() - this is a public form with no session at all,
     // not a signed-in actor whose session simply wasn't checked. audit()
     // resolves the actor from Auth.js and, finding none, would record
@@ -152,7 +169,7 @@ export async function submitInquiry(
         entityType: 'Prospect',
         entityId: created.id,
         propertyId: listing.propertyId,
-        after: { listingId, source },
+        after: { listingId, source, smsConsent },
       },
       tx,
     )
@@ -171,6 +188,8 @@ export async function submitInquiry(
   revalidatePath(`/listings/${listingId}`)
   return {
     notice:
-      "Thanks - check your email or phone for a few quick questions, and we'll be in touch.",
+      input.email || smsConsent
+        ? "Thanks - check your email or phone for a few quick questions, and we'll be in touch."
+        : "Thanks - we'll call you back at the number you gave.",
   }
 }
