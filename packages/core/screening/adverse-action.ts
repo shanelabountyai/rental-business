@@ -19,6 +19,28 @@
 // criterion - reproduced, never computed here. No AI or algorithmic
 // applicant scoring, ever (LEASE-04's rule, restated for the one document
 // that could otherwise smuggle a "risk score" back in through the notice).
+//
+// THE CREDIT-SCORE DISCLOSURE (LEGAL-02, D-276) is § 1681m(a)(2): when a
+// numerical credit score was used, the notice must state it together with
+// § 1681g(f)(1)(B)-(E) - the model's possible range, up to four key factors
+// that hurt it (five when inquiries is one of them but not in the first
+// four), the date it was created, and who provided it. Every one of those
+// is the provider's own figure, reproduced; none is computed here.
+
+import { friendlyBusinessDate, type BusinessDate } from '../scheduling/local-time.ts'
+
+/// What the provider reported about the score itself. Any piece it did not
+/// report is null (reports ordered before LEGAL-02 carry the score alone),
+/// and the notice says so rather than leaving the line out.
+export interface CreditScoreDisclosure {
+  score: number
+  rangeLow: number | null
+  rangeHigh: number | null
+  /// In the provider's own order, most significant first.
+  keyFactors: readonly string[]
+  scoredOn: BusinessDate | null
+  source: string | null
+}
 
 export interface AdverseActionContext {
   applicantName: string
@@ -41,6 +63,38 @@ export interface AdverseActionContext {
   /// screening is why this exists at all; reproduced here so the applicant
   /// sees the same reasoning the decision was actually based on.
   decisionNotes: string | null
+  /// Null when the report carried no score - the block is then omitted.
+  creditScore: CreditScoreDisclosure | null
+}
+
+/// § 1681g(f)(1)(C): no more than four factors, except that inquiries must
+/// be listed as a fifth when they are a key factor but not in the first four.
+export function disclosedKeyFactors(factors: readonly string[]): string[] {
+  const firstFour = factors.slice(0, 4)
+  const inquiries = factors.slice(4).find((f) => /inquir/i.test(f))
+  return inquiries ? [...firstFour, inquiries] : firstFour
+}
+
+const NOT_REPORTED = 'not reported by the agency - you may request it from the agency named above'
+
+function creditScoreLines(d: CreditScoreDisclosure): string[] {
+  const factors = disclosedKeyFactors(d.keyFactors)
+  return [
+    '',
+    'Your credit score',
+    '',
+    'We also obtained a credit score from the agency named above and used it in making this decision.',
+    '',
+    `Your credit score: ${d.score}`,
+    d.rangeLow != null && d.rangeHigh != null
+      ? `Scores range from ${d.rangeLow} to ${d.rangeHigh}.`
+      : `Range of possible scores: ${NOT_REPORTED}`,
+    `Date of the score: ${d.scoredOn ? friendlyBusinessDate(d.scoredOn) : NOT_REPORTED}`,
+    `Scoring model or source: ${d.source ?? NOT_REPORTED}`,
+    '',
+    'Key factors that adversely affected your credit score:',
+    ...(factors.length > 0 ? factors.map((f) => `- ${f}`) : [`- ${NOT_REPORTED}`]),
+  ]
 }
 
 /// What the compliance gate needs to know about ONE applicant's screening
@@ -90,6 +144,7 @@ export function adverseActionNoticeText(context: AdverseActionContext): string {
     'That agency did not make this decision and is unable to explain the specific reasons for it.',
     '',
     'You have the right to obtain a free copy of your report from that agency if you request it within 60 days of this notice, and the right to dispute the accuracy or completeness of any information the agency furnished, directly with the agency.',
+    ...(context.creditScore ? creditScoreLines(context.creditScore) : []),
     ...(context.factors.length > 0
       ? ['', 'Factors from the report considered in this decision:', ...context.factors.map((f) => `- ${f}`)]
       : []),

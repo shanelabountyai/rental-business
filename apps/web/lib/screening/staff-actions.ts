@@ -152,6 +152,7 @@ export async function recordScreeningDecision(
 
     if (!owesAdverseAction) return { noticeId: null, autoServed: false, bodyText: null }
 
+    const report = applicant.screeningReport!
     const criteria = await tx.screeningCriteria.findUniqueOrThrow({
       where: { version: applicant.screeningReport!.criteriaVersion },
     })
@@ -175,6 +176,19 @@ export async function recordScreeningDecision(
       agencyContact: applicant.screeningReport!.agencyContact ?? '(agency not on file)',
       factors,
       decisionNotes: notes || null,
+      // Disclosed whenever the report carried a score: staff decide with the
+      // score on screen, so "not used" is not something we can show (D-276).
+      creditScore:
+        report.creditScore == null
+          ? null
+          : {
+              score: report.creditScore,
+              rangeLow: report.creditScoreRangeLow,
+              rangeHigh: report.creditScoreRangeHigh,
+              keyFactors: report.creditScoreFactors,
+              scoredOn: recordOn(report.creditScoreOn),
+              source: report.creditScoreSource,
+            },
     })
 
     // R-210. THE NOTICE IS CREATED UNSERVED, ALWAYS.

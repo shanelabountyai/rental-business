@@ -45,6 +45,13 @@ export interface ScreeningOrderResult {
   /// criteria comparison also reads (D-27) - see simulated-adapter.ts's own
   /// header for how the simulated driver keeps that true.
   creditScore?: number
+  /// The score's disclosure facts (LEGAL-02) - see ScreeningReport's
+  /// columns of the same names.
+  creditScoreRangeLow?: number
+  creditScoreRangeHigh?: number
+  creditScoreFactors?: string[]
+  creditScoreOn?: BusinessDate
+  creditScoreSource?: string
   evictionRecordFound?: boolean
   criminalRecordFound?: boolean
   /// The most recent record's date, when one was found and the provider

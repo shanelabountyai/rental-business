@@ -298,6 +298,10 @@ test('a decline generates and auto-serves an FCRA adverse-action notice by email
   expect(notice?.applicantId).toBe(applicant.id)
   expect(notice?.bodyText).toContain('Simulated Consumer Reporting Agency')
   expect(notice?.bodyText).toMatch(/free copy of your report/)
+  // LEGAL-02: the score is disclosed. This fixture's report carries no
+  // disclosure facts (a pre-LEGAL-02 row), so the notice says so.
+  expect(notice?.bodyText).toContain('Your credit score: 720')
+  expect(notice?.bodyText).toMatch(/Range of possible scores: not reported by the agency/)
   expect(notice?.bodyText).toMatch(/A record dated .* was found within the \d+-month lookback/)
   // Auto-served by EMAIL, the moment the decision was recorded - no separate
   // staff click.

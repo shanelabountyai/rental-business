@@ -136,6 +136,12 @@ describe('orderScreeningForApplicant', () => {
     expect(report.criminalRecordFound).toBe(expected.criminalRecordFound)
     expect(report.evictionRecordOn?.toISOString().slice(0, 10)).toBe(expected.evictionRecordOn)
     expect(report.criminalRecordOn?.toISOString().slice(0, 10)).toBe(expected.criminalRecordOn)
+    // LEGAL-02: the score's disclosure facts are stored for the notice.
+    expect(report.creditScoreRangeLow).toBe(expected.creditScoreRangeLow)
+    expect(report.creditScoreRangeHigh).toBe(expected.creditScoreRangeHigh)
+    expect(report.creditScoreFactors).toEqual(expected.creditScoreFactors)
+    expect(report.creditScoreOn?.toISOString().slice(0, 10)).toBe(expected.creditScoreOn)
+    expect(report.creditScoreSource).toBe(expected.creditScoreSource)
   })
 
   it('is idempotent - a second call for the same applicant creates nothing new', async () => {

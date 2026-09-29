@@ -45,7 +45,7 @@ Release gate, backlog flagged-gaps §6 / D-4. Nothing here is legal advice; it l
 | Field | Seeded | Reviewer question |
 |---|---|---|
 | `incomeToRentMultiplierX100` | 300 (3x) | Owner policy, not statute. Confirm it is applied uniformly and consider voucher/subsidy handling (disparate-impact exposure). |
-| `minCreditScore` | 600 | Owner policy. Confirm it is never an automatic decline (code returns MEETS/FAILS/UNKNOWN only) and adverse-action notice text meets FCRA. |
+| `minCreditScore` | 600 | Owner policy. Confirm it is never an automatic decline (code returns MEETS/FAILS/UNKNOWN only) and adverse-action notice text meets FCRA. The notice's credit-score block (§1681m(a)(2): score, range, key factors, date, source) is in `packages/core/screening/adverse-action.ts` (LEGAL-02, D-276): confirm its wording, and that disclosing whenever a score was on the report is the right trigger. |
 | `evictionLookbackMonths` | 84 | Confirm the window and FCRA reporting limits. |
 | `criminalLookbackMonths` | 84 | Confirm individualized-assessment process per HUD 2016 guidance; a hit is a flag, never an automatic decline. |
 | `citation` / `reviewedBy` | null / null | Fill on the reviewed version. |

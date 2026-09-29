@@ -13715,3 +13715,26 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 - CI green for `3475f8d` (run 36487667788).
 - **Production migrated 2026-09-29** by Shane: `migrate status` showed exactly MONEY-01's `20260928120000` and this item's `20260928130000` pending, and `migrate deploy` applied both. Production is current through LEGAL-01.
 
+
+## LEGAL-02 — the adverse-action notice discloses the credit score
+
+**Commit:** `PENDING`  ·  **Date:** 2026-09-29
+
+**What it built.** [packages/core/screening/adverse-action.ts](packages/core/screening/adverse-action.ts) renders a "Your credit score" block (15 U.S.C. § 1681m(a)(2)): score, range, date, source and key factors. `disclosedKeyFactors` caps the factors at four, adding inquiries as a fifth only when it falls outside the first four. `ScreeningReport` gains `creditScoreRangeLow/High`, `creditScoreFactors`, `creditScoreOn` and `creditScoreSource` (migration `20260929120000_legal02_credit_score_disclosure`). The adapter contract, the simulator (300–850, today, a self-naming simulated source, 2–6 factors hashed from the applicant id), [order.ts](apps/web/lib/screening/order.ts) and [staff-actions.ts](apps/web/lib/screening/staff-actions.ts) carry them through.
+
+**What it decided.** D-276:
+- The block is disclosed whenever the report carried a score, not only when the score floor failed, because nothing on record shows the score was not used.
+- A fact the provider did not report is written as "not reported by the agency", never dropped.
+- The four/five-factor cap is applied in core.
+
+**What it left behind.**
+- Counsel must confirm the wording and the trigger (legal-review checklist §B, row `minCreditScore`).
+- Reports ordered before this item carry the score alone, so their notices print "not reported" for range, date, source and factors until re-ordered. There is still no re-order path (R-060's gap).
+
+**Gate.**
+- `lint` (0 errors, the 16 pre-existing warnings) and `typecheck` clean.
+- Screening unit tests: 54 passed of 54, including the factor cap and the missing-fact rendering.
+- Full `npm test`: 3461 passed, 4 skipped, **2 failed**, both `comms.test.ts` inbound routing: the pre-existing local-data failures from `main`. `pre-move-out-scheduling-job.test.ts` passed this run.
+- `e2e/screening.spec.ts`, both projects: **8 passed** of 8. The decline spec asserts the score line and the "not reported" range line.
+- `db:ci` (migrations from scratch, seed, drift) clean.
+- **Production not migrated**: `20260929120000` is pending there until Shane runs the `docs/DEPLOYMENT.md` recipe.

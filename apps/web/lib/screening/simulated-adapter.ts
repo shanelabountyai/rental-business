@@ -51,11 +51,27 @@ export const SIMULATED_AGENCY: ScreeningAgency = {
   phone: '(800) 555-0100',
 }
 
+/// Reason statements shaped like a bureau's own, in the order a model
+/// ranks them. Which ones an applicant gets is hashed from the id (D-27).
+const SIMULATED_SCORE_FACTORS = [
+  'Proportion of balances to credit limits is too high',
+  'Length of time accounts have been established',
+  'Too many accounts with balances',
+  'Delinquency on accounts',
+  'Number of recent inquiries',
+  'Lack of recent installment loan information',
+]
+
 function factsFor(
   applicantId: string,
   today: BusinessDate,
 ): {
   creditScore: number
+  creditScoreRangeLow: number
+  creditScoreRangeHigh: number
+  creditScoreFactors: string[]
+  creditScoreOn: BusinessDate
+  creditScoreSource: string
   evictionRecordFound: boolean
   criminalRecordFound: boolean
   evictionRecordOn?: BusinessDate
@@ -69,6 +85,13 @@ function factsFor(
   return {
     // 500-849, a realistic FICO-shaped range.
     creditScore: 500 + (digest[0] % 350),
+    creditScoreRangeLow: 300,
+    creditScoreRangeHigh: 850,
+    // 2-6 factors, so a list longer than the four the notice may show,
+    // with inquiries fifth, reaches core's own cap.
+    creditScoreFactors: SIMULATED_SCORE_FACTORS.slice(0, 2 + (digest[5] % 5)),
+    creditScoreOn: today,
+    creditScoreSource: 'Simulated scoring model (not a real credit score)',
     evictionRecordFound,
     criminalRecordFound,
     ...(evictionRecordFound && { evictionRecordOn: subtractMonths(today, 1 + (digest[3] % 180)) }),

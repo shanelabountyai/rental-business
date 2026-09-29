@@ -1461,6 +1461,16 @@ model ScreeningReport {
   faultCode   String?
 
   creditScore         Int?
+  /// The score's own disclosure facts, as the provider reported them -
+  /// 15 U.S.C. § 1681m(a)(2) puts every one in the adverse-action notice
+  /// when a score was used (LEGAL-02). Null/empty on reports ordered
+  /// before LEGAL-02; the notice then says the agency did not report it.
+  creditScoreRangeLow  Int?
+  creditScoreRangeHigh Int?
+  /// Provider order, most significant first.
+  creditScoreFactors   String[]  @default([])
+  creditScoreOn        DateTime? @db.Date
+  creditScoreSource    String?
   evictionRecordFound Boolean?
   criminalRecordFound Boolean?
   /// The most recent record's date, as the provider reported it (LEGAL-01).
