@@ -10,7 +10,8 @@
 - **Production migrated 2026-09-29** through LEGAL-01, MONEY-01's migration included. The recipe that works (Neon CLI, not `vercel env pull`) is in `docs/DEPLOYMENT.md`.
 - **Done 2026-09-29: LEGAL-02** (`8963909`, D-276): the adverse-action notice discloses score, range, key factors, date and source. Wording still needs counsel. **Production needs migrating** (`20260929120000_legal02_credit_score_disclosure` pending) via the `docs/DEPLOYMENT.md` recipe.
 - **Done 2026-09-29: LEGAL-03** (`8ae6056`, D-278): prospect/applicant texts need consent; inquiry form has an optional texting checkbox; co-applicant invites require an email. **Production needs migrating**: `20260929120000` (LEGAL-02) and `20260929180000` (LEGAL-03) both pending, via the `docs/DEPLOYMENT.md` recipe. Per-push deploys are now off (`bf30ca7`), so a deploy is manual too.
-- **Next item: LEGAL-04 (LOW)**: widen STOP matching to phrases ("please stop texting me"); a bare "YES" must not resubscribe an opted-out number. Model: **Opus** (TCPA revocation rule).
+- **Done 2026-09-29: LEGAL-04** (`2f91930`, D-279): SMS opts out on the FCC per-se words and a closed list of revocation sentences ("please stop texting me"); a bare YES no longer resubscribes. No migration.
+- **Next item: LEGAL-05 (LOW)**: the logging adapter writes full notification bodies to Vercel runtime logs; log a reference id instead. Model: **Opus** (legal-notice text in logs, privacy).
 - **Roll the Stripe TEST secret key**: a masking regex printed it into the 2026-09-28 session transcript. Test mode only, not sent anywhere.
 - SEC-17 reconfirmed in production 2026-09-28 (prefetch → 401).
 - **Not done, needs Shane:** rotate the demo password (`demo-rental-2026`, tracked in `seed-demo-access.mts` and D-257) — repo is PUBLIC so it's exposed regardless of code fixes. Consider making the repo private too.
