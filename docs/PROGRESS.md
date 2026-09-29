@@ -13745,7 +13745,7 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 
 **What it built.** `smsConsentVerdict` in [send.ts](apps/web/lib/notifications/send.ts) now gates PROSPECT and APPLICANT recipients; only STAFF and VENDOR are exempt. `TenantConsent` gains `prospectId` under the same one-subject CHECK, and `ConsentSource` gains `WEB_FORM` (migration `20260929180000_legal03_prospect_sms_consent`). The public inquiry form has an optional "Text me at this phone number" checkbox whose hint is `INQUIRY_SMS_DISCLOSURE` ([packages/core/consent/consent.ts](packages/core/consent/consent.ts)). `submitInquiry` writes the consent row in the same transaction as the prospect. A phone-only inquiry without the box ticked gets "we'll call you back". The co-applicant invite requires an email.
 
-**What it decided.** D-277:
+**What it decided.** D-278:
 - The lead applicant reads the prospect's consent only at the same number; a co-applicant is never texted.
 - The box is optional, because consent must not be a condition of inquiring.
 - Phone-only co-applicant invites are refused rather than accepted and never delivered.
