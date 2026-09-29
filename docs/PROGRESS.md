@@ -13766,7 +13766,7 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 
 ## LEGAL-04 — texts opt out on revocation sentences; YES no longer resubscribes
 
-**Commit:** `PENDING`  ·  **Date:** 2026-09-29
+**Commit:** `2f91930`  ·  **Date:** 2026-09-29
 
 **What it built.** `classifyOptOutKeyword` in [opt-out.ts](packages/core/comms/opt-out.ts) adds REVOKE and OPT OUT (and OPTOUT/OPT-OUT) to the stop words, tolerates repeated whitespace inside a keyword, and returns `STOP` for a message containing one of `STOP_PHRASES` (for example "stop texting", "do not contact me", "remove me from your", "revoke my consent"). `YES` is removed from the start words. `sms-intake.ts` is unchanged: a phrase revocation takes the existing STOP path (records an `SmsOptOut`, keeps the message in the thread, opens no ticket).
 
