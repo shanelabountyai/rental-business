@@ -13741,7 +13741,7 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 
 ## LEGAL-03 — prospects and applicants need consent before they are texted
 
-**Commit:** `PENDING`  ·  **Date:** 2026-09-29
+**Commit:** `8ae6056`  ·  **Date:** 2026-09-29
 
 **What it built.** `smsConsentVerdict` in [send.ts](apps/web/lib/notifications/send.ts) now gates PROSPECT and APPLICANT recipients; only STAFF and VENDOR are exempt. `TenantConsent` gains `prospectId` under the same one-subject CHECK, and `ConsentSource` gains `WEB_FORM` (migration `20260929180000_legal03_prospect_sms_consent`). The public inquiry form has an optional "Text me at this phone number" checkbox whose hint is `INQUIRY_SMS_DISCLOSURE` ([packages/core/consent/consent.ts](packages/core/consent/consent.ts)). `submitInquiry` writes the consent row in the same transaction as the prospect. A phone-only inquiry without the box ticked gets "we'll call you back". The co-applicant invite requires an email.
 
