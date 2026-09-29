@@ -13847,7 +13847,7 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 
 ## A11Y-03 — form value echo on server refusal (`sign-form.tsx`, `prescreen-form.tsx`, `applicant-form.tsx`)
 
-**Commit:** `<pending>`  ·  **Date:** 2026-09-29
+**Commit:** `25d5686`  ·  **Date:** 2026-09-29
 
 **What it built.** All three tenant/applicant-facing forms now use `useFormVersion` + an echoed `state.values` (raw form-data strings, matching `VendorFormState.values`'s own convention from `bid-form.tsx`) so a server-side refusal no longer wipes what was typed — the `FormAlerts` live region was moved outside the keyed `<form>` in each, per `useFormVersion`'s own warning that a `key` remounts everything inside it.
 - `sign-form.tsx` / `esign-actions.ts`: added `required` to the "I agree" checkbox (previously enforced only server-side) and echoed `signedName` on both field-validation refusals.
