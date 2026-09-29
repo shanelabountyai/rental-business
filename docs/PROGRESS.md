@@ -13806,7 +13806,7 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 
 ## A11Y-01 — the tenant bottom nav no longer overflows/collides on a phone
 
-**Commit:** `PENDING`  ·  **Date:** 2026-09-29
+**Commit:** `500c51a`  ·  **Date:** 2026-09-29
 
 **What it built.** `PortalNav` ([portal-nav.tsx](apps/web/components/portal/portal-nav.tsx)) got three changes: `min-w-0` on each `<li>`, the label wrapped in its own `<span className="w-full min-w-0 break-words">` instead of bare text, and the mobile-only text/padding shrunk (`text-[11px] px-1`, unchanged from `sm:` up). Confirmed by screenshot before touching the CSS: at 412px (Pixel 7) "Account" was pushed fully off-screen with no way to reach it; at 320px "Messages" and "Account" ran together with no visible gap. Neither showed up as `documentElement.scrollWidth` overflow, because the nav is `position: fixed` and a fixed box's own overflow doesn't widen the document — the `shell.spec.ts`-style check the backlog row proposed would have passed against both defects.
 
