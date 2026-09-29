@@ -101,6 +101,22 @@ npx dotenv -e <prod env file> -- npx prisma migrate deploy \
   --schema packages/db/prisma/schema.prisma
 ```
 
+**`vercel env pull` cannot produce that file.** `DATABASE_URL` and `DIRECT_URL`
+are *Sensitive* in Vercel, and a pull writes Sensitive values as empty strings,
+so Prisma fails with P1013 "scheme is not recognized". Take them from Neon
+instead, straight into the shell, never into a file (2026-09-29):
+
+```
+export DATABASE_URL="$(neonctl connection-string --project-id shy-frost-92109227 --org-id org-morning-smoke-06224724 --branch production --database-name neondb --role-name neondb_owner --pooled)"
+export DIRECT_URL="$(neonctl connection-string --project-id shy-frost-92109227 --org-id org-morning-smoke-06224724 --branch production --database-name neondb --role-name neondb_owner)"
+npx prisma migrate status --schema packages/db/prisma/schema.prisma
+npx prisma migrate deploy --schema packages/db/prisma/schema.prisma
+unset DATABASE_URL DIRECT_URL
+```
+
+Write the flags out in full: zsh does not word-split an unquoted `$VAR`, so
+packing them into one variable hands `neonctl` a single argument.
+
 `prisma migrate reset` is destructive and now refuses to run under an AI agent
 without explicit recorded consent. That guardrail is correct; do not paper over
 it.

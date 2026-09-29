@@ -7,7 +7,7 @@
 - **CI green** for `c437056` (run 36470684616, both jobs), which covers MONEY-03/04/07/08/10 and SEC-18.
 - **Local `rental_test` has leftover data**: 4 unit tests fail on `main` too (`comms.test.ts` inbound routing ×2, `pre-move-out-scheduling-job.test.ts` ×2), while CI is green.
 - **Done 2026-09-28: LEGAL-01** (`911b03c`, D-275): a screening record is cited as within the lookback only when a provider-reported date puts it there.
-- **Shane: production needs `migrate deploy`.** A deploy runs no migration (D-254). LEGAL-01 adds `ScreeningReport.evictionRecordOn`/`criminalRecordOn`, so production's screening pages will 500 until migration `20260928130000_legal01_screening_record_dates` is applied (`docs/DEPLOYMENT.md` has the command). Check `migrate status` for MONEY-01's `20260928120000` at the same time.
+- **Production migrated 2026-09-29** through LEGAL-01, MONEY-01's migration included. The recipe that works (Neon CLI, not `vercel env pull`) is in `docs/DEPLOYMENT.md`.
 - **Next item: LEGAL-02 (HIGH)**, the FCRA credit-score disclosure block in the adverse-action notice. Model: **Opus** (legal correctness). Final wording still needs counsel.
 - **Roll the Stripe TEST secret key**: a masking regex printed it into the 2026-09-28 session transcript. Test mode only, not sent anywhere.
 - SEC-17 reconfirmed in production 2026-09-28 (prefetch → 401).

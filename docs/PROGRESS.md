@@ -13712,4 +13712,6 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 - Full `npm test`: 3453 passed, 4 skipped, **4 failed**. They are the same 4 as on `main` (`comms.test.ts` inbound routing ×2, `pre-move-out-scheduling-job.test.ts` ×2).
 - `e2e/screening.spec.ts`, both projects: **8 passed** of 8. The decline spec now seeds a dated record and asserts the notice cites it.
 - `db:ci` (migrations from scratch, seed, drift) clean.
+- CI green for `3475f8d` (run 36487667788).
+- **Production migrated 2026-09-29** by Shane: `migrate status` showed exactly MONEY-01's `20260928120000` and this item's `20260928130000` pending, and `migrate deploy` applied both. Production is current through LEGAL-01.
 
