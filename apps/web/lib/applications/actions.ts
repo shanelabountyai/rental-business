@@ -56,10 +56,12 @@ function parseDateOnly(raw: string): Date | null {
 
 function violationsToState(
   violations: readonly { field: string; message: string }[],
+  values?: Record<string, string>,
 ): ApplicantFormState {
   return {
     error: 'Fix the highlighted fields.',
     fieldErrors: Object.fromEntries(violations.map((v) => [v.field, v.message])),
+    values,
   }
 }
 
@@ -67,6 +69,9 @@ export interface ApplicantFormState {
   error?: string
   fieldErrors?: Record<string, string>
   notice?: string
+  /// What they typed, handed back after a refusal (R-114) - see
+  /// `VendorFormState.values`'s own comment for why this exists.
+  values?: Record<string, string>
 }
 
 /**
@@ -109,6 +114,23 @@ export async function submitApplicantForm(
   }
 
   const intent = str(formData, 'intent')
+  // Raw, as typed - not `fieldData`'s parsed Dates and cents, which an
+  // `<input type="date">` or a defaultValue for a dollar field cannot take
+  // back (CLAUDE.md's own trap for a BusinessDate).
+  const rawValues: Record<string, string> = {
+    firstName: str(formData, 'firstName'),
+    lastName: str(formData, 'lastName'),
+    email: str(formData, 'email'),
+    phone: str(formData, 'phone'),
+    dateOfBirth: str(formData, 'dateOfBirth'),
+    currentAddressLine1: str(formData, 'currentAddressLine1'),
+    currentCity: str(formData, 'currentCity'),
+    currentState: str(formData, 'currentState'),
+    currentPostalCode: str(formData, 'currentPostalCode'),
+    monthsAtCurrentAddress: str(formData, 'monthsAtCurrentAddress'),
+    employerName: str(formData, 'employerName'),
+    monthlyIncome: str(formData, 'monthlyIncome'),
+  }
   const fieldData = {
     firstName: input.firstName,
     lastName: input.lastName,
@@ -143,7 +165,7 @@ export async function submitApplicantForm(
     // Still saved, even though it did not validate - a rejected submit must
     // not throw away what was typed.
     await prisma.applicant.update({ where: { id: status.applicant.id }, data: fieldData })
-    return violationsToState(violations)
+    return violationsToState(violations, rawValues)
   }
 
   await prisma.applicant.update({

@@ -46,6 +46,9 @@ async function clientIp(): Promise<string> {
 export interface SignFormState {
   error?: string
   notice?: string
+  /// What they typed, handed back after a refusal (R-114) - see
+  /// `VendorFormState.values`'s own comment for why this exists.
+  values?: Record<string, string>
 }
 
 /**
@@ -89,10 +92,16 @@ export async function signLeaseDocument(
   const signedName = str(formData, 'signedName')
   const agreed = formData.get('agree') === 'on'
   if (!signedName) {
-    return { error: `Type your full legal name exactly as it should appear on the ${what}.` }
+    return {
+      error: `Type your full legal name exactly as it should appear on the ${what}.`,
+      values: { signedName },
+    }
   }
   if (!agreed) {
-    return { error: 'Check the box to confirm this counts as your electronic signature.' }
+    return {
+      error: 'Check the box to confirm this counts as your electronic signature.',
+      values: { signedName },
+    }
   }
 
   const signer = await prisma.leaseSigner.findUniqueOrThrow({

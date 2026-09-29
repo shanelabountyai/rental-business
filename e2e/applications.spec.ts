@@ -209,6 +209,49 @@ test('staff invites a prospect, the lead adds a co-applicant, and the household 
   await expect(page.getByText(/Riley.*done/)).toBeVisible()
 })
 
+// A11Y-03: `isAdult()` is the one refusal `validateApplicantForm` can
+// produce that no HTML attribute catches - a real, well-formed date that
+// simply makes the applicant a minor. Proves the household/address/income
+// fields around the bad one survive the refusal instead of wiping (R-114's
+// fix, extended here the way `bid-form.tsx` already had it).
+test('a refused applicant form hands back what was typed', async ({ page, browser }) => {
+  const staff = await createStaff()
+  const { prospect } = await seedPreScreenedProspect(null)
+
+  await signIn(page, staff.email)
+  await page.goto(`/prospects/${prospect.id}`)
+  await page.getByRole('button', { name: 'Invite to apply' }).click()
+  await expect(page.getByText('Not invited to apply yet.')).toHaveCount(0)
+
+  const lead = await prisma.applicant.findFirstOrThrow({
+    where: { application: { prospectId: prospect.id }, isLead: true },
+  })
+  const leadToken = await linkFor(lead.id, 'application.invite')
+
+  const leadContext = await browser.newContext({ extraHTTPHeaders: uniqueClientHeaders() })
+  const leadPage = await leadContext.newPage()
+  await leadPage.goto(`/apply/${leadToken}`)
+
+  await leadPage.getByLabel('Date of birth').fill('2015-05-01') // a minor
+  await leadPage.getByLabel('Street address').fill('45 Current St')
+  await leadPage.getByLabel('City').fill('Houston')
+  await leadPage.getByLabel('State').fill('TX')
+  await leadPage.getByLabel('Postal code').fill('77003')
+  await leadPage.getByLabel('Months at this address').fill('12')
+  await leadPage.getByLabel('Monthly income').fill('6000')
+  await leadPage.getByRole('button', { name: 'Submit' }).click()
+
+  await expect(leadPage.getByText('Fix the highlighted fields')).toBeVisible()
+  await expect(leadPage.getByText(/Applicants must be 18 or older/)).toBeVisible()
+  await expect(leadPage.getByLabel('Date of birth')).toHaveValue('2015-05-01')
+  await expect(leadPage.getByLabel('Street address')).toHaveValue('45 Current St')
+  await expect(leadPage.getByLabel('City')).toHaveValue('Houston')
+  await expect(leadPage.getByLabel('Postal code')).toHaveValue('77003')
+  await expect(leadPage.getByLabel('Months at this address')).toHaveValue('12')
+  await expect(leadPage.getByLabel('Monthly income')).toHaveValue('6000')
+  await leadContext.close()
+})
+
 test('an application fee is required, and paying it is what completes the applicant', async ({
   page,
   browser,

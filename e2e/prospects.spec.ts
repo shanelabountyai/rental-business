@@ -319,3 +319,61 @@ test('a prospect answers the identical five questions, and staff moves the pipel
     })
     .toBe('SHOWING')
 })
+
+// A11Y-03: the one refusal `validatePrescreenAnswers` can produce that no
+// HTML `required` attribute can catch - "yes" to prior evictions demands a
+// detail, but the detail field itself is optional (it is ONLY required
+// conditional on the radio answer). Same reasoning as the inquiry form's own
+// "a refused inquiry hands back what the visitor typed" test above: this is
+// the refusal that actually reaches the action, so it is the one worth
+// proving survives R-114's fix.
+test('a refused pre-screening answer hands back what the visitor typed', async ({ browser }) => {
+  const { listing } = await seedPublishedListing()
+  const prospect = await prisma.prospect.create({
+    data: {
+      propertyId: listing.propertyId,
+      listingId: listing.id,
+      firstName: 'Refusal',
+      lastName: `Test-${randomUUID().slice(0, 6)}`,
+      email: `refusal-${randomUUID().slice(0, 8)}@example.test`,
+      source: 'direct',
+    },
+  })
+  prospectIds.push(prospect.id)
+
+  const minted = mintToken('PROSPECT_PRESCREEN')
+  await prisma.authToken.create({
+    data: {
+      purpose: 'PROSPECT_PRESCREEN',
+      tokenHash: minted.tokenHash,
+      subjectType: 'Prospect',
+      subjectId: prospect.id,
+      expiresAt: minted.expiresAt,
+    },
+  })
+
+  const anon = await browser.newContext({ extraHTTPHeaders: uniqueClientHeaders() })
+  const anonPage = await anon.newPage()
+  await anonPage.goto(`/prescreen/${minted.token}`)
+
+  await anonPage.getByLabel('When would you move in?').fill('2026-10-01')
+  await anonPage.getByLabel('How many people would live there?').fill('3')
+  await anonPage.getByLabel('Any pets?').fill('One small dog')
+  await anonPage.getByLabel('Household income range').selectOption('OVER_8000')
+  await anonPage.getByRole('radio', { name: 'Yes' }).check()
+  // Detail left blank - this is the refusal.
+  await anonPage.getByRole('button', { name: 'Submit' }).click()
+
+  await expect(anonPage.getByText('Fix the highlighted fields')).toBeVisible()
+  await expect(anonPage.getByText('Say briefly what happened')).toBeVisible()
+  await expect(anonPage.getByLabel('When would you move in?')).toHaveValue('2026-10-01')
+  await expect(anonPage.getByLabel('How many people would live there?')).toHaveValue('3')
+  await expect(anonPage.getByLabel('Any pets?')).toHaveValue('One small dog')
+  await expect(anonPage.getByLabel('Household income range')).toHaveValue('OVER_8000')
+  await expect(anonPage.getByRole('radio', { name: 'Yes' })).toBeChecked()
+  // The conditional detail field itself must still be showing, not just its
+  // sibling fields - this is the local toggle state `PriorEvictionsFieldset`
+  // has to re-seed from the echo, not merely a `defaultValue`.
+  await expect(anonPage.getByLabel('Briefly, what happened?')).toBeVisible()
+  await anon.close()
+})

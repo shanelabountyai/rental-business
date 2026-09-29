@@ -13844,3 +13844,26 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 - `lint` and `typecheck` clean.
 - `npm test` first run showed 41 failures across 19 files, all `afterAll` hook timeouts — traced to two sibling projects' test/e2e sweeps running concurrently (`apptbasedservice` vitest, `storage business` playwright) and exhausting the shared local Postgres connection pool, not a regression from this change (none of the failing files touch the 5 components edited here). Rerun once those sweeps were confirmed still running but idle: 3471 passed, 4 skipped, 2 failed — the known local-data `comms.test.ts` inbound-routing failures that also fail on `main`.
 - `PORT=3100 npm run test:e2e -- e2e/portal.spec.ts e2e/pay.spec.ts e2e/rent-roll.spec.ts e2e/applications.spec.ts e2e/announcements.spec.ts` against a production build: 93 passed, 1 skipped, reconciled against `--list`'s `Total: 94 tests`.
+
+## A11Y-03 — form value echo on server refusal (`sign-form.tsx`, `prescreen-form.tsx`, `applicant-form.tsx`)
+
+**Commit:** `<pending>`  ·  **Date:** 2026-09-29
+
+**What it built.** All three tenant/applicant-facing forms now use `useFormVersion` + an echoed `state.values` (raw form-data strings, matching `VendorFormState.values`'s own convention from `bid-form.tsx`) so a server-side refusal no longer wipes what was typed — the `FormAlerts` live region was moved outside the keyed `<form>` in each, per `useFormVersion`'s own warning that a `key` remounts everything inside it.
+- `sign-form.tsx` / `esign-actions.ts`: added `required` to the "I agree" checkbox (previously enforced only server-side) and echoed `signedName` on both field-validation refusals.
+- `prescreen-form.tsx` / `prescreen-actions.ts`: added `required` to both radio inputs in the `priorEvictions` group. Extracted the radio-plus-conditional-detail-textarea block into its own `PriorEvictionsFieldset` component, mounted inside the keyed form — the show/hide toggle is local UI state with no `name` of its own, so it needed its own remount (via the parent form's `key`) to re-seed from the echoed value on a refusal; a `defaultValue` alone doesn't touch a component's own `useState`.
+- `applicant-form.tsx` / `applications/actions.ts`: this one already had `required` and a `defaultValue` on nearly every field, tied to the page's static `values` prop (the applicant's saved DB row). The actual bug: a refused submit is validated server-side and its fields are still persisted to the DB (comment: "a rejected submit must not throw away what was typed"), but the action never called `revalidatePath` on that path and the form had no `key`, so React 19's post-dispatch reset put the DOM back to the stale *mounted* props instead of what was typed. Fixed by preferring `state.values` over the `values` prop, with `state.values` cleared on success so a fresh page load or a successful save still shows the (now-revalidated) `values` prop.
+
+**What it decided.**
+- Following `sign-form.tsx`'s checkbox is now not just an echo target: adding `required` to both fields there means the server-side field-validation branch (and its echo) is no longer reachable through the browser at all — the `values` field on `SignFormState` is defence in depth only, proven by the unchanged `lease-esign`/`lease-party-change`/`payment-plans` specs rather than a new regression test.
+- `prescreen-form.tsx` and `applicant-form.tsx` each kept exactly one refusal reachable past their new `required`s: `validatePrescreenAnswers`'s "yes to prior evictions, no detail typed" (the detail field is only conditionally required) and `validateApplicantForm`'s `isAdult()` check (a well-formed date that simply makes the applicant a minor). Each got a new e2e regression test proving the echo survives that specific refusal, following the existing `prospects.spec.ts` "a refused inquiry hands back what the visitor typed" test's own idiom.
+
+**What it left behind.**
+- Nothing scoped to this item. Still open lower-severity rows from the same review sweep: MONEY-05/06/09, SEC-19/20, UX-01..10, OPS-01.
+
+**Gate.**
+- `lint` and `typecheck` clean (16 pre-existing warnings, unchanged).
+- `npm run db:ci`: migrations apply clean to a throwaway db, no drift (this item touched no schema).
+- `npm test`: first run hit the known sibling-sweep pattern (`storage business` vitest running concurrently) — 33 failed across 18 files, all timeouts in paging/escalation/notification tests unrelated to the 6 files this item touched. Retried the 5 previously-timed-out files alone once the sibling sweep finished: 35/35 passed.
+- `PORT=3100 npm run test:e2e -- e2e/applications.spec.ts e2e/lease-esign.spec.ts e2e/lease-party-change.spec.ts e2e/payment-plans.spec.ts e2e/prospects.spec.ts`, both `desktop-chrome` and `mobile-chrome`: 20/20 passed each (reconciled against `--list`), including `payment-plans.spec.ts`'s own axe WCAG 2.1 AA check against a page holding a signed `SignForm`.
+- Two new regression tests (`prospects.spec.ts`'s "a refused pre-screening answer hands back what the visitor typed", `applications.spec.ts`'s "a refused applicant form hands back what was typed") plus their surrounding specs, both projects: 16/16 passed (reconciled against `--list`).

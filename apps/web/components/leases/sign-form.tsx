@@ -1,7 +1,7 @@
 'use client'
 
 import { useActionState } from 'react'
-import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
+import { FormAlerts, SubmitButton, useFormVersion } from '@/components/auth-form.tsx'
 import { CheckboxField, TextField } from '@/components/form/field.tsx'
 import type { SignFormState } from '@/lib/leases/esign-actions.ts'
 
@@ -26,24 +26,32 @@ export function SignForm({
   action: (state: SignFormState, formData: FormData) => Promise<SignFormState>
 }) {
   const [state, formAction] = useActionState<SignFormState, FormData>(action, {})
+  // What was typed, handed back after a refusal, and the `key` that makes it
+  // survive React 19's post-dispatch reset (R-114, `useFormVersion`).
+  const echoed = state.values ?? {}
+  const formVersion = useFormVersion(state)
 
   return (
-    <form action={formAction} className="flex flex-col gap-5">
+    <div className="flex flex-col gap-5">
       <FormAlerts state={state} />
 
-      <TextField
-        label="Type your full legal name"
-        name="signedName"
-        required
-        hint={`This is how your name will appear on the signed ${what}.`}
-      />
+      <form key={formVersion} action={formAction} className="flex flex-col gap-5">
+        <TextField
+          label="Type your full legal name"
+          name="signedName"
+          required
+          defaultValue={echoed.signedName}
+          hint={`This is how your name will appear on the signed ${what}.`}
+        />
 
-      <CheckboxField
-        label={`I agree that typing my name above and submitting this form is my electronic signature on this ${what}.`}
-        name="agree"
-      />
+        <CheckboxField
+          label={`I agree that typing my name above and submitting this form is my electronic signature on this ${what}.`}
+          name="agree"
+          required
+        />
 
-      <SubmitButton label={`Sign this ${what}`} />
-    </form>
+        <SubmitButton label={`Sign this ${what}`} />
+      </form>
+    </div>
   )
 }

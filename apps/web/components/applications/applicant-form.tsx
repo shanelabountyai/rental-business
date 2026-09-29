@@ -2,7 +2,7 @@
 
 import { useActionState } from 'react'
 import { useFormStatus } from 'react-dom'
-import { FormAlerts, pendingButtonProps } from '@/components/auth-form.tsx'
+import { FormAlerts, pendingButtonProps, useFormVersion } from '@/components/auth-form.tsx'
 import { TextField } from '@/components/form/field.tsx'
 import type { ApplicantFormState } from '@/lib/applications/actions.ts'
 
@@ -62,132 +62,143 @@ export function ApplicantForm({
 }) {
   const [state, formAction] = useActionState<ApplicantFormState, FormData>(action, {})
   const errors = state.fieldErrors ?? {}
+  // What was typed, handed back after a refusal, and the `key` that makes it
+  // survive React 19's post-dispatch reset (R-114, `useFormVersion`). Falls
+  // back to `values` (this applicant's saved row) when nothing was refused -
+  // the ordinary first render, and a successful save's revalidated props.
+  const echoed = state.values ?? {}
+  const formVersion = useFormVersion(state)
 
   return (
-    <form action={formAction} className="flex flex-col gap-4">
+    <div className="flex flex-col gap-4">
       <FormAlerts state={state} />
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <TextField
-          label="First name"
-          name="firstName"
-          required
-          idPrefix="applicant"
-          defaultValue={values.firstName}
-          error={errors.firstName}
-        />
-        <TextField
-          label="Last name"
-          name="lastName"
-          required
-          idPrefix="applicant"
-          defaultValue={values.lastName}
-          error={errors.lastName}
-        />
-      </div>
-      <div className="grid gap-4 sm:grid-cols-2">
-        <TextField
-          label="Email"
-          name="email"
-          type="email"
-          idPrefix="applicant"
-          defaultValue={values.email ?? undefined}
-          error={errors.email}
-          hint="Give an email or a phone - at least one."
-        />
-        <TextField
-          label="Phone"
-          name="phone"
-          type="tel"
-          idPrefix="applicant"
-          defaultValue={values.phone ?? undefined}
-        />
-      </div>
-      <TextField
-        label="Date of birth"
-        name="dateOfBirth"
-        type="date"
-        required
-        idPrefix="applicant"
-        defaultValue={values.dateOfBirth ?? undefined}
-        error={errors.dateOfBirth}
-      />
-
-      <fieldset className="flex flex-col gap-4 border-t pt-4">
-        <legend className="text-sm font-semibold">Current address</legend>
-        <TextField
-          label="Street address"
-          name="currentAddressLine1"
-          required
-          idPrefix="applicant"
-          defaultValue={values.currentAddressLine1 ?? undefined}
-          error={errors.currentAddressLine1}
-        />
-        <div className="grid gap-4 sm:grid-cols-3">
+      <form key={formVersion} action={formAction} className="flex flex-col gap-4">
+        <div className="grid gap-4 sm:grid-cols-2">
           <TextField
-            label="City"
-            name="currentCity"
+            label="First name"
+            name="firstName"
             required
             idPrefix="applicant"
-            defaultValue={values.currentCity ?? undefined}
-            error={errors.currentCity}
+            defaultValue={echoed.firstName ?? values.firstName}
+            error={errors.firstName}
           />
           <TextField
-            label="State"
-            name="currentState"
+            label="Last name"
+            name="lastName"
             required
             idPrefix="applicant"
-            defaultValue={values.currentState ?? undefined}
-            error={errors.currentState}
+            defaultValue={echoed.lastName ?? values.lastName}
+            error={errors.lastName}
+          />
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <TextField
+            label="Email"
+            name="email"
+            type="email"
+            idPrefix="applicant"
+            defaultValue={echoed.email ?? values.email ?? undefined}
+            error={errors.email}
+            hint="Give an email or a phone - at least one."
           />
           <TextField
-            label="Postal code"
-            name="currentPostalCode"
-            required
+            label="Phone"
+            name="phone"
+            type="tel"
             idPrefix="applicant"
-            defaultValue={values.currentPostalCode ?? undefined}
-            error={errors.currentPostalCode}
+            defaultValue={echoed.phone ?? values.phone ?? undefined}
           />
         </div>
         <TextField
-          label="Months at this address"
-          name="monthsAtCurrentAddress"
-          type="number"
-          min="0"
-          inputMode="numeric"
+          label="Date of birth"
+          name="dateOfBirth"
+          type="date"
           required
           idPrefix="applicant"
-          defaultValue={values.monthsAtCurrentAddress ?? undefined}
-          error={errors.monthsAtCurrentAddress}
+          defaultValue={echoed.dateOfBirth ?? values.dateOfBirth ?? undefined}
+          error={errors.dateOfBirth}
         />
-      </fieldset>
 
-      <fieldset className="flex flex-col gap-4 border-t pt-4">
-        <legend className="text-sm font-semibold">Income</legend>
-        <TextField
-          label="Employer (optional)"
-          name="employerName"
-          idPrefix="applicant"
-          defaultValue={values.employerName ?? undefined}
-        />
-        <TextField
-          label="Monthly income"
-          name="monthlyIncome"
-          type="number"
-          min="0"
-          step="0.01"
-          inputMode="decimal"
-          required
-          idPrefix="applicant"
-          defaultValue={
-            values.monthlyIncomeCents != null ? values.monthlyIncomeCents / 100 : undefined
-          }
-          error={errors.monthlyIncomeCents}
-          hint="Before taxes, in dollars."
-        />
-      </fieldset>
+        <fieldset className="flex flex-col gap-4 border-t pt-4">
+          <legend className="text-sm font-semibold">Current address</legend>
+          <TextField
+            label="Street address"
+            name="currentAddressLine1"
+            required
+            idPrefix="applicant"
+            defaultValue={echoed.currentAddressLine1 ?? values.currentAddressLine1 ?? undefined}
+            error={errors.currentAddressLine1}
+          />
+          <div className="grid gap-4 sm:grid-cols-3">
+            <TextField
+              label="City"
+              name="currentCity"
+              required
+              idPrefix="applicant"
+              defaultValue={echoed.currentCity ?? values.currentCity ?? undefined}
+              error={errors.currentCity}
+            />
+            <TextField
+              label="State"
+              name="currentState"
+              required
+              idPrefix="applicant"
+              defaultValue={echoed.currentState ?? values.currentState ?? undefined}
+              error={errors.currentState}
+            />
+            <TextField
+              label="Postal code"
+              name="currentPostalCode"
+              required
+              idPrefix="applicant"
+              defaultValue={echoed.currentPostalCode ?? values.currentPostalCode ?? undefined}
+              error={errors.currentPostalCode}
+            />
+          </div>
+          <TextField
+            label="Months at this address"
+            name="monthsAtCurrentAddress"
+            type="number"
+            min="0"
+            inputMode="numeric"
+            required
+            idPrefix="applicant"
+            defaultValue={
+              echoed.monthsAtCurrentAddress ?? values.monthsAtCurrentAddress ?? undefined
+            }
+            error={errors.monthsAtCurrentAddress}
+          />
+        </fieldset>
 
-      <FormButtons />
-    </form>
+        <fieldset className="flex flex-col gap-4 border-t pt-4">
+          <legend className="text-sm font-semibold">Income</legend>
+          <TextField
+            label="Employer (optional)"
+            name="employerName"
+            idPrefix="applicant"
+            defaultValue={echoed.employerName ?? values.employerName ?? undefined}
+          />
+          <TextField
+            label="Monthly income"
+            name="monthlyIncome"
+            type="number"
+            min="0"
+            step="0.01"
+            inputMode="decimal"
+            required
+            idPrefix="applicant"
+            defaultValue={
+              echoed.monthlyIncome ??
+              (values.monthlyIncomeCents != null ? values.monthlyIncomeCents / 100 : undefined)
+            }
+            error={errors.monthlyIncomeCents}
+            hint="Before taxes, in dollars."
+          />
+        </fieldset>
+
+        <FormButtons />
+      </form>
+    </div>
   )
 }

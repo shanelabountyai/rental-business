@@ -25,6 +25,9 @@ export interface PrescreenFormState {
   error?: string
   fieldErrors?: Record<string, string>
   notice?: string
+  /// What they typed, handed back after a refusal (R-114) - see
+  /// `VendorFormState.values`'s own comment for why this exists.
+  values?: Record<string, string>
 }
 
 function str(formData: FormData, name: string): string {
@@ -42,10 +45,12 @@ function parseDateOnly(raw: string): Date | null {
 
 function violationsToState(
   violations: readonly { field: string; message: string }[],
+  values: Record<string, string>,
 ): PrescreenFormState {
   return {
     error: 'Fix the highlighted fields.',
     fieldErrors: Object.fromEntries(violations.map((v) => [v.field, v.message])),
+    values,
   }
 }
 
@@ -69,17 +74,25 @@ export async function submitPrescreenAnswers(
   }
 
   const priorEvictionsRaw = str(formData, 'priorEvictions')
+  const rawValues: Record<string, string> = {
+    moveDate: str(formData, 'moveDate'),
+    occupants: str(formData, 'occupants'),
+    petsDescription: str(formData, 'petsDescription'),
+    incomeRange: str(formData, 'incomeRange'),
+    priorEvictions: priorEvictionsRaw,
+    priorEvictionsDetail: str(formData, 'priorEvictionsDetail'),
+  }
   const input: PrescreenAnswersInput = {
-    moveDate: parseDateOnly(str(formData, 'moveDate')),
-    occupants: str(formData, 'occupants') ? Number(str(formData, 'occupants')) : null,
-    petsDescription: str(formData, 'petsDescription') || null,
-    incomeRange: str(formData, 'incomeRange') || null,
+    moveDate: parseDateOnly(rawValues.moveDate!),
+    occupants: rawValues.occupants ? Number(rawValues.occupants) : null,
+    petsDescription: rawValues.petsDescription || null,
+    incomeRange: rawValues.incomeRange || null,
     priorEvictions:
       priorEvictionsRaw === 'yes' ? true : priorEvictionsRaw === 'no' ? false : null,
-    priorEvictionsDetail: str(formData, 'priorEvictionsDetail') || null,
+    priorEvictionsDetail: rawValues.priorEvictionsDetail || null,
   }
   const violations = validatePrescreenAnswers(input)
-  if (violations.length > 0) return violationsToState(violations)
+  if (violations.length > 0) return violationsToState(violations, rawValues)
 
   // Redeemed only now, after validation - a form rejected for a bad answer
   // must not burn the one link the prospect has.
