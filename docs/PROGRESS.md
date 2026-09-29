@@ -13784,3 +13784,22 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 - `lint` (0 errors, pre-existing warnings only) and `typecheck` clean.
 - `opt-out.test.ts`: 3 new cases (per-se words, revocation sentences, bare yes). The existing false-positive cases ("please stop the leak", "yes that works") still pass.
 - Full `npm test`: 3464 passed, 4 skipped, 7 failed, plus 3 files that failed in setup. 4 of the 7 are the known local-data failures that also fail on `main` (`comms.test.ts` inbound routing ×2, `pre-move-out-scheduling-job.test.ts` ×2). The rest were all timeouts (hook 10s, tests 20/30/60s) in `due-notices`, `sms-intake`, `emergency`, `notifications` and `tasks/queries`. Rerun alone, those five files passed **70 of 70**.
+
+## LEGAL-05 — the logging adapter keeps notification bodies out of runtime logs
+
+**Commit:** `PENDING`  ·  **Date:** 2026-09-29
+
+**What it built.** `LoggingChannelAdapter.send` in [logging-adapter.ts](apps/web/lib/notifications/logging-adapter.ts) checks `process.env.VERCEL`: on any Vercel deployment it logs `[notifications] <CHANNEL> logged as log_<uuid>` and nothing else — no recipient, subject or body. The `log_…` id is the `externalId` already stored on `NotificationDelivery`, so the line still finds the row. Off Vercel the full print is unchanged. New `logging-adapter.test.ts` covers both branches.
+
+**What it decided.** D-280:
+- The line is "any Vercel deployment", not `isProductionDeployment()`, because a preview with no Resend/Twilio settings sends every channel through this adapter.
+- A laptop keeps the body: `docs/DEMO-LOGINS.md` §3–4 has the demo walk read tenant and vendor magic links off this line.
+
+**What it left behind.**
+- On a deployment with no Resend key, a sign-in link is now only in the database (`Notification` body), not in the logs. No doc relied on the logs for that.
+- Other `console.*` calls elsewhere were not audited for PII; this item covered only the adapter the finding named.
+
+**Gate.**
+- `lint` (0 errors, pre-existing `requirePermission` warnings only) and `typecheck` clean.
+- `logging-adapter.test.ts`: 2 new cases; notifications folder plus `live-adapter.test.ts` green (30/30 on the rerun).
+- Full `npm test`: 3398 passed, 27 skipped, 52 failed (= 3477). The run overlapped two sibling projects' sweeps (`onsitestaffing` Playwright, `tradepost`) while `rental_test` sat idle: the failures were all 10–90s timeouts across unrelated domains. Rerun of the 45 failing files at `--maxWorkers=2`: **422 of 424 passed**; the 2 left are the known local-data `comms.test.ts` inbound-routing failures that also fail on `main`.

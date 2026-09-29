@@ -24,6 +24,17 @@ export class LoggingChannelAdapter implements ChannelAdapter {
 
   async send(message: OutboundMessage): Promise<SendResult> {
     const externalId = `log_${randomUUID()}`
+    // LEGAL-05: on any Vercel deployment (production AND preview) the console
+    // is a runtime log held by a third party, and a body is notice text,
+    // balances, names and sometimes a sign-in link. Log the reference only -
+    // it is stored as NotificationDelivery.externalId, so it finds the row
+    // that holds the body. The recipient is withheld for the same reason.
+    // A laptop keeps the full print: the demo walk reads tenant magic links
+    // off this line (docs/DEMO-LOGINS.md §3).
+    if (process.env.VERCEL) {
+      console.info(`[notifications] ${message.channel} logged as ${externalId}`)
+      return { externalId }
+    }
     console.info(
       `[notifications] ${message.channel} -> ${message.to}${
         message.subject ? ` | ${message.subject}` : ''
