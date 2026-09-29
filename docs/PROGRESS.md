@@ -13828,7 +13828,7 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 
 ## A11Y-02 — pending/busy buttons no longer hard-`disabled`
 
-**Commit:** `<pending>`  ·  **Date:** 2026-09-29
+**Commit:** `7f36bae`  ·  **Date:** 2026-09-29
 
 **What it built.** Fixed all 7 sites where the R-107a defect (`disabled={<pending boolean>}`) had come back: `autopay-panel.tsx` (2 sites), `fee-payment.tsx` (1), `maintenance-wizard.tsx` (1), `translations-panel.tsx` (2), `rent-roll-table.tsx` (1). The 5 plain `type="submit"` sites inside a `<form action>` now spread `pendingButtonProps(pending)` in place of `disabled`. The 2 `type="button"` sites in `autopay-panel.tsx` (manual `onClick` async handlers, not a form action) got `aria-disabled`/`aria-busy` set by hand plus an `if (busy) return` guard at the top of the handler — spreading `pendingButtonProps` there doesn't compose, since JSX spread is last-key-wins and the site's own `onClick` either fully overrides `pendingButtonProps`'s guard (spread first) or fully replaces the real handler (spread last). Also dropped the now-redundant `disabled:opacity-60`/`-50` classes at these sites; `PRIMARY_BUTTON_CLASSES`, `ACCENT_BUTTON_CLASSES` and (newly) `maintenance-wizard.tsx`'s `NEXT_BUTTON` constant already carry `aria-disabled:cursor-not-allowed`.
 
