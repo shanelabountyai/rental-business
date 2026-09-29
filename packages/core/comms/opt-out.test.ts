@@ -15,11 +15,39 @@ describe('classifyOptOutKeyword', () => {
   })
 
   it('recognises start and help', () => {
-    for (const word of ['START', 'unstop', 'Yes']) {
+    for (const word of ['START', 'unstop']) {
       expect(classifyOptOutKeyword(word)).toBe('START')
     }
     for (const word of ['HELP', 'info']) {
       expect(classifyOptOutKeyword(word)).toBe('HELP')
+    }
+  })
+
+  it("recognises the FCC's per-se revocation words (LEGAL-04)", () => {
+    for (const word of ['revoke', 'Opt out', 'OPT-OUT', 'optout', 'opt  out']) {
+      expect(classifyOptOutKeyword(word)).toBe('STOP')
+    }
+  })
+
+  it('treats a revocation sentence as STOP (LEGAL-04)', () => {
+    for (const body of [
+      'please stop texting me',
+      'Stop texting me!!',
+      'Can you stop sending me texts about rent',
+      'Don\u2019t text me anymore',
+      'do not contact me',
+      'Please remove me from your list',
+      'I revoke my consent to texts',
+    ]) {
+      expect(classifyOptOutKeyword(body)).toBe('STOP')
+    }
+  })
+
+  it('does not resubscribe on a bare yes (LEGAL-04)', () => {
+    // An opted-out tenant answering "Yes" to a question has not asked to be
+    // texted again.
+    for (const body of ['Yes', 'yes', 'YES.', 'Y']) {
+      expect(classifyOptOutKeyword(body)).toBeNull()
     }
   })
 

@@ -13763,3 +13763,24 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 - `e2e/prospects.spec.ts` and `e2e/applications.spec.ts`, both projects: **12 passed** of 12 (listed total 12), including the new texting-box spec.
 - `db:drift` and `db:ci` clean.
 - **Production not migrated**: `20260929120000` (LEGAL-02) and `20260929180000` (LEGAL-03) are both pending until Shane runs the `docs/DEPLOYMENT.md` recipe.
+
+## LEGAL-04 — texts opt out on revocation sentences; YES no longer resubscribes
+
+**Commit:** `PENDING`  ·  **Date:** 2026-09-29
+
+**What it built.** `classifyOptOutKeyword` in [opt-out.ts](packages/core/comms/opt-out.ts) adds REVOKE and OPT OUT (and OPTOUT/OPT-OUT) to the stop words, tolerates repeated whitespace inside a keyword, and returns `STOP` for a message containing one of `STOP_PHRASES` (for example "stop texting", "do not contact me", "remove me from your", "revoke my consent"). `YES` is removed from the start words. `sms-intake.ts` is unchanged: a phrase revocation takes the existing STOP path (records an `SmsOptOut`, keeps the message in the thread, opens no ticket).
+
+**What it decided.** D-279:
+- Keywords still match the whole message only; sentences match only the closed phrase list, each naming texting or contact, so "please stop the leak" stays a maintenance message.
+- Only START and UNSTOP resubscribe.
+
+**What it left behind.**
+- No confirmation text after a sentence revocation. The FCC rule allows one within five minutes; today nothing is sent, because the STOP path assumes the carrier confirms.
+- A message that revokes AND reports a repair ("stop texting me, the sink leaks") opens no ticket; it is still recorded in the thread.
+- Twilio's default opt-in keywords include YES, so Twilio may unblock a number that `SmsOptOut` still suppresses. Configuring Twilio Advanced Opt-Out to drop YES is a dashboard step for Shane if wanted.
+- Counsel should review the phrase list.
+
+**Gate.**
+- `lint` (0 errors, pre-existing warnings only) and `typecheck` clean.
+- `opt-out.test.ts`: 3 new cases (per-se words, revocation sentences, bare yes). The existing false-positive cases ("please stop the leak", "yes that works") still pass.
+- Full `npm test`: 3464 passed, 4 skipped, 7 failed, plus 3 files that failed in setup. 4 of the 7 are the known local-data failures that also fail on `main` (`comms.test.ts` inbound routing ×2, `pre-move-out-scheduling-job.test.ts` ×2). The rest were all timeouts (hook 10s, tests 20/30/60s) in `due-notices`, `sms-intake`, `emergency`, `notifications` and `tasks/queries`. Rerun alone, those five files passed **70 of 70**.
