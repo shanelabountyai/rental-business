@@ -13825,3 +13825,22 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 - `lint` (0 errors, pre-existing warnings only) and `typecheck` clean.
 - Full `npm test`: 3469 passed, 4 skipped, 4 failed — the known local-data failures that also fail on `main` (`comms.test.ts` inbound routing ×2, `pre-move-out-scheduling-job.test.ts` ×2; unchanged file count from before this item).
 - `e2e/portal.spec.ts` and `e2e/shell.spec.ts` against a production build, both projects: 52 passed, 2 skipped (the new test and `shell.spec.ts`'s own phone-viewport test both correctly skip on `desktop-chrome`).
+
+## A11Y-02 — pending/busy buttons no longer hard-`disabled`
+
+**Commit:** `<pending>`  ·  **Date:** 2026-09-29
+
+**What it built.** Fixed all 7 sites where the R-107a defect (`disabled={<pending boolean>}`) had come back: `autopay-panel.tsx` (2 sites), `fee-payment.tsx` (1), `maintenance-wizard.tsx` (1), `translations-panel.tsx` (2), `rent-roll-table.tsx` (1). The 5 plain `type="submit"` sites inside a `<form action>` now spread `pendingButtonProps(pending)` in place of `disabled`. The 2 `type="button"` sites in `autopay-panel.tsx` (manual `onClick` async handlers, not a form action) got `aria-disabled`/`aria-busy` set by hand plus an `if (busy) return` guard at the top of the handler — spreading `pendingButtonProps` there doesn't compose, since JSX spread is last-key-wins and the site's own `onClick` either fully overrides `pendingButtonProps`'s guard (spread first) or fully replaces the real handler (spread last). Also dropped the now-redundant `disabled:opacity-60`/`-50` classes at these sites; `PRIMARY_BUTTON_CLASSES`, `ACCENT_BUTTON_CLASSES` and (newly) `maintenance-wizard.tsx`'s `NEXT_BUTTON` constant already carry `aria-disabled:cursor-not-allowed`.
+
+**What it decided.** D-282:
+- `rent-roll-table.tsx`'s disable was `pending || selected.size === 0 || templates.length === 0` — only the `pending` part is the R-107a defect. Kept the other two as a real hard `disabled` (there is genuinely nothing to submit) and added `pendingButtonProps(pending)` alongside it for the busy part.
+- Deliberately left `autopay-panel.tsx:81` and `fee-payment.tsx:68` alone — both `disabled={busy || !stripeApi}` inside a `ConfirmForm`. `!stripeApi` is a real, non-pending disable (Stripe hasn't loaded), and both files' own header comments already say this component isn't covered by the e2e suite (a cross-origin Stripe Elements iframe Playwright can't drive). That keeps the fix at exactly the 7 sites the backlog row counted.
+
+**What it left behind.**
+- The two `ConfirmForm` Stripe-confirm buttons above still hard-`disabled` on `busy` — same defect, out of scope for this item, not reachable by axe or e2e today.
+- A11Y-03 (form value echo on refusal) is the next open row in the same review sweep.
+
+**Gate.**
+- `lint` and `typecheck` clean.
+- `npm test` first run showed 41 failures across 19 files, all `afterAll` hook timeouts — traced to two sibling projects' test/e2e sweeps running concurrently (`apptbasedservice` vitest, `storage business` playwright) and exhausting the shared local Postgres connection pool, not a regression from this change (none of the failing files touch the 5 components edited here). Rerun once those sweeps were confirmed still running but idle: 3471 passed, 4 skipped, 2 failed — the known local-data `comms.test.ts` inbound-routing failures that also fail on `main`.
+- `PORT=3100 npm run test:e2e -- e2e/portal.spec.ts e2e/pay.spec.ts e2e/rent-roll.spec.ts e2e/applications.spec.ts e2e/announcements.spec.ts` against a production build: 93 passed, 1 skipped, reconciled against `--list`'s `Total: 94 tests`.

@@ -196,7 +196,7 @@ export function TranslationsPanel({
           </LiveRegion>
           <button
             type="submit"
-            disabled={addPending}
+            {...pendingButtonProps(addPending)}
             className={`${PRIMARY_BUTTON_CLASSES} self-start`}
           >
             Save translation
@@ -218,7 +218,7 @@ export function TranslationsPanel({
         </LiveRegion>
         <button
           type="submit"
-          disabled={retirePending}
+          {...pendingButtonProps(retirePending)}
           className="focus-visible:ring-ring border-input min-h-11 self-start rounded-md border px-4 text-sm font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
         >
           {active ? 'Retire this template' : 'Put it back in use'}

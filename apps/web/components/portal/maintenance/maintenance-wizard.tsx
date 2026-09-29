@@ -10,7 +10,7 @@ import {
 } from '@rental/core/maintenance'
 import { useRouter } from 'next/navigation'
 import { useEffect, useRef, useState, useSyncExternalStore, useTransition } from 'react'
-import { LiveRegion } from '@/components/auth-form.tsx'
+import { LiveRegion, pendingButtonProps } from '@/components/auth-form.tsx'
 import {
   submitMaintenanceRequest,
   submitMaintenanceRequestForm,
@@ -132,7 +132,7 @@ interface Photo {
 export type WizardParams = Record<string, string | string[] | undefined>
 
 const NEXT_BUTTON =
-  'bg-primary text-primary-foreground focus-visible:ring-ring flex min-h-12 items-center justify-center rounded-md px-6 py-2 text-base font-medium disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none'
+  'bg-primary text-primary-foreground focus-visible:ring-ring flex min-h-12 items-center justify-center rounded-md px-6 py-2 text-base font-medium aria-disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none'
 const BACK_BUTTON =
   'border-input hover:bg-secondary focus-visible:ring-ring flex min-h-12 items-center justify-center rounded-md border px-6 py-2 text-base font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none'
 /// The visual shape of a choice. Applied to a `<label>` rather than a
@@ -1033,7 +1033,7 @@ export function MaintenanceWizard({
             >
               Back
             </a>
-            <button type="submit" className={NEXT_BUTTON} disabled={isPending}>
+            <button type="submit" className={NEXT_BUTTON} {...pendingButtonProps(isPending)}>
               {isPending ? 'Sending…' : submitLabel}
             </button>
             <CarriedAnswers answers={answers} owns={() => false} />

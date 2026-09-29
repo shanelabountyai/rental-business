@@ -237,8 +237,10 @@ export function AutopayPanel({
           <div className="flex flex-col gap-2 border-t pt-3">
             <button
               type="button"
-              disabled={turnOffBusy}
+              aria-disabled={turnOffBusy || undefined}
+              aria-busy={turnOffBusy || undefined}
               onClick={async () => {
+                if (turnOffBusy) return
                 setTurnOffBusy(true)
                 setTurnOffError(null)
                 const result = await turnOff()
@@ -249,7 +251,7 @@ export function AutopayPanel({
                 }
                 setTurnOffNotice(result.notice ?? 'Automatic payments are off.')
               }}
-              className="border-input hover:bg-secondary focus-visible:ring-ring flex min-h-11 w-fit items-center rounded-md border px-4 py-2 text-base font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:opacity-60"
+              className="border-input hover:bg-secondary focus-visible:ring-ring flex min-h-11 w-fit items-center rounded-md border px-4 py-2 text-base font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
             >
               {turnOffBusy ? 'Turning off…' : 'Turn off automatic payments'}
             </button>
@@ -276,8 +278,10 @@ export function AutopayPanel({
           ) : (
             <button
               type="button"
-              disabled={busy}
+              aria-disabled={busy || undefined}
+              aria-busy={busy || undefined}
               onClick={async () => {
+                if (busy) return
                 setBusy(true)
                 setError(null)
                 const result = await start()
@@ -288,7 +292,7 @@ export function AutopayPanel({
                 }
                 setClientSecret(result.clientSecret)
               }}
-              className="border-input hover:bg-secondary focus-visible:ring-ring flex min-h-11 w-full items-center justify-center rounded-md border px-6 py-2 text-base font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:opacity-60 sm:w-auto"
+              className="border-input hover:bg-secondary focus-visible:ring-ring flex min-h-11 w-full items-center justify-center rounded-md border px-6 py-2 text-base font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none sm:w-auto"
             >
               {busy ? 'Getting ready…' : 'Set up automatic payments'}
             </button>

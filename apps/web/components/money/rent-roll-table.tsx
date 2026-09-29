@@ -5,7 +5,7 @@ import { BUCKET_LABELS } from '@rental/core/ledger'
 import type { AgingBucket } from '@rental/core/ledger'
 import { formatCents } from '@rental/core/money'
 import { friendlyBusinessDate } from '@rental/core/scheduling'
-import { LiveRegion } from '@/components/auth-form.tsx'
+import { LiveRegion, pendingButtonProps } from '@/components/auth-form.tsx'
 import { FieldError } from '@/components/form/field.tsx'
 import type { ReminderFormState } from '@/lib/payments/reminders.ts'
 import { ACCENT_BUTTON_CLASSES, scrollableRegionProps } from '@/components/ui-classes.ts'
@@ -157,8 +157,9 @@ export function RentRollTable({
 
           <button
             type="submit"
-            disabled={pending || selected.size === 0 || templates.length === 0}
-            className={`${ACCENT_BUTTON_CLASSES} self-start disabled:opacity-60`}
+            disabled={selected.size === 0 || templates.length === 0}
+            {...pendingButtonProps(pending)}
+            className={`${ACCENT_BUTTON_CLASSES} self-start`}
           >
             {selected.size === 0
               ? 'Send reminder'
