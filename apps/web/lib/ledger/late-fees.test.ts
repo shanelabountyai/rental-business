@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto'
 import { wallClockToUtc } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
+import { getBillingProvider } from '@/lib/billing/provider.ts'
 import { assessLateFees } from './late-fees.ts'
 import { waiverPatternByTenant } from './waiver-report.ts'
 
@@ -436,6 +437,96 @@ describe('assessLateFees — unlinked rent (R-050b)', () => {
     })
     expect(mayFee.amountCents).toBeGreaterThan(0)
     expect(mayFee.assessedForDueOn?.toISOString().slice(0, 10)).toBe('2026-05-01')
+  }, 20_000)
+})
+
+describe('assessLateFees — payer selection on a two-payer lease (MONEY-06)', () => {
+  it('always bills the same, earliest-added payer, never whichever row comes back first', async () => {
+    // Own property/lease, isolated - the point of this test is row order,
+    // so a shared lease would let another test's payer rows decide it.
+    const stamp = `latefee-twopayer-${Date.now()}`
+    const entity = await prisma.legalEntity.create({ data: { name: stamp, type: 'LLC' } })
+    const property = await prisma.property.create({
+      data: {
+        legalEntityId: entity.id,
+        name: `${stamp}-house`,
+        addressLine1: '77 Voucher Way',
+        city: 'Houston',
+        state: 'TX',
+        postalCode: '77002',
+        timezone: 'America/Chicago',
+        propertyType: 'SINGLE_FAMILY',
+      },
+    })
+    const unit = await prisma.unit.create({
+      data: { propertyId: property.id, name: `U-${randomUUID().slice(0, 6)}`, status: 'OCCUPIED' },
+    })
+    const lease = await prisma.lease.create({
+      data: {
+        propertyId: property.id,
+        unitId: unit.id,
+        status: 'ACTIVE',
+        startsOn: new Date('2026-01-01'),
+        rentCents: 150_000,
+      },
+    })
+    const tenant = await prisma.tenant.create({
+      data: { firstName: 'Pat', lastName: `TwoPayer-${randomUUID().slice(0, 6)}` },
+    })
+    await prisma.leaseTenant.create({ data: { leaseId: lease.id, tenantId: tenant.id } })
+
+    // D-13 voucher-style lease: two active payers. The primary payer (first
+    // added, per billing/recurring.ts's own `orderBy: createdAt asc`
+    // convention) is created second here on purpose - with no orderBy on
+    // the query, `take: 1` would come back in whatever order Postgres feels
+    // like, not creation order.
+    const secondaryPayer = await prisma.leasePayer.create({
+      data: {
+        leaseId: lease.id,
+        propertyId: property.id,
+        payerType: 'HOUSING_AUTHORITY',
+        externalPayerName: 'Housing Authority',
+        stripeCustomerId: `cus_${randomUUID().replace(/-/g, '').slice(0, 14)}`,
+        createdAt: new Date('2026-01-01T00:00:01.000Z'),
+      },
+    })
+    const primaryPayer = await prisma.leasePayer.create({
+      data: {
+        leaseId: lease.id,
+        propertyId: property.id,
+        payerType: 'TENANT',
+        tenantId: tenant.id,
+        stripeCustomerId: `cus_${randomUUID().replace(/-/g, '').slice(0, 14)}`,
+        createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      },
+    })
+    const rent = await prisma.charge.create({
+      data: {
+        propertyId: property.id,
+        leaseId: lease.id,
+        type: 'RENT',
+        amountCents: 150_000,
+        description: 'Rent',
+        dueOn: new Date('2026-03-01T00:00:00.000Z'),
+      },
+    })
+
+    const spy = vi.spyOn(getBillingProvider(), 'addInvoiceItem')
+    let billedCustomerId: string | undefined
+    try {
+      await assessLateFees(property.id, new Date('2026-03-20T12:00:00Z'))
+      expect(spy).toHaveBeenCalledTimes(1)
+      billedCustomerId = spy.mock.calls[0][0].stripeCustomerId
+    } finally {
+      spy.mockRestore()
+    }
+
+    expect(billedCustomerId).toBe(primaryPayer.stripeCustomerId)
+    expect(billedCustomerId).not.toBe(secondaryPayer.stripeCustomerId)
+
+    await prisma.charge.deleteMany({ where: { assessedOnChargeId: rent.id } })
+    await prisma.tenant.updateMany({ where: { id: tenant.id }, data: { active: false } })
+    await prisma.property.updateMany({ where: { id: property.id }, data: { active: false } })
   }, 20_000)
 })
 

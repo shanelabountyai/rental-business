@@ -13867,3 +13867,21 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 - `npm test`: first run hit the known sibling-sweep pattern (`storage business` vitest running concurrently) — 33 failed across 18 files, all timeouts in paging/escalation/notification tests unrelated to the 6 files this item touched. Retried the 5 previously-timed-out files alone once the sibling sweep finished: 35/35 passed.
 - `PORT=3100 npm run test:e2e -- e2e/applications.spec.ts e2e/lease-esign.spec.ts e2e/lease-party-change.spec.ts e2e/payment-plans.spec.ts e2e/prospects.spec.ts`, both `desktop-chrome` and `mobile-chrome`: 20/20 passed each (reconciled against `--list`), including `payment-plans.spec.ts`'s own axe WCAG 2.1 AA check against a page holding a signed `SignForm`.
 - Two new regression tests (`prospects.spec.ts`'s "a refused pre-screening answer hands back what the visitor typed", `applications.spec.ts`'s "a refused applicant form hands back what was typed") plus their surrounding specs, both projects: 16/16 passed (reconciled against `--list`).
+
+## MONEY-06: deterministic late-fee payer selection
+
+**Commit:** (pending)  ·  **Date:** 2026-09-30
+
+**What it built.** `assessLateFees` (`lib/ledger/late-fees.ts`) picks a lease's billable payer with `leasePayers: { where: { active: true }, take: 1 }` in both passes (dated `Charge` rows and unlinked subscription rent). With no `orderBy`, Postgres is free to return active payers in any order — on a two-payer voucher-style lease (D-13: a tenant plus a housing authority, say) the late fee could land on either payer's Stripe customer, nondeterministically. Added `orderBy: { createdAt: 'asc' }` to both queries, matching the primary-payer convention `billing/recurring.ts` and `billing/rubs.ts` already use elsewhere in the codebase — no new concept, just applying the existing one to the one query that was missing it.
+
+**What it decided.**
+- "Primary payer" continues to mean "earliest-added active payer" (`createdAt asc`), consistent with the rest of billing. No new `isPrimary` flag on `LeasePayer` — the recurring-rent and RUBS code already solve this the same way, and a third representation of the same fact would just be another thing to keep in sync.
+
+**What it left behind.**
+- Nothing scoped to this item. Still open from the same review sweep: MONEY-09, SEC-19/20, UX-01..10, OPS-01. MONEY-05 (TX grace-day count) remains a legal-review item, not a code fix.
+
+**Gate.**
+- `lint` and `typecheck` clean (16 pre-existing warnings, unchanged).
+- New regression test, `late-fees.test.ts` → *assessLateFees — payer selection on a two-payer lease (MONEY-06)*: creates a lease with two active payers seeded out of creation order, spies on `getBillingProvider().addInvoiceItem`, and asserts the earlier-created payer's Stripe customer is billed. Verified it actually catches the bug: reverting the `orderBy` change makes this test fail (wrong customer billed); with the fix, passes.
+- `npm test apps/web/lib/ledger/late-fees.test.ts`: 15/15 passed, including the 14 pre-existing tests (unaffected by the `orderBy` addition since the fixtures across those tests all have exactly one active payer).
+- No schema change — `db:ci` not required for this item.

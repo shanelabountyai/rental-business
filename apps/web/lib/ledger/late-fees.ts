@@ -242,6 +242,7 @@ export async function assessLateFees(
           rentCents: true,
           leasePayers: {
             where: { active: true },
+            orderBy: { createdAt: 'asc' },
             select: { id: true, stripeCustomerId: true },
             take: 1,
           },
@@ -375,6 +376,7 @@ export async function assessLateFees(
       rentCents: true,
       leasePayers: {
         where: { active: true },
+        orderBy: { createdAt: 'asc' },
         select: { id: true, stripeCustomerId: true },
         take: 1,
       },
