@@ -13870,7 +13870,7 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 
 ## MONEY-06: deterministic late-fee payer selection
 
-**Commit:** (pending)  ·  **Date:** 2026-09-30
+**Commit:** `7181a97`  ·  **Date:** 2026-09-30
 
 **What it built.** `assessLateFees` (`lib/ledger/late-fees.ts`) picks a lease's billable payer with `leasePayers: { where: { active: true }, take: 1 }` in both passes (dated `Charge` rows and unlinked subscription rent). With no `orderBy`, Postgres is free to return active payers in any order — on a two-payer voucher-style lease (D-13: a tenant plus a housing authority, say) the late fee could land on either payer's Stripe customer, nondeterministically. Added `orderBy: { createdAt: 'asc' }` to both queries, matching the primary-payer convention `billing/recurring.ts` and `billing/rubs.ts` already use elsewhere in the codebase — no new concept, just applying the existing one to the one query that was missing it.
 
