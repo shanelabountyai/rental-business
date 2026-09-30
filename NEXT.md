@@ -4,15 +4,22 @@
 
 - `lib/ledger/late-fees.ts`: added `orderBy: { createdAt: 'asc' }` to both `leasePayers` queries (dated-charge pass and unlinked-rent pass), matching the primary-payer convention `billing/recurring.ts` and `billing/rubs.ts` already use. Without it, a two-payer voucher-style lease (D-13) could bill either active payer's Stripe customer nondeterministically.
 - New regression test in `late-fees.test.ts`: creates a lease with two active payers seeded out of creation order, spies on `getBillingProvider().addInvoiceItem`, asserts the earlier-created payer is billed. Verified it actually catches the regression — reverted the `orderBy` locally and confirmed the test fails (wrong customer billed) before restoring the fix.
-- Gate: lint/typecheck clean, `npm test apps/web/lib/ledger/late-fees.test.ts` 15/15. No schema change, `db:ci` not needed. Pushed; not yet checked against `gh run list` this session — **do that first next session**.
+- Gate: lint/typecheck clean, `npm test apps/web/lib/ledger/late-fees.test.ts` 15/15. No schema change, `db:ci` not needed.
+- **CI note:** its own CI run (`36731048340`) never finished — `ci.yml` has `cancel-in-progress: true` per branch, and the two MONEY-09(a) pushes below cancelled it. The MONEY-09(a) SHA-record push's run (`36732844569`) covers HEAD, which includes MONEY-06's changes too, so a green result there validates both. Being watched via `gh run watch` at the end of this session — **check `gh run list --limit 3` first next session if no result landed before it cleared.**
 
-## Next item: MONEY-09 (LOW)
+## Done 2026-09-30: MONEY-09(a) (`1007584`, `659544e`). Portal push shortfall surfaced on the drift panel.
 
-MONEY-01's two known follow-on gaps (both already marked `ponytail:` in code):
-(a) A failed push to Stripe after a portal payment settles is only logged — the invoice stays open, so a retry double-charges. Fix: surface settled portal payments whose splits fall short of their principal on `/money`'s drift panel.
-(b) A portal payment larger than open invoices (a prepayment) is a ledger credit Stripe can't see, so next month's invoice collects in full. Needs an owner decision first: are prepayments allowed at all? If yes, carry as a Stripe customer-balance credit.
+- `lib/billing/webhook.ts`: `applySettledPortalPayment` now reads `applyPortalPayment`'s return value, not just its exceptions. `pushSplits` can fall short WITHOUT throwing (stops at the first refused split, returns what landed) — the old catch-only version missed exactly that case, and its own `ponytail:` comment ("logged only... the drift to count on /money if this ever fires") was never actually wired up. Any shortfall now writes a `ledger.drift_detected` audit row — the SAME action `recentDrift()` already reads for `/money`'s reconciliation drift panel, so no new query or UI was needed, just a new `kind: 'portal_push_shortfall'` item on the existing feed.
+- New regression test in `billing.test.ts` (`a portal payment reaches the invoice (MONEY-01)` describe block): two open invoices, principal split across both, `recordOutOfBandPayment` spied so the first push lands and the second throws. Asserts the drift row exists with the right payment/kind/shortfall. Verified it actually catches the regression — reverted the `webhook.ts` change alone, confirmed the test fails (`expected null not to be null`, no drift row written), restored the fix.
+- Gate: lint/typecheck clean, `npm test apps/web/lib/billing/billing.test.ts` 43/43. No schema change, `db:ci` not needed. Pushed; CI result pending — see the MONEY-06 note above, same run covers both.
 
-(b) is a product decision, not a pure code item — flag it for Shane before implementing. (a) is code-closable alone (drift-panel query + display, same shape as MONEY-06). Model: Sonnet plausible for (a) alone (read-only reporting, no money written); if scope grows to touch (b)'s Stripe credit logic, recommend Opus at that point — re-ask per the model-per-item rule rather than deciding now.
+## Next item: MONEY-09(b) — needs Shane's decision first, not code
+
+A portal payment larger than open invoices (a prepayment) is a ledger credit Stripe can't see, so next month's invoice collects in full. `ponytail:` marker in `lib/payments/out-of-band.ts`.
+
+**🟡 Question for Shane: are prepayments allowed at all?** If yes, the fix carries the excess to Stripe as a customer-balance credit (needs its own design — how it's applied, how it's shown to the tenant, whether it survives a lease ending). If no, the fix is a refusal or a cap at the point a portal payment is started, which is a different code path (`lib/payments/actions.ts`'s `startPayment`) than the one MONEY-09(a) touched.
+
+Once that's answered: Sonnet is plausible if the answer is "no, cap it" (refusal logic, no new money-movement primitive). If the answer is "yes, carry as credit," recommend Opus — that's new Stripe customer-balance logic on the money-critical path (D-11/D-12), not a spec-following addition. Re-ask per the model-per-item rule once scope is known, don't decide now.
 
 Still open lower-severity after that: SEC-19, SEC-20, UX-01..10, OPS-01.
 
