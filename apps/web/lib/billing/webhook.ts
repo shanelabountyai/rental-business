@@ -461,7 +461,7 @@ async function projectClaimed(
   // never throwing: the ledger row is the fact, and a Stripe hiccup here must
   // not make Stripe redeliver money we have already counted.
   if (intent.kind === 'payment_succeeded' && intent.principalCents != null && paymentId) {
-    await applySettledPortalPayment(paymentId, intent)
+    await applySettledPortalPayment(paymentId, intent, payer)
   }
 
   // The receipt (PAY-01), OUTSIDE the transaction and only on settlement.
@@ -753,20 +753,57 @@ async function pendingAutopayDebit(tx: Tx, leasePayerId: string, intent: Project
   return candidates.find((row) => !ours.has(row.stripePaymentIntentId!)) ?? null
 }
 
-async function applySettledPortalPayment(paymentId: string, intent: ProjectionIntent) {
+async function applySettledPortalPayment(
+  paymentId: string,
+  intent: ProjectionIntent,
+  payer: { leaseId: string; propertyId: string },
+) {
+  const principalCents = intent.principalCents!
+  let appliedCents = 0
   try {
-    await applyPortalPayment({
+    const outcome = await applyPortalPayment({
       provider: getBillingProvider(),
       paymentId,
       stripeCustomerId: intent.stripeCustomerId!,
       stripePaymentIntentId: intent.stripePaymentIntentId!,
-      principalCents: intent.principalCents!,
+      principalCents,
       receivedAt: intent.occurredAt,
     })
+    appliedCents = outcome.appliedCents
   } catch (error) {
-    // ponytail: logged only. A payment whose splits fall short of its
-    // principal is the drift to count on /money if this ever fires.
     console.error(`[stripe] could not apply portal payment ${paymentId} to its invoices`, error)
+  }
+
+  // MONEY-09: `applyPortalPayment` also falls short WITHOUT throwing - a push
+  // can break partway through `pushSplits` and just return what landed. A
+  // shortfall left here silently is a tenant's paid rent Stripe still shows
+  // as owed, and its own retry double-charges. Surfaced on the SAME feed
+  // `recentDrift()` already reads (`/money`'s reconciliation drift panel),
+  // so a new failure mode gets an existing screen rather than a new one.
+  if (appliedCents < principalCents) {
+    await auditAsSystem('billing.webhook', {
+      action: 'ledger.drift_detected',
+      entityType: 'Payment',
+      entityId: paymentId,
+      propertyId: payer.propertyId,
+      after: {
+        checkedEvents: 0,
+        checkedEntries: 0,
+        externalChecked: true,
+        drift: [
+          {
+            kind: 'portal_push_shortfall',
+            stripeEventId: null,
+            ledgerEntryId: null,
+            leaseId: payer.leaseId,
+            differenceCents: appliedCents - principalCents,
+            detail: `Portal payment ${paymentId} applied ${formatCents(appliedCents)} of its ${formatCents(principalCents)} principal to Stripe invoices - the rest is still open there, and Stripe's own retry will collect it again unless someone reconciles it first.`,
+          },
+        ],
+      },
+    }).catch((auditError) => {
+      console.error(`[stripe] could not record portal push shortfall for ${paymentId}`, auditError)
+    })
   }
 }
 

@@ -13885,3 +13885,23 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 - New regression test, `late-fees.test.ts` → *assessLateFees — payer selection on a two-payer lease (MONEY-06)*: creates a lease with two active payers seeded out of creation order, spies on `getBillingProvider().addInvoiceItem`, and asserts the earlier-created payer's Stripe customer is billed. Verified it actually catches the bug: reverting the `orderBy` change makes this test fail (wrong customer billed); with the fix, passes.
 - `npm test apps/web/lib/ledger/late-fees.test.ts`: 15/15 passed, including the 14 pre-existing tests (unaffected by the `orderBy` addition since the fixtures across those tests all have exactly one active payer).
 - No schema change — `db:ci` not required for this item.
+
+## MONEY-09(a): surface a partial portal-push failure on the drift panel
+
+**Commit:** (pending)  ·  **Date:** 2026-09-30
+
+**What it built.** `applyPortalPayment` (`lib/payments/out-of-band.ts`) can fall short of its principal WITHOUT throwing: `pushSplits` stops at the first Stripe push it refuses and returns whatever landed before that point, by design (a failed push backs out only what did not land). `applySettledPortalPayment` (`lib/billing/webhook.ts`) used to discard that return value entirely and only had a `try/catch` around the call, so the case this item's own `ponytail:` marker named — "a payment whose splits fall short of its principal is the drift to count on /money" — was never actually counted; a total failure (an exception) was logged to the console and nothing else, and a partial failure (no exception) wasn't even logged. Fixed by checking `appliedCents < principalCents` after the call (covering both the exception path, where `appliedCents` stays 0, and the silent-shortfall path) and writing a `ledger.drift_detected` audit row when it's true. That's the same audit action `reconcileLedger` (`lib/ledger/reconcile.ts`) already writes for its own sweep, and `recentDrift()` already reads for `/money`'s reconciliation drift panel with no filter beyond the action name — so the shortfall shows up on the existing panel with no new query, no new UI component, and no core package change. `parseDriftRun` (`components/money/ops-log.tsx`) already parses `kind` as a plain string rather than validating it against core's `DriftKind` union, so a new kind (`portal_push_shortfall`) needed no type change there either.
+
+**What it decided.**
+- Reuse the existing `ledger.drift_detected` audit action and the panel that already reads it, rather than building a parallel "portal push failures" query/section — same conceptual shape as the `unclaimedCounterPayments` prop the panel already carries beside its main drift list (a second concern surfaced on the same screen, not a new screen). If a future kind of live-detected drift needs richer display than `detail`/`differenceCents`, that's the point to reconsider a dedicated shape; one kind sharing the existing one is not that point.
+- `differenceCents` on this drift item is `appliedCents - principalCents` (negative = shortfall), matching the sign convention `detectLeaseBalanceDrift` already uses for "projection vs. Stripe" comparisons.
+
+**What it left behind.**
+- MONEY-09(b) is untouched and still needs Shane's decision: is a portal overpayment (beyond open invoices) allowed at all, and if so, does it become a Stripe customer-balance credit? Flagged, not implemented — it changes what the product allows, not just how a failure is reported.
+- Still open from the same review sweep: SEC-19/20, UX-01..10, OPS-01. MONEY-05 (TX grace-day count) remains a legal-review item.
+
+**Gate.**
+- `lint` and `typecheck` clean (16 pre-existing warnings, unchanged).
+- New regression test, `billing.test.ts` → *a portal payment reaches the invoice (MONEY-01) → a push that fails partway is surfaced on the drift panel, not just logged*: two open invoices, principal that has to split across both, `recordOutOfBandPayment` spied so the first push calls through and the second throws. Asserts the landed split survives, the other is backed out (existing behavior, unchanged), and a `ledger.drift_detected` audit row now exists naming the payment, `kind: 'portal_push_shortfall'`, and the correct shortfall. Verified it actually catches the regression: reverted the `webhook.ts` change alone (kept the test) and confirmed it fails with `expected null not to be null` — no drift row was written — before restoring the fix.
+- `npm test apps/web/lib/billing/billing.test.ts`: 43/43 passed.
+- No schema change — `db:ci` not required for this item.

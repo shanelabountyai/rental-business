@@ -1302,6 +1302,81 @@ describe('a portal payment reaches the invoice (MONEY-01)', () => {
     const balance = await prisma.ledgerEntry.aggregate({ where: { leaseId: lease.id }, _sum: { amountCents: true } })
     expect(balance._sum.amountCents).toBe(0)
   })
+
+  // MONEY-09: `pushSplits` stops at the first refused split and returns what
+  // landed rather than throwing - so a push that fails partway used to leave
+  // Stripe's invoice open with nothing on record anywhere but a console line.
+  it('a push that fails partway is surfaced on the drift panel, not just logged', async () => {
+    const lease = await seedActiveLease()
+    await provisionLeaseBilling(lease.id)
+    const payer = await prisma.leasePayer.findFirstOrThrow({ where: { leaseId: lease.id } })
+    const customer = payer.stripeCustomerId!
+    const now = Math.floor(Date.now() / 1000)
+
+    // Two open invoices, so the principal below has to push twice - once per
+    // invoice - and the second push is the one that fails.
+    const olderInvoiceId = `in_${randomUUID().replace(/-/g, '').slice(0, 14)}`
+    const newerInvoiceId = `in_${randomUUID().replace(/-/g, '').slice(0, 14)}`
+    await processStripeEvent(
+      invoiceEvent({ customer, type: 'invoice.finalized', amountDue: 100_000, invoiceId: olderInvoiceId, created: now }),
+    )
+    await processStripeEvent(
+      invoiceEvent({ customer, type: 'invoice.finalized', amountDue: 100_000, invoiceId: newerInvoiceId, created: now + 1 }),
+    )
+
+    const provider = getBillingProvider()
+    const real = provider.recordOutOfBandPayment.bind(provider)
+    const spy = vi
+      .spyOn(provider, 'recordOutOfBandPayment')
+      .mockImplementationOnce(real)
+      .mockImplementationOnce(async () => {
+        throw new Error('simulated push failure')
+      })
+
+    const paymentIntentId = `pi_${randomUUID().replace(/-/g, '').slice(0, 16)}`
+    try {
+      await processStripeEvent({
+        id: `evt_${randomUUID().replace(/-/g, '')}`,
+        type: 'payment_intent.succeeded',
+        created: now + 2,
+        data: {
+          object: {
+            id: paymentIntentId,
+            customer,
+            amount: 200_000,
+            payment_method_types: ['card'],
+            metadata: { leasePayerId: payer.id, principalCents: '200000' },
+          },
+        },
+      })
+    } finally {
+      spy.mockRestore()
+    }
+
+    // Only the landed split survives - the other was backed out, same as a
+    // total failure would be.
+    const payment = await prisma.payment.findUniqueOrThrow({
+      where: { stripePaymentIntentId: paymentIntentId },
+      select: {
+        id: true,
+        invoiceSplits: { select: { stripeInvoiceId: true, amountCents: true } },
+      },
+    })
+    expect(payment.invoiceSplits).toEqual([{ stripeInvoiceId: olderInvoiceId, amountCents: 100_000 }])
+
+    // The shortfall lands on the SAME feed /money's reconciliation drift
+    // panel already reads (`recentDrift`), not a log line nobody watches.
+    const drift = await prisma.auditLog.findFirst({
+      where: { action: 'ledger.drift_detected', entityType: 'Payment', entityId: payment.id },
+      orderBy: { occurredAt: 'desc' },
+      select: { after: true },
+    })
+    expect(drift).not.toBeNull()
+    const item = (drift!.after as { drift: Array<Record<string, unknown>> }).drift[0]!
+    expect(item.kind).toBe('portal_push_shortfall')
+    expect(item.differenceCents).toBe(-100_000)
+    expect(item.detail).toContain(payment.id)
+  })
 })
 
 describe('an autopay ACH debit settles its own pending row (MONEY-08)', () => {
