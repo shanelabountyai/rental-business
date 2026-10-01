@@ -14034,7 +14034,7 @@ Two real bugs found and fixed along the way, both from axe/e2e, not from reading
 
 ## A11Y-06: `autoComplete` on name/email/phone/address fields
 
-**Commit:** (pending)  ·  **Date:** 2026-10-01
+**Commit:** `a2a97a5`  ·  **Date:** 2026-10-01
 
 **What it built.** Added an `autoComplete?: string` prop to `TextField` (`components/form/field.tsx`), passed straight through to the underlying `<input>`, with no default — a wrong guessed token (e.g. `name` on a field that's really `given-name`) actively breaks autofill, so leaving it unset for every existing caller is the safe default. Wired it at the three sites the finding named: `applicant-form.tsx` (`given-name`, `family-name`, `email`, `tel`, `bday`, plus `street-address`/`address-level2`/`address-level1`/`postal-code` on the current-address fieldset), `listing-inquiry-form.tsx` (`given-name`, `family-name`, `email`, `tel`), and `self-showing-form.tsx`'s photo-ID name field (`name`, since it's the visitor's own legal name, not a tenant's).
 
