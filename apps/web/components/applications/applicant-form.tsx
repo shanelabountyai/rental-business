@@ -83,6 +83,7 @@ export function ApplicantForm({
             idPrefix="applicant"
             defaultValue={echoed.firstName ?? values.firstName}
             error={errors.firstName}
+            autoComplete="given-name"
           />
           <TextField
             label="Last name"
@@ -91,6 +92,7 @@ export function ApplicantForm({
             idPrefix="applicant"
             defaultValue={echoed.lastName ?? values.lastName}
             error={errors.lastName}
+            autoComplete="family-name"
           />
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
@@ -102,6 +104,7 @@ export function ApplicantForm({
             defaultValue={echoed.email ?? values.email ?? undefined}
             error={errors.email}
             hint="Give an email or a phone - at least one."
+            autoComplete="email"
           />
           <TextField
             label="Phone"
@@ -109,6 +112,7 @@ export function ApplicantForm({
             type="tel"
             idPrefix="applicant"
             defaultValue={echoed.phone ?? values.phone ?? undefined}
+            autoComplete="tel"
           />
         </div>
         <TextField
@@ -119,6 +123,7 @@ export function ApplicantForm({
           idPrefix="applicant"
           defaultValue={echoed.dateOfBirth ?? values.dateOfBirth ?? undefined}
           error={errors.dateOfBirth}
+          autoComplete="bday"
         />
 
         <fieldset className="flex flex-col gap-4 border-t pt-4">
@@ -130,6 +135,7 @@ export function ApplicantForm({
             idPrefix="applicant"
             defaultValue={echoed.currentAddressLine1 ?? values.currentAddressLine1 ?? undefined}
             error={errors.currentAddressLine1}
+            autoComplete="street-address"
           />
           <div className="grid gap-4 sm:grid-cols-3">
             <TextField
@@ -139,6 +145,7 @@ export function ApplicantForm({
               idPrefix="applicant"
               defaultValue={echoed.currentCity ?? values.currentCity ?? undefined}
               error={errors.currentCity}
+              autoComplete="address-level2"
             />
             <TextField
               label="State"
@@ -147,6 +154,7 @@ export function ApplicantForm({
               idPrefix="applicant"
               defaultValue={echoed.currentState ?? values.currentState ?? undefined}
               error={errors.currentState}
+              autoComplete="address-level1"
             />
             <TextField
               label="Postal code"
@@ -155,6 +163,7 @@ export function ApplicantForm({
               idPrefix="applicant"
               defaultValue={echoed.currentPostalCode ?? values.currentPostalCode ?? undefined}
               error={errors.currentPostalCode}
+              autoComplete="postal-code"
             />
           </div>
           <TextField

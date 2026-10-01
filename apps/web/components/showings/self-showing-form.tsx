@@ -33,6 +33,7 @@ export function SelfShowingIdentityForm({
         required
         idPrefix="self-showing"
         error={state.fieldErrors?.documentName}
+        autoComplete="name"
         hint="It has to match the name this viewing was booked under. If it does not — a married name, a shortened first name — call the office instead and they will sort it out."
       />
       <p className="text-muted-foreground text-sm">

@@ -14031,3 +14031,19 @@ Two real bugs found and fixed along the way, both from axe/e2e, not from reading
 - `typecheck` clean.
 - `npm run build` clean — both pages stay Server Components; `FocusedStatus` lives entirely inside the already-`'use client'` `auth-form.tsx`, so no new Server/Client boundary was introduced.
 - No schema change — `db:ci` not required for this item.
+
+## A11Y-06: `autoComplete` on name/email/phone/address fields
+
+**Commit:** (pending)  ·  **Date:** 2026-10-01
+
+**What it built.** Added an `autoComplete?: string` prop to `TextField` (`components/form/field.tsx`), passed straight through to the underlying `<input>`, with no default — a wrong guessed token (e.g. `name` on a field that's really `given-name`) actively breaks autofill, so leaving it unset for every existing caller is the safe default. Wired it at the three sites the finding named: `applicant-form.tsx` (`given-name`, `family-name`, `email`, `tel`, `bday`, plus `street-address`/`address-level2`/`address-level1`/`postal-code` on the current-address fieldset), `listing-inquiry-form.tsx` (`given-name`, `family-name`, `email`, `tel`), and `self-showing-form.tsx`'s photo-ID name field (`name`, since it's the visitor's own legal name, not a tenant's).
+
+**What it decided.** Left `employerName` and `monthlyIncome` on `applicant-form.tsx` without a token — neither has a standard HTML autocomplete value (`organization` is for a work address field, not a reference to an employer by name; there is no income token at all), and a wrong guess is worse than nothing per the prop's own contract.
+
+**What it left behind.** Actual browser autofill behavior is a manual check, not yet performed by a person — same acceptance gap as the rest of this a11y sweep. No unit/e2e coverage: `autoComplete` has no accessible-name or DOM-structure effect for Playwright or axe to catch a regression in.
+
+**Gate.**
+- `lint` clean (0 errors; same 16 pre-existing warnings, none in touched files).
+- `typecheck` clean.
+- `npm run build` clean.
+- No schema change — `db:ci` not required for this item.

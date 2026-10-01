@@ -79,6 +79,7 @@ export function TextField({
   list,
   idPrefix,
   onChange,
+  autoComplete,
 }: {
   label: string
   name: string
@@ -99,6 +100,10 @@ export function TextField({
   step?: number | string
   autoFocus?: boolean
   list?: string
+  /// Standard HTML autofill token (`given-name`, `email`, `tel`,
+  /// `street-address`, ...) - A11Y-06. No default: a wrong guess (e.g.
+  /// `name` on a field that is really `given-name`) is worse than none.
+  autoComplete?: string
   /// Set when this form shares a field `name` (commonly "type" or "notes")
   /// with another form that can be present on the same page at once - two
   /// <details>-collapsed forms both existing in the DOM simultaneously is
@@ -145,6 +150,7 @@ export function TextField({
         step={step}
         list={list}
         autoFocus={autoFocus}
+        autoComplete={autoComplete}
         aria-invalid={Boolean(error) || undefined}
         aria-describedby={describedBy || undefined}
         className={INPUT_CLASSES}

@@ -65,6 +65,7 @@ export function ListingInquiryForm({
           idPrefix="inquiry"
           defaultValue={echoed.firstName}
           error={errors.firstName}
+          autoComplete="given-name"
         />
         <TextField
           label="Last name"
@@ -73,6 +74,7 @@ export function ListingInquiryForm({
           idPrefix="inquiry"
           defaultValue={echoed.lastName}
           error={errors.lastName}
+          autoComplete="family-name"
         />
       </div>
       <div className="grid gap-4 sm:grid-cols-2">
@@ -84,6 +86,7 @@ export function ListingInquiryForm({
           defaultValue={echoed.email}
           error={errors.email}
           hint="Give an email or a phone - at least one."
+          autoComplete="email"
         />
         <TextField
           label="Phone"
@@ -91,6 +94,7 @@ export function ListingInquiryForm({
           type="tel"
           idPrefix="inquiry"
           defaultValue={echoed.phone}
+          autoComplete="tel"
         />
       </div>
       {/* LEGAL-03. Unticked by default, and optional: the hint is the exact
