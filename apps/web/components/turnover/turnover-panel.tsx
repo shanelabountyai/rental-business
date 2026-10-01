@@ -278,7 +278,7 @@ export function TurnoverPanel({
               idPrefix="turnover-target"
               defaultValue={turnover.targetRentReadyDate ?? undefined}
             />
-            <SubmitButton label="Save" />
+            <SubmitButton label="Save target date" />
           </form>
 
           {/* The alerts live OUTSIDE the conditional below, which the action

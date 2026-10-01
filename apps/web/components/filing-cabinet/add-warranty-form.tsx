@@ -51,7 +51,7 @@ export function AddWarrantyForm({
         error={errors.expiresOn}
         hint="Leave blank if unknown - a work order will treat this as unknown coverage, not no coverage."
       />
-      <TextField label="Notes" name="notes" idPrefix="warranty" required={false} error={errors.notes} />
+      <TextField label="Warranty notes" name="notes" idPrefix="warranty" required={false} error={errors.notes} />
       <SubmitButton label="Add warranty" />
     </form>
   )

@@ -62,7 +62,7 @@ export function AddUtilityAccountForm({
         label="Landlord-revert agreement on file"
         name="landlordRevertAgreement"
       />
-      <TextField label="Notes" name="notes" idPrefix="utility" required={false} error={errors.notes} />
+      <TextField label="Account notes" name="notes" idPrefix="utility" required={false} error={errors.notes} />
       <SubmitButton label="Add utility account" />
     </form>
   )

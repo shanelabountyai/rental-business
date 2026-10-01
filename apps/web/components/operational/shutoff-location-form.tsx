@@ -35,7 +35,7 @@ export function ShutoffLocationForm({
       <FormAlerts state={state} />
       <div className="min-w-40">
         <SelectField
-          label="Type"
+          label="Shutoff type"
           name="type"
           idPrefix="shutoff"
           required
@@ -53,7 +53,7 @@ export function ShutoffLocationForm({
         error={errors.description}
         hint="Enough detail for someone in a hurry."
       />
-      <SubmitButton label="Save" />
+      <SubmitButton label="Save shutoff location" />
     </form>
   )
 }

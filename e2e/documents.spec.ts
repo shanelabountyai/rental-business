@@ -189,11 +189,7 @@ test.describe('uploading and downloading', () => {
     await signIn(page, staff.email)
 
     await page.goto(`/properties/${property.id}`)
-    // Not getByLabel('Type') - R-015's filing cabinet added a "Rate type"
-    // field (Mortgage form) to this same property page, and getByLabel does
-    // a substring match by default ("Rate type" contains "type");
-    // #field-doc-type is the upload form's select alone.
-    await page.locator('#field-doc-type').selectOption('INSURANCE_COI')
+    await page.getByLabel('Document type').selectOption('INSURANCE_COI')
     await page
       .getByLabel('File')
       .setInputFiles({ name: 'coi.txt', mimeType: 'text/plain', buffer: Buffer.from('proof of insurance') })
@@ -220,10 +216,7 @@ test.describe('uploading and downloading', () => {
     await signIn(page, staff.email)
 
     await page.goto(`/properties/${property.id}/units/${unit.id}`)
-    // Not getByLabel('Type') - the unit page also carries the operational-
-    // data section's own "Type" fields (access code, shutoff), all sharing
-    // that accessible name by design; #field-doc-type is this form's alone.
-    await page.locator('#field-doc-type').selectOption('UNIT_PHOTO')
+    await page.getByLabel('Document type').selectOption('UNIT_PHOTO')
     // exact: true - a substring match on "File" also catches "Landlord-
     // revert agreement on file" from the operational-data section elsewhere
     // on this same unit page.

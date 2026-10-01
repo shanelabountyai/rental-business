@@ -27,7 +27,7 @@ export function AddAccessCodeForm({
       <FormAlerts state={state} />
       <div className="min-w-36">
         <SelectField
-          label="Type"
+          label="Access type"
           name="type"
           idPrefix="code"
           required

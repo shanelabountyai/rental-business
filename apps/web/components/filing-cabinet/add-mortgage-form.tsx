@@ -82,7 +82,7 @@ export function AddMortgageForm({
         name="isBalloon"
         hint="Alerted 180 days before the maturity date above."
       />
-      <TextField label="Notes" name="notes" idPrefix="mortgage" required={false} error={errors.notes} />
+      <TextField label="Mortgage notes" name="notes" idPrefix="mortgage" required={false} error={errors.notes} />
       <SubmitButton label="Add mortgage" />
     </form>
   )

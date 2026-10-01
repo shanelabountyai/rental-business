@@ -129,7 +129,7 @@ test.describe('turnover', () => {
     expect(workOrder.turnoverStage).toBe('PAINT')
 
     await page.getByLabel('Target rent-ready date').fill('2026-07-15')
-    await page.getByRole('button', { name: 'Save' }).click()
+    await page.getByRole('button', { name: 'Save target date' }).click()
     await expect(page.getByLabel('Target rent-ready date')).toHaveValue('2026-07-15')
 
     // R-176. WARNED FIRST - this turn has no re-key recorded, and the press

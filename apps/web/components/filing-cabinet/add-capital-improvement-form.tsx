@@ -77,7 +77,7 @@ export function AddCapitalImprovementForm({
         error={errors.workOrderId}
         hint="Optional. If the project ran through maintenance, linking it stops the same money being deducted as a repair as well."
       />
-      <TextField label="Notes" name="notes" idPrefix="capex" required={false} error={errors.notes} />
+      <TextField label="Improvement notes" name="notes" idPrefix="capex" required={false} error={errors.notes} />
       <SubmitButton label="Add improvement" />
     </form>
   )

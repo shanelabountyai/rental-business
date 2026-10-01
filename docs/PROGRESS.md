@@ -14099,3 +14099,21 @@ Wired at all 6 call sites across `operational-data-section.tsx` (appliances, uti
 - `npm test`: 4 pre-existing failures, unrelated (`comms.test.ts` ×2, `pre-move-out-scheduling-job.test.ts` ×2 — leftover `rental_test` data, documented in `NEXT.md` before this session).
 - Scoped e2e (`e2e/operational.spec.ts` + `e2e/filing-cabinet.spec.ts`, `desktop-chrome` + `mobile-chrome`): 42/42 passed, reconciled against `--list`'s `Total: 42 tests`.
 - No schema change — `db:ci` not required for this item.
+
+## A11Y-10: repeated field names on the property and unit pages
+
+**Commit:** _pending_  ·  **Date:** 2026-10-01
+
+**What it built.** Pure string-literal relabels at 10 call sites — none of the shared field components (`TextField`, `SelectField`, `SubmitButton`) needed a shape change; every one already takes `label` as a required prop with no default. Property page's 6 "Notes" fields (all rendered via `FilingCabinetSection`'s subforms, simultaneously present in the DOM even collapsed inside `<details>`): `add-mortgage-form.tsx` → "Mortgage notes", `mortgage-statement-form.tsx` → "Statement notes", `add-insurance-policy-form.tsx` → "Policy notes", `hoa-info-form.tsx` → "HOA notes", `add-warranty-form.tsx` → "Warranty notes", `add-capital-improvement-form.tsx` → "Improvement notes". Unit page's 3 "Type" fields: `shutoff-location-form.tsx` → "Shutoff type", `add-access-code-form.tsx` → "Access type", `upload-form.tsx` (also rendered on the property page, no collision there) → "Document type". Unit page's 2 "Notes" fields: `add-appliance-form.tsx` → "Appliance notes", `add-utility-account-form.tsx` → "Account notes". The two "Save" buttons, both mounted on the unit page whenever staff has write access: `shutoff-location-form.tsx` → "Save shutoff location", `turnover-panel.tsx` → "Save target date".
+
+**What it decided.** Two of the first-choice labels reintroduced the exact substring-match trap this repo's own `CLAUDE.md` already documents for `getByRole('alert')` and `getByText` — but here against `getByLabel`, which also matches by substring. "Code type" (first choice for the access-code form) contains "Code", colliding with that same form's own `getByLabel('Code')` textbox; "Utility account notes" (first choice for the utility form) contains "Utility", colliding with that form's own `getByLabel('Utility')` select. Both were caught by the scoped e2e rerun (strict-mode violations, not axe failures — axe does not check for this) and renamed to "Access type" and "Account notes", which don't contain any other label on their own form as a substring. The lesson generalizes: a label rename for a cross-page collision has to be checked against substring collisions on its *own* form too, not just against the other labels it was deduplicating from.
+
+**What it left behind.** Nothing new — this was a label-only fix with no behavior change. Two e2e comments that had documented the old collision as "by design" (`e2e/documents.spec.ts`, two sites) were stale now that the collision is gone, so both were simplified from an id-selector workaround back to `getByLabel('Document type')`; the `#field-code-type` and `#field-shutoff-type` id-selector workarounds elsewhere in `operational.spec.ts` were left as-is (still correct, just no longer load-bearing).
+
+**Gate.**
+- `lint` clean (0 errors; same pre-existing warnings, none in touched files).
+- `typecheck` clean.
+- `npm run build` clean.
+- `npm test`: first full run showed 58 failures, all DB-hook/test timeouts across files with no shared code path (billing, notifications, leases, workorders) — traced to a sibling project (`apptbasedservice`/bookable) running its own vitest + Playwright sweep concurrently on the same Postgres instance, not a code defect (per `CLAUDE.md`'s "a cluster of failures across unrelated test files" guidance). Rerun after that sweep cleared: only the same 4 pre-existing failures `NEXT.md` already documents (`comms.test.ts` ×2, `pre-move-out-scheduling-job.test.ts` ×2).
+- Scoped e2e (`operational.spec.ts` + `filing-cabinet.spec.ts` + `turnover.spec.ts` + `documents.spec.ts`, desktop + mobile): 60/60 passed, reconciled against `--list`.
+- No schema change — `db:ci` not required for this item.

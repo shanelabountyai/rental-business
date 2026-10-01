@@ -66,7 +66,7 @@ export function AddApplianceForm({
         error={errors.filterSize}
         hint='"16x25x1"'
       />
-      <TextField label="Notes" name="notes" idPrefix="appliance" required={false} error={errors.notes} />
+      <TextField label="Appliance notes" name="notes" idPrefix="appliance" required={false} error={errors.notes} />
       <SubmitButton label="Add appliance" />
     </form>
   )

@@ -182,10 +182,7 @@ test.describe('access codes', () => {
     await page.goto(`/properties/${property.id}/units/${unit.id}`)
     await page.getByText('Add or replace a code').click()
     await expectFocusSurvived(page, 'opening “Add or replace a code” — an operational-data disclosure')
-    // Not getByLabel('Type') - three subsections on this page share that
-    // accessible name by design (access code, shutoff, and documents'
-    // upload form); #field-code-type is the access-code form's alone.
-    await page.locator('#field-code-type').selectOption('LOCKBOX')
+    await page.getByLabel('Access type').selectOption('LOCKBOX')
     await page.getByLabel('Label (optional)').fill('Front door')
     await page.getByLabel('Code').fill('7392')
     await page.getByRole('button', { name: 'Save code' }).click()
@@ -341,13 +338,13 @@ test.describe('shutoff locations', () => {
     await page.getByText('Set a shutoff location').click()
     await page.locator('#field-shutoff-type').selectOption('WATER_MAIN')
     await page.getByLabel('Where is it?').fill('Left side, under the hose bib.')
-    await page.getByRole('button', { name: 'Save' }).click()
+    await page.getByRole('button', { name: 'Save shutoff location' }).click()
     await expect(page.getByText('Left side, under the hose bib.')).toBeVisible()
 
     await page.getByText('Set a shutoff location').click()
     await page.locator('#field-shutoff-type').selectOption('WATER_MAIN')
     await page.getByLabel('Where is it?').fill('Corrected: right side, green box.')
-    await page.getByRole('button', { name: 'Save' }).click()
+    await page.getByRole('button', { name: 'Save shutoff location' }).click()
     await expect(page.getByText('Corrected: right side, green box.')).toBeVisible()
 
     const rows = await prisma.shutoffLocation.findMany({ where: { unitId: unit.id } })

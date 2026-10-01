@@ -19,7 +19,7 @@ export function UploadForm({
       <FormAlerts state={state} />
       <div className="min-w-40">
         <SelectField
-          label="Type"
+          label="Document type"
           name="type"
           idPrefix="doc"
           required

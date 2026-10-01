@@ -57,7 +57,7 @@ export function MortgageStatementForm({
         required={false}
         error={errors.escrowDollars}
       />
-      <TextField label="Notes" name="notes" idPrefix={idPrefix} required={false} error={errors.notes} />
+      <TextField label="Statement notes" name="notes" idPrefix={idPrefix} required={false} error={errors.notes} />
       <SubmitButton label="Record 1098" />
     </form>
   )

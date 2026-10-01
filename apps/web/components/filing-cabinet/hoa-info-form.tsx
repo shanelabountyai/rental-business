@@ -50,7 +50,7 @@ export function HoaInfoForm({
         hint='Free text - e.g. "capped at 20% of units, waitlist as of 2024".'
       />
       <TextField
-        label="Notes"
+        label="HOA notes"
         name="notes"
         idPrefix="hoa"
         required={false}

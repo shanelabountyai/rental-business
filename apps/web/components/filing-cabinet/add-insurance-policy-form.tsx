@@ -56,7 +56,7 @@ export function AddInsurancePolicyForm({
         hint="Alerted 60 days before renewal - the shopping window."
       />
       <CheckboxField label="Loss-of-rents coverage" name="lossOfRents" />
-      <TextField label="Notes" name="notes" idPrefix="insurance" required={false} error={errors.notes} />
+      <TextField label="Policy notes" name="notes" idPrefix="insurance" required={false} error={errors.notes} />
       <SubmitButton label="Add policy" />
     </form>
   )
