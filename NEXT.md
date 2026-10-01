@@ -4,7 +4,7 @@
 
 - `MortgageStatementForm` (`mortgage-statement-form.tsx`) now takes a required `mortgageId` prop and derives `idPrefix` as `` `statement-${mortgageId}` `` instead of the fixed `idPrefix="statement"` that collided across every mortgage statement form on a property with 2+ mortgages. Call site in `filing-cabinet-section.tsx` passes `mortgageId={mortgage.id}`.
 - Gate: lint/typecheck/build clean. No unit/e2e coverage — no existing axe assertion exercises the filing-cabinet section with two mortgages on one property.
-- Pushed pending — SHA backfill commit not yet made.
+- Pushed (`ee21071`, SHA backfill `d361d10`).
 - Next in backlog order: A11Y-09 (delete button labels/target size/result region), then A11Y-10, A11Y-11, then UX-03..10.
 
 ## Prior 2026-10-01: A11Y-07 (`e85fe17`). Rent amount field contrast + unlinked error.
