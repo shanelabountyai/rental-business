@@ -84,17 +84,29 @@ function bareType(contentType: string): string {
 }
 
 /**
- * A filename safe to put inside a header value.
+ * A filename safe to put inside the legacy `filename=` header parameter.
  *
  * `Document.fileName` is `file.name` from the uploader's machine, so it can
  * contain quotes (which would end the parameter early) and, in principle,
- * CR/LF. Node refuses to send a header containing a newline, so the latter
- * is a 500 rather than a response-splitting bug - but a 500 on somebody
- * opening a lease is still a defect, and one regex removes the question.
+ * CR/LF or a character above U+00FF (CJK, emoji) - both throw inside `new
+ * Response` rather than just mis-rendering. One regex removes all of it; the
+ * RFC 5987 `filename*=` parameter below carries the real name, which every
+ * browser prefers over this ASCII fallback.
  */
 function safeFileName(fileName: string): string {
-  const cleaned = fileName.replace(/[\r\n"\\]/g, '').trim()
+  const cleaned = fileName.replace(/[^\x20-\x7e]|["\\]/g, '').trim()
   return cleaned === '' ? 'document' : cleaned
+}
+
+/** The same name, percent-encoded for `filename*=UTF-8''...` (RFC 5987). */
+function encodedFileNameStar(fileName: string): string {
+  const cleaned = fileName.trim() === '' ? 'document' : fileName
+  // `encodeURIComponent` leaves `- _ . ! ~ * ' ( )` unescaped; RFC 5987's
+  // attr-char set excludes the last four, so they need a second pass.
+  return encodeURIComponent(cleaned).replace(
+    /['()*]/g,
+    (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`,
+  )
 }
 
 /**
@@ -131,7 +143,7 @@ export function documentResponse(
       'Content-Type': renderable ? type : 'application/octet-stream',
       'Content-Disposition': `${renderable ? 'inline' : 'attachment'}; filename="${safeFileName(
         document.fileName,
-      )}"`,
+      )}"; filename*=UTF-8''${encodedFileNameStar(document.fileName)}`,
       'Content-Length': String(bytes.byteLength),
       // A LAST FENCE ON THE UNTRUSTED PATH ONLY. Anything off the allowlist
       // is a type nobody vetted, so its response says "load nothing, run

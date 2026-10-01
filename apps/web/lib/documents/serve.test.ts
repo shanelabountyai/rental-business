@@ -98,16 +98,30 @@ describe('the last fence on the untrusted path', () => {
 })
 
 describe('the filename in the header', () => {
-  it('drops quotes and control characters', () => {
+  it('drops quotes and control characters from the ASCII fallback', () => {
     // `Document.fileName` is `file.name` off the uploader's machine. A quote
     // ends the parameter early; a newline is a header Node refuses to send,
     // so it would be a 500 on somebody opening a lease.
     const headers = headersOf('application/pdf', 'a"b\r\nX-Evil: 1.pdf')
-    expect(headers.disposition).toBe('inline; filename="abX-Evil: 1.pdf"')
+    expect(headers.disposition).toBe(
+      `inline; filename="abX-Evil: 1.pdf"; filename*=UTF-8''a%22b%0D%0AX-Evil%3A%201.pdf`,
+    )
   })
 
   it('falls back rather than emitting an empty filename', () => {
-    expect(headersOf('application/pdf', '"""').disposition).toBe('inline; filename="document"')
+    expect(headersOf('application/pdf', '"""').disposition).toBe(
+      `inline; filename="document"; filename*=UTF-8''%22%22%22`,
+    )
+  })
+
+  it('carries a CJK/emoji name through filename* instead of throwing', () => {
+    // SEC-20: a character above U+00FF made `new Response` throw, 500ing
+    // every open of a document named this way. The ASCII `filename=` drops
+    // it; `filename*=` (RFC 5987) is what actually carries it to the browser.
+    const headers = headersOf('application/pdf', '契約書📄.pdf')
+    expect(headers.disposition).toBe(
+      `inline; filename=".pdf"; filename*=UTF-8''%E5%A5%91%E7%B4%84%E6%9B%B8%F0%9F%93%84.pdf`,
+    )
   })
 })
 

@@ -13942,3 +13942,18 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 - `lint` and `typecheck` clean (same 16 pre-existing warnings).
 - `npm test -- packages/db/prisma/demo-database-guard.test.ts`: 10/10 passed.
 - No schema change — `db:ci` not required for this item.
+
+## SEC-20: filename* encoding for CJK/emoji document names
+
+**Commit:** (pending)  ·  **Date:** 2026-10-01
+
+**What it built.** `documentResponse` (`apps/web/lib/documents/serve.ts`) was constructing `Content-Disposition: inline; filename="…"` from the raw uploader-supplied `fileName`, only stripping CR/LF/quote/backslash. Node's `Response` encodes header values as Latin-1 (`ByteString`), so any character above U+00FF — any CJK character, any emoji — throws inside `new Response` rather than just mis-rendering, 500ing every open of that document. `safeFileName` now strips anything outside printable ASCII (`[^\x20-\x7e]`) as well, so the legacy `filename=` parameter can never contain a byte that throws. A new `encodedFileNameStar` RFC-5987-percent-encodes the real name (via `encodeURIComponent`, with a second pass over `'()*` which it leaves unescaped but RFC 5987's `attr-char` excludes) into a `filename*=UTF-8''…` parameter alongside it — every browser prefers `filename*` over `filename` when both are present, so the real name still reaches the download/preview dialog; only the legacy fallback is now ASCII-only.
+
+**What it decided.** Confirmed the throw with a standalone `new Response` call carrying a raw CJK+emoji filename before touching the fix, matching this repo's habit of proving a regression is real before writing the test that catches it.
+
+**What it left behind.** Nothing scoped out — this was a one-file, one-function fix matching the backlog's own suggested approach.
+
+**Gate.**
+- `lint` and `typecheck` clean (same 16 pre-existing warnings).
+- `npm test -- apps/web/lib/documents/serve.test.ts`: 16/16 passed (2 existing exact-string assertions updated for the new `filename*=` suffix; 1 new test with a `契約書📄.pdf` fixture — verified it would have thrown before the fix via a standalone repro, not by reverting and rerunning the suite, since the pre-fix code throws synchronously rather than failing an assertion).
+- No schema change — `db:ci` not required for this item.
