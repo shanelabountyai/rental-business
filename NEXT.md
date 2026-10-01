@@ -1,6 +1,13 @@
 # Next session
 
-## Done 2026-10-01: A11Y-08 (`ee21071`). Duplicate ids on mortgage statement forms.
+## Done 2026-10-01: A11Y-09 (`8758e0a`). Delete button labels, 44px target, result region outside the row.
+
+- `DeleteRowButton` (`delete-row-button.tsx`) takes a required `label` prop → `aria-label={`Remove ${label}`}` (visible text stays "Remove"); `min-h-9` → `min-h-11` (44px). Added `DeleteResultRegion` (React Context) so the removal announcement survives the `<li>` it describes being removed from the DOM — wrapped at all 6 call sites (appliances, utility accounts, mortgages, per-mortgage statements, insurance, warranties, capital improvements) across `operational-data-section.tsx` and `filing-cabinet-section.tsx`.
+- Gate: lint/typecheck/build/unit clean (4 pre-existing unrelated unit failures, same as before this session — leftover `rental_test` data). Scoped e2e (`operational.spec.ts` + `filing-cabinet.spec.ts`, desktop+mobile): 42/42 passed, including both axe specs.
+- Pushed (`8758e0a`, SHA backfill in the next commit).
+- Next in backlog order: A11Y-10 (repeated field names — "Notes" ×6, "Save" ×2), then A11Y-11, then UX-03..10.
+
+## Prior 2026-10-01: A11Y-08 (`ee21071`). Duplicate ids on mortgage statement forms.
 
 - `MortgageStatementForm` (`mortgage-statement-form.tsx`) now takes a required `mortgageId` prop and derives `idPrefix` as `` `statement-${mortgageId}` `` instead of the fixed `idPrefix="statement"` that collided across every mortgage statement form on a property with 2+ mortgages. Call site in `filing-cabinet-section.tsx` passes `mortgageId={mortgage.id}`.
 - Gate: lint/typecheck/build clean. No unit/e2e coverage — no existing axe assertion exercises the filing-cabinet section with two mortgages on one property.

@@ -14082,7 +14082,7 @@ Two real bugs found and fixed along the way, both from axe/e2e, not from reading
 
 ## A11Y-09: delete button labels, 44px target, result region outside the row
 
-**Commit:** `<pending>`  ·  **Date:** 2026-10-01
+**Commit:** `8758e0a`  ·  **Date:** 2026-10-01
 
 **What it built.** `DeleteRowButton` (`components/operational/delete-row-button.tsx`) now takes a required `label: string` prop, rendered as `aria-label={`Remove ${label}`}` — visible text stays "Remove", so the control satisfies 2.5.3 (visible label contained in accessible name) while every row gets a distinct name. Bumped the button's `min-h-9` to `min-h-11` (44px, the same token `<summary>` elements in these sections already use). The harder half of the finding: `FormAlerts` used to render *inside* the `<li>` the delete action removes, so on success the live region vanished in the same render pass as the text it would have announced — the R-101 "region before text" bug one step further along, since here the region itself is gone, not just arriving pre-populated. Added `DeleteResultRegion`, a `'use client'` component that holds the last removal result in React Context and renders the always-mounted `role="alert"`/`role="status"` pair (same shape as `FormAlerts`) as a sibling *after* its children — so it survives any one row inside it disappearing. `DeleteRowButton` reads the context setter via `useContext` and reports `state.error` or a synthesized `"Removed {label}."` through `useFormVersion` (skips the initial-mount render, same pattern `deposit-group-card.tsx` already uses for `onCreated`). Context over a lifted prop because a button can sit arbitrarily deep below a server component (a mortgage statement's own sub-list) that cannot hold state itself.
 
