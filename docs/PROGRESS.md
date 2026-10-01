@@ -14050,7 +14050,7 @@ Two real bugs found and fixed along the way, both from axe/e2e, not from reading
 
 ## A11Y-08: duplicate ids on mortgage statement forms
 
-**Commit:** TBD  ·  **Date:** 2026-10-01
+**Commit:** `ee21071`  ·  **Date:** 2026-10-01
 
 **What it built.** `MortgageStatementForm` (`components/filing-cabinet/mortgage-statement-form.tsx`) is rendered once per mortgage under a property (`filing-cabinet-section.tsx`), but every field used a fixed `idPrefix="statement"` — so with two or more mortgages, every form after the first generated ids that collided with the first form's, and every label pointed at the wrong form's input. Added a required `mortgageId` prop, derived `idPrefix` as `` `statement-${mortgageId}` `` inside the component, and replaced the fixed string on all five `TextField`s. The call site now passes `mortgageId={mortgage.id}`.
 

@@ -1,6 +1,13 @@
 # Next session
 
-## Done 2026-10-01: A11Y-07 (`e85fe17`). Rent amount field contrast + unlinked error.
+## Done 2026-10-01: A11Y-08 (`ee21071`). Duplicate ids on mortgage statement forms.
+
+- `MortgageStatementForm` (`mortgage-statement-form.tsx`) now takes a required `mortgageId` prop and derives `idPrefix` as `` `statement-${mortgageId}` `` instead of the fixed `idPrefix="statement"` that collided across every mortgage statement form on a property with 2+ mortgages. Call site in `filing-cabinet-section.tsx` passes `mortgageId={mortgage.id}`.
+- Gate: lint/typecheck/build clean. No unit/e2e coverage — no existing axe assertion exercises the filing-cabinet section with two mortgages on one property.
+- Pushed pending — SHA backfill commit not yet made.
+- Next in backlog order: A11Y-09 (delete button labels/target size/result region), then A11Y-10, A11Y-11, then UX-03..10.
+
+## Prior 2026-10-01: A11Y-07 (`e85fe17`). Rent amount field contrast + unlinked error.
 
 - Swapped the hand-rolled `className` on both amount inputs (`pay-form.tsx:73`, `offline-payment-form.tsx:100`) for `INPUT_CLASSES` (`components/ui-classes.ts`) — the plain `border` utility they used was ~1.26:1 contrast, under WCAG 1.4.11's 3:1. `pay-form.tsx` appends its deliberate `w-40 text-lg` after `INPUT_CLASSES` (D-10's large-text requirement for a phone rent-pay screen); `offline-payment-form.tsx` keeps `w-32`. Added `aria-invalid={Boolean(fieldErrors?.amountDollars) || undefined}` to both.
 - `offline-payment-form.tsx` already had `FieldError`/`aria-describedby` wired for this field (R-099) — only the class and `aria-invalid` were missing. `pay-form.tsx` had neither: added a `FieldError` region under the existing `amount-hint` paragraph; `aria-describedby` now lists both ids when an error is present.
