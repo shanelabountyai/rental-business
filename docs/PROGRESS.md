@@ -14002,7 +14002,7 @@ Two real bugs found and fixed along the way, both from axe/e2e, not from reading
 
 ## A11Y-04: focus the heading when autopay confirms, instead of an inert live region
 
-**Commit:** TBD  ·  **Date:** 2026-10-01
+**Commit:** `c0ad7e2`  ·  **Date:** 2026-10-01
 
 **What it built.** `AutopayPanel` (`components/payments/autopay-panel.tsx`) swaps its whole "off" branch (the Stripe Elements confirm form) for its "on" branch in one render pass when setup succeeds, the same whole-section-replacement shape as the three panels `useFocusWhen` was already written for (MFA enrolment, the vendor bid/job panels, the portal verify-link panel) — so the existing `role="status"` confirmation text mounts already populated and announces nothing, and the Save button that had focus is gone in the same pass, dropping focus to `<body>`. Added `useFocusWhen<HTMLHeadingElement>(saved)` on the panel's `h2`, `ref`+`tabIndex={-1}`, matching `bid-form.tsx`/`verify-panel.tsx`'s exact pattern. Driven by `saved` (the client action-state flag), not `alreadyOn` (a server prop also true on an ordinary page load where autopay was already on) — `useFocusWhen`'s own header comment names this distinction explicitly and warns against the server-prop version.
 
