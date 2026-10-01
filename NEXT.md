@@ -1,5 +1,11 @@
 # Next session
 
+## Done 2026-10-01: SEC-20 (`ed35c1b`). filename* encoding for CJK/emoji document names.
+
+- `documentResponse` (`apps/web/lib/documents/serve.ts`) threw inside `new Response` for any filename with a character above U+00FF (Node's header values are Latin-1) — confirmed the raw throw with a standalone repro before touching the fix. `safeFileName` now strips to printable ASCII for the legacy `filename=` fallback; new `encodedFileNameStar` RFC-5987-encodes the real name into `filename*=UTF-8''…`, which every browser prefers.
+- Gate: lint/typecheck clean, `npm test -- apps/web/lib/documents/serve.test.ts` 16/16 (2 existing exact-string assertions updated, 1 new CJK+emoji regression test). No schema change.
+- Pushed (`ed35c1b`). Next in backlog order: UX-01 (sticky anchor bar + collapse `/leases/[id]`'s ~30 panels — design-review acceptance, no automated gate). Lower down: UX-02..10, OPS-01, A11Y-04..11.
+
 ## Done 2026-10-01: SEC-19 (`4bc0d36`). Placeholder the Neon dev-branch hostname in a test fixture.
 
 - `packages/db/prisma/demo-database-guard.test.ts`'s `NEON` fixture carried the real Neon dev-branch hostname in a public repo; swapped for a made-up host in the same shape. The guard only pattern-matches `localhost`/`rental_demo`, so this doesn't change what the test exercises. Scoped to the file the finding named — `docs/DEPLOYMENT.md` still documents the real hostname deliberately as an ops reference; that's the separate "repo is PUBLIC" exposure already carried below, not touched here.
