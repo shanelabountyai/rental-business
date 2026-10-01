@@ -1,5 +1,14 @@
 # Next session
 
+## Done 2026-10-01: UX-01 (`ea36958`). Sticky anchor bar + pinned header for /leases/[id].
+
+- Sticky header (back link, title, balance, status) + five-link native `<nav>` anchor bar (Money/People/Compliance/Access/Lifecycle), reordered the page's ~30 panels into those five contiguous groups while preserving every documented pairwise ordering comment (R-084, R-175/Chase-between, R-143, R-086, R-094b — grepped for "above/below/before/after" to find all of them).
+- Scoped out `<details>` collapsing (backlog's secondary suggestion) — 31 e2e spec files interact with these panels, and closing any by default would need all of them updated to open it first first, for a LOW/no-automated-acceptance polish item. Noted as a natural fold-in for UX-09 (mobile accordion) if wanted later, not done here.
+- **Two real bugs found and fixed mid-item, both silent to lint/typecheck/build:** (1) naive anchor ids (`id="lifecycle"` etc.) collided with `lifecycle-panel.tsx`'s own pre-existing `id="lifecycle"`, corrupting its accessible name via `getElementById`'s first-match resolution — caught by a `getByLabel` strict-mode failure in `leases.spec.ts`, fixed by namespacing to `section-*`. (2) even after that, wrapping each group in a `<section aria-labelledby>` created a second ARIA landmark named "Lifecycle" colliding with `LifecyclePanel`'s own region — axe's `landmark-unique` rule caught it across multiple spec files' accessibility checks; fixed by making the group wrappers plain `<div>`s (not landmarks).
+- Gate: lint/typecheck/build clean. No unit test covers this file (pure layout) — verified instead against the real e2e suite: **154/154 on desktop-chrome AND 154/154 on mobile-chrome**, across all 31 spec files that navigate to `/leases/[id]` (reconciled against `npx playwright test --list`). No schema change.
+- Pushed (`ea36958`). Acceptance is "design review sign-off, no automated test" — a human visual pass is still outstanding; the e2e/axe green is the closest substitute so far.
+- Next: UX-02 (first in remaining backlog order), or pick from UX-03..10 / OPS-01 / A11Y-04..11 (see `06-backlog.md`).
+
 ## Done 2026-10-01: SEC-20 (`ed35c1b`). filename* encoding for CJK/emoji document names.
 
 - `documentResponse` (`apps/web/lib/documents/serve.ts`) threw inside `new Response` for any filename with a character above U+00FF (Node's header values are Latin-1) — confirmed the raw throw with a standalone repro before touching the fix. `safeFileName` now strips to printable ASCII for the legacy `filename=` fallback; new `encodedFileNameStar` RFC-5987-encodes the real name into `filename*=UTF-8''…`, which every browser prefers.
