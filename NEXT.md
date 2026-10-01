@@ -1,6 +1,14 @@
 # Next session
 
-## Done 2026-10-01: A11Y-06 (`a2a97a5`). `autoComplete` on name/email/phone/address fields.
+## Done 2026-10-01: A11Y-07 (`e85fe17`). Rent amount field contrast + unlinked error.
+
+- Swapped the hand-rolled `className` on both amount inputs (`pay-form.tsx:73`, `offline-payment-form.tsx:100`) for `INPUT_CLASSES` (`components/ui-classes.ts`) — the plain `border` utility they used was ~1.26:1 contrast, under WCAG 1.4.11's 3:1. `pay-form.tsx` appends its deliberate `w-40 text-lg` after `INPUT_CLASSES` (D-10's large-text requirement for a phone rent-pay screen); `offline-payment-form.tsx` keeps `w-32`. Added `aria-invalid={Boolean(fieldErrors?.amountDollars) || undefined}` to both.
+- `offline-payment-form.tsx` already had `FieldError`/`aria-describedby` wired for this field (R-099) — only the class and `aria-invalid` were missing. `pay-form.tsx` had neither: added a `FieldError` region under the existing `amount-hint` paragraph; `aria-describedby` now lists both ids when an error is present.
+- Gate: lint/typecheck/build clean. No unit/e2e coverage — contrast ratio and `aria-invalid` have no DOM-structure or accessible-name signal for axe/Playwright to regress-check; not yet confirmed by a person with a contrast checker.
+- Pushed (`e85fe17`, SHA backfill `49474ee`).
+- Next in backlog order: A11Y-08 (duplicate ids on mortgage statement forms), then A11Y-09..11, then UX-03..10.
+
+## Prior 2026-10-01: A11Y-06 (`a2a97a5`). `autoComplete` on name/email/phone/address fields.
 
 - Added `autoComplete?: string` to `TextField` (`apps/web/components/form/field.tsx`), no default — a wrong guessed token is worse than none. Wired it at the three call sites the finding named: `applicant-form.tsx` (`given-name`/`family-name`/`email`/`tel`/`bday`, plus `street-address`/`address-level2`/`address-level1`/`postal-code` on the current-address fieldset), `listing-inquiry-form.tsx` (`given-name`/`family-name`/`email`/`tel`), and `self-showing-form.tsx`'s photo-ID name field (`name`). Left `employerName`/`monthlyIncome` alone — no standard autocomplete token fits either.
 - Gate: lint/typecheck/build clean. No unit/e2e coverage — `autoComplete` has no accessible-name or DOM-structure effect for Playwright/axe to catch a regression in; actual autofill behavior is a manual browser check, not yet performed by a person.
