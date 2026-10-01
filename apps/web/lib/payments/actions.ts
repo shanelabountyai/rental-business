@@ -168,7 +168,7 @@ async function chargeResolvedPayer(
   }
 
   // Recomputed, not trusted. See this file's header.
-  const [entries, inFlight, rule] = await Promise.all([
+  const [entries, inFlight, rule, openInvoices] = await Promise.all([
     prisma.ledgerEntry.findMany({
       where: { leaseId: payer.leaseId },
       select: { id: true, amountCents: true },
@@ -181,6 +181,12 @@ async function chargeResolvedPayer(
       { state: payer.lease.property.state, county: payer.lease.property.county },
       new Date(),
     ),
+    // MONEY-09b: the ledger balance is lease-wide and can run ahead of what
+    // Stripe has actually invoiced THIS payer's customer - a charge pushed
+    // but not yet invoiced, or the other payer's portion on a voucher lease
+    // (D-13). `validatePaymentAmount` refuses the gap rather than accepting
+    // a prepayment `applyPortalPayment` cannot place.
+    getBillingProvider().getOpenInvoices({ stripeCustomerId: payer.stripeCustomerId }),
   ])
 
   const facts = {
@@ -194,6 +200,7 @@ async function chargeResolvedPayer(
     // hand-crafted request does not go through the form - and this is the
     // only place that actually refuses one.
     requireFullBalance: payer.lease.requireFullBalance,
+    openInvoiceCents: openInvoices?.reduce((total, invoice) => total + invoice.amountRemainingCents, 0) ?? null,
   }
 
   const verdict = validatePaymentAmount(facts, amountCents)

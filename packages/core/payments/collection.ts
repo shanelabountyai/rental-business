@@ -227,6 +227,14 @@ export type AmountRefusal =
   | 'partial_not_allowed'
   | 'not_a_positive_amount'
   | 'more_than_owed'
+  /// Within the ledger balance but beyond what Stripe has actually invoiced
+  /// (MONEY-09b). The ledger is lease-wide and can run ahead of Stripe: a
+  /// charge pushed but not yet invoiced, or on a voucher lease (D-13) the
+  /// OTHER payer's portion of the same lease balance. Taking the excess
+  /// would be a prepayment `applyPortalPayment` cannot place - it becomes a
+  /// ledger credit Stripe cannot see, and next month's invoice collects it
+  /// again in full. Refused here rather than silently capped there.
+  | 'more_than_invoiced'
 
 export interface PayableFacts {
   method: CollectionMethod
@@ -243,6 +251,13 @@ export interface PayableFacts {
   /// Payments Stripe has accepted but not settled. An ACH debit sits here
   /// for three to five days.
   inFlightCents: number
+  /// What Stripe says is still owed across every open invoice for this
+  /// payer's customer, summed (R-224) - mirrors `OfflineFacts.openInvoiceAmountCents`.
+  /// UNDEFINED skips the check (a display-only caller that has not fetched
+  /// it); NULL means it was asked for and came back empty, treated as a real
+  /// zero rather than an unchecked hole - the same fail-closed rule the
+  /// offline counter already follows.
+  openInvoiceCents?: number | null
 }
 
 export interface Payable {
@@ -294,6 +309,9 @@ export function validatePaymentAmount(
     return { ok: false, refusal: 'not_a_positive_amount' }
   }
   if (amountCents > limits.maxCents) return { ok: false, refusal: 'more_than_owed' }
+  if (facts.openInvoiceCents !== undefined && amountCents > (facts.openInvoiceCents ?? 0)) {
+    return { ok: false, refusal: 'more_than_invoiced' }
+  }
   if (amountCents < limits.maxCents && !limits.allowsPartial) {
     return { ok: false, refusal: 'partial_not_allowed' }
   }
@@ -311,4 +329,6 @@ export const AMOUNT_REFUSALS: Record<AmountRefusal, string> = {
     'This account is set up to pay the full amount. If you need to pay part of it, contact the office and we can change that for you.',
   not_a_positive_amount: 'Enter how much you would like to pay.',
   more_than_owed: 'That is more than you owe. Enter the amount shown or less.',
+  more_than_invoiced:
+    'Part of that has not been billed yet. Enter a smaller amount, or contact the office if you want to pay it early.',
 }

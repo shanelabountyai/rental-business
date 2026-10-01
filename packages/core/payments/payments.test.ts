@@ -364,6 +364,30 @@ describe('payable / validatePaymentAmount', () => {
     }
     expect(validatePaymentAmount(autopay, 50_000)).toEqual({ ok: true })
   })
+
+  it('refuses MORE than Stripe has actually invoiced (MONEY-09b)', () => {
+    // Under the ledger balance (so not `more_than_owed`) and over what
+    // Stripe says is open - a charge pushed but not yet invoiced, or on a
+    // voucher lease (D-13) the other payer's portion of the same lease
+    // balance. Without this, `applyPortalPayment` later caps silently and
+    // the excess becomes a ledger credit Stripe never sees.
+    expect(
+      validatePaymentAmount({ ...invoiced, openInvoiceCents: 100_000 }, 150_000),
+    ).toEqual({ ok: false, refusal: 'more_than_invoiced' })
+  })
+
+  it('does not check the invoice ceiling when the caller has not fetched it', () => {
+    // `queries.ts`'s display-only call does not pass `openInvoiceCents` -
+    // undefined must stay inert, not read as "nothing invoiced".
+    expect(validatePaymentAmount(invoiced, 150_000)).toEqual({ ok: true })
+  })
+
+  it('treats a failed invoice lookup as a real zero, not an unchecked hole', () => {
+    expect(validatePaymentAmount({ ...invoiced, openInvoiceCents: null }, 1)).toEqual({
+      ok: false,
+      refusal: 'more_than_invoiced',
+    })
+  })
 })
 
 describe('offline payments (PAY-05)', () => {
