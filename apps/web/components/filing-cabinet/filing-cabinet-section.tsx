@@ -167,6 +167,7 @@ export function FilingCabinetSection({
                       <div className="pt-2">
                         <MortgageStatementForm
                           action={recordMortgageStatement.bind(null, propertyId, mortgage.id)}
+                          mortgageId={mortgage.id}
                         />
                       </div>
                     </details>

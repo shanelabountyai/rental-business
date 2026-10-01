@@ -10,11 +10,14 @@ import type { FormState } from '@/lib/filing-cabinet/actions.ts'
 /// until every box is transcribed means the interest gets recorded nowhere.
 export function MortgageStatementForm({
   action,
+  mortgageId,
 }: {
   action: (state: FormState, formData: FormData) => Promise<FormState>
+  mortgageId: string
 }) {
   const [state, formAction] = useActionState<FormState, FormData>(action, {})
   const errors = state.fieldErrors ?? {}
+  const idPrefix = `statement-${mortgageId}`
 
   return (
     <form action={formAction} className="flex flex-col gap-4 sm:max-w-md">
@@ -22,7 +25,7 @@ export function MortgageStatementForm({
       <TextField
         label="Tax year"
         name="taxYear"
-        idPrefix="statement"
+        idPrefix={idPrefix}
         type="number"
         required
         error={errors.taxYear}
@@ -31,7 +34,7 @@ export function MortgageStatementForm({
       <TextField
         label="Interest paid (box 1)"
         name="interestDollars"
-        idPrefix="statement"
+        idPrefix={idPrefix}
         type="number"
         required
         error={errors.interestDollars}
@@ -40,7 +43,7 @@ export function MortgageStatementForm({
       <TextField
         label="Principal paid"
         name="principalDollars"
-        idPrefix="statement"
+        idPrefix={idPrefix}
         type="number"
         required={false}
         error={errors.principalDollars}
@@ -49,12 +52,12 @@ export function MortgageStatementForm({
       <TextField
         label="Escrow paid"
         name="escrowDollars"
-        idPrefix="statement"
+        idPrefix={idPrefix}
         type="number"
         required={false}
         error={errors.escrowDollars}
       />
-      <TextField label="Notes" name="notes" idPrefix="statement" required={false} error={errors.notes} />
+      <TextField label="Notes" name="notes" idPrefix={idPrefix} required={false} error={errors.notes} />
       <SubmitButton label="Record 1098" />
     </form>
   )
