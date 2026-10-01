@@ -1,6 +1,15 @@
 # Next session
 
-## Done 2026-10-01: A11Y-09 (`8758e0a`). Delete button labels, 44px target, result region outside the row.
+## Done 2026-10-01: A11Y-10 (`06be815`). Distinct labels for repeated field names and Save buttons.
+
+- 10 pure string-literal relabels, no component shape changed (`TextField`/`SelectField`/`SubmitButton` already take `label` as a required prop). Property page's 6 "Notes": mortgage/statement/insurance/HOA/warranty/capital-improvement forms → "Mortgage notes", "Statement notes", "Policy notes", "HOA notes", "Warranty notes", "Improvement notes". Unit page's 3 "Type": shutoff/access-code/upload forms → "Shutoff type", "Access type", "Document type". Unit page's 2 "Notes": appliance/utility-account forms → "Appliance notes", "Account notes". Two "Save" buttons → "Save shutoff location" (`shutoff-location-form.tsx`), "Save target date" (`turnover-panel.tsx`).
+- **Caught mid-session**: "Code type" and "Utility account notes" (first-choice labels) each reintroduced the substring-match trap this repo's `CLAUDE.md` already documents — `getByLabel('Code')`/`getByLabel('Utility')` matched both the renamed field AND the form's own existing "Code"/"Utility" field. Caught by the scoped e2e rerun (strict-mode violations), fixed by choosing labels ("Access type", "Account notes") that don't contain any other label on their own form as a substring.
+- **Also caught mid-session**: `npm test` initially showed 58 failures (DB-hook timeouts across billing/notifications/leases/workorders — no shared code path with this change). Traced to a sibling project (`apptbasedservice`/bookable) running its own test sweep concurrently on the same Postgres instance. Waited for it to clear, reran: only the same 4 pre-existing failures `NEXT.md` already tracked below.
+- Gate: lint/typecheck/build clean. Unit: 4 pre-existing failures (unrelated, see "carried forward" below). Scoped e2e (`operational.spec.ts` + `filing-cabinet.spec.ts` + `turnover.spec.ts` + `documents.spec.ts`, desktop+mobile): 60/60 passed.
+- Pushed (`06be815`).
+- Next in backlog order: A11Y-11 (garbled wizard legend text), then UX-03..10.
+
+## Prior 2026-10-01: A11Y-09 (`8758e0a`). Delete button labels, 44px target, result region outside the row.
 
 - `DeleteRowButton` (`delete-row-button.tsx`) takes a required `label` prop → `aria-label={`Remove ${label}`}` (visible text stays "Remove"); `min-h-9` → `min-h-11` (44px). Added `DeleteResultRegion` (React Context) so the removal announcement survives the `<li>` it describes being removed from the DOM — wrapped at all 6 call sites (appliances, utility accounts, mortgages, per-mortgage statements, insurance, warranties, capital improvements) across `operational-data-section.tsx` and `filing-cabinet-section.tsx`.
 - Gate: lint/typecheck/build/unit clean (4 pre-existing unrelated unit failures, same as before this session — leftover `rental_test` data). Scoped e2e (`operational.spec.ts` + `filing-cabinet.spec.ts`, desktop+mobile): 42/42 passed, including both axe specs.
