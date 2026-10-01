@@ -14050,7 +14050,7 @@ Two real bugs found and fixed along the way, both from axe/e2e, not from reading
 
 ## A11Y-07: rent amount field contrast + unlinked error
 
-**Commit:** TBD  ·  **Date:** 2026-10-01
+**Commit:** `e85fe17`  ·  **Date:** 2026-10-01
 
 **What it built.** Both tenant-facing amount inputs (`components/payments/pay-form.tsx:73`, `offline-payment-form.tsx:100`) had hand-rolled `className`s with the plain `border` utility — ~1.26:1 contrast against the page background, well under WCAG 1.4.11's 3:1 for UI components — instead of `INPUT_CLASSES`, which carries `border-input` (the real token) and `aria-invalid:border-red-500`. Swapped both to `INPUT_CLASSES` (`pay-form.tsx` keeps its deliberate `w-40 text-lg` sizing appended after it — D-10's large-text requirement for a phone-screen rent payment — `offline-payment-form.tsx` keeps `w-32`), and added `aria-invalid={Boolean(fieldErrors?.amountDollars) || undefined}` to both. `offline-payment-form.tsx` already had `FieldError` and `aria-describedby` wired for this field since R-099 — only the class and `aria-invalid` were missing. `pay-form.tsx` had neither: added a `FieldError` region under the existing `amount-hint` paragraph, with `aria-describedby` now listing both ids (`amount-hint amount-error`) when an error is present, `amount-hint` alone otherwise.
 
