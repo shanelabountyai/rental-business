@@ -3,6 +3,7 @@
 import { useActionState, useState } from 'react'
 import { FieldError, TextField } from '@/components/form/field.tsx'
 import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
+import { INPUT_CLASSES } from '@/components/ui-classes.ts'
 import type { OfflineFormState } from '@/lib/payments/offline.ts'
 
 // Recording a check, a money order or cash (PAY-05, R-038).
@@ -97,7 +98,8 @@ export function OfflinePaymentForm({
                   type="text"
                   inputMode="decimal"
                   defaultValue={defaultAmountDollars}
-                  className="w-32 rounded-md border px-2 py-1.5"
+                  className={`${INPUT_CLASSES} w-32`}
+                  aria-invalid={Boolean(state.fieldErrors?.amountDollars) || undefined}
                   aria-describedby={state.fieldErrors?.amountDollars ? 'amount-error' : undefined}
                 />
               </div>

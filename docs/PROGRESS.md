@@ -14047,3 +14047,19 @@ Two real bugs found and fixed along the way, both from axe/e2e, not from reading
 - `typecheck` clean.
 - `npm run build` clean.
 - No schema change — `db:ci` not required for this item.
+
+## A11Y-07: rent amount field contrast + unlinked error
+
+**Commit:** TBD  ·  **Date:** 2026-10-01
+
+**What it built.** Both tenant-facing amount inputs (`components/payments/pay-form.tsx:73`, `offline-payment-form.tsx:100`) had hand-rolled `className`s with the plain `border` utility — ~1.26:1 contrast against the page background, well under WCAG 1.4.11's 3:1 for UI components — instead of `INPUT_CLASSES`, which carries `border-input` (the real token) and `aria-invalid:border-red-500`. Swapped both to `INPUT_CLASSES` (`pay-form.tsx` keeps its deliberate `w-40 text-lg` sizing appended after it — D-10's large-text requirement for a phone-screen rent payment — `offline-payment-form.tsx` keeps `w-32`), and added `aria-invalid={Boolean(fieldErrors?.amountDollars) || undefined}` to both. `offline-payment-form.tsx` already had `FieldError` and `aria-describedby` wired for this field since R-099 — only the class and `aria-invalid` were missing. `pay-form.tsx` had neither: added a `FieldError` region under the existing `amount-hint` paragraph, with `aria-describedby` now listing both ids (`amount-hint amount-error`) when an error is present, `amount-hint` alone otherwise.
+
+**What it decided.** Kept the two forms' different sizing (`w-40`/`text-lg` vs `w-32`) rather than unifying them — that's a pre-existing, deliberate difference (tenant phone-pay screen vs staff desk-entry form) outside this finding's scope, and `INPUT_CLASSES`'s own `text-base` is a later Tailwind rule than `text-lg` in the generated scale order, so appending `text-lg` after `INPUT_CLASSES` in the className string reliably wins without needing `tailwind-merge` (not a dependency in this repo).
+
+**What it left behind.** Contrast ratio and `aria-invalid` wiring have no DOM-structure or accessible-name signal for axe or Playwright to regression-check, so there's no new automated coverage — same acceptance gap as the rest of this a11y sweep. Not yet confirmed by a person with a contrast checker or screen reader.
+
+**Gate.**
+- `lint` clean (0 errors; same 16 pre-existing warnings, none in touched files).
+- `typecheck` clean.
+- `npm run build` clean.
+- No schema change — `db:ci` not required for this item.

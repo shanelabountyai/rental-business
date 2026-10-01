@@ -3,6 +3,8 @@
 import { formatCents } from '@rental/core/money'
 import { useActionState, useState } from 'react'
 import { FormAlerts, SubmitButton, LiveRegion } from '@/components/auth-form.tsx'
+import { FieldError } from '@/components/form/field.tsx'
+import { INPUT_CLASSES } from '@/components/ui-classes.ts'
 import type { PayFormState } from '@/lib/payments/actions.ts'
 import type { PaymentView } from '@/lib/payments/queries.ts'
 
@@ -70,8 +72,11 @@ export function PayForm({
             onChange={(event) => setAmount(event.target.value)}
             // Large target and large text: this is a phone screen, and D-10
             // asks for a low reading level on tenant surfaces.
-            className="w-40 rounded-md border px-3 py-2 text-lg"
-            aria-describedby="amount-hint"
+            className={`${INPUT_CLASSES} w-40 text-lg`}
+            aria-invalid={Boolean(state.fieldErrors?.amountDollars) || undefined}
+            aria-describedby={
+              state.fieldErrors?.amountDollars ? 'amount-hint amount-error' : 'amount-hint'
+            }
           />
         </div>
         <p id="amount-hint" className="text-muted-foreground text-sm">
@@ -79,6 +84,7 @@ export function PayForm({
             ? `You owe ${formatCents(view.maxCents)}. You can pay part of it if you need to.`
             : `Your balance is ${formatCents(view.maxCents)}. This account pays the full amount.`}
         </p>
+        <FieldError id="amount-error" message={state.fieldErrors?.amountDollars} />
       </div>
 
       <fieldset className="flex flex-col gap-2">
