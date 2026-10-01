@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { requirePermission, requireScope } from '@/lib/auth/guard.ts'
 import { listEvictionCases } from '@/lib/evictions/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
+import { SUBMIT_BUTTON_CLASSES } from '@/components/ui-classes.ts'
 
 export const metadata = { title: 'Evictions — Rental Operations' }
 
@@ -27,7 +28,7 @@ export default async function EvictionsPage() {
         <h1 className="text-2xl font-semibold tracking-tight">Evictions</h1>
         <Link
           href="/evictions/new"
-          className="bg-primary text-primary-foreground focus-visible:ring-ring flex min-h-11 items-center justify-center rounded-md px-4 text-sm font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+          className={`${SUBMIT_BUTTON_CLASSES} flex min-h-11 items-center justify-center px-4 text-sm`}
         >
           Open a case
         </Link>

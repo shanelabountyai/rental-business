@@ -5,6 +5,7 @@ import { Elements, PaymentElement, useElements, useStripe } from '@stripe/react-
 import { type Stripe, loadStripe } from '@stripe/stripe-js'
 import { useActionState, useState } from 'react'
 import type { AutopaySetupState } from '@/lib/payments/autopay-actions.ts'
+import { SUBMIT_BUTTON_CLASSES } from '@/components/ui-classes.ts'
 
 // Turning autopay on (PAY-02, R-039a).
 //
@@ -79,7 +80,7 @@ function ConfirmForm({ onDone }: { onDone: () => void }) {
       <button
         type="submit"
         disabled={busy || !stripeApi}
-        className="bg-primary text-primary-foreground focus-visible:ring-ring flex min-h-11 items-center justify-center rounded-md px-6 py-2 text-base font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:opacity-60"
+        className={`${SUBMIT_BUTTON_CLASSES} flex min-h-11 items-center justify-center px-6 py-2 text-base disabled:opacity-60`}
       >
         {busy ? 'Saving…' : 'Save and turn on automatic payments'}
       </button>

@@ -4,6 +4,7 @@ import type { EmergencyCategory } from '@rental/core/maintenance'
 import { useActionState } from 'react'
 import { LiveRegion } from '@/components/auth-form.tsx'
 import type { EmergencyFormState } from '@/lib/maintenance/actions.ts'
+import { SUBMIT_BUTTON_CLASSES } from '@/components/ui-classes.ts'
 
 // The last step of the emergency path (MAINT-01, R-020, R-098).
 //
@@ -92,7 +93,7 @@ export function EmergencyDetailsForm({
 
       <button
         type="submit"
-        className="bg-primary text-primary-foreground focus-visible:ring-ring flex min-h-12 items-center justify-center rounded-md px-6 py-2 text-base font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+        className={`${SUBMIT_BUTTON_CLASSES} flex min-h-12 items-center justify-center px-6 py-2 text-base`}
       >
         Send now
       </button>

@@ -9,6 +9,7 @@ import { EmergencyDetailsForm } from '@/components/portal/maintenance/emergency-
 import { submitEmergencyForm } from '@/lib/maintenance/actions.ts'
 import { shutoffForEmergency, unitForEmergency } from '@/lib/maintenance/emergency.ts'
 import { requireTenantWithScope } from '@/lib/portal/guard.ts'
+import { SUBMIT_BUTTON_CLASSES } from '@/components/ui-classes.ts'
 
 export const metadata = { title: 'Emergency' }
 
@@ -177,7 +178,7 @@ export default async function EmergencyPage({
           ) : (
             <Link
               href={`/portal/maintenance/emergency?c=${category}&ready=1`}
-              className="bg-primary text-primary-foreground focus-visible:ring-ring flex min-h-12 w-fit items-center justify-center rounded-md px-6 py-2 text-base font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+              className={`${SUBMIT_BUTTON_CLASSES} flex min-h-12 w-fit items-center justify-center px-6 py-2 text-base`}
             >
               Continue
             </Link>

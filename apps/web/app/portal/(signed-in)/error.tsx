@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
+import { SUBMIT_BUTTON_CLASSES } from '@/components/ui-classes.ts'
 
 // What a TENANT sees when a portal page throws (U1, R-099).
 //
@@ -45,7 +46,7 @@ export default function PortalError({ reset }: { error: Error; reset: () => void
       <button
         type="button"
         onClick={() => reset()}
-        className="bg-primary text-primary-foreground focus-visible:ring-ring flex min-h-11 w-full items-center justify-center rounded-md px-6 py-2 text-base font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none sm:w-auto"
+        className={`${SUBMIT_BUTTON_CLASSES} flex min-h-11 w-full items-center justify-center px-6 py-2 text-base sm:w-auto`}
       >
         Try again
       </button>

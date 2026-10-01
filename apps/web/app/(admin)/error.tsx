@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
+import { SUBMIT_BUTTON_CLASSES } from '@/components/ui-classes.ts'
 
 // What STAFF see when an admin page throws (U1, R-099).
 //
@@ -39,7 +40,7 @@ export default function AdminError({
         <button
           type="button"
           onClick={() => reset()}
-          className="bg-primary text-primary-foreground focus-visible:ring-ring flex min-h-11 items-center rounded-md px-4 py-2 text-sm font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+          className={`${SUBMIT_BUTTON_CLASSES} flex min-h-11 items-center px-4 py-2 text-sm`}
         >
           Try again
         </button>

@@ -4,6 +4,7 @@ import { useActionState } from 'react'
 import { useFormStatus } from 'react-dom'
 import { FormAlerts, pendingButtonProps, useFormVersion } from '@/components/auth-form.tsx'
 import { TextField } from '@/components/form/field.tsx'
+import { SUBMIT_BUTTON_CLASSES } from '@/components/ui-classes.ts'
 import type { ApplicantFormState } from '@/lib/applications/actions.ts'
 
 // One applicant's own section (LEASE-03, R-059) - name, DOB, current
@@ -30,7 +31,7 @@ function FormButtons() {
         name="intent"
         value="submit"
         {...pendingButtonProps(pending)}
-        className="bg-primary text-primary-foreground focus-visible:ring-ring min-h-11 rounded-md px-4 py-2 text-base font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+        className={`${SUBMIT_BUTTON_CLASSES} min-h-11 px-4 py-2 text-base`}
       >
         {pending ? 'Working…' : 'Submit'}
       </button>

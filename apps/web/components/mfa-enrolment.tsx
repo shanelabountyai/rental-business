@@ -4,6 +4,7 @@ import { useActionState, useState } from 'react'
 import { useFocusWhen } from '@/components/auth-form.tsx'
 import { Field, FormAlerts, SubmitButton } from './auth-form.tsx'
 import type { FormState } from './auth-form.tsx'
+import { SUBMIT_BUTTON_CLASSES } from '@/components/ui-classes.ts'
 
 interface EnrolmentState extends FormState {
   secret?: string
@@ -83,7 +84,7 @@ export function MfaEnrolment({
       >
         <button
           type="submit"
-          className="bg-primary text-primary-foreground focus-visible:ring-ring min-h-11 rounded-md px-4 py-2 text-base font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+          className={`${SUBMIT_BUTTON_CLASSES} min-h-11 px-4 py-2 text-base`}
         >
           Set up two-factor authentication
         </button>

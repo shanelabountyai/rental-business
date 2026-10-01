@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { requireTenantWithScope } from '@/lib/portal/guard.ts'
 import { plansForLease } from '@/lib/payments/plans.ts'
 import { getTenantHome, listTenantUpdates } from '@/lib/portal/queries.ts'
+import { SUBMIT_BUTTON_CLASSES } from '@/components/ui-classes.ts'
 
 export const metadata = { title: 'Your home' }
 
@@ -172,7 +173,7 @@ export default async function PortalHomePage() {
         </h2>
         <Link
           href="/portal/maintenance/new"
-          className="bg-primary text-primary-foreground focus-visible:ring-ring flex min-h-12 items-center justify-center rounded-md px-6 py-2 text-base font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+          className={`${SUBMIT_BUTTON_CLASSES} flex min-h-12 items-center justify-center px-6 py-2 text-base`}
         >
           Report a problem
         </Link>

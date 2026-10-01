@@ -13,7 +13,7 @@ import { recordSettlementTransfer } from '@/lib/reports/settlement-actions.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 import { reportToday } from '@/lib/scope/report-today.ts'
 import { SettlementTransferForm } from '@/components/reports/settlement-transfer-form.tsx'
-import { scrollableRegionProps } from '@/components/ui-classes.ts'
+import { SUBMIT_BUTTON_CLASSES, scrollableRegionProps } from '@/components/ui-classes.ts'
 
 export const metadata = { title: 'Settlement by entity — Rental Operations' }
 
@@ -112,7 +112,7 @@ export default async function SettlementReportPage({
         </div>
         <button
           type="submit"
-          className="bg-primary text-primary-foreground hover:bg-primary/90 focus-visible:ring-ring h-10 rounded-md px-4 text-sm font-medium focus-visible:ring-2 focus-visible:outline-none"
+          className={`${SUBMIT_BUTTON_CLASSES} hover:bg-primary/90 h-10 px-4 text-sm`}
         >
           Show range
         </button>

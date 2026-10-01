@@ -3,6 +3,7 @@
 import { useActionState, useId } from 'react'
 import { useFormStatus } from 'react-dom'
 import { FormAlerts, pendingButtonProps } from '@/components/auth-form.tsx'
+import { SUBMIT_BUTTON_CLASSES } from '@/components/ui-classes.ts'
 import { runImport, type ImportFormState } from '@/lib/import/actions.ts'
 
 const INITIAL: ImportFormState = {}
@@ -126,16 +127,14 @@ function NamedSubmitButton({
 }) {
   const { pending } = useFormStatus()
   const classes =
-    variant === 'primary'
-      ? 'bg-primary text-primary-foreground'
-      : 'border bg-background text-foreground'
+    variant === 'primary' ? SUBMIT_BUTTON_CLASSES : 'border bg-background text-foreground rounded-md font-medium focus-visible:ring-ring focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none'
   return (
     <button
       type="submit"
       name="intent"
       value={intent}
       {...pendingButtonProps(pending)}
-      className={`min-h-11 rounded-md px-4 py-2 text-base font-medium aria-disabled:cursor-not-allowed focus-visible:ring-ring focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none ${classes}`}
+      className={`min-h-11 px-4 py-2 text-base aria-disabled:cursor-not-allowed ${classes}`}
     >
       {pending ? 'Working…' : label}
     </button>

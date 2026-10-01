@@ -3,6 +3,7 @@
 import type { ReactNode } from 'react'
 import { useActionState, useEffect, useRef, useState } from 'react'
 import { useFormStatus } from 'react-dom'
+import { SUBMIT_BUTTON_CLASSES } from '@/components/ui-classes.ts'
 
 // Shared chrome for every auth screen. Not a component library - R-007 brings
 // shadcn in properly with the admin shell. This exists so the accessibility
@@ -108,7 +109,7 @@ export function SubmitButton({ label }: { label: ReactNode }) {
     <button
       type="submit"
       {...pendingButtonProps(pending)}
-      className="bg-primary text-primary-foreground focus-visible:ring-ring min-h-11 rounded-md px-4 py-2 text-base font-medium aria-disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+      className={`${SUBMIT_BUTTON_CLASSES} min-h-11 px-4 py-2 text-base aria-disabled:cursor-not-allowed`}
     >
       {pending ? 'Working…' : label}
     </button>

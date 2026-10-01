@@ -2,6 +2,7 @@ import { ROLE_DEFINITIONS, type RoleKey } from '@rental/core/rbac'
 import Link from 'next/link'
 import { actorDecision, requirePermission } from '@/lib/auth/guard.ts'
 import { listStaff } from '@/lib/staff/queries.ts'
+import { SUBMIT_BUTTON_CLASSES } from '@/components/ui-classes.ts'
 
 export const metadata = { title: 'Staff — Rental Operations' }
 
@@ -37,7 +38,7 @@ export default async function StaffPage({
         {canManage && (
           <Link
             href="/staff/new"
-            className="bg-primary text-primary-foreground focus-visible:ring-ring flex min-h-11 items-center justify-center rounded-md px-4 text-sm font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+            className={`${SUBMIT_BUTTON_CLASSES} flex min-h-11 items-center justify-center px-4 text-sm`}
           >
             Add staff member
           </Link>

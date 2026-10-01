@@ -19,10 +19,28 @@
 // Layout is NOT in here. The call sites differ on `self-start` / `w-fit` /
 // `flex-1` and that is theirs to keep; what is shared is appearance and focus.
 
-/// The dark, high-emphasis button — "Send", "Record", "New template". Distinct
-/// from `SubmitButton`, which is the `bg-primary` one inside a form.
+/// The brand-colour, high-emphasis button — "Send", "Record", "New template".
+/// Same colour token as `SUBMIT_BUTTON_CLASSES` below; this one bakes in the
+/// compact admin size (min-h-11/px-4/text-sm) that its callers already share.
+///
+/// UX-02: this used to be `bg-foreground` (dark) while `SubmitButton` and ~30
+/// hand-copied admin/portal buttons used `bg-primary` — the same semantic
+/// "primary action" button rendering two different colours depending which
+/// file wrote it. Unified on `bg-primary` (Shane, 2026-10-01): more callers
+/// already used it, including `SubmitButton` itself.
 export const PRIMARY_BUTTON_CLASSES =
-  'bg-foreground text-background focus-visible:ring-ring min-h-11 rounded-md px-4 py-2 text-sm font-medium aria-disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none'
+  'bg-primary text-primary-foreground focus-visible:ring-ring min-h-11 rounded-md px-4 py-2 text-sm font-medium aria-disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none'
+
+/// Appearance only (colour, shape, focus ring) for a `bg-primary` button whose
+/// size genuinely varies by call site (admin CTAs at text-sm, portal/form
+/// buttons at text-base with a bigger touch target) — compose with the
+/// caller's own `min-h-*`/`px-*`/`py-*`/`text-*`/layout classes, the same
+/// split `scrollableRegionProps` above documents between shared appearance and
+/// local layout. Six call sites were silently missing `ring-offset-2` (the
+/// exact invisible-focus-ring defect this file exists to prevent); this fixes
+/// that for all of them by construction.
+export const SUBMIT_BUTTON_CLASSES =
+  'bg-primary text-primary-foreground focus-visible:ring-ring rounded-md font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none'
 
 /// The copper button (D-163) - Homestead reserves the accent for the chase
 /// affordance, so this is deliberately used in one place today. White on

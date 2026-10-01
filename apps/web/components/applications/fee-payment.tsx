@@ -5,6 +5,7 @@ import { type Stripe, loadStripe } from '@stripe/stripe-js'
 import { useState } from 'react'
 import { LiveRegion } from '@/components/auth-form.tsx'
 import type { FeePaymentState } from '@/lib/applications/actions.ts'
+import { SUBMIT_BUTTON_CLASSES } from '@/components/ui-classes.ts'
 
 // The application fee (LEASE-03, R-059) - same Stripe-hosted-fields shape
 // as AutopayPanel (§6.6): a card or bank number is typed into Stripe's own
@@ -66,7 +67,7 @@ function ConfirmForm({ onDone }: { onDone: () => void }) {
       <button
         type="submit"
         disabled={busy || !stripeApi}
-        className="bg-primary text-primary-foreground focus-visible:ring-ring flex min-h-11 items-center justify-center rounded-md px-6 py-2 text-base font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:opacity-60"
+        className={`${SUBMIT_BUTTON_CLASSES} flex min-h-11 items-center justify-center px-6 py-2 text-base disabled:opacity-60`}
       >
         {busy ? 'Paying…' : 'Pay application fee'}
       </button>

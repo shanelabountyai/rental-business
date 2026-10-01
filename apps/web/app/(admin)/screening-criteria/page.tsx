@@ -2,6 +2,7 @@ import { friendlyBusinessDate, utcToBusinessDate } from '@rental/core/scheduling
 import Link from 'next/link'
 import { actorCan, requirePermission } from '@/lib/auth/guard.ts'
 import { listCriteriaVersions } from '@/lib/screening/criteria-queries.ts'
+import { SUBMIT_BUTTON_CLASSES } from '@/components/ui-classes.ts'
 
 export const metadata = { title: 'Screening criteria — Rental Operations' }
 
@@ -42,7 +43,7 @@ export default async function ScreeningCriteriaPage({
         {canWrite && (
           <Link
             href="/screening-criteria/new"
-            className="bg-primary text-primary-foreground focus-visible:ring-ring flex min-h-11 items-center rounded-md px-4 py-2 text-sm font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+            className={`${SUBMIT_BUTTON_CLASSES} flex min-h-11 items-center px-4 py-2 text-sm`}
           >
             New version
           </Link>

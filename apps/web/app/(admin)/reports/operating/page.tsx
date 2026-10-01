@@ -6,7 +6,7 @@ import { requireScope } from '@/lib/auth/guard.ts'
 import { operatingReport } from '@/lib/reports/operating.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 import { exportableEntities } from '@/lib/tax/queries.ts'
-import { scrollableRegionProps } from '@/components/ui-classes.ts'
+import { SUBMIT_BUTTON_CLASSES, scrollableRegionProps } from '@/components/ui-classes.ts'
 
 export const metadata = { title: 'Operating report — Rental Operations' }
 
@@ -138,7 +138,7 @@ export default async function OperatingReportPage({
             </div>
             <button
               type="submit"
-              className="bg-primary text-primary-foreground focus-visible:ring-ring min-h-11 rounded-md px-4 py-2 text-sm font-medium focus-visible:ring-2 focus-visible:outline-none"
+              className={`${SUBMIT_BUTTON_CLASSES} min-h-11 px-4 py-2 text-sm`}
             >
               Show
             </button>

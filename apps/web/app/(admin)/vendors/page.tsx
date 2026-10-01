@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { requirePermission } from '@/lib/auth/guard.ts'
 import { listVendors } from '@/lib/vendors/staff-queries.ts'
+import { SUBMIT_BUTTON_CLASSES } from '@/components/ui-classes.ts'
 
 export const metadata = { title: 'Vendors — Rental Operations' }
 
@@ -19,7 +20,7 @@ export default async function VendorsPage() {
         <h1 className="text-2xl font-semibold tracking-tight">Vendors</h1>
         <Link
           href="/vendors/new"
-          className="bg-primary text-primary-foreground focus-visible:ring-ring flex min-h-11 items-center justify-center rounded-md px-4 text-sm font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+          className={`${SUBMIT_BUTTON_CLASSES} flex min-h-11 items-center justify-center px-4 text-sm`}
         >
           Add vendor
         </Link>

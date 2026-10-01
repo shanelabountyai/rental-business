@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { SUBMIT_BUTTON_CLASSES } from '@/components/ui-classes.ts'
 
 // The tenant's 404 (U1, R-099).
 //
@@ -25,7 +26,7 @@ export default function PortalNotFound() {
 
       <Link
         href="/portal"
-        className="bg-primary text-primary-foreground focus-visible:ring-ring flex min-h-11 w-full items-center justify-center rounded-md px-6 py-2 text-base font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none sm:w-auto"
+        className={`${SUBMIT_BUTTON_CLASSES} flex min-h-11 w-full items-center justify-center px-6 py-2 text-base sm:w-auto`}
       >
         Go to your home page
       </Link>

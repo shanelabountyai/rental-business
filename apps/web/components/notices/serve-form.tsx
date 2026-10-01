@@ -5,6 +5,7 @@ import type { NoticeServiceMethodName } from '@rental/core/notices'
 import { useActionState, useState } from 'react'
 import { LiveRegion, pendingButtonProps } from '@/components/auth-form.tsx'
 import { FieldError } from '@/components/form/field.tsx'
+import { SUBMIT_BUTTON_CLASSES } from '@/components/ui-classes.ts'
 import type { FormState } from '@/lib/notices/actions.ts'
 
 // Recording one service event (COMM-02, R-051).
@@ -293,7 +294,7 @@ export function ServeForm({
       <button
         type="submit"
         {...pendingButtonProps(pending)}
-        className="bg-primary text-primary-foreground focus-visible:ring-ring min-h-11 rounded-md px-4 text-sm font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+        className={`${SUBMIT_BUTTON_CLASSES} min-h-11 px-4 text-sm`}
       >
         {pending ? 'Recording…' : placeHold ? 'Serve and hold' : 'Record service'}
       </button>

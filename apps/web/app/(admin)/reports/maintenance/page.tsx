@@ -9,7 +9,7 @@ import { requireScope } from '@/lib/auth/guard.ts'
 import { maintenanceAnalytics } from '@/lib/reports/maintenance.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 import { reportToday } from '@/lib/scope/report-today.ts'
-import { scrollableRegionProps } from '@/components/ui-classes.ts'
+import { SUBMIT_BUTTON_CLASSES, scrollableRegionProps } from '@/components/ui-classes.ts'
 
 export const metadata = { title: 'Maintenance analytics — Rental Operations' }
 
@@ -101,7 +101,7 @@ export default async function MaintenanceAnalyticsPage({
         </div>
         <button
           type="submit"
-          className="bg-primary text-primary-foreground focus-visible:ring-ring min-h-11 rounded-md px-4 py-2 text-sm font-medium focus-visible:ring-2 focus-visible:outline-none"
+          className={`${SUBMIT_BUTTON_CLASSES} min-h-11 px-4 py-2 text-sm`}
         >
           Show
         </button>

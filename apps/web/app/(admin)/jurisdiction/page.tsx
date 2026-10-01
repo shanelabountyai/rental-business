@@ -6,6 +6,7 @@ import {
   listRuleVersions,
   portfolioCoverage,
 } from '@/lib/jurisdiction/queries.ts'
+import { SUBMIT_BUTTON_CLASSES } from '@/components/ui-classes.ts'
 
 export const metadata = { title: 'Jurisdiction rules — Rental Operations' }
 
@@ -80,7 +81,7 @@ export default async function JurisdictionRulesPage({
         {canWrite && (
           <Link
             href="/jurisdiction/new"
-            className="bg-primary text-primary-foreground focus-visible:ring-ring flex min-h-11 items-center rounded-md px-4 py-2 text-sm font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+            className={`${SUBMIT_BUTTON_CLASSES} flex min-h-11 items-center px-4 py-2 text-sm`}
           >
             New configuration
           </Link>

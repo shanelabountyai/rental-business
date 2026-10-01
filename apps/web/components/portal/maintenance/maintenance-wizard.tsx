@@ -25,6 +25,7 @@ import type {
   SubmitMaintenanceRequestArgs,
   SubmitMaintenanceRequestResult,
 } from '@/lib/maintenance/actions.ts'
+import { SUBMIT_BUTTON_CLASSES } from '@/components/ui-classes.ts'
 import { TroubleshootingIllustration } from './troubleshooting-illustration.tsx'
 
 // The tenant maintenance request flow (MAINT-01, R-019): category → 2-3
@@ -131,8 +132,7 @@ interface Photo {
 /// photos - see the header comment for why those are the one exception.
 export type WizardParams = Record<string, string | string[] | undefined>
 
-const NEXT_BUTTON =
-  'bg-primary text-primary-foreground focus-visible:ring-ring flex min-h-12 items-center justify-center rounded-md px-6 py-2 text-base font-medium aria-disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none'
+const NEXT_BUTTON = `${SUBMIT_BUTTON_CLASSES} flex min-h-12 items-center justify-center px-6 py-2 text-base aria-disabled:cursor-not-allowed`
 const BACK_BUTTON =
   'border-input hover:bg-secondary focus-visible:ring-ring flex min-h-12 items-center justify-center rounded-md border px-6 py-2 text-base font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none'
 /// The visual shape of a choice. Applied to a `<label>` rather than a

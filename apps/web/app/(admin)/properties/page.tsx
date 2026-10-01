@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { actorCan, requireScope } from '@/lib/auth/guard.ts'
 import { currentScope as switcherScope } from '@/lib/scope/current-scope.ts'
 import { canCreateAnyProperty, listProperties } from '@/lib/properties/queries.ts'
+import { SUBMIT_BUTTON_CLASSES } from '@/components/ui-classes.ts'
 
 export const metadata = { title: 'Properties — Rental Operations' }
 
@@ -55,7 +56,7 @@ export default async function PropertiesPage({
             {canCreateProperty && (
               <Link
                 href="/properties/new"
-                className="bg-primary text-primary-foreground focus-visible:ring-ring flex min-h-11 items-center rounded-md px-4 py-2 text-sm font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+                className={`${SUBMIT_BUTTON_CLASSES} flex min-h-11 items-center px-4 py-2 text-sm`}
               >
                 New property
               </Link>

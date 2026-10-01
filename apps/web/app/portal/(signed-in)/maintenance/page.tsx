@@ -3,6 +3,7 @@ import { CATEGORY_LABELS, emergencyDefinition } from '@rental/core/maintenance'
 import Link from 'next/link'
 import { requireTenantWithScope } from '@/lib/portal/guard.ts'
 import { listTenantTickets } from '@/lib/maintenance/queries.ts'
+import { SUBMIT_BUTTON_CLASSES } from '@/components/ui-classes.ts'
 
 export const metadata = { title: 'Maintenance' }
 
@@ -47,7 +48,7 @@ export default async function PortalMaintenancePage() {
 
       <Link
         href="/portal/maintenance/new"
-        className="bg-primary text-primary-foreground focus-visible:ring-ring flex min-h-12 items-center justify-center rounded-md px-6 py-2 text-base font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+        className={`${SUBMIT_BUTTON_CLASSES} flex min-h-12 items-center justify-center px-6 py-2 text-base`}
       >
         Report a problem
       </Link>

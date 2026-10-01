@@ -4,7 +4,7 @@ import { currentScope as writeScope, requireScope } from '@/lib/auth/guard.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 import { myDayTasks, openTasksOfType, rollupByProperty } from '@/lib/tasks/queries.ts'
 import { subjectLinks } from '@/lib/tasks/subject-link.ts'
-import { scrollableRegionProps } from '@/components/ui-classes.ts'
+import { SUBMIT_BUTTON_CLASSES, scrollableRegionProps } from '@/components/ui-classes.ts'
 
 export const metadata = { title: 'Tasks — Rental Operations' }
 
@@ -108,7 +108,7 @@ export default async function TasksPage({
         {canWrite && !drillDown && (
           <Link
             href="/tasks/new"
-            className="bg-primary text-primary-foreground focus-visible:ring-ring flex min-h-11 items-center rounded-md px-4 py-2 text-sm font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+            className={`${SUBMIT_BUTTON_CLASSES} flex min-h-11 items-center px-4 py-2 text-sm`}
           >
             Add task
           </Link>

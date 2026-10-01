@@ -2,6 +2,7 @@
 
 import { useActionState } from 'react'
 import { LiveRegion } from '@/components/auth-form.tsx'
+import { SUBMIT_BUTTON_CLASSES } from '@/components/ui-classes.ts'
 import type { FormState } from '@/lib/portal/actions.ts'
 
 // A tenant's reply box.
@@ -36,7 +37,7 @@ export function PortalReplyForm({
       </div>
       <button
         type="submit"
-        className="bg-primary text-primary-foreground focus-visible:ring-ring flex min-h-12 items-center justify-center rounded-md px-4 py-2 text-base font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+        className={`${SUBMIT_BUTTON_CLASSES} flex min-h-12 items-center justify-center px-4 py-2 text-base`}
       >
         Send
       </button>
