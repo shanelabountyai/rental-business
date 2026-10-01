@@ -1,6 +1,21 @@
 # Next session
 
-## Done 2026-10-01: A11Y-04 (`c0ad7e2`). Focus the autopay confirmation heading instead of an inert live region.
+## Done 2026-10-01: A11Y-06 (`a2a97a5`). `autoComplete` on name/email/phone/address fields.
+
+- Added `autoComplete?: string` to `TextField` (`apps/web/components/form/field.tsx`), no default — a wrong guessed token is worse than none. Wired it at the three call sites the finding named: `applicant-form.tsx` (`given-name`/`family-name`/`email`/`tel`/`bday`, plus `street-address`/`address-level2`/`address-level1`/`postal-code` on the current-address fieldset), `listing-inquiry-form.tsx` (`given-name`/`family-name`/`email`/`tel`), and `self-showing-form.tsx`'s photo-ID name field (`name`). Left `employerName`/`monthlyIncome` alone — no standard autocomplete token fits either.
+- Gate: lint/typecheck/build clean. No unit/e2e coverage — `autoComplete` has no accessible-name or DOM-structure effect for Playwright/axe to catch a regression in; actual autofill behavior is a manual browser check, not yet performed by a person.
+- Pushed (`a2a97a5`, SHA backfill `b24635e`).
+- Next in backlog order: A11Y-07 (rent amount field contrast + unlinked error), then A11Y-08..11, then UX-03..10.
+
+## Prior 2026-10-01: A11Y-05 (`a09d84f`). Focus post-redirect notices instead of mounting them silent.
+
+- Added `FocusedStatus` to `apps/web/components/auth-form.tsx` — a `role="status"` paragraph wired to the existing `useFocusWhen<HTMLParagraphElement>(true)` hook, focusing itself on mount. Both sites in the finding were async Server Components rendering a bare `<p role="status">` already populated on first paint (search-param-driven, one render only): the emergency "We have paged someone now" banner (`app/portal/(signed-in)/maintenance/[id]/page.tsx`) and the login "Your password was changed" notice (`app/login/page.tsx`). Replaced both with `<FocusedStatus className="...">`.
+- On `/login`, `FocusedStatus`'s post-hydration focus correctly wins over the Email field's native `autoFocus` (which fires earlier, during initial parse) — no explicit ordering logic needed, just a side effect of effects running after hydration.
+- Gate: lint/typecheck/build clean. No new Server/Client boundary (`FocusedStatus` lives inside the already-`'use client'` `auth-form.tsx`). No unit/e2e coverage by design — same manual screen-reader acceptance gap as A11Y-04, not yet performed by a person.
+- Pushed (`a09d84f`, SHA backfill `a62788c`).
+- Next in backlog order: A11Y-06 (missing `autoComplete` on `TextField`), then A11Y-07..11, then UX-03..10.
+
+## Prior 2026-10-01: A11Y-04 (`c0ad7e2`). Focus the autopay confirmation heading instead of an inert live region.
 
 - `AutopayPanel` (`apps/web/components/payments/autopay-panel.tsx`) swaps its whole "off" branch for its "on" branch in one render pass on save success — the same whole-section-replacement shape `useFocusWhen` was already written for (MFA enrolment, vendor bid/job panels, portal verify-link). The `role="status"` confirmation mounted already populated (announces nothing) and the Save button that had focus unmounted with it. Added `useFocusWhen<HTMLHeadingElement>(saved)` on the panel's `h2` — `ref`+`tabIndex={-1}`, matching `bid-form.tsx`/`verify-panel.tsx`'s exact pattern. Driven by `saved` (client action state), never `alreadyOn` (a server prop also true on an ordinary page load).
 - Gate: lint/typecheck/build clean. Caught one real mistake mid-edit: the hook was first placed after the panel's `if (!publishableKey) return null`, which trips `react-hooks/rules-of-hooks` — fixed by moving it above the early return. No unit/e2e coverage possible by design (D-15: Stripe Elements is a cross-origin iframe); acceptance is a manual screen-reader check, not yet performed by a person. No schema change.
