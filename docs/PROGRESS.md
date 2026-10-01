@@ -13927,3 +13927,18 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 - New tests in `packages/core/payments/payments.test.ts` → *payable / validatePaymentAmount*: refuses more than Stripe has actually invoiced (MONEY-09b); does not check the ceiling when the caller has not fetched it (undefined stays inert); treats a failed invoice lookup as a real zero. Verified the first actually catches the regression: reverted `collection.ts`'s check alone, confirmed both the undefined-stays-inert case's sibling and the null-is-zero case fail (`expected ok:true`, `expected undefined to be 'more_than_invoiced'`), then restored the fix and reran clean.
 - `npm test -- packages/core/payments/payments.test.ts apps/web/lib/payments/payments.test.ts apps/web/lib/billing/billing.test.ts`: 129/129 passed.
 - No schema change — `db:ci` not required for this item.
+
+## SEC-19: placeholder the Neon dev-branch hostname in the demo-database-guard test fixture
+
+**Commit:** (pending)  ·  **Date:** 2026-10-01
+
+**What it built.** `packages/db/prisma/demo-database-guard.test.ts`'s `NEON` fixture carried the real Neon dev-branch hostname (`ep-gentle-cell-ayd8m0qg-pooler…`) alongside an already-fake password — the repo is public, so the host was exposed for no reason the test needs. Swapped it for a made-up host in the same shape (`ep-example-branch-12345678-pooler…`); `refuseUnlessDemoDatabase` only pattern-matches `localhost`/`127.0.0.1` and `rental_demo` in the URL, so a fixture that is merely "not that" exercises the exact same refusal paths.
+
+**What it decided.** Scoped to the one file the finding named. `docs/DEPLOYMENT.md` still documents the same real hostname deliberately, as an ops reference — that's a different kind of exposure (operational doc, not a test fixture pretending to be arbitrary) and is already tracked under "repo is PUBLIC" / "consider making the repo private" in `NEXT.md`. Not touched here.
+
+**What it left behind.** The broader public-repo exposure (demo password, this hostname in `DEPLOYMENT.md`) is unchanged — still needs Shane's call on rotating the password and/or making the repo private.
+
+**Gate.**
+- `lint` and `typecheck` clean (same 16 pre-existing warnings).
+- `npm test -- packages/db/prisma/demo-database-guard.test.ts`: 10/10 passed.
+- No schema change — `db:ci` not required for this item.

@@ -7,7 +7,7 @@ import { refuseUnlessDemoDatabase } from './demo-database-guard.mts'
 // no guard at all - so these cases are the ones that actually happened, not
 // hypotheticals.
 
-const NEON = 'postgresql://neondb_owner:hunter2@ep-gentle-cell-ayd8m0qg-pooler.c-5.us-east-2.aws.neon.tech/neondb?sslmode=require'
+const NEON = 'postgresql://neondb_owner:hunter2@ep-example-branch-12345678-pooler.c-5.us-east-2.aws.neon.tech/neondb?sslmode=require'
 const DEMO = 'postgresql://shane@localhost:5432/rental_demo'
 
 function run(url: string | undefined) {
