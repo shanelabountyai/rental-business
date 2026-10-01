@@ -196,6 +196,31 @@ export function useFocusWhen<T extends HTMLElement>(when: boolean) {
 }
 
 /**
+ * A `role="status"` notice that is already-populated when it first renders -
+ * a server-rendered confirmation after a redirect (A11Y-05), not a form's
+ * response to an action. The route announcer only reads the page's `h1`, so
+ * the region is in the accessibility tree already full on its first paint
+ * and nothing ever announces it (the same class of bug `FormAlerts` fixes
+ * for an action's live region, but there is no "before" state to mount
+ * empty - it exists for exactly one render). Focusing it on mount makes
+ * assistive tech read it directly instead.
+ */
+export function FocusedStatus({
+  children,
+  className,
+}: {
+  children: ReactNode
+  className?: string
+}) {
+  const ref = useFocusWhen<HTMLParagraphElement>(true)
+  return (
+    <p role="status" ref={ref} tabIndex={-1} className={className}>
+      {children}
+    </p>
+  )
+}
+
+/**
  * A `key` for an uncontrolled form that has to hand back what was typed
  * (R-114, extracted from `property-form.tsx`'s R-008 fix).
  *

@@ -7,6 +7,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { AddPhotoForm } from '@/components/portal/maintenance/add-photo-form.tsx'
 import { VerifyPanel } from '@/components/portal/maintenance/verify-panel.tsx'
+import { FocusedStatus } from '@/components/auth-form.tsx'
 import { verifyWorkOrder } from '@/lib/portal/verify-actions.ts'
 import { requireTenantWithScope } from '@/lib/portal/guard.ts'
 import { getTenantTicket } from '@/lib/maintenance/queries.ts'
@@ -84,13 +85,10 @@ export default async function MaintenanceTicketPage({
         directly if nobody calls back.
       */}
       {emergency === '1' && (
-        <p
-          role="status"
-          className="rounded-md border-2 border-red-600 bg-red-50 px-4 py-3 font-medium text-red-950"
-        >
+        <FocusedStatus className="rounded-md border-2 border-red-600 bg-red-50 px-4 py-3 font-medium text-red-950">
           We have paged someone now. If this is life-threatening, call 911. If
           you do not hear back shortly, call or text the number on your lease.
-        </p>
+        </FocusedStatus>
       )}
 
       <div className="flex flex-col gap-1">

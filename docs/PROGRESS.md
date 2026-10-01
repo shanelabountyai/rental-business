@@ -14015,3 +14015,19 @@ Two real bugs found and fixed along the way, both from axe/e2e, not from reading
 - `typecheck` clean.
 - `npm run build` clean — the relevant check for a Client Component hook/ref change, since typecheck doesn't see the Server/Client boundary.
 - No schema change — `db:ci` not required for this item.
+
+## A11Y-05: focus the message instead of mounting an already-populated live region
+
+**Commit:** `<pending>`  ·  **Date:** 2026-10-01
+
+**What it built.** Both sites in the finding (the emergency "We have paged someone now" banner on `app/portal/(signed-in)/maintenance/[id]/page.tsx` and the "Your password was changed" notice on `app/login/page.tsx`) are async Server Components rendering a bare `<p role="status">` that is already populated on first paint — the same silent-arrival bug `FormAlerts` fixes for an action's live region (`auth-form.tsx`'s own header comment: "a region that appears already-populated is a new node, not a change"), except here there is no earlier empty render to mount ahead of time — the notice exists for exactly one page load, driven by a search param (`?emergency=1`, `?reset=1`) set by the redirect that sent the tenant or staff member here. Added `FocusedStatus` to `components/auth-form.tsx` (already `'use client'`): a `role="status"` paragraph with `ref`+`tabIndex={-1}` wired to `useFocusWhen<HTMLParagraphElement>(true)` — since the condition is always true at the moment this component mounts, the existing "fires once on mount" hook behavior is exactly "focus this on arrival," with no new logic needed. Replaced both inline `<p role="status">` blocks with `<FocusedStatus className="...">`, passing each page's own styling through.
+
+**What it decided.** One shared component used by both call sites rather than two copies, even though the two pages don't otherwise share a parent component — `auth-form.tsx` is already the shared home for `useFocusWhen` and its sibling live-region primitives, and `login/page.tsx` already imports from it. On `/login`, `FocusedStatus`'s mount-effect focus runs after hydration and therefore after the Email field's native `autoFocus` attribute (which fires during initial parse) — so when a reset notice is present, focus correctly ends up on the notice, not the field, with no explicit ordering logic required.
+
+**What it left behind.** Screen-reader check (both messages announced after their redirect) not yet performed by a person — same acceptance gap as A11Y-04 and the rest of this sweep. No unit/e2e coverage: both are one-time server-rendered notices behind a search param, not a flow with a meaningful assertion beyond "the DOM node exists," which axe and the e2e suite already implicitly cover.
+
+**Gate.**
+- `lint` clean (0 errors; same pre-existing warnings, none in touched files).
+- `typecheck` clean.
+- `npm run build` clean — both pages stay Server Components; `FocusedStatus` lives entirely inside the already-`'use client'` `auth-form.tsx`, so no new Server/Client boundary was introduced.
+- No schema change — `db:ci` not required for this item.

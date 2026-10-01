@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { AuthCard, AuthForm, Field } from '@/components/auth-form.tsx'
+import { AuthCard, AuthForm, Field, FocusedStatus } from '@/components/auth-form.tsx'
 import { startStaffSignIn } from '@/lib/auth/actions.ts'
 
 export const metadata = { title: 'Sign in — Rental Operations' }
@@ -22,12 +22,9 @@ export default async function StaffLoginPage({
       }
     >
       {reset && (
-        <p
-          role="status"
-          className="rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-900"
-        >
+        <FocusedStatus className="rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
           Your password was changed. Sign in with the new one.
-        </p>
+        </FocusedStatus>
       )}
       <AuthForm action={startStaffSignIn} submitLabel="Sign in">
         <Field
