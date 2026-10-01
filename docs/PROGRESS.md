@@ -13960,7 +13960,7 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 
 ## UX-01: sticky anchor bar + pinned header for /leases/[id]
 
-**Commit:** (pending)  ·  **Date:** 2026-10-01
+**Commit:** `ea36958`  ·  **Date:** 2026-10-01
 
 **What it built.** `/leases/[id]` (`apps/web/app/(admin)/leases/[id]/page.tsx`) had ~30 panels in one flat scroll with no jump nav and no pinned context — exactly the finding. Added a `position: sticky` header (back link, lease title, balance, status line) with a native `<nav>` of five anchor links — Money/People/Compliance/Access/Lifecycle, `href="#section-*"`, no JS — and regrouped every panel under those five headings. Grouping required physically reordering the panels (they were previously interleaved by workflow adjacency, not category), which this item did by hand while preserving every documented pairwise ordering comment found by grepping the file for "above/below/before/after" (R-084 HoldBanner-above-everything, the PaymentPlan-above-Holds-above-Chase-between sequence from R-175, R-143 Consent-above-SCRA, R-086 Accommodations-above-ScraTermination, R-094b DoorCodes-below-AccessCodes) — each is still true in the new layout, just achieved by choosing a page-level group order (Money, People, Compliance, Access, Lifecycle) compatible with all of them rather than by the original ad hoc adjacency.
 
@@ -13984,7 +13984,7 @@ Two real bugs found and fixed along the way, both from axe/e2e, not from reading
 
 ## UX-02: unify primary-button colour, remove ~34 hand-copied class strings
 
-**Commit:** (pending)  ·  **Date:** 2026-10-01
+**Commit:** `13a5a24`  ·  **Date:** 2026-10-01
 
 **What it built.** The backlog finding was accurate but understated: `bg-foreground` (`PRIMARY_BUTTON_CLASSES`, ~9 call sites, mostly form-submit buttons in panels) and `bg-primary` (hand-copied inline, ~34 call sites across admin pages, portal/vendor pages, auth, and forms) were both being used for the same semantic action — a primary form submit or primary CTA — rendered two different colours depending which file wrote it, not a deliberate split as `ui-classes.ts`'s own comment implied. Asked Shane which colour should win (a real visual decision across most of the app, not a mechanics call); he picked `bg-primary` — more call sites already used it, including `SubmitButton` itself. Recoloured `PRIMARY_BUTTON_CLASSES` (`bg-foreground`→`bg-primary`, kept its baked-in admin size since its 9 callers already agreed on one). Added `SUBMIT_BUTTON_CLASSES` — appearance only (colour, `rounded-md`, `font-medium`, full focus-ring set including `ring-offset-2`), deliberately with no baked-in size, since the ~34 inline copies disagreed on `min-h-11` vs `min-h-12`, `px-4` vs `px-6`, `text-sm` vs `text-base` in ways that looked like real, consistently-applied context splits (compact admin CTAs vs bigger touch targets on portal/vendor/auth forms) rather than drift worth unifying in a LOW item with no visual QA budget. Every call site now composes `${SUBMIT_BUTTON_CLASSES} <its own existing size/layout classes>` — sizes unchanged, only colour and the shared appearance tokens centralized.
 

@@ -1,5 +1,13 @@
 # Next session
 
+## Done 2026-10-01: UX-02 (`13a5a24`). Unify primary-button colour, remove ~34 hand-copied class strings.
+
+- The backlog finding undersold it: `bg-foreground` (`PRIMARY_BUTTON_CLASSES`, ~9 callers) and hand-copied `bg-primary` (~34 callers across admin/portal/vendor/auth) both styled the same semantic "primary action" button, two different colours depending which file wrote it — not a deliberate split as `ui-classes.ts`'s own comment implied (checked: `PRIMARY_BUTTON_CLASSES` is used on form-submit buttons too, not just non-form CTAs, so the comment's claimed distinction didn't hold). **Asked Shane which colour wins** (clickable question — a real visual-design call across most of the app) — he picked `bg-primary`.
+- `PRIMARY_BUTTON_CLASSES` recoloured (kept its baked-in admin size, unchanged). New `SUBMIT_BUTTON_CLASSES` in `apps/web/components/ui-classes.ts` carries appearance only (colour, focus ring incl. `ring-offset-2`, rounding, weight) — **no baked-in size**, since the 34 inline copies genuinely disagreed on size by context (compact admin CTAs vs bigger portal/auth touch targets) and unifying size wasn't part of what Shane approved. Every call site now composes `${SUBMIT_BUTTON_CLASSES} <its own size/layout classes>`.
+- **Real bug found mid-item:** 6 `reports/*` pages were silently missing `focus-visible:ring-offset-2` (WCAG 2.4.7, the exact defect this file exists to prevent) — fixed for all 6 by construction, since `SUBMIT_BUTTON_CLASSES` always includes it.
+- Gate: lint/typecheck/build clean. No unit test asserts on these class strings; verified via `npm run build` (catches Server/Client boundary breaks a className edit could cause) + booted `next start` and curled `/login` to confirm the composed class string renders correctly, not `undefined`. No schema change.
+- Pushed (`13a5a24`). Next: UX-03..10 / OPS-01 / A11Y-04..11 (see `06-backlog.md`) — none have a stated order after UX-02, pick top of remaining list.
+
 ## Done 2026-10-01: UX-01 (`ea36958`). Sticky anchor bar + pinned header for /leases/[id].
 
 - Sticky header (back link, title, balance, status) + five-link native `<nav>` anchor bar (Money/People/Compliance/Access/Lifecycle), reordered the page's ~30 panels into those five contiguous groups while preserving every documented pairwise ordering comment (R-084, R-175/Chase-between, R-143, R-086, R-094b — grepped for "above/below/before/after" to find all of them).
