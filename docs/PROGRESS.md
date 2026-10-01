@@ -14079,3 +14079,23 @@ Two real bugs found and fixed along the way, both from axe/e2e, not from reading
 - `typecheck` clean.
 - `npm run build` clean.
 - No schema change — `db:ci` not required for this item.
+
+## A11Y-09: delete button labels, 44px target, result region outside the row
+
+**Commit:** `<pending>`  ·  **Date:** 2026-10-01
+
+**What it built.** `DeleteRowButton` (`components/operational/delete-row-button.tsx`) now takes a required `label: string` prop, rendered as `aria-label={`Remove ${label}`}` — visible text stays "Remove", so the control satisfies 2.5.3 (visible label contained in accessible name) while every row gets a distinct name. Bumped the button's `min-h-9` to `min-h-11` (44px, the same token `<summary>` elements in these sections already use). The harder half of the finding: `FormAlerts` used to render *inside* the `<li>` the delete action removes, so on success the live region vanished in the same render pass as the text it would have announced — the R-101 "region before text" bug one step further along, since here the region itself is gone, not just arriving pre-populated. Added `DeleteResultRegion`, a `'use client'` component that holds the last removal result in React Context and renders the always-mounted `role="alert"`/`role="status"` pair (same shape as `FormAlerts`) as a sibling *after* its children — so it survives any one row inside it disappearing. `DeleteRowButton` reads the context setter via `useContext` and reports `state.error` or a synthesized `"Removed {label}."` through `useFormVersion` (skips the initial-mount render, same pattern `deposit-group-card.tsx` already uses for `onCreated`). Context over a lifted prop because a button can sit arbitrarily deep below a server component (a mortgage statement's own sub-list) that cannot hold state itself.
+
+Wired at all 6 call sites across `operational-data-section.tsx` (appliances, utility accounts) and `filing-cabinet-section.tsx` (mortgages, mortgage statements — one `DeleteResultRegion` per mortgage, nested inside the outer one — insurance, warranties, capital improvements): each wraps the list/empty-state ternary (not just the `<ul>`, since the live region has to persist through the list going empty too) and the existing display text per row was pulled into a `const label` reused by both the visible `<span>` and the button, rather than duplicated.
+
+**What it decided.** All six delete actions (`deleteAppliance`, `deleteUtilityAccount`, `deleteMortgage`, `deleteMortgageStatement`, `deleteInsurancePolicy`, `deleteWarranty`, `deleteCapitalImprovement`) always return a bare `{}` on success and never set `notice` — confirmed by reading every implementation. So the success announcement is synthesized client-side from `label` rather than threaded from the server; `state.error` is still passed through for the (currently unreachable in practice) failure path, since `requirePermission` throws before any of these reach a return statement.
+
+**What it left behind.** No new unit/e2e coverage asserting the announcement text itself — same manual-screen-reader acceptance gap as the rest of this sweep. A scoped e2e run (`e2e/operational.spec.ts` + `e2e/filing-cabinet.spec.ts`, desktop + mobile) confirms the existing delete flows and both pages' axe specs still pass with the new structure.
+
+**Gate.**
+- `lint` clean (0 errors; same pre-existing warnings, none in touched files).
+- `typecheck` clean.
+- `npm run build` clean (verifies the new Server→Client boundary: server components passing server-rendered children into `DeleteResultRegion`).
+- `npm test`: 4 pre-existing failures, unrelated (`comms.test.ts` ×2, `pre-move-out-scheduling-job.test.ts` ×2 — leftover `rental_test` data, documented in `NEXT.md` before this session).
+- Scoped e2e (`e2e/operational.spec.ts` + `e2e/filing-cabinet.spec.ts`, `desktop-chrome` + `mobile-chrome`): 42/42 passed, reconciled against `--list`'s `Total: 42 tests`.
+- No schema change — `db:ci` not required for this item.

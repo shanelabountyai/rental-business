@@ -3,7 +3,7 @@ import type { AccessCode, Appliance, ShutoffLocation, UtilityAccount } from '@re
 import { AddAccessCodeForm } from '@/components/operational/add-access-code-form.tsx'
 import { AddApplianceForm } from '@/components/operational/add-appliance-form.tsx'
 import { AddUtilityAccountForm } from '@/components/operational/add-utility-account-form.tsx'
-import { DeleteRowButton } from '@/components/operational/delete-row-button.tsx'
+import { DeleteResultRegion, DeleteRowButton } from '@/components/operational/delete-row-button.tsx'
 import { RevealCodeButton } from '@/components/operational/reveal-code-button.tsx'
 import { ShutoffLocationForm } from '@/components/operational/shutoff-location-form.tsx'
 import {
@@ -138,28 +138,40 @@ export async function OperationalDataSection({
 
       <div className="flex flex-col gap-2">
         <h3 className="text-sm font-medium">Appliances</h3>
-        {appliances.length === 0 ? (
-          <p className="text-muted-foreground text-sm">No appliances on file.</p>
-        ) : (
-          <ul className="flex flex-col divide-y">
-            {appliances.map((appliance) => (
-              <li key={appliance.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
-                <span>
-                  {APPLIANCE_CATEGORY_LABELS[appliance.category] ?? appliance.category}
-                  {appliance.make || appliance.model
+        <DeleteResultRegion>
+          {appliances.length === 0 ? (
+            <p className="text-muted-foreground text-sm">No appliances on file.</p>
+          ) : (
+            <ul className="flex flex-col divide-y">
+              {appliances.map((appliance) => {
+                const label = `${APPLIANCE_CATEGORY_LABELS[appliance.category] ?? appliance.category}${
+                  appliance.make || appliance.model
                     ? ` — ${[appliance.make, appliance.model].filter(Boolean).join(' ')}`
-                    : ''}
-                  {appliance.category === 'HVAC' && appliance.filterSize
-                    ? ` · filter ${appliance.filterSize}`
-                    : ''}
-                </span>
-                {canWrite && (
-                  <DeleteRowButton action={deleteAppliance.bind(null, unitId, appliance.id)} />
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
+                    : ''
+                }`
+                return (
+                  <li
+                    key={appliance.id}
+                    className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm"
+                  >
+                    <span>
+                      {label}
+                      {appliance.category === 'HVAC' && appliance.filterSize
+                        ? ` · filter ${appliance.filterSize}`
+                        : ''}
+                    </span>
+                    {canWrite && (
+                      <DeleteRowButton
+                        action={deleteAppliance.bind(null, unitId, appliance.id)}
+                        label={label}
+                      />
+                    )}
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+        </DeleteResultRegion>
         {canWrite && (
           <details>
             <summary className="min-h-11 cursor-pointer text-sm font-medium">Add an appliance</summary>
@@ -172,23 +184,34 @@ export async function OperationalDataSection({
 
       <div className="flex flex-col gap-2">
         <h3 className="text-sm font-medium">Utility accounts</h3>
-        {utilityAccounts.length === 0 ? (
-          <p className="text-muted-foreground text-sm">No utility accounts on file.</p>
-        ) : (
-          <ul className="flex flex-col divide-y">
-            {utilityAccounts.map((account) => (
-              <li key={account.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
-                <span>
-                  {UTILITY_TYPE_LABELS[account.type] ?? account.type} — {account.provider}
-                  {!account.landlordRevertAgreement && ' · no revert agreement on file'}
-                </span>
-                {canWrite && (
-                  <DeleteRowButton action={deleteUtilityAccount.bind(null, unitId, account.id)} />
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
+        <DeleteResultRegion>
+          {utilityAccounts.length === 0 ? (
+            <p className="text-muted-foreground text-sm">No utility accounts on file.</p>
+          ) : (
+            <ul className="flex flex-col divide-y">
+              {utilityAccounts.map((account) => {
+                const label = `${UTILITY_TYPE_LABELS[account.type] ?? account.type} — ${account.provider}`
+                return (
+                  <li
+                    key={account.id}
+                    className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm"
+                  >
+                    <span>
+                      {label}
+                      {!account.landlordRevertAgreement && ' · no revert agreement on file'}
+                    </span>
+                    {canWrite && (
+                      <DeleteRowButton
+                        action={deleteUtilityAccount.bind(null, unitId, account.id)}
+                        label={label}
+                      />
+                    )}
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+        </DeleteResultRegion>
         {canWrite && (
           <details>
             <summary className="min-h-11 cursor-pointer text-sm font-medium">Add a utility account</summary>

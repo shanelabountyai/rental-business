@@ -19,7 +19,7 @@ import { MortgageStatementForm } from '@/components/filing-cabinet/mortgage-stat
 import { AddWarrantyForm } from '@/components/filing-cabinet/add-warranty-form.tsx'
 import { CostBasisForm } from '@/components/filing-cabinet/cost-basis-form.tsx'
 import { HoaInfoForm } from '@/components/filing-cabinet/hoa-info-form.tsx'
-import { DeleteRowButton } from '@/components/operational/delete-row-button.tsx'
+import { DeleteResultRegion, DeleteRowButton } from '@/components/operational/delete-row-button.tsx'
 import {
   addCapitalImprovement,
   addInsurancePolicy,
@@ -123,72 +123,86 @@ export function FilingCabinetSection({
 
       <div className="flex flex-col gap-2">
         <h3 className="text-sm font-medium">Mortgages</h3>
-        {mortgages.length === 0 ? (
-          <p className="text-muted-foreground text-sm">No mortgages on file.</p>
-        ) : (
-          <ul className="flex flex-col divide-y">
-            {mortgages.map((mortgage) => (
-              <li key={mortgage.id} className="flex flex-col gap-1 py-2 text-sm">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span>
-                    {mortgage.lender} — {mortgage.rateType}
-                    {mortgage.currentBalanceCents != null &&
-                      ` · ${dollars(mortgage.currentBalanceCents)} balance`}
-                  </span>
-                  {canWrite && (
-                    <DeleteRowButton action={deleteMortgage.bind(null, propertyId, mortgage.id)} />
-                  )}
-                </div>
-                {/* RPT-07 (R-081b): the 1098s recorded against this loan.
-                    Schedule E line 12 reads them, so they live on the loan
-                    rather than on their own screen. */}
-                <div className="flex flex-col gap-1 pl-4">
-                  {mortgage.statements.length === 0 ? (
-                    <span className="text-muted-foreground text-xs">No 1098 recorded.</span>
-                  ) : (
-                    <ul className="flex flex-col text-xs">
-                      {mortgage.statements.map((statement) => (
-                        <li key={statement.id} className="flex items-center justify-between gap-2">
-                          <span>
-                            {statement.taxYear} 1098 — {dollars(statement.interestCents)} interest
-                          </span>
-                          {canWrite && (
-                            <DeleteRowButton
-                              action={deleteMortgageStatement.bind(null, propertyId, statement.id)}
-                            />
-                          )}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                  {canWrite && (
-                    <details>
-                      <summary className="min-h-11 cursor-pointer text-xs font-medium">Record a 1098</summary>
-                      <div className="pt-2">
-                        <MortgageStatementForm
-                          action={recordMortgageStatement.bind(null, propertyId, mortgage.id)}
-                          mortgageId={mortgage.id}
+        <DeleteResultRegion>
+          {mortgages.length === 0 ? (
+            <p className="text-muted-foreground text-sm">No mortgages on file.</p>
+          ) : (
+            <ul className="flex flex-col divide-y">
+              {mortgages.map((mortgage) => {
+                const mortgageLabel = `${mortgage.lender} — ${mortgage.rateType}`
+                return (
+                  <li key={mortgage.id} className="flex flex-col gap-1 py-2 text-sm">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span>
+                        {mortgageLabel}
+                        {mortgage.currentBalanceCents != null &&
+                          ` · ${dollars(mortgage.currentBalanceCents)} balance`}
+                      </span>
+                      {canWrite && (
+                        <DeleteRowButton
+                          action={deleteMortgage.bind(null, propertyId, mortgage.id)}
+                          label={mortgageLabel}
                         />
-                      </div>
-                    </details>
-                  )}
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {mortgageArmAdjustmentDue(mortgage, asOf) && (
-                    <AlertBadge>
-                      ARM adjusts {mortgage.armAdjustmentDate && day(mortgage.armAdjustmentDate)}
-                    </AlertBadge>
-                  )}
-                  {mortgageBalloonMaturityDue(mortgage, asOf) && (
-                    <AlertBadge>
-                      Balloon matures {mortgage.maturityDate && day(mortgage.maturityDate)}
-                    </AlertBadge>
-                  )}
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
+                      )}
+                    </div>
+                    {/* RPT-07 (R-081b): the 1098s recorded against this loan.
+                        Schedule E line 12 reads them, so they live on the loan
+                        rather than on their own screen. */}
+                    <div className="flex flex-col gap-1 pl-4">
+                      <DeleteResultRegion>
+                        {mortgage.statements.length === 0 ? (
+                          <span className="text-muted-foreground text-xs">No 1098 recorded.</span>
+                        ) : (
+                          <ul className="flex flex-col text-xs">
+                            {mortgage.statements.map((statement) => {
+                              const statementLabel = `${statement.taxYear} 1098`
+                              return (
+                                <li key={statement.id} className="flex items-center justify-between gap-2">
+                                  <span>
+                                    {statementLabel} — {dollars(statement.interestCents)} interest
+                                  </span>
+                                  {canWrite && (
+                                    <DeleteRowButton
+                                      action={deleteMortgageStatement.bind(null, propertyId, statement.id)}
+                                      label={statementLabel}
+                                    />
+                                  )}
+                                </li>
+                              )
+                            })}
+                          </ul>
+                        )}
+                      </DeleteResultRegion>
+                      {canWrite && (
+                        <details>
+                          <summary className="min-h-11 cursor-pointer text-xs font-medium">Record a 1098</summary>
+                          <div className="pt-2">
+                            <MortgageStatementForm
+                              action={recordMortgageStatement.bind(null, propertyId, mortgage.id)}
+                              mortgageId={mortgage.id}
+                            />
+                          </div>
+                        </details>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {mortgageArmAdjustmentDue(mortgage, asOf) && (
+                        <AlertBadge>
+                          ARM adjusts {mortgage.armAdjustmentDate && day(mortgage.armAdjustmentDate)}
+                        </AlertBadge>
+                      )}
+                      {mortgageBalloonMaturityDue(mortgage, asOf) && (
+                        <AlertBadge>
+                          Balloon matures {mortgage.maturityDate && day(mortgage.maturityDate)}
+                        </AlertBadge>
+                      )}
+                    </div>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+        </DeleteResultRegion>
         {canWrite && (
           <details>
             <summary className="min-h-11 cursor-pointer text-sm font-medium">Add a mortgage</summary>
@@ -201,30 +215,36 @@ export function FilingCabinetSection({
 
       <div className="flex flex-col gap-2">
         <h3 className="text-sm font-medium">Insurance</h3>
-        {insurancePolicies.length === 0 ? (
-          <p className="text-muted-foreground text-sm">No policies on file.</p>
-        ) : (
-          <ul className="flex flex-col divide-y">
-            {insurancePolicies.map((policy) => (
-              <li key={policy.id} className="flex flex-col gap-1 py-2 text-sm">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span>
-                    {policy.carrier} · renews {day(policy.renewsOn)}
-                    {policy.lossOfRents && ' · loss-of-rents'}
-                  </span>
-                  {canWrite && (
-                    <DeleteRowButton
-                      action={deleteInsurancePolicy.bind(null, propertyId, policy.id)}
-                    />
-                  )}
-                </div>
-                {insuranceRenewalDue(policy.renewsOn, asOf) && (
-                  <AlertBadge>Renewal shopping window open</AlertBadge>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
+        <DeleteResultRegion>
+          {insurancePolicies.length === 0 ? (
+            <p className="text-muted-foreground text-sm">No policies on file.</p>
+          ) : (
+            <ul className="flex flex-col divide-y">
+              {insurancePolicies.map((policy) => {
+                const label = `${policy.carrier} policy renewing ${day(policy.renewsOn)}`
+                return (
+                  <li key={policy.id} className="flex flex-col gap-1 py-2 text-sm">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span>
+                        {policy.carrier} · renews {day(policy.renewsOn)}
+                        {policy.lossOfRents && ' · loss-of-rents'}
+                      </span>
+                      {canWrite && (
+                        <DeleteRowButton
+                          action={deleteInsurancePolicy.bind(null, propertyId, policy.id)}
+                          label={label}
+                        />
+                      )}
+                    </div>
+                    {insuranceRenewalDue(policy.renewsOn, asOf) && (
+                      <AlertBadge>Renewal shopping window open</AlertBadge>
+                    )}
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+        </DeleteResultRegion>
         {canWrite && (
           <details>
             <summary className="min-h-11 cursor-pointer text-sm font-medium">Add a policy</summary>
@@ -259,24 +279,34 @@ export function FilingCabinetSection({
 
       <div className="flex flex-col gap-2">
         <h3 className="text-sm font-medium">Warranties</h3>
-        {warranties.length === 0 ? (
-          <p className="text-muted-foreground text-sm">No warranties on file.</p>
-        ) : (
-          <ul className="flex flex-col divide-y">
-            {warranties.map((warranty) => (
-              <li key={warranty.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
-                <span>
-                  {WARRANTY_CATEGORY_LABELS[warranty.category] ?? warranty.category} —{' '}
-                  {warranty.provider}
-                  {warranty.expiresOn && ` · expires ${day(warranty.expiresOn)}`}
-                </span>
-                {canWrite && (
-                  <DeleteRowButton action={deleteWarranty.bind(null, propertyId, warranty.id)} />
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
+        <DeleteResultRegion>
+          {warranties.length === 0 ? (
+            <p className="text-muted-foreground text-sm">No warranties on file.</p>
+          ) : (
+            <ul className="flex flex-col divide-y">
+              {warranties.map((warranty) => {
+                const label = `${WARRANTY_CATEGORY_LABELS[warranty.category] ?? warranty.category} — ${warranty.provider}`
+                return (
+                  <li
+                    key={warranty.id}
+                    className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm"
+                  >
+                    <span>
+                      {label}
+                      {warranty.expiresOn && ` · expires ${day(warranty.expiresOn)}`}
+                    </span>
+                    {canWrite && (
+                      <DeleteRowButton
+                        action={deleteWarranty.bind(null, propertyId, warranty.id)}
+                        label={label}
+                      />
+                    )}
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+        </DeleteResultRegion>
         {canWrite && (
           <details>
             <summary className="min-h-11 cursor-pointer text-sm font-medium">Add a warranty</summary>
@@ -293,34 +323,39 @@ export function FilingCabinetSection({
           Capitalised and depreciated from the day placed in service, not deducted as a repair
           (PROP-07). These are the rows the year-end tax export puts on its CapEx schedule.
         </p>
-        {capitalImprovements.length === 0 ? (
-          <p className="text-muted-foreground text-sm">No capital improvements on file.</p>
-        ) : (
-          <ul className="flex flex-col divide-y">
-            {capitalImprovements.map((improvement) => (
-              <li key={improvement.id} className="flex flex-col gap-1 py-2 text-sm">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span>
-                    {CAPEX_CATEGORY_LABELS[improvement.category] ?? improvement.category} —{' '}
-                    {improvement.description} · {dollars(improvement.costCents)}
-                  </span>
-                  {canWrite && (
-                    <DeleteRowButton
-                      action={deleteCapitalImprovement.bind(null, propertyId, improvement.id)}
-                    />
-                  )}
-                </div>
-                {improvement.inServiceOn ? (
-                  <span className="text-muted-foreground text-xs">
-                    In service {day(improvement.inServiceOn)}
-                  </span>
-                ) : (
-                  <AlertBadge>No in-service date — cannot be depreciated</AlertBadge>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
+        <DeleteResultRegion>
+          {capitalImprovements.length === 0 ? (
+            <p className="text-muted-foreground text-sm">No capital improvements on file.</p>
+          ) : (
+            <ul className="flex flex-col divide-y">
+              {capitalImprovements.map((improvement) => {
+                const label = `${CAPEX_CATEGORY_LABELS[improvement.category] ?? improvement.category} — ${improvement.description}`
+                return (
+                  <li key={improvement.id} className="flex flex-col gap-1 py-2 text-sm">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span>
+                        {label} · {dollars(improvement.costCents)}
+                      </span>
+                      {canWrite && (
+                        <DeleteRowButton
+                          action={deleteCapitalImprovement.bind(null, propertyId, improvement.id)}
+                          label={label}
+                        />
+                      )}
+                    </div>
+                    {improvement.inServiceOn ? (
+                      <span className="text-muted-foreground text-xs">
+                        In service {day(improvement.inServiceOn)}
+                      </span>
+                    ) : (
+                      <AlertBadge>No in-service date — cannot be depreciated</AlertBadge>
+                    )}
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+        </DeleteResultRegion>
         {canWrite && (
           <details>
             <summary className="min-h-11 cursor-pointer text-sm font-medium">Add an improvement</summary>
