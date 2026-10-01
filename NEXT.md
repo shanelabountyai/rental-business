@@ -1,5 +1,11 @@
 # Next session
 
+## Done 2026-10-01: SEC-19 (`4bc0d36`). Placeholder the Neon dev-branch hostname in a test fixture.
+
+- `packages/db/prisma/demo-database-guard.test.ts`'s `NEON` fixture carried the real Neon dev-branch hostname in a public repo; swapped for a made-up host in the same shape. The guard only pattern-matches `localhost`/`rental_demo`, so this doesn't change what the test exercises. Scoped to the file the finding named — `docs/DEPLOYMENT.md` still documents the real hostname deliberately as an ops reference; that's the separate "repo is PUBLIC" exposure already carried below, not touched here.
+- Gate: lint/typecheck clean, `npm test -- packages/db/prisma/demo-database-guard.test.ts` 10/10. No schema change.
+- Pushed (`4bc0d36`). Next: SEC-20 (CJK/emoji filename 500s `lib/documents/serve.ts`).
+
 ## Done 2026-10-01: MONEY-09(b) (`2b65b9b`, `023bbde`). Refuse a portal prepayment at payment start.
 
 - Shane decided (clickable question): prepayments are not allowed. `validatePaymentAmount` (`packages/core/payments/collection.ts`) gained a `more_than_invoiced` refusal, mirroring the staff-counter path's existing `offlinePaymentDecision` check — same class of gap, already solved once there. `startPayment` (`apps/web/lib/payments/actions.ts`) now fetches `getOpenInvoices` alongside its other recomputed facts and feeds the sum in as `openInvoiceCents`; optional on `PayableFacts` so `queries.ts`'s display-only call is untouched. D-283 records the decision.
@@ -22,7 +28,7 @@
 
 ## Next item: lower-severity backlog
 
-MONEY-09(a) and (b) are both done. Remaining from the review sweep: SEC-19, SEC-20, UX-01..10, OPS-01. MONEY-05 (TX grace-day count) remains a legal-review item.
+MONEY-09(a)/(b) and SEC-19 are done. Remaining from the review sweep: SEC-20, UX-01..10, OPS-01. MONEY-05 (TX grace-day count) remains a legal-review item.
 
 ## Carried forward, unchanged:
 
