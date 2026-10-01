@@ -1,5 +1,12 @@
 # Next session
 
+## Done 2026-10-01: MONEY-09(b) (`2b65b9b`, `023bbde`). Refuse a portal prepayment at payment start.
+
+- Shane decided (clickable question): prepayments are not allowed. `validatePaymentAmount` (`packages/core/payments/collection.ts`) gained a `more_than_invoiced` refusal, mirroring the staff-counter path's existing `offlinePaymentDecision` check — same class of gap, already solved once there. `startPayment` (`apps/web/lib/payments/actions.ts`) now fetches `getOpenInvoices` alongside its other recomputed facts and feeds the sum in as `openInvoiceCents`; optional on `PayableFacts` so `queries.ts`'s display-only call is untouched. D-283 records the decision.
+- Gate: lint/typecheck clean. `npm test -- packages/core/payments/payments.test.ts apps/web/lib/payments/payments.test.ts apps/web/lib/billing/billing.test.ts` 129/129, verified the new check actually catches the regression (reverted, confirmed red, restored). No schema change, `db:ci` not needed.
+- **Full local `npm test` was heavily flaky this session** (20-30 failed files across two consecutive runs, different counts each time) — traced to this machine's memory pressure (`kern.memorystatus_level` 35%, near the 30% swapcheck warning threshold) with a sibling project's dev server (`onsitestaffing`, :4600) resident at the same time. Confirmed NOT a regression: failures spanned unrelated modules (auth, comms, maintenance, tasks, tax), `comms.test.ts`'s 2 failures matched the pre-existing known-flaky entry below, and this item's own touched files passed clean in isolation. **If you're seeing a wall of unrelated timeouts next session, check for a sibling project's dev server before assuming a code regression** — `ps aux | grep "next dev"`.
+- Pushed (`023bbde`); CI run `36880077289` was in progress when this session ended — check `gh run list --limit 3` first next session if no result landed before it cleared.
+
 ## Done 2026-09-30: MONEY-06 (`7181a97`, `db2c688`). Deterministic late-fee payer selection.
 
 - `lib/ledger/late-fees.ts`: added `orderBy: { createdAt: 'asc' }` to both `leasePayers` queries (dated-charge pass and unlinked-rent pass), matching the primary-payer convention `billing/recurring.ts` and `billing/rubs.ts` already use. Without it, a two-payer voucher-style lease (D-13) could bill either active payer's Stripe customer nondeterministically.
@@ -13,15 +20,9 @@
 - New regression test in `billing.test.ts` (`a portal payment reaches the invoice (MONEY-01)` describe block): two open invoices, principal split across both, `recordOutOfBandPayment` spied so the first push lands and the second throws. Asserts the drift row exists with the right payment/kind/shortfall. Verified it actually catches the regression — reverted the `webhook.ts` change alone, confirmed the test fails (`expected null not to be null`, no drift row written), restored the fix.
 - Gate: lint/typecheck clean, `npm test apps/web/lib/billing/billing.test.ts` 43/43. No schema change, `db:ci` not needed. Pushed; CI result pending — see the MONEY-06 note above, same run covers both.
 
-## Next item: MONEY-09(b) — needs Shane's decision first, not code
+## Next item: lower-severity backlog
 
-A portal payment larger than open invoices (a prepayment) is a ledger credit Stripe can't see, so next month's invoice collects in full. `ponytail:` marker in `lib/payments/out-of-band.ts`.
-
-**🟡 Question for Shane: are prepayments allowed at all?** If yes, the fix carries the excess to Stripe as a customer-balance credit (needs its own design — how it's applied, how it's shown to the tenant, whether it survives a lease ending). If no, the fix is a refusal or a cap at the point a portal payment is started, which is a different code path (`lib/payments/actions.ts`'s `startPayment`) than the one MONEY-09(a) touched.
-
-Once that's answered: Sonnet is plausible if the answer is "no, cap it" (refusal logic, no new money-movement primitive). If the answer is "yes, carry as credit," recommend Opus — that's new Stripe customer-balance logic on the money-critical path (D-11/D-12), not a spec-following addition. Re-ask per the model-per-item rule once scope is known, don't decide now.
-
-Still open lower-severity after that: SEC-19, SEC-20, UX-01..10, OPS-01.
+MONEY-09(a) and (b) are both done. Remaining from the review sweep: SEC-19, SEC-20, UX-01..10, OPS-01. MONEY-05 (TX grace-day count) remains a legal-review item.
 
 ## Carried forward, unchanged:
 
