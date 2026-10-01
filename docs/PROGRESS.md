@@ -13957,3 +13957,27 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 - `lint` and `typecheck` clean (same 16 pre-existing warnings).
 - `npm test -- apps/web/lib/documents/serve.test.ts`: 16/16 passed (2 existing exact-string assertions updated for the new `filename*=` suffix; 1 new test with a `契約書📄.pdf` fixture — verified it would have thrown before the fix via a standalone repro, not by reverting and rerunning the suite, since the pre-fix code throws synchronously rather than failing an assertion).
 - No schema change — `db:ci` not required for this item.
+
+## UX-01: sticky anchor bar + pinned header for /leases/[id]
+
+**Commit:** (pending)  ·  **Date:** 2026-10-01
+
+**What it built.** `/leases/[id]` (`apps/web/app/(admin)/leases/[id]/page.tsx`) had ~30 panels in one flat scroll with no jump nav and no pinned context — exactly the finding. Added a `position: sticky` header (back link, lease title, balance, status line) with a native `<nav>` of five anchor links — Money/People/Compliance/Access/Lifecycle, `href="#section-*"`, no JS — and regrouped every panel under those five headings. Grouping required physically reordering the panels (they were previously interleaved by workflow adjacency, not category), which this item did by hand while preserving every documented pairwise ordering comment found by grepping the file for "above/below/before/after" (R-084 HoldBanner-above-everything, the PaymentPlan-above-Holds-above-Chase-between sequence from R-175, R-143 Consent-above-SCRA, R-086 Accommodations-above-ScraTermination, R-094b DoorCodes-below-AccessCodes) — each is still true in the new layout, just achieved by choosing a page-level group order (Money, People, Compliance, Access, Lifecycle) compatible with all of them rather than by the original ad hoc adjacency.
+
+**What it decided.** Two scope cuts from the backlog's suggested fix, both deliberate:
+- **Did not collapse any panel into `<details>`.** 31 e2e spec files interact with panels on this page; closing any of them by default would need every one of those specs updated to open the `<details>` first, for a LOW-value, no-automated-acceptance polish item. Flagging as a separate follow-up if wanted — UX-09 (mobile card/accordion treatment) is the natural place to fold it in rather than doing it twice.
+- **Group membership is a judgment call, documented inline** (`JUMP_LINKS`'s own comment) — a few panels (notification preferences, renter insurance, confidential cases) could reasonably sit in more than one bucket; moved whichever way kept the diff smallest without breaking a stated invariant.
+
+Two real bugs found and fixed along the way, both from axe/e2e, not from reading the diff:
+- **Duplicate DOM id.** The naive anchor-target ids (`id="money"`, `id="lifecycle"`, …) collided with `lifecycle-panel.tsx`'s own pre-existing `id="lifecycle"` — `getElementById` resolves the first match, so `LifecyclePanel`'s `aria-labelledby="lifecycle"` started pointing at my wrapper instead of its own heading, corrupting its accessible name to the concatenation of everything in the group. Caught by `getByLabel('Who gave notice')` resolving to 2 elements in `leases.spec.ts`. Fixed by namespacing every anchor id to `section-*`.
+- **Duplicate landmark name (axe `landmark-unique`).** Even after the id fix, wrapping each group in a `<section aria-labelledby>` made it an ARIA region landmark — and the Lifecycle group's region, named "Lifecycle" from its own heading, collided with `LifecyclePanel`'s own nested region (also named "Lifecycle" from its own `<h2>`). Fixed by making the five group wrappers plain `<div>`s (not landmarks) — they only need to be scroll-anchor targets with a visible heading, not a second navigable region competing with the component that already is one.
+
+**What it left behind.** `<details>` collapsing (see above). UX-01's acceptance line is "design review sign-off; no automated acceptance" — this was verified instead by running the full 31-spec-file desktop-chrome AND mobile-chrome sweep for every spec that touches `/leases/[id]`, plus the page's own axe scan, all green; a human design pass on the visual result is still outstanding.
+
+**Gate.**
+- `lint` and `typecheck` clean (same 16 pre-existing warnings); `npm run build` clean.
+- No unit test covers this file (pure server-component layout); verified instead against the real e2e suite:
+  - `desktop-chrome`: 154/154 passed across all 31 spec files that navigate to `/leases/[id]` (reconciled against `npx playwright test --list`'s own count for that file set).
+  - `mobile-chrome`: 154/154 passed, same file set — the sticky header's horizontal-scroll nav row and the reflowed groups hold up at 412px.
+  - Two real regressions were caught and fixed mid-item (see "What it decided") before either sweep went green — both were silent to `lint`/`typecheck`/`build` and visible only in the real browser via axe or a strict-mode locator failure.
+- No schema change — `db:ci` not required for this item.

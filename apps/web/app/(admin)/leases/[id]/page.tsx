@@ -149,6 +149,20 @@ const UTILITY_LABELS: Record<string, string> = {
   pest: 'Pest control',
 }
 
+// UX-01: this page is ~30 panels long with no jump nav, so the sticky bar
+// below groups them into five jump targets. Group membership is a judgment
+// call, not a data model - some panels (notification preferences, renter
+// insurance) could fit more than one bucket.
+const JUMP_LINKS = [
+  { id: 'section-money', label: 'Money' },
+  { id: 'section-people', label: 'People' },
+  { id: 'section-compliance', label: 'Compliance' },
+  { id: 'section-access', label: 'Access' },
+  { id: 'section-lifecycle', label: 'Lifecycle' },
+] as const
+
+const GROUP_HEADING_CLASSES = 'text-muted-foreground text-xs font-semibold tracking-wide uppercase'
+
 export default async function LeaseDetailPage({
   params,
 }: {
@@ -378,22 +392,42 @@ export default async function LeaseDetailPage({
 
   return (
     <div className="flex max-w-2xl flex-col gap-6">
-      <header className="flex flex-col gap-1">
+      <div className="border-border bg-background/95 supports-[backdrop-filter]:bg-background/80 sticky top-0 z-20 -mx-4 flex flex-col gap-2 border-b px-4 pb-3 backdrop-blur md:-mx-6 md:px-6">
         <Link
           href="/leases"
           className="text-muted-foreground hover:text-foreground focus-visible:ring-ring w-fit text-sm underline underline-offset-2 focus-visible:ring-2 focus-visible:outline-none"
         >
           ← All leases
         </Link>
-        <h1 className="text-2xl font-semibold tracking-tight">
-          {lease.property.name} — {lease.unit.name}
-        </h1>
+        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+          <h1 className="text-2xl font-semibold tracking-tight">
+            {lease.property.name} — {lease.unit.name}
+          </h1>
+          {/* UX-01: the one number worth keeping on screen while the other
+              ~30 panels below scroll past is what is owed right now. */}
+          <p className="text-sm font-medium whitespace-nowrap">
+            Balance {formatCents(ledger?.balanceCents ?? 0)}
+          </p>
+        </div>
         <p className="text-muted-foreground text-sm">
           {leaseStatusLabel(lease.status)}
           {lease.noticeGivenAt && ' · under notice'}
           {lease.origin === 'INHERITED' && ' · inherited at acquisition'}
         </p>
-      </header>
+        {/* UX-01: a flat ~30-panel scroll gets five jump targets instead -
+            native anchors, so they work before hydration and need no JS. */}
+        <nav aria-label="Lease sections" className="-mb-px flex gap-4 overflow-x-auto text-sm">
+          {JUMP_LINKS.map(({ id, label }) => (
+            <a
+              key={id}
+              href={`#${id}`}
+              className="text-muted-foreground hover:text-foreground focus-visible:ring-ring shrink-0 rounded-md underline underline-offset-2 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+            >
+              {label}
+            </a>
+          ))}
+        </nav>
+      </div>
 
       {/* R-084. Directly under the header, above the money and every panel:
           somebody who opens this lease to serve a notice or chase a balance
@@ -555,639 +589,669 @@ export default async function LeaseDetailPage({
         </section>
       )}
 
-      <LedgerPanel
-        balanceCents={ledger?.balanceCents ?? 0}
-        lines={(ledger?.lines ?? []).map((line) => ({
-          id: line.id,
-          type: line.type,
-          amountCents: line.amountCents,
-          occurredAt: friendlyDate(line.occurredAt, lease.property.timezone),
-          description: line.description,
-          runningBalanceCents: line.runningBalanceCents,
-          reversed: reversed.has(line.id),
-        }))}
-      />
+      <div id="section-money" className="flex scroll-mt-32 flex-col gap-6">
+        <h2 className={GROUP_HEADING_CLASSES}>
+          Money
+        </h2>
 
-      {/* Gated on `ledger` being readable at all - `leaseStatement` returns
-          null outside the actor's scope, which is the same gate the panel
-          above uses. The export shows nothing the panel does not; what it
-          adds is a file that leaves the building, and that is audited. */}
-      {ledger && (
-        <section className="flex flex-col gap-3">
-          <h2 className="text-lg font-semibold tracking-tight">
-            Statement of account
-          </h2>
-          <ExportStatementForm
-            // Bound HERE, on the server, for the reason the status actions
-            // above spell out - only a 'use server' export has an identity
-            // the client can call back to.
-            action={exportLedgerStatement.bind(null, lease.id)}
-          />
-        </section>
-      )}
-
-      <BillingPanel
-        live={billingIsLive()}
-        providerName={billingProviderName()}
-        leaseId={lease.id}
-        resync={resyncLease}
-        payers={payers.map((payer) => ({
-          id: payer.id,
-          name: payer.tenant
-            ? `${payer.tenant.firstName} ${payer.tenant.lastName}`
-            : (payer.externalPayerName ?? 'Payer'),
-          payerType: payer.payerType,
-          portionCents: payer.portionCents,
-          stripeCustomerId: payer.stripeCustomerId,
-          stripeSubscriptionId: payer.stripeSubscriptionId,
-          collectionMethod: payer.collectionMethod,
-        }))}
-        canSwitchCollection={canWrite}
-        switchCollection={switchCollectionMethod}
-      />
-
-      {/* ABOVE Holds, and that ordering is the item's own argument. A
-          repayment plan is now the ONLY way a payment-plan hold gets placed
-          (R-175), so somebody looking for "how do I stop chasing this tenant
-          while they pay it off" has to meet the plan before the hold list
-          that no longer offers it. */}
-      <PaymentPlanPanel
-        leaseId={lease.id}
-        canManage={canManageHolds}
-        balanceCents={ledger?.balanceCents ?? 0}
-        plans={paymentPlans.map((plan) => ({
-          id: plan.id,
-          status: plan.status,
-          arrearsCents: plan.arrearsCents,
-          // RAW business dates, formatted in the renderer (D-154). A
-          // pre-formatted prop turns `friendlyBusinessDate` from a guardrail
-          // into a crash.
-          startedOn: plan.startedOn,
-          note: plan.note,
-          instalments: plan.instalments,
-          paidCents: plan.progress.paidCents,
-          remainingCents: plan.progress.remainingCents,
-          shortfallCents: plan.progress.shortfallCents,
-          nextDueOn: plan.progress.nextDueOn,
-          missedDueOn: plan.progress.missedDueOn,
-          brokenOn: plan.brokenOn,
-          // A real timestamp, so it reads in the PROPERTY's zone.
-          agreedOn: friendlyDate(plan.createdAt, lease.property.timezone),
-          agreedByName: plan.createdByName,
-          cancelReason: plan.cancelReason,
-          // R-203. Null when nobody has been asked to sign, which is the
-          // ordinary case and reads as one.
-          signature: plan.signature
-            ? { ...plan.signature, signerCount: plan.signature.signerNames.length }
-            : null,
-        }))}
-        agreeAction={agreePaymentPlan}
-        cancelAction={cancelPaymentPlan}
-        sendAction={sendPaymentPlanForSignature}
-      />
-
-      {/* AFTER the plan and BEFORE the holds, for the same reason the plan
-          sits where it does: "who did we actually chase, and what happened to
-          it" is the question somebody asks immediately before deciding
-          whether to place a hold or send another one. */}
-      <ChasePanel rows={chaseHistory} />
-
-      <HoldsPanel
-        leaseId={lease.id}
-        canManage={canManageHolds}
-        holds={holds.map((hold) => ({
-          id: hold.id,
-          type: hold.type,
-          reason: hold.reason,
-          // Real timestamps, so they read in the PROPERTY's zone (R-101c).
-          placedOn: friendlyDate(hold.placedAt, lease.property.timezone),
-          placedByName: hold.placedByName,
-          liftedOn: hold.liftedAt ? friendlyDate(hold.liftedAt, lease.property.timezone) : null,
-          liftedByName: hold.liftedByName,
-          liftReason: hold.liftReason,
-        }))}
-        placeAction={placeLeaseHold}
-        liftAction={liftLeaseHold}
-      />
-
-      {/* R-143. Above the SCRA and risk panels: this one governs whether an
-          ordinary rent reminder can be texted at all, so it belongs with the
-          everyday facts about the tenancy rather than among the statutes that
-          only some tenancies ever touch. */}
-      <ConsentPanel
-        consents={consents.map((row) => ({
-          id: row.id,
-          // The CHECK `TenantConsent_one_subject` guarantees exactly one.
-          partyName: row.tenant
-            ? `${row.tenant.firstName} ${row.tenant.lastName}`
-            : `${row.guarantor?.firstName} ${row.guarantor?.lastName} (guarantor)`,
-          channel: row.channel,
-          basis: row.basis,
-          recordedOn: friendlyTimestamp(row.recordedAt, lease.property.timezone),
-          recordedByName: row.recordedBy?.name ?? null,
-          note: row.note,
-          hasDisclosure: row.disclosureText !== null,
-          revokedOn: row.revokedAt
-            ? friendlyTimestamp(row.revokedAt, lease.property.timezone)
-            : null,
-          revokeReason: row.revokeReason,
-        }))}
-        parties={[
-          ...lease.leaseTenants.map((lt) => ({
-            value: `TENANT:${lt.tenant.id}`,
-            label: `${lt.tenant.firstName} ${lt.tenant.lastName}`,
-          })),
-          // Active only (`getLease` filters them): a released guarantor is no
-          // longer chased, so there is nothing new for them to agree to.
-          ...lease.guarantors.map((g) => ({
-            value: `GUARANTOR:${g.id}`,
-            label: `${g.firstName} ${g.lastName} (guarantor)`,
-          })),
-        ]}
-        canManage={canManageConsent}
-        recordAction={recordConsent}
-        withdrawAction={withdrawConsent}
-      />
-
-      {/* R-164: the counter's mirror of a tenant's own portal preferences -
-          somebody calls in and asks for a change, staff make it here. One
-          section per tenant on the lease, each with its own heading and its
-          own accessible name (the collision this page has hit repeatedly). */}
-      {tenantPreferences.map((row) => (
-        <NotificationPreferencesSection
-          key={row.tenantId}
-          preferences={row.preferences}
-          action={setTenantNotificationPreference.bind(null, row.tenantId)}
-          heading={`Notifications — ${row.name}`}
-          headingId={`notifications-${row.tenantId}`}
-          idPrefix={`${row.tenantId}-`}
-        />
-      ))}
-
-      {/* R-085. Below the holds, because a positive search PLACES one — the
-          two read top to bottom in the order they actually happen. */}
-      <ScraLookupsPanel
-        lookups={scraLookups}
-        canRecord={canWrite}
-        recordAction={recordScraLookup.bind(null, lease.id)}
-        tenants={lease.leaseTenants.map((lt) => ({
-          id: lt.tenant.id,
-          name: `${lt.tenant.firstName} ${lt.tenant.lastName}`,
-        }))}
-      />
-
-      {/* R-086. Above the SCRA panels rather than below: an approved
-          assistance animal changes what may be BILLED, so it belongs near
-          the money and the holds rather than at the bottom of the page. */}
-      <AccommodationsPanel
-        leaseId={lease.id}
-        requests={accommodations}
-        canManage={canWrite}
-        today={businessDate(new Date(), lease.property.timezone)}
-        tenants={lease.leaseTenants.map((lt) => ({
-          id: lt.tenant.id,
-          name: `${lt.tenant.firstName} ${lt.tenant.lastName}`,
-        }))}
-        receiveAction={receiveAccommodationRequest.bind(null, lease.id)}
-        documentationAction={requestDocumentation}
-        decideAction={decideAccommodationRequest}
-      />
-
-      {/* R-087. `eviction.manage`, not `lease.write`: this path ends in
-          entering somebody's home, which is the same class of act as opening
-          an eviction. */}
-      {canManageEvictions && (
-        <OpenAbandonmentCasePanel
-          action={openAbandonmentCase.bind(null, lease.id)}
-          existing={
-            abandonmentCases.find((row) => row.status !== 'CLOSED')
-              ? {
-                  id: abandonmentCases.find((row) => row.status !== 'CLOSED')!.id,
-                  status: abandonmentCases.find((row) => row.status !== 'CLOSED')!.status,
-                }
-              : null
-          }
-        />
-      )}
-
-      {/* R-088. `lease.write`, deliberately NOT `eviction.manage`: recording
-          what was seen is the safe direction and the commonest outcome here
-          is the tenant keeping their home. Only closing a case as ESCALATED
-          asks for the eviction permission, and it asks at that moment. */}
-      {canWrite && (
-        <OpenViolationCasePanel
-          action={openViolationCase.bind(null, lease.id)}
-          cases={violationCases.map((row) => ({
-            ...row,
-            openedOn: friendlyDate(row.openedAt, lease.property.timezone),
+        <LedgerPanel
+          balanceCents={ledger?.balanceCents ?? 0}
+          lines={(ledger?.lines ?? []).map((line) => ({
+            id: line.id,
+            type: line.type,
+            amountCents: line.amountCents,
+            occurredAt: friendlyDate(line.occurredAt, lease.property.timezone),
+            description: line.description,
+            runningBalanceCents: line.runningBalanceCents,
+            reversed: reversed.has(line.id),
           }))}
         />
-      )}
 
-      <ScraTerminationPanel
-        action={recordScraTermination.bind(null, lease.id)}
-        canRecord={canWrite && (lease.status === 'ACTIVE' || lease.status === 'MONTH_TO_MONTH')}
-        recorded={
-          lease.scraTerminationBasis
-            ? {
-                basis:
-                  lease.scraTerminationBasis === 'ENTERED_SERVICE'
-                    ? 'entered_service'
-                    : 'pcs_or_deployment',
-                effectiveOn: lease.noticeEffectiveOn
-                  ? utcToBusinessDate(lease.noticeEffectiveOn)
-                  : null,
-              }
-            : null
-        }
-      />
+        {/* Gated on `ledger` being readable at all - `leaseStatement` returns
+            null outside the actor's scope, which is the same gate the panel
+            above uses. The export shows nothing the panel does not; what it
+            adds is a file that leaves the building, and that is audited. */}
+        {ledger && (
+          <section className="flex flex-col gap-3">
+            <h2 className="text-lg font-semibold tracking-tight">
+              Statement of account
+            </h2>
+            <ExportStatementForm
+              // Bound HERE, on the server, for the reason the status actions
+              // above spell out - only a 'use server' export has an identity
+              // the client can call back to.
+              action={exportLedgerStatement.bind(null, lease.id)}
+            />
+          </section>
+        )}
 
-      <PaymentHoldPanel
-        canSet={holdDecision.allowed}
-        payers={payers
-          .filter((payer) => payer.active)
-          .map((payer) => ({
+        <BillingPanel
+          live={billingIsLive()}
+          providerName={billingProviderName()}
+          leaseId={lease.id}
+          resync={resyncLease}
+          payers={payers.map((payer) => ({
             id: payer.id,
             name: payer.tenant
               ? `${payer.tenant.firstName} ${payer.tenant.lastName}`
               : (payer.externalPayerName ?? 'Payer'),
-            blockOnline: payer.collectionPaused,
-            blockPartial: payer.blockPartialPayments,
-            certifiedFundsOnly: payer.certifiedFundsOnly,
-            reason: payer.paymentHoldReason,
-            // A real timestamp, so it is read in the PROPERTY's zone (R-101c).
-            setAt: payer.paymentHoldSetAt
-              ? friendlyDate(payer.paymentHoldSetAt, lease.property.timezone)
-              : null,
-            setByName: payer.paymentHoldSetBy?.name ?? null,
+            payerType: payer.payerType,
+            portionCents: payer.portionCents,
+            stripeCustomerId: payer.stripeCustomerId,
+            stripeSubscriptionId: payer.stripeSubscriptionId,
+            collectionMethod: payer.collectionMethod,
           }))}
-        setHold={setPaymentHold}
-      />
+          canSwitchCollection={canWrite}
+          switchCollection={switchCollectionMethod}
+        />
 
-      <FeesPanel
-        canWaive={waiveDecision.allowed}
-        mfaRequired={!waiveDecision.allowed && waiveDecision.reason === 'mfa_required'}
-        fees={fees.map((fee) => ({
-          id: fee.id,
-          type: fee.type,
-          amountCents: fee.amountCents,
-          description: fee.description,
-          dueOn: friendlyBusinessDate(utcToBusinessDate(fee.dueOn)),
-          waivedAt: fee.waivedAt ? friendlyDate(fee.waivedAt, lease.property.timezone) : null,
-          waiveReason: fee.waiveReason,
-          waivedByName: fee.waivedBy?.name ?? null,
-        }))}
-        waive={waiveCharge}
-      />
-
-      <RecurringChargesPanel
-        canWrite={canWrite}
-        // `@db.Date` values, sliced off the ISO string rather than converted
-        // through a timezone: they are calendar days and no zone may touch
-        // them (the R-042 off-by-one, written down in CLAUDE.md).
-        defaultStartsOn={lease.startsOn.toISOString().slice(0, 10)}
-        charges={recurring.map((charge) => ({
-          id: charge.id,
-          type: charge.type,
-          amountCents: charge.amountCents,
-          description: charge.description,
-          startsOn: charge.startsOn.toISOString().slice(0, 10),
-          endsOn: charge.endsOn ? charge.endsOn.toISOString().slice(0, 10) : null,
-          active: charge.active,
-          live: charge.stripeSubscriptionItemId != null,
-        }))}
-        add={addRecurringCharge.bind(null, lease.id)}
-        end={endRecurringCharge}
-      />
-
-      {/* NOT gated on balanceCents > 0 (R-044's trap, again - R-166 found
-          this instance). Recording the FULL balance zeroes it out, and a
-          section gated on "there is a balance" would unmount itself, and
-          the confirmation and receipt link inside it, in the very render
-          pass meant to show them. `OfflinePaymentForm` itself decides
-          whether to show the input fields; this section only decides
-          whether the feature exists on this lease at all. */}
-      {canRecordPayment && payers.length > 0 && (
-        <section
-          aria-labelledby="offline-payment"
-          className="flex flex-col gap-3 border-t pt-4"
-        >
-          <h2 id="offline-payment" className="text-lg font-semibold">
-            Record a payment
-          </h2>
-          <p className="text-muted-foreground text-sm">
-            A check, money order or cash handed over in person.
-          </p>
-          <OfflinePaymentForm
-            // Bound server-side: a plain function cannot cross this boundary,
-            // and `npm run build` does not catch the difference.
-            action={recordOfflinePayment.bind(null, payers[0]!.id)}
-            today={businessDate(new Date(), lease.property.timezone)}
-            hasBalance={(ledger?.balanceCents ?? 0) > 0}
-            defaultAmountDollars={((ledger?.balanceCents ?? 0) / 100).toFixed(2)}
-            payerName={
-              payers[0]!.tenant
-                ? `${payers[0]!.tenant.firstName} ${payers[0]!.tenant.lastName}`
-                : (payers[0]!.externalPayerName ?? 'this payer')
-            }
-          />
-        </section>
-      )}
-
-      <PartiesPanel
-        canWrite={canWrite}
-        tenants={lease.leaseTenants.map((lt) => ({
-          id: lt.id,
-          name: `${lt.tenant.firstName} ${lt.tenant.lastName}`,
-          contact:
-            [lt.tenant.email, lt.tenant.phone ? phoneWithNote(lt.tenant.phone) : null]
-              .filter(Boolean)
-              .join(' · ') || 'No contact details on file',
-          isPrimary: lt.isPrimary,
-        }))}
-        guarantors={lease.guarantors.map((g) => ({
-          id: g.id,
-          name: `${g.firstName} ${g.lastName}`,
-          contact:
-            [g.email, g.phone ? phoneWithNote(g.phone) : null].filter(Boolean).join(' · ') ||
-            'No contact details on file',
-          // R-165. Bound here rather than inside the client component - a
-          // server action cannot be constructed on the client, only passed
-          // down already bound.
-          releaseAction: releaseGuarantor.bind(null, lease.id, g.id),
-        }))}
-        leaseIsRunning={leaseIsInForce(lease.status)}
-        today={businessDate(new Date(), lease.property.timezone)}
-        selectableTenants={tenants
-          .filter((t) => !alreadyOn.has(t.id))
-          .map((t) => ({
-            id: t.id,
-            label: `${t.firstName} ${t.lastName}${t.email ? ` (${t.email})` : ''}`,
-          }))}
-        addTenant={addLeaseTenant.bind(null, lease.id)}
-        removeTenant={removeLeaseTenant.bind(null, lease.id)}
-        addGuarantor={addGuarantor.bind(null, lease.id)}
-      />
-
-      {canManageConfidential && (
-        <OpenConfidentialCasePanel
+        {/* ABOVE Holds, and that ordering is the item's own argument. A
+            repayment plan is now the ONLY way a payment-plan hold gets placed
+            (R-175), so somebody looking for "how do I stop chasing this tenant
+            while they pay it off" has to meet the plan before the hold list
+            that no longer offers it. */}
+        <PaymentPlanPanel
           leaseId={lease.id}
-          openCount={confidentialCases.open}
-          totalCount={confidentialCases.total}
-          today={businessDate(new Date(), lease.property.timezone)}
-          tenantOptions={lease.leaseTenants.map((lt) => ({
-            id: lt.tenant.id,
-            label: `${lt.tenant.firstName} ${lt.tenant.lastName}`,
+          canManage={canManageHolds}
+          balanceCents={ledger?.balanceCents ?? 0}
+          plans={paymentPlans.map((plan) => ({
+            id: plan.id,
+            status: plan.status,
+            arrearsCents: plan.arrearsCents,
+            // RAW business dates, formatted in the renderer (D-154). A
+            // pre-formatted prop turns `friendlyBusinessDate` from a guardrail
+            // into a crash.
+            startedOn: plan.startedOn,
+            note: plan.note,
+            instalments: plan.instalments,
+            paidCents: plan.progress.paidCents,
+            remainingCents: plan.progress.remainingCents,
+            shortfallCents: plan.progress.shortfallCents,
+            nextDueOn: plan.progress.nextDueOn,
+            missedDueOn: plan.progress.missedDueOn,
+            brokenOn: plan.brokenOn,
+            // A real timestamp, so it reads in the PROPERTY's zone.
+            agreedOn: friendlyDate(plan.createdAt, lease.property.timezone),
+            agreedByName: plan.createdByName,
+            cancelReason: plan.cancelReason,
+            // R-203. Null when nobody has been asked to sign, which is the
+            // ordinary case and reads as one.
+            signature: plan.signature
+              ? { ...plan.signature, signerCount: plan.signature.signerNames.length }
+              : null,
           }))}
-          action={openConfidentialCase}
+          agreeAction={agreePaymentPlan}
+          cancelAction={cancelPaymentPlan}
+          sendAction={sendPaymentPlanForSignature}
         />
-      )}
 
-      <PartyChangePanel
-        canStart={execDecision.allowed}
-        leaseIsRunning={leaseIsInForce(lease.status)}
-        currentTenants={lease.leaseTenants.map((lt) => ({
-          leaseTenantId: lt.id,
-          name: `${lt.tenant.firstName} ${lt.tenant.lastName}`,
-        }))}
-        screenedApplicants={applicantsForChange.map((a) => ({
-          id: a.id,
-          name: `${a.firstName} ${a.lastName}`,
-          detail: [a.email, `screening: ${a.screeningReport?.decision?.toLowerCase() ?? 'none'}`]
-            .filter(Boolean)
-            .join(' · '),
-        }))}
-        changes={lease.partyChanges.map((change) => ({
-          id: change.id,
-          status: change.status,
-          effectiveOn: utcToBusinessDate(change.effectiveOn),
-          reason: change.reason,
-          // R-165: an OUTGOING party is a departing occupant OR a released
-          // guarantor now - `tenant` is null for the latter (see
-          // LeasePartyChangeParty's own "exactly one" comment).
-          leavingNames: change.parties
-            .filter((p) => p.direction === 'OUTGOING')
-            .map((p) =>
-              p.tenant
-                ? `${p.tenant.firstName} ${p.tenant.lastName}`
-                : `${p.guarantor!.firstName} ${p.guarantor!.lastName} (guarantor)`,
-            ),
-          // Always a tenant - a guarantor party is never INCOMING (the CHECK
-          // on LeasePartyChangeParty enforces it).
-          joiningNames: change.parties
-            .filter((p) => p.direction === 'INCOMING')
-            .map((p) => `${p.tenant!.firstName} ${p.tenant!.lastName}`),
-          voidReason: change.voidReason,
-          draftDocumentId: change.envelope?.draftDocumentId ?? null,
-          executedDocumentId: change.envelope?.executedDocumentId ?? null,
-          signers: (change.envelope?.signers ?? []).map((signer) => ({
-            id: signer.id,
-            name: signer.name,
-            role: signer.role,
-            status: signer.status,
-            signedAt: signer.signedAt
-              ? friendlyDate(signer.signedAt, lease.property.timezone)
-              : null,
-          })),
-        }))}
-        today={businessDate(new Date(), lease.property.timezone)}
-        startAction={startPartyChange.bind(null, lease.id)}
-        voidAction={voidPartyChange.bind(null, lease.id)}
-      />
+        {/* AFTER the plan and BEFORE the holds, for the same reason the plan
+            sits where it does: "who did we actually chase, and what happened to
+            it" is the question somebody asks immediately before deciding
+            whether to place a hold or send another one. */}
+        <ChasePanel rows={chaseHistory} />
 
-      <EsignPanel
-        canExecute={execDecision.allowed}
-        mfaRequired={!execDecision.allowed && execDecision.reason === 'mfa_required'}
-        offerGenerate={lease.status === 'DRAFT'}
-        envelope={
-          currentEnvelope
-            ? {
-                status: currentEnvelope.status,
-                addendumKeys: currentEnvelope.addendumKeys,
-                draftDocumentId: currentEnvelope.draftDocumentId,
-                executedDocumentId: currentEnvelope.executedDocumentId,
-                sentAt: currentEnvelope.sentAt
-                  ? friendlyDate(currentEnvelope.sentAt, lease.property.timezone)
-                  : null,
-                completedAt: currentEnvelope.completedAt
-                  ? friendlyDate(currentEnvelope.completedAt, lease.property.timezone)
-                  : null,
-                voidedAt: currentEnvelope.voidedAt
-                  ? friendlyDate(currentEnvelope.voidedAt, lease.property.timezone)
-                  : null,
-                signers: currentEnvelope.signers.map((signer) => ({
-                  id: signer.id,
-                  order: signer.order,
-                  role: signer.role,
-                  name: signer.name,
-                  status: signer.status,
-                  viewedAt: signer.viewedAt
-                    ? friendlyDate(signer.viewedAt, lease.property.timezone)
-                    : null,
-                  signedAt: signer.signedAt
-                    ? friendlyDate(signer.signedAt, lease.property.timezone)
-                    : null,
-                  signedName: signer.signedName,
-                })),
-              }
-            : null
-        }
-        generateAction={generateAndSendLease.bind(null, lease.id)}
-        voidAction={voidEnvelope.bind(null, lease.id)}
-      />
+        <HoldsPanel
+          leaseId={lease.id}
+          canManage={canManageHolds}
+          holds={holds.map((hold) => ({
+            id: hold.id,
+            type: hold.type,
+            reason: hold.reason,
+            // Real timestamps, so they read in the PROPERTY's zone (R-101c).
+            placedOn: friendlyDate(hold.placedAt, lease.property.timezone),
+            placedByName: hold.placedByName,
+            liftedOn: hold.liftedAt ? friendlyDate(hold.liftedAt, lease.property.timezone) : null,
+            liftedByName: hold.liftedByName,
+            liftReason: hold.liftReason,
+          }))}
+          placeAction={placeLeaseHold}
+          liftAction={liftLeaseHold}
+        />
 
-      <RenewalPanel
-        canOffer={canOfferRenewal}
-        currentRentCents={lease.rentCents}
-        marketRentCents={lease.unit.marketRentCents}
-        defaultStartsOn={renewalDefaultStartsOn}
-        defaultEndsOn={renewalDefaultEndsOn}
-        predecessor={
-          lease.renewedFrom
-            ? { id: lease.renewedFrom.id, status: lease.renewedFrom.status, rentCents: lease.renewedFrom.rentCents }
-            : null
-        }
-        successors={lease.renewalLeases.map((r) => ({
-          id: r.id,
-          status: r.status,
-          startsOn: friendlyBusinessDate(utcToBusinessDate(r.startsOn)),
-          rentCents: r.rentCents,
-        }))}
-        action={offerRenewal.bind(null, lease.id)}
-      />
-
-      <RenterInsurancePanel
-        canWrite={canWrite}
-        current={
-          lease.renterInsurancePolicies[0]
-            ? {
-                id: lease.renterInsurancePolicies[0].id,
-                carrier: lease.renterInsurancePolicies[0].carrier,
-                policyNumber: lease.renterInsurancePolicies[0].policyNumber,
-                liabilityCents: lease.renterInsurancePolicies[0].liabilityCents,
-                expiresOn: lease.renterInsurancePolicies[0].expiresOn
-                  ? utcToBusinessDate(lease.renterInsurancePolicies[0].expiresOn)
-                  : null,
-                documentId: lease.renterInsurancePolicies[0].documentId,
-                documentFileName: lease.renterInsurancePolicies[0].document?.fileName ?? null,
-                createdAt: lease.renterInsurancePolicies[0].createdAt.toISOString(),
-              }
-            : null
-        }
-        action={recordRenterInsurance.bind(null, lease.id)}
-      />
-
-      <AccessCodesPanel
-        leaseId={lease.id}
-        canIssue={canIssue}
-        depositCleared={depositCleared}
-        codes={accessCodes.map((code) => ({
-          id: code.id,
-          type: code.type,
-          label: code.label,
-          issuedOn: code.issuedAt ? friendlyDate(code.issuedAt, lease.property.timezone) : null,
-        }))}
-      />
-
-      {/* R-094b. Below the static access codes on purpose: an operator
-          reading down the page meets "here is the code we hand over" before
-          "here is the code the door actually knows", which is the order the
-          two facts have to be understood in. */}
-      <DoorCodesPanel
-        hasSmartLock={doorCodes.hasSmartLock}
-        canIssue={canIssue}
-        canRevoke={canWrite}
-        rows={lease.leaseTenants.map((leaseTenant) => {
-          const tenantId = leaseTenant.tenant.id
-          const mine = doorCodes.codes.filter((code) => code.tenantId === tenantId)
-          const live = mine.find((code) => code.revokedAt == null) ?? null
-          const stranded = mine.find((code) => code.revokeReachedDevice === false) ?? null
-          return {
-            tenantId,
-            name: `${leaseTenant.tenant.firstName} ${leaseTenant.tenant.lastName}`,
-            live: live
-              ? {
-                  issuedOn: friendlyDate(live.issuedAt, lease.property.timezone),
-                  issuedBy: live.issuedBy.name,
-                }
-              : null,
-            strandedAt:
-              stranded?.revokedAt != null
-                ? friendlyDate(stranded.revokedAt, lease.property.timezone)
+        <PaymentHoldPanel
+          canSet={holdDecision.allowed}
+          payers={payers
+            .filter((payer) => payer.active)
+            .map((payer) => ({
+              id: payer.id,
+              name: payer.tenant
+                ? `${payer.tenant.firstName} ${payer.tenant.lastName}`
+                : (payer.externalPayerName ?? 'Payer'),
+              blockOnline: payer.collectionPaused,
+              blockPartial: payer.blockPartialPayments,
+              certifiedFundsOnly: payer.certifiedFundsOnly,
+              reason: payer.paymentHoldReason,
+              // A real timestamp, so it is read in the PROPERTY's zone (R-101c).
+              setAt: payer.paymentHoldSetAt
+                ? friendlyDate(payer.paymentHoldSetAt, lease.property.timezone)
                 : null,
-            issueAction: issueTenantLockCode.bind(null, lease.id, tenantId),
-            revokeAction: revokeTenantLockCode.bind(null, lease.id, tenantId),
-          }
-        })}
-      />
-
-      {canWrite && (
-        <LifecyclePanel
-          offers={offers}
-          underNotice={lease.noticeGivenAt != null}
-          noticeSummary={
-            lease.noticeGivenAt
-              ? `Notice was given by ${
-                  lease.noticeGivenBy === 'TENANT' ? 'the tenant' : 'us'
-                } on ${friendlyDate(lease.noticeGivenAt, lease.property.timezone)}. The tenancy is still running until ${
-                  lease.noticeEffectiveOn
-                    ? `it ends on ${friendlyDate(lease.noticeEffectiveOn, lease.property.timezone)}`
-                    : 'it ends'
-                }.`
-              : null
-          }
-          recordNotice={recordLeaseNotice.bind(null, lease.id)}
+              setByName: payer.paymentHoldSetBy?.name ?? null,
+            }))}
+          setHold={setPaymentHold}
         />
-      )}
 
-      {canWrite && (
-        <section aria-labelledby="terms" className="flex flex-col gap-4 border-t pt-4">
-          <h2 id="terms" className="text-lg font-semibold">
-            Terms
-          </h2>
-          {isRunning && (
-            <RentChangePanel
-              cancel={cancelRentChange.bind(null, lease.id)}
-              scheduled={
-                pendingRaise
-                  ? {
-                      summary: `Rent goes up to ${formatCents(pendingRaise.toCents)}/mo on ${friendlyBusinessDate(
-                        utcToBusinessDate(pendingRaise.effectiveOn),
-                      )}. Until then the tenant is billed ${formatCents(lease.rentCents)}.`,
-                      noticeLine: pendingRaise.notice.servedAt
-                        ? `The rent increase notice was served on ${friendlyDate(pendingRaise.notice.servedAt, lease.property.timezone)}.`
-                        : 'The rent increase notice has not been served yet, and an increase whose notice is never served is not applied.',
-                      noticeHref: `/notices/${pendingRaise.noticeId}`,
-                    }
-                  : null
+        <FeesPanel
+          canWaive={waiveDecision.allowed}
+          mfaRequired={!waiveDecision.allowed && waiveDecision.reason === 'mfa_required'}
+          fees={fees.map((fee) => ({
+            id: fee.id,
+            type: fee.type,
+            amountCents: fee.amountCents,
+            description: fee.description,
+            dueOn: friendlyBusinessDate(utcToBusinessDate(fee.dueOn)),
+            waivedAt: fee.waivedAt ? friendlyDate(fee.waivedAt, lease.property.timezone) : null,
+            waiveReason: fee.waiveReason,
+            waivedByName: fee.waivedBy?.name ?? null,
+          }))}
+          waive={waiveCharge}
+        />
+
+        <RecurringChargesPanel
+          canWrite={canWrite}
+          // `@db.Date` values, sliced off the ISO string rather than converted
+          // through a timezone: they are calendar days and no zone may touch
+          // them (the R-042 off-by-one, written down in CLAUDE.md).
+          defaultStartsOn={lease.startsOn.toISOString().slice(0, 10)}
+          charges={recurring.map((charge) => ({
+            id: charge.id,
+            type: charge.type,
+            amountCents: charge.amountCents,
+            description: charge.description,
+            startsOn: charge.startsOn.toISOString().slice(0, 10),
+            endsOn: charge.endsOn ? charge.endsOn.toISOString().slice(0, 10) : null,
+            active: charge.active,
+            live: charge.stripeSubscriptionItemId != null,
+          }))}
+          add={addRecurringCharge.bind(null, lease.id)}
+          end={endRecurringCharge}
+        />
+
+        {/* NOT gated on balanceCents > 0 (R-044's trap, again - R-166 found
+            this instance). Recording the FULL balance zeroes it out, and a
+            section gated on "there is a balance" would unmount itself, and
+            the confirmation and receipt link inside it, in the very render
+            pass meant to show them. `OfflinePaymentForm` itself decides
+            whether to show the input fields; this section only decides
+            whether the feature exists on this lease at all. */}
+        {canRecordPayment && payers.length > 0 && (
+          <section
+            aria-labelledby="offline-payment"
+            className="flex flex-col gap-3 border-t pt-4"
+          >
+            <h2 id="offline-payment" className="text-lg font-semibold">
+              Record a payment
+            </h2>
+            <p className="text-muted-foreground text-sm">
+              A check, money order or cash handed over in person.
+            </p>
+            <OfflinePaymentForm
+              // Bound server-side: a plain function cannot cross this boundary,
+              // and `npm run build` does not catch the difference.
+              action={recordOfflinePayment.bind(null, payers[0]!.id)}
+              today={businessDate(new Date(), lease.property.timezone)}
+              hasBalance={(ledger?.balanceCents ?? 0) > 0}
+              defaultAmountDollars={((ledger?.balanceCents ?? 0) / 100).toFixed(2)}
+              payerName={
+                payers[0]!.tenant
+                  ? `${payers[0]!.tenant.firstName} ${payers[0]!.tenant.lastName}`
+                  : (payers[0]!.externalPayerName ?? 'this payer')
               }
             />
-          )}
-          <LeaseForm
-            action={updateLeaseTerms.bind(null, lease.id)}
-            schedulesRaise={isRunning}
-            submitLabel="Save terms"
-            defaults={{
-              startsOn: lease.startsOn.toISOString().slice(0, 10),
-              endsOn: lease.endsOn?.toISOString().slice(0, 10),
-              rentDollars: String(lease.rentCents / 100),
-              depositDollars: String(lease.depositCents / 100),
-              depositArrangement: lease.depositArrangement,
-              requireFullBalance: lease.requireFullBalance,
-              // Undefined, not "0", when the lease is silent - re-rendering a
-              // null as 0 would turn "no fee" into "expressly charges
-              // nothing" on the next save (R-039a).
-              nsfFeeDollars:
-                lease.nsfFeeCents != null ? String(lease.nsfFeeCents / 100) : undefined,
-              rentDueDay: String(lease.rentDueDay),
-              isMonthToMonth: lease.isMonthToMonth,
-              mtmRentDollars:
-                lease.mtmRentCents != null ? String(lease.mtmRentCents / 100) : undefined,
-              utilities,
-            }}
+          </section>
+        )}
+      </div>
+
+      <div id="section-people" className="flex scroll-mt-32 flex-col gap-6">
+        <h2 className={GROUP_HEADING_CLASSES}>
+          People
+        </h2>
+
+        <PartiesPanel
+          canWrite={canWrite}
+          tenants={lease.leaseTenants.map((lt) => ({
+            id: lt.id,
+            name: `${lt.tenant.firstName} ${lt.tenant.lastName}`,
+            contact:
+              [lt.tenant.email, lt.tenant.phone ? phoneWithNote(lt.tenant.phone) : null]
+                .filter(Boolean)
+                .join(' · ') || 'No contact details on file',
+            isPrimary: lt.isPrimary,
+          }))}
+          guarantors={lease.guarantors.map((g) => ({
+            id: g.id,
+            name: `${g.firstName} ${g.lastName}`,
+            contact:
+              [g.email, g.phone ? phoneWithNote(g.phone) : null].filter(Boolean).join(' · ') ||
+              'No contact details on file',
+            // R-165. Bound here rather than inside the client component - a
+            // server action cannot be constructed on the client, only passed
+            // down already bound.
+            releaseAction: releaseGuarantor.bind(null, lease.id, g.id),
+          }))}
+          leaseIsRunning={leaseIsInForce(lease.status)}
+          today={businessDate(new Date(), lease.property.timezone)}
+          selectableTenants={tenants
+            .filter((t) => !alreadyOn.has(t.id))
+            .map((t) => ({
+              id: t.id,
+              label: `${t.firstName} ${t.lastName}${t.email ? ` (${t.email})` : ''}`,
+            }))}
+          addTenant={addLeaseTenant.bind(null, lease.id)}
+          removeTenant={removeLeaseTenant.bind(null, lease.id)}
+          addGuarantor={addGuarantor.bind(null, lease.id)}
+        />
+
+        <PartyChangePanel
+          canStart={execDecision.allowed}
+          leaseIsRunning={leaseIsInForce(lease.status)}
+          currentTenants={lease.leaseTenants.map((lt) => ({
+            leaseTenantId: lt.id,
+            name: `${lt.tenant.firstName} ${lt.tenant.lastName}`,
+          }))}
+          screenedApplicants={applicantsForChange.map((a) => ({
+            id: a.id,
+            name: `${a.firstName} ${a.lastName}`,
+            detail: [a.email, `screening: ${a.screeningReport?.decision?.toLowerCase() ?? 'none'}`]
+              .filter(Boolean)
+              .join(' · '),
+          }))}
+          changes={lease.partyChanges.map((change) => ({
+            id: change.id,
+            status: change.status,
+            effectiveOn: utcToBusinessDate(change.effectiveOn),
+            reason: change.reason,
+            // R-165: an OUTGOING party is a departing occupant OR a released
+            // guarantor now - `tenant` is null for the latter (see
+            // LeasePartyChangeParty's own "exactly one" comment).
+            leavingNames: change.parties
+              .filter((p) => p.direction === 'OUTGOING')
+              .map((p) =>
+                p.tenant
+                  ? `${p.tenant.firstName} ${p.tenant.lastName}`
+                  : `${p.guarantor!.firstName} ${p.guarantor!.lastName} (guarantor)`,
+              ),
+            // Always a tenant - a guarantor party is never INCOMING (the CHECK
+            // on LeasePartyChangeParty enforces it).
+            joiningNames: change.parties
+              .filter((p) => p.direction === 'INCOMING')
+              .map((p) => `${p.tenant!.firstName} ${p.tenant!.lastName}`),
+            voidReason: change.voidReason,
+            draftDocumentId: change.envelope?.draftDocumentId ?? null,
+            executedDocumentId: change.envelope?.executedDocumentId ?? null,
+            signers: (change.envelope?.signers ?? []).map((signer) => ({
+              id: signer.id,
+              name: signer.name,
+              role: signer.role,
+              status: signer.status,
+              signedAt: signer.signedAt
+                ? friendlyDate(signer.signedAt, lease.property.timezone)
+                : null,
+            })),
+          }))}
+          today={businessDate(new Date(), lease.property.timezone)}
+          startAction={startPartyChange.bind(null, lease.id)}
+          voidAction={voidPartyChange.bind(null, lease.id)}
+        />
+      </div>
+
+      <div id="section-compliance" className="flex scroll-mt-32 flex-col gap-6">
+        <h2 className={GROUP_HEADING_CLASSES}>
+          Compliance
+        </h2>
+
+        {/* R-143. Above the SCRA and risk panels: this one governs whether an
+            ordinary rent reminder can be texted at all, so it belongs with the
+            everyday facts about the tenancy rather than among the statutes that
+            only some tenancies ever touch. */}
+        <ConsentPanel
+          consents={consents.map((row) => ({
+            id: row.id,
+            // The CHECK `TenantConsent_one_subject` guarantees exactly one.
+            partyName: row.tenant
+              ? `${row.tenant.firstName} ${row.tenant.lastName}`
+              : `${row.guarantor?.firstName} ${row.guarantor?.lastName} (guarantor)`,
+            channel: row.channel,
+            basis: row.basis,
+            recordedOn: friendlyTimestamp(row.recordedAt, lease.property.timezone),
+            recordedByName: row.recordedBy?.name ?? null,
+            note: row.note,
+            hasDisclosure: row.disclosureText !== null,
+            revokedOn: row.revokedAt
+              ? friendlyTimestamp(row.revokedAt, lease.property.timezone)
+              : null,
+            revokeReason: row.revokeReason,
+          }))}
+          parties={[
+            ...lease.leaseTenants.map((lt) => ({
+              value: `TENANT:${lt.tenant.id}`,
+              label: `${lt.tenant.firstName} ${lt.tenant.lastName}`,
+            })),
+            // Active only (`getLease` filters them): a released guarantor is no
+            // longer chased, so there is nothing new for them to agree to.
+            ...lease.guarantors.map((g) => ({
+              value: `GUARANTOR:${g.id}`,
+              label: `${g.firstName} ${g.lastName} (guarantor)`,
+            })),
+          ]}
+          canManage={canManageConsent}
+          recordAction={recordConsent}
+          withdrawAction={withdrawConsent}
+        />
+
+        {/* R-164: the counter's mirror of a tenant's own portal preferences -
+            somebody calls in and asks for a change, staff make it here. One
+            section per tenant on the lease, each with its own heading and its
+            own accessible name (the collision this page has hit repeatedly). */}
+        {tenantPreferences.map((row) => (
+          <NotificationPreferencesSection
+            key={row.tenantId}
+            preferences={row.preferences}
+            action={setTenantNotificationPreference.bind(null, row.tenantId)}
+            heading={`Notifications — ${row.name}`}
+            headingId={`notifications-${row.tenantId}`}
+            idPrefix={`${row.tenantId}-`}
           />
-        </section>
-      )}
+        ))}
+
+        {/* R-085. Below the holds, because a positive search PLACES one — the
+            two read top to bottom in the order they actually happen. */}
+        <ScraLookupsPanel
+          lookups={scraLookups}
+          canRecord={canWrite}
+          recordAction={recordScraLookup.bind(null, lease.id)}
+          tenants={lease.leaseTenants.map((lt) => ({
+            id: lt.tenant.id,
+            name: `${lt.tenant.firstName} ${lt.tenant.lastName}`,
+          }))}
+        />
+
+        {/* R-086. Above the SCRA panels rather than below: an approved
+            assistance animal changes what may be BILLED, so it belongs near
+            the money and the holds rather than at the bottom of the page. */}
+        <AccommodationsPanel
+          leaseId={lease.id}
+          requests={accommodations}
+          canManage={canWrite}
+          today={businessDate(new Date(), lease.property.timezone)}
+          tenants={lease.leaseTenants.map((lt) => ({
+            id: lt.tenant.id,
+            name: `${lt.tenant.firstName} ${lt.tenant.lastName}`,
+          }))}
+          receiveAction={receiveAccommodationRequest.bind(null, lease.id)}
+          documentationAction={requestDocumentation}
+          decideAction={decideAccommodationRequest}
+        />
+
+        {/* R-087. `eviction.manage`, not `lease.write`: this path ends in
+            entering somebody's home, which is the same class of act as opening
+            an eviction. */}
+        {canManageEvictions && (
+          <OpenAbandonmentCasePanel
+            action={openAbandonmentCase.bind(null, lease.id)}
+            existing={
+              abandonmentCases.find((row) => row.status !== 'CLOSED')
+                ? {
+                    id: abandonmentCases.find((row) => row.status !== 'CLOSED')!.id,
+                    status: abandonmentCases.find((row) => row.status !== 'CLOSED')!.status,
+                  }
+                : null
+            }
+          />
+        )}
+
+        {/* R-088. `lease.write`, deliberately NOT `eviction.manage`: recording
+            what was seen is the safe direction and the commonest outcome here
+            is the tenant keeping their home. Only closing a case as ESCALATED
+            asks for the eviction permission, and it asks at that moment. */}
+        {canWrite && (
+          <OpenViolationCasePanel
+            action={openViolationCase.bind(null, lease.id)}
+            cases={violationCases.map((row) => ({
+              ...row,
+              openedOn: friendlyDate(row.openedAt, lease.property.timezone),
+            }))}
+          />
+        )}
+
+        <ScraTerminationPanel
+          action={recordScraTermination.bind(null, lease.id)}
+          canRecord={canWrite && (lease.status === 'ACTIVE' || lease.status === 'MONTH_TO_MONTH')}
+          recorded={
+            lease.scraTerminationBasis
+              ? {
+                  basis:
+                    lease.scraTerminationBasis === 'ENTERED_SERVICE'
+                      ? 'entered_service'
+                      : 'pcs_or_deployment',
+                  effectiveOn: lease.noticeEffectiveOn
+                    ? utcToBusinessDate(lease.noticeEffectiveOn)
+                    : null,
+                }
+              : null
+          }
+        />
+
+        {canManageConfidential && (
+          <OpenConfidentialCasePanel
+            leaseId={lease.id}
+            openCount={confidentialCases.open}
+            totalCount={confidentialCases.total}
+            today={businessDate(new Date(), lease.property.timezone)}
+            tenantOptions={lease.leaseTenants.map((lt) => ({
+              id: lt.tenant.id,
+              label: `${lt.tenant.firstName} ${lt.tenant.lastName}`,
+            }))}
+            action={openConfidentialCase}
+          />
+        )}
+
+        <RenterInsurancePanel
+          canWrite={canWrite}
+          current={
+            lease.renterInsurancePolicies[0]
+              ? {
+                  id: lease.renterInsurancePolicies[0].id,
+                  carrier: lease.renterInsurancePolicies[0].carrier,
+                  policyNumber: lease.renterInsurancePolicies[0].policyNumber,
+                  liabilityCents: lease.renterInsurancePolicies[0].liabilityCents,
+                  expiresOn: lease.renterInsurancePolicies[0].expiresOn
+                    ? utcToBusinessDate(lease.renterInsurancePolicies[0].expiresOn)
+                    : null,
+                  documentId: lease.renterInsurancePolicies[0].documentId,
+                  documentFileName: lease.renterInsurancePolicies[0].document?.fileName ?? null,
+                  createdAt: lease.renterInsurancePolicies[0].createdAt.toISOString(),
+                }
+              : null
+          }
+          action={recordRenterInsurance.bind(null, lease.id)}
+        />
+      </div>
+
+      <div id="section-access" className="flex scroll-mt-32 flex-col gap-6">
+        <h2 className={GROUP_HEADING_CLASSES}>
+          Access
+        </h2>
+
+        <AccessCodesPanel
+          leaseId={lease.id}
+          canIssue={canIssue}
+          depositCleared={depositCleared}
+          codes={accessCodes.map((code) => ({
+            id: code.id,
+            type: code.type,
+            label: code.label,
+            issuedOn: code.issuedAt ? friendlyDate(code.issuedAt, lease.property.timezone) : null,
+          }))}
+        />
+
+        {/* R-094b. Below the static access codes on purpose: an operator
+            reading down the page meets "here is the code we hand over" before
+            "here is the code the door actually knows", which is the order the
+            two facts have to be understood in. */}
+        <DoorCodesPanel
+          hasSmartLock={doorCodes.hasSmartLock}
+          canIssue={canIssue}
+          canRevoke={canWrite}
+          rows={lease.leaseTenants.map((leaseTenant) => {
+            const tenantId = leaseTenant.tenant.id
+            const mine = doorCodes.codes.filter((code) => code.tenantId === tenantId)
+            const live = mine.find((code) => code.revokedAt == null) ?? null
+            const stranded = mine.find((code) => code.revokeReachedDevice === false) ?? null
+            return {
+              tenantId,
+              name: `${leaseTenant.tenant.firstName} ${leaseTenant.tenant.lastName}`,
+              live: live
+                ? {
+                    issuedOn: friendlyDate(live.issuedAt, lease.property.timezone),
+                    issuedBy: live.issuedBy.name,
+                  }
+                : null,
+              strandedAt:
+                stranded?.revokedAt != null
+                  ? friendlyDate(stranded.revokedAt, lease.property.timezone)
+                  : null,
+              issueAction: issueTenantLockCode.bind(null, lease.id, tenantId),
+              revokeAction: revokeTenantLockCode.bind(null, lease.id, tenantId),
+            }
+          })}
+        />
+      </div>
+
+      <div id="section-lifecycle" className="flex scroll-mt-32 flex-col gap-6">
+        <h2 className={GROUP_HEADING_CLASSES}>
+          Lifecycle
+        </h2>
+
+        <EsignPanel
+          canExecute={execDecision.allowed}
+          mfaRequired={!execDecision.allowed && execDecision.reason === 'mfa_required'}
+          offerGenerate={lease.status === 'DRAFT'}
+          envelope={
+            currentEnvelope
+              ? {
+                  status: currentEnvelope.status,
+                  addendumKeys: currentEnvelope.addendumKeys,
+                  draftDocumentId: currentEnvelope.draftDocumentId,
+                  executedDocumentId: currentEnvelope.executedDocumentId,
+                  sentAt: currentEnvelope.sentAt
+                    ? friendlyDate(currentEnvelope.sentAt, lease.property.timezone)
+                    : null,
+                  completedAt: currentEnvelope.completedAt
+                    ? friendlyDate(currentEnvelope.completedAt, lease.property.timezone)
+                    : null,
+                  voidedAt: currentEnvelope.voidedAt
+                    ? friendlyDate(currentEnvelope.voidedAt, lease.property.timezone)
+                    : null,
+                  signers: currentEnvelope.signers.map((signer) => ({
+                    id: signer.id,
+                    order: signer.order,
+                    role: signer.role,
+                    name: signer.name,
+                    status: signer.status,
+                    viewedAt: signer.viewedAt
+                      ? friendlyDate(signer.viewedAt, lease.property.timezone)
+                      : null,
+                    signedAt: signer.signedAt
+                      ? friendlyDate(signer.signedAt, lease.property.timezone)
+                      : null,
+                    signedName: signer.signedName,
+                  })),
+                }
+              : null
+          }
+          generateAction={generateAndSendLease.bind(null, lease.id)}
+          voidAction={voidEnvelope.bind(null, lease.id)}
+        />
+
+        <RenewalPanel
+          canOffer={canOfferRenewal}
+          currentRentCents={lease.rentCents}
+          marketRentCents={lease.unit.marketRentCents}
+          defaultStartsOn={renewalDefaultStartsOn}
+          defaultEndsOn={renewalDefaultEndsOn}
+          predecessor={
+            lease.renewedFrom
+              ? { id: lease.renewedFrom.id, status: lease.renewedFrom.status, rentCents: lease.renewedFrom.rentCents }
+              : null
+          }
+          successors={lease.renewalLeases.map((r) => ({
+            id: r.id,
+            status: r.status,
+            startsOn: friendlyBusinessDate(utcToBusinessDate(r.startsOn)),
+            rentCents: r.rentCents,
+          }))}
+          action={offerRenewal.bind(null, lease.id)}
+        />
+
+        {canWrite && (
+          <LifecyclePanel
+            offers={offers}
+            underNotice={lease.noticeGivenAt != null}
+            noticeSummary={
+              lease.noticeGivenAt
+                ? `Notice was given by ${
+                    lease.noticeGivenBy === 'TENANT' ? 'the tenant' : 'us'
+                  } on ${friendlyDate(lease.noticeGivenAt, lease.property.timezone)}. The tenancy is still running until ${
+                    lease.noticeEffectiveOn
+                      ? `it ends on ${friendlyDate(lease.noticeEffectiveOn, lease.property.timezone)}`
+                      : 'it ends'
+                  }.`
+                : null
+            }
+            recordNotice={recordLeaseNotice.bind(null, lease.id)}
+          />
+        )}
+
+        {canWrite && (
+          <section aria-labelledby="terms" className="flex flex-col gap-4 border-t pt-4">
+            <h2 id="terms" className="text-lg font-semibold">
+              Terms
+            </h2>
+            {isRunning && (
+              <RentChangePanel
+                cancel={cancelRentChange.bind(null, lease.id)}
+                scheduled={
+                  pendingRaise
+                    ? {
+                        summary: `Rent goes up to ${formatCents(pendingRaise.toCents)}/mo on ${friendlyBusinessDate(
+                          utcToBusinessDate(pendingRaise.effectiveOn),
+                        )}. Until then the tenant is billed ${formatCents(lease.rentCents)}.`,
+                        noticeLine: pendingRaise.notice.servedAt
+                          ? `The rent increase notice was served on ${friendlyDate(pendingRaise.notice.servedAt, lease.property.timezone)}.`
+                          : 'The rent increase notice has not been served yet, and an increase whose notice is never served is not applied.',
+                        noticeHref: `/notices/${pendingRaise.noticeId}`,
+                      }
+                    : null
+                }
+              />
+            )}
+            <LeaseForm
+              action={updateLeaseTerms.bind(null, lease.id)}
+              schedulesRaise={isRunning}
+              submitLabel="Save terms"
+              defaults={{
+                startsOn: lease.startsOn.toISOString().slice(0, 10),
+                endsOn: lease.endsOn?.toISOString().slice(0, 10),
+                rentDollars: String(lease.rentCents / 100),
+                depositDollars: String(lease.depositCents / 100),
+                depositArrangement: lease.depositArrangement,
+                requireFullBalance: lease.requireFullBalance,
+                // Undefined, not "0", when the lease is silent - re-rendering a
+                // null as 0 would turn "no fee" into "expressly charges
+                // nothing" on the next save (R-039a).
+                nsfFeeDollars:
+                  lease.nsfFeeCents != null ? String(lease.nsfFeeCents / 100) : undefined,
+                rentDueDay: String(lease.rentDueDay),
+                isMonthToMonth: lease.isMonthToMonth,
+                mtmRentDollars:
+                  lease.mtmRentCents != null ? String(lease.mtmRentCents / 100) : undefined,
+                utilities,
+              }}
+            />
+          </section>
+        )}
+      </div>
     </div>
   )
 }
