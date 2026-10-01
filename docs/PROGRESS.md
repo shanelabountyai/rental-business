@@ -13908,7 +13908,7 @@ New `effectiveMarketRentCents` ([vacancy.ts](packages/core/units/vacancy.ts)) fa
 
 ## MONEY-09(b): refuse a portal prepayment at the point a payment starts
 
-**Commit:** (recorded in a follow-up commit)  ·  **Date:** 2026-10-01
+**Commit:** `2b65b9b`  ·  **Date:** 2026-10-01
 
 **What it built.** Shane decided prepayments are not allowed (asked via a clickable question, not re-litigated), so the fix is a refusal at the write path, not a new money-movement primitive. `validatePaymentAmount` (`packages/core/payments/collection.ts`) gained a `more_than_invoiced` refusal — the same check the staff-counter path already has in `offlinePaymentDecision` (`more_than_invoiced` there too), just missing on the portal path. `startPayment`'s `chargeResolvedPayer` (`apps/web/lib/payments/actions.ts`) now fetches `getBillingProvider().getOpenInvoices({ stripeCustomerId })` alongside its other recomputed facts (entries, in-flight, jurisdiction rule — D-12's "every number recomputed here") and sums `amountRemainingCents` into a new `openInvoiceCents` fact. The root cause: `validatePaymentAmount` was only ever checking the attempted amount against the LEASE-WIDE ledger balance, which can legitimately run ahead of what Stripe has invoiced this one payer's customer for — a charge pushed via `addInvoiceItem` but not yet invoiced, or on a voucher lease (D-13) the OTHER payer's portion of the same shared lease balance. `applyPortalPayment` (`lib/payments/out-of-band.ts`) was already silently capping that gap (`Math.min(principalCents, open)`, its own `ponytail:` marker) — this item refuses the amount before a payment is even started, instead of accepting money the portal flow could not fully place.
 
