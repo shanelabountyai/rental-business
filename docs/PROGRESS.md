@@ -13999,3 +13999,19 @@ Two real bugs found and fixed along the way, both from axe/e2e, not from reading
 - `npm run build` clean — the real check here, since this touches ~15 Server Components and several Client Components composing template-literal classNames; a boundary or export mistake would 500 or fail the build, not typecheck.
 - No unit test asserts on these class strings (grepped for `bg-primary`/`PRIMARY_BUTTON_CLASSES`/`SUBMIT_BUTTON_CLASSES` across `*.test.ts*` — none). Verified instead by booting a production server (`npm run start`) and curling `/login`: the rendered `<button>` carries the fully composed class string (`SUBMIT_BUTTON_CLASSES` tokens + `SubmitButton`'s own size classes), confirming the template-literal composition isn't silently producing `undefined` or a malformed class list anywhere the build itself wouldn't catch.
 - No schema change — `db:ci` not required for this item.
+
+## A11Y-04: focus the heading when autopay confirms, instead of an inert live region
+
+**Commit:** TBD  ·  **Date:** 2026-10-01
+
+**What it built.** `AutopayPanel` (`components/payments/autopay-panel.tsx`) swaps its whole "off" branch (the Stripe Elements confirm form) for its "on" branch in one render pass when setup succeeds, the same whole-section-replacement shape as the three panels `useFocusWhen` was already written for (MFA enrolment, the vendor bid/job panels, the portal verify-link panel) — so the existing `role="status"` confirmation text mounts already populated and announces nothing, and the Save button that had focus is gone in the same pass, dropping focus to `<body>`. Added `useFocusWhen<HTMLHeadingElement>(saved)` on the panel's `h2`, `ref`+`tabIndex={-1}`, matching `bid-form.tsx`/`verify-panel.tsx`'s exact pattern. Driven by `saved` (the client action-state flag), not `alreadyOn` (a server prop also true on an ordinary page load where autopay was already on) — `useFocusWhen`'s own header comment names this distinction explicitly and warns against the server-prop version.
+
+**What it decided.** Left the pre-existing conditional `role="status"` on the confirmation paragraph untouched — redundant now that focus-based announcement does the real work, but harmless, and removing it was outside what the backlog item asked for.
+
+**What it left behind.** Nothing new. This component remains outside the e2e suite by original design (D-15: Stripe Elements is a cross-origin iframe Playwright cannot drive without brittle same-origin assumptions) and this fix doesn't change that — acceptance is a manual screen-reader check, not yet performed by a person.
+
+**Gate.**
+- `lint` clean (0 errors; same 16 pre-existing warnings, none in this file) — caught one real mistake mid-edit: placing the `useFocusWhen` call after the panel's existing `if (!publishableKey) return null` tripped `react-hooks/rules-of-hooks` immediately, fixed by moving the hook above the early return.
+- `typecheck` clean.
+- `npm run build` clean — the relevant check for a Client Component hook/ref change, since typecheck doesn't see the Server/Client boundary.
+- No schema change — `db:ci` not required for this item.

@@ -1,6 +1,6 @@
 'use client'
 
-import { LiveRegion } from '@/components/auth-form.tsx'
+import { LiveRegion, useFocusWhen } from '@/components/auth-form.tsx'
 import { Elements, PaymentElement, useElements, useStripe } from '@stripe/react-stripe-js'
 import { type Stripe, loadStripe } from '@stripe/stripe-js'
 import { useActionState, useState } from 'react'
@@ -202,6 +202,16 @@ export function AutopayPanel({
   const [turnOffError, setTurnOffError] = useState<string | null>(null)
   const [turnOffNotice, setTurnOffNotice] = useState<string | null>(null)
 
+  // Driven by `saved` (client action state), never `alreadyOn` (a server
+  // prop) - the panel also renders its "on" state on an ordinary page load,
+  // and focusing then would yank focus from someone who just navigated here.
+  // The Save button unmounts in the same pass this confirmation mounts, so a
+  // `role="status"` on the confirmation text announces nothing (see
+  // `useFocusWhen`'s own comment) - focusing the heading announces the whole
+  // new section instead. Called before the early return below: hooks cannot
+  // follow a conditional return.
+  const confirmedHeading = useFocusWhen<HTMLHeadingElement>(saved)
+
   // Nothing to offer without a publishable key. Rendering a button that
   // cannot work is worse than rendering nothing - the same call the vendor
   // help line makes when its number is unset (R-098).
@@ -211,7 +221,7 @@ export function AutopayPanel({
 
   return (
     <section aria-labelledby="autopay" className="flex flex-col gap-3 rounded-lg border p-4">
-      <h2 id="autopay" className="text-base font-medium">
+      <h2 id="autopay" ref={confirmedHeading} tabIndex={-1} className="text-base font-medium">
         {isOn ? 'Automatic payments are on' : 'Turn on automatic payments'}
       </h2>
 
