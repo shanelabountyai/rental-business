@@ -1,5 +1,12 @@
 # Next session
 
+## Done 2026-10-02: A11Y-11 (`64b4485`). Garbled maintenance wizard legend.
+
+- `maintenance-wizard.tsx:635` legend "What's the problem with?" → "What's the problem?". Pure copy edit, no component shape change.
+- Gate: lint/typecheck/build clean. No unit/e2e coverage (copy-only, no DOM/accessible-name signal to regress-check, same as prior pure-copy A11Y items).
+- Pushed (`64b4485`, SHA backfill `dc8bdaa`).
+- **A11Y backlog cluster is now done (A11Y-01 through A11Y-11).** Next in backlog order: UX-03 (nav grouping/breadcrumbs) through UX-10 — these are MED/LOW design items with "Design review sign-off; no automated acceptance" as their gate, a different shape from the A11Y items: no test to write, the acceptance criterion is a person looking at it. Consider asking Shane whether he wants these built speculatively or wants to review design direction first (e.g. UX-03's grouping scheme, UX-04's dashboard reflow) before code is written, since there's no spec beyond the one-line backlog description.
+
 ## Done 2026-10-01: A11Y-10 (`06be815`). Distinct labels for repeated field names and Save buttons.
 
 - 10 pure string-literal relabels, no component shape changed (`TextField`/`SelectField`/`SubmitButton` already take `label` as a required prop). Property page's 6 "Notes": mortgage/statement/insurance/HOA/warranty/capital-improvement forms → "Mortgage notes", "Statement notes", "Policy notes", "HOA notes", "Warranty notes", "Improvement notes". Unit page's 3 "Type": shutoff/access-code/upload forms → "Shutoff type", "Access type", "Document type". Unit page's 2 "Notes": appliance/utility-account forms → "Appliance notes", "Account notes". Two "Save" buttons → "Save shutoff location" (`shutoff-location-form.tsx`), "Save target date" (`turnover-panel.tsx`).
