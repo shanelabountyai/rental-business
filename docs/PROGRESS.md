@@ -14204,7 +14204,7 @@ Wired at all 6 call sites across `operational-data-section.tsx` (appliances, uti
 - No schema change — `db:ci` not required for this item.
 
 ## UX-07 — `<Panel>` + `<PageHeader>` components, panel/title consolidation
-**Commit:** `<pending>`  ·  **Date:** 2026-10-02
+**Commit:** `77ec2ee`  ·  **Date:** 2026-10-02
 
 **What it built.** Two new components. `components/panel.tsx` (`<Panel title headingId gap? trailing?>`) replaces the `<section aria-labelledby="x" className="flex flex-col gap-N border-t pt-4"><h2 id="x" className="text-lg font-semibold">...</h2>...</section>` shape that ~30 panel components each hand-rolled identically — `headingId` is a required prop, not generated, because several ids are referenced as URL hash anchors elsewhere; `gap` defaults to `gap-3` (the most common value) and is passed through as a literal string so Tailwind's content scanner still picks it up; `trailing` covers the handful of panels with extra header-row content (a balance span, a status badge) beside the title. `components/page-header.tsx` (`<PageHeader title children? focusable?>`) replaces every page's hand-rolled `<h1 className="text-2xl font-semibold tracking-tight">`; it's a `forwardRef` component (not a plain function) because the three `error.tsx` boundaries (R-099) move focus to the heading on mount and need a real DOM ref — `focusable` sets `tabIndex={-1}` for that case. Migrating `(admin)/error.tsx` onto it fixed its long-standing `text-xl` (the one page heading that didn't match every other page's `text-2xl`) as a side effect of the component's fixed size, not a special case.
 
