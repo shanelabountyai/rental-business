@@ -14,6 +14,31 @@ const PRIORITY_LABELS: Record<string, string> = {
   URGENT: 'Urgent',
   ROUTINE: 'Routine',
 }
+
+const PRIORITY_BADGE_CLASSES: Record<string, string> = {
+  EMERGENCY: 'bg-red-100 text-red-900',
+  URGENT: 'bg-amber-100 text-amber-900',
+}
+
+function PriorityBadge({ priority }: { priority: string }) {
+  return (
+    <span
+      className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+        PRIORITY_BADGE_CLASSES[priority] ?? 'bg-muted text-muted-foreground'
+      }`}
+    >
+      {PRIORITY_LABELS[priority] ?? priority}
+    </span>
+  )
+}
+
+function StatusBadge({ status }: { status: string }) {
+  return (
+    <span className="bg-secondary rounded-full px-2 py-0.5 text-xs font-medium">
+      {WORK_ORDER_STATUS_LABELS[status] ?? status}
+    </span>
+  )
+}
 /**
  * The PM's oversight view of every open work order, assigned or not, staff
  * or vendor (MAINT-03) - and RPT-04's own "open work orders by age and
@@ -76,13 +101,15 @@ export default async function WorkOrdersPage() {
                     </span>
                   )}
                 </span>
-                <span className="text-muted-foreground text-sm">
-                  {wo.property.name} — {wo.unit.name} ·{' '}
-                  {PRIORITY_LABELS[wo.priority] ?? wo.priority} ·{' '}
-                  {WORK_ORDER_STATUS_LABELS[wo.status] ?? wo.status} ·{' '}
-                  {wo.assignedTo?.name ?? wo.vendor?.name ?? 'Unassigned'} ·{' '}
-                  {friendlyDate(wo.createdAt, wo.property.timezone)} (
-                  {ageInDays(wo.createdAt, wo.property.timezone)}d)
+                <span className="text-muted-foreground flex flex-wrap items-center gap-1.5 text-sm">
+                  {wo.property.name} — {wo.unit.name}
+                  <PriorityBadge priority={wo.priority} />
+                  <StatusBadge status={wo.status} />
+                  <span>
+                    · {wo.assignedTo?.name ?? wo.vendor?.name ?? 'Unassigned'} ·{' '}
+                    {friendlyDate(wo.createdAt, wo.property.timezone)} (
+                    {ageInDays(wo.createdAt, wo.property.timezone)}d)
+                  </span>
                 </span>
               </Link>
             </li>

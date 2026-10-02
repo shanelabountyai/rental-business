@@ -14168,3 +14168,20 @@ Wired at all 6 call sites across `operational-data-section.tsx` (appliances, uti
 - `npm test`: same 4 pre-existing unrelated failures `NEXT.md` already tracks (leftover `rental_test` data) — confirmed by isolating a retry. The first full run reported 49 failures across 20 unrelated files (timeouts, FK races in cleanup hooks); running the e2e sweep immediately beforehand, then the full unit suite, on a machine also holding another project's live dev server, exhausted the shared Postgres connection pool — exactly the "wall of failures with no shared code path" signature this repo's conventions already name. Re-running those 20 files alone once connections drained reproduced only the known 4.
 - Scoped e2e (`dashboard.spec.ts` run separately, then `shell.spec.ts` + `route-boundaries.spec.ts`, desktop+mobile): 10/10 + (33 passed + 1 skipped)/34 = 43 passed + 1 skipped across 44 tests, reconciled against each run's own `--list`; includes `shell.spec.ts`'s axe sweep (no new violations) and `dashboard.spec.ts`'s pending-approvals drill-down test, which still passes unchanged now that tile is served only from the action row.
 - No schema change — `db:ci` not required for this item.
+
+## UX-05 — work order list badges
+**Commit:** `<pending>`  ·  **Date:** 2026-10-02
+
+**What it built.** `workorders/page.tsx` adds `PriorityBadge` (colored pill: red for EMERGENCY, amber for URGENT, muted for ROUTINE) and `StatusBadge` (plain pill, reusing `WORK_ORDER_STATUS_LABELS`), replacing the plain-text priority/status fields in the row's metadata line. They sit alongside the existing Warranty pill.
+
+**What it decided.** Shane picked "colored priority, plain status" over "color both" via a clickable preview — status colors are left for UX-06, which will build real semantic success/warning/danger tokens; picking status colors now would likely be redone there. The other two asks in the backlog row were already satisfied by earlier items and needed no change: emergencies already sort first (R-076's `priorityRank` comparator), and the empty state already sits below an unconditional "New work order" header button (R-024) — the backlog description predates that button or missed it.
+
+**What it left behind.** UX-06 through UX-10 are the same design-only shape; continue the propose-then-approve pattern.
+
+**Gate.**
+- `lint` clean (0 errors; same pre-existing warnings, none in touched files).
+- `typecheck` clean.
+- `npm run build` clean.
+- `npm test`: first full run reported 35 failures across 21 unrelated files (auth, billing, leases, vendors, notifications — no shared code path with a presentational list page) — the documented "wall of failures = environment symptom" signature. `pg_stat_activity` showed `event_toolkit_dev` holding 26 live connections and `bookable_test` 8 at the time, both other projects' processes competing for the same shared Postgres `max_connections`. Re-running the 21 affected files alone (via `dotenv -e .env.test -e .env.local -- vitest run <files>`, since a bare `npx vitest run` skips the npm script's env loading and 404s on `DATABASE_URL` — caught and redone) reproduced only the 4 failures `NEXT.md` already tracks as pre-existing (`comms.test.ts` ×2, `pre-move-out-scheduling-job.test.ts` ×2), confirming no regression.
+- Scoped e2e (`workorders.spec.ts`, desktop+mobile): 18/18 passed, reconciled against `--list`, including the accessibility sweep (no new violations at 412px).
+- No schema change — `db:ci` not required for this item.
