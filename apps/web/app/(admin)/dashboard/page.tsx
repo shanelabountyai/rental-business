@@ -1,7 +1,7 @@
 import { formatCents } from '@rental/core/money'
 import Link from 'next/link'
 import { requireScope } from '@/lib/auth/guard.ts'
-import { dashboardSummary } from '@/lib/dashboard/queries.ts'
+import { dashboardSummary, type DashboardSummary } from '@/lib/dashboard/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 
 export const metadata = { title: 'Dashboard — Rental Operations' }
@@ -30,12 +30,14 @@ function Tile({
   value,
   detail,
   glow,
+  progressPct,
 }: {
   href: string
   label: string
   value: string
   detail?: string
   glow?: boolean
+  progressPct?: number
 }) {
   return (
     <li>
@@ -43,8 +45,62 @@ function Tile({
         <span className="text-muted-foreground text-xs font-medium">{label}</span>
         <span className="text-xl font-semibold tabular-nums">{value}</span>
         {detail && <span className="text-muted-foreground text-xs">{detail}</span>}
+        {progressPct != null && (
+          <div
+            role="progressbar"
+            aria-label={`${label}, ${progressPct}% collected`}
+            aria-valuenow={progressPct}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            className="bg-secondary mt-1 h-1.5 w-full overflow-hidden rounded-full"
+          >
+            <div
+              className={`h-full rounded-full ${
+                progressPct < 40
+                  ? 'bg-red-500'
+                  : progressPct < 70
+                    ? 'bg-amber-500'
+                    : 'bg-primary'
+              }`}
+              style={{ width: `${progressPct}%` }}
+            />
+          </div>
+        )}
       </Link>
     </li>
+  )
+}
+
+// RPT-04/UX-04: four counts that mean "do something today", in one list so
+// the row can decide its own existence - hidden entirely when every count
+// is zero, same exception-first rule R-050 already applies to the open-
+// tickets tile below.
+function actionItems(summary: DashboardSummary) {
+  return [
+    summary.pendingApprovals.count > 0 && {
+      href: '/tasks?type=workorder_approval',
+      label: 'Pending approvals',
+      value: String(summary.pendingApprovals.count),
+    },
+    summary.unansweredMessages.count > 0 && {
+      href: '/tasks?type=tenant_unanswered',
+      label: 'Unanswered tenant messages',
+      value: String(summary.unansweredMessages.count),
+      detail: 'No staff reply in 2+ days',
+    },
+    summary.delinquency.pastGraceCount > 0 && {
+      href: '/money/rent-roll?pastGrace=1',
+      label: 'Tenancies past grace',
+      value: String(summary.delinquency.pastGraceCount),
+    },
+    summary.tickets.glowingCount > 0 && {
+      href: '/maintenance?glowing=1',
+      label: 'Emergency/urgent tickets',
+      value: String(summary.tickets.glowingCount),
+      detail: 'Open past 48h',
+    },
+  ].filter((item): item is { href: string; label: string; value: string; detail?: string } =>
+    Boolean(item),
   )
 }
 
@@ -58,6 +114,17 @@ export default async function DashboardPage() {
   const scope = await currentScope(actor, 'property.read')
   const now = new Date()
   const summary = await dashboardSummary(scope, now)
+  const needsAction = actionItems(summary)
+  const collectedPct =
+    summary.collectedVsBilled.billedCents > 0
+      ? Math.min(
+          100,
+          Math.round(
+            (summary.collectedVsBilled.collectedCents / summary.collectedVsBilled.billedCents) *
+              100,
+          ),
+        )
+      : undefined
 
   return (
     <div className="flex flex-col gap-6">
@@ -69,6 +136,19 @@ export default async function DashboardPage() {
         </p>
       </header>
 
+      <section className="flex flex-col gap-3">
+        <h2 className="text-lg font-semibold">Needs action today</h2>
+        {needsAction.length > 0 ? (
+          <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {needsAction.map((item) => (
+              <Tile key={item.href} glow {...item} />
+            ))}
+          </ul>
+        ) : (
+          <p className="text-muted-foreground text-sm">Nothing needs your attention today.</p>
+        )}
+      </section>
+
       {/* `<ul>`, not `<dl>` - a `<dl>`'s direct children must be `<dt>`/`<dd>`
           (WCAG 1.3.1, caught by the shell's own axe sweep). Each tile is a
           card that happens to show a stat, not a definition pair, so a list
@@ -79,6 +159,7 @@ export default async function DashboardPage() {
           label="Collected vs billed"
           value={`${formatCents(summary.collectedVsBilled.collectedCents)} / ${formatCents(summary.collectedVsBilled.billedCents)}`}
           detail={summary.collectedVsBilled.periodLabel || undefined}
+          progressPct={collectedPct}
         />
 
         <Tile
@@ -99,7 +180,6 @@ export default async function DashboardPage() {
               ? `${summary.tickets.glowingCount} emergency/urgent open past 48h`
               : 'None past the emergency/urgent 48h mark'
           }
-          glow={summary.tickets.glowingCount > 0}
         />
 
         <Tile
@@ -128,25 +208,10 @@ export default async function DashboardPage() {
         />
 
         <Tile
-          href="/tasks?type=workorder_approval"
-          label="Pending approvals"
-          value={String(summary.pendingApprovals.count)}
-        />
-
-        <Tile
           href="/renewals"
           label="Renewals & alerts"
           value={String(summary.renewalAlerts.count)}
           detail="Mortgage & insurance dates, not statutory compliance"
-        />
-
-        <Tile
-          href="/tasks?type=tenant_unanswered"
-          label="Unanswered tenant messages"
-          value={String(summary.unansweredMessages.count)}
-          detail={
-            summary.unansweredMessages.count > 0 ? 'No staff reply in 2+ days' : undefined
-          }
         />
       </ul>
     </div>
