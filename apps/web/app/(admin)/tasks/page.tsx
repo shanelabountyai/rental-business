@@ -1,5 +1,6 @@
 import { scopeIsEmpty } from '@rental/core/rbac'
 import Link from 'next/link'
+import { Badge } from '@/components/badge.tsx'
 import { currentScope as writeScope, requireScope } from '@/lib/auth/guard.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 import { myDayTasks, openTasksOfType, rollupByProperty } from '@/lib/tasks/queries.ts'
@@ -129,8 +130,8 @@ export default async function TasksPage({
               >
                 <span className="font-medium">
                   {task.priority === 'EMERGENCY' && (
-                    <span className="mr-2 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800">
-                      {PRIORITY_LABELS.EMERGENCY}
+                    <span className="mr-2">
+                      <Badge tone="danger">{PRIORITY_LABELS.EMERGENCY}</Badge>
                     </span>
                   )}
                   <span id={`task-title-${task.id}`}>{task.title}</span>

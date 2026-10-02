@@ -24,7 +24,7 @@ export function FinishWalkForm({
     <form action={formAction} className="flex flex-col gap-2">
       <FormAlerts state={state} />
       {state.needsEntryOverride && (
-        <div className="flex max-w-md flex-col gap-2 rounded-md border-2 border-amber-500 p-3">
+        <div className="flex max-w-md flex-col gap-2 rounded-md border-2 border-warning p-3">
           <p className="text-sm font-medium">No entry notice was served for this walk</p>
           <p className="text-muted-foreground text-sm">
             You can record it anyway, but the reason is kept permanently and is what this entry

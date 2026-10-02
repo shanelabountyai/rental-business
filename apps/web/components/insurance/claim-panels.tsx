@@ -47,7 +47,7 @@ export function MitigationPanel({ claim }: { claim: ClaimView }) {
     <section
       aria-labelledby="mitigation"
       className={`flex flex-col gap-2 rounded-md border p-4 ${
-        urgent ? 'border-amber-500/60 bg-amber-500/10' : ''
+        urgent ? 'border-warning/60 bg-warning/10' : ''
       }`}
     >
       <h2 id="mitigation" className="text-lg font-semibold">
@@ -178,7 +178,7 @@ export function PositionPanel({
       </dl>
 
       {position.belowDeductible && (
-        <p className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+        <p className="rounded-md border border-warning/40 bg-warning/10 p-3 text-sm">
           {BELOW_DEDUCTIBLE_WARNING}
         </p>
       )}
@@ -336,7 +336,7 @@ export function LossOfRentsPanel({ claim, units, action }: {
           section quietly disappearing — an owner who assumes they are covered
           and finds out at settlement is the person this sentence is for. */}
       {!claim.lossOfRentsCovered && (
-        <p className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+        <p className="rounded-md border border-warning/40 bg-warning/10 p-3 text-sm">
           The policy on file is not recorded as carrying loss-of-rents cover. You can still build
           the figure — the record may be out of date, and a carrier that pays has settled the
           question better than our copy of the policy has — but check before relying on it.

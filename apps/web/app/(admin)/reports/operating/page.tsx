@@ -248,7 +248,7 @@ export default async function OperatingReportPage({
                                 {row.unitCount} {row.unitCount === 1 ? 'unit' : 'units'}
                               </span>
                               {(report.missingFixedCosts[row.propertyId]?.length ?? 0) > 0 && (
-                                <span className="block text-xs text-amber-800">
+                                <span className="block text-xs text-warning">
                                   No {report.missingFixedCosts[row.propertyId].join(' or ')} booked
                                 </span>
                               )}
@@ -264,7 +264,7 @@ export default async function OperatingReportPage({
                             </td>
                             <td
                               className={`py-2 pr-4 text-right font-medium tabular-nums ${
-                                row.netCents < 0 ? 'text-red-700' : ''
+                                row.netCents < 0 ? 'text-danger' : ''
                               }`}
                             >
                               {formatCents(row.netCents)}
@@ -352,7 +352,7 @@ export default async function OperatingReportPage({
                             <td
                               key={cell.month}
                               className={`py-2 pr-3 text-right tabular-nums ${
-                                cell.netCents < 0 ? 'text-red-700' : ''
+                                cell.netCents < 0 ? 'text-danger' : ''
                               }`}
                             >
                               {cell.netCents === 0 ? '—' : formatCents(cell.netCents)}

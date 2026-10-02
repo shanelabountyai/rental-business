@@ -68,7 +68,7 @@ export function VerifyLinkForm({
           type="submit"
           name="resolved"
           value="yes"
-          className="focus-visible:ring-ring min-h-14 rounded-md bg-emerald-700 px-4 text-base font-medium text-white focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none hover:bg-emerald-800"
+          className="focus-visible:ring-ring min-h-14 rounded-md bg-success px-4 text-base font-medium text-white focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none hover:bg-success/90"
         >
           Yes, it&rsquo;s fixed
         </button>

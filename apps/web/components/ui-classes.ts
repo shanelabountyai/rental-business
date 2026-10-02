@@ -89,7 +89,7 @@ export const ACCENT_BUTTON_CLASSES =
 /// one of the two contexts still overflowing.
 /// ==========================================================================
 export const INPUT_CLASSES =
-  'border-input bg-background focus-visible:ring-ring min-h-11 max-w-full min-w-0 rounded-md border px-3 py-2 text-base focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none aria-invalid:border-red-500'
+  'border-input bg-background focus-visible:ring-ring min-h-11 max-w-full min-w-0 rounded-md border px-3 py-2 text-base focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none aria-invalid:border-danger'
 
 /**
  * A sideways-scrolling wrapper a keyboard can actually scroll (WCAG 2.1.1).

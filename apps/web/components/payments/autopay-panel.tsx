@@ -74,7 +74,7 @@ function ConfirmForm({ onDone }: { onDone: () => void }) {
       <PaymentElement />
 
       <LiveRegion assertive>
-        {error && <p className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-base text-red-900">{error}</p>}
+        {error && <p className="rounded-md border border-danger/35 bg-danger/6 px-3 py-2 text-base text-danger">{error}</p>}
       </LiveRegion>
 
       <button
@@ -145,7 +145,7 @@ function DebitDayForm({
       </div>
       <LiveRegion assertive>
         {state.error && (
-          <p className="text-base text-red-700">{state.error}</p>
+          <p className="text-base text-danger">{state.error}</p>
         )}
       </LiveRegion>
       {/* The region persists; only the sentence inside it comes and goes
@@ -276,7 +276,7 @@ export function AutopayPanel({
           </p>
 
           <LiveRegion assertive>
-            {error && <p className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-base text-red-900">{error}</p>}
+            {error && <p className="rounded-md border border-danger/35 bg-danger/6 px-3 py-2 text-base text-danger">{error}</p>}
           </LiveRegion>
 
           {clientSecret ? (
@@ -314,7 +314,7 @@ export function AutopayPanel({
       {/* ALWAYS MOUNTED, regardless of which branch above renders - see the
           state comment above. */}
       <LiveRegion assertive>
-        {turnOffError && <p className="text-base text-red-700">{turnOffError}</p>}
+        {turnOffError && <p className="text-base text-danger">{turnOffError}</p>}
       </LiveRegion>
       <LiveRegion>
         {turnOffNotice && <p className="text-base">{turnOffNotice}</p>}

@@ -85,7 +85,7 @@ export default async function MaintenanceTicketPage({
         directly if nobody calls back.
       */}
       {emergency === '1' && (
-        <FocusedStatus className="rounded-md border-2 border-red-600 bg-red-50 px-4 py-3 font-medium text-red-950">
+        <FocusedStatus className="rounded-md border-2 border-danger bg-danger/6 px-4 py-3 font-medium text-danger">
           We have paged someone now. If this is life-threatening, call 911. If
           you do not hear back shortly, call or text the number on your lease.
         </FocusedStatus>

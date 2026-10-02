@@ -13,6 +13,7 @@ import {
 import { prisma } from '@rental/db'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { Badge } from '@/components/badge.tsx'
 import { TaskActionButton } from '@/components/tasks/action-button.tsx'
 import { CompleteForm } from '@/components/tasks/complete-form.tsx'
 import { TriagePanel } from '@/components/maintenance/triage-panel.tsx'
@@ -140,8 +141,8 @@ export default async function TaskDetailPage({
         <dd className="col-span-1 sm:col-span-2">
           {STATUS_LABELS[task.status] ?? task.status}
           {unresolved && overdue && (
-            <span className="ml-2 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800">
-              Overdue
+            <span className="ml-2">
+              <Badge tone="danger">Overdue</Badge>
             </span>
           )}
         </dd>

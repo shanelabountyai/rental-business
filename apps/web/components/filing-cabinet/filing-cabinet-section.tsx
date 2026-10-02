@@ -19,6 +19,7 @@ import { MortgageStatementForm } from '@/components/filing-cabinet/mortgage-stat
 import { AddWarrantyForm } from '@/components/filing-cabinet/add-warranty-form.tsx'
 import { CostBasisForm } from '@/components/filing-cabinet/cost-basis-form.tsx'
 import { HoaInfoForm } from '@/components/filing-cabinet/hoa-info-form.tsx'
+import { Badge } from '@/components/badge.tsx'
 import { DeleteResultRegion, DeleteRowButton } from '@/components/operational/delete-row-button.tsx'
 import {
   addCapitalImprovement,
@@ -76,11 +77,7 @@ function day(date: Date): string {
 /// (R-016), neither of which exists yet. This is the "report" half of the
 /// "report, not automated action" pattern documents/retention.ts established.
 function AlertBadge({ children }: { children: React.ReactNode }) {
-  return (
-    <span className="rounded-md bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900">
-      {children}
-    </span>
-  )
+  return <Badge tone="warning">{children}</Badge>
 }
 
 /// PROP-06's filing cabinet: cost basis, mortgages (with ARM/balloon

@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { requireScope } from '@/lib/auth/guard.ts'
 import { listNotices } from '@/lib/notices/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
+import { Badge } from '@/components/badge.tsx'
 
 export const metadata = { title: 'Notices — Rental Operations' }
 
@@ -66,13 +67,11 @@ export default async function NoticesPage() {
                       {notice.lease?.unit ? ` · ${notice.lease.unit.name}` : ''}
                     </span>
                     {notice.servedAt ? (
-                      <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-900">
+                      <Badge tone="success">
                         Served {friendlyDate(notice.servedAt, notice.property.timezone)}
-                      </span>
+                      </Badge>
                     ) : (
-                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900">
-                        Not served
-                      </span>
+                      <Badge tone="warning">Not served</Badge>
                     )}
                   </span>
                   <span className="text-muted-foreground text-sm">

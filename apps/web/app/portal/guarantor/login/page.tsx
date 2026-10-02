@@ -34,7 +34,7 @@ export default async function GuarantorLoginPage({
       {message && (
         <p
           role="alert"
-          className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-900"
+          className="rounded-md border border-danger/35 bg-danger/6 px-3 py-2 text-sm text-danger"
         >
           {message}
         </p>

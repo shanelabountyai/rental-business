@@ -140,7 +140,7 @@ function ReceivablesTable({
               <td className="py-2 pr-3 text-right font-medium tabular-nums">
                 {formatCents(row.owedCents)}
                 {row.unbilledCents > 0 && (
-                  <span className="block text-xs font-normal text-amber-800">
+                  <span className="block text-xs font-normal text-warning">
                     {formatCents(row.unbilledCents)} not yet billed
                   </span>
                 )}

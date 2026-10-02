@@ -126,7 +126,7 @@ export function LeaseForm({
             </label>
           ))}
           {origin === 'INHERITED' && (
-            <p className="text-sm text-amber-800">
+            <p className="text-sm text-warning">
               Three things will be flagged as outstanding: confirming these terms
               with the tenant, establishing whether the deposit transferred, and
               capturing condition-as-found photos. Each gets harder every week

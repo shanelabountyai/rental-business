@@ -54,11 +54,11 @@ export default async function JobsPage() {
       </header>
 
       {failing.length === 0 && overdue.length === 0 && neverRun.length === 0 ? (
-        <p className="rounded-md border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+        <p className="rounded-md border border-success/35 bg-success/6 px-4 py-3 text-sm text-success">
           Every scheduled job has run successfully and nothing is overdue.
         </p>
       ) : (
-        <p className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        <p className="rounded-md border border-warning/35 bg-warning/6 px-4 py-3 text-sm text-warning">
           {summarise(failing.length, overdue.length, neverRun.length)}
         </p>
       )}
@@ -79,21 +79,21 @@ export default async function JobsPage() {
                   Last succeeded {friendlyTimestamp(job.lastSuccessAt, 'UTC')}.
                 </>
               ) : (
-                <span className="font-medium text-red-800">
+                <span className="font-medium text-danger">
                   Has never completed successfully anywhere.
                 </span>
               )}
             </p>
 
             {job.overdueToday.length > 0 && (
-              <p className="text-sm text-amber-900">
+              <p className="text-sm text-warning">
                 Due today and not yet run at{' '}
                 {job.overdueToday.map((p) => p.propertyName).join(', ')}.
               </p>
             )}
 
             {job.missedDates.length > 0 && (
-              <p className="text-sm text-amber-900">
+              <p className="text-sm text-warning">
                 Missed, and now outside the catch-up window:{' '}
                 {job.missedDates
                   .map(
@@ -109,7 +109,7 @@ export default async function JobsPage() {
               <ul className="flex flex-col gap-3 divide-y">
                 {job.failed.map((run) => (
                   <li key={run.id} className="flex flex-col gap-2 pt-3 first:pt-0">
-                    <p className="text-sm font-medium text-red-900">
+                    <p className="text-sm font-medium text-danger">
                       Failed at {run.propertyName} for{' '}
                       {friendlyBusinessDate(run.businessDate)} — attempt{' '}
                       {run.attempts}

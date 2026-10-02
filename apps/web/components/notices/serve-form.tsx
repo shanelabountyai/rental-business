@@ -67,13 +67,13 @@ export function ServeForm({
     <form action={formAction} className="flex flex-col gap-4" encType="multipart/form-data">
       <LiveRegion assertive>
         {state.error && (
-          <p className="rounded-md border border-red-300 px-3 py-2 text-sm text-red-700">
+          <p className="rounded-md border border-danger/35 px-3 py-2 text-sm text-danger">
             {state.error}
           </p>
         )}
       </LiveRegion>
       {state.notice && (
-        <p className="rounded-md border border-green-300 px-3 py-2 text-sm">
+        <p className="rounded-md border border-success/35 px-3 py-2 text-sm">
           {state.notice}
         </p>
       )}
@@ -108,7 +108,7 @@ export function ServeForm({
           // service may already have happened, and a product that refuses to
           // record what an operator actually did produces no evidence at all
           // — which is worse than evidence carrying an honest flag.
-          <p className="rounded-md border border-amber-300 px-3 py-2 text-sm">
+          <p className="rounded-md border border-warning/35 px-3 py-2 text-sm">
             This state&apos;s configured rules do not list that method for this
             notice type. You can still record it — it will be flagged as not
             permitted on the record.
@@ -236,7 +236,7 @@ export function ServeForm({
         </p>
       )}
       {holdOffer && !holdOffer.alreadyHeld && (
-        <fieldset className="flex flex-col gap-2 rounded-md border border-amber-300 p-3">
+        <fieldset className="flex flex-col gap-2 rounded-md border border-warning/35 p-3">
           <legend className="px-1 text-sm font-semibold">Payment hold</legend>
           <label className="flex min-h-11 items-start gap-2 text-sm">
             <input

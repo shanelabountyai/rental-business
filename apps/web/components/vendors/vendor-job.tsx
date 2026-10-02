@@ -210,12 +210,12 @@ export function VendorJob({
           // did. It still reads as a warning because the heading says so.
           role="note"
           aria-labelledby="pet-warning"
-          className="flex flex-col gap-1 rounded-md border-2 border-amber-500 bg-amber-50 p-4"
+          className="flex flex-col gap-1 rounded-md border-2 border-warning bg-warning/6 p-4"
         >
-          <h2 id="pet-warning" className="text-sm font-semibold text-amber-900">
+          <h2 id="pet-warning" className="text-sm font-semibold text-warning">
             There is a pet at this home
           </h2>
-          <p className="text-sm text-amber-900">
+          <p className="text-sm text-warning">
             The tenant told us to expect an animal.
             {job.entryPermission === true
               ? ' They have agreed we can come in when they are not home, so knock first and let them secure it if they are there.'
@@ -459,7 +459,7 @@ export function VendorJob({
               <h2 className="text-sm font-medium">Getting in</h2>
               <LiveRegion assertive>
                 {revealState.error && (
-                  <p className="text-sm text-red-700">{revealState.error}</p>
+                  <p className="text-sm text-danger">{revealState.error}</p>
                 )}
               </LiveRegion>
               {/* THE ONE ACTION THIS SURFACE EXISTS TO PERFORM, and until

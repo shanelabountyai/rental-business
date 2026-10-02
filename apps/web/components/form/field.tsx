@@ -53,7 +53,7 @@ export function FieldError({ id, message }: { id: string; message?: string }) {
   return (
     <div role="alert" className="contents">
       {message && (
-        <p id={id} className="text-sm text-red-700">
+        <p id={id} className="text-sm text-danger">
           {message}
         </p>
       )}

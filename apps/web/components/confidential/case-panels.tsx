@@ -178,7 +178,7 @@ export function LockChangePanel({
           form subcomponent is what unmounts and the code has to be read
           before it does. */}
       {state.strandedNames && (
-        <div className="flex flex-col gap-1 rounded-md border border-red-300 p-3 text-sm text-red-800">
+        <div className="flex flex-col gap-1 rounded-md border border-danger/35 p-3 text-sm text-danger">
           <p className="font-medium">
             {state.strandedNames.join(', ')} {state.strandedNames.length === 1 ? 'has' : 'have'} no
             working door code.

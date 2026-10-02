@@ -239,7 +239,7 @@ export function ConsentPanel({
               </p>
               {row.note && <p className="text-muted-foreground">{row.note}</p>}
               {row.revokedOn ? (
-                <p className="mt-1 font-medium text-amber-900">
+                <p className="mt-1 font-medium text-warning">
                   {/* "Consent in effect", not "In force": the holds panel two
                       sections down already renders "in force" and "N in
                       force", and getByText is a case-insensitive SUBSTRING
@@ -250,7 +250,7 @@ export function ConsentPanel({
                   {row.revokeReason ? ` — ${row.revokeReason}` : ""}
                 </p>
               ) : (
-                <p className="mt-1 font-medium text-green-900">Consent in effect</p>
+                <p className="mt-1 font-medium text-success">Consent in effect</p>
               )}
             </li>
           ))}

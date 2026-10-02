@@ -5,6 +5,7 @@ import { MAX_PLAN_INSTALMENTS, PLAN_GRACE_DAYS } from '@rental/core/payments'
 import { friendlyBusinessDate } from '@rental/core/scheduling'
 import { useActionState } from 'react'
 import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
+import { Badge } from '@/components/badge.tsx'
 import { TextField } from '@/components/form/field.tsx'
 import type { PlanFormState } from '@/lib/payments/plan-actions.ts'
 
@@ -307,9 +308,7 @@ export function PaymentPlanPanel({
           Repayment plan
         </h2>
         {live && (
-          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900">
-            {live.shortfallCents > 0 ? 'Behind schedule' : 'In force'}
-          </span>
+          <Badge tone="warning">{live.shortfallCents > 0 ? 'Behind schedule' : 'In force'}</Badge>
         )}
       </div>
 

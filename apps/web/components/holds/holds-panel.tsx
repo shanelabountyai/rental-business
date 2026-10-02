@@ -2,6 +2,7 @@
 
 import { effectLabels, HOLD_DEFINITIONS, HOLD_TYPES, type HoldType } from '@rental/core/holds'
 import { useActionState, useState } from 'react'
+import { Badge } from '@/components/badge.tsx'
 import { FormAlerts, LiveRegion, SubmitButton } from '@/components/auth-form.tsx'
 import { SelectField, TextField } from '@/components/form/field.tsx'
 import type { HoldFormState } from '@/lib/holds/actions.ts'
@@ -150,9 +151,7 @@ export function HoldsPanel({
           Holds
         </h2>
         {active.length > 0 && (
-          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900">
-            {active.length} in force
-          </span>
+          <Badge tone="warning">{active.length} in force</Badge>
         )}
       </div>
 

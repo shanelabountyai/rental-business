@@ -625,7 +625,7 @@ export function MaintenanceWizard({
   return (
     <div className="flex flex-col gap-6">
       <LiveRegion assertive>
-        {error && <p className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-base text-red-900">{error}</p>}
+        {error && <p className="rounded-md border border-danger/35 bg-danger/6 px-3 py-2 text-base text-danger">{error}</p>}
       </LiveRegion>
 
       {step === 'category' && (
@@ -858,7 +858,7 @@ export function MaintenanceWizard({
                     // which is what 2.5.3 asks.
                     aria-label={`Remove ${photo.file.name}`}
                     onClick={() => removePhoto(photo.key)}
-                    className="text-muted-foreground hover:text-red-700 min-h-11 rounded-md px-2 underline underline-offset-2"
+                    className="text-muted-foreground hover:text-danger min-h-11 rounded-md px-2 underline underline-offset-2"
                   >
                     Remove
                   </button>

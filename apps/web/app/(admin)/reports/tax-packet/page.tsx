@@ -274,7 +274,7 @@ export default async function TaxPacketPage({
                   with the number in front of you.
                 </p>
                 {missingW9.length > 0 && (
-                  <p className="rounded-md bg-amber-100 px-3 py-2 text-sm text-amber-900">
+                  <p className="rounded-md bg-warning/12 px-3 py-2 text-sm text-warning">
                     {missingW9.length} vendor{missingW9.length === 1 ? '' : 's'} over the threshold
                     with no W-9 on file. Chase before January.
                   </p>

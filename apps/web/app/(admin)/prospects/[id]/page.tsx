@@ -247,7 +247,7 @@ export default async function ProspectDetailPage({
                   <p className="text-muted-foreground">No report ordered yet.</p>
                 )}
                 {a.reportStatus === 'FAILED' && (
-                  <p className="text-red-700">
+                  <p className="text-danger">
                     The report failed. Not evaluated against criteria.
                   </p>
                 )}
@@ -259,7 +259,7 @@ export default async function ProspectDetailPage({
                         <dd
                           className={
                             c.result === 'FAILS'
-                              ? 'text-red-700'
+                              ? 'text-danger'
                               : c.result === 'UNKNOWN'
                                 ? 'text-muted-foreground'
                                 : ''
@@ -281,16 +281,16 @@ export default async function ProspectDetailPage({
                   <p className="text-sm">
                     <span className="text-muted-foreground">Adverse-action notice: </span>
                     {a.adverseAction.sentAt ? (
-                      <span className="text-green-800">
+                      <span className="text-success">
                         Sent {friendlyDate(a.adverseAction.sentAt, property.timezone)}
                       </span>
                     ) : a.adverseAction.overriddenAt ? (
-                      <span className="text-amber-800">
+                      <span className="text-warning">
                         Not sent — overridden{' '}
                         {friendlyDate(a.adverseAction.overriddenAt, property.timezone)}
                       </span>
                     ) : (
-                      <span className="text-red-700">Not sent yet</span>
+                      <span className="text-danger">Not sent yet</span>
                     )}{' '}
                     <Link
                       href={`/notices/${a.adverseAction.noticeId}`}

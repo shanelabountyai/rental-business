@@ -49,7 +49,7 @@ export function ProspectStageForm({
       </div>
 
       {state.needsOverride && (
-        <div className="flex flex-col gap-2 rounded-md border-2 border-amber-500 p-3">
+        <div className="flex flex-col gap-2 rounded-md border-2 border-warning p-3">
           <p className="text-sm font-medium">
             No adverse-action notice sent for{' '}
             {state.needsOverride.applicantNames.join(', ')}

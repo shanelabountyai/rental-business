@@ -39,7 +39,7 @@ export function LogCallForm({
           required
           aria-invalid={Boolean(errors.body) || undefined}
           aria-describedby={errors.body ? 'field-call-body-error' : undefined}
-          className="border-input bg-background focus-visible:ring-ring min-h-11 rounded-md border px-3 py-2 text-base focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none aria-invalid:border-red-500"
+          className="border-input bg-background focus-visible:ring-ring min-h-11 rounded-md border px-3 py-2 text-base focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none aria-invalid:border-danger"
         />
         <FieldError id="field-call-body-error" message={errors.body} />
       </div>

@@ -63,7 +63,7 @@ export default async function ViolationsPage() {
                   : ' · nothing observed yet'}
               </p>
               {row.openAccommodationCount > 0 && (
-                <p className="mt-1 text-sm text-amber-800">
+                <p className="mt-1 text-sm text-warning">
                   {row.openAccommodationCount} undecided accommodation request
                   {row.openAccommodationCount === 1 ? '' : 's'} on this tenancy.
                 </p>

@@ -6,6 +6,7 @@ import {
 import { businessDate, friendlyBusinessDate, friendlyTimestamp } from '@rental/core/scheduling'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { Badge } from '@/components/badge.tsx'
 import { EmergencyResponsePanel } from '@/components/maintenance/emergency-response-panel.tsx'
 import { MarkEmergencyForm } from '@/components/maintenance/mark-emergency-form.tsx'
 import { actorCan, propertyResource, requireScope } from '@/lib/auth/guard.ts'
@@ -95,8 +96,8 @@ export default async function StaffTicketDetailPage({
           {CATEGORY_LABELS[ticket.category as keyof typeof CATEGORY_LABELS] ??
             ticket.category}
           {ticket.habitabilityFlag && (
-            <span className="ml-2 rounded-full bg-red-100 px-2 py-0.5 align-middle text-xs font-medium text-red-800">
-              Habitability
+            <span className="ml-2 align-middle">
+              <Badge tone="danger">Habitability</Badge>
             </span>
           )}
         </h1>

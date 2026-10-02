@@ -3,6 +3,7 @@
 import { leaseStatusLabel } from '@rental/core/leases'
 import { formatCents } from '@rental/core/money'
 import { useActionState } from 'react'
+import { Badge } from '@/components/badge.tsx'
 import { FormAlerts, LiveRegion, SubmitButton } from '@/components/auth-form.tsx'
 import type { BillingFormState } from '@/lib/billing/actions.ts'
 
@@ -62,9 +63,7 @@ export function BillingRuns({
           Billing runs
         </h2>
         {!live && (
-          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900">
-            {providerName} provider — not real Stripe
-          </span>
+          <Badge tone="warning">{providerName} provider — not real Stripe</Badge>
         )}
       </div>
 
@@ -114,14 +113,14 @@ export function BillingRuns({
                     R-101 fix, applied to the caller that hand-rolled it. */}
                 <LiveRegion assertive>
                   {row.lastSyncError && (
-                    <span className="text-sm text-red-700">
+                    <span className="text-sm text-danger">
                       {row.lastSyncError}
                     </span>
                   )}
                 </LiveRegion>
                 {!row.lastSyncError &&
                   (!row.hasSubscription ? (
-                    <span className="text-sm text-amber-800">
+                    <span className="text-sm text-warning">
                       No subscription — nothing will bill for this payer.
                     </span>
                   ) : (

@@ -219,7 +219,7 @@ function DangerButton({ label }: { label: ReactNode }) {
     <button
       type="submit"
       {...pendingButtonProps(useFormStatus().pending)}
-      className="focus-visible:ring-ring min-h-11 w-fit rounded-md border border-red-300 bg-red-50 px-4 text-sm font-medium text-red-900 aria-disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+      className="focus-visible:ring-ring min-h-11 w-fit rounded-md border border-danger/35 bg-danger/6 px-4 text-sm font-medium text-danger aria-disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
     >
       {label}
     </button>

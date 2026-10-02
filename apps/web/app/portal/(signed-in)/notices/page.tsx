@@ -1,5 +1,6 @@
 import { friendlyDate } from '@rental/core/scheduling'
 import Link from 'next/link'
+import { Badge } from '@/components/badge.tsx'
 import { requireTenantWithScope } from '@/lib/portal/guard.ts'
 import { listTenantNotices } from '@/lib/notices/queries.ts'
 
@@ -43,11 +44,7 @@ export default async function PortalNoticesPage() {
                 >
                   <span className="flex flex-wrap items-center justify-between gap-2">
                     <span className="font-medium">About your home</span>
-                    {unread && (
-                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900">
-                        New
-                      </span>
-                    )}
+                    {unread && <Badge tone="warning">New</Badge>}
                   </span>
                   <span className="text-muted-foreground text-sm">
                     {notice.servedAt

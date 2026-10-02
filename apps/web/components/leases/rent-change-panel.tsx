@@ -23,7 +23,7 @@ export function RentChangePanel({
     <form action={action} className="flex flex-col gap-3">
       <FormAlerts state={state} />
       {scheduled && (
-        <div className="flex flex-col gap-3 rounded-md border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-50">
+        <div className="flex flex-col gap-3 rounded-md border border-warning/35 bg-warning/6 p-4 text-sm text-warning">
           <p className="font-medium break-words">{scheduled.summary}</p>
           <p className="break-words">
             {scheduled.noticeLine}{' '}

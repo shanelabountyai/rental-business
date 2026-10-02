@@ -40,7 +40,7 @@ export function AnimalForkNotice({
 }) {
   const fork = animalCaseFork({ hasApprovedAssistanceAnimal, hasUndecidedRequest })
   return (
-    <p className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+    <p className="rounded-md border border-warning/40 bg-warning/10 p-3 text-sm">
       {ANIMAL_FORK_MESSAGES[fork]}
     </p>
   )
@@ -300,7 +300,7 @@ export function CloseCasePanel({
               hint="Species, and a name if there is one."
             />
             {hasUndecidedRequest && (
-              <p className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+              <p className="rounded-md border border-warning/40 bg-warning/10 p-3 text-sm">
                 There is an undecided accommodation request on this tenancy.
                 Authorizing this animal as a pet answers it in the direction that
                 costs the tenant money, before anybody has decided it. Decide the

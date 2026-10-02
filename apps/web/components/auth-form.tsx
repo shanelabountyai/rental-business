@@ -302,14 +302,14 @@ export function FormAlerts({ state }: { state: FormState }) {
     <>
       <div role="alert" className="contents">
         {state.error && (
-          <p className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-900">
+          <p className="rounded-md border border-danger/35 bg-danger/6 px-3 py-2 text-sm text-danger">
             {state.error}
           </p>
         )}
       </div>
       <div role="status" className="contents">
         {state.notice && (
-          <p className="rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
+          <p className="rounded-md border border-success/35 bg-success/6 px-3 py-2 text-sm text-success">
             {state.notice}
           </p>
         )}

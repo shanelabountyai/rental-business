@@ -47,7 +47,7 @@ export function OpenClaimPanel({
                 {claim.status === 'OPEN' ? 'open' : CLAIM_OUTCOME_LABELS[claim.outcome!]}
               </span>
               {claim.mitigationUrgent && (
-                <span className="text-amber-800">
+                <span className="text-warning">
                   {' '}
                   · nothing recorded as mitigated
                 </span>

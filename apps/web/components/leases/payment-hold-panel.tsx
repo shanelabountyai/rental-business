@@ -2,6 +2,7 @@
 
 import { useActionState } from 'react'
 import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
+import { Badge } from '@/components/badge.tsx'
 import { TextField } from '@/components/form/field.tsx'
 import type { BillingFormState } from '@/lib/billing/actions.ts'
 
@@ -50,10 +51,10 @@ function HoldForm({
         {payer.setAt && (
           // WHEN AND BY WHOM, on the screen rather than only in the audit
           // log. A hold nobody can attribute is one nobody will lift.
-          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900">
+          <Badge tone="warning">
             Held since {payer.setAt}
             {payer.setByName ? ` by ${payer.setByName}` : ''}
-          </span>
+          </Badge>
         )}
       </div>
 
@@ -177,11 +178,7 @@ export function PaymentHoldPanel({
         <h2 id="payment-hold" className="text-lg font-semibold">
           Legal-action payment controls
         </h2>
-        {anyHeld && (
-          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900">
-            This tenancy is held
-          </span>
-        )}
+        {anyHeld && <Badge tone="warning">This tenancy is held</Badge>}
       </div>
 
       <p className="text-muted-foreground text-sm">

@@ -102,7 +102,7 @@ export function TenantConsentSection({
           with it (R-044's trap; ConsentPanel makes the same choice). */}
       <form action={formAction} className="flex flex-col gap-3">
         <LiveRegion assertive>
-          {state.error && <p className="text-base text-red-700">{state.error}</p>}
+          {state.error && <p className="text-base text-danger">{state.error}</p>}
         </LiveRegion>
         <LiveRegion>
           {state.notice && <p className="text-base">{state.notice}</p>}

@@ -54,7 +54,7 @@ export function ImportForm() {
       </div>
 
       {state.headerErrors && state.headerErrors.length > 0 && (
-        <ul className="list-disc rounded-md border border-red-300 bg-red-50 px-6 py-3 text-sm text-red-900">
+        <ul className="list-disc rounded-md border border-danger/35 bg-danger/6 px-6 py-3 text-sm text-danger">
           {state.headerErrors.map((message) => (
             <li key={message}>{message}</li>
           ))}

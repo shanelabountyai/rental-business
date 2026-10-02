@@ -101,7 +101,7 @@ export default async function GuarantorBalancePage() {
                       </td>
                       <td
                         className={`py-2 pr-3 text-right whitespace-nowrap tabular-nums ${
-                          isPayment ? 'text-emerald-700' : ''
+                          isPayment ? 'text-success' : ''
                         }`}
                       >
                         {isPayment ? '−' : ''}

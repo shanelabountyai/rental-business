@@ -3,6 +3,7 @@
 import { formatCents } from "@rental/core/money";
 import type { CollectionMethod } from "@rental/core/payments";
 import { useActionState } from "react";
+import { Badge } from "@/components/badge.tsx";
 import { FormAlerts, SubmitButton } from "@/components/auth-form.tsx";
 import { SelectField, TextField } from "@/components/form/field.tsx";
 import type { BillingFormState } from "@/lib/billing/actions.ts";
@@ -133,9 +134,7 @@ export function BillingPanel({
           Billing
         </h2>
         {!live && (
-          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900">
-            {providerName} provider — not real Stripe
-          </span>
+          <Badge tone="warning">{providerName} provider — not real Stripe</Badge>
         )}
       </div>
 
@@ -176,7 +175,7 @@ export function BillingPanel({
                   {payer.stripeCustomerId} · {payer.stripeSubscriptionId}
                 </span>
               ) : (
-                <span className="text-sm text-amber-800">
+                <span className="text-sm text-warning">
                   No subscription yet — nothing will bill for this payer.
                 </span>
               )}

@@ -204,7 +204,7 @@ function NoticeForm({ action }: { action: Action }) {
         )}
 
         {noticePeriod && (
-          <div className="flex flex-col gap-2 rounded-md border-2 border-amber-500 p-3">
+          <div className="flex flex-col gap-2 rounded-md border-2 border-warning p-3">
             <p className="text-sm font-medium">
               {noticePeriod.shortfallDays} day{noticePeriod.shortfallDays === 1 ? '' : 's'} short
               of the {noticePeriod.requiredDays}-day notice period this jurisdiction requires

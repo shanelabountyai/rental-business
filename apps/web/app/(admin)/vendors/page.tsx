@@ -52,7 +52,7 @@ export default async function VendorsPage() {
                   </span>
                   <span className="text-muted-foreground text-sm">
                     {vendor.trades.join(', ') || 'No trades on file'}
-                    {flags.length > 0 && <span className="text-amber-800"> · {flags.join(' · ')}</span>}
+                    {flags.length > 0 && <span className="text-warning"> · {flags.join(' · ')}</span>}
                   </span>
                 </Link>
               </li>

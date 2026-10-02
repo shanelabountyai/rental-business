@@ -17,11 +17,11 @@ export function SetupLink({ url }: { url?: string }) {
   return (
     <div className="contents">
       {url && (
-        <div className="flex flex-col gap-1 rounded-md border border-amber-300 bg-amber-50 px-3 py-2">
-          <span className="text-sm font-medium text-amber-900">
+        <div className="flex flex-col gap-1 rounded-md border border-warning/35 bg-warning/6 px-3 py-2">
+          <span className="text-sm font-medium text-warning">
             Setup link — send it to them yourself if the email does not arrive
           </span>
-          <code className="text-xs break-all text-amber-950">{url}</code>
+          <code className="text-xs break-all text-warning">{url}</code>
         </div>
       )}
     </div>

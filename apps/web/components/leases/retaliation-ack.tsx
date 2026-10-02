@@ -44,7 +44,7 @@ export function RetaliationAck({
   return (
     <LiveRegion>
       {view && (
-        <div className="flex flex-col gap-2 rounded-md border-2 border-amber-500 p-3">
+        <div className="flex flex-col gap-2 rounded-md border-2 border-warning p-3">
           <p className="text-sm font-medium">
             {view.daysAgo} day{view.daysAgo === 1 ? '' : 's'} after this tenant&rsquo;s{' '}
             {view.description} ({friendlyBusinessDate(view.occurredOn)}) — inside the{' '}

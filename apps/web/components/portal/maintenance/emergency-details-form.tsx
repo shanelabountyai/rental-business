@@ -71,7 +71,7 @@ export function EmergencyDetailsForm({
       <input type="hidden" name="category" value={category} />
 
       <LiveRegion assertive>
-        {state.error && <p className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-base text-red-900">{state.error}</p>}
+        {state.error && <p className="rounded-md border border-danger/35 bg-danger/6 px-3 py-2 text-base text-danger">{state.error}</p>}
       </LiveRegion>
 
       <h2 className="text-lg font-semibold">{categoryLabel}</h2>

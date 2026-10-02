@@ -6,6 +6,7 @@ import { deadLetteredEvents } from '@/lib/jobs/outbox.ts'
 import { listNotifications } from '@/lib/notifications/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 import { countOpenTasksOfType } from '@/lib/tasks/queries.ts'
+import { Badge, type BadgeTone } from '@/components/badge.tsx'
 
 export const metadata = { title: 'Notifications — Rental Operations' }
 
@@ -45,17 +46,17 @@ const CHANNEL_LABELS: Record<string, string> = {
   CALL_LOG: 'Call log',
 }
 
-function statusClasses(status: string): string {
+function statusTone(status: string): BadgeTone {
   if (status === 'FAILED' || status === 'BOUNCED') {
-    return 'bg-red-100 text-red-900'
+    return 'danger'
   }
   if (status === 'SUPPRESSED' || status === 'DEFERRED') {
-    return 'bg-amber-100 text-amber-900'
+    return 'warning'
   }
   if (status === 'QUEUED') {
-    return 'bg-muted text-muted-foreground'
+    return 'neutral'
   }
-  return 'bg-emerald-100 text-emerald-900'
+  return 'success'
 }
 
 export default async function NotificationsPage() {
@@ -91,7 +92,7 @@ export default async function NotificationsPage() {
       </header>
 
       {unreachable > 0 && (
-        <p className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        <p className="rounded-md border border-warning/35 bg-warning/6 px-4 py-3 text-sm text-warning">
           {unreachable} notice{unreachable === 1 ? '' : 's'} could
           not be delivered electronically at all.{' '}
           <Link
@@ -126,12 +127,10 @@ export default async function NotificationsPage() {
                         ? CATEGORY_LABELS[notification.category]
                         : notification.category)}
                   </span>
-                  <span
-                    className={`rounded-md px-2 py-0.5 text-xs font-medium ${statusClasses(status)}`}
-                  >
+                  <Badge tone={statusTone(status)}>
                     {STATUS_LABELS[status] ?? status}
                     {reason ? ` — ${SUPPRESSION_LABELS[reason] ?? reason}` : ''}
-                  </span>
+                  </Badge>
                 </div>
                 <p className="text-muted-foreground">
                   {CHANNEL_LABELS[notification.channel] ?? notification.channel}{' '}
@@ -171,16 +170,14 @@ export default async function NotificationsPage() {
                 <li key={event.id} className="flex flex-col gap-1 px-4 py-3 text-sm">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <span className="font-medium">{event.type}</span>
-                    <span className="rounded-md bg-red-100 px-2 py-0.5 text-xs font-medium text-red-900">
-                      Gave up after {event.attempts} attempts
-                    </span>
+                    <Badge tone="danger">Gave up after {event.attempts} attempts</Badge>
                   </div>
                   <p className="text-muted-foreground">
                     {event.aggregateType} {event.aggregateId} ·{' '}
                     {friendlyTimestamp(event.occurredAt, 'UTC')}
                   </p>
                   {event.lastError && (
-                    <p className="text-red-700">{event.lastError}</p>
+                    <p className="text-danger">{event.lastError}</p>
                   )}
                 </li>
               ))}

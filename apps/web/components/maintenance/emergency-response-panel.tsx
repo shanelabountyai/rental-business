@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from 'react'
 import { LiveRegion, pendingButtonProps, useFocusWhen } from '@/components/auth-form.tsx'
+import { Badge } from '@/components/badge.tsx'
 import type { MaintenanceFormState } from '@/lib/maintenance/actions.ts'
 import { PRIMARY_BUTTON_CLASSES } from '@/components/ui-classes.ts'
 
@@ -75,7 +76,7 @@ export function EmergencyResponsePanel({
   return (
     <section
       aria-labelledby="emergency-response"
-      className="flex flex-col gap-4 rounded-md border border-red-300 p-4"
+      className="flex flex-col gap-4 rounded-md border border-danger/35 p-4"
     >
       <h2 id="emergency-response" ref={headingRef} tabIndex={-1} className="text-lg font-semibold">
         Emergency response
@@ -136,11 +137,7 @@ export function EmergencyResponsePanel({
                   ) : (
                     <span className="text-muted-foreground">no phone on file</span>
                   )}
-                  {vendor.emergencyAvailable && (
-                    <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-900">
-                      Answers after hours
-                    </span>
-                  )}
+                  {vendor.emergencyAvailable && <Badge tone="success">Answers after hours</Badge>}
                   {canEditVendors && (
                     <form action={vendorAction}>
                       <input type="hidden" name="vendorId" value={vendor.id} />
@@ -168,7 +165,7 @@ export function EmergencyResponsePanel({
       )}
 
       <LiveRegion assertive>
-        {error && <p className="text-sm text-red-700">{error}</p>}
+        {error && <p className="text-sm text-danger">{error}</p>}
       </LiveRegion>
     </section>
   )

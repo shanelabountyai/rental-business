@@ -6,6 +6,7 @@ import { requirePermission, requireScope } from '@/lib/auth/guard.ts'
 import { listOpenWorkOrders } from '@/lib/workorders/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 import { SUBMIT_BUTTON_CLASSES } from '@/components/ui-classes.ts'
+import { Badge, type BadgeTone } from '@/components/badge.tsx'
 
 export const metadata = { title: 'Work orders — Rental Operations' }
 
@@ -15,29 +16,17 @@ const PRIORITY_LABELS: Record<string, string> = {
   ROUTINE: 'Routine',
 }
 
-const PRIORITY_BADGE_CLASSES: Record<string, string> = {
-  EMERGENCY: 'bg-red-100 text-red-900',
-  URGENT: 'bg-amber-100 text-amber-900',
+const PRIORITY_BADGE_TONE: Record<string, BadgeTone> = {
+  EMERGENCY: 'danger',
+  URGENT: 'warning',
 }
 
 function PriorityBadge({ priority }: { priority: string }) {
-  return (
-    <span
-      className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-        PRIORITY_BADGE_CLASSES[priority] ?? 'bg-muted text-muted-foreground'
-      }`}
-    >
-      {PRIORITY_LABELS[priority] ?? priority}
-    </span>
-  )
+  return <Badge tone={PRIORITY_BADGE_TONE[priority] ?? 'neutral'}>{PRIORITY_LABELS[priority] ?? priority}</Badge>
 }
 
 function StatusBadge({ status }: { status: string }) {
-  return (
-    <span className="bg-secondary rounded-full px-2 py-0.5 text-xs font-medium">
-      {WORK_ORDER_STATUS_LABELS[status] ?? status}
-    </span>
-  )
+  return <Badge>{WORK_ORDER_STATUS_LABELS[status] ?? status}</Badge>
 }
 /**
  * The PM's oversight view of every open work order, assigned or not, staff
@@ -96,8 +85,8 @@ export default async function WorkOrdersPage() {
                 <span className="font-medium">
                   {wo.scope.slice(0, 80)}
                   {wo.warrantyClaim && (
-                    <span className="ml-2 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800">
-                      Warranty
+                    <span className="ml-2">
+                      <Badge tone="info">Warranty</Badge>
                     </span>
                   )}
                 </span>

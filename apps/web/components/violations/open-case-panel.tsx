@@ -107,7 +107,7 @@ export function OpenViolationCasePanel({
                 its text is a new node rather than a change. */}
             <LiveRegion assertive>
               {kind === 'UNAUTHORIZED_ANIMAL' && (
-                <p className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+                <p className="rounded-md border border-warning/40 bg-warning/10 p-3 text-sm">
                   Ask first whether it is a service or assistance animal. A tenant
                   is not required to volunteer that, and a notice served on an
                   assistance animal is a fair-housing complaint whether or not

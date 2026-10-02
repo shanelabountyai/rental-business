@@ -62,8 +62,8 @@ export function ClosePanel({
         <p
           className={`rounded-md border px-3 py-2 text-sm ${
             currentAnswer.resolved
-              ? 'border-green-300'
-              : 'border-red-300'
+              ? 'border-success/35'
+              : 'border-danger/35'
           }`}
         >
           {currentAnswer.resolved

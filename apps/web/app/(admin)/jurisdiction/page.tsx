@@ -91,7 +91,7 @@ export default async function JurisdictionRulesPage({
       {versioned && (
         <p
           role="status"
-          className="rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-900"
+          className="rounded-md border border-success/35 bg-success/6 px-3 py-2 text-sm text-success"
         >
           Added a new version for {versioned}.
         </p>
@@ -104,7 +104,7 @@ export default async function JurisdictionRulesPage({
       {(coverage.statesNeedingRule.length > 0 || coverage.gaps.length > 0) && (
         <section
           aria-labelledby="coverage-heading"
-          className="flex flex-col gap-3 rounded-md border border-amber-300 bg-amber-50 p-4 text-amber-900"
+          className="flex flex-col gap-3 rounded-md border border-warning/35 bg-warning/6 p-4 text-warning"
         >
           <h2 id="coverage-heading" className="text-lg font-semibold">
             Coverage gaps

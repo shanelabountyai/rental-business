@@ -23,6 +23,7 @@ import { INVOICE_STATUS_LABELS, invoiceLifecycleStatus } from '@rental/core/vend
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { prisma } from '@rental/db'
+import { Badge } from '@/components/badge.tsx'
 import { Breadcrumbs } from '@/components/shell/breadcrumbs.tsx'
 import { ApprovalPanel } from '@/components/workorders/approval-panel.tsx'
 import { BidsPanel } from '@/components/workorders/bids-panel.tsx'
@@ -309,8 +310,8 @@ export default async function WorkOrderDetailPage({
         <dd className="col-span-1 sm:col-span-2">
           {STATUS_LABELS[workOrder.status] ?? workOrder.status}
           {workOrder.warrantyClaim && (
-            <span className="ml-2 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800">
-              Warranty claim
+            <span className="ml-2">
+              <Badge tone="info">Warranty claim</Badge>
             </span>
           )}
         </dd>
@@ -333,13 +334,13 @@ export default async function WorkOrderDetailPage({
               {localTime(workOrder.scheduledStart)}
               {workOrder.scheduledEnd && ` to ${endClock(workOrder.scheduledEnd)}`}
               {workOrder.entryOverrideReason && (
-                <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900">
-                  Entry override logged
+                <span className="ml-2">
+                  <Badge tone="warning">Entry override logged</Badge>
                 </span>
               )}
               {workOrder.tenantNoShowAt && (
-                <span className="ml-2 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800">
-                  Tenant no-show
+                <span className="ml-2">
+                  <Badge tone="danger">Tenant no-show</Badge>
                 </span>
               )}
             </dd>
@@ -542,7 +543,7 @@ export default async function WorkOrderDetailPage({
               The tenant confirmed this was fixed.
             </p>
           ) : (
-            <p className="text-sm text-amber-800">
+            <p className="text-sm text-warning">
               The tenant never confirmed this one.
             </p>
           )}

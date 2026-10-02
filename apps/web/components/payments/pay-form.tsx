@@ -128,7 +128,7 @@ export function PayForm({
       <LiveRegion>
       {feeCents > 0 && (
         <p
-          className="rounded-md bg-amber-50 p-3 text-sm"
+          className="rounded-md bg-warning/6 p-3 text-sm"
         >
           Paying by card adds a <strong>{formatCents(feeCents)}</strong> processing fee, so you
           will be charged <strong>{formatCents(amountCents + feeCents)}</strong> in total. Bank

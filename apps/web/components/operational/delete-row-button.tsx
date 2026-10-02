@@ -24,7 +24,7 @@ export function DeleteResultRegion({ children }: { children: ReactNode }) {
       {children}
       <div role="alert" className="contents">
         {result?.error && (
-          <p className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-900">
+          <p className="rounded-md border border-danger/35 bg-danger/6 px-3 py-2 text-sm text-danger">
             {result.text}
           </p>
         )}
@@ -65,7 +65,7 @@ export function DeleteRowButton({
       <button
         type="submit"
         aria-label={`Remove ${label}`}
-        className="focus-visible:ring-ring text-muted-foreground hover:text-red-700 min-h-11 rounded-md px-2 text-sm underline underline-offset-2 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+        className="focus-visible:ring-ring text-muted-foreground hover:text-danger min-h-11 rounded-md px-2 text-sm underline underline-offset-2 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
       >
         Remove
       </button>

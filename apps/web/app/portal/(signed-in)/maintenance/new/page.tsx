@@ -55,7 +55,7 @@ export default async function NewMaintenanceRequestPage({
       */}
       <Link
         href="/portal/maintenance/emergency"
-        className="focus-visible:ring-ring flex min-h-12 items-center rounded-md border-2 border-red-600 bg-red-50 px-4 py-2 text-base font-medium text-red-950 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+        className="focus-visible:ring-ring flex min-h-12 items-center rounded-md border-2 border-danger bg-danger/6 px-4 py-2 text-base font-medium text-danger focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
       >
         Is this an emergency? Gas, flooding, no heat, break-in →
       </Link>

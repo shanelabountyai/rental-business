@@ -13,6 +13,7 @@ import { friendlyBusinessDate, type BusinessDate } from '@rental/core/scheduling
 import { useActionState, useState } from 'react'
 import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
 import { FieldError, SelectField, TextField } from '@/components/form/field.tsx'
+import { Badge, type BadgeTone } from '@/components/badge.tsx'
 import type { ScraFormState } from '@/lib/scra/actions.ts'
 
 // The SCRA surfaces (RISK-12, R-085).
@@ -36,15 +37,12 @@ export interface LookupRow {
   notes: string | null
 }
 
-const RESULT_TONE: Record<ScraLookupResult, string> = {
-  in_service:
-    'bg-amber-100 text-amber-900',
-  not_in_service:
-    'bg-green-100 text-green-900',
+const RESULT_TONE: Record<ScraLookupResult, BadgeTone> = {
+  in_service: 'warning',
+  not_in_service: 'success',
   // Deliberately NOT green. A no-match reads as "nothing found", which is the
   // exact misreading that gets a false affidavit signed.
-  indeterminate:
-    'bg-amber-100 text-amber-900',
+  indeterminate: 'warning',
 }
 
 function RecordLookupForm({
@@ -99,7 +97,7 @@ function RecordLookupForm({
 
       {result === 'in_service' && (
         <>
-          <p className="rounded-md border border-amber-500 bg-amber-50 p-3 text-sm text-amber-950">
+          <p className="rounded-md border border-warning bg-warning/6 p-3 text-sm text-warning">
             Recording this places an SCRA hold on the tenancy automatically —
             no late fees, no chase, no access changes, and a banner on every
             notice screen.
@@ -121,7 +119,7 @@ function RecordLookupForm({
       )}
 
       {result === 'indeterminate' && (
-        <p className="rounded-md border border-amber-500 bg-amber-50 p-3 text-sm text-amber-950">
+        <p className="rounded-md border border-warning bg-warning/6 p-3 text-sm text-warning">
           A no-match is not a negative. It will not support the §3931
           affidavit — re-run the search with a date of birth or SSN.
         </p>
@@ -202,7 +200,7 @@ export function ScraLookupsPanel({
       </p>
 
       {prompt && (
-        <p className="rounded-md border border-amber-500 bg-amber-50 p-3 text-sm text-amber-950">
+        <p className="rounded-md border border-warning bg-warning/6 p-3 text-sm text-warning">
           {prompt}
         </p>
       )}
@@ -215,11 +213,9 @@ export function ScraLookupsPanel({
             <li key={lookup.id} className="flex flex-col gap-1 px-4 py-3">
               <span className="flex flex-wrap items-center justify-between gap-2">
                 <span className="font-medium">{lookup.tenantName}</span>
-                <span
-                  className={`rounded-full px-2 py-0.5 text-xs font-medium ${RESULT_TONE[lookup.result]}`}
-                >
+                <Badge tone={RESULT_TONE[lookup.result]}>
                   {SCRA_LOOKUP_RESULT_LABELS[lookup.result]}
-                </span>
+                </Badge>
               </span>
               <span className="text-muted-foreground text-sm">
                 Searched {friendlyBusinessDate(lookup.searchedOn)} · recorded by {lookup.recordedByName}
@@ -244,7 +240,7 @@ export function ScraLookupsPanel({
                     {lookup.certificateFileName}
                   </a>
                 ) : (
-                  <span className="text-amber-800">
+                  <span className="text-warning">
                     No certificate attached — this is a claim, not evidence.
                   </span>
                 )}

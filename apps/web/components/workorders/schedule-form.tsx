@@ -108,7 +108,7 @@ export function ScheduleForm({
       />
 
       {state.needsOverride && (
-        <div className="flex flex-col gap-2 rounded-md border-2 border-amber-500 p-3">
+        <div className="flex flex-col gap-2 rounded-md border-2 border-warning p-3">
           <p className="text-sm font-medium">
             {state.needsOverride.unserved
               ? 'The notice cannot be served through the portal'

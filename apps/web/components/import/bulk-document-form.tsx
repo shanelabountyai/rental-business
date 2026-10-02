@@ -72,7 +72,7 @@ export function BulkDocumentForm() {
                 <tr key={`${result.line}-${i}`} className="border-t">
                   <td className="px-3 py-2">{result.line}</td>
                   <td className="px-3 py-2">{result.fileName || '—'}</td>
-                  <td className={`px-3 py-2 ${result.status === 'error' ? 'text-red-700' : 'text-emerald-700'}`}>
+                  <td className={`px-3 py-2 ${result.status === 'error' ? 'text-danger' : 'text-success'}`}>
                     {result.message}
                   </td>
                 </tr>

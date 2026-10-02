@@ -75,7 +75,7 @@ export function DeleteForm({
       </select>
       <button
         type="submit"
-        className="focus-visible:ring-ring min-h-9 rounded-md border border-red-300 px-3 py-1 text-sm font-medium text-red-800 hover:bg-red-50 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+        className="focus-visible:ring-ring min-h-9 rounded-md border border-danger/35 px-3 py-1 text-sm font-medium text-danger hover:bg-danger/12 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
       >
         {/* VISIBLE "Delete", accessible name "Delete {fileName}". The
             filename in the visible label would print it three times in a row

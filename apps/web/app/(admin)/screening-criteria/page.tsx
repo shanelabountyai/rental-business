@@ -53,7 +53,7 @@ export default async function ScreeningCriteriaPage({
       {versioned && (
         <p
           role="status"
-          className="rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-900"
+          className="rounded-md border border-success/35 bg-success/6 px-3 py-2 text-sm text-success"
         >
           Added a new criteria version.
         </p>
@@ -62,7 +62,7 @@ export default async function ScreeningCriteriaPage({
       {current && !current.reviewedBy && (
         <p
           role="alert"
-          className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900"
+          className="rounded-md border border-warning/35 bg-warning/6 px-3 py-2 text-sm text-warning"
         >
           The current criteria (v{current.version}) have never been reviewed
           by an attorney (OQ-6). This is a release gate, not a formality -

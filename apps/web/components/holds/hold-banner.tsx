@@ -49,9 +49,9 @@ export function HoldBanner({
       // A labelled region a screen reader can land on is what a persistent
       // warning actually is.
       aria-labelledby="lease-holds"
-      className="flex flex-col gap-3 rounded-md border-2 border-amber-500 bg-amber-50 p-4"
+      className="flex flex-col gap-3 rounded-md border-2 border-warning bg-warning/6 p-4"
     >
-      <h2 id="lease-holds" className="text-sm font-semibold text-amber-950">
+      <h2 id="lease-holds" className="text-sm font-semibold text-warning">
         {holds.length === 1
           ? 'This tenancy is under a hold'
           : `This tenancy is under ${holds.length} holds`}
@@ -62,19 +62,19 @@ export function HoldBanner({
           const definition = HOLD_DEFINITIONS[hold.type]
           return (
             <li key={`${hold.type}-${hold.placedOn}`} className="flex flex-col gap-1">
-              <span className="text-sm font-medium text-amber-950">
+              <span className="text-sm font-medium text-warning">
                 {definition.label}
               </span>
-              <span className="text-sm text-amber-900">
+              <span className="text-sm text-warning">
                 {definition.banner}
               </span>
-              <span className="text-xs text-amber-800">
+              <span className="text-xs text-warning">
                 Placed {hold.placedOn} by {hold.placedByName}
                 {hold.daysInForce != null &&
                   `, in force ${hold.daysInForce === 0 ? 'since today' : `for ${hold.daysInForce} day${hold.daysInForce === 1 ? '' : 's'}`}`}{' '}
                 — “{hold.reason}”
               </span>
-              <span className="text-xs text-amber-800">
+              <span className="text-xs text-warning">
                 In force: {effectLabels(hold.type).join('; ')}.
               </span>
             </li>
@@ -82,7 +82,7 @@ export function HoldBanner({
         })}
       </ul>
 
-      <p className="text-xs text-amber-900">
+      <p className="text-xs text-warning">
         {context ?? 'Nothing here is blocked'} — this is a warning, not a
         refusal. The product does not decide whether the protection applies to
         what you are about to do. Check before you proceed, and record what

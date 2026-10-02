@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { actorCan, requireScope } from '@/lib/auth/guard.ts'
 import { listLeases } from '@/lib/leases/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
+import { Badge } from '@/components/badge.tsx'
 
 export const metadata = { title: 'Leases — Rental Operations' }
 
@@ -17,28 +18,16 @@ function StatusPill({ status, underNotice }: { status: string; underNotice: bool
   const over = status === 'ENDED' || status === 'TERMINATED'
   return (
     <span className="flex flex-wrap items-center gap-1.5">
-      <span
-        className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-          running
-            ? 'bg-green-100 text-green-900'
-            : over
-              ? 'bg-muted text-muted-foreground'
-              : 'bg-amber-100 text-amber-900'
-        }`}
-      >
+      <Badge tone={running ? 'success' : over ? 'neutral' : 'warning'}>
         {leaseStatusLabel(status)}
-      </span>
+      </Badge>
       {/*
         Notice is rendered as its own badge ALONGSIDE the status, not
         instead of it - a tenancy under notice is still running, which is
         precisely why there is no NOTICE_GIVEN status to swap in. See
         LeaseStatus's own schema comment.
       */}
-      {underNotice && (
-        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900">
-          Notice given
-        </span>
-      )}
+      {underNotice && <Badge tone="warning">Notice given</Badge>}
     </span>
   )
 }

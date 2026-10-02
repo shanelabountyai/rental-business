@@ -174,7 +174,7 @@ export default async function EvictionCasePage({ params }: { params: Promise<{ i
           <p className="text-muted-foreground text-sm">Last day to cure is {friendlyBusinessDate(clock.cureBy)}.</p>
         ) : (
           clock.periodUnknown && (
-            <p className="text-sm text-amber-800">
+            <p className="text-sm text-warning">
               This state&rsquo;s cure period is not configured in this system, so no deadline is shown. Ask your
               attorney — a date guessed here is the one that gets a case dismissed.
             </p>
@@ -204,14 +204,14 @@ export default async function EvictionCasePage({ params }: { params: Promise<{ i
               </p>
             )}
             {ledgerToday && ledgerToday.chargedSinceDraftingCents > 0 && (
-              <p className="text-sm text-amber-800">
+              <p className="text-sm text-warning">
                 {formatCents(ledgerToday.chargedSinceDraftingCents)} has been charged since the notice was drafted, and
                 none of it is in the demand. Whether a charge added after service affects the notice is a question for
                 your attorney.
               </p>
             )}
             {demand.verdict.state === 'part_cured' && (
-              <p className="text-sm text-amber-800">{partialCureWarning(partialPaymentCures)}</p>
+              <p className="text-sm text-warning">{partialCureWarning(partialPaymentCures)}</p>
             )}
           </div>
         )}
@@ -224,12 +224,12 @@ export default async function EvictionCasePage({ params }: { params: Promise<{ i
       {paymentsSinceService.length > 0 && (
         <section
           aria-labelledby="acceptance"
-          className="flex flex-col gap-2 rounded-md border border-red-300 bg-red-50 p-4"
+          className="flex flex-col gap-2 rounded-md border border-danger/35 bg-danger/6 p-4"
         >
-          <h2 id="acceptance" className="text-lg font-semibold text-red-900">
+          <h2 id="acceptance" className="text-lg font-semibold text-danger">
             Money accepted after service
           </h2>
-          <ul className="flex flex-col gap-1 text-sm text-red-900">
+          <ul className="flex flex-col gap-1 text-sm text-danger">
             {paymentsSinceService.map((payment, index) => (
               <li key={index} className="tabular-nums">
                 {formatCents(payment.amountCents)} — {payment.channelLabel},{' '}
@@ -237,9 +237,9 @@ export default async function EvictionCasePage({ params }: { params: Promise<{ i
               </li>
             ))}
           </ul>
-          <p className="text-sm text-red-900">{acceptanceWarning(acceptanceWaivesNotice)}</p>
+          <p className="text-sm text-danger">{acceptanceWarning(acceptanceWaivesNotice)}</p>
           {acceptanceWaiverNote && (
-            <p className="text-sm text-red-900">Counsel&rsquo;s note on file: {acceptanceWaiverNote}</p>
+            <p className="text-sm text-danger">Counsel&rsquo;s note on file: {acceptanceWaiverNote}</p>
           )}
         </section>
       )}
@@ -285,7 +285,7 @@ export default async function EvictionCasePage({ params }: { params: Promise<{ i
                       Served {delivery.method.toLowerCase().replace(/_/g, ' ')} on{' '}
                       {friendlyDate(delivery.servedAt, zone)}
                       {delivery.permittedByJurisdiction === false && (
-                        <span className="text-red-800">
+                        <span className="text-danger">
                           {' '}
                           — this state does not name that method for this notice
                         </span>
@@ -314,7 +314,7 @@ export default async function EvictionCasePage({ params }: { params: Promise<{ i
                   </li>
                 </ul>
                 {draft.demand.lines.some((line) => line.kind === 'FEE') && feeDemandWarning(draft.mayIncludeFees) && (
-                  <p className="text-sm text-amber-800">{feeDemandWarning(draft.mayIncludeFees)}</p>
+                  <p className="text-sm text-warning">{feeDemandWarning(draft.mayIncludeFees)}</p>
                 )}
                 <DraftCureNoticePanel
                   action={draftCureNotice.bind(null, evictionCase.id)}
@@ -386,7 +386,7 @@ export default async function EvictionCasePage({ params }: { params: Promise<{ i
             Record what happened next
           </h2>
           {next && filingReadiness && !filingReadiness.ready ? (
-            <p className="text-sm text-amber-800">
+            <p className="text-sm text-warning">
               {FILING_REFUSAL_MESSAGES[filingReadiness.refusal!]}
             </p>
           ) : (

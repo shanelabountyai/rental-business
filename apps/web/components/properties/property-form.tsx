@@ -146,7 +146,7 @@ export function PropertyForm({
 
       <LiveRegion assertive>
         {state.duplicateOf && (
-          <div className="flex flex-col gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          <div className="flex flex-col gap-2 rounded-md border border-warning/35 bg-warning/6 px-3 py-2 text-sm text-warning">
             <p>
               A property called <strong>{state.duplicateOf.name}</strong> at{' '}
               <strong>{state.duplicateOf.addressLine1}</strong> already exists.

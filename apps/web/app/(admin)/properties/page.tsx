@@ -68,7 +68,7 @@ export default async function PropertiesPage({
       {entityCreated && (
         <p
           role="status"
-          className="rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-900"
+          className="rounded-md border border-success/35 bg-success/6 px-3 py-2 text-sm text-success"
         >
           Created entity &ldquo;{entityCreated}&rdquo;.
         </p>

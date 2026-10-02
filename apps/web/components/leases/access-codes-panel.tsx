@@ -42,7 +42,7 @@ export function AccessCodesPanel({
       </h2>
 
       {!depositCleared && (
-        <p className="rounded-md bg-amber-50 p-2 text-sm text-amber-900">
+        <p className="rounded-md bg-warning/6 p-2 text-sm text-warning">
           Move-in funds have not cleared yet. Codes are withheld until they
           do — certified funds (money order, cash, ACH, card) clear the
           moment they settle; a personal check clears after its hold period.

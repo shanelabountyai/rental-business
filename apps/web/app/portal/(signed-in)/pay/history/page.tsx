@@ -142,7 +142,7 @@ export default async function PaymentHistoryPage() {
                       </td>
                       <td
                         className={`py-2 pr-3 text-right whitespace-nowrap tabular-nums ${
-                          isPayment ? 'text-emerald-700' : ''
+                          isPayment ? 'text-success' : ''
                         }`}
                       >
                         {/* A payment reduces what is owed, so it shows as a

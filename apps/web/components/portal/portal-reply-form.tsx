@@ -21,7 +21,7 @@ export function PortalReplyForm({
   return (
     <form action={formAction} className="flex flex-col gap-3">
       <LiveRegion assertive>
-        {state.error && <p className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-base text-red-900">{state.error}</p>}
+        {state.error && <p className="rounded-md border border-danger/35 bg-danger/6 px-3 py-2 text-base text-danger">{state.error}</p>}
       </LiveRegion>
       <div className="flex flex-col gap-1.5">
         <label htmlFor="portal-reply" className="font-medium">

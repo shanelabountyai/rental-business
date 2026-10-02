@@ -79,7 +79,7 @@ export function ReconciliationDrift({
           ' Billing is simulated in this deployment, so only the internal projection check runs; Stripe’s own records are not consulted.'}
       </p>
       {unclaimedCounterPayments > 0 && (
-        <p className="text-sm font-medium text-red-700">
+        <p className="text-sm font-medium text-danger">
           {unclaimedCounterPayments === 1
             ? '1 counter payment recorded more than two days ago has no ledger entry: its event never came back from the billing provider, so no balance includes that money.'
             : `${unclaimedCounterPayments} counter payments recorded more than two days ago have no ledger entry: their events never came back from the billing provider, so no balance includes that money.`}
@@ -97,7 +97,7 @@ export function ReconciliationDrift({
               <div className="flex flex-wrap items-center justify-between gap-2">
                 {/* Red plus words, never the copper accent - drift is an
                     alarm, and D-163 reserves red for exactly this. */}
-                <span className="font-medium text-red-700">
+                <span className="font-medium text-danger">
                   {run.items.length}{' '}
                   {run.items.length === 1 ? 'discrepancy' : 'discrepancies'}
                 </span>

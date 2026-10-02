@@ -51,6 +51,21 @@
   --border: oklch(0.922 0 0);
   --input: oklch(0.72 0 0); /* 3.05:1 on white */
   --ring: oklch(0.55 0 0); /* 4.63:1 on white, and still reads on --primary */
+  /* UX-06: semantic status colors, replacing ad hoc amber/red/green/emerald/
+     blue Tailwind classes used directly in 90+ places. Each is a single text
+     color - callers tint a background with it via Tailwind's opacity
+     modifier (e.g. `bg-danger/10`), the same pattern already established for
+     `bg-primary/90` and `hover:bg-secondary/50`. Values are the exact shades
+     already in use for alarm/notice TEXT (red-900/amber-900/emerald-800/
+     blue-800, all already passing AA on white per the existing a11y work),
+     so migrating a call site to these tokens is a no-op visually - never a
+     re-review of contrast. Deliberately separate from --destructive, which
+     is a different UI role (the brighter, higher-chroma red used on
+     destructive ACTION elements like buttons) with its own contrast math. */
+  --success: #065f46;
+  --warning: #78350f;
+  --danger: #7f1d1d;
+  --info: #1e40af;
 }
 
 @theme inline {
@@ -79,6 +94,10 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --color-info: var(--info);
 }
 
 @layer base {

@@ -22,7 +22,7 @@ export const metadata = { title: 'Dashboard — Rental Operations' }
 const CARD =
   'hover:bg-secondary focus-visible:ring-ring flex flex-col gap-1 rounded-lg border p-3 focus-visible:ring-2 focus-visible:outline-none'
 const CARD_GLOW =
-  'flex flex-col gap-1 rounded-lg border border-red-300 bg-red-50 p-3 hover:bg-red-100 focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none'
+  'flex flex-col gap-1 rounded-lg border border-danger/35 bg-danger/6 p-3 hover:bg-danger/12 focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none'
 
 function Tile({
   href,
@@ -57,9 +57,9 @@ function Tile({
             <div
               className={`h-full rounded-full ${
                 progressPct < 40
-                  ? 'bg-red-500'
+                  ? 'bg-danger'
                   : progressPct < 70
-                    ? 'bg-amber-500'
+                    ? 'bg-warning'
                     : 'bg-primary'
               }`}
               style={{ width: `${progressPct}%` }}

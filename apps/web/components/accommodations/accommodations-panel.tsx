@@ -15,6 +15,7 @@ import {
 } from '@rental/core/accommodations'
 import { friendlyBusinessDate } from '@rental/core/scheduling'
 import { useActionState, useState } from 'react'
+import { Badge, type BadgeTone } from '@/components/badge.tsx'
 import { FormAlerts, LiveRegion, SubmitButton } from '@/components/auth-form.tsx'
 import { FieldError, SelectField, TextField, TextareaField } from '@/components/form/field.tsx'
 import type { AccommodationFormState } from '@/lib/accommodations/actions.ts'
@@ -41,12 +42,12 @@ export interface RequestRow {
   documents: { id: string; fileName: string }[]
 }
 
-const STATUS_TONE: Record<RequestStatus, string> = {
-  RECEIVED: 'bg-amber-100 text-amber-900',
-  INFO_REQUESTED: 'bg-amber-100 text-amber-900',
-  APPROVED: 'bg-green-100 text-green-900',
-  DENIED: 'bg-neutral-200 text-neutral-900',
-  WITHDRAWN: 'bg-neutral-200 text-neutral-900',
+const STATUS_TONE: Record<RequestStatus, BadgeTone> = {
+  RECEIVED: 'warning',
+  INFO_REQUESTED: 'warning',
+  APPROVED: 'success',
+  DENIED: 'neutral',
+  WITHDRAWN: 'neutral',
 }
 
 function IntakeForm({
@@ -169,7 +170,7 @@ function DocumentationForm({
   // reaching for a workaround.
   if (!decision.requestable) {
     return (
-      <p className="rounded-md border border-amber-500 bg-amber-50 p-3 text-sm text-amber-950">
+      <p className="rounded-md border border-warning bg-warning/6 p-3 text-sm text-warning">
         {DOCUMENTATION_REFUSAL_MESSAGES[decision.refusal!]}
       </p>
     )
@@ -356,9 +357,7 @@ export function AccommodationsPanel({
           Accommodation requests
         </h2>
         {open.length > 0 && (
-          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900">
-            {open.length} awaiting a determination
-          </span>
+          <Badge tone="warning">{open.length} awaiting a determination</Badge>
         )}
       </div>
 
@@ -379,11 +378,9 @@ export function AccommodationsPanel({
               <li key={request.id} className="flex flex-col gap-2 rounded-md border p-4">
                 <span className="flex flex-wrap items-center justify-between gap-2">
                   <span className="font-medium">{request.requesterName}</span>
-                  <span
-                    className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_TONE[request.status]}`}
-                  >
+                  <Badge tone={STATUS_TONE[request.status]}>
                     {REQUEST_STATUS_LABELS[request.status]}
-                  </span>
+                  </Badge>
                 </span>
 
                 <span className="text-muted-foreground text-sm">
@@ -394,7 +391,7 @@ export function AccommodationsPanel({
                 <span
                   className={
                     clock.overdue
-                      ? 'text-sm font-medium text-red-800'
+                      ? 'text-sm font-medium text-danger'
                       : 'text-muted-foreground text-sm'
                   }
                 >

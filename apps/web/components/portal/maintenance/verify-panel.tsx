@@ -160,7 +160,7 @@ export function VerifyPanel({
 
         <LiveRegion assertive>
           {state.error && (
-            <p className="text-sm text-red-700">{state.error}</p>
+            <p className="text-sm text-danger">{state.error}</p>
           )}
         </LiveRegion>
       </form>

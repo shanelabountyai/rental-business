@@ -128,7 +128,7 @@ export function TranslationsPanel({
                     {translation.approvedByName ? ` by ${translation.approvedByName}` : ''}
                   </span>
                 ) : (
-                  <span className="font-normal text-amber-800">
+                  <span className="font-normal text-warning">
                     {' '}
                     — not approved
                     {isLegal && ', so it is not being used'}

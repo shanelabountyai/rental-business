@@ -7,6 +7,7 @@ import Link from 'next/link'
 import { requirePermission, requireScope } from '@/lib/auth/guard.ts'
 import { listAbandonmentCases } from '@/lib/abandonment/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
+import { Badge } from '@/components/badge.tsx'
 
 export const metadata = { title: 'Gone dark — Rental Operations' }
 
@@ -59,17 +60,11 @@ export default async function AbandonmentPage() {
                   <span className="font-medium">
                     {row.propertyName} — {row.unitName}
                   </span>
-                  <span
-                    className={
-                      row.status === 'CLOSED'
-                        ? 'rounded-full bg-neutral-200 px-2 py-0.5 text-xs font-medium text-neutral-900'
-                        : 'rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900'
-                    }
-                  >
+                  <Badge tone={row.status === 'CLOSED' ? 'neutral' : 'warning'}>
                     {row.outcome
                       ? ABANDONMENT_OUTCOME_LABELS[row.outcome]
                       : ABANDONMENT_STATUS_LABELS[row.status]}
-                  </span>
+                  </Badge>
                 </span>
                 <span className="text-muted-foreground text-sm">
                   {row.tenantNames.join(', ') || 'No tenant recorded'} · opened{' '}

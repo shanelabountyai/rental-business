@@ -3,6 +3,7 @@
 import { useActionState } from 'react'
 import Link from 'next/link'
 import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
+import { Badge, type BadgeTone } from '@/components/badge.tsx'
 import { SelectField } from '@/components/form/field.tsx'
 import type { MaintenanceFormState } from '@/lib/maintenance/actions.ts'
 import type { SlaState } from '@rental/core/maintenance'
@@ -14,15 +15,15 @@ const PRIORITY_OPTIONS = [
   { value: 'ROUTINE', label: 'Routine' },
 ]
 
-const SLA_BADGES: Record<SlaState, { label: string; className: string } | null> = {
+const SLA_BADGES: Record<SlaState, { label: string; tone: BadgeTone } | null> = {
   on_track: null,
   approaching: {
     label: 'First response due soon',
-    className: 'bg-amber-100 text-amber-900',
+    tone: 'warning',
   },
   breached: {
     label: 'First response overdue',
-    className: 'bg-red-100 text-red-800',
+    tone: 'danger',
   },
   responded: null,
 }
@@ -117,16 +118,8 @@ export function TriagePanel({
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-medium">{ticket.categoryLabel}</span>
         <span className="text-muted-foreground text-sm">· {ticket.source}</span>
-        {ticket.habitabilityFlag && (
-          <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800">
-            Habitability
-          </span>
-        )}
-        {badge && (
-          <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${badge.className}`}>
-            {badge.label}
-          </span>
-        )}
+        {ticket.habitabilityFlag && <Badge tone="danger">Habitability</Badge>}
+        {badge && <Badge tone={badge.tone}>{badge.label}</Badge>}
       </div>
 
       <p className="whitespace-pre-wrap rounded-md border p-3 text-sm">{ticket.description}</p>
