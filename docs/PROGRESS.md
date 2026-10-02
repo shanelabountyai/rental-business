@@ -14151,3 +14151,20 @@ Wired at all 6 call sites across `operational-data-section.tsx` (appliances, uti
 - `npm test`: same 4 pre-existing unrelated failures `NEXT.md` already tracks (leftover `rental_test` data).
 - Scoped e2e (`shell.spec.ts` + `portal.spec.ts` + `route-boundaries.spec.ts` + `properties.spec.ts` + `leases.spec.ts` + `workorders.spec.ts`, desktop+mobile): 156 passed + 2 skipped = 158, reconciled against `--list`. `e2e/shell.spec.ts`'s nav-structure assertions needed no changes — they query by role (`nav[aria-label=Sections]` → `link`), which the new `<h2>` group headings don't disturb.
 - No schema change — `db:ci` not required for this item.
+
+## UX-04 — needs-action row + collected-vs-billed progress bar
+**Commit:** `3f5b33c`  ·  **Date:** 2026-10-02
+
+**What it built.** `dashboard/page.tsx` adds an `actionItems(summary)` helper pulling the four counts that mean "do something today" (pending approvals, unanswered tenant messages, past-grace tenancies, emergency/urgent tickets — all already computed by `dashboardSummary`, no new query) into a "Needs action today" section rendered first, reusing the existing `Tile` component with its `glow` styling. `Tile` gained a `progressPct` prop: a `role="progressbar"` bar under Collected vs billed, colored red (<40%), amber (<70%) or `bg-primary` (≥70%) by the month's % collected.
+
+**What it decided.** The action row disappears entirely when all four counts are zero (replaced by a one-line "Nothing needs your attention today."), rather than always showing four slots with checkmarks — same exception-first rule the tickets tile already used. Pending approvals and unanswered messages were removed from the informational tile grid below, since they now live only in the action row (no duplicate, no zero-state tile for them). Both calls — hide-vs-always-show, and plain-bar-vs-labeled-bar — were proposed to Shane as clickable previews and approved before any code was written, same propose-then-approve step UX-03 used.
+
+**What it left behind.** UX-05 through UX-10 are the same design-only shape; continue the propose-then-approve pattern rather than guessing from the one-line backlog description.
+
+**Gate.**
+- `lint` clean (0 errors; same pre-existing warnings, none in touched files).
+- `typecheck` clean.
+- `npm run build` clean.
+- `npm test`: same 4 pre-existing unrelated failures `NEXT.md` already tracks (leftover `rental_test` data) — confirmed by isolating a retry. The first full run reported 49 failures across 20 unrelated files (timeouts, FK races in cleanup hooks); running the e2e sweep immediately beforehand, then the full unit suite, on a machine also holding another project's live dev server, exhausted the shared Postgres connection pool — exactly the "wall of failures with no shared code path" signature this repo's conventions already name. Re-running those 20 files alone once connections drained reproduced only the known 4.
+- Scoped e2e (`dashboard.spec.ts` run separately, then `shell.spec.ts` + `route-boundaries.spec.ts`, desktop+mobile): 10/10 + (33 passed + 1 skipped)/34 = 43 passed + 1 skipped across 44 tests, reconciled against each run's own `--list`; includes `shell.spec.ts`'s axe sweep (no new violations) and `dashboard.spec.ts`'s pending-approvals drill-down test, which still passes unchanged now that tile is served only from the action row.
+- No schema change — `db:ci` not required for this item.
