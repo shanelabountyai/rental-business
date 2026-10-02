@@ -14170,7 +14170,7 @@ Wired at all 6 call sites across `operational-data-section.tsx` (appliances, uti
 - No schema change — `db:ci` not required for this item.
 
 ## UX-05 — work order list badges
-**Commit:** `<pending>`  ·  **Date:** 2026-10-02
+**Commit:** `3933584`  ·  **Date:** 2026-10-02
 
 **What it built.** `workorders/page.tsx` adds `PriorityBadge` (colored pill: red for EMERGENCY, amber for URGENT, muted for ROUTINE) and `StatusBadge` (plain pill, reusing `WORK_ORDER_STATUS_LABELS`), replacing the plain-text priority/status fields in the row's metadata line. They sit alongside the existing Warranty pill.
 
