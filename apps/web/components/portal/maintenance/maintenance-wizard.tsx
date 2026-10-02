@@ -632,7 +632,7 @@ export function MaintenanceWizard({
         <form method="get" className="flex flex-col gap-6">
           <fieldset className="flex flex-col gap-3">
             <legend className="text-lg font-semibold" tabIndex={-1} ref={setHeading}>
-              What&rsquo;s the problem with?
+              What&rsquo;s the problem?
             </legend>
             <div className="flex flex-col gap-2">
               {MAINTENANCE_CATEGORIES.map((value) => (

@@ -14117,3 +14117,20 @@ Wired at all 6 call sites across `operational-data-section.tsx` (appliances, uti
 - `npm test`: first full run showed 58 failures, all DB-hook/test timeouts across files with no shared code path (billing, notifications, leases, workorders) — traced to a sibling project (`apptbasedservice`/bookable) running its own vitest + Playwright sweep concurrently on the same Postgres instance, not a code defect (per `CLAUDE.md`'s "a cluster of failures across unrelated test files" guidance). Rerun after that sweep cleared: only the same 4 pre-existing failures `NEXT.md` already documents (`comms.test.ts` ×2, `pre-move-out-scheduling-job.test.ts` ×2).
 - Scoped e2e (`operational.spec.ts` + `filing-cabinet.spec.ts` + `turnover.spec.ts` + `documents.spec.ts`, desktop + mobile): 60/60 passed, reconciled against `--list`.
 - No schema change — `db:ci` not required for this item.
+
+## A11Y-11: garbled maintenance wizard legend
+
+**Commit:** _pending_  ·  **Date:** 2026-10-02
+
+**What it built.** `maintenance-wizard.tsx:635` legend changed from the garbled "What's the problem with?" to "What's the problem?". Pure copy edit — one string literal, no component shape change, no new logic.
+
+**What it decided.** Nothing — no open question, no call for a later session to respect.
+
+**What it left behind.** Nothing new.
+
+**Gate.**
+- `lint` clean (0 errors; same pre-existing warnings, none in touched files).
+- `typecheck` clean.
+- `npm run build` clean.
+- No unit/e2e coverage — no assertion exercised the old legend text (checked by grep); a copy-only change has no DOM-structure or accessible-name signal for axe/Playwright to regress-check, same as prior pure-copy A11Y items.
+- No schema change — `db:ci` not required for this item.
