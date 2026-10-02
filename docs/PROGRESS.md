@@ -14187,7 +14187,7 @@ Wired at all 6 call sites across `operational-data-section.tsx` (appliances, uti
 - No schema change — `db:ci` not required for this item.
 
 ## UX-06 — semantic status color tokens + `<Badge tone>` component
-**Commit:** (pending)  ·  **Date:** 2026-10-02
+**Commit:** `50c8712`  ·  **Date:** 2026-10-02
 
 **What it built.** Four CSS tokens in `globals.css` — `--success` (`#065f46`), `--warning` (`#78350f`), `--danger` (`#7f1d1d`), `--info` (`#1e40af`) — registered in `@theme inline` so Tailwind's opacity-modifier pattern (`bg-success/12`, already used elsewhere as `bg-primary/90`) works on them. One `Badge` component (`components/badge.tsx`, `tone: 'success' | 'warning' | 'danger' | 'info' | 'neutral'`) renders the pill. Every ad hoc `amber-*`/`red-*`/`green-*`/`emerald-*`/`blue-*` Tailwind class across 93 files (~180 sites, found by widening the audit regex twice — the first pass missed `-200`/`-300`/`-600`/`-900` shades entirely, the second missed the shared `INPUT_CLASSES` constant's `aria-invalid:border-red-500`) was migrated onto these: a pill-shaped span became `<Badge tone>`, everything else (alert boxes, warning text, borders) got the literal class renamed to the token at the same shade so the visual result is unchanged. Each tone's value is the exact text shade already in use (red-900/amber-900/emerald-800/blue-800), chosen deliberately separate from the existing `--destructive` token, which is a brighter, different-contrast-math color reserved for destructive action buttons, not status text.
 
