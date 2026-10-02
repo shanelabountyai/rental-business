@@ -227,7 +227,9 @@ test.describe('the money screen ops panels', () => {
     await page.goto('/money')
 
     // The page itself renders for them - ledger.read within their scope.
-    await expect(page.getByRole('heading', { name: 'Money' })).toBeVisible()
+    // Scoped to `main`: the nav's own "Money" section heading (UX-03) shares
+    // this accessible name, and an unscoped locator is ambiguous across both.
+    await expect(page.locator('main').getByRole('heading', { name: 'Money' })).toBeVisible()
     await expect(
       page.getByRole('heading', { name: 'Reconciliation drift' }),
     ).toHaveCount(0)
