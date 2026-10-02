@@ -9,9 +9,17 @@ import type { Permission } from '@rental/core/rbac'
 // as well. The permission here exists so a maintenance tech is not shown a
 // financial section that would refuse them anyway.
 
+// UX-03: the section a nav item sits under in the shell. Order here is the
+// render order of the headed groups, not alphabetical - "Daily" first
+// because that is what gets checked constantly, "Admin" last because it is
+// mostly portfolio-wide back-office work.
+export const NAV_GROUPS = ['Daily', 'Money', 'Property', 'Compliance', 'Admin'] as const
+export type NavGroup = (typeof NAV_GROUPS)[number]
+
 export interface NavItem {
   href: string
   label: string
+  group: NavGroup
   /// Shown to an actor who holds this permission over ANYTHING
   /// (`holdsAnywhere`), not one who holds it portfolio-wide. A manager scoped
   /// to one house still runs that house's leases and money, so hiding those
@@ -39,18 +47,21 @@ export const NAV_ITEMS: readonly NavItem[] = [
   {
     href: '/dashboard',
     label: 'Dashboard',
+    group: 'Daily',
     permission: 'property.read',
     ownedBy: 'R-013',
   },
   {
     href: '/properties',
     label: 'Properties',
+    group: 'Property',
     permission: 'property.read',
     ownedBy: 'R-008',
   },
   {
     href: '/leases',
     label: 'Leases',
+    group: 'Property',
     permission: 'lease.read',
     // R-033, not R-016 - R-016 is the notification engine. Corrected while
     // building it, since the wrong item number here is how a later session
@@ -60,12 +71,14 @@ export const NAV_ITEMS: readonly NavItem[] = [
   {
     href: '/maintenance',
     label: 'Maintenance',
+    group: 'Daily',
     permission: 'ticket.read',
     ownedBy: 'R-022',
   },
   {
     href: '/confidential',
     label: 'Confidential',
+    group: 'Property',
     // RISK-04 / ROLE-05 (R-091). Seeded to the Owner role alone, so this link
     // simply is not there for anybody else - not greyed out, not present with
     // a tooltip. A nav entry a manager can see but not open would announce
@@ -77,42 +90,49 @@ export const NAV_ITEMS: readonly NavItem[] = [
   {
     href: '/workorders',
     label: 'Work orders',
+    group: 'Daily',
     permission: 'workorder.read',
     ownedBy: 'R-024',
   },
   {
     href: '/money',
     label: 'Money',
+    group: 'Money',
     permission: 'ledger.read',
     ownedBy: 'R-035',
   },
   {
     href: '/tasks',
     label: 'Tasks',
+    group: 'Daily',
     permission: 'task.read',
     ownedBy: 'R-011',
   },
   {
     href: '/notices',
     label: 'Notices',
+    group: 'Compliance',
     permission: 'notice.read',
     ownedBy: 'R-051',
   },
   {
     href: '/messages',
     label: 'Messages',
+    group: 'Daily',
     permission: 'message.read',
     ownedBy: 'R-017',
   },
   {
     href: '/notifications',
     label: 'Notifications',
+    group: 'Daily',
     permission: 'message.read',
     ownedBy: 'R-016',
   },
   {
     href: '/jurisdiction',
     label: 'Jurisdiction rules',
+    group: 'Compliance',
     permission: 'jurisdiction.read',
     portfolioOnly: true,
     ownedBy: 'R-010',
@@ -120,6 +140,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   {
     href: '/screening-criteria',
     label: 'Screening criteria',
+    group: 'Compliance',
     permission: 'screening.criteria.read',
     portfolioOnly: true,
     ownedBy: 'R-242',
@@ -127,6 +148,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   {
     href: '/jobs',
     label: 'Scheduled jobs',
+    group: 'Admin',
     permission: 'job.manage',
     portfolioOnly: true,
     ownedBy: 'R-174',
@@ -134,12 +156,14 @@ export const NAV_ITEMS: readonly NavItem[] = [
   {
     href: '/prospects',
     label: 'Prospects',
+    group: 'Property',
     permission: 'lease.read',
     ownedBy: 'R-058',
   },
   {
     href: '/documents/templates',
     label: 'Document templates',
+    group: 'Admin',
     permission: 'template.write',
     portfolioOnly: true,
     ownedBy: 'R-062',
@@ -147,24 +171,28 @@ export const NAV_ITEMS: readonly NavItem[] = [
   {
     href: '/inspections',
     label: 'Inspections',
+    group: 'Property',
     permission: 'inspection.read',
     ownedBy: 'R-068',
   },
   {
     href: '/reports',
     label: 'Reports',
+    group: 'Property',
     permission: 'property.read',
     ownedBy: 'R-076',
   },
   {
     href: '/compliance',
     label: 'Compliance',
+    group: 'Compliance',
     permission: 'property.read',
     ownedBy: 'R-077',
   },
   {
     href: '/vendors',
     label: 'Vendors',
+    group: 'Admin',
     permission: 'vendor.read',
     portfolioOnly: true,
     ownedBy: 'R-079',
@@ -172,18 +200,21 @@ export const NAV_ITEMS: readonly NavItem[] = [
   {
     href: '/maintenance/preventive',
     label: 'Preventive maintenance',
+    group: 'Property',
     permission: 'workorder.read',
     ownedBy: 'R-080',
   },
   {
     href: '/evictions',
     label: 'Evictions',
+    group: 'Compliance',
     permission: 'eviction.manage',
     ownedBy: 'R-083',
   },
   {
     href: '/abandonment',
     label: 'Gone dark',
+    group: 'Compliance',
     /// Deliberately NOT "Abandonment" in the nav. A case is opened on a
     /// suspicion and the commonest outcome is the tenant coming back, so a
     /// menu item that already calls it abandonment prejudges every one of
@@ -195,6 +226,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   {
     href: '/claims',
     label: 'Claims',
+    group: 'Compliance',
     /// Property-level, so the property permission. Not `report.financial`:
     /// the money here never touches the tenant ledger, and the people who
     /// need to see a live water claim are the ones who manage the building.
@@ -204,6 +236,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   {
     href: '/violations',
     label: 'Violations',
+    group: 'Compliance',
     /// `lease.read`, not `eviction.manage`. Most of what happens here ends
     /// with the tenant keeping their home - the commonest outcome of finding
     /// an unauthorized occupant is that they apply and stay - and a leasing
@@ -215,6 +248,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   {
     href: '/import',
     label: 'Import',
+    group: 'Admin',
     /// `property.write` with no resource is the same portfolio-wide-only
     /// guard `createLegalEntity` already uses - onboarding a portfolio is
     /// not a thing a property- or entity-scoped manager does.
@@ -225,6 +259,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   {
     href: '/staff',
     label: 'Staff',
+    group: 'Admin',
     /// `staff.read`, which the manager holds - the directory is readable by
     /// the people who work alongside it. Changing access needs
     /// `staff.manage`, which only the owner holds, and the page hides those

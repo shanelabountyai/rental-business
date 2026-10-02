@@ -1,6 +1,7 @@
 import { friendlyBusinessDate, utcToBusinessDate } from '@rental/core/scheduling'
 import Link from 'next/link'
 import { jobCostCents } from '@rental/core/workorders'
+import { Breadcrumbs } from '@/components/shell/breadcrumbs.tsx'
 import { MaintenanceSpendSection } from '@/components/workorders/maintenance-spend.tsx'
 import { closedJobCostsForProperty } from '@/lib/workorders/verify.ts'
 import { notFound } from 'next/navigation'
@@ -134,6 +135,9 @@ export default async function PropertyDetailPage({
 
   return (
     <div className="flex max-w-2xl flex-col gap-6">
+      <Breadcrumbs
+        items={[{ label: 'Properties', href: '/properties' }, { label: property.name }]}
+      />
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">

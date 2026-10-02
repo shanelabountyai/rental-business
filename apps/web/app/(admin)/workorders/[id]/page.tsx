@@ -23,6 +23,7 @@ import { INVOICE_STATUS_LABELS, invoiceLifecycleStatus } from '@rental/core/vend
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { prisma } from '@rental/db'
+import { Breadcrumbs } from '@/components/shell/breadcrumbs.tsx'
 import { ApprovalPanel } from '@/components/workorders/approval-panel.tsx'
 import { BidsPanel } from '@/components/workorders/bids-panel.tsx'
 import { AssignForm } from '@/components/workorders/assign-form.tsx'
@@ -271,13 +272,13 @@ export default async function WorkOrderDetailPage({
   return (
     <div className="flex max-w-2xl flex-col gap-6">
       <header className="flex flex-col gap-1">
-        <p className="text-muted-foreground text-sm">
-          <Link href="/workorders" className="underline underline-offset-4">
-            {workOrder.property.name}
-          </Link>
-          {' — '}
-          {workOrder.unit.name}
-        </p>
+        <Breadcrumbs
+          items={[
+            { label: 'Work orders', href: '/workorders' },
+            { label: workOrder.property.name, href: `/properties/${workOrder.propertyId}` },
+            { label: workOrder.unit.name },
+          ]}
+        />
         <h1 className="text-2xl font-semibold tracking-tight">
           {workOrder.scope.slice(0, 80)}
         </h1>

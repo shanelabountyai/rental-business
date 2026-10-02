@@ -21,6 +21,7 @@ import {
 } from '@rental/core/scheduling'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { Breadcrumbs } from '@/components/shell/breadcrumbs.tsx'
 import { ExportDepositPacketPanel } from '@/components/deposits/export-packet-panel.tsx'
 import { exportDepositPacket } from '@/lib/deposits/packet.ts'
 import { AccessCodesPanel } from '@/components/leases/access-codes-panel.tsx'
@@ -393,12 +394,13 @@ export default async function LeaseDetailPage({
   return (
     <div className="flex max-w-2xl flex-col gap-6">
       <div className="border-border bg-background/95 supports-[backdrop-filter]:bg-background/80 sticky top-0 z-20 -mx-4 flex flex-col gap-2 border-b px-4 pb-3 backdrop-blur md:-mx-6 md:px-6">
-        <Link
-          href="/leases"
-          className="text-muted-foreground hover:text-foreground focus-visible:ring-ring w-fit text-sm underline underline-offset-2 focus-visible:ring-2 focus-visible:outline-none"
-        >
-          ← All leases
-        </Link>
+        <Breadcrumbs
+          items={[
+            { label: 'Leases', href: '/leases' },
+            { label: lease.property.name, href: `/properties/${lease.property.id}` },
+            { label: lease.unit.name },
+          ]}
+        />
         <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
           <h1 className="text-2xl font-semibold tracking-tight">
             {lease.property.name} — {lease.unit.name}

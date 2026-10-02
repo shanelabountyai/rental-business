@@ -14134,3 +14134,20 @@ Wired at all 6 call sites across `operational-data-section.tsx` (appliances, uti
 - `npm run build` clean.
 - No unit/e2e coverage — no assertion exercised the old legend text (checked by grep); a copy-only change has no DOM-structure or accessible-name signal for axe/Playwright to regress-check, same as prior pure-copy A11Y items.
 - No schema change — `db:ci` not required for this item.
+
+## UX-03 — nav grouping and breadcrumbs
+**Commit:** _pending_  ·  **Date:** 2026-10-02
+
+**What it built.** `NavItem` (`lib/nav.ts`) gained a `group: NavGroup` field; all 27 nav entries assigned to one of five groups (`Daily`, `Money`, `Property`, `Compliance`, `Admin`). `Nav` (`components/shell/nav.tsx`) now renders one `<h2>`-headed list per non-empty group instead of a single flat `<ul>` — a group with nothing visible to the signed-in actor renders no heading. New `Breadcrumbs` component (`components/shell/breadcrumbs.tsx`) wired into `/properties/[id]`, `/leases/[id]`, and `/workorders/[id]`, replacing two ad hoc single-link "back" affordances those pages already had.
+
+**What it decided.** The grouping itself: Daily = Dashboard, Tasks, Messages, Notifications, Maintenance, Work orders. Money = Money. Property = Properties, Leases, Prospects, Inspections, Preventive maintenance, Confidential, Reports. Compliance = Notices, Jurisdiction rules, Screening criteria, Compliance calendar, Evictions, Gone dark, Claims, Violations. Admin = Scheduled jobs, Document templates, Vendors, Import, Staff. Proposed to Shane as a clickable preview and approved as-is before any code was written — a later session should not re-litigate which group an item sits in without a reason.
+
+**What it left behind.** UX-04 through UX-10 are the same shape (design-only, "Design review sign-off; no automated acceptance" gate, one-line backlog descriptions with no spec for the actual visual choices) — each one likely wants the same propose-then-approve step before building, not a silent default.
+
+**Gate.**
+- `lint` clean (0 errors; same pre-existing warnings, none in touched files).
+- `typecheck` clean.
+- `npm run build` clean.
+- `npm test`: same 4 pre-existing unrelated failures `NEXT.md` already tracks (leftover `rental_test` data).
+- Scoped e2e (`shell.spec.ts` + `portal.spec.ts` + `route-boundaries.spec.ts` + `properties.spec.ts` + `leases.spec.ts` + `workorders.spec.ts`, desktop+mobile): 156 passed + 2 skipped = 158, reconciled against `--list`. `e2e/shell.spec.ts`'s nav-structure assertions needed no changes — they query by role (`nav[aria-label=Sections]` → `link`), which the new `<h2>` group headings don't disturb.
+- No schema change — `db:ci` not required for this item.
