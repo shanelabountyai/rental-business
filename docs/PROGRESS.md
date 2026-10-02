@@ -14120,7 +14120,7 @@ Wired at all 6 call sites across `operational-data-section.tsx` (appliances, uti
 
 ## A11Y-11: garbled maintenance wizard legend
 
-**Commit:** _pending_  ·  **Date:** 2026-10-02
+**Commit:** `64b4485`  ·  **Date:** 2026-10-02
 
 **What it built.** `maintenance-wizard.tsx:635` legend changed from the garbled "What's the problem with?" to "What's the problem?". Pure copy edit — one string literal, no component shape change, no new logic.
 
