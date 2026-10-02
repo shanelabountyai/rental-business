@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation'
 import { prisma } from '@rental/db'
+import { PageHeader } from '@/components/page-header.tsx'
 import { UnitForm } from '@/components/units/unit-form.tsx'
 import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
 import { updateUnit } from '@/lib/units/actions.ts'
@@ -23,9 +24,7 @@ export default async function EditUnitPage({
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-semibold tracking-tight">
-        Edit {unit.name}
-      </h1>
+      <PageHeader title={<>Edit {unit.name}</>} />
       <UnitForm
         action={updateUnit.bind(null, propertyId, unitId)}
         submitLabel="Save changes"

@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { PageHeader } from '@/components/page-header.tsx'
 import { requireScope } from '@/lib/auth/guard.ts'
 
 export const metadata = { title: 'Reports — Rental Operations' }
@@ -17,13 +18,12 @@ export default async function ReportsPage() {
 
   return (
     <div className="flex max-w-2xl flex-col gap-6">
-      <header className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Weekly reports</h1>
+      <PageHeader title="Weekly reports">
         <p className="text-muted-foreground text-sm">
           The five operating reports RPT-04 names, each a real filtered view rather than a
           dead-end number.
         </p>
-      </header>
+      </PageHeader>
 
       <ul className="flex flex-col divide-y rounded-md border">
         <li>

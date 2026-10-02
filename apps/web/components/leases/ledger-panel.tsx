@@ -1,4 +1,5 @@
 import { formatCents } from '@rental/core/money'
+import { Panel } from '@/components/panel.tsx'
 import { scrollableRegionProps } from '@/components/ui-classes.ts'
 
 // The tenant ledger (PAY-03, PAY-09, D-11).
@@ -42,11 +43,10 @@ export function LedgerPanel({
   balanceCents: number
 }) {
   return (
-    <section aria-labelledby="ledger" className="flex flex-col gap-3 border-t pt-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 id="ledger" className="text-lg font-semibold">
-          Ledger
-        </h2>
+    <Panel
+      headingId="ledger"
+      title="Ledger"
+      trailing={
         <span className="text-sm">
           {balanceCents === 0
             ? 'Nothing owed'
@@ -59,7 +59,8 @@ export function LedgerPanel({
                 */
                 `${formatCents(-balanceCents)} in credit`}
         </span>
-      </div>
+      }
+    >
 
       {lines.length === 0 ? (
         <p className="text-muted-foreground text-sm">
@@ -111,6 +112,6 @@ export function LedgerPanel({
         correction is a new reversing entry — nothing here is edited or
         deleted.
       </p>
-    </section>
+    </Panel>
   )
 }

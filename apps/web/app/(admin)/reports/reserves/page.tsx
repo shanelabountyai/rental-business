@@ -1,5 +1,6 @@
 import { formatCents } from '@rental/core/money'
 import Link from 'next/link'
+import { PageHeader } from '@/components/page-header.tsx'
 import { SetReserveForm } from '@/components/reserves/set-reserve-form.tsx'
 import { requireScope } from '@/lib/auth/guard.ts'
 import { setPropertyReserve } from '@/lib/reserves/actions.ts'
@@ -66,7 +67,7 @@ export default async function ReservesPage() {
         >
           ← Reports
         </Link>
-        <h1 className="text-2xl font-semibold tracking-tight">Reserves &amp; capital plan</h1>
+        <PageHeader title="Reserves &amp; capital plan" />
         <p className="text-muted-foreground text-sm">
           What each house should be holding against the next roof, furnace and water heater — and
           what it actually holds. <strong>Both figures are typed in.</strong> This product has no

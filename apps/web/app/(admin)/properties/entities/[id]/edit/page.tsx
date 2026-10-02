@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation'
 import { prisma } from '@rental/db'
+import { PageHeader } from '@/components/page-header.tsx'
 import { EntityForm } from '@/components/properties/entity-form.tsx'
 import { requirePermission } from '@/lib/auth/guard.ts'
 import { updateLegalEntity } from '@/lib/properties/actions.ts'
@@ -21,9 +22,7 @@ export default async function EditLegalEntityPage({
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-semibold tracking-tight">
-        Edit {entity.name}
-      </h1>
+      <PageHeader title={<>Edit {entity.name}</>} />
       <EntityForm
         action={updateLegalEntity.bind(null, id)}
         submitLabel="Save changes"

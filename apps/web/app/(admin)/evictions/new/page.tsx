@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { OpenCaseForm } from '@/components/evictions/open-case-form.tsx'
+import { PageHeader } from '@/components/page-header.tsx'
 import { requirePermission, requireScope } from '@/lib/auth/guard.ts'
 import { openEvictionCase } from '@/lib/evictions/actions.ts'
 import { leasesWithoutOpenCase } from '@/lib/evictions/queries.ts'
@@ -24,7 +25,7 @@ export default async function NewEvictionCasePage() {
       >
         ← Evictions
       </Link>
-      <h1 className="text-2xl font-semibold tracking-tight">Open an eviction case</h1>
+      <PageHeader title="Open an eviction case" />
       <p className="text-muted-foreground text-sm">
         Opening a case files nothing with anybody. It starts the record — the notices, their proof of service, the
         costs and the dates — that an attorney would be handed.

@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { PageHeader } from '@/components/page-header.tsx'
 import { requireTenantWithScope } from '@/lib/portal/guard.ts'
 import { listTenantThreads } from '@/lib/portal/queries.ts'
 
@@ -13,13 +14,12 @@ export default async function PortalMessagesPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-2">
-        <h1 className="text-2xl font-semibold tracking-tight">Messages</h1>
+      <PageHeader title="Messages">
         <p>
           Messages between you and your landlord. Texts, emails and messages
           sent here all appear in the same place.
         </p>
-      </div>
+      </PageHeader>
 
       {threads.length === 0 ? (
         <p>

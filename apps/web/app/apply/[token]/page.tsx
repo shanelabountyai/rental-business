@@ -11,6 +11,7 @@ import {
 } from '@/lib/applications/actions.ts'
 import { applicationLinkStatus } from '@/lib/applications/link.ts'
 import { documentsForApplicant, householdFor } from '@/lib/applications/queries.ts'
+import { PageHeader } from '@/components/page-header.tsx'
 
 export const metadata = {
   title: 'Your application',
@@ -49,7 +50,7 @@ export default async function ApplyPage({ params }: { params: Promise<{ token: s
   if (!status.ok) {
     return (
       <main className="mx-auto flex max-w-md flex-col gap-4 p-6">
-        <h1 className="text-2xl font-semibold tracking-tight">This link isn’t working</h1>
+        <PageHeader title={<>This link isn’t working</>} />
         <p className="text-base">{REJECTION_MESSAGES[status.reason] ?? 'This link is not valid.'}</p>
       </main>
     )
@@ -64,14 +65,11 @@ export default async function ApplyPage({ params }: { params: Promise<{ token: s
 
   return (
     <main className="mx-auto flex max-w-md flex-col gap-8 p-6">
-      <header className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold tracking-tight">
-          Hi {applicant.firstName}, your application
-        </h1>
+      <PageHeader title={<>Hi {applicant.firstName}, your application</>}>
         <p className="text-muted-foreground text-sm">
           Come back to this link anytime - your progress is saved as you go.
         </p>
-      </header>
+      </PageHeader>
 
       {household.length > 1 && (
         <section aria-labelledby="household" className="flex flex-col gap-2">

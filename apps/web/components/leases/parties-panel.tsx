@@ -3,6 +3,7 @@
 import { useActionState } from 'react'
 import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
 import { SelectField, TextareaField, TextField } from '@/components/form/field.tsx'
+import { Panel } from '@/components/panel.tsx'
 import type { LeaseFormState } from '@/lib/leases/actions.ts'
 import type { PartyChangeFormState } from '@/lib/leases/party-change-builder.ts'
 
@@ -69,10 +70,7 @@ export function PartiesPanel({
   const guarantorErrors = guarantorState.fieldErrors ?? {}
 
   return (
-    <section aria-labelledby="parties" className="flex flex-col gap-5 border-t pt-4">
-      <h2 id="parties" className="text-lg font-semibold">
-        Who is on this lease
-      </h2>
+    <Panel headingId="parties" title="Who is on this lease" gap="gap-5">
 
       <div className="flex flex-col gap-2">
         <h3 className="text-sm font-medium">Occupants</h3>
@@ -203,7 +201,7 @@ export function PartiesPanel({
           </details>
         )}
       </div>
-    </section>
+    </Panel>
   )
 }
 

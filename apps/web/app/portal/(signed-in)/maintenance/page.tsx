@@ -1,6 +1,7 @@
 import { friendlyDate } from '@rental/core/scheduling'
 import { CATEGORY_LABELS, emergencyDefinition } from '@rental/core/maintenance'
 import Link from 'next/link'
+import { PageHeader } from '@/components/page-header.tsx'
 import { requireTenantWithScope } from '@/lib/portal/guard.ts'
 import { listTenantTickets } from '@/lib/maintenance/queries.ts'
 import { SUBMIT_BUTTON_CLASSES } from '@/components/ui-classes.ts'
@@ -28,10 +29,9 @@ export default async function PortalMaintenancePage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-2">
-        <h1 className="text-2xl font-semibold tracking-tight">Maintenance</h1>
+      <PageHeader title="Maintenance">
         <p>Report a problem, or check on one you already sent.</p>
-      </div>
+      </PageHeader>
 
       {/*
         The emergency route is first and visually distinct - somebody who can

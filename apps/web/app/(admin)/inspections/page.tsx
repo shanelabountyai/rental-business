@@ -4,6 +4,7 @@ import {
   INSPECTION_STATUS_LABELS,
   INSPECTION_TYPE_LABELS,
 } from '@rental/core/inspections'
+import { PageHeader } from '@/components/page-header.tsx'
 import { requireScope } from '@/lib/auth/guard.ts'
 import { inspectionsForScope } from '@/lib/inspections/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
@@ -18,12 +19,11 @@ export default async function InspectionsPage() {
 
   return (
     <div className="flex max-w-3xl flex-col gap-6">
-      <header className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Inspections</h1>
+      <PageHeader title="Inspections">
         <p className="text-muted-foreground text-sm">
           Room-by-room condition reports, from a reusable checklist.
         </p>
-      </header>
+      </PageHeader>
 
       <div className="flex flex-wrap gap-3">
         <Link

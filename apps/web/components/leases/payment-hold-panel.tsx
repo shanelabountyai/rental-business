@@ -4,6 +4,7 @@ import { useActionState } from 'react'
 import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
 import { Badge } from '@/components/badge.tsx'
 import { TextField } from '@/components/form/field.tsx'
+import { Panel } from '@/components/panel.tsx'
 import type { BillingFormState } from '@/lib/billing/actions.ts'
 
 // PAY-12's legal-action payment controls (R-047).
@@ -173,13 +174,11 @@ export function PaymentHoldPanel({
   if (payers.length === 0) return null
 
   return (
-    <section aria-labelledby="payment-hold" className="flex flex-col gap-3 border-t pt-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 id="payment-hold" className="text-lg font-semibold">
-          Legal-action payment controls
-        </h2>
-        {anyHeld && <Badge tone="warning">This tenancy is held</Badge>}
-      </div>
+    <Panel
+      headingId="payment-hold"
+      title="Legal-action payment controls"
+      trailing={anyHeld && <Badge tone="warning">This tenancy is held</Badge>}
+    >
 
       <p className="text-muted-foreground text-sm">
         For a tenancy in legal action. The tenant is told only that the office
@@ -214,6 +213,6 @@ export function PaymentHoldPanel({
           ))}
         </ul>
       )}
-    </section>
+    </Panel>
   )
 }

@@ -9,6 +9,7 @@ import { notFound } from 'next/navigation'
 import { Badge } from '@/components/badge.tsx'
 import { EmergencyResponsePanel } from '@/components/maintenance/emergency-response-panel.tsx'
 import { MarkEmergencyForm } from '@/components/maintenance/mark-emergency-form.tsx'
+import { PageHeader } from '@/components/page-header.tsx'
 import { actorCan, propertyResource, requireScope } from '@/lib/auth/guard.ts'
 import {
   acknowledgeEmergency,
@@ -92,15 +93,18 @@ export default async function StaffTicketDetailPage({
             {ticket.property.name}
           </Link>
         </p>
-        <h1 className="text-2xl font-semibold tracking-tight">
+        <PageHeader
+          title={
+            <>
           {CATEGORY_LABELS[ticket.category as keyof typeof CATEGORY_LABELS] ??
             ticket.category}
           {ticket.habitabilityFlag && (
             <span className="ml-2 align-middle">
               <Badge tone="danger">Habitability</Badge>
             </span>
-          )}
-        </h1>
+          )}</>
+          }
+        />
       </header>
 
       <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm sm:grid-cols-3">

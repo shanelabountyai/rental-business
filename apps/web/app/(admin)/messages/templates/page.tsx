@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { PageHeader } from '@/components/page-header.tsx'
 import { actorCan, requirePermission } from '@/lib/auth/guard.ts'
 import { listTemplates } from '@/lib/comms/templates.ts'
 import { PRIMARY_BUTTON_CLASSES } from '@/components/ui-classes.ts'
@@ -38,7 +39,7 @@ export default async function TemplatesPage() {
         >
           ← Messages
         </Link>
-        <h1 className="text-2xl font-semibold tracking-tight">Message templates</h1>
+        <PageHeader title="Message templates" />
         <p className="text-muted-foreground text-sm">
           The things you send more than once. Write them with merge fields, see
           exactly what a tenant will get, then send.

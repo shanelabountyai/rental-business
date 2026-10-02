@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { requirePermission, requireScope } from '@/lib/auth/guard.ts'
 import { listOpenWorkOrders } from '@/lib/workorders/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
+import { PageHeader } from '@/components/page-header.tsx'
 import { SUBMIT_BUTTON_CLASSES } from '@/components/ui-classes.ts'
 import { Badge, type BadgeTone } from '@/components/badge.tsx'
 
@@ -59,7 +60,7 @@ export default async function WorkOrdersPage() {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between gap-4">
-        <h1 className="text-2xl font-semibold tracking-tight">Work orders</h1>
+        <PageHeader title="Work orders" />
         <Link
           href="/workorders/new"
           className={`${SUBMIT_BUTTON_CLASSES} flex min-h-11 items-center justify-center px-4 text-sm`}

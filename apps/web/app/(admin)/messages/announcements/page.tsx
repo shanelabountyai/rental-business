@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { AnnouncementForm } from '@/components/messages/announcement-form.tsx'
+import { PageHeader } from '@/components/page-header.tsx'
 import { requireScope } from '@/lib/auth/guard.ts'
 import { sendAnnouncement } from '@/lib/comms/announcement-actions.ts'
 import { segmentOptions } from '@/lib/comms/announcements.ts'
@@ -26,7 +27,7 @@ export default async function AnnouncementsPage() {
         >
           ← Messages
         </Link>
-        <h1 className="text-2xl font-semibold tracking-tight">Announcements</h1>
+        <PageHeader title="Announcements" />
         <p className="text-muted-foreground text-sm">
           One message to a whole segment — all tenants, one property, one
           metro, or one tag — with delivery status for every recipient.

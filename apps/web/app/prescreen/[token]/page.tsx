@@ -1,3 +1,4 @@
+import { PageHeader } from '@/components/page-header.tsx'
 import { PrescreenForm } from '@/components/prospects/prescreen-form.tsx'
 import { submitPrescreenAnswers } from '@/lib/prospects/prescreen-actions.ts'
 import { prescreenLinkStatus } from '@/lib/prospects/prescreen-link.ts'
@@ -58,11 +59,13 @@ export default async function PrescreenLinkPage({
   if (!status.ok) {
     return (
       <main className="mx-auto flex max-w-md flex-col gap-4 p-6">
-        <h1 className="text-2xl font-semibold tracking-tight">
-          {status.reason === 'already_used' || status.reason === 'already_answered'
-            ? 'Thanks'
-            : 'This link isn’t working'}
-        </h1>
+        <PageHeader
+          title={
+            status.reason === 'already_used' || status.reason === 'already_answered'
+              ? 'Thanks'
+              : 'This link isn’t working'
+          }
+        />
         <p className="text-base">
           {REJECTION_MESSAGES[status.reason] ?? 'This link is not valid.'}
         </p>
@@ -72,15 +75,12 @@ export default async function PrescreenLinkPage({
 
   return (
     <main className="mx-auto flex max-w-md flex-col gap-6 p-6">
-      <header className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold tracking-tight">
-          Hi {status.prospect.firstName}, a few quick questions
-        </h1>
+      <PageHeader title={<>Hi {status.prospect.firstName}, a few quick questions</>}>
         <p className="text-muted-foreground text-sm">
           We ask everyone who inquires about a listing the same five questions - it keeps
           things fair.
         </p>
-      </header>
+      </PageHeader>
       <PrescreenForm action={submitPrescreenAnswers.bind(null, token)} />
     </main>
   )

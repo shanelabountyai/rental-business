@@ -22,6 +22,8 @@ import {
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { Breadcrumbs } from '@/components/shell/breadcrumbs.tsx'
+import { PageHeader } from '@/components/page-header.tsx'
+import { Panel } from '@/components/panel.tsx'
 import { ExportDepositPacketPanel } from '@/components/deposits/export-packet-panel.tsx'
 import { exportDepositPacket } from '@/lib/deposits/packet.ts'
 import { AccessCodesPanel } from '@/components/leases/access-codes-panel.tsx'
@@ -402,9 +404,7 @@ export default async function LeaseDetailPage({
           ]}
         />
         <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-          <h1 className="text-2xl font-semibold tracking-tight">
-            {lease.property.name} — {lease.unit.name}
-          </h1>
+          <PageHeader title={`${lease.property.name} — ${lease.unit.name}`} />
           {/* UX-01: the one number worth keeping on screen while the other
               ~30 panels below scroll past is what is owed right now. */}
           <p className="text-sm font-medium whitespace-nowrap">
@@ -777,13 +777,7 @@ export default async function LeaseDetailPage({
             whether to show the input fields; this section only decides
             whether the feature exists on this lease at all. */}
         {canRecordPayment && payers.length > 0 && (
-          <section
-            aria-labelledby="offline-payment"
-            className="flex flex-col gap-3 border-t pt-4"
-          >
-            <h2 id="offline-payment" className="text-lg font-semibold">
-              Record a payment
-            </h2>
+          <Panel headingId="offline-payment" title="Record a payment">
             <p className="text-muted-foreground text-sm">
               A check, money order or cash handed over in person.
             </p>
@@ -800,7 +794,7 @@ export default async function LeaseDetailPage({
                   : (payers[0]!.externalPayerName ?? 'this payer')
               }
             />
-          </section>
+          </Panel>
         )}
       </div>
 
@@ -1206,10 +1200,7 @@ export default async function LeaseDetailPage({
         )}
 
         {canWrite && (
-          <section aria-labelledby="terms" className="flex flex-col gap-4 border-t pt-4">
-            <h2 id="terms" className="text-lg font-semibold">
-              Terms
-            </h2>
+          <Panel headingId="terms" title="Terms" gap="gap-4">
             {isRunning && (
               <RentChangePanel
                 cancel={cancelRentChange.bind(null, lease.id)}
@@ -1251,7 +1242,7 @@ export default async function LeaseDetailPage({
                 utilities,
               }}
             />
-          </section>
+          </Panel>
         )}
       </div>
     </div>

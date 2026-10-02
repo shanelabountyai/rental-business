@@ -5,6 +5,7 @@ import { auth } from '@/auth.ts'
 import { MfaEnrolment } from '@/components/mfa-enrolment.tsx'
 import { OnCallToggle } from '@/components/maintenance/on-call-toggle.tsx'
 import { NotificationPreferencesSection } from '@/components/notifications/preferences-section.tsx'
+import { PageHeader } from '@/components/page-header.tsx'
 import {
   beginMfaEnrolment,
   confirmMfaEnrolment,
@@ -96,12 +97,11 @@ export default async function AccountPage({
 
   return (
     <div className="flex w-full max-w-xl flex-col gap-8">
-      <header className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Your account</h1>
+      <PageHeader title="Your account">
         <p className="text-muted-foreground text-sm">
           {session?.principal.name} · {session?.principal.email}
         </p>
-      </header>
+      </PageHeader>
 
       {/*
         Set by the guard when a privileged action was refused for want of a

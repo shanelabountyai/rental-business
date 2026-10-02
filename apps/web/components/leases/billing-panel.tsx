@@ -6,6 +6,7 @@ import { useActionState } from "react";
 import { Badge } from "@/components/badge.tsx";
 import { FormAlerts, SubmitButton } from "@/components/auth-form.tsx";
 import { SelectField, TextField } from "@/components/form/field.tsx";
+import { Panel } from "@/components/panel.tsx";
 import type { BillingFormState } from "@/lib/billing/actions.ts";
 import type { WorkOrderFormState } from "@/lib/workorders/actions.ts";
 
@@ -125,18 +126,15 @@ export function BillingPanel({
   );
 
   return (
-    <section
-      aria-labelledby="billing"
-      className="flex flex-col gap-3 border-t pt-4"
-    >
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 id="billing" className="text-lg font-semibold">
-          Billing
-        </h2>
-        {!live && (
+    <Panel
+      headingId="billing"
+      title="Billing"
+      trailing={
+        !live && (
           <Badge tone="warning">{providerName} provider — not real Stripe</Badge>
-        )}
-      </div>
+        )
+      }
+    >
 
       {payers.length === 0 ? (
         <p className="text-muted-foreground text-sm">
@@ -202,6 +200,6 @@ export function BillingPanel({
         shows on the ledger here is a projection of what Stripe reports, never
         written directly.
       </p>
-    </section>
+    </Panel>
   );
 }

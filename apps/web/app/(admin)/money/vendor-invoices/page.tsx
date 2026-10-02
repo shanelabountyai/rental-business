@@ -3,6 +3,7 @@ import { invoiceSplitCategoryLabel } from '@rental/core/vendors'
 import { utcToBusinessDate } from '@rental/core/scheduling'
 import Link from 'next/link'
 import { prisma } from '@rental/db'
+import { PageHeader } from '@/components/page-header.tsx'
 import { RecordInvoiceForm } from '@/components/vendor-invoices/record-invoice-form.tsx'
 import { requireScope } from '@/lib/auth/guard.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
@@ -72,7 +73,7 @@ export default async function VendorInvoicesPage() {
         >
           ← Money
         </Link>
-        <h1 className="text-2xl font-semibold tracking-tight">Vendor invoices</h1>
+        <PageHeader title="Vendor invoices" />
         <p className="text-muted-foreground text-sm">
           The $900 handyman invoice covering three houses. Record it once, split it across the
           properties it actually paid for, and each share lands on that property&rsquo;s P&amp;L and

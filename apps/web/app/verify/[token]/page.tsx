@@ -1,4 +1,5 @@
 import { friendlyTimestamp } from '@rental/core/scheduling'
+import { PageHeader } from '@/components/page-header.tsx'
 import { VerifyLinkForm } from '@/components/portal/verify-link-form.tsx'
 import { answerFromLink } from '@/lib/portal/verify-link-actions.ts'
 import { answeredMessage, rejectionMessage, verifyVerifyLink } from '@/lib/portal/verify-link.ts'
@@ -41,9 +42,7 @@ export default async function VerifyLinkPage({
   if (!link.ok) {
     return (
       <main className="mx-auto flex max-w-md flex-col gap-4 p-6">
-        <h1 className="text-2xl font-semibold tracking-tight">
-          {link.reason === 'answered' ? 'Thanks' : 'This link isn’t working'}
-        </h1>
+        <PageHeader title={link.reason === 'answered' ? 'Thanks' : 'This link isn’t working'} />
         {/* THIS IS ALSO THE SUCCESS SCREEN, which is not obvious. A server
             action re-renders the page it was called from, so the moment a
             tenant taps an answer this branch is what replaces the form — the
@@ -59,12 +58,11 @@ export default async function VerifyLinkPage({
 
   return (
     <main className="mx-auto flex max-w-md flex-col gap-6 p-6">
-      <header className="flex flex-col gap-2">
-        <h1 className="text-2xl font-semibold tracking-tight">Was this fixed?</h1>
+      <PageHeader title="Was this fixed?">
         <p className="text-muted-foreground text-sm">
           {link.job.propertyName} — {link.job.unitName}
         </p>
-      </header>
+      </PageHeader>
 
       <section className="flex flex-col gap-2 rounded-md border p-4">
         <h2 className="text-sm font-medium">What you reported</h2>

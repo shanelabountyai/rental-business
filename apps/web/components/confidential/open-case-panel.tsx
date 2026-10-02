@@ -5,6 +5,7 @@ import { useActionState } from 'react'
 import { DOCUMENTATION_IS_NOT_STORED, DOCUMENTATION_LABELS } from '@rental/core/confidential'
 import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
 import { SelectField, TextField, TextareaField } from '@/components/form/field.tsx'
+import { Panel } from '@/components/panel.tsx'
 import type { ConfidentialFormState } from '@/lib/confidential/actions.ts'
 
 // Opening a confidential safety case from the tenancy it concerns (RISK-04,
@@ -44,10 +45,7 @@ export function OpenConfidentialCasePanel({
   const errors = state.fieldErrors ?? {}
 
   return (
-    <section aria-labelledby="confidential" className="flex flex-col gap-3 border-t pt-4">
-      <h2 id="confidential" className="text-lg font-semibold">
-        Confidential case
-      </h2>
+    <Panel headingId="confidential" title="Confidential case">
       <p className="text-muted-foreground text-sm">
         Restricted to staff holding the confidential permission. Nothing recorded here appears
         on this page, in any queue, or to anybody else.
@@ -131,6 +129,6 @@ export function OpenConfidentialCasePanel({
           <SubmitButton label="Open the confidential case" />
         </form>
       </details>
-    </section>
+    </Panel>
   )
 }

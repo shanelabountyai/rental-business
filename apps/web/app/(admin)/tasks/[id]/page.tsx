@@ -14,6 +14,7 @@ import { prisma } from '@rental/db'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { Badge } from '@/components/badge.tsx'
+import { PageHeader } from '@/components/page-header.tsx'
 import { TaskActionButton } from '@/components/tasks/action-button.tsx'
 import { CompleteForm } from '@/components/tasks/complete-form.tsx'
 import { TriagePanel } from '@/components/maintenance/triage-panel.tsx'
@@ -129,7 +130,7 @@ export default async function TaskDetailPage({
             {task.property.name}
           </Link>
         </p>
-        <h1 className="text-2xl font-semibold tracking-tight">{task.title}</h1>
+        <PageHeader title={task.title} />
       </header>
 
       <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm sm:grid-cols-3">

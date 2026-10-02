@@ -1,5 +1,6 @@
 import { friendlyBusinessDate, utcToBusinessDate } from '@rental/core/scheduling'
 import Link from 'next/link'
+import { PageHeader } from '@/components/page-header.tsx'
 import { actorCan, requirePermission } from '@/lib/auth/guard.ts'
 import {
   listCurrentRules,
@@ -67,17 +68,14 @@ export default async function JurisdictionRulesPage({
   return (
     <div className="flex flex-col gap-6">
       <header className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">
-            Jurisdiction rules
-          </h1>
+        <PageHeader title="Jurisdiction rules">
           <p className="text-muted-foreground max-w-prose text-sm">
             The single source of every statutory number (D-4): grace days,
             late-fee caps, deposit deadlines, entry-notice hours and notice
             periods. All drafts requiring attorney review before real-world
             use - this is a learning project, not legal advice.
           </p>
-        </div>
+        </PageHeader>
         {canWrite && (
           <Link
             href="/jurisdiction/new"

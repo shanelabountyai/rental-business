@@ -14,6 +14,7 @@ import { useActionState, useState } from 'react'
 import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
 import { FieldError, SelectField, TextField } from '@/components/form/field.tsx'
 import { Badge, type BadgeTone } from '@/components/badge.tsx'
+import { Panel } from '@/components/panel.tsx'
 import type { ScraFormState } from '@/lib/scra/actions.ts'
 
 // The SCRA surfaces (RISK-12, R-085).
@@ -176,10 +177,7 @@ export function ScraLookupsPanel({
   prompt?: string
 }) {
   return (
-    <section aria-labelledby="scra-lookups" className="flex flex-col gap-4 border-t pt-4">
-      <h2 id="scra-lookups" className="text-lg font-semibold">
-        Military-service searches
-      </h2>
+    <Panel headingId="scra-lookups" title="Military-service searches" gap="gap-4">
 
       <p className="text-muted-foreground text-sm">
         A default judgment needs an affidavit stating whether the tenant is on
@@ -258,7 +256,7 @@ export function ScraLookupsPanel({
           evictionCaseId={evictionCaseId}
         />
       )}
-    </section>
+    </Panel>
   )
 }
 
@@ -278,10 +276,7 @@ export function ScraTerminationPanel({
   const errors = state.fieldErrors ?? {}
 
   return (
-    <section aria-labelledby="scra-termination" className="flex flex-col gap-3 border-t pt-4">
-      <h2 id="scra-termination" className="text-lg font-semibold">
-        Termination on military orders
-      </h2>
+    <Panel headingId="scra-termination" title="Termination on military orders">
 
       {recorded ? (
         <p className="text-sm">
@@ -365,6 +360,6 @@ export function ScraTerminationPanel({
           )}
         </>
       )}
-    </section>
+    </Panel>
   )
 }

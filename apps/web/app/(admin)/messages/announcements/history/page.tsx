@@ -1,6 +1,7 @@
 import { friendlyTimestamp } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import Link from 'next/link'
+import { PageHeader } from '@/components/page-header.tsx'
 import { propertyWhere, requireScope } from '@/lib/auth/guard.ts'
 import { announcementHistory } from '@/lib/comms/announcement-history.ts'
 import { scrollableRegionProps } from '@/components/ui-classes.ts'
@@ -50,7 +51,7 @@ export default async function AnnouncementHistoryPage() {
         >
           ← Announcements
         </Link>
-        <h1 className="text-2xl font-semibold tracking-tight">Announcement history</h1>
+        <PageHeader title="Announcement history" />
         <p className="text-muted-foreground text-sm">
           Every segment announcement ever sent, from the audit log each send
           already writes.

@@ -1,6 +1,7 @@
 import { friendlyBusinessDate, utcToBusinessDate } from '@rental/core/scheduling'
 import Link from 'next/link'
 import { jobCostCents } from '@rental/core/workorders'
+import { PageHeader } from '@/components/page-header.tsx'
 import { Breadcrumbs } from '@/components/shell/breadcrumbs.tsx'
 import { MaintenanceSpendSection } from '@/components/workorders/maintenance-spend.tsx'
 import { closedJobCostsForProperty } from '@/lib/workorders/verify.ts'
@@ -139,16 +140,13 @@ export default async function PropertyDetailPage({
         items={[{ label: 'Properties', href: '/properties' }, { label: property.name }]}
       />
       <header className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">
-            {property.name}
-          </h1>
+        <PageHeader title={property.name}>
           <p className="text-muted-foreground text-sm">
             {property.addressLine1}
             {property.addressLine2 ? `, ${property.addressLine2}` : ''},{' '}
             {property.city}, {property.state} {property.postalCode}
           </p>
-        </div>
+        </PageHeader>
         {canWrite && (
           <Link
             href={`/properties/${property.id}/edit`}

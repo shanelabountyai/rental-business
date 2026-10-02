@@ -12,6 +12,7 @@ import {
 import { recordSettlementTransfer } from '@/lib/reports/settlement-actions.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 import { reportToday } from '@/lib/scope/report-today.ts'
+import { PageHeader } from '@/components/page-header.tsx'
 import { SettlementTransferForm } from '@/components/reports/settlement-transfer-form.tsx'
 import { SUBMIT_BUTTON_CLASSES, scrollableRegionProps } from '@/components/ui-classes.ts'
 
@@ -77,7 +78,7 @@ export default async function SettlementReportPage({
         >
           ← Reports
         </Link>
-        <h1 className="text-2xl font-semibold tracking-tight">Settlement by entity</h1>
+        <PageHeader title="Settlement by entity" />
         <p className="text-muted-foreground text-sm">
           Online rent for every LLC settles into one Stripe balance and one bank account. This is
           each entity&rsquo;s share of it for a date range, so the funds can be moved deliberately

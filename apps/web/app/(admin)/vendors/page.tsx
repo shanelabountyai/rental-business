@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { requirePermission } from '@/lib/auth/guard.ts'
 import { listVendors } from '@/lib/vendors/staff-queries.ts'
+import { PageHeader } from '@/components/page-header.tsx'
 import { SUBMIT_BUTTON_CLASSES } from '@/components/ui-classes.ts'
 
 export const metadata = { title: 'Vendors — Rental Operations' }
@@ -17,7 +18,7 @@ export default async function VendorsPage() {
   return (
     <div className="flex max-w-2xl flex-col gap-6">
       <div className="flex items-center justify-between gap-4">
-        <h1 className="text-2xl font-semibold tracking-tight">Vendors</h1>
+        <PageHeader title="Vendors" />
         <Link
           href="/vendors/new"
           className={`${SUBMIT_BUTTON_CLASSES} flex min-h-11 items-center justify-center px-4 text-sm`}

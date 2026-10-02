@@ -1,6 +1,7 @@
 import { noticeTypeLabel, SERVICE_METHOD_LABELS } from '@rental/core/notices'
 import { friendlyDate } from '@rental/core/scheduling'
 import Link from 'next/link'
+import { PageHeader } from '@/components/page-header.tsx'
 import { requireScope } from '@/lib/auth/guard.ts'
 import { listNotices } from '@/lib/notices/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
@@ -28,14 +29,13 @@ export default async function NoticesPage() {
 
   return (
     <div className="flex max-w-4xl flex-col gap-6">
-      <header className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Notices</h1>
+      <PageHeader title="Notices">
         <p className="text-muted-foreground text-sm">
           {notices.length} notice{notices.length === 1 ? '' : 's'} across{' '}
           {scope.propertyIds.length} propert{scope.propertyIds.length === 1 ? 'y' : 'ies'}
           {unserved.length > 0 && ` · ${unserved.length} not yet served`}.
         </p>
-      </header>
+      </PageHeader>
 
       {notices.length === 0 ? (
         <p className="text-muted-foreground text-sm">

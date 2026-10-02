@@ -5,6 +5,7 @@ import { notFound } from 'next/navigation'
 import { ExportTranscriptForm } from '@/components/comms/export-transcript-form.tsx'
 import { LogCallForm } from '@/components/comms/log-call-form.tsx'
 import { ReplyForm } from '@/components/comms/reply-form.tsx'
+import { PageHeader } from '@/components/page-header.tsx'
 import { actorCan, propertyResource, requireScope } from '@/lib/auth/guard.ts'
 import { logCallInThread, replyInThread } from '@/lib/comms/actions.ts'
 import { exportThreadTranscript } from '@/lib/comms/transcript.ts'
@@ -95,7 +96,7 @@ export default async function ThreadPage({
         >
           ← All messages
         </Link>
-        <h1 className="text-2xl font-semibold tracking-tight">{name}</h1>
+        <PageHeader title={name} />
         <p className="text-muted-foreground text-sm">
           {thread.property.name}
           {party?.phone ? ` · ${formatPhone(party.phone)}` : ''}

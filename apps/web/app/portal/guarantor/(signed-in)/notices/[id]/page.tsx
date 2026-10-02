@@ -1,6 +1,7 @@
 import { friendlyDate } from '@rental/core/scheduling'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { PageHeader } from '@/components/page-header.tsx'
 import { markNoticeRead } from '@/lib/notices/read-receipt.ts'
 import { listTenantNotices } from '@/lib/notices/queries.ts'
 import { requireGuarantorWithScope } from '@/lib/portal/guarantor-guard.ts'
@@ -41,7 +42,7 @@ export default async function GuarantorNoticePage({
         >
           ← Notices
         </Link>
-        <h1 className="text-2xl font-semibold tracking-tight">About this lease</h1>
+        <PageHeader title="About this lease" />
         <p className="text-muted-foreground text-sm">
           {notice.servedAt ? friendlyDate(notice.servedAt, notice.property.timezone) : ''}
         </p>

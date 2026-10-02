@@ -3,6 +3,7 @@
 import { useActionState } from 'react'
 import { LiveRegion, pendingButtonProps } from '@/components/auth-form.tsx'
 import { FieldError, TextField } from '@/components/form/field.tsx'
+import { Panel } from '@/components/panel.tsx'
 import type { WorkOrderFormState } from '@/lib/workorders/actions.ts'
 import { PRIMARY_BUTTON_CLASSES } from '@/components/ui-classes.ts'
 
@@ -52,10 +53,7 @@ export function ChargebackPanel({
   )
 
   return (
-    <section aria-labelledby="chargeback" className="flex flex-col gap-4 border-t pt-4">
-      <h2 id="chargeback" className="text-lg font-semibold">
-        Bill the tenant
-      </h2>
+    <Panel headingId="chargeback" title="Bill the tenant" gap="gap-4">
 
       {postedAmount ? (
         <p className="rounded-md border px-3 py-2 text-sm">
@@ -119,6 +117,6 @@ export function ChargebackPanel({
           </button>
         </form>
       )}
-    </section>
+    </Panel>
   )
 }

@@ -5,6 +5,7 @@ import {
   isEmergencyCategory,
 } from '@rental/core/maintenance'
 import Link from 'next/link'
+import { PageHeader } from '@/components/page-header.tsx'
 import { EmergencyDetailsForm } from '@/components/portal/maintenance/emergency-details-form.tsx'
 import { submitEmergencyForm } from '@/lib/maintenance/actions.ts'
 import { shutoffForEmergency, unitForEmergency } from '@/lib/maintenance/emergency.ts'
@@ -59,7 +60,7 @@ export default async function EmergencyPage({
   if (!home) {
     return (
       <div className="flex flex-col gap-4">
-        <h1 className="text-2xl font-semibold tracking-tight">Emergency</h1>
+        <PageHeader title="Emergency" />
         <p>
           We do not have a home on file for you yet, so we cannot route this
           to the right person. Please call 911 if anyone is in danger, then
@@ -82,8 +83,7 @@ export default async function EmergencyPage({
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-2">
-        <h1 className="text-2xl font-semibold tracking-tight">Emergency</h1>
+      <PageHeader title="Emergency">
         {/*
           Said before anything else on the page, and not only inside a
           category's own instructions: somebody who lands here by accident,
@@ -93,7 +93,7 @@ export default async function EmergencyPage({
           If anyone is in danger, call 911 first. This page does not reach
           emergency services.
         </p>
-      </div>
+      </PageHeader>
 
       {category === null ? (
         <nav aria-labelledby="what-is-happening" className="flex flex-col gap-3">

@@ -5,6 +5,7 @@ import {
 } from '@rental/core/maintenance'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { PageHeader } from '@/components/page-header.tsx'
 import { AddPhotoForm } from '@/components/portal/maintenance/add-photo-form.tsx'
 import { VerifyPanel } from '@/components/portal/maintenance/verify-panel.tsx'
 import { FocusedStatus } from '@/components/auth-form.tsx'
@@ -91,12 +92,13 @@ export default async function MaintenanceTicketPage({
         </FocusedStatus>
       )}
 
-      <div className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold tracking-tight">
-          {emergencyDefinition(ticket.category)?.label ??
-            CATEGORY_LABELS[ticket.category as keyof typeof CATEGORY_LABELS] ??
-            'What you texted us'}
-        </h1>
+      <PageHeader
+        title={
+          emergencyDefinition(ticket.category)?.label ??
+          CATEGORY_LABELS[ticket.category as keyof typeof CATEGORY_LABELS] ??
+          'What you texted us'
+        }
+      >
         <p className="text-muted-foreground">
           {STATUS_WORDS[ticket.status] ?? ticket.status}
         </p>
@@ -105,7 +107,7 @@ export default async function MaintenanceTicketPage({
         <p className="text-muted-foreground">
           Reference <span className="font-mono">{ticketReference(ticket.id)}</span>
         </p>
-      </div>
+      </PageHeader>
 
       <p className="whitespace-pre-wrap rounded-md border p-4">{ticket.description}</p>
 

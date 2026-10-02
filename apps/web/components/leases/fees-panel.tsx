@@ -4,6 +4,7 @@ import { formatCents } from '@rental/core/money'
 import { useActionState } from 'react'
 import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
 import { TextField } from '@/components/form/field.tsx'
+import { Panel } from '@/components/panel.tsx'
 import type { WaiverFormState } from '@/lib/ledger/waivers.ts'
 
 // Fees, and forgiving one (PAY-04, R-041).
@@ -121,10 +122,7 @@ export function FeesPanel({
   if (fees.length === 0) return null
 
   return (
-    <section aria-labelledby="fees" className="flex flex-col gap-3 border-t pt-4">
-      <h2 id="fees" className="text-lg font-semibold">
-        Fees
-      </h2>
+    <Panel headingId="fees" title="Fees">
 
       <ul className="flex flex-col divide-y">
         {fees.map((fee) => (
@@ -175,6 +173,6 @@ export function FeesPanel({
         Waiving posts a credit rather than deleting the charge — the fee and
         the decision to forgive it both stay on the record.
       </p>
-    </section>
+    </Panel>
   )
 }

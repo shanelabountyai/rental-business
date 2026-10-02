@@ -3,6 +3,7 @@ import { friendlyBusinessDate, utcToBusinessDate } from '@rental/core/scheduling
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { RecordCompletionForm } from '@/components/compliance/record-completion-form.tsx'
+import { PageHeader } from '@/components/page-header.tsx'
 import { requireScope } from '@/lib/auth/guard.ts'
 import { recordCompletion } from '@/lib/compliance/actions.ts'
 import { getComplianceItem } from '@/lib/compliance/queries.ts'
@@ -33,7 +34,7 @@ export default async function ComplianceItemPage({
         >
           ← Compliance calendar
         </Link>
-        <h1 className="text-2xl font-semibold tracking-tight">{item.label}</h1>
+        <PageHeader title={item.label} />
         <p className="text-muted-foreground text-sm">
           {complianceItemTypeLabel(item.type)} · {item.property?.name ?? item.legalEntity?.name} · due{' '}
           {friendlyBusinessDate(utcToBusinessDate(item.dueOn))}

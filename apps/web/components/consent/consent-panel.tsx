@@ -11,6 +11,7 @@ import {
 import { useActionState, useState } from "react";
 import { FormAlerts, SubmitButton } from "@/components/auth-form.tsx";
 import { SelectField, TextareaField } from "@/components/form/field.tsx";
+import { Panel } from "@/components/panel.tsx";
 import type { ConsentFormState } from "@/lib/consent/actions.ts";
 
 // The TCPA consent surface (COMM-02, R-051b, wired R-143).
@@ -205,13 +206,7 @@ export function ConsentPanel({
   const live = consents.filter((row) => row.revokedOn === null);
 
   return (
-    <section
-      aria-labelledby="tenant-consent"
-      className="flex flex-col gap-4 border-t pt-4"
-    >
-      <h2 id="tenant-consent" className="text-lg font-semibold">
-        Permission to contact
-      </h2>
+    <Panel headingId="tenant-consent" title="Permission to contact" gap="gap-4">
 
       <p className="text-muted-foreground text-sm">
         A text message to a tenant or guarantor is sent only where this record
@@ -261,6 +256,6 @@ export function ConsentPanel({
         <RecordConsentForm action={recordAction} parties={parties} />
       )}
       {canManage && <WithdrawConsentForm action={withdrawAction} live={live} />}
-    </section>
+    </Panel>
   );
 }

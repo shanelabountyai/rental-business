@@ -45,6 +45,7 @@ import {
   RecordCostPanel,
 } from '@/components/evictions/case-panels.tsx'
 import { HoldBanner } from '@/components/holds/hold-banner.tsx'
+import { PageHeader } from '@/components/page-header.tsx'
 import { ScraLookupsPanel } from '@/components/scra/scra-panels.tsx'
 import { requirePermission, requireScope } from '@/lib/auth/guard.ts'
 import {
@@ -140,9 +141,7 @@ export default async function EvictionCasePage({ params }: { params: Promise<{ i
         >
           ← Evictions
         </Link>
-        <h1 className="text-2xl font-semibold tracking-tight">
-          {evictionCase.property.name} — {evictionCase.unit.name}
-        </h1>
+        <PageHeader title={<>{evictionCase.property.name} — {evictionCase.unit.name}</>} />
         <p className="text-muted-foreground text-sm">
           {evictionCase.lease.leaseTenants
             .map((lt) => `${lt.tenant.firstName} ${lt.tenant.lastName}`)

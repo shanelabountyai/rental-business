@@ -1,3 +1,4 @@
+import { PageHeader } from '@/components/page-header.tsx'
 import {
   MaintenanceWizard,
   type WizardParams,
@@ -58,9 +59,7 @@ export default async function ClarifyPage({
   if (!link.ok) {
     return (
       <main className="mx-auto flex max-w-md flex-col gap-4 p-6">
-        <h1 className="text-2xl font-semibold tracking-tight">
-          {link.reason === 'answered' ? 'Thanks' : 'This link isn’t working'}
-        </h1>
+        <PageHeader title={link.reason === 'answered' ? 'Thanks' : 'This link isn’t working'} />
         {/* THIS IS ALSO THE SUCCESS SCREEN. The token is burned on submit, so
             the moment a tenant sends their answers this branch is what
             replaces the wizard — and it is equally right for somebody
@@ -72,14 +71,11 @@ export default async function ClarifyPage({
 
   return (
     <main className="mx-auto flex max-w-md flex-col gap-6 p-6">
-      <header className="flex flex-col gap-2">
-        <h1 className="text-2xl font-semibold tracking-tight">
-          A few questions about your request
-        </h1>
+      <PageHeader title="A few questions about your request">
         <p className="text-muted-foreground text-sm">
           {link.propertyName} — {link.unitName}
         </p>
-      </header>
+      </PageHeader>
 
       <section className="flex flex-col gap-2 rounded-md border p-4">
         <h2 className="text-sm font-medium">What you told us</h2>

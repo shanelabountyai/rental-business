@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation'
 import { prisma } from '@rental/db'
+import { PageHeader } from '@/components/page-header.tsx'
 import { PropertyForm } from '@/components/properties/property-form.tsx'
 import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
 import { updateProperty } from '@/lib/properties/actions.ts'
@@ -29,9 +30,7 @@ export default async function EditPropertyPage({
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-semibold tracking-tight">
-        Edit {property.name}
-      </h1>
+      <PageHeader title={<>Edit {property.name}</>} />
       <PropertyForm
         action={updateProperty.bind(null, id)}
         submitLabel="Save changes"

@@ -1,4 +1,5 @@
 import { friendlyBusinessDate, friendlyTimestamp } from '@rental/core/scheduling'
+import { PageHeader } from '@/components/page-header.tsx'
 import { requirePermission } from '@/lib/auth/guard.ts'
 // Side-effect import: populates SCHEDULED_JOBS before `jobHealth()` reads it.
 // See registrations.ts for why every job module is imported from exactly here.
@@ -45,13 +46,12 @@ export default async function JobsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <header className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Scheduled jobs</h1>
+      <PageHeader title="Scheduled jobs">
         <p className="text-muted-foreground text-sm">
           The nightly work, per job. Times are UTC — each job actually fires at
           its own hour in each property&rsquo;s local day.
         </p>
-      </header>
+      </PageHeader>
 
       {failing.length === 0 && overdue.length === 0 && neverRun.length === 0 ? (
         <p className="rounded-md border border-success/35 bg-success/6 px-4 py-3 text-sm text-success">

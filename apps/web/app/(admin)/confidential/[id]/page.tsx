@@ -8,6 +8,7 @@ import {
   LockChangePanel,
   RemovePartyPanel,
 } from '@/components/confidential/case-panels.tsx'
+import { PageHeader } from '@/components/page-header.tsx'
 import { actorCan, propertyResource, requireScope } from '@/lib/auth/guard.ts'
 import {
   closeConfidentialCase,
@@ -71,9 +72,7 @@ export default async function ConfidentialCasePage({
             Confidential
           </Link>
         </p>
-        <h1 className="text-2xl font-semibold tracking-tight">
-          {found.lease.property.name} — {found.lease.unit.name}
-        </h1>
+        <PageHeader title={<>{found.lease.property.name} — {found.lease.unit.name}</>} />
         <p className="text-muted-foreground text-sm">
           {found.status === 'OPEN' ? 'Open' : 'Closed'} · opened{' '}
           {friendlyDate(found.openedAt, zone)} by {found.openedBy.name} ·{' '}

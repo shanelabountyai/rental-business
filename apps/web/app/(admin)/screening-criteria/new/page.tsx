@@ -1,3 +1,4 @@
+import { PageHeader } from '@/components/page-header.tsx'
 import { CriteriaForm } from '@/components/screening/criteria-form.tsx'
 import { requirePermission } from '@/lib/auth/guard.ts'
 import { createCriteriaVersion } from '@/lib/screening/criteria-actions.ts'
@@ -13,9 +14,7 @@ export default async function NewScreeningCriteriaPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-semibold tracking-tight">
-        New criteria version
-      </h1>
+      <PageHeader title="New criteria version" />
       <p className="text-muted-foreground max-w-prose text-sm">
         {previous
           ? `Supersedes v${previous.version}. The prior version stays on record - nothing is edited or deleted. Every field below starts from it; change only what changed.`

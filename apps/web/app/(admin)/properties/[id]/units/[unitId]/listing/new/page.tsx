@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation'
 import { addBusinessDays, utcToBusinessDate } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { ListingForm } from '@/components/listings/listing-form.tsx'
+import { PageHeader } from '@/components/page-header.tsx'
 import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
 import { createListing } from '@/lib/listings/actions.ts'
 
@@ -31,7 +32,7 @@ export default async function NewListingPage({
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-semibold tracking-tight">New listing for {unit.name}</h1>
+      <PageHeader title={<>New listing for {unit.name}</>} />
       <ListingForm
         action={createListing.bind(null, unitId)}
         submitLabel="Create listing"

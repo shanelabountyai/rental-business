@@ -1,6 +1,7 @@
 import { friendlyDate } from '@rental/core/scheduling'
 import Link from 'next/link'
 import { Badge } from '@/components/badge.tsx'
+import { PageHeader } from '@/components/page-header.tsx'
 import { requireTenantWithScope } from '@/lib/portal/guard.ts'
 import { listTenantNotices } from '@/lib/notices/queries.ts'
 
@@ -22,13 +23,12 @@ export default async function PortalNoticesPage() {
 
   return (
     <div className="flex max-w-2xl flex-col gap-6">
-      <header className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Your notices</h1>
+      <PageHeader title="Your notices">
         <p className="text-muted-foreground text-sm">
           Letters we have sent you about your home. Opening one tells us you have
           seen it.
         </p>
-      </header>
+      </PageHeader>
 
       {notices.length === 0 ? (
         <p className="text-muted-foreground text-sm">You have no notices.</p>

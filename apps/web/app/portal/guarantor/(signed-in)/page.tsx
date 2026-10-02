@@ -1,5 +1,6 @@
 import { formatCents } from '@rental/core/money'
 import { friendlyDate } from '@rental/core/scheduling'
+import { PageHeader } from '@/components/page-header.tsx'
 import { guarantorStatement } from '@/lib/payments/queries.ts'
 import { requireGuarantorWithScope } from '@/lib/portal/guarantor-guard.ts'
 import { scrollableRegionProps } from '@/components/ui-classes.ts'
@@ -33,12 +34,11 @@ export default async function GuarantorBalancePage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <header className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold tracking-tight">What you guarantee</h1>
+      <PageHeader title="What you guarantee">
         <p className="text-muted-foreground text-sm">
           {view.propertyName} — {view.unitName}
         </p>
-      </header>
+      </PageHeader>
 
       <section aria-labelledby="now" className="flex flex-col gap-1 rounded-lg border p-4">
         <h2 id="now" className="text-muted-foreground text-sm font-medium">

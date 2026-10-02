@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { PageHeader } from '@/components/page-header.tsx'
 import { requireStaff } from '@/lib/auth/guard.ts'
 
 export const metadata = { title: 'No access — Rental Operations' }
@@ -23,9 +24,7 @@ export default async function NoAccessPage({
 
   return (
     <div className="flex max-w-prose flex-col gap-3">
-      <h1 className="text-2xl font-semibold tracking-tight">
-        You don&rsquo;t have access to that
-      </h1>
+      <PageHeader title="You don&rsquo;t have access to that" />
       <p className="text-muted-foreground text-sm">
         {reason === 'out_of_scope'
           ? 'Your access covers some properties but not that one. Ask whoever manages access to widen your scope.'

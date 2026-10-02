@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { PageHeader } from '@/components/page-header.tsx'
 import { requireScope } from '@/lib/auth/guard.ts'
 import { leasingFunnel } from '@/lib/reports/funnel.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
@@ -59,7 +60,7 @@ export default async function LeasingFunnelPage({
         >
           ← Reports
         </Link>
-        <h1 className="text-2xl font-semibold tracking-tight">Leasing funnel</h1>
+        <PageHeader title="Leasing funnel" />
         <p className="text-muted-foreground text-sm">
           Where prospects stop, which channels send people who qualify, and how long a home sits
           empty.

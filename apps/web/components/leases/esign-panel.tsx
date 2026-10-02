@@ -3,6 +3,7 @@
 import { useActionState } from 'react'
 import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
 import { TextareaField } from '@/components/form/field.tsx'
+import { Panel } from '@/components/panel.tsx'
 import type { EsignFormState } from '@/lib/leases/esign-staff-actions.ts'
 
 // Generating a lease and sending it for e-signature (LEASE-06, DOC-02,
@@ -72,10 +73,7 @@ export function EsignPanel({
   if (!canExecute && !mfaRequired && !envelope) return null
 
   return (
-    <section aria-labelledby="esign" className="flex flex-col gap-4 border-t pt-4">
-      <h2 id="esign" className="text-lg font-semibold">
-        Lease document &amp; e-signature
-      </h2>
+    <Panel headingId="esign" title="Lease document &amp; e-signature" gap="gap-4">
 
       {envelope ? (
         <div className="flex flex-col gap-3 text-sm">
@@ -133,7 +131,7 @@ export function EsignPanel({
             with your authenticator to send this one.
           </p>
         ) : null)}
-    </section>
+    </Panel>
   )
 }
 

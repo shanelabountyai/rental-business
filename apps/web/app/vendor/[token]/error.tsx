@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
+import { PageHeader } from '@/components/page-header.tsx'
 import { SUBMIT_BUTTON_CLASSES } from '@/components/ui-classes.ts'
 
 // What a VENDOR sees when the job page throws (U1, R-099).
@@ -33,9 +34,7 @@ export default function VendorError({ reset }: { error: Error; reset: () => void
 
   return (
     <main className="mx-auto flex max-w-xl flex-col gap-4 p-4">
-      <h1 ref={heading} tabIndex={-1} className="text-2xl font-semibold tracking-tight">
-        This page did not load
-      </h1>
+      <PageHeader ref={heading} focusable title="This page did not load" />
 
       <p className="text-base">
         Something went wrong on our side. Your job is still there — this is

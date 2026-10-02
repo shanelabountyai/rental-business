@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { friendlyDate } from '@rental/core/scheduling'
 import { UtilityBillsPanel } from '@/components/billing/utility-bills-panel.tsx'
+import { PageHeader } from '@/components/page-header.tsx'
 import { actorCan, propertyResource, requireScope } from '@/lib/auth/guard.ts'
 import { utilityBillsForProperty, utilityLabel } from '@/lib/billing/rubs.ts'
 import { recordUtilityBill, splitUtilityBill } from '@/lib/billing/rubs-actions.ts'
@@ -67,7 +68,7 @@ export default async function PropertyUtilitiesPage({
         {/* NOT "Utility bills" — the panel below carries that as its own
             section heading, and two headings with the same accessible name on
             one page is a screen reader announcing the same landmark twice. */}
-        <h1 className="text-2xl font-semibold tracking-tight">Utilities</h1>
+        <PageHeader title="Utilities" />
         <p className="text-muted-foreground text-sm">
           For a property on one meter: record the bill, check the split, then
           charge it on.

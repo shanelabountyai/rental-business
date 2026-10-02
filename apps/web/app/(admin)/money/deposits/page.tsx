@@ -1,6 +1,7 @@
 import { depositChannelLabel } from '@rental/core/payments'
 import { formatCents } from '@rental/core/money'
 import Link from 'next/link'
+import { PageHeader } from '@/components/page-header.tsx'
 import { DepositBatchList } from '@/components/payments/deposit-batch-list.tsx'
 import { requireScope } from '@/lib/auth/guard.ts'
 import { createDepositBatch } from '@/lib/payments/deposit-actions.ts'
@@ -33,7 +34,7 @@ export default async function DepositsPage() {
         >
           ← Money
         </Link>
-        <h1 className="text-2xl font-semibold tracking-tight">Deposits</h1>
+        <PageHeader title="Deposits" />
         <p className="text-muted-foreground text-sm">
           Checks, money orders and cash not yet taken to the bank, grouped by
           the trip each one would make - one legal entity, one day, one

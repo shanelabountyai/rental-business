@@ -3,6 +3,7 @@ import { friendlyDate } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { PageHeader } from '@/components/page-header.tsx'
 import { StaffControls } from '@/components/staff/staff-controls.tsx'
 import { actorDecision, requirePermission } from '@/lib/auth/guard.ts'
 import { manageStaff } from '@/lib/staff/actions.ts'
@@ -66,7 +67,7 @@ export default async function StaffMemberPage({
         >
           ← Staff
         </Link>
-        <h1 className="text-2xl font-semibold tracking-tight">{member.name}</h1>
+        <PageHeader title={member.name} />
         <p className="text-muted-foreground text-sm">
           {member.email}
           {member.active

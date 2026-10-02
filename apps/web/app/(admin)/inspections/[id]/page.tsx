@@ -11,6 +11,7 @@ import {
 import { friendlyDate, friendlyTimestamp, utcToWallClock } from '@rental/core/scheduling'
 import { FinishWalkForm } from '@/components/inspections/finish-walk-form.tsx'
 import { InspectionItemForm } from '@/components/inspections/inspection-item-form.tsx'
+import { PageHeader } from '@/components/page-header.tsx'
 import { TaskActionButton } from '@/components/tasks/action-button.tsx'
 import { ScheduleForm } from '@/components/workorders/schedule-form.tsx'
 import { requireScope } from '@/lib/auth/guard.ts'
@@ -77,9 +78,7 @@ export default async function InspectionPage({
         >
           ← Inspections
         </Link>
-        <h1 className="text-2xl font-semibold tracking-tight">
-          {inspection.property.name} — {inspection.unit.name}
-        </h1>
+        <PageHeader title={<>{inspection.property.name} — {inspection.unit.name}</>} />
         <p className="text-muted-foreground text-sm">
           {INSPECTION_TYPE_LABELS[inspection.type] ?? inspection.type} ·{' '}
           {INSPECTION_STATUS_LABELS[status]}

@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { PageHeader } from '@/components/page-header.tsx'
 import { PortalReplyForm } from '@/components/portal/portal-reply-form.tsx'
 import { replyFromPortal } from '@/lib/portal/actions.ts'
 import { requireTenantWithScope } from '@/lib/portal/guard.ts'
@@ -56,9 +57,7 @@ export default async function PortalThreadPage({
         >
           ← All messages
         </Link>
-        <h1 className="text-2xl font-semibold tracking-tight">
-          {thread.property.name}
-        </h1>
+        <PageHeader title={thread.property.name} />
       </div>
 
       {thread.messages.length === 0 ? (

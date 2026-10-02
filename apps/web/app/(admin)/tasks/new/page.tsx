@@ -1,3 +1,4 @@
+import { PageHeader } from '@/components/page-header.tsx'
 import { AddTaskForm } from '@/components/tasks/add-task-form.tsx'
 import { requireScope } from '@/lib/auth/guard.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
@@ -14,7 +15,7 @@ export default async function NewTaskPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-semibold tracking-tight">New task</h1>
+      <PageHeader title="New task" />
       <p className="text-muted-foreground max-w-prose text-sm">
         An ad-hoc task with no domain event behind it - everything else in
         the queue is created automatically once a later item produces it

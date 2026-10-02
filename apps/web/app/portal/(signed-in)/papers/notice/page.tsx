@@ -1,4 +1,5 @@
 import { friendlyDate } from '@rental/core/scheduling'
+import { PageHeader } from '@/components/page-header.tsx'
 import { NoticeToVacateForm } from '@/components/portal/notice-to-vacate-form.tsx'
 import { requireTenantWithScope } from '@/lib/portal/guard.ts'
 import { submitNoticeToVacate } from '@/lib/portal/notice-to-vacate-actions.ts'
@@ -19,7 +20,7 @@ export default async function NoticeToVacatePage() {
   if (!home) {
     return (
       <div className="flex flex-col gap-4">
-        <h1 className="text-2xl font-semibold tracking-tight">Give notice</h1>
+        <PageHeader title="Give notice" />
         <p>We do not have a home on file for you yet. Send us a message instead.</p>
       </div>
     )
@@ -28,7 +29,7 @@ export default async function NoticeToVacatePage() {
   if (home.noticeGivenAt) {
     return (
       <div className="flex flex-col gap-4">
-        <h1 className="text-2xl font-semibold tracking-tight">Notice already on file</h1>
+        <PageHeader title="Notice already on file" />
         <p>
           {home.noticeGivenBy === 'TENANT'
             ? `You gave notice on ${friendlyDate(home.noticeGivenAt, home.property.timezone)}`
@@ -44,14 +45,13 @@ export default async function NoticeToVacatePage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-2">
-        <h1 className="text-2xl font-semibold tracking-tight">Give notice to vacate</h1>
+      <PageHeader title="Give notice to vacate">
         <p>
           Tell us when you plan to move out of {home.property.addressLine1}
           {home.unit.name ? ` (${home.unit.name})` : ''}. Rent is still due, and any repairs
           are still owed, until you actually leave.
         </p>
-      </div>
+      </PageHeader>
       <NoticeToVacateForm action={submitNoticeToVacate} />
     </div>
   )

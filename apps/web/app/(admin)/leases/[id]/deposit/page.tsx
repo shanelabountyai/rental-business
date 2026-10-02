@@ -7,6 +7,8 @@ import { notFound, redirect } from 'next/navigation'
 import { AddDeductionForm } from '@/components/deposits/add-deduction-form.tsx'
 import { FinalizeDispositionForm } from '@/components/deposits/finalize-disposition-form.tsx'
 import { RecordRefundForm } from '@/components/deposits/record-refund-form.tsx'
+import { PageHeader } from '@/components/page-header.tsx'
+import { Panel } from '@/components/panel.tsx'
 import { TaskActionButton } from '@/components/tasks/action-button.tsx'
 import { requireScope } from '@/lib/auth/guard.ts'
 import {
@@ -57,9 +59,9 @@ export default async function DepositDispositionPage({
         {/* A page with no h1 is a page a screen-reader user cannot orient in,
             and this branch had none - the heading lived only in the branch
             below it. Found by the Milestone 10 demo walk. */}
-        <h1 className="text-2xl font-semibold tracking-tight">
-          Deposit disposition — {lease.property.name} {lease.unit.name}
-        </h1>
+        <PageHeader
+          title={`Deposit disposition — ${lease.property.name} ${lease.unit.name}`}
+        />
         <p className="text-muted-foreground text-sm">
           This lease holds no deposit - there is nothing to dispose of.
         </p>
@@ -112,9 +114,9 @@ export default async function DepositDispositionPage({
         >
           ← Lease
         </Link>
-        <h1 className="text-2xl font-semibold tracking-tight">
-          Deposit disposition — {lease.property.name} {lease.unit.name}
-        </h1>
+        <PageHeader
+          title={`Deposit disposition — ${lease.property.name} ${lease.unit.name}`}
+        />
         <p className="text-muted-foreground text-sm">
           {tenantName} · held {formatCents(deposit.heldCents)}
           {deposit.dispositionDueOn &&
@@ -230,10 +232,7 @@ export default async function DepositDispositionPage({
       </section>
 
       {finalized ? (
-        <section aria-labelledby="refund" className="flex flex-col gap-3 border-t pt-4">
-          <h2 id="refund" className="text-lg font-semibold">
-            Refund payment
-          </h2>
+        <Panel headingId="refund" title="Refund payment">
           <p className="text-muted-foreground text-sm">
             The disposition letter is written and{' '}
             <Link
@@ -284,12 +283,9 @@ export default async function DepositDispositionPage({
               )}
             </dl>
           )}
-        </section>
+        </Panel>
       ) : (
-        <section aria-labelledby="finalize" className="flex flex-col gap-3 border-t pt-4">
-          <h2 id="finalize" className="text-lg font-semibold">
-            Finalize
-          </h2>
+        <Panel headingId="finalize" title="Finalize">
           <p className="text-muted-foreground text-sm">
             Locks the deduction list, generates the disposition letter, and moves to recording how
             it was served. This cannot be undone once the letter exists.
@@ -300,7 +296,7 @@ export default async function DepositDispositionPage({
               deposit.forwardingAddress ?? lease.noticeForwardingAddress ?? ''
             }
           />
-        </section>
+        </Panel>
       )}
     </div>
   )

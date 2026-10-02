@@ -2,6 +2,7 @@ import { ROLE_DEFINITIONS, type RoleKey } from '@rental/core/rbac'
 import Link from 'next/link'
 import { actorDecision, requirePermission } from '@/lib/auth/guard.ts'
 import { listStaff } from '@/lib/staff/queries.ts'
+import { PageHeader } from '@/components/page-header.tsx'
 import { SUBMIT_BUTTON_CLASSES } from '@/components/ui-classes.ts'
 
 export const metadata = { title: 'Staff — Rental Operations' }
@@ -34,7 +35,7 @@ export default async function StaffPage({
   return (
     <div className="flex max-w-2xl flex-col gap-6">
       <div className="flex items-center justify-between gap-4">
-        <h1 className="text-2xl font-semibold tracking-tight">Staff</h1>
+        <PageHeader title="Staff" />
         {canManage && (
           <Link
             href="/staff/new"

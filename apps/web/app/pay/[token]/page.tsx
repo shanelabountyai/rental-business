@@ -1,5 +1,6 @@
 import { formatCents } from '@rental/core/money'
 import { CARD_FIXED_CENTS, CARD_RATE_BPS, debitsAutomatically } from '@rental/core/payments'
+import { PageHeader } from '@/components/page-header.tsx'
 import { PayForm } from '@/components/payments/pay-form.tsx'
 import { startPaymentFromLink } from '@/lib/payments/actions.ts'
 import { paymentView } from '@/lib/payments/queries.ts'
@@ -43,9 +44,7 @@ export default async function PayLinkPage({
   if (!link.ok) {
     return (
       <main className="mx-auto flex max-w-md flex-col gap-4 p-6">
-        <h1 className="text-2xl font-semibold tracking-tight">
-          This link isn&rsquo;t working
-        </h1>
+        <PageHeader title={<>This link isn&rsquo;t working</>} />
         <p className="text-base">{payLinkRejection(link.reason)}</p>
       </main>
     )
@@ -67,7 +66,7 @@ export default async function PayLinkPage({
   if (!view) {
     return (
       <main className="mx-auto flex max-w-md flex-col gap-4 p-6">
-        <h1 className="text-2xl font-semibold tracking-tight">Pay your rent</h1>
+        <PageHeader title="Pay your rent" />
         <p className="text-base">
           There is nothing set up to pay against on this account yet. Please
           contact the office.
@@ -80,14 +79,11 @@ export default async function PayLinkPage({
 
   return (
     <main className="mx-auto flex max-w-md flex-col gap-6 p-6">
-      <header className="flex flex-col gap-2">
-        <h1 className="text-2xl font-semibold tracking-tight">
-          Hello {link.tenantFirstName}
-        </h1>
+      <PageHeader title={<>Hello {link.tenantFirstName}</>}>
         <p className="text-muted-foreground text-sm">
           {view.propertyName} — {view.unitName}
         </p>
-      </header>
+      </PageHeader>
 
       <section aria-labelledby="balance" className="flex flex-col gap-1 rounded-lg border p-4">
         <h2 id="balance" className="text-muted-foreground text-sm font-medium">

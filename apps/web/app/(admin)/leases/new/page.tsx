@@ -1,6 +1,7 @@
 import { friendlyBusinessDate, utcToBusinessDate } from '@rental/core/scheduling'
 import Link from 'next/link'
 import { LeaseForm } from '@/components/leases/lease-form.tsx'
+import { PageHeader } from '@/components/page-header.tsx'
 import { requireScope } from '@/lib/auth/guard.ts'
 import { createLease } from '@/lib/leases/actions.ts'
 import { unitsForNewLease } from '@/lib/leases/queries.ts'
@@ -28,7 +29,7 @@ export default async function NewLeasePage() {
         >
           ← All leases
         </Link>
-        <h1 className="text-2xl font-semibold tracking-tight">New lease</h1>
+        <PageHeader title="New lease" />
         <p className="text-muted-foreground text-sm">
           Created as a draft. Add the people on it, then make it active.
         </p>

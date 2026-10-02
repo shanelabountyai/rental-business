@@ -11,6 +11,7 @@ import {
   ObservationsPanel,
   type ApplicantOption,
 } from '@/components/violations/case-panels.tsx'
+import { Panel } from '@/components/panel.tsx'
 import { requirePermission, requireScope } from '@/lib/auth/guard.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 import {
@@ -117,10 +118,7 @@ export default async function ViolationCasePage({
           action={closeViolationCase}
         />
       ) : (
-        <section aria-labelledby="case-closed" className="flex flex-col gap-2 border-t pt-4">
-          <h2 id="case-closed" className="text-lg font-semibold">
-            Closed
-          </h2>
+        <Panel headingId="case-closed" title="Closed" gap="gap-2">
           {found.legitimizedApplicantName && (
             <p className="text-sm">
               Legitimized through {found.legitimizedApplicantName}’s application.
@@ -132,7 +130,7 @@ export default async function ViolationCasePage({
           {found.overrideReason && (
             <p className="text-sm">Proceeded despite a warning: {found.overrideReason}</p>
           )}
-        </section>
+        </Panel>
       )}
     </div>
   )

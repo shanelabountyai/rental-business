@@ -13,6 +13,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { HoldBanner } from '@/components/holds/hold-banner.tsx'
 import { ServeForm } from '@/components/notices/serve-form.tsx'
+import { PageHeader } from '@/components/page-header.tsx'
 import { actorCan, requireScope } from '@/lib/auth/guard.ts'
 import { rulesFor } from '@/lib/jurisdiction/queries.ts'
 import { generateNoticePdfAction, recordNoticeService } from '@/lib/notices/actions.ts'
@@ -108,9 +109,7 @@ export default async function NoticePage({
         >
           ← Notices
         </Link>
-        <h1 className="text-2xl font-semibold tracking-tight">
-          {noticeTypeLabel(notice.type)}
-        </h1>
+        <PageHeader title={noticeTypeLabel(notice.type)} />
         <p className="text-muted-foreground text-sm">
           {notice.property.name}
           {notice.lease?.unit ? ` — ${notice.lease.unit.name}` : ''} ·{' '}

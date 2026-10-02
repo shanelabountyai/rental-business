@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation'
 import { DocumentTemplateForm } from '@/components/documents/document-template-form.tsx'
 import { GenerateDocumentForm } from '@/components/documents/generate-document-form.tsx'
 import { RetireDocumentTemplateForm } from '@/components/documents/retire-document-template-form.tsx'
+import { PageHeader } from '@/components/page-header.tsx'
 import { requirePermission } from '@/lib/auth/guard.ts'
 import { generateDocumentFromTemplate } from '@/lib/documents/generate.ts'
 import { retireDocumentTemplate, saveDocumentTemplate } from '@/lib/documents/template-actions.ts'
@@ -37,7 +38,7 @@ export default async function DocumentTemplatePage({
         >
           ← Document templates
         </Link>
-        <h1 className="text-2xl font-semibold tracking-tight">{template.name}</h1>
+        <PageHeader title={template.name} />
         <p className="text-muted-foreground text-sm">
           {DOCUMENT_TYPE_LABELS[template.documentType as DocumentTypeValue] ?? template.documentType}
           {!template.active && ' · retired'}

@@ -8,6 +8,7 @@ import { prisma } from '@rental/db'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { InviteToApplyForm } from '@/components/applications/invite-to-apply-form.tsx'
+import { PageHeader } from '@/components/page-header.tsx'
 import { ProspectStageForm } from '@/components/prospects/prospect-stage-form.tsx'
 import { ScreeningDecisionForm } from '@/components/screening/screening-decision-form.tsx'
 import { TaskActionButton } from '@/components/tasks/action-button.tsx'
@@ -91,9 +92,7 @@ export default async function ProspectDetailPage({
         >
           ← Prospects
         </Link>
-        <h1 className="text-2xl font-semibold tracking-tight">
-          {prospect.firstName} {prospect.lastName}
-        </h1>
+        <PageHeader title={<>{prospect.firstName} {prospect.lastName}</>} />
         <p className="text-muted-foreground text-sm">
           {STATUS_LABELS[prospect.status] ?? prospect.status} · from {prospect.source}
         </p>

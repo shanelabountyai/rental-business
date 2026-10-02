@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { InspectionTemplateForm } from '@/components/inspections/inspection-template-form.tsx'
 import { RetireInspectionTemplateForm } from '@/components/inspections/retire-inspection-template-form.tsx'
+import { PageHeader } from '@/components/page-header.tsx'
 import { requirePermission } from '@/lib/auth/guard.ts'
 import { retireInspectionTemplate, saveInspectionTemplate } from '@/lib/inspections/template-actions.ts'
 import { getInspectionTemplate } from '@/lib/inspections/template-queries.ts'
@@ -31,7 +32,7 @@ export default async function InspectionTemplatePage({
         >
           ← Inspection checklists
         </Link>
-        <h1 className="text-2xl font-semibold tracking-tight">{template.name}</h1>
+        <PageHeader title={template.name} />
         {!template.active && <p className="text-muted-foreground text-sm">Retired</p>}
       </header>
 

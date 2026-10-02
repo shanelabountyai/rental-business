@@ -1,5 +1,6 @@
 import { formatCents } from '@rental/core/money'
 import Link from 'next/link'
+import { PageHeader } from '@/components/page-header.tsx'
 import { requireScope } from '@/lib/auth/guard.ts'
 import { cashSummaryByEntity } from '@/lib/reports/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
@@ -23,7 +24,7 @@ export default async function CashSummaryPage() {
         >
           ← Reports
         </Link>
-        <h1 className="text-2xl font-semibold tracking-tight">Cash summary</h1>
+        <PageHeader title="Cash summary" />
         <p className="text-muted-foreground text-sm">
           Collected vs. billed and the largest outflows. Reserve targets and actuals live on
           their own report (R-082) rather than here — this page is about the month, and a reserve

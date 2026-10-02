@@ -3,6 +3,7 @@
 import { useActionState } from 'react'
 import { LiveRegion, pendingButtonProps } from '@/components/auth-form.tsx'
 import { FieldError, TextField } from '@/components/form/field.tsx'
+import { Panel } from '@/components/panel.tsx'
 import type { WorkOrderFormState } from '@/lib/workorders/actions.ts'
 import { PRIMARY_BUTTON_CLASSES } from '@/components/ui-classes.ts'
 
@@ -53,10 +54,7 @@ export function ClosePanel({
   )
 
   return (
-    <section aria-labelledby="close" className="flex flex-col gap-4 border-t pt-4">
-      <h2 id="close" className="text-lg font-semibold">
-        Verify &amp; close
-      </h2>
+    <Panel headingId="close" title="Verify &amp; close" gap="gap-4">
 
       {currentAnswer ? (
         <p
@@ -156,6 +154,6 @@ export function ClosePanel({
           Close this work order
         </button>
       </form>
-    </section>
+    </Panel>
   )
 }

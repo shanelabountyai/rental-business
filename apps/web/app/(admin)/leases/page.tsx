@@ -2,6 +2,7 @@ import { formatCents } from '@rental/core/money'
 import { daysUntilExpiry, expiryWindow, leaseStatusLabel } from '@rental/core/leases'
 import { businessDate, friendlyBusinessDate, utcToBusinessDate } from '@rental/core/scheduling'
 import Link from 'next/link'
+import { PageHeader } from '@/components/page-header.tsx'
 import { actorCan, requireScope } from '@/lib/auth/guard.ts'
 import { listLeases } from '@/lib/leases/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
@@ -63,12 +64,11 @@ export default async function LeasesPage({
   return (
     <div className="flex max-w-3xl flex-col gap-6">
       <header className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex flex-col gap-1">
-          <h1 className="text-2xl font-semibold tracking-tight">Leases</h1>
+        <PageHeader title="Leases">
           <p className="text-muted-foreground text-sm">
             Tenancies, parties and terms. Running ones first.
           </p>
-        </div>
+        </PageHeader>
         {canWrite && (
           <Link
             href="/leases/new"

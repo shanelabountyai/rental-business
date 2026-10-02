@@ -1,6 +1,7 @@
 import { friendlyDate } from '@rental/core/scheduling'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { PageHeader } from '@/components/page-header.tsx'
 import { markNoticeRead } from '@/lib/notices/read-receipt.ts'
 import { listTenantNotices } from '@/lib/notices/queries.ts'
 import { requireTenantWithScope } from '@/lib/portal/guard.ts'
@@ -53,7 +54,7 @@ export default async function PortalNoticePage({
         >
           ← Your notices
         </Link>
-        <h1 className="text-2xl font-semibold tracking-tight">About your home</h1>
+        <PageHeader title="About your home" />
         <p className="text-muted-foreground text-sm">
           {notice.servedAt ? friendlyDate(notice.servedAt, notice.property.timezone) : ''}
         </p>

@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { PageHeader } from '@/components/page-header.tsx'
 import { VendorRecordForm } from '@/components/vendors/vendor-record-form.tsx'
 import { requirePermission } from '@/lib/auth/guard.ts'
 import { saveVendorRecord } from '@/lib/vendors/staff-actions.ts'
@@ -17,7 +18,7 @@ export default async function NewVendorPage() {
         >
           ← Vendors
         </Link>
-        <h1 className="text-2xl font-semibold tracking-tight">New vendor</h1>
+        <PageHeader title="New vendor" />
       </header>
       <VendorRecordForm action={saveVendorRecord.bind(null, null)} defaults={{}} submitLabel="Add vendor" />
     </div>

@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { PreventiveTemplateForm } from '@/components/maintenance/preventive-template-form.tsx'
+import { PageHeader } from '@/components/page-header.tsx'
 import { TaskActionButton } from '@/components/tasks/action-button.tsx'
 import { requirePermission } from '@/lib/auth/guard.ts'
 import { deactivatePreventiveTemplate, savePreventiveTemplate } from '@/lib/maintenance/preventive-actions.ts'
@@ -23,7 +24,7 @@ export default async function PreventiveTemplatePage({ params }: { params: Promi
       >
         ← Preventive maintenance
       </Link>
-      <h1 className="text-2xl font-semibold tracking-tight">{template.name}</h1>
+      <PageHeader title={template.name} />
 
       <PreventiveTemplateForm
         action={savePreventiveTemplate.bind(null, template.id)}

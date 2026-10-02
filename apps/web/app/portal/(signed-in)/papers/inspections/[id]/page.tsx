@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation'
 import { friendlyDate } from '@rental/core/scheduling'
 import { InspectionItemForm } from '@/components/inspections/inspection-item-form.tsx'
+import { PageHeader } from '@/components/page-header.tsx'
 import { InspectionFinishForm } from '@/components/portal/inspection-finish-form.tsx'
 import { InspectionSignForm } from '@/components/portal/inspection-sign-form.tsx'
 import { requireTenantWithScope } from '@/lib/portal/guard.ts'
@@ -40,7 +41,7 @@ export default async function TenantInspectionPage({
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-2">
-        <h1 className="text-2xl font-semibold tracking-tight">Your inspection report</h1>
+        <PageHeader title="Your inspection report" />
         <p>
           {inspection.property.addressLine1}
           {inspection.unit.name ? ` (${inspection.unit.name})` : ''}

@@ -2,6 +2,7 @@ import { friendlyBusinessDate, utcToBusinessDate } from '@rental/core/scheduling
 import Link from 'next/link'
 import { actorCan, requirePermission } from '@/lib/auth/guard.ts'
 import { listCriteriaVersions } from '@/lib/screening/criteria-queries.ts'
+import { PageHeader } from '@/components/page-header.tsx'
 import { SUBMIT_BUTTON_CLASSES } from '@/components/ui-classes.ts'
 
 export const metadata = { title: 'Screening criteria — Rental Operations' }
@@ -29,17 +30,14 @@ export default async function ScreeningCriteriaPage({
   return (
     <div className="flex flex-col gap-6">
       <header className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">
-            Screening criteria
-          </h1>
+        <PageHeader title="Screening criteria">
           <p className="text-muted-foreground max-w-prose text-sm">
             The versioned income, credit and lookback criteria applied to
             every applicant (LEASE-04). No AI or algorithmic scoring, ever -
             this is where the numbers a person compares a report against are
             recorded, with who reviewed them.
           </p>
-        </div>
+        </PageHeader>
         {canWrite && (
           <Link
             href="/screening-criteria/new"

@@ -10,6 +10,7 @@ import {
   useFormVersion,
 } from '@/components/auth-form.tsx'
 import { TextField } from '@/components/form/field.tsx'
+import { Panel } from '@/components/panel.tsx'
 import type { VendorFormState, VendorRevealState } from '@/lib/vendors/actions.ts'
 
 // The vendor's whole surface (D-6, MAINT-03, R-025). One screen, no account,
@@ -646,10 +647,7 @@ export function VendorJob({
         clarifying question, and gating messaging behind "accept the job
         first" would shut off the one channel that could help them decide.
       */}
-      <section aria-labelledby="vendor-messages" className="flex flex-col gap-3 border-t pt-4">
-        <h2 id="vendor-messages" className="text-lg font-semibold">
-          Messages
-        </h2>
+      <Panel headingId="vendor-messages" title="Messages">
         {messages.length === 0 ? (
           <p className="text-muted-foreground text-sm">Nothing yet.</p>
         ) : (
@@ -689,7 +687,7 @@ export function VendorJob({
               better label anyway. */}
           <SubmitButton label="Send this message" />
         </form>
-      </section>
+      </Panel>
     </main>
   )
 }

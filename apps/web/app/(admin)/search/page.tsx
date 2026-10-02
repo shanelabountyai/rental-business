@@ -1,5 +1,6 @@
 import { requirePermission, requireScope } from '@/lib/auth/guard.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
+import { PageHeader } from '@/components/page-header.tsx'
 
 export const metadata = { title: 'Search — Rental Operations' }
 
@@ -28,7 +29,7 @@ export default async function SearchPage({
 
   return (
     <div className="flex flex-col gap-3">
-      <h1 className="text-2xl font-semibold tracking-tight">Search</h1>
+      <PageHeader title="Search" />
       {query ? (
         <p className="text-muted-foreground text-sm">
           Nothing is indexed yet, so there are no results for{' '}

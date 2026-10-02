@@ -1,5 +1,6 @@
 import { INSPECTION_TYPE_LABELS } from '@rental/core/inspections'
 import Link from 'next/link'
+import { PageHeader } from '@/components/page-header.tsx'
 import { requirePermission } from '@/lib/auth/guard.ts'
 import { listInspectionTemplates } from '@/lib/inspections/template-queries.ts'
 import { PRIMARY_BUTTON_CLASSES } from '@/components/ui-classes.ts'
@@ -15,13 +16,12 @@ export default async function InspectionTemplatesPage() {
 
   return (
     <div className="flex max-w-3xl flex-col gap-6">
-      <header className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Inspection checklists</h1>
+      <PageHeader title="Inspection checklists">
         <p className="text-muted-foreground text-sm">
           Room-by-room lists you reuse across inspections. The same checklist walked
           at move-in and move-out is what makes the two comparable later.
         </p>
-      </header>
+      </PageHeader>
 
       <div className="flex flex-col gap-3">
         <Link

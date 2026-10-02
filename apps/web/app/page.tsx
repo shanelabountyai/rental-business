@@ -11,6 +11,8 @@
 // policy this page cannot satisfy.
 import Link from 'next/link'
 
+import { PageHeader } from '@/components/page-header.tsx'
+
 export const dynamic = 'force-dynamic'
 
 // THE PUBLIC FRONT DOOR (R-114, audit angle 8).
@@ -30,14 +32,11 @@ export const dynamic = 'force-dynamic'
 export default function Home() {
   return (
     <main className="mx-auto flex min-h-screen max-w-2xl flex-col justify-center gap-6 p-8">
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight">
-          Rental Operations Platform
-        </h1>
+      <PageHeader title="Rental Operations Platform">
         <p className="text-muted-foreground mt-2 text-sm">
           Property management for the homes we look after.
         </p>
-      </header>
+      </PageHeader>
 
       <nav aria-label="Sign in" className="flex flex-col gap-3">
         <Link

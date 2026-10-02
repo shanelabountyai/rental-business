@@ -3,6 +3,7 @@ import { AGING_BUCKETS, BUCKET_LABELS, type AgingBucket } from '@rental/core/led
 import { formatCents } from '@rental/core/money'
 import { RentRollTable } from '@/components/money/rent-roll-table.tsx'
 import { propertyScope, scopeIsEmpty } from '@rental/core/rbac'
+import { PageHeader } from '@/components/page-header.tsx'
 import { requireScope } from '@/lib/auth/guard.ts'
 import { listTemplates } from '@/lib/comms/templates.ts'
 import { rentRoll } from '@/lib/payments/rent-roll.ts'
@@ -64,7 +65,7 @@ export default async function RentRollPage({
         >
           ← Money
         </Link>
-        <h1 className="text-2xl font-semibold tracking-tight">Rent roll</h1>
+        <PageHeader title="Rent roll" />
         <p className="text-muted-foreground text-sm">
           Every live tenancy: what is billed, what is owed, how long it has
           been owed, and when the tenant was last contacted.

@@ -1,5 +1,6 @@
 import { DOCUMENT_TYPE_LABELS, type DocumentTypeValue } from '@rental/core/documents'
 import Link from 'next/link'
+import { PageHeader } from '@/components/page-header.tsx'
 import { requirePermission } from '@/lib/auth/guard.ts'
 import { listDocumentTemplates } from '@/lib/documents/template-queries.ts'
 import { PRIMARY_BUTTON_CLASSES } from '@/components/ui-classes.ts'
@@ -16,13 +17,12 @@ export default async function DocumentTemplatesPage() {
 
   return (
     <div className="flex max-w-3xl flex-col gap-6">
-      <header className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Document templates</h1>
+      <PageHeader title="Document templates">
         <p className="text-muted-foreground text-sm">
           Letters, estoppel certificates, and anything else you generate more than
           once. Write them with merge fields, generate a PDF per recipient.
         </p>
-      </header>
+      </PageHeader>
 
       <div className="flex flex-col gap-3">
         <Link

@@ -7,6 +7,7 @@ import { useActionState } from 'react'
 import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
 import { Badge } from '@/components/badge.tsx'
 import { TextField } from '@/components/form/field.tsx'
+import { Panel } from '@/components/panel.tsx'
 import type { PlanFormState } from '@/lib/payments/plan-actions.ts'
 
 // Repayment plans on one tenancy (PAY-08, PAY-12; R-175).
@@ -302,15 +303,16 @@ export function PaymentPlanPanel({
   const [sendState, sendFormAction] = useActionState<PlanFormState, FormData>(sendAction, {})
 
   return (
-    <section aria-labelledby="repayment-plan" className="flex flex-col gap-4 border-t pt-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 id="repayment-plan" className="text-lg font-semibold">
-          Repayment plan
-        </h2>
-        {live && (
+    <Panel
+      headingId="repayment-plan"
+      title="Repayment plan"
+      gap="gap-4"
+      trailing={
+        live && (
           <Badge tone="warning">{live.shortfallCents > 0 ? 'Behind schedule' : 'In force'}</Badge>
-        )}
-      </div>
+        )
+      }
+    >
 
       {canManage && (
         <div>
@@ -437,6 +439,6 @@ export function PaymentPlanPanel({
           </ul>
         </details>
       )}
-    </section>
+    </Panel>
   )
 }

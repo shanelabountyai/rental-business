@@ -3,6 +3,7 @@
 import { useActionState } from 'react'
 import { LiveRegion, pendingButtonProps } from '@/components/auth-form.tsx'
 import { FieldError, TextField } from '@/components/form/field.tsx'
+import { Panel } from '@/components/panel.tsx'
 import type { TemplateFormState } from '@/lib/comms/template-actions.ts'
 import { PRIMARY_BUTTON_CLASSES } from '@/components/ui-classes.ts'
 
@@ -104,10 +105,7 @@ export function TranslationsPanel({
   >(retireAction, {})
 
   return (
-    <section aria-labelledby="translations" className="flex flex-col gap-4 border-t pt-4">
-      <h2 id="translations" className="text-lg font-semibold">
-        Other languages
-      </h2>
+    <Panel headingId="translations" title="Other languages" gap="gap-4">
 
       <p className="text-muted-foreground text-sm">
         {isLegal
@@ -224,6 +222,6 @@ export function TranslationsPanel({
           {active ? 'Retire this template' : 'Put it back in use'}
         </button>
       </form>
-    </section>
+    </Panel>
   )
 }

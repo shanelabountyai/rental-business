@@ -1,6 +1,7 @@
 import { EVICTION_STAGE_LABELS, type EvictionStageValue } from '@rental/core/evictions'
 import { friendlyDate } from '@rental/core/scheduling'
 import Link from 'next/link'
+import { PageHeader } from '@/components/page-header.tsx'
 import { requirePermission, requireScope } from '@/lib/auth/guard.ts'
 import { listEvictionCases } from '@/lib/evictions/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
@@ -25,7 +26,7 @@ export default async function EvictionsPage() {
   return (
     <div className="flex max-w-3xl flex-col gap-6">
       <div className="flex items-center justify-between gap-4">
-        <h1 className="text-2xl font-semibold tracking-tight">Evictions</h1>
+        <PageHeader title="Evictions" />
         <Link
           href="/evictions/new"
           className={`${SUBMIT_BUTTON_CLASSES} flex min-h-11 items-center justify-center px-4 text-sm`}

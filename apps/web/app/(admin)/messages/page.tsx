@@ -1,6 +1,7 @@
 import { propertyScope, scopeIsEmpty } from '@rental/core/rbac'
 import { friendlyTimestamp } from '@rental/core/scheduling'
 import Link from 'next/link'
+import { PageHeader } from '@/components/page-header.tsx'
 import { actorCan, requireScope } from '@/lib/auth/guard.ts'
 import { listThreads, unroutedCount } from '@/lib/comms/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
@@ -51,7 +52,7 @@ export default async function MessagesPage() {
   return (
     <div className="flex flex-col gap-6">
       <header className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Messages</h1>
+        <PageHeader title="Messages" />
         <p className="text-muted-foreground text-sm">
           Every conversation, whatever channel it came in on. Logged calls sit
           in the same history.

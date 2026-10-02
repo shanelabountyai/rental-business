@@ -1,5 +1,6 @@
 import { friendlyDate } from '@rental/core/scheduling'
 import Link from 'next/link'
+import { PageHeader } from '@/components/page-header.tsx'
 import { requireScope } from '@/lib/auth/guard.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 import { listConfidentialCases } from '@/lib/confidential/queries.ts'
@@ -41,14 +42,13 @@ export default async function ConfidentialPage() {
 
   return (
     <div className="flex max-w-4xl flex-col gap-6">
-      <header className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Confidential</h1>
+      <PageHeader title="Confidential">
         <p className="text-muted-foreground text-sm">
           Restricted safety cases. Visible only to staff holding the confidential
           permission, which is the Owner role by default. A case is opened from the
           tenancy it concerns.
         </p>
-      </header>
+      </PageHeader>
 
       {cases.length === 0 ? (
         <p className="text-muted-foreground text-sm">No cases.</p>

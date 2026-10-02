@@ -14,6 +14,7 @@ import {
 import { useActionState, useState } from 'react'
 import { FormAlerts, LiveRegion, SubmitButton } from '@/components/auth-form.tsx'
 import { SelectField, TextField, TextareaField } from '@/components/form/field.tsx'
+import { Panel } from '@/components/panel.tsx'
 import type { ViolationFormState } from '@/lib/violations/actions.ts'
 
 // Opening a lease-violation case from the tenancy it is about (RISK-02,
@@ -48,10 +49,7 @@ export function OpenViolationCasePanel({
   const errors = state.fieldErrors ?? {}
 
   return (
-    <section aria-labelledby="violations" className="flex flex-col gap-3 border-t pt-4">
-      <h2 id="violations" className="text-lg font-semibold">
-        Lease violations
-      </h2>
+    <Panel headingId="violations" title="Lease violations">
 
       {cases.length > 0 && (
         <ul className="flex flex-col gap-1 text-sm">
@@ -158,6 +156,6 @@ export function OpenViolationCasePanel({
           </form>
         </div>
       </details>
-    </section>
+    </Panel>
   )
 }

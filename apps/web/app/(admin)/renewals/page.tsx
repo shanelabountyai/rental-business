@@ -5,6 +5,7 @@ import {
 } from '@rental/core/filing-cabinet'
 import { friendlyBusinessDate, utcToBusinessDate } from '@rental/core/scheduling'
 import Link from 'next/link'
+import { PageHeader } from '@/components/page-header.tsx'
 import { requireScope } from '@/lib/auth/guard.ts'
 import { filingCabinetAlertsDue } from '@/lib/filing-cabinet/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
@@ -40,7 +41,7 @@ export default async function RenewalsPage() {
         >
           ← Dashboard
         </Link>
-        <h1 className="text-2xl font-semibold tracking-tight">Renewals & alerts</h1>
+        <PageHeader title="Renewals & alerts" />
         <p className="text-muted-foreground text-sm">
           Mortgage rate adjustments due within {ARM_ADJUSTMENT_ALERT_DAYS} days, balloon
           maturities within {BALLOON_MATURITY_ALERT_DAYS} days and insurance renewals within{' '}

@@ -1,6 +1,7 @@
 import { complianceItemTypeLabel } from '@rental/core/compliance'
 import { friendlyBusinessDate, utcToBusinessDate } from '@rental/core/scheduling'
 import Link from 'next/link'
+import { PageHeader } from '@/components/page-header.tsx'
 import { requireScope } from '@/lib/auth/guard.ts'
 import { listComplianceItems } from '@/lib/compliance/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
@@ -21,7 +22,7 @@ export default async function CompliancePage() {
   return (
     <div className="flex max-w-3xl flex-col gap-6">
       <div className="flex items-center justify-between gap-4">
-        <h1 className="text-2xl font-semibold tracking-tight">Compliance calendar</h1>
+        <PageHeader title="Compliance calendar" />
         <Link
           href="/compliance/new"
           className={`${SUBMIT_BUTTON_CLASSES} flex min-h-11 items-center justify-center px-4 text-sm`}

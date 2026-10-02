@@ -3,6 +3,7 @@ import {
   canIssueSelfShowingCode,
   friendlyTimestamp,
 } from '@rental/core/scheduling'
+import { PageHeader } from '@/components/page-header.tsx'
 import { SelfShowingIdentityForm } from '@/components/showings/self-showing-form.tsx'
 import { verifyIdentityForShowing } from '@/lib/showings/access-actions.ts'
 import { revealShowingCode } from '@/lib/showings/reveal-code.ts'
@@ -45,7 +46,7 @@ const REJECTION_MESSAGES: Record<string, string> = {
 function Shell({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <main className="mx-auto flex max-w-md flex-col gap-4 p-6">
-      <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
+      <PageHeader title={title} />
       {children}
     </main>
   )

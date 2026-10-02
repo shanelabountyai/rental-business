@@ -5,6 +5,7 @@ import {
   friendlyTimestamp,
   utcToBusinessDate,
 } from '@rental/core/scheduling'
+import { PageHeader } from '@/components/page-header.tsx'
 import { ShowingBookingForm } from '@/components/showings/showing-booking-form.tsx'
 import { bookShowing } from '@/lib/showings/actions.ts'
 import { availableSlotsFor } from '@/lib/showings/queries.ts'
@@ -48,7 +49,7 @@ export default async function ShowingBookingPage({
     if (link.booked) {
       return (
         <main className="mx-auto flex max-w-md flex-col gap-4 p-6">
-          <h1 className="text-2xl font-semibold tracking-tight">You&rsquo;re booked</h1>
+          <PageHeader title={<>You&rsquo;re booked</>} />
           <p className="text-base">
             {link.booked.addressLine1}
             {link.booked.unitName ? ` (${link.booked.unitName})` : ''}, {' '}
@@ -62,7 +63,7 @@ export default async function ShowingBookingPage({
     }
     return (
       <main className="mx-auto flex max-w-md flex-col gap-4 p-6">
-        <h1 className="text-2xl font-semibold tracking-tight">This link isn&rsquo;t working</h1>
+        <PageHeader title={<>This link isn&rsquo;t working</>} />
         <p className="text-base">{REJECTION_MESSAGES[link.reason] ?? 'This link is not valid.'}</p>
       </main>
     )
@@ -85,13 +86,12 @@ export default async function ShowingBookingPage({
 
   return (
     <main className="mx-auto flex max-w-md flex-col gap-6 p-6">
-      <header className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Hi {link.firstName}</h1>
+      <PageHeader title={<>Hi {link.firstName}</>}>
         <p className="text-muted-foreground text-sm">
           {link.addressLine1}
           {link.unitName ? ` (${link.unitName})` : ''}
         </p>
-      </header>
+      </PageHeader>
 
       {/* R-141. Before this the page named the prospect and the street and
           stopped, which asks somebody to book a viewing of a home the page

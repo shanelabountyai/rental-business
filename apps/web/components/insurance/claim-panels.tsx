@@ -16,6 +16,7 @@ import { friendlyBusinessDate, friendlyDate, utcToWallClock } from '@rental/core
 import { useActionState } from 'react'
 import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
 import { FieldError, SelectField, TextField, TextareaField } from '@/components/form/field.tsx'
+import { Panel } from '@/components/panel.tsx'
 import type { ClaimFormState } from '@/lib/insurance/actions.ts'
 import type { ClaimView } from '@/lib/insurance/queries.ts'
 
@@ -569,10 +570,7 @@ export function CloseClaimPanel({ claim, action }: { claim: ClaimView; action: A
   const errors = state.fieldErrors ?? {}
 
   return (
-    <section aria-labelledby="close-claim" className="flex flex-col gap-3 border-t pt-4">
-      <h2 id="close-claim" className="text-lg font-semibold">
-        How the claim ended
-      </h2>
+    <Panel headingId="close-claim" title="How the claim ended">
       <form action={formAction} className="flex flex-col gap-3">
         <input type="hidden" name="claimId" value={claim.id} />
         <FormAlerts state={state} />
@@ -594,7 +592,7 @@ export function CloseClaimPanel({ claim, action }: { claim: ClaimView; action: A
         />
         <SubmitButton label="Close this claim" />
       </form>
-    </section>
+    </Panel>
   )
 }
 

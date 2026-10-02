@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { PageHeader } from '@/components/page-header.tsx'
 import { PropertyForm } from '@/components/properties/property-form.tsx'
 import { actorCan, requireScope } from '@/lib/auth/guard.ts'
 import { createProperty } from '@/lib/properties/actions.ts'
@@ -19,7 +20,7 @@ export default async function NewPropertyPage() {
     const canCreateEntity = await actorCan('property.write')
     return (
       <div className="flex flex-col gap-3">
-        <h1 className="text-2xl font-semibold tracking-tight">New property</h1>
+        <PageHeader title="New property" />
         <p className="text-muted-foreground max-w-prose text-sm">
           You don&rsquo;t have create access to any legal entity yet. Ask
           whoever manages access to grant you entity-level access
@@ -39,7 +40,7 @@ export default async function NewPropertyPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-semibold tracking-tight">New property</h1>
+      <PageHeader title="New property" />
       <PropertyForm
         action={createProperty}
         submitLabel="Create property"

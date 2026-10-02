@@ -2,6 +2,7 @@ import { formatCents } from '@rental/core/money'
 import { UNATTRIBUTED_TRADE, economicOccupancy, vacancyRate } from '@rental/core/metrics'
 import { isAccountingBasis } from '@rental/core/tax'
 import Link from 'next/link'
+import { PageHeader } from '@/components/page-header.tsx'
 import { requireScope } from '@/lib/auth/guard.ts'
 import { operatingReport } from '@/lib/reports/operating.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
@@ -76,7 +77,7 @@ export default async function OperatingReportPage({
         >
           ← Reports
         </Link>
-        <h1 className="text-2xl font-semibold tracking-tight">Operating report</h1>
+        <PageHeader title="Operating report" />
         <p className="text-muted-foreground text-sm">
           What each house earned, cost, and sat empty for. An operating view — full financial
           statements are QuickBooks&rsquo; job (RPT-09), so nothing here balances to a trial balance.

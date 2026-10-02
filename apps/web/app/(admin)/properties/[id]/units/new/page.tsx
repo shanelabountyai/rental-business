@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation'
 import { prisma } from '@rental/db'
+import { PageHeader } from '@/components/page-header.tsx'
 import { UnitForm } from '@/components/units/unit-form.tsx'
 import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
 import { createUnit } from '@/lib/units/actions.ts'
@@ -19,9 +20,7 @@ export default async function NewUnitPage({
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-semibold tracking-tight">
-        New unit at {property.name}
-      </h1>
+      <PageHeader title={<>New unit at {property.name}</>} />
       <UnitForm
         action={createUnit.bind(null, id)}
         submitLabel="Create unit"

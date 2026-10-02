@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { PageHeader } from '@/components/page-header.tsx'
 import {
   MaintenanceWizard,
   type WizardParams,
@@ -30,7 +31,7 @@ export default async function NewMaintenanceRequestPage({
   if (!home) {
     return (
       <div className="flex flex-col gap-4">
-        <h1 className="text-2xl font-semibold tracking-tight">Report a problem</h1>
+        <PageHeader title="Report a problem" />
         <p>
           We do not have a home on file for you yet. Please{' '}
           <Link
@@ -47,7 +48,7 @@ export default async function NewMaintenanceRequestPage({
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-semibold tracking-tight">Report a problem</h1>
+      <PageHeader title="Report a problem" />
       {/*
         An escape hatch at the top of the ordinary flow, not buried at the
         bottom: a tenant who starts here and only then realises how bad it is

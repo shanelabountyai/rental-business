@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { StartInspectionForm } from '@/components/inspections/start-inspection-form.tsx'
+import { PageHeader } from '@/components/page-header.tsx'
 import { requireScope } from '@/lib/auth/guard.ts'
 import { startInspection } from '@/lib/inspections/actions.ts'
 import { unitsForNewInspection } from '@/lib/inspections/queries.ts'
@@ -26,7 +27,7 @@ export default async function NewInspectionPage() {
         >
           ← Inspections
         </Link>
-        <h1 className="text-2xl font-semibold tracking-tight">New inspection</h1>
+        <PageHeader title="New inspection" />
       </header>
 
       {units.length === 0 ? (

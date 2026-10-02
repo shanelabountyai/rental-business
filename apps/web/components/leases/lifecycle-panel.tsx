@@ -3,6 +3,7 @@
 import { useActionState, useState } from 'react'
 import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
 import { SelectField, TextareaField, TextField } from '@/components/form/field.tsx'
+import { Panel } from '@/components/panel.tsx'
 import type { LeaseFormState } from '@/lib/leases/actions.ts'
 import { RetaliationAck } from './retaliation-ack.tsx'
 
@@ -41,10 +42,7 @@ export function LifecyclePanel({
   recordNotice: Action
 }) {
   return (
-    <section aria-labelledby="lifecycle" className="flex flex-col gap-4 border-t pt-4">
-      <h2 id="lifecycle" className="text-lg font-semibold">
-        Lifecycle
-      </h2>
+    <Panel headingId="lifecycle" title="Lifecycle" gap="gap-4">
 
       {underNotice ? (
         <p className="text-sm">{noticeSummary}</p>
@@ -69,7 +67,7 @@ export function LifecyclePanel({
           ))}
         </div>
       )}
-    </section>
+    </Panel>
   )
 }
 

@@ -1,6 +1,7 @@
 import { formatCents } from '@rental/core/money'
 import { friendlyDate } from '@rental/core/scheduling'
 import Link from 'next/link'
+import { PageHeader } from '@/components/page-header.tsx'
 import { tenantStatement } from '@/lib/payments/queries.ts'
 import { requireTenantWithScope } from '@/lib/portal/guard.ts'
 import { scrollableRegionProps } from '@/components/ui-classes.ts'
@@ -56,7 +57,7 @@ export default async function PaymentHistoryPage() {
         >
           ← Pay rent
         </Link>
-        <h1 className="text-2xl font-semibold tracking-tight">Your payments</h1>
+        <PageHeader title="Your payments" />
         <p className="text-muted-foreground text-sm">
           {view.propertyName} — {view.unitName}
         </p>

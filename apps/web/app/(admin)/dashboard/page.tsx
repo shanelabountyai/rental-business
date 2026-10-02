@@ -1,5 +1,6 @@
 import { formatCents } from '@rental/core/money'
 import Link from 'next/link'
+import { PageHeader } from '@/components/page-header.tsx'
 import { requireScope } from '@/lib/auth/guard.ts'
 import { dashboardSummary, type DashboardSummary } from '@/lib/dashboard/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
@@ -128,13 +129,12 @@ export default async function DashboardPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <header className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
+      <PageHeader title="Dashboard">
         <p className="text-muted-foreground text-sm">
           In scope right now: {scope.propertyIds.length} propert
           {scope.propertyIds.length === 1 ? 'y' : 'ies'}.
         </p>
-      </header>
+      </PageHeader>
 
       <section className="flex flex-col gap-3">
         <h2 className="text-lg font-semibold">Needs action today</h2>

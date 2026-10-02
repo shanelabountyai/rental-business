@@ -4,6 +4,7 @@ import { formatCents } from '@rental/core/money'
 import { friendlyBusinessDate } from '@rental/core/scheduling'
 import { propertyScope, scopeIsEmpty } from '@rental/core/rbac'
 import { WriteOffForm } from '@/components/money/write-off-form.tsx'
+import { PageHeader } from '@/components/page-header.tsx'
 import { scrollableRegionProps } from '@/components/ui-classes.ts'
 import { requireScope } from '@/lib/auth/guard.ts'
 import { type FormerTenantRow, formerTenantReceivables } from '@/lib/payments/former-tenants.ts'
@@ -32,7 +33,7 @@ export default async function FormerTenantsPage() {
         >
           ← Money
         </Link>
-        <h1 className="text-2xl font-semibold tracking-tight">Former tenants</h1>
+        <PageHeader title="Former tenants" />
         <p className="text-muted-foreground text-sm">
           What tenants who have moved out still owe: unpaid rent and fees, and
           damage beyond their deposit. Worst first.

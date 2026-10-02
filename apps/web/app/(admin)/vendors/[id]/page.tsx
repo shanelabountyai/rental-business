@@ -3,6 +3,7 @@ import { requiresForm1099 } from '@rental/core/vendors'
 import Link from 'next/link'
 import { Fragment } from 'react'
 import { notFound } from 'next/navigation'
+import { PageHeader } from '@/components/page-header.tsx'
 import { TaskActionButton } from '@/components/tasks/action-button.tsx'
 import { VendorRecordForm } from '@/components/vendors/vendor-record-form.tsx'
 import { requirePermission } from '@/lib/auth/guard.ts'
@@ -34,7 +35,7 @@ export default async function VendorPage({
         >
           ← Vendors
         </Link>
-        <h1 className="text-2xl font-semibold tracking-tight">{vendor.name}</h1>
+        <PageHeader title={vendor.name} />
       </header>
 
       <section aria-labelledby="totals" className="flex flex-col gap-2 rounded-md border p-4">

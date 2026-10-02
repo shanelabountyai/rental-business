@@ -1,3 +1,4 @@
+import { PageHeader } from '@/components/page-header.tsx'
 import { EntityForm } from '@/components/properties/entity-form.tsx'
 import { requirePermission } from '@/lib/auth/guard.ts'
 import { createLegalEntity } from '@/lib/properties/actions.ts'
@@ -12,9 +13,7 @@ export default async function NewLegalEntityPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-semibold tracking-tight">
-        New legal entity
-      </h1>
+      <PageHeader title="New legal entity" />
       <p className="text-muted-foreground max-w-prose text-sm">
         The LLC, trust or other entity that owns one or more properties.
         Reports and exports split by entity (PROP-04).

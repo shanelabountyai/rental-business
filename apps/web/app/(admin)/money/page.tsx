@@ -8,6 +8,7 @@ import {
 } from '@/components/money/ops-log.tsx'
 import { PlanOfferPattern } from '@/components/money/plan-offer-pattern.tsx'
 import { WaiverPattern } from '@/components/money/waiver-pattern.tsx'
+import { PageHeader } from '@/components/page-header.tsx'
 import { requirePermission, requireScope } from '@/lib/auth/guard.ts'
 import { resyncPayer } from '@/lib/billing/actions.ts'
 import { billingRunRows } from '@/lib/billing/lifecycle.ts'
@@ -58,7 +59,7 @@ export default async function MoneyPage() {
   return (
     <div className="flex max-w-3xl flex-col gap-6">
       <header className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Money</h1>
+        <PageHeader title="Money" />
         <p className="text-muted-foreground text-sm">
           What Stripe is billing, and where it has stopped agreeing with the
           lease.

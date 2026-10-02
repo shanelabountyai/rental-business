@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { DocumentTemplateForm } from '@/components/documents/document-template-form.tsx'
+import { PageHeader } from '@/components/page-header.tsx'
 import { requirePermission } from '@/lib/auth/guard.ts'
 import { saveDocumentTemplate } from '@/lib/documents/template-actions.ts'
 import { DOCUMENT_TYPE_OPTIONS } from '@/lib/documents/template-queries.ts'
@@ -18,7 +19,7 @@ export default async function NewDocumentTemplatePage() {
         >
           ← Document templates
         </Link>
-        <h1 className="text-2xl font-semibold tracking-tight">New document template</h1>
+        <PageHeader title="New document template" />
       </header>
 
       <DocumentTemplateForm

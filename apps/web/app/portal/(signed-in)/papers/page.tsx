@@ -1,3 +1,4 @@
+import { PageHeader } from '@/components/page-header.tsx'
 import { requireTenantWithScope } from '@/lib/portal/guard.ts'
 import {
   inspectionsAwaitingTenantSignature,
@@ -56,13 +57,12 @@ export default async function PortalPapersPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-2">
-        <h1 className="text-2xl font-semibold tracking-tight">Your papers</h1>
+      <PageHeader title="Your papers">
         <p>
           Your lease and anything else we have sent you. Only your own papers
           appear here.
         </p>
-      </div>
+      </PageHeader>
 
       {awaitingWalk.length > 0 && (
         <ul className="flex flex-col gap-3">

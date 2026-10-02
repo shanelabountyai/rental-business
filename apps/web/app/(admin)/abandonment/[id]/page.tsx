@@ -24,6 +24,8 @@ import {
   LogAttemptPanel,
   RecordEntryPanel,
 } from '@/components/abandonment/case-panels.tsx'
+import { PageHeader } from '@/components/page-header.tsx'
+import { Panel } from '@/components/panel.tsx'
 import {
   closeAbandonmentCase,
   disposeBelongings,
@@ -107,9 +109,7 @@ export default async function AbandonmentCasePage({
         >
           ← Gone dark
         </Link>
-        <h1 className="text-2xl font-semibold tracking-tight">
-          {found.propertyName} — {found.unitName}
-        </h1>
+        <PageHeader title={`${found.propertyName} — ${found.unitName}`} />
         <p className="text-muted-foreground text-sm">
           {found.tenantNames.join(', ') || 'No tenant recorded'} ·{' '}
           {found.outcome
@@ -275,26 +275,20 @@ export default async function AbandonmentCasePage({
       )}
 
       {openCase ? (
-        <section aria-labelledby="close" className="flex flex-col gap-3 border-t pt-4">
-          <h2 id="close" className="text-lg font-semibold">
-            Close this case
-          </h2>
+        <Panel headingId="close" title="Close this case">
           <CloseCasePanel
             caseId={found.id}
             action={closeAbandonmentCase}
             deceasedPrompt={DECEASED_OUTCOME_PROMPT}
           />
-        </section>
+        </Panel>
       ) : (
-        <section aria-labelledby="closed" className="flex flex-col gap-1 border-t pt-4">
-          <h2 id="closed" className="text-lg font-semibold">
-            Closed
-          </h2>
+        <Panel headingId="closed" title="Closed" gap="gap-1">
           <p className="text-sm">
             {found.outcome ? ABANDONMENT_OUTCOME_LABELS[found.outcome] : 'Closed'} —{' '}
             {found.outcomeNote}
           </p>
-        </section>
+        </Panel>
       )}
     </div>
   )

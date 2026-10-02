@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { InspectionTemplateForm } from '@/components/inspections/inspection-template-form.tsx'
+import { PageHeader } from '@/components/page-header.tsx'
 import { requirePermission } from '@/lib/auth/guard.ts'
 import { saveInspectionTemplate } from '@/lib/inspections/template-actions.ts'
 
@@ -17,7 +18,7 @@ export default async function NewInspectionTemplatePage() {
         >
           ← Inspection checklists
         </Link>
-        <h1 className="text-2xl font-semibold tracking-tight">New checklist</h1>
+        <PageHeader title="New checklist" />
       </header>
 
       {/* Bound server-side - a plain function cannot cross this boundary

@@ -1,6 +1,7 @@
 import { CAUSE_OF_LOSS_LABELS, CLAIM_OUTCOME_LABELS } from '@rental/core/insurance'
 import { friendlyDate } from '@rental/core/scheduling'
 import Link from 'next/link'
+import { PageHeader } from '@/components/page-header.tsx'
 import { requirePermission, requireScope } from '@/lib/auth/guard.ts'
 import { listClaims } from '@/lib/insurance/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
@@ -25,13 +26,12 @@ export default async function ClaimsPage() {
 
   return (
     <div className="flex max-w-4xl flex-col gap-6">
-      <header className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Claims</h1>
+      <PageHeader title="Claims">
         <p className="text-muted-foreground text-sm">
           Insurance claims across the portfolio. A claim is opened from the property it happened at,
           against a policy already on file.
         </p>
-      </header>
+      </PageHeader>
 
       {claims.length === 0 ? (
         <p className="text-muted-foreground text-sm">No claims.</p>

@@ -1,6 +1,7 @@
 import { CATEGORY_LABELS, isNotificationCategory } from '@rental/core/notifications'
 import { friendlyTimestamp } from '@rental/core/scheduling'
 import Link from 'next/link'
+import { PageHeader } from '@/components/page-header.tsx'
 import { requireScope } from '@/lib/auth/guard.ts'
 import { deadLetteredEvents } from '@/lib/jobs/outbox.ts'
 import { listNotifications } from '@/lib/notifications/queries.ts'
@@ -83,13 +84,12 @@ export default async function NotificationsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <header className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Notifications</h1>
+      <PageHeader title="Notifications">
         <p className="text-muted-foreground text-sm">
           Every message this system decided to send, including the ones it
           deliberately did not. Append-only.
         </p>
-      </header>
+      </PageHeader>
 
       {unreachable > 0 && (
         <p className="rounded-md border border-warning/35 bg-warning/6 px-4 py-3 text-sm text-warning">

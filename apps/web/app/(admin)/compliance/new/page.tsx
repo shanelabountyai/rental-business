@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { AddComplianceItemForm } from '@/components/compliance/add-item-form.tsx'
+import { PageHeader } from '@/components/page-header.tsx'
 import { requireScope } from '@/lib/auth/guard.ts'
 import { createComplianceItem } from '@/lib/compliance/actions.ts'
 import { complianceScopeOptions } from '@/lib/compliance/queries.ts'
@@ -21,7 +22,7 @@ export default async function NewComplianceItemPage() {
         >
           ← Compliance calendar
         </Link>
-        <h1 className="text-2xl font-semibold tracking-tight">New compliance item</h1>
+        <PageHeader title="New compliance item" />
       </header>
 
       {properties.length === 0 ? (

@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { PageHeader } from '@/components/page-header.tsx'
 import { SUBMIT_BUTTON_CLASSES } from '@/components/ui-classes.ts'
 
 // The tenant's 404 (U1, R-099).
@@ -17,7 +18,7 @@ import { SUBMIT_BUTTON_CLASSES } from '@/components/ui-classes.ts'
 export default function PortalNotFound() {
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-2xl font-semibold tracking-tight">We could not find that</h1>
+      <PageHeader title="We could not find that" />
 
       <p className="text-base">
         The link may be old, or it may point at something that is not part of

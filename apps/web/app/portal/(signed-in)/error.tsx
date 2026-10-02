@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
+import { PageHeader } from '@/components/page-header.tsx'
 import { SUBMIT_BUTTON_CLASSES } from '@/components/ui-classes.ts'
 
 // What a TENANT sees when a portal page throws (U1, R-099).
@@ -33,10 +34,7 @@ export default function PortalError({ reset }: { error: Error; reset: () => void
 
   return (
     <div className="flex flex-col gap-4">
-      {/* tabIndex -1 so it can take focus without joining the tab order. */}
-      <h1 ref={heading} tabIndex={-1} className="text-2xl font-semibold tracking-tight">
-        Something went wrong
-      </h1>
+      <PageHeader ref={heading} focusable title="Something went wrong" />
 
       <p className="text-base">
         This page could not load. It is a problem on our side, not something

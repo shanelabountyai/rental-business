@@ -1,5 +1,6 @@
 import { CATEGORY_LABELS, MAINTENANCE_CATEGORIES } from '@rental/core/maintenance'
 import { LogPhoneRequestForm } from '@/components/maintenance/log-phone-request-form.tsx'
+import { PageHeader } from '@/components/page-header.tsx'
 import { requireScope } from '@/lib/auth/guard.ts'
 import { logPhoneMaintenanceRequest } from '@/lib/maintenance/actions.ts'
 import { listLoggableLeaseTenants } from '@/lib/maintenance/queries.ts'
@@ -27,9 +28,7 @@ export default async function NewPhoneRequestPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-semibold tracking-tight">
-        Log a phone-reported request
-      </h1>
+      <PageHeader title="Log a phone-reported request" />
       <p className="text-muted-foreground max-w-prose text-sm">
         A tenant who called instead of using the portal is not a
         second-class record - this becomes the same kind of ticket as one

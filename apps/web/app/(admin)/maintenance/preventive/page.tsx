@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { RunBatchButton } from '@/components/maintenance/run-batch-button.tsx'
+import { PageHeader } from '@/components/page-header.tsx'
 import { requirePermission } from '@/lib/auth/guard.ts'
 import { runPreventiveBatch } from '@/lib/maintenance/preventive-actions.ts'
 import { dueCountForTemplate, listPreventiveTemplates } from '@/lib/maintenance/preventive-queries.ts'
@@ -29,7 +30,7 @@ export default async function PreventiveMaintenancePage() {
   return (
     <div className="flex max-w-2xl flex-col gap-6">
       <div className="flex items-center justify-between gap-4">
-        <h1 className="text-2xl font-semibold tracking-tight">Preventive maintenance</h1>
+        <PageHeader title="Preventive maintenance" />
         <Link
           href="/maintenance/preventive/new"
           className={`${SUBMIT_BUTTON_CLASSES} flex min-h-11 items-center justify-center px-4 text-sm`}

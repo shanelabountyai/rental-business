@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { TemplateEditor } from '@/components/comms/template-editor.tsx'
 import { TranslationsPanel } from '@/components/comms/translations-panel.tsx'
+import { PageHeader } from '@/components/page-header.tsx'
 import { actorCan, requirePermission } from '@/lib/auth/guard.ts'
 import {
   approveTranslation,
@@ -43,7 +44,7 @@ export default async function TemplatePage({
         >
           ← Message templates
         </Link>
-        <h1 className="text-2xl font-semibold tracking-tight">{template.name}</h1>
+        <PageHeader title={template.name} />
         <p className="text-muted-foreground text-sm">
           {template.kind === 'LEGAL' ? 'Legal notice' : 'Routine message'}
           {!template.active && ' · retired'}

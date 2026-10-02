@@ -1,6 +1,7 @@
 import { friendlyBusinessDate, friendlyDate, utcToBusinessDate } from '@rental/core/scheduling'
 import { formatCents } from '@rental/core/money'
 import Link from 'next/link'
+import { PageHeader } from '@/components/page-header.tsx'
 import { requireTenantWithScope } from '@/lib/portal/guard.ts'
 import { plansForLease } from '@/lib/payments/plans.ts'
 import { getTenantHome, listTenantUpdates } from '@/lib/portal/queries.ts'
@@ -45,9 +46,7 @@ export default async function PortalHomePage() {
 
   return (
     <div className="flex flex-col gap-8">
-      <h1 className="text-2xl font-semibold tracking-tight">
-        Hello, {tenant.name.split(' ')[0]}
-      </h1>
+      <PageHeader title={<>Hello, {tenant.name.split(' ')[0]}</>} />
 
       <section aria-labelledby="your-home" className="flex flex-col gap-3">
         <h2 id="your-home" className="text-lg font-semibold">

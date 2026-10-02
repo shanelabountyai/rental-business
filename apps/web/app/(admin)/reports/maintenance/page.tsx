@@ -5,6 +5,7 @@ import {
   friendlyDate,
 } from '@rental/core/scheduling'
 import Link from 'next/link'
+import { PageHeader } from '@/components/page-header.tsx'
 import { requireScope } from '@/lib/auth/guard.ts'
 import { maintenanceAnalytics } from '@/lib/reports/maintenance.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
@@ -68,7 +69,7 @@ export default async function MaintenanceAnalyticsPage({
         >
           ← Reports
         </Link>
-        <h1 className="text-2xl font-semibold tracking-tight">Maintenance analytics</h1>
+        <PageHeader title="Maintenance analytics" />
         <p className="text-muted-foreground text-sm">
           How fast things get fixed, what keeps breaking, and what it costs by vendor.
         </p>

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
+import { PageHeader } from '@/components/page-header.tsx'
 import { SUBMIT_BUTTON_CLASSES } from '@/components/ui-classes.ts'
 
 // What STAFF see when an admin page throws (U1, R-099).
@@ -27,9 +28,7 @@ export default function AdminError({
 
   return (
     <div className="flex flex-col gap-4">
-      <h1 ref={heading} tabIndex={-1} className="text-xl font-semibold tracking-tight">
-        This page failed to load
-      </h1>
+      <PageHeader ref={heading} focusable title="This page failed to load" />
 
       <p className="text-sm">
         The request did not complete. Nothing was written — a page that throws

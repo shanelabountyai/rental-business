@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { PageHeader } from '@/components/page-header.tsx'
 import { actorCan, requireScope } from '@/lib/auth/guard.ts'
 import { currentScope as switcherScope } from '@/lib/scope/current-scope.ts'
 import { canCreateAnyProperty, listProperties } from '@/lib/properties/queries.ts'
@@ -36,13 +37,12 @@ export default async function PropertiesPage({
   return (
     <div className="flex flex-col gap-6">
       <header className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Properties</h1>
+        <PageHeader title="Properties">
           <p className="text-muted-foreground text-sm">
             {properties.length} propert{properties.length === 1 ? 'y' : 'ies'}{' '}
             in {scope.selection.kind === 'all' ? 'your scope' : 'this view'}.
           </p>
-        </div>
+        </PageHeader>
         {(canCreateEntity || canCreateProperty) && (
           <div className="flex gap-2">
             {canCreateEntity && (

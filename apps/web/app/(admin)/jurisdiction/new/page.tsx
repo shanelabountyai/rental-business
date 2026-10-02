@@ -2,6 +2,7 @@ import { parseServiceMethodMap } from '@rental/core/notices'
 import { friendlyBusinessDate, utcToBusinessDate } from '@rental/core/scheduling'
 import { SelectField } from '@/components/form/field.tsx'
 import { RuleForm } from '@/components/jurisdiction/rule-form.tsx'
+import { PageHeader } from '@/components/page-header.tsx'
 import { requirePermission } from '@/lib/auth/guard.ts'
 import { createRuleVersion } from '@/lib/jurisdiction/actions.ts'
 import { currentRuleVersion, listCurrentRules } from '@/lib/jurisdiction/queries.ts'
@@ -49,13 +50,11 @@ export default async function NewJurisdictionRulePage({
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-semibold tracking-tight">
-        {previous
+      <PageHeader title={previous
           ? 'New rule version'
           : cloneSource
             ? `New jurisdiction configuration, cloned from ${cloneSource.state}`
-            : 'New jurisdiction configuration'}
-      </h1>
+            : 'New jurisdiction configuration'} />
       <p className="text-muted-foreground max-w-prose text-sm">
         {previous
           ? `Supersedes v${previous.version}, in effect since ${friendlyBusinessDate(utcToBusinessDate(previous.effectiveFrom))}. The prior version stays on record (D-4) - nothing is edited or deleted.`

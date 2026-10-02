@@ -11,6 +11,7 @@ import {
 import { friendlyBusinessDate } from '@rental/core/scheduling'
 import { FormAlerts, LiveRegion, SubmitButton } from '@/components/auth-form.tsx'
 import { SelectField, TextField, TextareaField } from '@/components/form/field.tsx'
+import { Panel } from '@/components/panel.tsx'
 import type { ConfidentialFormState } from '@/lib/confidential/actions.ts'
 
 // The confidential case file (RISK-04, ROLE-05; R-091).
@@ -54,10 +55,7 @@ export function CaseDetailsPanel({
 
   if (closed) {
     return (
-      <section aria-labelledby="case-details" className="flex flex-col gap-3 border-t pt-4">
-        <h2 id="case-details" className="text-lg font-semibold">
-          What this case records
-        </h2>
+      <Panel headingId="case-details" title="What this case records">
         <p className="text-sm whitespace-pre-wrap">{summary}</p>
         <dl className="grid gap-2 text-sm sm:grid-cols-2">
           <div>
@@ -73,15 +71,12 @@ export function CaseDetailsPanel({
             </dd>
           </div>
         </dl>
-      </section>
+      </Panel>
     )
   }
 
   return (
-    <section aria-labelledby="case-details" className="flex flex-col gap-4 border-t pt-4">
-      <h2 id="case-details" className="text-lg font-semibold">
-        What this case records
-      </h2>
+    <Panel headingId="case-details" title="What this case records" gap="gap-4">
       <FormAlerts state={state} />
       <form action={submit} className="flex flex-col gap-4">
         <TextareaField
@@ -146,7 +141,7 @@ export function CaseDetailsPanel({
 
         <SubmitButton label="Save this case" />
       </form>
-    </section>
+    </Panel>
   )
 }
 
@@ -165,10 +160,7 @@ export function LockChangePanel({
   const errors = state.fieldErrors ?? {}
 
   return (
-    <section aria-labelledby="lock-change" className="flex flex-col gap-3 border-t pt-4">
-      <h2 id="lock-change" className="text-lg font-semibold">
-        Locks and access codes
-      </h2>
+    <Panel headingId="lock-change" title="Locks and access codes">
       <FormAlerts state={state} />
 
       {/* R-091c. RENDERED OUTSIDE THE ordered/not-ordered branch, so it
@@ -251,7 +243,7 @@ export function LockChangePanel({
           <SubmitButton label="Order the re-key and retire the codes" />
         </form>
       )}
-    </section>
+    </Panel>
   )
 }
 
@@ -270,10 +262,7 @@ export function CloseCasePanel({
   const errors = state.fieldErrors ?? {}
 
   return (
-    <section aria-labelledby="close-case" className="flex flex-col gap-3 border-t pt-4">
-      <h2 id="close-case" className="text-lg font-semibold">
-        Closing this case
-      </h2>
+    <Panel headingId="close-case" title="Closing this case">
       <LiveRegion>
         {closed && (
           <p className="text-sm">
@@ -296,7 +285,7 @@ export function CloseCasePanel({
           <SubmitButton label="Close this case" />
         </form>
       )}
-    </section>
+    </Panel>
   )
 }
 
@@ -326,10 +315,7 @@ export function EarlyTerminationPanel({
   const errors = state.fieldErrors ?? {}
 
   return (
-    <section aria-labelledby="early-termination" className="flex flex-col gap-3 border-t pt-4">
-      <h2 id="early-termination" className="text-lg font-semibold">
-        Ending the tenancy early
-      </h2>
+    <Panel headingId="early-termination" title="Ending the tenancy early">
       <FormAlerts state={state} />
       <LiveRegion>
         {recorded && (
@@ -379,7 +365,7 @@ export function EarlyTerminationPanel({
           <SubmitButton label="Record the early termination" />
         </form>
       )}
-    </section>
+    </Panel>
   )
 }
 
@@ -409,10 +395,7 @@ export function RemovePartyPanel({
   const errors = state.fieldErrors ?? {}
 
   return (
-    <section aria-labelledby="remove-party" className="flex flex-col gap-3 border-t pt-4">
-      <h2 id="remove-party" className="text-lg font-semibold">
-        Taking the restricted party off the tenancy
-      </h2>
+    <Panel headingId="remove-party" title="Taking the restricted party off the tenancy">
       <FormAlerts state={state} />
 
       {sent ? (
@@ -449,6 +432,6 @@ export function RemovePartyPanel({
           <SubmitButton label="Send the amendment without their signature" />
         </form>
       )}
-    </section>
+    </Panel>
   )
 }

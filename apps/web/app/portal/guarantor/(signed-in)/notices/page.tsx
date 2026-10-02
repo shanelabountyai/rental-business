@@ -1,6 +1,7 @@
 import { friendlyDate } from '@rental/core/scheduling'
 import Link from 'next/link'
 import { Badge } from '@/components/badge.tsx'
+import { PageHeader } from '@/components/page-header.tsx'
 import { listTenantNotices } from '@/lib/notices/queries.ts'
 import { requireGuarantorWithScope } from '@/lib/portal/guarantor-guard.ts'
 
@@ -20,13 +21,12 @@ export default async function GuarantorNoticesPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <header className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Notices about this lease</h1>
+      <PageHeader title="Notices about this lease">
         <p className="text-muted-foreground text-sm">
           Letters served on this tenancy. Opening one records that you have seen
           it.
         </p>
-      </header>
+      </PageHeader>
 
       {notices.length === 0 ? (
         <p className="text-muted-foreground text-sm">No notices.</p>

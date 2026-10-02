@@ -3,6 +3,8 @@ import { friendlyBusinessDate, utcToBusinessDate } from '@rental/core/scheduling
 import { formatCents } from '@rental/core/money'
 import { notFound } from 'next/navigation'
 import { ListingInquiryForm } from '@/components/listings/listing-inquiry-form.tsx'
+import { PageHeader } from '@/components/page-header.tsx'
+import { Panel } from '@/components/panel.tsx'
 import { rulesFor } from '@/lib/jurisdiction/queries.ts'
 import { recordListingLead } from '@/lib/listings/leads.ts'
 import { publicListing, unitPhotosForListing } from '@/lib/listings/queries.ts'
@@ -75,15 +77,14 @@ export default async function PublicListingPage({
 
   return (
     <main className="mx-auto flex max-w-2xl flex-col gap-6 p-6">
-      <header className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold tracking-tight">
-          {listing.headline || `${listing.property.addressLine1}, ${listing.property.city}`}
-        </h1>
+      <PageHeader
+        title={listing.headline || `${listing.property.addressLine1}, ${listing.property.city}`}
+      >
         <p className="text-muted-foreground text-sm">
           {listing.property.addressLine1}, {listing.property.city}, {listing.property.state}{' '}
           {listing.property.postalCode}
         </p>
-      </header>
+      </PageHeader>
 
       {/* NOT `alt=""` (1.1.1, R-114). These are the primary content of a
           rental listing, and marking them decorative left a blind prospect
@@ -169,16 +170,13 @@ export default async function PublicListingPage({
         )}
       </section>
 
-      <section aria-labelledby="inquire" className="flex flex-col gap-3 border-t pt-4">
-        <h2 id="inquire" className="text-lg font-semibold">
-          Ask about this listing
-        </h2>
+      <Panel headingId="inquire" title="Ask about this listing">
         <p className="text-muted-foreground text-sm">
           We&rsquo;ll send a few quick pre-screening questions - the same ones everyone who inquires
           gets asked.
         </p>
         <ListingInquiryForm action={submitInquiry.bind(null, listing.id)} source={src ?? 'direct'} />
-      </section>
+      </Panel>
     </main>
   )
 }

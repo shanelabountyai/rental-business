@@ -3,6 +3,7 @@
 import { useActionState } from 'react'
 import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
 import { TextField } from '@/components/form/field.tsx'
+import { Panel } from '@/components/panel.tsx'
 import type { AbandonmentFormState } from '@/lib/abandonment/actions.ts'
 
 // Opening a gone-dark case from the tenancy it is about (RISK-01, R-087).
@@ -32,10 +33,7 @@ export function OpenAbandonmentCasePanel({
   const errors = state.fieldErrors ?? {}
 
   return (
-    <section aria-labelledby="gone-dark" className="flex flex-col gap-3 border-t pt-4">
-      <h2 id="gone-dark" className="text-lg font-semibold">
-        Tenant gone dark
-      </h2>
+    <Panel headingId="gone-dark" title="Tenant gone dark">
 
       {existing ? (
         <p className="text-sm">
@@ -80,6 +78,6 @@ export function OpenAbandonmentCasePanel({
           </div>
         </details>
       )}
-    </section>
+    </Panel>
   )
 }

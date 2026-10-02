@@ -5,6 +5,7 @@ import { currentScope as writeScope, requireScope } from '@/lib/auth/guard.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 import { myDayTasks, openTasksOfType, rollupByProperty } from '@/lib/tasks/queries.ts'
 import { subjectLinks } from '@/lib/tasks/subject-link.ts'
+import { PageHeader } from '@/components/page-header.tsx'
 import { SUBMIT_BUTTON_CLASSES, scrollableRegionProps } from '@/components/ui-classes.ts'
 
 export const metadata = { title: 'Tasks — Rental Operations' }
@@ -85,10 +86,7 @@ export default async function TasksPage({
   return (
     <div className="flex flex-col gap-8">
       <header className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">
-            {drillDown ? drillDown.heading : 'My day'}
-          </h1>
+        <PageHeader title={drillDown ? drillDown.heading : 'My day'}>
           <p className="text-muted-foreground text-sm">
             {drillDown ? (
               <>
@@ -105,7 +103,7 @@ export default async function TasksPage({
               </>
             )}
           </p>
-        </div>
+        </PageHeader>
         {canWrite && !drillDown && (
           <Link
             href="/tasks/new"

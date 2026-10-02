@@ -24,6 +24,8 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { prisma } from '@rental/db'
 import { Badge } from '@/components/badge.tsx'
+import { PageHeader } from '@/components/page-header.tsx'
+import { Panel } from '@/components/panel.tsx'
 import { Breadcrumbs } from '@/components/shell/breadcrumbs.tsx'
 import { ApprovalPanel } from '@/components/workorders/approval-panel.tsx'
 import { BidsPanel } from '@/components/workorders/bids-panel.tsx'
@@ -280,9 +282,7 @@ export default async function WorkOrderDetailPage({
             { label: workOrder.unit.name },
           ]}
         />
-        <h1 className="text-2xl font-semibold tracking-tight">
-          {workOrder.scope.slice(0, 80)}
-        </h1>
+        <PageHeader title={workOrder.scope.slice(0, 80)} />
       </header>
 
       {warranties.length > 0 && (
@@ -429,13 +429,7 @@ export default async function WorkOrderDetailPage({
           navigating this page by heading went straight past every control
           that changes the job's state.
         */
-        <section
-          aria-labelledby="move-this-job-on"
-          className="flex flex-col gap-6 border-t pt-4"
-        >
-          <h2 id="move-this-job-on" className="text-lg font-semibold">
-            Move this job on
-          </h2>
+        <Panel headingId="move-this-job-on" title="Move this job on" gap="gap-6">
           {unassigned && (staff.length > 0 || vendors.length > 0) && !onHold && (
             <AssignForm
               action={assignWorkOrder.bind(null, workOrder.id)}
@@ -516,7 +510,7 @@ export default async function WorkOrderDetailPage({
               label="Put on hold for warranty claim"
             />
           )}
-        </section>
+        </Panel>
       )}
 
       {/*
@@ -527,10 +521,7 @@ export default async function WorkOrderDetailPage({
         caveat somebody needs to see months later, not for two seconds.
       */}
       {workOrder.status === 'CLOSED' && (
-        <section aria-labelledby="closed" className="flex flex-col gap-2 border-t pt-4">
-          <h2 id="closed" className="text-lg font-semibold">
-            Closed
-          </h2>
+        <Panel headingId="closed" title="Closed" gap="gap-2">
           <p className="text-sm">
             {workOrder.closedAt
               ? `Closed ${friendlyDate(workOrder.closedAt, workOrder.property.timezone)}`
@@ -547,7 +538,7 @@ export default async function WorkOrderDetailPage({
               The tenant never confirmed this one.
             </p>
           )}
-        </section>
+        </Panel>
       )}
 
       {chargeback && (

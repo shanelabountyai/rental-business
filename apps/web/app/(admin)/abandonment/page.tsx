@@ -4,6 +4,7 @@ import {
 } from '@rental/core/abandonment'
 import { friendlyDate } from '@rental/core/scheduling'
 import Link from 'next/link'
+import { PageHeader } from '@/components/page-header.tsx'
 import { requirePermission, requireScope } from '@/lib/auth/guard.ts'
 import { listAbandonmentCases } from '@/lib/abandonment/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
@@ -30,13 +31,12 @@ export default async function AbandonmentPage() {
 
   return (
     <div className="flex max-w-4xl flex-col gap-6">
-      <header className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Gone dark</h1>
+      <PageHeader title="Gone dark">
         <p className="text-muted-foreground text-sm">
           {cases.length} case{cases.length === 1 ? '' : 's'}
           {open.length > 0 && ` · ${open.length} still open`}.
         </p>
-      </header>
+      </PageHeader>
 
       <p className="text-muted-foreground text-sm">
         A case is opened on a suspicion, and the commonest outcome is that the

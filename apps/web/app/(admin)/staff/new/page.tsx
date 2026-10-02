@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { PageHeader } from '@/components/page-header.tsx'
 import { InviteStaffForm } from '@/components/staff/invite-form.tsx'
 import { requirePermission } from '@/lib/auth/guard.ts'
 import { inviteStaff } from '@/lib/staff/actions.ts'
@@ -22,7 +23,7 @@ export default async function NewStaffPage() {
         >
           ← Staff
         </Link>
-        <h1 className="text-2xl font-semibold tracking-tight">Add staff member</h1>
+        <PageHeader title="Add staff member" />
         <p className="text-muted-foreground text-sm">
           They set their own password from a single-use link. No password is ever chosen for
           them here.

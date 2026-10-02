@@ -4,6 +4,7 @@ import { prisma } from '@rental/db'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { FileUnroutedForm } from '@/components/comms/file-unrouted-form.tsx'
+import { PageHeader } from '@/components/page-header.tsx'
 import { requireScope } from '@/lib/auth/guard.ts'
 import { fileUnroutedMessage } from '@/lib/comms/actions.ts'
 import { listUnroutedMessages, triagesUnrouted } from '@/lib/comms/queries.ts'
@@ -62,9 +63,7 @@ export default async function UnroutedMessagesPage() {
         >
           ← All messages
         </Link>
-        <h1 className="text-2xl font-semibold tracking-tight">
-          Unsorted messages
-        </h1>
+        <PageHeader title="Unsorted messages" />
         <p className="text-muted-foreground text-sm">
           These arrived from a number the system could not place. Nothing is
           filed on a guess — putting a message in the wrong person&rsquo;s

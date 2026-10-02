@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { requireScope } from '@/lib/auth/guard.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 import { exportableEntities, taxExportFacts } from '@/lib/tax/queries.ts'
+import { PageHeader } from '@/components/page-header.tsx'
 import { SUBMIT_BUTTON_CLASSES } from '@/components/ui-classes.ts'
 
 export const metadata = { title: 'Tax export — Rental Operations' }
@@ -48,7 +49,7 @@ export default async function TaxExportPage({
         >
           ← Reports
         </Link>
-        <h1 className="text-2xl font-semibold tracking-tight">Year-end tax export</h1>
+        <PageHeader title="Year-end tax export" />
         <p className="text-muted-foreground text-sm">
           Income and expenses for one legal entity, sorted onto Schedule E lines and QuickBooks
           accounts. <strong>This is bookkeeping, not tax advice</strong> — every mapping here is a

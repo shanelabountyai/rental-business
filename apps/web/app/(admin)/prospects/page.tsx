@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { PageHeader } from '@/components/page-header.tsx'
 import { requireScope } from '@/lib/auth/guard.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 import { prospectsForScope } from '@/lib/prospects/queries.ts'
@@ -26,12 +27,11 @@ export default async function ProspectsPage() {
 
   return (
     <div className="flex max-w-3xl flex-col gap-6">
-      <header className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Prospects</h1>
+      <PageHeader title="Prospects">
         <p className="text-muted-foreground text-sm">
           {prospects.length} prospect{prospects.length === 1 ? '' : 's'}, newest first.
         </p>
-      </header>
+      </PageHeader>
 
       {prospects.length === 0 ? (
         <p className="text-muted-foreground text-sm">No inquiries yet.</p>

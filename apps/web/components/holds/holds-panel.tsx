@@ -5,6 +5,7 @@ import { useActionState, useState } from 'react'
 import { Badge } from '@/components/badge.tsx'
 import { FormAlerts, LiveRegion, SubmitButton } from '@/components/auth-form.tsx'
 import { SelectField, TextField } from '@/components/form/field.tsx'
+import { Panel } from '@/components/panel.tsx'
 import type { HoldFormState } from '@/lib/holds/actions.ts'
 
 // Placing and lifting holds on one tenancy (R-084).
@@ -145,15 +146,12 @@ export function HoldsPanel({
   const activeTypes = new Set(active.map((hold) => hold.type))
 
   return (
-    <section aria-labelledby="holds" className="flex flex-col gap-4 border-t pt-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 id="holds" className="text-lg font-semibold">
-          Holds
-        </h2>
-        {active.length > 0 && (
-          <Badge tone="warning">{active.length} in force</Badge>
-        )}
-      </div>
+    <Panel
+      headingId="holds"
+      title="Holds"
+      gap="gap-4"
+      trailing={active.length > 0 && <Badge tone="warning">{active.length} in force</Badge>}
+    >
 
       <p className="text-muted-foreground text-sm">
         A hold declares that something about this tenancy has changed in a way
@@ -213,6 +211,6 @@ export function HoldsPanel({
           </ul>
         </details>
       )}
-    </section>
+    </Panel>
   )
 }

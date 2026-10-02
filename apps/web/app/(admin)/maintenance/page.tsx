@@ -1,6 +1,7 @@
 import { friendlyDate } from '@rental/core/scheduling'
 import { CATEGORY_LABELS, ticketGlows } from '@rental/core/maintenance'
 import Link from 'next/link'
+import { PageHeader } from '@/components/page-header.tsx'
 import { requireScope } from '@/lib/auth/guard.ts'
 import { listOpenTickets } from '@/lib/maintenance/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
@@ -56,7 +57,7 @@ export default async function MaintenancePage({
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between gap-4">
-        <h1 className="text-2xl font-semibold tracking-tight">Maintenance</h1>
+        <PageHeader title="Maintenance" />
         <Link
           href="/maintenance/new"
           className={`${SUBMIT_BUTTON_CLASSES} flex min-h-11 items-center justify-center px-4 text-sm`}

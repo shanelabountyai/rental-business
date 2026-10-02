@@ -5,6 +5,7 @@ import { prisma } from '@rental/db'
 import { ListingForm } from '@/components/listings/listing-form.tsx'
 import { ListingPublishControls } from '@/components/listings/listing-publish-controls.tsx'
 import { ListingSyndicationSection } from '@/components/listings/listing-syndication.tsx'
+import { PageHeader } from '@/components/page-header.tsx'
 import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
 import { publishListing, unpublishListing, updateListing } from '@/lib/listings/actions.ts'
 import { leadCountsForListing, listingSyndications } from '@/lib/listings/queries.ts'
@@ -47,8 +48,7 @@ export default async function ListingDetailPage({
 
   return (
     <div className="flex flex-col gap-6">
-      <header className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Listing for {listing.unit.name}</h1>
+      <PageHeader title={<>Listing for {listing.unit.name}</>}>
         <p className="text-muted-foreground text-sm">
           {listing.status === 'PUBLISHED' ? (
             <>
@@ -63,7 +63,7 @@ export default async function ListingDetailPage({
             'Unpublished — no longer public.'
           )}
         </p>
-      </header>
+      </PageHeader>
 
       <ListingPublishControls
         status={listing.status}

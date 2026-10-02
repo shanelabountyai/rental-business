@@ -1,6 +1,7 @@
 import { IMPORT_COLUMNS } from '@rental/core/import'
 import { BulkDocumentForm } from '@/components/import/bulk-document-form.tsx'
 import { ImportForm } from '@/components/import/import-form.tsx'
+import { PageHeader } from '@/components/page-header.tsx'
 import { requirePermission } from '@/lib/auth/guard.ts'
 
 export const metadata = { title: 'Import — Rental Operations' }
@@ -47,8 +48,7 @@ export default async function ImportPage() {
 
   return (
     <div className="flex max-w-3xl flex-col gap-10">
-      <header className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Import</h1>
+      <PageHeader title="Import">
         <p className="text-muted-foreground text-sm">
           Bring an existing portfolio&rsquo;s properties, tenants and leases in from
           a spreadsheet, plus the paperwork that goes with them. A tenancy
@@ -57,7 +57,7 @@ export default async function ImportPage() {
           same as everything else an inherited tenancy waits on staff review
           for.
         </p>
-      </header>
+      </PageHeader>
 
       <section className="flex flex-col gap-4">
         <h2 className="text-lg font-semibold">Properties, tenants and leases</h2>

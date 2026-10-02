@@ -1,6 +1,7 @@
 import { DOCUMENT_TYPE_LABELS, type DocumentTypeValue } from '@rental/core/documents'
 import { friendlyBusinessDate, utcToBusinessDate } from '@rental/core/scheduling'
 import Link from 'next/link'
+import { PageHeader } from '@/components/page-header.tsx'
 import { requireScope } from '@/lib/auth/guard.ts'
 import { documentsPastRetention } from '@/lib/documents/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
@@ -27,7 +28,7 @@ export default async function RetentionReviewPage() {
         >
           ← Reports
         </Link>
-        <h1 className="text-2xl font-semibold tracking-tight">Retention review</h1>
+        <PageHeader title="Retention review" />
         <p className="text-muted-foreground text-sm">
           Documents past their retention window (DOC-05). A list for a person
           to review and act on — nothing here is deleted automatically.

@@ -18,6 +18,7 @@ import { useActionState, useState } from 'react'
 import { Badge, type BadgeTone } from '@/components/badge.tsx'
 import { FormAlerts, LiveRegion, SubmitButton } from '@/components/auth-form.tsx'
 import { FieldError, SelectField, TextField, TextareaField } from '@/components/form/field.tsx'
+import { Panel } from '@/components/panel.tsx'
 import type { AccommodationFormState } from '@/lib/accommodations/actions.ts'
 
 // Reasonable-accommodation requests on one tenancy (RISK-13, R-086; widened
@@ -351,15 +352,14 @@ export function AccommodationsPanel({
   const open = requests.filter((r) => r.status === 'RECEIVED' || r.status === 'INFO_REQUESTED')
 
   return (
-    <section aria-labelledby="accommodations" className="flex flex-col gap-4 border-t pt-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 id="accommodations" className="text-lg font-semibold">
-          Accommodation requests
-        </h2>
-        {open.length > 0 && (
-          <Badge tone="warning">{open.length} awaiting a determination</Badge>
-        )}
-      </div>
+    <Panel
+      headingId="accommodations"
+      title="Accommodation requests"
+      gap="gap-4"
+      trailing={
+        open.length > 0 && <Badge tone="warning">{open.length} awaiting a determination</Badge>
+      }
+    >
 
       <p className="text-muted-foreground text-sm">
         An assistance animal is not a pet: no pet rent, pet fee, pet deposit,
@@ -455,6 +455,6 @@ export function AccommodationsPanel({
           </div>
         </details>
       )}
-    </section>
+    </Panel>
   )
 }

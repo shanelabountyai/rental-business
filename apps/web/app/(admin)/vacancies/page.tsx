@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { requireScope } from '@/lib/auth/guard.ts'
 import { thisWeekLeasingActivity, vacantUnitsWithTurnover } from '@/lib/reports/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
+import { PageHeader } from '@/components/page-header.tsx'
 
 export const metadata = { title: 'Vacancies — Rental Operations' }
 
@@ -33,7 +34,7 @@ export default async function VacanciesPage() {
         >
           ← Dashboard
         </Link>
-        <h1 className="text-2xl font-semibold tracking-tight">Vacancies</h1>
+        <PageHeader title="Vacancies" />
         <p className="text-muted-foreground text-sm">
           {sorted.length} unit{sorted.length === 1 ? '' : 's'} vacant or in make-ready,
           oldest first.

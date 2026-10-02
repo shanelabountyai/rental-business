@@ -4,6 +4,7 @@ import { friendlyBusinessDate } from '@rental/core/scheduling'
 import { useActionState } from 'react'
 import { FormAlerts, LiveRegion, SubmitButton } from '@/components/auth-form.tsx'
 import { CheckboxField, TextField, TextareaField } from '@/components/form/field.tsx'
+import { Panel } from '@/components/panel.tsx'
 import type { PartyChangeFormState } from '@/lib/leases/party-change-builder.ts'
 
 // Roommate changes and lease assignment (RISK-10, R-090).
@@ -80,10 +81,7 @@ export function PartyChangePanel({
   const groupError = errors.parties ?? errors.incoming ?? errors.outgoing ?? errors.lease ?? null
 
   return (
-    <section aria-labelledby="party-change" className="flex flex-col gap-4 border-t pt-4">
-      <h2 id="party-change" className="text-lg font-semibold">
-        Roommate changes and assignment
-      </h2>
+    <Panel headingId="party-change" title="Roommate changes and assignment" gap="gap-4">
       <p className="text-muted-foreground text-sm">
         A change of occupants keeps the same lease, so the ledger, the rent and the deposit
         carry straight through. The security deposit stays with the unit until the last
@@ -243,6 +241,6 @@ export function PartyChangePanel({
           Occupants can only be changed on a running tenancy.
         </p>
       )}
-    </section>
+    </Panel>
   )
 }

@@ -1,4 +1,5 @@
 import { SignForm } from '@/components/leases/sign-form.tsx'
+import { PageHeader } from '@/components/page-header.tsx'
 import { signLeaseDocument } from '@/lib/leases/esign-actions.ts'
 import { markSignerViewed, signedThing, verifySignerLink } from '@/lib/leases/sign-link.ts'
 
@@ -36,7 +37,7 @@ export default async function SignLinkPage({
   if (!link.ok) {
     return (
       <main className="mx-auto flex max-w-md flex-col gap-4 p-6">
-        <h1 className="text-2xl font-semibold tracking-tight">This link isn&rsquo;t working</h1>
+        <PageHeader title={<>This link isn&rsquo;t working</>} />
         <p className="text-base">
           {link.reason === 'expired'
             ? 'This signing link has expired. Contact your property manager for a new one.'
@@ -64,10 +65,9 @@ export default async function SignLinkPage({
 
   return (
     <main className="mx-auto flex max-w-md flex-col gap-6 p-6">
-      <header className="flex flex-col gap-2">
-        <h1 className="text-2xl font-semibold tracking-tight">Hello {link.name}</h1>
+      <PageHeader title={<>Hello {link.name}</>}>
         <p className="text-muted-foreground text-sm">{where}</p>
-      </header>
+      </PageHeader>
 
       {link.documentId && (
         <a

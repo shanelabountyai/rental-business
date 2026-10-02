@@ -3,6 +3,7 @@ import { friendlyBusinessDate, utcToBusinessDate } from '@rental/core/scheduling
 import { SCHEDULE_E } from '@rental/core/tax'
 import { prisma } from '@rental/db'
 import Link from 'next/link'
+import { PageHeader } from '@/components/page-header.tsx'
 import { RecordExpenseForm } from '@/components/property-expenses/record-expense-form.tsx'
 import { requireScope } from '@/lib/auth/guard.ts'
 import { recordPropertyExpense, stopExpenseRecurrence } from '@/lib/property-expenses/actions.ts'
@@ -61,7 +62,7 @@ export default async function PropertyExpensesPage() {
         >
           ← Money
         </Link>
-        <h1 className="text-2xl font-semibold tracking-tight">Property expenses</h1>
+        <PageHeader title="Property expenses" />
         <p className="text-muted-foreground text-sm">
           Property tax, the landlord policy, the management fee — what you pay without a
           vendor&rsquo;s bill. Each one lands on its Schedule E line and in the operating

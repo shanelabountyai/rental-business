@@ -2,6 +2,7 @@ import { formatCents } from '@rental/core/money'
 import { friendlyBusinessDate } from '@rental/core/scheduling'
 import { isAccountingBasis } from '@rental/core/tax'
 import Link from 'next/link'
+import { PageHeader } from '@/components/page-header.tsx'
 import { ArchivePacketPanel } from '@/components/tax/archive-panel.tsx'
 import { requireScope } from '@/lib/auth/guard.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
@@ -51,7 +52,7 @@ export default async function TaxPacketPage({
         >
           ← Reports
         </Link>
-        <h1 className="text-2xl font-semibold tracking-tight">Year-end tax packet</h1>
+        <PageHeader title="Year-end tax packet" />
         <p className="text-muted-foreground text-sm">
           Everything a preparer asks for in February, for one legal entity.{' '}
           <strong>This is bookkeeping, not tax advice.</strong>

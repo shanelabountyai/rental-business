@@ -2,6 +2,7 @@ import { CATEGORY_LABELS } from '@rental/core/maintenance'
 import { friendlyBusinessDate, utcToBusinessDate } from '@rental/core/scheduling'
 import { activeWarranties, likelyMatchingWarranty } from '@rental/core/workorders'
 import { notFound } from 'next/navigation'
+import { PageHeader } from '@/components/page-header.tsx'
 import { CreateWorkOrderForm } from '@/components/workorders/create-work-order-form.tsx'
 import { actorCan, requireScope } from '@/lib/auth/guard.ts'
 import { getStaffTicket } from '@/lib/maintenance/queries.ts'
@@ -48,7 +49,7 @@ export default async function NewWorkOrderPage({
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-semibold tracking-tight">New work order</h1>
+      <PageHeader title="New work order" />
       <p className="text-muted-foreground max-w-prose text-sm">
         From a ticket, or standalone - a make-ready turn has no ticket behind
         it (MAINT-03).

@@ -4,6 +4,7 @@ import type { TimelineEntry } from '@rental/core/workorders'
 import { useActionState } from 'react'
 import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
 import { ReplyForm } from '@/components/comms/reply-form.tsx'
+import { Panel } from '@/components/panel.tsx'
 import type { WorkOrderFormState } from '@/lib/workorders/actions.ts'
 import { INPUT_CLASSES } from '@/components/ui-classes.ts'
 
@@ -59,18 +60,19 @@ export function TimelineSection({
   attachMessage: Action
 }) {
   return (
-    <section aria-labelledby="timeline" className="flex flex-col gap-4 border-t pt-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 id="timeline" className="text-lg font-semibold">
-          Timeline
-        </h2>
+    <Panel
+      headingId="timeline"
+      title="Timeline"
+      gap="gap-4"
+      trailing={
         <a
           href={`/workorders/${workOrderId}/timeline`}
           className="text-muted-foreground hover:text-foreground min-h-11 text-sm underline underline-offset-4"
         >
           Download as text
         </a>
-      </div>
+      }
+    >
 
       {entries.length === 0 ? (
         <p className="text-muted-foreground text-sm">Nothing recorded yet.</p>
@@ -126,7 +128,7 @@ export function TimelineSection({
           </div>
         </div>
       )}
-    </section>
+    </Panel>
   )
 }
 

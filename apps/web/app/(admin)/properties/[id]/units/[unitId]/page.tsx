@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { DocumentsSection } from '@/components/documents/documents-section.tsx'
 import { OperationalDataSection } from '@/components/operational/operational-data-section.tsx'
+import { PageHeader } from '@/components/page-header.tsx'
 import { TurnoverPanel } from '@/components/turnover/turnover-panel.tsx'
 import { actorCan, propertyResource, requireScope } from '@/lib/auth/guard.ts'
 import { currentScope as switcherScope } from '@/lib/scope/current-scope.ts'
@@ -161,7 +162,7 @@ export default async function UnitDetailPage({
               {unit.property.name}
             </Link>
           </p>
-          <h1 className="text-2xl font-semibold tracking-tight">{unit.name}</h1>
+          <PageHeader title={unit.name} />
         </div>
         {canWrite && (
           <Link

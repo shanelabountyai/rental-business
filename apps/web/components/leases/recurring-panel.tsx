@@ -5,6 +5,7 @@ import { friendlyBusinessDate } from '@rental/core/scheduling'
 import { useActionState } from 'react'
 import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
 import { FieldError } from '@/components/form/field.tsx'
+import { Panel } from '@/components/panel.tsx'
 import type { RecurringChargeFormState } from '@/lib/billing/recurring-actions.ts'
 
 // Pet rent and flat utility fees (PAY-08, R-042).
@@ -225,10 +226,7 @@ export function RecurringChargesPanel({
     .reduce((total, charge) => total + charge.amountCents, 0)
 
   return (
-    <section aria-labelledby="recurring" className="flex flex-col gap-3 border-t pt-4">
-      <h2 id="recurring" className="text-lg font-semibold">
-        Monthly charges beside the rent
-      </h2>
+    <Panel headingId="recurring" title="Monthly charges beside the rent">
 
       {charges.length === 0 ? (
         <p className="text-muted-foreground text-sm">
@@ -281,6 +279,6 @@ export function RecurringChargesPanel({
         changes every month — a utility bill split across units — is not one of
         these; record the bill and split it instead.
       </p>
-    </section>
+    </Panel>
   )
 }

@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { TemplateEditor } from '@/components/comms/template-editor.tsx'
+import { PageHeader } from '@/components/page-header.tsx'
 import { requirePermission } from '@/lib/auth/guard.ts'
 import { saveTemplate } from '@/lib/comms/template-actions.ts'
 import { previewTenancy, templateValues } from '@/lib/comms/template-values.ts'
@@ -24,7 +25,7 @@ export default async function NewTemplatePage() {
         >
           ← Message templates
         </Link>
-        <h1 className="text-2xl font-semibold tracking-tight">New template</h1>
+        <PageHeader title="New template" />
       </header>
 
       <TemplateEditor
