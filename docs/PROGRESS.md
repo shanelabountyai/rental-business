@@ -14136,7 +14136,7 @@ Wired at all 6 call sites across `operational-data-section.tsx` (appliances, uti
 - No schema change — `db:ci` not required for this item.
 
 ## UX-03 — nav grouping and breadcrumbs
-**Commit:** _pending_  ·  **Date:** 2026-10-02
+**Commit:** `11d254c`  ·  **Date:** 2026-10-02
 
 **What it built.** `NavItem` (`lib/nav.ts`) gained a `group: NavGroup` field; all 27 nav entries assigned to one of five groups (`Daily`, `Money`, `Property`, `Compliance`, `Admin`). `Nav` (`components/shell/nav.tsx`) now renders one `<h2>`-headed list per non-empty group instead of a single flat `<ul>` — a group with nothing visible to the signed-in actor renders no heading. New `Breadcrumbs` component (`components/shell/breadcrumbs.tsx`) wired into `/properties/[id]`, `/leases/[id]`, and `/workorders/[id]`, replacing two ad hoc single-link "back" affordances those pages already had.
 
