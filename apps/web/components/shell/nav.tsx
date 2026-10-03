@@ -47,13 +47,18 @@ export function Nav({
                         // section it is in; the colour change alone says
                         // nothing to anyone who cannot see it.
                         aria-current={active ? 'page' : undefined}
-                        className={`focus-visible:ring-ring flex min-h-11 items-center rounded-md px-3 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none ${
+                        className={`focus-visible:ring-ring flex min-h-11 flex-col justify-center gap-0.5 rounded-md px-3 py-1.5 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none ${
                           active
                             ? 'bg-secondary text-secondary-foreground font-medium'
                             : 'text-muted-foreground hover:bg-secondary/50 hover:text-foreground'
                         }`}
                       >
-                        {item.label}
+                        <span>{item.label}</span>
+                        {item.subtitle && (
+                          <span className="text-muted-foreground text-xs font-normal">
+                            {item.subtitle}
+                          </span>
+                        )}
                       </Link>
                     </li>
                   )

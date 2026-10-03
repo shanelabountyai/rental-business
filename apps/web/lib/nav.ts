@@ -41,6 +41,10 @@ export interface NavItem {
   /// Which backlog item fills the section in. Rendered on the placeholder, so
   /// a half-built shell explains itself instead of looking broken.
   ownedBy: string
+  /// One line under the label, only for items whose name alone doesn't say
+  /// what's behind it (UX-10). Most items are self-explanatory; this is
+  /// deliberately not on every row.
+  subtitle?: string
 }
 
 export const NAV_ITEMS: readonly NavItem[] = [
@@ -214,6 +218,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   {
     href: '/abandonment',
     label: 'Gone dark',
+    subtitle: 'Tenant unreachable, before assuming abandonment',
     group: 'Compliance',
     /// Deliberately NOT "Abandonment" in the nav. A case is opened on a
     /// suspicion and the commonest outcome is the tenant coming back, so a
@@ -226,6 +231,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   {
     href: '/claims',
     label: 'Claims',
+    subtitle: 'Property insurance claims',
     group: 'Compliance',
     /// Property-level, so the property permission. Not `report.financial`:
     /// the money here never touches the tenant ledger, and the people who
@@ -236,6 +242,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   {
     href: '/violations',
     label: 'Violations',
+    subtitle: 'Unauthorized occupants & lease breaches',
     group: 'Compliance',
     /// `lease.read`, not `eviction.manage`. Most of what happens here ends
     /// with the tenant keeping their home - the commonest outcome of finding

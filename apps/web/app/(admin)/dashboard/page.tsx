@@ -91,14 +91,13 @@ function actionItems(summary: DashboardSummary) {
     },
     summary.delinquency.pastGraceCount > 0 && {
       href: '/money/rent-roll?pastGrace=1',
-      label: 'Tenancies past grace',
+      label: 'Late tenants',
       value: String(summary.delinquency.pastGraceCount),
     },
     summary.tickets.glowingCount > 0 && {
       href: '/maintenance?glowing=1',
-      label: 'Emergency/urgent tickets',
+      label: 'Urgent repairs waiting over 2 days',
       value: String(summary.tickets.glowingCount),
-      detail: 'Open past 48h',
     },
   ].filter((item): item is { href: string; label: string; value: string; detail?: string } =>
     Boolean(item),
@@ -164,9 +163,9 @@ export default async function DashboardPage() {
 
         <Tile
           href="/money/rent-roll?pastGrace=1"
-          label="Aged delinquency"
+          label="Rent overdue"
           value={formatCents(summary.delinquency.outstandingCents)}
-          detail={`${summary.delinquency.pastGraceCount} tenanc${summary.delinquency.pastGraceCount === 1 ? 'y' : 'ies'} past grace`}
+          detail={`${summary.delinquency.pastGraceCount} tenant${summary.delinquency.pastGraceCount === 1 ? '' : 's'} behind`}
         />
 
         <Tile
@@ -211,7 +210,7 @@ export default async function DashboardPage() {
           href="/renewals"
           label="Renewals & alerts"
           value={String(summary.renewalAlerts.count)}
-          detail="Mortgage & insurance dates, not statutory compliance"
+          detail="Upcoming mortgage & insurance renewal dates"
         />
       </ul>
     </div>
