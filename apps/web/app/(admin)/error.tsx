@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import Link from 'next/link'
 import { PageHeader } from '@/components/page-header.tsx'
 import { SUBMIT_BUTTON_CLASSES } from '@/components/ui-classes.ts'
 
@@ -22,6 +23,7 @@ export default function AdminError({
   reset: () => void
 }) {
   const heading = useRef<HTMLHeadingElement>(null)
+  const [copied, setCopied] = useState(false)
   useEffect(() => {
     heading.current?.focus()
   }, [])
@@ -35,7 +37,7 @@ export default function AdminError({
         while rendering has not changed any record.
       </p>
 
-      <div className="flex flex-wrap gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <button
           type="button"
           onClick={() => reset()}
@@ -43,13 +45,26 @@ export default function AdminError({
         >
           Try again
         </button>
+        <Link
+          href="/dashboard"
+          className="border-input hover:bg-secondary focus-visible:ring-ring flex min-h-11 items-center rounded-md border px-4 py-2 text-sm font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+        >
+          Back to dashboard
+        </Link>
       </div>
 
       {error.digest && (
-        <p className="text-muted-foreground text-sm">
-          Reference: <code className="font-mono">{error.digest}</code> — quote
-          this when reporting it; it identifies the failure in the server log.
-        </p>
+        <button
+          type="button"
+          aria-live="polite"
+          onClick={() => {
+            navigator.clipboard.writeText(error.digest!)
+            setCopied(true)
+          }}
+          className="border-input hover:bg-secondary focus-visible:ring-ring flex min-h-11 w-fit items-center gap-2 rounded-md border px-3 py-1.5 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+        >
+          {copied ? 'Copied' : 'Copy reference'} <code className="font-mono">{error.digest}</code>
+        </button>
       )}
     </div>
   )

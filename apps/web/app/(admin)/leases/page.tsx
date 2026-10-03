@@ -89,9 +89,17 @@ export default async function LeasesPage({
       )}
 
       {leases.length === 0 ? (
-        <p className="text-muted-foreground text-sm">
-          No leases in scope yet.
-        </p>
+        <div className="flex flex-wrap items-center gap-3">
+          <p className="text-muted-foreground text-sm">No leases in scope yet.</p>
+          {canWrite && (
+            <Link
+              href="/leases/new"
+              className="border-input hover:bg-secondary focus-visible:ring-ring flex min-h-11 items-center rounded-md border px-3 py-1.5 text-sm font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+            >
+              New lease
+            </Link>
+          )}
+        </div>
       ) : (
         <ul className="flex flex-col divide-y">
           {leases.map((lease) => {

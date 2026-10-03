@@ -14203,6 +14203,23 @@ Wired at all 6 call sites across `operational-data-section.tsx` (appliances, uti
 - Full e2e sweep abandoned twice under genuine external CPU contention from concurrent unrelated sessions (see "What it left behind"); scoped e2e instead, covering every file where a status-lookup record/ternary was converted to `<Badge tone>` plus the two workorders files (`abandonment` + `accommodations` + `filing-cabinet` + `leases` + `notifications` + `scra` + `triage` + `workorders`.spec.ts, desktop+mobile): **146/146 passed**, reconciled exactly against `--list` (73 + 73), including 6 accessibility sweeps with no new violations.
 - No schema change — `db:ci` not required for this item.
 
+## UX-08 — Error page "Back to dashboard" + copy-reference button; leases empty-state action
+**Commit:** _pending_  ·  **Date:** 2026-10-03
+
+**What it built.** `(admin)/error.tsx` now renders a "Back to dashboard" `Link` (`/dashboard`) next to "Try again", and the digest line — previously plain text ("Reference: `<digest>` — quote this...") — is now a button labelled "Copy reference `<digest>`" that calls `navigator.clipboard.writeText` and flips its own label to "Copied" on click; `aria-live="polite"` on the button means the label change is announced without a separate live region, since the button is still the focused element. `/leases`'s empty state ("No leases in scope yet.") now sits beside a `canWrite`-gated "New lease" link, same markup/style as the one already in the page header.
+
+**What it decided.** Nothing new — this is the narrow scope the backlog row already specified, no design choices left open.
+
+**What it left behind.** Nothing. The two other pre-existing e2e issues `NEXT.md` has tracked since UX-07 (`units.spec.ts` exact-match collision, `staff.spec.ts` a11y timeout, `vendor-invoice-splits.spec.ts` reserve-form flake) are untouched — still open, still owned by whoever picks up test-infra cleanup.
+
+**Gate.**
+- `lint` clean (0 errors; same pre-existing warnings).
+- `typecheck` clean.
+- `npm run build` clean.
+- `npm test`: same 4 pre-existing unrelated failures `NEXT.md` already tracks (leftover `rental_test` data).
+- No e2e spec covers this surface (backlog's own acceptance note: "Design review sign-off; no automated acceptance"). Verified live instead: started `dev:demo` against the already-seeded local `rental_demo`, logged in as `owner@demo.test`, and drove it with a throwaway Playwright script — temporarily forced `leases` to an empty array and added a throwaway page under `(admin)/` that throws, screenshotted both states, clicked "Copy reference" (label flipped to "Copied") and "Back to dashboard" (navigated correctly), then reverted both temporary changes before committing. `git status` confirms only the two intended files are modified.
+- No schema change — `db:ci` not required for this item.
+
 ## UX-07 — `<Panel>` + `<PageHeader>` components, panel/title consolidation
 **Commit:** `77ec2ee`  ·  **Date:** 2026-10-02
 
