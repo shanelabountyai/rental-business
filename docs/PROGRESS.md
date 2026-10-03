@@ -14268,7 +14268,7 @@ Two pre-existing defects surfaced by the full e2e sweep, neither caused by this 
 - No schema change — `db:ci` not required for this item.
 
 ## UX-10 — dashboard tile and nav copy, plain language
-**Commit:** _pending_  ·  **Date:** 2026-10-03
+**Commit:** `8d92fef`  ·  **Date:** 2026-10-03
 
 **What it built.** Reworded four pieces of dashboard jargon the backlog row named directly: the "Aged delinquency" tile → "Rent overdue"; the "Needs action today" row's "Tenancies past grace" item → "Late tenants"; its "Emergency/urgent tickets" item (which carried a separate "Open past 48h" detail line) collapsed into one label, "Urgent repairs waiting over 2 days", matching the acceptance text verbatim; and the Renewals tile's detail line, which used to read "Mortgage & insurance dates, not statutory compliance" — a defensive disclaimer that told a visitor what the tile *wasn't* rather than what was in it — now reads "Upcoming mortgage & insurance renewal dates". `NavItem` (`lib/nav.ts`) gained an optional `subtitle?: string`, rendered as a muted second line under the label in `components/shell/nav.tsx`. Filled in for the three nav entries that are genuinely unexplained to someone not already fluent in this app's internal vocabulary — "Gone dark" → "Tenant unreachable, before assuming abandonment", "Claims" → "Property insurance claims", "Violations" → "Unauthorized occupants & lease breaches" — pulled from each page's own `PageHeader` description so the subtitle doesn't introduce a second, inconsistent phrasing of the same thing.
 
