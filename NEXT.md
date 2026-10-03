@@ -1,5 +1,14 @@
 # Next session
 
+## Done 2026-10-03: UX-08 (`bd65c6a`, SHA backfill `0075d2f`). Error page dashboard link + copy-reference button; leases empty-state action.
+
+- `(admin)/error.tsx`: added a "Back to dashboard" `Link` (`/dashboard`) next to "Try again"; the plain-text digest line became an `aria-live="polite"` "Copy reference" button that copies to the clipboard and flips its own label to "Copied".
+- `/leases` empty state ("No leases in scope yet.") now has a `canWrite`-gated "New lease" link beside it, matching the header's existing one.
+- Gate: lint/typecheck/build clean, `npm test` same 4 pre-existing failures. No e2e spec covers this (backlog says "Design review sign-off; no automated acceptance"), so verified live against `dev:demo` with a throwaway Playwright script: logged in as `owner@demo.test`, temporarily forced the leases list empty and added a throwaway throwing page to trigger the error boundary, screenshotted both, clicked both new controls, then reverted the temporary changes before committing — `git status` confirmed only the two intended files changed.
+- CI run queued on push (`0075d2f`) — **check `gh run list --limit 3` before trusting green**.
+- No schema change — `db:ci` not required.
+- Next in backlog order: **UX-09** — mobile: stack ledger/rent-roll rows as cards instead of horizontal-scroll tables, collapse `/leases/[id]`'s ~30 panels into an accordion (pairs with UX-01). Needs a phone-width (412px) screenshot per its own acceptance note; bigger than UX-08, likely wants a scoping pass like UX-07 got before committing to an approach.
+
 ## Done 2026-10-02: UX-07 (`77ec2ee`, SHA backfill `7ccbcd5`). `<Panel>` + `<PageHeader>` components, type-scale consolidation.
 
 - `components/panel.tsx` (`<Panel title headingId gap? trailing?>`) replaces the `<section aria-labelledby><h2 className="text-lg font-semibold">` shape ~30 panel components hand-rolled identically. `components/page-header.tsx` (`<PageHeader title children? focusable?>`, a `forwardRef`) replaces every page's `<h1 className="text-2xl font-semibold tracking-tight">`; `focusable` serves the three `error.tsx` boundaries' focus-on-mount ref. Migrating `(admin)/error.tsx` onto it fixed its stray `text-xl` for free.
