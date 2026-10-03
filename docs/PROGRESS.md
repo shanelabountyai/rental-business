@@ -14204,7 +14204,7 @@ Wired at all 6 call sites across `operational-data-section.tsx` (appliances, uti
 - No schema change — `db:ci` not required for this item.
 
 ## UX-08 — Error page "Back to dashboard" + copy-reference button; leases empty-state action
-**Commit:** _pending_  ·  **Date:** 2026-10-03
+**Commit:** `bd65c6a`  ·  **Date:** 2026-10-03
 
 **What it built.** `(admin)/error.tsx` now renders a "Back to dashboard" `Link` (`/dashboard`) next to "Try again", and the digest line — previously plain text ("Reference: `<digest>` — quote this...") — is now a button labelled "Copy reference `<digest>`" that calls `navigator.clipboard.writeText` and flips its own label to "Copied" on click; `aria-live="polite"` on the button means the label change is announced without a separate live region, since the button is still the focused element. `/leases`'s empty state ("No leases in scope yet.") now sits beside a `canWrite`-gated "New lease" link, same markup/style as the one already in the page header.
 
