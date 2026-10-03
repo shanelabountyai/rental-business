@@ -168,14 +168,20 @@ export function RentRollTable({
         </div>
       )}
 
-      <div className="overflow-x-auto" {...scrollableRegionProps('Rent roll, scrolls sideways')}>
-        <table className="w-full text-sm">
+      {/* UX-09: below `sm` this is a stack of cards, not a sideways-scrolling
+          table — the only way to see Balance on a 412px phone without
+          scrolling. Table/row/cell roles are set EXPLICITLY because Chromium
+          derives them from computed `display` otherwise, and `flex` on the
+          mobile `<td>`/`<tr>` would silently drop them below `sm` (axe and
+          `getByRole('cell'/'row', …)` both rely on the role being there). */}
+      <div className="sm:overflow-x-auto" {...scrollableRegionProps('Rent roll, scrolls sideways')}>
+        <table role="table" className="block w-full text-sm sm:table">
           <caption className="sr-only">
             Every live tenancy with rent, balance, how late it is, autopay
             status, deposit held, subsidy portion and when the tenant was last
             contacted.
           </caption>
-          <thead>
+          <thead className="hidden sm:table-header-group">
             <tr className="text-muted-foreground border-b text-left text-xs">
               {canSend && <th scope="col" className="py-2 pr-2 font-medium">Chase</th>}
               <th scope="col" className="py-2 pr-3 font-medium">Tenancy</th>
@@ -186,11 +192,16 @@ export function RentRollTable({
               <th scope="col" className="py-2 font-medium">Last contacted</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody role="rowgroup" className="flex flex-col gap-3 sm:table-row-group">
             {rows.map((row) => (
-              <tr key={row.leaseId} className="border-b last:border-0">
+              <tr
+                key={row.leaseId}
+                role="row"
+                className="flex flex-col gap-2 rounded-md border p-3 sm:table-row sm:gap-0 sm:rounded-none sm:border-0 sm:border-b sm:p-0 sm:last:border-0"
+              >
                 {canSend && (
-                  <td className="py-2 pr-2">
+                  <td role="cell" className="flex items-center justify-between gap-3 py-1 sm:table-cell sm:py-2 sm:pr-2">
+                    <span className="text-muted-foreground text-xs font-medium sm:hidden">Chase</span>
                     {row.pastGrace && !row.chaseHeld ? (
                       // WRAPPED FOR THE TARGET SIZE (R-116, 2.5.8). A bare
                       // `size-5` checkbox is a 20px target, and this is the
@@ -222,7 +233,8 @@ export function RentRollTable({
                     )}
                   </td>
                 )}
-                <td className="py-2 pr-3">
+                <td role="cell" className="flex flex-col gap-0.5 py-1 sm:table-cell sm:py-2 sm:pr-3">
+                  <span className="text-muted-foreground text-xs font-medium sm:hidden">Tenancy</span>
                   {row.tenantName}
                   <span className="text-muted-foreground block text-xs">
                     {row.propertyName} · {row.unitName}
@@ -245,19 +257,23 @@ export function RentRollTable({
                       ` · ${formatCents(row.subsidyCents)} subsidy`}
                   </span>
                 </td>
-                <td className="py-2 pr-3 text-right tabular-nums">
+                <td role="cell" className="flex flex-col gap-0.5 py-1 tabular-nums sm:table-cell sm:py-2 sm:pr-3 sm:text-right">
+                  <span className="text-muted-foreground text-xs font-medium sm:hidden">Rent</span>
                   {formatCents(row.rentCents)}
                 </td>
                 <td
-                  className={`py-2 pr-3 text-right tabular-nums ${
+                  role="cell"
+                  className={`flex flex-col gap-0.5 py-1 tabular-nums sm:table-cell sm:py-2 sm:pr-3 sm:text-right ${
                     row.balanceCents > 0 ? 'font-medium' : 'text-muted-foreground'
                   }`}
                 >
+                  <span className="text-muted-foreground text-xs font-medium sm:hidden">Balance</span>
                   {row.balanceCents < 0
                     ? `${formatCents(Math.abs(row.balanceCents))} credit`
                     : formatCents(row.balanceCents)}
                 </td>
-                <td className="py-2 pr-3">
+                <td role="cell" className="flex flex-col gap-0.5 py-1 sm:table-cell sm:py-2 sm:pr-3">
+                  <span className="text-muted-foreground text-xs font-medium sm:hidden">How late</span>
                   {row.bucket === 'current' ? (
                     <span className="text-muted-foreground">Current</span>
                   ) : (
@@ -283,10 +299,12 @@ export function RentRollTable({
                     </>
                   )}
                 </td>
-                <td className="text-muted-foreground py-2 pr-3 text-right tabular-nums">
+                <td role="cell" className="text-muted-foreground flex flex-col gap-0.5 py-1 tabular-nums sm:table-cell sm:py-2 sm:pr-3 sm:text-right">
+                  <span className="text-xs font-medium sm:hidden">Deposit held</span>
                   {formatCents(row.depositHeldCents)}
                 </td>
-                <td className="text-muted-foreground py-2">
+                <td role="cell" className="text-muted-foreground flex flex-col gap-0.5 py-1 sm:table-cell sm:py-2">
+                  <span className="text-xs font-medium sm:hidden">Last contacted</span>
                   {row.lastContactOn ? friendlyBusinessDate(row.lastContactOn) : 'never'}
                 </td>
               </tr>

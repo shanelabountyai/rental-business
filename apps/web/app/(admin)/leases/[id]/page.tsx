@@ -591,11 +591,21 @@ export default async function LeaseDetailPage({
         </section>
       )}
 
-      <div id="section-money" className="flex scroll-mt-32 flex-col gap-6">
-        <h2 className={GROUP_HEADING_CLASSES}>
-          Money
-        </h2>
-
+      {/* UX-09: a native accordion, not a custom one — `<details open>`
+          needs no client JS and the group stays visible by default, which is
+          the ONLY reason this is safe to add on a page this many other
+          specs already interact with (ops-visibility.spec.ts asserts the
+          "Money" heading is visible with no setup of its own). `open`
+          collapses to a no-op on desktop, where none of these groups were
+          long enough on their own to want hiding; the win is a phone user
+          being able to tap a group shut rather than scroll past it. */}
+      <details id="section-money" open className="scroll-mt-32">
+        <summary className="cursor-pointer py-1">
+          <h2 className={`${GROUP_HEADING_CLASSES} inline`}>
+            Money
+          </h2>
+        </summary>
+      <div className="flex flex-col gap-6 pt-4">
         <LedgerPanel
           balanceCents={ledger?.balanceCents ?? 0}
           lines={(ledger?.lines ?? []).map((line) => ({
@@ -797,12 +807,15 @@ export default async function LeaseDetailPage({
           </Panel>
         )}
       </div>
+      </details>
 
-      <div id="section-people" className="flex scroll-mt-32 flex-col gap-6">
-        <h2 className={GROUP_HEADING_CLASSES}>
-          People
-        </h2>
-
+      <details id="section-people" open className="scroll-mt-32">
+        <summary className="cursor-pointer py-1">
+          <h2 className={`${GROUP_HEADING_CLASSES} inline`}>
+            People
+          </h2>
+        </summary>
+      <div className="flex flex-col gap-6 pt-4">
         <PartiesPanel
           canWrite={canWrite}
           tenants={lease.leaseTenants.map((lt) => ({
@@ -890,11 +903,15 @@ export default async function LeaseDetailPage({
           voidAction={voidPartyChange.bind(null, lease.id)}
         />
       </div>
+      </details>
 
-      <div id="section-compliance" className="flex scroll-mt-32 flex-col gap-6">
-        <h2 className={GROUP_HEADING_CLASSES}>
-          Compliance
-        </h2>
+      <details id="section-compliance" open className="scroll-mt-32">
+        <summary className="cursor-pointer py-1">
+          <h2 className={`${GROUP_HEADING_CLASSES} inline`}>
+            Compliance
+          </h2>
+        </summary>
+      <div className="flex flex-col gap-6 pt-4">
 
         {/* R-143. Above the SCRA and risk panels: this one governs whether an
             ordinary rent reminder can be texted at all, so it belongs with the
@@ -1063,11 +1080,15 @@ export default async function LeaseDetailPage({
           action={recordRenterInsurance.bind(null, lease.id)}
         />
       </div>
+      </details>
 
-      <div id="section-access" className="flex scroll-mt-32 flex-col gap-6">
-        <h2 className={GROUP_HEADING_CLASSES}>
-          Access
-        </h2>
+      <details id="section-access" open className="scroll-mt-32">
+        <summary className="cursor-pointer py-1">
+          <h2 className={`${GROUP_HEADING_CLASSES} inline`}>
+            Access
+          </h2>
+        </summary>
+      <div className="flex flex-col gap-6 pt-4">
 
         <AccessCodesPanel
           leaseId={lease.id}
@@ -1113,11 +1134,15 @@ export default async function LeaseDetailPage({
           })}
         />
       </div>
+      </details>
 
-      <div id="section-lifecycle" className="flex scroll-mt-32 flex-col gap-6">
-        <h2 className={GROUP_HEADING_CLASSES}>
-          Lifecycle
-        </h2>
+      <details id="section-lifecycle" open className="scroll-mt-32">
+        <summary className="cursor-pointer py-1">
+          <h2 className={`${GROUP_HEADING_CLASSES} inline`}>
+            Lifecycle
+          </h2>
+        </summary>
+      <div className="flex flex-col gap-6 pt-4">
 
         <EsignPanel
           canExecute={execDecision.allowed}
@@ -1245,6 +1270,7 @@ export default async function LeaseDetailPage({
           </Panel>
         )}
       </div>
+      </details>
     </div>
   )
 }

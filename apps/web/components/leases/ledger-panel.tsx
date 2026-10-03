@@ -68,13 +68,19 @@ export function LedgerPanel({
           them.
         </p>
       ) : (
-        <div className="overflow-x-auto" {...scrollableRegionProps('Tenancy ledger, scrolls sideways')}>
-          <table className="w-full text-sm">
+        // UX-09: below `sm` this is a stack of cards, not a sideways-scrolling
+        // table — the only way to see Balance on a 412px phone without
+        // scrolling. Table/row/cell roles are set EXPLICITLY because Chromium
+        // derives them from computed `display` otherwise, and `flex` on the
+        // mobile `<td>`/`<tr>` would silently drop them below `sm` (axe and
+        // `getByRole('cell'/'row', …)` both rely on the role being there).
+        <div className="sm:overflow-x-auto" {...scrollableRegionProps('Tenancy ledger, scrolls sideways')}>
+          <table role="table" className="block w-full text-sm sm:table">
             <caption className="sr-only">
               Every charge and payment on this tenancy, oldest first, with the
               balance after each.
             </caption>
-            <thead>
+            <thead className="hidden sm:table-header-group">
               <tr className="text-muted-foreground text-left text-xs">
                 <th scope="col" className="py-1 pr-3 font-medium">Date</th>
                 <th scope="col" className="py-1 pr-3 font-medium">What</th>
@@ -82,23 +88,33 @@ export function LedgerPanel({
                 <th scope="col" className="py-1 text-right font-medium">Balance</th>
               </tr>
             </thead>
-            <tbody className="divide-y">
+            <tbody role="rowgroup" className="flex flex-col gap-3 sm:table-row-group sm:gap-0 sm:divide-y">
               {lines.map((line) => (
-                <tr key={line.id} className={line.reversed ? 'text-muted-foreground' : ''}>
-                  <td className="py-2 pr-3 align-top whitespace-nowrap">
-                    {line.occurredAt}
+                <tr
+                  key={line.id}
+                  role="row"
+                  className={`flex flex-col gap-1 rounded-md border p-3 sm:table-row sm:gap-0 sm:rounded-none sm:border-0 sm:p-0 ${line.reversed ? 'text-muted-foreground' : ''}`}
+                >
+                  <td role="cell" className="flex flex-col gap-0.5 py-1 sm:table-cell sm:py-2 sm:pr-3 sm:align-top sm:whitespace-nowrap">
+                    <span className="text-muted-foreground text-xs font-medium sm:hidden">Date</span>
+                    <span>{line.occurredAt}</span>
                   </td>
-                  <td className="py-2 pr-3 align-top">
-                    {TYPE_LABELS[line.type] ?? line.type}
-                    {' — '}
-                    {line.description}
-                    {line.reversed && ' (later reversed)'}
+                  <td role="cell" className="flex flex-col gap-0.5 py-1 sm:table-cell sm:py-2 sm:pr-3 sm:align-top">
+                    <span className="text-muted-foreground text-xs font-medium sm:hidden">What</span>
+                    <span>
+                      {TYPE_LABELS[line.type] ?? line.type}
+                      {' — '}
+                      {line.description}
+                      {line.reversed && ' (later reversed)'}
+                    </span>
                   </td>
-                  <td className="py-2 pr-3 text-right align-top whitespace-nowrap">
-                    {formatCents(line.amountCents)}
+                  <td role="cell" className="flex flex-col gap-0.5 py-1 sm:table-cell sm:py-2 sm:pr-3 sm:text-right sm:align-top sm:whitespace-nowrap">
+                    <span className="text-muted-foreground text-xs font-medium sm:hidden">Amount</span>
+                    <span>{formatCents(line.amountCents)}</span>
                   </td>
-                  <td className="py-2 text-right align-top whitespace-nowrap">
-                    {formatCents(line.runningBalanceCents)}
+                  <td role="cell" className="flex flex-col gap-0.5 py-1 sm:table-cell sm:py-2 sm:text-right sm:align-top sm:whitespace-nowrap">
+                    <span className="text-muted-foreground text-xs font-medium sm:hidden">Balance</span>
+                    <span>{formatCents(line.runningBalanceCents)}</span>
                   </td>
                 </tr>
               ))}
