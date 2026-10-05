@@ -14285,7 +14285,7 @@ Two pre-existing defects surfaced by the full e2e sweep, neither caused by this 
 - No schema change — `db:ci` not required for this item.
 
 ## Carried-forward test cleanup — exact locators, staff a11y timeout, SetReserveForm locator, comms/pre-move-out leftover-data root cause
-**Commit:** (pending)  ·  **Date:** 2026-10-05
+**Commit:** `edaa0ef`  ·  **Date:** 2026-10-05
 
 Not a backlog row — the backlog (`06-backlog.md`) has nothing buildable left this session (every remaining row is gated on a vendor contract, counsel, or a go-live decision). This closes the five small carried-forward items `NEXT.md` had been listing since UX-07/UX-10.
 
