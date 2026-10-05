@@ -14316,3 +14316,16 @@ Not a backlog row — the backlog (`06-backlog.md`) has nothing buildable left t
 
 **Gate.** Docs-only change; lint/typecheck/test/e2e not applicable. No schema change.
 - No schema change — `db:ci` not required.
+
+## Project-closure pass — demo script re-verified, brief and write-up re-measured
+**Commit:** `PENDING`  ·  **Date:** 2026-10-05
+
+**What it built.** No code. `docs/DEMO-SCRIPT.md` re-verified by running its setup commands and walking 15 routes as `owner@demo.test` in a browser against a fresh `--reset` seed. The exec brief (https://claude.ai/artifact/GSG4tVzFVzbgD4m5eacsrB) and `WRITEUP.md` now carry numbers measured today: 3,479 unit and integration tests in 256 files (`vitest list`), 1,310 e2e tests in 101 files (`playwright test --list`), 118 migrations, 287 decisions, 939 commits, 342 backlog rows done.
+
+**What it decided.** The existing brief was updated in place, not rewritten, so its URL holds. `DEMO-SCRIPT.md` keeps Acts 1-6 and its stated caveat that later work is unscripted; writing acts for everything since R-138 was not attempted.
+
+**What it left behind.** LinkedIn: 8 rental posts already sit in the Ledger; new angles were proposed and none drafted until Shane picks. The "seventeen months" span quoted for the tenant sign-in bug cannot be right against a first commit of 2026-08-01 and is flagged in `NEXT.md`, unchanged.
+
+**Found along the way.** `rental_demo` was four migrations behind, which nothing reports because `db:status` covers only test and dev. `/money/deposits` redirects an owner without MFA to `/account`; correct (`ledger.adjust` is privileged) and previously undocumented in the script.
+
+**Gate.** Docs only; no lint, typecheck or test run was needed and none is claimed.

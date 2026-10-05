@@ -2,10 +2,10 @@
 
 > Portfolio write-up. Update the "Last synced" line every time the repo changes materially. A stale write-up is worse than none.
 
-**Repo:** https://github.com/shanelabountyai/rental-business (private)
-**Live demo:** deployed to Vercel, currently behind Vercel Authentication (not yet public — see *What I'd Do Differently*). The full demo runs locally from [`docs/DEMO-SCRIPT.md`](docs/DEMO-SCRIPT.md)
+**Repo:** https://github.com/shanelabountyai/rental-business (public, D-285)
+**Live demo:** https://rent.labintelligence.co, behind one shared demo password (D-257; available on request). The full demo also runs locally from [`docs/DEMO-SCRIPT.md`](docs/DEMO-SCRIPT.md)
 **Built with:** Claude Code + Next.js (App Router), TypeScript, Postgres + Prisma, Stripe Billing, Twilio, Resend, Tailwind CSS + shadcn, Vercel
-**Status:** Feature-complete (Milestones 1–16, all ✅) · Go-live hardening in progress (Milestone 17: production Stripe/Twilio/Resend cutover, legal review of jurisdiction configs) · Last synced: 2026-09-21
+**Status:** Feature-complete (Milestones 1–16, all ✅) · Post-completion review sweep closed (41 findings, 39 fixed) · Remaining rows are gated on a vendor contract, counsel or a go-live decision (production Stripe/Twilio/Resend cutover, legal review of jurisdiction configs) · Last synced: 2026-10-05
 **Exec brief (non-technical):** https://claude.ai/artifact/GSG4tVzFVzbgD4m5eacsrB
 
 ---
@@ -25,9 +25,9 @@ A single-family rental owner running 10–50 houses across several LLCs is doing
 
 ## How It's Built
 
-It's an npm-workspaces monorepo: `apps/web` (Next.js App Router), `packages/core` (domain logic — money math, jurisdiction rules, metrics) and `packages/db` (Prisma schema + hand-written migrations). The schema has 111 models across 114 migrations, using the canonical entity names from the master PRD (LegalEntity, Property, Unit, Lease, Tenant, LedgerEntry, WorkOrder, Notice, Task and supporting entities). Three external capabilities that are partner-gated or regulated — screening, e-sign, listing syndication — run against fault-injecting simulators until a real vendor is chosen; Stripe, Twilio and Resend are real, wired drivers behind the same kind of seam, selected by whether a key is configured rather than by an environment flag.
+It's an npm-workspaces monorepo: `apps/web` (Next.js App Router), `packages/core` (domain logic — money math, jurisdiction rules, metrics) and `packages/db` (Prisma schema + hand-written migrations). The schema has 111 models across 118 migrations, using the canonical entity names from the master PRD (LegalEntity, Property, Unit, Lease, Tenant, LedgerEntry, WorkOrder, Notice, Task and supporting entities). Three external capabilities that are partner-gated or regulated — screening, e-sign, listing syndication — run against fault-injecting simulators until a real vendor is chosen; Stripe, Twilio and Resend are real, wired drivers behind the same kind of seam, selected by whether a key is configured rather than by an environment flag.
 
-**Key design decisions** (the full log is [`docs/prds/07-decisions.md`](docs/prds/07-decisions.md): 253 entries, each settled once)
+**Key design decisions** (the full log is [`docs/prds/07-decisions.md`](docs/prds/07-decisions.md): 287 entries, each settled once)
 
 | Decision | Alternative considered | Why I chose it |
 |---|---|---|
@@ -73,6 +73,8 @@ Each of these cost a debugging pass. The lesson from each is written into the re
 - **An `afterAll` cleanup query with no `ORDER BY` was silently non-deterministic.** A leftover fixture row from an earlier crashed run tied with a live test's fixture on the same lookup key; which one won was query-planner order, not code — so three tests failed roughly one run in three, with wrong *data* and no thrown error, for two backlog items before it was root-caused.
 - **A green CI pipeline was reported as still broken for eleven consecutive items.** After a nine-day GitHub Actions billing outage was fixed, eleven backlog entries in a row copied forward the previous entry's "still unresolved" line instead of checking `gh run list` — the same failure as the original outage, wearing the opposite sign: first a dead pipeline nobody read, then a live one nobody read.
 - **A database connection cap was removed once "to speed things up" and made the suite slower.** Two process-parallel test runners against a 100-connection Postgres instance were arithmetically guaranteed to exhaust it under load; the resulting `too many clients already` errors surfaced inside whichever fixture happened to be seeding at the time, which read as three unrelated flaky tests before anyone counted `pg_stat_activity`.
+- **A seven-reviewer sweep after "feature-complete" found 41 more.** Security, money, legal, accessibility and usability reviewers, each briefed on one concern, against a product with every test green. Among them: an autopay payment that could be credited twice, a card pass-through fee credited to the tenant as rent, and a text-message opt-out that honoured the word STOP but not the sentence "please stop texting me". 39 are fixed; the other two wait on an attorney and a go-live decision.
+- **The deployment doc said the payment webhook was "set up and verified". The endpoint did not exist.** Listing the endpoints against the project's own key returned none, so no payment event had been reaching the deployed demo at all. Same root cause as the CI line above: a status sentence nobody re-ran.
 
 ## What I'd Do Differently
 
@@ -85,8 +87,9 @@ Each of these cost a debugging pass. The lesson from each is written into the re
 - **Built in 52 calendar days** (2026-08-01 to 2026-09-21): 723 commits, 285 `docs/PROGRESS.md` entries (R-001 through R-239, including lettered sub-parts), one entry per completed item recording what it built, what it decided and what it left behind.
 - **3,298 unit and integration tests** (3,298 passed, 4 skipped as of 2026-09-21) across 245 test files. **1,276 end-to-end tests** across 100 Playwright spec files, run at phone and desktop widths against a production build, not a dev server.
 - About 147,500 lines of application TypeScript and 89,000 lines of tests.
-- 111 data models, 114 migrations, and 253 recorded product decisions.
-- **What is not real:** applicant screening, e-signature and listing syndication run against fault-injecting simulators, not real vendors, by design (D-7) — a real driver is a Phase 3 item. Stripe runs in test mode only (D-26); Twilio and Resend are real, wired drivers with no production phone number or verified sending domain behind them yet. The production Vercel deployment exists but is currently gated behind Vercel Authentication rather than genuinely public — closing that, and the Stripe/Twilio/Resend cutover, is the open Milestone 17 work.
+- 111 data models, 118 migrations, and 287 recorded product decisions.
+- **Re-measured 2026-10-05, after the review sweep:** 939 commits, 3,479 unit and integration tests across 256 files, 1,310 end-to-end tests across 101 spec files.
+- **What is not real:** applicant screening, e-signature and listing syndication run against fault-injecting simulators, not real vendors, by design (D-7) — a real driver is a Phase 3 item. Stripe runs in test mode only (D-26); Twilio and Resend are real, wired drivers with no production phone number or verified sending domain behind them yet. The production deployment is live behind the app's own shared demo password and holds only the seeded demo portfolio; the Stripe/Twilio/Resend cutover is the open go-live work.
 
 ---
 

@@ -1,6 +1,15 @@
 # Next session
 
-## Done 2026-10-05: carried-forward test cleanup (`edaa0ef`, SHA backfill `ee69aa0`). Not a backlog row — see below for why.
+## Done 2026-10-05: project-closure pass (SHA in `docs/PROGRESS.md`, "Project-closure pass")
+
+- **Demo script** (`docs/DEMO-SCRIPT.md`) re-verified in a browser: setup commands, owner sign-in, 15 routes. `rental_demo` was four migrations behind; `db:migrate:demo` first, always. `/money/deposits` is MFA-gated (`ledger.adjust`), now noted in the script.
+- **Exec brief** republished at the same URL with measured numbers: https://claude.ai/artifact/GSG4tVzFVzbgD4m5eacsrB
+- **`WRITEUP.md`** synced (repo public, live URL, 287 decisions, 118 migrations, 3,479 + 1,310 tests, two new *Defects Found* bullets).
+- **Cost review**: D-286 baseline, D-277 auto-deploy off. Nothing new left running.
+- **LinkedIn**: the Ledger (https://claude.ai/artifact/Ai5xKScgT2sWtqXRQ1ZA8i) already holds 8 rental posts. Five new angles were proposed to Shane; **none drafted or added until he picks.** That is the only open closure item.
+- **Open question for Shane:** `WRITEUP.md`, `CLAUDE.md` and one Ledger post say the tenant sign-in bug hid for "seventeen months". The first commit is 2026-08-01, so that figure cannot be right. Not changed; needs his call on the true span.
+
+## Prior: Done 2026-10-05: carried-forward test cleanup (`edaa0ef`, SHA backfill `ee69aa0`). Not a backlog row — see below for why.
 
 **Backlog check first: `docs/prds/06-backlog.md` has nothing buildable this session.** Every remaining unchecked row (R-093, R-097-split, R-037a, R-097b, MONEY-05, OPS-01) is explicitly gated on a vendor contract, counsel, or a go-live decision — D-15 forbids simulating the vendor-gated ones. Shane chose to spend the session on the cheap carried-forward cleanup instead (see options below next time this comes up: project closure pass / cost-review baseline / stop and flag human-only items).
 
@@ -36,6 +45,6 @@ Full detail, including the exact gate numbers, in `docs/PROGRESS.md`'s "Carried-
 - **Three env rotations are queued behind the `ignoreCommand` skip, waiting on a real (non-docs) code push to go live:** `BLOB_READ_WRITE_TOKEN`, `STRIPE_SECRET_KEY`/`STRIPE_PUBLISHABLE_KEY`, `DEMO_ACCESS_PASSWORD` — all saved in Vercel, none yet baked into a deployment. Confirmed twice today that an env-only or docs-only push gets `Canceled` (exit 0) rather than building. `STRIPE_WEBHOOK_SECRET` is the exception and is already live, because its redeploy happened to land on a commit with real code in it. Not urgent — Blob and Stripe key both have grace periods, and `DEMO_ACCESS_PASSWORD`'s old value simply stops being the gate once the new deployment ships, no exploit window either way. **Worth remembering next time any real code ships**, so these three aren't forgotten indefinitely.
 - ✅ **DONE 2026-10-05: cost review baseline written into `07-decisions.md` as D-286** (Neon 41.6 CU-h / 161.2 active-h since 2026-09-17; Vercel build CPU $6.76 effective / $1.41 billed 09-01..09-26). No action attached — baseline only, compare future measurements against it.
 - Legal review and R-228 still need a person (unchanged).
-- **Backlog is still empty of buildable work** — every remaining unchecked row (R-093, R-097-split, R-037a, R-097b, MONEY-05, OPS-01) is vendor/counsel/go-live-gated (D-15). Next session: either a project-closure pass (exec-brief/DEMO.md/LinkedIn posts per the closure checklist in `~/.claude/CLAUDE.md`), or wait for a vendor contract/go-live decision to unblock the gated rows.
+- **Backlog is still empty of buildable work** — every remaining unchecked row (R-093, R-097-split, R-037a, R-097b, MONEY-05, OPS-01) is vendor/counsel/go-live-gated (D-15). Closure pass is done bar the LinkedIn pick above. Next session: draft whichever angles Shane picked, otherwise wait for a vendor contract/go-live decision to unblock the gated rows.
 
 ## Prior: A11Y-01 through A11Y-11, UX-01 through UX-10 all done (see `06-backlog.md` and `PROGRESS.md` for each). 7-agent review sweep scoped 2026-09-27/28 into 37 backlog rows (`90956f0`, `2c30266`). Also done: SEC-17, MONEY-01/02/03/04/06/07/08/09/10, SEC-18, SEC-19, SEC-20, LEGAL-01/02/03/04/05.

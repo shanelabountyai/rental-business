@@ -330,8 +330,20 @@ out of you does not.
   R-223 to R-233 migrations are not on the Neon dev branch either.
 - **Acts 1-6 were written at R-138.** Later work (deposits, MTM notices,
   guarantor account, abandonment and claims) is real and browser-walked but
-  not scripted here.
+  not scripted here. **If deposits gets its own act, flag before opening it
+  live:** `/money/deposits` guards itself on `ledger.adjust`, which is on
+  `PRIVILEGED_PERMISSIONS` — recording a bank deposit is a ledger
+  adjustment — so it hits the same unmarked MFA door Act 5 already warns
+  about for `/staff`. Enrol the owner first (`DEMO-LOGINS.md` → *Walking
+  `/login/mfa` without a phone*), or the room watches a 307 to `/account`.
 
-**Verified 2026-09-23:** every setup command in §0 ran clean against
-`rental_demo`, and every route named in the acts returned 200 as
-`owner@demo.test` with no `undefined`, `NaN` or `Invalid Date` on the page.
+**Verified 2026-09-23, re-verified 2026-10-05:** every setup command in §0
+ran clean against `rental_demo` (today's run also caught `rental_demo` four
+migrations behind — `db:migrate:demo` is not optional before a demo even
+when the database already exists), and every route named in the acts
+returned 200 as `owner@demo.test` with no `undefined`, `NaN` or
+`Invalid Date` on the page. Also spot-checked 2026-10-05, outside the
+scripted acts: `/money/rent-roll`, `/money/expenses`,
+`/money/former-tenants`, `/money/vendor-invoices`, `/notices`,
+`/abandonment`, `/claims`, `/workorders`, `/tasks`, `/reports` and `/staff`
+all 200 for `owner@demo.test` against a fresh `--reset` seed.
