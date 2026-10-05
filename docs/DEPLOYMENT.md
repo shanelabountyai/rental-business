@@ -8,7 +8,7 @@ the repo alone — a dashboard setting is invisible to `git log`.
 
 | Thing | Value |
 |---|---|
-| GitHub | `shanelabountyai/rental-business`, private |
+| GitHub | `shanelabountyai/rental-business`, **public** (D-285, 2026-10-05 — kept public deliberately for the portfolio use case; was private at creation) |
 | Vercel team | `shanelabountyai-8212s-projects` (`team_HJnm56EPKbrqWwd75nQEytBd`) |
 | Vercel project | `rental-business` (`prj_jIRKum8dzMvYnnmSIVJjeYkQ99su`) |
 | Root Directory | **`apps/web`** |
