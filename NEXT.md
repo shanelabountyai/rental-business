@@ -6,9 +6,10 @@
 - **Exec brief** republished at the same URL with measured numbers: https://claude.ai/artifact/GSG4tVzFVzbgD4m5eacsrB
 - **`WRITEUP.md`** synced (repo public, live URL, 287 decisions, 118 migrations, 3,479 + 1,310 tests, two new *Defects Found* bullets).
 - **Cost review**: D-286 baseline, D-277 auto-deploy off. Nothing new left running.
-- **LinkedIn**: the Ledger (https://claude.ai/artifact/Ai5xKScgT2sWtqXRQ1ZA8i) already held 8 rental posts. Shane picked four new angles; all four are drafted in `docs/LINKEDIN-DRAFTS.md` (posts 96-99) and **not yet in the Ledger**. That is the only open closure item.
-  - **NEXT ITEM: add them.** Wait for Shane's edits to the drafts first. Posts live in the page source, not a database: append the four objects to the `POSTS` array in `<script id="pagejs">` and append `97, 96, 98, 99` to `order` in `<script id="statedata">`. Publish only the content after `<body>`, without the wrapper, to the same `url`.
-  - **Cost warning:** the page is 541 KB and a publish is refused until every line of the live version has been Read, about 195k tokens in chunks of 25k. Do it first thing in a fresh session, and nothing else in that session. Worth asking Shane once whether posts should move to the artifact database so an add stops costing that.
+- **LinkedIn**: ✅ done 2026-10-05. Posts 96-99 are in the Ledger (https://claude.ai/artifact/Ai5xKScgT2sWtqXRQ1ZA8i), queued after 95 as 97, 96, 98, 99; `docs/LINKEDIN-DRAFTS.md` deleted. All four closure deliverables now exist.
+  - **The Ledger's posts moved out of the page source into the artifact database the same day** (Shane's call), so an add no longer costs a ~195k-token read of a 541 KB page. The page is now ~54 KB and holds no posts.
+  - **To add a post now:** `ArtifactData` `set` on collection `posts`, doc id = the post number, body `{n, project, pillar, hook, full, source, posted:false, date:null, image:null}`; then `get` `meta/queue` and `update` its `order` array (pin `if_version`). A post with no queue slot still shows, at the end. Do NOT republish the page to add a post.
+  - Not verified by me: the page in a browser. The store was read back (99 posts, queue of 99); nobody has yet opened the page and ticked a box since the change. The pre-migration page is version 65 in the artifact's history if it needs restoring.
 - **Open question for Shane:** `WRITEUP.md`, `CLAUDE.md` and one Ledger post say the tenant sign-in bug hid for "seventeen months". The first commit is 2026-08-01, so that figure cannot be right. Not changed; needs his call on the true span.
 
 ## Prior: Done 2026-10-05: carried-forward test cleanup (`edaa0ef`, SHA backfill `ee69aa0`). Not a backlog row — see below for why.
