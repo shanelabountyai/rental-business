@@ -1,6 +1,18 @@
 # Next session
 
-## Done 2026-10-03: UX-10 (`8d92fef`, SHA backfill `1fef90f`). Dashboard tile and nav copy, plain language.
+## Done 2026-10-05: carried-forward test cleanup (`edaa0ef`, SHA backfill `ee69aa0`). Not a backlog row — see below for why.
+
+**Backlog check first: `docs/prds/06-backlog.md` has nothing buildable this session.** Every remaining unchecked row (R-093, R-097-split, R-037a, R-097b, MONEY-05, OPS-01) is explicitly gated on a vendor contract, counsel, or a go-live decision — D-15 forbids simulating the vendor-gated ones. Shane chose to spend the session on the cheap carried-forward cleanup instead (see options below next time this comes up: project closure pass / cost-review baseline / stop and flag human-only items).
+
+Closed 4 of the carried-forward items UX-07/UX-10 had been listing:
+- `units.spec.ts` — `getByText('Down')` now `{ exact: true }`.
+- `staff.spec.ts` — a11y test timeout raised 180s → 300s. **Caveat found while fixing it: isolated-alone measurement today is 3.8 minutes, not the old 45s/174s** — this machine's real cost for 3 axe scans has grown. 300s holds for a normal single-spec-file run; running it alongside `units.spec.ts` + `vendor-invoice-splits.spec.ts` together (not a realistic session, only done to batch-verify) pushed it past 300s on both tries. The real fix (split into one test per URL) is still not done.
+- `vendor-invoice-splits.spec.ts` — `SetReserveForm`'s hint/error strict-mode collision was in the test's locator, not the component. Narrowed to the error's own wording.
+- `comms.test.ts` + `pre-move-out-scheduling-job.test.ts` — **not just leftover data, a real self-reinforcing bug** in the second file: cleanup scoped by a collected-id list instead of unit ownership meant an untracked auto-scheduled inspection blocked `unit.deleteMany`, which threw *before* the `JurisdictionRule` cleanup line ran, leaking that test's rule every time it fired. Found **71 leaked rows** for this file's fixed `state: 'XW'` — fixed the cleanup scoping, deleted the leaked rows, replaced `comms.test.ts`'s 8 hardcoded phone literals with a local `uniquePhone()`. `npm test` now genuinely green (256 files / 3479 tests, 0 failures) — confirmed by rerunning `pre-move-out-scheduling-job.test.ts` twice more with zero new leaks.
+
+Full detail, including the exact gate numbers, in `docs/PROGRESS.md`'s "Carried-forward test cleanup" entry.
+
+## Prior: Done 2026-10-03: UX-10 (`8d92fef`, SHA backfill `1fef90f`). Dashboard tile and nav copy, plain language.
 
 - Dashboard: "Aged delinquency" → "Rent overdue"; "Tenancies past grace" action item → "Late tenants"; "Emergency/urgent tickets" + its separate "Open past 48h" detail collapsed into one label, "Urgent repairs waiting over 2 days" (matches the backlog's acceptance text verbatim); Renewals tile's defensive "Mortgage & insurance dates, not statutory compliance" → "Upcoming mortgage & insurance renewal dates".
 - `NavItem` gained an optional `subtitle?: string` (`lib/nav.ts`), rendered as a muted second line in `components/shell/nav.tsx`. Filled in only for the three terms the backlog row actually calls unexplained — Gone dark, Claims, Violations — not every nav item; the rest already read as plain English. Subtitle text pulled from each page's own `PageHeader` description so it doesn't introduce a second phrasing of the same thing.
@@ -9,16 +21,14 @@
 - No schema change — `db:ci` not required.
 - No demo-walk screenshot taken for this item — it's a LOW-priority copy pass with "design review sign-off; no automated acceptance" as its own acceptance line, and the e2e runs above already render and assert the real text. A full demo walk is reserved for milestone closes (D-28), not every backlog row. **Flag for Shane to eyeball the new copy/nav subtitles in the demo when convenient** — that's the "design review sign-off" this row asks for; nothing here should be read as having already gotten that sign-off.
 - CI run should be queued on push (`1fef90f`) — **check `gh run list --limit 3` before trusting green.**
-- Backlog is now past every UX-0X row. Check `docs/prds/06-backlog.md` top to bottom for the next unchecked item — nothing has been pre-selected.
 
 ## Carried forward, unchanged:
 
 - **A future item should decide the dozen other sideways-scrolling tables** UX-09 deliberately left as `overflow-x-auto` (not cards) — `workorders/bids-panel.tsx`, every `reports/*` page, `tasks/page.tsx`, `money/ops-log.tsx`, etc. The explicit-role + `sm:hidden`-label pattern in `ledger-panel.tsx`/`rent-roll-table.tsx` is the reference implementation if/when one of them gets the same treatment.
-- **Fix the 3 pre-existing e2e issues UX-07 surfaced** — not blocking, cheap wins: add `exact: true` in `units.spec.ts`'s `getByText('Down')`, raise/split `staff.spec.ts`'s a11y timeout (runs at 2.9m against a 3m budget on unmodified `main`), investigate `SetReserveForm`'s hint/error paragraph overlap in `vendor-invoice-splits.spec.ts`.
+- **`staff.spec.ts`'s a11y test still deserves a per-URL split**, not just the timeout raise done today — see above.
 - **A follow-up item should decide the ad hoc boxed/unboxed panel sections UX-07 deliberately left out** (D-284) — whether `Panel` grows a `variant` prop or they stay bespoke. Also `components/portal/tenant-consent-section.tsx`'s one skipped `consent` panel.
 - **OPS-01 still open, deliberately skipped** — go-live readiness list (no live Stripe key, $0 deposit on imported leases, no portal invite for imported tenants, simulated e-sign, daily-cron message delay). Revisit only when going live is actually planned.
 - **Shane: subscribe the test webhook endpoint to `charge.dispute.closed`.** Endpoint `we_1U47bfJ7dm36XvZPk4ekxGak` still lists `charge.dispute.created`. Swap it in the Stripe dashboard (Developers → Webhooks), or MONEY-04 never receives its event. Target set in `docs/DEPLOYMENT.md`.
-- **Local `rental_test` has leftover data**: up to 4 unit tests fail on `main` too (`comms.test.ts` inbound routing ×2, `pre-move-out-scheduling-job.test.ts` ×2), while CI is green.
 - **Production needs migrating**: `20260929120000` (LEGAL-02) and `20260929180000` (LEGAL-03) both pending, via the `docs/DEPLOYMENT.md` recipe. Per-push deploys are off (`bf30ca7`), so a deploy is manual too. UX-03 through UX-10 have no migrations.
 - **Roll the Stripe TEST secret key**: a masking regex printed it into the 2026-09-28 session transcript. Test mode only, not sent anywhere.
 - **Not done, needs Shane:** rotate the demo password (`demo-rental-2026`, tracked in `seed-demo-access.mts` and D-257) — repo is PUBLIC so it's exposed regardless of code fixes. Consider making the repo private too.
