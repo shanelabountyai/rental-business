@@ -370,8 +370,11 @@ test('a property-scoped manager cannot reach the directory at all', async ({ pag
  * other test is running**. Under a full sweep it goes over and times out
  * inside the third scan, on both projects, which is exactly the "timeout set
  * at the measured cost is a flake generator" pattern CLAUDE.md records
- * against R-102b and R-040e. 180s is deliberately far above the measurement
- * rather than just above it.
+ * against R-102b and R-040e. 180s was deliberately far above the 45s
+ * isolated measurement, but under sweep contention it was measured at 174s
+ * (2.9min) against the 180s budget — the same no-headroom pattern one level
+ * up. Raised to 300s, which is still well short of splitting into one test
+ * per URL (the real fix, left for whoever next touches this file).
  *
  * The 10x spread between the first page and the other two is not noise and is
  * not addressed here: axe's cost is superlinear in node count, so a 21s scan
@@ -379,7 +382,7 @@ test('a property-scoped manager cannot reach the directory at all', async ({ pag
  * ==========================================================================
  */
 test('the staff screens are accessible', async ({ page }) => {
-  test.setTimeout(180_000)
+  test.setTimeout(300_000)
   const owner = await createStaff('owner', { mfa: true })
   const target = await createStaff('manager')
   await signIn(page, owner)

@@ -252,7 +252,7 @@ test.describe('editing a unit', () => {
 
     await page.waitForURL(`**/properties/${property.id}/units/${unit.id}`)
     await expect(page.getByRole('heading', { name: 'After Edit', level: 1 })).toBeVisible()
-    await expect(page.getByText('Down')).toBeVisible()
+    await expect(page.getByText('Down', { exact: true })).toBeVisible()
 
     const entry = await prisma.auditLog.findFirst({
       where: { action: 'unit.updated', entityId: unit.id },

@@ -340,7 +340,10 @@ test.describe('the reserve and capital plan report', () => {
     await section.getByLabel('Balance held').fill('8450')
     await section.getByRole('button', { name: 'Save reserve' }).click()
 
-    await expect(section.getByText('always reads as current')).toBeVisible()
+    // 'always reads as current' alone matches both the field's hint and its
+    // error paragraph once the error renders (strict-mode violation) —
+    // scope to the error's own wording.
+    await expect(section.getByText('Say when this balance was counted')).toBeVisible()
     expect(
       await prisma.propertyReserve.count({ where: { propertyId: houses[0].property.id } }),
     ).toBe(0)

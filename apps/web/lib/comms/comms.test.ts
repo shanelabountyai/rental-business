@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { prisma } from '@rental/db'
+import { formatPhone } from '@rental/core/comms'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   logCall,
@@ -19,6 +20,21 @@ import { resolveThread } from './threads.ts'
 // than two. Each of those failures is a cross-tenant leak or a split history.
 
 const CHICAGO = 'America/Chicago'
+
+// A number no other fixture in this run holds. The e2e suite has its own
+// `uniquePhone`, deliberately not imported here: a unit test reaching into
+// e2e/ couples two suites that are excluded from each other's runs. This file
+// used to hardcode '+15125550001' through '...0006' and '...0777'/'...0778'
+// — a crashed run that skipped afterAll left active tenants on those exact
+// numbers, and the next run's routing tests saw two candidates instead of
+// one and failed with 'unrouted' instead of 'routed'.
+let phoneCounter = 0
+function uniquePhone(): string {
+  phoneCounter += 1
+  const exchange = String(500 + (phoneCounter % 100)).padStart(3, '0')
+  const line = String(Date.now() % 10000).padStart(4, '0')
+  return `+1512${exchange}${line}`
+}
 
 let entityId: string
 let propertyA: string
@@ -160,12 +176,12 @@ describe('thread resolution', () => {
 
 describe('inbound routing', () => {
   it('files a text from a known tenant into their thread', async () => {
-    const phone = '+15125550001'
+    const phone = uniquePhone()
     const tenant = await makeTenant({ phone, propertyId: propertyA })
 
     const result = await receiveInboundMessage({
       channel: 'SMS',
-      from: '(512) 555-0001',
+      from: formatPhone(phone),
       body: 'The kitchen tap is dripping',
       receivedAt: new Date('2026-08-05T15:00:00Z'),
     })
@@ -216,7 +232,7 @@ describe('inbound routing', () => {
   it('refuses to pick between two tenants sharing a phone', async () => {
     // A couple with one handset. Filing under either one puts a conversation
     // in the wrong person's permanent record.
-    const phone = '+15125550002'
+    const phone = uniquePhone()
     await makeTenant({ phone, propertyId: propertyA })
     await makeTenant({ phone, propertyId: propertyA })
 
@@ -238,7 +254,7 @@ describe('inbound routing', () => {
   it('ignores an inactive tenant, so a reassigned number is not misfiled', async () => {
     // Phone numbers get recycled. Matching a former tenant's number would
     // file a stranger's text into a closed tenancy's record.
-    const phone = '+15125550003'
+    const phone = uniquePhone()
     await makeTenant({ phone, propertyId: propertyA, active: false })
 
     const result = await receiveInboundMessage({
@@ -270,7 +286,7 @@ describe('inbound routing', () => {
   it('treats a redelivered webhook as a duplicate', async () => {
     // Providers retry. A redelivery must not put a second copy of the same
     // text in somebody's history.
-    const phone = '+15125550004'
+    const phone = uniquePhone()
     await makeTenant({ phone, propertyId: propertyA })
     const externalId = `SM${randomUUID()}`
 
@@ -301,7 +317,7 @@ describe('inbound routing', () => {
     // Genuinely ambiguous: "the tap is dripping" - which house? Picking the
     // newer lease would file a guess as a fact, and the property is what
     // every RBAC check keys on.
-    const phone = '+15125550005'
+    const phone = uniquePhone()
     const tenant = await makeTenant({
       phone,
       propertyId: propertyA,
@@ -341,7 +357,7 @@ describe('inbound routing', () => {
     // The common case, and the reason the lookup filters to live leases: an
     // ended tenancy at the old address must not make every future text
     // ambiguous forever.
-    const phone = '+15125550006'
+    const phone = uniquePhone()
     const tenant = await makeTenant({
       phone,
       propertyId: propertyB,
@@ -465,8 +481,9 @@ describe('filing an unrouted message', () => {
 
 describe('outbound and call logging', () => {
   it('records an outbound message before it is transmitted', async () => {
+    const phone = uniquePhone()
     const tenant = await makeTenant({
-      phone: '+15125550777',
+      phone,
       propertyId: propertyA,
     })
     const thread = await resolveThread({
@@ -481,7 +498,7 @@ describe('outbound and call logging', () => {
       channel: 'SMS',
       body: 'Tech arrives between 9 and 11',
       staffUserId: staffId,
-      toAddress: '+15125550777',
+      toAddress: phone,
     })
 
     const stored = await prisma.message.findUniqueOrThrow({
@@ -499,8 +516,9 @@ describe('outbound and call logging', () => {
     const previous = process.env.NOTIFICATIONS_ENABLED
     process.env.NOTIFICATIONS_ENABLED = 'false'
     try {
+      const phone = uniquePhone()
       const tenant = await makeTenant({
-        phone: '+15125550778',
+        phone,
         propertyId: propertyA,
       })
       const thread = await resolveThread({
@@ -515,7 +533,7 @@ describe('outbound and call logging', () => {
         channel: 'SMS',
         body: 'should not go out',
         staffUserId: staffId,
-        toAddress: '+15125550778',
+        toAddress: phone,
       })
       const stored = await prisma.messageDelivery.findFirstOrThrow({
         where: { messageId: message.id },

@@ -37,8 +37,14 @@ afterEach(async () => {
   // don't delete" fix auto-finalize-job.test.ts's own afterAll already
   // documents. Inspections, leases, units and tenants are all still
   // per-test-unique and safe to clear.
-  await prisma.inspectionItem.deleteMany({ where: { inspectionId: { in: inspectionIds } } })
-  await prisma.inspection.deleteMany({ where: { id: { in: inspectionIds } } })
+  // Scoped to unitId ownership, not the collected inspectionIds list: the
+  // job under test can schedule a PRE_MOVE_OUT inspection a test did not
+  // expect (see the JurisdictionRule note below) and an untracked inspection
+  // left a unit's FK blocked, which threw inside this very afterEach and
+  // skipped every line after it - including the rule delete, so the
+  // poisoned rule survived to ambiguate the next run too.
+  await prisma.inspectionItem.deleteMany({ where: { inspection: { unitId: { in: unitIds } } } })
+  await prisma.inspection.deleteMany({ where: { unitId: { in: unitIds } } })
   await prisma.task.deleteMany({ where: { subjectId: { in: leaseIds } } })
   await prisma.leaseTenant.deleteMany({ where: { leaseId: { in: leaseIds } } })
   await prisma.lease.deleteMany({ where: { id: { in: leaseIds } } })
