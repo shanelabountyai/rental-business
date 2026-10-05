@@ -6,7 +6,9 @@
 - **Exec brief** republished at the same URL with measured numbers: https://claude.ai/artifact/GSG4tVzFVzbgD4m5eacsrB
 - **`WRITEUP.md`** synced (repo public, live URL, 287 decisions, 118 migrations, 3,479 + 1,310 tests, two new *Defects Found* bullets).
 - **Cost review**: D-286 baseline, D-277 auto-deploy off. Nothing new left running.
-- **LinkedIn**: the Ledger (https://claude.ai/artifact/Ai5xKScgT2sWtqXRQ1ZA8i) already holds 8 rental posts. Five new angles were proposed to Shane; **none drafted or added until he picks.** That is the only open closure item.
+- **LinkedIn**: the Ledger (https://claude.ai/artifact/Ai5xKScgT2sWtqXRQ1ZA8i) already held 8 rental posts. Shane picked four new angles; all four are drafted in `docs/LINKEDIN-DRAFTS.md` (posts 96-99) and **not yet in the Ledger**. That is the only open closure item.
+  - **NEXT ITEM: add them.** Wait for Shane's edits to the drafts first. Posts live in the page source, not a database: append the four objects to the `POSTS` array in `<script id="pagejs">` and append `97, 96, 98, 99` to `order` in `<script id="statedata">`. Publish only the content after `<body>`, without the wrapper, to the same `url`.
+  - **Cost warning:** the page is 541 KB and a publish is refused until every line of the live version has been Read, about 195k tokens in chunks of 25k. Do it first thing in a fresh session, and nothing else in that session. Worth asking Shane once whether posts should move to the artifact database so an add stops costing that.
 - **Open question for Shane:** `WRITEUP.md`, `CLAUDE.md` and one Ledger post say the tenant sign-in bug hid for "seventeen months". The first commit is 2026-08-01, so that figure cannot be right. Not changed; needs his call on the true span.
 
 ## Prior: Done 2026-10-05: carried-forward test cleanup (`edaa0ef`, SHA backfill `ee69aa0`). Not a backlog row — see below for why.
