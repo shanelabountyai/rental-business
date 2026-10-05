@@ -14305,4 +14305,14 @@ Not a backlog row — the backlog (`06-backlog.md`) has nothing buildable left t
 - `typecheck` clean.
 - `npm test`: **256 passed | 1 skipped (257 files), 3479 passed | 4 skipped** — the 4 pre-existing `comms.test.ts`/`pre-move-out-scheduling-job.test.ts` failures `NEXT.md` had been tracking are gone, not just passing by luck; reran `pre-move-out-scheduling-job.test.ts` twice more to confirm no new `JurisdictionRule` leak.
 - Scoped e2e (production build, desktop-chrome): `units.spec.ts` (9/9), `vendor-invoice-splits.spec.ts` (7/7), `staff.spec.ts` (8/8 run alone — see above for the combined-run caveat). All three locator/timeout fixes confirmed passing in the specs that exercise them.
+
+## Cost-review baseline written up (D-286)
+
+**What it built.** Nothing — a documentation-only commit. Recorded the 2026-09-26 cost-review measurements into `docs/prds/07-decisions.md` as D-286: Neon `rentalbusiness` 41.6 CU-h / 161.2 active-h since 2026-09-17; Vercel rental-business build CPU $6.76 effective / $1.41 billed for 2026-09-01..09-26. The numbers had been given verbally that session and `NEXT.md` had been carrying a reminder to write them down ever since.
+
+**What it decided.** Nothing new — D-286 is a baseline record, not an action. No keep/slow/off decision attached; revisit by re-running the same two measurement commands (noted in D-286) and comparing.
+
+**What it left behind.** Nothing changed about what's running or billing. This just closes the "not yet written into 07-decisions.md" gap `NEXT.md` had been carrying.
+
+**Gate.** Docs-only change; lint/typecheck/test/e2e not applicable. No schema change.
 - No schema change — `db:ci` not required.
