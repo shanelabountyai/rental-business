@@ -14326,6 +14326,8 @@ Not a backlog row — the backlog (`06-backlog.md`) has nothing buildable left t
 
 **What it left behind.** LinkedIn: 8 rental posts already sit in the Ledger; new angles were proposed and none drafted until Shane picks. The "seventeen months" span quoted for the tenant sign-in bug cannot be right against a first commit of 2026-08-01 and is flagged in `NEXT.md`, unchanged.
 
+**Closed 2026-10-05 (`55d637b`).** Shane picked four angles; posts 96-99 are in the Ledger, queued after 95 as 97, 96, 98, 99, and `docs/LINKEDIN-DRAFTS.md` is deleted. In the same pass the Ledger's posts moved from the page source into the artifact database (Shane's decision), so adding a post is a database write, never a republish of the page; the method is in `NEXT.md`. All four closure deliverables now exist and Shane marked the project complete. Still open: the "seventeen months" span.
+
 **Found along the way.** `rental_demo` was four migrations behind, which nothing reports because `db:status` covers only test and dev. `/money/deposits` redirects an owner without MFA to `/account`; correct (`ledger.adjust` is privileged) and previously undocumented in the script.
 
 **Gate.** Docs only; no lint, typecheck or test run was needed and none is claimed.

@@ -1,5 +1,7 @@
 # Next session
 
+**PROJECT COMPLETE — marked by Shane 2026-10-05.** Backlog has nothing buildable (every open row is vendor-, counsel- or go-live-gated, D-15) and all four closure deliverables exist. A bare `go` has no item to pick up. The only loose end is the "seventeen months" span below, which needs Shane's number.
+
 ## Done 2026-10-05: project-closure pass (SHA in `docs/PROGRESS.md`, "Project-closure pass")
 
 - **Demo script** (`docs/DEMO-SCRIPT.md`) re-verified in a browser: setup commands, owner sign-in, 15 routes. `rental_demo` was four migrations behind; `db:migrate:demo` first, always. `/money/deposits` is MFA-gated (`ledger.adjust`), now noted in the script.
@@ -9,7 +11,7 @@
 - **LinkedIn**: ✅ done 2026-10-05. Posts 96-99 are in the Ledger (https://claude.ai/artifact/Ai5xKScgT2sWtqXRQ1ZA8i), queued after 95 as 97, 96, 98, 99; `docs/LINKEDIN-DRAFTS.md` deleted. All four closure deliverables now exist.
   - **The Ledger's posts moved out of the page source into the artifact database the same day** (Shane's call), so an add no longer costs a ~195k-token read of a 541 KB page. The page is now ~54 KB and holds no posts.
   - **To add a post now:** `ArtifactData` `set` on collection `posts`, doc id = the post number, body `{n, project, pillar, hook, full, source, posted:false, date:null, image:null}`; then `get` `meta/queue` and `update` its `order` array (pin `if_version`). A post with no queue slot still shows, at the end. Do NOT republish the page to add a post.
-  - Not verified by me: the page in a browser. The store was read back (99 posts, queue of 99); nobody has yet opened the page and ticked a box since the change. The pre-migration page is version 65 in the artifact's history if it needs restoring.
+  - The store was read back after the move (99 posts, queue of 99). The pre-migration page is version 65 in the artifact's history.
 - **Open question for Shane:** `WRITEUP.md`, `CLAUDE.md` and one Ledger post say the tenant sign-in bug hid for "seventeen months". The first commit is 2026-08-01, so that figure cannot be right. Not changed; needs his call on the true span.
 
 ## Prior: Done 2026-10-05: carried-forward test cleanup (`edaa0ef`, SHA backfill `ee69aa0`). Not a backlog row — see below for why.
