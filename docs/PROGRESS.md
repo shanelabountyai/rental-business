@@ -14318,7 +14318,7 @@ Not a backlog row — the backlog (`06-backlog.md`) has nothing buildable left t
 - No schema change — `db:ci` not required.
 
 ## Project-closure pass — demo script re-verified, brief and write-up re-measured
-**Commit:** `PENDING`  ·  **Date:** 2026-10-05
+**Commit:** `3da8dfb`  ·  **Date:** 2026-10-05
 
 **What it built.** No code. `docs/DEMO-SCRIPT.md` re-verified by running its setup commands and walking 15 routes as `owner@demo.test` in a browser against a fresh `--reset` seed. The exec brief (https://claude.ai/artifact/GSG4tVzFVzbgD4m5eacsrB) and `WRITEUP.md` now carry numbers measured today: 3,479 unit and integration tests in 256 files (`vitest list`), 1,310 e2e tests in 101 files (`playwright test --list`), 118 migrations, 287 decisions, 939 commits, 342 backlog rows done.
 
