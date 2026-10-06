@@ -1,9 +1,8 @@
 import { formatCents } from '@rental/core/money'
-import { friendlyDate } from '@rental/core/scheduling'
 import { PageHeader } from '@/components/page-header.tsx'
 import { guarantorStatement } from '@/lib/payments/queries.ts'
 import { requireGuarantorWithScope } from '@/lib/portal/guarantor-guard.ts'
-import { scrollableRegionProps } from '@/components/ui-classes.ts'
+import { StatementTable } from '@/components/portal/statement-table.tsx'
 
 export const metadata = { title: 'What you guarantee' }
 
@@ -60,62 +59,13 @@ export default async function GuarantorBalancePage() {
         {view.lines.length === 0 ? (
           <p className="text-muted-foreground text-sm">Nothing has been charged yet.</p>
         ) : (
-          <div className="overflow-x-auto" {...scrollableRegionProps('The account ledger, scrolls sideways')}>
-            <table className="w-full text-sm">
-              <caption className="sr-only">
-                Every charge and payment on this account, newest first, with what
-                was owed after each one.
-              </caption>
-              <thead>
-                <tr className="text-muted-foreground border-b text-left text-xs">
-                  <th scope="col" className="py-2 pr-3 font-medium">
-                    When
-                  </th>
-                  <th scope="col" className="py-2 pr-3 font-medium">
-                    What
-                  </th>
-                  <th scope="col" className="py-2 pr-3 text-right font-medium">
-                    Amount
-                  </th>
-                  <th scope="col" className="py-2 text-right font-medium">
-                    Owed after
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {[...view.lines].reverse().map((line) => {
-                  const isPayment = line.amountCents < 0
-                  const wasReversed = view.reversed.has(line.id)
-                  return (
-                    <tr key={line.id} className="border-b last:border-0">
-                      <td className="py-2 pr-3 whitespace-nowrap">
-                        {friendlyDate(line.occurredAt, view.timezone)}
-                      </td>
-                      <td className="py-2 pr-3">
-                        <span>{line.description}</span>
-                        {wasReversed && (
-                          <span className="text-muted-foreground block text-xs">
-                            This was later reversed
-                          </span>
-                        )}
-                      </td>
-                      <td
-                        className={`py-2 pr-3 text-right whitespace-nowrap tabular-nums ${
-                          isPayment ? 'text-success' : ''
-                        }`}
-                      >
-                        {isPayment ? '−' : ''}
-                        {formatCents(Math.abs(line.amountCents))}
-                      </td>
-                      <td className="py-2 text-right whitespace-nowrap tabular-nums">
-                        {formatCents(Math.max(0, line.runningBalanceCents))}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
+          <StatementTable
+            lines={view.lines}
+            reversed={view.reversed}
+            timezone={view.timezone}
+            label="The account ledger, scrolls sideways"
+            caption="Every charge and payment on this account, newest first, with what was owed after each one."
+          />
         )}
       </section>
     </div>

@@ -170,7 +170,7 @@ test('a PM itemizes deductions, sees the unsupported flag and depreciation guida
   await expect(page.getByText(/Age-based guidance suggests/)).toBeVisible()
 
   // Totals: $2000 held, $960 deducted, $1040 refund due.
-  const totals = page.locator('#totals').locator('..')
+  const totals = page.locator('section[aria-labelledby="totals"]')
   await expect(totals).toContainText('$960.00')
   await expect(totals).toContainText('$1,040.00')
 

@@ -8,6 +8,7 @@ import { operatingReport } from '@/lib/reports/operating.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 import { exportableEntities } from '@/lib/tax/queries.ts'
 import { SUBMIT_BUTTON_CLASSES, scrollableRegionProps } from '@/components/ui-classes.ts'
+import { Panel } from '@/components/panel.tsx'
 
 export const metadata = { title: 'Operating report — Rental Operations' }
 
@@ -153,13 +154,7 @@ export default async function OperatingReportPage({
             </p>
           ) : (
             <>
-              <section
-                aria-labelledby="op-lemon"
-                className="flex flex-col gap-3 rounded-md border p-4"
-              >
-                <h2 id="op-lemon" className="text-lg font-semibold">
-                  {report.legalEntityName} · {report.year} · {report.basis}
-                </h2>
+              <Panel variant="boxed" headingId="op-lemon" title={<>{report.legalEntityName} · {report.year} · {report.basis}</>}>
                 <p className="text-muted-foreground text-xs">
                   Worst net first — a list sorted by name buries the house that is losing money.
                   Vacancy loss is market rent × vacant days; economic occupancy is collected ÷
@@ -306,7 +301,7 @@ export default async function OperatingReportPage({
                     </tbody>
                   </table>
                 </div>
-              </section>
+              </Panel>
 
               <section
                 aria-labelledby="op-monthly"

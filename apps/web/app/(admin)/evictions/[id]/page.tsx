@@ -60,6 +60,7 @@ import { affidavitLookupFor, lookupsForLease } from '@/lib/scra/queries.ts'
 import { exportAttorneyPacket } from '@/lib/evictions/packet.ts'
 import { attachableNotices, cureClockFor, cureDemandFor, getEvictionCase } from '@/lib/evictions/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
+import { Panel } from '@/components/panel.tsx'
 
 export const metadata = { title: 'Eviction case — Rental Operations' }
 
@@ -163,10 +164,7 @@ export default async function EvictionCasePage({ params }: { params: Promise<{ i
           }))}
       />
 
-      <section aria-labelledby="clock" className="flex flex-col gap-2 rounded-md border p-4">
-        <h2 id="clock" className="text-lg font-semibold">
-          Service and the cure period
-        </h2>
+      <Panel variant="boxed" headingId="clock" title="Service and the cure period" gap="gap-2">
         <p className="text-sm">{CURE_STATE_LABELS[clock.state]}</p>
         {clock.runsFrom && <p className="text-muted-foreground text-sm">Runs from {friendlyBusinessDate(clock.runsFrom)}.</p>}
         {clock.cureBy ? (
@@ -214,7 +212,7 @@ export default async function EvictionCasePage({ params }: { params: Promise<{ i
             )}
           </div>
         )}
-      </section>
+      </Panel>
 
       {/* R-156. The fact opposing counsel raises first, on the screen where
           the filing decision is made rather than on the money pages. A
@@ -263,10 +261,7 @@ export default async function EvictionCasePage({ params }: { params: Promise<{ i
         }
       />
 
-      <section aria-labelledby="notices" className="flex flex-col gap-3 rounded-md border p-4">
-        <h2 id="notices" className="text-lg font-semibold">
-          Notices filed under this case
-        </h2>
+      <Panel variant="boxed" headingId="notices" title="Notices filed under this case">
         {evictionCase.notices.length === 0 ? (
           <p className="text-muted-foreground text-sm">None yet.</p>
         ) : (
@@ -340,12 +335,9 @@ export default async function EvictionCasePage({ params }: { params: Promise<{ i
             }))}
           />
         )}
-      </section>
+      </Panel>
 
-      <section aria-labelledby="dates" className="flex flex-col gap-2 rounded-md border p-4">
-        <h2 id="dates" className="text-lg font-semibold">
-          Case dates
-        </h2>
+      <Panel variant="boxed" headingId="dates" title="Case dates" gap="gap-2">
         <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
           {(
             [
@@ -377,13 +369,10 @@ export default async function EvictionCasePage({ params }: { params: Promise<{ i
             {evictionCase.outcomeNote ? ` — ${evictionCase.outcomeNote}` : ''}
           </p>
         )}
-      </section>
+      </Panel>
 
       {stage !== 'CLOSED' && (
-        <section aria-labelledby="advance" className="flex flex-col gap-4 rounded-md border p-4">
-          <h2 id="advance" className="text-lg font-semibold">
-            Record what happened next
-          </h2>
+        <Panel variant="boxed" headingId="advance" title="Record what happened next" gap="gap-4">
           {next && filingReadiness && !filingReadiness.ready ? (
             <p className="text-sm text-warning">
               {FILING_REFUSAL_MESSAGES[filingReadiness.refusal!]}
@@ -409,13 +398,10 @@ export default async function EvictionCasePage({ params }: { params: Promise<{ i
               }))}
             />
           </div>
-        </section>
+        </Panel>
       )}
 
-      <section aria-labelledby="costs" className="flex flex-col gap-3 rounded-md border p-4">
-        <h2 id="costs" className="text-lg font-semibold">
-          What this has cost
-        </h2>
+      <Panel variant="boxed" headingId="costs" title="What this has cost">
         {evictionCase.costs.length === 0 ? (
           <p className="text-muted-foreground text-sm">Nothing recorded yet.</p>
         ) : (
@@ -439,19 +425,16 @@ export default async function EvictionCasePage({ params }: { params: Promise<{ i
             costTypes={EVICTION_COST_TYPES.map((value) => ({ value, label: EVICTION_COST_LABELS[value] }))}
           />
         )}
-      </section>
+      </Panel>
 
-      <section aria-labelledby="packet" className="flex flex-col gap-3 rounded-md border p-4">
-        <h2 id="packet" className="text-lg font-semibold">
-          Attorney packet
-        </h2>
+      <Panel variant="boxed" headingId="packet" title="Attorney packet">
         <p className="text-muted-foreground text-sm">
           One file: this case summary, the statement of account, every notice with its proof of service, the executed
           lease and the photographs on record. Anything that cannot be attached is named on the index rather than
           quietly left out.
         </p>
         <ExportPacketPanel action={exportAttorneyPacket.bind(null, evictionCase.id)} />
-      </section>
+      </Panel>
     </div>
   )
 }

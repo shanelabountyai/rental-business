@@ -1,10 +1,9 @@
 import { formatCents } from '@rental/core/money'
-import { friendlyDate } from '@rental/core/scheduling'
 import Link from 'next/link'
 import { PageHeader } from '@/components/page-header.tsx'
 import { tenantStatement } from '@/lib/payments/queries.ts'
 import { requireTenantWithScope } from '@/lib/portal/guard.ts'
-import { scrollableRegionProps } from '@/components/ui-classes.ts'
+import { StatementTable } from '@/components/portal/statement-table.tsx'
 
 export const metadata = { title: 'Your payments' }
 
@@ -92,76 +91,13 @@ export default async function PaymentHistoryPage() {
           // after that line, whichever order it is displayed in. A tenant
           // opens this to check the most recent thing, not to read a year
           // from the beginning.
-          <div className="overflow-x-auto" {...scrollableRegionProps('Your payments, scrolls sideways')}>
-            <table className="w-full text-sm">
-              <caption className="sr-only">
-                Every charge and payment on your account, newest first, with
-                what you owed after each one.
-              </caption>
-              <thead>
-                <tr className="text-muted-foreground border-b text-left text-xs">
-                  <th scope="col" className="py-2 pr-3 font-medium">
-                    When
-                  </th>
-                  <th scope="col" className="py-2 pr-3 font-medium">
-                    What
-                  </th>
-                  <th scope="col" className="py-2 pr-3 text-right font-medium">
-                    Amount
-                  </th>
-                  <th scope="col" className="py-2 text-right font-medium">
-                    Owed after
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {[...view.lines].reverse().map((line) => {
-                  const isPayment = line.amountCents < 0
-                  const wasReversed = view.reversed.has(line.id)
-                  return (
-                    <tr key={line.id} className="border-b last:border-0">
-                      <td className="py-2 pr-3 whitespace-nowrap">
-                        {/* The PROPERTY's clock, not the server's (R-101c). */}
-                        {friendlyDate(line.occurredAt, view.timezone)}
-                      </td>
-                      <td className="py-2 pr-3">
-                        {/* Its own element, so the description is addressable
-                            on its own — the reversal note below shares this
-                            cell, and running them together makes one string
-                            out of two separate facts. */}
-                        <span>{line.description}</span>
-                        {wasReversed && (
-                          // Said plainly rather than hidden. D-11 keeps the
-                          // original row visible and adds a reversal beside
-                          // it; a tenant who sees a payment listed and then
-                          // reversed needs to know which it was, or the
-                          // statement looks like it double-counted.
-                          <span className="text-muted-foreground block text-xs">
-                            This was later reversed
-                          </span>
-                        )}
-                      </td>
-                      <td
-                        className={`py-2 pr-3 text-right whitespace-nowrap tabular-nums ${
-                          isPayment ? 'text-success' : ''
-                        }`}
-                      >
-                        {/* A payment reduces what is owed, so it shows as a
-                            minus. The sign is not decoration: it is how a
-                            tenant tells "you charged me" from "I paid you"
-                            at a glance. */}
-                        {isPayment ? '−' : ''}
-                        {formatCents(Math.abs(line.amountCents))}
-                      </td>
-                      <td className="py-2 text-right whitespace-nowrap tabular-nums">
-                        {formatCents(Math.max(0, line.runningBalanceCents))}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
+          <StatementTable
+            lines={view.lines}
+            reversed={view.reversed}
+            timezone={view.timezone}
+            label="Your payments, scrolls sideways"
+            caption="Every charge and payment on your account, newest first, with what you owed after each one."
+          />
         )}
       </section>
 

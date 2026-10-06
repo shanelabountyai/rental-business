@@ -36,11 +36,16 @@ Full detail, including the exact gate numbers, in `docs/PROGRESS.md`'s "Carried-
 - No demo-walk screenshot taken for this item — it's a LOW-priority copy pass with "design review sign-off; no automated acceptance" as its own acceptance line, and the e2e runs above already render and assert the real text. A full demo walk is reserved for milestone closes (D-28), not every backlog row. **Flag for Shane to eyeball the new copy/nav subtitles in the demo when convenient** — that's the "design review sign-off" this row asks for; nothing here should be read as having already gotten that sign-off.
 - CI run should be queued on push (`1fef90f`) — **check `gh run list --limit 3` before trusting green.**
 
+## Done 2026-10-05: the three carried-forward items (SHA in `docs/PROGRESS.md`, "Carried-forward cleanup 2")
+
+- `staff.spec.ts` a11y test split per URL. The slowness was 17,779 leftover active legal entities in the access-scope select, now drained in the spec's `beforeAll`; scans are 2s.
+- D-287: the two tenant statement tables are stacked cards on a phone (`components/portal/statement-table.tsx`); staff tables keep their scroll on purpose.
+- D-288: `Panel variant="boxed"`, 25 exact-shape sections migrated; 39 small-heading boxed sections and all other boxed markup stay bespoke on purpose.
+- **Owed:** eyeball `/portal/pay/history` and `/portal/guarantor` at phone width in `dev:demo`. Specs and axe pass on mobile-chrome; nobody has looked at the cards.
+- This was a real code push, so the three queued env rotations below go live with its deployment **only if auto-deploy is on** (D-277 turned it off; check before assuming).
+
 ## Carried forward, unchanged:
 
-- **A future item should decide the dozen other sideways-scrolling tables** UX-09 deliberately left as `overflow-x-auto` (not cards) — `workorders/bids-panel.tsx`, every `reports/*` page, `tasks/page.tsx`, `money/ops-log.tsx`, etc. The explicit-role + `sm:hidden`-label pattern in `ledger-panel.tsx`/`rent-roll-table.tsx` is the reference implementation if/when one of them gets the same treatment.
-- **`staff.spec.ts`'s a11y test still deserves a per-URL split**, not just the timeout raise done today — see above.
-- **A follow-up item should decide the ad hoc boxed/unboxed panel sections UX-07 deliberately left out** (D-284) — whether `Panel` grows a `variant` prop or they stay bespoke. Also `components/portal/tenant-consent-section.tsx`'s one skipped `consent` panel.
 - **OPS-01 still open, deliberately skipped** — go-live readiness list (no live Stripe key, $0 deposit on imported leases, no portal invite for imported tenants, simulated e-sign, daily-cron message delay). Revisit only when going live is actually planned.
 - ✅ **DONE 2026-10-05: webhook endpoint created and live.** Turned out `we_1U47bfJ7dm36XvZPk4ekxGak` didn't exist at all — confirmed via `stripe webhook_endpoints list` against this project's actual test key, which returned zero endpoints. `docs/DEPLOYMENT.md`'s "set up and verified 2026-08-13" was stale; the orphaned `STRIPE_WEBHOOK_SECRET` in Vercel pointed at a deleted endpoint, meaning **no Stripe event had been reaching production at all**, not just the wrong dispute event. Created a new endpoint with the correct 10-event `HANDLED_EVENTS` list (`packages/core/billing/events.ts`), API version pinned to `2024-06-20` to match `stripe-adapter.ts:54`, new `STRIPE_WEBHOOK_SECRET` saved to Vercel Production, redeployed (`dpl` built clean from commits through `6f30621`) — confirmed Ready.
 - ✅ **DONE 2026-10-05: production migrated.** `20260929120000` (LEGAL-02) and `20260929180000` (LEGAL-03) both applied via the `docs/DEPLOYMENT.md` neonctl/`prisma migrate deploy` recipe. `migrate status` confirmed exactly these two pending beforehand, both additive (nullable columns, one enum value, a widened constraint); `migrate status` afterward: "Database schema is up to date!", all 118 migrations in sync.

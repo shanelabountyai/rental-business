@@ -70,10 +70,7 @@ export function LossPhotosPanel({ claim, action }: { claim: ClaimView; action: A
   const [state, formAction] = useActionState<ClaimFormState, FormData>(action, {})
 
   return (
-    <section aria-labelledby="loss-photos" className="flex flex-col gap-3 rounded-md border p-4">
-      <h2 id="loss-photos" className="text-lg font-semibold">
-        Photographs of the loss
-      </h2>
+    <Panel variant="boxed" headingId="loss-photos" title="Photographs of the loss">
 
       {claim.documents.length === 0 ? (
         <p className="text-muted-foreground text-sm">
@@ -124,7 +121,7 @@ export function LossPhotosPanel({ claim, action }: { claim: ClaimView; action: A
           <SubmitButton label="Attach these" />
         </form>
       )}
-    </section>
+    </Panel>
   )
 }
 
@@ -152,10 +149,7 @@ export function PositionPanel({
   const { position } = claim
 
   return (
-    <section aria-labelledby="position" className="flex flex-col gap-3 rounded-md border p-4">
-      <h2 id="position" className="text-lg font-semibold">
-        Payout against cost
-      </h2>
+    <Panel variant="boxed" headingId="position" title="Payout against cost">
 
       <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
         <dt>Repair cost, from the jobs</dt>
@@ -240,7 +234,7 @@ export function PositionPanel({
           <SubmitButton label="Attach this job" />
         </form>
       )}
-    </section>
+    </Panel>
   )
 }
 
@@ -249,10 +243,7 @@ export function PaymentsPanel({ claim, action }: { claim: ClaimView; action: Act
   const errors = state.fieldErrors ?? {}
 
   return (
-    <section aria-labelledby="claim-payments" className="flex flex-col gap-3 rounded-md border p-4">
-      <h2 id="claim-payments" className="text-lg font-semibold">
-        Money received
-      </h2>
+    <Panel variant="boxed" headingId="claim-payments" title="Money received">
 
       {claim.payments.length === 0 ? (
         <p className="text-muted-foreground text-sm">Nothing received yet.</p>
@@ -315,7 +306,7 @@ export function PaymentsPanel({ claim, action }: { claim: ClaimView; action: Act
           <SubmitButton label="Record this payment" />
         </form>
       )}
-    </section>
+    </Panel>
   )
 }
 
@@ -328,10 +319,7 @@ export function LossOfRentsPanel({ claim, units, action }: {
   const errors = state.fieldErrors ?? {}
 
   return (
-    <section aria-labelledby="loss-of-rents" className="flex flex-col gap-3 rounded-md border p-4">
-      <h2 id="loss-of-rents" className="text-lg font-semibold">
-        Rent lost while it was down
-      </h2>
+    <Panel variant="boxed" headingId="loss-of-rents" title="Rent lost while it was down">
 
       {/* A "no" here is a real answer and it is said plainly rather than the
           section quietly disappearing — an owner who assumes they are covered
@@ -392,7 +380,7 @@ export function LossOfRentsPanel({ claim, units, action }: {
           <SubmitButton label="Record the downtime" />
         </form>
       )}
-    </section>
+    </Panel>
   )
 }
 
@@ -401,10 +389,7 @@ export function TimelinePanel({ claim, action }: { claim: ClaimView; action: Act
   const errors = state.fieldErrors ?? {}
 
   return (
-    <section aria-labelledby="claim-timeline" className="flex flex-col gap-3 rounded-md border p-4">
-      <h2 id="claim-timeline" className="text-lg font-semibold">
-        What the carrier said, and when
-      </h2>
+    <Panel variant="boxed" headingId="claim-timeline" title="What the carrier said, and when">
 
       {claim.events.length === 0 ? (
         <p className="text-muted-foreground text-sm">Nothing logged yet.</p>
@@ -475,7 +460,7 @@ export function TimelinePanel({ claim, action }: { claim: ClaimView; action: Act
           <SubmitButton label="Log it" />
         </form>
       )}
-    </section>
+    </Panel>
   )
 }
 
@@ -490,10 +475,7 @@ export function ClaimDetailsPanel({ claim, action }: { claim: ClaimView; action:
     value ? utcToWallClock(value, claim.timezone) : ''
 
   return (
-    <section aria-labelledby="claim-details" className="flex flex-col gap-3 rounded-md border p-4">
-      <h2 id="claim-details" className="text-lg font-semibold">
-        The carrier and the adjuster
-      </h2>
+    <Panel variant="boxed" headingId="claim-details" title="The carrier and the adjuster">
 
       {claim.status === 'CLOSED' ? (
         <p className="text-sm">
@@ -561,7 +543,7 @@ export function ClaimDetailsPanel({ claim, action }: { claim: ClaimView; action:
           <SubmitButton label="Save these details" />
         </form>
       )}
-    </section>
+    </Panel>
   )
 }
 

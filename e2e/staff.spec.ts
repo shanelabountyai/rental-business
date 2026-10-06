@@ -373,23 +373,38 @@ test('a property-scoped manager cannot reach the directory at all', async ({ pag
  * against R-102b and R-040e. 180s was deliberately far above the 45s
  * isolated measurement, but under sweep contention it was measured at 174s
  * (2.9min) against the 180s budget — the same no-headroom pattern one level
- * up. Raised to 300s, which is still well short of splitting into one test
- * per URL (the real fix, left for whoever next touches this file).
+ * up, and the 300s that replaced it lost again once the isolated cost grew to
+ * 3.8 minutes. Now ONE TEST PER URL, so each scan gets its own budget and its
+ * own sign-in, and a slow page names itself instead of timing out a
+ * neighbour's scan.
  *
- * The 10x spread between the first page and the other two is not noise and is
- * not addressed here: axe's cost is superlinear in node count, so a 21s scan
- * is a page saying it is very large. Left as found, and noted.
+ * THE 10x SPREAD BETWEEN THE FIRST PAGE AND THE OTHER TWO WAS DEBRIS, not the
+ * pages. Both carry the access-scope select, which lists every ACTIVE legal
+ * entity, and specs deactivate their property in `afterAll` but leave its
+ * entity active: `rental_test` held 17,779 of them, so axe was scanning a
+ * select with ~17,800 options and each split test still timed out at 180s.
+ * The `beforeAll` below retires them BY OWNERSHIP, never by age (R-109): an
+ * entity that has properties, all of them inactive, is a spec that has
+ * finished. One with no property yet may be a fixture mid-creation in another
+ * worker, so it is left alone.
  * ==========================================================================
  */
-test('the staff screens are accessible', async ({ page }) => {
-  test.setTimeout(300_000)
-  const owner = await createStaff('owner', { mfa: true })
-  const target = await createStaff('manager')
-  await signIn(page, owner)
+test.beforeAll(async () => {
+  await prisma.legalEntity.updateMany({
+    where: { active: true, properties: { some: {}, every: { active: false } } },
+    data: { active: false },
+  })
+})
 
-  for (const url of ['/staff', '/staff/new', `/staff/${target.id}`]) {
+for (const screen of ['/staff', '/staff/new', '/staff/[id]']) {
+  test(`the staff screen ${screen} is accessible`, async ({ page }) => {
+    test.setTimeout(180_000)
+    const owner = await createStaff('owner', { mfa: true })
+    const url = screen.replace('[id]', (await createStaff('manager')).id)
+    await signIn(page, owner)
+
     await page.goto(url)
     const results = await axeScan(page)
     expect(results.violations, `${url} has axe violations`).toEqual([])
-  }
-})
+  })
+}

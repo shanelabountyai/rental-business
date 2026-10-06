@@ -10,6 +10,7 @@ import {
   type BusinessDate,
 } from '@rental/core/scheduling'
 import { SUBMIT_BUTTON_CLASSES, scrollableRegionProps } from '@/components/ui-classes.ts'
+import { Panel } from '@/components/panel.tsx'
 
 export const metadata = { title: 'Leasing funnel — Rental Operations' }
 
@@ -100,10 +101,7 @@ export default async function LeasingFunnelPage({
         </button>
       </form>
 
-      <section aria-labelledby="lf-funnel" className="flex flex-col gap-3 rounded-md border p-4">
-        <h2 id="lf-funnel" className="text-lg font-semibold">
-          The funnel
-        </h2>
+      <Panel variant="boxed" headingId="lf-funnel" title="The funnel">
         <p className="text-muted-foreground text-xs">
           One row per <strong>person</strong>, not per booking — somebody who rescheduled twice is
           one prospect who viewed the home. Conversion is measured{' '}
@@ -140,7 +138,7 @@ export default async function LeasingFunnelPage({
             </li>
           ))}
         </ul>
-      </section>
+      </Panel>
 
       <section aria-labelledby="lf-sources" className="flex flex-col gap-2 rounded-md border p-4">
         <h2 id="lf-sources" className="text-sm font-semibold">

@@ -9,6 +9,7 @@ import { requireScope } from '@/lib/auth/guard.ts'
 import { recordPropertyExpense, stopExpenseRecurrence } from '@/lib/property-expenses/actions.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 import { exportableEntities } from '@/lib/tax/queries.ts'
+import { Panel } from '@/components/panel.tsx'
 
 export const metadata = { title: 'Property expenses — Rental Operations' }
 
@@ -70,10 +71,7 @@ export default async function PropertyExpensesPage() {
         </p>
       </header>
 
-      <section aria-labelledby="record-expense" className="flex flex-col gap-4 rounded-md border p-4">
-        <h2 id="record-expense" className="text-lg font-semibold">
-          Record an expense
-        </h2>
+      <Panel variant="boxed" headingId="record-expense" title="Record an expense" gap="gap-4">
         {entities.length === 0 ? (
           <p className="text-muted-foreground text-sm">No legal entities in scope.</p>
         ) : (
@@ -83,7 +81,7 @@ export default async function PropertyExpensesPage() {
             properties={properties}
           />
         )}
-      </section>
+      </Panel>
 
       <section aria-labelledby="recent-expenses" className="flex flex-col gap-3">
         <h2 id="recent-expenses" className="text-lg font-semibold">

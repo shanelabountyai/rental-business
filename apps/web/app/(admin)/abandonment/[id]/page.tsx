@@ -123,10 +123,7 @@ export default async function AbandonmentCasePage({
           product never blocks on this — an operator with a genuine reason to
           move faster should not be arguing with a counter — but the gaps are
           exactly what the other side's solicitor will list. */}
-      <section aria-labelledby="evidence" className="flex flex-col gap-2 rounded-md border p-4">
-        <h2 id="evidence" className="text-lg font-semibold">
-          Where the evidence stands
-        </h2>
+      <Panel variant="boxed" headingId="evidence" title="Where the evidence stands" gap="gap-2">
         <p className="text-sm">
           {found.attempts.length} attempt{found.attempts.length === 1 ? '' : 's'} across{' '}
           {evidence.distinctMethods} method{evidence.distinctMethods === 1 ? '' : 's'}
@@ -146,12 +143,9 @@ export default async function AbandonmentCasePage({
             ))}
           </ul>
         )}
-      </section>
+      </Panel>
 
-      <section aria-labelledby="attempts" className="flex flex-col gap-3 rounded-md border p-4">
-        <h2 id="attempts" className="text-lg font-semibold">
-          Contact attempts
-        </h2>
+      <Panel variant="boxed" headingId="attempts" title="Contact attempts">
         {found.attempts.length === 0 ? (
           <p className="text-muted-foreground text-sm">None logged yet.</p>
         ) : (
@@ -170,12 +164,9 @@ export default async function AbandonmentCasePage({
           </ul>
         )}
         {openCase && <LogAttemptPanel caseId={found.id} action={logContactAttempt} />}
-      </section>
+      </Panel>
 
-      <section aria-labelledby="entry" className="flex flex-col gap-3 rounded-md border p-4">
-        <h2 id="entry" className="text-lg font-semibold">
-          The entry
-        </h2>
+      <Panel variant="boxed" headingId="entry" title="The entry">
         {found.enteredAt ? (
           <>
             <p className="text-sm">
@@ -206,13 +197,10 @@ export default async function AbandonmentCasePage({
         ) : (
           <p className="text-muted-foreground text-sm">The unit was never entered.</p>
         )}
-      </section>
+      </Panel>
 
       {found.documents.length > 0 && (
-        <section aria-labelledby="photos" className="flex flex-col gap-2 rounded-md border p-4">
-          <h2 id="photos" className="text-lg font-semibold">
-            Photographs
-          </h2>
+        <Panel variant="boxed" headingId="photos" title="Photographs" gap="gap-2">
           <ul className="flex flex-col gap-1 text-sm">
             {found.documents.map((document) => (
               <li key={document.id}>
@@ -225,17 +213,11 @@ export default async function AbandonmentCasePage({
               </li>
             ))}
           </ul>
-        </section>
+        </Panel>
       )}
 
       {found.enteredAt && (
-        <section
-          aria-labelledby="belongings"
-          className="flex flex-col gap-3 rounded-md border p-4"
-        >
-          <h2 id="belongings" className="text-lg font-semibold">
-            Their belongings
-          </h2>
+        <Panel variant="boxed" headingId="belongings" title="Their belongings">
 
           {found.belongingsHeldFrom ? (
             <>
@@ -271,7 +253,7 @@ export default async function AbandonmentCasePage({
           ) : (
             openCase && <HoldBelongingsPanel caseId={found.id} action={holdBelongings} />
           )}
-        </section>
+        </Panel>
       )}
 
       {openCase ? (

@@ -14333,3 +14333,27 @@ Not a backlog row — the backlog (`06-backlog.md`) has nothing buildable left t
 **Found along the way.** `rental_demo` was four migrations behind, which nothing reports because `db:status` covers only test and dev. `/money/deposits` redirects an owner without MFA to `/account`; correct (`ledger.adjust` is privileged) and previously undocumented in the script.
 
 **Gate.** Docs only; no lint, typecheck or test run was needed and none is claimed.
+
+## Carried-forward cleanup 2 — staff a11y split, tenant statement cards, boxed `Panel` variant (D-287, D-288)
+**Commit:** `SHA_PENDING`  ·  **Date:** 2026-10-05
+
+Not a backlog row. Closes the three "carried forward" items `NEXT.md` listed after project closure.
+
+**What it built.**
+- `e2e/staff.spec.ts` — the one three-URL accessibility test is now one test per URL (`/staff`, `/staff/new`, `/staff/[id]`), each with its own sign-in and a 180s budget, plus a `beforeAll` that retires finished specs' legal entities.
+- `components/portal/statement-table.tsx` — the statement table `/portal/pay/history` and `/portal/guarantor` each carried line for line, now one component, rendered as stacked cards below `sm` on the UX-09 pattern (explicit table/row/cell roles, an `sm:hidden` label per cell).
+- `components/panel.tsx` — `variant="boxed"`; 25 sections across 11 files migrated by codemod, heading ids unchanged.
+
+**What it decided.**
+- D-287: only the two tenant-facing tables become cards; every staff table keeps its keyboard-accessible scroll.
+- D-288: `Panel variant="boxed"` is for sections that already had `Panel`'s exact shape. The other boxed markup stays bespoke.
+
+**Real bug found.** The split alone did not fix the timeout: `/staff/new` and `/staff/[id]` still ran past 180s each. The "superlinear axe cost on a very large page" the old comment recorded as unexplained was test debris. Both pages carry the access-scope select, which lists every active legal entity; specs deactivate their property in `afterAll` and leave its entity active, and `rental_test` held **17,779** active entities. Retiring the ones whose properties are all inactive (ownership, not age, per R-109) left 53, and both scans went from over 3 minutes to **2.2s**. `/staff` is 12s. Production is unaffected: it is a select sized to the number of legal entities, which is single digits for the product's audience.
+
+**What it left behind.**
+- 39 boxed sections with a `text-sm font-semibold` heading were not migrated; the pre-build estimate of ~54 exact matches counted them by mistake (corrected in D-288).
+- `Panel` wraps its heading in a header row, so a spec that walks up from a heading id (`locator('#x').locator('..')`) lands on that row, not the section. `deposit-disposition.spec.ts` did this for `#totals` and was the one spec that went red; it now targets `section[aria-labelledby="totals"]`. No other spec walks up from a migrated id.
+- The stacked statement cards were not walked in a browser at 412px. The mobile-chrome specs and axe scans for both pages pass; the visual check is still owed.
+- The roughly sixty spec files that leave a legal entity active still do. The drain in `staff.spec.ts` covers the cost; fixing each `afterAll` was not done.
+
+**Gate.** lint, typecheck, build clean. `npm test`: 256 files / 3,479 passed, 4 skipped. Scoped e2e, both projects, 14 spec files: 185 passed + 1 skipped = 186, reconciled against `--list` (186). The full sweep was not run locally; CI owns it.

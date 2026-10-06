@@ -203,10 +203,7 @@ export default async function DepositDispositionPage({
         )}
       </section>
 
-      <section aria-labelledby="totals" className="flex flex-col gap-2 rounded-md border p-4">
-        <h2 id="totals" className="text-lg font-semibold">
-          Totals
-        </h2>
+      <Panel variant="boxed" headingId="totals" title="Totals" gap="gap-2">
         <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
           <dt className="text-muted-foreground">Held</dt>
           <dd>{formatCents(totals.heldCents)}</dd>
@@ -229,7 +226,7 @@ export default async function DepositDispositionPage({
             </>
           )}
         </dl>
-      </section>
+      </Panel>
 
       {finalized ? (
         <Panel headingId="refund" title="Refund payment">

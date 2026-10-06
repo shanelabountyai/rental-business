@@ -11,6 +11,7 @@ import { maintenanceAnalytics } from '@/lib/reports/maintenance.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 import { reportToday } from '@/lib/scope/report-today.ts'
 import { SUBMIT_BUTTON_CLASSES, scrollableRegionProps } from '@/components/ui-classes.ts'
+import { Panel } from '@/components/panel.tsx'
 
 export const metadata = { title: 'Maintenance analytics — Rental Operations' }
 
@@ -108,10 +109,7 @@ export default async function MaintenanceAnalyticsPage({
         </button>
       </form>
 
-      <section aria-labelledby="ma-resolve" className="flex flex-col gap-2 rounded-md border p-4">
-        <h2 id="ma-resolve" className="text-lg font-semibold">
-          Time to resolve, by priority
-        </h2>
+      <Panel variant="boxed" headingId="ma-resolve" title="Time to resolve, by priority" gap="gap-2">
         <p className="text-muted-foreground text-xs">
           The <strong>ticket&rsquo;s</strong> own clock — reported to closed — not a work
           order&rsquo;s. A ticket can outlive several jobs (a callback, a second visit) before it
@@ -129,7 +127,7 @@ export default async function MaintenanceAnalyticsPage({
             </div>
           ))}
         </dl>
-      </section>
+      </Panel>
 
       <section aria-labelledby="ma-repeat" className="flex flex-col gap-2 rounded-md border p-4">
         <h2 id="ma-repeat" className="text-sm font-semibold">

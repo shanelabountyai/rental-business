@@ -9,6 +9,7 @@ import { VendorRecordForm } from '@/components/vendors/vendor-record-form.tsx'
 import { requirePermission } from '@/lib/auth/guard.ts'
 import { deactivateVendor, saveVendorRecord } from '@/lib/vendors/staff-actions.ts'
 import { getVendor, vendorPaymentTotalsForYear } from '@/lib/vendors/staff-queries.ts'
+import { Panel } from '@/components/panel.tsx'
 
 export const metadata = { title: 'Vendor — Rental Operations' }
 
@@ -38,10 +39,7 @@ export default async function VendorPage({
         <PageHeader title={vendor.name} />
       </header>
 
-      <section aria-labelledby="totals" className="flex flex-col gap-2 rounded-md border p-4">
-        <h2 id="totals" className="text-lg font-semibold">
-          Paid in {year}
-        </h2>
+      <Panel variant="boxed" headingId="totals" title={<>Paid in {year}</>} gap="gap-2">
         {totals.totalCents === 0 ? (
           <p className="text-muted-foreground text-sm">Nothing paid yet this year.</p>
         ) : (
@@ -61,7 +59,7 @@ export default async function VendorPage({
             $600 or more paid this year — a 1099-NEC candidate.
           </p>
         )}
-      </section>
+      </Panel>
 
       <VendorRecordForm
         action={saveVendorRecord.bind(null, vendor.id)}

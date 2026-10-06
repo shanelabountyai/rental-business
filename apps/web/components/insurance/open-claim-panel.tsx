@@ -7,6 +7,7 @@ import { FormAlerts, SubmitButton } from '@/components/auth-form.tsx'
 import { SelectField, TextField, TextareaField } from '@/components/form/field.tsx'
 import type { ClaimFormState } from '@/lib/insurance/actions.ts'
 import type { ClaimSummary } from '@/lib/insurance/queries.ts'
+import { Panel } from '@/components/panel.tsx'
 
 // Opening a claim from the property it happened at (RISK-07, R-089).
 //
@@ -30,10 +31,7 @@ export function OpenClaimPanel({
   const errors = state.fieldErrors ?? {}
 
   return (
-    <section aria-labelledby="property-claims" className="flex flex-col gap-3 rounded-md border p-4">
-      <h2 id="property-claims" className="text-lg font-semibold">
-        Claims on this property
-      </h2>
+    <Panel variant="boxed" headingId="property-claims" title="Claims on this property">
 
       {claims.length > 0 && (
         <ul className="flex flex-col gap-1 text-sm">
@@ -129,6 +127,6 @@ export function OpenClaimPanel({
           </div>
         </details>
       )}
-    </section>
+    </Panel>
   )
 }

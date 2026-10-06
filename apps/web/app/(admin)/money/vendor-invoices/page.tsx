@@ -8,6 +8,7 @@ import { RecordInvoiceForm } from '@/components/vendor-invoices/record-invoice-f
 import { requireScope } from '@/lib/auth/guard.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 import { recordVendorInvoice } from '@/lib/vendor-invoices/actions.ts'
+import { Panel } from '@/components/panel.tsx'
 
 export const metadata = { title: 'Vendor invoices — Rental Operations' }
 
@@ -81,10 +82,7 @@ export default async function VendorInvoicesPage() {
         </p>
       </header>
 
-      <section aria-labelledby="record-invoice" className="flex flex-col gap-4 rounded-md border p-4">
-        <h2 id="record-invoice" className="text-lg font-semibold">
-          Record an invoice
-        </h2>
+      <Panel variant="boxed" headingId="record-invoice" title="Record an invoice" gap="gap-4">
         {entities.length === 0 || vendors.length === 0 ? (
           <p className="text-muted-foreground text-sm">
             {vendors.length === 0
@@ -99,7 +97,7 @@ export default async function VendorInvoicesPage() {
             vendors={vendors}
           />
         )}
-      </section>
+      </Panel>
 
       <section aria-labelledby="recent-invoices" className="flex flex-col gap-3">
         <h2 id="recent-invoices" className="text-lg font-semibold">
