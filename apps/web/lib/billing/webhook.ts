@@ -159,7 +159,7 @@ async function projectClaimed(
     return { outcome: 'ignored', detail }
   }
 
-  const intent = interpretation.intent
+  const intent = await resolveRefundInvoice(interpretation.intent)
 
   // A LOST CHARGEBACK (MONEY-04). A Dispute names no customer, so the payer
   // lookups below would find nobody; it is resolved from its Payment instead.
@@ -601,6 +601,35 @@ async function writePayment(
         },
       })
       return existing
+    }
+  }
+
+  // A REFUND OF A CARD AUTOPAY PAYMENT (MONEY-13). That row was written from
+  // `invoice.updated` with no intent, so the lookup above cannot find it and
+  // used to mint a fresh REFUNDED row beside the SETTLED original (D-272).
+  // Harmless on its own; fatal once a chargeback follows, because
+  // `projectLostDispute` reaches the original through the same invoice and
+  // reverses it a second time. Landing the refund on the original means the
+  // later dispute sees REFUNDED and ignores it, and the MONEY-10 cap applies
+  // because the row has ledger rows. The invoice is the event's own where it
+  // carries one, else what `resolveRefundInvoice` asked Stripe for.
+  if (intent.kind === 'refund' && intent.stripeInvoiceId) {
+    const original = await tx.payment.findFirst({
+      where: {
+        leasePayerId: payer.id,
+        stripeInvoiceId: intent.stripeInvoiceId,
+        status: 'SETTLED',
+        amountCents: { gte: intent.amountCents },
+      },
+      orderBy: { receivedAt: 'desc' },
+      select: { id: true, status: true },
+    })
+    if (original) {
+      await tx.payment.update({
+        where: { id: original.id },
+        data: { status, reversedAt: intent.occurredAt },
+      })
+      return original
     }
   }
 
@@ -1092,6 +1121,33 @@ async function sendPaymentFailedFix(
   if (deliveryIds.length > 0) {
     await dispatchPendingNotifications(new Date(), 50, { deliveryIds })
   }
+}
+
+/**
+ * The invoice a refund's intent paid, for a refund of a payment this ledger
+ * recorded by invoice alone (MONEY-13).
+ *
+ * Under the account's API version the charge carries no `invoice` (D-274
+ * measured it), and a card autopay row has no intent to match on, so without
+ * this the refund cannot find its payment. Asked of Stripe BEFORE the
+ * transaction, exactly as `projectLostDispute` does: a network call inside an
+ * interactive transaction holds a pooled connection for its whole round trip.
+ * Skipped when the row is already findable by intent, so a portal refund
+ * costs no extra call.
+ */
+async function resolveRefundInvoice(intent: ProjectionIntent): Promise<ProjectionIntent> {
+  if (intent.kind !== 'refund' || intent.stripeInvoiceId || !intent.stripePaymentIntentId) {
+    return intent
+  }
+  const known = await prisma.payment.findUnique({
+    where: { stripePaymentIntentId: intent.stripePaymentIntentId },
+    select: { id: true },
+  })
+  if (known) return intent
+  const stripeInvoiceId = await getBillingProvider().findInvoiceForPaymentIntent(
+    intent.stripePaymentIntentId,
+  )
+  return stripeInvoiceId ? { ...intent, stripeInvoiceId } : intent
 }
 
 /**

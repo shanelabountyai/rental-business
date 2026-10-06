@@ -1691,4 +1691,41 @@ describe('a lost chargeback (MONEY-04)', () => {
     lookup.mockRestore()
     expect(await balance()).toBe(before)
   }, 30_000)
+
+  it('ignores a loss on a card autopay payment that was already refunded (MONEY-13)', async () => {
+    // Refund then chargeback on one card charge is an ordinary sequence. The
+    // refund used to mint a fresh REFUNDED row beside the SETTLED original,
+    // and the lost dispute then reversed the original on top of it.
+    const { payer, customer, balance } = await setup()
+    const now = Math.floor(Date.now() / 1000)
+    const invoiceId = `in_${randomUUID().replace(/-/g, '').slice(0, 14)}`
+    await processStripeEvent(invoiceEvent({ customer, invoiceId, type: 'invoice.finalized', amountDue: 150_000, created: now }))
+    const before = await balance()
+    await processStripeEvent(invoiceEvent({ customer, invoiceId, amountPaid: 150_000, paymentIntentId: null, created: now }))
+    expect(await balance()).toBe(before - 150_000)
+
+    // Measured under dahlia: the charge names its intent and customer, never
+    // its invoice, so both the refund and the dispute have to ask Stripe.
+    const paymentIntentId = `pi_${randomUUID().replace(/-/g, '').slice(0, 16)}`
+    const lookup = vi.spyOn(getBillingProvider(), 'findInvoiceForPaymentIntent').mockResolvedValue(invoiceId)
+    await processStripeEvent({
+      id: `evt_${randomUUID().replace(/-/g, '')}`,
+      type: 'charge.refunded',
+      created: now + 60,
+      data: {
+        object: { id: `ch_${randomUUID().replace(/-/g, '').slice(0, 14)}`, customer, amount_refunded: 150_000, payment_intent: paymentIntentId },
+      },
+    })
+    expect(await balance()).toBe(before)
+
+    expect((await closed(paymentIntentId, 'lost', 150_000, now + 120)).outcome).toBe('ignored')
+    lookup.mockRestore()
+    expect(await balance()).toBe(before)
+
+    // One row, on the original payment - not a second one minted for the refund.
+    const payments = await prisma.payment.findMany({ where: { leasePayerId: payer.id } })
+    expect(payments).toHaveLength(1)
+    expect(payments[0]).toMatchObject({ status: 'REFUNDED', stripeInvoiceId: invoiceId, amountCents: 150_000 })
+    expect(payments[0]!.reversedAt).not.toBeNull()
+  }, 30_000)
 })

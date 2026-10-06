@@ -1,5 +1,7 @@
 # Next session
 
+**2026-10-05 (later): MONEY-13 fixed (D-290).** SHA and gate in `docs/PROGRESS.md`. Queue row 1 is done; a bare `go` picks up **row 2: MONEY-14 + MONEY-16 + TEST-01** (Opus). Shane's three steps below are still owed and unchanged — nothing in MONEY-13 adds a migration, so the D-289 one is still the only pending one.
+
 **2026-10-05 (night): MONEY-11 + MONEY-12 fixed (D-289), MONEY-15 comment, SEC-21 repo side.** SHA and gate in `docs/PROGRESS.md`. The list below is the earlier session's; items 1 and 3 are updated here.
 
 ## Owed by Shane, in this order
@@ -10,26 +12,29 @@
 
 ## Next buildable item
 
-**MONEY-13** (refund then lost dispute on a card-autopay row reverses twice), then MONEY-14, MONEY-16, TEST-01. Opus for the MONEY rows.
+~~MONEY-13~~ done (D-290). **MONEY-14 + MONEY-16 + TEST-01** next (queue row 2), Opus.
 
 Also still owed: eyeball `/portal/pay/history` and `/portal/guarantor` at phone width in `dev:demo`; commit the storage repo's convention port (item 5 below).
 
 ---
 
-**2026-10-05 (late): post-closure review session.** The "No loose ends" line below was wrong in three places, and a second-pass review of the 09-28 money fixes found real rows. Nothing in the rental repo was committed this session; everything is in the working tree.
+**2026-10-05 (late): post-closure review — run queue.** Reconciled after the "night" session above landed MONEY-11/12/15 (D-289) and the D-277 edit. Shane's three steps above come first; then a bare `go` runs this, top to bottom. The same queue is the last section of `docs/prds/06-backlog.md`.
 
-## Found this session — in priority order
+## Queue (one session each) — model in brackets; **Fable** = the review session's own recommendation for work where the cost of a wrong answer is high
 
-1. **SEC-21 — the `main-manual` Deploy Hook URL is committed in `07-decisions.md` D-277 (`bf30ca7`) and the repo is public (D-285).** Unauthenticated POST = anyone can burn production build minutes. Regenerate the hook in Vercel, keep the new URL out of the repo, replace the line in D-277. Row added to `06-backlog.md`.
-2. **The three queued env rotations will NOT ship on the next code push.** The carried-forward note below says they wait on "a real (non-docs) code push", but `apps/web/vercel.json` has `git.deploymentEnabled: false` (D-277) — pushes do not deploy at all. They need the hook POSTed (or Deploy clicked in Vercel). Blob and Stripe test keys are on grace periods, so do this before regenerating the hook, or regenerate first and use the new one. The Vercel connector returns 403 on this team, so Claude cannot trigger it; Shane does.
-3. **(MONEY-11, 12, 15 now fixed — D-289.)** **MONEY-11..16 — second-pass review of D-268/269/272/274** (`06-backlog.md`, new section at the bottom). Two are worth re-opening the project for: **MONEY-11** (a Stripe timeout after the payment record was written → split deleted → echo mints a second credit) and **MONEY-12** (a process dying mid-push leaves an unclaimed split that absorbs Stripe's own autopay retry — MONEY-01 again, with the detector off). **MONEY-13** (refund then lost dispute on a card-autopay row reverses twice) is a real sequence too. One `pushedAt` column on `PaymentInvoiceSplit` closes 11 and 12 together.
-4. ~~`e2e/staff.spec.ts` uncommitted~~ — it was in the working tree when this session started and landed as `0a5c5fe` (carried-forward cleanup 2, D-287/D-288) from a parallel Claude Code session at 22:07 while this one was running. **Two sessions were editing this tree at once**; this one touched only `NEXT.md` and `06-backlog.md` (pure additions, verified with `git diff` — no lines removed).
-5. **Storage repo got the convention port (D in Shane's pick list), uncommitted there:** `scripts/ship-deps.mts` (new, run clean: 778 dev packages, no offender), `package.json` scripts `check:ship-deps` / `db:drift` / `db:ci`+3 / `lighthouse` / `ci:local`, `lighthouserc.json` `startServerCommand` → `start:test`, and a "Carried over from the rental build" section at the end of its `CLAUDE.md` (10 rules, each citing the rental item). `tsc -p tsconfig.tests.json` green with the new script. Not run there: `db:ci` and `lighthouse` (need local Postgres / a build). Commit from the storage repo as a B-item or a housekeeping commit.
-6. **TEST-01** — one nit from the static test-trap sweep; the sweep was otherwise clean on all five named traps.
+1. ~~**MONEY-13**~~ ✅ done 2026-10-05 (D-290) — refund gets the dispute's invoice fallback (`findInvoiceForPaymentIntent`); refund→lost-dispute test on a card-autopay row. [**Fable** — it crosses three event paths (refund, dispute, invoice fallback) and the night session's D-289 shows the backlog's stated fix can be wrong; Opus acceptable]
+2. **MONEY-14 + MONEY-16 + TEST-01** — partial-dispute cap; per-lease serialisation of `planAllocation` or a recorded decision not to; `renewal-rollover-job.test.ts` state code. [Opus; the MONEY-16 serialise-or-decline call is the one to think about]
+3. **CLOSE-01** — regenerate `PRD.docx` (rendered 2026-08-01; 8 PRD commits since, latest 2026-09-18) or drop it from the closure deliverables in `WRITEUP.md`. [Sonnet]
+4. **CLOSE-02** — pre-counsel citation table for the seeded TX `JurisdictionRule` → `docs/LEGAL-REVIEW-CHECKLIST.md` (MONEY-05 is row one). Prep for the human review, not legal advice. [**Fable**, with web search on — statute text must be quoted from the Texas Property Code as published, every row carries a confidence, and a confident wrong citation is worse than a blank; this is the row where model quality matters most]
+5. **CLOSE-03** — by-topic index of `07-decisions.md` (289 D-numbers): money / jurisdiction / infra+deploy / tests / UX. [Sonnet]
+6. **CLOSE-04** — Shane deletes `_to_delete/` (`BACKLOG.md`, `PRD.md`, `git-locks`, `rental-starter.zip`).
+7. **CLOSE-05** — demo walk in a browser after 1–2 and the D-289 deploy (D-28: money-path changes), including the phone-width eyeball of `/portal/pay/history` and `/portal/guarantor` the night session asked for. [Opus; the walk finds things a test cannot — R-105 found seven]
+
+Storage repo (`~/Projects/storage business`) has its own two-item queue at the top of its `NEXT.md`: commit the convention port [Sonnet], then the same adversarial money review on its Stripe path [**Fable** — this is the pass that found MONEY-11..16 here].
 
 ## Correction to the record
 
-"No loose ends" (the line kept below for the record) was written before items 1, 2 and 4 above were checked. Item 2 is the kind of claim `CLAUDE.md` already warns about — a status line copied forward (from the 09-28 `ignoreCommand` finding) past the decision (D-277, 09-29) that made it false.
+"No loose ends" (kept below for the record) was wrong in three places when written: the hook URL, the deploy mechanism (status line copied forward past D-277), and `staff.spec.ts`. Two Claude sessions worked this tree at once on 2026-10-05: the review session wrote only `NEXT.md` and `06-backlog.md`; the parallel Claude Code session committed `0a5c5fe`, `8f19e76` and their SHA follow-ups, consuming the review's rows as it went.
 
 ---
 

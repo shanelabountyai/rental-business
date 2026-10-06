@@ -14384,3 +14384,21 @@ Re-opens the project for two rows from the post-closure second-pass review of th
 - Production needs the migration applied (`docs/DEPLOYMENT.md` recipe) before this code deploys, and deploys only happen by hook (D-277).
 
 **Gate.** `npm run ci:local` exit 0: `db:ci` from scratch with no drift, lint, typecheck, `check:ship-deps` clean, `npm test` 256 files / 3,481 passed, 4 skipped (two more than before, the two new tests), build compiled. No e2e run: no route, component or spec changed. The full sweep is CI's.
+
+## MONEY-13 — a refund lands on the card-autopay row it refunds, so a lost dispute after it is ignored (D-290)
+**Commit:** _pending_  ·  **Date:** 2026-10-05
+
+**What it built.**
+- `resolveRefundInvoice` in `webhook.ts`: a `charge.refunded` with no intent-keyed `Payment` and no `invoice` on the charge asks `findInvoiceForPaymentIntent` before the transaction, exactly as `projectLostDispute` does.
+- `writePayment`: a refund carrying an invoice lands on that invoice's `SETTLED` row for the payer with `amountCents ≥` the refund, newest first, and moves it to `REFUNDED` with `reversedAt`. Only when nothing matches does it mint a fresh row as before.
+- `billing.test.ts`: card autopay settles via `invoice.updated`, full `charge.refunded` by intent only, then `charge.dispute.closed` lost — balance re-opened exactly once, one `Payment` row, `REFUNDED`.
+
+**What it decided.** D-290. The fix is the backlog's stated one; the lookup is outside the transaction for the pool's sake, and a second partial refund of the same charge still mints a fresh row (D-272's shape) — the orphan cannot be collapsed without a charge id on `Payment`.
+
+**Real bug confirmed.** Against `HEAD`'s `webhook.ts` the new test's dispute came back `projected`: the $1,500 was re-opened twice.
+
+**What it left behind.**
+- MONEY-14, MONEY-16 and TEST-01 are open (queue row 2).
+- Production still needs the D-289 migration applied and the hook POSTed before this deploys (`NEXT.md`); nothing here adds a migration.
+
+**Gate.** `lint` 0 errors, `typecheck` clean, `npm test -- apps/web/lib/billing/billing.test.ts` 46 passed / 46 (one more than before, the new test). No schema change, so no `db:ci`; no route, component or `'use server'` module changed, so no build or e2e run. The full sweep is CI's — check `gh run list` after the push. Note for the next session: `dotenv -e .env.test -- vitest` alone fails the R-045 notice test with `AUTH_URL is not set`; `npm test` layers `.env.local` under it and is the only correct invocation.
