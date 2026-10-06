@@ -1,5 +1,11 @@
 # Next session
 
+**2026-10-06 (night): CLOSE-05 browser walk done by Shane (Acts 1-3, signed in as owner, tenant Maria/Derrick, vendor link).** Findings, none fixed, none yet a backlog row:
+1. **`/portal/pay`**: `AutopayPanel` renders before the balance section (`apps/web/app/portal/(signed-in)/pay/page.tsx` line 77 vs 101). Shane expected the amount owed first. Reorder touches e2e specs that read the page.
+2. **Tenant portal nav on full desktop**: "Messages" wraps mid-word. Likely cause, unverified in a browser: `components/portal/portal-nav.tsx` splits a `max-w-2xl` column into seven equal `flex-1` slots (~63px of text width) and the label has `break-words`. Same markup serves the phone bottom bar, so a fix needs `mobile-chrome` too.
+3. **Console error, never captured**: Shane saw one during the walk; two screenshots sent did not show it. Page and text unknown. Ask for the text before any fix.
+Not reported either way: the phone-width look at `/portal/pay/history` and `/portal/guarantor`, and the money-path pages in Act 1. CLOSE-04 (`rm -rf _to_delete`) not confirmed done.
+
 **2026-10-06 (night): owed steps 1–3 are DONE** (production migration applied, 119 migrations; production deployed from `58f7262`, Ready; deploy hook regenerated, old URL returns 404, SEC-21 closed). Still owed by Shane: CLOSE-04 (`_to_delete/`) and CLOSE-05 (browser demo walk). Ignore the "Owed by Shane" list below for 1–3.
 
 **2026-10-06 (night): nothing Claude-owned here; checked.** Working tree clean, CI green through CLOSE-02, `_to_delete/` still present (CLOSE-04, Shane's), CLOSE-05 still waits on Shane's steps 1–2 below. The storage repo's `NEXT.md` has moved on since the line below was written: MONEY-07 shipped at `04eb97c`, **MONEY-08** is next there (Opus). A bare `go` in this repo has nothing to pick up until Shane does rows 6–7.
