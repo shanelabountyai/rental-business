@@ -14102,7 +14102,7 @@ Wired at all 6 call sites across `operational-data-section.tsx` (appliances, uti
 
 ## A11Y-10: repeated field names on the property and unit pages
 
-**Commit:** _pending_  ·  **Date:** 2026-10-01
+**Commit:** `06be815`  ·  **Date:** 2026-10-01
 
 **What it built.** Pure string-literal relabels at 10 call sites — none of the shared field components (`TextField`, `SelectField`, `SubmitButton`) needed a shape change; every one already takes `label` as a required prop with no default. Property page's 6 "Notes" fields (all rendered via `FilingCabinetSection`'s subforms, simultaneously present in the DOM even collapsed inside `<details>`): `add-mortgage-form.tsx` → "Mortgage notes", `mortgage-statement-form.tsx` → "Statement notes", `add-insurance-policy-form.tsx` → "Policy notes", `hoa-info-form.tsx` → "HOA notes", `add-warranty-form.tsx` → "Warranty notes", `add-capital-improvement-form.tsx` → "Improvement notes". Unit page's 3 "Type" fields: `shutoff-location-form.tsx` → "Shutoff type", `add-access-code-form.tsx` → "Access type", `upload-form.tsx` (also rendered on the property page, no collision there) → "Document type". Unit page's 2 "Notes" fields: `add-appliance-form.tsx` → "Appliance notes", `add-utility-account-form.tsx` → "Account notes". The two "Save" buttons, both mounted on the unit page whenever staff has write access: `shutoff-location-form.tsx` → "Save shutoff location", `turnover-panel.tsx` → "Save target date".
 
