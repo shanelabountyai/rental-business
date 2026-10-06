@@ -49,7 +49,7 @@ It's an npm-workspaces monorepo: `apps/web` (Next.js App Router), `packages/core
 
 ## The Hardest Bug
 
-**No tenant could ever sign in, on any deployed environment, for seventeen months.** `apps/web/lib/auth/delivery.ts` was written as a placeholder on day one (R-003), with a comment saying *"R-030 replaces this"* — and a guard that silently no-op'd in production:
+**No tenant could ever sign in, on any deployed environment, for 30 days and 168 backlog items.** `apps/web/lib/auth/delivery.ts` was written as a placeholder on day one (R-003), with a comment saying *"R-030 replaces this"* — and a guard that silently no-op'd in production:
 
 ```ts
 if (process.env.NODE_ENV === 'production') { console.warn(…); return }
@@ -61,7 +61,7 @@ It stayed hidden for three reasons that each independently masked it: local deve
 
 The fix routes `deliverAuthLink` through the real notification engine — the same `notify()` plus a *scoped* dispatch that R-025's vendor path already used, so a person standing at a login form doesn't wait for the hourly cron and doesn't pay for the whole queue ahead of them. The regression test lives in `e2e/staff.spec.ts`, deliberately, because the bug only existed in a production build — a dev-server or unit-test assertion could never have seen it, since the branch that skips the send checks `NODE_ENV === 'production'` and nothing else in the suite runs under that flag.
 
-**What I'd instrument next time:** any `NODE_ENV === 'production'` branch that returns early is a deploy-only code path by definition, and a deploy-only code path needs a production-build assertion the day it's written, not seventeen months and a different item's accident later.
+**What I'd instrument next time:** any `NODE_ENV === 'production'` branch that returns early is a deploy-only code path by definition, and a deploy-only code path needs a production-build assertion the day it's written, not 30 days, 168 items and a different item's accident later.
 
 ## Defects Found
 

@@ -1,6 +1,6 @@
 # Next session
 
-**PROJECT COMPLETE — marked by Shane 2026-10-05.** Backlog has nothing buildable (every open row is vendor-, counsel- or go-live-gated, D-15) and all four closure deliverables exist. A bare `go` has no item to pick up. The only loose end is the "seventeen months" span below, which needs Shane's number.
+**PROJECT COMPLETE — marked by Shane 2026-10-05.** Backlog has nothing buildable (every open row is vendor-, counsel- or go-live-gated, D-15) and all four closure deliverables exist. A bare `go` has no item to pick up. No loose ends.
 
 ## Done 2026-10-05: project-closure pass (SHA in `docs/PROGRESS.md`, "Project-closure pass")
 
@@ -12,7 +12,7 @@
   - **The Ledger's posts moved out of the page source into the artifact database the same day** (Shane's call), so an add no longer costs a ~195k-token read of a 541 KB page. The page is now ~54 KB and holds no posts.
   - **To add a post now:** `ArtifactData` `set` on collection `posts`, doc id = the post number, body `{n, project, pillar, hook, full, source, posted:false, date:null, image:null}`; then `get` `meta/queue` and `update` its `order` array (pin `if_version`). A post with no queue slot still shows, at the end. Do NOT republish the page to add a post.
   - The store was read back after the move (99 posts, queue of 99). The pre-migration page is version 65 in the artifact's history.
-- **Open question for Shane:** `WRITEUP.md`, `CLAUDE.md` and one Ledger post say the tenant sign-in bug hid for "seventeen months". The first commit is 2026-08-01, so that figure cannot be right. Not changed; needs his call on the true span.
+- ✅ **"Seventeen months" corrected 2026-10-05** to the measured span: 30 days and 168 backlog items (R-003 `62700de` 2026-08-01 to R-139 `80dac5a` 2026-08-31). Fixed in `WRITEUP.md`, `CLAUDE.md` and two code comments. No Ledger post and not the exec brief ever carried it.
 
 ## Prior: Done 2026-10-05: carried-forward test cleanup (`edaa0ef`, SHA backfill `ee69aa0`). Not a backlog row — see below for why.
 

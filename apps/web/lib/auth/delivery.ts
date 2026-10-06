@@ -87,7 +87,7 @@ export async function deliverAuthLink(delivery: AuthLinkDelivery): Promise<void>
   const now = delivery.now ?? new Date()
 
   // NOT wrapped in a try/catch, deliberately. A failure to RECORD is a real
-  // failure, and seventeen months of a silent `console.warn` is the argument
+  // failure, and 30 days of a silent `console.warn` is the argument
   // against swallowing one - the neutral "if that address has an account…"
   // response every caller gives is about not confirming who has an account,
   // never about hiding that the product is broken.

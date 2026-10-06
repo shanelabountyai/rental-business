@@ -5,7 +5,7 @@ import { afterAll, describe, expect, it } from 'vitest'
 import { canReceiveAuthLink, deliverAuthLink } from './delivery.ts'
 import { issueToken } from './store.ts'
 
-// R-139. The claim under test is the one that was false for seventeen months:
+// R-139. The claim under test is the one that was false for 30 days (R-003 to R-139):
 // calling this function actually RECORDS a message. The old body returned
 // early on `NODE_ENV === 'production'` and wrote nothing anywhere, so a
 // deployed environment sent no tenant magic link and no staff password reset.
