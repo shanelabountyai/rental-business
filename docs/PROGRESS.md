@@ -14426,7 +14426,7 @@ Re-opens the project for two rows from the post-closure second-pass review of th
 **Gate.** `lint` 0 errors, `typecheck` clean, `npm test` 256 files / 3,485 passed, 4 skipped — run twice, both green, after one sweep in which the new MONEY-16 test failed and exposed MONEY-17. No schema change, so no `db:ci`; no route, component or `'use server'` module changed, so no build or e2e run. The full sweep is CI's — check `gh run list` after the push.
 
 ## CLOSE-01 — the PRD has one copy (D-292)
-**Commit:** `PENDING`  ·  **Date:** 2026-10-06
+**Commit:** `179ce24`  ·  **Date:** 2026-10-06
 
 **What it built.**
 - Deleted `PRD.docx` from the repo root. It was a Word render of the master PRD's Draft v1.0 (2026-07-31), committed with the R-001 scaffold and never touched again while `00-master-prd.md` took eight more commits (latest R-223, 2026-09-18).
