@@ -14386,7 +14386,7 @@ Re-opens the project for two rows from the post-closure second-pass review of th
 **Gate.** `npm run ci:local` exit 0: `db:ci` from scratch with no drift, lint, typecheck, `check:ship-deps` clean, `npm test` 256 files / 3,481 passed, 4 skipped (two more than before, the two new tests), build compiled. No e2e run: no route, component or spec changed. The full sweep is CI's.
 
 ## MONEY-13 — a refund lands on the card-autopay row it refunds, so a lost dispute after it is ignored (D-290)
-**Commit:** _pending_  ·  **Date:** 2026-10-05
+**Commit:** `7b4ed23`  ·  **Date:** 2026-10-05
 
 **What it built.**
 - `resolveRefundInvoice` in `webhook.ts`: a `charge.refunded` with no intent-keyed `Payment` and no `invoice` on the charge asks `findInvoiceForPaymentIntent` before the transaction, exactly as `projectLostDispute` does.
