@@ -62,30 +62,6 @@ export default async function PayPage() {
         </p>
       </header>
 
-      {/* ABOVE the balance and the pay form, because a tenant who sets this
-          up once never has to read either again - and PAY-02 calls autopay a
-          Must for exactly that reason. The publishable key is read on the
-          server and passed down: it is safe to expose, but the component
-          should not have to know where it lives. */}
-      {/* NOT OFFERED UNDER A HOLD (PAY-12, R-047). Enrolling a held tenancy
-          in autopay is the exact defect this control exists to prevent: a
-          charge that fires the morning after a notice is served. The hold
-          pauses the subscription, so an enrolment here would either fail
-          confusingly or start collecting the moment the hold lifted —
-          neither is something to offer somebody mid-case. */}
-      {!view.hold.blockOnline && !view.hold.certifiedFundsOnly && (
-      <AutopayPanel
-        publishableKey={process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? null}
-        alreadyOn={view.autopayOn}
-        debitDay={view.debitDay}
-        rentDueDay={view.rentDueDay}
-        latestSafeDebitDay={view.latestSafeDebitDay}
-        start={startAutopaySetup}
-        saveDebitDay={setDebitDay}
-        turnOff={turnOffAutopay}
-      />
-      )}
-
       {/* The way to "did you get my payment?" (R-043). Above the pay form so
           a tenant checking rather than paying does not have to scroll past a
           payment button to find it, and a link rather than an inline list so
@@ -143,6 +119,33 @@ export default async function PayPage() {
             ))}
           </ul>
         </section>
+      )}
+
+      {/* BELOW the balance and what it is made up of, ABOVE the pay form.
+          It was first on the page until the 2026-10-06 demo walk:
+          a tenant who opens this screen to pay wants the amount before an
+          invitation to set something up. Still ahead of the pay form, because
+          PAY-02 calls autopay a Must and a tenant who enrols never has to
+          read either again. The publishable key is read on the server and
+          passed down: it is safe to expose, but the component should not
+          have to know where it lives. */}
+      {/* NOT OFFERED UNDER A HOLD (PAY-12, R-047). Enrolling a held tenancy
+          in autopay is the exact defect this control exists to prevent: a
+          charge that fires the morning after a notice is served. The hold
+          pauses the subscription, so an enrolment here would either fail
+          confusingly or start collecting the moment the hold lifted —
+          neither is something to offer somebody mid-case. */}
+      {!view.hold.blockOnline && !view.hold.certifiedFundsOnly && (
+      <AutopayPanel
+        publishableKey={process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? null}
+        alreadyOn={view.autopayOn}
+        debitDay={view.debitDay}
+        rentDueDay={view.rentDueDay}
+        latestSafeDebitDay={view.latestSafeDebitDay}
+        start={startAutopaySetup}
+        saveDebitDay={setDebitDay}
+        turnOff={turnOffAutopay}
+      />
       )}
 
       {view.hold.blockOnline || view.hold.certifiedFundsOnly ? (

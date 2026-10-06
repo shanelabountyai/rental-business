@@ -36,7 +36,7 @@ export function PortalNav({ items }: { items: readonly PortalNavItem[] }) {
               <Link
                 href={item.href}
                 aria-current={active ? 'page' : undefined}
-                className={`focus-visible:ring-ring flex min-h-14 min-w-0 flex-col items-center justify-center gap-0.5 border-t-2 px-1 py-2 text-center text-[11px] leading-tight focus-visible:ring-2 focus-visible:-outline-offset-2 focus-visible:outline-none sm:min-h-12 sm:border-t-0 sm:border-b-2 sm:px-3 sm:text-base ${
+                className={`focus-visible:ring-ring flex min-h-14 min-w-0 flex-col items-center justify-center gap-0.5 border-t-2 px-1 py-2 text-center text-[11px] leading-tight focus-visible:ring-2 focus-visible:-outline-offset-2 focus-visible:outline-none sm:min-h-12 sm:border-t-0 sm:border-b-2 sm:px-1 sm:text-sm ${
                   active
                     ? 'border-foreground text-foreground font-semibold'
                     : 'text-muted-foreground hover:text-foreground border-transparent'
