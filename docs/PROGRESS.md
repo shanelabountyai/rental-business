@@ -14440,3 +14440,29 @@ Re-opens the project for two rows from the post-closure second-pass review of th
 - Queue row 4 (CLOSE-02, the TX citation table) is next; Shane's three production steps in `NEXT.md` still come first.
 
 **Gate.** Docs-only change: one tracked binary removed and three Markdown files edited. No code, schema, route or test touched, so no lint, typecheck, unit or e2e run. CI runs its sweep on the push regardless; `b638595`'s own run was still in progress when this started. Vercel's `ignoreCommand` will skip this push, correctly.
+
+## CLOSE-02 — pre-counsel citation table for the seeded TX rule (D-293)
+**Commit:** _pending_  ·  **Date:** 2026-10-06
+
+**What it built.**
+- `docs/LEGAL-REVIEW-CHECKLIST.md` §D: one row per seeded `JurisdictionRule` value (25 rows), the statute quoted as published, a confidence per row (High / Medium / Low-by-absence / Blank), and the reviewer's question. Plus §D.2 (statutes that touch the product but are not seeded) and §D.3 (the eight errors in the seed's own comments, for whoever writes v2).
+- Source: the Legislature's statute files at `tcss.legis.texas.gov/resources/<CODE>/htm/`, which is what `statutes.capitol.texas.gov` renders — the public site is a JavaScript shell now and a plain fetch returns only its menu. Fetched Prop. Code ch. 24, 54, 91, 92; Bus. & Com. Code ch. 3, 604A; Gov't Code ch. 311; Local Gov't Code ch. 250; Water Code ch. 13. Sections were extracted by regex from the HTML and read in full before quoting.
+- One pointer comment at the top of `seedJurisdictionRules()` so the next reader of the seed does not re-trust its citations.
+- Backlog: CLOSE-02 ✅; new counsel-gated row LEGAL-06 (S.B. 38).
+
+**What it found.**
+- **MONEY-05 confirmed from the text.** §92.019(a)(3) says "two full days"; `lateFeeFor` charges at `daysLate > graceDays`, so the seeded 1 attaches the fee a day early and the v2 value is 2.
+- **S.B. 38 (Acts 2025, Ch. 960) rewrote §24.005 effective 2026-01-01.** (f)–(f-2) repealed; the seed's inside-vs-outside-door reasoning cites them. New (f-3) permits e-mail "if the parties have agreed in writing" — the seed excludes EMAIL from eviction notices on the old text — and new (a) requires a pay-or-vacate form for a first-time-late tenant. Three days survives.
+- **Gov't Code §311.014(b)** rolls the last day of any Code period over a weekend or legal holiday. The seed asserts "plain calendar days, no roll"; the product already has `CALENDAR_ROLL_FORWARD` for exactly this.
+- Four citations name the wrong section: §92.019(b) for the (a-1) safe harbor; §92.332(a) for the §92.331(b) six-month window; §604A.003 (the civil penalty) for the §604A.002 debit bar; and §3.506 paraphrased as "greater of $30 or the face amount" where it is a flat $30 maximum. The seed's "Austin voucher ordinance" is preempted by Local Gov't Code §250.007 since 2015 except for veterans. The "POLICE_REPORT deliberately absent" comment is wrong for stalking, where §92.0161(c-1)(2)(A) makes an incident report a required component.
+- `CREDIT_ONLY` rests on *Rowell v. Paxton* (W.D. Tex. 2018) enjoining §604A.0021 as applied to five named plaintiffs, not on the statute's text; the AG opinion reading the injunction narrowly (KP-0257) could not be fetched and is cited from secondary sources at Medium.
+
+**What it decided.**
+- D-293: the table is a record, not a review. No seed value, no code and no v1 row changes on it (D-4); counsel's v2 carries the corrections. Low and Blank rows stay blank rather than guessed.
+
+**What it left behind.**
+- Everything in §D is counsel's to confirm; MONEY-05 and LEGAL-06 stay gated on that review.
+- Not fetched: Gov't Code ch. 662 (the holiday list), 16 TAC ch. 24 subch. H (PUC allocation rules), Prop. Code ch. 54 subch. C text (downloaded, not extracted), §24.005106 (summary disposition), AG Op. KP-0257. Each is named where it matters.
+- Queue row 5 (CLOSE-03, the decisions index) is next; Shane's three production steps in `NEXT.md` still come first.
+
+**Gate.** Docs plus one comment line in `seed.mts` — no logic, schema, route or test changed, so no unit or e2e run; `lint` and `typecheck` run on the comment change. CI runs its sweep on the push regardless. The seed comment makes this a non-docs diff for Vercel's `ignoreCommand`, but auto-deploy is off (D-277), so nothing deploys until the hook is POSTed.

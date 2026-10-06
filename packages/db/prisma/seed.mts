@@ -76,6 +76,12 @@ const TX_NOTICE_SERVICE_METHODS = {
   REPAIR_CHARGE: ['PERSONAL', 'CERTIFIED_MAIL', 'FIRST_CLASS_MAIL', 'EMAIL', 'PORTAL'],
 } as const
 
+// CITATIONS IN THIS BLOCK WERE CHECKED AGAINST THE PUBLISHED CODE ON 2026-10-06
+// (CLOSE-02) and several are wrong - graceDays is a day early, four section
+// numbers point at the wrong subsection, and §24.005(f) was repealed on
+// 2026-01-01. The comments below are left as written because v1 is never
+// edited (D-4); docs/LEGAL-REVIEW-CHECKLIST.md §D has the corrections and
+// the quoted statute text, and the v2 row counsel signs off carries them.
 async function seedJurisdictionRules() {
   const existing = await prisma.jurisdictionRule.findFirst({
     where: { state: 'TX', jurisdiction: null, version: 1 },

@@ -1,5 +1,7 @@
 # Next session
 
+**2026-10-06 (later still): CLOSE-02 done (D-293).** `docs/LEGAL-REVIEW-CHECKLIST.md` §D is the pre-counsel citation table: 25 rows, statute quoted from the Legislature's own files, confidence per row. Found and recorded, not fixed (D-4): `graceDays` should be 2 (MONEY-05 confirmed from §92.019(a)(3)); S.B. 38 rewrote §24.005 service methods on 2026-01-01 (new counsel-gated row **LEGAL-06**); Gov't Code §311.014(b) rolls Code deadlines over weekends; four seed citations name the wrong section. One comment line in `seed.mts` points at §D, so this push is a code diff for Vercel but auto-deploy is off (D-277). Queue row 4 is done; a bare `go` picks up **row 5: CLOSE-03** (Sonnet: by-topic index of `07-decisions.md`, now 293 D-numbers: money / jurisdiction / infra+deploy / tests / UX). Shane's three steps below are unchanged.
+
 **2026-10-06 (later): CLOSE-01 done (D-292).** `PRD.docx` deleted, not regenerated; nothing linked it. Docs-only push, so Vercel skips it and nothing changes for Shane's three steps below. Queue row 3 is done; a bare `go` picks up **row 4: CLOSE-02** (Fable, web search on: pre-counsel citation table for the seeded TX `JurisdictionRule` → `docs/LEGAL-REVIEW-CHECKLIST.md`, MONEY-05 is row one; every row carries a confidence, a blank beats a confident wrong citation).
 
 **2026-10-06: MONEY-14 + MONEY-16 + TEST-01 fixed, MONEY-17 found and fixed (D-291).** SHA and gate in `docs/PROGRESS.md`. Queue row 2 is done; a bare `go` picks up **row 3: CLOSE-01** (Sonnet: regenerate `PRD.docx` or drop it from `WRITEUP.md`). Shane's three steps below are still owed and unchanged — nothing here adds a migration, so the D-289 one is still the only pending one. This push is real code, so once the hook is POSTed it ships D-289, D-290 and D-291 together with the three queued env rotations.
@@ -16,7 +18,7 @@
 
 ## Next buildable item
 
-~~MONEY-13~~ done (D-290). ~~MONEY-14 + MONEY-16 + TEST-01~~ done (D-291). ~~CLOSE-01~~ done (D-292). **CLOSE-02** next (queue row 4), Fable with web search.
+~~MONEY-13~~ done (D-290). ~~MONEY-14 + MONEY-16 + TEST-01~~ done (D-291). ~~CLOSE-01~~ done (D-292). ~~CLOSE-02~~ done (D-293). **CLOSE-03** next (queue row 5), Sonnet.
 
 Also still owed: eyeball `/portal/pay/history` and `/portal/guarantor` at phone width in `dev:demo`; commit the storage repo's convention port (item 5 below).
 
