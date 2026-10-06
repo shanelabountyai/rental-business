@@ -1,5 +1,7 @@
 # Next session
 
+**2026-10-06: MONEY-14 + MONEY-16 + TEST-01 fixed, MONEY-17 found and fixed (D-291).** SHA and gate in `docs/PROGRESS.md`. Queue row 2 is done; a bare `go` picks up **row 3: CLOSE-01** (Sonnet: regenerate `PRD.docx` or drop it from `WRITEUP.md`). Shane's three steps below are still owed and unchanged — nothing here adds a migration, so the D-289 one is still the only pending one. This push is real code, so once the hook is POSTed it ships D-289, D-290 and D-291 together with the three queued env rotations.
+
 **2026-10-05 (later): MONEY-13 fixed (D-290).** SHA and gate in `docs/PROGRESS.md`. Queue row 1 is done; a bare `go` picks up **row 2: MONEY-14 + MONEY-16 + TEST-01** (Opus). Shane's three steps below are still owed and unchanged — nothing in MONEY-13 adds a migration, so the D-289 one is still the only pending one.
 
 **2026-10-05 (night): MONEY-11 + MONEY-12 fixed (D-289), MONEY-15 comment, SEC-21 repo side.** SHA and gate in `docs/PROGRESS.md`. The list below is the earlier session's; items 1 and 3 are updated here.
@@ -12,7 +14,7 @@
 
 ## Next buildable item
 
-~~MONEY-13~~ done (D-290). **MONEY-14 + MONEY-16 + TEST-01** next (queue row 2), Opus.
+~~MONEY-13~~ done (D-290). ~~MONEY-14 + MONEY-16 + TEST-01~~ done (D-291). **CLOSE-01** next (queue row 3), Sonnet.
 
 Also still owed: eyeball `/portal/pay/history` and `/portal/guarantor` at phone width in `dev:demo`; commit the storage repo's convention port (item 5 below).
 
@@ -23,7 +25,7 @@ Also still owed: eyeball `/portal/pay/history` and `/portal/guarantor` at phone 
 ## Queue (one session each) — model in brackets; **Fable** = the review session's own recommendation for work where the cost of a wrong answer is high
 
 1. ~~**MONEY-13**~~ ✅ done 2026-10-05 (D-290) — refund gets the dispute's invoice fallback (`findInvoiceForPaymentIntent`); refund→lost-dispute test on a card-autopay row. [**Fable** — it crosses three event paths (refund, dispute, invoice fallback) and the night session's D-289 shows the backlog's stated fix can be wrong; Opus acceptable]
-2. **MONEY-14 + MONEY-16 + TEST-01** — partial-dispute cap; per-lease serialisation of `planAllocation` or a recorded decision not to; `renewal-rollover-job.test.ts` state code. [Opus; the MONEY-16 serialise-or-decline call is the one to think about]
+2. ~~**MONEY-14 + MONEY-16 + TEST-01**~~ ✅ done 2026-10-06 (D-291; MONEY-17 found along the way) — partial-dispute cap; per-lease serialisation of `planAllocation` or a recorded decision not to; `renewal-rollover-job.test.ts` state code. [Opus; the MONEY-16 serialise-or-decline call is the one to think about]
 3. **CLOSE-01** — regenerate `PRD.docx` (rendered 2026-08-01; 8 PRD commits since, latest 2026-09-18) or drop it from the closure deliverables in `WRITEUP.md`. [Sonnet]
 4. **CLOSE-02** — pre-counsel citation table for the seeded TX `JurisdictionRule` → `docs/LEGAL-REVIEW-CHECKLIST.md` (MONEY-05 is row one). Prep for the human review, not legal advice. [**Fable**, with web search on — statute text must be quoted from the Texas Property Code as published, every row carries a confidence, and a confident wrong citation is worse than a blank; this is the row where model quality matters most]
 5. **CLOSE-03** — by-topic index of `07-decisions.md` (289 D-numbers): money / jurisdiction / infra+deploy / tests / UX. [Sonnet]

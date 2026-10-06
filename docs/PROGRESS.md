@@ -14404,7 +14404,7 @@ Re-opens the project for two rows from the post-closure second-pass review of th
 **Gate.** `lint` 0 errors, `typecheck` clean, `npm test -- apps/web/lib/billing/billing.test.ts` 46 passed / 46 (one more than before, the new test). No schema change, so no `db:ci`; no route, component or `'use server'` module changed, so no build or e2e run. The full sweep is CI's — check `gh run list` after the push. Note for the next session: `dotenv -e .env.test -- vitest` alone fails the R-045 notice test with `AUTH_URL is not set`; `npm test` layers `.env.local` under it and is the only correct invocation.
 
 ## MONEY-14 + MONEY-16 + TEST-01 (+ MONEY-17) — a partial dispute reverses its own amount; one settlement per lease plans at a time (D-291)
-**Commit:** _pending_  ·  **Date:** 2026-10-06
+**Commit:** `fe8d652`  ·  **Date:** 2026-10-06
 
 **What it built.**
 - `reverseSettledPayment` takes `capCents`; `projectLostDispute` passes the dispute's amount, a bank return passes nothing. Rows are spent in written order (`orderBy: { id }`, cuid) with the last split. The card-autopay fallback matches `amountCents ≥` the dispute, as D-290's refund does.
