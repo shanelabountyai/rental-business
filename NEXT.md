@@ -1,5 +1,7 @@
 # Next session
 
+**2026-10-06 (evening): CLOSE-03 done (D-294).** "Index by topic" at the top of `docs/prds/07-decisions.md`: all 294 rows under ten headings, coverage checked by script; D-158 found used twice (R-143, R-138), left as is and named in the index. Docs-only push. Queue row 5 is done. **Rows 6 and 7 are Shane's**: CLOSE-04 is the `_to_delete/` removal, CLOSE-05 is the browser demo walk after the three production steps below and the D-289 deploy. A bare `go` has no Claude-owned row left in this repo's queue; the storage repo's two-item queue (its `NEXT.md`) is the next Claude work.
+
 **2026-10-06 (later still): CLOSE-02 done (D-293).** `docs/LEGAL-REVIEW-CHECKLIST.md` §D is the pre-counsel citation table: 25 rows, statute quoted from the Legislature's own files, confidence per row. Found and recorded, not fixed (D-4): `graceDays` should be 2 (MONEY-05 confirmed from §92.019(a)(3)); S.B. 38 rewrote §24.005 service methods on 2026-01-01 (new counsel-gated row **LEGAL-06**); Gov't Code §311.014(b) rolls Code deadlines over weekends; four seed citations name the wrong section. One comment line in `seed.mts` points at §D, so this push is a code diff for Vercel but auto-deploy is off (D-277). Queue row 4 is done; a bare `go` picks up **row 5: CLOSE-03** (Sonnet: by-topic index of `07-decisions.md`, now 293 D-numbers: money / jurisdiction / infra+deploy / tests / UX). Shane's three steps below are unchanged.
 
 **2026-10-06 (later): CLOSE-01 done (D-292).** `PRD.docx` deleted, not regenerated; nothing linked it. Docs-only push, so Vercel skips it and nothing changes for Shane's three steps below. Queue row 3 is done; a bare `go` picks up **row 4: CLOSE-02** (Fable, web search on: pre-counsel citation table for the seeded TX `JurisdictionRule` → `docs/LEGAL-REVIEW-CHECKLIST.md`, MONEY-05 is row one; every row carries a confidence, a blank beats a confident wrong citation).
@@ -18,7 +20,7 @@
 
 ## Next buildable item
 
-~~MONEY-13~~ done (D-290). ~~MONEY-14 + MONEY-16 + TEST-01~~ done (D-291). ~~CLOSE-01~~ done (D-292). ~~CLOSE-02~~ done (D-293). **CLOSE-03** next (queue row 5), Sonnet.
+~~MONEY-13~~ done (D-290). ~~MONEY-14 + MONEY-16 + TEST-01~~ done (D-291). ~~CLOSE-01~~ done (D-292). ~~CLOSE-02~~ done (D-293). ~~CLOSE-03~~ done (D-294). **Nothing Claude-owned left in the queue**; rows 6–7 are Shane's.
 
 Also still owed: eyeball `/portal/pay/history` and `/portal/guarantor` at phone width in `dev:demo`; commit the storage repo's convention port (item 5 below).
 
@@ -32,7 +34,7 @@ Also still owed: eyeball `/portal/pay/history` and `/portal/guarantor` at phone 
 2. ~~**MONEY-14 + MONEY-16 + TEST-01**~~ ✅ done 2026-10-06 (D-291; MONEY-17 found along the way) — partial-dispute cap; per-lease serialisation of `planAllocation` or a recorded decision not to; `renewal-rollover-job.test.ts` state code. [Opus; the MONEY-16 serialise-or-decline call is the one to think about]
 3. **CLOSE-01** — regenerate `PRD.docx` (rendered 2026-08-01; 8 PRD commits since, latest 2026-09-18) or drop it from the closure deliverables in `WRITEUP.md`. [Sonnet]
 4. **CLOSE-02** — pre-counsel citation table for the seeded TX `JurisdictionRule` → `docs/LEGAL-REVIEW-CHECKLIST.md` (MONEY-05 is row one). Prep for the human review, not legal advice. [**Fable**, with web search on — statute text must be quoted from the Texas Property Code as published, every row carries a confidence, and a confident wrong citation is worse than a blank; this is the row where model quality matters most]
-5. **CLOSE-03** — by-topic index of `07-decisions.md` (289 D-numbers): money / jurisdiction / infra+deploy / tests / UX. [Sonnet]
+5. ~~**CLOSE-03**~~ ✅ done 2026-10-06 (D-294) — by-topic index of `07-decisions.md` (289 D-numbers): money / jurisdiction / infra+deploy / tests / UX. [Sonnet]
 6. **CLOSE-04** — Shane deletes `_to_delete/` (`BACKLOG.md`, `PRD.md`, `git-locks`, `rental-starter.zip`).
 7. **CLOSE-05** — demo walk in a browser after 1–2 and the D-289 deploy (D-28: money-path changes), including the phone-width eyeball of `/portal/pay/history` and `/portal/guarantor` the night session asked for. [Opus; the walk finds things a test cannot — R-105 found seven]
 

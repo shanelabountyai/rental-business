@@ -14466,3 +14466,24 @@ Re-opens the project for two rows from the post-closure second-pass review of th
 - Queue row 5 (CLOSE-03, the decisions index) is next; Shane's three production steps in `NEXT.md` still come first.
 
 **Gate.** Docs plus one comment line in `seed.mts` — no logic, schema, route or test changed, so no unit or e2e run; `lint` and `typecheck` run on the comment change. CI runs its sweep on the push regardless. The seed comment makes this a non-docs diff for Vercel's `ignoreCommand`, but auto-deploy is off (D-277), so nothing deploys until the hook is POSTed.
+
+## CLOSE-03 — the decision log indexed by topic (D-294)
+**Commit:** `TBD`  ·  **Date:** 2026-10-06
+
+**What it built.**
+- "Index by topic" at the top of `docs/prds/07-decisions.md`: ten headings (money; jurisdiction & legal; leases/tenancy/inspections; maintenance/vendors/turnover; comms & notifications; access/security/permissions; infra/deploy/data model; tests/CI/demo; UX/accessibility/copy; process/scope/owner calls), each with keyword sub-lines listing D-numbers only. A decision that belongs to two topics is listed under both.
+- Coverage checked rather than eyeballed: every D-1..D-294 appears at least once (a shell loop over the section's `D-n` tokens against `seq 1 294`).
+- Backlog: CLOSE-03 ✅. D-294 appended.
+
+**What it found.**
+- **D-158 is used twice**: the dead-writer sweep (R-143, 2026-09-01) and the staff lockouts (R-138, 2026-08-31). Both are cited by number in this file, so neither is renumbered; the index names each with its R-number.
+- Rows D-164 onward sit after the "Needs owner decision" and "How to use this log" sections, outside the first Markdown table. Noted in the index, not moved.
+- The queue row said 289 D-numbers; the log had 293 by the time the item ran, plus the duplicate.
+
+**What it decided.**
+- D-294: the index lives in the log itself, numbers only, ten headings, and a new D-number is added to the index in the same commit that appends its row.
+
+**What it left behind.**
+- Nothing. Queue row 6 (CLOSE-04) is Shane's delete; row 7 (CLOSE-05, the demo walk) waits on Shane's three production steps in `NEXT.md`.
+
+**Gate.** Docs-only: three Markdown files edited, no code, schema, route or test touched, so no lint, typecheck, unit or e2e run. CI runs its sweep on the push regardless; `ignoreCommand` skips the Vercel build (and auto-deploy is off anyway, D-277).

@@ -3,6 +3,119 @@
 **Status:** D-1 through D-10 recorded 2026-07-31 at project setup, carrying forward the conventions proven on the self-storage build. **D-11 (2026-07-31) supersedes D-2** and deliberately diverges from the storage platform. **D-13 (2026-08-01) settles the two-payer ledger shape** and closes OQ-12; OQ-2 is partially answered and R-048 remains gated on the rest of it. **D-14 (2026-08-03) settles file/photo storage** for R-012. **D-15 (2026-08-05) settles notification delivery providers** for R-016 and flags the 10DLC registration as the owner's longest external lead time. **D-16 (2026-08-05) amends "single-use" for vendor links only** — they are multi-use until expiry, for R-025. **D-17 (2026-08-06) answers OQ-3** — all external vendors, so R-028 defers to Phase 3. Open owner decisions are listed under "Needs owner decision"; several gate specific milestones.
 **Precedence:** This document amends the PRDs. Where a PRD conflicts with a decision below, this document wins. When building from the backlog, treat each decision as settled — do not re-open unless the owner amends this log.
 
+## Index by topic (CLOSE-03, D-294)
+
+Every D-number below, grouped so "has this been settled?" is one grep of this section. A decision that genuinely belongs to two topics is listed under both. The queue row named five topics (money / jurisdiction / infra+deploy / tests / UX); five more were needed so that no row is unindexed. **Add a new D-number here in the same commit that appends it.** Two quirks of the log, kept rather than rewritten: **D-158 is used twice** (the dead-writer sweep, R-143, and the staff lockouts, R-138 — both numbers are cited elsewhere, so neither is renumbered), and rows D-164 onward sit after the "How to use this log" section rather than inside the first table.
+
+### Money — billing, ledger, Stripe, payments, deposits, reports
+- **Architecture (Stripe is the record, core decides):** D-2 (superseded), D-3, D-11, D-12, D-13, D-29, D-30, D-36
+- **Stripe seam, driver, simulator:** D-23, D-26, D-27
+- **Webhooks, projection, idempotency, claims:** D-24, D-35, D-141, D-161, D-177, D-207, D-268, D-269, D-271, D-289, D-291
+- **Refunds and disputes:** D-272, D-274, D-290, D-291
+- **Returned payments, reversing entries:** D-32
+- **Reconciliation and drift:** D-25, D-166, D-169 (bug, closed by D-177)
+- **Offline / counter payments, bank deposits, settlements:** D-31, D-142, D-168, D-177, D-191, D-207, D-213, D-243
+- **Portal payments, pay-now link, card fee:** D-45, D-149, D-268, D-270, D-283 (no prepayments)
+- **Late fees and the fee meter:** D-33, D-34, D-80, D-223, D-231, D-246
+- **Delinquency, chase ladder, repayment plans, former tenants:** D-134, D-151, D-181, D-188, D-189, D-202, D-214, D-218, D-219, D-220, D-224, D-233, D-248
+- **Proration, recurring charges, RUBS, move-out credit:** D-39, D-40, D-165
+- **Security deposit money (clearing, liability, disposition, applied to arrears):** D-59, D-61, D-173, D-174, D-195, D-203, D-227, D-236, D-245, D-250
+- **Maintenance cost, chargebacks, insurance-claim money:** D-19, D-42, D-43, D-100, D-101, D-102
+- **Opening balances at import:** D-170
+- **Reports, tax export, accounting basis, metrics:** D-46, D-65, D-66, D-71, D-72, D-73, D-74, D-75, D-76, D-77, D-155, D-208, D-239, D-251
+- **Court / attorney packets:** D-50, D-236, D-250
+
+### Jurisdiction & legal — statute-driven rules, notices, fair housing, consent
+- **`JurisdictionRule` posture (versioned config, null means unasked, where it refuses):** D-4, D-48, D-92, D-193, D-195, D-215, D-235, D-293
+- **The one hardcoded statute (SCRA, federal):** D-82, D-83, D-84, D-85, D-86, D-111
+- **Notices: service, proof, fallback, what is recorded:** D-38, D-47, D-48, D-56, D-148, D-209, D-228, D-244, D-247, D-256
+- **Eviction, cure clock, filing gates:** D-70, D-85, D-148, D-209, D-231, D-246
+- **Lease holds (type-driven effects, warn vs block):** D-78, D-79, D-80, D-81, D-86, D-231, D-246
+- **Fair housing: assistance animals, accommodation, violations, hoarding:** D-87, D-88, D-89, D-90, D-91, D-96, D-97, D-98, D-99
+- **Abandonment and disposal of belongings:** D-92, D-93, D-94, D-95
+- **Domestic-violence confidentiality:** D-107, D-108, D-109, D-111, D-112, D-120
+- **Retaliation, habitability:** D-230, D-235
+- **FCRA screening and adverse action:** D-51, D-105, D-275, D-276
+- **TCPA / consent (tenants, guarantors, prospects, STOP words):** D-49, D-127, D-162, D-190, D-211, D-278, D-279
+- **Day counting, statutory deadlines, deadline corrections:** D-173, D-193, D-215
+- **Card surcharge legality:** D-149
+- **Lease template, estoppel / handoff packet honesty:** D-52, D-113, D-114
+- **Pre-counsel review record:** D-293
+
+### Leases, tenancy, screening & inspections
+- **Lease status machine, notice given, inherited tenancies:** D-21, D-22, D-241
+- **Renewal, MTM rollover, rent increase, non-renewal:** D-54, D-56, D-244, D-256
+- **Roommate change, guarantor release, party changes:** D-104, D-105, D-106, D-112, D-167
+- **Move-in / move-out facts (`moveInAt`, auto make-ready):** D-178, D-226, D-241
+- **Inspections (checklists, photos, self-guided, periodic, comparison):** D-57, D-58, D-60, D-63, D-64, D-226, D-245
+- **Deposit process (funds cleared, disposition letter, dispute packet):** D-59, D-61, D-236
+- **Showings and entry codes for strangers:** D-53, D-115, D-116, D-117
+- **Renter's insurance, screening criteria mechanism:** D-55, D-255
+- **Listing after notice:** D-237
+
+### Maintenance, vendors & turnover
+- **Vendor access (zero-login, multi-use link, no in-house tech):** D-6, D-16, D-17
+- **Emergency, after-hours, quiet hours:** D-18, D-225, D-242
+- **Verify & close, completion photo, cost, chargeback:** D-19, D-41, D-42, D-43
+- **Work-order comms, acknowledgement, troubleshooting, photo parenting:** D-20, D-128, D-183, D-192, D-204
+- **Vendors: invoice lifecycle, COI, preventive maintenance:** D-68, D-69, D-232, D-249
+- **Insurance claims:** D-100, D-101, D-102, D-103
+- **Turnover and the sequenced turn:** D-62, D-182, D-184, D-185, D-186, D-187, D-241
+- **Smart locks and door codes:** D-115, D-116, D-117, D-118, D-119, D-120, D-182
+- **Welfare-check entry, entry judged against real service:** D-95, D-247
+
+### Comms & notifications
+- **Engine posture (one engine, adapters, drivers, exceptions):** D-15, D-147, D-159, D-162, D-252
+- **Delivery reality (reachable, PORTAL needs sign-in, decided vs returned):** D-38, D-179, D-228, D-229, D-234
+- **Threads and templates:** D-20, D-44
+- **Inbound email and SMS routing, opt-out:** D-125, D-126, D-127, D-128, D-132, D-135, D-162, D-279
+- **Consent gates:** D-49, D-190, D-211, D-278
+- **Calendar (.ics) disclosure:** D-124
+- **What a notification may carry on a third-party log:** D-280
+- **Repayment-plan and chase recipients:** D-188, D-214
+
+### Access, security & permissions
+- **No superuser, scope, guards:** D-5, D-81, D-110, D-196, D-212, D-259, D-260, D-266
+- **Tokens and magic links (scope, lifetime, redemption):** D-16, D-45, D-183, D-264
+- **Served bytes, CSP:** D-137, D-138, D-139
+- **Server-action boundary, webhooks and secrets:** D-258, D-261, D-262, D-273
+- **Demo gate and shared passwords:** D-257, D-267, D-285
+- **Confidential records and privileged exports:** D-107, D-108, D-113
+- **Storage access level, log redaction:** D-37, D-280
+
+### Infra, deploy & data model
+- **Stack and adapters:** D-1, D-7, D-8, D-14, D-15, D-37, D-146, D-147
+- **Deploy, crons, cost:** D-254, D-257, D-263, D-265, D-277, D-286
+- **Scheduled jobs (`JobRun`, replay clock, re-raise guard):** D-180, D-205, D-206, D-237, D-241
+- **Data-model shapes (one task queue, child tables not columns, derived not stored):** D-9, D-20, D-21, D-47, D-57, D-62, D-67, D-68, D-69, D-104, D-167, D-184, D-208, D-210, D-213
+- **Dependencies and audit triage:** D-152
+- **Dead code posture (writers vs readers):** D-158 (R-143)
+
+### Tests, CI & demo
+- **Demo checkpoints and walks (D-28's rule and each walk's findings):** D-28, D-129, D-131, D-134, D-140, D-196, D-221, D-238
+- **Demo seed and `--reset`:** D-143, D-144, D-145, D-146, D-160, D-199, D-200
+- **Suite mechanics (rate-limit bucket, pool cap, Lighthouse, dead sweep):** D-130, D-156, D-157, D-158 (R-143)
+- **Mobile-chrome layout "races":** D-171, D-175, D-176, D-194, D-197
+- **Waiting and assertions in e2e:** D-217
+- **Simulators must not agree by construction:** D-27, D-116
+- **Date-formatting class (`BusinessDate` in prose):** D-153, D-154, D-198, D-216, D-221
+- **Fixtures shaped like the real input:** D-132, D-197
+
+### UX, accessibility & copy
+- **Lexicon, labels, naming that discloses nothing:** D-10, D-46, D-107
+- **Brand:** D-163
+- **Accessibility rules (focus ring, `aria-disabled`, option labels, reflow):** D-150, D-194, D-197, D-281, D-282
+- **Shared components and phone layout:** D-284, D-287, D-288
+- **Error sentences that tell the truth:** D-134, D-196
+
+### Process, scope & owner calls
+- **Open questions answered or cut:** D-13, D-17, D-30, D-52, D-122, D-123, D-133, D-136, D-255
+- **Items split, cut or deferred:** D-17, D-121
+- **Arcs and what came next:** D-164, D-172, D-201, D-222, D-240, D-253
+- **Order of work:** D-175
+- **Staff lockouts:** D-158 (R-138)
+- **Closure records:** D-277, D-285, D-286, D-292, D-293, D-294
+
 | # | Topic | Decision | What it means for the build |
 |---|---|---|---|
 | D-1 | Tech stack | **Same stack as the self-storage platform.** | Next.js (App Router) + TypeScript, Postgres + Prisma, Auth.js, Tailwind + shadcn/radix, Stripe, Resend, Vitest + Playwright + axe + Lighthouse CI, Vercel. Monorepo `apps/web` + `packages/core` + `packages/db`. Rationale: this is a learning project and the second repo in the same idiom — reusing the stack means the second build reinforces the first instead of splitting attention across two ecosystems. Patterns (facility→property scoping, RBAC-as-data, audit service, event outbox) transfer nearly one-for-one. |
@@ -335,3 +448,4 @@ When starting a Claude Code session on a backlog item, include this file alongsi
 | D-291 | **A lost dispute reverses at most its own amount, spent over the payment's ledger rows in the order they were written with the last row split; and one settlement per lease plans at a time — `planAllocation` runs inside the projection transaction behind a transaction-scoped advisory lock on the lease, reading through that transaction** (MONEY-14, MONEY-16, 2026-10-06; extends D-161, D-272, D-274) | `reverseSettledPayment` takes `capCents`; `projectLostDispute` passes `intent.amountCents`, a bank return passes nothing. The invoice fallback that finds a card-autopay row now matches `amountCents ≥` the dispute, the shape D-290 gave the refund, because an equality match could never reach the row a partial dispute was about. Rows are ordered by `id` (cuid, time-prefixed), not `createdAt`, which is one `now()` for every row of a transaction. **Written order re-opens core's applications first, then the unlinked rent row.** Under Texas's RENT-first order that is the fee before the rent, which is what the net money should be left paying; under a FEE-first order the same rule re-opens the fee first, which is the wrong end — the full answer is a re-plan of the net, and a partial dispute in a fee-first state is where to look if a fee ever shows unpaid after one. A partial loss still moves the Payment to `REVERSED`, as D-272 leaves a partial refund `REFUNDED`; Stripe raises one dispute per charge, so nothing follows. **Serialised rather than declined**: `webhook.ts` takes `pg_advisory_xact_lock(hashtext('lease-allocation:<leaseId>'))` inside the transaction (the `consumeRateLimit` and settlement-archive shape) and calls `planAllocation` with the transaction as its client, so `outstandingCharges` and `leaseBalanceCents` gain an optional client and the second plan reads the first's committed rows. Proven: two concurrent `payment_intent.succeeded` each covering rent and a $100 fee linked $200 to the fee before, $100 after. The rule read stays on the pool, so a settlement transaction briefly holds two connections; fine under `localPoolCap` for the few settlements one lease sees at once, and the Vercel pool is uncapped. D-161's "calls it BEFORE the transaction" is superseded by this row. **MONEY-17, found by the MONEY-16 test on its first full sweep:** `claimPortalEcho` pinned the oldest unclaimed split by id before its conditional claim, so two echoes of equal amount on one invoice raced for one split and the loser was credited as new money; it now retries on the next unclaimed split. The MONEY-16 test is the only check and it reaches the race by timing, not by construction. |
 | D-292 | **The PRD exists in one form only, `docs/prds/00-master-prd.md`. The Word render `PRD.docx` at the repo root is deleted, not regenerated** (CLOSE-01, 2026-10-06) | The `.docx` was rendered on 2026-07-31 from Draft v1.0 and committed with the R-001 scaffold; the Markdown has had eight commits since (latest R-223, 2026-09-18) and the render never followed. Nothing linked it: `git grep PRD.docx` matched only the backlog row and `NEXT.md`, and `WRITEUP.md` never listed it as a deliverable, so the row's "drop it from the closure deliverables" premise was already true. Regenerating would have made a second source of truth that drifts again on the next PRD commit, the same way this one did. A reader who wants a Word copy renders one from the Markdown on demand (pandoc or the `docx` skill); nothing is kept that has to be kept in sync by hand. Recoverable from history at `b638595` if it is ever wanted. |
 | D-293 | **The pre-counsel citation table (`docs/LEGAL-REVIEW-CHECKLIST.md` §D) is the record of what the seeded TX rule claims and what the published statute says; nothing in the seed changes on the strength of it** (CLOSE-02, 2026-10-06) | Every seeded `JurisdictionRule` value was checked against the Legislature's own statute files (current through the 2025 session) and given a confidence. Findings: `graceDays: 1` is a day early against §92.019(a)(3)'s "two full days" (MONEY-05 confirmed; v2 value 2); S.B. 38 repealed §24.005(f)–(f-2) on 2026-01-01 and the seed's service-method reasoning rests on them (LEGAL-06); the Code Construction Act, Gov't Code §311.014(b), rolls the last day of a Code period over a weekend or holiday, which is `CALENDAR_ROLL_FORWARD` rather than the seeded `CALENDAR`; four citations name the wrong section (§92.019(b) for (a-1), §92.332(a) for §92.331(b), §604A.003 for §604A.002, and a §3.506 paraphrase). **None of this is applied to v1 or to code**: D-4 says a rule changes by a new version with `reviewedBy` set, and a statute reading by this session is not that review. The seed block carries one pointer comment to §D so the next reader does not re-trust the comments. A blank cell beats a confident wrong citation, which is why three rows are Low or Blank. |
+| D-294 | **The decision log carries its own by-topic index, at the top of this file, and a new D-number is added to it in the same commit that appends the row** (CLOSE-03, 2026-10-06) | Ten headings (the queue row named five; five more were needed so no row went unindexed), keyword sub-lines, numbers only — the row itself stays the record. Chosen over a separate `07-decisions-index.md` (a second file to keep in step with the first) and over one line per decision (293 lines that would duplicate the titles). Two quirks are indexed, not fixed: D-158 is used twice (R-143 and R-138, both cited in `PROGRESS.md`, so neither is renumbered), and D-164 onward sit after the "How to use this log" section — moving 130 rows is a diff with no grep value. |
