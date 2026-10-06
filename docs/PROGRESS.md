@@ -14468,7 +14468,7 @@ Re-opens the project for two rows from the post-closure second-pass review of th
 **Gate.** Docs plus one comment line in `seed.mts` — no logic, schema, route or test changed, so no unit or e2e run; `lint` and `typecheck` run on the comment change. CI runs its sweep on the push regardless. The seed comment makes this a non-docs diff for Vercel's `ignoreCommand`, but auto-deploy is off (D-277), so nothing deploys until the hook is POSTed.
 
 ## CLOSE-03 — the decision log indexed by topic (D-294)
-**Commit:** `TBD`  ·  **Date:** 2026-10-06
+**Commit:** `3a7796d`  ·  **Date:** 2026-10-06
 
 **What it built.**
 - "Index by topic" at the top of `docs/prds/07-decisions.md`: ten headings (money; jurisdiction & legal; leases/tenancy/inspections; maintenance/vendors/turnover; comms & notifications; access/security/permissions; infra/deploy/data model; tests/CI/demo; UX/accessibility/copy; process/scope/owner calls), each with keyword sub-lines listing D-numbers only. A decision that belongs to two topics is listed under both.
