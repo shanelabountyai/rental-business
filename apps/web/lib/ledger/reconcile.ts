@@ -1,10 +1,12 @@
 import 'server-only'
 
 import { type Drift, detectDrift, detectLeaseBalanceDrift } from '@rental/core/ledger'
+import { formatCents } from '@rental/core/money'
 import { prisma } from '@rental/db'
 import { auditAsSystem } from '@/lib/audit/system.ts'
 import { billingIsLive, getBillingProvider } from '@/lib/billing/provider.ts'
 import { leaseBalanceCents } from '@/lib/ledger/queries.ts'
+import { UNPUSHED_CLAIM_WINDOW_MS } from '@/lib/payments/out-of-band.ts'
 
 // Reconciling the projection (D-11, R-035).
 //
@@ -128,6 +130,35 @@ export async function reconcileLedger(
       amountCents: entry.amountCents,
     })),
   )
+
+  // PUSHES NOBODY CONFIRMED (MONEY-12). A portal split with no `pushedAt` and
+  // no echo, older than the minutes an echo takes. The request that wrote it
+  // either reported this already or died before it could - and the second is
+  // the case with no other witness, since the report dies with the process.
+  const unpushed = await prisma.paymentInvoiceSplit.findMany({
+    where: {
+      pushedAt: null,
+      claimedByEventId: null,
+      createdAt: { gte: since, lt: new Date(now.getTime() - UNPUSHED_CLAIM_WINDOW_MS) },
+      payment: { stripePaymentIntentId: { not: null } },
+    },
+    select: {
+      amountCents: true,
+      stripeInvoiceId: true,
+      paymentId: true,
+      payment: { select: { leaseId: true } },
+    },
+  })
+  for (const split of unpushed) {
+    drift.push({
+      kind: 'portal_push_unconfirmed',
+      stripeEventId: null,
+      ledgerEntryId: null,
+      leaseId: split.payment.leaseId,
+      differenceCents: -split.amountCents,
+      detail: `Portal payment ${split.paymentId} has ${formatCents(split.amountCents)} for invoice ${split.stripeInvoiceId} that Stripe never confirmed receiving. Look at the invoice in Stripe - if it is still open, Stripe's own retry will collect that rent a second time.`,
+    })
+  }
 
   // The external half (R-163): only possible once there is a real Stripe
   // account to ask. NOT windowed like the internal check above - it walks

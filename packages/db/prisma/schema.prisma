@@ -4533,8 +4533,10 @@ model Payment {
  * Stripe to apply to the open invoices. Their `invoice.updated` echoes are
  * claimed by `claimedByEventId` instead of a ledger entry, because a ledger
  * entry is exactly what an echo must not write.
- * Not append-only. A split whose push failed is deleted, and a Payment that
- * is backed out takes its splits with it.
+ * Not append-only. A counter split whose push failed is deleted, and a
+ * Payment that is backed out takes its splits with it. A PORTAL split whose
+ * push threw is KEPT (MONEY-11): a timeout after Stripe wrote the record
+ * throws too, and its echo must still find the split.
  */
 model PaymentInvoiceSplit {
   id               String   @id @default(cuid())
@@ -4544,6 +4546,10 @@ model PaymentInvoiceSplit {
   /// The `invoice.updated` a portal split was pushed as (MONEY-01). Null on a
   /// counter split, which is claimed by its ledger entry instead.
   claimedByEventId String?  @unique
+  /// When the push to Stripe RETURNED (MONEY-11/12). Null means Stripe may or
+  /// may not know: the push threw, or the process died first. Such a split
+  /// can claim an echo only for minutes, never a payment days later.
+  pushedAt         DateTime?
   createdAt        DateTime @default(now())
 
   payment Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)

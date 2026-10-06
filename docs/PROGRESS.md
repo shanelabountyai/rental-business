@@ -14357,3 +14357,30 @@ Not a backlog row. Closes the three "carried forward" items `NEXT.md` listed aft
 - The roughly sixty spec files that leave a legal entity active still do. The drain in `staff.spec.ts` covers the cost; fixing each `afterAll` was not done.
 
 **Gate.** lint, typecheck, build clean. `npm test`: 256 files / 3,479 passed, 4 skipped. Scoped e2e, both projects, 14 spec files: 185 passed + 1 skipped = 186, reconciled against `--list` (186). The full sweep was not run locally; CI owns it.
+
+## MONEY-11 + MONEY-12 (+ MONEY-15, SEC-21 repo side) — a push that threw is unknown, not failed (D-289)
+**Commit:** `PENDING_SHA`  ·  **Date:** 2026-10-05
+
+Re-opens the project for two rows from the post-closure second-pass review of the 09-28 money fixes.
+
+**What it built.**
+- `PaymentInvoiceSplit.pushedAt` (migration `20261005120000_money11_split_pushed_at`, backfilled from `createdAt`), stamped by `pushSplits` after each push returns.
+- `applyPortalPayment` keeps the split whose push threw and reports it as `unconfirmedCents`; only never-attempted splits are deleted. A replay that finds earlier splits reports them and does not push again.
+- `claimPortalEcho`: a stamped split keeps the two-day window, an unstamped one gets `UNPUSHED_CLAIM_WINDOW_MS` (ten minutes).
+- New drift kind `portal_push_unconfirmed`, written at push time when a push throws and by `reconcileLedger` for any portal split older than ten minutes with no stamp and no claim.
+- The simulator's open-invoice figure counts only splits that were stamped or claimed.
+- MONEY-15: the stale-failure comment in `webhook.ts` now says `receivedAt` is not restamped on settlement.
+- SEC-21: the deploy hook URL is replaced in D-277 by where it lives.
+
+**What it decided.** D-289. The backlog's fix for MONEY-12 (the claim requires `pushedAt`) does not work, because the echo arrives before the push returns; the stamp sets the length of the claim window instead.
+
+**Real bug confirmed.** Run against `HEAD`'s three source files, the new MONEY-11 test read **-$2,000 of payment credit for one $1,000 payment**, and the MONEY-12 test's split absorbed the genuine payment with nothing reported.
+
+**What it left behind.**
+- After a throw nobody asks Stripe whether the record exists; the drift row asks a person to look (D-289).
+- A portal payment larger than the open invoices, or made when none is open, still writes a `portal_push_shortfall` row saying the rest "is still open there". That is a prepayment, not a shortfall. Pre-existing (MONEY-09), not touched.
+- MONEY-13, MONEY-14, MONEY-16 and TEST-01 are open.
+- SEC-21 is not closed: the old URL is in history at `bf30ca7` and works until the hook is regenerated.
+- Production needs the migration applied (`docs/DEPLOYMENT.md` recipe) before this code deploys, and deploys only happen by hook (D-277).
+
+**Gate.** `npm run ci:local` exit 0: `db:ci` from scratch with no drift, lint, typecheck, `check:ship-deps` clean, `npm test` 256 files / 3,481 passed, 4 skipped (two more than before, the two new tests), build compiled. No e2e run: no route, component or spec changed. The full sweep is CI's.

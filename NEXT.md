@@ -1,5 +1,39 @@
 # Next session
 
+**2026-10-05 (night): MONEY-11 + MONEY-12 fixed (D-289), MONEY-15 comment, SEC-21 repo side.** SHA and gate in `docs/PROGRESS.md`. The list below is the earlier session's; items 1 and 3 are updated here.
+
+## Owed by Shane, in this order
+
+1. **Apply migration `20261005120000_money11_split_pushed_at` to production** (`docs/DEPLOYMENT.md` neonctl / `prisma migrate deploy` recipe). The new code reads `pushedAt`; deploying first breaks every portal payment.
+2. **POST the `main-manual` deploy hook once** (or click Deploy in Vercel). That one build ships this fix and the three queued env rotations (Blob token, Stripe test keys, `DEMO_ACCESS_PASSWORD`).
+3. **Then regenerate the hook** (SEC-21). The old URL is out of D-277 at HEAD but is in public history at `bf30ca7` and works until regenerated. Keep the new one out of the repo.
+
+## Next buildable item
+
+**MONEY-13** (refund then lost dispute on a card-autopay row reverses twice), then MONEY-14, MONEY-16, TEST-01. Opus for the MONEY rows.
+
+Also still owed: eyeball `/portal/pay/history` and `/portal/guarantor` at phone width in `dev:demo`; commit the storage repo's convention port (item 5 below).
+
+---
+
+**2026-10-05 (late): post-closure review session.** The "No loose ends" line below was wrong in three places, and a second-pass review of the 09-28 money fixes found real rows. Nothing in the rental repo was committed this session; everything is in the working tree.
+
+## Found this session — in priority order
+
+1. **SEC-21 — the `main-manual` Deploy Hook URL is committed in `07-decisions.md` D-277 (`bf30ca7`) and the repo is public (D-285).** Unauthenticated POST = anyone can burn production build minutes. Regenerate the hook in Vercel, keep the new URL out of the repo, replace the line in D-277. Row added to `06-backlog.md`.
+2. **The three queued env rotations will NOT ship on the next code push.** The carried-forward note below says they wait on "a real (non-docs) code push", but `apps/web/vercel.json` has `git.deploymentEnabled: false` (D-277) — pushes do not deploy at all. They need the hook POSTed (or Deploy clicked in Vercel). Blob and Stripe test keys are on grace periods, so do this before regenerating the hook, or regenerate first and use the new one. The Vercel connector returns 403 on this team, so Claude cannot trigger it; Shane does.
+3. **(MONEY-11, 12, 15 now fixed — D-289.)** **MONEY-11..16 — second-pass review of D-268/269/272/274** (`06-backlog.md`, new section at the bottom). Two are worth re-opening the project for: **MONEY-11** (a Stripe timeout after the payment record was written → split deleted → echo mints a second credit) and **MONEY-12** (a process dying mid-push leaves an unclaimed split that absorbs Stripe's own autopay retry — MONEY-01 again, with the detector off). **MONEY-13** (refund then lost dispute on a card-autopay row reverses twice) is a real sequence too. One `pushedAt` column on `PaymentInvoiceSplit` closes 11 and 12 together.
+4. ~~`e2e/staff.spec.ts` uncommitted~~ — it was in the working tree when this session started and landed as `0a5c5fe` (carried-forward cleanup 2, D-287/D-288) from a parallel Claude Code session at 22:07 while this one was running. **Two sessions were editing this tree at once**; this one touched only `NEXT.md` and `06-backlog.md` (pure additions, verified with `git diff` — no lines removed).
+5. **Storage repo got the convention port (D in Shane's pick list), uncommitted there:** `scripts/ship-deps.mts` (new, run clean: 778 dev packages, no offender), `package.json` scripts `check:ship-deps` / `db:drift` / `db:ci`+3 / `lighthouse` / `ci:local`, `lighthouserc.json` `startServerCommand` → `start:test`, and a "Carried over from the rental build" section at the end of its `CLAUDE.md` (10 rules, each citing the rental item). `tsc -p tsconfig.tests.json` green with the new script. Not run there: `db:ci` and `lighthouse` (need local Postgres / a build). Commit from the storage repo as a B-item or a housekeeping commit.
+6. **TEST-01** — one nit from the static test-trap sweep; the sweep was otherwise clean on all five named traps.
+
+## Correction to the record
+
+"No loose ends" (the line kept below for the record) was written before items 1, 2 and 4 above were checked. Item 2 is the kind of claim `CLAUDE.md` already warns about — a status line copied forward (from the 09-28 `ignoreCommand` finding) past the decision (D-277, 09-29) that made it false.
+
+---
+
+
 **PROJECT COMPLETE — marked by Shane 2026-10-05.** Backlog has nothing buildable (every open row is vendor-, counsel- or go-live-gated, D-15) and all four closure deliverables exist. A bare `go` has no item to pick up. No loose ends.
 
 ## Done 2026-10-05: project-closure pass (SHA in `docs/PROGRESS.md`, "Project-closure pass")

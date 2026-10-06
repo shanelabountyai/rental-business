@@ -3,6 +3,7 @@ import { prisma } from '@rental/db'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { leaseBillingState, provisionLeaseBilling } from './provision.ts'
 import { leaseBalanceCents, outstandingCharges } from '@/lib/ledger/queries.ts'
+import { reconcileLedger } from '@/lib/ledger/reconcile.ts'
 import { getBillingProvider } from './provider.ts'
 import { processStripeEvent, unclaimedCounterPayments } from './webhook.ts'
 
@@ -1353,16 +1354,23 @@ describe('a portal payment reaches the invoice (MONEY-01)', () => {
       spy.mockRestore()
     }
 
-    // Only the landed split survives - the other was backed out, same as a
-    // total failure would be.
+    // BOTH splits survive (MONEY-11). A push that threw may have reached
+    // Stripe, so its split stays for the echo to find - told apart from the
+    // one that landed by having no `pushedAt`.
     const payment = await prisma.payment.findUniqueOrThrow({
       where: { stripePaymentIntentId: paymentIntentId },
       select: {
         id: true,
-        invoiceSplits: { select: { stripeInvoiceId: true, amountCents: true } },
+        invoiceSplits: { select: { stripeInvoiceId: true, amountCents: true, pushedAt: true } },
       },
     })
-    expect(payment.invoiceSplits).toEqual([{ stripeInvoiceId: olderInvoiceId, amountCents: 100_000 }])
+    expect(payment.invoiceSplits).toHaveLength(2)
+    expect(payment.invoiceSplits).toEqual(
+      expect.arrayContaining([
+        { stripeInvoiceId: olderInvoiceId, amountCents: 100_000, pushedAt: expect.any(Date) },
+        { stripeInvoiceId: newerInvoiceId, amountCents: 100_000, pushedAt: null },
+      ]),
+    )
 
     // The shortfall lands on the SAME feed /money's reconciliation drift
     // panel already reads (`recentDrift`), not a log line nobody watches.
@@ -1373,9 +1381,111 @@ describe('a portal payment reaches the invoice (MONEY-01)', () => {
     })
     expect(drift).not.toBeNull()
     const item = (drift!.after as { drift: Array<Record<string, unknown>> }).drift[0]!
-    expect(item.kind).toBe('portal_push_shortfall')
+    expect(item.kind).toBe('portal_push_unconfirmed')
     expect(item.differenceCents).toBe(-100_000)
     expect(item.detail).toContain(payment.id)
+  })
+
+  /// A portal payment for one $1,000 invoice whose only push THROWS. Nothing
+  /// is delivered back: the caller plays Stripe's side from here.
+  async function portalPaymentWhosePushThrew() {
+    const lease = await seedActiveLease()
+    await provisionLeaseBilling(lease.id)
+    const payer = await prisma.leasePayer.findFirstOrThrow({ where: { leaseId: lease.id } })
+    const customer = payer.stripeCustomerId!
+    const invoiceId = `in_${randomUUID().replace(/-/g, '').slice(0, 14)}`
+    const now = Math.floor(Date.now() / 1000)
+    await processStripeEvent(
+      invoiceEvent({ customer, type: 'invoice.finalized', amountDue: 100_000, invoiceId, created: now }),
+    )
+
+    const spy = vi.spyOn(getBillingProvider(), 'recordOutOfBandPayment').mockImplementationOnce(async () => {
+      throw new Error('simulated timeout')
+    })
+    const paymentIntentId = `pi_${randomUUID().replace(/-/g, '').slice(0, 16)}`
+    try {
+      await processStripeEvent({
+        id: `evt_${randomUUID().replace(/-/g, '')}`,
+        type: 'payment_intent.succeeded',
+        created: now,
+        data: {
+          object: {
+            id: paymentIntentId,
+            customer,
+            amount: 100_000,
+            payment_method_types: ['us_bank_account'],
+            metadata: { leasePayerId: payer.id, principalCents: '100000' },
+          },
+        },
+      })
+    } finally {
+      spy.mockRestore()
+    }
+    const payment = await prisma.payment.findUniqueOrThrow({
+      where: { stripePaymentIntentId: paymentIntentId },
+      select: { id: true },
+    })
+    const paymentCredits = async () =>
+      (
+        await prisma.ledgerEntry.aggregate({
+          where: { leaseId: lease.id, type: 'PAYMENT' },
+          _sum: { amountCents: true },
+        })
+      )._sum.amountCents
+    return { customer, invoiceId, now, paymentId: payment.id, paymentCredits }
+  }
+
+  // MONEY-11: a timeout on Stripe's response throws AFTER the record was
+  // written. The split used to be deleted on any throw, so the echo that
+  // followed found nothing to claim and credited the principal a second time.
+  it('a push that threw after Stripe recorded it is still credited once', async () => {
+    const { customer, invoiceId, now, paymentId, paymentCredits } = await portalPaymentWhosePushThrew()
+
+    // Stripe did record it, and says so.
+    await processStripeEvent(
+      invoiceEvent({ customer, invoiceId, amountPaid: 100_000, paymentIntentId: null, created: now }),
+    )
+
+    expect(await paymentCredits()).toBe(-100_000)
+    const splits = await prisma.paymentInvoiceSplit.findMany({
+      where: { paymentId },
+      select: { claimedByEventId: true, pushedAt: true },
+    })
+    expect(splits).toEqual([{ claimedByEventId: expect.stringMatching(/^evt_/), pushedAt: null }])
+
+    // And the report said "unknown", not "still open" - which here would
+    // have been the opposite of what happened.
+    const drift = await prisma.auditLog.findFirstOrThrow({
+      where: { action: 'ledger.drift_detected', entityType: 'Payment', entityId: paymentId },
+      select: { after: true },
+    })
+    const item = (drift.after as { drift: Array<Record<string, unknown>> }).drift[0]!
+    expect(item.kind).toBe('portal_push_unconfirmed')
+    expect(item.detail).toContain('may or may not')
+  })
+
+  // MONEY-12: a split nobody stamped, minutes old, is a push that died or was
+  // refused. With the full two-day window it absorbed Stripe's own autopay
+  // retry on the still-open invoice - collected twice, credited once, silent.
+  it('a stale unconfirmed split does not swallow a genuine payment, and the sweep reports it', async () => {
+    const { customer, invoiceId, now, paymentId, paymentCredits } = await portalPaymentWhosePushThrew()
+    await prisma.paymentInvoiceSplit.updateMany({
+      where: { paymentId },
+      data: { createdAt: new Date(Date.now() - 11 * 60_000) },
+    })
+
+    // Scoped to this payment: the sweep reads the whole shared database.
+    const report = await reconcileLedger()
+    const mine = report.drift.filter((item) => item.detail.includes(paymentId))
+    expect(mine).toMatchObject([{ kind: 'portal_push_unconfirmed', differenceCents: -100_000 }])
+
+    // Stripe's retry collects the invoice the push never paid: real money.
+    await processStripeEvent(
+      invoiceEvent({ customer, invoiceId, amountPaid: 100_000, paymentIntentId: null, created: now }),
+    )
+    expect(await paymentCredits()).toBe(-200_000)
+    const [split] = await prisma.paymentInvoiceSplit.findMany({ where: { paymentId } })
+    expect(split!.claimedByEventId).toBeNull()
   })
 })
 

@@ -21,7 +21,7 @@ import { isUniqueViolation } from '@/lib/db/unique-violation.ts'
 import { auditAsSystem } from '@/lib/audit/system.ts'
 import { getBillingProvider } from '@/lib/billing/provider.ts'
 import { planAllocation } from '@/lib/ledger/allocate.ts'
-import { applyPortalPayment } from '@/lib/payments/out-of-band.ts'
+import { applyPortalPayment, UNPUSHED_CLAIM_WINDOW_MS } from '@/lib/payments/out-of-band.ts'
 import { assessNsfFee } from '@/lib/ledger/nsf-fees.ts'
 import { leaseBalanceCents } from '@/lib/ledger/queries.ts'
 import { dispatchPendingNotifications, notify } from '@/lib/notifications/send.ts'
@@ -221,8 +221,11 @@ async function projectClaimed(
   // back" text at a tenant who paid.
   //
   // A genuine ACH return happens AFTER settlement; a stale decline before it.
-  // `writePayment` stamps `receivedAt` from the succeeded event, so the two
-  // timestamps are directly comparable. The symmetric guard already exists in
+  // `receivedAt` is when the row was FIRST written and is not restamped on
+  // settlement (MONEY-15): the succeeded event for a card, `processing` for an
+  // ACH debit adopted from PENDING. Both still order correctly - a return is
+  // after `processing`, a stale decline before `succeeded`. The symmetric
+  // guard already exists in
   // `writePayment` for a `payment_pending` arriving late; this is the half
   // that was missing.
   const staleFailure =
@@ -760,6 +763,7 @@ async function applySettledPortalPayment(
 ) {
   const principalCents = intent.principalCents!
   let appliedCents = 0
+  let unconfirmedCents = 0
   try {
     const outcome = await applyPortalPayment({
       provider: getBillingProvider(),
@@ -770,6 +774,7 @@ async function applySettledPortalPayment(
       receivedAt: intent.occurredAt,
     })
     appliedCents = outcome.appliedCents
+    unconfirmedCents = outcome.unconfirmedCents
   } catch (error) {
     console.error(`[stripe] could not apply portal payment ${paymentId} to its invoices`, error)
   }
@@ -780,7 +785,17 @@ async function applySettledPortalPayment(
   // as owed, and its own retry double-charges. Surfaced on the SAME feed
   // `recentDrift()` already reads (`/money`'s reconciliation drift panel),
   // so a new failure mode gets an existing screen rather than a new one.
+  //
+  // UNCONFIRMED IS NOT SHORT (MONEY-11). A push that threw may have landed,
+  // and "still open at Stripe" would then be the opposite of the truth - so
+  // that part is named as unknown, with the one check that settles it.
   if (appliedCents < principalCents) {
+    const shortCents = principalCents - appliedCents - unconfirmedCents
+    const detail =
+      unconfirmedCents > 0
+        ? `Portal payment ${paymentId}: a push of ${formatCents(unconfirmedCents)} to a Stripe invoice threw, so Stripe may or may not have recorded it. Look at the invoice in Stripe - if it is still open, Stripe's own retry will collect that rent a second time.` +
+          (shortCents > 0 ? ` A further ${formatCents(shortCents)} of its principal was never applied.` : '')
+        : `Portal payment ${paymentId} applied ${formatCents(appliedCents)} of its ${formatCents(principalCents)} principal to Stripe invoices - the rest is still open there, and Stripe's own retry will collect it again unless someone reconciles it first.`
     await auditAsSystem('billing.webhook', {
       action: 'ledger.drift_detected',
       entityType: 'Payment',
@@ -792,12 +807,12 @@ async function applySettledPortalPayment(
         externalChecked: true,
         drift: [
           {
-            kind: 'portal_push_shortfall',
+            kind: unconfirmedCents > 0 ? 'portal_push_unconfirmed' : 'portal_push_shortfall',
             stripeEventId: null,
             ledgerEntryId: null,
             leaseId: payer.leaseId,
             differenceCents: appliedCents - principalCents,
-            detail: `Portal payment ${paymentId} applied ${formatCents(appliedCents)} of its ${formatCents(principalCents)} principal to Stripe invoices - the rest is still open there, and Stripe's own retry will collect it again unless someone reconciles it first.`,
+            detail,
           },
         ],
       },
@@ -816,6 +831,14 @@ async function applySettledPortalPayment(
  * bounded in time the way the counter claim is (D-207), so a split whose
  * echo was lost cannot swallow a genuine payment of the same amount weeks
  * later.
+ *
+ * A split with no `pushedAt` gets minutes, not days (MONEY-12). Nothing says
+ * Stripe was ever told about it - the push threw, or the process died first -
+ * so the only event it may take is one arriving right behind it. Left with
+ * the full window it absorbed Stripe's own autopay retry: rent collected
+ * twice, credited once, and nothing said so. It cannot simply be refused,
+ * because an echo routinely arrives BEFORE the push that caused it returns
+ * (against the simulator, always).
  */
 async function claimPortalEcho(
   stripeEventId: string,
@@ -833,12 +856,20 @@ async function claimPortalEcho(
   // replay of an event that failed after taking it must find it again - or it
   // falls through and credits the tenant's money a second time.
   const unclaimed = { OR: [{ claimedByEventId: null }, { claimedByEventId: stripeEventId }] }
+  const since = (windowMs: number) => new Date(intent.occurredAt.getTime() - windowMs)
   const split = await prisma.paymentInvoiceSplit.findFirst({
     where: {
       stripeInvoiceId: intent.stripeInvoiceId,
       amountCents: intent.amountCents,
-      ...unclaimed,
-      createdAt: { gte: new Date(intent.occurredAt.getTime() - COUNTER_CLAIM_WINDOW_MS) },
+      AND: [
+        unclaimed,
+        {
+          OR: [
+            { pushedAt: { not: null }, createdAt: { gte: since(COUNTER_CLAIM_WINDOW_MS) } },
+            { pushedAt: null, createdAt: { gte: since(UNPUSHED_CLAIM_WINDOW_MS) } },
+          ],
+        },
+      ],
       payment: { leasePayerId, stripePaymentIntentId: { not: null } },
     },
     orderBy: { createdAt: 'asc' },

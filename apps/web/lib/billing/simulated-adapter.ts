@@ -404,7 +404,12 @@ export class SimulatedBillingProvider implements BillingProvider {
         _sum: { amountCents: true },
       }),
       prisma.paymentInvoiceSplit.aggregate({
-        where: { payment: { leaseId: payer.leaseId, stripePaymentIntentId: { not: null } } },
+        where: {
+          payment: { leaseId: payer.leaseId, stripePaymentIntentId: { not: null } },
+          // Only what reached us: a split whose push threw is kept (MONEY-11)
+          // and is not money on the invoice until its echo says so.
+          OR: [{ pushedAt: { not: null } }, { claimedByEventId: { not: null } }],
+        },
         _sum: { amountCents: true },
       }),
       prisma.ledgerEntry.findMany({

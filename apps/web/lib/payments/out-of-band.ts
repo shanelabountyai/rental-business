@@ -56,7 +56,7 @@ export async function recordAcrossInvoices(input: {
     select: { id: true },
   })
 
-  const { landed, landedCents } = await pushSplits({ ...input, splits })
+  const { landed, landedCents } = await pushSplits({ ...input, paymentId: payment.id, splits })
 
   if (landed.length === splits.length) return { recorded: 'all', paymentId: payment.id }
 
@@ -105,6 +105,12 @@ export async function recordAcrossInvoices(input: {
  *
  * Only the PRINCIPAL is applied. The card fee paid for the privilege of
  * paying by card and settles no invoice.
+ *
+ * A PUSH THAT THROWS IS NOT A PUSH THAT FAILED (MONEY-11). A timeout on
+ * Stripe's response throws after the record was written, and its echo is
+ * already on the way. That split is kept, unstamped, and reported as
+ * `unconfirmedCents`; deleting it sent the echo to `writePayment`, which
+ * credited the same money twice. Only splits never attempted are backed out.
  */
 export async function applyPortalPayment(input: {
   provider: BillingProvider
@@ -113,20 +119,36 @@ export async function applyPortalPayment(input: {
   stripePaymentIntentId: string
   principalCents: number
   receivedAt: Date
-}): Promise<{ appliedCents: number }> {
+}): Promise<{ appliedCents: number; unconfirmedCents: number }> {
+  // A REPLAY (MONEY-12). Splits already here mean an earlier run of this same
+  // event got as far as the push, and what it sent is not knowable from here.
+  // Pushing again would apply the money to the invoice twice once Stripe's
+  // idempotency key has aged out, so report what is known and leave the rest
+  // to the drift sweep.
+  const prior = await prisma.paymentInvoiceSplit.findMany({
+    where: { paymentId: input.paymentId },
+    select: { amountCents: true, pushedAt: true, claimedByEventId: true },
+  })
+  if (prior.length > 0) {
+    const sum = (rows: typeof prior) => rows.reduce((total, row) => total + row.amountCents, 0)
+    const known = prior.filter((row) => row.pushedAt != null || row.claimedByEventId != null)
+    return { appliedCents: sum(known), unconfirmedCents: sum(prior) - sum(known) }
+  }
+
   const invoices = await input.provider.getOpenInvoices({ stripeCustomerId: input.stripeCustomerId })
   if (!invoices) throw new Error(`could not list open invoices for ${input.stripeCustomerId}`)
   const open = invoices.reduce((total, invoice) => total + invoice.amountRemainingCents, 0)
   // ponytail: money beyond the open invoices (a prepayment) stays a ledger
   // credit Stripe cannot see, so next month's invoice is collected in full.
   const splits = splitAcrossInvoices(Math.min(input.principalCents, open), invoices)
-  if (splits.length === 0) return { appliedCents: 0 }
+  if (splits.length === 0) return { appliedCents: 0, unconfirmedCents: 0 }
 
   await prisma.paymentInvoiceSplit.createMany({
     data: splits.map((split) => ({ ...split, paymentId: input.paymentId })),
   })
-  const { landed, landedCents } = await pushSplits({
+  const { landed, landedCents, threw } = await pushSplits({
     provider: input.provider,
+    paymentId: input.paymentId,
     splits,
     stripeCustomerId: input.stripeCustomerId,
     payment: { receivedAt: input.receivedAt },
@@ -137,16 +159,28 @@ export async function applyPortalPayment(input: {
   })
   if (landed.length < splits.length) {
     await prisma.paymentInvoiceSplit.deleteMany({
-      where: { paymentId: input.paymentId, stripeInvoiceId: { notIn: landed } },
+      where: {
+        paymentId: input.paymentId,
+        stripeInvoiceId: { notIn: threw ? [...landed, threw.stripeInvoiceId] : landed },
+      },
     })
   }
-  return { appliedCents: landedCents }
+  return { appliedCents: landedCents, unconfirmedCents: threw?.amountCents ?? 0 }
 }
+
+/// How long a split with no `pushedAt` may still claim an echo (MONEY-12).
+/// The push is one synchronous call inside one request, so a real echo is
+/// seconds behind its split; ten minutes is longer than any function lives.
+/// Past it, a split nobody stamped is a push that died or was refused, and
+/// the next `invoice.updated` of its amount is somebody's money.
+export const UNPUSHED_CLAIM_WINDOW_MS = 10 * 60_000
 
 /// One push per split, oldest first, stopping at the first refusal: what
 /// landed is real money at Stripe, what did not is the caller's to back out.
+/// `threw` is the one split whose push threw - Stripe may hold it or not.
 async function pushSplits(input: {
   provider: BillingProvider
+  paymentId: string
   splits: readonly { stripeInvoiceId: string; amountCents: number }[]
   stripeCustomerId: string
   payment: { receivedAt: Date }
@@ -154,7 +188,11 @@ async function pushSplits(input: {
   instrument: string
   idempotencyKey: string
   logTag: string
-}): Promise<{ landed: string[]; landedCents: number }> {
+}): Promise<{
+  landed: string[]
+  landedCents: number
+  threw: { stripeInvoiceId: string; amountCents: number } | null
+}> {
   let landedCents = 0
   const landed: string[] = []
   for (const split of input.splits) {
@@ -170,10 +208,20 @@ async function pushSplits(input: {
       })
     } catch (error) {
       console.error(`[${input.logTag}] out-of-band push failed on ${split.stripeInvoiceId}`, error)
-      break
+      return { landed, landedCents, threw: split }
     }
     landedCents += split.amountCents
     landed.push(split.stripeInvoiceId)
+    // Swallowed: the push landed and that is the fact. A split left unstamped
+    // has usually claimed its echo already, and otherwise shows up as drift.
+    await prisma.paymentInvoiceSplit
+      .updateMany({
+        where: { paymentId: input.paymentId, stripeInvoiceId: split.stripeInvoiceId },
+        data: { pushedAt: new Date() },
+      })
+      .catch((stampError) => {
+        console.error(`[${input.logTag}] could not stamp push of ${split.stripeInvoiceId}`, stampError)
+      })
   }
-  return { landed, landedCents }
+  return { landed, landedCents, threw: null }
 }

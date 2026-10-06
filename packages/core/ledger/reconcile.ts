@@ -38,6 +38,10 @@ export const DRIFT_KINDS = [
   'stuck_claim',
   /// Amounts disagree for the same event.
   'amount_mismatch',
+  /// A portal payment's push to a Stripe invoice that nothing confirms: it
+  /// threw, or the process died around it (MONEY-11/12). Stripe may hold the
+  /// record or may still be collecting that invoice.
+  'portal_push_unconfirmed',
 ] as const
 export type DriftKind = (typeof DRIFT_KINDS)[number]
 
