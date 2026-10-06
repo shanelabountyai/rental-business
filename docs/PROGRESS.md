@@ -14335,7 +14335,7 @@ Not a backlog row — the backlog (`06-backlog.md`) has nothing buildable left t
 **Gate.** Docs only; no lint, typecheck or test run was needed and none is claimed.
 
 ## Carried-forward cleanup 2 — staff a11y split, tenant statement cards, boxed `Panel` variant (D-287, D-288)
-**Commit:** `SHA_PENDING`  ·  **Date:** 2026-10-05
+**Commit:** `0a5c5fe`  ·  **Date:** 2026-10-05
 
 Not a backlog row. Closes the three "carried forward" items `NEXT.md` listed after project closure.
 
