@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { prisma } from '@rental/db'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { runDueJobs } from '../jobs/runner.ts'
@@ -200,8 +201,10 @@ describe('the MTM auto-rollover job', () => {
 // ceiling whatever the lease says. Own state code and rule - `rulesFor`
 // reads every rule for a state, so the TX property above must not see a cap.
 describe('the MTM auto-rollover job against a rent-increase cap', () => {
-  const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
-  const state = Array.from({ length: 2 }, () => letters[Math.floor(Math.random() * 26)]).join('')
+  // Not two random letters: one run in 676 minted `TX` and shadowed the
+  // seeded rule for every test in that run (TEST-01). Same shape as
+  // `nsf-fees.test.ts`: a real state code can never start this way.
+  const state = `Q${randomUUID().slice(0, 8)}`
   let capEntityId: string
   let capPropertyId: string
   let capRuleId: string

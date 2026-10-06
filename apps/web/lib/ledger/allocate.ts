@@ -6,7 +6,7 @@ import {
   allocationOrderFor,
 } from '@rental/core/ledger'
 import { businessDate, dueDateOnOrBefore } from '@rental/core/scheduling'
-import { prisma } from '@rental/db'
+import { prisma, type Prisma } from '@rental/db'
 import { rulesForConfigured } from '@/lib/jurisdiction/queries.ts'
 import { leaseBalanceCents, outstandingCharges } from '@/lib/ledger/queries.ts'
 
@@ -50,30 +50,35 @@ export interface AllocationPlan {
 /**
  * Plans one settled payment across the tenancy's debts.
  *
- * READ BEFORE THE TRANSACTION THAT WRITES THE RESULT, deliberately: the
- * balance this works from must be the balance BEFORE this payment's own
- * entries exist, and every read here is of rows the projection is about to
- * add to rather than change.
+ * READ BEFORE THE ENTRIES IT PLANS ARE WRITTEN, deliberately: the balance
+ * this works from must be the balance BEFORE this payment's own entries
+ * exist, and every read here is of rows the projection is about to add to
+ * rather than change.
  *
- * Two payments settling concurrently can each plan against the same balance
- * and so both aim at the same charge. The balance stays right either way -
- * each writes entries summing to its own amount - and the cost is a
- * mis-attributed link, not lost money. A lock over the lease would be the
- * fix if that ever shows up in reconciliation.
+ * SERIALISED PER LEASE (MONEY-16, D-291). Two payments settling concurrently
+ * used to each plan against the same balance and so both aim at the same
+ * charge: the balance stayed right either way, but the linked rows against
+ * one $100 fee could sum to $200. `webhook.ts` now takes a transaction-scoped
+ * advisory lock on the lease and calls this inside it with `db` set to that
+ * transaction, so the second plan reads the first one's committed rows. The
+ * rule read stays on the pool: it is not what the lock protects.
  */
-export async function planAllocation(args: {
-  leaseId: string
-  propertyId: string
-  leasePayerId: string
-  /// Positive cents, as they arrived.
-  paymentCents: number
-  /// When the money moved, per Stripe.
-  occurredAt: Date
-}): Promise<AllocationPlan> {
+export async function planAllocation(
+  args: {
+    leaseId: string
+    propertyId: string
+    leasePayerId: string
+    /// Positive cents, as they arrived.
+    paymentCents: number
+    /// When the money moved, per Stripe.
+    occurredAt: Date
+  },
+  db: typeof prisma | Prisma.TransactionClient = prisma,
+): Promise<AllocationPlan> {
   const [charges, balanceBefore, payer] = await Promise.all([
-    outstandingCharges(args.leaseId),
-    leaseBalanceCents(args.leaseId),
-    prisma.leasePayer.findUniqueOrThrow({
+    outstandingCharges(args.leaseId, db),
+    leaseBalanceCents(args.leaseId, db),
+    db.leasePayer.findUniqueOrThrow({
       where: { id: args.leasePayerId },
       select: {
         debitDay: true,

@@ -14402,3 +14402,25 @@ Re-opens the project for two rows from the post-closure second-pass review of th
 - Production still needs the D-289 migration applied and the hook POSTed before this deploys (`NEXT.md`); nothing here adds a migration.
 
 **Gate.** `lint` 0 errors, `typecheck` clean, `npm test -- apps/web/lib/billing/billing.test.ts` 46 passed / 46 (one more than before, the new test). No schema change, so no `db:ci`; no route, component or `'use server'` module changed, so no build or e2e run. The full sweep is CI's — check `gh run list` after the push. Note for the next session: `dotenv -e .env.test -- vitest` alone fails the R-045 notice test with `AUTH_URL is not set`; `npm test` layers `.env.local` under it and is the only correct invocation.
+
+## MONEY-14 + MONEY-16 + TEST-01 (+ MONEY-17) — a partial dispute reverses its own amount; one settlement per lease plans at a time (D-291)
+**Commit:** _pending_  ·  **Date:** 2026-10-06
+
+**What it built.**
+- `reverseSettledPayment` takes `capCents`; `projectLostDispute` passes the dispute's amount, a bank return passes nothing. Rows are spent in written order (`orderBy: { id }`, cuid) with the last split. The card-autopay fallback matches `amountCents ≥` the dispute, as D-290's refund does.
+- `planAllocation` runs inside the projection transaction behind `pg_advisory_xact_lock(hashtext('lease-allocation:<leaseId>'))`, reading through the transaction: `planAllocation`, `outstandingCharges` and `leaseBalanceCents` gain an optional client. The rule read stays on the pool.
+- `claimPortalEcho` retries on the next unclaimed split when its conditional claim loses (MONEY-17).
+- `renewal-rollover-job.test.ts` mints `Q` + uuid slice for its state code (TEST-01).
+- `billing.test.ts`: partial dispute on a portal payment with a fee row ($200 fee reversed first, then $300 of rent, Payment `REVERSED`); partial dispute reaching a card-autopay row through its invoice; two concurrent `payment_intent.succeeded` each covering rent and a $100 fee, fee links sum to $100 and the balance moves by the two intents only. All three red on the old code (verified by stashing the fix).
+
+**What it decided.** D-291. Serialise, not decline: the lock is the shape two other places already use, and the proof was $200 linked to a $100 fee. Written order for the partial reversal is right for RENT-first (Texas) and the wrong end for FEE-first; a re-plan of the net is the full answer and is not built. A partial loss still moves the Payment to `REVERSED` (D-272's shape for a partial refund).
+
+**Real bug found.** MONEY-17, by the MONEY-16 test's first run inside a full sweep (passed alone three times): the balance was over-credited by exactly the rent invoice. Two concurrent echoes of equal amount both pinned the oldest unclaimed split; the loser fell through and was projected as a genuine payment. Narrow in production (two payers on one lease pushing the same amount to one invoice within seconds) and a double credit when it happens.
+
+**What it left behind.**
+- MONEY-17 has no deterministic test; the MONEY-16 test reaches the race by timing.
+- A partial dispute in a FEE-first jurisdiction re-opens the fee first (D-291 says where to look).
+- The settlement transaction briefly holds two connections (the rule read); fine under `localPoolCap`, noted in D-291.
+- Queue row 3 (CLOSE-01) is next; Shane's three production steps in `NEXT.md` still come first and nothing here adds a migration.
+
+**Gate.** `lint` 0 errors, `typecheck` clean, `npm test` 256 files / 3,485 passed, 4 skipped — run twice, both green, after one sweep in which the new MONEY-16 test failed and exposed MONEY-17. No schema change, so no `db:ci`; no route, component or `'use server'` module changed, so no build or e2e run. The full sweep is CI's — check `gh run list` after the push.

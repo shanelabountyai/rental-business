@@ -1,8 +1,13 @@
 import 'server-only'
 
 import { balanceCents, statement } from '@rental/core/ledger'
-import { prisma } from '@rental/db'
+import { prisma, type Prisma } from '@rental/db'
 import type { ResolvedScope } from '@/lib/scope/current-scope.ts'
+
+/// The client a read runs on. The default is the pool; `planAllocation`
+/// passes the transaction that holds the per-lease lock (MONEY-16, D-291),
+/// so the rows it plans against are the ones that lock protects.
+type Db = typeof prisma | Prisma.TransactionClient
 
 // Reads over the ledger projection (PAY-03, D-11, R-035).
 //
@@ -44,8 +49,8 @@ export async function leaseStatement(leaseId: string, scope: ResolvedScope) {
 /// The balance alone, when a caller does not need the lines. Same rows, same
 /// arithmetic - deliberately NOT a separate SQL SUM, so the two can never
 /// disagree about what a balance is.
-export async function leaseBalanceCents(leaseId: string): Promise<number> {
-  const rows = await prisma.ledgerEntry.findMany({
+export async function leaseBalanceCents(leaseId: string, db: Db = prisma): Promise<number> {
+  const rows = await db.ledgerEntry.findMany({
     where: { leaseId },
     select: { id: true, amountCents: true },
   })
@@ -69,8 +74,8 @@ export async function leaseBalanceCents(leaseId: string): Promise<number> {
 /// unpaid - and a payment settling in that window would be allocated to a
 /// fee somebody has already forgiven. `rent-roll.ts` and `late-fees.ts`
 /// both filter it for the same reason.
-export async function outstandingCharges(leaseId: string) {
-  const charges = await prisma.charge.findMany({
+export async function outstandingCharges(leaseId: string, db: Db = prisma) {
+  const charges = await db.charge.findMany({
     where: { leaseId, waivedAt: null },
     select: {
       id: true,

@@ -258,18 +258,12 @@ async function projectClaimed(
   // balance rather than settling one; both keep the linked-in-full shape
   // below, where the invoice line already names exactly what moved.
   //
-  // OUTSIDE THE TRANSACTION, so the balance it works from is the one before
-  // this payment's own entries exist.
-  const plan =
-    action !== 'reverse' && intent.kind === 'payment_succeeded' && movesLedger(intent)
-      ? await planAllocation({
-          leaseId: payer.leaseId,
-          propertyId: payer.propertyId,
-          leasePayerId: payer.id,
-          paymentCents: Math.abs(ledgerAmountCents(intent)),
-          occurredAt: intent.occurredAt,
-        })
-      : null
+  // INSIDE THE TRANSACTION, UNDER A PER-LEASE LOCK (MONEY-16, D-291), and
+  // before this payment's own entries are written, so the balance it works
+  // from is the one before them. It used to run before the transaction; two
+  // settlements for one lease then planned against the same balance and
+  // could both land on the same charge.
+  const plans = action !== 'reverse' && intent.kind === 'payment_succeeded' && movesLedger(intent)
 
   // One name for the outcome, used for the recorded row and the returned
   // value alike. Two spellings of the same fact is how a caller and a log
@@ -291,6 +285,27 @@ async function projectClaimed(
     if (action === 'reverse' && settled) {
       await reverseSettledPayment(tx, event, intent, payer, settled)
       return
+    }
+
+    // Released at commit, so the next settlement for this lease plans
+    // against rows that include this one's. The same shape `consumeRateLimit`
+    // and the settlement archive use. The rule read inside `planAllocation`
+    // still goes to the pool, so a transaction briefly needs a second
+    // connection: fine under `localPoolCap` (8) for the handful of
+    // settlements one lease ever sees at once.
+    let plan = null as Awaited<ReturnType<typeof planAllocation>> | null
+    if (plans) {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`lease-allocation:${payer.leaseId}`}))`
+      plan = await planAllocation(
+        {
+          leaseId: payer.leaseId,
+          propertyId: payer.propertyId,
+          leasePayerId: payer.id,
+          paymentCents: Math.abs(ledgerAmountCents(intent)),
+          occurredAt: intent.occurredAt,
+        },
+        tx,
+      )
     }
 
     const payment = await writePayment(tx, event, intent, payer)
@@ -886,30 +901,37 @@ async function claimPortalEcho(
   // falls through and credits the tenant's money a second time.
   const unclaimed = { OR: [{ claimedByEventId: null }, { claimedByEventId: stripeEventId }] }
   const since = (windowMs: number) => new Date(intent.occurredAt.getTime() - windowMs)
-  const split = await prisma.paymentInvoiceSplit.findFirst({
-    where: {
-      stripeInvoiceId: intent.stripeInvoiceId,
-      amountCents: intent.amountCents,
-      AND: [
-        unclaimed,
-        {
-          OR: [
-            { pushedAt: { not: null }, createdAt: { gte: since(COUNTER_CLAIM_WINDOW_MS) } },
-            { pushedAt: null, createdAt: { gte: since(UNPUSHED_CLAIM_WINDOW_MS) } },
-          ],
-        },
-      ],
-      payment: { leasePayerId, stripePaymentIntentId: { not: null } },
-    },
-    orderBy: { createdAt: 'asc' },
-    select: { id: true },
-  })
-  if (!split) return false
-  const { count } = await prisma.paymentInvoiceSplit.updateMany({
-    where: { id: split.id, ...unclaimed },
-    data: { claimedByEventId: stripeEventId },
-  })
-  return count === 1
+  // UNTIL A CLAIM LANDS OR NOTHING IS LEFT TO CLAIM (MONEY-17, D-291). Two
+  // echoes of the same amount on one invoice - two payers on a lease paying
+  // at once - both found the OLDEST unclaimed split; one claim won and the
+  // other returned false, so a push's own echo was credited as new money.
+  // The loser now looks again and finds the split the winner left.
+  for (;;) {
+    const split = await prisma.paymentInvoiceSplit.findFirst({
+      where: {
+        stripeInvoiceId: intent.stripeInvoiceId,
+        amountCents: intent.amountCents,
+        AND: [
+          unclaimed,
+          {
+            OR: [
+              { pushedAt: { not: null }, createdAt: { gte: since(COUNTER_CLAIM_WINDOW_MS) } },
+              { pushedAt: null, createdAt: { gte: since(UNPUSHED_CLAIM_WINDOW_MS) } },
+            ],
+          },
+        ],
+        payment: { leasePayerId, stripePaymentIntentId: { not: null } },
+      },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true },
+    })
+    if (!split) return false
+    const { count } = await prisma.paymentInvoiceSplit.updateMany({
+      where: { id: split.id, ...unclaimed },
+      data: { claimedByEventId: stripeEventId },
+    })
+    if (count === 1) return true
+  }
 }
 
 async function recordOutcome(stripeEventId: string, outcome: string, detail?: string) {
@@ -1200,9 +1222,11 @@ async function projectLostDispute(
   })
   if (!settled) {
     const invoiceId = await getBillingProvider().findInvoiceForPaymentIntent(paymentIntentId)
+    // `gte`, not equality: a partial dispute names less than the charge
+    // (MONEY-14), the same shape D-290 gave the refund.
     settled = invoiceId
       ? await prisma.payment.findFirst({
-          where: { stripeInvoiceId: invoiceId, status: 'SETTLED', amountCents: intent.amountCents },
+          where: { stripeInvoiceId: invoiceId, status: 'SETTLED', amountCents: { gte: intent.amountCents } },
           select,
           orderBy: { receivedAt: 'desc' },
         })
@@ -1220,7 +1244,8 @@ async function projectLostDispute(
       where: { stripeEventId: event.id },
       data: { outcome: 'projected', detail: intent.kind },
     })
-    await reverseSettledPayment(tx, event, intent, payer, settled)
+    // Capped at what was disputed: Stripe disputes can be partial (MONEY-14).
+    await reverseSettledPayment(tx, event, intent, payer, settled, intent.amountCents)
   })
   return { outcome: 'projected', detail: intent.kind }
 }
@@ -1245,6 +1270,16 @@ async function projectLostDispute(
  * yet keys off a payment. When something does - a notice cancelled on
  * payment, most obviously (R-062) - it has to unwind here, and this comment
  * is the reminder.
+ *
+ * `capCents` is how much of the credit to take back; a bank return passes
+ * none (the whole payment came back), a dispute passes its own amount
+ * because a dispute can be partial (MONEY-14, D-291). The cap is spent over
+ * the payment's rows in the order they were written - core's allocation
+ * order, then the unlinked rent row - with the last row split. Under the
+ * RENT-first order Texas is seeded with that re-opens the fee before the
+ * rent, which is what the net money should be left paying. The Payment row
+ * still goes `REVERSED` on a partial loss, as D-272 leaves a partial refund
+ * `REFUNDED`; Stripe allows one dispute per charge, so nothing follows it.
  */
 async function reverseSettledPayment(
   tx: Tx,
@@ -1252,6 +1287,7 @@ async function reverseSettledPayment(
   intent: ProjectionIntent,
   payer: { id: string; leaseId: string; propertyId: string },
   settled: { id: string; amountCents: number },
+  capCents = Number.POSITIVE_INFINITY,
 ) {
   const [reason, description] =
     intent.kind === 'dispute_lost'
@@ -1279,6 +1315,10 @@ async function reverseSettledPayment(
   const originals = await tx.ledgerEntry.findMany({
     where: { paymentId: settled.id, type: 'PAYMENT' },
     select: { id: true, amountCents: true, chargeId: true },
+    // Written order. The ids are cuids, time-prefixed, so this is the order
+    // the projection created them in; `createdAt` cannot say, because every
+    // row of one transaction carries the same `now()`.
+    orderBy: { id: 'asc' },
   })
 
   if (originals.length === 0) {
@@ -1292,7 +1332,7 @@ async function reverseSettledPayment(
         leaseId: payer.leaseId,
         leasePayerId: payer.id,
         type: 'REVERSAL',
-        amountCents: reversalAmountCents(settled.amountCents),
+        amountCents: Math.min(reversalAmountCents(settled.amountCents), capCents),
         description,
         occurredAt: intent.occurredAt,
         paymentId: settled.id,
@@ -1303,7 +1343,11 @@ async function reverseSettledPayment(
     return
   }
 
+  let remainingCents = capCents
   for (const original of originals) {
+    const amountCents = Math.min(reversalAmountCents(original.amountCents), remainingCents)
+    if (amountCents <= 0) break
+    remainingCents -= amountCents
     await tx.ledgerEntry.create({
       data: {
         propertyId: payer.propertyId,
@@ -1312,7 +1356,7 @@ async function reverseSettledPayment(
         type: 'REVERSAL',
         // From the ORIGINAL row, so a partial payment gives back exactly what
         // it gave - an invoice total is a different number.
-        amountCents: reversalAmountCents(original.amountCents),
+        amountCents,
         description,
         occurredAt: intent.occurredAt,
         paymentId: settled.id,

@@ -1728,4 +1728,113 @@ describe('a lost chargeback (MONEY-04)', () => {
     expect(payments[0]).toMatchObject({ status: 'REFUNDED', stripeInvoiceId: invoiceId, amountCents: 150_000 })
     expect(payments[0]!.reversedAt).not.toBeNull()
   }, 30_000)
+
+  it('reverses only the disputed part of a payment, fee row first (MONEY-14)', async () => {
+    // A dispute can be for less than the charge. The reversal used to undo
+    // every row of the payment whatever the dispute said, so a lost dispute
+    // for half the payment re-opened all of it.
+    const { lease, payer, customer, balance } = await setup()
+    const now = Math.floor(Date.now() / 1000)
+    const fee = await prisma.charge.create({
+      data: { propertyId: lease.propertyId, leaseId: lease.id, type: 'LATE_FEE', amountCents: 50_000, description: 'Late fee', dueOn: new Date('2026-03-05T00:00:00.000Z') },
+    })
+    await processStripeEvent(invoiceEvent({ customer, type: 'invoice.finalized', amountDue: 150_000, created: now }))
+    const feeInvoice = invoiceEvent({ customer, type: 'invoice.finalized', amountDue: 50_000, created: now })
+    ;(feeInvoice.data.object as Record<string, unknown>).lines = { data: [{ metadata: { chargeId: fee.id } }] }
+    await processStripeEvent(feeInvoice)
+    const before = await balance()
+
+    // $1,700 principal under RENT-first: $1,500 to rent (unlinked), $200 on the fee.
+    const paymentIntentId = `pi_${randomUUID().replace(/-/g, '').slice(0, 16)}`
+    await processStripeEvent({
+      id: `evt_${randomUUID().replace(/-/g, '')}`,
+      type: 'payment_intent.succeeded',
+      created: now,
+      data: {
+        object: { id: paymentIntentId, customer, amount: 173_000, payment_method_types: ['card'], metadata: { leasePayerId: payer.id, principalCents: '170000' } },
+      },
+    })
+    expect(await balance()).toBe(before - 170_000)
+
+    // $500 lost: the $200 fee row goes first (written first), then $300 of rent.
+    expect((await closed(paymentIntentId, 'lost', 50_000, now + 60)).outcome).toBe('projected')
+    expect(await balance()).toBe(before - 120_000)
+    const reversals = await prisma.ledgerEntry.findMany({
+      where: { leaseId: lease.id, type: 'REVERSAL' },
+      select: { amountCents: true, chargeId: true },
+      orderBy: { id: 'asc' },
+    })
+    expect(reversals).toEqual([
+      { amountCents: 20_000, chargeId: fee.id },
+      { amountCents: 30_000, chargeId: null },
+    ])
+    const payment = await prisma.payment.findUniqueOrThrow({ where: { stripePaymentIntentId: paymentIntentId } })
+    expect(payment.status).toBe('REVERSED')
+  }, 30_000)
+
+  it('finds a card autopay row through its invoice for a partial dispute (MONEY-14)', async () => {
+    const { customer, balance } = await setup()
+    const now = Math.floor(Date.now() / 1000)
+    const invoiceId = `in_${randomUUID().replace(/-/g, '').slice(0, 14)}`
+    await processStripeEvent(invoiceEvent({ customer, invoiceId, type: 'invoice.finalized', amountDue: 150_000, created: now }))
+    const before = await balance()
+    await processStripeEvent(invoiceEvent({ customer, invoiceId, amountPaid: 150_000, paymentIntentId: null, created: now }))
+    expect(await balance()).toBe(before - 150_000)
+
+    // The invoice lookup used to match on the exact amount, so a partial
+    // dispute could never reach the row it was about.
+    const paymentIntentId = `pi_${randomUUID().replace(/-/g, '').slice(0, 16)}`
+    const lookup = vi.spyOn(getBillingProvider(), 'findInvoiceForPaymentIntent').mockResolvedValueOnce(invoiceId)
+    expect((await closed(paymentIntentId, 'lost', 40_000, now + 60)).outcome).toBe('projected')
+    lookup.mockRestore()
+    expect(await balance()).toBe(before - 110_000)
+  }, 30_000)
+})
+
+describe('two settlements for one lease at once (MONEY-16)', () => {
+  it('never links more to a charge than the charge is for', async () => {
+    // `planAllocation` ran before the transaction, so two concurrent
+    // settlements planned against the same balance and both paid the same
+    // fee. The balance was right either way; the fee's linked rows were not.
+    const lease = await seedActiveLease()
+    await provisionLeaseBilling(lease.id)
+    const payer = await prisma.leasePayer.findFirstOrThrow({ where: { leaseId: lease.id } })
+    const customer = payer.stripeCustomerId!
+    const now = Math.floor(Date.now() / 1000)
+    const fee = await prisma.charge.create({
+      data: { propertyId: lease.propertyId, leaseId: lease.id, type: 'LATE_FEE', amountCents: 10_000, description: 'Late fee', dueOn: new Date('2026-03-05T00:00:00.000Z') },
+    })
+    await processStripeEvent(invoiceEvent({ customer, type: 'invoice.finalized', amountDue: 150_000, created: now }))
+    const feeInvoice = invoiceEvent({ customer, type: 'invoice.finalized', amountDue: 10_000, created: now })
+    ;(feeInvoice.data.object as Record<string, unknown>).lines = { data: [{ metadata: { chargeId: fee.id } }] }
+    await processStripeEvent(feeInvoice)
+    const before = await leaseBalanceCents(lease.id)
+
+    // Each alone covers the rent AND the fee, so each plan on the pre-payment
+    // balance lands $100 on the fee. Serialised, the second sees the first.
+    const settle = () =>
+      processStripeEvent({
+        id: `evt_${randomUUID().replace(/-/g, '')}`,
+        type: 'payment_intent.succeeded',
+        created: now,
+        data: {
+          object: {
+            id: `pi_${randomUUID().replace(/-/g, '').slice(0, 16)}`,
+            customer,
+            amount: 160_000,
+            payment_method_types: ['card'],
+            metadata: { leasePayerId: payer.id, principalCents: '160000' },
+          },
+        },
+      })
+    const results = await Promise.all([settle(), settle()])
+    expect(results.map((r) => r.outcome)).toEqual(['projected', 'projected'])
+
+    expect(await leaseBalanceCents(lease.id)).toBe(before - 320_000)
+    const { _sum } = await prisma.ledgerEntry.aggregate({
+      where: { chargeId: fee.id, type: 'PAYMENT' },
+      _sum: { amountCents: true },
+    })
+    expect(_sum.amountCents).toBe(-10_000)
+  }, 30_000)
 })
