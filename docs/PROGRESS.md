@@ -14359,7 +14359,7 @@ Not a backlog row. Closes the three "carried forward" items `NEXT.md` listed aft
 **Gate.** lint, typecheck, build clean. `npm test`: 256 files / 3,479 passed, 4 skipped. Scoped e2e, both projects, 14 spec files: 185 passed + 1 skipped = 186, reconciled against `--list` (186). The full sweep was not run locally; CI owns it.
 
 ## MONEY-11 + MONEY-12 (+ MONEY-15, SEC-21 repo side) — a push that threw is unknown, not failed (D-289)
-**Commit:** `PENDING_SHA`  ·  **Date:** 2026-10-05
+**Commit:** `8f19e76`  ·  **Date:** 2026-10-05
 
 Re-opens the project for two rows from the post-closure second-pass review of the 09-28 money fixes.
 
