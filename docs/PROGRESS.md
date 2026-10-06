@@ -14442,7 +14442,7 @@ Re-opens the project for two rows from the post-closure second-pass review of th
 **Gate.** Docs-only change: one tracked binary removed and three Markdown files edited. No code, schema, route or test touched, so no lint, typecheck, unit or e2e run. CI runs its sweep on the push regardless; `b638595`'s own run was still in progress when this started. Vercel's `ignoreCommand` will skip this push, correctly.
 
 ## CLOSE-02 — pre-counsel citation table for the seeded TX rule (D-293)
-**Commit:** _pending_  ·  **Date:** 2026-10-06
+**Commit:** `aaaae38`  ·  **Date:** 2026-10-06
 
 **What it built.**
 - `docs/LEGAL-REVIEW-CHECKLIST.md` §D: one row per seeded `JurisdictionRule` value (25 rows), the statute quoted as published, a confidence per row (High / Medium / Low-by-absence / Blank), and the reviewer's question. Plus §D.2 (statutes that touch the product but are not seeded) and §D.3 (the eight errors in the seed's own comments, for whoever writes v2).
