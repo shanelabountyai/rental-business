@@ -5,7 +5,7 @@
 **Repo:** https://github.com/shanelabountyai/rental-business (public, D-285)
 **Live demo:** https://rent.labintelligence.co, behind one shared demo password (D-257; available on request). The full demo also runs locally from [`docs/DEMO-SCRIPT.md`](docs/DEMO-SCRIPT.md)
 **Built with:** Claude Code + Next.js (App Router), TypeScript, Postgres + Prisma, Stripe Billing, Twilio, Resend, Tailwind CSS + shadcn, Vercel
-**Status:** Feature-complete (Milestones 1–16, all ✅) · Post-completion review sweep closed (41 findings, 39 fixed) · Remaining rows are gated on a vendor contract, counsel or a go-live decision (production Stripe/Twilio/Resend cutover, legal review of jurisdiction configs) · Last synced: 2026-10-05
+**Status:** Feature-complete (Milestones 1–16, all ✅) · Post-completion review sweep closed (41 findings, 39 fixed) · Remaining rows are gated on a vendor contract, counsel or a go-live decision (production Stripe/Twilio/Resend cutover, legal review of jurisdiction configs) · Post-closure money review queue closed (D-289 to D-295) · Marked complete and shipped 2026-10-06 · Last synced: 2026-10-06
 **Exec brief (non-technical):** https://claude.ai/artifact/GSG4tVzFVzbgD4m5eacsrB
 
 ---
