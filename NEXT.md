@@ -1,5 +1,7 @@
 # Next session
 
+**2026-10-06 (night): owed steps 1–3 are DONE** (production migration applied, 119 migrations; production deployed from `58f7262`, Ready; deploy hook regenerated, old URL returns 404, SEC-21 closed). Still owed by Shane: CLOSE-04 (`_to_delete/`) and CLOSE-05 (browser demo walk). Ignore the "Owed by Shane" list below for 1–3.
+
 **2026-10-06 (night): nothing Claude-owned here; checked.** Working tree clean, CI green through CLOSE-02, `_to_delete/` still present (CLOSE-04, Shane's), CLOSE-05 still waits on Shane's steps 1–2 below. The storage repo's `NEXT.md` has moved on since the line below was written: MONEY-07 shipped at `04eb97c`, **MONEY-08** is next there (Opus). A bare `go` in this repo has nothing to pick up until Shane does rows 6–7.
 
 **2026-10-06 (evening): CLOSE-03 done (D-294).** "Index by topic" at the top of `docs/prds/07-decisions.md`: all 294 rows under ten headings, coverage checked by script; D-158 found used twice (R-143, R-138), left as is and named in the index. Docs-only push. Queue row 5 is done. **Rows 6 and 7 are Shane's**: CLOSE-04 is the `_to_delete/` removal, CLOSE-05 is the browser demo walk after the three production steps below and the D-289 deploy. A bare `go` has no Claude-owned row left in this repo's queue; the next Claude work is in the storage repo, whose `NEXT.md` (checked 2026-10-06) says the convention port is committed, MONEY-01 to MONEY-06 are built, and **MONEY-07** is next. CLOSE-05 here waits on Shane's steps 1–2 below and the D-289 deploy; `_to_delete/` (CLOSE-04) still exists.
