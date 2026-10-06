@@ -14424,3 +14424,19 @@ Re-opens the project for two rows from the post-closure second-pass review of th
 - Queue row 3 (CLOSE-01) is next; Shane's three production steps in `NEXT.md` still come first and nothing here adds a migration.
 
 **Gate.** `lint` 0 errors, `typecheck` clean, `npm test` 256 files / 3,485 passed, 4 skipped — run twice, both green, after one sweep in which the new MONEY-16 test failed and exposed MONEY-17. No schema change, so no `db:ci`; no route, component or `'use server'` module changed, so no build or e2e run. The full sweep is CI's — check `gh run list` after the push.
+
+## CLOSE-01 — the PRD has one copy (D-292)
+**Commit:** `PENDING`  ·  **Date:** 2026-10-06
+
+**What it built.**
+- Deleted `PRD.docx` from the repo root. It was a Word render of the master PRD's Draft v1.0 (2026-07-31), committed with the R-001 scaffold and never touched again while `00-master-prd.md` took eight more commits (latest R-223, 2026-09-18).
+- `WRITEUP.md` now says the PRD is Markdown only and why the render was dropped; its decisions count is 292.
+
+**What it decided.**
+- D-292: delete, do not regenerate. `git grep PRD.docx` matched only the backlog row and `NEXT.md`; `WRITEUP.md` never listed the file as a deliverable, so the row's "drop it from the closure deliverables" premise was already true. A regenerated copy drifts again on the next PRD commit. Anyone wanting a Word copy renders one from the Markdown on demand.
+
+**What it left behind.**
+- Nothing. The file is in history at `b638595` if it is ever wanted.
+- Queue row 4 (CLOSE-02, the TX citation table) is next; Shane's three production steps in `NEXT.md` still come first.
+
+**Gate.** Docs-only change: one tracked binary removed and three Markdown files edited. No code, schema, route or test touched, so no lint, typecheck, unit or e2e run. CI runs its sweep on the push regardless; `b638595`'s own run was still in progress when this started. Vercel's `ignoreCommand` will skip this push, correctly.

@@ -25,9 +25,9 @@ A single-family rental owner running 10–50 houses across several LLCs is doing
 
 ## How It's Built
 
-It's an npm-workspaces monorepo: `apps/web` (Next.js App Router), `packages/core` (domain logic — money math, jurisdiction rules, metrics) and `packages/db` (Prisma schema + hand-written migrations). The schema has 111 models across 118 migrations, using the canonical entity names from the master PRD (LegalEntity, Property, Unit, Lease, Tenant, LedgerEntry, WorkOrder, Notice, Task and supporting entities). Three external capabilities that are partner-gated or regulated — screening, e-sign, listing syndication — run against fault-injecting simulators until a real vendor is chosen; Stripe, Twilio and Resend are real, wired drivers behind the same kind of seam, selected by whether a key is configured rather than by an environment flag.
+It's an npm-workspaces monorepo: `apps/web` (Next.js App Router), `packages/core` (domain logic — money math, jurisdiction rules, metrics) and `packages/db` (Prisma schema + hand-written migrations). The schema has 111 models across 118 migrations, using the canonical entity names from the master PRD (LegalEntity, Property, Unit, Lease, Tenant, LedgerEntry, WorkOrder, Notice, Task and supporting entities). Three external capabilities that are partner-gated or regulated — screening, e-sign, listing syndication — run against fault-injecting simulators until a real vendor is chosen; Stripe, Twilio and Resend are real, wired drivers behind the same kind of seam, selected by whether a key is configured rather than by an environment flag. The PRD itself is Markdown only, [`docs/prds/00-master-prd.md`](docs/prds/00-master-prd.md); a Word render of its first draft sat at the repo root from day one, was never updated through eight PRD commits, and was deleted rather than regenerated (D-292), because a second copy of a living document only drifts.
 
-**Key design decisions** (the full log is [`docs/prds/07-decisions.md`](docs/prds/07-decisions.md): 287 entries, each settled once)
+**Key design decisions** (the full log is [`docs/prds/07-decisions.md`](docs/prds/07-decisions.md): 292 entries, each settled once)
 
 | Decision | Alternative considered | Why I chose it |
 |---|---|---|

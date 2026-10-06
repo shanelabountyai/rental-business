@@ -1,5 +1,7 @@
 # Next session
 
+**2026-10-06 (later): CLOSE-01 done (D-292).** `PRD.docx` deleted, not regenerated; nothing linked it. Docs-only push, so Vercel skips it and nothing changes for Shane's three steps below. Queue row 3 is done; a bare `go` picks up **row 4: CLOSE-02** (Fable, web search on: pre-counsel citation table for the seeded TX `JurisdictionRule` → `docs/LEGAL-REVIEW-CHECKLIST.md`, MONEY-05 is row one; every row carries a confidence, a blank beats a confident wrong citation).
+
 **2026-10-06: MONEY-14 + MONEY-16 + TEST-01 fixed, MONEY-17 found and fixed (D-291).** SHA and gate in `docs/PROGRESS.md`. Queue row 2 is done; a bare `go` picks up **row 3: CLOSE-01** (Sonnet: regenerate `PRD.docx` or drop it from `WRITEUP.md`). Shane's three steps below are still owed and unchanged — nothing here adds a migration, so the D-289 one is still the only pending one. This push is real code, so once the hook is POSTed it ships D-289, D-290 and D-291 together with the three queued env rotations.
 
 **2026-10-05 (later): MONEY-13 fixed (D-290).** SHA and gate in `docs/PROGRESS.md`. Queue row 1 is done; a bare `go` picks up **row 2: MONEY-14 + MONEY-16 + TEST-01** (Opus). Shane's three steps below are still owed and unchanged — nothing in MONEY-13 adds a migration, so the D-289 one is still the only pending one.
@@ -14,7 +16,7 @@
 
 ## Next buildable item
 
-~~MONEY-13~~ done (D-290). ~~MONEY-14 + MONEY-16 + TEST-01~~ done (D-291). **CLOSE-01** next (queue row 3), Sonnet.
+~~MONEY-13~~ done (D-290). ~~MONEY-14 + MONEY-16 + TEST-01~~ done (D-291). ~~CLOSE-01~~ done (D-292). **CLOSE-02** next (queue row 4), Fable with web search.
 
 Also still owed: eyeball `/portal/pay/history` and `/portal/guarantor` at phone width in `dev:demo`; commit the storage repo's convention port (item 5 below).
 
