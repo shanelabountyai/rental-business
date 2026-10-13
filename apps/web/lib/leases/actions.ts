@@ -700,7 +700,8 @@ export async function changeLeaseStatus(
     // The unoccupied tail of the final month, credited back BEFORE
     // disposition reads the ledger (R-160) - moveInProration's mirror, so
     // "minus balance owed" is net of days the tenant paid for and never
-    // lived.
+    // lived. Posted straight to the ledger (D-302), so it no longer
+    // matters that the subscription above is already cancelled.
     await chargeMoveOutProration(leaseId).catch((error) => {
       console.error(`[lease] move-out proration failed for ${leaseId}`, error)
     })

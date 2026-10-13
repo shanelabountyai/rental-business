@@ -2,7 +2,11 @@ import { randomUUID } from 'node:crypto'
 import { wallClockToUtc } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { leaseBalanceAtStripeCents, leaseBalanceCents } from '@/lib/ledger/queries.ts'
+import { syncLease } from './lifecycle.ts'
+import { getBillingProvider } from './provider.ts'
 import { chargeMoveInProration, chargeMoveOutProration } from './proration.ts'
+import { processStripeEvent } from './webhook.ts'
 
 // Charging the part month (PAY-08, R-042; D-12).
 //
@@ -167,15 +171,79 @@ describe('chargeMoveOutProration', () => {
     expect(charge.amountCents).toBe(-53_226)
     expect(charge.description).toContain('Move-out credit')
     expect(charge.description).toContain('11/31 days')
-    // D-12: core decided the amount, Stripe was handed a finished number -
-    // negative, its own mechanism for a credit (same as `waiveCharge`).
-    expect(charge.stripeInvoiceItemId).not.toBeNull()
+    // D-302: nothing is pushed. A negative invoice item rides the NEXT
+    // invoice, and a tenancy that has ended never has one.
+    expect(charge.stripeInvoiceItemId).toBeNull()
 
     const audit = await prisma.auditLog.findFirstOrThrow({
       where: { entityType: 'Charge', entityId: charge.id, action: 'ledger.adjusted' },
     })
     expect(audit.reason).toContain('11/31 days')
   }, 20_000)
+
+  it('reduces the ledger balance by the credit, once, on either side of the cancel', async () => {
+    // D-302. March was billed in advance on the 1st and is unpaid; the tenant
+    // left on the 20th. What they owe is $1,500 less the 11 unoccupied days.
+    // The credit used to be a negative invoice item waiting on a next invoice
+    // a cancelled subscription never cuts, so the ledger went on saying
+    // $1,500 whichever order the two ran in.
+    for (const creditFirst of [true, false]) {
+      const lease = await seedMoveOutLease({
+        moveOutAt: new Date('2026-03-20T12:00:00.000Z'),
+        rentDueDay: 1,
+      })
+      const payer = await prisma.leasePayer.findFirstOrThrow({ where: { leaseId: lease.id } })
+      await prisma.leasePayer.update({
+        where: { id: payer.id },
+        data: { stripeSubscriptionId: `sub_${randomUUID().replace(/-/g, '').slice(0, 14)}` },
+      })
+      await processStripeEvent({
+        id: `evt_test_${randomUUID()}`,
+        type: 'invoice.finalized',
+        created: Date.parse('2026-03-01T09:00:00Z') / 1000,
+        data: {
+          object: {
+            id: `in_test_${randomUUID().slice(0, 12)}`,
+            customer: payer.stripeCustomerId,
+            amount_due: 150_000,
+          },
+        },
+      })
+
+      if (creditFirst) await chargeMoveOutProration(lease.id)
+      await syncLease(lease.id)
+      if (!creditFirst) await chargeMoveOutProration(lease.id)
+      expect(await leaseBalanceCents(lease.id)).toBe(150_000 - 53_226)
+
+      // Ending a lease twice, a retried post-commit chain and two of them at
+      // once all post it once.
+      await Promise.all([chargeMoveOutProration(lease.id), chargeMoveOutProration(lease.id)])
+      expect(await leaseBalanceCents(lease.id)).toBe(150_000 - 53_226)
+
+      const charge = await prisma.charge.findFirstOrThrow({ where: { leaseId: lease.id } })
+      const entries = await prisma.ledgerEntry.findMany({ where: { chargeId: charge.id } })
+      expect(entries).toHaveLength(1)
+      expect(entries[0]).toMatchObject({
+        type: 'CREDIT',
+        amountCents: -53_226,
+        leasePayerId: payer.id,
+        // Nothing at Stripe produced it, and it does not pretend otherwise.
+        stripeEventId: null,
+      })
+      expect(entries[0]!.description).toContain('11/31 days')
+      // Stripe's invoice still says $1,500. The nightly comparison must not
+      // report the credit it was never sent as drift, and the simulator must
+      // not answer as though it had been sent it.
+      expect(await leaseBalanceAtStripeCents(lease.id)).toBe(150_000)
+      expect(
+        await getBillingProvider().getOpenInvoiceAmountCents({
+          stripeSubscriptionId: (
+            await prisma.leasePayer.findUniqueOrThrow({ where: { id: payer.id } })
+          ).stripeSubscriptionId!,
+        }),
+      ).toBe(150_000)
+    }
+  }, 30_000)
 
   it('credits NOTHING when moving out exactly on the next due day', async () => {
     // 08:00 UTC, before the 09:00 billing hour: the period beginning that

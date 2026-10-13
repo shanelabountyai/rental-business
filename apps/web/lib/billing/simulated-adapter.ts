@@ -2,7 +2,7 @@ import 'server-only'
 
 import { createHash, randomBytes } from 'node:crypto'
 import { prisma } from '@rental/db'
-import { leaseBalanceCents } from '@/lib/ledger/queries.ts'
+import { leaseBalanceAtStripeCents } from '@/lib/ledger/queries.ts'
 import type { CollectionMethod, OpenInvoice, PaymentRail } from '@rental/core/payments'
 import type {
   BillingProvider,
@@ -213,7 +213,7 @@ export class SimulatedBillingProvider implements BillingProvider {
       select: { leaseId: true },
     })
     if (!payer) return null
-    return leaseBalanceCents(payer.leaseId)
+    return leaseBalanceAtStripeCents(payer.leaseId)
   }
 
   async addInvoiceItem(input: {
@@ -398,7 +398,7 @@ export class SimulatedBillingProvider implements BillingProvider {
     // ponytail: a refund of a portal payment reads as re-opening the invoice
     // here, which Stripe does not do.
     const [owed, fromIntents, pushed, charges] = await Promise.all([
-      leaseBalanceCents(payer.leaseId),
+      leaseBalanceAtStripeCents(payer.leaseId),
       prisma.ledgerEntry.aggregate({
         where: { leaseId: payer.leaseId, stripeObjectId: { startsWith: 'pi_' } },
         _sum: { amountCents: true },

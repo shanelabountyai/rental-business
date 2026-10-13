@@ -5,7 +5,7 @@ import { formatCents } from '@rental/core/money'
 import { prisma } from '@rental/db'
 import { auditAsSystem } from '@/lib/audit/system.ts'
 import { billingIsLive, getBillingProvider } from '@/lib/billing/provider.ts'
-import { leaseBalanceCents } from '@/lib/ledger/queries.ts'
+import { leaseBalanceAtStripeCents } from '@/lib/ledger/queries.ts'
 import { UNPUSHED_CLAIM_WINDOW_MS } from '@/lib/payments/out-of-band.ts'
 
 // Reconciling the projection (D-11, R-035).
@@ -61,7 +61,8 @@ import { UNPUSHED_CLAIM_WINDOW_MS } from '@/lib/payments/out-of-band.ts'
 // `LeasePayer`'s Stripe subscription for what it still owes
 // (`getOpenInvoiceAmountCents` - the sum of `amount_remaining`, i.e.
 // amount_due minus amount_paid, across its open invoices) and comparing that
-// to `leaseBalanceCents`, the projection's own figure for the same lease.
+// to `leaseBalanceAtStripeCents`, the projection's own figure for the same
+// lease less the one credit Stripe is never sent (D-302).
 // That is a coarser question than "does this one event's amount match" -
 // `detectLeaseBalanceDrift` (packages/core) is a separate comparison from
 // `detectDrift`, not a second use of it, because it has no event to key on -
@@ -191,7 +192,7 @@ export async function reconcileLedger(
       [...stripeBalanceByLease].map(async ([leaseId, stripeBalanceCents]) => ({
         leaseId,
         stripeBalanceCents,
-        projectedBalanceCents: await leaseBalanceCents(leaseId),
+        projectedBalanceCents: await leaseBalanceAtStripeCents(leaseId),
       })),
     )
     drift.push(...detectLeaseBalanceDrift(leaseBalances))

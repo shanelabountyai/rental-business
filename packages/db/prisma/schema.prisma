@@ -4599,7 +4599,9 @@ model ProcessedStripeEvent {
 /// a new REVERSAL row pointing at the entry it reverses.
 ///
 /// A row here that Stripe does not know about is a reconciliation bug, not a
-/// shortcut.
+/// shortcut. ONE exception, by the owner's decision (D-302): the move-out
+/// proration credit, a `CREDIT` with no `stripeEventId`, which nothing at
+/// Stripe can carry once the subscription is over.
 model LedgerEntry {
   id             String          @id @default(cuid())
   propertyId     String

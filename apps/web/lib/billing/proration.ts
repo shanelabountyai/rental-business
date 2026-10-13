@@ -178,13 +178,7 @@ export async function chargeMoveInProration(
 export interface MoveOutProrationChargeResult {
   chargeId: string | null
   amountCents: number
-  reason:
-    | 'credited'
-    | 'no_credit'
-    | 'already_credited'
-    | 'no_customer'
-    | 'push_failed'
-    | 'no_move_out'
+  reason: 'credited' | 'no_credit' | 'already_credited' | 'no_customer' | 'no_move_out'
 }
 
 /**
@@ -193,9 +187,17 @@ export interface MoveOutProrationChargeResult {
  * `chargeMoveInProration`'s mirror, same idempotency posture: re-running a
  * status transition — or a nightly resync — must not credit a tenant twice.
  * `Charge.amountCents` is negative here, the one place in the product a
- * charge reduces rather than increases what's owed, so the deposit
- * disposition's ledger read (D-11) is already net of it by the time
- * disposition runs.
+ * charge reduces rather than increases what's owed.
+ *
+ * A LEDGER-ONLY CREDIT, AND THE ONE ROW IN `LedgerEntry` THE WEBHOOK DID NOT
+ * WRITE (D-302, the owner's call; amends D-11 and D-165 for this case alone).
+ * It used to be a negative invoice item, which rides the payer's NEXT
+ * invoice - and a tenancy that has ended never has one, so the credit never
+ * finalized, never projected, and the deposit disposition read a balance
+ * that still charged the tenant for days they were gone. Nothing at Stripe
+ * can carry it without a credit note, so nothing is sent: the entry has no
+ * `stripeEventId`, and `reconcileLedger` leaves it out of what it expects
+ * Stripe to agree with.
  */
 export async function chargeMoveOutProration(leaseId: string): Promise<MoveOutProrationChargeResult> {
   const lease = await prisma.lease.findUniqueOrThrow({
@@ -239,75 +241,91 @@ export async function chargeMoveOutProration(leaseId: string): Promise<MoveOutPr
   // billed is the one fully occupied, so there is nothing to give back.
   if (!proration) return { chargeId: null, amountCents: 0, reason: 'no_credit' }
 
-  const existing = await prisma.charge.findFirst({
-    where: { leaseId, type: 'RENT', description: { startsWith: 'Move-out credit' } },
-    select: { id: true, amountCents: true },
-  })
-  if (existing) {
-    return { chargeId: existing.id, amountCents: existing.amountCents, reason: 'already_credited' }
-  }
-
+  // A payer nothing was ever billed to has no period paid in advance to give
+  // part of back. This was harmless while the credit could not land; now
+  // that it does, crediting rent never charged would be money invented.
   const payer = lease.leasePayers[0]
-  if (!payer) return { chargeId: null, amountCents: 0, reason: 'no_customer' }
+  if (!payer?.stripeCustomerId) return { chargeId: null, amountCents: 0, reason: 'no_customer' }
 
-  const charge = await prisma.charge.create({
-    data: {
-      propertyId: lease.propertyId,
-      leaseId: lease.id,
-      // RENT, not a separate type — it's a reduction of rent already billed,
-      // and typing it as something else would drop it out of every
-      // rent-versus-fees split the product already makes.
-      type: 'RENT',
-      amountCents: -proration.amountCents,
-      description: proration.description,
-      dueOn: businessDateToUtc(moveOutOn),
-    },
+  const posted = await prisma.$transaction(async (tx) => {
+    // THE LOCK IS THE IDEMPOTENCY, since no unique index names "the move-out
+    // credit" and a read-then-write alone lets two runs both pass the read.
+    // The same per-lease lock a settling payment plans its allocation under
+    // (MONEY-16), so that plan never sees half of this either.
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`lease-allocation:${lease.id}`}))`
+
+    const existing = await tx.charge.findFirst({
+      where: { leaseId, type: 'RENT', description: { startsWith: 'Move-out credit' } },
+      select: { id: true, amountCents: true },
+    })
+    // Including a credit written before D-302, which has a Charge and no
+    // entry. Nothing is backfilled (D-201): its disposition may already have
+    // gone out on the old balance.
+    if (existing) return { charge: existing, created: false }
+
+    const charge = await tx.charge.create({
+      data: {
+        propertyId: lease.propertyId,
+        leaseId: lease.id,
+        // RENT, not a separate type — it's a reduction of rent already billed,
+        // and typing it as something else would drop it out of every
+        // rent-versus-fees split the product already makes.
+        type: 'RENT',
+        amountCents: -proration.amountCents,
+        description: proration.description,
+        dueOn: businessDateToUtc(moveOutOn),
+      },
+      select: { id: true, amountCents: true },
+    })
+    // Charge and entry commit together or not at all, so "is there a Charge"
+    // above is the same question as "has the credit been posted".
+    await tx.ledgerEntry.create({
+      data: {
+        propertyId: lease.propertyId,
+        leaseId: lease.id,
+        leasePayerId: payer.id,
+        chargeId: charge.id,
+        type: 'CREDIT',
+        amountCents: -proration.amountCents,
+        // The arithmetic in words, as on the Charge: it is what the tenant
+        // reads on their statement and what the disposition letter cites.
+        description: proration.description,
+        // When it was posted. Not back-dated to the move-out: an entry
+        // slipped into the past would change running balances already
+        // printed on a statement.
+        occurredAt: new Date(),
+      },
+    })
+    // In the transaction, unlike the move-in audit: this row has no Stripe
+    // event behind it, so the audit entry is the only record of where it
+    // came from and the two must not be separable.
+    await auditAsSystem(
+      'billing.proration',
+      {
+        action: 'ledger.adjusted',
+        entityType: 'Charge',
+        entityId: charge.id,
+        propertyId: lease.propertyId,
+        reason: proration.description,
+        after: {
+          type: 'RENT',
+          moveOutCredit: true,
+          ledgerOnly: true,
+          amountCents: -proration.amountCents,
+          daysVacant: proration.daysOccupied,
+          daysInMonth: proration.daysInMonth,
+          method: proration.method,
+          monthlyRentCents: lease.rentCents,
+        },
+      },
+      tx,
+    )
+    return { charge, created: true }
   })
 
-  if (!payer.stripeCustomerId) {
-    return { chargeId: charge.id, amountCents: charge.amountCents, reason: 'no_customer' }
+  return {
+    chargeId: posted.charge.id,
+    amountCents: posted.charge.amountCents,
+    reason: posted.created ? 'credited' : 'already_credited',
   }
-
-  try {
-    const item = await getBillingProvider().addInvoiceItem({
-      stripeCustomerId: payer.stripeCustomerId,
-      // A NEGATIVE invoice item — Stripe's own mechanism for a credit
-      // (same pattern as `waiveCharge`), which keeps Stripe the system of
-      // record for what is owed (D-11).
-      amountCents: -proration.amountCents,
-      currency: 'usd',
-      description: proration.description,
-      chargeId: charge.id,
-      // Keyed on the lease, because there is exactly one move-out per lease.
-      idempotencyKey: `moveout-proration:${lease.id}`,
-    })
-    await prisma.charge.update({
-      where: { id: charge.id },
-      data: { stripeInvoiceItemId: item.stripeInvoiceItemId },
-    })
-  } catch (error) {
-    console.error(`[proration] failed to push move-out credit ${charge.id}`, error)
-    return { chargeId: charge.id, amountCents: charge.amountCents, reason: 'push_failed' }
-  }
-
-  await auditAsSystem('billing.proration', {
-    action: 'ledger.adjusted',
-    entityType: 'Charge',
-    entityId: charge.id,
-    propertyId: lease.propertyId,
-    reason: proration.description,
-    after: {
-      type: 'RENT',
-      moveOutCredit: true,
-      amountCents: -proration.amountCents,
-      daysVacant: proration.daysOccupied,
-      daysInMonth: proration.daysInMonth,
-      method: proration.method,
-      monthlyRentCents: lease.rentCents,
-    },
-  }).catch((error: unknown) => {
-    console.error(`[proration] failed to audit move-out credit ${charge.id}`, error)
-  })
-
-  return { chargeId: charge.id, amountCents: charge.amountCents, reason: 'credited' }
 }

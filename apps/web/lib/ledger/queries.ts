@@ -64,6 +64,29 @@ export async function leaseBalanceCents(leaseId: string, db: Db = prisma): Promi
   )
 }
 
+/**
+ * The balance STRIPE can be expected to agree with: the projection's, less
+ * the one kind of row Stripe is never told about - the move-out proration
+ * credit (D-302), a `CREDIT` with no `stripeEventId`. Stripe's open invoices
+ * cannot net off a credit it does not hold, so the nightly comparison reads
+ * this (or every tenancy ended mid-period would alarm as drift for as long
+ * as its invoice stayed open), and so does the simulator, which reports what
+ * Stripe was told (D-27).
+ *
+ * ONLY that shape. Any other row with no event behind it is still exactly
+ * what the reconciliation exists to find.
+ */
+export async function leaseBalanceAtStripeCents(leaseId: string): Promise<number> {
+  const [balance, ledgerOnly] = await Promise.all([
+    leaseBalanceCents(leaseId),
+    prisma.ledgerEntry.aggregate({
+      where: { leaseId, type: 'CREDIT', stripeEventId: null },
+      _sum: { amountCents: true },
+    }),
+  ])
+  return balance - (ledgerOnly._sum.amountCents ?? 0)
+}
+
 /// Charges with anything still unpaid, for the allocation policy to work
 /// over (`lib/ledger/allocate.ts`). Outstanding is derived from the charge's
 /// own applications rather than stored, for the same reason the balance is.
