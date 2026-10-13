@@ -94,6 +94,58 @@ export function moveInProration(input: ProrationInput): ProrationResult | null {
   }
 }
 
+export interface UnbilledBeforeFirstBill {
+  /// The first and last day nothing bills, property-local.
+  fromOn: BusinessDate
+  throughOn: BusinessDate
+  /// Whole rent periods inside the gap, each owed as the whole rent.
+  wholePeriods: number
+  /// What the gap's rent comes to: the part month up to the first due day,
+  /// prorated the lease's own way, plus `wholePeriods` months.
+  amountCents: Cents
+}
+
+/**
+ * What a lease activated MORE than one rent period after it starts was never
+ * billed for (D-304) - exactly the case `moveInProration` returns null for
+ * and declines to truncate.
+ *
+ * Returns null when the gap is a month or less, which the part-month charge
+ * covers in full. Only a description of the gap: nothing here is charged,
+ * and whether any of it should be is a person's decision.
+ */
+export function unbilledBeforeFirstBill(
+  input: ProrationInput & { rentDueDay: number },
+): UnbilledBeforeFirstBill | null {
+  const start = parseBusinessDate(input.startsOn)
+  const firstBill = parseBusinessDate(input.firstFullPeriodStartsOn)
+  if (daysBetween(start, firstBill) <= daysInMonthOf(start)) return null
+
+  // The first due day on or after the start: this month's, or next month's
+  // once it has passed. Due days stop at 28, so every month has one.
+  const firstDue = new Date(
+    Date.UTC(
+      start.getUTCFullYear(),
+      start.getUTCMonth() + (start.getUTCDate() > input.rentDueDay ? 1 : 0),
+      input.rentDueDay,
+    ),
+  )
+  const wholePeriods =
+    (firstBill.getUTCFullYear() - firstDue.getUTCFullYear()) * 12 +
+    (firstBill.getUTCMonth() - firstDue.getUTCMonth())
+  const partMonth = moveInProration({
+    ...input,
+    firstFullPeriodStartsOn: firstDue.toISOString().slice(0, 10),
+  })
+
+  return {
+    fromOn: input.startsOn,
+    throughOn: new Date(firstBill.getTime() - 86_400_000).toISOString().slice(0, 10),
+    wholePeriods,
+    amountCents: (partMonth?.amountCents ?? 0) + wholePeriods * input.monthlyRentCents,
+  }
+}
+
 /**
  * The arithmetic in words.
  *

@@ -285,6 +285,69 @@ describe('the subscription anchor and the move-in proration agree', () => {
   }, 20_000)
 })
 
+// D-304. After D-301 a lease activated more than one rent period after it
+// starts is billed from the first due day on or after its activation, and the
+// periods before that are charged by nothing. Whether to bill them is a
+// person's call, so provisioning raises the question and posts no charge.
+describe('a lease activated more than a rent period after it starts', () => {
+  async function provisionAt(dates: { startsOn: string; activatedAt: string }) {
+    const lease = await prisma.lease.create({
+      data: {
+        propertyId,
+        unitId,
+        status: 'ACTIVE',
+        startsOn: new Date(dates.startsOn),
+        rentCents: 150_000,
+        rentDueDay: 1,
+        activatedAt: new Date(dates.activatedAt),
+      },
+    })
+    leaseIds.push(lease.id)
+    await prisma.leaseTenant.create({ data: { leaseId: lease.id, tenantId, isPrimary: true } })
+    expect((await provisionLeaseBilling(lease.id)).outcome).toBe('provisioned')
+    return lease
+  }
+  const tasksFor = (leaseId: string) =>
+    prisma.task.findMany({ where: { type: 'lease_unbilled_rent', subjectId: leaseId } })
+
+  it('raises ONE staff task naming the unbilled period and its rent, and charges nothing', async () => {
+    // Starts 20 January, activated 10 March: first billed 1 April. Unbilled
+    // is 12 days of January ($1,500 x 12/31 = $580.65) plus February and
+    // March whole - $3,580.65.
+    const lease = await provisionAt({ startsOn: '2026-01-20', activatedAt: '2026-03-10T18:00:00Z' })
+
+    const [task, ...others] = await tasksFor(lease.id)
+    expect(others).toHaveLength(0)
+    expect(task).toMatchObject({ subjectType: 'Lease', status: 'OPEN', propertyId })
+    expect(task!.title).toContain('20 Jan 2026')
+    expect(task!.title).toContain('31 Mar 2026')
+    expect(task!.title).toContain('$3,580.65')
+    expect(task!.title).toContain('$1,500.00')
+    // Dated the day billing starts, which is when the gap becomes fact.
+    expect(task!.businessDate.toISOString().slice(0, 10)).toBe('2026-04-01')
+
+    // Nothing is back-billed: no charge of any kind, and nothing pending.
+    expect(await prisma.charge.count({ where: { leaseId: lease.id } })).toBe(0)
+    expect(await prisma.ledgerEntry.count({ where: { leaseId: lease.id } })).toBe(0)
+
+    // A re-provision after the subscription is lost asks the question once.
+    await prisma.leasePayer.updateMany({
+      where: { leaseId: lease.id },
+      data: { stripeSubscriptionId: null },
+    })
+    expect((await provisionLeaseBilling(lease.id)).outcome).toBe('provisioned')
+    expect(await tasksFor(lease.id)).toHaveLength(1)
+  }, 20_000)
+
+  it('raises nothing when the part month covers the whole gap', async () => {
+    // Starts 10 March, activated the same day: 22 days to 1 April, and the
+    // part-month charge (D-301) already bills every one of them.
+    const lease = await provisionAt({ startsOn: '2026-03-10', activatedAt: '2026-03-10T18:00:00Z' })
+    expect(await tasksFor(lease.id)).toHaveLength(0)
+    expect(await prisma.charge.count({ where: { leaseId: lease.id } })).toBe(1)
+  }, 20_000)
+})
+
 describe('processStripeEvent', () => {
   async function provisionedLease() {
     const lease = await seedActiveLease()

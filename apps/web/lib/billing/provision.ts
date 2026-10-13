@@ -1,11 +1,18 @@
 import 'server-only'
 
-import { firstBillingAnchor, firstPeriodIsPartial } from '@rental/core/billing'
+import {
+  firstBillingAnchor,
+  firstPeriodIsPartial,
+  unbilledBeforeFirstBill,
+} from '@rental/core/billing'
+import { formatCents } from '@rental/core/money'
+import { businessDate, friendlyBusinessDate, utcToBusinessDate } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { auditAsSystem } from '@/lib/audit/system.ts'
 import { chargeMoveInProration } from './proration.ts'
 import { getBillingProvider } from './provider.ts'
 import { syncRecurringCharges } from './recurring.ts'
+import { createTask } from '@/lib/tasks/create.ts'
 
 // Provisioning a lease's billing (D-11, R-034).
 //
@@ -108,7 +115,9 @@ export async function provisionLeaseBilling(
       rentDueDay: true,
       startsOn: true,
       activatedAt: true,
+      prorationMethod: true,
       property: { select: { name: true, timezone: true } },
+      unit: { select: { name: true } },
     },
   })
 
@@ -231,6 +240,37 @@ export async function provisionLeaseBilling(
     await chargeMoveInProration(lease.id, anchor).catch((error: unknown) => {
       console.error(`[billing] proration failed for lease ${lease.id}`, error)
     })
+
+    // A LEASE ACTIVATED MORE THAN A RENT PERIOD AFTER IT STARTS (D-304). The
+    // subscription bills from the anchor and the part month above declines
+    // anything longer than a month, so the periods in between are charged by
+    // nothing. Whether they are owed here is not this function's to decide -
+    // an inherited tenancy paid its previous manager, a late signature may
+    // not have - so it ASKS, in the one queue (D-9), and posts no charge.
+    // Idempotent on the task's own unique key, dated the day billing starts.
+    const firstBilledOn = businessDate(anchor, lease.property.timezone)
+    const unbilled = unbilledBeforeFirstBill({
+      monthlyRentCents: lease.rentCents,
+      // A calendar day and an instant, read two ways - see
+      // `chargeMoveInProration`, which is handed the same pair.
+      startsOn: utcToBusinessDate(lease.startsOn),
+      firstFullPeriodStartsOn: firstBilledOn,
+      method: lease.prorationMethod === 'BANKER30' ? 'banker30' : 'actual',
+      rentDueDay: lease.rentDueDay,
+    })
+    if (unbilled) {
+      await createTask(prisma, {
+        propertyId: lease.propertyId,
+        type: 'lease_unbilled_rent',
+        subjectType: 'Lease',
+        subjectId: lease.id,
+        businessDate: firstBilledOn,
+        priority: 'ROUTINE',
+        title: `Decide whether to bill ${lease.property.name} ${lease.unit.name} for ${friendlyBusinessDate(unbilled.fromOn)} to ${friendlyBusinessDate(unbilled.throughOn)}: the lease was activated after it started, billing begins ${friendlyBusinessDate(firstBilledOn)}, and ${formatCents(unbilled.amountCents)} of rent before then (at ${formatCents(lease.rentCents)} a month) has not been charged`,
+      }).catch((error: unknown) => {
+        console.error(`[billing] unbilled-rent task failed for lease ${lease.id}`, error)
+      })
+    }
 
     // Pet rent and flat utility fees agreed before billing existed (R-042).
     // A charge added to a DRAFT lease has nowhere to go until there is a
