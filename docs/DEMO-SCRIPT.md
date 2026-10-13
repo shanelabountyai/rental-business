@@ -313,6 +313,13 @@ out of you does not.
 - **Nothing here touches real money.** Stripe runs in test mode only (D-26);
   there is no live key anywhere by design. The ledger is a projection of Stripe
   test events.
+- **A move-out credit lives on our ledger and Stripe is never told** (D-302,
+  D-308). When a tenant leaves mid-month, the days they paid for and did not
+  live are credited on the ledger only, and the deposit letter returns or
+  nets that credit. Stripe still holds the full final invoice. For a tenant
+  in arrears that invoice stays open at Stripe for the credited amount and
+  autopay may retry it. Fine in test mode; **a real deployment needs a Stripe
+  credit note built before go-live**, and that is not built.
 - **Screening and e-signature are simulated adapters** (PRD 00 §14), built not
   to agree with us by construction (D-27). No real vendor API was ever called.
 - **The legal wording is draft-only and is not legal advice.** The seeded Texas

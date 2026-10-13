@@ -309,6 +309,12 @@ own external precondition outside this repo.
 
 ### Stripe — real money
 
+0. **Build the Stripe credit note for the move-out credit before anything
+   below (D-308).** The credit is ledger-only today (D-302), so Stripe still
+   holds the full final invoice: for a tenant in arrears it stays open for
+   the credited amount and autopay may retry it, and the nightly
+   reconciliation is deliberately blind to the difference. Harmless in test
+   mode, real money in live mode.
 1. **Owner decision first, recorded as a new D-number.** `StripeBillingProvider`
    (`apps/web/lib/billing/stripe-adapter.ts:104-116`) throws
    `LiveModeRefusedError` at construction on any `sk_live_`/`rk_live_` key —
