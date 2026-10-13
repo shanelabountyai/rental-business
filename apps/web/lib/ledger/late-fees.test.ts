@@ -129,7 +129,8 @@ describe('assessLateFees', () => {
     await prisma.leasePayer.create({
       data: { leaseId: lease.id, propertyId, payerType: 'TENANT', tenantId: tenant.id, stripeCustomerId },
     })
-    const proration = await chargeMoveInProration(lease.id)
+    const firstInvoiceAt = wallClockToUtc('2026-04-01T09:00', 'America/Chicago')
+    const proration = await chargeMoveInProration(lease.id, firstInvoiceAt)
     expect(proration.reason).toBe('charged')
     const feesOnIt = () =>
       prisma.charge.count({ where: { assessedOnChargeId: proration.chargeId!, type: 'LATE_FEE' } })
@@ -143,7 +144,7 @@ describe('assessLateFees', () => {
     await processStripeEvent({
       id: `evt_test_${randomUUID()}`,
       type: 'invoice.finalized',
-      created: Math.floor(wallClockToUtc('2026-04-01T09:00', 'America/Chicago').getTime() / 1000),
+      created: Math.floor(firstInvoiceAt.getTime() / 1000),
       data: {
         object: {
           id: `in_test_${randomUUID().slice(0, 12)}`,

@@ -198,6 +198,93 @@ describe('provisionLeaseBilling', () => {
   })
 })
 
+// M1 (D-301). `proration.test.ts` asserts the part month against its own
+// anchor and the tests above assert the subscription's against its own;
+// nothing asserted the two AGREE, and they did not. One invariant covers
+// both directions: the part-month charge covers exactly the days from the
+// lease's first day up to the day the subscription first bills - no day
+// billed twice, none billed by neither.
+describe('the subscription anchor and the move-in proration agree', () => {
+  const DAY = 86_400_000
+
+  async function provisionAt(dates: { startsOn: string; activatedAt: string }) {
+    const lease = await prisma.lease.create({
+      data: {
+        propertyId,
+        unitId,
+        status: 'ACTIVE',
+        startsOn: new Date(dates.startsOn),
+        rentCents: 150_000,
+        rentDueDay: 1,
+        activatedAt: new Date(dates.activatedAt),
+      },
+    })
+    leaseIds.push(lease.id)
+    await prisma.leaseTenant.create({ data: { leaseId: lease.id, tenantId, isPrimary: true } })
+
+    const spy = vi.spyOn(getBillingProvider(), 'createSubscription')
+    let anchor: Date
+    try {
+      expect((await provisionLeaseBilling(lease.id)).outcome).toBe('provisioned')
+      anchor = spy.mock.calls[0][0].billingCycleAnchor
+    } finally {
+      spy.mockRestore()
+    }
+    // The local day the subscription first bills. Every case here is in
+    // Chicago at 09:00, so the UTC date is the local one.
+    const firstBilledOn = anchor.toISOString().slice(0, 10)
+    const partMonth = await prisma.charge.findFirst({
+      where: { leaseId: lease.id, type: 'RENT', description: { startsWith: 'Part month' } },
+    })
+    const daysBeforeFirstBill = (Date.parse(firstBilledOn) - Date.parse(dates.startsOn)) / DAY
+    return { firstBilledOn, partMonth, daysBeforeFirstBill }
+  }
+
+  it('OVERBILLING: signed weeks ahead of a mid-month start, the first month is billed once', async () => {
+    // Signed 20 Feb for a 10 March start. The subscription used to anchor to
+    // 1 March off the SIGNING date and bill a whole March, while the
+    // proration separately charged 10-31 March onto the same invoice: $2,564
+    // for a month in which $1,064 is owed, nine days before the tenancy.
+    const { firstBilledOn, partMonth, daysBeforeFirstBill } = await provisionAt({
+      startsOn: '2026-03-10',
+      activatedAt: '2026-02-20T18:00:00Z',
+    })
+
+    // Never a period that begins before the tenancy does.
+    expect(firstBilledOn).toBe('2026-04-01')
+    expect(daysBeforeFirstBill).toBe(22)
+    expect(partMonth?.description).toContain('22/31 days')
+    expect(partMonth?.amountCents).toBe(106_452)
+  }, 20_000)
+
+  it('UNDERBILLING: activated after 09:00 on a due-day start, the first month is still billed', async () => {
+    // Starts on the 1st, activated at 10:00 that morning. The subscription
+    // anchors to 1 April because 09:00 has passed; the proration used to
+    // read the lease's start alone, see a due day, and charge nothing - so
+    // March was billed by neither.
+    const { firstBilledOn, partMonth, daysBeforeFirstBill } = await provisionAt({
+      startsOn: '2026-03-01',
+      activatedAt: '2026-03-01T16:00:00Z',
+    })
+
+    expect(firstBilledOn).toBe('2026-04-01')
+    expect(daysBeforeFirstBill).toBe(31)
+    expect(partMonth?.description).toContain('31/31 days')
+    expect(partMonth?.amountCents).toBe(150_000)
+  }, 20_000)
+
+  it('charges no part month when the subscription itself bills the first day', async () => {
+    const { firstBilledOn, partMonth, daysBeforeFirstBill } = await provisionAt({
+      startsOn: '2026-03-01',
+      activatedAt: '2026-02-20T18:00:00Z',
+    })
+
+    expect(firstBilledOn).toBe('2026-03-01')
+    expect(daysBeforeFirstBill).toBe(0)
+    expect(partMonth).toBeNull()
+  }, 20_000)
+})
+
 describe('processStripeEvent', () => {
   async function provisionedLease() {
     const lease = await seedActiveLease()

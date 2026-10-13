@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { wallClockToUtc } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { chargeMoveInProration, chargeMoveOutProration } from './proration.ts'
@@ -230,11 +231,16 @@ describe('chargeMoveOutProration', () => {
   }, 20_000)
 })
 
+/// The instant the subscription first bills: 09:00 property-local on a due
+/// day. What `provisionLeaseBilling` hands this function in production
+/// (D-301) - `billing.test.ts` is where the two are proved to agree.
+const billsOn = (day: string) => wallClockToUtc(`${day}T09:00`, 'America/Chicago')
+
 describe('chargeMoveInProration', () => {
   it('charges the part month and shows the arithmetic on the charge', async () => {
     // 20 March to 1 April is 12 days of a 31-day month.
     const lease = await seedLease({ startsOn: '2026-03-20', rentDueDay: 1 })
-    const result = await chargeMoveInProration(lease.id)
+    const result = await chargeMoveInProration(lease.id, billsOn('2026-04-01'))
 
     expect(result.reason).toBe('charged')
     expect(result.amountCents).toBe(58_065)
@@ -267,7 +273,7 @@ describe('chargeMoveInProration', () => {
     // A whole month is owed. A zero-amount line on a tenant's first invoice
     // is noise that has to be explained.
     const lease = await seedLease({ startsOn: '2026-04-01', rentDueDay: 1 })
-    const result = await chargeMoveInProration(lease.id)
+    const result = await chargeMoveInProration(lease.id, billsOn('2026-04-01'))
 
     expect(result.reason).toBe('whole_month')
     expect(await prisma.charge.count({ where: { leaseId: lease.id } })).toBe(0)
@@ -278,8 +284,8 @@ describe('chargeMoveInProration', () => {
     // days you moved in is the worst possible first impression of a new
     // landlord's systems.
     const lease = await seedLease({ startsOn: '2026-03-20', rentDueDay: 1 })
-    await chargeMoveInProration(lease.id)
-    const second = await chargeMoveInProration(lease.id)
+    await chargeMoveInProration(lease.id, billsOn('2026-04-01'))
+    const second = await chargeMoveInProration(lease.id, billsOn('2026-04-01'))
 
     expect(second.reason).toBe('already_charged')
     expect(await prisma.charge.count({ where: { leaseId: lease.id } })).toBe(1)
@@ -293,7 +299,7 @@ describe('chargeMoveInProration', () => {
       rentDueDay: 1,
       method: 'BANKER30',
     })
-    const result = await chargeMoveInProration(lease.id)
+    const result = await chargeMoveInProration(lease.id, billsOn('2026-03-01'))
 
     expect(result.amountCents).toBe(45_000)
     const charge = await prisma.charge.findFirstOrThrow({ where: { leaseId: lease.id } })
@@ -306,7 +312,7 @@ describe('chargeMoveInProration', () => {
     // The bug this pins end to end: 9 days of a 28-day February is $482.14.
     // Dividing by March's 31 would undercharge by $46.
     const lease = await seedLease({ startsOn: '2026-02-20', rentDueDay: 1 })
-    const result = await chargeMoveInProration(lease.id)
+    const result = await chargeMoveInProration(lease.id, billsOn('2026-03-01'))
     expect(result.amountCents).toBe(48_214)
   }, 20_000)
 })

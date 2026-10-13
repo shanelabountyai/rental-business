@@ -95,6 +95,42 @@ export function billingCycleAnchor(input: AnchorInput): Date {
 }
 
 /**
+ * The ONE instant a lease's billing starts from (D-301): the first due day
+ * on or after BOTH the day the tenancy begins and the moment it was
+ * activated.
+ *
+ * The subscription and the move-in proration each used to derive their own -
+ * the subscription from the activation instant alone, the proration from the
+ * lease's start alone - and whenever those two were not in the same rent
+ * period they disagreed about where the part month ends. Signed weeks ahead
+ * of a mid-month start, the subscription billed a whole month from before
+ * the tenancy began AND the proration billed the same days again; activated
+ * after 09:00 on a due-day start, the subscription skipped to next month and
+ * the proration saw a whole month and billed nothing. Both callers are
+ * handed the result of this, so there is one boundary.
+ *
+ * `startsOn` is the `@db.Date` column as Prisma returns it - a CALENDAR DAY
+ * at UTC midnight - read here as the start of that day in the property's
+ * zone. `activatedAt` is a genuine instant.
+ */
+export function firstBillingAnchor(input: {
+  rentDueDay: number
+  timezone: string
+  startsOn: Date
+  activatedAt: Date
+}): Date {
+  const tenancyBegins = wallClockToUtc(
+    `${input.startsOn.toISOString().slice(0, 10)}T00:00`,
+    input.timezone,
+  )
+  return billingCycleAnchor({
+    rentDueDay: input.rentDueDay,
+    timezone: input.timezone,
+    notBefore: input.activatedAt > tenancyBegins ? input.activatedAt : tenancyBegins,
+  })
+}
+
+/**
  * Whether the first billing period is a full one.
  *
  * A lease starting on the 1st and billing on the 1st owes a whole month from

@@ -4,6 +4,7 @@ import {
   MAX_BILLING_DAY,
   SIGNATURE_TOLERANCE_SECONDS,
   billingCycleAnchor,
+  firstBillingAnchor,
   firstPeriodIsPartial,
   interpretStripeEvent,
   isHandledEvent,
@@ -256,6 +257,33 @@ describe('billingCycleAnchor', () => {
     }
     expect(MAX_BILLING_DAY).toBe(28)
     expect(BILLING_HOUR_LOCAL).toBe(9)
+  })
+})
+
+describe('firstBillingAnchor', () => {
+  // `startsOn` as the database returns a `@db.Date`: UTC midnight, which is
+  // the PREVIOUS evening in Chicago. Noon-UTC fixtures would hide that.
+  const chicago = (startsOn: string, activatedAt: string) =>
+    firstBillingAnchor({
+      rentDueDay: 1,
+      timezone: 'America/Chicago',
+      startsOn: new Date(`${startsOn}T00:00:00.000Z`),
+      activatedAt: new Date(activatedAt),
+    }).toISOString()
+
+  it('waits for the tenancy to begin when the lease was signed ahead', () => {
+    // Signed 20 Feb for 10 March: 1 April, not the 1 March that comes first
+    // after signing and nine days before the tenant has a key.
+    expect(chicago('2026-03-10', '2026-02-20T18:00:00Z')).toBe('2026-04-01T14:00:00.000Z')
+  })
+
+  it('bills the first day itself when the lease starts on its due day', () => {
+    expect(chicago('2026-03-01', '2026-02-20T18:00:00Z')).toBe('2026-03-01T15:00:00.000Z')
+  })
+
+  it('never hands back an instant before the activation', () => {
+    // Activated at 10:00 on the 1st: 09:00 has gone, so next month.
+    expect(chicago('2026-03-01', '2026-03-01T16:00:00Z')).toBe('2026-04-01T14:00:00.000Z')
   })
 })
 

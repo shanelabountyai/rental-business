@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { billingCycleAnchor, firstPeriodIsPartial } from '@rental/core/billing'
+import { firstBillingAnchor, firstPeriodIsPartial } from '@rental/core/billing'
 import { prisma } from '@rental/db'
 import { auditAsSystem } from '@/lib/audit/system.ts'
 import { chargeMoveInProration } from './proration.ts'
@@ -152,13 +152,17 @@ export async function provisionLeaseBilling(
       })
     }
 
-    // Anchored in PROPERTY-LOCAL time (D-3, D-11). `notBefore` is the
-    // activation instant, not the lease start: a lease activated late must
-    // not be handed an anchor in the past, which Stripe would reject.
-    const anchor = billingCycleAnchor({
+    // Anchored in PROPERTY-LOCAL time (D-3, D-11), on the first due day on
+    // or after BOTH the lease's start and its activation (D-301). Not the
+    // activation alone: a lease signed weeks ahead would start billing whole
+    // months before the tenancy begins. Not the start alone: a lease
+    // activated late must not be handed an anchor in the past, which Stripe
+    // would reject. The proration below is handed this same instant.
+    const anchor = firstBillingAnchor({
       rentDueDay: lease.rentDueDay,
       timezone: lease.property.timezone,
-      notBefore: lease.activatedAt ?? now,
+      startsOn: lease.startsOn,
+      activatedAt: lease.activatedAt ?? now,
     })
 
     const subscription = await getBillingProvider().createSubscription({
@@ -216,11 +220,17 @@ export async function provisionLeaseBilling(
     // proration push fails - and never throwing, for the same reason nothing
     // else in this function does: activation is a tenancy fact and must not
     // be undone because a billing provider was unreachable.
-    if (partial) {
-      await chargeMoveInProration(lease.id).catch((error: unknown) => {
-        console.error(`[billing] proration failed for lease ${lease.id}`, error)
-      })
-    }
+    //
+    // NOT GATED ON `partial` ANY MORE (D-301). Whether there is a part month
+    // is a question about the ANCHOR - the days between the lease's start
+    // and the day the subscription first bills - and `partial` answers a
+    // different one, from the start date alone. A lease starting on its due
+    // day and activated after 09:00 is not "partial" and still has a whole
+    // unbilled month in front of its first invoice. `chargeMoveInProration`
+    // returns `whole_month` and writes nothing when there are no such days.
+    await chargeMoveInProration(lease.id, anchor).catch((error: unknown) => {
+      console.error(`[billing] proration failed for lease ${lease.id}`, error)
+    })
 
     // Pet rent and flat utility fees agreed before billing existed (R-042).
     // A charge added to a DRAFT lease has nowhere to go until there is a

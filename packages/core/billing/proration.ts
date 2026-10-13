@@ -66,23 +66,29 @@ export function moveInProration(input: ProrationInput): ProrationResult | null {
   // has no opinion about and must not silently truncate.
   if (daysOccupied > daysInMonth) return null
 
+  // A WHOLE PERIOD IS THE WHOLE RENT, under either method (D-301). Reached
+  // when a lease that starts on its due day is activated too late for the
+  // subscription to bill that day, so the first month arrives here instead.
+  // The 30-day convention would otherwise charge 31/30 of the rent for March.
+  const method = daysOccupied === daysInMonth ? 'actual' : input.method
+
   const amountCents = prorateRent({
     monthlyRentCents: input.monthlyRentCents,
     daysOccupied,
     daysInMonth,
-    method: input.method,
+    method,
   })
 
   return {
     amountCents,
     daysOccupied,
     daysInMonth,
-    method: input.method,
+    method,
     description: describeProration({
       monthlyRentCents: input.monthlyRentCents,
       daysOccupied,
       daysInMonth,
-      method: input.method,
+      method,
       amountCents,
     }),
   }

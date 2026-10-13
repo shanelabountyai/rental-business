@@ -50,6 +50,23 @@ describe('moveInProration', () => {
     expect(result!.daysInMonth).toBe(29)
   })
 
+  it('charges the whole rent for a whole period, under either method (D-301)', () => {
+    // A lease starting on its due day whose subscription first bills a month
+    // later. 31 days of a 31-day March is the rent - and on the 30-day
+    // convention it must not be 31/30 of it.
+    for (const method of ['actual', 'banker30'] as const) {
+      const result = moveInProration({
+        monthlyRentCents: 150_000,
+        startsOn: '2026-03-01',
+        firstFullPeriodStartsOn: '2026-04-01',
+        method,
+      })
+      expect(result!.daysOccupied).toBe(31)
+      expect(result!.amountCents).toBe(150_000)
+      expect(result!.description).toContain('31/31 days')
+    }
+  })
+
   it('does NOT count the first day of the next period', () => {
     // The classic proration bug: counting the anchor day in both the part
     // month and the full month that follows, so the tenant pays for it twice.

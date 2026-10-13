@@ -41,14 +41,21 @@ export interface ProrationChargeResult {
  * at any time, and a tenant billed twice for their first days is the worst
  * possible first impression of a new landlord's systems.
  */
-export async function chargeMoveInProration(leaseId: string): Promise<ProrationChargeResult> {
+export async function chargeMoveInProration(
+  leaseId: string,
+  /// The instant the subscription first bills - `firstBillingAnchor`, the
+  /// SAME value `provisionLeaseBilling` handed to Stripe. Passed in rather
+  /// than derived here, because deriving it here from the lease's start
+  /// alone is how the part month and the subscription came to disagree about
+  /// where the boundary is (D-301).
+  anchor: Date,
+): Promise<ProrationChargeResult> {
   const lease = await prisma.lease.findUniqueOrThrow({
     where: { id: leaseId },
     select: {
       id: true,
       propertyId: true,
       rentCents: true,
-      rentDueDay: true,
       startsOn: true,
       prorationMethod: true,
       property: { select: { timezone: true } },
@@ -60,17 +67,7 @@ export async function chargeMoveInProration(leaseId: string): Promise<ProrationC
   })
 
   // The anchor is the instant the first FULL period begins; the part month
-  // runs from move-in up to it. Computed by the same function that told
-  // Stripe when to bill, so the two cannot disagree about where the boundary
-  // is (D-3: property-local, then expressed to Stripe).
-  const anchor = billingCycleAnchor({
-    rentDueDay: lease.rentDueDay,
-    timezone: lease.property.timezone,
-    // The lease's own start: the anchor is the first billing day on or after
-    // it, which is exactly the boundary the part month runs up to.
-    notBefore: lease.startsOn,
-  })
-
+  // runs from move-in up to it.
   const proration = moveInProration({
     monthlyRentCents: lease.rentCents,
     // TWO DIFFERENT KINDS OF DATE, READ TWO DIFFERENT WAYS - the distinction
@@ -87,10 +84,11 @@ export async function chargeMoveInProration(leaseId: string): Promise<ProrationC
     method: lease.prorationMethod === 'BANKER30' ? 'banker30' : 'actual',
   })
 
-  // Null covers every legitimate no-charge case: the lease starts on the due
-  // day, or the first period is not actually a part month. None of them is an
-  // error and none should leave a zero-amount line on a tenant's first
-  // invoice.
+  // Null covers every legitimate no-charge case: the subscription bills the
+  // lease's first day itself, or the gap before it first bills is longer
+  // than a month (an inherited tenancy activated long after it began - not a
+  // part month, and not ours to back-bill). None of them is an error and
+  // none should leave a zero-amount line on a tenant's first invoice.
   if (!proration) return { chargeId: null, amountCents: 0, reason: 'whole_month' }
 
   const existing = await prisma.charge.findFirst({
