@@ -54,6 +54,8 @@ export interface DepositPacketFacts {
   service: readonly { methodLabel: string; servedOn: BusinessDate }[]
   appliedCents: Cents
   refundedCents: Cents
+  /// A ledger credit returned with the refund (D-303). Not deposit money.
+  creditRefundedCents: Cents
   refundPaidOn: BusinessDate | null
   refundMethodLabel: string | null
   refundReference: string | null
@@ -131,7 +133,7 @@ export function depositPacketBlocks(facts: DepositPacketFacts): DocumentBlock[] 
       })
     }
   }
-  if (facts.refundedCents > 0) {
+  if (facts.refundedCents + facts.creditRefundedCents > 0) {
     blocks.push({
       kind: 'meta',
       text: facts.refundPaidOn
@@ -161,6 +163,12 @@ export function depositPacketBlocks(facts: DepositPacketFacts): DocumentBlock[] 
       kind: 'mono',
       text: padRow('Refunded', formatCents(facts.refundedCents)),
     })
+    if (facts.creditRefundedCents > 0) {
+      blocks.push({
+        kind: 'mono',
+        text: padRow('Account credit returned', formatCents(facts.creditRefundedCents)),
+      })
+    }
   }
 
   blocks.push({

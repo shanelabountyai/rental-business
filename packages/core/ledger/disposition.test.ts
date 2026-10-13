@@ -3,6 +3,7 @@ import {
   computeDisposition,
   depositLiabilityCents,
   depreciationGuidance,
+  dispositionAsSent,
   dispositionLetterText,
   isUnsupportedDeduction,
   validateDepositRefund,
@@ -138,6 +139,37 @@ describe('computeDisposition', () => {
       expect(totals.ledgerAppliedCents).toBe(50_000)
       expect(totals.additionalOwedCents).toBe(150_000)
     })
+  })
+})
+
+describe('dispositionAsSent', () => {
+  // The state after the refund is recorded (D-306): the ledger reads zero,
+  // so a recomputation finds no credit at all. The letter said $532.26.
+  it('reads the credit back from what was stored, not from a ledger that has since moved', () => {
+    const today = computeDisposition(200_000, 30_000, 0)
+    expect(today.ledgerCreditCents).toBe(0)
+
+    const sent = dispositionAsSent(today, {
+      appliedCents: 30_000,
+      refundedCents: 170_000,
+      creditRefundedCents: 53_226,
+    })
+    expect(sent.ledgerCreditCents).toBe(53_226)
+    expect(sent.totalRefundCents).toBe(223_226)
+  })
+
+  it('does not let a charge that landed after the letter shrink the promised refund', () => {
+    const today = computeDisposition(200_000, 30_000, 5_000)
+    expect(today.refundedCents).toBe(165_000)
+
+    const sent = dispositionAsSent(today, {
+      appliedCents: 30_000,
+      refundedCents: 170_000,
+      creditRefundedCents: 0,
+    })
+    expect(sent.appliedCents).toBe(30_000)
+    expect(sent.refundedCents).toBe(170_000)
+    expect(sent.totalRefundCents).toBe(170_000)
   })
 })
 

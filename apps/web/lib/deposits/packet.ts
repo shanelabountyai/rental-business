@@ -85,6 +85,7 @@ export async function exportDepositPacket(
           forwardingAddress: true,
           appliedCents: true,
           refundedCents: true,
+          creditRefundedCents: true,
           refundPaidOn: true,
           refundMethod: true,
           refundReference: true,
@@ -349,6 +350,7 @@ export async function exportDepositPacket(
           })),
           appliedCents: deposit.appliedCents,
           refundedCents: deposit.refundedCents,
+          creditRefundedCents: deposit.creditRefundedCents,
           refundPaidOn: deposit.refundPaidOn ? utcToBusinessDate(deposit.refundPaidOn) : null,
           refundMethodLabel: deposit.refundMethod
             ? (DEPOSIT_REFUND_INSTRUMENTS[deposit.refundMethod as DepositRefundInstrument] ?? deposit.refundMethod)

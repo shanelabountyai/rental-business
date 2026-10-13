@@ -117,6 +117,16 @@ unset DATABASE_URL DIRECT_URL
 Write the flags out in full: zsh does not word-split an unquoted `$VAR`, so
 packing them into one variable hands `neonctl` a single argument.
 
+### Pending for production
+
+Migrations in the repo that `production` has not had. Apply them with the
+commands above **before** the next deploy, and delete the line once applied.
+
+- `20261013120000_deposit_credit_refunded` (D-305, 2026-10-13) adds
+  `Deposit.creditRefundedCents`. Every deposit read selects it, so a deploy
+  ahead of the migration fails wherever a deposit is read or written.
+  Applied to the local test database only.
+
 `prisma migrate reset` is destructive and now refuses to run under an AI agent
 without explicit recorded consent. That guardrail is correct; do not paper over
 it.

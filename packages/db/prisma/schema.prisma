@@ -4674,6 +4674,14 @@ model Deposit {
   forwardingAddress    String?
   appliedCents         Int             @default(0)
   refundedCents        Int             @default(0)
+  /// D-303: a credit balance on the tenant's LEDGER that the disposition
+  /// returns with the refund - rent paid for days not lived, or an
+  /// overpayment. Its own column because it is not deposit money: the
+  /// liability is `heldCents - appliedCents - refundedCents`, and folding
+  /// this into `refundedCents` would take it below zero. What the tenant is
+  /// paid is `refundedCents + creditRefundedCents`, and `refundPaidOn`
+  /// records both leaving together.
+  creditRefundedCents  Int             @default(0)
   /// R-170: THE REFUND IS AN EVENT, NOT THE LETTER. `refundedCents` is what
   /// the disposition PROMISED; these five are the money actually leaving.
   /// The liability is released by `refundPaidOn` and never by

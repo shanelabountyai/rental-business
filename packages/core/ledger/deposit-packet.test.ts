@@ -20,6 +20,7 @@ const facts: DepositPacketFacts = {
   service: [{ methodLabel: 'Certified mail', servedOn: '2026-09-02' }],
   appliedCents: 96_000,
   refundedCents: 104_000,
+  creditRefundedCents: 0,
   refundPaidOn: null,
   refundMethodLabel: null,
   refundReference: null,
@@ -103,6 +104,13 @@ describe('depositPacketBlocks', () => {
     expect(out).not.toContain('Disposition letter written: 20 Aug 2026 (after')
     expect(out).toContain('Refund paid: not recorded as paid')
     expect(text({ ...facts, service: [] })).toContain('No service of the disposition letter is recorded.')
+  })
+
+  it('shows a returned ledger credit as its own row, and its payment even with no deposit refund (D-303)', () => {
+    expect(text(facts)).not.toContain('Account credit returned')
+    const out = text({ ...facts, appliedCents: 200_000, refundedCents: 0, creditRefundedCents: 53_226 })
+    expect(out).toMatch(/Account credit returned\s+\$532\.26/)
+    expect(out).toContain('Refund paid: not recorded as paid')
   })
 
   it('marks only the items whose condition changed', () => {

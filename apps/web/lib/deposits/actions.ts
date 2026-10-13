@@ -452,6 +452,7 @@ export async function finalizeDisposition(
         forwardingAddress,
         appliedCents: totals.appliedCents,
         refundedCents: totals.refundedCents,
+        creditRefundedCents: totals.ledgerCreditCents,
       },
     })
     await audit(
@@ -501,7 +502,8 @@ export async function finalizeDisposition(
     // safe direction: no letter, nothing to reconcile.
     //
     // D-303: raised for a returned CREDIT too, and titled with the whole
-    // amount to pay. `Deposit.refundedCents` above stays deposit money only.
+    // amount to pay. `Deposit.refundedCents` above stays deposit money only;
+    // the credit is stored beside it as `creditRefundedCents`.
     if (totals.totalRefundCents > 0) {
       // R-188: DATED WITH THE DEADLINE, NOT WITH TODAY. This was
       // `businessDate(new Date(), ...)` - the day the letter was finalized -
@@ -587,6 +589,7 @@ export async function recordDepositRefund(
       propertyId: true,
       leaseId: true,
       refundedCents: true,
+      creditRefundedCents: true,
       dispositionSentAt: true,
       refundPaidOn: true,
       property: { select: { id: true, legalEntityId: true, timezone: true } },
@@ -600,7 +603,11 @@ export async function recordDepositRefund(
   if (deposit.refundPaidOn) {
     return { error: 'This refund has already been recorded.' }
   }
-  if (deposit.refundedCents <= 0) {
+  // D-305: one disbursement covers the deposit refund and any ledger credit
+  // the letter returned with it, so a disposition that returns only a credit
+  // is still recorded here.
+  const paidCents = deposit.refundedCents + deposit.creditRefundedCents
+  if (paidCents <= 0) {
     return { error: 'This disposition refunds nothing, so there is nothing to pay.' }
   }
 
@@ -661,7 +668,9 @@ export async function recordDepositRefund(
         entityId: deposit.id,
         propertyId: deposit.propertyId,
         after: {
-          amountCents: deposit.refundedCents,
+          amountCents: paidCents,
+          depositRefundCents: deposit.refundedCents,
+          creditRefundedCents: deposit.creditRefundedCents,
           method,
           reference,
           paidOn,
@@ -685,7 +694,7 @@ export async function recordDepositRefund(
     })
     if (task) {
       await completeTaskWork(tx, task, actor.id, {
-        note: `${formatCents(deposit.refundedCents)} by ${DEPOSIT_REFUND_INSTRUMENTS[method as DepositRefundInstrument].toLowerCase()} on ${friendlyBusinessDate(paidOn)}${reference ? ` (${reference})` : ''}`,
+        note: `${formatCents(paidCents)} by ${DEPOSIT_REFUND_INSTRUMENTS[method as DepositRefundInstrument].toLowerCase()} on ${friendlyBusinessDate(paidOn)}${reference ? ` (${reference})` : ''}`,
       })
     }
   })

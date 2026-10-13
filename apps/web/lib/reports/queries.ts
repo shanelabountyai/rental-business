@@ -240,7 +240,12 @@ export async function upcomingCriticalDates(
       // while the refund it promises runs on the SAME statutory clock. A
       // finalized disposition with money still owed stays on the calendar
       // until `refundPaidOn` - the same test the liability itself uses.
-      OR: [{ dispositionSentAt: null }, { refundPaidOn: null, refundedCents: { gt: 0 } }],
+      OR: [
+        { dispositionSentAt: null },
+        { refundPaidOn: null, refundedCents: { gt: 0 } },
+        // D-305: a returned ledger credit is owed on the same clock.
+        { refundPaidOn: null, creditRefundedCents: { gt: 0 } },
+      ],
     },
     select: {
       propertyId: true,

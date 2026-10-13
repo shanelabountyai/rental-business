@@ -40,7 +40,12 @@ SCHEDULED_JOBS.push({
         // is the moment the obligation to pay actually begins. Keyed on
         // `refundPaidOn`, exactly as the liability itself is (R-170's schema
         // comment): the money leaving is the only thing that closes it.
-        OR: [{ dispositionSentAt: null }, { refundPaidOn: null, refundedCents: { gt: 0 } }],
+        OR: [
+          { dispositionSentAt: null },
+          { refundPaidOn: null, refundedCents: { gt: 0 } },
+          // D-305: a returned ledger credit is owed on the same clock.
+          { refundPaidOn: null, creditRefundedCents: { gt: 0 } },
+        ],
       },
       select: {
         id: true,

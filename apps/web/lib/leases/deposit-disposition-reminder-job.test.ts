@@ -154,6 +154,26 @@ describe('the deposit-disposition reminder job', () => {
     expect(task?.title).toContain('31 Aug 2026')
   })
 
+  // D-305: a returned ledger credit is owed on the same clock, including
+  // when the deposit itself is spent and the credit is all that comes back.
+  it('keeps watching a finalized disposition that owes only a ledger credit', async () => {
+    const { deposit } = await seedDeposit('i', '2026-08-01', '2026-08-31')
+    await prisma.deposit.update({
+      where: { id: deposit.id },
+      data: {
+        dispositionSentAt: new Date('2026-08-05T12:00:00Z'),
+        appliedCents: 200_000,
+        creditRefundedCents: 53_226,
+      },
+    })
+    await runAt('2026-09-05T12:00:00Z')
+
+    const task = await prisma.task.findFirst({
+      where: { subjectId: deposit.id, type: 'deposit.disposition_overdue' },
+    })
+    expect(task?.title).toContain('Deposit refund OVERDUE')
+  })
+
   it('stops once the refund has actually been paid', async () => {
     const { deposit } = await seedDeposit('g', '2026-08-01', '2026-08-31')
     await prisma.deposit.update({

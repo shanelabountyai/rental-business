@@ -110,6 +110,28 @@ export function computeDisposition(
   }
 }
 
+/**
+ * The totals AS THE LETTER STATED THEM, for a disposition already sent.
+ *
+ * What was promised is read back from the `Deposit` row and never recomputed
+ * (D-305): the ledger moves after the letter - a late charge lands, and
+ * recording the refund itself takes the credit off it (D-306) - and neither
+ * may change the figure the tenant was told or the one staff is asked to
+ * pay. `computed` supplies only what no column holds.
+ */
+export function dispositionAsSent(
+  computed: DispositionTotals,
+  stored: { appliedCents: Cents; refundedCents: Cents; creditRefundedCents: Cents },
+): DispositionTotals {
+  return {
+    ...computed,
+    appliedCents: stored.appliedCents,
+    refundedCents: stored.refundedCents,
+    ledgerCreditCents: stored.creditRefundedCents,
+    totalRefundCents: stored.refundedCents + stored.creditRefundedCents,
+  }
+}
+
 export interface DepreciationGuidance {
   /// The most a claim this old, on an item with this useful life, is likely
   /// to hold up as - "full replacement cost on nine-year-old carpet loses

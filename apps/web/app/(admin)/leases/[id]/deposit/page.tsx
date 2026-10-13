@@ -1,4 +1,9 @@
-import { computeDisposition, depreciationGuidance, isUnsupportedDeduction } from '@rental/core/ledger'
+import {
+  computeDisposition,
+  depreciationGuidance,
+  dispositionAsSent,
+  isUnsupportedDeduction,
+} from '@rental/core/ledger'
 import { formatCents } from '@rental/core/money'
 import { DEPOSIT_REFUND_INSTRUMENTS, type DepositRefundInstrument } from '@rental/core/ledger'
 import { businessDate, friendlyBusinessDate, utcToBusinessDate } from '@rental/core/scheduling'
@@ -74,13 +79,16 @@ export default async function DepositDispositionPage({
   // letter alone is how the one screen that could record the disbursement
   // became unreachable the instant the disbursement became due.
   const finalized = deposit.noticeId != null
-  const refundOutstanding = deposit.refundedCents > 0 && deposit.refundPaidOn == null
+  // D-305: what the letter promised is the deposit refund PLUS any ledger
+  // credit it returned, and one disbursement pays both.
+  const promisedCents = deposit.refundedCents + deposit.creditRefundedCents
+  const refundOutstanding = promisedCents > 0 && deposit.refundPaidOn == null
   // A disposition that refunded nothing has nothing left to do here, which
   // is every case this page had before R-170. One that refunded something
   // keeps its own screen for good: first to record the disbursement, then
   // to hold the record of it - the evidence produced when a former tenant
   // says the money never came back.
-  if (finalized && deposit.refundedCents === 0) redirect(`/notices/${deposit.noticeId}`)
+  if (finalized && promisedCents === 0) redirect(`/notices/${deposit.noticeId}`)
 
   const [workOrders, inspectionItems, statement] = await Promise.all([
     workOrdersForUnit(lease.unitId),
@@ -97,20 +105,10 @@ export default async function DepositDispositionPage({
   // charge landing on the ledger afterwards must not quietly change the
   // number the tenant was promised - which is also the number this page now
   // asks somebody to pay.
-  //
-  // D-303: THE CREDIT IS NOT READ BACK, because no column holds it. It is
-  // today's ledger credit, which is the letter's figure for as long as
-  // nothing moves on a former tenant's ledger. The letter and the refund
-  // task carry the number that was promised.
   const computed = computeDisposition(deposit.heldCents, deductedCents, outstandingLedgerCents)
-  const totals = finalized
-    ? {
-        ...computed,
-        appliedCents: deposit.appliedCents,
-        refundedCents: deposit.refundedCents,
-        totalRefundCents: deposit.refundedCents + computed.ledgerCreditCents,
-      }
-    : computed
+  // D-305: the credit is read back too. It has to be: once the refund is
+  // recorded the ledger no longer shows it.
+  const totals = finalized ? dispositionAsSent(computed, deposit) : computed
 
   return (
     <div className="flex max-w-2xl flex-col gap-6">
@@ -255,15 +253,15 @@ export default async function DepositDispositionPage({
             </Link>
             .{' '}
             {refundOutstanding
-              ? `It promised ${formatCents(deposit.refundedCents)} back — until that money actually leaves, the deposit stays on the rent roll and the year-end packet as a liability.`
-              : `${formatCents(deposit.refundedCents)} was returned to the tenant and the deposit is fully accounted for.`}
-            {totals.ledgerCreditCents > 0 &&
-              ` The tenant’s account is also ${formatCents(totals.ledgerCreditCents)} in credit, which the letter returns with the refund: ${formatCents(totals.totalRefundCents)} in all. The record below is of the deposit refund.`}
+              ? `It promised ${formatCents(promisedCents)} back — until that money actually leaves, the deposit stays on the rent roll and the year-end packet as a liability.`
+              : `${formatCents(promisedCents)} was returned to the tenant and the deposit is fully accounted for.`}
+            {deposit.creditRefundedCents > 0 &&
+              ` That is the ${formatCents(deposit.refundedCents)} deposit refund plus the ${formatCents(deposit.creditRefundedCents)} credit on the tenant’s account.`}
           </p>
           {refundOutstanding ? (
             <RecordRefundForm
               action={recordDepositRefund.bind(null, deposit.id)}
-              amountLabel={formatCents(deposit.refundedCents)}
+              amountLabel={formatCents(promisedCents)}
               today={businessDate(new Date(), lease.property.timezone)}
             />
           ) : (
