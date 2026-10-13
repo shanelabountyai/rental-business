@@ -398,6 +398,77 @@ describe('dispatch', () => {
     }
   })
 
+  // S2 (D-299). The test above dispatches twice IN SEQUENCE, so the second
+  // sweep reads a row that is already SENT - which never exercised the claim
+  // at all. These are the two interleavings a cron overlapping a staff
+  // action can actually produce.
+  describe('against a second dispatcher', () => {
+    afterEach(() => {
+      vi.restoreAllMocks()
+    })
+
+    async function queued() {
+      const outcomes = await notifyOnce({ idempotencyKey: `test:claim:${randomUUID()}` })
+      const deliveryIds = outcomes
+        .map((o) => o.deliveryId)
+        .filter((id): id is string => id !== undefined)
+      expect(deliveryIds.length).toBeGreaterThan(0)
+      return deliveryIds
+    }
+
+    it('sends once when two sweeps read the same queued row', async () => {
+      const deliveryIds = await queued()
+      const send = vi.spyOn(notificationAdapter, 'send')
+
+      // Both `findMany`s are on the wire before either claim is.
+      await Promise.all([
+        dispatchPendingNotifications(new Date(), 100, { deliveryIds }),
+        dispatchPendingNotifications(new Date(), 100, { deliveryIds }),
+      ])
+
+      expect(send).toHaveBeenCalledTimes(deliveryIds.length)
+      const rows = await prisma.notificationDelivery.findMany({ where: { id: { in: deliveryIds } } })
+      for (const row of rows) expect(row.attempts).toBe(1)
+    })
+
+    it('sends once when a second sweep arrives while the first is mid-send', async () => {
+      const deliveryIds = await queued()
+      const real = notificationAdapter.send.bind(notificationAdapter)
+      let nested = false
+      const send = vi.spyOn(notificationAdapter, 'send').mockImplementation(async (...args) => {
+        // The provider call is the slow part, and the row is claimed but not
+        // yet SENT for the whole of it.
+        if (!nested) {
+          nested = true
+          await dispatchPendingNotifications(new Date(), 100, { deliveryIds })
+        }
+        return real(...args)
+      })
+
+      await dispatchPendingNotifications(new Date(), 100, { deliveryIds })
+
+      expect(send).toHaveBeenCalledTimes(deliveryIds.length)
+    })
+
+    it('still retakes a claim whose dispatcher died', async () => {
+      const deliveryIds = await queued()
+      // Claimed (attempts 1, still QUEUED) and never finished, long enough
+      // ago that no live request can be holding it.
+      await prisma.notificationDelivery.updateMany({
+        where: { id: { in: deliveryIds } },
+        data: { attempts: 1, updatedAt: new Date(Date.now() - 60 * 60_000) },
+      })
+
+      await dispatchPendingNotifications(new Date(), 100, { deliveryIds })
+
+      const rows = await prisma.notificationDelivery.findMany({ where: { id: { in: deliveryIds } } })
+      for (const row of rows) {
+        expect(row.status).toBe('SENT')
+        expect(row.attempts).toBe(2)
+      }
+    })
+  })
+
   it('leaves a deferred notification alone until its time comes', async () => {
     const key = `test:${randomUUID()}`
     await notify({
@@ -629,6 +700,7 @@ describe('the kill switch', () => {
 // another.
 describe('retrying a failed delivery', () => {
   const AT = new Date('2026-08-05T15:00:00Z')
+  const TWICE_FAILED = { attempts: 2, status: 'DEFERRED', sendAfter: new Date(0) } as const
 
   afterEach(() => {
     vi.restoreAllMocks()
@@ -688,10 +760,12 @@ describe('retrying a failed delivery', () => {
       .map((o) => o.deliveryId)
       .filter((id): id is string => id !== undefined)
     // Two attempts already spent; the claim in the sweep makes this the third
-    // and last.
+    // and last. DEFERRED and due, which is what a row that has failed twice
+    // really looks like - QUEUED with attempts spent is a send in flight, and
+    // the sweep leaves those alone (D-299).
     await prisma.notificationDelivery.updateMany({
       where: { id: { in: deliveryIds } },
-      data: { attempts: 2 },
+      data: TWICE_FAILED,
     })
 
     vi.spyOn(notificationAdapter, 'send').mockRejectedValue(
@@ -729,7 +803,7 @@ describe('retrying a failed delivery', () => {
       .filter((id): id is string => id !== undefined)
     await prisma.notificationDelivery.updateMany({
       where: { id: { in: deliveryIds } },
-      data: { attempts: 2 },
+      data: TWICE_FAILED,
     })
 
     vi.spyOn(notificationAdapter, 'send').mockRejectedValue(
@@ -762,7 +836,7 @@ describe('retrying a failed delivery', () => {
       .filter((id): id is string => id !== undefined)
     await prisma.notificationDelivery.updateMany({
       where: { id: { in: deliveryIds } },
-      data: { attempts: 2 },
+      data: TWICE_FAILED,
     })
 
     vi.spyOn(notificationAdapter, 'send').mockRejectedValue(

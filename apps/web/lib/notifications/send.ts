@@ -560,6 +560,10 @@ async function record(db: Db, args: RecordInput): Promise<ChannelOutcome> {
   }
 }
 
+/// How long a claimed delivery is left alone before a sweep assumes its
+/// dispatcher died. Well past the cron route's `maxDuration` of 60s.
+const CLAIM_STALE_MS = 5 * 60_000
+
 export interface DispatchResult {
   sent: number
   failed: number
@@ -623,10 +627,18 @@ export async function dispatchPendingNotifications(
   // suppressed, say - and must not fall through to a global sweep.
   if (only && only.deliveryIds.length === 0) return { sent: 0, failed: 0, remaining: 0 }
 
+  // A QUEUED row with attempts > 0 is one a dispatcher has CLAIMED and not
+  // finished (D-299): the claim below leaves the status QUEUED, so the count
+  // is the only mark. It is somebody else's send in flight unless it has sat
+  // that way longer than any request can live, in which case its dispatcher
+  // died and this sweep retakes it. The wall clock, not `now`: `updatedAt`
+  // is the database's own, and callers replay `now`.
+  const claimExpired = new Date(Date.now() - CLAIM_STALE_MS)
   const dueWhere = {
     ...(only ? { id: { in: [...only.deliveryIds] } } : {}),
     OR: [
-      { status: 'QUEUED' as const },
+      { status: 'QUEUED' as const, attempts: 0 },
+      { status: 'QUEUED' as const, updatedAt: { lt: claimExpired } },
       { status: 'DEFERRED' as const, sendAfter: { lte: now } },
     ],
   }
@@ -646,8 +658,13 @@ export async function dispatchPendingNotifications(
     // overlapping a staff action - would otherwise both see QUEUED and both
     // send. The updateMany's own count tells the loser to stop, without a
     // lock and without a read-then-write race.
+    //
+    // `attempts` IS the claim (D-299). Status alone excluded nobody: a row
+    // read as QUEUED is written back as QUEUED, so a second dispatcher's
+    // identical predicate matched it too and the message went out twice.
+    // The increment makes the row stop matching what the loser read.
     const claimed = await prisma.notificationDelivery.updateMany({
-      where: { id: delivery.id, status: delivery.status },
+      where: { id: delivery.id, status: delivery.status, attempts: delivery.attempts },
       data: { status: 'QUEUED', attempts: { increment: 1 } },
     })
     if (claimed.count === 0) continue
