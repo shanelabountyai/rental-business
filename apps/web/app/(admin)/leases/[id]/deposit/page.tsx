@@ -226,6 +226,17 @@ export default async function DepositDispositionPage({
             <>
               <dt className="text-muted-foreground">Credit on the tenant’s account</dt>
               <dd>{formatCents(totals.ledgerCreditCents)}</dd>
+              {/* D-307: the credit meets deductions beyond the deposit before
+                  any of it goes back, and only the difference is paid or
+                  billed. Shown as its own row so the total can be checked. */}
+              {totals.creditAppliedCents > 0 && (
+                <>
+                  <dt className="text-muted-foreground">
+                    Credit applied to deductions beyond the deposit
+                  </dt>
+                  <dd>{formatCents(totals.creditAppliedCents)}</dd>
+                </>
+              )}
               <dt className="text-muted-foreground">Total to pay the tenant</dt>
               <dd>{formatCents(totals.totalRefundCents)}</dd>
             </>
@@ -256,7 +267,9 @@ export default async function DepositDispositionPage({
               ? `It promised ${formatCents(promisedCents)} back — until that money actually leaves, the deposit stays on the rent roll and the year-end packet as a liability.`
               : `${formatCents(promisedCents)} was returned to the tenant and the deposit is fully accounted for.`}
             {deposit.creditRefundedCents > 0 &&
-              ` That is the ${formatCents(deposit.refundedCents)} deposit refund plus the ${formatCents(deposit.creditRefundedCents)} credit on the tenant’s account.`}
+              (deposit.refundedCents > 0
+                ? ` That is the ${formatCents(deposit.refundedCents)} deposit refund plus the ${formatCents(deposit.creditRefundedCents)} credit on the tenant’s account.`
+                : ' That is the credit on the tenant’s account; the deposit itself was applied in full.')}
           </p>
           {refundOutstanding ? (
             <RecordRefundForm

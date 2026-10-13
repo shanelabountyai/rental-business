@@ -4684,6 +4684,11 @@ model Deposit {
   /// paid is `refundedCents + creditRefundedCents`, and `refundPaidOn`
   /// records both leaving together.
   creditRefundedCents  Int             @default(0)
+  /// D-307: the part of that ledger credit set against deductions the
+  /// deposit could not cover, instead of being returned. The credit on the
+  /// account when the letter was written was this plus
+  /// `creditRefundedCents`. Not deposit money either.
+  creditAppliedCents   Int             @default(0)
   /// R-170: THE REFUND IS AN EVENT, NOT THE LETTER. `refundedCents` is what
   /// the disposition PROMISED; these five are the money actually leaving.
   /// The liability is released by `refundPaidOn` and never by

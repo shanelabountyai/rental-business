@@ -42,26 +42,32 @@ export interface DispositionTotals {
   /// than the deposit would take the liability below zero on the rent roll
   /// and the year-end packet.
   refundedCents: Cents
-  /// What deductions and the outstanding balance together exceed the
-  /// deposit by, if anything - money still owed AFTER the full deposit is
-  /// applied. Disclosed in the letter.
+  /// What the tenant still owes AFTER the full deposit is applied and after
+  /// any credit on their account has been set against the rest (D-307).
+  /// Disclosed in the letter.
   additionalOwedCents: Cents
   /// The DEDUCTION half of `additionalOwedCents` (R-215). The ledger half is
   /// already a receivable - it is still on the ledger - but damage beyond the
   /// deposit exists nowhere except this arithmetic until something bills it,
   /// so this is the number finalize raises as its own charge (D-233).
   /// `additionalOwedCents` always equals this plus the arrears left unpaid.
+  /// NET of `creditAppliedCents`: only the difference is invoiced.
   uncoveredDeductionsCents: Cents
-  /// A credit balance on the tenant's ledger, returned with the refund
+  /// A credit balance on the tenant's ledger when the letter is written
   /// (D-303) - normally the move-out proration credit, days paid for and
-  /// never lived (D-302). Its own figure and its own line in the letter,
-  /// because it is the tenant's rent coming back and not their deposit.
-  ///
-  /// NOT set against deductions the deposit could not cover. Those are
-  /// invoiced through Stripe (`uncoveredDeductionsCents`, D-233), which holds
-  /// no record of a ledger-only credit to net them off against.
+  /// never lived (D-302). The tenant's rent, not their deposit, so it is
+  /// never part of `appliedCents` or `refundedCents`. Always exactly
+  /// `creditAppliedCents + creditRefundedCents`.
   ledgerCreditCents: Cents
-  /// What the tenant is actually paid: `refundedCents + ledgerCreditCents`.
+  /// The part of that credit SET AGAINST DEDUCTIONS THE DEPOSIT COULD NOT
+  /// COVER (D-307), before any of it is returned. Refunding the credit in
+  /// full while invoicing the excess in full was a cheque and a bill to the
+  /// same person for the same move-out. Its own line in the letter.
+  creditAppliedCents: Cents
+  /// The part of the credit returned with the refund: whatever the excess
+  /// deductions did not take. What `Deposit.creditRefundedCents` stores.
+  creditRefundedCents: Cents
+  /// What the tenant is actually paid: `refundedCents + creditRefundedCents`.
   totalRefundCents: Cents
 }
 
@@ -78,6 +84,14 @@ export interface DispositionTotals {
  * A CREDIT BALANCE IS RETURNED, NOT CLAMPED AWAY (D-303). This used to treat
  * a negative ledger balance as zero, so a paid-up tenant who left mid-month
  * got the deposit back and lost the days they had paid for and not lived.
+ *
+ * AND IT MEETS DEDUCTIONS BEYOND THE DEPOSIT FIRST (D-307): only the
+ * difference is refunded or invoiced, never both. The deposit's own
+ * accounting is untouched by that - the credit is not deposit money
+ * (Tex. Prop. Code §92.102 excludes "an advance payment of rent" from the
+ * definition) and is set against a debt the deposit has already failed to
+ * cover, not against the deposit. A credit and arrears cannot coexist: both
+ * are the sign of one balance.
  */
 export function computeDisposition(
   heldCents: Cents,
@@ -91,10 +105,15 @@ export function computeDisposition(
   const owedByTenant = Math.max(0, deductedCents) + Math.max(0, outstandingLedgerCents)
   const appliedCents = Math.min(heldCents, owedByTenant)
   const refundedCents = Math.max(0, heldCents - appliedCents)
-  const additionalOwedCents = Math.max(0, owedByTenant - heldCents)
   const ledgerAppliedCents = Math.min(appliedCents, Math.max(0, outstandingLedgerCents))
-  const uncoveredDeductionsCents = Math.max(0, deductedCents) - (appliedCents - ledgerAppliedCents)
   const ledgerCreditCents = Math.max(0, -outstandingLedgerCents)
+  // Deductions the deposit did not reach, before the credit meets them.
+  const deductionsBeyondDepositCents =
+    Math.max(0, deductedCents) - (appliedCents - ledgerAppliedCents)
+  const creditAppliedCents = Math.min(ledgerCreditCents, deductionsBeyondDepositCents)
+  const creditRefundedCents = ledgerCreditCents - creditAppliedCents
+  const uncoveredDeductionsCents = deductionsBeyondDepositCents - creditAppliedCents
+  const additionalOwedCents = Math.max(0, owedByTenant - heldCents) - creditAppliedCents
 
   return {
     heldCents,
@@ -106,7 +125,9 @@ export function computeDisposition(
     additionalOwedCents,
     uncoveredDeductionsCents,
     ledgerCreditCents,
-    totalRefundCents: refundedCents + ledgerCreditCents,
+    creditAppliedCents,
+    creditRefundedCents,
+    totalRefundCents: refundedCents + creditRefundedCents,
   }
 }
 
@@ -114,21 +135,37 @@ export function computeDisposition(
  * The totals AS THE LETTER STATED THEM, for a disposition already sent.
  *
  * What was promised is read back from the `Deposit` row and never recomputed
- * (D-305): the ledger moves after the letter - a late charge lands, and
- * recording the refund itself takes the credit off it (D-306) - and neither
- * may change the figure the tenant was told or the one staff is asked to
- * pay. `computed` supplies only what no column holds.
+ * (D-305): the ledger moves after the letter - a late charge lands, the
+ * applied credit comes off it at once (D-307) and the returned credit when
+ * the refund is recorded (D-306) - and none of that may change the figure
+ * the tenant was told or the one staff is asked to pay. `computed` supplies
+ * only what no column holds.
+ *
+ * NOTHING IS STILL OWED BEYOND A DISPOSITION THAT PAYS MONEY BACK, by
+ * construction: the deposit refunds only when it covered everything, and a
+ * credit is returned only after it has covered the excess. So those two are
+ * zeroed rather than recomputed, which matters - a recomputation against
+ * what is left of the credit applies it to the same excess a second time.
  */
 export function dispositionAsSent(
   computed: DispositionTotals,
-  stored: { appliedCents: Cents; refundedCents: Cents; creditRefundedCents: Cents },
+  stored: {
+    appliedCents: Cents
+    refundedCents: Cents
+    creditAppliedCents: Cents
+    creditRefundedCents: Cents
+  },
 ): DispositionTotals {
+  const totalRefundCents = stored.refundedCents + stored.creditRefundedCents
   return {
     ...computed,
     appliedCents: stored.appliedCents,
     refundedCents: stored.refundedCents,
-    ledgerCreditCents: stored.creditRefundedCents,
-    totalRefundCents: stored.refundedCents + stored.creditRefundedCents,
+    ledgerCreditCents: stored.creditAppliedCents + stored.creditRefundedCents,
+    creditAppliedCents: stored.creditAppliedCents,
+    creditRefundedCents: stored.creditRefundedCents,
+    totalRefundCents,
+    ...(totalRefundCents > 0 ? { additionalOwedCents: 0, uncoveredDeductionsCents: 0 } : {}),
   }
 }
 
@@ -234,10 +271,11 @@ export function dispositionLetterText(context: DispositionLetterContext): string
     )
   }
 
-  // With a credit coming back as well, the deposit refund is named as what
-  // it is and the credit and the total follow below - three figures a tenant
-  // can check, rather than one they cannot.
+  // With a credit on the account as well, the deposit refund is named as
+  // what it is and the credit and the total follow below - figures a tenant
+  // can check line by line, rather than one they cannot.
   const credit = totals.ledgerCreditCents
+  const creditApplied = totals.creditAppliedCents
   if (totals.refundedCents > 0) {
     lines.push(
       credit > 0
@@ -245,21 +283,37 @@ export function dispositionLetterText(context: DispositionLetterContext): string
         : `Amount being refunded to you: ${formatDollars(totals.refundedCents)}.`,
     )
   }
+  // D-307: the credit meets what the deposit could not cover. Each step is
+  // its own line - the excess, the credit, how much of it was applied - so
+  // the figure that follows can be checked rather than taken on trust.
+  if (creditApplied > 0) {
+    lines.push(
+      `Deductions beyond your security deposit: ${formatDollars(totals.uncoveredDeductionsCents + creditApplied)}.`,
+      `Your account carries a credit balance of ${formatDollars(credit)} for rent paid beyond what was owed.`,
+      `Credit applied to those deductions: ${formatDollars(creditApplied)}.`,
+    )
+  }
   if (totals.additionalOwedCents > 0) {
     lines.push(
-      `After applying your full deposit, you still owe ${formatDollars(totals.additionalOwedCents)}. We will contact you separately about this balance.`,
+      creditApplied > 0
+        ? `After applying your full deposit and that credit, you still owe ${formatDollars(totals.additionalOwedCents)}. We will contact you separately about this balance.`
+        : `After applying your full deposit, you still owe ${formatDollars(totals.additionalOwedCents)}. We will contact you separately about this balance.`,
     )
   }
   if (totals.refundedCents === 0 && totals.additionalOwedCents === 0) {
     lines.push(
-      credit > 0
+      totals.creditRefundedCents > 0
         ? 'Your deposit has been fully applied and you owe nothing further.'
-        : 'Your deposit has been fully applied; no refund is due and you owe nothing further.',
+        : creditApplied > 0
+          ? 'Your deposit and that credit have been fully applied; no refund is due and you owe nothing further.'
+          : 'Your deposit has been fully applied; no refund is due and you owe nothing further.',
     )
   }
-  if (credit > 0) {
+  if (totals.creditRefundedCents > 0) {
     lines.push(
-      `Your account also carries a credit balance of ${formatDollars(credit)} for rent paid beyond what was owed, which is being returned to you.`,
+      creditApplied > 0
+        ? `Remainder of your credit balance being returned to you: ${formatDollars(totals.creditRefundedCents)}.`
+        : `Your account also carries a credit balance of ${formatDollars(credit)} for rent paid beyond what was owed, which is being returned to you.`,
       `Total being refunded to you: ${formatDollars(totals.totalRefundCents)}.`,
     )
   }

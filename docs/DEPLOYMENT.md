@@ -126,6 +126,8 @@ commands above **before** the next deploy, and delete the line once applied.
   `Deposit.creditRefundedCents`. Every deposit read selects it, so a deploy
   ahead of the migration fails wherever a deposit is read or written.
   Applied to the local test database only.
+- `20261013130000_deposit_credit_applied` (D-307, 2026-10-13) adds
+  `Deposit.creditAppliedCents`. Same consequence, same status.
 
 `prisma migrate reset` is destructive and now refuses to run under an AI agent
 without explicit recorded consent. That guardrail is correct; do not paper over

@@ -56,6 +56,9 @@ export interface DepositPacketFacts {
   refundedCents: Cents
   /// A ledger credit returned with the refund (D-303). Not deposit money.
   creditRefundedCents: Cents
+  /// The part of that credit set against deductions beyond the deposit
+  /// instead (D-307).
+  creditAppliedCents: Cents
   refundPaidOn: BusinessDate | null
   refundMethodLabel: string | null
   refundReference: string | null
@@ -163,6 +166,12 @@ export function depositPacketBlocks(facts: DepositPacketFacts): DocumentBlock[] 
       kind: 'mono',
       text: padRow('Refunded', formatCents(facts.refundedCents)),
     })
+    if (facts.creditAppliedCents > 0) {
+      blocks.push({
+        kind: 'mono',
+        text: padRow('Credit applied to deductions', formatCents(facts.creditAppliedCents)),
+      })
+    }
     if (facts.creditRefundedCents > 0) {
       blocks.push({
         kind: 'mono',

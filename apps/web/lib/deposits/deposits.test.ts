@@ -332,3 +332,130 @@ describe('paying out a returned credit (D-306)', () => {
     expect(await leaseBalanceCents(lease.id)).toBe(0)
   })
 })
+
+// D-307. $2,000 held and a $532.26 credit throughout; only the deductions
+// move. The arithmetic is proven in core - what is proven here is that the
+// letter, the stored row, the invoice, the task and the LEDGER all say the
+// same thing.
+describe('a credit set against deductions beyond the deposit (D-307)', () => {
+  const adjustments = (leaseId: string) =>
+    prisma.ledgerEntry
+      .findMany({ where: { leaseId, type: 'ADJUSTMENT' }, orderBy: { createdAt: 'asc' } })
+      .then((rows) => rows.map((row) => row.amountCents))
+  const invoicedBeyondDeposit = (depositId: string) =>
+    prisma.charge.findUnique({ where: { depositId }, select: { amountCents: true } })
+  const refundTask = (depositId: string) =>
+    prisma.task.findFirst({ where: { type: 'deposit_refund_due', subjectId: depositId } })
+  const letter = async (noticeId: string | null) =>
+    (await prisma.notice.findUniqueOrThrow({ where: { id: noticeId! } })).bodyText
+
+  it('credit smaller than the excess: invoices the difference and refunds nothing', async () => {
+    const { deposit, lease } = await endedTenancy({ heldCents: 200_000, deductionCents: 300_000 })
+    const sent = await finalize(deposit.id)
+
+    expect(sent).toMatchObject({
+      appliedCents: 200_000,
+      refundedCents: 0,
+      creditAppliedCents: CREDIT,
+      creditRefundedCents: 0,
+    })
+    // $1,000.00 beyond the deposit, less the $532.26 credit.
+    expect(await invoicedBeyondDeposit(deposit.id)).toEqual({ amountCents: 46_774 })
+    expect(await refundTask(deposit.id)).toBeNull()
+    expect(await letter(sent.noticeId)).toContain('you still owe $467.74')
+
+    // The credit is spent, and what the ledger shows owed is the invoice.
+    expect(await adjustments(lease.id)).toEqual([CREDIT])
+    expect(await leaseBalanceCents(lease.id)).toBe(46_774)
+    // Which is also all Stripe holds: the one-off invoice just raised.
+    expect(await leaseBalanceAtStripeCents(lease.id)).toBe(46_774)
+
+    expect(await recordRefund(deposit.id)).toEqual({
+      error: 'This disposition refunds nothing, so there is nothing to pay.',
+    })
+  })
+
+  it('credit equal to the excess: nothing is invoiced, nothing refunded, and the ledger reads zero', async () => {
+    const { deposit, lease } = await endedTenancy({ heldCents: 200_000, deductionCents: 200_000 + CREDIT })
+    const sent = await finalize(deposit.id)
+
+    expect(sent).toMatchObject({ refundedCents: 0, creditAppliedCents: CREDIT, creditRefundedCents: 0 })
+    expect(await invoicedBeyondDeposit(deposit.id)).toBeNull()
+    expect(await refundTask(deposit.id)).toBeNull()
+    expect(await adjustments(lease.id)).toEqual([CREDIT])
+    expect(await leaseBalanceCents(lease.id)).toBe(0)
+    expect(await leaseBalanceAtStripeCents(lease.id)).toBe(0)
+  })
+
+  it('credit larger than the excess: refunds the difference, and paying it zeroes the ledger', async () => {
+    const { deposit, lease } = await endedTenancy({ heldCents: 200_000, deductionCents: 220_000 })
+    const sent = await finalize(deposit.id)
+
+    // $200.00 beyond the deposit; $532.26 - $200.00 = $332.26 comes back.
+    expect(sent).toMatchObject({
+      appliedCents: 200_000,
+      refundedCents: 0,
+      creditAppliedCents: 20_000,
+      creditRefundedCents: 33_226,
+    })
+    expect(await invoicedBeyondDeposit(deposit.id)).toBeNull()
+    const text = await letter(sent.noticeId)
+    expect(text).toContain('Credit applied to those deductions: $200.00.')
+    expect(text).toContain('Total being refunded to you: $332.26.')
+    const task = await refundTask(deposit.id)
+    expect(task?.title).toContain('$332.26')
+    expect(task?.title).not.toContain('$532.26')
+    expect(await leaseBalanceCents(lease.id)).toBe(-33_226)
+
+    expect(await recordRefund(deposit.id)).toEqual({ notice: 'Refund recorded.' })
+
+    const audited = await prisma.auditLog.findFirstOrThrow({
+      where: { entityId: deposit.id, action: 'deposit.refund_recorded' },
+    })
+    expect(audited.after).toMatchObject({ amountCents: 33_226, creditRefundedCents: 33_226 })
+    // One row for the part applied at the letter, one for the part paid out.
+    expect(await adjustments(lease.id)).toEqual([20_000, 33_226])
+    expect(await leaseBalanceCents(lease.id)).toBe(0)
+    expect(await leaseBalanceAtStripeCents(lease.id)).toBe(0)
+  })
+
+  it('no excess: applies none of the credit and posts nothing until the refund is paid', async () => {
+    const { deposit, lease } = await endedTenancy({ heldCents: 200_000, deductionCents: 30_000 })
+    const sent = await finalize(deposit.id)
+
+    expect(sent).toMatchObject({
+      appliedCents: 30_000,
+      refundedCents: 170_000,
+      creditAppliedCents: 0,
+      creditRefundedCents: CREDIT,
+    })
+    expect(await invoicedBeyondDeposit(deposit.id)).toBeNull()
+    expect(await adjustments(lease.id)).toEqual([])
+    expect(await leaseBalanceCents(lease.id)).toBe(-CREDIT)
+    expect((await refundTask(deposit.id))?.title).toContain('$2,232.26')
+  })
+
+  // The applied part is posted in the letter's own transaction, so the
+  // re-read of `dispositionSentAt` under the per-lease lock is what stops a
+  // second finalization posting it again. Two letters used to be possible.
+  it('applies the credit once when two finalizations land together', async () => {
+    const { deposit, lease } = await endedTenancy({ heldCents: 200_000, deductionCents: 220_000 })
+    const press = () => {
+      const form = new FormData()
+      form.set('acknowledgeFinal', 'on')
+      form.set('forwardingAddress', '12 Elsewhere St, Austin TX 78701')
+      return finalizeDisposition(deposit.id, {}, form).catch((error: unknown) => {
+        if (error instanceof Redirected) return null
+        throw error
+      })
+    }
+    const results = await Promise.all([press(), press()])
+
+    expect(results.filter((r) => r === null)).toHaveLength(1)
+    expect(results.find((r) => r !== null)).toEqual({
+      error: 'This disposition has already been finalized.',
+    })
+    expect(await adjustments(lease.id)).toEqual([20_000])
+    expect(await prisma.notice.count({ where: { leaseId: lease.id } })).toBe(1)
+  })
+})

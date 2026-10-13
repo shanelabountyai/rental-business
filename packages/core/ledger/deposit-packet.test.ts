@@ -21,6 +21,7 @@ const facts: DepositPacketFacts = {
   appliedCents: 96_000,
   refundedCents: 104_000,
   creditRefundedCents: 0,
+  creditAppliedCents: 0,
   refundPaidOn: null,
   refundMethodLabel: null,
   refundReference: null,
@@ -111,6 +112,19 @@ describe('depositPacketBlocks', () => {
     const out = text({ ...facts, appliedCents: 200_000, refundedCents: 0, creditRefundedCents: 53_226 })
     expect(out).toMatch(/Account credit returned\s+\$532\.26/)
     expect(out).toContain('Refund paid: not recorded as paid')
+  })
+
+  it('shows a credit applied to deductions beyond the deposit as its own row (D-307)', () => {
+    expect(text(facts)).not.toContain('Credit applied to deductions')
+    const out = text({
+      ...facts,
+      appliedCents: 200_000,
+      refundedCents: 0,
+      creditAppliedCents: 20_000,
+      creditRefundedCents: 33_226,
+    })
+    expect(out).toMatch(/Credit applied to deductions\s+\$200\.00/)
+    expect(out).toMatch(/Account credit returned\s+\$332\.26/)
   })
 
   it('marks only the items whose condition changed', () => {

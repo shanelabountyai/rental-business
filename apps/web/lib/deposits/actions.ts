@@ -435,6 +435,18 @@ export async function finalizeDisposition(
 
   let uncoveredCharge: { id: string; amountCents: number; description: string } | null = null
   const notice = await prisma.$transaction(async (tx) => {
+    // D-307: this transaction now writes to the ledger, so it takes the
+    // per-lease lock every other ledger writer plans under (MONEY-16, D-302)
+    // and re-reads the one marker that says the letter is out. The check at
+    // the top of this action is outside the transaction: two presses in one
+    // instant both passed it and wrote two letters.
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`lease-allocation:${deposit.leaseId}`}))`
+    const current = await tx.deposit.findUniqueOrThrow({
+      where: { id: deposit.id },
+      select: { dispositionSentAt: true },
+    })
+    if (current.dispositionSentAt) return null
+
     const created = await tx.notice.create({
       data: {
         propertyId: deposit.propertyId,
@@ -452,7 +464,8 @@ export async function finalizeDisposition(
         forwardingAddress,
         appliedCents: totals.appliedCents,
         refundedCents: totals.refundedCents,
-        creditRefundedCents: totals.ledgerCreditCents,
+        creditAppliedCents: totals.creditAppliedCents,
+        creditRefundedCents: totals.creditRefundedCents,
       },
     })
     await audit(
@@ -465,6 +478,45 @@ export async function finalizeDisposition(
       },
       tx,
     )
+    // D-307: THE CREDIT SET AGAINST DEDUCTIONS BEYOND THE DEPOSIT LEAVES THE
+    // LEDGER HERE, with the letter that says so. A ledger-only row like the
+    // credit it spends (D-302) and the one that pays the rest of it out
+    // (D-306): Stripe holds none of the three, and is invoiced below for the
+    // difference only. Without it the ledger would go on showing a credit
+    // the letter has just told the tenant was used up - and the next
+    // disbursement or disposition to read that balance would pay it again.
+    if (totals.creditAppliedCents > 0) {
+      const entry = await tx.ledgerEntry.create({
+        data: {
+          propertyId: deposit.propertyId,
+          leaseId: deposit.leaseId,
+          leasePayerId: payer?.id ?? null,
+          type: 'ADJUSTMENT',
+          amountCents: totals.creditAppliedCents,
+          description: 'Credit balance applied to deductions beyond the security deposit',
+          occurredAt: new Date(),
+        },
+        select: { id: true },
+      })
+      await audit(
+        {
+          action: 'ledger.adjusted',
+          entityType: 'LedgerEntry',
+          entityId: entry.id,
+          propertyId: deposit.propertyId,
+          reason: 'Credit balance applied to deductions beyond the security deposit',
+          after: {
+            type: 'ADJUSTMENT',
+            creditApplied: true,
+            ledgerOnly: true,
+            amountCents: totals.creditAppliedCents,
+            depositId: deposit.id,
+          },
+        },
+        tx,
+      )
+    }
+
     // R-215: DAMAGE THE DEPOSIT COULD NOT COVER BECOMES A RECEIVABLE. Until
     // this it existed only as a sentence in the letter ("we will contact you
     // separately"), and left every list an operator reads the day the
@@ -479,7 +531,12 @@ export async function finalizeDisposition(
           leaseId: deposit.leaseId,
           type: 'OTHER',
           amountCents: totals.uncoveredDeductionsCents,
-          description: 'Damages and deductions beyond the security deposit',
+          // D-307: the amount is net of any credit applied above, and the
+          // tenant reads this line on the invoice.
+          description:
+            totals.creditAppliedCents > 0
+              ? 'Damages and deductions beyond the security deposit, less the credit on your account'
+              : 'Damages and deductions beyond the security deposit',
           // Property-local today, for the same reason chargebacks read it so.
           dueOn: businessDateToUtc(businessDate(new Date(), deposit.property.timezone)),
           depositId: deposit.id,
@@ -503,7 +560,8 @@ export async function finalizeDisposition(
     //
     // D-303: raised for a returned CREDIT too, and titled with the whole
     // amount to pay. `Deposit.refundedCents` above stays deposit money only;
-    // the credit is stored beside it as `creditRefundedCents`.
+    // the credit is stored beside it as `creditRefundedCents`, and that is
+    // what is left of it after D-307's netting.
     if (totals.totalRefundCents > 0) {
       // R-188: DATED WITH THE DEADLINE, NOT WITH TODAY. This was
       // `businessDate(new Date(), ...)` - the day the letter was finalized -
@@ -525,14 +583,20 @@ export async function finalizeDisposition(
         // A statutory deadline the owner has already passed the decision
         // point on. Late here is treble damages in Texas, not a late fee.
         priority: 'URGENT',
+        // Three shapes, because "the $0.00 deposit refund plus..." is a
+        // title nobody trusts: both, the credit alone (D-307 makes that the
+        // ordinary case when deductions pass the deposit), the deposit alone.
         title:
-          totals.ledgerCreditCents > 0
-            ? `Pay ${tenantName} ${formatCents(totals.totalRefundCents)} by ${friendlyBusinessDate(refundDueOn)}: the ${formatCents(totals.refundedCents)} deposit refund plus the ${formatCents(totals.ledgerCreditCents)} credit on their account`
-            : `Pay ${tenantName} the ${formatCents(totals.refundedCents)} deposit refund by ${friendlyBusinessDate(refundDueOn)}`,
+          totals.creditRefundedCents === 0
+            ? `Pay ${tenantName} the ${formatCents(totals.refundedCents)} deposit refund by ${friendlyBusinessDate(refundDueOn)}`
+            : totals.refundedCents === 0
+              ? `Pay ${tenantName} ${formatCents(totals.creditRefundedCents)} by ${friendlyBusinessDate(refundDueOn)}: the credit on their account, none of it deposit money`
+              : `Pay ${tenantName} ${formatCents(totals.totalRefundCents)} by ${friendlyBusinessDate(refundDueOn)}: the ${formatCents(totals.refundedCents)} deposit refund plus the ${formatCents(totals.creditRefundedCents)} credit on their account`,
       })
     }
     return created
   })
+  if (!notice) return { error: 'This disposition has already been finalized.' }
 
   // NOT FATAL, the same posture a chargeback takes: the Charge stands and the
   // letter is out, and an unbilled charge is shown as such on the former-

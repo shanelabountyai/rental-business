@@ -22,6 +22,8 @@ describe('computeDisposition', () => {
       additionalOwedCents: 0,
       uncoveredDeductionsCents: 0,
       ledgerCreditCents: 0,
+      creditAppliedCents: 0,
+      creditRefundedCents: 0,
       totalRefundCents: 150_000,
     })
   })
@@ -87,14 +89,70 @@ describe('computeDisposition', () => {
     expect(totals.totalRefundCents).toBe(75_000)
   })
 
-  it('returns the credit even when the deposit itself is used up', () => {
-    // Not netted against deductions beyond the deposit: those are invoiced
-    // through Stripe (D-233), which does not know about a ledger credit.
-    const totals = computeDisposition(100_000, 150_000, -20_000)
-    expect(totals.refundedCents).toBe(0)
-    expect(totals.uncoveredDeductionsCents).toBe(50_000)
-    expect(totals.additionalOwedCents).toBe(50_000)
-    expect(totals.totalRefundCents).toBe(20_000)
+  // D-307, reversing D-303 on this one point. A credit used to be refunded
+  // in full while deductions beyond the deposit were invoiced in full: a
+  // cheque to the tenant and a bill to the same tenant in one envelope. The
+  // credit now meets that excess first. Hand-computed, $2,000 held and a
+  // $532.26 credit throughout (rent of $1,500, out on the 20th of a 31-day
+  // month: 150000 * 11 / 31).
+  describe('a credit against deductions beyond the deposit (D-307)', () => {
+    it('credit smaller than the excess: the difference is invoiced and nothing is refunded', () => {
+      // $3,000 of deductions: $1,000.00 beyond the deposit, less $532.26.
+      const totals = computeDisposition(200_000, 300_000, -53_226)
+      expect(totals.appliedCents).toBe(200_000)
+      expect(totals.refundedCents).toBe(0)
+      expect(totals.ledgerCreditCents).toBe(53_226)
+      expect(totals.creditAppliedCents).toBe(53_226)
+      expect(totals.creditRefundedCents).toBe(0)
+      expect(totals.uncoveredDeductionsCents).toBe(46_774)
+      expect(totals.additionalOwedCents).toBe(46_774)
+      expect(totals.totalRefundCents).toBe(0)
+    })
+
+    it('credit equal to the excess: nothing is invoiced and nothing is refunded', () => {
+      // $2,532.26 of deductions: $532.26 beyond the deposit.
+      const totals = computeDisposition(200_000, 253_226, -53_226)
+      expect(totals.creditAppliedCents).toBe(53_226)
+      expect(totals.creditRefundedCents).toBe(0)
+      expect(totals.uncoveredDeductionsCents).toBe(0)
+      expect(totals.additionalOwedCents).toBe(0)
+      expect(totals.refundedCents).toBe(0)
+      expect(totals.totalRefundCents).toBe(0)
+    })
+
+    it('credit larger than the excess: the difference is refunded and nothing is invoiced', () => {
+      // $2,200 of deductions: $200.00 beyond the deposit, $332.26 left over.
+      const totals = computeDisposition(200_000, 220_000, -53_226)
+      expect(totals.creditAppliedCents).toBe(20_000)
+      expect(totals.creditRefundedCents).toBe(33_226)
+      expect(totals.uncoveredDeductionsCents).toBe(0)
+      expect(totals.additionalOwedCents).toBe(0)
+      // Still deposit money only: the deposit is spent, the refund is rent.
+      expect(totals.refundedCents).toBe(0)
+      expect(totals.totalRefundCents).toBe(33_226)
+    })
+
+    it('no excess: the whole credit comes back with the deposit refund, as under D-303', () => {
+      // $300 of deductions, all of it inside the deposit.
+      const totals = computeDisposition(200_000, 30_000, -53_226)
+      expect(totals.appliedCents).toBe(30_000)
+      expect(totals.refundedCents).toBe(170_000)
+      expect(totals.creditAppliedCents).toBe(0)
+      expect(totals.creditRefundedCents).toBe(53_226)
+      expect(totals.uncoveredDeductionsCents).toBe(0)
+      expect(totals.additionalOwedCents).toBe(0)
+      expect(totals.totalRefundCents).toBe(223_226)
+    })
+
+    it('the credit is always either applied or returned, to the cent', () => {
+      for (const deducted of [0, 30_000, 200_000, 200_001, 220_000, 253_225, 253_226, 253_227, 300_000]) {
+        const totals = computeDisposition(200_000, deducted, -53_226)
+        expect(totals.creditAppliedCents + totals.creditRefundedCents).toBe(53_226)
+        // What the tenant ends up with, net, is the same whichever way it
+        // is split: everything they had with the landlord less the damage.
+        expect(totals.totalRefundCents - totals.additionalOwedCents).toBe(200_000 + 53_226 - deducted)
+      }
+    })
   })
 
   it('never refunds more than was held, and discloses the shortfall separately', () => {
@@ -152,10 +210,35 @@ describe('dispositionAsSent', () => {
     const sent = dispositionAsSent(today, {
       appliedCents: 30_000,
       refundedCents: 170_000,
+      creditAppliedCents: 0,
       creditRefundedCents: 53_226,
     })
     expect(sent.ledgerCreditCents).toBe(53_226)
     expect(sent.totalRefundCents).toBe(223_226)
+  })
+
+  // D-307: after the letter the ledger holds only what is left of the
+  // credit, so a recomputation would apply it against the same excess a
+  // second time and report the tenant as still owing.
+  it('reads the applied credit back, and never re-applies what is left of it', () => {
+    // As sent: $2,200 deductions on $2,000 held, $532.26 credit, $200
+    // applied, $332.26 to return. The ledger now reads -$332.26.
+    const today = computeDisposition(200_000, 220_000, -33_226)
+    expect(today.creditAppliedCents).toBe(20_000)
+    expect(today.creditRefundedCents).toBe(13_226)
+
+    const sent = dispositionAsSent(today, {
+      appliedCents: 200_000,
+      refundedCents: 0,
+      creditAppliedCents: 20_000,
+      creditRefundedCents: 33_226,
+    })
+    expect(sent.ledgerCreditCents).toBe(53_226)
+    expect(sent.creditAppliedCents).toBe(20_000)
+    expect(sent.creditRefundedCents).toBe(33_226)
+    expect(sent.totalRefundCents).toBe(33_226)
+    expect(sent.additionalOwedCents).toBe(0)
+    expect(sent.uncoveredDeductionsCents).toBe(0)
   })
 
   it('does not let a charge that landed after the letter shrink the promised refund', () => {
@@ -165,6 +248,7 @@ describe('dispositionAsSent', () => {
     const sent = dispositionAsSent(today, {
       appliedCents: 30_000,
       refundedCents: 170_000,
+      creditAppliedCents: 0,
       creditRefundedCents: 0,
     })
     expect(sent.appliedCents).toBe(30_000)
@@ -266,6 +350,58 @@ describe('dispositionLetterText', () => {
     })
     expect(text).not.toContain('no refund is due')
     expect(text).toContain('Total being refunded to you: $200.00.')
+  })
+
+  // D-307. The four figures a tenant has to be able to check are each on a
+  // line of their own: the deposit, the deductions, the credit applied, and
+  // what is left one way or the other.
+  describe('with a credit set against deductions beyond the deposit (D-307)', () => {
+    const letter = (deductedCents: number) =>
+      dispositionLetterText({
+        ...base,
+        deductions: [{ description: 'Replace the carpet', amountCents: deductedCents }],
+        totals: computeDisposition(200_000, deductedCents, -53_226),
+      })
+
+    it('credit smaller than the excess: states the credit applied and the balance still owed', () => {
+      const text = letter(300_000)
+      expect(text).toContain('accounts for your security deposit of $2,000.00')
+      expect(text).toContain('Replace the carpet: $3,000.00')
+      expect(text).toContain('Deductions beyond your security deposit: $1,000.00.')
+      expect(text).toContain('credit balance of $532.26')
+      expect(text).toContain('Credit applied to those deductions: $532.26.')
+      expect(text).toContain('you still owe $467.74')
+      expect(text).not.toContain('refunded to you')
+      expect(text).not.toContain('returned to you')
+    })
+
+    it('credit equal to the excess: says nothing is due either way', () => {
+      const text = letter(253_226)
+      expect(text).toContain('Deductions beyond your security deposit: $532.26.')
+      expect(text).toContain('Credit applied to those deductions: $532.26.')
+      expect(text).toContain('no refund is due and you owe nothing further')
+      expect(text).not.toContain('still owe')
+      expect(text).not.toContain('refunded to you')
+    })
+
+    it('credit larger than the excess: states the credit applied and the remainder refunded', () => {
+      const text = letter(220_000)
+      expect(text).toContain('Deductions beyond your security deposit: $200.00.')
+      expect(text).toContain('Credit applied to those deductions: $200.00.')
+      expect(text).toContain('Remainder of your credit balance being returned to you: $332.26.')
+      expect(text).toContain('Total being refunded to you: $332.26.')
+      expect(text).not.toContain('still owe')
+      expect(text).not.toContain('no refund is due')
+    })
+
+    it('no excess: unchanged from D-303, with nothing said about applying the credit', () => {
+      const text = letter(30_000)
+      expect(text).toContain('Refund of your security deposit: $1,700.00.')
+      expect(text).toContain('credit balance of $532.26')
+      expect(text).toContain('Total being refunded to you: $2,232.26.')
+      expect(text).not.toContain('Credit applied')
+      expect(text).not.toContain('beyond your security deposit')
+    })
   })
 
   it('discloses a shortfall rather than a negative refund', () => {
