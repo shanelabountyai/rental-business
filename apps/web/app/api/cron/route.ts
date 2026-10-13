@@ -14,8 +14,10 @@ import { sweepShowingReminders } from '@/lib/showings/reminders.ts'
 import { sweepUnansweredDispatches } from '@/lib/vendors/no-response.ts'
 import { sweepEntryReminders } from '@/lib/workorders/entry-reminders.ts'
 
-// The single scheduled entry point. Vercel Cron hits it hourly (vercel.json),
-// and the runner decides which properties are due in their own local time -
+// The single scheduled entry point. Vercel Cron hits it once a day at 16:00
+// UTC (vercel.json, D-265/D-296) - at or past every job's local hour in every
+// contiguous US zone - and the runner decides which properties are due in
+// their own local time -
 // D-3, restated: there is no UTC-midnight job in this product.
 //
 // Hourly rather than nightly on purpose. A nightly UTC job would have to pick
