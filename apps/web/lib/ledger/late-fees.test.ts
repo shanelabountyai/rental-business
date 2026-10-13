@@ -3,6 +3,8 @@ import { wallClockToUtc } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { getBillingProvider } from '@/lib/billing/provider.ts'
+import { chargeMoveInProration } from '@/lib/billing/proration.ts'
+import { processStripeEvent } from '@/lib/billing/webhook.ts'
 import { assessLateFees } from './late-fees.ts'
 import { waiverPatternByTenant } from './waiver-report.ts'
 
@@ -74,7 +76,7 @@ afterAll(async () => {
 })
 
 async function overdueRent(dueOn: string) {
-  return prisma.charge.create({
+  const rent = await prisma.charge.create({
     data: {
       propertyId,
       leaseId,
@@ -84,9 +86,87 @@ async function overdueRent(dueOn: string) {
       dueOn: new Date(`${dueOn}T00:00:00.000Z`),
     },
   })
+  // INVOICED, which is what makes it a debt (D-300). A Charge row with no
+  // CHARGE entry is a pending invoice item the tenant has not been billed
+  // for, and pass 1 no longer assesses one - the fixture used to be exactly
+  // that and was assessed anyway.
+  await prisma.ledgerEntry.create({
+    data: {
+      propertyId,
+      leaseId,
+      chargeId: rent.id,
+      type: 'CHARGE',
+      amountCents: rent.amountCents,
+      occurredAt: wallClockToUtc(`${dueOn}T09:00`, 'America/Chicago'),
+      description: 'Rent',
+    },
+  })
+  return rent
 }
 
 describe('assessLateFees', () => {
+  it('does not assess a move-in proration the tenant has not been invoiced for (D-300)', async () => {
+    // BUILT BY THE REAL WRITER, not by hand. `chargeMoveInProration` leaves a
+    // RENT Charge due on the lease's first day and a PENDING invoice item:
+    // nothing reaches the ledger until the subscription's first invoice
+    // carries it. Every other fixture here wrote the CHARGE entry itself,
+    // which is the one state in which this defect cannot show.
+    const tenant = await prisma.tenant.create({
+      data: { firstName: 'Mo', lastName: `Movein-${randomUUID().slice(0, 6)}` },
+    })
+    const lease = await prisma.lease.create({
+      data: {
+        propertyId,
+        unitId,
+        status: 'ACTIVE',
+        startsOn: new Date('2026-03-10T00:00:00.000Z'),
+        rentCents: 150_000,
+        rentDueDay: 1,
+      },
+    })
+    await prisma.leaseTenant.create({ data: { leaseId: lease.id, tenantId: tenant.id } })
+    const stripeCustomerId = `cus_${randomUUID().replace(/-/g, '').slice(0, 14)}`
+    await prisma.leasePayer.create({
+      data: { leaseId: lease.id, propertyId, payerType: 'TENANT', tenantId: tenant.id, stripeCustomerId },
+    })
+    const proration = await chargeMoveInProration(lease.id)
+    expect(proration.reason).toBe('charged')
+    const feesOnIt = () =>
+      prisma.charge.count({ where: { assessedOnChargeId: proration.chargeId!, type: 'LATE_FEE' } })
+
+    // Two days in, past the seeded one-day grace - and three weeks before
+    // the first invoice.
+    await assessLateFees(propertyId, new Date('2026-03-12T18:00:00Z'))
+    expect(await feesOnIt()).toBe(0)
+
+    // 1 April 09:00 local: the first invoice finalizes carrying the item.
+    await processStripeEvent({
+      id: `evt_test_${randomUUID()}`,
+      type: 'invoice.finalized',
+      created: Math.floor(wallClockToUtc('2026-04-01T09:00', 'America/Chicago').getTime() / 1000),
+      data: {
+        object: {
+          id: `in_test_${randomUUID().slice(0, 12)}`,
+          customer: stripeCustomerId,
+          amount_due: proration.amountCents,
+          description: 'Part month',
+          lines: { data: [{ metadata: { chargeId: proration.chargeId! } }] },
+        },
+      },
+    })
+
+    // Aged from the day it was billed, not from move-in: on the invoice's
+    // own day it is not late, whatever `dueOn` says.
+    await assessLateFees(propertyId, new Date('2026-04-01T18:00:00Z'))
+    expect(await feesOnIt()).toBe(0)
+
+    await assessLateFees(propertyId, new Date('2026-04-10T18:00:00Z'))
+    expect(await feesOnIt()).toBe(1)
+
+    await prisma.lease.update({ where: { id: lease.id }, data: { status: 'ENDED' } })
+    await prisma.tenant.update({ where: { id: tenant.id }, data: { active: false } })
+  }, 30_000)
+
   it('assesses an overdue rent charge and stamps the rule version onto it', async () => {
     const rent = await overdueRent('2026-03-01')
     const result = await assessLateFees(propertyId, new Date('2026-03-20T12:00:00Z'))
@@ -508,6 +588,18 @@ describe('assessLateFees — payer selection on a two-payer lease (MONEY-06)', (
         amountCents: 150_000,
         description: 'Rent',
         dueOn: new Date('2026-03-01T00:00:00.000Z'),
+      },
+    })
+    // Invoiced - an un-invoiced charge is not assessed at all (D-300).
+    await prisma.ledgerEntry.create({
+      data: {
+        propertyId: property.id,
+        leaseId: lease.id,
+        chargeId: rent.id,
+        type: 'CHARGE',
+        amountCents: rent.amountCents,
+        occurredAt: wallClockToUtc('2026-03-01T09:00', 'America/Chicago'),
+        description: 'Rent',
       },
     })
 

@@ -221,7 +221,16 @@ export async function assessLateFees(
   // a lift charged every day the hold had covered.
   const heldSpans = await heldSpansInProperty(propertyId, 'halt_late_fees', property.timezone)
 
-  // ---- Pass 1: dated RENT charges (unchanged) ----
+  // ---- Pass 1: dated RENT charges ----
+  //
+  // ONLY ONES THE TENANT HAS BEEN INVOICED FOR (D-300). A `Charge` row is
+  // written the moment we decide a charge and pushed as a PENDING invoice
+  // item; it becomes a debt when the invoice carrying it finalizes and the
+  // webhook projects its CHARGE entry. The only `RENT` charge in production
+  // is the move-in proration, due on the lease's first day and billed on the
+  // first due day after it - so this pass used to fine a tenant two days
+  // into a tenancy for a part month they had not been sent a bill for and,
+  // under the portal's no-prepayment guard (D-283), could not have paid.
 
   const overdue = await prisma.charge.findMany({
     where: {
@@ -229,6 +238,7 @@ export async function assessLateFees(
       type: { in: [...LATE_FEE_APPLIES_TO] },
       waivedAt: null,
       dueOn: { lt: new Date(`${today}T00:00:00.000Z`) },
+      ledgerEntries: { some: { type: 'CHARGE' } },
       lease: { status: { in: ['ACTIVE', 'MONTH_TO_MONTH'] } },
     },
     select: {
@@ -248,8 +258,9 @@ export async function assessLateFees(
           },
         },
       },
-      // What has already been paid or credited against this rent.
-      ledgerEntries: { select: { amountCents: true, type: true } },
+      // What has already been paid or credited against this rent, and (the
+      // CHARGE entry) when it was billed.
+      ledgerEntries: { select: { amountCents: true, type: true, occurredAt: true } },
       // What this rent has already attracted in fees.
       assessedFees: { select: { amountCents: true, waivedAt: true } },
     },
@@ -279,7 +290,17 @@ export async function assessLateFees(
         // `@db.Date` comes back as UTC midnight; reading it with local getters
         // is off by one for any server west of UTC, which is exactly how
         // `daysPastDue` once reported a day late ON the due date.
-        dueOn: utcToBusinessDate(charge.dueOn),
+        //
+        // The LATER of that and the day it was invoiced (D-300): lateness
+        // runs from when the tenant was asked, the same clock pass 2 reads
+        // off a rent period's own CHARGE entry. Business dates are ISO
+        // strings, so the comparison is the calendar one.
+        dueOn: [
+          utcToBusinessDate(charge.dueOn),
+          ...charge.ledgerEntries
+            .filter((entry) => entry.type === 'CHARGE')
+            .map((entry) => businessDate(entry.occurredAt, property.timezone)),
+        ].reduce((latest, day) => (day > latest ? day : latest)),
         asOf: today,
       },
       heldSpans.get(charge.leaseId) ?? [],
