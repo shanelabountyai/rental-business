@@ -223,6 +223,18 @@ export async function assignWorkOrder(
   })
   await requirePermission('workorder.write', propertyResource(workOrder.property))
 
+  // The approval gate IS the status column (MAINT-04, D-298). This action
+  // writes ASSIGNED below, so on a PENDING_APPROVAL job it used to answer the
+  // owner's question for them - `decideApproval` then refused with "not
+  // waiting for a decision" - and on a CLOSED or CANCELED (denied) one it
+  // reopened the job.
+  if (workOrder.status === 'PENDING_APPROVAL') {
+    return { error: 'This work order is waiting for approval. Decide that first.' }
+  }
+  if (workOrder.status === 'CLOSED' || workOrder.status === 'CANCELED') {
+    return { error: 'This work order is already resolved.' }
+  }
+
   const assignedStaffId = str(formData, 'assignedStaffId') || null
   const vendorId = str(formData, 'vendorId') || null
   const violations = validateAssignment({ assignedStaffId, vendorId })
@@ -385,6 +397,13 @@ export async function dispatchToVendor(
   if (workOrder.status === 'CLOSED' || workOrder.status === 'CANCELED') {
     return { error: 'This work order is already resolved.' }
   }
+  // "Explicit approval before dispatch" (MAINT-04, D-298). A RESEND is let
+  // through: a dispatched vendor's own over-ceiling invoice is what sends a
+  // job back to PENDING_APPROVAL (R-037), and they keep their link while the
+  // office decides. It no longer clears the gate - see the status write below.
+  if (workOrder.status === 'PENDING_APPROVAL' && workOrder.dispatchedAt == null) {
+    return { error: 'This work order is waiting for approval. Decide that first.' }
+  }
 
   // Warned and logged, never refused (R-214, D-187's posture): the only
   // plumber who answers at 2am still goes out, but the PM is told at the
@@ -405,7 +424,17 @@ export async function dispatchToVendor(
   await prisma.$transaction(async (tx) => {
     await tx.workOrder.update({
       where: { id: workOrder.id },
-      data: { dispatchedAt: new Date(), status: 'ASSIGNED' },
+      data: {
+        dispatchedAt: new Date(),
+        // Only a job that has not been assigned yet moves to ASSIGNED. This
+        // used to be unconditional, so resending a link dragged an
+        // IN_PROGRESS job backwards and erased PENDING_APPROVAL (D-298).
+        ...(workOrder.status === 'SUBMITTED' ||
+        workOrder.status === 'TRIAGED' ||
+        workOrder.status === 'APPROVED'
+          ? { status: 'ASSIGNED' as const }
+          : {}),
+      },
     })
     await audit(
       {
