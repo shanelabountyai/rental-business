@@ -73,14 +73,19 @@ export async function leaseBalanceCents(leaseId: string, db: Db = prisma): Promi
  * as its invoice stayed open), and so does the simulator, which reports what
  * Stripe was told (D-27).
  *
- * ONLY that shape. Any other row with no event behind it is still exactly
- * what the reconciliation exists to find.
+ * AND THE ROW THAT ANSWERS IT (D-306): an `ADJUSTMENT` with no
+ * `stripeEventId`, posted when that credit is paid out with the deposit
+ * refund. Stripe heard about neither, so counting one without the other
+ * would report the credit as drift the night after it was paid.
+ *
+ * ONLY those two shapes. Any other row with no event behind it is still
+ * exactly what the reconciliation exists to find.
  */
 export async function leaseBalanceAtStripeCents(leaseId: string): Promise<number> {
   const [balance, ledgerOnly] = await Promise.all([
     leaseBalanceCents(leaseId),
     prisma.ledgerEntry.aggregate({
-      where: { leaseId, type: 'CREDIT', stripeEventId: null },
+      where: { leaseId, type: { in: ['CREDIT', 'ADJUSTMENT'] }, stripeEventId: null },
       _sum: { amountCents: true },
     }),
   ])

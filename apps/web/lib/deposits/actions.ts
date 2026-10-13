@@ -593,6 +593,9 @@ export async function recordDepositRefund(
       dispositionSentAt: true,
       refundPaidOn: true,
       property: { select: { id: true, legalEntityId: true, timezone: true } },
+      // D-306: whose ledger the paid-out credit comes off. The same one
+      // active payer `finalizeDisposition` reads.
+      lease: { select: { leasePayers: { where: { active: true }, take: 1, select: { id: true } } } },
     },
   })
   const actor = await requirePermission('ledger.adjust', propertyResource(deposit.property))
@@ -623,7 +626,19 @@ export async function recordDepositRefund(
     }
   }
 
-  await prisma.$transaction(async (tx) => {
+  const recorded = await prisma.$transaction(async (tx) => {
+    // D-306: the same per-lease lock the move-out credit is posted under
+    // (D-302) and a settling payment plans under (MONEY-16). THE LOCK AND
+    // THE RE-READ BELOW ARE THE IDEMPOTENCY: the check at the top of this
+    // action is outside the transaction, so two presses in one instant both
+    // pass it, and before this both wrote the refund and its audit row.
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`lease-allocation:${deposit.leaseId}`}))`
+    const current = await tx.deposit.findUniqueOrThrow({
+      where: { id: deposit.id },
+      select: { refundPaidOn: true },
+    })
+    if (current.refundPaidOn) return false
+
     let refundDocumentId: string | null = null
     const file = formData.get('file')
     if (file instanceof File && file.size > 0) {
@@ -680,6 +695,55 @@ export async function recordDepositRefund(
       tx,
     )
 
+    // D-306: THE CREDIT LEAVES THE LEDGER WHEN THE MONEY LEAVES THE BANK.
+    // Without this the tenant's account went on reading in credit for money
+    // they had already been handed. A ledger-only row like the credit it
+    // answers (D-302): Stripe was never told about either, so there is no
+    // event to project it from, and `leaseBalanceAtStripeCents` leaves both
+    // out of what it expects Stripe to agree with.
+    //
+    // THE STORED FIGURE, not today's balance: it is what was paid. A charge
+    // that landed after the letter is still owed, and stays showing.
+    //
+    // In this transaction, so `refundPaidOn` above is the one marker for
+    // both: a refund is recorded and its credit taken off, or neither.
+    if (deposit.creditRefundedCents > 0) {
+      const entry = await tx.ledgerEntry.create({
+        data: {
+          propertyId: deposit.propertyId,
+          leaseId: deposit.leaseId,
+          leasePayerId: deposit.lease.leasePayers[0]?.id ?? null,
+          // ADJUSTMENT, which nothing else writes: not a CHARGE (it is not
+          // income, and the accrual export reads unlinked CHARGE rows as
+          // rent) and not a REVERSAL (the credit was right; it was paid).
+          type: 'ADJUSTMENT',
+          amountCents: deposit.creditRefundedCents,
+          description: `Credit balance returned with the deposit refund on ${friendlyBusinessDate(paidOn)}`,
+          // When it was posted, not `paidOn`: an entry slipped into the past
+          // would change running balances already printed on a statement.
+          occurredAt: new Date(),
+        },
+        select: { id: true },
+      })
+      await audit(
+        {
+          action: 'ledger.adjusted',
+          entityType: 'LedgerEntry',
+          entityId: entry.id,
+          propertyId: deposit.propertyId,
+          reason: 'Credit balance paid out with the deposit refund',
+          after: {
+            type: 'ADJUSTMENT',
+            creditPaidOut: true,
+            ledgerOnly: true,
+            amountCents: deposit.creditRefundedCents,
+            depositId: deposit.id,
+          },
+        },
+        tx,
+      )
+    }
+
     // Closes the obligation finalization raised. Not a second queue and not
     // a second notion of "done" - `completeTaskWork` is the one write that
     // marks a Task complete (D-9), and the disbursement IS the completion,
@@ -697,7 +761,9 @@ export async function recordDepositRefund(
         note: `${formatCents(paidCents)} by ${DEPOSIT_REFUND_INSTRUMENTS[method as DepositRefundInstrument].toLowerCase()} on ${friendlyBusinessDate(paidOn)}${reference ? ` (${reference})` : ''}`,
       })
     }
+    return true
   })
+  if (!recorded) return { error: 'This refund has already been recorded.' }
 
   revalidatePath(`/leases/${deposit.leaseId}/deposit`)
   revalidatePath('/tasks')

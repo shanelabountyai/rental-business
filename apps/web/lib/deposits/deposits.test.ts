@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { prisma } from '@rental/db'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
+import { leaseBalanceAtStripeCents, leaseBalanceCents } from '@/lib/ledger/queries.ts'
 import { upcomingCriticalDates } from '@/lib/reports/queries.ts'
 import type { ResolvedScope } from '@/lib/scope/current-scope.ts'
 import { finalizeDisposition, recordDepositRefund } from './actions.ts'
@@ -252,5 +253,82 @@ describe('a disposition that returns a ledger credit (D-303, D-305)', () => {
     expect(await recordRefund(deposit.id)).toEqual({
       error: 'This disposition refunds nothing, so there is nothing to pay.',
     })
+  })
+})
+
+// D-306. Until this, cutting the cheque wrote nothing to the ledger, so a
+// former tenant who had been paid their credit went on showing as owed it.
+describe('paying out a returned credit (D-306)', () => {
+  const payouts = (leaseId: string) =>
+    prisma.ledgerEntry.findMany({ where: { leaseId, type: 'ADJUSTMENT' } })
+
+  it('posts one ledger-only entry that takes the credit off the ledger', async () => {
+    const { deposit, lease } = await endedTenancy({ heldCents: 200_000 })
+    await finalize(deposit.id)
+    // The letter alone moves nothing: the money has not left yet.
+    expect(await leaseBalanceCents(lease.id)).toBe(-CREDIT)
+
+    expect(await recordRefund(deposit.id)).toEqual({ notice: 'Refund recorded.' })
+
+    const posted = await payouts(lease.id)
+    expect(posted).toHaveLength(1)
+    expect(posted[0]).toMatchObject({ amountCents: CREDIT, stripeEventId: null, chargeId: null })
+    expect(await leaseBalanceCents(lease.id)).toBe(0)
+    // Stripe was told about neither the credit nor its payment, and its
+    // invoice for the month is paid. Counting this row would report the
+    // tenancy as CREDIT cents adrift every night from now on.
+    expect(await leaseBalanceAtStripeCents(lease.id)).toBe(0)
+
+    const audited = await prisma.auditLog.findFirstOrThrow({
+      where: { entityType: 'LedgerEntry', entityId: posted[0]!.id, action: 'ledger.adjusted' },
+    })
+    expect(audited.after).toMatchObject({
+      ledgerOnly: true,
+      amountCents: CREDIT,
+      depositId: deposit.id,
+    })
+  })
+
+  it('posts it once when the same refund is recorded again', async () => {
+    const { deposit, lease } = await endedTenancy({ heldCents: 200_000 })
+    await finalize(deposit.id)
+
+    await recordRefund(deposit.id)
+    expect(await recordRefund(deposit.id)).toEqual({
+      error: 'This refund has already been recorded.',
+    })
+
+    expect(await payouts(lease.id)).toHaveLength(1)
+    expect(await leaseBalanceCents(lease.id)).toBe(0)
+  })
+
+  // Two presses in the same instant both pass the read outside the
+  // transaction. The per-lease lock and the re-read under it are what refuse
+  // the second, not the check at the top of the action.
+  it('posts it once when two recordings land together', async () => {
+    const { deposit, lease } = await endedTenancy({ heldCents: 200_000 })
+    await finalize(deposit.id)
+
+    const results = await Promise.all([recordRefund(deposit.id), recordRefund(deposit.id)])
+
+    expect(results.filter((r) => r.notice)).toHaveLength(1)
+    expect(results.filter((r) => r.error)).toHaveLength(1)
+    expect(await payouts(lease.id)).toHaveLength(1)
+    expect(await leaseBalanceCents(lease.id)).toBe(0)
+    expect(
+      await prisma.auditLog.count({
+        where: { entityId: deposit.id, action: 'deposit.refund_recorded' },
+      }),
+    ).toBe(1)
+  })
+
+  it('posts nothing for a refund that is deposit money only', async () => {
+    const { deposit, lease } = await endedTenancy({ heldCents: 200_000, creditCents: 0 })
+    await finalize(deposit.id)
+
+    expect(await recordRefund(deposit.id)).toEqual({ notice: 'Refund recorded.' })
+
+    expect(await payouts(lease.id)).toHaveLength(0)
+    expect(await leaseBalanceCents(lease.id)).toBe(0)
   })
 })

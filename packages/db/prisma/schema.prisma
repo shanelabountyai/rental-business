@@ -4601,7 +4601,9 @@ model ProcessedStripeEvent {
 /// A row here that Stripe does not know about is a reconciliation bug, not a
 /// shortcut. ONE exception, by the owner's decision (D-302): the move-out
 /// proration credit, a `CREDIT` with no `stripeEventId`, which nothing at
-/// Stripe can carry once the subscription is over.
+/// Stripe can carry once the subscription is over - and the `ADJUSTMENT`
+/// with no `stripeEventId` that takes a credit off again when it is paid
+/// out with the deposit refund (D-306).
 model LedgerEntry {
   id             String          @id @default(cuid())
   propertyId     String

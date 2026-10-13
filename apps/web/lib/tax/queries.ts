@@ -58,8 +58,10 @@ import type { ResolvedScope } from '@/lib/scope/current-scope.ts'
  *   `paymentId` and is therefore already out.
  *
  * The type list is closed rather than "everything unlinked": `CREDIT` and
- * `ADJUSTMENT` exist in the enum and nothing writes them, and a value
+ * `ADJUSTMENT` were in the enum with nothing writing them, and a value
  * nobody has defined should not become rent income the day somebody does.
+ * Somebody has (D-302, D-306: the move-out credit and its payout), and
+ * neither is income.
  */
 const LEDGER_INCOME_WHERE: Record<AccountingBasis, Prisma.LedgerEntryWhereInput> = {
   cash: { paymentId: { not: null } },
