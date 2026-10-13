@@ -20,6 +20,8 @@ describe('computeDisposition', () => {
       refundedCents: 150_000,
       additionalOwedCents: 0,
       uncoveredDeductionsCents: 0,
+      ledgerCreditCents: 0,
+      totalRefundCents: 150_000,
     })
   })
 
@@ -47,10 +49,51 @@ describe('computeDisposition', () => {
     expect(totals.additionalOwedCents).toBe(0)
   })
 
-  it('ignores a credit balance (negative outstanding) rather than adding it to the refund', () => {
+  // D-303 (Shane, 2026-10-13). This test used to assert the opposite - "ignores
+  // a credit balance rather than adding it to the refund" - and was changed on
+  // purpose: a tenant who has paid for days they did not live there is owed
+  // that money, and the disposition is the last cheque they will ever get.
+  it('returns a credit balance with the refund, as its own figure beside the deposit', () => {
     const totals = computeDisposition(200_000, 50_000, -10_000)
     expect(totals.appliedCents).toBe(50_000)
+    // Deposit money only, so applied + refunded still accounts for exactly
+    // what was held and the deposit liability still closes at zero.
     expect(totals.refundedCents).toBe(150_000)
+    expect(totals.appliedCents + totals.refundedCents).toBe(totals.heldCents)
+    expect(totals.ledgerCreditCents).toBe(10_000)
+    expect(totals.totalRefundCents).toBe(160_000)
+    expect(totals.ledgerAppliedCents).toBe(0)
+  })
+
+  it('a paid-up tenant who leaves on the 15th gets the deposit and the unused days back', () => {
+    // $1,500 rent paid on the 1st of a 30-day month, out on the 15th: the
+    // move-out credit (D-302) leaves the ledger $750 in credit.
+    const totals = computeDisposition(150_000, 0, -75_000)
+    expect(totals.refundedCents).toBe(150_000)
+    expect(totals.ledgerCreditCents).toBe(75_000)
+    expect(totals.totalRefundCents).toBe(225_000)
+    expect(totals.additionalOwedCents).toBe(0)
+  })
+
+  it('a tenant in arrears who leaves on the 15th has only the days lived taken from the deposit', () => {
+    // The same month unpaid. The credit has already reduced the balance to
+    // $750 by the time this reads it, so that - not $1,500 - is what the
+    // deposit settles, and there is no credit left over to return.
+    const totals = computeDisposition(150_000, 0, 150_000 - 75_000)
+    expect(totals.ledgerAppliedCents).toBe(75_000)
+    expect(totals.refundedCents).toBe(75_000)
+    expect(totals.ledgerCreditCents).toBe(0)
+    expect(totals.totalRefundCents).toBe(75_000)
+  })
+
+  it('returns the credit even when the deposit itself is used up', () => {
+    // Not netted against deductions beyond the deposit: those are invoiced
+    // through Stripe (D-233), which does not know about a ledger credit.
+    const totals = computeDisposition(100_000, 150_000, -20_000)
+    expect(totals.refundedCents).toBe(0)
+    expect(totals.uncoveredDeductionsCents).toBe(50_000)
+    expect(totals.additionalOwedCents).toBe(50_000)
+    expect(totals.totalRefundCents).toBe(20_000)
   })
 
   it('never refunds more than was held, and discloses the shortfall separately', () => {
@@ -169,6 +212,28 @@ describe('dispositionLetterText', () => {
     const totals = computeDisposition(200_000, 0, 0)
     const text = dispositionLetterText({ ...base, deductions: [], totals })
     expect(text).toContain('No deductions were made against your deposit.')
+  })
+
+  it('shows a returned credit as its own line, never folded into the deposit refund', () => {
+    const text = dispositionLetterText({
+      ...base,
+      deductions: [],
+      totals: computeDisposition(150_000, 0, -75_000),
+    })
+    expect(text).toContain('Refund of your security deposit: $1,500.00.')
+    expect(text).toContain('credit balance of $750.00')
+    expect(text).toContain('Total being refunded to you: $2,250.00.')
+    expect(text).not.toContain('Amount being refunded to you')
+  })
+
+  it('does not say "no refund is due" when the deposit is spent and a credit is coming back', () => {
+    const text = dispositionLetterText({
+      ...base,
+      deductions: [{ description: 'Wall repair', amountCents: 100_000 }],
+      totals: computeDisposition(100_000, 100_000, -20_000),
+    })
+    expect(text).not.toContain('no refund is due')
+    expect(text).toContain('Total being refunded to you: $200.00.')
   })
 
   it('discloses a shortfall rather than a negative refund', () => {

@@ -97,13 +97,20 @@ export default async function DepositDispositionPage({
   // charge landing on the ledger afterwards must not quietly change the
   // number the tenant was promised - which is also the number this page now
   // asks somebody to pay.
+  //
+  // D-303: THE CREDIT IS NOT READ BACK, because no column holds it. It is
+  // today's ledger credit, which is the letter's figure for as long as
+  // nothing moves on a former tenant's ledger. The letter and the refund
+  // task carry the number that was promised.
+  const computed = computeDisposition(deposit.heldCents, deductedCents, outstandingLedgerCents)
   const totals = finalized
     ? {
-        ...computeDisposition(deposit.heldCents, deductedCents, outstandingLedgerCents),
+        ...computed,
         appliedCents: deposit.appliedCents,
         refundedCents: deposit.refundedCents,
+        totalRefundCents: deposit.refundedCents + computed.ledgerCreditCents,
       }
-    : computeDisposition(deposit.heldCents, deductedCents, outstandingLedgerCents)
+    : computed
 
   return (
     <div className="flex max-w-2xl flex-col gap-6">
@@ -217,6 +224,14 @@ export default async function DepositDispositionPage({
           )}
           <dt className="text-muted-foreground">Refund due</dt>
           <dd>{formatCents(totals.refundedCents)}</dd>
+          {totals.ledgerCreditCents > 0 && (
+            <>
+              <dt className="text-muted-foreground">Credit on the tenant’s account</dt>
+              <dd>{formatCents(totals.ledgerCreditCents)}</dd>
+              <dt className="text-muted-foreground">Total to pay the tenant</dt>
+              <dd>{formatCents(totals.totalRefundCents)}</dd>
+            </>
+          )}
           {totals.additionalOwedCents > 0 && (
             <>
               <dt className="text-muted-foreground">Still owed after deposit</dt>
@@ -242,6 +257,8 @@ export default async function DepositDispositionPage({
             {refundOutstanding
               ? `It promised ${formatCents(deposit.refundedCents)} back — until that money actually leaves, the deposit stays on the rent roll and the year-end packet as a liability.`
               : `${formatCents(deposit.refundedCents)} was returned to the tenant and the deposit is fully accounted for.`}
+            {totals.ledgerCreditCents > 0 &&
+              ` The tenant’s account is also ${formatCents(totals.ledgerCreditCents)} in credit, which the letter returns with the refund: ${formatCents(totals.totalRefundCents)} in all. The record below is of the deposit refund.`}
           </p>
           {refundOutstanding ? (
             <RecordRefundForm

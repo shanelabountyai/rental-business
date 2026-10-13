@@ -15,7 +15,8 @@ export interface DispositionTotals {
   deductedCents: Cents
   /// Money the tenant separately owes on the ordinary ledger (unpaid rent,
   /// fees) - NOT deposit deductions. Read from `balanceCents()` at
-  /// finalize time; a credit balance (negative) contributes nothing here.
+  /// finalize time; a credit balance (negative) is nothing owed, and comes
+  /// back to the tenant as `ledgerCreditCents`.
   outstandingLedgerCents: Cents
   /// Kept against the liability - deductions plus any outstanding balance,
   /// never more than what was actually held.
@@ -35,7 +36,11 @@ export interface DispositionTotals {
   /// sentence exact in every case, and the shortfall lands in
   /// `additionalOwedCents`, which names no particular debt.
   ledgerAppliedCents: Cents
-  /// Given back to the tenant.
+  /// Given back to the tenant OUT OF THE DEPOSIT. Deposit money only, even
+  /// when a credit is returned with it: this is what `Deposit.refundedCents`
+  /// stores and what `depositLiabilityCents` subtracts, and a figure larger
+  /// than the deposit would take the liability below zero on the rent roll
+  /// and the year-end packet.
   refundedCents: Cents
   /// What deductions and the outstanding balance together exceed the
   /// deposit by, if anything - money still owed AFTER the full deposit is
@@ -47,6 +52,17 @@ export interface DispositionTotals {
   /// so this is the number finalize raises as its own charge (D-233).
   /// `additionalOwedCents` always equals this plus the arrears left unpaid.
   uncoveredDeductionsCents: Cents
+  /// A credit balance on the tenant's ledger, returned with the refund
+  /// (D-303) - normally the move-out proration credit, days paid for and
+  /// never lived (D-302). Its own figure and its own line in the letter,
+  /// because it is the tenant's rent coming back and not their deposit.
+  ///
+  /// NOT set against deductions the deposit could not cover. Those are
+  /// invoiced through Stripe (`uncoveredDeductionsCents`, D-233), which holds
+  /// no record of a ledger-only credit to net them off against.
+  ledgerCreditCents: Cents
+  /// What the tenant is actually paid: `refundedCents + ledgerCreditCents`.
+  totalRefundCents: Cents
 }
 
 /**
@@ -58,6 +74,10 @@ export interface DispositionTotals {
  * schema comment describes ("applied and refunded amounts account for the
  * rest"). A shortfall shows up as `additionalOwedCents`, never as a
  * negative `refundedCents`.
+ *
+ * A CREDIT BALANCE IS RETURNED, NOT CLAMPED AWAY (D-303). This used to treat
+ * a negative ledger balance as zero, so a paid-up tenant who left mid-month
+ * got the deposit back and lost the days they had paid for and not lived.
  */
 export function computeDisposition(
   heldCents: Cents,
@@ -74,6 +94,7 @@ export function computeDisposition(
   const additionalOwedCents = Math.max(0, owedByTenant - heldCents)
   const ledgerAppliedCents = Math.min(appliedCents, Math.max(0, outstandingLedgerCents))
   const uncoveredDeductionsCents = Math.max(0, deductedCents) - (appliedCents - ledgerAppliedCents)
+  const ledgerCreditCents = Math.max(0, -outstandingLedgerCents)
 
   return {
     heldCents,
@@ -84,6 +105,8 @@ export function computeDisposition(
     refundedCents,
     additionalOwedCents,
     uncoveredDeductionsCents,
+    ledgerCreditCents,
+    totalRefundCents: refundedCents + ledgerCreditCents,
   }
 }
 
@@ -189,8 +212,16 @@ export function dispositionLetterText(context: DispositionLetterContext): string
     )
   }
 
+  // With a credit coming back as well, the deposit refund is named as what
+  // it is and the credit and the total follow below - three figures a tenant
+  // can check, rather than one they cannot.
+  const credit = totals.ledgerCreditCents
   if (totals.refundedCents > 0) {
-    lines.push(`Amount being refunded to you: ${formatDollars(totals.refundedCents)}.`)
+    lines.push(
+      credit > 0
+        ? `Refund of your security deposit: ${formatDollars(totals.refundedCents)}.`
+        : `Amount being refunded to you: ${formatDollars(totals.refundedCents)}.`,
+    )
   }
   if (totals.additionalOwedCents > 0) {
     lines.push(
@@ -198,7 +229,17 @@ export function dispositionLetterText(context: DispositionLetterContext): string
     )
   }
   if (totals.refundedCents === 0 && totals.additionalOwedCents === 0) {
-    lines.push('Your deposit has been fully applied; no refund is due and you owe nothing further.')
+    lines.push(
+      credit > 0
+        ? 'Your deposit has been fully applied and you owe nothing further.'
+        : 'Your deposit has been fully applied; no refund is due and you owe nothing further.',
+    )
+  }
+  if (credit > 0) {
+    lines.push(
+      `Your account also carries a credit balance of ${formatDollars(credit)} for rent paid beyond what was owed, which is being returned to you.`,
+      `Total being refunded to you: ${formatDollars(totals.totalRefundCents)}.`,
+    )
   }
 
   lines.push(

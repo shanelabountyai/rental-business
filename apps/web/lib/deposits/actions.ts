@@ -499,7 +499,10 @@ export async function finalizeDisposition(
     // here (the `dispositionSentAt` guard above means a deposit is finalized
     // once), and if it somehow did, the whole finalization failing is the
     // safe direction: no letter, nothing to reconcile.
-    if (totals.refundedCents > 0) {
+    //
+    // D-303: raised for a returned CREDIT too, and titled with the whole
+    // amount to pay. `Deposit.refundedCents` above stays deposit money only.
+    if (totals.totalRefundCents > 0) {
       // R-188: DATED WITH THE DEADLINE, NOT WITH TODAY. This was
       // `businessDate(new Date(), ...)` - the day the letter was finalized -
       // so the one URGENT row left watching the refund read *Overdue* from
@@ -520,7 +523,10 @@ export async function finalizeDisposition(
         // A statutory deadline the owner has already passed the decision
         // point on. Late here is treble damages in Texas, not a late fee.
         priority: 'URGENT',
-        title: `Pay ${tenantName} the ${formatCents(totals.refundedCents)} deposit refund by ${friendlyBusinessDate(refundDueOn)}`,
+        title:
+          totals.ledgerCreditCents > 0
+            ? `Pay ${tenantName} ${formatCents(totals.totalRefundCents)} by ${friendlyBusinessDate(refundDueOn)}: the ${formatCents(totals.refundedCents)} deposit refund plus the ${formatCents(totals.ledgerCreditCents)} credit on their account`
+            : `Pay ${tenantName} the ${formatCents(totals.refundedCents)} deposit refund by ${friendlyBusinessDate(refundDueOn)}`,
       })
     }
     return created
