@@ -90,6 +90,28 @@ describe('tenantCanSeeDocument', () => {
 // R-020 widened this rule by exactly one clause. These are the tests for that
 // clause - both what it now allows and, more importantly, what it still does
 // not.
+describe('papers assembled against the tenant stay out of their portal', () => {
+  // Each writer omits `tenantId` and says the packet "must never appear in
+  // their own portal" - but it sets `leaseId`, which is itself a grant.
+  it.each(['ATTORNEY_PACKET', 'LEDGER_STATEMENT', 'DEPOSIT_PACKET'])(
+    'refuses a %s on their own lease',
+    (type) => {
+      expect(
+        tenantCanSeeDocument(doc({ leaseId: 'lease_mine', type }), ME),
+      ).toBe(false)
+    },
+  )
+
+  it('refuses one even when it names the tenant', () => {
+    expect(
+      tenantCanSeeDocument(
+        doc({ tenantId: 'ten_me', type: 'ATTORNEY_PACKET' }),
+        ME,
+      ),
+    ).toBe(false)
+  })
+})
+
 describe('the shutoff-photo safety exception (R-020)', () => {
   it('allows a shutoff photo on a unit the tenant leases', () => {
     // MAINT-01 requires the emergency intake to display "the relevant

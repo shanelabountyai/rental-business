@@ -191,6 +191,15 @@ describe('a tenant sees only their own papers (DOC-03)', () => {
     expect(ids).not.toContain(onLease.id)
   })
 
+  it.each(['ATTORNEY_PACKET', 'LEDGER_STATEMENT', 'DEPOSIT_PACKET'])(
+    'never lists a %s built against them, though it is on their lease',
+    async (type) => {
+      const packet = await makeDocument({ leaseId: myLeaseId, type })
+      const ids = (await listTenantDocuments(myScope())).map((d) => d.id)
+      expect(ids).not.toContain(packet.id)
+    },
+  )
+
   it('agrees with the pure rule on every document in the fixture', async () => {
     // The drift check. The predicate and the `where` clause are two
     // expressions of one rule; this walks the whole fixture and asserts they

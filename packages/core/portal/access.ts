@@ -99,11 +99,28 @@ const UNIT_SAFETY_DOCUMENT_TYPES: ReadonlySet<string> = new Set(['SHUTOFF_PHOTO'
  * hangs off the inspection, and INSP is R-070's. Whichever item builds it
  * adds its clause here, in one place, with a test.
  */
+/**
+ * Papers the product assembles for a dispute WITH the tenant - never theirs to
+ * see, whatever ids the row carries.
+ *
+ * Each writer leaves `tenantId` off for exactly this reason, but all three set
+ * `leaseId`, and a lease link is itself a grant below. So the type refuses
+ * first. `COMMS_TRANSCRIPT` sets neither id and needs no entry.
+ */
+export const STAFF_ONLY_DOCUMENT_TYPES: readonly string[] = [
+  'ATTORNEY_PACKET',
+  'LEDGER_STATEMENT',
+  'DEPOSIT_PACKET',
+]
+
 export function tenantCanSeeDocument(
   document: DocumentAccessFacts,
   scope: TenantScope,
 ): boolean {
   if (document.deletedAt !== null) return false
+  if (document.type != null && STAFF_ONLY_DOCUMENT_TYPES.includes(document.type)) {
+    return false
+  }
   if (document.tenantId !== null && document.tenantId === scope.tenantId) {
     return true
   }

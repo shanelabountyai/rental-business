@@ -1,6 +1,9 @@
 import 'server-only'
 
-import type { TenantScope } from '@rental/core/portal'
+import {
+  STAFF_ONLY_DOCUMENT_TYPES,
+  type TenantScope,
+} from '@rental/core/portal'
 import { prisma } from '@rental/db'
 
 // Reads for the tenant portal (R-018). Every one of them is filtered by the
@@ -22,6 +25,9 @@ import { prisma } from '@rental/db'
 function visibleDocumentWhere(scope: TenantScope) {
   return {
     deletedAt: null,
+    // Dispute packets carry a leaseId and are still not the tenant's - see
+    // STAFF_ONLY_DOCUMENT_TYPES. `type` is non-null, so notIn drops no rows.
+    type: { notIn: [...STAFF_ONLY_DOCUMENT_TYPES] },
     OR: [
       { tenantId: scope.tenantId },
       // An empty leaseIds array makes this clause match nothing, which is
