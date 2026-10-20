@@ -14550,7 +14550,7 @@ Re-opens the project for two rows from the post-closure second-pass review of th
 **Gate.** lint (16 warnings, unchanged), typecheck, `npm test` 3563 passed + 4 skipped. `e2e/announcements.spec.ts` on both projects: 26 passed of 26, run in the previous session on this same working tree and not re-run here. The full sweep is CI's.
 
 ## R-261 — scheduled announcements
-**Commit:** _(recorded in the follow-up commit)_  ·  **Date:** 2026-10-20
+**Commit:** `5c53c68`  ·  **Date:** 2026-10-20
 
 **What it built.**
 - `notify()` takes `sendAfter` (apps/web/lib/notifications/send.ts): the delivery is recorded DEFERRED to that instant, and quiet hours are judged at that instant rather than at creation — 9am tomorrow is not quiet; 11pm tomorrow is, and slides to the next 8am. Nothing new drains it: the dispatch that already releases a quiet-hours hold releases this.
