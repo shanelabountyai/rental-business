@@ -505,6 +505,9 @@ export const AUDIT_ACTIONS = [
   /// records what segment was targeted, what was requested, what was sent,
   /// and every skip with its reason.
   'message.announcement_sent',
+  /// R-259 (PRD 08 A4): a segment saved under a name, and its retirement.
+  'message.audience_saved',
+  'message.audience_retired',
   /// R-052 (COMM-05): a communications transcript was produced for a party -
   /// every message, notification and served notice on their record, in one
   /// PDF that leaves the building.

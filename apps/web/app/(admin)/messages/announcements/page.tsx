@@ -1,9 +1,11 @@
 import Link from 'next/link'
-import { AnnouncementForm } from '@/components/messages/announcement-form.tsx'
+import { parseSegment } from '@rental/core/comms'
+import { AnnouncementForm, SaveAudienceForm } from '@/components/messages/announcement-form.tsx'
 import { PageHeader } from '@/components/page-header.tsx'
+import { INPUT_CLASSES, PRIMARY_BUTTON_CLASSES } from '@/components/ui-classes.ts'
 import { requireScope } from '@/lib/auth/guard.ts'
-import { sendAnnouncement } from '@/lib/comms/announcement-actions.ts'
-import { segmentOptions } from '@/lib/comms/announcements.ts'
+import { retireAudience, saveAudience, sendAnnouncement } from '@/lib/comms/announcement-actions.ts'
+import { listAudiences, reviewSegment, segmentOptions } from '@/lib/comms/announcements.ts'
 import { listTemplates } from '@/lib/comms/templates.ts'
 
 export const metadata = { title: 'Announcements — Rental Operations' }
@@ -12,11 +14,34 @@ export const metadata = { title: 'Announcements — Rental Operations' }
 // Tuesday". `requireScope`, not a bare `requirePermission`: a property-scoped
 // manager holds message.send over their own properties only, and the segment
 // itself is resolved against that same scope inside the action.
+//
+// TWO STEPS, BOTH SERVER-RENDERED (R-259). Choosing who it goes to is a plain
+// GET form, so `?segment=` is the whole state of step one and it works before
+// hydration (R-115's reason for one select). Step two is the reviewed list
+// the send posts back. One `<select>` with the count in every option: a
+// second, conditionally-rendered control would only exist after hydration,
+// which is the bug R-115 removed.
 
-export default async function AnnouncementsPage() {
+function withCount(choice: { label: string; count: number }): string {
+  return `${choice.label} — ${choice.count} ${choice.count === 1 ? 'tenant' : 'tenants'}`
+}
+
+export default async function AnnouncementsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ segment?: string }>
+}) {
   const { scope } = await requireScope('message.send')
+  const { segment: posted = '' } = await searchParams
+  const segment = parseSegment(posted)
 
-  const [options, templates] = await Promise.all([segmentOptions(scope), listTemplates()])
+  const [options, templates, audiences, recipients] = await Promise.all([
+    segmentOptions(scope),
+    listTemplates(),
+    listAudiences(),
+    segment ? reviewSegment(scope, segment) : Promise.resolve(null),
+  ])
+  const groups = options.groups.filter((group) => group.choices.length > 0)
 
   return (
     <div className="flex flex-col gap-6">
@@ -47,14 +72,92 @@ export default async function AnnouncementsPage() {
         </Link>
       </div>
 
-      <AnnouncementForm
-        options={options}
-        templates={templates.map((template) => ({ id: template.id, name: template.name }))}
-        // Not bound — sendAnnouncement takes only (state, formData), the
-        // 'use server' export itself, which is the only kind of function the
-        // client can call back to.
-        sendAction={sendAnnouncement}
-      />
+      <form method="get" className="flex flex-col gap-3 rounded-lg border p-4">
+        <h2 className="text-sm font-medium">Send an announcement</h2>
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="segment" className="text-sm font-medium">
+            Send to
+          </label>
+          <select
+            id="segment"
+            name="segment"
+            defaultValue={segment ? posted : 'ALL'}
+            aria-describedby="segment-hint"
+            // INPUT_CLASSES for its `min-w-0 max-w-full` (R-170a): a native
+            // select is as wide as its widest option, and "Property · Unit"
+            // labels (R-258) are the longest this one has carried.
+            className={INPUT_CLASSES}
+          >
+            <option value={options.all.value}>{withCount(options.all)}</option>
+            {groups.map((group) => (
+              <optgroup key={group.label} label={group.label}>
+                {group.choices.map((choice) => (
+                  <option key={`${group.label}:${choice.value}`} value={choice.value}>
+                    {withCount(choice)}
+                  </option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+          <p id="segment-hint" className="text-muted-foreground text-sm">
+            Counts are current tenancies. A lease on a marketing hold, or a
+            tenant whose merge fields cannot be filled, is dropped at send time
+            and named in the results.
+          </p>
+        </div>
+        <button type="submit" className={`${PRIMARY_BUTTON_CLASSES} self-start`}>
+          Choose recipients
+        </button>
+      </form>
+
+      {segment && recipients && recipients.length === 0 && (
+        <p className="rounded-lg border border-dashed p-4 text-sm">
+          Nobody matches that segment right now. Choose another one above.
+        </p>
+      )}
+
+      {segment && recipients && recipients.length > 0 && (
+        <>
+          <AnnouncementForm
+            // Keyed on the segment so a new choice starts fully ticked again.
+            key={posted}
+            segment={posted}
+            recipients={recipients}
+            templates={templates.map((template) => ({ id: template.id, name: template.name }))}
+            // Not bound — sendAnnouncement takes only (state, formData), the
+            // 'use server' export itself, which is the only kind of function
+            // the client can call back to.
+            sendAction={sendAnnouncement}
+          />
+          <SaveAudienceForm segment={posted} saveAction={saveAudience} />
+        </>
+      )}
+
+      {audiences.length > 0 && (
+        <section className="flex flex-col gap-2">
+          <h2 className="text-sm font-medium">Saved audiences</h2>
+          <ul className="flex flex-col">
+            {audiences.map((audience) => (
+              <li
+                key={audience.id}
+                className="flex min-h-11 min-w-0 items-center justify-between gap-3 border-b break-words last:border-0"
+              >
+                <span className="min-w-0 text-sm">{audience.name}</span>
+                <form action={retireAudience}>
+                  <input type="hidden" name="audienceId" value={audience.id} />
+                  <button
+                    type="submit"
+                    aria-label={`Remove saved audience ${audience.name}`}
+                    className="focus-visible:ring-ring min-h-11 rounded-md px-3 text-sm underline underline-offset-4 focus-visible:ring-2 focus-visible:outline-none"
+                  >
+                    Remove
+                  </button>
+                </form>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
     </div>
   )
 }

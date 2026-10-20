@@ -69,7 +69,16 @@ export async function sendAnnouncement(
   // The same resolution the picker counted with (R-258), so the number the
   // sender saw and the set sent to cannot disagree. Ids come back already
   // intersected with the actor's scope.
-  const leaseIds = await resolveSegment(scope, segment)
+  const matched = await resolveSegment(scope, segment)
+  // THE REVIEWED LIST IS ON TOP OF THE FILTER, NOT INSTEAD OF IT (R-259).
+  // Only ticked tenancies that STILL match are sent to: a posted id outside
+  // the segment or the actor's scope is dropped, never trusted, and someone
+  // who joined the segment after the review was not reviewed, so is not sent
+  // to either (R-044's explicit-list rule).
+  const picked = new Set(formData.getAll('leaseIds').map(String))
+  const leaseIds = matched.filter((id) => picked.has(id))
+  const removed = matched.filter((id) => !picked.has(id))
+  if (leaseIds.length === 0) return { error: 'Tick at least one recipient.' }
 
   const leases = await prisma.lease.findMany({
     where: { id: { in: leaseIds } },
@@ -221,6 +230,9 @@ export async function sendAnnouncement(
       segmentValue: segment.value || null,
       requested: leases.length,
       sent: results.length,
+      // Who the sender unticked on the review list (R-259). A tenancy that
+      // matched and was not sent to has to be explainable later.
+      removedLeaseIds: removed,
       // THE SKIPS ARE RECORDED, not just counted — same reasoning as
       // reminders.ts: "why didn't this tenant get it" needs an answer weeks
       // later.
@@ -251,4 +263,51 @@ function describeSkips(skipped: { why: string }[]): string {
   if (skipped.length === 0) return ''
   const reasons = [...new Set(skipped.map((s) => s.why))]
   return `Skipped ${skipped.length}: ${reasons.join('; ')}.`
+}
+
+export interface AudienceFormState {
+  error?: string
+  notice?: string
+}
+
+/// Save the segment being reviewed under a name (R-259, PRD 08 A4). Stores
+/// the segment, never the ticked list: an audience is a filter.
+export async function saveAudience(
+  _previous: AudienceFormState,
+  formData: FormData,
+): Promise<AudienceFormState> {
+  const { actor } = await requireScope('message.send')
+  const name = String(formData.get('name') ?? '').trim()
+  const posted = String(formData.get('segment') ?? '')
+  if (!name) return { error: 'Give the audience a name.' }
+  if (name.length > 80) return { error: 'Keep the name to 80 characters.' }
+  if (!parseSegment(posted)) return { error: 'Choose who this goes to first.' }
+
+  const audience = await prisma.audience.create({
+    data: { name, segment: posted, createdByStaffId: actor.id },
+  })
+  await audit({
+    action: 'message.audience_saved',
+    entityType: 'Audience',
+    entityId: audience.id,
+    after: { name, segment: posted },
+  })
+  revalidatePath('/messages/announcements')
+  return { notice: `Saved "${name}". It is in the Send to list.` }
+}
+
+/// Retire a saved audience. Retired, not deleted, like a template.
+export async function retireAudience(formData: FormData): Promise<void> {
+  await requireScope('message.send')
+  const id = String(formData.get('audienceId') ?? '')
+  const audience = await prisma.audience.findFirst({ where: { id, active: true } })
+  if (!audience) return
+  await prisma.audience.update({ where: { id }, data: { active: false } })
+  await audit({
+    action: 'message.audience_retired',
+    entityType: 'Audience',
+    entityId: id,
+    before: { name: audience.name, segment: audience.segment },
+  })
+  revalidatePath('/messages/announcements')
 }

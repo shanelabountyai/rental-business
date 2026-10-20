@@ -7,6 +7,7 @@ import {
   type TenancyFacts,
   WINDOW_DAYS,
   matchesSegment,
+  normalizePhone,
   parseSegment,
 } from '@rental/core/comms'
 import { balanceCents } from '@rental/core/ledger'
@@ -15,6 +16,7 @@ import { businessDate, utcToBusinessDate } from '@rental/core/scheduling'
 import { OPEN_WORK_ORDER_STATUSES } from '@rental/core/workorders'
 import { prisma } from '@rental/db'
 import { propertyWhere } from '@/lib/auth/guard.ts'
+import { blockedNumbers } from '@/lib/comms/opt-out-store.ts'
 
 // Segment resolution for staff-authored announcements (COMM-04, R-053).
 //
@@ -195,6 +197,68 @@ export async function resolveSegment(
   return loaded.facts.filter((f) => matchesSegment(f, segment)).map((f) => f.leaseId)
 }
 
+/// One row of the review list (R-259): a tenancy the segment reached, ticked
+/// by default, which the sender may untick before sending.
+export interface ReviewRecipient {
+  leaseId: string
+  tenantName: string
+  place: string
+  /// The tenant's number is on the carrier opt-out list. Shown, not excluded:
+  /// the engine already suppresses the SMS and the email still goes.
+  textsOff: boolean
+}
+
+/**
+ * Who a segment reaches right now, for the sender to review (R-259, PRD 08
+ * A3). The same `resolveSegment` the send uses, so the list and the send
+ * cannot disagree on who matched; the send then keeps only the ticked ones.
+ * A tenancy with no active tenant is left off, since the send skips it anyway.
+ */
+export async function reviewSegment(
+  scope: PropertyScope,
+  segment: Segment,
+  now = new Date(),
+): Promise<ReviewRecipient[]> {
+  const leaseIds = await resolveSegment(scope, segment, now)
+  if (leaseIds.length === 0) return []
+  const leases = await prisma.lease.findMany({
+    where: { id: { in: leaseIds } },
+    select: {
+      id: true,
+      property: { select: { name: true } },
+      unit: { select: { name: true } },
+      leaseTenants: {
+        select: { tenant: { select: { firstName: true, lastName: true, phone: true, active: true } } },
+      },
+    },
+  })
+  const rows = leases.flatMap((lease) => {
+    const tenant = lease.leaseTenants.map((lt) => lt.tenant).find((t) => t.active)
+    return tenant ? [{ lease, tenant }] : []
+  })
+  const blocked = await blockedNumbers(rows.map((r) => r.tenant.phone))
+  return rows
+    .map(({ lease, tenant }) => {
+      const phone = tenant.phone ? normalizePhone(tenant.phone) : null
+      return {
+        leaseId: lease.id,
+        tenantName: `${tenant.firstName} ${tenant.lastName}`,
+        place: `${lease.property.name} · ${lease.unit.name}`,
+        textsOff: phone !== null && blocked.has(phone),
+      }
+    })
+    .sort((a, b) => a.tenantName.localeCompare(b.tenantName))
+}
+
+/// Saved audiences, by name (R-259, PRD 08 A4).
+export async function listAudiences(): Promise<{ id: string; name: string; segment: string }[]> {
+  return prisma.audience.findMany({
+    where: { active: true },
+    select: { id: true, name: true, segment: true },
+    orderBy: { name: 'asc' },
+  })
+}
+
 /** What the composer's segment picker offers, narrowed to the actor's scope. */
 export async function segmentOptions(
   scope: PropertyScope,
@@ -211,10 +275,17 @@ export async function segmentOptions(
   const entities = new Map(properties.map((p) => [p.legalEntityId, p.legalEntityName]))
   const metros = [...new Set(properties.map((p) => p.metro).filter((m): m is string => !!m))].sort()
   const tags = [...new Set(properties.flatMap((p) => p.tags))].sort()
+  // A saved audience posts its stored segment, so it is counted and sent by
+  // exactly the same path as the segment it was saved from. One whose
+  // segment no longer parses is dropped rather than offered as "everyone".
+  const saved = (await listAudiences()).flatMap((a) =>
+    parseSegment(a.segment) ? [choice(a.segment, a.name)] : [],
+  )
 
   return {
     all: choice('ALL', 'All tenants'),
     groups: [
+      { label: 'Saved audiences', choices: saved },
       {
         label: 'Who owes or needs something',
         choices: [

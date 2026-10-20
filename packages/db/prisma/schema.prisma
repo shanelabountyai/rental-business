@@ -2064,6 +2064,7 @@ model StaffUser {
   confidentialDocumentationSeen           ConfidentialCase[]              @relation("ConfidentialCaseDocumentationSeenBy")
   messagesRouted                          UnroutedMessage[]               @relation("UnroutedMessageRoutedBy")
   templatesCreated                        MessageTemplate[]               @relation("TemplateCreatedBy")
+  audiencesCreated                        Audience[]                      @relation("AudienceCreatedBy")
   templatesUpdated                        MessageTemplate[]               @relation("TemplateUpdatedBy")
   documentTemplatesCreated                DocumentTemplate[]              @relation("DocumentTemplateCreatedBy")
   documentTemplatesUpdated                DocumentTemplate[]              @relation("DocumentTemplateUpdatedBy")
@@ -4539,18 +4540,18 @@ model Payment {
  * throws too, and its echo must still find the split.
  */
 model PaymentInvoiceSplit {
-  id               String   @id @default(cuid())
+  id               String    @id @default(cuid())
   paymentId        String
   stripeInvoiceId  String
   amountCents      Int
   /// The `invoice.updated` a portal split was pushed as (MONEY-01). Null on a
   /// counter split, which is claimed by its ledger entry instead.
-  claimedByEventId String?  @unique
+  claimedByEventId String?   @unique
   /// When the push to Stripe RETURNED (MONEY-11/12). Null means Stripe may or
   /// may not know: the push threw, or the process died first. Such a split
   /// can claim an echo only for minutes, never a payment days later.
   pushedAt         DateTime?
-  createdAt        DateTime @default(now())
+  createdAt        DateTime  @default(now())
 
   payment Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
 
@@ -5646,6 +5647,26 @@ model MessageTemplateTranslation {
   /// One translation per language per template. Two Spanish versions is a
   /// question nobody can answer at send time.
   @@unique([templateId, locale])
+}
+
+/// A saved announcement filter, named by the person who will look for it
+/// ("Oak St duplexes") (R-259, PRD 08 A4). It stores the SEGMENT, never a
+/// list of people: who it reaches is resolved at send time like any other
+/// segment, and the hand-picked removals are made per send on the review
+/// screen. Retired rather than deleted, like `MessageTemplate`.
+model Audience {
+  id               String   @id @default(cuid())
+  name             String
+  /// What the composer posts, `ALL` or `TYPE:value`, parsed by `parseSegment`.
+  segment          String
+  active           Boolean  @default(true)
+  createdByStaffId String
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  createdBy StaffUser @relation("AudienceCreatedBy", fields: [createdByStaffId], references: [id])
+
+  @@index([active, name])
 }
 
 /// A legally significant notice and the proof it was served. `addressOfRecord`

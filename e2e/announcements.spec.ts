@@ -156,6 +156,17 @@ async function signIn(
   await page.waitForURL('**/dashboard')
 }
 
+/// Step one (R-259): pick the segment and load its reviewed list. A GET, so
+/// the URL changing is the signal the list is the new one.
+async function chooseRecipients(page: import('@playwright/test').Page, segment?: string) {
+  if (segment) await page.getByLabel('Send to').selectOption(segment)
+  await page.getByRole('button', { name: 'Choose recipients' }).click()
+  await page.waitForURL(/[?&]segment=/)
+  await expect(page.getByRole('group', { name: 'Who gets this?' })).toBeVisible()
+}
+
+const audienceNames: string[] = []
+
 test.beforeEach(async ({ page }) => {
   const octet = () => Math.floor(Math.random() * 254) + 1
   await page.setExtraHTTPHeaders({
@@ -173,6 +184,7 @@ test.describe('segment announcements (COMM-04)', () => {
     await page.goto('/messages/announcements')
 
     // "All tenants" is the default — no segment value picker to fill in.
+    await chooseRecipients(page)
     await page.getByLabel('Template').selectOption(template.id)
     await page.getByRole('button', { name: 'Send' }).click()
 
@@ -199,7 +211,7 @@ test.describe('segment announcements (COMM-04)', () => {
     // `TYPE:value` option, because the value dropdown used to exist only
     // while client state said so - so before hydration the only segment
     // anybody could send to was the default, "All tenants".
-    await page.getByLabel('Send to').selectOption(`PROPERTY:${a.property.id}`)
+    await chooseRecipients(page, `PROPERTY:${a.property.id}`)
     await page.getByLabel('Template').selectOption(template.id)
     await page.getByRole('button', { name: 'Send' }).click()
 
@@ -228,7 +240,7 @@ test.describe('segment announcements (COMM-04)', () => {
     await signIn(page, staff)
     await page.goto('/messages/announcements')
 
-    await page.getByLabel('Send to').selectOption(`METRO:${a.property.metro!}`)
+    await chooseRecipients(page, `METRO:${a.property.metro!}`)
     await page.getByLabel('Template').selectOption(template.id)
     await page.getByRole('button', { name: 'Send' }).click()
 
@@ -249,7 +261,7 @@ test.describe('segment announcements (COMM-04)', () => {
     await signIn(page, staff)
     await page.goto('/messages/announcements')
 
-    await page.getByLabel('Send to').selectOption(`TAG:${a.property.tags[0]}`)
+    await chooseRecipients(page, `TAG:${a.property.tags[0]}`)
     await page.getByLabel('Template').selectOption(template.id)
     await page.getByRole('button', { name: 'Send' }).click()
 
@@ -295,7 +307,7 @@ test.describe('segment announcements (COMM-04)', () => {
     ])
     expect(width[0]).toBeLessThanOrEqual(width[1]!)
 
-    await page.getByLabel('Send to').selectOption('BALANCE_DUE')
+    await chooseRecipients(page, 'BALANCE_DUE')
     await page.getByLabel('Template').selectOption(template.id)
     await page.getByRole('button', { name: 'Send' }).click()
 
@@ -318,7 +330,7 @@ test.describe('segment announcements (COMM-04)', () => {
 
     await signIn(page, staff)
     await page.goto('/messages/announcements')
-    await page.getByLabel('Send to').selectOption(`PROPERTY:${a.property.id}`)
+    await chooseRecipients(page, `PROPERTY:${a.property.id}`)
     await page.getByLabel('Template').selectOption(template.id)
 
     const countRows = () =>
@@ -339,6 +351,93 @@ test.describe('segment announcements (COMM-04)', () => {
     // nothing (same reasoning as rent-roll.spec.ts's identical test).
     expect(afterFirst).toBeGreaterThan(0)
     expect(afterSecond).toBe(afterFirst)
+  })
+})
+
+test.describe('reviewed recipients and saved audiences (R-259)', () => {
+  test('UNTICKING A RECIPIENT LEAVES THEM OUT, and the audit names them', async ({ page }) => {
+    const { entity, a, b } = await seedTwoProperties()
+    const staff = await seedScopedManager(entity.id)
+    const template = await seedTemplate(staff.id)
+
+    await signIn(page, staff)
+    await page.goto('/messages/announcements')
+    await chooseRecipients(page)
+
+    await page.getByRole('checkbox', { name: new RegExp(b.tenant.firstName) }).uncheck()
+    // The live count is client state; the button's label is what proves the
+    // untick was seen before the press.
+    await expect(page.getByRole('button', { name: 'Send to 1 tenant' })).toBeVisible()
+    await page.getByLabel('Template').selectOption(template.id)
+    await page.getByRole('button', { name: 'Send to 1 tenant' }).click()
+
+    await expect(page.getByText(/Sent to 1 tenant/)).toBeVisible()
+    await expect(page.getByRole('row', { name: new RegExp(a.tenant.firstName) })).toBeVisible()
+    const delivery = await prisma.notificationDelivery.findFirst({
+      where: { notification: { recipientId: b.tenant.id, templateKey: 'comms.announcement' } },
+    })
+    expect(delivery).toBeNull()
+
+    const row = await prisma.auditLog.findFirstOrThrow({
+      where: { action: 'message.announcement_sent', entityId: template.id },
+    })
+    expect((row.after as { removedLeaseIds: string[] }).removedLeaseIds).toEqual([b.lease.id])
+  })
+
+  test('A POSTED ID OUTSIDE THE SEGMENT IS DROPPED, never trusted', async ({ page }) => {
+    const { entity, a, b } = await seedTwoProperties()
+    const staff = await seedScopedManager(entity.id)
+    const template = await seedTemplate(staff.id)
+
+    await signIn(page, staff)
+    await page.goto('/messages/announcements')
+    await chooseRecipients(page, `PROPERTY:${a.property.id}`)
+
+    // A hand-made POST: b is in the manager's scope but not in the segment.
+    await page.locator('input[name="leaseIds"]').first().evaluate((input, id) => {
+      const field = input as HTMLInputElement
+      const extra = field.cloneNode() as HTMLInputElement
+      extra.value = id
+      field.form!.append(extra)
+    }, b.lease.id)
+    await page.getByLabel('Template').selectOption(template.id)
+    await page.getByRole('button', { name: /^Send to/ }).click()
+
+    await expect(page.getByText(/Sent to 1 tenant/)).toBeVisible()
+    const delivery = await prisma.notificationDelivery.findFirst({
+      where: { notification: { recipientId: b.tenant.id, templateKey: 'comms.announcement' } },
+    })
+    expect(delivery).toBeNull()
+  })
+
+  test('A SAVED AUDIENCE is a filter in the Send to list, with a live count, and can be removed', async ({
+    page,
+  }) => {
+    const { entity, a } = await seedTwoProperties()
+    const staff = await seedScopedManager(entity.id)
+    const name = `Downtown only ${randomUUID().slice(0, 8)}`
+    audienceNames.push(name)
+
+    await signIn(page, staff)
+    await page.goto('/messages/announcements')
+    await chooseRecipients(page, `PROPERTY:${a.property.id}`)
+
+    await page.getByLabel('Save this filter as an audience').fill(name)
+    await page.getByRole('button', { name: 'Save audience' }).click()
+    await expect(page.getByText(`Saved "${name}".`)).toBeVisible()
+
+    const saved = await prisma.audience.findFirstOrThrow({ where: { name } })
+    expect(saved.segment).toBe(`PROPERTY:${a.property.id}`)
+
+    await page.goto('/messages/announcements')
+    await expect(
+      page.locator('optgroup[label="Saved audiences"] option', { hasText: name }),
+    ).toHaveText(`${name} — 1 tenant`)
+
+    await page.getByRole('button', { name: `Remove saved audience ${name}` }).click()
+    await expect.poll(async () => (await prisma.audience.findUniqueOrThrow({ where: { id: saved.id } })).active).toBe(false)
+    await page.reload()
+    await expect(page.locator('option', { hasText: name })).toHaveCount(0)
   })
 })
 
@@ -363,7 +462,7 @@ test.describe('accessibility', () => {
 
     await signIn(page, staff)
     await page.goto('/messages/announcements')
-    await page.getByLabel('Send to').selectOption(`PROPERTY:${a.property.id}`)
+    await chooseRecipients(page, `PROPERTY:${a.property.id}`)
     await page.getByLabel('Template').selectOption(template.id)
     await page.getByRole('button', { name: 'Send' }).click()
     await expect(page.getByText(/Sent to 1 tenant/)).toBeVisible()
@@ -374,6 +473,7 @@ test.describe('accessibility', () => {
 })
 
 test.afterAll(async () => {
+  await prisma.audience.updateMany({ where: { name: { in: audienceNames } }, data: { active: false } })
   await prisma.messageTemplate.deleteMany({ where: { id: { in: templateIds } } })
   await prisma.staffAssignment.deleteMany({ where: { staffUserId: { in: staffIds } } })
   await prisma.staffUser.updateMany({

@@ -1,54 +1,40 @@
 'use client'
 
-import { useActionState } from 'react'
+import { BanIcon } from 'lucide-react'
+import { useActionState, useState } from 'react'
 import { LiveRegion, pendingButtonProps } from '@/components/auth-form.tsx'
 import { FieldError, SelectField } from '@/components/form/field.tsx'
 import type {
   AnnouncementFormState,
   AnnouncementRecipientResult,
+  AudienceFormState,
 } from '@/lib/comms/announcement-actions.ts'
-import type { SegmentOptions } from '@/lib/comms/announcements.ts'
+import type { ReviewRecipient } from '@/lib/comms/announcements.ts'
 import { INPUT_CLASSES, PRIMARY_BUTTON_CLASSES, scrollableRegionProps } from '@/components/ui-classes.ts'
 
-// The composer for segment announcements (COMM-04, R-053).
+// The composer for segment announcements (COMM-04, R-053), second step.
 //
-// ==========================================================================
-// ONE SELECT, WITH THE BLAST RADIUS IN EVERY OPTION (R-115).
-//
-// It was two controls: a segment TYPE dropdown held in `useState`, and a
-// value dropdown that rendered only when that state said so. Two consequences
-// the audit found together. Before hydration the second control did not
-// exist, so the only segment reachable on a first paint was the default -
-// "All tenants", the widest one. And nothing anywhere said how many people
-// any of it reached; the per-recipient results table renders only after the
-// send.
-//
-// Collapsing the pair into one `<select>` of `TYPE:value` options answers
-// both, and deletes the state, the conditional, and the two "nothing in
-// scope" empty states with it - an optgroup with no options simply does not
-// render. `segmentOptions` puts the count in each label, so the number is in
-// front of the person BEFORE they choose rather than after they have sent.
-//
-// The value/template pickers use `SelectField` (`components/form/field.tsx`)
-// rather than a hand-rolled `<label>` wrapping a `<select>`, and that is not
-// cosmetic: a label that WRAPS its control gets an accessible name built from
-// the control's own rendered content, so a select whose options include the
-// word "property" collided with the global property/entity switcher's
-// "Property" label under `getByLabel` - caught by this form's own e2e spec.
-// `SelectField` keeps the label a SIBLING, associated by `htmlFor`/`id`,
-// whose accessible name is its own text and nothing the control renders.
-// ==========================================================================
+// The segment is chosen on the page by a plain GET form (one `<select>`, the
+// count in every option - R-115), and this form receives who it reached as a
+// REVIEWED LIST (R-259, PRD 08 A3): one checkbox per tenancy, all ticked, so
+// the sender removes people rather than enumerating them. Every checkbox is
+// server-rendered and ticked, so the send works before hydration; the live
+// count is the only thing that needs JavaScript, and its first value is the
+// right one without it.
 
-function withCount(choice: { label: string; count: number }): string {
-  return `${choice.label} — ${choice.count} ${choice.count === 1 ? 'tenant' : 'tenants'}`
+function plural(n: number): string {
+  return `${n} ${n === 1 ? 'tenant' : 'tenants'}`
 }
 
 export function AnnouncementForm({
-  options,
+  segment,
+  recipients,
   templates,
   sendAction,
 }: {
-  options: SegmentOptions
+  /// What the page's picker chose, posted back and re-resolved by the action.
+  segment: string
+  recipients: ReviewRecipient[]
   templates: { id: string; name: string }[]
   sendAction: (
     previous: AnnouncementFormState,
@@ -59,46 +45,61 @@ export function AnnouncementForm({
     sendAction,
     {},
   )
-
-  const groups = options.groups.filter((group) => group.choices.length > 0)
+  const [ticked, setTicked] = useState(recipients.length)
+  const textsOff = recipients.filter((r) => r.textsOff).length
 
   return (
-    <form action={action} className="flex flex-col gap-6">
-      <div className="flex flex-col gap-3 rounded-lg border p-4">
-        <h2 className="text-sm font-medium">Send an announcement</h2>
+    <form
+      action={action}
+      onChange={(event) =>
+        setTicked(event.currentTarget.querySelectorAll('input[name="leaseIds"]:checked').length)
+      }
+      className="flex flex-col gap-6"
+    >
+      <input type="hidden" name="segment" value={segment} />
 
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="segment" className="text-sm font-medium">
-            Send to
-          </label>
-          <select
-            id="segment"
-            name="segment"
-            defaultValue="ALL"
-            aria-describedby="segment-hint"
-            // INPUT_CLASSES for its `min-w-0 max-w-full` (R-170a): a native
-            // select is as wide as its widest option, and "Property · Unit"
-            // labels (R-258) are the longest this one has carried.
-            className={INPUT_CLASSES}
-          >
-            <option value={options.all.value}>{withCount(options.all)}</option>
-            {groups.map((group) => (
-              <optgroup key={group.label} label={group.label}>
-                {group.choices.map((choice) => (
-                  <option key={choice.value} value={choice.value}>
-                    {withCount(choice)}
-                  </option>
-                ))}
-              </optgroup>
-            ))}
-          </select>
-          <p id="segment-hint" className="text-muted-foreground text-sm">
-            Counts are current tenancies. A lease on a marketing hold, or a
-            tenant whose merge fields cannot be filled, is dropped at send time
-            and named in the results below.
-          </p>
+      <fieldset className="flex min-w-0 flex-col gap-3 rounded-lg border p-4">
+        <legend className="px-1 text-sm font-medium">Who gets this?</legend>
+        <p className="text-muted-foreground text-sm">
+          Everyone this segment reaches is ticked. Untick anyone who should not
+          get it.
+        </p>
+        <ul className="flex flex-col">
+          {recipients.map((r) => (
+            <li key={r.leaseId} className="border-b last:border-0">
+              <label className="flex min-h-14 min-w-0 cursor-pointer items-center gap-3 py-1.5">
+                <input
+                  type="checkbox"
+                  name="leaseIds"
+                  value={r.leaseId}
+                  defaultChecked
+                  className="accent-primary size-5 shrink-0"
+                />
+                <span className="flex min-w-0 flex-1 flex-col break-words">
+                  <span className="text-sm font-medium">{r.tenantName}</span>
+                  <span className="text-muted-foreground text-sm">{r.place}</span>
+                </span>
+                {r.textsOff && (
+                  <span className="bg-warning/10 text-warning inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium">
+                    <BanIcon aria-hidden className="size-3" />
+                    Texts off
+                  </span>
+                )}
+              </label>
+            </li>
+          ))}
+        </ul>
+        <div aria-live="polite" className="flex flex-col">
+          <span className="text-base font-semibold">{plural(ticked)} will receive this</span>
+          {textsOff > 0 && (
+            <span className="text-muted-foreground text-sm">
+              {textsOff} opted out of texts and will get email only.
+            </span>
+          )}
         </div>
+      </fieldset>
 
+      <div className="flex flex-col gap-3 rounded-lg border p-4">
         <SelectField
           label="Template"
           name="templateId"
@@ -120,15 +121,54 @@ export function AnnouncementForm({
 
         <button
           type="submit"
-          disabled={templates.length === 0}
+          // Disabled buttons say why in their label (Messaging P0 design).
+          disabled={templates.length === 0 || ticked === 0}
           {...pendingButtonProps(pending)}
           className={`${PRIMARY_BUTTON_CLASSES} self-start`}
         >
-          Send
+          {ticked === 0 ? 'Tick someone to send' : `Send to ${plural(ticked)}`}
         </button>
       </div>
 
       {state.results && state.results.length > 0 && <ResultsTable results={state.results} />}
+    </form>
+  )
+}
+
+/// Save the segment under review as a named audience (R-259, PRD 08 A4).
+export function SaveAudienceForm({
+  segment,
+  saveAction,
+}: {
+  segment: string
+  saveAction: (previous: AudienceFormState, formData: FormData) => Promise<AudienceFormState>
+}) {
+  const [state, action, pending] = useActionState<AudienceFormState, FormData>(saveAction, {})
+  return (
+    <form action={action} className="flex flex-col gap-1.5">
+      <input type="hidden" name="segment" value={segment} />
+      <label htmlFor="audience-name" className="text-sm font-medium">
+        Save this filter as an audience
+      </label>
+      <div className="flex min-w-0 flex-wrap gap-2">
+        <input
+          id="audience-name"
+          name="name"
+          required
+          maxLength={80}
+          placeholder="e.g. Oak St duplexes"
+          aria-describedby="audience-error"
+          className={`${INPUT_CLASSES} flex-1`}
+        />
+        <button type="submit" {...pendingButtonProps(pending)} className={PRIMARY_BUTTON_CLASSES}>
+          Save audience
+        </button>
+      </div>
+      <p className="text-muted-foreground text-sm">
+        Saves the filter, not the ticks: it reaches whoever matches when you next send.
+      </p>
+      <FieldError id="audience-error" message={state.error} />
+      <LiveRegion>{state.notice && <p className="text-sm">{state.notice}</p>}</LiveRegion>
     </form>
   )
 }

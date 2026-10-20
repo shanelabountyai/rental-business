@@ -14507,3 +14507,23 @@ Re-opens the project for two rows from the post-closure second-pass review of th
 - Not walked in a browser.
 
 **Gate.** lint (16 warnings, same as before), typecheck, `npm test` 3560 passed + 4 skipped, `npm run build`, and `e2e/announcements.spec.ts` on both projects: 16 passed of 16 listed. The full sweep is CI's.
+
+## R-259 — reviewed recipients and saved audiences (D-314)
+**Commit:** `PENDING`  ·  **Date:** 2026-10-20
+
+**What it built.**
+- Announcements are now two server-rendered steps. Step one is a plain GET form: the same one `<select>` with counts (R-115), plus *Choose recipients*, so `?segment=` is the whole state. Step two is a reviewed list: one checkbox per tenancy the segment reached, all ticked, with name and *Property · Unit*, and a *Texts off* badge (icon + word) when the tenant's number is on the SMS opt-out list. A live "N tenants will receive this" count, and a send button that reads *Send to N tenants* (*Tick someone to send* when none are ticked). This follows the Claude Design *Messaging P0 Round 1* screen 2, restyled inside the existing layout.
+- `sendAnnouncement` sends to `resolveSegment ∩ ticked`, and audits the unticked ones as `removedLeaseIds`.
+- `Audience` table (name, segment, active; migration `20261020120000_audience`). *Save this filter as an audience* on the review step; saved audiences appear first in *Send to* under *Saved audiences*, each with its live count, and can be removed (retired). Audit actions `message.audience_saved` / `message.audience_retired`.
+- Tests: `announcements.spec.ts` moves to the two-step flow and adds three: unticking leaves a tenant out and the audit names them; a hand-injected `leaseIds` outside the segment is dropped; a saved audience shows with its count and can be removed.
+
+**What it decided.**
+- D-314: the ticked list sits on top of the filter. A posted id outside the segment or scope is dropped, never trusted. Someone who joins the segment after the review isn't sent to. An audience stores the segment, never the ticks. An opted-out tenant stays ticked: the engine suppresses the text and the email still goes.
+- Owner call: the design is implemented one backlog item per session inside the current app. No bottom-tab shell, no per-org colours until R-276 / OQ-18. Screens 1 and 3 → R-260/R-261, 4 → R-262, 5 → R-263.
+
+**What it left behind.**
+- The design's multi-property chips and name search: segments stay single-valued (D-313), and at 10–50 doors the list is short enough to scan. Add both if a saved audience ever needs two properties.
+- `Audience` has no `orgId` yet. R-274 adds it with every other table (gated on OQ-18).
+- Not walked in a browser.
+
+**Gate.** lint (16 warnings, unchanged), typecheck, `npm test` 3560 passed + 4 skipped, `db:drift` clean, ship-deps, and `e2e/announcements.spec.ts` on both projects against the production build: 22 passed of 22 listed. The full sweep is CI's.
