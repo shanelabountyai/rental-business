@@ -106,6 +106,8 @@ Rent charges post automatically on the 1st per lease (PAY-03). Autopay runs on t
 
 Priority key: **[M]** Must-have · **[S]** Should-have · **[C]** Could-have · **[W]** Won't-have for v1 (MoSCoW). Acceptance criteria are Given/When/Then. Story IDs are stable and match `06-backlog.md`.
 
+**Companion PRDs (2026-10-20).** Stories **M1.1–M4.1** (operator messaging, self-service templates and settings, manual application review, multi-organisation) are in [`08-messaging-and-white-label.md`](08-messaging-and-white-label.md); requirements **Q1–Q12** (QuickBooks Online sync) are in [`09-quickbooks-sync.md`](09-quickbooks-sync.md). Their backlog rows are Milestone 18, R-258–R-284 (D-309). Where they extend an epic here, the epic is COMM (M1, M2), LEASE (M3) and RPT (Q).
+
 ---
 
 ### EPIC 1 — Property & Unit Management (PROP) — Must

@@ -9,7 +9,7 @@
 | **Source** | Claude Docs "QuickBooks Accounting Sync PRD" — https://claude.ai/artifact/UzLuiyCxTdRYPJ7gmV8Esu |
 | **Companion files** | `00-master-prd.md` · `08-messaging-and-white-label.md` · `06-backlog.md` · `07-decisions.md` (**overrides this document where they conflict**) · `../PROGRESS.md` |
 
-> **On the numbering.** As in PRD 08, every R-, D- and OQ- number below is a **draft placeholder that collides** with a settled one (R-115–R-120 are built rows, D-14/D-15 are settled, OQ-16–OQ-18 do not exist yet but follow PRD 08's colliding block). Renumbered when appended, not before.
+> **On the numbering.** The draft's IDs collided with settled ones, so the R-, D- and OQ- numbers in §1–§5 are the **draft's**. The real ones: `06-backlog.md` Milestone 18 R-279–R-284, `07-decisions.md` D-310–D-312 and OQ-13, OQ-21, OQ-22. Nothing here is built; the nearest existing code is the tax export (R-078, D-71).
 
 > **Conflicts with settled decisions — resolve before any row is appended.**
 > - **The ledger is `LedgerEntry`, not `LedgerLine`, and it is append-only by trigger.** §4's nullable `qboJournalEntryId`/`qboDocNumber`/`syncedAt`/`syncRunId` columns would be written by an UPDATE after the sync, which the database refuses. Sync state needs its own table keyed by `ledgerEntryId` (the `WorkOrderMessageLink` pattern).

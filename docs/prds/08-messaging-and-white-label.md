@@ -9,7 +9,42 @@
 | **Source** | Claude Docs "Renter Text Messaging PRD" — https://claude.ai/artifact/XwdtN1toh2zR691rNDUfRJ |
 | **Companion files** | `00-master-prd.md` · `06-backlog.md` · `07-decisions.md` (**overrides this document where they conflict**) · `../PROGRESS.md` |
 
-> **On the numbering — read before appending anything.** The draft's IDs were written without checking the repo and **every one of them collides**: R-098 to R-122 are already built rows in `06-backlog.md` (highest is R-257), D-11 to D-16 are already settled in `07-decisions.md` (D-11 is *Stripe Billing drives recurring rent*; highest is D-308), and OQ-11/OQ-12 exist in the master PRD §10. Treat every R-, D- and OQ- number below as a **draft placeholder**. They are renumbered (R-258+, D-309+, OQ-13+) when the rows are appended to the backlog and decisions log, not before. Story IDs M1.1–M4.1 do not collide.
+> **On the numbering.** The draft's IDs collided with settled ones (R-098–R-122 are built rows, D-11–D-16 settled, OQ-11/12 answered), so the R-, D- and OQ- numbers in §1–§9 are the **draft's**, kept for traceability to the Claude Docs source. The real ones are in §0 and in `06-backlog.md` Milestone 18 (R-258–R-278), `07-decisions.md` D-309 and OQ-13–OQ-20. Story IDs M1.1–M4.1 are unchanged.
+
+## 0. Gap analysis against the built platform (2026-10-20)
+
+The draft's premise ("no operator-composed messaging, no audience selection, no self-service template editing") is wrong. Segment announcements with per-recipient delivery status (R-053), history and a shared suppression list (R-054), a confirm step with reach count (R-115), STOP handling (R-040e), consent records (R-051b) and human screening decisions on a simulated vendor (R-060) are built. The backlog carries only the delta.
+
+| Req | Verdict | Already built | Backlog row |
+|---|---|---|---|
+| A1, A6, B4 | Partial | Composer, reach count (R-115), `renderTemplate` `missing[]` | R-260 |
+| A2 | Partial | Segments ALL / PROPERTY / METRO / TAG | R-258 |
+| A3, A4 | New | — (R-053 chose filter over selection) | R-259 |
+| A5 | Partial | Property-local quiet-hours deferral | R-261 |
+| A7 | Built | `NotificationDelivery`, `/api/sms/status`, announcement history | — (verify in R-262) |
+| A8 | Partial | Inbound on the tenant `Thread`; Task for unknown senders and 2-day unanswered | R-263 |
+| A9 | New | — | R-262 |
+| B1 | Partial | Create, edit, retire; last editor only | R-264 |
+| B2 | Partial | First name, property, unit, balance, due date, company name/phone | R-265 |
+| B3 | Conflicts with D-44 | 13 automated templates deliberately not overridable | R-268, gated on OQ-20 |
+| B5 | New | Quiet hours are a constant; no settings page | R-266 |
+| B6 | Partial | `template.write` / `template.approve` exist | R-267, gated on OQ-15 |
+| C1, C3, C7 | Partial | `recordScreeningDecision` (R-060), adverse-action notice (R-061) | R-269 |
+| C2 | Partial | Screening report, document upload | R-271 |
+| C4, C5 | Partial / new | Adverse-action notice only | R-270 |
+| C6 | Built | Simulated adapter, decision is always human (D-7, R-060) | — |
+| §7 consent | Built | `TenantConsent` (R-051b, D-49) | — |
+| §7 footer | Partial | "Reply STOP" in opt-out replies only | R-266 |
+| §7 rate limit, 10DLC | New, gated on live Twilio (D-15) | — | R-272, R-273 |
+| §7 retention | Built by construction | `Message` is append-only, kept indefinitely | — |
+| §8 multi-org root | New, gated on OQ-18 | Only `LegalEntity` (D-123) | R-274 |
+| §8 per-org credentials, branding | New | Env-driven single sender | R-275, R-276 |
+| §8 Stripe Connect | Conflicts with D-11/D-12 | One Stripe account is the system of record | R-277, gated on OQ-19 |
+| §8 CSV import | Built | R-168 (check its second half before onboarding) | — |
+| §8 Oklahoma rules | Data only | `JurisdictionRule` is per-state (D-4) | R-278, gated on OQ-14 |
+| §8 e-sign | Existing vendor gate | Simulated adapter | R-093 (SignWell is a recommendation) |
+
+**§6 tables already covered:** `MessageTemplate` exists (versioning is R-264); `BroadcastRecipient` is `Notification` + `NotificationDelivery`; `InboundMessage` is `Message` (INBOUND) + `UnroutedMessage`; `RenterContactPref` is `NotificationPreference` + `SmsOptOut` + `TenantConsent`; `ApplicationDecision` extends `ScreeningReport`'s decision columns (R-269); `Task.type` is already a free string, so no enum extension (D-210). Genuinely new: `Audience`, messaging settings, `Organization`, `OrgIntegration`.
 
 ## 1. Context and problem
 

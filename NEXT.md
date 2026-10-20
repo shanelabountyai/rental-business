@@ -1,5 +1,43 @@
 # Next session
 
+**2026-10-20: PRDs 08 and 09 saved and appended as a gap-checked delta (D-309) — STOPPED for Shane's review before the schema step.** The queue pasted below uses the drafts' numbers, which all collided; the real ones are **Milestone 18, R-258–R-284**, **D-309–D-312**, **OQ-13–OQ-22**. Most of PRD 08's messaging asks were already built (R-053/R-054/R-115/R-040e); PRD 08 §0 maps each requirement. Three items wait on owner calls because each would reverse a settled decision: OQ-18 multi-org (D-123), OQ-19 Stripe Connect (D-11/D-12), OQ-20 editable system texts (D-44). Also: `LedgerEntry` is append-only, so QuickBooks sync state gets its own table (D-312). The brief's step 3 (Prisma diff) and step 4 (R-098 middleware) are **not started**: the "orgId middleware" is R-274, which is gated on OQ-18. The first buildable row is R-258.
+
+# NEXT — Realtor prospect work queue (Oct 2026)
+
+Context: a realtor whose group runs 20 rental properties is a potential first paying, white-labeled customer. He asked for renter texting (broadcast + targeted), self-service editing of messages/settings, a mobile-first owner UI, manual application approve/decline, Stripe payments, and possibly QuickBooks.
+
+Source PRDs (paste each into docs/prds/ before starting):
+- 08-messaging-and-white-label.md  <- "Renter Text Messaging PRD" (Claude Docs)
+- 09-quickbooks-sync.md            <- "QuickBooks Accounting Sync PRD" (Claude Docs)
+
+## Start here
+1. Read CLAUDE.md, docs/prds/00–09, 06-backlog.md, 07-decisions.md, PROGRESS.md.
+2. Add PRD 08 and 09 story IDs to the master PRD §5 index.
+3. Append backlog R-098 to R-121, decisions D-11 to D-16, open questions OQ-11 to OQ-18.
+4. STOP for Shane's review.
+
+## Build order
+1. R-098 Organization as tenant root + orgId scoping middleware (tests prove cross-org reads fail)
+2. R-099 MessageTemplate CRUD + versioning + merge fields
+3. R-100 MessagingSettings page (mobile-first)
+4. R-101 Audience filter engine + saved audiences
+5. R-102 Broadcast composer + confirmation sheet (mobile-first)
+6. R-103 Send queue, Twilio callbacks, delivery log, resend-failed
+7. R-104 Inbound SMS -> Task; STOP/START
+8. R-105 Quiet-hours hold + override
+9. R-106 Map system texts to editable templates
+10. R-107 / R-108 Manual application review + approve/decline/more-info with audit
+11. R-109 to R-114 White-label: Stripe Connect per org, Twilio subaccount + 10DLC, OrgIntegration table, branding + custom domain, CSV import, Oklahoma rules
+12. R-115 to R-120 QuickBooks sync
+13. R-121 SignWell e-sign adapter replacing the simulated adapter (D-16)
+14. Owner statements check: grep the master PRD, backlog and code for owner statements / owner portal. If present, note where in PROGRESS.md. If missing, add R-122 "Monthly owner statement per entity/property (income, expenses, net, PDF + email)" to the backlog and STOP for Shane's review before building.
+
+## Invariants
+Money integer cents. UTC in DB, property-local for display and nightly jobs. Append-only ledger. One Task entity for all queues. No card/bank/SSN stored. Owner screens mobile-first at 375 px, Lighthouse >= 90. Each white-label org brings its own Stripe and Twilio. Log every step in PROGRESS.md with SHA.
+
+## Waiting on the realtor
+OQ-11/16 QuickBooks use; OQ-12 property states; OQ-13 staff free-form texts; OQ-14 decline reasons (counsel); OQ-15 pricing ($99/mo flat + $500 onboarding, draft). Feature gaps to close: real e-sign vendor, confirm owner statements..
+
 **PROJECT COMPLETE / SHIPPED — marked by Shane 2026-10-06.** Post-closure queue (MONEY-13 to CLOSE-05) is empty, CI green on `4db2c37` (D-295). A bare `go` has nothing to pick up. One known gap: the live deployment at rent.labintelligence.co was built 13:18 CDT, before D-295 (13:50 CDT), so the pay-page order and portal nav fix reach production only on the next deploy-hook POST (auto-deploy off, D-277). Remaining backlog rows are vendor-, counsel- or go-live-gated (D-15).
 
 **2026-10-06 (night): CLOSE-05 browser walk done by Shane (Acts 1-3, signed in as owner, tenant Maria/Derrick, vendor link).** Findings 1 and 2 FIXED the same night (D-295, scoped e2e 82 passed + 2 skipped of 84, both projects); finding 3 RESOLVED (not a defect): the console error was React's dev-only `eval() is not supported` message, because `proxy.ts` CSP forbids `unsafe-eval` on purpose; production never uses eval. No action. Phone-width `/portal/pay/history` and `/portal/guarantor` checked fine; Act 1 money pages nothing to report; `_to_delete/` removed. CLOSE-04 and CLOSE-05 done. Nothing owed by Shane in this repo. Findings as first recorded:
