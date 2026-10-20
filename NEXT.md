@@ -1,3 +1,5 @@
+**2026-10-20: R-258 done (D-313, `2105c8e`).** A bare `go` picks up **R-259** (hand-pick/remove recipients after filtering + saved `Audience` table; new schema, so Opus).
+
 # Next session
 
 **2026-10-20: PRDs 08 and 09 saved and appended as a gap-checked delta (D-309) — STOPPED for Shane's review before the schema step.** The queue pasted below uses the drafts' numbers, which all collided; the real ones are **Milestone 18, R-258–R-284**, **D-309–D-312**, **OQ-13–OQ-22**. Most of PRD 08's messaging asks were already built (R-053/R-054/R-115/R-040e); PRD 08 §0 maps each requirement. Three items wait on owner calls because each would reverse a settled decision: OQ-18 multi-org (D-123), OQ-19 Stripe Connect (D-11/D-12), OQ-20 editable system texts (D-44). Also: `LedgerEntry` is append-only, so QuickBooks sync state gets its own table (D-312). The brief's step 3 (Prisma diff) and step 4 (R-098 middleware) are **not started**: the "orgId middleware" is R-274, which is gated on OQ-18. The first buildable row is R-258.

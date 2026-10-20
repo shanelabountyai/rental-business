@@ -14487,3 +14487,23 @@ Re-opens the project for two rows from the post-closure second-pass review of th
 - Nothing. Queue row 6 (CLOSE-04) is Shane's delete; row 7 (CLOSE-05, the demo walk) waits on Shane's three production steps in `NEXT.md`.
 
 **Gate.** Docs-only: three Markdown files edited, no code, schema, route or test touched, so no lint, typecheck, unit or e2e run. CI runs its sweep on the push regardless; `ignoreCommand` skips the Vercel build (and auto-deploy is off anyway, D-277).
+
+## R-258 — announcement audience filters (D-313)
+**Commit:** `2105c8e`  ·  **Date:** 2026-10-20
+
+**What it built.**
+- Nine new announcement segments beside All/property/metro/tag: legal entity, unit, lease status (fixed term or MTM), balance due, move-in within 7/30/60 days, move-out within 7/30/60 days, open maintenance request. Still one `<select>`, `TYPE:value` options, count in every label (R-115).
+- `packages/core/comms/segments.ts`: `parseSegment` (refuses an unknown type, a missing value, a non-sendable status or an unlisted window) and the pure `matchesSegment`. `apps/web/lib/comms/announcements.ts` loads every in-scope sendable tenancy's facts once (`loadFacts`), and `segmentOptions` and the new `resolveSegment` both run the same predicate, so the picker's number and the recipient set cannot disagree. `segmentWhere` is gone; `sendAnnouncement` sends to the resolved lease ids.
+- The select now uses `INPUT_CLASSES` (`min-w-0 max-w-full`): "Property · Unit" labels are the widest options it has held (R-170a).
+- Tests: `segments.test.ts` (15 pure cases: window edges both sides, credit vs owing, refusals). `announcements.spec.ts` gains a balance-due test asserting the option reads "Balance due — 1 tenant" before the press, the other tenant gets no delivery row, and the page has no horizontal overflow.
+
+**What it decided.**
+- D-313: one predicate for count and send; move-in looks either side of today, move-out forward only from notice's effective date else the term's end; open repair = open Ticket or open WorkOrder on the unit; balance from ledger rows through `balanceCents`, not a SQL SUM.
+- Leases on an inactive property are no longer sent to. Before, "All tenants" sent to them while its own count excluded them.
+
+**What it left behind.**
+- Applicant status is not a segment. An applicant has no lease or tenant record; applicant messages are R-270's (D-313).
+- Loads every in-scope tenancy and its ledger rows per render and per send (`ponytail:` comment). Fine at 10–50 doors.
+- Not walked in a browser.
+
+**Gate.** lint (16 warnings, same as before), typecheck, `npm test` 3560 passed + 4 skipped, `npm run build`, and `e2e/announcements.spec.ts` on both projects: 16 passed of 16 listed. The full sweep is CI's.
