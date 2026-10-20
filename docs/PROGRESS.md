@@ -14509,7 +14509,7 @@ Re-opens the project for two rows from the post-closure second-pass review of th
 **Gate.** lint (16 warnings, same as before), typecheck, `npm test` 3560 passed + 4 skipped, `npm run build`, and `e2e/announcements.spec.ts` on both projects: 16 passed of 16 listed. The full sweep is CI's.
 
 ## R-259 — reviewed recipients and saved audiences (D-314)
-**Commit:** `PENDING`  ·  **Date:** 2026-10-20
+**Commit:** `edb83ef`  ·  **Date:** 2026-10-20
 
 **What it built.**
 - Announcements are now two server-rendered steps. Step one is a plain GET form: the same one `<select>` with counts (R-115), plus *Choose recipients*, so `?segment=` is the whole state. Step two is a reviewed list: one checkbox per tenancy the segment reached, all ticked, with name and *Property · Unit*, and a *Texts off* badge (icon + word) when the tenant's number is on the SMS opt-out list. A live "N tenants will receive this" count, and a send button that reads *Send to N tenants* (*Tick someone to send* when none are ticked). This follows the Claude Design *Messaging P0 Round 1* screen 2, restyled inside the existing layout.

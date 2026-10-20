@@ -1,4 +1,4 @@
-**2026-10-20: R-258 done (D-313, `2105c8e`).** A bare `go` picks up **R-259** (hand-pick/remove recipients after filtering + saved `Audience` table; new schema, so Opus).
+**2026-10-20: R-259 done (D-314, `edb83ef`).** A bare `go` picks up **R-260** (composer preview before send). Its UI spec is screens 1 and 3 of the Claude Design project *Messaging P0 Round 1* (claude.ai/design/p/66006441-da45-47e7-9c78-6c2b7c93e952), restyled inside the current app per D-314. No schema, so Sonnet should do.
 
 # Next session
 
