@@ -47,6 +47,7 @@ const NOT_SENT_BECAUSE: Record<SuppressionReason, string> = {
   unsupported_channel: 'no channel that can carry this message',
   // Unreachable: `digest_batched` is counted as reaching them - see below.
   digest_batched: 'folded into their daily digest instead',
+  cancelled: 'the scheduled announcement was cancelled',
 }
 
 /**

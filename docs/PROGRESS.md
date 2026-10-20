@@ -14548,3 +14548,26 @@ Re-opens the project for two rows from the post-closure second-pass review of th
 - Not walked in a browser.
 
 **Gate.** lint (16 warnings, unchanged), typecheck, `npm test` 3563 passed + 4 skipped. `e2e/announcements.spec.ts` on both projects: 26 passed of 26, run in the previous session on this same working tree and not re-run here. The full sweep is CI's.
+
+## R-261 — scheduled announcements
+**Commit:** _(recorded in the follow-up commit)_  ·  **Date:** 2026-10-20
+
+**What it built.**
+- `notify()` takes `sendAfter` (apps/web/lib/notifications/send.ts): the delivery is recorded DEFERRED to that instant, and quiet hours are judged at that instant rather than at creation — 9am tomorrow is not quiet; 11pm tomorrow is, and slides to the next 8am. Nothing new drains it: the dispatch that already releases a quiet-hours hold releases this.
+- `sendAnnouncement` reads an optional `sendAt` (`<input type="datetime-local">`, "Send at", hint: each property's local time, empty means now). Each recipient's instant is `wallClockToUtc(sendAt, property.timezone)` — two zones, two instants. Refused if already past at any property or more than 90 days out. The idempotency key uses the day the send is FOR, so tomorrow's and today's do not collide and a double press on either sends once. The button reads "Schedule for N tenants" once a time is typed.
+- `AnnouncementSchedule` (migration `20261020160000_announcement_schedule`): the index the page lists and cancels by — template, segment, `sendAt` wall clock, `lastSendAfter`, recipient count, `deliveryIds`, who, `cancelledAt`. Unique on (template, segment, sendAt). Never deleted.
+- A **Scheduled** section on `/messages/announcements` (everything-scope sees all, others their own) with Cancel: `cancelScheduledAnnouncement` suppresses the deliveries still DEFERRED with reason `cancelled` (new `SuppressionReason`, worded in both label maps), stamps the row, audits `message.announcement_cancelled`. A delivery the dispatcher has already claimed is left alone. History shows scheduled and cancelled rows beside sent ones.
+- **An hourly notifications-only cron**, `/api/cron/notifications` → `dispatchPendingNotifications()`, `0 * * * *` in `apps/web/vercel.json` (D-326). Allowlisted in `route-guards.test.ts` with its reason.
+- Tests: two unit tests in `notifications.test.ts` (held to the asked instant; quiet hours judged at that instant), one e2e in `announcements.spec.ts` (schedule 9am tomorrow → every would-go delivery DEFERRED to the Chicago instant, listed, Cancel → suppressed `cancelled`, audit names the schedule).
+
+**What it decided.**
+- D-326: the only drain was `/api/cron` at 16:00 UTC, so a quiet-hours hold due at 08:00 local went out at 10–11am Central and a 9am schedule would have too. CLAUDE.md's "hourly cron" described the intent, not the config. The route-guard allowlist for `api/cron/escalations` likewise calls itself a five-minute tick; `vercel.json` runs it daily at 06:00. Not changed here — noted.
+- D-327: a scheduled announcement is the ordinary send with a per-property `sendAfter`, rendered and recipient-frozen at schedule time (R-260's one-path rule, R-044's explicit-list posture). The deliveries are the schedule; the table is only an index. No second queue (D-9).
+
+**What it left behind.**
+- No "override quiet hours with a logged reason" per send (PRD 08 §7 asks for it); the hold is the product default and no one has asked.
+- A balance or merge value that changes between scheduling and sending is not re-rendered; the sender sees exactly what will go. Revisit only if a scheduled rent reminder is ever wanted (that is R-268's territory).
+- The escalations cron's cadence vs its comment (above).
+- Not walked in a browser.
+
+**Gate.** lint (17 warnings, one new: unchanged class), typecheck, `db:drift` clean, ship-deps clean, `npm test` 3,565 passed + 4 skipped of 3,570 with one failure — the new cron route missing from the route-guard allowlist — fixed and that file re-run green. `e2e/announcements.spec.ts` on both projects against the production build: **28 passed of 28 listed**. CI owns the full sweep.

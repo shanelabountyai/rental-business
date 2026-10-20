@@ -113,6 +113,7 @@ const SUPPRESSION_NARRATIVE: Record<SuppressionReason, string> = {
   sms_opt_out: 'not sent — the carrier reported this number had replied STOP',
   no_consent: 'not sent — no consent to text this person was on file',
   digest_batched: 'not sent on its own — batched into that day\'s digest email instead',
+  cancelled: 'not sent — the scheduled announcement was cancelled before its time',
 }
 
 const STATUS_NARRATIVE: Record<string, string> = {

@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { PageHeader } from '@/components/page-header.tsx'
 import { propertyWhere, requireScope } from '@/lib/auth/guard.ts'
 import { announcementHistory } from '@/lib/comms/announcement-history.ts'
+import { friendlyWallClock } from '@/lib/comms/announcements.ts'
 import { scrollableRegionProps } from '@/components/ui-classes.ts'
 
 export const metadata = { title: 'Announcement history — Rental Operations' }
@@ -53,8 +54,8 @@ export default async function AnnouncementHistoryPage() {
         </Link>
         <PageHeader title="Announcement history" />
         <p className="text-muted-foreground text-sm">
-          Every segment announcement ever sent, from the audit log each send
-          already writes.
+          Every segment announcement ever sent, scheduled or cancelled, from
+          the audit log each one writes.
         </p>
       </header>
 
@@ -73,7 +74,7 @@ export default async function AnnouncementHistoryPage() {
             <thead>
               <tr className="border-b text-left">
                 <th scope="col" className="px-3 py-2 font-medium">
-                  Sent
+                  When
                 </th>
                 <th scope="col" className="px-3 py-2 font-medium">
                   Template
@@ -98,7 +99,12 @@ export default async function AnnouncementHistoryPage() {
                   <td className="px-3 py-2 whitespace-nowrap">
                     {friendlyTimestamp(entry.occurredAt, zone)}
                   </td>
-                  <td className="px-3 py-2">{entry.templateName ?? '—'}</td>
+                  <td className="px-3 py-2">
+                    {entry.kind === 'scheduled' && 'Scheduled: '}
+                    {entry.kind === 'cancelled' && 'Cancelled: '}
+                    {entry.templateName ?? '—'}
+                    {entry.sendAt ? ` (for ${friendlyWallClock(entry.sendAt)})` : ''}
+                  </td>
                   <td className="px-3 py-2">
                     {entry.segmentType ?? '—'}
                     {entry.segmentValue ? `: ${entry.segmentValue}` : ''}

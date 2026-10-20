@@ -2065,6 +2065,8 @@ model StaffUser {
   messagesRouted                          UnroutedMessage[]               @relation("UnroutedMessageRoutedBy")
   templatesCreated                        MessageTemplate[]               @relation("TemplateCreatedBy")
   audiencesCreated                        Audience[]                      @relation("AudienceCreatedBy")
+  announcementSchedulesCreated            AnnouncementSchedule[]          @relation("AnnouncementScheduleCreatedBy")
+  announcementSchedulesCancelled          AnnouncementSchedule[]          @relation("AnnouncementScheduleCancelledBy")
   templatesUpdated                        MessageTemplate[]               @relation("TemplateUpdatedBy")
   documentTemplatesCreated                DocumentTemplate[]              @relation("DocumentTemplateCreatedBy")
   documentTemplatesUpdated                DocumentTemplate[]              @relation("DocumentTemplateUpdatedBy")
@@ -5612,6 +5614,7 @@ model MessageTemplate {
   /// Who last edited a template is part of explaining a message sent from it.
   updatedBy    StaffUser?                   @relation("TemplateUpdatedBy", fields: [updatedByStaffId], references: [id], onDelete: Restrict)
   translations MessageTemplateTranslation[]
+  schedules    AnnouncementSchedule[]
 
   @@index([active, name])
 }
@@ -5654,6 +5657,36 @@ model MessageTemplateTranslation {
 /// list of people: who it reaches is resolved at send time like any other
 /// segment, and the hand-picked removals are made per send on the review
 /// screen. Retired rather than deleted, like `MessageTemplate`.
+/// R-261 (PRD 08 A5): one scheduled announcement. The DELIVERIES carry the
+/// schedule - each is DEFERRED with its own property-local `sendAfter`, and
+/// the ordinary dispatch releases it - so this row is only the index the
+/// composer lists and cancels by. Cancelling suppresses the deliveries that
+/// are still DEFERRED and stamps `cancelledAt`; the row stays.
+model AnnouncementSchedule {
+  id                 String    @id @default(cuid())
+  templateId         String
+  segment            String
+  /// Property-local wall clock, `YYYY-MM-DDTHH:mm`, exactly as typed. Each
+  /// recipient's instant is this in their own property's timezone.
+  sendAt             String
+  /// The latest per-property instant, so "still pending" is one comparison.
+  lastSendAfter      DateTime
+  recipientCount     Int
+  deliveryIds        String[]
+  createdByStaffId   String
+  createdAt          DateTime  @default(now())
+  cancelledAt        DateTime?
+  cancelledByStaffId String?
+
+  template    MessageTemplate @relation(fields: [templateId], references: [id])
+  createdBy   StaffUser       @relation("AnnouncementScheduleCreatedBy", fields: [createdByStaffId], references: [id])
+  cancelledBy StaffUser?      @relation("AnnouncementScheduleCancelledBy", fields: [cancelledByStaffId], references: [id], onDelete: Restrict)
+
+  /// A double press schedules once: same template, same segment, same time.
+  @@unique([templateId, segment, sendAt])
+  @@index([cancelledAt, lastSendAfter])
+}
+
 model Audience {
   id               String   @id @default(cuid())
   name             String

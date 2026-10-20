@@ -311,6 +311,58 @@ describe('quiet hours', () => {
     }
   })
 
+  it('holds a send asked for later until that instant (R-261)', async () => {
+    const key = `test:${randomUUID()}`
+    // 14:00 UTC = 09:00 Chicago in August: not quiet, so held to exactly then.
+    const sendAfter = new Date('2026-08-06T14:00:00Z')
+    await notify({
+      category: 'unit_make_ready',
+      templateKey: 'unit.make_ready',
+      recipient: recipient(),
+      context: { propertyName: 'Test House', unitName: 'ADU' },
+      propertyId,
+      idempotencyKey: key,
+      now: new Date('2026-08-05T15:00:00Z'),
+      sendAfter,
+    })
+    const rows = await prisma.notification.findMany({
+      where: { idempotencyKey: { startsWith: key } },
+      include: { delivery: true },
+    })
+    notificationIds.push(...rows.map((r) => r.id))
+    expect(rows.length).toBeGreaterThan(0)
+    for (const row of rows) {
+      expect(row.delivery?.status).toBe('DEFERRED')
+      expect(row.delivery?.sendAfter?.toISOString()).toBe(sendAfter.toISOString())
+    }
+  })
+
+  it('judges quiet hours at the asked-for instant, not at creation (R-261)', async () => {
+    const key = `test:${randomUUID()}`
+    await notify({
+      category: 'unit_make_ready',
+      templateKey: 'unit.make_ready',
+      recipient: recipient(),
+      context: { propertyName: 'Test House', unitName: 'ADU' },
+      propertyId,
+      idempotencyKey: key,
+      // Created mid-afternoon, asked for 23:00 Chicago (04:00 UTC next day).
+      now: new Date('2026-08-05T20:00:00Z'),
+      sendAfter: new Date('2026-08-07T04:00:00Z'),
+    })
+    const rows = await prisma.notification.findMany({
+      where: { idempotencyKey: { startsWith: key } },
+      include: { delivery: true },
+    })
+    notificationIds.push(...rows.map((r) => r.id))
+    expect(rows.length).toBeGreaterThan(0)
+    for (const row of rows) {
+      expect(row.delivery?.status).toBe('DEFERRED')
+      // Slid to the next local 08:00, 13:00 UTC in August.
+      expect(row.delivery?.sendAfter?.toISOString()).toBe('2026-08-07T13:00:00.000Z')
+    }
+  })
+
   it('does not defer an emergency', async () => {
     // maintenance_emergency is the one category that bypasses quiet hours.
     // It has no template of its own yet (R-020 owns that), so this asserts

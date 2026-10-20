@@ -43,6 +43,8 @@ const PUBLIC_ROUTES: Record<string, string> = {
     'Authorized by a constant-time CRON_SECRET bearer check rather than a session - no human is signed in.',
   'api/cron/escalations/route.ts':
     "The five-minute emergency-escalation tick (NOTIF-05, R-029). Same CRON_SECRET bearer check as the hourly route, through the same shared isAuthorizedCron() - separate only because fifteen minutes cannot be measured by an hourly schedule.",
+  'api/cron/notifications/route.ts':
+    'The hourly release of due deliveries (R-261, D-326): quiet-hours holds and scheduled announcements. Same CRON_SECRET bearer check through the same isAuthorizedCron(); separate so a slow nightly job cannot delay a timed send.',
   'manifest.webmanifest/route.ts':
     'The PWA manifest (D-8). A browser fetches it before any session exists, and it carries no data beyond the app name and icons.',
   'vendor/[token]/page.tsx':

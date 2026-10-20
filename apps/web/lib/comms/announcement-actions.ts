@@ -1,6 +1,6 @@
 'use server'
 
-import { businessDate } from '@rental/core/scheduling'
+import { businessDate, wallClockToUtc } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { audit } from '@/lib/audit/index.ts'
@@ -8,7 +8,7 @@ import { requireScope } from '@/lib/auth/guard.ts'
 import { getTemplate, renderForRecipient } from '@/lib/comms/templates.ts'
 import { parseSegment } from '@rental/core/comms'
 import { previewAnnouncement } from '@/lib/comms/announcement-preview.ts'
-import { resolveSegment } from '@/lib/comms/announcements.ts'
+import { friendlyWallClock, resolveSegment } from '@/lib/comms/announcements.ts'
 import { leasesHalted } from '@/lib/holds/queries.ts'
 import { dispatchPendingNotifications, notify } from '@/lib/notifications/send.ts'
 
@@ -51,6 +51,14 @@ export async function sendAnnouncement(
   const { actor, scope } = await requireScope('message.send')
 
   const templateId = String(formData.get('templateId') ?? '')
+  const postedSegment = String(formData.get('segment') ?? '')
+  // R-261: empty means now. Otherwise a property-local wall clock, applied in
+  // EACH recipient's property timezone - "9am tomorrow" is 9am in Houston and
+  // 9am in El Paso, two instants.
+  const sendAt = String(formData.get('sendAt') ?? '').trim()
+  if (sendAt && !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(sendAt)) {
+    return { error: 'Pick a date and time to send at, or leave it empty to send now.' }
+  }
   // ONE control, not a type plus a conditionally-rendered value (R-115). The
   // second control only existed while client state said so, so before the page
   // hydrated the only segment anybody could actually send to was the default,
@@ -119,6 +127,23 @@ export async function sendAnnouncement(
     return { error: 'Nobody matches that segment.' }
   }
 
+  const now = new Date()
+  const sendAfterByLease = new Map<string, Date>()
+  if (sendAt) {
+    for (const lease of leases) {
+      const at = wallClockToUtc(sendAt, lease.property.timezone)
+      if (at.getTime() <= now.getTime()) {
+        return {
+          error: `${friendlyWallClock(sendAt)} has already passed at ${lease.property.name}. Pick a later time.`,
+        }
+      }
+      if (at.getTime() > now.getTime() + 90 * 24 * 60 * 60 * 1000) {
+        return { error: 'Schedule within the next 90 days.' }
+      }
+      sendAfterByLease.set(lease.id, at)
+    }
+  }
+
   const results: AnnouncementRecipientResult[] = []
   const skipped: { leaseId: string; why: string }[] = []
   // Every (row, channel) that got a delivery row, so the final status read
@@ -179,10 +204,13 @@ export async function sendAnnouncement(
       },
       context: { subject: rendered.subject, body: rendered.body },
       propertyId: lease.propertyId,
+      sendAfter: sendAfterByLease.get(lease.id) ?? null,
       // Keyed on the FACT — this lease, this template, this property-local
-      // day — so a double press sends once, matching R-044's reminders.
+      // day — so a double press sends once, matching R-044's reminders. For a
+      // scheduled send the day is the one it is FOR (R-261), so scheduling
+      // tomorrow's text does not collide with one sent today.
       idempotencyKey: `announcement:${templateId}:${lease.id}:${businessDate(
-        new Date(),
+        sendAfterByLease.get(lease.id) ?? now,
         lease.property.timezone,
       )}`,
     })
@@ -207,6 +235,65 @@ export async function sendAnnouncement(
   }
 
   const deliveryIds = pending.map((p) => p.deliveryId)
+
+  if (sendAt) {
+    // Nothing to dispatch: every delivery is DEFERRED to its own instant and
+    // the hourly cron releases it. The schedule row is the index the page
+    // lists and cancels by; the deliveries are the schedule itself.
+    if (results.length === 0) {
+      return { error: `Nothing was scheduled. ${describeSkips(skipped)}` }
+    }
+    const lastSendAfter = new Date(
+      Math.max(...[...sendAfterByLease.values()].map((d) => d.getTime())),
+    )
+    let scheduleId: string
+    try {
+      const schedule = await prisma.announcementSchedule.create({
+        data: {
+          templateId,
+          segment: postedSegment,
+          sendAt,
+          lastSendAfter,
+          recipientCount: results.length,
+          deliveryIds,
+          createdByStaffId: actor.id,
+        },
+        select: { id: true },
+      })
+      scheduleId = schedule.id
+    } catch (error) {
+      if ((error as { code?: string }).code === 'P2002') {
+        return { error: 'That announcement is already scheduled for that time.' }
+      }
+      throw error
+    }
+    await audit({
+      action: 'message.announcement_scheduled',
+      entityType: 'MessageTemplate',
+      entityId: templateId,
+      after: {
+        templateName: template.name,
+        segmentType: segment.type,
+        segmentValue: segment.value || null,
+        sendAt,
+        scheduleId,
+        requested: leases.length,
+        sent: results.length,
+        removedLeaseIds: removed,
+        skipped,
+        sentByStaffId: actor.id,
+      },
+    }).catch((error) => {
+      console.error('[announcements] audit failed', error)
+    })
+    revalidatePath('/messages/announcements')
+    const who = `${results.length} ${results.length === 1 ? 'tenant' : 'tenants'}`
+    return {
+      notice: `Scheduled for ${friendlyWallClock(sendAt)}, each property's local time, to ${who}. A time inside quiet hours goes out when they end.${skipped.length ? ` ${describeSkips(skipped)}` : ''}`,
+      results,
+    }
+  }
+
   if (deliveryIds.length > 0) {
     // Only OUR rows — an unfiltered sweep would make this pay for the whole
     // global backlog (same rule as reminders.ts).
@@ -308,6 +395,47 @@ export async function saveAudience(
 }
 
 /// Retire a saved audience. Retired, not deleted, like a template.
+/// R-261: cancel a scheduled announcement that has not gone out. Suppresses
+/// the deliveries still DEFERRED - one the dispatcher has already claimed is
+/// going out and is left alone - and stamps the schedule; nothing is deleted.
+export async function cancelScheduledAnnouncement(formData: FormData): Promise<void> {
+  const { actor, scope } = await requireScope('message.send')
+  const id = String(formData.get('scheduleId') ?? '')
+  const schedule = await prisma.announcementSchedule.findFirst({
+    where: { id, cancelledAt: null },
+    include: { template: { select: { name: true } } },
+  })
+  if (!schedule) return
+  if (!scope.everything && schedule.createdByStaffId !== actor.id) return
+
+  const now = new Date()
+  const suppressed = await prisma.notificationDelivery.updateMany({
+    where: { id: { in: schedule.deliveryIds }, status: 'DEFERRED', sendAfter: { gt: now } },
+    data: { status: 'SUPPRESSED', suppressedReason: 'cancelled' },
+  })
+  await prisma.announcementSchedule.update({
+    where: { id },
+    data: { cancelledAt: now, cancelledByStaffId: actor.id },
+  })
+  const segment = parseSegment(schedule.segment)
+  await audit({
+    action: 'message.announcement_cancelled',
+    entityType: 'MessageTemplate',
+    entityId: schedule.templateId,
+    after: {
+      templateName: schedule.template.name,
+      segmentType: segment?.type ?? null,
+      segmentValue: segment?.value || null,
+      sendAt: schedule.sendAt,
+      scheduleId: id,
+      sent: suppressed.count,
+      requested: schedule.recipientCount,
+      sentByStaffId: actor.id,
+    },
+  })
+  revalidatePath('/messages/announcements')
+}
+
 export async function retireAudience(formData: FormData): Promise<void> {
   await requireScope('message.send')
   const id = String(formData.get('audienceId') ?? '')

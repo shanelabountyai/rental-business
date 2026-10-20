@@ -33,6 +33,10 @@ export interface AnnouncementHistoryEntry {
   sent: number | null
   skippedCount: number | null
   sentByStaffId: string | null
+  /// R-261: what the row records - a send, a schedule, or a cancellation.
+  kind: 'sent' | 'scheduled' | 'cancelled'
+  /// Property-local wall clock for a scheduled or cancelled row.
+  sendAt: string | null
 }
 
 export async function announcementHistory(
@@ -42,7 +46,16 @@ export async function announcementHistory(
   if (!scope.everything) return null
 
   const rows = await prisma.auditLog.findMany({
-    where: { entityType: 'MessageTemplate', action: 'message.announcement_sent' },
+    where: {
+      entityType: 'MessageTemplate',
+      action: {
+        in: [
+          'message.announcement_sent',
+          'message.announcement_scheduled',
+          'message.announcement_cancelled',
+        ],
+      },
+    },
     orderBy: { occurredAt: 'desc' },
     take: limit,
   })
@@ -60,6 +73,13 @@ export async function announcementHistory(
       sent: typeof after.sent === 'number' ? after.sent : null,
       skippedCount: skipped.length,
       sentByStaffId: typeof after.sentByStaffId === 'string' ? after.sentByStaffId : null,
+      kind:
+        row.action === 'message.announcement_scheduled'
+          ? 'scheduled'
+          : row.action === 'message.announcement_cancelled'
+            ? 'cancelled'
+            : 'sent',
+      sendAt: typeof after.sendAt === 'string' ? after.sendAt : null,
     }
   })
 }

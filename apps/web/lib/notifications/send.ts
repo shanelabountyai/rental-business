@@ -100,6 +100,14 @@ export interface NotifyInput {
    */
   idempotencyKey: string
   now?: Date
+  /**
+   * Not before this instant (R-261, a scheduled announcement). The delivery is
+   * recorded DEFERRED with this as `sendAfter`, and quiet hours are judged at
+   * THIS instant rather than at creation: 9am tomorrow is not quiet, 11pm
+   * tomorrow is and slides to the next 8am. Nothing new drains it - the same
+   * dispatch that releases a quiet-hours hold picks it up when it is due.
+   */
+  sendAfter?: Date | null
 }
 
 export interface ChannelOutcome {
@@ -218,10 +226,11 @@ export async function notify(
         )?.timezone
       : undefined
 
+  const notBefore =
+    input.sendAfter && input.sendAfter.getTime() > now.getTime() ? input.sendAfter : null
+  const at = notBefore ?? now
   const deferUntil =
-    timezone && withinQuietHours(now, timezone)
-      ? quietHoursEndAfter(now, timezone)
-      : null
+    timezone && withinQuietHours(at, timezone) ? quietHoursEndAfter(at, timezone) : notBefore
 
   // Asked ONCE for the whole fan-out rather than per channel, and only when
   // an SMS is actually on the table (R-040e). A carrier block is a fact about

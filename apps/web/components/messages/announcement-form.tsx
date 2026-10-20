@@ -3,7 +3,7 @@
 import { BanIcon } from 'lucide-react'
 import { useActionState, useState } from 'react'
 import { LiveRegion, pendingButtonProps } from '@/components/auth-form.tsx'
-import { FieldError } from '@/components/form/field.tsx'
+import { FieldError, TextField } from '@/components/form/field.tsx'
 import type {
   AnnouncementFormState,
   AnnouncementRecipientResult,
@@ -48,6 +48,7 @@ export function AnnouncementForm({
     {},
   )
   const [ticked, setTicked] = useState(recipients.length)
+  const [sendAt, setSendAt] = useState('')
   const textsOff = recipients.filter((r) => r.textsOff).length
 
   return (
@@ -104,6 +105,13 @@ export function AnnouncementForm({
       <input type="hidden" name="templateId" value={templateId} />
 
       <div className="flex flex-col gap-3 rounded-lg border p-4">
+        <TextField
+          label="Send at"
+          name="sendAt"
+          type="datetime-local"
+          hint="Each property's local time. Leave empty to send now. A time inside quiet hours goes out when they end."
+          onChange={setSendAt}
+        />
         <FieldError id="announcement-error" message={state.error} />
         <LiveRegion>
           {state.notice && <p className="text-sm">{state.notice}</p>}
@@ -116,7 +124,11 @@ export function AnnouncementForm({
           {...pendingButtonProps(pending)}
           className={`${PRIMARY_BUTTON_CLASSES} self-start`}
         >
-          {ticked === 0 ? 'Tick someone to send' : `Send to ${plural(ticked)}`}
+          {ticked === 0
+            ? 'Tick someone to send'
+            : sendAt
+              ? `Schedule for ${plural(ticked)}`
+              : `Send to ${plural(ticked)}`}
         </button>
       </div>
 

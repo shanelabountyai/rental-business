@@ -251,6 +251,43 @@ export async function reviewSegment(
 }
 
 /// Saved audiences, by name (R-259, PRD 08 A4).
+/// `YYYY-MM-DDTHH:mm` as typed into `<input type="datetime-local">`, shown
+/// back as "Oct 21, 9:00 AM" with no zone: it is each property's own clock.
+export function friendlyWallClock(sendAt: string): string {
+  return new Date(`${sendAt}:00Z`).toLocaleString('en-US', {
+    timeZone: 'UTC',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  })
+}
+
+/// Scheduled announcements still waiting to go out (R-261). An `everything`
+/// actor sees all of them; anyone else sees the ones they scheduled.
+export async function listScheduledAnnouncements(
+  scope: PropertyScope,
+  actorId: string,
+  now = new Date(),
+) {
+  return prisma.announcementSchedule.findMany({
+    where: {
+      cancelledAt: null,
+      lastSendAfter: { gt: now },
+      ...(scope.everything ? {} : { createdByStaffId: actorId }),
+    },
+    orderBy: { lastSendAfter: 'asc' },
+    select: {
+      id: true,
+      sendAt: true,
+      segment: true,
+      recipientCount: true,
+      template: { select: { name: true } },
+      createdBy: { select: { name: true } },
+    },
+  })
+}
+
 export async function listAudiences(): Promise<{ id: string; name: string; segment: string }[]> {
   return prisma.audience.findMany({
     where: { active: true },

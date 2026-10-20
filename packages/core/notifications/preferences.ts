@@ -17,6 +17,8 @@ import {
 /// when the engine records the decision, which is the whole point of writing a
 /// row for something that was never sent.
 export const SUPPRESSION_REASONS = [
+  /// R-261: a scheduled announcement was cancelled before its send time.
+  'cancelled',
   'preference_off',
   'no_address',
   'kill_switch',

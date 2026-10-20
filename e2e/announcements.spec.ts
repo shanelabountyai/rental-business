@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { hashPassword } from '@rental/core/auth'
+import { businessDate, wallClockToUtc } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
 import { axeScan, uniquePhone } from './fixtures.ts'
@@ -453,6 +454,74 @@ test.describe('reviewed recipients and saved audiences (R-259)', () => {
     ).toBe(0)
   })
 
+  test('SCHEDULED FOR 9AM TOMORROW holds every text to that property-local instant, lists it, and Cancel suppresses it', async ({
+    page,
+  }) => {
+    const { entity, a, b } = await seedTwoProperties()
+    const staff = await seedScopedManager(entity.id)
+    const template = await seedTemplate(staff.id)
+    // 36h ahead so the date's 09:00 is in the future whatever the hour now.
+    const day = businessDate(new Date(Date.now() + 36 * 60 * 60 * 1000), 'America/Chicago')
+    const sendAt = `${day}T09:00`
+    const instant = wallClockToUtc(sendAt, 'America/Chicago')
+
+    await signIn(page, staff)
+    await page.goto('/messages/announcements')
+    await chooseRecipients(page, undefined, template.id)
+    await page.getByLabel('Send at').fill(sendAt)
+    await page.getByRole('button', { name: 'Schedule for 2 tenants' }).click()
+    await expect(page.getByText(/^Scheduled for .* to 2 tenants\./)).toBeVisible()
+
+    // A channel the engine suppresses anyway (no SMS consent on this fixture)
+    // is still SUPPRESSED; what the schedule owns is every delivery that
+    // WOULD have gone, and none of those may be queued or sent yet.
+    const held: string[] = []
+    for (const tenant of [a.tenant, b.tenant]) {
+      const deliveries = await prisma.notificationDelivery.findMany({
+        where: { notification: { recipientId: tenant.id, templateKey: 'comms.announcement' } },
+      })
+      const deferred = deliveries.filter((d) => d.status === 'DEFERRED')
+      expect(deferred.length).toBeGreaterThan(0)
+      expect(deliveries.filter((d) => d.status === 'QUEUED' || d.status === 'SENT')).toEqual([])
+      for (const d of deferred) {
+        expect(d.sendAfter?.toISOString()).toBe(instant.toISOString())
+        held.push(d.id)
+      }
+    }
+
+    const schedule = await prisma.announcementSchedule.findFirstOrThrow({
+      where: { templateId: template.id, sendAt },
+    })
+    expect(schedule.recipientCount).toBe(2)
+
+    await page.goto('/messages/announcements')
+    await page
+      .getByRole('button', { name: `Cancel scheduled announcement ${template.name}` })
+      .click()
+    // Poll the action's LAST write (the audit row), not its first: the
+    // suppress and the stamp land before it, so once it exists they have too.
+    await expect
+      .poll(async () =>
+        prisma.auditLog.findFirst({
+          where: { action: 'message.announcement_cancelled', entityId: template.id },
+        }),
+      )
+      .not.toBeNull()
+    const row = await prisma.auditLog.findFirstOrThrow({
+      where: { action: 'message.announcement_cancelled', entityId: template.id },
+    })
+    expect((row.after as { scheduleId: string }).scheduleId).toBe(schedule.id)
+    expect(
+      (await prisma.announcementSchedule.findUniqueOrThrow({ where: { id: schedule.id } }))
+        .cancelledAt,
+    ).not.toBeNull()
+    const after = await prisma.notificationDelivery.findMany({ where: { id: { in: held } } })
+    expect(after.length).toBe(held.length)
+    expect(after.every((d) => d.status === 'SUPPRESSED' && d.suppressedReason === 'cancelled')).toBe(
+      true,
+    )
+  })
+
   test('A SAVED AUDIENCE is a filter in the Send to list, with a live count, and can be removed', async ({
     page,
   }) => {
@@ -517,6 +586,8 @@ test.describe('accessibility', () => {
 
 test.afterAll(async () => {
   await prisma.audience.updateMany({ where: { name: { in: audienceNames } }, data: { active: false } })
+  // R-261: a schedule points at its template, so it goes first.
+  await prisma.announcementSchedule.deleteMany({ where: { templateId: { in: templateIds } } })
   await prisma.messageTemplate.deleteMany({ where: { id: { in: templateIds } } })
   await prisma.staffAssignment.deleteMany({ where: { staffUserId: { in: staffIds } } })
   await prisma.staffUser.updateMany({

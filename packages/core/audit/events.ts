@@ -505,6 +505,11 @@ export const AUDIT_ACTIONS = [
   /// records what segment was targeted, what was requested, what was sent,
   /// and every skip with its reason.
   'message.announcement_sent',
+  /// R-261 (PRD 08 A5): a segment announcement was scheduled for a
+  /// property-local time, and its cancellation before it went out. The
+  /// deliveries carry the actual sends; these record the intent and who.
+  'message.announcement_scheduled',
+  'message.announcement_cancelled',
   /// R-259 (PRD 08 A4): a segment saved under a name, and its retirement.
   'message.audience_saved',
   'message.audience_retired',

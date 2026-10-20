@@ -8,9 +8,20 @@ import {
 import { PageHeader } from '@/components/page-header.tsx'
 import { INPUT_CLASSES, PRIMARY_BUTTON_CLASSES } from '@/components/ui-classes.ts'
 import { requireScope } from '@/lib/auth/guard.ts'
-import { retireAudience, saveAudience, sendAnnouncement } from '@/lib/comms/announcement-actions.ts'
+import {
+  cancelScheduledAnnouncement,
+  retireAudience,
+  saveAudience,
+  sendAnnouncement,
+} from '@/lib/comms/announcement-actions.ts'
 import { previewAnnouncement } from '@/lib/comms/announcement-preview.ts'
-import { listAudiences, reviewSegment, segmentOptions } from '@/lib/comms/announcements.ts'
+import {
+  friendlyWallClock,
+  listAudiences,
+  listScheduledAnnouncements,
+  reviewSegment,
+  segmentOptions,
+} from '@/lib/comms/announcements.ts'
 import { getTemplate, listTemplates } from '@/lib/comms/templates.ts'
 
 export const metadata = { title: 'Announcements — Rental Operations' }
@@ -36,14 +47,15 @@ export default async function AnnouncementsPage({
 }: {
   searchParams: Promise<{ segment?: string; templateId?: string }>
 }) {
-  const { scope } = await requireScope('message.send')
+  const { actor, scope } = await requireScope('message.send')
   const { segment: posted = '', templateId = '' } = await searchParams
   const segment = parseSegment(posted)
 
-  const [options, templates, audiences, recipients] = await Promise.all([
+  const [options, templates, audiences, scheduled, recipients] = await Promise.all([
     segmentOptions(scope),
     listTemplates(),
     listAudiences(),
+    listScheduledAnnouncements(scope, actor.id),
     segment ? reviewSegment(scope, segment) : Promise.resolve(null),
   ])
   // The preview needs the template, so it is chosen in step one beside the
@@ -55,6 +67,10 @@ export default async function AnnouncementsPage({
       ? await previewAnnouncement(template, recipients.map((r) => r.leaseId))
       : null
   const groups = options.groups.filter((group) => group.choices.length > 0)
+  const segmentLabels = new Map<string, string>([
+    [options.all.value, options.all.label],
+    ...options.groups.flatMap((g) => g.choices.map((c) => [c.value, c.label] as [string, string])),
+  ])
 
   return (
     <div className="flex flex-col gap-6">
@@ -173,6 +189,40 @@ export default async function AnnouncementsPage({
           />
           <SaveAudienceForm segment={posted} saveAction={saveAudience} />
         </>
+      )}
+
+      {scheduled.length > 0 && (
+        <section className="flex flex-col gap-2">
+          <h2 className="text-sm font-medium">Scheduled</h2>
+          <ul className="flex flex-col">
+            {scheduled.map((s) => (
+              <li
+                key={s.id}
+                className="flex min-h-11 min-w-0 items-center justify-between gap-3 border-b break-words last:border-0"
+              >
+                <span className="flex min-w-0 flex-col py-1.5 text-sm">
+                  <span className="font-medium">
+                    {s.template.name} · {friendlyWallClock(s.sendAt)}
+                  </span>
+                  <span className="text-muted-foreground">
+                    {segmentLabels.get(s.segment) ?? s.segment} · {s.recipientCount}{' '}
+                    {s.recipientCount === 1 ? 'tenant' : 'tenants'} · by {s.createdBy.name}
+                  </span>
+                </span>
+                <form action={cancelScheduledAnnouncement}>
+                  <input type="hidden" name="scheduleId" value={s.id} />
+                  <button
+                    type="submit"
+                    aria-label={`Cancel scheduled announcement ${s.template.name}`}
+                    className="focus-visible:ring-ring min-h-11 rounded-md px-3 text-sm underline underline-offset-4 focus-visible:ring-2 focus-visible:outline-none"
+                  >
+                    Cancel
+                  </button>
+                </form>
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
 
       {audiences.length > 0 && (
