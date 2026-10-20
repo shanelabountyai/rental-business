@@ -37,9 +37,9 @@ The draft's premise ("no operator-composed messaging, no audience selection, no 
 | §7 footer | Partial | "Reply STOP" in opt-out replies only | R-266 |
 | §7 rate limit, 10DLC | New, gated on live Twilio (D-15) | — | R-272, R-273 |
 | §7 retention | Built by construction | `Message` is append-only, kept indefinitely | — |
-| §8 multi-org root | New, gated on OQ-18 | Only `LegalEntity` (D-123) | R-274 |
+| §8 multi-org root | New — specified in PRD 10, OQ-18 answered by D-315 | Only `LegalEntity` (D-123) | R-274, Milestone 19 |
 | §8 per-org credentials, branding | New | Env-driven single sender | R-275, R-276 |
-| §8 Stripe Connect | Conflicts with D-11/D-12 | One Stripe account is the system of record | R-277, gated on OQ-19 |
+| §8 Stripe Connect | Narrows D-11/D-12 per account (D-316, PRD 10 §2) | One Stripe account is the system of record | R-277 |
 | §8 CSV import | Built | R-168 (check its second half before onboarding) | — |
 | §8 Oklahoma rules | Data only | `JurisdictionRule` is per-state (D-4) | R-278, gated on OQ-14 |
 | §8 e-sign | Existing vendor gate | Simulated adapter | R-093 (SignWell is a recommendation) |
