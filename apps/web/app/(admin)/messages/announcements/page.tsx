@@ -1,12 +1,17 @@
 import Link from 'next/link'
 import { parseSegment } from '@rental/core/comms'
-import { AnnouncementForm, SaveAudienceForm } from '@/components/messages/announcement-form.tsx'
+import {
+  AnnouncementForm,
+  AnnouncementPreviewPanel,
+  SaveAudienceForm,
+} from '@/components/messages/announcement-form.tsx'
 import { PageHeader } from '@/components/page-header.tsx'
 import { INPUT_CLASSES, PRIMARY_BUTTON_CLASSES } from '@/components/ui-classes.ts'
 import { requireScope } from '@/lib/auth/guard.ts'
 import { retireAudience, saveAudience, sendAnnouncement } from '@/lib/comms/announcement-actions.ts'
+import { previewAnnouncement } from '@/lib/comms/announcement-preview.ts'
 import { listAudiences, reviewSegment, segmentOptions } from '@/lib/comms/announcements.ts'
-import { listTemplates } from '@/lib/comms/templates.ts'
+import { getTemplate, listTemplates } from '@/lib/comms/templates.ts'
 
 export const metadata = { title: 'Announcements — Rental Operations' }
 
@@ -29,10 +34,10 @@ function withCount(choice: { label: string; count: number }): string {
 export default async function AnnouncementsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ segment?: string }>
+  searchParams: Promise<{ segment?: string; templateId?: string }>
 }) {
   const { scope } = await requireScope('message.send')
-  const { segment: posted = '' } = await searchParams
+  const { segment: posted = '', templateId = '' } = await searchParams
   const segment = parseSegment(posted)
 
   const [options, templates, audiences, recipients] = await Promise.all([
@@ -41,6 +46,14 @@ export default async function AnnouncementsPage({
     listAudiences(),
     segment ? reviewSegment(scope, segment) : Promise.resolve(null),
   ])
+  // The preview needs the template, so it is chosen in step one beside the
+  // segment (R-260). An id that is gone or retired previews nothing.
+  const chosen = templateId ? templates.find((t) => t.id === templateId) ?? null : null
+  const template = chosen ? await getTemplate(chosen.id) : null
+  const preview =
+    template && recipients && recipients.length > 0
+      ? await previewAnnouncement(template, recipients.map((r) => r.leaseId))
+      : null
   const groups = options.groups.filter((group) => group.choices.length > 0)
 
   return (
@@ -105,6 +118,27 @@ export default async function AnnouncementsPage({
             and named in the results.
           </p>
         </div>
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="templateId" className="text-sm font-medium">
+            Message
+          </label>
+          <select
+            id="templateId"
+            name="templateId"
+            defaultValue={chosen?.id ?? ''}
+            required
+            className={INPUT_CLASSES}
+          >
+            <option value="" disabled>
+              Choose a template…
+            </option>
+            {templates.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
+          </select>
+        </div>
         <button type="submit" className={`${PRIMARY_BUTTON_CLASSES} self-start`}>
           Choose recipients
         </button>
@@ -116,14 +150,22 @@ export default async function AnnouncementsPage({
         </p>
       )}
 
-      {segment && recipients && recipients.length > 0 && (
+      {segment && recipients && recipients.length > 0 && !template && (
+        <p className="rounded-lg border border-dashed p-4 text-sm">
+          Choose a message above to see a preview and send.
+        </p>
+      )}
+
+      {preview && <AnnouncementPreviewPanel preview={preview} />}
+
+      {segment && recipients && recipients.length > 0 && template && (
         <>
           <AnnouncementForm
             // Keyed on the segment so a new choice starts fully ticked again.
-            key={posted}
+            key={`${posted}:${template.id}`}
             segment={posted}
+            templateId={template.id}
             recipients={recipients}
-            templates={templates.map((template) => ({ id: template.id, name: template.name }))}
             // Not bound — sendAnnouncement takes only (state, formData), the
             // 'use server' export itself, which is the only kind of function
             // the client can call back to.

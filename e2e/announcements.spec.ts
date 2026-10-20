@@ -158,10 +158,15 @@ async function signIn(
 
 /// Step one (R-259): pick the segment and load its reviewed list. A GET, so
 /// the URL changing is the signal the list is the new one.
-async function chooseRecipients(page: import('@playwright/test').Page, segment?: string) {
+async function chooseRecipients(
+  page: import('@playwright/test').Page,
+  segment: string | undefined,
+  templateId: string,
+) {
+  await page.getByLabel('Message', { exact: true }).selectOption(templateId)
   if (segment) await page.getByLabel('Send to').selectOption(segment)
   await page.getByRole('button', { name: 'Choose recipients' }).click()
-  await page.waitForURL(/[?&]segment=/)
+  await page.waitForURL(/[?&]templateId=/)
   await expect(page.getByRole('group', { name: 'Who gets this?' })).toBeVisible()
 }
 
@@ -184,8 +189,7 @@ test.describe('segment announcements (COMM-04)', () => {
     await page.goto('/messages/announcements')
 
     // "All tenants" is the default — no segment value picker to fill in.
-    await chooseRecipients(page)
-    await page.getByLabel('Template').selectOption(template.id)
+    await chooseRecipients(page, undefined, template.id)
     await page.getByRole('button', { name: 'Send' }).click()
 
     await expect(page.getByText(/Sent to 2 tenants/)).toBeVisible()
@@ -211,8 +215,7 @@ test.describe('segment announcements (COMM-04)', () => {
     // `TYPE:value` option, because the value dropdown used to exist only
     // while client state said so - so before hydration the only segment
     // anybody could send to was the default, "All tenants".
-    await chooseRecipients(page, `PROPERTY:${a.property.id}`)
-    await page.getByLabel('Template').selectOption(template.id)
+    await chooseRecipients(page, `PROPERTY:${a.property.id}`, template.id)
     await page.getByRole('button', { name: 'Send' }).click()
 
     await expect(page.getByText(/Sent to 1 tenant/)).toBeVisible()
@@ -240,8 +243,7 @@ test.describe('segment announcements (COMM-04)', () => {
     await signIn(page, staff)
     await page.goto('/messages/announcements')
 
-    await chooseRecipients(page, `METRO:${a.property.metro!}`)
-    await page.getByLabel('Template').selectOption(template.id)
+    await chooseRecipients(page, `METRO:${a.property.metro!}`, template.id)
     await page.getByRole('button', { name: 'Send' }).click()
 
     await expect(page.getByText(/Sent to 1 tenant/)).toBeVisible()
@@ -261,8 +263,7 @@ test.describe('segment announcements (COMM-04)', () => {
     await signIn(page, staff)
     await page.goto('/messages/announcements')
 
-    await chooseRecipients(page, `TAG:${a.property.tags[0]}`)
-    await page.getByLabel('Template').selectOption(template.id)
+    await chooseRecipients(page, `TAG:${a.property.tags[0]}`, template.id)
     await page.getByRole('button', { name: 'Send' }).click()
 
     await expect(page.getByText(/Sent to 1 tenant/)).toBeVisible()
@@ -307,8 +308,7 @@ test.describe('segment announcements (COMM-04)', () => {
     ])
     expect(width[0]).toBeLessThanOrEqual(width[1]!)
 
-    await chooseRecipients(page, 'BALANCE_DUE')
-    await page.getByLabel('Template').selectOption(template.id)
+    await chooseRecipients(page, 'BALANCE_DUE', template.id)
     await page.getByRole('button', { name: 'Send' }).click()
 
     await expect(page.getByText(/Sent to 1 tenant/)).toBeVisible()
@@ -330,8 +330,7 @@ test.describe('segment announcements (COMM-04)', () => {
 
     await signIn(page, staff)
     await page.goto('/messages/announcements')
-    await chooseRecipients(page, `PROPERTY:${a.property.id}`)
-    await page.getByLabel('Template').selectOption(template.id)
+    await chooseRecipients(page, `PROPERTY:${a.property.id}`, template.id)
 
     const countRows = () =>
       prisma.notification.count({
@@ -362,13 +361,12 @@ test.describe('reviewed recipients and saved audiences (R-259)', () => {
 
     await signIn(page, staff)
     await page.goto('/messages/announcements')
-    await chooseRecipients(page)
+    await chooseRecipients(page, undefined, template.id)
 
     await page.getByRole('checkbox', { name: new RegExp(b.tenant.firstName) }).uncheck()
     // The live count is client state; the button's label is what proves the
     // untick was seen before the press.
     await expect(page.getByRole('button', { name: 'Send to 1 tenant' })).toBeVisible()
-    await page.getByLabel('Template').selectOption(template.id)
     await page.getByRole('button', { name: 'Send to 1 tenant' }).click()
 
     await expect(page.getByText(/Sent to 1 tenant/)).toBeVisible()
@@ -391,7 +389,7 @@ test.describe('reviewed recipients and saved audiences (R-259)', () => {
 
     await signIn(page, staff)
     await page.goto('/messages/announcements')
-    await chooseRecipients(page, `PROPERTY:${a.property.id}`)
+    await chooseRecipients(page, `PROPERTY:${a.property.id}`, template.id)
 
     // A hand-made POST: b is in the manager's scope but not in the segment.
     await page.locator('input[name="leaseIds"]').first().evaluate((input, id) => {
@@ -400,7 +398,6 @@ test.describe('reviewed recipients and saved audiences (R-259)', () => {
       extra.value = id
       field.form!.append(extra)
     }, b.lease.id)
-    await page.getByLabel('Template').selectOption(template.id)
     await page.getByRole('button', { name: /^Send to/ }).click()
 
     await expect(page.getByText(/Sent to 1 tenant/)).toBeVisible()
@@ -410,17 +407,64 @@ test.describe('reviewed recipients and saved audiences (R-259)', () => {
     expect(delivery).toBeNull()
   })
 
+  test('the PREVIEW shows the first recipient\'s text and a segment estimate before anything is sent', async ({
+    page,
+  }) => {
+    const { entity, a } = await seedTwoProperties()
+    const staff = await seedScopedManager(entity.id)
+    const template = await seedTemplate(staff.id)
+
+    await signIn(page, staff)
+    await page.goto('/messages/announcements')
+    await chooseRecipients(page, `PROPERTY:${a.property.id}`, template.id)
+
+    const preview = page.getByRole('region', { name: 'Preview' })
+    await expect(preview.getByText(`Hi ${a.tenant.firstName}, the city is flushing`)).toBeVisible()
+    await expect(preview.getByText(/up to 1 segment each \(GSM-7\)/)).toBeVisible()
+  })
+
+  test('a body over 1,600 characters is BLOCKED in the preview and refused by the send', async ({
+    page,
+  }) => {
+    const { entity, a } = await seedTwoProperties()
+    const staff = await seedScopedManager(entity.id)
+    const template = await prisma.messageTemplate.create({
+      data: {
+        name: `Too long ${randomUUID().slice(0, 6)}`,
+        kind: 'ROUTINE',
+        subject: 'Long',
+        body: `Hi {{tenant.first_name}}, ${'word '.repeat(340)}`,
+        createdByStaffId: staff.id,
+      },
+    })
+    templateIds.push(template.id)
+
+    await signIn(page, staff)
+    await page.goto('/messages/announcements')
+    await chooseRecipients(page, `PROPERTY:${a.property.id}`, template.id)
+
+    await expect(page.getByText('This cannot be sent yet:')).toBeVisible()
+    await page.getByRole('button', { name: 'Send' }).click()
+    await expect(page.getByText(/Not sent\. The message is over 1600 characters/)).toBeVisible()
+    expect(
+      await prisma.notificationDelivery.count({
+        where: { notification: { recipientId: a.tenant.id, templateKey: 'comms.announcement' } },
+      }),
+    ).toBe(0)
+  })
+
   test('A SAVED AUDIENCE is a filter in the Send to list, with a live count, and can be removed', async ({
     page,
   }) => {
     const { entity, a } = await seedTwoProperties()
     const staff = await seedScopedManager(entity.id)
+    const template = await seedTemplate(staff.id)
     const name = `Downtown only ${randomUUID().slice(0, 8)}`
     audienceNames.push(name)
 
     await signIn(page, staff)
     await page.goto('/messages/announcements')
-    await chooseRecipients(page, `PROPERTY:${a.property.id}`)
+    await chooseRecipients(page, `PROPERTY:${a.property.id}`, template.id)
 
     await page.getByLabel('Save this filter as an audience').fill(name)
     await page.getByRole('button', { name: 'Save audience' }).click()
@@ -462,8 +506,7 @@ test.describe('accessibility', () => {
 
     await signIn(page, staff)
     await page.goto('/messages/announcements')
-    await chooseRecipients(page, `PROPERTY:${a.property.id}`)
-    await page.getByLabel('Template').selectOption(template.id)
+    await chooseRecipients(page, `PROPERTY:${a.property.id}`, template.id)
     await page.getByRole('button', { name: 'Send' }).click()
     await expect(page.getByText(/Sent to 1 tenant/)).toBeVisible()
 

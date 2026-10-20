@@ -3,12 +3,13 @@
 import { BanIcon } from 'lucide-react'
 import { useActionState, useState } from 'react'
 import { LiveRegion, pendingButtonProps } from '@/components/auth-form.tsx'
-import { FieldError, SelectField } from '@/components/form/field.tsx'
+import { FieldError } from '@/components/form/field.tsx'
 import type {
   AnnouncementFormState,
   AnnouncementRecipientResult,
   AudienceFormState,
 } from '@/lib/comms/announcement-actions.ts'
+import type { AnnouncementPreview } from '@/lib/comms/announcement-preview.ts'
 import type { ReviewRecipient } from '@/lib/comms/announcements.ts'
 import { INPUT_CLASSES, PRIMARY_BUTTON_CLASSES, scrollableRegionProps } from '@/components/ui-classes.ts'
 
@@ -28,14 +29,15 @@ function plural(n: number): string {
 
 export function AnnouncementForm({
   segment,
+  templateId,
   recipients,
-  templates,
   sendAction,
 }: {
   /// What the page's picker chose, posted back and re-resolved by the action.
   segment: string
+  /// The template the page's picker chose, previewed above and posted back.
+  templateId: string
   recipients: ReviewRecipient[]
-  templates: { id: string; name: string }[]
   sendAction: (
     previous: AnnouncementFormState,
     formData: FormData,
@@ -99,21 +101,9 @@ export function AnnouncementForm({
         </div>
       </fieldset>
 
+      <input type="hidden" name="templateId" value={templateId} />
+
       <div className="flex flex-col gap-3 rounded-lg border p-4">
-        <SelectField
-          label="Template"
-          name="templateId"
-          required
-          placeholder="Choose a template…"
-          options={templates.map((template) => ({ value: template.id, label: template.name }))}
-        />
-
-        {templates.length === 0 && (
-          <p className="text-muted-foreground text-sm">
-            There are no templates yet. Write one first.
-          </p>
-        )}
-
         <FieldError id="announcement-error" message={state.error} />
         <LiveRegion>
           {state.notice && <p className="text-sm">{state.notice}</p>}
@@ -122,7 +112,7 @@ export function AnnouncementForm({
         <button
           type="submit"
           // Disabled buttons say why in their label (Messaging P0 design).
-          disabled={templates.length === 0 || ticked === 0}
+          disabled={ticked === 0}
           {...pendingButtonProps(pending)}
           className={`${PRIMARY_BUTTON_CLASSES} self-start`}
         >
@@ -132,6 +122,60 @@ export function AnnouncementForm({
 
       {state.results && state.results.length > 0 && <ResultsTable results={state.results} />}
     </form>
+  )
+}
+
+const money = (cents: number) => `$${(cents / 100).toFixed(2)}`
+
+/// What the send will do, before it does it (R-260, PRD 08 A1/A6). Rendered
+/// from the first recipient through the send's own path. Server-rendered, so
+/// it is there before hydration; it counts the whole segment, and the send
+/// re-checks whoever is ticked.
+export function AnnouncementPreviewPanel({
+  preview,
+}: {
+  preview: AnnouncementPreview
+}) {
+  return (
+    <section aria-labelledby="preview-heading" className="flex flex-col gap-3 rounded-lg border p-4">
+      <h2 id="preview-heading" className="text-sm font-medium">
+        Preview
+      </h2>
+      {preview.sample && (
+        <div className="bg-muted/50 flex min-w-0 flex-col gap-1 rounded-md p-3 text-sm break-words">
+          <span className="text-muted-foreground text-xs">As {preview.sample.tenantName} sees it</span>
+          {preview.sample.subject && <span className="font-medium">{preview.sample.subject}</span>}
+          <span className="whitespace-pre-wrap">{preview.sample.body}</span>
+        </div>
+      )}
+      <p className="text-sm">
+        {preview.smsRecipients === 0
+          ? 'No texts will go; everyone reached gets email only.'
+          : `${preview.smsRecipients} ${preview.smsRecipients === 1 ? 'text' : 'texts'}, up to ${preview.maxSegments} ${preview.maxSegments === 1 ? 'segment' : 'segments'} each (${preview.encoding}), about ${money(preview.estimatedCostCents)}.`}
+      </p>
+      {preview.encoding === 'UCS-2' && (
+        <p className="text-muted-foreground text-sm">
+          A character outside the basic SMS set (a curly quote or emoji) makes every text
+          shorter and so costlier. Swap it for a plain one to cut segments.
+        </p>
+      )}
+      {preview.quietHeld > 0 && preview.quietUntil && (
+        <p className="bg-warning/10 text-warning rounded-md p-3 text-sm">
+          {preview.quietHeld} {preview.quietHeld === 1 ? 'text is' : 'texts are'} held by quiet
+          hours until {preview.quietUntil}. Email is not held.
+        </p>
+      )}
+      {preview.problems.length > 0 && (
+        <div className="border-destructive text-destructive rounded-md border p-3 text-sm">
+          <p className="font-medium">This cannot be sent yet:</p>
+          <ul className="list-disc pl-5">
+            {preview.problems.slice(0, 5).map((problem) => (
+              <li key={problem}>{problem}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </section>
   )
 }
 

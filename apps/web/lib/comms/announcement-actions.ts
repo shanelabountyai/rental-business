@@ -7,6 +7,7 @@ import { audit } from '@/lib/audit/index.ts'
 import { requireScope } from '@/lib/auth/guard.ts'
 import { getTemplate, renderForRecipient } from '@/lib/comms/templates.ts'
 import { parseSegment } from '@rental/core/comms'
+import { previewAnnouncement } from '@/lib/comms/announcement-preview.ts'
 import { resolveSegment } from '@/lib/comms/announcements.ts'
 import { leasesHalted } from '@/lib/holds/queries.ts'
 import { dispatchPendingNotifications, notify } from '@/lib/notifications/send.ts'
@@ -79,6 +80,16 @@ export async function sendAnnouncement(
   const leaseIds = matched.filter((id) => picked.has(id))
   const removed = matched.filter((id) => !picked.has(id))
   if (leaseIds.length === 0) return { error: 'Tick at least one recipient.' }
+
+  // THE PREVIEW'S OWN GATE (R-260, PRD 08 A6): one empty merge field or an
+  // over-long body refuses the whole send, naming who - the sender fixes the
+  // template or unticks the tenant, rather than learning from the results
+  // table that someone was quietly left out. The per-lease skip below stays
+  // for a tenancy that changed between this check and the loop.
+  const { problems } = await previewAnnouncement(template, leaseIds)
+  if (problems.length > 0) {
+    return { error: `Not sent. ${problems.slice(0, 5).join('; ')}.` }
+  }
 
   const leases = await prisma.lease.findMany({
     where: { id: { in: leaseIds } },

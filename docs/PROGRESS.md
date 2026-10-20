@@ -14527,3 +14527,24 @@ Re-opens the project for two rows from the post-closure second-pass review of th
 - Not walked in a browser.
 
 **Gate.** lint (16 warnings, unchanged), typecheck, `npm test` 3560 passed + 4 skipped, `db:drift` clean, ship-deps, and `e2e/announcements.spec.ts` on both projects against the production build: 22 passed of 22 listed. The full sweep is CI's.
+
+## R-260 — composer preview before send
+**Commit:** _see git log_  ·  **Date:** 2026-10-20
+
+**What it built.**
+- `packages/core/comms/sms-length.ts`: segment count per body. GSM-7 is 160 in one segment and 153 per segment after a split, with the extended characters (`^{}\[~]|€`) counted as two. One character outside GSM-7 (a curly quote, an emoji) flips the whole message to UCS-2 (70 / 67), and the preview reports that flip. `SMS_MAX_LENGTH = 1600`, `SMS_SEGMENT_COST_CENTS = 1` (PRD 08's ~$0.01 a segment, an estimate rather than the carrier's invoice). Three unit tests.
+- `apps/web/lib/comms/announcement-preview.ts` → `previewAnnouncement(template, leaseIds)`: the first recipient's rendered text, texts that will actually go (has a number and isn't opted out), worst-case segments, encoding, estimated cost, how many are held by property-local quiet hours and until when, and `problems[]` (an empty merge field per tenant by name, or a body over 1,600 characters).
+- The template picker moved into step one beside the segment, so the review step can render the preview (screens 1 and 3 of *Messaging P0 Round 1*, restyled in the current app per D-314).
+- `sendAnnouncement` calls the same function and refuses the whole send when `problems` is non-empty, naming who's affected.
+- e2e: two new tests in `announcements.spec.ts`. One checks that the preview shows the first recipient's text and a segment estimate before send. The other checks that an over-1,600 body is blocked in the preview and refused by the send.
+
+**What it decided.**
+- The preview and the send's gate are one function, so the preview can't say "ready" for a send the action then rejects. Rendering goes through `renderForRecipient`, the path the send takes.
+- An empty merge field blocks the whole send instead of quietly skipping that tenant. The sender fixes the template or unticks the tenant. The per-lease skip in the send loop stays, for a tenancy that changes between the check and the loop.
+
+**What it left behind.**
+- The cost is a flat estimate, not a Twilio price lookup.
+- The preview loads every picked tenancy per render, the same ceiling as R-259 (fine at 10–50 doors).
+- Not walked in a browser.
+
+**Gate.** lint (16 warnings, unchanged), typecheck, `npm test` 3563 passed + 4 skipped. `e2e/announcements.spec.ts` on both projects: 26 passed of 26, run in the previous session on this same working tree and not re-run here. The full sweep is CI's.
