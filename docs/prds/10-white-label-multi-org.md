@@ -9,6 +9,8 @@
 | **Source** | Shane's brief of 2026-10-20: "multi-org from day one; Tim Bales's group (20 rentals) is org #1" |
 | **Companion files** | `00-master-prd.md` · `08-messaging-and-white-label.md` (§8 is the sketch this document replaces) · `09-quickbooks-sync.md` · `06-backlog.md` Milestone 19 · `07-decisions.md` (**overrides this document where they conflict**) · `../PROGRESS.md` |
 
+> **Answered 2026-10-20, after Shane read this document:** D-315 and D-316 confirmed as written. OQ-23 → D-322 (application fee only; §6's meter and platform customer are not built), OQ-24 → D-323 (platform admin creates orgs), OQ-25 → D-324 (neutral product domain, not yet bought), OQ-26 → D-325 (90 days / 7 years, counsel later). The sections below still describe the options as they were weighed.
+
 > **On the numbering.** The brief said "backlog IDs start at R-121; decisions continue from D-14". Those are the draft numbers PRD 08 and 09 carried, and D-309 already records why they collide (R-098–R-121 are built, D-11–D-16 settled). The real ones: **Milestone 19, R-285–R-301**, decisions **D-315–D-320**, open questions **OQ-23–OQ-26**. Six Milestone 18 rows already name this work (R-272–R-278); they are not duplicated here, they are refined in place and un-gated where a decision below answers their gate.
 
 > **Conflicts with settled decisions, and with the brief — resolve before any row is built.**
