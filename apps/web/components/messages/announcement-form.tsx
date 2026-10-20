@@ -8,7 +8,7 @@ import type {
   AnnouncementRecipientResult,
 } from '@/lib/comms/announcement-actions.ts'
 import type { SegmentOptions } from '@/lib/comms/announcements.ts'
-import { PRIMARY_BUTTON_CLASSES, scrollableRegionProps } from '@/components/ui-classes.ts'
+import { INPUT_CLASSES, PRIMARY_BUTTON_CLASSES, scrollableRegionProps } from '@/components/ui-classes.ts'
 
 // The composer for segment announcements (COMM-04, R-053).
 //
@@ -60,11 +60,7 @@ export function AnnouncementForm({
     {},
   )
 
-  const groups = [
-    { label: 'One property', choices: options.properties },
-    { label: 'One metro', choices: options.metros },
-    { label: 'One tag', choices: options.tags },
-  ].filter((group) => group.choices.length > 0)
+  const groups = options.groups.filter((group) => group.choices.length > 0)
 
   return (
     <form action={action} className="flex flex-col gap-6">
@@ -80,7 +76,10 @@ export function AnnouncementForm({
             name="segment"
             defaultValue="ALL"
             aria-describedby="segment-hint"
-            className="border-input bg-background focus-visible:ring-ring min-h-11 rounded-md border px-3 py-2 text-base focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+            // INPUT_CLASSES for its `min-w-0 max-w-full` (R-170a): a native
+            // select is as wide as its widest option, and "Property · Unit"
+            // labels (R-258) are the longest this one has carried.
+            className={INPUT_CLASSES}
           >
             <option value={options.all.value}>{withCount(options.all)}</option>
             {groups.map((group) => (

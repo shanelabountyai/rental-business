@@ -18,7 +18,7 @@ The draft's premise ("no operator-composed messaging, no audience selection, no 
 | Req | Verdict | Already built | Backlog row |
 |---|---|---|---|
 | A1, A6, B4 | Partial | Composer, reach count (R-115), `renderTemplate` `missing[]` | R-260 |
-| A2 | Partial | Segments ALL / PROPERTY / METRO / TAG | R-258 |
+| A2 | Built (R-258) | Entity, property, unit, metro, tag, lease status, balance due, move-in/out window, open repair. Applicant status is R-270 (D-313) | R-258 |
 | A3, A4 | New | — (R-053 chose filter over selection) | R-259 |
 | A5 | Partial | Property-local quiet-hours deferral | R-261 |
 | A7 | Built | `NotificationDelivery`, `/api/sms/status`, announcement history | — (verify in R-262) |

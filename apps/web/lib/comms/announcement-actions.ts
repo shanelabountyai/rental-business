@@ -4,9 +4,10 @@ import { businessDate } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { audit } from '@/lib/audit/index.ts'
-import { propertyWhere, requireScope } from '@/lib/auth/guard.ts'
+import { requireScope } from '@/lib/auth/guard.ts'
 import { getTemplate, renderForRecipient } from '@/lib/comms/templates.ts'
-import { parseSegment, segmentWhere } from '@/lib/comms/announcements.ts'
+import { parseSegment } from '@rental/core/comms'
+import { resolveSegment } from '@/lib/comms/announcements.ts'
 import { leasesHalted } from '@/lib/holds/queries.ts'
 import { dispatchPendingNotifications, notify } from '@/lib/notifications/send.ts'
 
@@ -60,26 +61,18 @@ export async function sendAnnouncement(
     return { error: 'Choose who this goes to.' }
   }
 
-  const segmentFilter = segmentWhere(segment.type, segment.value)
-  if (segmentFilter === null) {
-    return { error: 'Choose a property, metro or tag to send to.' }
-  }
-
   const template = await getTemplate(templateId)
   if (!template || !template.active) {
     return { error: 'That template is no longer available.' }
   }
 
-  const scopedWhere = propertyWhere(scope)
-  if (scopedWhere === null) {
-    return { error: 'Nothing in your scope matches that.' }
-  }
+  // The same resolution the picker counted with (R-258), so the number the
+  // sender saw and the set sent to cannot disagree. Ids come back already
+  // intersected with the actor's scope.
+  const leaseIds = await resolveSegment(scope, segment)
 
   const leases = await prisma.lease.findMany({
-    where: {
-      status: { in: ['ACTIVE', 'MONTH_TO_MONTH'] },
-      property: { AND: [scopedWhere, segmentFilter] },
-    },
+    where: { id: { in: leaseIds } },
     select: {
       id: true,
       propertyId: true,

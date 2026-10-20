@@ -29,8 +29,10 @@ export default async function AnnouncementsPage() {
         </Link>
         <PageHeader title="Announcements" />
         <p className="text-muted-foreground text-sm">
-          One message to a whole segment — all tenants, one property, one
-          metro, or one tag — with delivery status for every recipient.
+          One message to a whole segment — all tenants, one entity, property,
+          unit, metro or tag, or everyone with a balance due, an open repair,
+          or a move-in or move-out coming up — with delivery status for every
+          recipient.
         </p>
       </header>
 

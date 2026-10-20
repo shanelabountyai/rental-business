@@ -262,6 +262,55 @@ test.describe('segment announcements (COMM-04)', () => {
     ).toHaveCount(0)
   })
 
+  test('BALANCE DUE reaches only the tenancy that owes, and the picker said so first', async ({
+    page,
+  }) => {
+    const { entity, a, b } = await seedTwoProperties()
+    // A fixture charge, as deposits.spec.ts does: the balance is what the
+    // segment reads, and where the row came from is not this spec's subject.
+    await prisma.ledgerEntry.create({
+      data: {
+        propertyId: a.property.id,
+        leaseId: a.lease.id,
+        type: 'CHARGE',
+        amountCents: 150_000,
+        description: 'October rent',
+        occurredAt: new Date('2026-10-01T00:00:00Z'),
+      },
+    })
+    const staff = await seedScopedManager(entity.id)
+    const template = await seedTemplate(staff.id)
+
+    await signIn(page, staff)
+    await page.goto('/messages/announcements')
+
+    // R-258: the count and the send come from one predicate, so the option
+    // must already say 1 before anything is pressed.
+    await expect(page.locator('option[value="BALANCE_DUE"]')).toHaveText('Balance due — 1 tenant')
+    // A "Property · Unit" label is the widest option this select has held,
+    // and a native select is as wide as its widest option (R-170a, R-182).
+    const width = await page.evaluate(() => [
+      document.documentElement.scrollWidth,
+      window.innerWidth,
+    ])
+    expect(width[0]).toBeLessThanOrEqual(width[1]!)
+
+    await page.getByLabel('Send to').selectOption('BALANCE_DUE')
+    await page.getByLabel('Template').selectOption(template.id)
+    await page.getByRole('button', { name: 'Send' }).click()
+
+    await expect(page.getByText(/Sent to 1 tenant/)).toBeVisible()
+    await expect(
+      page.getByRole('row', { name: new RegExp(a.tenant.firstName) }),
+    ).toBeVisible()
+    const delivery = await prisma.notificationDelivery.findFirst({
+      where: {
+        notification: { recipientId: b.tenant.id, templateKey: 'comms.announcement' },
+      },
+    })
+    expect(delivery).toBeNull()
+  })
+
   test('DOUBLE-PRESSING SENDS ONCE', async ({ page }) => {
     const { entity, a } = await seedTwoProperties()
     const staff = await seedScopedManager(entity.id)
