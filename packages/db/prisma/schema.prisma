@@ -2068,6 +2068,7 @@ model StaffUser {
   announcementSchedulesCreated            AnnouncementSchedule[]          @relation("AnnouncementScheduleCreatedBy")
   announcementSchedulesCancelled          AnnouncementSchedule[]          @relation("AnnouncementScheduleCancelledBy")
   templatesUpdated                        MessageTemplate[]               @relation("TemplateUpdatedBy")
+  templateVersionsSaved                   MessageTemplateVersion[]        @relation("TemplateVersionSavedBy")
   documentTemplatesCreated                DocumentTemplate[]              @relation("DocumentTemplateCreatedBy")
   documentTemplatesUpdated                DocumentTemplate[]              @relation("DocumentTemplateUpdatedBy")
   inspectionTemplatesCreated              InspectionTemplate[]            @relation("InspectionTemplateCreatedBy")
@@ -5615,8 +5616,36 @@ model MessageTemplate {
   updatedBy    StaffUser?                   @relation("TemplateUpdatedBy", fields: [updatedByStaffId], references: [id], onDelete: Restrict)
   translations MessageTemplateTranslation[]
   schedules    AnnouncementSchedule[]
+  versions     MessageTemplateVersion[]
 
   @@index([active, name])
+}
+
+/// R-264 (PRD 08 B1): every saved state of a managed template, with who and
+/// when. Written in the same transaction as the save, so the newest version
+/// IS the template; a restore is a new version copying an old one, never a
+/// rewind. Cascades with its template, which the app never deletes (retired
+/// instead) - only test and demo-seed cleanup do.
+model MessageTemplateVersion {
+  id                  String   @id @default(cuid())
+  templateId          String
+  /// 1, 2, 3... per template. The unique key is what refuses two concurrent
+  /// saves claiming the same number.
+  version             Int
+  name                String
+  kind                String
+  subject             String?
+  body                String
+  savedByStaffId      String
+  /// Set when this version was made by restoring an older one.
+  restoredFromVersion Int?
+  createdAt           DateTime @default(now())
+
+  template MessageTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  /// Restrict: who wrote the words is the point of the row.
+  savedBy  StaffUser       @relation("TemplateVersionSavedBy", fields: [savedByStaffId], references: [id], onDelete: Restrict)
+
+  @@unique([templateId, version])
 }
 
 /// One template in one language (COMM-03).

@@ -1,16 +1,21 @@
+import { friendlyTimestamp } from '@rental/core/scheduling'
+import { prisma } from '@rental/db'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { TemplateEditor } from '@/components/comms/template-editor.tsx'
+import { TemplateHistoryPanel } from '@/components/comms/template-history-panel.tsx'
 import { TranslationsPanel } from '@/components/comms/translations-panel.tsx'
 import { PageHeader } from '@/components/page-header.tsx'
-import { actorCan, requirePermission } from '@/lib/auth/guard.ts'
+import { actorCan, propertyWhere, requireScope } from '@/lib/auth/guard.ts'
 import {
   approveTranslation,
+  duplicateTemplate,
+  restoreTemplateVersion,
   retireTemplate,
   saveTemplate,
   saveTranslation,
 } from '@/lib/comms/template-actions.ts'
-import { getTemplate } from '@/lib/comms/templates.ts'
+import { getTemplate, listTemplateVersions } from '@/lib/comms/templates.ts'
 import { previewTenancy, templateValues } from '@/lib/comms/template-values.ts'
 
 export const metadata = { title: 'Template — Rental Operations' }
@@ -24,15 +29,25 @@ export default async function TemplatePage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
-  await requirePermission('template.write')
+  const { scope } = await requireScope('template.write')
 
   const template = await getTemplate(id)
   if (!template) notFound()
 
-  const [canApprove, sample] = await Promise.all([
+  const [canApprove, sample, versions, zoneProperty] = await Promise.all([
     actorCan('template.approve'),
     previewTenancy(null),
+    listTemplateVersions(id),
+    // No property owns a template, so no zone is exactly right: the first
+    // property in scope, with the abbreviation printed, as the announcement
+    // history page does (R-115).
+    prisma.property.findFirst({
+      where: propertyWhere(scope) ?? { id: '' },
+      orderBy: { name: 'asc' },
+      select: { timezone: true },
+    }),
   ])
+  const zone = zoneProperty?.timezone ?? 'UTC'
   const values = sample ? await templateValues(sample) : null
 
   return (
@@ -52,6 +67,12 @@ export default async function TemplatePage({
       </header>
 
       <TemplateEditor
+        // REMOUNTED ON A RESTORE AND ONLY THEN (R-264). The editor holds its
+        // text in useState, so without this it keeps showing the pre-restore
+        // words and the next Save quietly undoes the restore. Not keyed on
+        // every version: an ordinary save would then remount the form and
+        // throw away its own "Saved." live region (R-101).
+        key={versions.find((row) => row.restoredFromVersion !== null)?.id ?? 'original'}
         defaults={{
           name: template.name,
           kind: template.kind,
@@ -79,6 +100,21 @@ export default async function TemplatePage({
         approveAction={approveTranslation}
         retireAction={retireTemplate.bind(null, template.id)}
         active={template.active}
+      />
+
+      <TemplateHistoryPanel
+        versions={versions.map((row) => ({
+          id: row.id,
+          version: row.version,
+          name: row.name,
+          subject: row.subject,
+          body: row.body,
+          savedAt: friendlyTimestamp(row.createdAt, zone),
+          savedByName: row.savedBy.name,
+          restoredFromVersion: row.restoredFromVersion,
+        }))}
+        restoreAction={restoreTemplateVersion.bind(null, template.id)}
+        duplicateAction={duplicateTemplate.bind(null, template.id)}
       />
     </div>
   )

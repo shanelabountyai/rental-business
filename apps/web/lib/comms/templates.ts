@@ -107,3 +107,23 @@ export async function renderForRecipient(
     language,
   }
 }
+
+/// A template's saved versions, newest first (R-264). Kept out of
+/// TEMPLATE_SELECT, which the picker and the send path also read.
+export async function listTemplateVersions(templateId: string) {
+  return prisma.messageTemplateVersion.findMany({
+    where: { templateId },
+    orderBy: { version: 'desc' },
+    select: {
+      id: true,
+      version: true,
+      name: true,
+      kind: true,
+      subject: true,
+      body: true,
+      restoredFromVersion: true,
+      createdAt: true,
+      savedBy: { select: { name: true } },
+    },
+  })
+}

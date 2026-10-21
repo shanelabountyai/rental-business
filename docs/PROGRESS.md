@@ -14614,3 +14614,27 @@ Re-opens the project for two rows from the post-closure second-pass review of th
 **Real bug found.** `sms-intake.test.ts`'s `afterAll` timed out on every run, on main too. It deleted `NotificationDelivery` rows filtered on `notification.recipientId` alone. The only recipient index leads with `recipientType`, so Postgres scanned all 1.1M rows in the shared test database (64s measured). The fix adds `recipientType: 'STAFF'` to the filter. Cleanup hooks in `inbound-email.test.ts`, `emergency.test.ts` and `verify.test.ts` time out only some of the time under full-suite load. Each passes alone, and no single query in them is slow.
 
 **Gate.** lint and typecheck clean. `npm test`: **3,565 passed + 4 skipped of 3,569**, with two file-level cleanup-hook timeouts (`emergency.test.ts`, `verify.test.ts`) that pass rerun alone (22 of 22). No schema change, no e2e touched. CI owns the full sweep.
+
+
+## R-264 — template version history, duplicate, restore
+**Commit:** `PENDING`  ·  **Date:** 2026-10-20
+
+**What it built.**
+- `MessageTemplateVersion` (migration `20261020200000_message_template_version`): one row per content-changing save, with who and when, plus `restoredFromVersion`. The migration backfills each existing template's current words as version 1.
+- `recordVersion` in `apps/web/lib/comms/template-actions.ts` runs inside `saveTemplate`'s transaction. A save that changes nothing writes no version.
+- `restoreTemplateVersion` saves an old version again as a new one, re-validated against today's merge-field catalogue, and audits it as `template.restored` (new action in `packages/core/audit/events.ts`).
+- `duplicateTemplate` creates "Copy of <name>" with its own version 1. Translations are copied without their approvals.
+- History panel on `/messages/templates/[id]` (`components/comms/template-history-panel.tsx`): versions newest first, with the words behind a disclosure, a restore button per older version, and a duplicate button. The demo seed writes version 1 for its template.
+
+**What it decided.**
+- D-330: restore is a new version, not a rewind. Versions cascade with the template, with no append-only trigger, because only test and demo-seed cleanup ever delete a template. Duplicates copy translations unapproved.
+- `TemplateEditor` is keyed on the newest *restore* row only. Without the key, the editor's `useState` keeps the pre-restore words and the next Save quietly undoes the restore. Keying on every version would remount the form on each ordinary save and throw away its "Saved." live region (R-101).
+- The page now uses `requireScope`, for the timestamp zone (first property in scope, as the announcement history page does). Its `RESOURCE_LESS_GUARDS` exemption in `route-guards.test.ts` is removed, because the test refuses a stale exemption.
+
+**What it left behind.**
+- No side-by-side diff between versions; each version's full text is shown instead.
+- Wording from before this migration exists only in the `template.saved` audit rows.
+- System texts (D-44) are not versioned. R-268 owns that, and it is gated on OQ-20.
+- Not walked in a browser.
+
+**Gate.** lint and typecheck clean, `npm run build` clean, `check:ship-deps` clean, `db:ci` no drift. `npm test`: 3,563 passed + 4 skipped, with 1 failure: the stale guard exemption above, fixed, and `route-guards.test.ts` rerun at 167 of 167. e2e `templates.spec.ts`: **24 passed of 24** (12 tests × `desktop-chrome` + `mobile-chrome`), including the new version-history test. CI owns the full sweep.

@@ -227,7 +227,6 @@ const RESOURCE_LESS_GUARDS: Record<string, string> = {
   'app/(admin)/messages/templates/page.tsx':
     'A managed message template is portfolio-wide (COMM-03, R-049): the same notice goes out from every property, and there is nothing property-shaped to scope it to. Refusing a property-scoped manager is the intended answer, not an accident.',
   'app/(admin)/messages/templates/new/page.tsx': 'Same as the template list above.',
-  'app/(admin)/messages/templates/[id]/page.tsx': 'Same as the template list above.',
   'lib/comms/template-actions.ts':
     'Same as the message-template pages. `template.approve` is on the same footing and stricter still - signing off a legal translation is a claim about wording used everywhere.',
   'app/(admin)/documents/templates/page.tsx':

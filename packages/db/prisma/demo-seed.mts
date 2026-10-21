@@ -4089,6 +4089,17 @@ async function seedDemoData() {
       subject: MESSAGE_TEMPLATE_SUBJECT,
       body: MESSAGE_TEMPLATE_BODY,
       createdByStaffId: staff.id,
+      // Its version 1, as the app's own save writes it (R-264).
+      versions: {
+        create: {
+          version: 1,
+          name: MESSAGE_TEMPLATE_NAME,
+          kind: 'ROUTINE',
+          subject: MESSAGE_TEMPLATE_SUBJECT,
+          body: MESSAGE_TEMPLATE_BODY,
+          savedByStaffId: staff.id,
+        },
+      },
     },
   })
 

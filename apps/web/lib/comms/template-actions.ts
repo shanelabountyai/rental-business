@@ -3,6 +3,7 @@
 import { TEMPLATE_KINDS, validateTemplate } from '@rental/core/comms'
 import type { TemplateKind } from '@rental/core/comms'
 import { prisma } from '@rental/db'
+import type { Prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { audit } from '@/lib/audit/index.ts'
@@ -26,6 +27,40 @@ export interface TemplateFormState {
 function str(formData: FormData, name: string): string {
   const value = formData.get(name)
   return typeof value === 'string' ? value.trim() : ''
+}
+
+interface TemplateContent {
+  name: string
+  kind: string
+  subject: string | null
+  body: string
+}
+
+/// Appends the template's new state to its history (R-264). Call it AFTER the
+/// template row is written in the same transaction: that write holds the row
+/// lock, so a concurrent save waits here and then reads the number this one
+/// took. The unique key is the backstop if it ever does not.
+async function recordVersion(
+  tx: Prisma.TransactionClient,
+  templateId: string,
+  content: TemplateContent,
+  staffId: string,
+  restoredFromVersion: number | null = null,
+): Promise<number> {
+  const latest = await tx.messageTemplateVersion.findFirst({
+    where: { templateId },
+    orderBy: { version: 'desc' },
+    select: { version: true },
+  })
+  const version = (latest?.version ?? 0) + 1
+  await tx.messageTemplateVersion.create({
+    data: { templateId, version, ...content, savedByStaffId: staffId, restoredFromVersion },
+  })
+  return version
+}
+
+function sameContent(a: TemplateContent, b: TemplateContent): boolean {
+  return a.name === b.name && a.kind === b.kind && a.subject === b.subject && a.body === b.body
 }
 
 export async function saveTemplate(
@@ -79,6 +114,11 @@ export async function saveTemplate(
           data: { ...input, createdByStaffId: actor.id },
         })
     savedId = saved.id
+    // A save that changed nothing is not a version. Otherwise pressing Save
+    // twice buries the real history under identical rows.
+    if (!existing || !sameContent(existing, input)) {
+      await recordVersion(tx, saved.id, input, actor.id)
+    }
 
     await audit(
       {
@@ -99,6 +139,125 @@ export async function saveTemplate(
   revalidatePath('/messages/templates')
   if (!templateId) redirect(`/messages/templates/${savedId}`)
   return { notice: 'Saved.' }
+}
+
+/**
+ * Puts an older version's words back (R-264). NOT A REWIND: the restore is a
+ * new version that copies the old one, so the history still shows what was
+ * live in between, and who brought the old words back.
+ */
+export async function restoreTemplateVersion(
+  templateId: string,
+  _previous: TemplateFormState,
+  formData: FormData,
+): Promise<TemplateFormState> {
+  const actor = await requirePermission('template.write')
+  const versionId = str(formData, 'versionId')
+
+  const [current, old] = await Promise.all([
+    prisma.messageTemplate.findUnique({
+      where: { id: templateId },
+      select: { name: true, kind: true, subject: true, body: true },
+    }),
+    prisma.messageTemplateVersion.findFirst({
+      where: { id: versionId, templateId },
+      select: { version: true, name: true, kind: true, subject: true, body: true },
+    }),
+  ])
+  if (!current || !old) return { error: 'That version no longer exists.' }
+
+  const content: TemplateContent = { name: old.name, kind: old.kind, subject: old.subject, body: old.body }
+  if (sameContent(current, content)) return { notice: 'That is already what the template says.' }
+
+  // RE-VALIDATED, because the merge-field catalogue can have moved since the
+  // old version was written. Restoring words that name a field that no longer
+  // exists would put a broken template back in the picker.
+  const violations = validateTemplate({ ...content, kind: content.kind as TemplateKind })
+  if (violations.length > 0) {
+    return {
+      error: `Version ${old.version} cannot be restored as it stands: ${violations.map((v) => v.message).join(' ')}`,
+    }
+  }
+
+  let version = 0
+  await prisma.$transaction(async (tx) => {
+    await tx.messageTemplate.update({
+      where: { id: templateId },
+      data: { ...content, updatedByStaffId: actor.id },
+    })
+    version = await recordVersion(tx, templateId, content, actor.id, old.version)
+    await audit(
+      {
+        action: 'template.restored',
+        entityType: 'MessageTemplate',
+        entityId: templateId,
+        before: current,
+        after: { ...content, restoredFromVersion: old.version },
+      },
+      tx,
+    )
+  })
+
+  revalidatePath('/messages/templates')
+  revalidatePath(`/messages/templates/${templateId}`)
+  return { notice: `Restored version ${old.version} as version ${version}.` }
+}
+
+/**
+ * Copies a template into a new one to edit (R-264). Translations come along
+ * UNAPPROVED: an approval vouches for one template's legal wording, and the
+ * copy exists to be reworded.
+ */
+export async function duplicateTemplate(
+  templateId: string,
+  _previous: TemplateFormState,
+  _formData: FormData,
+): Promise<TemplateFormState> {
+  const actor = await requirePermission('template.write')
+
+  const source = await prisma.messageTemplate.findUnique({
+    where: { id: templateId },
+    select: {
+      name: true,
+      kind: true,
+      subject: true,
+      body: true,
+      translations: { select: { locale: true, subject: true, body: true } },
+    },
+  })
+  if (!source) return { error: 'That template no longer exists.' }
+
+  const content: TemplateContent = {
+    name: `Copy of ${source.name}`,
+    kind: source.kind,
+    subject: source.subject,
+    body: source.body,
+  }
+
+  let copyId = ''
+  await prisma.$transaction(async (tx) => {
+    const copy = await tx.messageTemplate.create({
+      data: {
+        ...content,
+        createdByStaffId: actor.id,
+        translations: { create: source.translations },
+      },
+    })
+    copyId = copy.id
+    await recordVersion(tx, copy.id, content, actor.id)
+    await audit(
+      {
+        action: 'template.saved',
+        entityType: 'MessageTemplate',
+        entityId: copy.id,
+        after: { ...content, duplicatedFrom: templateId },
+      },
+      tx,
+    )
+  })
+
+  revalidatePath('/messages/templates')
+  redirect(`/messages/templates/${copyId}`)
 }
 
 export async function retireTemplate(

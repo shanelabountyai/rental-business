@@ -210,6 +210,63 @@ test.describe('writing a template (COMM-03)', () => {
   })
 })
 
+test.describe('version history (R-264)', () => {
+  test('every save is a version; a restore is a NEW version and the editor shows it; duplicate copies it', async ({
+    page,
+  }) => {
+    await seedTenancy()
+    await signIn(page, await seedStaff('owner'))
+    await page.goto('/messages/templates/new')
+
+    const name = `Versioned ${randomUUID().slice(0, 6)}`
+    await page.getByLabel('Template name').fill(name)
+    await page.getByLabel('Message', { exact: true }).fill('First wording, {{tenant.first_name}}.')
+    await page.getByRole('button', { name: 'Save template' }).click()
+    await page.waitForURL(/\/messages\/templates\/(?!new$)[a-z0-9]+$/)
+    const template = await prisma.messageTemplate.findFirstOrThrow({ where: { name } })
+    templateIds.push(template.id)
+
+    await page.getByLabel('Message', { exact: true }).fill('Second wording, {{tenant.first_name}}.')
+    await page.getByRole('button', { name: 'Save template' }).click()
+    // Polled on the row, not the "Saved." notice: the version list is what the
+    // next step clicks, and it is written by the same action.
+    await expect
+      .poll(() => prisma.messageTemplateVersion.count({ where: { templateId: template.id } }))
+      .toBe(2)
+    await page.reload()
+
+    await page.getByRole('button', { name: 'Restore version 1' }).click()
+    await expect(page.getByText('Restored version 1 as version 3.')).toBeVisible()
+
+    const versions = await prisma.messageTemplateVersion.findMany({
+      where: { templateId: template.id },
+      orderBy: { version: 'asc' },
+    })
+    expect(versions.map((v) => [v.version, v.body, v.restoredFromVersion])).toEqual([
+      [1, 'First wording, {{tenant.first_name}}.', null],
+      [2, 'Second wording, {{tenant.first_name}}.', null],
+      [3, 'First wording, {{tenant.first_name}}.', 1],
+    ])
+    // THE EDITOR SHOWS THE RESTORED WORDS. Otherwise the next Save quietly
+    // writes version 2's text back over the restore.
+    await expect(page.getByLabel('Message', { exact: true })).toHaveValue(
+      'First wording, {{tenant.first_name}}.',
+    )
+    const audited = await prisma.auditLog.findFirstOrThrow({
+      where: { entityId: template.id, action: 'template.restored' },
+    })
+    expect(audited.after).toMatchObject({ restoredFromVersion: 1 })
+
+    await page.getByRole('button', { name: 'Duplicate this template' }).click()
+    await page.waitForURL((url) => !url.pathname.endsWith(template.id))
+    const copy = await prisma.messageTemplate.findFirstOrThrow({ where: { name: `Copy of ${name}` } })
+    templateIds.push(copy.id)
+    expect(copy.body).toBe('First wording, {{tenant.first_name}}.')
+    expect(await prisma.messageTemplateVersion.count({ where: { templateId: copy.id } })).toBe(1)
+    await expect(page.getByRole('heading', { name: `Copy of ${name}` })).toBeVisible()
+  })
+})
+
 test.describe('approving a translation — the rule COMM-03 rests on', () => {
   async function seedLegalTemplateWithUnapprovedSpanish(staffId: string) {
     const template = await prisma.messageTemplate.create({

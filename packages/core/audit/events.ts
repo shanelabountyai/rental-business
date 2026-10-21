@@ -542,6 +542,10 @@ export const AUDIT_ACTIONS = [
   /// so the audit row and the document's own index agree.
   'tax.packet_archived',
   'template.saved',
+  /// R-264: an older version's words were put back. Its own action rather
+  /// than another `template.saved`, because "who brought the old notice back"
+  /// is a different question from "who wrote it".
+  'template.restored',
   /// R-049: a translation was marked approved for a LEGAL notice. THE most
   /// consequential row in this area. The product cannot verify an attorney
   /// read it; it can only record who claimed so, and this is that record.
