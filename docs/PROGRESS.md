@@ -14640,7 +14640,7 @@ Re-opens the project for two rows from the post-closure second-pass review of th
 **Gate.** lint and typecheck clean, `npm run build` clean, `check:ship-deps` clean, `db:ci` no drift. `npm test`: 3,563 passed + 4 skipped, with 1 failure: the stale guard exemption above, fixed, and `route-guards.test.ts` rerun at 167 of 167. e2e `templates.spec.ts`: **24 passed of 24** (12 tests × `desktop-chrome` + `mobile-chrome`), including the new version-history test. CI owns the full sweep.
 
 ## R-265 — merge fields: portal link, owner name, owner phone
-**Commit:** `SHA_PENDING`  ·  **Date:** 2026-10-21
+**Commit:** `f2a23ce`  ·  **Date:** 2026-10-21
 
 **What it built.**
 - Three entries on the closed catalogue in `packages/core/comms/merge-fields.ts`: `owner.name`, `owner.phone`, `portal.link`.
