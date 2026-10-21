@@ -14595,7 +14595,7 @@ Re-opens the project for two rows from the post-closure second-pass review of th
 
 
 ## R-263 — a tenant's reply raises a Task
-**Commit:** `PENDING`  ·  **Date:** 2026-10-20
+**Commit:** `cf6c24f`  ·  **Date:** 2026-10-20
 
 **What it built.**
 - `raiseReplyTask` in `apps/web/lib/comms/messages.ts`: a `tenant_reply` Task on the tenant's `Thread` (D-210's existing `Thread` route opens the conversation), titled "Reply from <name>: <first 60 chars>", through `createTask`, so (type, thread, property-local day) makes it one Task per tenant per day. It swallows its own errors because the message is already recorded.
