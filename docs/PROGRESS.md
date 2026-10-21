@@ -14573,7 +14573,7 @@ Re-opens the project for two rows from the post-closure second-pass review of th
 **Gate.** lint (17 warnings, one new: unchanged class), typecheck, `db:drift` clean, ship-deps clean, `npm test` 3,565 passed + 4 skipped of 3,570 with one failure — the new cron route missing from the route-guard allowlist — fixed and that file re-run green. `e2e/announcements.spec.ts` on both projects against the production build: **28 passed of 28 listed**. CI owns the full sweep.
 
 ## R-262 — resend to failed recipients only
-**Commit:** `pending`  ·  **Date:** 2026-10-20
+**Commit:** `0cd1648`  ·  **Date:** 2026-10-20
 
 **What it built.**
 - The backlog row's first question answered: `/messages/announcements/history` showed only the audit row's counts — no per-recipient status — so that was built first. Both the sent and scheduled audit rows now carry `deliveryIds` in `after` (JSON, no migration); `announcementDeliveries()` in `announcement-history.ts` reads those ids LIVE off `NotificationDelivery` in one query per page, and the page shows a **Recipients** column: a native `<details>` labelled "N recipients, M failed" (recipients, not rows — every tenant has one row per channel, most SUPPRESSED) listing tenant · channel: status (reason). A row written before R-262 says "Not recorded for this send"; a cancellation shows "—".
