@@ -17,7 +17,7 @@ import {
   attachMessageDocumentsToTicket,
 } from './inbound-attachments.ts'
 import { honourEmailOptOut } from './email-opt-out.ts'
-import { receiveInboundMessage } from './messages.ts'
+import { raiseReplyTask, receiveInboundMessage } from './messages.ts'
 
 // Email-to-ticket (COMM-08, MAINT-01; R-097f).
 //
@@ -117,6 +117,7 @@ export async function handleInboundEmail(args: {
     if (decision.existingTicketId) {
       await attachMessageDocumentsToTicket(prisma, routed.messageId, decision.existingTicketId)
     }
+    await raiseReplyTask(thread.id, args.body, args.receivedAt)
     return {
       outcome: 'threaded',
       threadId: thread.id,
@@ -134,7 +135,10 @@ export async function handleInboundEmail(args: {
     orderBy: { lease: { startsOn: 'desc' } },
     select: { lease: { select: { id: true, unitId: true } } },
   })
-  if (!leaseTenant) return { outcome: 'threaded', threadId: thread.id }
+  if (!leaseTenant) {
+    await raiseReplyTask(thread.id, args.body, args.receivedAt)
+    return { outcome: 'threaded', threadId: thread.id }
+  }
 
   const habitabilityFlag = detectHabitabilityLanguage(args.body)
   const priority = suggestTicketPriority({ category: 'UNCATEGORIZED', habitabilityFlag })

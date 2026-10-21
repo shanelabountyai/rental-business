@@ -10,9 +10,11 @@ import {
   normalizePhone,
   replyAddress,
 } from '@rental/core/comms'
+import { businessDate } from '@rental/core/scheduling'
 import type { MessageChannel } from '@rental/db'
 import { type Prisma, prisma } from '@rental/db'
 import { deliverOverChannel } from '@/lib/notifications/deliver.ts'
+import { createTask } from '@/lib/tasks/create.ts'
 import { candidatesForEmail, candidatesForPhone, resolveThread } from './threads.ts'
 import { inboundEmailConfig } from './inbound-email-config.ts'
 import { type InboundAttachment, storeInboundAttachments } from './inbound-attachments.ts'
@@ -431,6 +433,44 @@ export async function receiveInboundMessage(args: {
     candidate.scope === 'VENDOR' ? candidate.partyId : null,
   )
   return { outcome: 'routed', threadId: thread.id, messageId: message.id }
+}
+
+/// R-263 (PRD 08 A8, D-329): a known tenant's reply raises a Task in the one
+/// queue (D-9) - but ONLY where the reply did not open a ticket. The intake
+/// paths call this, not `receiveInboundMessage`, because only they know: a
+/// ticket is already a queue entry, and two entries for one text is the
+/// operator closing one by hand. Carrier keywords and "stop emailing me" raise
+/// none either; they are handled, not waiting on anybody. Keyed on the thread and the property-local day, so a tenant who
+/// texts five times in an afternoon raises ONE task, which is the intended
+/// grain; a vendor's reply raises none, because R-025's work order is their
+/// queue. Only the first reply of the day names the words - the key refuses
+/// the rest - so the title is a pointer to the conversation, not the record
+/// of it. Never allowed to fail the message, for the same reason
+/// `storeAttachments` is not: the words are already recorded.
+export async function raiseReplyTask(threadId: string, body: string, receivedAt: Date): Promise<void> {
+  try {
+    const thread = await prisma.thread.findUniqueOrThrow({
+      where: { id: threadId },
+      select: {
+        propertyId: true,
+        property: { select: { timezone: true } },
+        tenant: { select: { firstName: true, lastName: true } },
+      },
+    })
+    if (!thread.tenant) return
+    const snippet = body.trim().replace(/\s+/g, ' ').slice(0, 60)
+    await createTask(prisma, {
+      propertyId: thread.propertyId,
+      type: 'tenant_reply',
+      subjectType: 'Thread',
+      subjectId: threadId,
+      businessDate: businessDate(receivedAt, thread.property.timezone),
+      priority: 'ROUTINE',
+      title: `Reply from ${thread.tenant.firstName} ${thread.tenant.lastName}: ${snippet}`,
+    })
+  } catch (error) {
+    console.error(`[inbound] reply task failed for thread ${threadId}`, error)
+  }
 }
 
 /// Never allowed to fail the message. By the time this runs the words are

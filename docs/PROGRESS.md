@@ -14593,3 +14593,24 @@ Re-opens the project for two rows from the post-closure second-pass review of th
 
 **Gate.** lint (16 warnings, none new), typecheck, ship-deps clean, `npm test` **3,565 passed + 4 skipped of 3,569**. `e2e/announcements.spec.ts` on both projects against the production build: first full run 28 passed + 2 failed of 30 (the new test expected "2 deliveries", the page said "6 deliveries" — label changed to count recipients), then the new test alone **2 passed of 2**; the 28 do not read the history page. A first attempt failed every test in 300ms — `npx playwright` called directly has no `DATABASE_URL`; the npm script's `dotenv` wrapper is load-bearing. CI owns the full sweep.
 
+
+## R-263 — a tenant's reply raises a Task
+**Commit:** `PENDING`  ·  **Date:** 2026-10-20
+
+**What it built.**
+- `raiseReplyTask` in `apps/web/lib/comms/messages.ts`: a `tenant_reply` Task on the tenant's `Thread` (D-210's existing `Thread` route opens the conversation), titled "Reply from <name>: <first 60 chars>", through `createTask`, so (type, thread, property-local day) makes it one Task per tenant per day. It swallows its own errors because the message is already recorded.
+- Called from the SMS and email intake paths (`sms-intake.ts`, `email-intake.ts`) on their tenant *threaded* outcomes only. It is not called from `receiveInboundMessage`, which cannot know whether a ticket follows.
+- `sms-intake.test.ts`: two follow-up texts on an open ticket raise exactly one reply Task, and a text that opens a ticket raises none.
+
+**What it decided.**
+- D-329 (owner call): one queue entry per reply. The ticket counts as the entry if one opened; otherwise the reply Task does. The alternative was to skip tickets for texts after an announcement. It was rejected because a repair report sent as a reply must still start the habitability clock.
+
+**What it left behind.**
+- A reply like "Tuesday works" from a tenant with nothing open still opens an uncategorized SMS ticket (R-021's rule, unchanged, accepted in D-329).
+- No assignee on reply Tasks; R-266 owns the default assignee.
+- No dashboard tile for `tenant_reply`; it shows on `/tasks` like every other type.
+- Not walked in a browser.
+
+**Real bug found.** `sms-intake.test.ts`'s `afterAll` timed out on every run, on main too. It deleted `NotificationDelivery` rows filtered on `notification.recipientId` alone. The only recipient index leads with `recipientType`, so Postgres scanned all 1.1M rows in the shared test database (64s measured). The fix adds `recipientType: 'STAFF'` to the filter. Cleanup hooks in `inbound-email.test.ts`, `emergency.test.ts` and `verify.test.ts` time out only some of the time under full-suite load. Each passes alone, and no single query in them is slow.
+
+**Gate.** lint and typecheck clean. `npm test`: **3,565 passed + 4 skipped of 3,569**, with two file-level cleanup-hook timeouts (`emergency.test.ts`, `verify.test.ts`) that pass rerun alone (22 of 22). No schema change, no e2e touched. CI owns the full sweep.

@@ -21,7 +21,7 @@ import {
   attachMessageDocumentsToTicket,
 } from './inbound-attachments.ts'
 import { recordOptIn, recordOptOut } from './opt-out-store.ts'
-import { receiveInboundMessage } from './messages.ts'
+import { raiseReplyTask, receiveInboundMessage } from './messages.ts'
 
 // SMS-to-ticket (MAINT-01, COMM-01, R-021).
 //
@@ -137,6 +137,7 @@ export async function handleInboundSms(args: {
     // which is how a phone sends them - had the words on the ticket and the
     // picture nowhere the vendor could reach (D-204).
     await attachMessageDocumentsToTicket(prisma, routed.messageId, decision.existingTicketId)
+    await raiseReplyTask(thread.id, args.body, args.receivedAt)
     return {
       outcome: 'threaded',
       threadId: thread.id,
@@ -160,6 +161,7 @@ export async function handleInboundSms(args: {
     // only if a lease was removed between routing and here. Threaded, no
     // ticket: a Ticket needs a unit, and inventing one is worse than not
     // opening it.
+    await raiseReplyTask(thread.id, args.body, args.receivedAt)
     return { outcome: 'threaded', threadId: thread.id }
   }
 

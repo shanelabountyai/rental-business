@@ -116,12 +116,16 @@ afterAll(async () => {
   // written by the code under test, not by the test (R-189).
   await prisma.document.deleteMany({ where: { propertyId: { in: propertyIds } } })
   await prisma.ticket.deleteMany({ where: { id: { in: ticketIds } } })
+  await prisma.task.deleteMany({ where: { type: 'tenant_reply', propertyId: { in: propertyIds } } })
   await prisma.unroutedMessage.deleteMany({
     where: { fromAddress: { in: [UNKNOWN_PHONE] } },
   })
   await prisma.workOrder.deleteMany({ where: { vendorId } })
+  // recipientType too: Notification's only recipient index LEADS with it, so
+  // filtering on recipientId alone seq-scanned 1.1M rows (64s) and timed the
+  // hook out on every run (found in R-263).
   await prisma.notificationDelivery.deleteMany({
-    where: { notification: { recipientId: onCallId } },
+    where: { notification: { recipientType: 'STAFF', recipientId: onCallId } },
   })
   await prisma.staffAssignment.deleteMany({ where: { staffUserId: onCallId } })
   await prisma.staffUser.updateMany({ where: { id: onCallId }, data: { active: false } })
@@ -357,13 +361,27 @@ describe('a conversation does not become five tickets', () => {
     // Still just the tickets each earlier test opened - these three texts
     // produced exactly one between them.
     expect(opened).toBe(ticketIds.length)
+
+    // R-263 / D-329: the two follow-ups threaded rather than ticketed, so the
+    // operator gets a reply Task - one, keyed on (thread, today), not two.
+    const replyTasks = await prisma.task.findMany({
+      where: { type: 'tenant_reply', subjectId: first.threadId },
+    })
+    expect(replyTasks).toHaveLength(1)
+    expect(replyTasks[0]?.subjectType).toBe('Thread')
+    expect(replyTasks[0]?.title).toMatch(/^Reply from .+: /)
   })
 
   it('opens a new ticket once the previous one is closed', async () => {
     await closeOpenTickets()
+    const replyTasks = () => prisma.task.count({ where: { type: 'tenant_reply', property: { id: { in: propertyIds } } } })
+    const before = await replyTasks()
 
     const result = await text('Different problem: the garage door will not open')
     expect(result.outcome).toBe('ticket_opened')
+    // D-329: the ticket IS the queue entry. A reply Task beside it would be
+    // a second entry for one text.
+    expect(await replyTasks()).toBe(before)
   })
 })
 
