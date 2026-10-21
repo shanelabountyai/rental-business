@@ -14659,7 +14659,7 @@ Re-opens the project for two rows from the post-closure second-pass review of th
 **Gate.** lint and typecheck clean (lint's `requirePermission` warnings predate this item). `npm test`: 3,564 passed + 4 skipped. e2e `templates.spec.ts`: 18 of 18 passed, twice in a row with `--retries=0`, on both `desktop-chrome` and `mobile-chrome`. The first run with the new assertion went red on the sibling-tenancy race above.
 
 ## R-266 — messaging settings: quiet hours, SMS footer, reply assignee
-**Commit:** `PENDING`  ·  **Date:** 2026-10-21
+**Commit:** `f83b7e9`  ·  **Date:** 2026-10-21
 
 **What it built.**
 - `/messages/settings`, linked from Messages. A portfolio-wide grant sees the business name and the default reply-Task assignee. Every `template.write` holder sees quiet hours for the properties in their scope, one form per property.
