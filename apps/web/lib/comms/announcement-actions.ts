@@ -94,7 +94,7 @@ export async function sendAnnouncement(
   // template or unticks the tenant, rather than learning from the results
   // table that someone was quietly left out. The per-lease skip below stays
   // for a tenancy that changed between this check and the loop.
-  const { problems } = await previewAnnouncement(template, leaseIds)
+  const { problems, smsFooter } = await previewAnnouncement(template, leaseIds)
   if (problems.length > 0) {
     return { error: `Not sent. ${problems.slice(0, 5).join('; ')}.` }
   }
@@ -202,7 +202,7 @@ export async function sendAnnouncement(
         email: tenant.email,
         phone: tenant.phone,
       },
-      context: { subject: rendered.subject, body: rendered.body },
+      context: { subject: rendered.subject, body: rendered.body, smsFooter },
       propertyId: lease.propertyId,
       sendAfter: sendAfterByLease.get(lease.id) ?? null,
       // Keyed on the FACT — this lease, this template, this property-local

@@ -58,7 +58,11 @@ const SENSITIVE_PATTERNS: readonly RegExp[] = [
   /credential/i,
   /apikey|api_key/i,
   /codes?$/i,
-  /ssn|socialsecurity/i,
+  // `ssn` as a camelCase word only (`ssn`, `tenantSsn`, `SSN`), not as
+  // letters inside one: case-insensitive, it matched `busineSSName` and
+  // blanked every business name in the trail (R-266).
+  /^ssn|Ssn|SSN/,
+  /socialsecurity/i,
 ]
 
 /**

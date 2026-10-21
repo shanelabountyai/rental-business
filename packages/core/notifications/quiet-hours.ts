@@ -25,11 +25,20 @@ export interface QuietHours {
  * the conservative common-practice choice and not a citation - the same
  * posture R-010 takes toward its seeded jurisdiction numbers.
  *
- * Not yet per-property configurable. Whichever item first has an operator ask
- * for that adds a column and reads it here; nothing else has to change,
- * because every caller already goes through these two functions.
+ * A property may set its own window (R-266); `quietHoursOf` reads it.
  */
 export const DEFAULT_QUIET_HOURS: QuietHours = { startHour: 21, endHour: 8 }
+
+/// A property's own window, or the default when it has none. The database
+/// keeps the pair both set or both null.
+export function quietHoursOf(property: {
+  quietHoursStart: number | null
+  quietHoursEnd: number | null
+}): QuietHours {
+  return property.quietHoursStart === null || property.quietHoursEnd === null
+    ? DEFAULT_QUIET_HOURS
+    : { startHour: property.quietHoursStart, endHour: property.quietHoursEnd }
+}
 
 /// Handles the ordinary overnight window (21 -> 8, wrapping midnight) and the
 /// degenerate same-day one (13 -> 17) without the caller caring which it has.

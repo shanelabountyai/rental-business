@@ -11,6 +11,7 @@ import {
 import { prisma } from '@rental/db'
 
 import { authUrl } from '../auth/delivery.ts'
+import { messagingSettings } from '@/lib/comms/messaging-settings.ts'
 
 // Turning a real tenancy into merge-field values (COMM-03, R-049).
 //
@@ -54,8 +55,6 @@ export interface TemplateAudience extends TenancyRef {
   email: string | null
   phone: string | null
 }
-
-export const COMPANY_NAME = 'Rental Operations'
 
 export async function templateValues(
   ref: TenancyRef,
@@ -169,7 +168,7 @@ export async function templateValues(
     'balance.total': owed > 0 ? formatCents(owed) : null,
     'balance.due_on': friendlyBusinessDate(dueDateOnOrAfter(today, lease.rentDueDay)),
     today: friendlyBusinessDate(today),
-    'company.name': COMPANY_NAME,
+    'company.name': (await messagingSettings()).businessName,
     // No per-property contact number exists on Property yet, so this is the
     // one merge field with nothing behind it. Null rather than a placeholder:
     // `renderTemplate` leaves the token visible and the send path refuses,

@@ -10,6 +10,7 @@ import {
   mayAutoRetry,
   isNotificationCategory,
   quietHoursEndAfter,
+  quietHoursOf,
   renderTemplate,
   resolveChannels,
   templateFor,
@@ -222,23 +223,24 @@ export async function notify(
     }).map((decision) => [decision.channel, decision]),
   )
 
-  // Quiet hours need the property's own timezone (D-3). Loaded once for the
-  // whole fan-out rather than per channel.
-  const timezone =
+  // Quiet hours need the property's own timezone (D-3) and its own window
+  // (R-266). Loaded once for the whole fan-out rather than per channel.
+  const quietProperty =
     input.propertyId && !bypassesQuietHours(input.category) && !input.urgent
-      ? (
-          await db.property.findUnique({
-            where: { id: input.propertyId },
-            select: { timezone: true },
-          })
-        )?.timezone
-      : undefined
+      ? await db.property.findUnique({
+          where: { id: input.propertyId },
+          select: { timezone: true, quietHoursStart: true, quietHoursEnd: true },
+        })
+      : null
+  const timezone = quietProperty?.timezone
 
   const notBefore =
     input.sendAfter && input.sendAfter.getTime() > now.getTime() ? input.sendAfter : null
   const at = notBefore ?? now
   const deferUntil =
-    timezone && withinQuietHours(at, timezone) ? quietHoursEndAfter(at, timezone) : notBefore
+    quietProperty && withinQuietHours(at, quietProperty.timezone, quietHoursOf(quietProperty))
+      ? quietHoursEndAfter(at, quietProperty.timezone, quietHoursOf(quietProperty))
+      : notBefore
 
   // Asked ONCE for the whole fan-out rather than per channel, and only when
   // an SMS is actually on the table (R-040e). A carrier block is a fact about
@@ -502,14 +504,15 @@ async function scheduleRetry(args: {
   const at = new Date(args.now.getTime() + delay * 60_000)
   if (!args.propertyId || args.urgent || bypassesQuietHours(args.category)) return at
 
-  const timezone = (
-    await prisma.property.findUnique({
-      where: { id: args.propertyId },
-      select: { timezone: true },
-    })
-  )?.timezone
-  if (!timezone) return at
-  return withinQuietHours(at, timezone) ? quietHoursEndAfter(at, timezone) : at
+  const property = await prisma.property.findUnique({
+    where: { id: args.propertyId },
+    select: { timezone: true, quietHoursStart: true, quietHoursEnd: true },
+  })
+  if (!property) return at
+  const quiet = quietHoursOf(property)
+  return withinQuietHours(at, property.timezone, quiet)
+    ? quietHoursEndAfter(at, property.timezone, quiet)
+    : at
 }
 
 interface RecordInput {

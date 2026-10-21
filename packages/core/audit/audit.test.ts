@@ -31,6 +31,9 @@ describe('redaction', () => {
     'lockboxCode',
     'smartLockCode',
     'ssn',
+    'tenantSsn',
+    'ssnLast4',
+    'SSN',
     'accountNumber',
   ])('treats %s as sensitive', (field) => {
     expect(isSensitiveField(field)).toBe(true)
@@ -47,6 +50,8 @@ describe('redaction', () => {
     'stripeCustomerId',
     'addressLine1',
     'capturedAt',
+    // R-266: "ss" then "n" inside a word is not an SSN.
+    'businessName',
   ])('leaves %s alone', (field) => {
     expect(isSensitiveField(field)).toBe(false)
   })
@@ -125,10 +130,12 @@ describe('redaction keeps up with the schema', () => {
   // `gateCode` column forces a decision instead of silently landing in audit
   // payloads. Exemption is deliberate and reviewable; forgetting is not.
   it('handles every field in the schema that looks like a secret', () => {
-    const looksSensitive = /password|secret|token|credential|apikey|ssn|codes?$/i
+    const looksSensitive = /password|secret|token|credential|apikey|codes?$/i
+    // `ssn` as a word, the same rule redact.ts applies (R-266).
+    const looksLikeSsn = /^ssn|Ssn|SSN/
     const unhandled = schemaFields.filter(
       ({ field }) =>
-        looksSensitive.test(field) &&
+        (looksSensitive.test(field) || looksLikeSsn.test(field)) &&
         !isSensitiveField(field) &&
         !ALWAYS_SAFE.has(field.toLowerCase()),
     )

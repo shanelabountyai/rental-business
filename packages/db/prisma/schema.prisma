@@ -548,6 +548,12 @@ model Property {
   /// otherwise about.
   moldHistoryNotes   String?
   bedbugHistoryNotes String?
+  /// R-266 (PRD 08 B5): this property's quiet hours, local whole hours with
+  /// the same meaning as `QuietHours` in packages/core/notifications. Both
+  /// null means DEFAULT_QUIET_HOURS; a CHECK keeps them both set or both
+  /// null, 0-23 and unequal (an equal pair would mean no quiet hours at all).
+  quietHoursStart    Int?
+  quietHoursEnd      Int?
   active             Boolean      @default(true)
   createdAt          DateTime     @default(now())
   updatedAt          DateTime     @updatedAt
@@ -2050,6 +2056,7 @@ model StaffUser {
   workOrderMessagesLinked                 WorkOrderMessageLink[]
   ticketsAcknowledged                     Ticket[]                        @relation("TicketAcknowledgedBy")
   tasksAssigned                           Task[]                          @relation("TaskAssignedTo")
+  messagingReplyAssignee                  MessagingSettings[]             @relation("MessagingReplyAssignee")
   tasksCompleted                          Task[]                          @relation("TaskCompletedBy")
   inspectionsPerformed                    Inspection[]                    @relation("InspectionPerformedBy")
   noticesServed                           Notice[]                        @relation("NoticeServedBy")
@@ -6839,4 +6846,20 @@ model ReceivableWriteOff {
 
   @@index([leaseId])
   @@index([propertyId])
+}
+
+/// R-266 (PRD 08 B5): the deployment's messaging settings, ONE row (a CHECK
+/// pins the id to 'default'). R-285 turns that into one row per organisation.
+/// Quiet hours are per property and live on `Property`.
+model MessagingSettings {
+  id                       String   @id @default("default")
+  /// Names the business in every announcement's SMS footer and fills
+  /// `{{company.name}}`. Null means COMPANY_NAME.
+  businessName             String?
+  /// Who a tenant's reply Task (R-263) is assigned to. Null means anyone. Used
+  /// only while this person is active and holds `task.write` over the property.
+  replyTaskAssigneeStaffId String?
+  updatedAt                DateTime @updatedAt
+
+  replyTaskAssignee StaffUser? @relation("MessagingReplyAssignee", fields: [replyTaskAssigneeStaffId], references: [id])
 }

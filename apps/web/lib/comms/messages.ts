@@ -18,6 +18,7 @@ import { createTask } from '@/lib/tasks/create.ts'
 import { candidatesForEmail, candidatesForPhone, resolveThread } from './threads.ts'
 import { inboundEmailConfig } from './inbound-email-config.ts'
 import { type InboundAttachment, storeInboundAttachments } from './inbound-attachments.ts'
+import { replyTaskAssignee } from '@/lib/comms/messaging-settings.ts'
 
 // Writing to a thread (COMM-01, R-017).
 //
@@ -453,11 +454,18 @@ export async function raiseReplyTask(threadId: string, body: string, receivedAt:
       where: { id: threadId },
       select: {
         propertyId: true,
-        property: { select: { timezone: true } },
+        property: { select: { timezone: true, legalEntityId: true } },
         tenant: { select: { firstName: true, lastName: true } },
       },
     })
     if (!thread.tenant) return
+    // R-266: the default assignee from messaging settings, when they can
+    // work this property. Only a NEW task takes it; the key returns the
+    // day's existing one untouched, so a claim is never overwritten.
+    const assigneeStaffId = await replyTaskAssignee({
+      id: thread.propertyId,
+      legalEntityId: thread.property.legalEntityId,
+    })
     const snippet = body.trim().replace(/\s+/g, ' ').slice(0, 60)
     await createTask(prisma, {
       propertyId: thread.propertyId,
@@ -466,6 +474,7 @@ export async function raiseReplyTask(threadId: string, body: string, receivedAt:
       subjectId: threadId,
       businessDate: businessDate(receivedAt, thread.property.timezone),
       priority: 'ROUTINE',
+      assigneeStaffId,
       title: `Reply from ${thread.tenant.firstName} ${thread.tenant.lastName}: ${snippet}`,
     })
   } catch (error) {

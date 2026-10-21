@@ -269,6 +269,8 @@ const RESOURCE_LESS_GUARDS: Record<string, string> = {
   'lib/import/actions.ts': 'Same as the import page above.',
   'lib/import/documents.ts':
     'Same as the import page above - the manifest can name a property in any entity, so there is no single resource to scope the guard to.',
+  'lib/comms/messaging-settings-actions.ts':
+    'R-266: the business name and the default reply assignee are one row for the whole deployment (D-332). The same file\'s quiet-hours action is checked against its property.',
 }
 
 const RESOURCE_LESS = /requirePermission\(\s*'[a-z_.]+'\s*\)/

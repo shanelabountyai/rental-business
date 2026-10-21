@@ -158,6 +158,7 @@ export function AnnouncementPreviewPanel({
           <span className="text-muted-foreground text-xs">As {preview.sample.tenantName} sees it</span>
           {preview.sample.subject && <span className="font-medium">{preview.sample.subject}</span>}
           <span className="whitespace-pre-wrap">{preview.sample.body}</span>
+          <span className="text-muted-foreground">Texts end with: {preview.smsFooter}</span>
         </div>
       )}
       <p className="text-sm">
@@ -174,7 +175,7 @@ export function AnnouncementPreviewPanel({
       {preview.quietHeld > 0 && preview.quietUntil && (
         <p className="bg-warning/10 text-warning rounded-md p-3 text-sm">
           {preview.quietHeld} {preview.quietHeld === 1 ? 'text is' : 'texts are'} held by quiet
-          hours until {preview.quietUntil}. Email is not held.
+          hours until {preview.quietUntil}. Email to the same tenants waits too.
         </p>
       )}
       {preview.problems.length > 0 && (

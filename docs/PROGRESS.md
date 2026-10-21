@@ -14657,3 +14657,30 @@ Re-opens the project for two rows from the post-closure second-pass review of th
 **Found along the way.** Every test in `e2e/templates.spec.ts` seeds an identical 2099-01-01 lease, and `previewTenancy` picks the newest, so each preview test has been rendering an arbitrary sibling's tenancy. That was harmless only while all of them looked the same. The preview test now seeds 2099-01-02. R-264's entry counted 24 runs from 12 tests; the file has 9 tests, so 18 runs.
 
 **Gate.** lint and typecheck clean (lint's `requirePermission` warnings predate this item). `npm test`: 3,564 passed + 4 skipped. e2e `templates.spec.ts`: 18 of 18 passed, twice in a row with `--retries=0`, on both `desktop-chrome` and `mobile-chrome`. The first run with the new assertion went red on the sibling-tenancy race above.
+
+## R-266 — messaging settings: quiet hours, SMS footer, reply assignee
+**Commit:** `PENDING`  ·  **Date:** 2026-10-21
+
+**What it built.**
+- `/messages/settings`, linked from Messages. A portfolio-wide grant sees the business name and the default reply-Task assignee. Every `template.write` holder sees quiet hours for the properties in their scope, one form per property.
+- Migration `20261021120000_messaging_settings`. It adds `Property.quietHoursStart`/`quietHoursEnd` (nullable; a CHECK requires both or neither, 0–23, unequal) and a one-row `MessagingSettings` table (CHECK `id = 'default'`).
+- `quietHoursOf` in `packages/core/notifications/quiet-hours.ts`. All three quiet-hours reads use it: `notify()`'s deferral, the retry scheduler and the announcement preview.
+- Every announcement text now ends with `<business name>. Reply STOP to opt out.` `announcementTemplate` adds it on SMS only. The preview counts it in segments, cost and the 1,600-character gate, and shows it under the sample. The business name also fills `{{company.name}}`. `COMPANY_NAME` moved to `lib/comms/messaging-settings.ts` and is the fallback.
+- `raiseReplyTask` assigns the configured person via `replyTaskAssignee`, but only while they are active and hold `task.write` over the property.
+- Audit: `messaging_settings.updated` for the portfolio form, `property.updated` for quiet hours.
+
+**What it decided.**
+- D-332: where each setting lives, texts-only footer, `template.write` as the gate, and no way to switch quiet hours off.
+
+**What it left behind.**
+- Sender number per organisation: R-275 (as the backlog row says). 10DLC status: R-273.
+- One settings row for the deployment; R-285 makes it per organisation.
+- The assignee picker lists anyone holding `task.write` anywhere. Whether they cover a given property is decided per reply, so a property-scoped pick silently leaves other properties' replies unclaimed. That is correct but not shown on the page.
+- Not walked in a browser beyond e2e.
+
+**Found along the way.**
+- **The audit redactor blanked every business name.** `/ssn/i` matched "busi**ssN**ame", so any field with those letters inside a word went to `[redacted]`. The pattern is now a camelCase word (`/^ssn|Ssn|SSN/`), and the schema canary in `audit.test.ts` uses the same rule. Found when the e2e read back its own audit row.
+- **The announcement preview said "Email is not held."** That was false: `notify()` defers every channel during quiet hours (only `maintenance_emergency` bypasses). The copy now says email waits too.
+- The first e2e version asserted on the shared settings row and lost to the other Playwright project running the same test at the same moment. It now reads the actor's own audit row.
+
+**Gate.** lint and typecheck clean (the `requirePermission` lint warnings predate this item). `npm test`: 3,576 passed + 4 skipped. `db:ci`: migrations from scratch, seed, no drift. e2e `announcements.spec.ts` + `messaging-settings.spec.ts`, `--retries=0`, both projects: 34 of 34, matching `--list`.

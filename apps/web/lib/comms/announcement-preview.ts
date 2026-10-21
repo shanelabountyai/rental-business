@@ -6,9 +6,15 @@ import {
   normalizePhone,
   smsLength,
 } from '@rental/core/comms'
-import { quietHoursEndAfter, withinQuietHours } from '@rental/core/notifications'
+import {
+  announcementSmsFooter,
+  quietHoursEndAfter,
+  quietHoursOf,
+  withinQuietHours,
+} from '@rental/core/notifications'
 import { friendlyTimestamp } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
+import { messagingSettings } from '@/lib/comms/messaging-settings.ts'
 import { blockedNumbers } from '@/lib/comms/opt-out-store.ts'
 import { renderForRecipient } from '@/lib/comms/templates.ts'
 
@@ -33,6 +39,8 @@ export interface AnnouncementPreview {
   quietUntil: string | null
   /// Reasons the send must not go. Non-empty means blocked.
   problems: string[]
+  /// R-266: the line every text ends with. Counted in the segments above.
+  smsFooter: string
 }
 
 export async function previewAnnouncement(
@@ -44,7 +52,7 @@ export async function previewAnnouncement(
     where: { id: { in: leaseIds } },
     select: {
       id: true,
-      property: { select: { timezone: true } },
+      property: { select: { timezone: true, quietHoursStart: true, quietHoursEnd: true } },
       leaseTenants: {
         select: {
           tenant: {
@@ -67,6 +75,7 @@ export async function previewAnnouncement(
     return tenant ? [{ lease, tenant }] : []
   })
   const blocked = await blockedNumbers(rows.map((r) => r.tenant.phone))
+  const smsFooter = announcementSmsFooter((await messagingSettings()).businessName)
 
   const preview: AnnouncementPreview = {
     sample: null,
@@ -77,6 +86,7 @@ export async function previewAnnouncement(
     quietHeld: 0,
     quietUntil: null,
     problems: [],
+    smsFooter,
   }
   const empty = new Map<string, string[]>()
   const tooLong: string[] = []
@@ -95,18 +105,21 @@ export async function previewAnnouncement(
     if (!rendered) continue
     preview.sample ??= { tenantName, subject: rendered.subject, body: rendered.body }
     if (rendered.missing.length > 0) empty.set(tenantName, rendered.missing)
-    if (rendered.body.length > SMS_MAX_LENGTH) tooLong.push(tenantName)
+    // The text, footer included (the same join `announcementTemplate` makes).
+    const sms = `${rendered.body}\n${smsFooter}`
+    if (sms.length > SMS_MAX_LENGTH) tooLong.push(tenantName)
 
     const phone = tenant.phone ? normalizePhone(tenant.phone) : null
     if (phone === null || blocked.has(phone)) continue
-    const length = smsLength(rendered.body)
+    const length = smsLength(sms)
     preview.smsRecipients += 1
     preview.maxSegments = Math.max(preview.maxSegments, length.segments)
     preview.estimatedCostCents += length.segments * SMS_SEGMENT_COST_CENTS
     if (length.encoding === 'UCS-2') preview.encoding = 'UCS-2'
-    if (withinQuietHours(now, lease.property.timezone)) {
+    const quiet = quietHoursOf(lease.property)
+    if (withinQuietHours(now, lease.property.timezone, quiet)) {
       preview.quietHeld += 1
-      const until = quietHoursEndAfter(now, lease.property.timezone)
+      const until = quietHoursEndAfter(now, lease.property.timezone, quiet)
       if (!latest || until > latest) {
         latest = until
         preview.quietUntil = friendlyTimestamp(until, lease.property.timezone)

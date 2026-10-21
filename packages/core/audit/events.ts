@@ -542,6 +542,9 @@ export const AUDIT_ACTIONS = [
   /// so the audit row and the document's own index agree.
   'tax.packet_archived',
   'template.saved',
+  /// R-266: the business name or the default reply assignee changed. A
+  /// property's quiet hours are `property.updated`.
+  'messaging_settings.updated',
   /// R-264: an older version's words were put back. Its own action rather
   /// than another `template.saved`, because "who brought the old notice back"
   /// is a different question from "who wrote it".

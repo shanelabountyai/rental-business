@@ -1371,6 +1371,15 @@ export const inspectionMoveInOverdueTemplate: NotificationTemplate<InspectionMov
 export interface ManagedTemplateContext {
   subject: string | null
   body: string
+  /// R-266: appended to the SMS only, by `announcementTemplate`. Email gets
+  /// none, because a bare "STOP" by email is not honoured (R-097e).
+  smsFooter?: string
+}
+
+/// The announcement SMS footer (R-266, PRD 08 B5). No dash: an em dash is
+/// not GSM-7 and would halve every segment.
+export function announcementSmsFooter(businessName: string): string {
+  return `${businessName}. Reply STOP to opt out.`
 }
 
 /**
@@ -1410,14 +1419,16 @@ export const managedTemplate: NotificationTemplate<ManagedTemplateContext> = {
  * `notify()` refuses when a template's fixed category disagrees with the
  * call's category, so `managedTemplate` above - locked to `rent_reminder` -
  * cannot also carry a segment announcement. A second registration, not a
- * parameter: the render function has no category-specific behavior, only the
- * key and category differ.
+ * parameter. The one difference in rendering is the SMS footer (R-266).
  */
 export const announcementTemplate: NotificationTemplate<ManagedTemplateContext> = {
   key: 'comms.announcement',
   category: 'announcement',
   channels: ['SMS', 'EMAIL', 'PORTAL'],
-  render: managedTemplate.render,
+  render: (context, channel) =>
+    channel === 'SMS' && context.smsFooter
+      ? { body: `${context.body}\n${context.smsFooter}` }
+      : managedTemplate.render(context, channel),
 }
 
 /// Context for `payment.due_soon` and `payment.due` (PAY-02, R-045). One

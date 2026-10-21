@@ -48,6 +48,9 @@ export default async function MessagesPage() {
   // person whose job this is (the same trap the rent roll's `canSend`
   // documents).
   const canSendAnnouncements = !scopeIsEmpty(propertyScope(actor, 'message.send'))
+  // Scoped for the same reason: a property-scoped manager sets their own
+  // properties' quiet hours there (R-266).
+  const canEditSettings = !scopeIsEmpty(propertyScope(actor, 'template.write'))
 
   return (
     <div className="flex flex-col gap-6">
@@ -57,7 +60,7 @@ export default async function MessagesPage() {
           Every conversation, whatever channel it came in on. Logged calls sit
           in the same history.
         </p>
-        <div className="flex gap-4">
+        <div className="flex flex-wrap gap-x-4 gap-y-2">
           {canWriteTemplates && (
             <Link
               href="/messages/templates"
@@ -72,6 +75,14 @@ export default async function MessagesPage() {
               className="focus-visible:ring-ring w-fit text-sm underline underline-offset-4 focus-visible:ring-2 focus-visible:outline-none"
             >
               Send an announcement
+            </Link>
+          )}
+          {canEditSettings && (
+            <Link
+              href="/messages/settings"
+              className="focus-visible:ring-ring w-fit text-sm underline underline-offset-4 focus-visible:ring-2 focus-visible:outline-none"
+            >
+              Messaging settings
             </Link>
           )}
         </div>

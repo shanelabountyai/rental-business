@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   CATEGORY_AUDIENCE,
   DEFAULT_QUIET_HOURS,
+  announcementSmsFooter,
   DIGEST_ELIGIBLE_CATEGORIES,
   LOCKED_CATEGORIES,
   NOTIFICATION_CATEGORIES,
@@ -10,6 +11,7 @@ import {
   defaultEnabled,
   isDigestEligible,
   isInAudience,
+  quietHoursOf,
   isLockedCategory,
   isNotificationCategory,
   mayAutoRetry,
@@ -248,6 +250,15 @@ describe('quiet hours', () => {
   it('uses 21:00-08:00 as the shipped default', () => {
     expect(DEFAULT_QUIET_HOURS).toEqual({ startHour: 21, endHour: 8 })
   })
+
+  it("reads a property's own window, and the default when it has none (R-266)", () => {
+    expect(quietHoursOf({ quietHoursStart: null, quietHoursEnd: null })).toBe(DEFAULT_QUIET_HOURS)
+    const own = quietHoursOf({ quietHoursStart: 20, quietHoursEnd: 9 })
+    expect(own).toEqual({ startHour: 20, endHour: 9 })
+    // 20:30 Chicago in August is 01:30Z: quiet here, not under the default.
+    expect(withinQuietHours(new Date('2026-08-06T01:30:00Z'), CHICAGO, own)).toBe(true)
+    expect(withinQuietHours(new Date('2026-08-06T01:30:00Z'), CHICAGO)).toBe(false)
+  })
 })
 
 describe('templates', () => {
@@ -385,5 +396,24 @@ describe('mayAutoRetry', () => {
     expect(mayAutoRetry('maintenance_emergency')).toBe(true)
     expect(mayAutoRetry('lease_signature')).toBe(true)
     expect(mayAutoRetry('rent_reminder')).toBe(true)
+  })
+})
+
+describe('announcement footer (R-266)', () => {
+  const context = {
+    subject: 'Water off',
+    body: 'Water is off Tuesday.',
+    smsFooter: announcementSmsFooter('Oak Rentals'),
+  }
+
+  it('ends every text with the business name and STOP, and stays GSM-7', () => {
+    expect(renderTemplate('comms.announcement', context, 'SMS').body).toBe(
+      'Water is off Tuesday.\nOak Rentals. Reply STOP to opt out.',
+    )
+    expect(announcementSmsFooter('Oak Rentals')).toMatch(/^[\x20-\x7e]+$/)
+  })
+
+  it('leaves email alone: a bare STOP by email is not honoured (R-097e)', () => {
+    expect(renderTemplate('comms.announcement', context, 'EMAIL').body).toBe('Water is off Tuesday.')
   })
 })
