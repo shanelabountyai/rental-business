@@ -14617,7 +14617,7 @@ Re-opens the project for two rows from the post-closure second-pass review of th
 
 
 ## R-264 — template version history, duplicate, restore
-**Commit:** `PENDING`  ·  **Date:** 2026-10-20
+**Commit:** `98197e5`  ·  **Date:** 2026-10-20
 
 **What it built.**
 - `MessageTemplateVersion` (migration `20261020200000_message_template_version`): one row per content-changing save, with who and when, plus `restoredFromVersion`. The migration backfills each existing template's current words as version 1.
