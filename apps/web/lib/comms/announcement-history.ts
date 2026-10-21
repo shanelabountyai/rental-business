@@ -34,10 +34,74 @@ export interface AnnouncementHistoryEntry {
   skippedCount: number | null
   sentByStaffId: string | null
   /// R-261: what the row records - a send, a schedule, or a cancellation.
-  kind: 'sent' | 'scheduled' | 'cancelled'
+  /// R-262: or a resend of an earlier row's failures.
+  kind: 'sent' | 'scheduled' | 'cancelled' | 'resent'
   /// Property-local wall clock for a scheduled or cancelled row.
   sendAt: string | null
+  /// R-262: the deliveries this row created. Empty on a row written before
+  /// R-262 and on a cancellation, which creates none.
+  deliveryIds: string[]
 }
+
+/// R-262: one recipient-channel of one announcement, as it stands NOW on
+/// NotificationDelivery - a Twilio callback that lands a week later moves it.
+export interface AnnouncementDelivery {
+  id: string
+  tenantName: string
+  channel: string
+  status: string
+  reason: string | null
+}
+
+/// Every delivery the given history rows created, keyed by row id. One query
+/// for the whole page rather than one per row.
+export async function announcementDeliveries(
+  entries: readonly AnnouncementHistoryEntry[],
+): Promise<Map<string, AnnouncementDelivery[]>> {
+  const ids = entries.flatMap((e) => e.deliveryIds)
+  if (ids.length === 0) return new Map()
+  const rows = await prisma.notificationDelivery.findMany({
+    where: { id: { in: ids } },
+    select: {
+      id: true,
+      status: true,
+      suppressedReason: true,
+      failureCode: true,
+      notification: { select: { channel: true, recipientId: true } },
+    },
+  })
+  const tenants = new Map(
+    (
+      await prisma.tenant.findMany({
+        where: { id: { in: [...new Set(rows.map((r) => r.notification.recipientId))] } },
+        select: { id: true, firstName: true, lastName: true },
+      })
+    ).map((t) => [t.id, `${t.firstName} ${t.lastName}`]),
+  )
+  const byId = new Map(rows.map((r) => [r.id, r]))
+  const result = new Map<string, AnnouncementDelivery[]>()
+  for (const entry of entries) {
+    const list: AnnouncementDelivery[] = []
+    for (const id of entry.deliveryIds) {
+      const row = byId.get(id)
+      if (!row) continue
+      list.push({
+        id,
+        tenantName: tenants.get(row.notification.recipientId) ?? '—',
+        channel: row.notification.channel,
+        status: row.status,
+        reason: row.suppressedReason ?? row.failureCode ?? null,
+      })
+    }
+    list.sort((x, y) => x.tenantName.localeCompare(y.tenantName) || x.channel.localeCompare(y.channel))
+    result.set(entry.id, list)
+  }
+  return result
+}
+
+/// The statuses "resend to failed" acts on: a provider refused it, for good.
+/// Not SUPPRESSED (a decision) and not DEFERRED (R-106 is still retrying).
+export const RESENDABLE_STATUSES: readonly string[] = ['FAILED', 'BOUNCED']
 
 export async function announcementHistory(
   scope: PropertyScope,
@@ -53,6 +117,7 @@ export async function announcementHistory(
           'message.announcement_sent',
           'message.announcement_scheduled',
           'message.announcement_cancelled',
+          'message.announcement_resent',
         ],
       },
     },
@@ -78,8 +143,11 @@ export async function announcementHistory(
           ? 'scheduled'
           : row.action === 'message.announcement_cancelled'
             ? 'cancelled'
-            : 'sent',
+            : row.action === 'message.announcement_resent'
+              ? 'resent'
+              : 'sent',
       sendAt: typeof after.sendAt === 'string' ? after.sendAt : null,
+      deliveryIds: Array.isArray(after.deliveryIds) ? after.deliveryIds.map(String) : [],
     }
   })
 }

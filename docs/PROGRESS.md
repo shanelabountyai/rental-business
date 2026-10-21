@@ -14571,3 +14571,25 @@ Re-opens the project for two rows from the post-closure second-pass review of th
 - Not walked in a browser.
 
 **Gate.** lint (17 warnings, one new: unchanged class), typecheck, `db:drift` clean, ship-deps clean, `npm test` 3,565 passed + 4 skipped of 3,570 with one failure — the new cron route missing from the route-guard allowlist — fixed and that file re-run green. `e2e/announcements.spec.ts` on both projects against the production build: **28 passed of 28 listed**. CI owns the full sweep.
+
+## R-262 — resend to failed recipients only
+**Commit:** `pending`  ·  **Date:** 2026-10-20
+
+**What it built.**
+- The backlog row's first question answered: `/messages/announcements/history` showed only the audit row's counts — no per-recipient status — so that was built first. Both the sent and scheduled audit rows now carry `deliveryIds` in `after` (JSON, no migration); `announcementDeliveries()` in `announcement-history.ts` reads those ids LIVE off `NotificationDelivery` in one query per page, and the page shows a **Recipients** column: a native `<details>` labelled "N recipients, M failed" (recipients, not rows — every tenant has one row per channel, most SUPPRESSED) listing tenant · channel: status (reason). A row written before R-262 says "Not recorded for this send"; a cancellation shows "—".
+- `notify()` takes `channels` (apps/web/lib/notifications/send.ts), narrowing the fan-out to the named channels of the template's own. One filter line.
+- `resendFailedAnnouncement(formData)` in `announcement-actions.ts`: owner-scoped like history; takes the source row's FAILED or BOUNCED deliveries, reloads each tenant's address, `notify()`s on the failed channel only with the body that was sent and key `<base key>:resend:<failedAt ms>`, dispatches only its own rows, audits `message.announcement_resent` (new action in `packages/core/audit/events.ts`) with `sourceAuditLogId` and the new `deliveryIds`, so the resend is itself a history row with its own per-recipient status. A "Resend to N failed" form button sits inside the `<details>`.
+- One e2e in `announcements.spec.ts`: send to two tenants, force one EMAIL delivery FAILED through Prisma (the logging adapter never fails; `NotificationDelivery` is not append-only and the cancel path already updates it), open history as an owner in a second context with its own client IP, expand the row, resend; exactly one new notification exists — tenant A, EMAIL — with its delivery SENT, and tenant B has nothing new.
+
+**What it decided.**
+- D-328: a resend is a new delivery keyed on the failed one, on the failed channel only, to the address as it is now. SUPPRESSED is a decision and DEFERRED-with-`failedAt` is R-106's own retry; neither is resendable.
+
+**What it left behind.**
+- Still portfolio-wide only, for history's own reason (no propertyId on the audit row).
+- The source row keeps showing its failures after a resend; the resent row beneath it shows the outcome. A "resent" marker on the original would need a second audit read per row and nobody has asked.
+- A `Twilio` status callback marks SMS FAILED in production; no real callback has been exercised here (D-15).
+- Next.js logs `The destination stream closed early` twice during the e2e, because the test closes the owner's context while the post-action re-render is streaming. Test-induced, not a defect.
+- Not walked in a browser.
+
+**Gate.** lint (16 warnings, none new), typecheck, ship-deps clean, `npm test` **3,565 passed + 4 skipped of 3,569**. `e2e/announcements.spec.ts` on both projects against the production build: first full run 28 passed + 2 failed of 30 (the new test expected "2 deliveries", the page said "6 deliveries" — label changed to count recipients), then the new test alone **2 passed of 2**; the 28 do not read the history page. A first attempt failed every test in 300ms — `npx playwright` called directly has no `DATABASE_URL`; the npm script's `dotenv` wrapper is load-bearing. CI owns the full sweep.
+

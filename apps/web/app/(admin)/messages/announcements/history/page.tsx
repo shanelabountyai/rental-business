@@ -3,7 +3,12 @@ import { prisma } from '@rental/db'
 import Link from 'next/link'
 import { PageHeader } from '@/components/page-header.tsx'
 import { propertyWhere, requireScope } from '@/lib/auth/guard.ts'
-import { announcementHistory } from '@/lib/comms/announcement-history.ts'
+import { resendFailedAnnouncement } from '@/lib/comms/announcement-actions.ts'
+import {
+  RESENDABLE_STATUSES,
+  announcementDeliveries,
+  announcementHistory,
+} from '@/lib/comms/announcement-history.ts'
 import { friendlyWallClock } from '@/lib/comms/announcements.ts'
 import { scrollableRegionProps } from '@/components/ui-classes.ts'
 
@@ -16,6 +21,10 @@ export const metadata = { title: 'Announcement history — Rental Operations' }
 export default async function AnnouncementHistoryPage() {
   const { scope } = await requireScope('message.send')
   const entries = await announcementHistory(scope)
+  // R-262: per-recipient status is read LIVE off NotificationDelivery, not
+  // off the audit row - a Twilio callback a day later changes it, and the
+  // audit row is append-only and must not try to follow.
+  const deliveries = await announcementDeliveries(entries ?? [])
 
   const staffIds = [
     ...new Set((entries ?? []).map((e) => e.sentByStaffId).filter((id): id is string => !!id)),
@@ -91,6 +100,9 @@ export default async function AnnouncementHistoryPage() {
                 <th scope="col" className="px-3 py-2 text-right font-medium">
                   Skipped
                 </th>
+                <th scope="col" className="px-3 py-2 font-medium">
+                  Recipients
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -102,6 +114,7 @@ export default async function AnnouncementHistoryPage() {
                   <td className="px-3 py-2">
                     {entry.kind === 'scheduled' && 'Scheduled: '}
                     {entry.kind === 'cancelled' && 'Cancelled: '}
+                    {entry.kind === 'resent' && 'Resent to failed: '}
                     {entry.templateName ?? '—'}
                     {entry.sendAt ? ` (for ${friendlyWallClock(entry.sendAt)})` : ''}
                   </td>
@@ -118,6 +131,12 @@ export default async function AnnouncementHistoryPage() {
                   <td className="px-3 py-2 text-right tabular-nums">
                     {entry.skippedCount ?? '—'}
                   </td>
+                  <td className="px-3 py-2">
+                    <RecipientStatus
+                      entry={entry}
+                      deliveries={deliveries.get(entry.id) ?? []}
+                    />
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -125,5 +144,55 @@ export default async function AnnouncementHistoryPage() {
         </div>
       )}
     </div>
+  )
+}
+
+/// R-262: what happened to each recipient, as it stands now, and the resend.
+/// A native <details> - it works before hydration and needs no state. A row
+/// written before R-262 recorded no delivery ids and says so.
+function RecipientStatus({
+  entry,
+  deliveries,
+}: {
+  entry: { id: string; kind: string; templateName: string | null; deliveryIds: string[] }
+  deliveries: { id: string; tenantName: string; channel: string; status: string; reason: string | null }[]
+}) {
+  if (entry.kind === 'cancelled') return <span className="text-muted-foreground">—</span>
+  if (deliveries.length === 0) {
+    return <span className="text-muted-foreground">Not recorded for this send</span>
+  }
+  const failed = deliveries.filter((d) => RESENDABLE_STATUSES.includes(d.status))
+  // Recipients, not rows: every tenant has one row per channel, most of them
+  // SUPPRESSED, and "6 deliveries" for two tenants reads as a wrong count.
+  const recipients = new Set(deliveries.map((d) => d.tenantName)).size
+  const label = `${recipients} ${recipients === 1 ? 'recipient' : 'recipients'}${
+    failed.length ? `, ${failed.length} failed` : ''
+  }`
+  return (
+    <details>
+      <summary className="focus-visible:ring-ring cursor-pointer py-2 underline underline-offset-4 focus-visible:ring-2 focus-visible:outline-none">
+        {label}
+      </summary>
+      <ul className="flex flex-col gap-1 py-2">
+        {deliveries.map((d) => (
+          <li key={d.id} className="whitespace-nowrap">
+            {d.tenantName} · {d.channel}: {d.status.toLowerCase()}
+            {d.reason ? ` (${d.reason})` : ''}
+          </li>
+        ))}
+      </ul>
+      {failed.length > 0 && (
+        <form action={resendFailedAnnouncement}>
+          <input type="hidden" name="auditLogId" value={entry.id} />
+          <button
+            type="submit"
+            aria-label={`Resend to ${failed.length} failed: ${entry.templateName ?? 'announcement'}`}
+            className="focus-visible:ring-ring min-h-11 rounded-md px-3 text-sm underline underline-offset-4 focus-visible:ring-2 focus-visible:outline-none"
+          >
+            Resend to {failed.length} failed
+          </button>
+        </form>
+      )}
+    </details>
   )
 }

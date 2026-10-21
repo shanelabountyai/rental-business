@@ -3,7 +3,7 @@ import { hashPassword } from '@rental/core/auth'
 import { businessDate, wallClockToUtc } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
-import { axeScan, uniquePhone } from './fixtures.ts'
+import { axeScan, uniqueClientHeaders, uniquePhone } from './fixtures.ts'
 
 // Segment announcements (COMM-04, R-053) — "the city is flushing hydrants
 // Tuesday". One message to a segment (all tenants / one property / one
@@ -551,6 +551,81 @@ test.describe('reviewed recipients and saved audiences (R-259)', () => {
     await expect.poll(async () => (await prisma.audience.findUniqueOrThrow({ where: { id: saved.id } })).active).toBe(false)
     await page.reload()
     await expect(page.locator('option', { hasText: name })).toHaveCount(0)
+  })
+})
+
+test.describe('resend to failed recipients (R-262)', () => {
+  test('HISTORY SHOWS PER-RECIPIENT STATUS, and Resend reaches only the failed one, on its channel', async ({
+    page,
+    browser,
+  }) => {
+    const { entity, a, b } = await seedTwoProperties()
+    const staff = await seedScopedManager(entity.id)
+    const template = await seedTemplate(staff.id)
+
+    await signIn(page, staff)
+    await page.goto('/messages/announcements')
+    await chooseRecipients(page, undefined, template.id)
+    await page.getByRole('button', { name: 'Send' }).click()
+    await expect(page.getByText(/Sent to 2 tenants/)).toBeVisible()
+
+    // The logging adapter never fails, so the failure is written the way a
+    // Twilio status callback (/api/sms/status) writes it. SMS is SUPPRESSED on
+    // this fixture (no consent), so the channel that actually went is EMAIL.
+    const failedDelivery = await prisma.notificationDelivery.findFirstOrThrow({
+      where: {
+        notification: { recipientId: a.tenant.id, templateKey: 'comms.announcement', channel: 'EMAIL' },
+      },
+    })
+    expect(failedDelivery.status).toBe('SENT')
+    await prisma.notificationDelivery.update({
+      where: { id: failedDelivery.id },
+      data: { status: 'FAILED', failedAt: new Date(), failureCode: 'e2e_forced' },
+    })
+    const before = await prisma.notification.count({
+      where: { recipientId: { in: [a.tenant.id, b.tenant.id] }, templateKey: 'comms.announcement' },
+    })
+
+    // History is portfolio-wide (announcement-history.ts), so an owner reads
+    // it. A new context does not inherit the x-forwarded-for above.
+    const owner = await seedOwner()
+    const context = await browser.newContext({ extraHTTPHeaders: uniqueClientHeaders() })
+    const ownerPage = await context.newPage()
+    await signIn(ownerPage, owner)
+    await ownerPage.goto('/messages/announcements/history')
+    const row = ownerPage.getByRole('row', { name: new RegExp(template.name) }).first()
+    await row.getByText('2 recipients, 1 failed').click()
+    await expect(row.getByText(`${a.tenant.firstName} ${a.tenant.lastName} · EMAIL: failed (e2e_forced)`)).toBeVisible()
+    await expect(row.getByText(`${b.tenant.firstName} ${b.tenant.lastName} · EMAIL: sent`)).toBeVisible()
+    await row.getByRole('button', { name: `Resend to 1 failed: ${template.name}` }).click()
+
+    // Poll the action's LAST write, the audit row (R-261's rule).
+    await expect
+      .poll(async () =>
+        prisma.auditLog.findFirst({
+          where: { action: 'message.announcement_resent', entityId: template.id },
+        }),
+      )
+      .not.toBeNull()
+    await context.close()
+
+    const resent = await prisma.notification.findMany({
+      where: {
+        recipientId: { in: [a.tenant.id, b.tenant.id] },
+        templateKey: 'comms.announcement',
+        idempotencyKey: { contains: ':resend:' },
+      },
+      include: { delivery: true },
+    })
+    // Exactly one new row: tenant A, EMAIL only - no second SMS or portal
+    // copy, and nothing for tenant B, whose email went the first time.
+    expect(resent.map((n) => [n.recipientId, n.channel])).toEqual([[a.tenant.id, 'EMAIL']])
+    expect(resent[0]?.delivery?.status).toBe('SENT')
+    expect(
+      await prisma.notification.count({
+        where: { recipientId: { in: [a.tenant.id, b.tenant.id] }, templateKey: 'comms.announcement' },
+      }),
+    ).toBe(before + 1)
   })
 })
 

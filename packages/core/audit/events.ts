@@ -510,6 +510,10 @@ export const AUDIT_ACTIONS = [
   /// deliveries carry the actual sends; these record the intent and who.
   'message.announcement_scheduled',
   'message.announcement_cancelled',
+  /// R-262 (PRD 08 A9): the failed deliveries of one earlier announcement
+  /// were sent again, each on the channel that failed. Carries the source
+  /// row's id and the new delivery ids, like the row it resends.
+  'message.announcement_resent',
   /// R-259 (PRD 08 A4): a segment saved under a name, and its retirement.
   'message.audience_saved',
   'message.audience_retired',

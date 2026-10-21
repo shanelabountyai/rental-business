@@ -282,6 +282,7 @@ export async function sendAnnouncement(
         removedLeaseIds: removed,
         skipped,
         sentByStaffId: actor.id,
+        deliveryIds,
       },
     }).catch((error) => {
       console.error('[announcements] audit failed', error)
@@ -336,6 +337,10 @@ export async function sendAnnouncement(
       // later.
       skipped,
       sentByStaffId: actor.id,
+      // R-262: the history page reads per-recipient status off these rows,
+      // and "resend to failed" starts from them. Ids only - the status is
+      // live on NotificationDelivery, where a Twilio callback updates it.
+      deliveryIds,
     },
   }).catch((error) => {
     console.error('[announcements] audit failed', error)
@@ -434,6 +439,102 @@ export async function cancelScheduledAnnouncement(formData: FormData): Promise<v
     },
   })
   revalidatePath('/messages/announcements')
+}
+
+/// R-262 (PRD 08 A9): send one earlier announcement again to the recipients
+/// whose delivery FAILED or BOUNCED, each on the channel that failed. A
+/// SUPPRESSED row was a decision, not a failure, and a DEFERRED row with a
+/// `failedAt` is R-106's own retry still in flight; neither is touched.
+///
+/// The address is read from the tenant NOW, not from the failed row - the
+/// usual reason a text failed is a wrong number, and the resend is pressed
+/// after somebody fixed it. The body is the one that was sent (R-260's
+/// rule: what was previewed is what goes). The key is the failed delivery
+/// itself, so a double press resends once and a second failure later is a
+/// new key.
+export async function resendFailedAnnouncement(formData: FormData): Promise<void> {
+  const { actor, scope } = await requireScope('message.send')
+  // Portfolio-wide only, for the reason announcement-history.ts gives.
+  if (!scope.everything) return
+  const auditLogId = String(formData.get('auditLogId') ?? '')
+  const source = await prisma.auditLog.findFirst({
+    where: {
+      id: auditLogId,
+      action: { in: ['message.announcement_sent', 'message.announcement_scheduled'] },
+    },
+  })
+  if (!source) return
+  const after = (source.after ?? {}) as { deliveryIds?: unknown; templateName?: unknown }
+  const sourceIds = Array.isArray(after.deliveryIds) ? after.deliveryIds.map(String) : []
+  if (sourceIds.length === 0) return
+
+  const failed = await prisma.notificationDelivery.findMany({
+    where: { id: { in: sourceIds }, status: { in: ['FAILED', 'BOUNCED'] } },
+    select: {
+      failedAt: true,
+      notification: {
+        select: {
+          channel: true,
+          idempotencyKey: true,
+          subject: true,
+          body: true,
+          propertyId: true,
+          recipientType: true,
+          recipientId: true,
+        },
+      },
+    },
+  })
+  if (failed.length === 0) return
+
+  const tenants = new Map(
+    (
+      await prisma.tenant.findMany({
+        where: { id: { in: failed.map((f) => f.notification.recipientId) } },
+        select: { id: true, email: true, phone: true },
+      })
+    ).map((t) => [t.id, t]),
+  )
+
+  const deliveryIds: string[] = []
+  const now = new Date()
+  for (const { failedAt, notification } of failed) {
+    if (notification.recipientType !== 'TENANT') continue
+    const tenant = tenants.get(notification.recipientId)
+    if (!tenant) continue
+    const channel = notification.channel
+    if (channel !== 'EMAIL' && channel !== 'SMS' && channel !== 'PORTAL') continue
+    const outcomes = await notify({
+      category: 'announcement',
+      templateKey: 'comms.announcement',
+      recipient: { type: 'TENANT', id: tenant.id, email: tenant.email, phone: tenant.phone },
+      context: { subject: notification.subject ?? '', body: notification.body },
+      propertyId: notification.propertyId,
+      channels: [channel],
+      idempotencyKey: `${notification.idempotencyKey.replace(/:(EMAIL|SMS|PORTAL)$/, '')}:resend:${(failedAt ?? now).getTime()}`,
+    })
+    for (const outcome of outcomes) if (outcome.deliveryId) deliveryIds.push(outcome.deliveryId)
+  }
+
+  if (deliveryIds.length > 0) {
+    await dispatchPendingNotifications(now, 500, { deliveryIds }).catch((error) => {
+      console.error('[announcements] resend dispatch failed', error)
+    })
+  }
+  await audit({
+    action: 'message.announcement_resent',
+    entityType: 'MessageTemplate',
+    entityId: source.entityId,
+    after: {
+      templateName: typeof after.templateName === 'string' ? after.templateName : null,
+      sourceAuditLogId: source.id,
+      requested: failed.length,
+      sent: deliveryIds.length,
+      sentByStaffId: actor.id,
+      deliveryIds,
+    },
+  })
+  revalidatePath('/messages/announcements/history')
 }
 
 export async function retireAudience(formData: FormData): Promise<void> {

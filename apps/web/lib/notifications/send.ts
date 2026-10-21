@@ -108,6 +108,12 @@ export interface NotifyInput {
    * dispatch that releases a quiet-hours hold picks it up when it is due.
    */
   sendAfter?: Date | null
+  /**
+   * Only these channels, of the ones the template declares (R-262). A resend
+   * of a failed SMS goes out on SMS; re-fanning out would email and portal
+   * the same tenant a second copy of a message they already have.
+   */
+  channels?: readonly NotificationChannel[]
 }
 
 export interface ChannelOutcome {
@@ -184,7 +190,9 @@ export async function notify(
   // to a screen that does not exist. That is not an address missing from a
   // channel they could have had; it is not a channel for them at all, and a
   // row saying `no_address` would read as something somebody could fix.
-  const channels = channelsFor(template.channels, input.recipient)
+  const channels = channelsFor(template.channels, input.recipient).filter(
+    (channel) => !input.channels || input.channels.includes(channel),
+  )
 
   // R-216. Only a phone-only recipient needs the question asked: an email
   // always carries a sign-in link, and neither address carries nothing.
