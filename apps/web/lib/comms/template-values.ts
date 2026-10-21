@@ -10,6 +10,8 @@ import {
 } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 
+import { authUrl } from '../auth/delivery.ts'
+
 // Turning a real tenancy into merge-field values (COMM-03, R-049).
 //
 // ==========================================================================
@@ -65,7 +67,10 @@ export async function templateValues(
       endsOn: true,
       rentCents: true,
       rentDueDay: true,
-      property: { select: { name: true, addressLine1: true, timezone: true } },
+      propertyId: true,
+      property: {
+        select: { name: true, addressLine1: true, timezone: true, legalEntityId: true },
+      },
       unit: { select: { name: true } },
       // `?? ''` rather than a conditional include: an empty string matches no
       // cuid, so the unset side comes back empty and the set side is still
@@ -99,6 +104,34 @@ export async function templateValues(
     },
   })
   const owed = balanceCents(rows)
+
+  // THE OWNER IS A PERSON, not the LLC (D-331): the staff user holding an
+  // active `owner` grant, narrowest scope first — this property, then its
+  // entity, then the whole deployment — and the earliest grant within a
+  // scope, so the same tenancy always names the same person.
+  const ownerGrants = await prisma.staffAssignment.findMany({
+    where: {
+      revokedAt: null,
+      role: { key: 'owner' },
+      staffUser: { active: true },
+      OR: [
+        { propertyId: lease.propertyId },
+        { propertyId: null, legalEntityId: lease.property.legalEntityId },
+        { propertyId: null, legalEntityId: null },
+      ],
+    },
+    orderBy: { grantedAt: 'asc' },
+    select: {
+      propertyId: true,
+      legalEntityId: true,
+      staffUser: { select: { name: true, phone: true } },
+    },
+  })
+  const owner = (
+    ownerGrants.find((grant) => grant.propertyId) ??
+    ownerGrants.find((grant) => grant.legalEntityId) ??
+    ownerGrants[0]
+  )?.staffUser
 
   // The PROPERTY's calendar day, not the server's (D-3). A reminder that says
   // "today" and names yesterday is a reminder nobody trusts again.
@@ -143,6 +176,15 @@ export async function templateValues(
     // which is the honest outcome for a field the product cannot fill. R-081's
     // property contact details is where it gets a value.
     'company.phone': null,
+    // Null when the owner has no phone on file: the send refuses, which is
+    // better than a message telling a tenant to call nobody.
+    'owner.name': owner?.name ?? null,
+    'owner.phone': owner?.phone ?? null,
+    // TENANTS ONLY. A guarantor has no portal sign-in, so a link would land
+    // them on a login that refuses them — the same call `plan-actions` makes.
+    // Null without AUTH_URL rather than `authUrl`'s throw, which would turn a
+    // missing setting into a 500 on the preview page.
+    'portal.link': lease.leaseTenants[0] && process.env.AUTH_URL ? authUrl('/portal') : null,
   }
 }
 

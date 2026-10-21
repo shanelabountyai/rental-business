@@ -78,6 +78,9 @@ export const MERGE_FIELDS: readonly MergeField[] = [
   { key: 'today', label: "Today's date, in the property's timezone", example: '15 Aug 2026' },
   { key: 'company.name', label: 'Your business name', example: 'Cedar Row Rentals' },
   { key: 'company.phone', label: 'Your contact number', example: '(512) 555-0134' },
+  { key: 'owner.name', label: "The owner's name", example: 'Jordan Ellis' },
+  { key: 'owner.phone', label: "The owner's phone number", example: '(512) 555-0188' },
+  { key: 'portal.link', label: 'Link to the tenant portal', example: 'https://example.com/portal' },
 ] as const
 
 const FIELD_KEYS: ReadonlySet<string> = new Set(MERGE_FIELDS.map((field) => field.key))

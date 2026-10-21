@@ -25,7 +25,7 @@ The draft's premise ("no operator-composed messaging, no audience selection, no 
 | A8 | Partial | Inbound on the tenant `Thread`; Task for unknown senders and 2-day unanswered | R-263 |
 | A9 | New | — | R-262 |
 | B1 | Partial | Create, edit, retire; last editor only | R-264 |
-| B2 | Partial | First name, property, unit, balance, due date, company name/phone | R-265 |
+| B2 | Built | Catalogue complete; `owner.*` is the narrowest-scoped owner grant (D-331); `company.phone` still has nothing behind it | R-265 ✅ |
 | B3 | Conflicts with D-44 | 13 automated templates deliberately not overridable | R-268, gated on OQ-20 |
 | B5 | New | Quiet hours are a constant; no settings page | R-266 |
 | B6 | Partial | `template.write` / `template.approve` exist | R-267, gated on OQ-15 |

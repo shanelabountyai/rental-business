@@ -14638,3 +14638,22 @@ Re-opens the project for two rows from the post-closure second-pass review of th
 - Not walked in a browser.
 
 **Gate.** lint and typecheck clean, `npm run build` clean, `check:ship-deps` clean, `db:ci` no drift. `npm test`: 3,563 passed + 4 skipped, with 1 failure: the stale guard exemption above, fixed, and `route-guards.test.ts` rerun at 167 of 167. e2e `templates.spec.ts`: **24 passed of 24** (12 tests × `desktop-chrome` + `mobile-chrome`), including the new version-history test. CI owns the full sweep.
+
+## R-265 — merge fields: portal link, owner name, owner phone
+**Commit:** `SHA_PENDING`  ·  **Date:** 2026-10-21
+
+**What it built.**
+- Three entries on the closed catalogue in `packages/core/comms/merge-fields.ts`: `owner.name`, `owner.phone`, `portal.link`.
+- Their values in `templateValues` (`apps/web/lib/comms/template-values.ts`), the one resolver that preview and send share, so neither path needed touching.
+
+**What it decided.**
+- D-331: the owner is a person, namely the active `owner` grant with the narrowest scope covering the property, earliest grant first. A missing phone is null, so the send refuses instead of printing a blank. The portal link goes to tenants only, and it is null when `AUTH_URL` is unset rather than a thrown error.
+
+**What it left behind.**
+- `company.phone` still has nothing behind it (unchanged).
+- An owner with no phone on `StaffUser` makes every template that uses `{{owner.phone}}` unsendable until one is entered. Nothing in the staff UI prompts for it yet.
+- Not walked in a browser beyond the e2e preview.
+
+**Found along the way.** Every test in `e2e/templates.spec.ts` seeds an identical 2099-01-01 lease, and `previewTenancy` picks the newest, so each preview test has been rendering an arbitrary sibling's tenancy. That was harmless only while all of them looked the same. The preview test now seeds 2099-01-02. R-264's entry counted 24 runs from 12 tests; the file has 9 tests, so 18 runs.
+
+**Gate.** lint and typecheck clean (lint's `requirePermission` warnings predate this item). `npm test`: 3,564 passed + 4 skipped. e2e `templates.spec.ts`: 18 of 18 passed, twice in a row with `--retries=0`, on both `desktop-chrome` and `mobile-chrome`. The first run with the new assertion went red on the sibling-tenancy race above.

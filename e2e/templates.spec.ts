@@ -30,7 +30,7 @@ const staffIds: string[] = []
 const templateIds: string[] = []
 
 /// A live tenancy, so the preview has real data to render against.
-async function seedTenancy() {
+async function seedTenancy(startsOn = '2099-01-01') {
   const stamp = randomUUID().slice(0, 8)
   const entity = await prisma.legalEntity.create({
     data: { name: `Tpl LLC-${stamp}`, type: 'LLC' },
@@ -64,7 +64,7 @@ async function seedTenancy() {
       status: 'ACTIVE',
       // Newest start date, so `previewTenancy` picks THIS tenancy and the
       // assertions below can name it.
-      startsOn: new Date('2099-01-01'),
+      startsOn: new Date(startsOn),
       // Month-to-month in substance: no end date, which is what makes
       // `{{lease.ends_on}}` genuinely empty rather than artificially so.
       endsOn: null,
@@ -129,7 +129,27 @@ test.describe('writing a template (COMM-03)', () => {
   test('THE PREVIEW RENDERS REAL DATA AS YOU TYPE, and names a field it cannot fill', async ({
     page,
   }) => {
-    const { tenant } = await seedTenancy()
+    // A DAY LATER THAN EVERY OTHER TEST HERE, so `previewTenancy` picks this
+    // tenancy rather than a sibling's: they all seed 2099-01-01 and look
+    // identical, until one of them has to carry a property-scoped owner.
+    const { tenant, property } = await seedTenancy('2099-01-02')
+    // THE OWNER IS THE NARROWEST GRANT (D-331). `rental_test` holds hundreds
+    // of deployment-wide owner grants from other specs; one scoped to THIS
+    // property must beat every one of them, or the tenant is told to ring a
+    // stranger. Granted BEFORE the page loads: the preview's values are
+    // resolved server-side once, at render.
+    const propertyOwner = await prisma.staffUser.create({
+      data: {
+        email: `tpl-prop-owner-${randomUUID()}@example.test`,
+        name: 'Priya Okafor',
+        phone: '(512) 555-0188',
+      },
+    })
+    staffIds.push(propertyOwner.id)
+    const ownerRole = await prisma.role.findUniqueOrThrow({ where: { key: 'owner' } })
+    await prisma.staffAssignment.create({
+      data: { staffUserId: propertyOwner.id, roleId: ownerRole.id, propertyId: property.id },
+    })
     await signIn(page, await seedStaff('owner'))
     await page.goto('/messages/templates/new')
 
@@ -162,15 +182,22 @@ test.describe('writing a template (COMM-03)', () => {
     await expect(preview.getByText('Your lease ends on {{lease.ends_on}}.')).toBeVisible()
 
     // AND A DATE READS AS A DATE (D-198). The fixture pins `startsOn` to
-    // 2099-01-01 so this can name the exact output; before the fix the
-    // preview — and the real email behind it — said "starts 2099-01-01".
+    // 2099-01-02 so this can name the exact output; before the fix the
+    // preview — and the real email behind it — said "starts 2099-01-02".
     //
     // THE PREVIEW PANEL CANNOT CATCH THIS ON ITS OWN, which is why the
     // assertion is here rather than trusted to the "Nothing to put in" line
     // above it: that line flags a field with NOTHING behind it, and a field
     // with the wrong FORMAT behind it looks completely fine to it.
     await page.getByLabel('Message', { exact: true }).fill('Your lease starts {{lease.starts_on}}.')
-    await expect(preview.getByText('Your lease starts 1 Jan 2099.')).toBeVisible()
+    await expect(preview.getByText('Your lease starts 2 Jan 2099.')).toBeVisible()
+
+    await page
+      .getByLabel('Message', { exact: true })
+      .fill('Call {{owner.name}} on {{owner.phone}} or visit {{portal.link}}')
+    await expect(
+      preview.getByText(/^Call Priya Okafor on \(512\) 555-0188 or visit http\S+\/portal$/),
+    ).toBeVisible()
   })
 
   test('REFUSES A TYPO IN A MERGE FIELD, and names it', async ({ page }) => {
