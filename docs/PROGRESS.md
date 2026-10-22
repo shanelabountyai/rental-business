@@ -14686,7 +14686,7 @@ Re-opens the project for two rows from the post-closure second-pass review of th
 **Gate.** lint and typecheck clean (the `requirePermission` lint warnings predate this item). `npm test`: 3,576 passed + 4 skipped. `db:ci`: migrations from scratch, seed, no drift. e2e `announcements.spec.ts` + `messaging-settings.spec.ts`, `--retries=0`, both projects: 34 of 34, matching `--list`.
 
 ## R-269 — application review as a decision with a record
-**Commit:** `PENDING`  ·  **Date:** 2026-10-21
+**Commit:** `63f968f`  ·  **Date:** 2026-10-21
 
 **What it built.**
 - Migration `20261021180000_application_review`. It adds `DecisionReason` (code, label, retiredAt), seeded with five PLACEHOLDER reasons. It adds `ScreeningReport.decisionReasonCode` (FK, RESTRICT) and `decisionTemplateVersion`, plus `ApplicantInfoRequest`.
