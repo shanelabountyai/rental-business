@@ -14749,7 +14749,7 @@ Re-opens the project for two rows from the post-closure second-pass review of th
 **Gate.** lint and typecheck clean. `npm test`: 3,577 passed + 4 skipped of 3,581. e2e `screening.spec.ts` + `notices.spec.ts`, `--retries=0`, both projects, production build: 28 of 28, matching `--list`.
 
 ## R-270 follow-up — a skipped lease draft is a Task, not a log line
-**Commit:** `PENDING`  ·  **Date:** 2026-10-22
+**Commit:** `ac28317`  ·  **Date:** 2026-10-22
 
 **What it built.** When the household is approved but `openLeaseDraft` refuses, `settleHousehold` opens an `application.lease_draft` Task for the owner that names the reason. `/prospects/[id]` warns, in red, while an approved household has no draft. New e2e: a unit with a live tenancy produces no draft, a Task, and the warning.
 
