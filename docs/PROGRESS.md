@@ -14734,3 +14734,16 @@ Re-opens the project for two rows from the post-closure second-pass review of th
 - The first full `npm test` showed 33 timeouts across 14 unrelated files, because I ran `db:drift` and `db:ci` at the same time. Rerun alone, the 14 files passed 203 of 203. Do not run database checks during the unit suite.
 
 **Gate.** lint and typecheck clean (the warnings predate this item). `npm test`: 3,577 passed + 4 skipped of 3,581 (33 confirmed on rerun, above). `db:migrate:test` applied; `db:drift` and `db:ci`: no drift. e2e `screening.spec.ts`, `--retries=0`, both projects, production build: 12 of 12, matching `--list`.
+
+## R-270 follow-up — the draft and approval fire wherever the last blocker clears
+**Commit:** `PENDING`  ·  **Date:** 2026-10-22
+
+**What it built.** `lib/screening/household.ts`: `settleHousehold` (household check, `SCREENED → APPROVED`, lease draft, approval messages) and `tellApplicant`, moved out of `recordScreeningDecision`. Two new callers: `recordNoticeService` for an ADVERSE_ACTION notice, and `advanceProspectStage` when a move to APPROVED overrides an owed notice. `localInputValue` moved from `notices.spec.ts` to `e2e/fixtures.ts`.
+
+**What it decided.** D-335 (owner call), amending D-334. A household held at SCREENED by an owed notice used to get no draft and no approval once that notice was served or overridden. That was the normal way out for a conditionally approved applicant with no email. A plain hand move with nothing owed still opens nothing.
+
+**What it left behind.** Nothing new.
+
+**Found along the way.** A side agent spotted the gap after R-270 shipped. R-270's own e2e only covered the automatic advance, which is why it passed.
+
+**Gate.** lint and typecheck clean. `npm test`: 3,577 passed + 4 skipped of 3,581. e2e `screening.spec.ts` + `notices.spec.ts`, `--retries=0`, both projects, production build: 28 of 28, matching `--list`.

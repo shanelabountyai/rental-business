@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { hashPassword, mintToken } from '@rental/core/auth'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
-import { axeScan, uniqueClientHeaders, uniquePhone, signInWithLink } from './fixtures.ts'
+import { axeScan, localInputValue, uniqueClientHeaders, uniquePhone, signInWithLink } from './fixtures.ts'
 
 // Notice delivery proof, end to end (COMM-02, R-051).
 //
@@ -116,29 +116,6 @@ async function seedNotice() {
   })
 
   return { entity, property, unit, tenant, lease, notice, stamp }
-}
-
-/// A `datetime-local` value in the PROPERTY's timezone, N hours ago.
-///
-/// NOT a hardcoded date. The first draft of this file used a literal
-/// '2026-08-16T09:30' and every service test failed with "cannot be recorded
-/// in the future" - because the property is America/Chicago and the machine
-/// had already rolled past UTC midnight, so the literal was genuinely
-/// tomorrow. The same UTC-vs-property-local fencepost this product's own
-/// date helpers exist to kill, committed in a fixture.
-function localInputValue(hoursAgo: number, timeZone: string): string {
-  const instant = new Date(Date.now() - hoursAgo * 3_600_000)
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hourCycle: 'h23',
-  }).formatToParts(instant)
-  const get = (type: string) => parts.find((part) => part.type === type)!.value
-  return `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}`
 }
 
 /// Mints a magic link the way the sign-in action would. The portal has no

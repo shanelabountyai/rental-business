@@ -268,3 +268,26 @@ export async function signInWithLink(page: Page, link: string): Promise<void> {
   await page.getByRole('button', { name: 'Continue' }).click()
   await page.waitForURL((url) => !url.pathname.includes('/verify'))
 }
+
+/// A `datetime-local` value in the PROPERTY's timezone, N hours ago.
+///
+/// NOT a hardcoded date. The first draft of this file used a literal
+/// '2026-08-16T09:30' and every service test failed with "cannot be recorded
+/// in the future" - because the property is America/Chicago and the machine
+/// had already rolled past UTC midnight, so the literal was genuinely
+/// tomorrow. The same UTC-vs-property-local fencepost this product's own
+/// date helpers exist to kill, committed in a fixture.
+export function localInputValue(hoursAgo: number, timeZone: string): string {
+  const instant = new Date(Date.now() - hoursAgo * 3_600_000)
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(instant)
+  const get = (type: string) => parts.find((part) => part.type === type)!.value
+  return `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}`
+}

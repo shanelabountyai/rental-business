@@ -11,6 +11,7 @@ import { revalidatePath } from 'next/cache'
 import { audit } from '@/lib/audit/index.ts'
 import { actorCan, propertyResource, requirePermission } from '@/lib/auth/guard.ts'
 import { applyPaymentHold } from '@/lib/payments/legal-hold.ts'
+import { settleHousehold } from '@/lib/screening/household.ts'
 import { extractCapturedAt } from '@/lib/documents/exif.ts'
 import { rulesForConfigured } from '@/lib/jurisdiction/queries.ts'
 import { generateStorageKey, storage } from '@/lib/storage/index.ts'
@@ -344,6 +345,17 @@ export async function recordNoticeService(
       tx,
     )
   })
+
+  // An adverse-action notice served after the decision may have been the
+  // household's last blocker (D-335).
+  if (notice.type === 'ADVERSE_ACTION' && notice.applicantId) {
+    const applicant = await prisma.applicant.findUniqueOrThrow({
+      where: { id: notice.applicantId },
+      select: { applicationId: true, application: { select: { prospectId: true } } },
+    })
+    await settleHousehold(applicant.applicationId, actor)
+    revalidatePath(`/prospects/${applicant.application.prospectId}`)
+  }
 
   revalidatePath(`/notices/${noticeId}`)
   revalidatePath('/notices')

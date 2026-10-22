@@ -4,6 +4,7 @@ import { adverseActionOwed } from '@rental/core/screening'
 import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { audit } from '@/lib/audit/index.ts'
+import { settleHousehold } from '@/lib/screening/household.ts'
 import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
 
 // STAFF writes for Prospect (LEASE-07, R-058) - separate from actions.ts,
@@ -68,6 +69,7 @@ export async function advanceProspectStage(
   const values = { status: to }
 
   let owingApplicants: { id: string; name: string; screeningReportId: string }[] = []
+  let applicationId: string | null = null
   if (CLOSING_STAGES.has(to)) {
     const application = await prisma.application.findFirst({
       where: { prospectId },
@@ -87,6 +89,7 @@ export async function advanceProspectStage(
         },
       },
     })
+    applicationId = application?.id ?? null
     owingApplicants = (application?.applicants ?? [])
       .filter((a) =>
         adverseActionOwed({
@@ -143,6 +146,14 @@ export async function advanceProspectStage(
       )
     }
   })
+
+  // An override of the owed notice is the one hand move that clears the
+  // household's blocker, so it gets what the automatic advance would have
+  // (D-335). A plain hand move records something done off-platform and opens
+  // nothing (D-334).
+  if (to === 'APPROVED' && prospect.status === 'SCREENED' && owingApplicants.length > 0 && applicationId) {
+    await settleHousehold(applicationId, actor, { alreadyAdvanced: true })
+  }
 
   revalidatePath(`/prospects/${prospectId}`)
   revalidatePath('/prospects')

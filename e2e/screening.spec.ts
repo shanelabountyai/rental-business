@@ -3,7 +3,7 @@ import { createTotpEnrolment, hashPassword, sealSecret } from '@rental/core/auth
 import { Secret, TOTP } from 'otpauth'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
-import { safeTimeZone } from './fixtures.ts'
+import { localInputValue, safeTimeZone } from './fixtures.ts'
 
 // Screening accept/decline (LEASE-04, R-060) - the one surface everything
 // else in this item feeds: criteria comparison and report ordering are
@@ -430,7 +430,7 @@ test('a conditional approval with no reachable adverse-action notice blocks clos
   const staff = await createStaff()
   // No email/address on file, so the notice cannot auto-serve - the
   // realistic "we can't reach them" gap the block exists for.
-  const { prospect, applicant } = await seedScreenedApplicant(600_000)
+  const { prospect, application, applicant } = await seedScreenedApplicant(600_000)
 
   await signIn(page, staff)
   await page.goto(`/prospects/${prospect.id}`)
@@ -477,4 +477,46 @@ test('a conditional approval with no reachable adverse-action notice blocks clos
     where: { action: 'adverse_action.overridden', entityId: report.id },
   })
   expect(audited?.reason).toMatch(/mailed by hand/)
+
+  // D-335: the override cleared the household's last blocker, so it gets
+  // what the automatic advance would have given it.
+  await expect
+    .poll(async () => (await prisma.lease.findUnique({ where: { applicationId: application.id } }))?.status)
+    .toBe('DRAFT')
+  const approval = await prisma.notification.findFirst({
+    where: { recipientType: 'APPLICANT', recipientId: applicant.id, templateKey: 'application.approved' },
+  })
+  expect(approval).not.toBeNull()
+})
+
+test('serving an owed adverse-action notice by post approves the household and opens its draft (D-335)', async ({
+  page,
+}) => {
+  const staff = await createStaff()
+  const { prospect, property, application, applicant } = await seedScreenedApplicant(600_000)
+
+  await signIn(page, staff)
+  await page.goto(`/prospects/${prospect.id}`)
+  await page.getByLabel('Decision').selectOption('APPROVED_WITH_CONDITIONS')
+  await page.getByLabel('Reason from the list').selectOption('INCOME_BELOW_CRITERIA')
+  await page.getByLabel('Individualized-assessment notes').fill('Approved with a co-signer.')
+  await page.getByRole('button', { name: 'Record decision' }).click()
+  await expect(page.getByText(/Adverse-action notice:.*Not sent yet/)).toBeVisible()
+
+  const report = await prisma.screeningReport.findUniqueOrThrow({ where: { applicantId: applicant.id } })
+  expect(await prisma.lease.findUnique({ where: { applicationId: application.id } })).toBeNull()
+
+  await page.goto(`/notices/${report.adverseActionNoticeId}`)
+  await page.getByLabel('How was it served?').selectOption('CERTIFIED_MAIL')
+  await page.getByLabel('When was it served?').fill(localInputValue(1, property.timezone))
+  await page.getByLabel('Certified-mail article number').fill('9407 1000 0000 0000 0000 35')
+  await page.getByRole('button', { name: 'Record service' }).click()
+  await expect(page.getByText(/9407 1000/)).toBeVisible()
+
+  await expect
+    .poll(async () => (await prisma.prospect.findUniqueOrThrow({ where: { id: prospect.id } })).status)
+    .toBe('APPROVED')
+  await expect
+    .poll(async () => (await prisma.lease.findUnique({ where: { applicationId: application.id } }))?.status)
+    .toBe('DRAFT')
 })

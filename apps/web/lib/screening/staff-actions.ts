@@ -4,16 +4,14 @@ import { businessDate, utcToBusinessDate } from '@rental/core/scheduling'
 import {
   ADVERSE_ACTION_TEMPLATE_VERSION,
   adverseActionNoticeText,
-  adverseActionOwed,
   evaluateCriteria,
 } from '@rental/core/screening'
 import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
-import { openLeaseDraft } from '@/lib/applications/lease-draft.ts'
 import { audit } from '@/lib/audit/index.ts'
 import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
-import { reachOf, type Reach } from '@/lib/notifications/reach.ts'
 import { dispatchPendingNotifications, notify } from '@/lib/notifications/send.ts'
+import { settleHousehold, tellApplicant } from './household.ts'
 import { outOfOrderApplicationIds } from './order.ts'
 
 // STAFF writes for ScreeningReport (LEASE-04, R-060) - separate from any
@@ -348,41 +346,7 @@ export async function recordScreeningDecision(
     )
   }
 
-  // Every applicant in the household now decided, none declined, and no
-  // adverse action still owed - advance the pipeline to APPROVED. A decline
-  // stays at SCREENED; there is no separate ProspectStatus for it (that
-  // enum's own comment already notes only the first two transitions are
-  // automated - see order.ts's identical guard for why this never
-  // overwrites a later stage staff already set by hand). An
-  // APPROVED_WITH_CONDITIONS applicant with an unsent, un-overridden notice
-  // holds the WHOLE household at SCREENED until that is resolved - this is
-  // "blocks closing the application" (LEASE-05).
-  const allApplicants = await prisma.applicant.findMany({
-    where: { applicationId: application.id },
-    include: {
-      screeningReport: {
-        select: {
-          decision: true,
-          adverseActionOverriddenAt: true,
-          adverseActionNotice: { select: { servedAt: true } },
-        },
-      },
-    },
-  })
-  const allDecided = allApplicants.every((a) => a.screeningReport?.decision != null)
-  const allApproved = allApplicants.every(
-    (a) =>
-      a.screeningReport?.decision === 'APPROVED' ||
-      a.screeningReport?.decision === 'APPROVED_WITH_CONDITIONS',
-  )
-  const noneOwed = allApplicants.every(
-    (a) =>
-      !adverseActionOwed({
-        decision: a.screeningReport?.decision ?? null,
-        noticeSentAt: a.screeningReport?.adverseActionNotice?.servedAt ?? null,
-        overriddenAt: a.screeningReport?.adverseActionOverriddenAt ?? null,
-      }),
-  )
+  const { allDecided } = await settleHousehold(application.id, actor)
   // The household's review Task (R-269) is done once nobody is left to
   // decide, whatever the outcome.
   if (allDecided) {
@@ -394,27 +358,6 @@ export async function recordScreeningDecision(
       },
       data: { status: 'DONE', completedAt: new Date(), completedByStaffId: actor.id },
     })
-  }
-  if (allDecided && allApproved && noneOwed) {
-    const advanced = await prisma.prospect.updateMany({
-      where: { id: application.prospectId, status: 'SCREENED' },
-      data: { status: 'APPROVED' },
-    })
-    // R-270 (PRD 08 C5, M3.2): only on the transition itself, so the draft
-    // and the approval text happen once per household. Outside the decision's
-    // transaction on purpose - the decision stands whatever happens here.
-    if (advanced.count > 0) {
-      const draft = await openLeaseDraft(application.id, actor).catch((error) => {
-        console.error(`[screening] lease draft failed for application ${application.id}`, error)
-        return { skipped: 'it failed - see the server log' }
-      })
-      if ('skipped' in draft) {
-        console.warn(`[screening] no lease draft for application ${application.id}: ${draft.skipped}`)
-      }
-      for (const member of allApplicants) {
-        await tellApplicant(member, application, 'application.approved', `application-approved:${member.id}`)
-      }
-    }
   }
 
   revalidatePath(`/prospects/${application.prospectId}`)
@@ -480,43 +423,6 @@ export async function requestApplicantInfo(
         : reach.status === 'DEFERRED'
           ? 'Recorded. It goes to the applicant once quiet hours end.'
           : `Recorded, but NOT SENT - ${reach.why}. Contact the applicant yourself.`,
-  }
-}
-
-/**
- * One applicant message (R-270), sent now rather than at the next cron tick,
- * and what happened to it. A co-applicant is never texted - nobody consented
- * for them (LEGAL-03, `smsConsentVerdict`) - so one with no email gets
- * nothing, and the reach says so instead of claiming a send. Never throws:
- * the decision or request it follows is already recorded.
- */
-async function tellApplicant(
-  applicant: { id: string; firstName: string; email: string | null; phone: string | null },
-  application: { propertyId: string; property: { addressLine1: string } },
-  templateKey: string,
-  idempotencyKey: string,
-  extra: Record<string, string> = {},
-): Promise<Reach> {
-  try {
-    const outcomes = await notify({
-      category: 'prospect_application',
-      templateKey,
-      recipient: { type: 'APPLICANT', id: applicant.id, email: applicant.email, phone: applicant.phone },
-      context: {
-        firstName: applicant.firstName,
-        addressLine1: application.property.addressLine1,
-        ...extra,
-      },
-      propertyId: application.propertyId,
-      idempotencyKey,
-    })
-    await dispatchPendingNotifications(new Date(), 50, {
-      deliveryIds: outcomes.map((o) => o.deliveryId).filter((id): id is string => id != null),
-    })
-    return reachOf(outcomes)
-  } catch (error) {
-    console.error(`[screening] ${templateKey} failed for applicant ${applicant.id}`, error)
-    return { status: 'NOT_SENT', why: 'sending failed' }
   }
 }
 
