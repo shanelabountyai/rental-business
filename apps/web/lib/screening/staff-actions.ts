@@ -9,8 +9,10 @@ import {
 } from '@rental/core/screening'
 import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
+import { openLeaseDraft } from '@/lib/applications/lease-draft.ts'
 import { audit } from '@/lib/audit/index.ts'
 import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
+import { reachOf, type Reach } from '@/lib/notifications/reach.ts'
 import { dispatchPendingNotifications, notify } from '@/lib/notifications/send.ts'
 import { outOfOrderApplicationIds } from './order.ts'
 
@@ -23,6 +25,7 @@ import { outOfOrderApplicationIds } from './order.ts'
 
 export interface DecisionFormState {
   error?: string
+  notice?: string
 }
 
 const DECISIONS = ['APPROVED', 'APPROVED_WITH_CONDITIONS', 'DECLINED'] as const
@@ -334,6 +337,17 @@ export async function recordScreeningDecision(
     }
   }
 
+  // R-270 (PRD 08 C4): the decline or conditional-approval TEXT, beside the
+  // notice above. Keyed on the report, so a retry never sends it twice.
+  if (owesAdverseAction) {
+    await tellApplicant(
+      applicant,
+      application,
+      decision === 'DECLINED' ? 'application.declined' : 'application.approved_with_conditions',
+      `application-decision:${applicant.screeningReport.id}`,
+    )
+  }
+
   // Every applicant in the household now decided, none declined, and no
   // adverse action still owed - advance the pipeline to APPROVED. A decline
   // stays at SCREENED; there is no separate ProspectStatus for it (that
@@ -382,10 +396,25 @@ export async function recordScreeningDecision(
     })
   }
   if (allDecided && allApproved && noneOwed) {
-    await prisma.prospect.updateMany({
+    const advanced = await prisma.prospect.updateMany({
       where: { id: application.prospectId, status: 'SCREENED' },
       data: { status: 'APPROVED' },
     })
+    // R-270 (PRD 08 C5, M3.2): only on the transition itself, so the draft
+    // and the approval text happen once per household. Outside the decision's
+    // transaction on purpose - the decision stands whatever happens here.
+    if (advanced.count > 0) {
+      const draft = await openLeaseDraft(application.id, actor).catch((error) => {
+        console.error(`[screening] lease draft failed for application ${application.id}`, error)
+        return { skipped: 'it failed - see the server log' }
+      })
+      if ('skipped' in draft) {
+        console.warn(`[screening] no lease draft for application ${application.id}: ${draft.skipped}`)
+      }
+      for (const member of allApplicants) {
+        await tellApplicant(member, application, 'application.approved', `application-approved:${member.id}`)
+      }
+    }
   }
 
   revalidatePath(`/prospects/${application.prospectId}`)
@@ -396,8 +425,8 @@ export async function recordScreeningDecision(
  * "Request more info" (R-269, PRD 08 C3/M3.4): the outcome beside approve
  * and decline that is NOT a decision, so it never writes
  * ScreeningReport.decision, needs no screening report (the vendor is never a
- * gate, C6), and can be asked more than once. Sending it to the applicant is
- * R-270; until then the panel says it was not sent.
+ * gate, C6), and can be asked more than once. R-270 sends it to the applicant
+ * and says on the form whether it actually went.
  */
 export async function requestApplicantInfo(
   _previous: DecisionFormState,
@@ -418,7 +447,7 @@ export async function requestApplicantInfo(
     return { error: 'This applicant already has a recorded decision.' }
   }
 
-  await prisma.$transaction(async (tx) => {
+  const row = await prisma.$transaction(async (tx) => {
     const row = await tx.applicantInfoRequest.create({
       data: { applicantId, request, requestedByStaffId: actor.id },
     })
@@ -432,10 +461,63 @@ export async function requestApplicantInfo(
       },
       tx,
     )
+    return row
   })
 
+  const reach = await tellApplicant(
+    applicant,
+    application,
+    'application.info_request',
+    `info-request:${row.id}`,
+    { request },
+  )
+
   revalidatePath(`/prospects/${application.prospectId}`)
-  return {}
+  return {
+    notice:
+      reach.status === 'SENT' || reach.status === 'ALREADY_SENT'
+        ? 'Recorded and sent to the applicant.'
+        : reach.status === 'DEFERRED'
+          ? 'Recorded. It goes to the applicant once quiet hours end.'
+          : `Recorded, but NOT SENT - ${reach.why}. Contact the applicant yourself.`,
+  }
+}
+
+/**
+ * One applicant message (R-270), sent now rather than at the next cron tick,
+ * and what happened to it. A co-applicant is never texted - nobody consented
+ * for them (LEGAL-03, `smsConsentVerdict`) - so one with no email gets
+ * nothing, and the reach says so instead of claiming a send. Never throws:
+ * the decision or request it follows is already recorded.
+ */
+async function tellApplicant(
+  applicant: { id: string; firstName: string; email: string | null; phone: string | null },
+  application: { propertyId: string; property: { addressLine1: string } },
+  templateKey: string,
+  idempotencyKey: string,
+  extra: Record<string, string> = {},
+): Promise<Reach> {
+  try {
+    const outcomes = await notify({
+      category: 'prospect_application',
+      templateKey,
+      recipient: { type: 'APPLICANT', id: applicant.id, email: applicant.email, phone: applicant.phone },
+      context: {
+        firstName: applicant.firstName,
+        addressLine1: application.property.addressLine1,
+        ...extra,
+      },
+      propertyId: application.propertyId,
+      idempotencyKey,
+    })
+    await dispatchPendingNotifications(new Date(), 50, {
+      deliveryIds: outcomes.map((o) => o.deliveryId).filter((id): id is string => id != null),
+    })
+    return reachOf(outcomes)
+  } catch (error) {
+    console.error(`[screening] ${templateKey} failed for applicant ${applicant.id}`, error)
+    return { status: 'NOT_SENT', why: 'sending failed' }
+  }
 }
 
 function recordOn(value: Date | null): string | null {

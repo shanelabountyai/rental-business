@@ -239,6 +239,17 @@ export default async function ProspectDetailPage({
           <h2 id="screening" className="text-sm font-semibold">
             Screening
           </h2>
+          {screening.leaseDraftId && (
+            <p className="text-sm">
+              A lease draft is open for this household.{' '}
+              <Link
+                href={`/leases/${screening.leaseDraftId}`}
+                className="underline underline-offset-2"
+              >
+                Open the lease draft
+              </Link>
+            </p>
+          )}
           <ul className="flex flex-col gap-3 text-sm">
             {screening.applicants.map((a) => (
               <li key={a.applicantId} className="flex flex-col gap-2 rounded border p-2">
@@ -288,6 +299,20 @@ export default async function ProspectDetailPage({
                           More info requested {friendlyDate(r.requestedAt, property.timezone)}:{' '}
                         </span>
                         {r.request}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {a.messages.length > 0 && (
+                  <ul className="flex flex-col gap-1">
+                    {a.messages.map((m) => (
+                      <li key={m.id}>
+                        <span className="text-muted-foreground">
+                          {m.label} ({m.channel.toLowerCase()}):{' '}
+                        </span>
+                        <span className={m.narrative.startsWith('not sent') ? 'text-danger' : ''}>
+                          {m.narrative}
+                        </span>
                       </li>
                     ))}
                   </ul>

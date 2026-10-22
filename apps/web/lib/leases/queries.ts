@@ -226,7 +226,7 @@ export async function screenedApplicants(propertyId: string) {
       // The lease's own property (SEC-09): the builder refuses anyone else,
       // so the picker must not offer them.
       application: { propertyId },
-      screeningReport: { decision: { in: ['APPROVED', 'CONDITIONAL'] } },
+      screeningReport: { decision: { in: ['APPROVED', 'APPROVED_WITH_CONDITIONS'] } },
       // Already on a live tenancy through an earlier change - offering them
       // again would only produce the "already on this lease" refusal, or
       // worse, a second Tenant row for the same person on a second lease.

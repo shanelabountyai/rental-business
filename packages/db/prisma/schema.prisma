@@ -1296,6 +1296,7 @@ model Application {
   listing    Listing     @relation(fields: [listingId], references: [id])
   prospect   Prospect    @relation(fields: [prospectId], references: [id])
   applicants Applicant[]
+  leaseDraft Lease?
 
   @@index([propertyId])
   @@index([listingId])
@@ -2544,6 +2545,13 @@ model Lease {
   renewedFromLeaseId String?
   renewedFrom        Lease?  @relation("LeaseRenewal", fields: [renewedFromLeaseId], references: [id], onDelete: Restrict)
   renewalLeases      Lease[] @relation("LeaseRenewal")
+
+  /// R-270 (PRD 08 C5): the household application this draft was opened
+  /// from when every applicant was approved. Unique, so a household opens one
+  /// draft however often the approval path runs. Restrict for the same
+  /// reason `renewedFromLeaseId` gives: nothing deletes a Lease row.
+  applicationId String?      @unique
+  application   Application? @relation(fields: [applicationId], references: [id], onDelete: Restrict)
 
   property                   Property                @relation(fields: [propertyId], references: [id])
   unit                       Unit                    @relation(fields: [unitId], references: [id])

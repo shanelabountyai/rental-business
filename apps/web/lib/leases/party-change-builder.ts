@@ -192,7 +192,7 @@ export async function buildPartyChange(
     screeningDecision: (a.screeningReport?.decision ?? null) as
       | 'APPROVED'
       | 'DECLINED'
-      | 'CONDITIONAL'
+      | 'APPROVED_WITH_CONDITIONS'
       | null,
     monthlyIncomeCents: a.monthlyIncomeCents,
   }))

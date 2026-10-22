@@ -104,7 +104,7 @@ describe('assessPartyChange', () => {
   // deposit) - a decision a person made, not an absence of one. It passes
   // here for the same reason it passes anywhere else in this product.
   it('accepts a conditional approval', () => {
-    expect(fields({ ...base, incoming: [{ ...screened, screeningDecision: 'CONDITIONAL' }] })).toEqual(
+    expect(fields({ ...base, incoming: [{ ...screened, screeningDecision: 'APPROVED_WITH_CONDITIONS' }] })).toEqual(
       [],
     )
   })

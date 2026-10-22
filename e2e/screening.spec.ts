@@ -202,8 +202,13 @@ test.afterAll(async () => {
 
 test('shows the report criteria and records an explicit approve decision', async ({ page }) => {
   const staff = await createStaff()
-  // 4x the seeded 150,000c rent, comfortably over the 3x floor.
-  const { prospect, property, application } = await seedScreenedApplicant(600_000)
+  // 4x the seeded 150,000c rent, comfortably over the 3x floor. An email on
+  // file so the approval (R-270) has a channel that can reach them.
+  const { prospect, property, application, applicant } = await seedScreenedApplicant(
+    600_000,
+    undefined,
+    { withEmailAndAddress: true },
+  )
   // The review Task a real completion opens (R-269, fee-webhook.ts) - the
   // fixture skips completion, so it is seeded here to prove the decision
   // closes it.
@@ -239,6 +244,31 @@ test('shows the report criteria and records an explicit approve decision', async
     .toBe('APPROVED')
   const closed = await prisma.task.findUniqueOrThrow({ where: { id: review.id } })
   expect(closed.status).toBe('DONE')
+
+  // R-270 (PRD 08 C5): the approved household becomes a lease draft in the
+  // ordinary lease flow, with the applicant on it as the primary tenant.
+  const draft = await prisma.lease.findUniqueOrThrow({
+    where: { applicationId: application.id },
+    include: { leaseTenants: { include: { tenant: true } } },
+  })
+  expect(draft.status).toBe('DRAFT')
+  expect(draft.origin).toBe('APPLICATION')
+  expect(draft.rentCents).toBe(150_000)
+  expect(draft.leaseTenants).toHaveLength(1)
+  expect(draft.leaseTenants[0]?.isPrimary).toBe(true)
+  expect(draft.leaseTenants[0]?.tenant.lastName).toBe(prospect.lastName)
+  await page.reload()
+  await expect(page.getByRole('link', { name: 'Open the lease draft' })).toHaveAttribute(
+    'href',
+    `/leases/${draft.id}`,
+  )
+
+  // R-270 (PRD 08 C4): and the approval goes to the applicant.
+  const approval = await prisma.notification.findFirst({
+    where: { recipientType: 'APPLICANT', recipientId: applicant.id, templateKey: 'application.approved', channel: 'EMAIL' },
+  })
+  expect(approval?.body).toContain('is approved')
+  await expect(screeningSection.getByText('Approval (email):')).toBeVisible()
 
   const audited = await prisma.auditLog.findFirst({
     where: { action: 'screening.decided', propertyId: property.id },
@@ -314,6 +344,10 @@ test('records a request for more info without deciding (R-269)', async ({ page }
   await page.getByLabel('What you need from them').fill('Two recent pay stubs.')
   await page.getByRole('button', { name: 'Request more info' }).click()
   await expect(page.getByText(/More info requested .*:/)).toBeVisible()
+  // R-270: this fixture's applicant has no email and no phone, so nothing
+  // can reach them - and the form says so rather than claiming a send.
+  await expect(page.getByText(/Recorded, but NOT SENT/)).toBeVisible()
+  await expect(page.getByText('More-info request (email):')).toBeVisible()
 
   const requests = await prisma.applicantInfoRequest.findMany({ where: { applicantId: applicant.id } })
   expect(requests.map((r) => r.request)).toEqual(['Two recent pay stubs.'])
@@ -377,6 +411,14 @@ test('a decline generates and auto-serves an FCRA adverse-action notice by email
     where: { recipientType: 'APPLICANT', recipientId: applicant.id, templateKey: 'application.adverse_action' },
   })
   expect(emailed).not.toBeNull()
+  // R-270: the decline text is SMS only (the email is the notice), and this
+  // applicant has no phone, so it is recorded as not sent.
+  const texted = await prisma.notification.findFirst({
+    where: { recipientType: 'APPLICANT', recipientId: applicant.id, templateKey: 'application.declined' },
+    include: { delivery: true },
+  })
+  expect(texted?.channel).toBe('SMS')
+  expect(texted?.delivery?.status).toBe('SUPPRESSED')
 
   // Visible on the Prospect page too.
   await expect(page.getByText(/Adverse-action notice:.*Sent/)).toBeVisible()

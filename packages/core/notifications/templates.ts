@@ -2005,6 +2005,103 @@ export const applicationAdverseActionTemplate: NotificationTemplate<AdverseActio
   }),
 }
 
+/// Context for the applicant decision texts (R-270, PRD 08 C4).
+export interface ApplicationDecisionContext {
+  firstName: string
+  addressLine1: string
+}
+
+/**
+ * The household is approved (R-270, PRD 08 C4/M3.2) - sent to EVERY applicant
+ * once the last one is decided and nobody is declined, the same moment the
+ * lease draft opens. Never per applicant: telling one person "approved" while
+ * a co-applicant is still undecided would be a promise the household may not
+ * get. Code templates, not owner-editable: D-44, and R-268 waits on OQ-20.
+ */
+export const applicationApprovedTemplate: NotificationTemplate<ApplicationDecisionContext> = {
+  key: 'application.approved',
+  category: 'prospect_application',
+  channels: ['SMS', 'EMAIL'],
+  render: (context, channel) => {
+    if (channel === 'SMS') {
+      return {
+        body: `Good news - your application for ${context.addressLine1} is approved. We will send the lease to sign shortly.`,
+      }
+    }
+    return {
+      subject: `Application approved - ${context.addressLine1}`,
+      body: [
+        `Hi ${context.firstName},`,
+        '',
+        `Your application for ${context.addressLine1} is approved. We are preparing the lease now and will send it to you to review and sign.`,
+      ].join('\n'),
+    }
+  },
+}
+
+/**
+ * A decline or a conditional approval (R-270). SMS ONLY, on purpose: the
+ * email for these outcomes IS the FCRA adverse-action notice
+ * (`application.adverse_action`), and a second, shorter email beside it would
+ * be the one people read. The text never states a reason - the reason list is
+ * unreviewed (OQ-16, D-333) and the notice is where the decision is explained.
+ */
+export const applicationDeclinedTemplate: NotificationTemplate<ApplicationDecisionContext> = {
+  key: 'application.declined',
+  category: 'prospect_application',
+  channels: ['SMS'],
+  render: (context) => ({
+    body: `Hi ${context.firstName}, we are not able to approve your application for ${context.addressLine1}. A written notice explaining the decision and your rights is on its way to you.`,
+  }),
+}
+
+export const applicationConditionalTemplate: NotificationTemplate<ApplicationDecisionContext> = {
+  key: 'application.approved_with_conditions',
+  category: 'prospect_application',
+  channels: ['SMS'],
+  render: (context) => ({
+    body: `Hi ${context.firstName}, your application for ${context.addressLine1} can be approved with conditions. A written notice explaining the conditions and your rights is on its way to you.`,
+  }),
+}
+
+/// Context for `application.info_request` (R-270, PRD 08 C3/C4).
+export interface ApplicationInfoRequestContext {
+  firstName: string
+  addressLine1: string
+  /// What staff typed, verbatim.
+  request: string
+}
+
+/// "two recent pay stubs" reads as a run-on before "Reply to..." in one text.
+function sentence(text: string): string {
+  return /[.!?]$/.test(text) ? text : `${text}.`
+}
+
+export const applicationInfoRequestTemplate: NotificationTemplate<ApplicationInfoRequestContext> = {
+  key: 'application.info_request',
+  category: 'prospect_application',
+  channels: ['SMS', 'EMAIL'],
+  render: (context, channel) => {
+    if (channel === 'SMS') {
+      return {
+        body: `Hi ${context.firstName}, to finish reviewing your application for ${context.addressLine1} we need: ${sentence(context.request)} Reply to this message with any questions.`,
+      }
+    }
+    return {
+      subject: `More information needed - ${context.addressLine1}`,
+      body: [
+        `Hi ${context.firstName},`,
+        '',
+        `To finish reviewing your application for ${context.addressLine1}, we need the following:`,
+        '',
+        context.request,
+        '',
+        'Reply to this email with any questions.',
+      ].join('\n'),
+    }
+  },
+}
+
 /// Context for `showing.invite` (LEASE-08, R-064) - the link to book a
 /// slot, sent right after a prospect answers pre-screening.
 export interface ShowingInviteContext {
@@ -2443,6 +2540,14 @@ export const TEMPLATES: Readonly<Record<string, NotificationTemplate<never>>> = 
     applicationFeePaidTemplate as unknown as NotificationTemplate<never>,
   [applicationAdverseActionTemplate.key]:
     applicationAdverseActionTemplate as unknown as NotificationTemplate<never>,
+  [applicationApprovedTemplate.key]:
+    applicationApprovedTemplate as unknown as NotificationTemplate<never>,
+  [applicationDeclinedTemplate.key]:
+    applicationDeclinedTemplate as unknown as NotificationTemplate<never>,
+  [applicationConditionalTemplate.key]:
+    applicationConditionalTemplate as unknown as NotificationTemplate<never>,
+  [applicationInfoRequestTemplate.key]:
+    applicationInfoRequestTemplate as unknown as NotificationTemplate<never>,
   [leaseSignInviteTemplate.key]:
     leaseSignInviteTemplate as unknown as NotificationTemplate<never>,
   [leaseAmendmentSignInviteTemplate.key]:

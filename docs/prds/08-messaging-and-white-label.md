@@ -31,7 +31,7 @@ The draft's premise ("no operator-composed messaging, no audience selection, no 
 | B6 | Partial | `template.write` / `template.approve` exist | R-267, gated on OQ-15 |
 | C1, C3, C7 | Built (R-269) | Review Task, reason list (placeholder, OQ-16; recorded, not in the notice, D-333), request more info, template version on the decision | R-269 ✅ |
 | C2 | Partial | Screening report, document upload | R-271 |
-| C4, C5 | Partial / new | Adverse-action notice only | R-270 |
+| C4, C5 | Built (R-270) | Decision and more-info texts (code templates, not owner-editable until OQ-20/R-268); household approval opens a lease draft (D-334) | R-270 ✅ |
 | C6 | Built | Simulated adapter, decision is always human (D-7, R-060) | — |
 | §7 consent | Built | `TenantConsent` (R-051b, D-49) | — |
 | §7 footer | Partial | "Reply STOP" in opt-out replies only | R-266 |

@@ -1,6 +1,7 @@
 import 'server-only'
 
-import { businessDate, utcToBusinessDate } from '@rental/core/scheduling'
+import { deliveryNarrative } from '@rental/core/comms'
+import { businessDate, friendlyTimestamp, utcToBusinessDate } from '@rental/core/scheduling'
 import { evaluateCriteria, type CriterionEvaluation } from '@rental/core/screening'
 import { prisma } from '@rental/db'
 import type { ResolvedScope } from '@/lib/scope/current-scope.ts'
@@ -24,6 +25,11 @@ export interface ApplicantScreeningSummary {
   decidedAt: Date | null
   /// R-269: every "request more info", oldest first.
   infoRequests: { id: string; request: string; requestedAt: Date }[]
+  /// R-270: every decision or info-request message sent to them, one line
+  /// per channel, with what actually happened - a co-applicant is never
+  /// texted (no consent is possible for them), so this is how staff learn
+  /// they have to make contact themselves.
+  messages: { id: string; label: string; channel: string; narrative: string }[]
   /// R-061: set only for DECLINED/APPROVED_WITH_CONDITIONS. Null noticeId
   /// with a non-null decision means one is still owed and unresolved - see
   /// `adverseActionOwed()`.
@@ -45,6 +51,15 @@ export interface ApplicationScreeningSummary {
   outOfOrder: boolean
   /// R-269: the active decline-reason list, for the decision form.
   reasons: { value: string; label: string }[]
+  /// R-270: the lease draft opened when the household was approved.
+  leaseDraftId: string | null
+}
+
+const MESSAGE_LABELS: Record<string, string> = {
+  'application.approved': 'Approval',
+  'application.declined': 'Decline',
+  'application.approved_with_conditions': 'Conditional approval',
+  'application.info_request': 'More-info request',
 }
 
 export async function screeningForApplication(
@@ -56,6 +71,7 @@ export async function screeningForApplication(
     include: {
       listing: { select: { rentCents: true } },
       property: { select: { timezone: true } },
+      leaseDraft: { select: { id: true } },
       applicants: {
         include: {
           screeningReport: {
@@ -76,6 +92,17 @@ export async function screeningForApplication(
   if (!application) return null
 
   const currentCriteria = await currentScreeningCriteria()
+
+  const sent = await prisma.notification.findMany({
+    where: {
+      recipientType: 'APPLICANT',
+      recipientId: { in: application.applicants.map((a) => a.id) },
+      templateKey: { in: Object.keys(MESSAGE_LABELS) },
+    },
+    include: { delivery: true },
+    orderBy: { createdAt: 'asc' },
+  })
+  const zone = application.property.timezone
 
   // Every version actually pinned on a report here, fetched by ITS OWN row
   // - not assumed to equal `currentCriteria` (Applicant.feeCents's own
@@ -122,6 +149,25 @@ export async function screeningForApplication(
       decisionReason: report?.decisionReason?.label ?? null,
       decidedAt: report?.decidedAt ?? null,
       infoRequests: applicant.infoRequests,
+      messages: sent
+        .filter((n) => n.recipientId === applicant.id)
+        .map((n) => ({
+          id: n.id,
+          label: MESSAGE_LABELS[n.templateKey]!,
+          channel: n.channel === 'SMS' ? 'Text' : 'Email',
+          narrative: n.delivery
+            ? deliveryNarrative(
+                {
+                  status: n.delivery.status,
+                  detail: n.delivery.suppressedReason ?? n.delivery.failureCode,
+                  sentAt: n.delivery.sentAt,
+                  deliveredAt: n.delivery.deliveredAt,
+                  failedAt: n.delivery.failedAt,
+                },
+                (at) => friendlyTimestamp(at, zone),
+              )
+            : 'no delivery recorded',
+        })),
       adverseAction: report?.adverseActionNotice
         ? {
             noticeId: report.adverseActionNotice.id,
@@ -136,7 +182,7 @@ export async function screeningForApplication(
 
   const reasons = await activeDecisionReasons()
 
-  return { applicants, outOfOrder, reasons }
+  return { applicants, outOfOrder, reasons, leaseDraftId: application.leaseDraft?.id ?? null }
 }
 
 /** R-269: the decline-reason list, oldest first, retired rows left out. */

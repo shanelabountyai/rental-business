@@ -37,7 +37,7 @@ export interface PartyChangePartyInput {
   applicantId?: string | null
   /// INCOMING only: whether that applicant's screening reached a decision,
   /// and which. Null means no ScreeningReport exists at all.
-  screeningDecision?: 'APPROVED' | 'DECLINED' | 'CONDITIONAL' | null
+  screeningDecision?: 'APPROVED' | 'DECLINED' | 'APPROVED_WITH_CONDITIONS' | null
   monthlyIncomeCents?: number | null
 }
 

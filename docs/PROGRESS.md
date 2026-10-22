@@ -14709,3 +14709,28 @@ Re-opens the project for two rows from the post-closure second-pass review of th
 - A `prettier --write` on one test file reformatted all 300 lines into another quote style. I restored the file from git and applied only the real edit. No repo prettier config covers `packages/core`, so do not run prettier there.
 
 **Gate.** lint and typecheck clean (the `requirePermission` warnings predate this item). `npm test`: 3,577 passed + 4 skipped. `db:migrate:test` applied, `db:drift` and `db:ci`: no drift. e2e `screening.spec.ts` + `applications.spec.ts`, `--retries=0`, both projects: 18 of 18, matching `--list`.
+
+## R-270 — applicant decision texts and approve-to-lease-draft
+**Commit:** `PENDING`  ·  **Date:** 2026-10-21
+
+**What it built.**
+- Four code templates in `prospect_application`: `application.approved` (SMS + email), `application.declined` and `application.approved_with_conditions` (SMS only; the email is the FCRA notice), and `application.info_request` (SMS + email, staff's words verbatim).
+- `recordScreeningDecision` texts a decline or conditional approval to that applicant, beside the notice. When the household reaches APPROVED, it texts and emails every applicant and opens a lease draft. Both happen only on the `SCREENED → APPROVED` transition.
+- `lib/applications/lease-draft.ts` → `openLeaseDraft`: an ordinary DRAFT `Lease` linked by the new unique `Lease.applicationId` (migration `20261021200000_application_lease_draft`). Unit, rent and deposit come from the listing; the start date is the later of available date and today; there is no end date. Each applicant becomes a new `Tenant`, with the lead as primary. Audited as `lease.created`.
+- `requestApplicantInfo` sends the request and says on the form whether it went: sent, held for quiet hours, or "Recorded, but NOT SENT — why. Contact the applicant yourself."
+- `/prospects/[id]` lists each applicant's decision and more-info messages per channel, with what happened to each (`deliveryNarrative`), and links the lease draft.
+
+**What it decided.**
+- D-334. The approval goes to the household once, never per applicant. Decline and conditional texts never state a reason. A co-applicant is never texted, because LEGAL-03 allows no consent on their behalf, so the page shows staff who was not reached. No draft opens if the decider lacks `lease.write`, the deposit is over the cap, or the unit has a live tenancy. The text's own record is the `Notification` row; `decisionTemplateVersion` stays the notice's.
+
+**What it left behind.**
+- Owner-editable versions of these texts: R-268 (gated on OQ-20, D-44).
+- Moving a prospect to APPROVED by hand on the pipeline form opens no draft and sends nothing (D-334).
+- When no draft opens, the reason goes only to the server log. The page shows no draft link and staff create the lease by hand.
+- Not walked in a browser beyond e2e.
+
+**Found along the way.**
+- `screenedApplicants` (R-090's roommate picker) filtered on `decision in ['APPROVED', 'CONDITIONAL']`. `CONDITIONAL` is not a value anything writes, since the column is a `String` and the real value is `APPROVED_WITH_CONDITIONS`. So conditionally approved applicants never appeared in the picker. Fixed there and in the party-change types.
+- The first full `npm test` showed 33 timeouts across 14 unrelated files, because I ran `db:drift` and `db:ci` at the same time. Rerun alone, the 14 files passed 203 of 203. Do not run database checks during the unit suite.
+
+**Gate.** lint and typecheck clean (the warnings predate this item). `npm test`: 3,577 passed + 4 skipped of 3,581 (33 confirmed on rerun, above). `db:migrate:test` applied; `db:drift` and `db:ci`: no drift. e2e `screening.spec.ts`, `--retries=0`, both projects, production build: 12 of 12, matching `--list`.

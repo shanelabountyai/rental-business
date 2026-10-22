@@ -110,7 +110,7 @@ export function InfoRequestForm({
           label="What you need from them"
           name="request"
           idPrefix={`info-${applicantId}`}
-          hint="For example, two recent pay stubs. This is recorded but not sent yet: contact the applicant yourself."
+          hint="For example, two recent pay stubs. Sent to the applicant by text and email where we can reach them; the form says if it could not be."
           rows={2}
         />
         <SubmitButton
