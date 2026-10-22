@@ -14742,8 +14742,8 @@ Re-opens the project for two rows from the post-closure second-pass review of th
 
 **What it decided.** D-335 (owner call), amending D-334. A household held at SCREENED by an owed notice used to get no draft and no approval once that notice was served or overridden. That was the normal way out for a conditionally approved applicant with no email. A plain hand move with nothing owed still opens nothing.
 
-**What it left behind.** Nothing new.
+**What it left behind.** 93 e2e specs still hard-code `timezone: 'America/Chicago'`. Any of them that asserts a message was SENT fails when CI runs during Chicago's quiet hours. Fix each the way `announcements.spec.ts` now does (`safeTimeZone()`) when it next goes red, or sweep them as their own item.
 
-**Found along the way.** A side agent spotted the gap after R-270 shipped. R-270's own e2e only covered the automatic advance, which is why it passed.
+**Found along the way.** A side agent spotted the gap after R-270 shipped. Separately, CI for R-270's push failed in `announcements.spec.ts` (R-262, mobile-chrome): the fixture hard-coded Chicago, and at 04:18 UTC (23:18 in Chicago) the resend email was correctly held as DEFERRED, not SENT. That test bug was already there; R-270 did not cause it. Now uses `safeTimeZone()`, and the scheduled-send test reads the property's own zone. `announcements.spec.ts`: 30 of 30. R-270's own e2e only covered the automatic advance, which is why it passed.
 
 **Gate.** lint and typecheck clean. `npm test`: 3,577 passed + 4 skipped of 3,581. e2e `screening.spec.ts` + `notices.spec.ts`, `--retries=0`, both projects, production build: 28 of 28, matching `--list`.

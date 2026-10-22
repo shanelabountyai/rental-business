@@ -3,7 +3,7 @@ import { hashPassword } from '@rental/core/auth'
 import { businessDate, wallClockToUtc } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { expect, test } from '@playwright/test'
-import { axeScan, uniqueClientHeaders, uniquePhone } from './fixtures.ts'
+import { axeScan, safeTimeZone, uniqueClientHeaders, uniquePhone } from './fixtures.ts'
 
 // Segment announcements (COMM-04, R-053) — "the city is flushing hydrants
 // Tuesday". One message to a segment (all tenants / one property / one
@@ -45,7 +45,9 @@ async function seedTwoProperties() {
         city: 'Houston',
         state: 'TX',
         postalCode: '77002',
-        timezone: 'America/Chicago',
+        // Safe from quiet hours right now (R-237). A hard-coded Chicago held
+        // R-262's resend email as DEFERRED whenever CI ran after 9pm there.
+        timezone: safeTimeZone(),
         propertyType: 'SINGLE_FAMILY',
         metro,
         tags,
@@ -461,9 +463,9 @@ test.describe('reviewed recipients and saved audiences (R-259)', () => {
     const staff = await seedScopedManager(entity.id)
     const template = await seedTemplate(staff.id)
     // 36h ahead so the date's 09:00 is in the future whatever the hour now.
-    const day = businessDate(new Date(Date.now() + 36 * 60 * 60 * 1000), 'America/Chicago')
+    const day = businessDate(new Date(Date.now() + 36 * 60 * 60 * 1000), a.property.timezone)
     const sendAt = `${day}T09:00`
-    const instant = wallClockToUtc(sendAt, 'America/Chicago')
+    const instant = wallClockToUtc(sendAt, a.property.timezone)
 
     await signIn(page, staff)
     await page.goto('/messages/announcements')
