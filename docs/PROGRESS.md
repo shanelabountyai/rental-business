@@ -14711,7 +14711,7 @@ Re-opens the project for two rows from the post-closure second-pass review of th
 **Gate.** lint and typecheck clean (the `requirePermission` warnings predate this item). `npm test`: 3,577 passed + 4 skipped. `db:migrate:test` applied, `db:drift` and `db:ci`: no drift. e2e `screening.spec.ts` + `applications.spec.ts`, `--retries=0`, both projects: 18 of 18, matching `--list`.
 
 ## R-270 — applicant decision texts and approve-to-lease-draft
-**Commit:** `PENDING`  ·  **Date:** 2026-10-21
+**Commit:** `ec9ed8a`  ·  **Date:** 2026-10-21
 
 **What it built.**
 - Four code templates in `prospect_application`: `application.approved` (SMS + email), `application.declined` and `application.approved_with_conditions` (SMS only; the email is the FCRA notice), and `application.info_request` (SMS + email, staff's words verbatim).
