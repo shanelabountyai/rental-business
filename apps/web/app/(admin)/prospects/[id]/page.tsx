@@ -239,6 +239,16 @@ export default async function ProspectDetailPage({
           <h2 id="screening" className="text-sm font-semibold">
             Screening
           </h2>
+          {screening.approvedWithoutDraft && prospect.status === 'APPROVED' && (
+            <p className="text-danger text-sm">
+              Every applicant is approved and was told a lease is coming, but no lease draft is
+              open. Create the lease by hand from{' '}
+              <Link href="/leases/new" className="underline underline-offset-2">
+                New lease
+              </Link>
+              .
+            </p>
+          )}
           {screening.leaseDraftId && (
             <p className="text-sm">
               A lease draft is open for this household.{' '}

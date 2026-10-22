@@ -53,6 +53,9 @@ export interface ApplicationScreeningSummary {
   reasons: { value: string; label: string }[]
   /// R-270: the lease draft opened when the household was approved.
   leaseDraftId: string | null
+  /// R-270 (D-336): every applicant approved and no draft - the household was
+  /// told a lease is coming and nobody has one open.
+  approvedWithoutDraft: boolean
 }
 
 const MESSAGE_LABELS: Record<string, string> = {
@@ -182,7 +185,16 @@ export async function screeningForApplication(
 
   const reasons = await activeDecisionReasons()
 
-  return { applicants, outOfOrder, reasons, leaseDraftId: application.leaseDraft?.id ?? null }
+  const allApproved =
+    applicants.length > 0 &&
+    applicants.every((a) => a.decision === 'APPROVED' || a.decision === 'APPROVED_WITH_CONDITIONS')
+  return {
+    applicants,
+    outOfOrder,
+    reasons,
+    leaseDraftId: application.leaseDraft?.id ?? null,
+    approvedWithoutDraft: allApproved && !application.leaseDraft,
+  }
 }
 
 /** R-269: the decline-reason list, oldest first, retired rows left out. */

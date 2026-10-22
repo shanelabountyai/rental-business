@@ -276,6 +276,34 @@ test('shows the report criteria and records an explicit approve decision', async
   expect(audited?.actorType).toBe('STAFF')
 })
 
+test('an approval that cannot open a draft raises a Task and warns on the page (D-336)', async ({ page }) => {
+  const staff = await createStaff()
+  const { prospect, property, application } = await seedScreenedApplicant(600_000)
+  // Somebody already lives in the unit, so openLeaseDraft refuses.
+  const listing = await prisma.listing.findUniqueOrThrow({ where: { id: application.listingId } })
+  await prisma.lease.create({
+    data: {
+      propertyId: property.id,
+      unitId: listing.unitId,
+      status: 'ACTIVE',
+      startsOn: new Date('2026-01-01'),
+      rentCents: 150_000,
+    },
+  })
+
+  await signIn(page, staff)
+  await page.goto(`/prospects/${prospect.id}`)
+  await page.getByLabel('Decision').selectOption('APPROVED')
+  await page.getByRole('button', { name: 'Record decision' }).click()
+
+  await expect(page.getByText(/no lease draft is\s+open/)).toBeVisible()
+  expect(await prisma.lease.findUnique({ where: { applicationId: application.id } })).toBeNull()
+  const task = await prisma.task.findFirst({
+    where: { type: 'application.lease_draft', subjectId: application.id },
+  })
+  expect(task?.title).toMatch(/the unit already has a live tenancy/)
+})
+
 test('refuses a decline with no individualized-assessment note', async ({ page }) => {
   const staff = await createStaff()
   const { prospect, applicant } = await seedScreenedApplicant(600_000)

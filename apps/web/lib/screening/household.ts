@@ -2,10 +2,13 @@ import 'server-only'
 
 import type { Actor } from '@rental/core/rbac'
 import { adverseActionOwed } from '@rental/core/screening'
+import { businessDate } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { openLeaseDraft } from '@/lib/applications/lease-draft.ts'
 import { reachOf, type Reach } from '@/lib/notifications/reach.ts'
 import { dispatchPendingNotifications, notify } from '@/lib/notifications/send.ts'
+import { propertyOwner } from '@/lib/staff/property-owner.ts'
+import { createTask } from '@/lib/tasks/create.ts'
 
 /**
  * Is the household approved now, and if it just became so, open its lease
@@ -36,7 +39,7 @@ export async function settleHousehold(
   const application = await prisma.application.findUniqueOrThrow({
     where: { id: applicationId },
     include: {
-      property: { select: { addressLine1: true } },
+      property: { select: { id: true, legalEntityId: true, addressLine1: true, timezone: true } },
       applicants: {
         include: {
           screeningReport: {
@@ -84,8 +87,24 @@ export async function settleHousehold(
       console.error(`[screening] lease draft failed for application ${applicationId}`, error)
       return { skipped: 'it failed - see the server log' }
     })
+    // The approval text says the lease is coming, so a skipped draft is work
+    // somebody owes, not a log line (D-336): a Task for the owner, with why.
+    // The prospect page also warns while no draft exists.
     if ('skipped' in draft) {
       console.warn(`[screening] no lease draft for application ${applicationId}: ${draft.skipped}`)
+      const owner = await propertyOwner(application.property)
+      await createTask(prisma, {
+        propertyId: application.propertyId,
+        type: 'application.lease_draft',
+        subjectType: 'Application',
+        subjectId: applicationId,
+        businessDate: businessDate(new Date(), application.property.timezone),
+        priority: 'ROUTINE',
+        assigneeStaffId: owner?.id ?? null,
+        title: `Prepare the lease by hand for ${application.property.addressLine1}: the household is approved and was told a lease is coming, but no draft opened because ${draft.skipped}`,
+      }).catch((error) => {
+        console.error(`[screening] lease-draft Task failed for application ${applicationId}`, error)
+      })
     }
     for (const member of all) {
       await tellApplicant(member, application, 'application.approved', `application-approved:${member.id}`)

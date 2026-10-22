@@ -14747,3 +14747,16 @@ Re-opens the project for two rows from the post-closure second-pass review of th
 **Found along the way.** A side agent spotted the gap after R-270 shipped. Separately, CI for R-270's push failed in `announcements.spec.ts` (R-262, mobile-chrome): the fixture hard-coded Chicago, and at 04:18 UTC (23:18 in Chicago) the resend email was correctly held as DEFERRED, not SENT. That test bug was already there; R-270 did not cause it. Now uses `safeTimeZone()`, and the scheduled-send test reads the property's own zone. `announcements.spec.ts`: 30 of 30. R-270's own e2e only covered the automatic advance, which is why it passed.
 
 **Gate.** lint and typecheck clean. `npm test`: 3,577 passed + 4 skipped of 3,581. e2e `screening.spec.ts` + `notices.spec.ts`, `--retries=0`, both projects, production build: 28 of 28, matching `--list`.
+
+## R-270 follow-up — a skipped lease draft is a Task, not a log line
+**Commit:** `PENDING`  ·  **Date:** 2026-10-22
+
+**What it built.** When the household is approved but `openLeaseDraft` refuses, `settleHousehold` opens an `application.lease_draft` Task for the owner that names the reason. `/prospects/[id]` warns, in red, while an approved household has no draft. New e2e: a unit with a live tenancy produces no draft, a Task, and the warning.
+
+**What it decided.** D-336. The approval text still goes, and the Task is what keeps its "lease is coming" promise.
+
+**What it left behind.** Nothing new.
+
+**Found along the way.** A side agent flagged it: the approval text went out whether or not a draft opened, and the only record was `console.warn`.
+
+**Gate.** lint and typecheck clean. `npm test`: 3,577 passed + 4 skipped of 3,581. e2e `screening.spec.ts`, `--retries=0`, both projects: 16 of 16, matching `--list`.
