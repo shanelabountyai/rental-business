@@ -14736,7 +14736,7 @@ Re-opens the project for two rows from the post-closure second-pass review of th
 **Gate.** lint and typecheck clean (the warnings predate this item). `npm test`: 3,577 passed + 4 skipped of 3,581 (33 confirmed on rerun, above). `db:migrate:test` applied; `db:drift` and `db:ci`: no drift. e2e `screening.spec.ts`, `--retries=0`, both projects, production build: 12 of 12, matching `--list`.
 
 ## R-270 follow-up — the draft and approval fire wherever the last blocker clears
-**Commit:** `PENDING`  ·  **Date:** 2026-10-22
+**Commit:** `5f0a35b`  ·  **Date:** 2026-10-22
 
 **What it built.** `lib/screening/household.ts`: `settleHousehold` (household check, `SCREENED → APPROVED`, lease draft, approval messages) and `tellApplicant`, moved out of `recordScreeningDecision`. Two new callers: `recordNoticeService` for an ADVERSE_ACTION notice, and `advanceProspectStage` when a move to APPROVED overrides an owed notice. `localInputValue` moved from `notices.spec.ts` to `e2e/fixtures.ts`.
 
