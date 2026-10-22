@@ -29,7 +29,7 @@ The draft's premise ("no operator-composed messaging, no audience selection, no 
 | B3 | Conflicts with D-44 | 13 automated templates deliberately not overridable | R-268, gated on OQ-20 |
 | B5 | New | Quiet hours are a constant; no settings page | R-266 |
 | B6 | Partial | `template.write` / `template.approve` exist | R-267, gated on OQ-15 |
-| C1, C3, C7 | Partial | `recordScreeningDecision` (R-060), adverse-action notice (R-061) | R-269 |
+| C1, C3, C7 | Built (R-269) | Review Task, reason list (placeholder, OQ-16; recorded, not in the notice, D-333), request more info, template version on the decision | R-269 ✅ |
 | C2 | Partial | Screening report, document upload | R-271 |
 | C4, C5 | Partial / new | Adverse-action notice only | R-270 |
 | C6 | Built | Simulated adapter, decision is always human (D-7, R-060) | — |

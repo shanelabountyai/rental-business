@@ -1,5 +1,11 @@
+import { createHash } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
-import { adverseActionNoticeText, adverseActionOwed, disclosedKeyFactors } from './adverse-action.ts'
+import {
+  ADVERSE_ACTION_TEMPLATE_VERSION,
+  adverseActionNoticeText,
+  adverseActionOwed,
+  disclosedKeyFactors,
+} from './adverse-action.ts'
 
 describe('adverseActionNoticeText', () => {
   const base = {
@@ -43,6 +49,17 @@ describe('adverseActionNoticeText', () => {
     const text = adverseActionNoticeText({ ...base, decision: 'DECLINED' })
     expect(text).toContain(base.factors[0])
     expect(text).toContain(base.decisionNotes)
+  })
+
+  // If this fails you changed the notice's wording: bump
+  // ADVERSE_ACTION_TEMPLATE_VERSION, then update both values here.
+  it('pins the wording to ADVERSE_ACTION_TEMPLATE_VERSION', () => {
+    const text = adverseActionNoticeText({ ...base, decision: 'DECLINED', creditScore: score })
+    const digest = createHash('sha256').update(text).digest('hex').slice(0, 12)
+    expect({ version: ADVERSE_ACTION_TEMPLATE_VERSION, digest }).toEqual({
+      version: 'adverse-action/1',
+      digest: '8bc79ea4d318',
+    })
   })
 
   it('omits the factors section entirely when there are none', () => {

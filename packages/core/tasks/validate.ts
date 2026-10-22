@@ -55,6 +55,7 @@ export const TASK_SUBJECT_TYPES = [
   'AbandonmentCase',
   'AccommodationRequest',
   'AdHoc',
+  'Application',
   'ComplianceItem',
   'Deposit',
   'EvictionCase',

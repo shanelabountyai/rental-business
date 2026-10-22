@@ -12,6 +12,8 @@ export type {
   AdverseActionStatus,
   CreditScoreDisclosure,
 } from './adverse-action.ts'
-export { adverseActionNoticeText, adverseActionOwed, disclosedKeyFactors } from './adverse-action.ts'
+export {
+  ADVERSE_ACTION_TEMPLATE_VERSION,
+  adverseActionNoticeText, adverseActionOwed, disclosedKeyFactors } from './adverse-action.ts'
 export type { FieldViolation, ScreeningCriteriaInput } from './criteria.ts'
 export { validateCriteriaInput } from './criteria.ts'

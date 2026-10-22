@@ -203,7 +203,21 @@ test.afterAll(async () => {
 test('shows the report criteria and records an explicit approve decision', async ({ page }) => {
   const staff = await createStaff()
   // 4x the seeded 150,000c rent, comfortably over the 3x floor.
-  const { prospect, property } = await seedScreenedApplicant(600_000)
+  const { prospect, property, application } = await seedScreenedApplicant(600_000)
+  // The review Task a real completion opens (R-269, fee-webhook.ts) - the
+  // fixture skips completion, so it is seeded here to prove the decision
+  // closes it.
+  const review = await prisma.task.create({
+    data: {
+      propertyId: property.id,
+      type: 'application.review',
+      subjectType: 'Application',
+      subjectId: application.id,
+      businessDate: new Date(),
+      priority: 'ROUTINE',
+      title: 'Review the application',
+    },
+  })
 
   await signIn(page, staff)
   await page.goto(`/prospects/${prospect.id}`)
@@ -223,6 +237,8 @@ test('shows the report criteria and records an explicit approve decision', async
       return row.status
     })
     .toBe('APPROVED')
+  const closed = await prisma.task.findUniqueOrThrow({ where: { id: review.id } })
+  expect(closed.status).toBe('DONE')
 
   const audited = await prisma.auditLog.findFirst({
     where: { action: 'screening.decided', propertyId: property.id },
@@ -253,6 +269,7 @@ test('refuses a decline with no individualized-assessment note', async ({ page }
   // retry. Re-selecting is what a real person does too: read the error, redo
   // the whole form.
   await page.getByLabel('Decision').selectOption('DECLINED')
+  await page.getByLabel('Reason from the list').selectOption('RENTAL_HISTORY')
   await page.getByLabel('Individualized-assessment notes').fill('Two evictions in the last year.')
   await page.getByRole('button', { name: 'Record decision' }).click()
   // One match only because the badge and the <option> differ by one letter:
@@ -267,6 +284,45 @@ test('refuses a decline with no individualized-assessment note', async ({ page }
   // SCREENED, right where the fixture started it.
   const updated = await prisma.prospect.findUniqueOrThrow({ where: { id: prospect.id } })
   expect(updated.status).toBe('SCREENED')
+})
+
+test('refuses a decline with no reason from the list (R-269)', async ({ page }) => {
+  const staff = await createStaff()
+  const { prospect, applicant } = await seedScreenedApplicant(600_000)
+
+  await signIn(page, staff)
+  await page.goto(`/prospects/${prospect.id}`)
+
+  await page.getByLabel('Decision').selectOption('DECLINED')
+  await page.getByLabel('Individualized-assessment notes').fill('Two evictions in the last year.')
+  await page.getByRole('button', { name: 'Record decision' }).click()
+  await expect(page.getByText('Choose the reason for this decision from the list.')).toBeVisible()
+
+  const report = await prisma.screeningReport.findUniqueOrThrow({
+    where: { applicantId: applicant.id },
+  })
+  expect(report.decision).toBeNull()
+})
+
+test('records a request for more info without deciding (R-269)', async ({ page }) => {
+  const staff = await createStaff()
+  const { prospect, applicant } = await seedScreenedApplicant(600_000)
+
+  await signIn(page, staff)
+  await page.goto(`/prospects/${prospect.id}`)
+
+  await page.getByLabel('What you need from them').fill('Two recent pay stubs.')
+  await page.getByRole('button', { name: 'Request more info' }).click()
+  await expect(page.getByText(/More info requested .*:/)).toBeVisible()
+
+  const requests = await prisma.applicantInfoRequest.findMany({ where: { applicantId: applicant.id } })
+  expect(requests.map((r) => r.request)).toEqual(['Two recent pay stubs.'])
+  const report = await prisma.screeningReport.findUniqueOrThrow({
+    where: { applicantId: applicant.id },
+  })
+  expect(report.decision).toBeNull()
+  // Still undecided, so the decision form is still there.
+  await expect(page.getByRole('button', { name: 'Record decision' })).toBeVisible()
 })
 
 test('a decline generates and auto-serves an FCRA adverse-action notice by email', async ({
@@ -284,6 +340,7 @@ test('a decline generates and auto-serves an FCRA adverse-action notice by email
   await page.goto(`/prospects/${prospect.id}`)
 
   await page.getByLabel('Decision').selectOption('DECLINED')
+  await page.getByLabel('Reason from the list').selectOption('RENTAL_HISTORY')
   await page.getByLabel('Individualized-assessment notes').fill('Recent eviction on record.')
   await page.getByRole('button', { name: 'Record decision' }).click()
   await expect(page.getByText('Declined')).toBeVisible()
@@ -298,6 +355,12 @@ test('a decline generates and auto-serves an FCRA adverse-action notice by email
   expect(notice?.applicantId).toBe(applicant.id)
   expect(notice?.bodyText).toContain('Simulated Consumer Reporting Agency')
   expect(notice?.bodyText).toMatch(/free copy of your report/)
+  // R-269: the reason is recorded, and kept OUT of the notice while the list
+  // is unreviewed placeholder wording (OQ-16, D-333). The decision records
+  // which wording of the notice it sent.
+  expect(notice?.bodyText).not.toContain('after individualized assessment')
+  expect(report.decisionReasonCode).toBe('RENTAL_HISTORY')
+  expect(report.decisionTemplateVersion).toMatch(/^adverse-action\//)
   // LEGAL-02: the score is disclosed. This fixture's report carries no
   // disclosure facts (a pre-LEGAL-02 row), so the notice says so.
   expect(notice?.bodyText).toContain('Your credit score: 720')
@@ -331,6 +394,7 @@ test('a conditional approval with no reachable adverse-action notice blocks clos
   await page.goto(`/prospects/${prospect.id}`)
 
   await page.getByLabel('Decision').selectOption('APPROVED_WITH_CONDITIONS')
+  await page.getByLabel('Reason from the list').selectOption('INCOME_BELOW_CRITERIA')
   await page.getByLabel('Individualized-assessment notes').fill('Approved with a co-signer.')
   await page.getByRole('button', { name: 'Record decision' }).click()
   await expect(page.getByText('Approved with conditions')).toBeVisible()

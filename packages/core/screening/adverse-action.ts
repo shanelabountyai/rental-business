@@ -29,6 +29,12 @@
 
 import { friendlyBusinessDate, type BusinessDate } from '../scheduling/local-time.ts'
 
+/// Which wording of this notice a decision sent, recorded on the decision
+/// (R-269, PRD 08 C7). Bump it with ANY change to the text below:
+/// adverse-action.test.ts pins a digest of a fixed notice to this value, so a
+/// wording change that forgets the bump fails there.
+export const ADVERSE_ACTION_TEMPLATE_VERSION = 'adverse-action/1'
+
 /// What the provider reported about the score itself. Any piece it did not
 /// report is null (reports ordered before LEGAL-02 carry the score alone),
 /// and the notice says so rather than leaving the line out.

@@ -216,6 +216,15 @@ describe('submitApplicantForm', () => {
       where: { action: 'application.completed', entityId: application.id },
     })
     expect(audited?.actorType).toBe('SYSTEM')
+
+    // R-269 (PRD 08 C1): the completed application is a review Task. Who it
+    // is assigned to is a deployment-wide question (D-331's owner) that the
+    // shared database cannot pin, so only its existence is asserted.
+    const review = await prisma.task.findFirst({
+      where: { type: 'application.review', subjectType: 'Application', subjectId: application.id },
+    })
+    expect(review?.status).toBe('OPEN')
+    expect(review?.title).toMatch(/^Review the application from /)
   })
 
   it('submits but does NOT complete while a fee is still due', async () => {

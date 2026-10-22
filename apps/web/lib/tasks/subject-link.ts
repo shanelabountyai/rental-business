@@ -113,6 +113,13 @@ export const SUBJECT_ROUTES: Record<TaskSubjectType, SubjectRoute | null> = {
         (row) => `/properties/${row.propertyId}/units/${row.unitId}#turnover`,
       ),
   },
+  // R-269: the review happens in the prospect page's screening panel.
+  Application: {
+    permission: 'lease.read',
+    label: 'Open the application',
+    hrefs: (s) =>
+      byId(prisma.application.findMany({ where: ids(s), select: { id: true, prospectId: true } }), s, (row) => `/prospects/${row.prospectId}#screening`),
+  },
   Showing: {
     permission: 'lease.read',
     label: "Open the prospect's showings",

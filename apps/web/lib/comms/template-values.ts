@@ -12,6 +12,7 @@ import { prisma } from '@rental/db'
 
 import { authUrl } from '../auth/delivery.ts'
 import { messagingSettings } from '@/lib/comms/messaging-settings.ts'
+import { propertyOwner } from '@/lib/staff/property-owner.ts'
 
 // Turning a real tenancy into merge-field values (COMM-03, R-049).
 //
@@ -104,33 +105,7 @@ export async function templateValues(
   })
   const owed = balanceCents(rows)
 
-  // THE OWNER IS A PERSON, not the LLC (D-331): the staff user holding an
-  // active `owner` grant, narrowest scope first — this property, then its
-  // entity, then the whole deployment — and the earliest grant within a
-  // scope, so the same tenancy always names the same person.
-  const ownerGrants = await prisma.staffAssignment.findMany({
-    where: {
-      revokedAt: null,
-      role: { key: 'owner' },
-      staffUser: { active: true },
-      OR: [
-        { propertyId: lease.propertyId },
-        { propertyId: null, legalEntityId: lease.property.legalEntityId },
-        { propertyId: null, legalEntityId: null },
-      ],
-    },
-    orderBy: { grantedAt: 'asc' },
-    select: {
-      propertyId: true,
-      legalEntityId: true,
-      staffUser: { select: { name: true, phone: true } },
-    },
-  })
-  const owner = (
-    ownerGrants.find((grant) => grant.propertyId) ??
-    ownerGrants.find((grant) => grant.legalEntityId) ??
-    ownerGrants[0]
-  )?.staffUser
+  const owner = await propertyOwner({ id: lease.propertyId, legalEntityId: lease.property.legalEntityId })
 
   // The PROPERTY's calendar day, not the server's (D-3). A reminder that says
   // "today" and names yesterday is a reminder nobody trusts again.

@@ -2,6 +2,7 @@ import { friendlyBusinessDate, utcToBusinessDate } from '@rental/core/scheduling
 import Link from 'next/link'
 import { actorCan, requirePermission } from '@/lib/auth/guard.ts'
 import { listCriteriaVersions } from '@/lib/screening/criteria-queries.ts'
+import { activeDecisionReasons } from '@/lib/screening/queries.ts'
 import { PageHeader } from '@/components/page-header.tsx'
 import { SUBMIT_BUTTON_CLASSES } from '@/components/ui-classes.ts'
 
@@ -20,8 +21,9 @@ export default async function ScreeningCriteriaPage({
   searchParams: Promise<{ versioned?: string }>
 }) {
   await requirePermission('screening.criteria.read')
-  const [versions, canWrite, { versioned }] = await Promise.all([
+  const [versions, reasons, canWrite, { versioned }] = await Promise.all([
     listCriteriaVersions(),
+    activeDecisionReasons(),
     actorCan('screening.criteria.write'),
     searchParams,
   ])
@@ -98,6 +100,26 @@ export default async function ScreeningCriteriaPage({
           ))}
         </ul>
       )}
+
+      {/* R-269. Read-only here: adding and retiring reasons arrives with
+          R-297, which ties each one to a written criterion per organisation,
+          and the wording waits on counsel either way (OQ-16). */}
+      <section aria-labelledby="decision-reasons" className="flex flex-col gap-2">
+        <h2 id="decision-reasons" className="text-sm font-semibold">
+          Decline reasons
+        </h2>
+        <p className="text-warning text-sm">
+          A placeholder list, not reviewed by counsel (OQ-16). A decline or
+          conditional approval must pick one. It is recorded on the decision
+          and kept out of the adverse-action notice until counsel approves
+          this list.
+        </p>
+        <ul className="flex list-disc flex-col gap-1 pl-5 text-sm">
+          {reasons.map((reason) => (
+            <li key={reason.value}>{reason.label}</li>
+          ))}
+        </ul>
+      </section>
     </div>
   )
 }

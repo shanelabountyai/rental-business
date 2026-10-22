@@ -10,14 +10,17 @@ import Link from 'next/link'
 import { InviteToApplyForm } from '@/components/applications/invite-to-apply-form.tsx'
 import { PageHeader } from '@/components/page-header.tsx'
 import { ProspectStageForm } from '@/components/prospects/prospect-stage-form.tsx'
-import { ScreeningDecisionForm } from '@/components/screening/screening-decision-form.tsx'
+import {
+  InfoRequestForm,
+  ScreeningDecisionForm,
+} from '@/components/screening/screening-decision-form.tsx'
 import { TaskActionButton } from '@/components/tasks/action-button.tsx'
 import { inviteToApply } from '@/lib/applications/staff-actions.ts'
 import { applicationForProspect } from '@/lib/applications/queries.ts'
 import { requireScope } from '@/lib/auth/guard.ts'
 import { advanceProspectStage } from '@/lib/prospects/staff-actions.ts'
 import { prospectForWrite } from '@/lib/prospects/queries.ts'
-import { recordScreeningDecision } from '@/lib/screening/staff-actions.ts'
+import { recordScreeningDecision, requestApplicantInfo } from '@/lib/screening/staff-actions.ts'
 import { screeningForApplication } from '@/lib/screening/queries.ts'
 import { cancelShowing } from '@/lib/showings/staff-actions.ts'
 import { showingsForProspect } from '@/lib/showings/queries.ts'
@@ -273,9 +276,22 @@ export default async function ProspectDetailPage({
                 {a.decision ? (
                   <p>
                     <span className="font-medium">{DECISION_LABELS[a.decision] ?? a.decision}</span>
+                    {a.decisionReason && <span> · {a.decisionReason}</span>}
                     {a.decisionNotes && <span> — {a.decisionNotes}</span>}
                   </p>
                 ) : null}
+                {a.infoRequests.length > 0 && (
+                  <ul className="flex flex-col gap-1">
+                    {a.infoRequests.map((r) => (
+                      <li key={r.id}>
+                        <span className="text-muted-foreground">
+                          More info requested {friendlyDate(r.requestedAt, property.timezone)}:{' '}
+                        </span>
+                        {r.request}
+                      </li>
+                    ))}
+                  </ul>
+                )}
                 {a.adverseAction && (
                   <p className="text-sm">
                     <span className="text-muted-foreground">Adverse-action notice: </span>
@@ -299,15 +315,21 @@ export default async function ProspectDetailPage({
                     </Link>
                   </p>
                 )}
+                {!a.decision && a.reportStatus === 'COMPLETE' && (
+                  <ScreeningDecisionForm
+                    action={recordScreeningDecision}
+                    applicantId={a.applicantId}
+                    applicantName={`${a.firstName} ${a.lastName}`}
+                    outOfOrder={screening.outOfOrder}
+                    reasons={screening.reasons}
+                  />
+                )}
                 {!a.decision && (
-                  a.reportStatus === 'COMPLETE' && (
-                    <ScreeningDecisionForm
-                      action={recordScreeningDecision}
-                      applicantId={a.applicantId}
-                      applicantName={`${a.firstName} ${a.lastName}`}
-                      outOfOrder={screening.outOfOrder}
-                    />
-                  )
+                  <InfoRequestForm
+                    action={requestApplicantInfo}
+                    applicantId={a.applicantId}
+                    applicantName={`${a.firstName} ${a.lastName}`}
+                  />
                 )}
               </li>
             ))}

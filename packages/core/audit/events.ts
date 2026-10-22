@@ -340,6 +340,8 @@ export const AUDIT_ACTIONS = [
   // Compliance overrides
   'entry_notice.overridden',
   'screening.decided',
+  /// R-269: "request more info" on an application - not a decision.
+  'screening.info_requested',
   'application_order.deviated',
   /// R-061: staff moved a prospect to APPROVED/SIGNED despite an unsent
   /// FCRA adverse-action notice - "blocks closing the application until

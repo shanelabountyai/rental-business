@@ -1,7 +1,12 @@
 'use server'
 
 import { businessDate, utcToBusinessDate } from '@rental/core/scheduling'
-import { adverseActionNoticeText, adverseActionOwed, evaluateCriteria } from '@rental/core/screening'
+import {
+  ADVERSE_ACTION_TEMPLATE_VERSION,
+  adverseActionNoticeText,
+  adverseActionOwed,
+  evaluateCriteria,
+} from '@rental/core/screening'
 import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { audit } from '@/lib/audit/index.ts'
@@ -62,6 +67,7 @@ export async function recordScreeningDecision(
   const decision = str(formData, 'decision')
   const notes = str(formData, 'notes')
   const deviationReason = str(formData, 'deviationReason')
+  const reasonCode = str(formData, 'reasonCode')
   if (!applicantId) return { error: 'Nothing was selected to decide.' }
   if (!(DECISIONS as readonly string[]).includes(decision)) {
     return { error: 'Choose approve, approve with conditions, or decline.' }
@@ -71,6 +77,17 @@ export async function recordScreeningDecision(
       error:
         'Say why - an individualized-assessment note is required for anything but a plain approval.',
     }
+  }
+  // R-269 (PRD 08 C3): a decline or a conditional approval names a reason
+  // from the list, recorded on the decision for the fair-housing audit. It
+  // is NOT put in the adverse-action notice while the list is unreviewed
+  // placeholder wording (OQ-16, D-333). A plain approval records none.
+  const reason =
+    decision !== 'APPROVED' && reasonCode
+      ? await prisma.decisionReason.findFirst({ where: { code: reasonCode, retiredAt: null } })
+      : null
+  if (decision !== 'APPROVED' && !reason) {
+    return { error: 'Choose the reason for this decision from the list.' }
   }
 
   const applicant = await prisma.applicant.findUniqueOrThrow({
@@ -122,6 +139,8 @@ export async function recordScreeningDecision(
       data: {
         decision: decision as Decision,
         decisionNotes: notes || null,
+        decisionReasonCode: reason?.code ?? null,
+        decisionTemplateVersion: owesAdverseAction ? ADVERSE_ACTION_TEMPLATE_VERSION : null,
         decidedAt: new Date(),
         decidedByStaffId: actor.id,
       },
@@ -132,7 +151,13 @@ export async function recordScreeningDecision(
         entityType: 'ScreeningReport',
         entityId: applicant.screeningReport!.id,
         propertyId: application.propertyId,
-        after: { applicantId, decision, notes: notes || null },
+        after: {
+          applicantId,
+          decision,
+          notes: notes || null,
+          reasonCode: reason?.code ?? null,
+          templateVersion: owesAdverseAction ? ADVERSE_ACTION_TEMPLATE_VERSION : null,
+        },
       },
       tx,
     )
@@ -344,12 +369,70 @@ export async function recordScreeningDecision(
         overriddenAt: a.screeningReport?.adverseActionOverriddenAt ?? null,
       }),
   )
+  // The household's review Task (R-269) is done once nobody is left to
+  // decide, whatever the outcome.
+  if (allDecided) {
+    await prisma.task.updateMany({
+      where: {
+        subjectType: 'Application',
+        subjectId: application.id,
+        status: { in: ['OPEN', 'IN_PROGRESS', 'BLOCKED'] },
+      },
+      data: { status: 'DONE', completedAt: new Date(), completedByStaffId: actor.id },
+    })
+  }
   if (allDecided && allApproved && noneOwed) {
     await prisma.prospect.updateMany({
       where: { id: application.prospectId, status: 'SCREENED' },
       data: { status: 'APPROVED' },
     })
   }
+
+  revalidatePath(`/prospects/${application.prospectId}`)
+  return {}
+}
+
+/**
+ * "Request more info" (R-269, PRD 08 C3/M3.4): the outcome beside approve
+ * and decline that is NOT a decision, so it never writes
+ * ScreeningReport.decision, needs no screening report (the vendor is never a
+ * gate, C6), and can be asked more than once. Sending it to the applicant is
+ * R-270; until then the panel says it was not sent.
+ */
+export async function requestApplicantInfo(
+  _previous: DecisionFormState,
+  formData: FormData,
+): Promise<DecisionFormState> {
+  const applicantId = str(formData, 'applicantId')
+  const request = str(formData, 'request')
+  if (!applicantId) return { error: 'Nothing was selected.' }
+  if (!request) return { error: 'Say what you need from the applicant.' }
+
+  const applicant = await prisma.applicant.findUniqueOrThrow({
+    where: { id: applicantId },
+    include: { application: { include: { property: true } }, screeningReport: true },
+  })
+  const { application } = applicant
+  const actor = await requirePermission('screening.decide', propertyResource(application.property))
+  if (applicant.screeningReport?.decision) {
+    return { error: 'This applicant already has a recorded decision.' }
+  }
+
+  await prisma.$transaction(async (tx) => {
+    const row = await tx.applicantInfoRequest.create({
+      data: { applicantId, request, requestedByStaffId: actor.id },
+    })
+    await audit(
+      {
+        action: 'screening.info_requested',
+        entityType: 'ApplicantInfoRequest',
+        entityId: row.id,
+        propertyId: application.propertyId,
+        after: { applicantId, request },
+      },
+      tx,
+    )
+  })
 
   revalidatePath(`/prospects/${application.prospectId}`)
   return {}

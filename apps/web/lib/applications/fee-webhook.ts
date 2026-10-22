@@ -1,10 +1,13 @@
 import 'server-only'
 
 import type { ProjectionIntent } from '@rental/core/billing'
+import { businessDate } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { auditAsSystem } from '@/lib/audit/system.ts'
 import { notify } from '@/lib/notifications/send.ts'
 import { orderScreeningForApplication } from '@/lib/screening/order.ts'
+import { propertyOwner } from '@/lib/staff/property-owner.ts'
+import { createTask } from '@/lib/tasks/create.ts'
 
 // The application-fee half of the Stripe webhook pipeline (R-059).
 //
@@ -146,5 +149,36 @@ async function maybeCompleteApplication(applicationId: string): Promise<void> {
   // long as a third party takes to answer. Screening (LEASE-04, R-060) is
   // "applicant-initiated" in the sense that the household completing their
   // own application IS the initiating act.
+  await openApplicationReviewTask(applicationId)
   await orderScreeningForApplication(applicationId)
+}
+
+/**
+ * R-269 (PRD 08 C1): a completed application is a Task for the property's
+ * owner (D-331's person), on the one queue (D-9). Opened BEFORE screening is
+ * ordered, because the vendor is optional and never a gate (C6): the review
+ * exists whether or not a report ever arrives. `recordScreeningDecision`
+ * closes it once the whole household is decided.
+ */
+async function openApplicationReviewTask(applicationId: string): Promise<void> {
+  const application = await prisma.application.findUniqueOrThrow({
+    where: { id: applicationId },
+    include: {
+      property: { select: { id: true, legalEntityId: true, timezone: true, addressLine1: true } },
+      applicants: { select: { firstName: true, lastName: true, isLead: true } },
+    },
+  })
+  const lead = application.applicants.find((a) => a.isLead) ?? application.applicants[0]
+  const others = application.applicants.length - 1
+  const owner = await propertyOwner(application.property)
+  await createTask(prisma, {
+    propertyId: application.propertyId,
+    type: 'application.review',
+    subjectType: 'Application',
+    subjectId: applicationId,
+    businessDate: businessDate(new Date(), application.property.timezone),
+    priority: 'ROUTINE',
+    assigneeStaffId: owner?.id ?? null,
+    title: `Review the application from ${lead ? `${lead.firstName} ${lead.lastName}` : 'a household'}${others > 0 ? ` (+${others})` : ''} for ${application.property.addressLine1}`,
+  })
 }

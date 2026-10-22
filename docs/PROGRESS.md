@@ -14684,3 +14684,28 @@ Re-opens the project for two rows from the post-closure second-pass review of th
 - The first e2e version asserted on the shared settings row and lost to the other Playwright project running the same test at the same moment. It now reads the actor's own audit row.
 
 **Gate.** lint and typecheck clean (the `requirePermission` lint warnings predate this item). `npm test`: 3,576 passed + 4 skipped. `db:ci`: migrations from scratch, seed, no drift. e2e `announcements.spec.ts` + `messaging-settings.spec.ts`, `--retries=0`, both projects: 34 of 34, matching `--list`.
+
+## R-269 — application review as a decision with a record
+**Commit:** `PENDING`  ·  **Date:** 2026-10-21
+
+**What it built.**
+- Migration `20261021180000_application_review`. It adds `DecisionReason` (code, label, retiredAt), seeded with five PLACEHOLDER reasons. It adds `ScreeningReport.decisionReasonCode` (FK, RESTRICT) and `decisionTemplateVersion`, plus `ApplicantInfoRequest`.
+- `recordScreeningDecision` requires an active reason for a decline or a conditional approval. It stores the reason and `ADVERSE_ACTION_TEMPLATE_VERSION` on the decision and in the `screening.decided` audit row. Once the whole household is decided, it marks the household's review Task DONE.
+- `requestApplicantInfo` adds "Request more info" beside the decision form. It works with or without a report, can be used more than once, never writes `decision`, and is audited as `screening.info_requested`. The prospect page lists each request with its date.
+- A completed application opens an `application.review` Task. It is assigned to D-331's owner and opened before screening is ordered. Its subject type is `Application`, linking to `/prospects/[id]#screening`.
+- `/screening-criteria` shows the reason list, read-only, with an OQ-16 warning.
+- The owner lookup moved to `lib/staff/property-owner.ts`, so `{{owner.*}}` and the Task share it.
+
+**What it decided.**
+- D-333. **Owner call:** the reason is recorded but kept out of the FCRA notice until counsel approves the list. The backlog row said the list "feeds" the notice, and that is deferred on purpose. A notice-wording digest test is tied to the template version. "More info" is a separate row, not a decision. The editor is left to R-297.
+
+**What it left behind.**
+- Adding the reason to the notice once OQ-16 is answered: one line in `adverseActionNoticeText`, plus a bump to `adverse-action/2`.
+- Sending "more info" and the decision texts: R-270. Today the form says the request is recorded and not sent.
+- Adding and retiring reasons, and per-organisation lists tied to criteria: R-297.
+- Not walked in a browser beyond e2e.
+
+**Found along the way.**
+- A `prettier --write` on one test file reformatted all 300 lines into another quote style. I restored the file from git and applied only the real edit. No repo prettier config covers `packages/core`, so do not run prettier there.
+
+**Gate.** lint and typecheck clean (the `requirePermission` warnings predate this item). `npm test`: 3,577 passed + 4 skipped. `db:migrate:test` applied, `db:drift` and `db:ci`: no drift. e2e `screening.spec.ts` + `applications.spec.ts`, `--retries=0`, both projects: 18 of 18, matching `--list`.

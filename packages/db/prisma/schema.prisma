@@ -1366,6 +1366,7 @@ model Applicant {
   application     Application             @relation(fields: [applicationId], references: [id])
   documents       Document[]
   screeningReport ScreeningReport?
+  infoRequests    ApplicantInfoRequest[]
   /// FCRA adverse-action notices (R-061) - the "either" half of Notice's
   /// either/or, the "or" being `leaseId`.
   notices         Notice[]
@@ -1493,15 +1494,22 @@ model ScreeningReport {
   /// APPROVED, APPROVED_WITH_CONDITIONS, DECLINED. Null until a staff
   /// member decides - "accept/decline always an explicit human action"
   /// (LEASE-04).
-  decision         String?
+  decision                String?
   /// The individualized-assessment note LEASE-04 asks to retain - required
   /// for anything but a plain APPROVED (apps/web/lib/screening's own
   /// validation), because a decline or a conditional approval is exactly
   /// the case HUD's guidance says needs a person's stated reasoning, not a
   /// threshold.
-  decisionNotes    String?
-  decidedAt        DateTime?
-  decidedByStaffId String?
+  decisionNotes           String?
+  decidedAt               DateTime?
+  decidedByStaffId        String?
+  /// R-269 (PRD 08 C3): the reason picked from `DecisionReason`. Required
+  /// for DECLINED and APPROVED_WITH_CONDITIONS, null for a plain APPROVED.
+  decisionReasonCode      String?
+  /// R-269 (PRD 08 C7): which wording of the message the decision sent -
+  /// today the adverse-action notice (ADVERSE_ACTION_TEMPLATE_VERSION). Null
+  /// when nothing was sent.
+  decisionTemplateVersion String?
 
   /// The reporting agency's own identity, as the (simulated) adapter
   /// returned it at order time - rendered, multi-line text, not structured
@@ -1531,10 +1539,11 @@ model ScreeningReport {
   orderedAt   DateTime  @default(now())
   completedAt DateTime?
 
-  applicant                 Applicant  @relation(fields: [applicantId], references: [id])
-  decidedBy                 StaffUser? @relation("ScreeningReportDecidedBy", fields: [decidedByStaffId], references: [id])
-  adverseActionNotice       Notice?    @relation(fields: [adverseActionNoticeId], references: [id])
-  adverseActionOverriddenBy StaffUser? @relation("ScreeningReportAdverseActionOverriddenBy", fields: [adverseActionOverriddenByStaffId], references: [id])
+  applicant                 Applicant       @relation(fields: [applicantId], references: [id])
+  decisionReason            DecisionReason? @relation(fields: [decisionReasonCode], references: [code], onDelete: Restrict)
+  decidedBy                 StaffUser?      @relation("ScreeningReportDecidedBy", fields: [decidedByStaffId], references: [id])
+  adverseActionNotice       Notice?         @relation(fields: [adverseActionNoticeId], references: [id])
+  adverseActionOverriddenBy StaffUser?      @relation("ScreeningReportAdverseActionOverriddenBy", fields: [adverseActionOverriddenByStaffId], references: [id])
 
   @@index([applicantId])
 }
@@ -2115,6 +2124,7 @@ model StaffUser {
   showingAccessesRevoked                  ShowingAccess[]                 @relation("ShowingAccessRevokedBy")
   tenantLockCodesIssued                   TenantLockCode[]                @relation("TenantLockCodeIssuedBy")
   tenantLockCodesRevoked                  TenantLockCode[]                @relation("TenantLockCodeRevokedBy")
+  applicantInfoRequests                   ApplicantInfoRequest[]          @relation("ApplicantInfoRequestedBy")
 
   @@index([active])
 }
@@ -6862,4 +6872,34 @@ model MessagingSettings {
   updatedAt                DateTime @updatedAt
 
   replyTaskAssignee StaffUser? @relation("MessagingReplyAssignee", fields: [replyTaskAssigneeStaffId], references: [id])
+}
+
+/// R-269 (PRD 08 C3). The decline-reason list a decision picks from. A
+/// PLACEHOLDER until counsel reviews it (OQ-16); seeded by the migration.
+/// Rows are added or retired, never relabelled, so the code a past decision
+/// recorded still means what it meant. R-297 makes the list per-organisation
+/// and maps each reason to a written criterion.
+model DecisionReason {
+  code      String    @id
+  label     String
+  createdAt DateTime  @default(now())
+  retiredAt DateTime?
+
+  decisions ScreeningReport[]
+}
+
+/// R-269 (PRD 08 C3, M3.4): "request more info" - the outcome that is not a
+/// decision, so it never touches ScreeningReport.decision and can happen
+/// more than once. Sending it to the applicant is R-270.
+model ApplicantInfoRequest {
+  id                 String   @id @default(cuid())
+  applicantId        String
+  request            String
+  requestedByStaffId String
+  requestedAt        DateTime @default(now())
+
+  applicant   Applicant @relation(fields: [applicantId], references: [id], onDelete: Cascade)
+  requestedBy StaffUser @relation("ApplicantInfoRequestedBy", fields: [requestedByStaffId], references: [id])
+
+  @@index([applicantId])
 }

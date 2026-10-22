@@ -19,7 +19,11 @@ export interface ApplicantScreeningSummary {
   criteria: CriterionEvaluation[]
   decision: string | null
   decisionNotes: string | null
+  /// R-269: the label of the reason picked from `DecisionReason`.
+  decisionReason: string | null
   decidedAt: Date | null
+  /// R-269: every "request more info", oldest first.
+  infoRequests: { id: string; request: string; requestedAt: Date }[]
   /// R-061: set only for DECLINED/APPROVED_WITH_CONDITIONS. Null noticeId
   /// with a non-null decision means one is still owed and unresolved - see
   /// `adverseActionOwed()`.
@@ -39,6 +43,8 @@ export interface ApplicationScreeningSummary {
   /// for real at write time (a read can go stale between render and
   /// submit).
   outOfOrder: boolean
+  /// R-269: the active decline-reason list, for the decision form.
+  reasons: { value: string; label: string }[]
 }
 
 export async function screeningForApplication(
@@ -52,7 +58,16 @@ export async function screeningForApplication(
       property: { select: { timezone: true } },
       applicants: {
         include: {
-          screeningReport: { include: { adverseActionNotice: { select: { id: true, servedAt: true } } } },
+          screeningReport: {
+            include: {
+              adverseActionNotice: { select: { id: true, servedAt: true } },
+              decisionReason: { select: { label: true } },
+            },
+          },
+          infoRequests: {
+            select: { id: true, request: true, requestedAt: true },
+            orderBy: { requestedAt: 'asc' },
+          },
         },
         orderBy: [{ isLead: 'desc' }, { createdAt: 'asc' }],
       },
@@ -104,7 +119,9 @@ export async function screeningForApplication(
       }),
       decision: report?.decision ?? null,
       decisionNotes: report?.decisionNotes ?? null,
+      decisionReason: report?.decisionReason?.label ?? null,
       decidedAt: report?.decidedAt ?? null,
+      infoRequests: applicant.infoRequests,
       adverseAction: report?.adverseActionNotice
         ? {
             noticeId: report.adverseActionNotice.id,
@@ -117,5 +134,16 @@ export async function screeningForApplication(
 
   const outOfOrder = (await outOfOrderApplicationIds(application)).length > 0
 
-  return { applicants, outOfOrder }
+  const reasons = await activeDecisionReasons()
+
+  return { applicants, outOfOrder, reasons }
+}
+
+/** R-269: the decline-reason list, oldest first, retired rows left out. */
+export async function activeDecisionReasons() {
+  const rows = await prisma.decisionReason.findMany({
+    where: { retiredAt: null },
+    orderBy: { createdAt: 'asc' },
+  })
+  return rows.map((row) => ({ value: row.code, label: row.label }))
 }
