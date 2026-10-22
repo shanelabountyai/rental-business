@@ -387,6 +387,29 @@ test('records a request for more info without deciding (R-269)', async ({ page }
   await expect(page.getByRole('button', { name: 'Record decision' })).toBeVisible()
 })
 
+test('shows income to rent and saves an internal note the applicant never sees (R-271)', async ({
+  page,
+}) => {
+  const staff = await createStaff()
+  const { prospect, applicant } = await seedScreenedApplicant(600_000)
+
+  await signIn(page, staff)
+  await page.goto(`/prospects/${prospect.id}`)
+
+  await expect(page.getByText('Income to rent')).toBeVisible()
+  await expect(page.getByText(/× the asking rent/)).toBeVisible()
+
+  await page.getByLabel('Internal note').fill('Pay stubs match the stated employer.')
+  await page.getByRole('button', { name: 'Save note' }).click()
+  await expect(page.getByText('Note saved. It is internal and never sent to the applicant.')).toBeVisible()
+  await expect(page.getByText('Pay stubs match the stated employer.')).toBeVisible()
+
+  const notes = await prisma.applicantNote.findMany({ where: { applicantId: applicant.id } })
+  expect(notes.map((n) => n.body)).toEqual(['Pay stubs match the stated employer.'])
+  // Staff-only: no notification was written for it.
+  expect(await prisma.notification.count({ where: { recipientId: applicant.id } })).toBe(0)
+})
+
 test('a decline generates and auto-serves an FCRA adverse-action notice by email', async ({
   page,
 }) => {

@@ -1368,6 +1368,8 @@ model Applicant {
   documents       Document[]
   screeningReport ScreeningReport?
   infoRequests    ApplicantInfoRequest[]
+  /// R-271: staff-only review notes. Never sent to, or shown to, the applicant.
+  notes           ApplicantNote[]
   /// FCRA adverse-action notices (R-061) - the "either" half of Notice's
   /// either/or, the "or" being `leaseId`.
   notices         Notice[]
@@ -2126,6 +2128,7 @@ model StaffUser {
   tenantLockCodesIssued                   TenantLockCode[]                @relation("TenantLockCodeIssuedBy")
   tenantLockCodesRevoked                  TenantLockCode[]                @relation("TenantLockCodeRevokedBy")
   applicantInfoRequests                   ApplicantInfoRequest[]          @relation("ApplicantInfoRequestedBy")
+  applicantNotes                          ApplicantNote[]
 
   @@index([active])
 }
@@ -6908,6 +6911,23 @@ model ApplicantInfoRequest {
 
   applicant   Applicant @relation(fields: [applicantId], references: [id], onDelete: Cascade)
   requestedBy StaffUser @relation("ApplicantInfoRequestedBy", fields: [requestedByStaffId], references: [id])
+
+  @@index([applicantId])
+}
+
+/// R-271 (PRD 08 C2): an internal note on an applicant, written during review.
+/// Staff-only by construction: nothing in the notification engine or the
+/// applicant pages reads this table. Append-only in practice - there is no
+/// edit or delete action, so what a reviewer wrote at decision time survives.
+model ApplicantNote {
+  id            String   @id @default(cuid())
+  applicantId   String
+  body          String
+  authorStaffId String
+  createdAt     DateTime @default(now())
+
+  applicant Applicant @relation(fields: [applicantId], references: [id], onDelete: Cascade)
+  author    StaffUser @relation(fields: [authorStaffId], references: [id])
 
   @@index([applicantId])
 }

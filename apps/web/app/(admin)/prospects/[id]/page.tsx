@@ -7,6 +7,10 @@ import {
 import { prisma } from '@rental/db'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
+import {
+  ApplicantNoteForm,
+  DocumentStrip,
+} from '@/components/applications/applicant-review.tsx'
 import { InviteToApplyForm } from '@/components/applications/invite-to-apply-form.tsx'
 import { PageHeader } from '@/components/page-header.tsx'
 import { ProspectStageForm } from '@/components/prospects/prospect-stage-form.tsx'
@@ -15,7 +19,7 @@ import {
   ScreeningDecisionForm,
 } from '@/components/screening/screening-decision-form.tsx'
 import { TaskActionButton } from '@/components/tasks/action-button.tsx'
-import { inviteToApply } from '@/lib/applications/staff-actions.ts'
+import { addApplicantNote, inviteToApply } from '@/lib/applications/staff-actions.ts'
 import { applicationForProspect } from '@/lib/applications/queries.ts'
 import { requireScope } from '@/lib/auth/guard.ts'
 import { advanceProspectStage } from '@/lib/prospects/staff-actions.ts'
@@ -226,6 +230,41 @@ export default async function ProspectDetailPage({
                         : 'in progress'}
                     {' · '}
                     {a.documentCount} document{a.documentCount === 1 ? '' : 's'}
+                    <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 break-words">
+                      <dt className="text-muted-foreground">Monthly income</dt>
+                      <dd>
+                        {a.monthlyIncomeCents != null
+                          ? `$${(a.monthlyIncomeCents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}`
+                          : 'Not stated'}
+                      </dd>
+                      <dt className="text-muted-foreground">Income to rent</dt>
+                      <dd>{a.incomeToRent ? `${a.incomeToRent}× the asking rent` : '—'}</dd>
+                    </dl>
+                    <div className="mt-2">
+                      <DocumentStrip
+                        documents={a.documents}
+                        applicantName={`${a.firstName} ${a.lastName}`}
+                      />
+                    </div>
+                    {a.notes.length > 0 && (
+                      <ul className="mt-2 flex flex-col gap-1">
+                        {a.notes.map((n) => (
+                          <li key={n.id} className="break-words">
+                            <span className="text-muted-foreground">
+                              {n.authorName}, {friendlyDate(n.createdAt, property.timezone)}:{' '}
+                            </span>
+                            {n.body}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    <div className="mt-2">
+                      <ApplicantNoteForm
+                        action={addApplicantNote}
+                        applicantId={a.id}
+                        applicantName={`${a.firstName} ${a.lastName}`}
+                      />
+                    </div>
                   </li>
                 ))}
               </ul>

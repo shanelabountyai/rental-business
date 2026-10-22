@@ -11,7 +11,12 @@ import {
 } from './actions.ts'
 import { completeApplicantIfDone, projectApplicationFeeEvent } from './fee-webhook.ts'
 import { applicationLinkStatus } from './link.ts'
-import { applicationForProspect, documentsForApplicant, householdFor } from './queries.ts'
+import {
+  applicationForProspect,
+  documentsForApplicant,
+  householdFor,
+  incomeToRent,
+} from './queries.ts'
 
 // The database half of LEASE-03 (R-059) - everything EXCEPT inviteToApply
 // (staff-actions.ts, session-dependent via requirePermission/audit()) and
@@ -433,5 +438,14 @@ describe('applicationForProspect, householdFor, documentsForApplicant', () => {
     expect(members).toHaveLength(1)
     expect(members[0]!.id).toBe(lead.id)
     expect(members[0]).not.toHaveProperty('email')
+  })
+})
+
+describe('incomeToRent (R-271)', () => {
+  it('is one decimal on integer cents, and null when either side is missing', () => {
+    expect(incomeToRent(560_000, 200_000)).toBe('2.8')
+    expect(incomeToRent(150_000, 200_000)).toBe('0.8')
+    expect(incomeToRent(null, 200_000)).toBeNull()
+    expect(incomeToRent(560_000, 0)).toBeNull()
   })
 })

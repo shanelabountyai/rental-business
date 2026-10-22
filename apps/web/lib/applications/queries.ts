@@ -22,6 +22,19 @@ export interface ApplicantSummary {
   formSubmittedAt: Date | null
   completedAt: Date | null
   documentCount: number
+  monthlyIncomeCents: number | null
+  /// Income divided by the listing's asking rent, one decimal ("2.8"); null
+  /// when either side is missing. Never a pass/fail: the written criteria
+  /// (R-060) decide, this is what a reviewer glances at.
+  incomeToRent: string | null
+  documents: { id: string; fileName: string; contentType: string }[]
+  notes: { id: string; body: string; authorName: string; createdAt: Date }[]
+}
+
+/// Integer maths on cents; `toFixed` only formats the final one-decimal ratio.
+export function incomeToRent(incomeCents: number | null, rentCents: number): string | null {
+  if (incomeCents == null || rentCents <= 0) return null
+  return (Math.round((incomeCents * 10) / rentCents) / 10).toFixed(1)
 }
 
 export interface ApplicationSummary {
@@ -43,8 +56,19 @@ export async function applicationForProspect(
     include: {
       applicants: {
         orderBy: [{ isLead: 'desc' }, { createdAt: 'asc' }],
-        include: { _count: { select: { documents: true } } },
+        include: {
+          documents: {
+            where: { deletedAt: null },
+            orderBy: { createdAt: 'asc' },
+            select: { id: true, fileName: true, contentType: true },
+          },
+          notes: {
+            orderBy: { createdAt: 'desc' },
+            include: { author: { select: { name: true } } },
+          },
+        },
       },
+      listing: { select: { rentCents: true } },
     },
   })
   if (!application) return null
@@ -64,7 +88,16 @@ export async function applicationForProspect(
       feePaidAt: a.feePaidAt,
       formSubmittedAt: a.formSubmittedAt,
       completedAt: a.completedAt,
-      documentCount: a._count.documents,
+      documentCount: a.documents.length,
+      monthlyIncomeCents: a.monthlyIncomeCents,
+      incomeToRent: incomeToRent(a.monthlyIncomeCents, application.listing.rentCents),
+      documents: a.documents,
+      notes: a.notes.map((n) => ({
+        id: n.id,
+        body: n.body,
+        authorName: n.author.name,
+        createdAt: n.createdAt,
+      })),
     })),
   }
 }

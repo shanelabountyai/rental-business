@@ -14760,3 +14760,17 @@ Re-opens the project for two rows from the post-closure second-pass review of th
 **Found along the way.** A side agent flagged it: the approval text went out whether or not a draft opened, and the only record was `console.warn`.
 
 **Gate.** lint and typecheck clean. `npm test`: 3,577 passed + 4 skipped of 3,581. e2e `screening.spec.ts`, `--retries=0`, both projects: 16 of 16, matching `--list`.
+
+## R-271 — mobile application review screen
+**Commit:** `PENDING`  ·  **Date:** 2026-10-22
+
+**What it built.** Each applicant under `/prospects/[id]` → Application now shows stated monthly income, the income-to-rent ratio, a swipeable document strip (scroll-snap; images inline, other files as links through the existing staff file route) and internal notes with an add form. New `ApplicantNote` table (migration `20261022100000_applicant_note`, production not migrated) and audit action `application.note_added`. `documentCount` now excludes deleted documents.
+
+**What it decided.** D-337. The ratio is shown and never scored. Notes are staff-only and append-only.
+
+**What it left behind.** No in-page PDF preview: a PDF opens through the browser's own viewer. No 375px visual walk yet; that belongs to the Milestone 19 walk (D-28).
+
+**Found along the way.** Nothing broken. R-107 in the old backlog was the accessibility remediation, not a mobile document viewer, so there was nothing to reuse and no prior screen at 375px to verify.
+
+**Gate.** lint and typecheck clean, `npm run build` clean, `npm test`: 3,578 passed + 4 skipped of 3,582. e2e `screening.spec.ts` + `applications.spec.ts` + `prospects.spec.ts`, both projects, production build: 34 of 34, matching `--list`.
+

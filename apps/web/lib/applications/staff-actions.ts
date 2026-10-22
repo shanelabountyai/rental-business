@@ -103,3 +103,51 @@ export async function inviteToApply(
   revalidatePath(`/prospects/${prospectId}`)
   return {}
 }
+
+export interface NoteFormState {
+  error?: string
+  notice?: string
+}
+
+/**
+ * An internal review note on one applicant (R-271, PRD 08 C2). Staff-only:
+ * nothing in the notification engine or an applicant page reads
+ * `ApplicantNote`. Append-only in practice - there is deliberately no edit or
+ * delete, so what a reviewer wrote before deciding survives the decision.
+ */
+export async function addApplicantNote(
+  _previous: NoteFormState,
+  formData: FormData,
+): Promise<NoteFormState> {
+  const applicantId = String(formData.get('applicantId') ?? '')
+  const body = String(formData.get('body') ?? '').trim()
+  if (!applicantId) return { error: 'Nothing was selected.' }
+  if (!body) return { error: 'Write the note first.' }
+  if (body.length > 4000) return { error: 'Keep a note under 4,000 characters.' }
+
+  const applicant = await prisma.applicant.findUniqueOrThrow({
+    where: { id: applicantId },
+    include: { application: { include: { property: true } } },
+  })
+  const { application } = applicant
+  const actor = await requirePermission('screening.decide', propertyResource(application.property))
+
+  await prisma.$transaction(async (tx) => {
+    const note = await tx.applicantNote.create({
+      data: { applicantId, body, authorStaffId: actor.id },
+    })
+    await audit(
+      {
+        action: 'application.note_added',
+        entityType: 'ApplicantNote',
+        entityId: note.id,
+        propertyId: application.propertyId,
+        after: { applicantId },
+      },
+      tx,
+    )
+  })
+
+  revalidatePath(`/prospects/${application.prospectId}`)
+  return { notice: 'Note saved. It is internal and never sent to the applicant.' }
+}
