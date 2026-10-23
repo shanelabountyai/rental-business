@@ -454,10 +454,30 @@ enum ActorType {
 // Ownership & inventory
 // ---------------------------------------------------------------------------
 
+/// R-285a (D-318, D-339): one StaffUser is one human; this row is what makes
+/// them staff of an organisation. A StaffAssignment can only be written in an
+/// org where its holder has a live membership (trigger). Removal stamps
+/// removedAt rather than deleting, so the history of who could see what stays.
+/// Cascades from StaffUser only because the app never deletes one (it
+/// deactivates); test cleanup does, and a membership is part of the person.
+model OrgMembership {
+  orgId       String
+  staffUserId String
+  joinedAt    DateTime  @default(now())
+  removedAt   DateTime?
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
+  staffUser    StaffUser    @relation(fields: [staffUserId], references: [id], onDelete: Cascade)
+
+  @@id([orgId, staffUserId])
+  @@index([staffUserId])
+}
+
 /// R-274 (D-315): the tenant root. Every org-owned row reaches exactly one
 /// organisation; the existing portfolio is org #0, id "org_0", created by the
-/// migration that introduced this table. Nothing reads orgId to SCOPE yet -
-/// PropertyScope, Actor, memberships and the other tables are R-285.
+/// migration that introduced this table. R-285a (D-339) put orgId on every
+/// org-owned table, derived from its parent by the org_scope trigger; nothing
+/// reads it to SCOPE until R-285b.
 /// Never deleted (D-319): offboarding is export, freeze, purge.
 model Organization {
   id        String   @id @default(cuid())
@@ -468,6 +488,117 @@ model Organization {
 
   legalEntities LegalEntity[]
   properties    Property[]
+  memberships   OrgMembership[]
+
+  mortgages                      Mortgage[]
+  mortgageAnnualStatements       MortgageAnnualStatement[]
+  insurancePolicies              InsurancePolicy[]
+  insuranceClaims                InsuranceClaim[]
+  insuranceClaimPayments         InsuranceClaimPayment[]
+  insuranceClaimEvents           InsuranceClaimEvent[]
+  hoaInfos                       HoaInfo[]
+  complianceItems                ComplianceItem[]
+  complianceCompletions          ComplianceCompletion[]
+  capitalImprovements            CapitalImprovement[]
+  propertyReserves               PropertyReserve[]
+  warranties                     Warranty[]
+  units                          Unit[]
+  listings                       Listing[]
+  listingSyndications            ListingSyndication[]
+  listingLeads                   ListingLead[]
+  applications                   Application[]
+  applicants                     Applicant[]
+  screeningCriterias             ScreeningCriteria[]
+  screeningReports               ScreeningReport[]
+  prospects                      Prospect[]
+  showings                       Showing[]
+  smartLocks                     SmartLock[]
+  identityChecks                 IdentityCheck[]
+  showingAccesses                ShowingAccess[]
+  tenantLockCodes                TenantLockCode[]
+  lockEvents                     LockEvent[]
+  accessCodes                    AccessCode[]
+  appliances                     Appliance[]
+  utilityAccounts                UtilityAccount[]
+  shutoffLocations               ShutoffLocation[]
+  tenants                        Tenant[]
+  guarantors                     Guarantor[]
+  vendors                        Vendor[]
+  vendorInvoices                 VendorInvoice[]
+  vendorInvoiceSplits            VendorInvoiceSplit[]
+  entitySettlements              EntitySettlement[]
+  propertyExpenses               PropertyExpense[]
+  leases                         Lease[]
+  leaseTenants                   LeaseTenant[]
+  leasePartyChanges              LeasePartyChange[]
+  leasePartyChangeParties        LeasePartyChangeParty[]
+  confidentialCases              ConfidentialCase[]
+  leaseHolds                     LeaseHold[]
+  paymentPlans                   PaymentPlan[]
+  paymentPlanInstalments         PaymentPlanInstalment[]
+  scraLookups                    ScraLookup[]
+  accommodationRequests          AccommodationRequest[]
+  violationCases                 ViolationCase[]
+  violationObservations          ViolationObservation[]
+  abandonmentCases               AbandonmentCase[]
+  abandonmentContactAttempts     AbandonmentContactAttempt[]
+  renterInsurancePolicies        RenterInsurancePolicy[]
+  leaseEnvelopes                 LeaseEnvelope[]
+  leaseSigners                   LeaseSigner[]
+  outboxEvents                   OutboxEvent[]
+  eventConsumptions              EventConsumption[]
+  jobRuns                        JobRun[]
+  staffAssignments               StaffAssignment[]
+  tenantCredentials              TenantCredential[]
+  leasePayers                    LeasePayer[]
+  charges                        Charge[]
+  payerAllocations               PayerAllocation[]
+  recurringCharges               RecurringCharge[]
+  utilityBills                   UtilityBill[]
+  payments                       Payment[]
+  paymentInvoiceSplits           PaymentInvoiceSplit[]
+  processedStripeEvents          ProcessedStripeEvent[]
+  ledgerEntries                  LedgerEntry[]
+  deposits                       Deposit[]
+  depositDeductions              DepositDeduction[]
+  tickets                        Ticket[]
+  workOrders                     WorkOrder[]
+  preventiveMaintenanceTemplates PreventiveMaintenanceTemplate[]
+  workOrderMessageLinks          WorkOrderMessageLink[]
+  workOrderNotes                 WorkOrderNote[]
+  workOrderVerifications         WorkOrderVerification[]
+  workOrderBids                  WorkOrderBid[]
+  turnoverProjects               TurnoverProject[]
+  threads                        Thread[]
+  unroutedMessages               UnroutedMessage[]
+  messages                       Message[]
+  messageDeliveries              MessageDelivery[]
+  notifications                  Notification[]
+  notificationDeliveries         NotificationDelivery[]
+  notificationPreferences        NotificationPreference[]
+  messageTemplates               MessageTemplate[]
+  messageTemplateVersions        MessageTemplateVersion[]
+  messageTemplateTranslations    MessageTemplateTranslation[]
+  announcementSchedules          AnnouncementSchedule[]
+  audiences                      Audience[]
+  evictionCases                  EvictionCase[]
+  evictionCosts                  EvictionCost[]
+  notices                        Notice[]
+  rentChanges                    RentChange[]
+  noticeDeliveries               NoticeDelivery[]
+  inspectionTemplates            InspectionTemplate[]
+  inspections                    Inspection[]
+  inspectionItems                InspectionItem[]
+  documentTemplates              DocumentTemplate[]
+  documents                      Document[]
+  tasks                          Task[]
+  auditLogs                      AuditLog[]
+  tenantConsents                 TenantConsent[]
+  smsOptOuts                     SmsOptOut[]
+  receivableWriteOffs            ReceivableWriteOff[]
+  messagingSettingses            MessagingSettings[]
+  applicantInfoRequests          ApplicantInfoRequest[]
+  applicantNotes                 ApplicantNote[]
 }
 
 model LegalEntity {
@@ -661,7 +792,10 @@ model Property {
 // ---------------------------------------------------------------------------
 
 model Mortgage {
-  id                  String    @id @default(cuid())
+  id                  String       @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId               String       @default("org_0")
+  organization        Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
   propertyId          String
   lender              String
   originalAmountCents Int?
@@ -670,17 +804,18 @@ model Mortgage {
   rateType            String
   interestRateBps     Int?
   /// Set only when rateType = ARM.
-  armAdjustmentDate   DateTime? @db.Date
-  maturityDate        DateTime? @db.Date
-  isBalloon           Boolean   @default(false)
+  armAdjustmentDate   DateTime?    @db.Date
+  maturityDate        DateTime?    @db.Date
+  isBalloon           Boolean      @default(false)
   notes               String?
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
 
   property   Property                  @relation(fields: [propertyId], references: [id])
   statements MortgageAnnualStatement[]
 
   @@index([propertyId])
+  @@index([orgId])
 }
 
 /// One lender's Form 1098 for one tax year (RPT-07, R-081b).
@@ -695,7 +830,10 @@ model Mortgage {
 /// reconciled is a much larger build and belongs with PAY-11's capital plan,
 /// not with a tax packet (owner decision, 2026-08-21).
 model MortgageAnnualStatement {
-  id                String   @id @default(cuid())
+  id                String       @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId             String       @default("org_0")
+  organization      Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
   mortgageId        String
   /// The calendar year the form covers. A 1098 is always a calendar year;
   /// there is no timezone question here and no `@db.Date` to misread.
@@ -714,8 +852,8 @@ model MortgageAnnualStatement {
   documentId        String?
   recordedByStaffId String
   notes             String?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
 
   mortgage   Mortgage  @relation(fields: [mortgageId], references: [id])
   document   Document? @relation("MortgageAnnualStatementDocument", fields: [documentId], references: [id])
@@ -725,27 +863,32 @@ model MortgageAnnualStatement {
   /// 12, which is a real overstated deduction rather than a tidiness issue.
   @@unique([mortgageId, taxYear])
   @@index([taxYear])
+  @@index([orgId])
 }
 
 model InsurancePolicy {
-  id              String   @id @default(cuid())
+  id              String       @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId           String       @default("org_0")
+  organization    Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
   propertyId      String
   carrier         String
   policyNumber    String?
   limitsCents     Int?
   deductibleCents Int?
-  lossOfRents     Boolean  @default(false)
+  lossOfRents     Boolean      @default(false)
   /// Next renewal date - the field the 45-60 day shopping-window alert
   /// reads (PROP-06).
-  renewsOn        DateTime @db.Date
+  renewsOn        DateTime     @db.Date
   notes           String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
 
   property Property         @relation(fields: [propertyId], references: [id])
   claims   InsuranceClaim[]
 
   @@index([propertyId, renewsOn])
+  @@index([orgId])
 }
 
 /// Mirrors `CAUSES_OF_LOSS` in packages/core/insurance.
@@ -819,9 +962,12 @@ enum ClaimEventKind {
 /// required. A claim against no policy on file is a claim nobody can
 /// evaluate.
 model InsuranceClaim {
-  id         String @id @default(cuid())
-  propertyId String
-  policyId   String
+  id           String       @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId        String       @default("org_0")
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
+  propertyId   String
+  policyId     String
 
   /// Null until the carrier assigns one, which is often days later.
   claimNumber String?
@@ -884,6 +1030,7 @@ model InsuranceClaim {
   @@index([status, openedAt])
   @@index([lossOfRentsUnitId])
   @@index([lossOfRentsLeaseId])
+  @@index([orgId])
 }
 
 /// Money that actually arrived, split by what it was for.
@@ -896,8 +1043,11 @@ model InsuranceClaim {
 /// `LedgerEntry` is strictly lease-scoped and a property-level receipt has no
 /// route through it.
 model InsuranceClaimPayment {
-  id      String @id @default(cuid())
-  claimId String
+  id           String       @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId        String       @default("org_0")
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
+  claimId      String
 
   category    ClaimPaymentCategory
   amountCents Int
@@ -913,12 +1063,16 @@ model InsuranceClaimPayment {
   recordedBy StaffUser      @relation("ClaimPaymentRecordedBy", fields: [recordedByStaffId], references: [id], onDelete: Restrict)
 
   @@index([claimId, receivedOn])
+  @@index([orgId])
 }
 
 /// The timeline and the correspondence log, which are one thing.
 model InsuranceClaimEvent {
-  id      String @id @default(cuid())
-  claimId String
+  id           String       @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId        String       @default("org_0")
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
+  claimId      String
 
   kind       ClaimEventKind
   occurredAt DateTime
@@ -935,24 +1089,30 @@ model InsuranceClaimEvent {
   recordedBy StaffUser      @relation("ClaimEventRecordedBy", fields: [recordedByStaffId], references: [id], onDelete: Restrict)
 
   @@index([claimId, occurredAt])
+  @@index([orgId])
 }
 
 /// One row per property, unlike Mortgage/InsurancePolicy/Warranty - a
 /// property belongs to at most one HOA.
 model HoaInfo {
-  id              String   @id @default(cuid())
-  propertyId      String   @unique
+  id              String       @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId           String       @default("org_0")
+  organization    Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
+  propertyId      String       @unique
   name            String?
   contactInfo     String?
-  hasRentalCap    Boolean  @default(false)
+  hasRentalCap    Boolean      @default(false)
   /// Free text - "capped at 20% of units, waitlist as of 2024" is not
   /// something a boolean or a single number represents honestly.
   rentalCapPolicy String?
   notes           String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
 
   property Property @relation(fields: [propertyId], references: [id])
+
+  @@index([orgId])
 }
 
 /// One compliance obligation with a due date, property- or entity-scoped
@@ -969,7 +1129,10 @@ model HoaInfo {
 /// property-level license and an entity-level annual report are different
 /// facts and neither scope is optional-both.
 model ComplianceItem {
-  id               String   @id @default(cuid())
+  id               String       @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId            String       @default("org_0")
+  organization     Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
   propertyId       String?
   /// LLC annual reports, registered-agent renewals - obligations that
   /// belong to the entity, not any one property under it.
@@ -986,7 +1149,7 @@ model ComplianceItem {
   /// time a completion is recorded (`nextComplianceDueDate()`); for a
   /// one-time item it never changes - completion is read from whether any
   /// `ComplianceCompletion` exists at all, not from this column.
-  dueOn            DateTime @db.Date
+  dueOn            DateTime     @db.Date
   /// Null means one-time (e.g. a lead disclosure acknowledgment signed
   /// once); set means it recurs every N months from whenever it was last
   /// actually completed - the same "anchored to when the work really
@@ -997,10 +1160,10 @@ model ComplianceItem {
   /// because a 60-day insurance-style notice and a 7-day smoke-detector
   /// battery check are not the same lead time, and nothing here is a
   /// jurisdiction fact D-4 would otherwise want configured centrally.
-  leadTimeDays     Int      @default(30)
+  leadTimeDays     Int          @default(30)
   notes            String?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
 
   property    Property?              @relation(fields: [propertyId], references: [id])
   legalEntity LegalEntity?           @relation(fields: [legalEntityId], references: [id])
@@ -1009,6 +1172,7 @@ model ComplianceItem {
   @@index([propertyId])
   @@index([legalEntityId])
   @@index([dueOn])
+  @@index([orgId])
 }
 
 /// The permanent log - "when was this last done, in one lookup" (PROP-05's
@@ -1017,20 +1181,24 @@ model ComplianceItem {
 /// identical reason (RenterInsurancePolicy, AccessCode's own version
 /// history).
 model ComplianceCompletion {
-  id                 String   @id @default(cuid())
+  id                 String       @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId              String       @default("org_0")
+  organization       Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
   complianceItemId   String
-  completedOn        DateTime @db.Date
+  completedOn        DateTime     @db.Date
   completedByStaffId String?
   /// Proof - a certificate, a paid receipt, a filed confirmation.
   documentId         String?
   notes              String?
-  createdAt          DateTime @default(now())
+  createdAt          DateTime     @default(now())
 
   complianceItem ComplianceItem @relation(fields: [complianceItemId], references: [id])
   completedBy    StaffUser?     @relation(fields: [completedByStaffId], references: [id])
   document       Document?      @relation(fields: [documentId], references: [id])
 
   @@index([complianceItemId, completedOn])
+  @@index([orgId])
 }
 
 /// A capital project on a property - roof, HVAC, repipe (PROP-07, R-078).
@@ -1043,7 +1211,10 @@ model ComplianceCompletion {
 /// order to carry a flag, and a roof bought straight from a contractor
 /// never passes through maintenance at all.
 model CapitalImprovement {
-  id                String    @id @default(cuid())
+  id                String       @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId             String       @default("org_0")
+  organization      Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
   propertyId        String
   /// Closed vocabulary in code, free-form column - the same posture
   /// `Warranty.category` and `EvictionCost.type` take. A component nobody
@@ -1058,17 +1229,17 @@ model CapitalImprovement {
   /// that date are two moments, the same call `UtilityBill.documentId`
   /// makes; an improvement with no date in service lands on the export's
   /// exception list rather than being silently depreciated from a guess.
-  inServiceOn       DateTime? @db.Date
+  inServiceOn       DateTime?    @db.Date
   /// Set when the project ran through maintenance. UNIQUE, and load-bearing
   /// for the tax export: a work order behind a capitalised improvement must
   /// NOT also appear as a deductible repair, so `taxExportFacts` excludes
   /// exactly the work orders named here. Two improvements pointing at one
   /// work order would make that exclusion ambiguous.
-  workOrderId       String?   @unique
+  workOrderId       String?      @unique
   recordedByStaffId String
   notes             String?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
 
   property   Property   @relation(fields: [propertyId], references: [id])
   workOrder  WorkOrder? @relation(fields: [workOrderId], references: [id])
@@ -1076,6 +1247,7 @@ model CapitalImprovement {
   documents  Document[]
 
   @@index([propertyId, inServiceOn])
+  @@index([orgId])
 }
 
 // ---------------------------------------------------------------------------
@@ -1098,8 +1270,11 @@ model CapitalImprovement {
 // ---------------------------------------------------------------------------
 
 model PropertyReserve {
-  id           String    @id @default(cuid())
-  propertyId   String    @unique
+  id           String       @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId        String       @default("org_0")
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
+  propertyId   String       @unique
   /// What this property should be holding. Set by the owner, informed by the
   /// capital plan's annual accrual - never overwritten by it, because the
   /// plan is an estimate and the target is a decision.
@@ -1107,7 +1282,7 @@ model PropertyReserve {
   /// What is actually held, as last counted. Null means nobody has said -
   /// which the report shows as "not recorded", never as zero.
   balanceCents Int?
-  balanceAsOf  DateTime? @db.Date
+  balanceAsOf  DateTime?    @db.Date
   notes        String?
 
   updatedByStaffId String
@@ -1116,10 +1291,15 @@ model PropertyReserve {
 
   property  Property  @relation(fields: [propertyId], references: [id])
   updatedBy StaffUser @relation("PropertyReserveUpdatedBy", fields: [updatedByStaffId], references: [id])
+
+  @@index([orgId])
 }
 
 model Warranty {
-  id              String    @id @default(cuid())
+  id              String       @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId           String       @default("org_0")
+  organization    Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
   propertyId      String
   /// ROOF, HVAC, WATER_HEATER, APPLIANCE, HOME_WARRANTY, OTHER.
   category        String
@@ -1127,33 +1307,37 @@ model Warranty {
   coverageSummary String?
   /// Null means no expiration on file, not "never expires" - treated as
   /// "unknown", the safe direction for a coverage-before-dispatch check.
-  expiresOn       DateTime? @db.Date
+  expiresOn       DateTime?    @db.Date
   notes           String?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
 
   property Property @relation(fields: [propertyId], references: [id])
 
   @@index([propertyId])
+  @@index([orgId])
 }
 
 model Unit {
-  id              String     @id @default(cuid())
+  id              String       @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId           String       @default("org_0")
+  organization    Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
   propertyId      String
   /// "Main house", "ADU", "Unit A". Unique per property.
   name            String
-  status          UnitStatus @default(VACANT)
+  status          UnitStatus   @default(VACANT)
   marketRentCents Int?
   bedrooms        Int?
-  bathrooms       Decimal?   @db.Decimal(3, 1)
+  bathrooms       Decimal?     @db.Decimal(3, 1)
   squareFeet      Int?
   notes           String?
   /// Cosmetic, not operational in the safety sense (PROP-03) - kept as a
   /// plain field on Unit rather than its own model, unlike the versioned/
   /// structured data below, because it needs neither history nor structure.
   paintColor      String?
-  createdAt       DateTime   @default(now())
-  updatedAt       DateTime   @updatedAt
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
 
   property                   Property          @relation(fields: [propertyId], references: [id])
   leases                     Lease[]
@@ -1176,6 +1360,7 @@ model Unit {
 
   @@unique([propertyId, name])
   @@index([status])
+  @@index([orgId])
 }
 
 /// A listing for one unit (LEASE-01, R-056). Photos are NOT copied here -
@@ -1194,6 +1379,9 @@ model Unit {
 /// past event the way a Message or a Notice is.
 model Listing {
   id                  String        @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId               String        @default("org_0")
+  organization        Organization  @relation(fields: [orgId], references: [id], onDelete: Restrict)
   propertyId          String
   unitId              String
   status              ListingStatus @default(DRAFT)
@@ -1230,6 +1418,7 @@ model Listing {
 
   @@index([propertyId, status])
   @@index([unitId, status])
+  @@index([orgId])
 }
 
 /// LISTED means the simulated network currently carries it. FAILED is
@@ -1252,6 +1441,9 @@ enum SyndicationStatus {
 /// fixed in the Stripe simulator.
 model ListingSyndication {
   id            String            @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId         String            @default("org_0")
+  organization  Organization      @relation(fields: [orgId], references: [id], onDelete: Restrict)
   listingId     String
   /// Closed vocabulary in packages/core/listings (SYNDICATION_NETWORKS) -
   /// a plain string, not a DB enum, so a real driver adding a network later
@@ -1275,6 +1467,7 @@ model ListingSyndication {
 
   @@unique([listingId, network])
   @@index([listingId])
+  @@index([orgId])
 }
 
 /// An inbound visit to the public listing page carrying a tracked source
@@ -1286,17 +1479,21 @@ model ListingSyndication {
 /// on, the same "shared thing before its second consumer" call D-9 already
 /// made for the one Task queue.
 model ListingLead {
-  id         String   @id @default(cuid())
-  listingId  String
+  id           String       @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId        String       @default("org_0")
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
+  listingId    String
   /// A network name from SYNDICATION_NETWORKS, or "direct" for a visit with
   /// no `?src=` at all - recorded rather than skipped, so "how many visits
   /// had no attributable source" is answerable instead of invisible.
-  source     String
-  occurredAt DateTime @default(now())
+  source       String
+  occurredAt   DateTime     @default(now())
 
   listing Listing @relation(fields: [listingId], references: [id])
 
   @@index([listingId, occurredAt])
+  @@index([orgId])
 }
 
 /// The household applying for one listing (LEASE-03, R-059) - the group the
@@ -1314,13 +1511,16 @@ model ListingLead {
 /// once EVERY `Applicant` under this group has its own `completedAt`, i.e.
 /// the whole household is done, not just whoever applied first.
 model Application {
-  id          String    @id @default(cuid())
-  propertyId  String
-  listingId   String
-  prospectId  String
-  completedAt DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id           String       @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId        String       @default("org_0")
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
+  propertyId   String
+  listingId    String
+  prospectId   String
+  completedAt  DateTime?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
 
   property   Property    @relation(fields: [propertyId], references: [id])
   listing    Listing     @relation(fields: [listingId], references: [id])
@@ -1331,6 +1531,7 @@ model Application {
   @@index([propertyId])
   @@index([listingId])
   @@index([prospectId])
+  @@index([orgId])
 }
 
 /// One adult (LEASE-03: "one per adult 18+"). `isLead` marks the person
@@ -1353,14 +1554,17 @@ model Application {
 /// `Deposit.depositCents` already gives for freezing a lease's own number
 /// at signing rather than tracking the listing forever.
 model Applicant {
-  id            String    @id @default(cuid())
+  id            String       @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId         String       @default("org_0")
+  organization  Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
   applicationId String
-  isLead        Boolean   @default(false)
+  isLead        Boolean      @default(false)
   firstName     String
   lastName      String
   email         String?
   phone         String?
-  dateOfBirth   DateTime? @db.Date
+  dateOfBirth   DateTime?    @db.Date
 
   currentAddressLine1    String?
   currentCity            String?
@@ -1414,6 +1618,7 @@ model Applicant {
 
   @@index([applicationId])
   @@index([stripeCustomerId])
+  @@index([orgId])
 }
 
 /// Written screening criteria (LEASE-04, R-060; D-7), versioned like
@@ -1433,8 +1638,11 @@ model Applicant {
 /// than "criteria already exist"), the same honestly-flagged posture
 /// JurisdictionRule's own seed comment already uses for the identical gap.
 model ScreeningCriteria {
-  id      String @id @default(cuid())
-  version Int
+  id           String       @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId        String       @default("org_0")
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
+  version      Int
 
   /// Minimum monthly income as a multiple of rent, x100 (300 = 3.00x) -
   /// integer, same reasoning money-as-cents gives everywhere else: a float
@@ -1466,6 +1674,7 @@ model ScreeningCriteria {
 
   @@unique([version])
   @@index([effectiveTo])
+  @@index([orgId])
 }
 
 /// One consumer report per Applicant (LEASE-04, R-060) - screening is
@@ -1495,12 +1704,15 @@ model ScreeningCriteria {
 /// `decision` is written by a staff member alone - see
 /// apps/web/lib/screening/staff-actions.ts.
 model ScreeningReport {
-  id          String  @id @default(cuid())
-  applicantId String  @unique
-  providerId  String
+  id           String       @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId        String       @default("org_0")
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
+  applicantId  String       @unique
+  providerId   String
   /// ORDERED, COMPLETE, FAILED.
-  status      String
-  faultCode   String?
+  status       String
+  faultCode    String?
 
   creditScore          Int?
   /// The score's own disclosure facts, as the provider reported them -
@@ -1579,6 +1791,7 @@ model ScreeningReport {
   adverseActionOverriddenBy StaffUser?      @relation("ScreeningReportAdverseActionOverriddenBy", fields: [adverseActionOverriddenByStaffId], references: [id])
 
   @@index([applicantId])
+  @@index([orgId])
 }
 
 /// inquiry -> pre-screened -> showing -> applied -> screened -> approved ->
@@ -1604,22 +1817,25 @@ enum ProspectStatus {
 /// comment). Created only when real contact information is actually
 /// submitted through the public inquiry form, never from a bare page visit.
 model Prospect {
-  id         String         @id @default(cuid())
-  propertyId String
-  listingId  String
-  firstName  String
-  lastName   String
-  email      String?
-  phone      String?
+  id           String         @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId        String         @default("org_0")
+  organization Organization   @relation(fields: [orgId], references: [id], onDelete: Restrict)
+  propertyId   String
+  listingId    String
+  firstName    String
+  lastName     String
+  email        String?
+  phone        String?
   /// Free text from the inquiry form itself - never a substitute for the
   /// five fixed pre-screening fields below, which stay their own columns so
   /// every prospect answers the identical structured question (the whole
   /// fair-housing point of this item).
-  message    String?
+  message      String?
   /// A network name from SYNDICATION_NETWORKS, or "direct" - same meaning
   /// as ListingLead.source, carried onto the named record once one exists.
-  source     String
-  status     ProspectStatus @default(INQUIRY)
+  source       String
+  status       ProspectStatus @default(INQUIRY)
 
   // The five fixed pre-screening answers (LEASE-07's own list). All null
   // until preScreenRespondedAt is set - a prospect who has not yet answered
@@ -1650,6 +1866,7 @@ model Prospect {
 
   @@index([propertyId, status])
   @@index([listingId])
+  @@index([orgId])
 }
 
 enum ShowingStatus {
@@ -1675,6 +1892,9 @@ enum ShowingStatus {
 /// Task open forever; left behind for whoever needs no-show tracking.
 model Showing {
   id             String        @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId          String        @default("org_0")
+  organization   Organization  @relation(fields: [orgId], references: [id], onDelete: Restrict)
   propertyId     String
   unitId         String
   prospectId     String
@@ -1693,6 +1913,7 @@ model Showing {
 
   @@index([unitId, scheduledStart])
   @@index([status, scheduledStart])
+  @@index([orgId])
 }
 
 enum SmartLockProvider {
@@ -1706,7 +1927,10 @@ enum SmartLockProvider {
 /// Task - so nothing about an existing unit changes by this table existing.
 /// Self-showings are opt-in per unit, by an owner physically fitting a lock.
 model SmartLock {
-  id String @id @default(cuid())
+  id           String       @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId        String       @default("org_0")
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
 
   unitId     String            @unique
   provider   SmartLockProvider @default(SIMULATED)
@@ -1724,7 +1948,8 @@ model SmartLock {
   events      LockEvent[]
   tenantCodes TenantLockCode[]
 
-  @@unique([provider, externalId])
+  @@unique([orgId, provider, externalId])
+  @@index([orgId])
 }
 
 /// Mirrors `IDENTITY_CHECK_RESULTS` in packages/core/scheduling.
@@ -1764,6 +1989,9 @@ enum IdentityCheckResult {
 /// pinned by `ShowingAccess.identityCheckId`.
 model IdentityCheck {
   id           String              @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId        String              @default("org_0")
+  organization Organization        @relation(fields: [orgId], references: [id], onDelete: Restrict)
   prospectId   String
   provider     String
   /// The provider's own reference. What a later question is taken back to
@@ -1777,6 +2005,7 @@ model IdentityCheck {
   access   ShowingAccess?
 
   @@index([prospectId, checkedAt])
+  @@index([orgId])
 }
 
 /// The one-time code that lets a stranger into a vacant house on their own
@@ -1795,10 +2024,13 @@ model IdentityCheck {
 /// that code live at 3pm on Tuesday" is answerable only from a row that
 /// outlived being killed - the same call `LeaseHold.liftedAt` makes.
 model ShowingAccess {
-  id              String @id @default(cuid())
-  showingId       String @unique
+  id              String       @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId           String       @default("org_0")
+  organization    Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
+  showingId       String       @unique
   smartLockId     String
-  identityCheckId String @unique
+  identityCheckId String       @unique
 
   providerRef String
   /// Sealed by the same box `AccessCode.sealedCode` uses (R-005). The
@@ -1834,6 +2066,7 @@ model ShowingAccess {
   events        LockEvent[]
 
   @@index([smartLockId, validFrom])
+  @@index([orgId])
 }
 
 /// One tenant's own smart-lock code (PROP-03, LEASE-08; R-094b).
@@ -1864,13 +2097,16 @@ model ShowingAccess {
 /// `SmsOptOut` index that did). The issuing action checks it as well,
 /// because a 23505 is a 500 rather than a sentence.
 model TenantLockCode {
-  id          String @id @default(cuid())
-  smartLockId String
-  leaseId     String
-  tenantId    String
-  providerRef String
+  id           String       @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId        String       @default("org_0")
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
+  smartLockId  String
+  leaseId      String
+  tenantId     String
+  providerRef  String
   /// Sealed by the same box `AccessCode.sealedCode` uses (R-005).
-  sealedCode  String
+  sealedCode   String
 
   issuedAt        DateTime @default(now())
   issuedByStaffId String
@@ -1899,6 +2135,7 @@ model TenantLockCode {
   @@index([leaseId])
   @@index([smartLockId])
   @@index([tenantId])
+  @@index([orgId])
 }
 
 /// DENIED is as much of the entry log as UNLOCKED: a run of refusals at a
@@ -1915,6 +2152,9 @@ enum LockEventKind {
 /// construction (D-27) and could never show the entry we did not expect.
 model LockEvent {
   id               String        @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId            String        @default("org_0")
+  organization     Organization  @relation(fields: [orgId], references: [id], onDelete: Restrict)
   smartLockId      String
   /// Null for an event no code of ours explains - a key, somebody's own app,
   /// a code issued before this system knew about the lock. Kept rather than
@@ -1938,6 +2178,7 @@ model LockEvent {
 
   @@unique([smartLockId, providerRef])
   @@index([smartLockId, occurredAt])
+  @@index([orgId])
 }
 
 // ---------------------------------------------------------------------------
@@ -1957,7 +2198,10 @@ model LockEvent {
 /// this does not model multiple simultaneous codes of the same type. Real
 /// gap, not solved generically here.
 model AccessCode {
-  id               String    @id @default(cuid())
+  id               String       @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId            String       @default("org_0")
+  organization     Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
   unitId           String
   /// LOCKBOX, SMART_LOCK, GATE, MAILBOX, OTHER.
   type             String
@@ -1966,20 +2210,24 @@ model AccessCode {
   label            String?
   sealedCode       String
   version          Int
-  effectiveFrom    DateTime  @default(now())
+  effectiveFrom    DateTime     @default(now())
   effectiveTo      DateTime?
   createdByStaffId String?
-  createdAt        DateTime  @default(now())
+  createdAt        DateTime     @default(now())
 
   unit      Unit       @relation(fields: [unitId], references: [id])
   createdBy StaffUser? @relation(fields: [createdByStaffId], references: [id])
 
   @@unique([unitId, type, version])
   @@index([unitId, type, effectiveTo])
+  @@index([orgId])
 }
 
 model Appliance {
-  id           String    @id @default(cuid())
+  id           String       @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId        String       @default("org_0")
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
   unitId       String
   /// REFRIGERATOR, RANGE, DISHWASHER, WASHER, DRYER, WATER_HEATER, HVAC,
   /// MICROWAVE, OTHER.
@@ -1987,21 +2235,25 @@ model Appliance {
   make         String?
   model        String?
   serialNumber String?
-  installedOn  DateTime? @db.Date
+  installedOn  DateTime?    @db.Date
   /// Only meaningful for category = HVAC; nullable for everything else
   /// rather than a second table for one field.
   filterSize   String?
   notes        String?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
 
   unit Unit @relation(fields: [unitId], references: [id])
 
   @@index([unitId])
+  @@index([orgId])
 }
 
 model UtilityAccount {
-  id                         String   @id @default(cuid())
+  id                         String       @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId                      String       @default("org_0")
+  organization               Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
   unitId                     String
   /// ELECTRIC, GAS, WATER, SEWER, TRASH, OTHER.
   type                       String
@@ -2013,14 +2265,15 @@ model UtilityAccount {
   /// since a vacant unit with no utilities on is how a pipe freezes
   /// unnoticed.
   nameOnAccountVacancy       String?
-  landlordRevertAgreement    Boolean  @default(false)
+  landlordRevertAgreement    Boolean      @default(false)
   notes                      String?
-  createdAt                  DateTime @default(now())
-  updatedAt                  DateTime @updatedAt
+  createdAt                  DateTime     @default(now())
+  updatedAt                  DateTime     @updatedAt
 
   unit Unit @relation(fields: [unitId], references: [id])
 
   @@index([unitId])
+  @@index([orgId])
 }
 
 /// Where to physically stop the water/power/gas in an emergency (PROP-03,
@@ -2030,18 +2283,22 @@ model UtilityAccount {
 /// R-012's attachment/versioning/soft-delete rather than a second photo
 /// column here.
 model ShutoffLocation {
-  id          String   @id @default(cuid())
-  unitId      String
+  id           String       @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId        String       @default("org_0")
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
+  unitId       String
   /// WATER_MAIN, BREAKER_PANEL, GAS, OTHER.
-  type        String
-  description String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  type         String
+  description  String
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
 
   unit Unit @relation(fields: [unitId], references: [id])
 
   @@unique([unitId, type])
   @@index([unitId])
+  @@index([orgId])
 }
 
 // ---------------------------------------------------------------------------
@@ -2086,6 +2343,7 @@ model StaffUser {
   credential         StaffCredential?
   assignments        StaffAssignment[]
   assignmentsGranted StaffAssignment[] @relation("AssignmentGrantedBy")
+  orgMemberships     OrgMembership[]
 
   paymentsReceived                        Payment[]                       @relation("PaymentReceivedBy")
   chargesWaived                           Charge[]                        @relation("ChargeWaivedBy")
@@ -2164,12 +2422,15 @@ model StaffUser {
 }
 
 model Tenant {
-  id                String   @id @default(cuid())
+  id                String       @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId             String       @default("org_0")
+  organization      Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
   firstName         String
   lastName          String
   email             String?
   phone             String?
-  active            Boolean  @default(true)
+  active            Boolean      @default(true)
   notes             String?
   /// BCP-47, or null for "never said". Null is NOT the same as English: it
   /// means nobody asked, which is the honest state for every tenant onboarded
@@ -2178,9 +2439,9 @@ model Tenant {
   preferredLocale   String?
   /// Same revocation watermark as StaffUser. A tenant who moves out or whose
   /// magic link leaked has every issued session invalidated by bumping this.
-  sessionsValidFrom DateTime @default(now())
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  sessionsValidFrom DateTime     @default(now())
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
 
   credential             TenantCredential?
   leaseTenants           LeaseTenant[]
@@ -2203,6 +2464,7 @@ model Tenant {
 
   @@index([lastName, firstName])
   @@index([email])
+  @@index([orgId])
 }
 
 /// Financially liable on the ledger, no portal access to maintenance or
@@ -2210,7 +2472,10 @@ model Tenant {
 /// guaranteeing two leases is two rows, which is the honest shape - their
 /// liability is per-lease.
 model Guarantor {
-  id                String   @id @default(cuid())
+  id                String       @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId             String       @default("org_0")
+  organization      Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
   leaseId           String
   firstName         String
   lastName          String
@@ -2220,13 +2485,13 @@ model Guarantor {
   /// never a delete - see LeasePartyChangeParty). Doubles as the portal's
   /// session gate, same as Tenant.active: `principalIsStillValid` refuses a
   /// magic-link session for a guarantor no longer attached to anything.
-  active            Boolean  @default(true)
+  active            Boolean      @default(true)
   /// Same revocation watermark as Tenant/StaffUser. Bumped on release so a
   /// live portal session dies with the release rather than at its own
   /// expiry.
-  sessionsValidFrom DateTime @default(now())
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  sessionsValidFrom DateTime     @default(now())
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
 
   lease           Lease                   @relation(fields: [leaseId], references: [id])
   leaseSignatures LeaseSigner[]
@@ -2237,10 +2502,14 @@ model Guarantor {
   consents        TenantConsent[]
 
   @@index([leaseId])
+  @@index([orgId])
 }
 
 model Vendor {
-  id                 String    @id @default(cuid())
+  id                 String       @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId              String       @default("org_0")
+  organization       Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
   name               String
   /// Free-form trade tags ("plumbing", "hvac"). Not an enum - the trade list
   /// is operator data, and a new trade should not need a migration.
@@ -2252,8 +2521,8 @@ model Vendor {
   licenseNumber      String?
   /// Payment is blocked or flagged without a W-9 on file (MAINT-11). The W-9
   /// itself is a Document; this is the flag the dispatch check reads.
-  w9OnFile           Boolean   @default(false)
-  coiExpiresOn       DateTime? @db.Date
+  w9OnFile           Boolean      @default(false)
+  coiExpiresOn       DateTime?    @db.Date
   /// Lower sorts first within a trade. Null = no stated preference.
   preferredRank      Int?
   /// R-029 (MAINT-12's "emergency vendor list per trade"): this vendor
@@ -2261,11 +2530,11 @@ model Vendor {
   /// use for a scheduled cartridge swap is often not the one who picks up
   /// on a Sunday, and dispatching an emergency to somebody who will not
   /// answer costs the hours that matter most.
-  emergencyAvailable Boolean   @default(false)
-  active             Boolean   @default(true)
+  emergencyAvailable Boolean      @default(false)
+  active             Boolean      @default(true)
   notes              String?
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
 
   workOrders    WorkOrder[]
   bids          WorkOrderBid[]
@@ -2276,6 +2545,7 @@ model Vendor {
   invoices      VendorInvoice[]
 
   @@index([active])
+  @@index([orgId])
 }
 
 // ---------------------------------------------------------------------------
@@ -2295,7 +2565,10 @@ model Vendor {
 // ---------------------------------------------------------------------------
 
 model VendorInvoice {
-  id            String    @id @default(cuid())
+  id            String       @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId         String       @default("org_0")
+  organization  Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
   /// Which set of books this bill belongs to. Every split's property must
   /// belong to this entity - the tax export runs per entity, so a split
   /// pointing at another entity's house would be money that leaves one
@@ -2310,7 +2583,7 @@ model VendorInvoice {
   /// The vendor's total, entered as printed. The splits must sum to exactly
   /// this - see the model comment.
   totalCents    Int
-  invoicedOn    DateTime  @db.Date
+  invoicedOn    DateTime     @db.Date
   /// Set when the bill is actually paid. Drives the CASH basis: an invoice
   /// with no payment date is not a cash-basis deduction in any year, exactly
   /// as an unpaid work order is not.
@@ -2332,10 +2605,14 @@ model VendorInvoice {
 
   @@index([legalEntityId, invoicedOn])
   @@index([vendorId, paidAt])
+  @@index([orgId])
 }
 
 model VendorInvoiceSplit {
-  id              String  @id @default(cuid())
+  id              String       @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId           String       @default("org_0")
+  organization    Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
   vendorInvoiceId String
   propertyId      String
   /// A `ScheduleEKey` (`packages/core/tax/schedule-e.ts`), restricted to the
@@ -2352,7 +2629,7 @@ model VendorInvoiceSplit {
   /// order whose cost arrives here must NOT also be deducted from its own
   /// `invoiceCents`, and two splits claiming one job would make that
   /// exclusion ambiguous.
-  workOrderId     String? @unique
+  workOrderId     String?      @unique
   /// What this share was for, when the job link does not already say it.
   description     String?
 
@@ -2366,6 +2643,7 @@ model VendorInvoiceSplit {
 
   @@index([vendorInvoiceId])
   @@index([propertyId])
+  @@index([orgId])
 }
 
 /// Owner-side outlay nobody invoiced (R-193, RPT-05/RPT-07): the property tax
@@ -2384,32 +2662,39 @@ model VendorInvoiceSplit {
 /// and by a real movement, never by an edit - this is the row produced when an
 /// accountant or opposing counsel asks whether the LLCs' money was kept apart.
 model EntitySettlement {
-  id               String   @id @default(cuid())
+  id               String       @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId            String       @default("org_0")
+  organization     Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
   legalEntityId    String
   /// The report's range, inclusive, as calendar days (D-3).
-  windowFrom       DateTime @db.Date
-  windowTo         DateTime @db.Date
+  windowFrom       DateTime     @db.Date
+  windowTo         DateTime     @db.Date
   /// What the report said the entity was owed for the range, before Stripe's
   /// fees. Recomputed when the transfer is recorded, never read off the form.
   grossCents       Int
   /// What actually left the shared account - usually less than gross by fees.
   transferredCents Int
-  transferredOn    DateTime @db.Date
+  transferredOn    DateTime     @db.Date
   /// The bank's confirmation or trace number: what matches this to a statement.
   reference        String
-  documentId       String   @unique
+  documentId       String       @unique
   recordedById     String
-  createdAt        DateTime @default(now())
+  createdAt        DateTime     @default(now())
 
   legalEntity LegalEntity @relation(fields: [legalEntityId], references: [id], onDelete: Restrict)
   document    Document    @relation("EntitySettlementReport", fields: [documentId], references: [id], onDelete: Restrict)
   recordedBy  StaffUser   @relation("EntitySettlementRecordedBy", fields: [recordedById], references: [id], onDelete: Restrict)
 
   @@index([legalEntityId, windowFrom])
+  @@index([orgId])
 }
 
 model PropertyExpense {
-  id                String    @id @default(cuid())
+  id                String       @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId             String       @default("org_0")
+  organization      Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
   /// Whose books. Required even when a property is named, so an entity-wide
   /// row and a property row are read by the same `where`.
   legalEntityId     String
@@ -2423,18 +2708,18 @@ model PropertyExpense {
   description       String
   /// When the money left. The only date, so it serves both bases, as
   /// `EvictionCost.incurredOn` does.
-  paidOn            DateTime  @db.Date
+  paidOn            DateTime     @db.Date
   /// Repeats on `paidOn`'s day of each month, expanded on read through today
   /// and never written ahead (D-201: no accrual engine).
-  recursMonthly     Boolean   @default(false)
+  recursMonthly     Boolean      @default(false)
   /// The last day a monthly series covers. Null while it runs.
-  recurrenceEndsOn  DateTime? @db.Date
+  recurrenceEndsOn  DateTime?    @db.Date
   /// The bill or receipt, when there is one - `EvictionCost.documentId`'s
   /// shape.
   documentId        String?
   recordedByStaffId String
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
 
   legalEntity LegalEntity @relation(fields: [legalEntityId], references: [id])
   property    Property?   @relation(fields: [propertyId], references: [id], onDelete: Restrict)
@@ -2443,10 +2728,14 @@ model PropertyExpense {
 
   @@index([legalEntityId, paidOn])
   @@index([propertyId, paidOn])
+  @@index([orgId])
 }
 
 model Lease {
   id                      String             @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId                   String             @default("org_0")
+  organization            Organization       @relation(fields: [orgId], references: [id], onDelete: Restrict)
   propertyId              String
   unitId                  String
   status                  LeaseStatus        @default(DRAFT)
@@ -2628,23 +2917,28 @@ model Lease {
   @@index([status])
   @@index([endsOn])
   @@index([renewedFromLeaseId])
+  @@index([orgId])
 }
 
 /// A lease has one row per adult occupant (LEASE-06). Separate from
 /// LeasePayer: every adult is jointly liable, but not every adult is a
 /// distinct Stripe payer.
 model LeaseTenant {
-  id        String   @id @default(cuid())
-  leaseId   String
-  tenantId  String
-  isPrimary Boolean  @default(false)
-  createdAt DateTime @default(now())
+  id           String       @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId        String       @default("org_0")
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
+  leaseId      String
+  tenantId     String
+  isPrimary    Boolean      @default(false)
+  createdAt    DateTime     @default(now())
 
   lease  Lease  @relation(fields: [leaseId], references: [id])
   tenant Tenant @relation(fields: [tenantId], references: [id])
 
   @@unique([leaseId, tenantId])
   @@index([tenantId])
+  @@index([orgId])
 }
 
 enum PartyChangeStatus {
@@ -2687,19 +2981,22 @@ enum PartyRemovalBasis {
 }
 
 model LeasePartyChange {
-  id          String            @id @default(cuid())
-  leaseId     String
-  status      PartyChangeStatus @default(PENDING_SIGNATURE)
+  id           String            @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId        String            @default("org_0")
+  organization Organization      @relation(fields: [orgId], references: [id], onDelete: Restrict)
+  leaseId      String
+  status       PartyChangeStatus @default(PENDING_SIGNATURE)
   /// The date the parties agreed the change takes effect. RECORDED AND
   /// PRINTED ON THE AMENDMENT, but it is not a scheduler: the change is
   /// applied when the last signature lands, never on a timer. A future
   /// date that quietly removed somebody's portal access and stopped their
   /// notices before they had moved out is the failure mode avoided; see
   /// lib/leases/party-change-actions.ts for the full reasoning.
-  effectiveOn DateTime          @db.Date
+  effectiveOn  DateTime          @db.Date
   /// Why, in whoever's words. Required - a change of who is liable on a
   /// tenancy with no stated reason is the one a dispute asks about.
-  reason      String
+  reason       String
 
   /// The amendment everybody signs. One per change: voiding the envelope
   /// voids the change, and starting over means a new change, rather than
@@ -2737,6 +3034,7 @@ model LeasePartyChange {
   confidentialCase ConfidentialCase?
 
   @@index([leaseId, status])
+  @@index([orgId])
 }
 
 /// One person moving on or off the tenancy.
@@ -2760,13 +3058,16 @@ model LeasePartyChange {
 /// tenantId/guarantorId is set, also by CHECK: this row names one person
 /// moving, never both at once.
 model LeasePartyChangeParty {
-  id          String               @id @default(cuid())
-  changeId    String
-  direction   PartyChangeDirection
-  tenantId    String?
-  guarantorId String?
-  applicantId String?
-  createdAt   DateTime             @default(now())
+  id           String               @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId        String               @default("org_0")
+  organization Organization         @relation(fields: [orgId], references: [id], onDelete: Restrict)
+  changeId     String
+  direction    PartyChangeDirection
+  tenantId     String?
+  guarantorId  String?
+  applicantId  String?
+  createdAt    DateTime             @default(now())
 
   change    LeasePartyChange @relation(fields: [changeId], references: [id], onDelete: Cascade)
   tenant    Tenant?          @relation(fields: [tenantId], references: [id], onDelete: Restrict)
@@ -2777,6 +3078,7 @@ model LeasePartyChangeParty {
   @@unique([changeId, guarantorId])
   @@index([tenantId])
   @@index([guarantorId])
+  @@index([orgId])
 }
 
 enum ConfidentialCaseStatus {
@@ -2811,13 +3113,16 @@ enum ConfidentialCaseStatus {
 /// verified, by whom and on what date, which is what a state's early-
 /// termination right actually turns on. See R-091b, which consumes it.
 model ConfidentialCase {
-  id      String                 @id @default(cuid())
-  leaseId String
-  status  ConfidentialCaseStatus @default(OPEN)
+  id           String                 @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId        String                 @default("org_0")
+  organization Organization           @relation(fields: [orgId], references: [id], onDelete: Restrict)
+  leaseId      String
+  status       ConfidentialCaseStatus @default(OPEN)
   /// What is going on, in the owner's own words. Restricted, and never
   /// copied into an audit payload - see `audit/events.ts` on
   /// `confidential.case_opened`.
-  summary String
+  summary      String
 
   /// Who the tenancy is being protected FROM. Free text, because they are as
   /// often somebody with no record in this system as they are a co-tenant -
@@ -2867,6 +3172,7 @@ model ConfidentialCase {
   partyChange         LeasePartyChange? @relation(fields: [partyChangeId], references: [id], onDelete: Restrict)
 
   @@index([leaseId, status])
+  @@index([orgId])
 }
 
 /// What a hold is FOR. The effects follow from it — see
@@ -2900,17 +3206,20 @@ enum LeaseHoldType {
 /// SmsOptOut one that did), and the action has to read the active holds
 /// anyway to tell somebody it is already placed.
 model LeaseHold {
-  id         String        @id @default(cuid())
-  leaseId    String
+  id           String        @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId        String        @default("org_0")
+  organization Organization  @relation(fields: [orgId], references: [id], onDelete: Restrict)
+  leaseId      String
   /// Denormalized from the lease so scoping and the per-property sweeps can
   /// filter without a join — the same call `Charge` and `LeasePayer` make.
-  propertyId String
-  type       LeaseHoldType
+  propertyId   String
+  type         LeaseHoldType
   /// Required, always. A hold with no stated reason is indistinguishable
   /// from one placed for a retaliatory one, which is the claim it will be
   /// defended against — the same reasoning `payment.hold_changed` is on
   /// REASON_REQUIRED for.
-  reason     String
+  reason       String
 
   placedAt        DateTime @default(now())
   placedByStaffId String
@@ -2963,6 +3272,7 @@ model LeaseHold {
 
   @@index([leaseId, liftedAt])
   @@index([propertyId, liftedAt])
+  @@index([orgId])
 }
 
 /// R-175. Mirrors `PAYMENT_PLAN_STATUSES` in packages/core/payments.
@@ -2987,12 +3297,15 @@ enum PaymentPlanStatus {
 /// rather than a note: it breaks the plan, lifts the hold and raises a Task
 /// the moment an instalment goes unpaid past its slack.
 model PaymentPlan {
-  id         String            @id @default(cuid())
-  leaseId    String
+  id           String            @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId        String            @default("org_0")
+  organization Organization      @relation(fields: [orgId], references: [id], onDelete: Restrict)
+  leaseId      String
   /// Denormalized from the lease, the same call `LeaseHold` and `Charge`
   /// make, so the per-property nightly sweep filters without a join.
-  propertyId String
-  status     PaymentPlanStatus @default(ACTIVE)
+  propertyId   String
+  status       PaymentPlanStatus @default(ACTIVE)
 
   /// What the plan repays, snapshotted when it was agreed. NOT recomputed
   /// from the balance afterwards: new rent charged during the plan is not
@@ -3046,23 +3359,28 @@ model PaymentPlan {
 
   @@index([leaseId, status])
   @@index([propertyId, status])
+  @@index([orgId])
 }
 
 /// One expected payment on a plan (R-175). Immutable once written: a
 /// renegotiation cancels the plan and agrees a new one, so the schedule
 /// somebody was actually held to survives.
 model PaymentPlanInstalment {
-  id          String   @id @default(cuid())
-  planId      String
+  id           String       @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId        String       @default("org_0")
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
+  planId       String
   /// 1-based, so "instalment 2 of 4" reads off the row.
-  sequence    Int
-  dueOn       DateTime @db.Date
-  amountCents Int
+  sequence     Int
+  dueOn        DateTime     @db.Date
+  amountCents  Int
 
   plan PaymentPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
 
   @@unique([planId, sequence])
   @@index([planId, dueOn])
+  @@index([orgId])
 }
 
 /// Which limb of SCRA §3955(b) a termination was invoked under (R-085).
@@ -3099,6 +3417,9 @@ enum ScraLookupResult {
 /// most recent; the older rows are what answer "what did you know in March".
 model ScraLookup {
   id                    String           @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId                 String           @default("org_0")
+  organization          Organization     @relation(fields: [orgId], references: [id], onDelete: Restrict)
   leaseId               String
   propertyId            String
   /// Who was searched for. Per TENANT, not per lease: §3931's affidavit is
@@ -3140,6 +3461,7 @@ model ScraLookup {
   @@index([leaseId, searchedOn])
   @@index([evictionCaseId])
   @@index([tenantId])
+  @@index([orgId])
 }
 
 /// What kind of reasonable accommodation this is. Mirrors
@@ -3187,7 +3509,10 @@ enum AccommodationRequestStatus {
 /// matters is enforced at the money (`petMoneyAllowed`), not at a type
 /// column.
 model AccommodationRequest {
-  id              String  @id @default(cuid())
+  id              String       @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId           String       @default("org_0")
+  organization    Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
   propertyId      String
   leaseId         String
   /// Who asked. Nullable because a household member who is not on the lease
@@ -3255,6 +3580,7 @@ model AccommodationRequest {
   @@index([leaseId, status])
   @@index([propertyId, status])
   @@index([violationCaseId])
+  @@index([orgId])
 }
 
 /// Mirrors `VIOLATION_KINDS` in packages/core/violations.
@@ -3312,10 +3638,13 @@ enum ViolationOutcome {
 /// apply and stay. A product that only models the enforcement path pushes
 /// every case down it.
 model ViolationCase {
-  id         String @id @default(cuid())
-  propertyId String
-  unitId     String
-  leaseId    String
+  id           String       @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId        String       @default("org_0")
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
+  propertyId   String
+  unitId       String
+  leaseId      String
 
   kind   ViolationKind
   status ViolationStatus @default(OPEN)
@@ -3367,6 +3696,7 @@ model ViolationCase {
   @@index([leaseId])
   @@index([status, openedAt])
   @@index([legitimizedApplicantId])
+  @@index([orgId])
 }
 
 /// One dated observation on a case, with its photographs.
@@ -3376,8 +3706,11 @@ model ViolationCase {
 /// evidence rather than a folder is that each one is dated, attributed and
 /// tied to the term it shows a breach of.
 model ViolationObservation {
-  id     String @id @default(cuid())
-  caseId String
+  id           String       @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId        String       @default("org_0")
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
+  caseId       String
 
   /// Required on a `PREMISES_CONDITION` case and forbidden on the others,
   /// where the kind of case IS the ground. Enforced by CHECK constraint as
@@ -3396,6 +3729,7 @@ model ViolationObservation {
   photos     Document[]    @relation("ViolationObservationPhotos")
 
   @@index([caseId, observedOn])
+  @@index([orgId])
 }
 
 /// Mirrors `ABANDONMENT_STATUSES` in packages/core/abandonment.
@@ -3444,15 +3778,18 @@ enum ContactOutcome {
 /// records what was tried, when the unit was entered and on what basis, and
 /// runs the two clocks the statutes turn on.
 model AbandonmentCase {
-  id          String              @id @default(cuid())
-  propertyId  String
-  unitId      String
-  leaseId     String
-  status      AbandonmentStatus   @default(MONITORING)
-  outcome     AbandonmentOutcome?
+  id           String              @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId        String              @default("org_0")
+  organization Organization        @relation(fields: [orgId], references: [id], onDelete: Restrict)
+  propertyId   String
+  unitId       String
+  leaseId      String
+  status       AbandonmentStatus   @default(MONITORING)
+  outcome      AbandonmentOutcome?
   /// Required when closing - "this is over" with no account of how is the
   /// record that helps nobody, the same call EvictionCase.outcomeNote makes.
-  outcomeNote String?
+  outcomeNote  String?
 
   openedAt        DateTime  @default(now())
   openedByStaffId String
@@ -3496,6 +3833,7 @@ model AbandonmentCase {
 
   @@index([propertyId, status])
   @@index([leaseId])
+  @@index([orgId])
 }
 
 /// One logged attempt to reach the tenant, or to find out where they are.
@@ -3506,6 +3844,9 @@ model AbandonmentCase {
 /// leave the most persuasive evidence off the record entirely.
 model AbandonmentContactAttempt {
   id                String         @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId             String         @default("org_0")
+  organization      Organization   @relation(fields: [orgId], references: [id], onDelete: Restrict)
   caseId            String
   method            ContactMethod
   outcome           ContactOutcome
@@ -3520,6 +3861,7 @@ model AbandonmentContactAttempt {
   recordedBy StaffUser       @relation("AbandonmentAttemptRecordedBy", fields: [recordedByStaffId], references: [id], onDelete: Restrict)
 
   @@index([caseId, attemptedOn])
+  @@index([orgId])
 }
 
 /// A tenant's own renter's-liability certificate (LEASE-10, R-067). NOT
@@ -3534,7 +3876,10 @@ model AbandonmentContactAttempt {
 /// the OWNER's own coverage) - a different entity insuring a different
 /// interest, which happens to share an English word.
 model RenterInsurancePolicy {
-  id             String    @id @default(cuid())
+  id             String       @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId          String       @default("org_0")
+  organization   Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
   leaseId        String
   carrier        String
   policyNumber   String?
@@ -3545,16 +3890,17 @@ model RenterInsurancePolicy {
   /// Null means not yet on file for this row - a policy recorded from its
   /// paperwork before every field was transcribed. Distinct from "no
   /// coverage": the certificate (`documentId`) is what states the truth.
-  expiresOn      DateTime? @db.Date
-  documentId     String?   @unique
+  expiresOn      DateTime?    @db.Date
+  documentId     String?      @unique
   notes          String?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
   lease    Lease     @relation(fields: [leaseId], references: [id])
   document Document? @relation(fields: [documentId], references: [id], onDelete: Restrict)
 
   @@index([leaseId, createdAt])
+  @@index([orgId])
 }
 
 // ---------------------------------------------------------------------------
@@ -3631,6 +3977,9 @@ enum LeaseEnvelopeKind {
 
 model LeaseEnvelope {
   id                 String              @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId              String              @default("org_0")
+  organization       Organization        @relation(fields: [orgId], references: [id], onDelete: Restrict)
   kind               LeaseEnvelopeKind   @default(LEASE)
   /// NOT unique. A voided envelope is kept as evidence (the same
   /// "retire, don't delete" rule every append-only-adjacent row in this
@@ -3657,7 +4006,7 @@ model LeaseEnvelope {
   addendumKeys       String[]
   /// The provider's own envelope id (D-27: never invented by us). Null
   /// until createEnvelope() succeeds.
-  providerId         String?             @unique
+  providerId         String?
   /// The unsigned generated PDF, archived the moment it is produced -
   /// R-062's "the PDF is the archived artifact, not a re-render" rule
   /// applied here.
@@ -3679,12 +4028,17 @@ model LeaseEnvelope {
   executedDocument Document?         @relation("LeaseEnvelopeExecutedDocument", fields: [executedDocumentId], references: [id], onDelete: Restrict)
   signers          LeaseSigner[]
 
+  @@unique([orgId, providerId])
   @@index([leaseId])
   @@index([status])
+  @@index([orgId])
 }
 
 model LeaseSigner {
   id               String            @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId            String            @default("org_0")
+  organization     Organization      @relation(fields: [orgId], references: [id], onDelete: Restrict)
   envelopeId       String
   /// Signing order (LEASE-06's own ask). Not enforced as a hard sequential
   /// gate today - every signer's link is live from the moment the envelope
@@ -3723,6 +4077,7 @@ model LeaseSigner {
   guarantor Guarantor?    @relation(fields: [guarantorId], references: [id], onDelete: Restrict)
 
   @@index([envelopeId, order])
+  @@index([orgId])
 }
 
 // ---------------------------------------------------------------------------
@@ -3756,7 +4111,10 @@ enum JobRunStatus {
 /// The alternative - emitting after commit - drops events whenever the process
 /// dies in the gap, and drops them silently.
 model OutboxEvent {
-  id            String    @id @default(cuid())
+  id            String       @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId         String       @default("org_0")
+  organization  Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
   /// Event name from packages/core/events. A closed vocabulary, for the same
   /// reason audit actions are.
   type          String
@@ -3770,11 +4128,11 @@ model OutboxEvent {
   payload       Json
   /// When the thing happened, which is not when the row was written and not
   /// when it was published.
-  occurredAt    DateTime  @default(now())
+  occurredAt    DateTime     @default(now())
   publishedAt   DateTime?
-  attempts      Int       @default(0)
+  attempts      Int          @default(0)
   lastError     String?
-  createdAt     DateTime  @default(now())
+  createdAt     DateTime     @default(now())
 
   property      Property?          @relation(fields: [propertyId], references: [id])
   consumptions  EventConsumption[]
@@ -3784,6 +4142,7 @@ model OutboxEvent {
   @@index([publishedAt, occurredAt])
   @@index([aggregateType, aggregateId])
   @@index([propertyId])
+  @@index([orgId])
 }
 
 /// One row per (event, consumer). The unique constraint IS the idempotency:
@@ -3793,17 +4152,21 @@ model OutboxEvent {
 /// Recorded in the same transaction as the consumer's own effects, so a
 /// consumer that half-succeeded is retried rather than skipped.
 model EventConsumption {
-  id          String   @id @default(cuid())
-  eventId     String
+  id           String       @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId        String       @default("org_0")
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
+  eventId      String
   /// Stable consumer name. Renaming one makes it re-consume every event it
   /// has already handled, which is why the name belongs in code review.
-  consumer    String
-  processedAt DateTime @default(now())
+  consumer     String
+  processedAt  DateTime     @default(now())
 
   event OutboxEvent @relation(fields: [eventId], references: [id])
 
   @@unique([eventId, consumer])
   @@index([consumer])
+  @@index([orgId])
 }
 
 /// The ledger of scheduled work. One row per (job, property, local day), which
@@ -3813,6 +4176,9 @@ model EventConsumption {
 /// `businessDate` is a property-LOCAL calendar day (D-3), never a UTC one.
 model JobRun {
   id           String       @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId        String       @default("org_0")
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
   jobType      String
   /// Null for a portfolio-wide job that is not run per property.
   propertyId   String?
@@ -3831,6 +4197,7 @@ model JobRun {
   @@index([jobType, businessDate])
   @@index([propertyId, businessDate])
   @@index([status])
+  @@index([orgId])
 }
 
 // ---------------------------------------------------------------------------
@@ -3910,7 +4277,10 @@ model Role {
 /// migration, because a half-understood scope is how a "property-scoped" user
 /// quietly sees everything.
 model StaffAssignment {
-  id               String    @id @default(cuid())
+  id               String       @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId            String       @default("org_0")
+  organization     Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
   staffUserId      String
   roleId           String
   legalEntityId    String?
@@ -3918,13 +4288,13 @@ model StaffAssignment {
   /// Who granted it and why - a permission change is a privileged action
   /// (ROLE-03) and the audit trail starts with the row itself.
   grantedByStaffId String?
-  grantedAt        DateTime  @default(now())
+  grantedAt        DateTime     @default(now())
   /// Revocation is a timestamp, never a delete: ROLE-06 requires that
   /// deactivation preserve all history. A revoked assignment stops granting
   /// anything on the next request, because permissions are read per request.
   revokedAt        DateTime?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
 
   staffUser   StaffUser    @relation(fields: [staffUserId], references: [id])
   role        Role         @relation(fields: [roleId], references: [id])
@@ -3935,6 +4305,7 @@ model StaffAssignment {
   @@index([staffUserId, revokedAt])
   @@index([propertyId])
   @@index([legalEntityId])
+  @@index([orgId])
 }
 
 // ---------------------------------------------------------------------------
@@ -4123,17 +4494,22 @@ model StaffCredential {
 /// primary path because friction is what keeps tenants off the portal, and a
 /// tenant who never sets a password must still be able to get in.
 model TenantCredential {
-  id                String    @id @default(cuid())
-  tenantId          String    @unique
+  id                String       @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId             String       @default("org_0")
+  organization      Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
+  tenantId          String       @unique
   passwordHash      String?
   passwordUpdatedAt DateTime?
-  failedLoginCount  Int       @default(0)
+  failedLoginCount  Int          @default(0)
   lockedUntil       DateTime?
   lastLoginAt       DateTime?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([orgId])
 }
 
 /// One table for every short-lived single-use token in the product - tenant
@@ -4200,6 +4576,9 @@ model RateLimitCounter {
 
 model LeasePayer {
   id                      String           @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId                   String           @default("org_0")
+  organization            Organization     @relation(fields: [orgId], references: [id], onDelete: Restrict)
   leaseId                 String
   propertyId              String
   payerType               PayerType
@@ -4304,22 +4683,26 @@ model LeasePayer {
   @@unique([stripeSubscriptionId])
   @@index([leaseId])
   @@index([propertyId])
+  @@index([orgId])
 }
 
 /// What core decided this charge is worth and why. Charges originate here,
 /// not in Stripe: if a statute could change the number, core computes it and
 /// pushes it to Stripe as an invoice item (D-12).
 model Charge {
-  id                  String     @id @default(cuid())
+  id                  String       @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId               String       @default("org_0")
+  organization        Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
   propertyId          String
   leaseId             String
   type                ChargeType
   amountCents         Int
   description         String
   /// Property-local calendar day the charge is due (D-3).
-  dueOn               DateTime   @db.Date
-  periodStart         DateTime?  @db.Date
-  periodEnd           DateTime?  @db.Date
+  dueOn               DateTime     @db.Date
+  periodStart         DateTime?    @db.Date
+  periodEnd           DateTime?    @db.Date
   /// The rule version that produced a statutory amount - the late fee cap in
   /// force on the day it was assessed (D-12). Null for amounts no statute
   /// touches, like agreed pet rent.
@@ -4365,17 +4748,17 @@ model Charge {
   /// being read as "already assessed" against a completely different one
   /// next month. `Charge.dueOn` on THIS row is already the day the fee
   /// itself was assessed, not this.
-  assessedForDueOn    DateTime?  @db.Date
+  assessedForDueOn    DateTime?    @db.Date
   /// The disposition whose deductions outran the deposit (R-215). The part
   /// the deposit could not cover is billed as its own invoice so it is a
   /// receivable Stripe knows about (D-11), and a former tenant's cheque for it
   /// has an invoice to land on. Unique: one disposition, one such charge.
-  depositId           String?    @unique
+  depositId           String?      @unique
   waivedAt            DateTime?
   waivedByStaffId     String?
   waiveReason         String?
-  createdAt           DateTime   @default(now())
-  updatedAt           DateTime   @updatedAt
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
 
   property          Property          @relation(fields: [propertyId], references: [id])
   lease             Lease             @relation("ChargeLease", fields: [leaseId], references: [id])
@@ -4412,6 +4795,7 @@ model Charge {
   /// it is invisible here and visible in the migration.
   @@index([workOrderId])
   @@index([assessedOnLeaseId, assessedForDueOn])
+  @@index([orgId])
 }
 
 /// Splits one Charge across the lease's payers. The allocation rows for a
@@ -4420,35 +4804,42 @@ model Charge {
 /// without a trigger, and a trigger here would fire mid-insert on a
 /// legitimately half-built allocation.
 model PayerAllocation {
-  id           String   @id @default(cuid())
+  id           String       @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId        String       @default("org_0")
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
   chargeId     String
   leasePayerId String
   amountCents  Int
-  createdAt    DateTime @default(now())
+  createdAt    DateTime     @default(now())
 
   charge     Charge     @relation(fields: [chargeId], references: [id])
   leasePayer LeasePayer @relation(fields: [leasePayerId], references: [id])
 
   @@unique([chargeId, leasePayerId])
   @@index([leasePayerId])
+  @@index([orgId])
 }
 
 model RecurringCharge {
-  id                       String     @id @default(cuid())
+  id                       String       @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId                    String       @default("org_0")
+  organization             Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
   propertyId               String
   leaseId                  String
   type                     ChargeType
   amountCents              Int
   description              String
   /// Property-local day of month to post.
-  dayOfMonth               Int        @default(1)
-  startsOn                 DateTime   @db.Date
-  endsOn                   DateTime?  @db.Date
+  dayOfMonth               Int          @default(1)
+  startsOn                 DateTime     @db.Date
+  endsOn                   DateTime?    @db.Date
   stripePriceId            String?
   stripeSubscriptionItemId String?
-  active                   Boolean    @default(true)
-  createdAt                DateTime   @default(now())
-  updatedAt                DateTime   @updatedAt
+  active                   Boolean      @default(true)
+  createdAt                DateTime     @default(now())
+  updatedAt                DateTime     @updatedAt
 
   property Property @relation(fields: [propertyId], references: [id])
   lease    Lease    @relation(fields: [leaseId], references: [id])
@@ -4456,6 +4847,7 @@ model RecurringCharge {
 
   @@index([leaseId])
   @@index([propertyId])
+  @@index([orgId])
 }
 
 /// How a single-meter utility bill is split across the units it covers
@@ -4486,15 +4878,18 @@ enum RubsMethod {
 /// Several states restrict or forbid RUBS, which is why allocation is gated
 /// on `JurisdictionRule.rubsPermitted` (D-4) rather than on anything here.
 model UtilityBill {
-  id                 String     @id @default(cuid())
+  id                 String       @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId              String       @default("org_0")
+  organization       Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
   propertyId         String
   /// ELECTRIC, GAS, WATER, SEWER, TRASH, OTHER - the same vocabulary
   /// `UtilityAccount.type` uses.
   utilityType        String
   provider           String?
   /// What the bill covers, property-local calendar days (D-3).
-  periodStart        DateTime   @db.Date
-  periodEnd          DateTime   @db.Date
+  periodStart        DateTime     @db.Date
+  periodEnd          DateTime     @db.Date
   amountCents        Int
   method             RubsMethod
   /// The scanned bill. Nullable because recording the bill and finding the
@@ -4510,8 +4905,8 @@ model UtilityBill {
   /// the bill is one somebody will eventually be asked to explain.
   landlordCents      Int?
   notes              String?
-  createdAt          DateTime   @default(now())
-  updatedAt          DateTime   @updatedAt
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
 
   property    Property   @relation(fields: [propertyId], references: [id])
   document    Document?  @relation("UtilityBillDocument", fields: [documentId], references: [id])
@@ -4519,10 +4914,14 @@ model UtilityBill {
   charges     Charge[]
 
   @@index([propertyId, periodEnd])
+  @@index([orgId])
 }
 
 model Payment {
   id                    String         @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId                 String         @default("org_0")
+  organization          Organization   @relation(fields: [orgId], references: [id], onDelete: Restrict)
   propertyId            String
   leaseId               String
   /// Which payer's money this is. A voucher lease's HAP deposit and its
@@ -4578,6 +4977,7 @@ model Payment {
   @@index([propertyId, receivedAt])
   @@index([status])
   @@index([depositBatchId])
+  @@index([orgId])
 }
 
 /**
@@ -4601,23 +5001,27 @@ model Payment {
  * throws too, and its echo must still find the split.
  */
 model PaymentInvoiceSplit {
-  id               String    @id @default(cuid())
+  id               String       @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId            String       @default("org_0")
+  organization     Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
   paymentId        String
   stripeInvoiceId  String
   amountCents      Int
   /// The `invoice.updated` a portal split was pushed as (MONEY-01). Null on a
   /// counter split, which is claimed by its ledger entry instead.
-  claimedByEventId String?   @unique
+  claimedByEventId String?      @unique
   /// When the push to Stripe RETURNED (MONEY-11/12). Null means Stripe may or
   /// may not know: the push threw, or the process died first. Such a split
   /// can claim an echo only for minutes, never a payment days later.
   pushedAt         DateTime?
-  createdAt        DateTime  @default(now())
+  createdAt        DateTime     @default(now())
 
   payment Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
 
   @@unique([paymentId, stripeInvoiceId])
   @@index([stripeInvoiceId])
+  @@index([orgId])
 }
 
 /**
@@ -4636,7 +5040,10 @@ model PaymentInvoiceSplit {
  * silence cannot give.
  */
 model ProcessedStripeEvent {
-  stripeEventId String   @id
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId         String       @default("org_0")
+  organization  Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
+  stripeEventId String       @id
   type          String
   /// What happened: `projected` or `ignored`. Free text rather than an enum -
   /// this is an operational log, and a new outcome should not need a
@@ -4648,10 +5055,11 @@ model ProcessedStripeEvent {
   /// Stripe's own timestamp for the event, so the log can be read in the
   /// order things happened rather than the order they arrived.
   occurredAt    DateTime
-  processedAt   DateTime @default(now())
+  processedAt   DateTime     @default(now())
 
   @@index([occurredAt])
   @@index([type])
+  @@index([orgId])
 }
 
 /// Append-only projection of Stripe (D-11). Rows are INSERTed by the webhook
@@ -4668,6 +5076,9 @@ model ProcessedStripeEvent {
 /// out with the deposit refund (D-306).
 model LedgerEntry {
   id             String          @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId          String          @default("org_0")
+  organization   Organization    @relation(fields: [orgId], references: [id], onDelete: Restrict)
   propertyId     String
   leaseId        String
   /// Null only for lease-level entries that belong to no single payer.
@@ -4704,6 +5115,7 @@ model LedgerEntry {
   @@index([leaseId, occurredAt])
   @@index([propertyId, occurredAt])
   @@index([stripeEventId])
+  @@index([orgId])
 }
 
 /// A liability, never income (PAY-07). `heldCents` is what was RECEIVED and
@@ -4717,6 +5129,9 @@ model LedgerEntry {
 /// stored, so a later rule change never moves a deadline already running.
 model Deposit {
   id                   String          @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId                String          @default("org_0")
+  organization         Organization    @relation(fields: [orgId], references: [id], onDelete: Restrict)
   propertyId           String
   leaseId              String
   type                 DepositType     @default(SECURITY)
@@ -4788,6 +5203,7 @@ model Deposit {
   @@index([leaseId])
   @@index([propertyId])
   @@index([dispositionDueOn])
+  @@index([orgId])
 }
 
 /// One itemized deduction against a held deposit (INSP-03, R-071). Editable
@@ -4801,7 +5217,10 @@ model Deposit {
 /// when neither `workOrderId`, `inspectionItemId`, nor an attached
 /// `Document` exists - see `isUnsupportedDeduction()`.
 model DepositDeduction {
-  id                String   @id @default(cuid())
+  id                String       @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId             String       @default("org_0")
+  organization      Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
   propertyId        String
   depositId         String
   description       String
@@ -4820,8 +5239,8 @@ model DepositDeduction {
   estimatedAgeYears Int?
   usefulLifeYears   Int?
   createdByStaffId  String?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
 
   property       Property        @relation(fields: [propertyId], references: [id])
   deposit        Deposit         @relation(fields: [depositId], references: [id])
@@ -4831,6 +5250,7 @@ model DepositDeduction {
   evidence       Document[]
 
   @@index([depositId])
+  @@index([orgId])
 }
 
 // ---------------------------------------------------------------------------
@@ -4842,6 +5262,9 @@ model DepositDeduction {
 /// route).
 model Ticket {
   id                    String       @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId                 String       @default("org_0")
+  organization          Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
   propertyId            String
   unitId                String
   leaseId               String?
@@ -4890,10 +5313,14 @@ model Ticket {
   @@index([propertyId, status])
   @@index([unitId])
   @@index([status, priority])
+  @@index([orgId])
 }
 
 model WorkOrder {
   id                             String          @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId                          String          @default("org_0")
+  organization                   Organization    @relation(fields: [orgId], references: [id], onDelete: Restrict)
   propertyId                     String
   unitId                         String
   ticketId                       String?
@@ -5067,6 +5494,7 @@ model WorkOrder {
   @@index([turnoverProjectId])
   @@index([pmTemplateId])
   @@index([insuranceClaimId])
+  @@index([orgId])
 }
 
 /// A recurring preventive-maintenance task the PM can batch-create across
@@ -5076,7 +5504,10 @@ model WorkOrder {
 /// `InspectionTemplate`/`ComplianceItem` already take: a task this product
 /// has never heard of needs no migration, only a new row.
 model PreventiveMaintenanceTemplate {
-  id               String   @id @default(cuid())
+  id               String       @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId            String       @default("org_0")
+  organization     Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
   name             String
   /// Matched against `Vendor.trades` for auto-assignment on a batch run
   /// (lowercased, the same vocabulary posture R-079/D-68 already
@@ -5088,13 +5519,15 @@ model PreventiveMaintenanceTemplate {
   /// names cadences from quarterly (pest) to annual (chimney), and nothing in
   /// this product's history has found one cadence that fits every task.
   intervalMonths   Int
-  active           Boolean  @default(true)
+  active           Boolean      @default(true)
   createdByStaffId String
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
 
   createdBy  StaffUser   @relation(fields: [createdByStaffId], references: [id])
   workOrders WorkOrder[]
+
+  @@index([orgId])
 }
 
 /// One vendor's price for one work order (MAINT-04's bid-collection
@@ -5114,20 +5547,24 @@ model PreventiveMaintenanceTemplate {
  * is no correction path here either, only a new link.
  */
 model WorkOrderMessageLink {
-  id              String   @id @default(cuid())
+  id              String       @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId           String       @default("org_0")
+  organization    Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
   workOrderId     String
   /// Unique: a message belongs to at most one job. Attaching it twice, or
   /// to two different jobs, is a mistake this constraint refuses outright
   /// rather than silently double-counting it on two timelines.
-  messageId       String   @unique
+  messageId       String       @unique
   linkedByStaffId String
-  linkedAt        DateTime @default(now())
+  linkedAt        DateTime     @default(now())
 
   workOrder WorkOrder @relation(fields: [workOrderId], references: [id])
   message   Message   @relation(fields: [messageId], references: [id])
   linkedBy  StaffUser @relation(fields: [linkedByStaffId], references: [id])
 
   @@index([workOrderId])
+  @@index([orgId])
 }
 
 /**
@@ -5141,16 +5578,20 @@ model WorkOrderMessageLink {
  * correction is a new note, not an edit to this one.
  */
 model WorkOrderNote {
-  id          String   @id @default(cuid())
-  workOrderId String
-  staffUserId String
-  body        String
-  createdAt   DateTime @default(now())
+  id           String       @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId        String       @default("org_0")
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
+  workOrderId  String
+  staffUserId  String
+  body         String
+  createdAt    DateTime     @default(now())
 
   workOrder WorkOrder @relation(fields: [workOrderId], references: [id])
   staffUser StaffUser @relation(fields: [staffUserId], references: [id])
 
   @@index([workOrderId, createdAt])
+  @@index([orgId])
 }
 
 /// A tenant's answer to "was this resolved?" (MAINT-07, R-030).
@@ -5162,9 +5603,12 @@ model WorkOrderNote {
 /// justified, and this product's whole premise is that such evidence does
 /// not get overwritten.
 model WorkOrderVerification {
-  id          String @id @default(cuid())
-  workOrderId String
-  tenantId    String
+  id           String       @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId        String       @default("org_0")
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
+  workOrderId  String
+  tenantId     String
 
   /// WHO DID THE WORK BEING VERIFIED - captured here, at the moment of the
   /// answer, and never read off the work order later.
@@ -5198,21 +5642,25 @@ model WorkOrderVerification {
   /// One answer per round. A tenant tapping twice is one answer, not two.
   @@unique([workOrderId, round])
   @@index([vendorId, resolved])
+  @@index([orgId])
 }
 
 model WorkOrderBid {
-  id          String    @id @default(cuid())
-  workOrderId String
-  vendorId    String
+  id           String       @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId        String       @default("org_0")
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
+  workOrderId  String
+  vendorId     String
   /// Null until the vendor answers. A row exists from the moment the bid is
   /// REQUESTED, so "who was asked and never replied" is answerable - which
   /// is half of what a comparison view is for.
-  amountCents Int?
-  note        String?
+  amountCents  Int?
+  note         String?
   /// Set when a vendor answers "not interested" rather than quoting.
-  declinedAt  DateTime?
-  respondedAt DateTime?
-  requestedAt DateTime  @default(now())
+  declinedAt   DateTime?
+  respondedAt  DateTime?
+  requestedAt  DateTime     @default(now())
 
   workOrder WorkOrder @relation(fields: [workOrderId], references: [id])
   vendor    Vendor    @relation(fields: [vendorId], references: [id])
@@ -5221,6 +5669,7 @@ model WorkOrderBid {
   /// vendor, not collecting a second opinion from them.
   @@unique([workOrderId, vendorId])
   @@index([workOrderId])
+  @@index([orgId])
 }
 
 /// Turnover / make-ready as a project (LEASE-12, R-072): the mini-project a
@@ -5245,21 +5694,24 @@ model WorkOrderBid {
 /// the class of drift bug this codebase keeps a running list of avoiding
 /// (see `packages/core/units/vacancy.ts`'s own comment).
 model TurnoverProject {
-  id                  String    @id @default(cuid())
+  id                  String       @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId               String       @default("org_0")
+  organization        Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
   propertyId          String
   unitId              String
   /// The departing lease whose move-out started this turn. Restrict, not
   /// SetNull: nothing in this product deletes a Lease row (see
   /// `Lease.renewedFromLeaseId`'s own comment), so there is no delete path
   /// this FK needs to survive.
-  leaseId             String    @unique
-  targetRentReadyDate DateTime? @db.Date
+  leaseId             String       @unique
+  targetRentReadyDate DateTime?    @db.Date
   /// Set when staff marks the turn done. No separate status column - null
   /// vs. set IS the status, so there is nothing for a second field to
   /// disagree with.
   rentReadyAt         DateTime?
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
 
   property   Property    @relation(fields: [propertyId], references: [id])
   unit       Unit        @relation(fields: [unitId], references: [id])
@@ -5268,6 +5720,7 @@ model TurnoverProject {
 
   @@index([propertyId])
   @@index([unitId, rentReadyAt])
+  @@index([orgId])
 }
 
 // ---------------------------------------------------------------------------
@@ -5278,7 +5731,10 @@ model TurnoverProject {
 // ---------------------------------------------------------------------------
 
 model Thread {
-  id       String  @id @default(cuid())
+  id           String       @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId        String       @default("org_0")
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
   /// R-097a (COMM-08): the opaque label that names this conversation in the
   /// address a reply is sent to - `hello+<replyKey>@inbound...`.
   ///
@@ -5292,7 +5748,7 @@ model Thread {
   ///
   /// Minted lazily on the first outbound email, so a portfolio that never
   /// emails never grows one.
-  replyKey String? @unique
+  replyKey     String?      @unique
 
   /// Deterministic identity, built by packages/core/comms - "tenant:<id>:
   /// property:<id>", "vendor:<id>:property:<id>", "property:<id>".
@@ -5336,6 +5792,7 @@ model Thread {
   @@index([leaseId])
   @@index([tenantId])
   @@index([vendorId])
+  @@index([orgId])
 }
 
 /// An inbound message that could NOT be routed to a thread automatically
@@ -5362,21 +5819,24 @@ model Thread {
 /// Task requires a propertyId and an unknown sender has no property, which is
 /// precisely why the content cannot simply live on the Task.
 model UnroutedMessage {
-  id          String           @id @default(cuid())
-  channel     MessageChannel
-  direction   MessageDirection @default(INBOUND)
+  id           String           @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId        String           @default("org_0")
+  organization Organization     @relation(fields: [orgId], references: [id], onDelete: Restrict)
+  channel      MessageChannel
+  direction    MessageDirection @default(INBOUND)
   /// The sender as the provider reported it, normalized to E.164 where it
   /// could be. Stored as received when it could not be - an unparseable
   /// number is still evidence of who tried to make contact.
-  fromAddress String
-  body        String
+  fromAddress  String
+  body         String
   /// UNKNOWN_SENDER or AMBIGUOUS. Closed vocabulary in packages/core/comms.
-  reason      String
+  reason       String
   /// Provider message id (Twilio SID), for reconciliation and de-duplication
   /// if the provider redelivers the same webhook.
-  externalId  String?          @unique
-  receivedAt  DateTime
-  createdAt   DateTime         @default(now())
+  externalId   String?          @unique
+  receivedAt   DateTime
+  createdAt    DateTime         @default(now())
 
   /// Set when a human files it into a thread. The Message created then
   /// carries the ORIGINAL receivedAt as its sentAt, so the transcript reads
@@ -5400,6 +5860,7 @@ model UnroutedMessage {
   attachmentsDropped Int @default(0)
 
   @@index([routedAt, receivedAt])
+  @@index([orgId])
 }
 
 /// Immutable once written (COMM-05), enforced by the same trigger that
@@ -5409,17 +5870,20 @@ model UnroutedMessage {
 /// that legitimately changes after the fact, so it lives on MessageDelivery
 /// rather than on the immutable row.
 model Message {
-  id          String           @id @default(cuid())
-  threadId    String
-  channel     MessageChannel
-  direction   MessageDirection
-  body        String
-  sentAt      DateTime
-  staffUserId String?
-  tenantId    String?
-  vendorId    String?
+  id           String           @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId        String           @default("org_0")
+  organization Organization     @relation(fields: [orgId], references: [id], onDelete: Restrict)
+  threadId     String
+  channel      MessageChannel
+  direction    MessageDirection
+  body         String
+  sentAt       DateTime
+  staffUserId  String?
+  tenantId     String?
+  vendorId     String?
   /// Provider message id (Twilio SID, Resend id) for delivery reconciliation.
-  externalId  String?
+  externalId   String?
   /// R-032 (COMM-06): which incident this message is EVIDENCE OF, distinct
   /// from which Thread it lives in. A tenant's thread is deliberately
   /// continuous across every ticket they ever raise (COMM-01) - it cannot
@@ -5429,9 +5893,9 @@ model Message {
   /// (attachMessageToWorkOrder) - never inferred from a date range, which
   /// would file a message on a guess. Null is the ordinary case: most of a
   /// tenant's conversation is not about any one job.
-  ticketId    String?
-  workOrderId String?
-  createdAt   DateTime         @default(now())
+  ticketId     String?
+  workOrderId  String?
+  createdAt    DateTime         @default(now())
 
   thread        Thread                @relation(fields: [threadId], references: [id])
   staffUser     StaffUser?            @relation("MessageSentBy", fields: [staffUserId], references: [id])
@@ -5452,19 +5916,23 @@ model Message {
   @@index([externalId])
   @@index([ticketId])
   @@index([workOrderId])
+  @@index([orgId])
 }
 
 /// The mutable half of a Message: what the provider told us afterwards.
 /// Separated so the message body itself can be trigger-protected as evidence
 /// while a webhook is still free to move QUEUED -> DELIVERED -> READ.
 model MessageDelivery {
-  id          String         @id @default(cuid())
-  messageId   String         @unique
-  status      DeliveryStatus @default(QUEUED)
-  deliveredAt DateTime?
-  readAt      DateTime?
-  failedAt    DateTime?
-  failureCode String?
+  id           String         @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId        String         @default("org_0")
+  organization Organization   @relation(fields: [orgId], references: [id], onDelete: Restrict)
+  messageId    String         @unique
+  status       DeliveryStatus @default(QUEUED)
+  deliveredAt  DateTime?
+  readAt       DateTime?
+  failedAt     DateTime?
+  failureCode  String?
   /// Provider message id for an OUTBOUND message (R-017).
   ///
   /// Message.externalId already carries it for INBOUND, where the provider
@@ -5474,13 +5942,14 @@ model MessageDelivery {
   /// does not exist yet when the immutable row is built. It belongs on the
   /// mutable half, which is where the reconciliation webhook looks anyway,
   /// and mirrors NotificationDelivery.externalId exactly.
-  externalId  String?
-  updatedAt   DateTime       @updatedAt
+  externalId   String?
+  updatedAt    DateTime       @updatedAt
 
   message Message @relation(fields: [messageId], references: [id])
 
   @@index([status])
   @@index([externalId])
+  @@index([orgId])
 }
 
 // ---------------------------------------------------------------------------
@@ -5525,7 +5994,10 @@ model MessageDelivery {
 /// point 1 means an orphan is still readable evidence rather than a dangling
 /// pointer.
 model Notification {
-  id String @id @default(cuid())
+  id           String       @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId        String       @default("org_0")
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
 
   /// The idempotency key, and the hard invariant of this engine: the same
   /// logical notification can be requested any number of times and is sent
@@ -5575,6 +6047,7 @@ model Notification {
   @@index([propertyId, createdAt])
   @@index([category, createdAt])
   @@index([eventId])
+  @@index([orgId])
 }
 
 /// The mutable half: what happened after the decision. Separated so the body
@@ -5582,6 +6055,9 @@ model Notification {
 /// free to move QUEUED -> SENT -> DELIVERED.
 model NotificationDelivery {
   id               String         @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId            String         @default("org_0")
+  organization     Organization   @relation(fields: [orgId], references: [id], onDelete: Restrict)
   notificationId   String         @unique
   status           DeliveryStatus @default(QUEUED)
   /// Why it was never sent, when status is SUPPRESSED. Closed vocabulary in
@@ -5610,6 +6086,7 @@ model NotificationDelivery {
 
   @@index([status, sendAfter])
   @@index([externalId])
+  @@index([orgId])
 }
 
 /// A per-recipient, per-category, per-channel override (NOTIF-02).
@@ -5624,6 +6101,9 @@ model NotificationDelivery {
 /// maintenance), and a check constraint would need a migration to follow it.
 model NotificationPreference {
   id            String                    @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId         String                    @default("org_0")
+  organization  Organization              @relation(fields: [orgId], references: [id], onDelete: Restrict)
   recipientType NotificationRecipientType
   recipientId   String
   category      String
@@ -5634,6 +6114,7 @@ model NotificationPreference {
 
   @@unique([recipientType, recipientId, category, channel])
   @@index([recipientType, recipientId])
+  @@index([orgId])
 }
 
 /// A managed message template (COMM-03, R-049).
@@ -5647,7 +6128,10 @@ model NotificationPreference {
 /// closed catalogue in packages/core/comms/merge-fields.ts, validation on
 /// save, and preview-before-send are what replace the type checking.
 model MessageTemplate {
-  id               String   @id @default(cuid())
+  id               String       @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId            String       @default("org_0")
+  organization     Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
   /// Free text, shown in the picker. Named by the person who will look for it.
   name             String
   /// ROUTINE or LEGAL. Decides whether an unapproved translation may be used
@@ -5662,11 +6146,11 @@ model MessageTemplate {
   /// Retired rather than deleted, like every other referenceable row here: a
   /// message sent from a template is evidence, and the template it was sent
   /// from is part of explaining it.
-  active           Boolean  @default(true)
+  active           Boolean      @default(true)
   createdByStaffId String
   updatedByStaffId String?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
 
   createdBy    StaffUser                    @relation("TemplateCreatedBy", fields: [createdByStaffId], references: [id])
   /// Restrict, not the SetNull Prisma defaults to for an optional relation.
@@ -5677,6 +6161,7 @@ model MessageTemplate {
   versions     MessageTemplateVersion[]
 
   @@index([active, name])
+  @@index([orgId])
 }
 
 /// R-264 (PRD 08 B1): every saved state of a managed template, with who and
@@ -5685,7 +6170,10 @@ model MessageTemplate {
 /// rewind. Cascades with its template, which the app never deletes (retired
 /// instead) - only test and demo-seed cleanup do.
 model MessageTemplateVersion {
-  id                  String   @id @default(cuid())
+  id                  String       @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId               String       @default("org_0")
+  organization        Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
   templateId          String
   /// 1, 2, 3... per template. The unique key is what refuses two concurrent
   /// saves claiming the same number.
@@ -5697,13 +6185,14 @@ model MessageTemplateVersion {
   savedByStaffId      String
   /// Set when this version was made by restoring an older one.
   restoredFromVersion Int?
-  createdAt           DateTime @default(now())
+  createdAt           DateTime     @default(now())
 
   template MessageTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
   /// Restrict: who wrote the words is the point of the row.
   savedBy  StaffUser       @relation("TemplateVersionSavedBy", fields: [savedByStaffId], references: [id], onDelete: Restrict)
 
   @@unique([templateId, version])
+  @@index([orgId])
 }
 
 /// One template in one language (COMM-03).
@@ -5715,7 +6204,10 @@ model MessageTemplateVersion {
 /// translation falls back to the default language and reports why, rather
 /// than serving a notice whose words nobody read.
 model MessageTemplateTranslation {
-  id                String    @id @default(cuid())
+  id                String       @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId             String       @default("org_0")
+  organization      Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
   templateId        String
   /// BCP-47, matching `Tenant.preferredLocale`.
   locale            String
@@ -5726,8 +6218,8 @@ model MessageTemplateTranslation {
   /// claim auditable rather than pretending to check it.
   approvedAt        DateTime?
   approvedByStaffId String?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
 
   template   MessageTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
   /// Restrict. WHO approved a legal translation is the auditable claim this
@@ -5737,6 +6229,7 @@ model MessageTemplateTranslation {
   /// One translation per language per template. Two Spanish versions is a
   /// question nobody can answer at send time.
   @@unique([templateId, locale])
+  @@index([orgId])
 }
 
 /// A saved announcement filter, named by the person who will look for it
@@ -5750,7 +6243,10 @@ model MessageTemplateTranslation {
 /// composer lists and cancels by. Cancelling suppresses the deliveries that
 /// are still DEFERRED and stamps `cancelledAt`; the row stays.
 model AnnouncementSchedule {
-  id                 String    @id @default(cuid())
+  id                 String       @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId              String       @default("org_0")
+  organization       Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
   templateId         String
   segment            String
   /// Property-local wall clock, `YYYY-MM-DDTHH:mm`, exactly as typed. Each
@@ -5761,7 +6257,7 @@ model AnnouncementSchedule {
   recipientCount     Int
   deliveryIds        String[]
   createdByStaffId   String
-  createdAt          DateTime  @default(now())
+  createdAt          DateTime     @default(now())
   cancelledAt        DateTime?
   cancelledByStaffId String?
 
@@ -5772,21 +6268,26 @@ model AnnouncementSchedule {
   /// A double press schedules once: same template, same segment, same time.
   @@unique([templateId, segment, sendAt])
   @@index([cancelledAt, lastSendAfter])
+  @@index([orgId])
 }
 
 model Audience {
-  id               String   @id @default(cuid())
+  id               String       @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId            String       @default("org_0")
+  organization     Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
   name             String
   /// What the composer posts, `ALL` or `TYPE:value`, parsed by `parseSegment`.
   segment          String
-  active           Boolean  @default(true)
+  active           Boolean      @default(true)
   createdByStaffId String
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
 
   createdBy StaffUser @relation("AudienceCreatedBy", fields: [createdByStaffId], references: [id])
 
   @@index([active, name])
+  @@index([orgId])
 }
 
 /// A legally significant notice and the proof it was served. `addressOfRecord`
@@ -5809,6 +6310,9 @@ model Audience {
 /// R-051 generated, served and archived, with its own `NoticeDelivery` proof.
 model EvictionCase {
   id              String           @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId           String           @default("org_0")
+  organization    Organization     @relation(fields: [orgId], references: [id], onDelete: Restrict)
   propertyId      String
   unitId          String
   leaseId         String
@@ -5857,6 +6361,7 @@ model EvictionCase {
 
   @@index([propertyId, stage])
   @@index([leaseId])
+  @@index([orgId])
 }
 
 /// What the eviction cost the OWNER (PAY-14, R-083).
@@ -5872,25 +6377,29 @@ model EvictionCase {
 /// and the packet prints the statement of account. See
 /// `LOST_RENT_IS_DERIVED` in packages/core/evictions/costs.ts.
 model EvictionCost {
-  id                String   @id @default(cuid())
+  id                String       @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId             String       @default("org_0")
+  organization      Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
   evictionCaseId    String
   /// Closed vocabulary in code, free-form column - the same posture
   /// `Notice.type` and `WorkOrder.invoicePaymentMethod` take. A county that
   /// invents a fee must not need a migration.
   type              String
   amountCents       Int
-  incurredOn        DateTime @db.Date
+  incurredOn        DateTime     @db.Date
   description       String
   /// A receipt or invoice, when there is one.
   documentId        String?
   recordedByStaffId String
-  createdAt         DateTime @default(now())
+  createdAt         DateTime     @default(now())
 
   evictionCase EvictionCase @relation(fields: [evictionCaseId], references: [id])
   document     Document?    @relation("EvictionCostReceipt", fields: [documentId], references: [id])
   recordedBy   StaffUser    @relation("EvictionCostRecordedBy", fields: [recordedByStaffId], references: [id])
 
   @@index([evictionCaseId])
+  @@index([orgId])
 }
 
 /// APPEND-ONLY BY TRIGGER (R-161), like LedgerEntry/AuditLog/Message/
@@ -5903,6 +6412,9 @@ model EvictionCost {
 /// the migration.
 model Notice {
   id                 String               @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId              String               @default("org_0")
+  organization       Organization         @relation(fields: [orgId], references: [id], onDelete: Restrict)
   propertyId         String
   leaseId            String?
   /// FCRA adverse action (R-061) - the other half of the either/or above.
@@ -5992,6 +6504,7 @@ model Notice {
   @@index([evictionCaseId])
   @@index([violationCaseId])
   @@index([propertyId, servedAt])
+  @@index([orgId])
 }
 
 enum RentChangeStatus {
@@ -6016,6 +6529,9 @@ enum RentChangeStatus {
 /// for the same drift reason.
 model RentChange {
   id             String           @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId          String           @default("org_0")
+  organization   Organization     @relation(fields: [orgId], references: [id], onDelete: Restrict)
   leaseId        String
   propertyId     String
   fromCents      Int
@@ -6038,6 +6554,7 @@ model RentChange {
 
   @@index([leaseId])
   @@index([propertyId, status, effectiveOn])
+  @@index([orgId])
 }
 
 /// One service event, with its own proof (R-051, COMM-02).
@@ -6052,6 +6569,9 @@ model RentChange {
 /// tracking number, and a read receipt only exists for PORTAL service.
 model NoticeDelivery {
   id                      String              @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId                   String              @default("org_0")
+  organization            Organization        @relation(fields: [orgId], references: [id], onDelete: Restrict)
   noticeId                String
   method                  NoticeServiceMethod
   servedAt                DateTime
@@ -6081,6 +6601,7 @@ model NoticeDelivery {
 
   @@index([noticeId])
   @@index([servedAt])
+  @@index([orgId])
 }
 
 /// A reusable room-by-room checklist a PM defines once (R-068, INSP-01).
@@ -6098,6 +6619,9 @@ model NoticeDelivery {
 /// already makes for the identical reason.
 model InspectionTemplate {
   id               String          @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId            String          @default("org_0")
+  organization     Organization    @relation(fields: [orgId], references: [id], onDelete: Restrict)
   name             String
   /// An ordered array of `{ room: string, item: string }` objects -
   /// validated at the application layer (packages/core/inspections/template.ts),
@@ -6120,7 +6644,7 @@ model InspectionTemplate {
   ///
   /// MOVE_OUT/PRE_MOVE_OUT still never read it: both copy the lease's own
   /// move-in walk (`itemsFromMoveIn`), which beats any template.
-  defaultForType   InspectionType? @unique
+  defaultForType   InspectionType?
   createdByStaffId String
   updatedByStaffId String?
   createdAt        DateTime        @default(now())
@@ -6132,11 +6656,16 @@ model InspectionTemplate {
   updatedBy   StaffUser?   @relation("InspectionTemplateUpdatedBy", fields: [updatedByStaffId], references: [id], onDelete: Restrict)
   inspections Inspection[]
 
+  @@unique([orgId, defaultForType])
   @@index([active])
+  @@index([orgId])
 }
 
 model Inspection {
   id                  String         @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId               String         @default("org_0")
+  organization        Organization   @relation(fields: [orgId], references: [id], onDelete: Restrict)
   propertyId          String
   unitId              String
   leaseId             String?
@@ -6199,6 +6728,7 @@ model Inspection {
   @@index([propertyId, type])
   @@index([unitId])
   @@index([leaseId])
+  @@index([orgId])
 }
 
 /// `moveInItemId` links a move-out item to its move-in counterpart. That pair
@@ -6206,6 +6736,9 @@ model Inspection {
 /// evidence (INSP-02), so it is a real foreign key, not a convention.
 model InspectionItem {
   id           String         @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId        String         @default("org_0")
+  organization Organization   @relation(fields: [orgId], references: [id], onDelete: Restrict)
   inspectionId String
   room         String
   item         String
@@ -6231,6 +6764,7 @@ model InspectionItem {
   depositDeductions DepositDeduction[]
 
   @@index([inspectionId])
+  @@index([orgId])
 }
 
 /// Attaches to whatever it is evidence of. The nullable foreign keys below
@@ -6255,7 +6789,10 @@ model InspectionItem {
 /// names directly: "notices, letters, estoppel certificates" - the ones
 /// with no computed number and no compliance clock behind them.
 model DocumentTemplate {
-  id               String   @id @default(cuid())
+  id               String       @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId            String       @default("org_0")
+  organization     Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
   /// Free text, shown in the picker.
   name             String
   /// One of `packages/core/documents`' closed `DOCUMENT_TYPES` - what the
@@ -6279,11 +6816,11 @@ model DocumentTemplate {
   /// Retired rather than deleted - a document generated FROM this template
   /// is evidence, and the template it came from is part of explaining it,
   /// the identical reasoning `MessageTemplate.active`'s own comment gives.
-  active           Boolean  @default(true)
+  active           Boolean      @default(true)
   createdByStaffId String
   updatedByStaffId String?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
 
   createdBy      StaffUser       @relation("DocumentTemplateCreatedBy", fields: [createdByStaffId], references: [id])
   /// Restrict, not the SetNull Prisma defaults to for an optional relation -
@@ -6294,10 +6831,14 @@ model DocumentTemplate {
 
   @@index([active, name])
   @@index([documentType, state])
+  @@index([orgId])
 }
 
 model Document {
-  id                   String    @id @default(cuid())
+  id                   String       @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId                String       @default("org_0")
+  organization         Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
   propertyId           String?
   /// R-081d: a document that belongs to the ENTITY rather than to any one
   /// property under it - the year-end tax packet, an entity-level compliance
@@ -6348,7 +6889,7 @@ model Document {
   /// Object-store key. Files never live in Postgres.
   storageKey           String
   sha256               String?
-  version              Int       @default(1)
+  version              Int          @default(1)
   /// Original capture time from EXIF, preserved. Distinct from createdAt,
   /// which is only when it was uploaded.
   capturedAt           DateTime?
@@ -6356,15 +6897,15 @@ model Document {
   /// ordinary case (most phones can, but plenty of photos carry no GPS tag
   /// at all) - never guessed from the property's own address, which would
   /// misrepresent a photo as geotagged when it was not.
-  latitude             Decimal?  @db.Decimal(9, 6)
-  longitude            Decimal?  @db.Decimal(9, 6)
+  latitude             Decimal?     @db.Decimal(9, 6)
+  longitude            Decimal?     @db.Decimal(9, 6)
   uploadedByStaffId    String?
   /// Soft-delete marker (DOC-05's 30-day undelete). Null means active. Who
   /// deleted it and why lives in AuditLog ('document.delete_marked'), not
   /// here - the same split Property.active relies on for the same reason.
   deletedAt            DateTime?
-  createdAt            DateTime  @default(now())
-  updatedAt            DateTime  @updatedAt
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
 
   property                Property?                 @relation(fields: [propertyId], references: [id])
   legalEntity             LegalEntity?              @relation(fields: [legalEntityId], references: [id])
@@ -6429,6 +6970,7 @@ model Document {
   @@index([violationObservationId])
   @@index([insuranceClaimId])
   @@index([messageId])
+  @@index([orgId])
 }
 
 // ---------------------------------------------------------------------------
@@ -6441,7 +6983,10 @@ model Document {
 /// queue table - the storage build had to consolidate seven of them after the
 /// fact, which is why this one exists before its first consumer.
 model Task {
-  id                 String     @id @default(cuid())
+  id                 String       @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId              String       @default("org_0")
+  organization       Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
   propertyId         String
   /// Free-form so a later item can add a task type without a migration.
   type               String
@@ -6450,11 +6995,11 @@ model Task {
   subjectId          String
   /// The property-local calendar day this task belongs to (D-3). Part of the
   /// idempotency key, so a nightly job that runs twice creates one task.
-  businessDate       DateTime   @db.Date
-  priority           Priority   @default(ROUTINE)
+  businessDate       DateTime     @db.Date
+  priority           Priority     @default(ROUTINE)
   /// Null means anyone on the team can pick it up.
   assigneeStaffId    String?
-  status             TaskStatus @default(OPEN)
+  status             TaskStatus   @default(OPEN)
   title              String
   /// Typed completion proof - the photo, the reading, the confirmation the
   /// task type demands. Shape is per task type and belongs to R-011.
@@ -6464,8 +7009,8 @@ model Task {
   /// The domain event that created this task, for tracing back through the
   /// outbox (R-006).
   sourceEventId      String?
-  createdAt          DateTime   @default(now())
-  updatedAt          DateTime   @updatedAt
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
 
   property    Property   @relation(fields: [propertyId], references: [id])
   assignee    StaffUser? @relation("TaskAssignedTo", fields: [assigneeStaffId], references: [id])
@@ -6477,6 +7022,7 @@ model Task {
   @@unique([type, subjectId, businessDate])
   @@index([propertyId, status, businessDate])
   @@index([assigneeStaffId, status])
+  @@index([orgId])
 }
 
 /// Every statutory number in the product, versioned and effective-dated
@@ -6720,7 +7266,10 @@ model JurisdictionRule {
 /// tenant, a vendor on a magic link and a nightly job are all legitimate
 /// authors of an audit row and none of them is a StaffUser.
 model AuditLog {
-  id           String    @id @default(cuid())
+  id           String       @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId        String       @default("org_0")
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
   propertyId   String?
   actorType    ActorType
   actorStaffId String?
@@ -6737,7 +7286,7 @@ model AuditLog {
   reason       String?
   ipAddress    String?
   userAgent    String?
-  occurredAt   DateTime  @default(now())
+  occurredAt   DateTime     @default(now())
 
   property   Property?  @relation(fields: [propertyId], references: [id])
   actorStaff StaffUser? @relation("AuditLogActor", fields: [actorStaffId], references: [id])
@@ -6745,6 +7294,7 @@ model AuditLog {
   @@index([entityType, entityId])
   @@index([propertyId, occurredAt])
   @@index([actorStaffId, occurredAt])
+  @@index([orgId])
 }
 
 /// A carrier-level SMS opt-out (R-040e, D-38).
@@ -6774,6 +7324,9 @@ model AuditLog {
 /// and given again survives intact.
 model TenantConsent {
   id                String         @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId             String         @default("org_0")
+  organization      Organization   @relation(fields: [orgId], references: [id], onDelete: Restrict)
   /// R-196: exactly one of `tenantId` / `guarantorId` is set, by the CHECK
   /// `TenantConsent_one_subject`. Widened rather than renamed: the table,
   /// its append-only trigger and `consentVerdict` are the same for either
@@ -6806,27 +7359,32 @@ model TenantConsent {
   @@index([tenantId, channel])
   @@index([guarantorId, channel])
   @@index([prospectId, channel])
+  @@index([orgId])
 }
 
 model SmsOptOut {
-  id         String          @id @default(cuid())
+  id           String          @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId        String          @default("org_0")
+  organization Organization    @relation(fields: [orgId], references: [id], onDelete: Restrict)
   /// E.164.
-  phone      String          @unique
-  optedOutAt DateTime        @default(now())
-  source     SmsOptOutSource
+  phone        String          @unique
+  optedOutAt   DateTime        @default(now())
+  source       SmsOptOutSource
   /// The keyword they sent, or the provider error code that told us.
-  reason     String?
+  reason       String?
   /// Set when START arrives. The row is kept rather than deleted - a number
   /// that has opted out and back in twice is a pattern worth seeing.
-  revokedAt  DateTime?
-  createdAt  DateTime        @default(now())
-  updatedAt  DateTime        @updatedAt
+  revokedAt    DateTime?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
 
   // NO @@index HERE. `phone` is already `@unique`, which is the index every
   // query on this table uses, and there is one row per number. An earlier
   // version declared a second index and created it in SQL as a PARTIAL one
   // (`WHERE revokedAt IS NULL`) - a shape Prisma cannot express, so the drift
   // check reported a missing index on every CI run for ever (R-040e).
+  @@index([orgId])
 }
 
 enum SmsOptOutSource {
@@ -6880,16 +7438,19 @@ enum ProrationMethod {
 /// APPEND-ONLY by trigger, like every other evidence table. There is no undo;
 /// a write-off is a decision somebody signed, not a flag.
 model ReceivableWriteOff {
-  id           String   @id @default(cuid())
+  id           String       @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId        String       @default("org_0")
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
   propertyId   String
   leaseId      String
   /// The balance written off, as it stood when the decision was made.
   amountCents  Int
   /// Property-local calendar day of the decision.
-  writtenOffOn DateTime @db.Date
+  writtenOffOn DateTime     @db.Date
   reason       String
   staffUserId  String
-  createdAt    DateTime @default(now())
+  createdAt    DateTime     @default(now())
 
   property  Property  @relation(fields: [propertyId], references: [id], onDelete: Restrict)
   lease     Lease     @relation(fields: [leaseId], references: [id], onDelete: Restrict)
@@ -6897,22 +7458,28 @@ model ReceivableWriteOff {
 
   @@index([leaseId])
   @@index([propertyId])
+  @@index([orgId])
 }
 
 /// R-266 (PRD 08 B5): the deployment's messaging settings, ONE row (a CHECK
 /// pins the id to 'default'). R-285 turns that into one row per organisation.
 /// Quiet hours are per property and live on `Property`.
 model MessagingSettings {
-  id                       String   @id @default("default")
+  id                       String       @id @default("default")
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId                    String       @default("org_0")
+  organization             Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
   /// Names the business in every announcement's SMS footer and fills
   /// `{{company.name}}`. Null means COMPANY_NAME.
   businessName             String?
   /// Who a tenant's reply Task (R-263) is assigned to. Null means anyone. Used
   /// only while this person is active and holds `task.write` over the property.
   replyTaskAssigneeStaffId String?
-  updatedAt                DateTime @updatedAt
+  updatedAt                DateTime     @updatedAt
 
   replyTaskAssignee StaffUser? @relation("MessagingReplyAssignee", fields: [replyTaskAssigneeStaffId], references: [id])
+
+  @@unique([orgId])
 }
 
 /// R-269 (PRD 08 C3). The decline-reason list a decision picks from. A
@@ -6933,16 +7500,20 @@ model DecisionReason {
 /// decision, so it never touches ScreeningReport.decision and can happen
 /// more than once. Sending it to the applicant is R-270.
 model ApplicantInfoRequest {
-  id                 String   @id @default(cuid())
+  id                 String       @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId              String       @default("org_0")
+  organization       Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
   applicantId        String
   request            String
   requestedByStaffId String
-  requestedAt        DateTime @default(now())
+  requestedAt        DateTime     @default(now())
 
   applicant   Applicant @relation(fields: [applicantId], references: [id], onDelete: Cascade)
   requestedBy StaffUser @relation("ApplicantInfoRequestedBy", fields: [requestedByStaffId], references: [id])
 
   @@index([applicantId])
+  @@index([orgId])
 }
 
 /// R-271 (PRD 08 C2): an internal note on an applicant, written during review.
@@ -6950,14 +7521,18 @@ model ApplicantInfoRequest {
 /// applicant pages reads this table. Append-only in practice - there is no
 /// edit or delete action, so what a reviewer wrote at decision time survives.
 model ApplicantNote {
-  id            String   @id @default(cuid())
+  id            String       @id @default(cuid())
+  /// Derived from its parent by trigger and immutable (D-339); see the org_scope trigger.
+  orgId         String       @default("org_0")
+  organization  Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
   applicantId   String
   body          String
   authorStaffId String
-  createdAt     DateTime @default(now())
+  createdAt     DateTime     @default(now())
 
   applicant Applicant @relation(fields: [applicantId], references: [id], onDelete: Cascade)
   author    StaffUser @relation(fields: [authorStaffId], references: [id])
 
   @@index([applicantId])
+  @@index([orgId])
 }

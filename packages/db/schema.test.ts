@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { afterAll, describe, expect, it } from 'vitest'
 import { prisma } from './index.ts'
 
@@ -351,36 +352,27 @@ describe('organisation root (R-274)', () => {
   // A property's org is derived from its entity by trigger, so a writer that
   // names the wrong org - or none - still lands in the right one, and an
   // entity cannot be moved into another customer's org.
-  it('derives Property.orgId from its entity, on insert and on re-parenting', async () => {
+  it('derives Property.orgId from its entity, and refuses a move into another org (D-339)', async () => {
     await expect(
       prisma.$transaction(
         async (tx) => {
           const orgB = await tx.organization.create({
             data: { slug: `r274-${Date.now()}`, name: 'Org B' },
           })
-          const { legalEntity, property } = await seedLease(tx)
+          const { property } = await seedLease(tx)
           expect(property.orgId).toBe('org_0')
 
           const entityB = await tx.legalEntity.create({
             data: { orgId: orgB.id, name: 'B Holdings LLC', type: 'LLC' },
           })
-          const moved = await tx.property.update({
+          await tx.property.update({
             where: { id: property.id },
             data: { legalEntityId: entityB.id },
           })
-          expect(moved.orgId).toBe(orgB.id)
-
-          // Naming org #0 explicitly is overwritten, not honoured.
-          const forced = await tx.property.update({
-            where: { id: property.id },
-            data: { orgId: legalEntity.orgId },
-          })
-          expect(forced.orgId).toBe(orgB.id)
-          throw new Rollback()
         },
         { timeout: 30_000 },
       ),
-    ).rejects.toThrow(Rollback)
+    ).rejects.toThrow(/Property\.orgId cannot change/)
   })
 
   it('refuses to move a LegalEntity to another organisation', async () => {
@@ -399,5 +391,80 @@ describe('organisation root (R-274)', () => {
         { timeout: 30_000 },
       ),
     ).rejects.toThrow(/orgId cannot change/)
+  })
+})
+
+describe('orgId on every org-owned table (R-285a)', () => {
+  // ORG-06's schema half: a model either carries orgId or is on this list.
+  // Adding a model means deciding which, here, on purpose.
+  const ORGLESS = [
+    'Organization', 'OrgMembership', 'StaffUser', 'StaffCredential', 'Role',
+    'JurisdictionRule', 'RateLimitCounter', 'AuthToken', 'DecisionReason',
+  ]
+
+  it('every model but the org-less list has orgId and an org_scope trigger', async () => {
+    const schema = readFileSync(new URL('./prisma/schema.prisma', import.meta.url), 'utf8')
+    const owned = [...schema.matchAll(/^model (\w+) \{\n([\s\S]*?)^\}/gm)]
+      .filter(([, name]) => !ORGLESS.includes(name!))
+    expect(owned.length).toBeGreaterThan(100)
+    expect(owned.filter(([, , body]) => !/^\s+orgId\s+String\s/m.test(body!)).map(([, n]) => n)).toEqual([])
+
+    const triggered = await prisma.$queryRaw<{ table: string }[]>`
+      SELECT c.relname AS table FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid
+      WHERE t.tgname = 'org_scope'`
+    const names = new Set(triggered.map((r) => r.table))
+    expect(owned.map(([, n]) => n).filter((n) => n !== 'LegalEntity' && !names.has(n!))).toEqual([])
+  })
+
+  it('derives a child row\'s org from its parent and refuses a cross-org reference', async () => {
+    await expect(
+      prisma.$transaction(
+        async (tx) => {
+          const orgB = await tx.organization.create({
+            data: { slug: `r285-${Date.now()}`, name: 'Org B' },
+          })
+          const { lease } = await seedLease(tx)
+          // A writer naming the wrong org is overwritten from the parent.
+          const tenant = await tx.tenant.create({
+            data: { firstName: 'Ana', lastName: 'Ruiz' },
+          })
+          const link = await tx.leaseTenant.create({
+            data: { orgId: orgB.id, leaseId: lease.id, tenantId: tenant.id },
+          })
+          expect(link.orgId).toBe('org_0')
+
+          const tenantB = await tx.tenant.create({
+            data: { orgId: orgB.id, firstName: 'Bo', lastName: 'Org' },
+          })
+          await tx.leaseTenant.create({ data: { leaseId: lease.id, tenantId: tenantB.id } })
+        },
+        { timeout: 30_000 },
+      ),
+    ).rejects.toThrow(/cross-organisation reference: LeaseTenant\.tenantId/)
+  })
+
+  it('refuses a grant in an org where the holder has no membership', async () => {
+    await expect(
+      prisma.$transaction(
+        async (tx) => {
+          const orgB = await tx.organization.create({
+            data: { slug: `r285-m-${Date.now()}`, name: 'Org B' },
+          })
+          const role = await tx.role.findFirstOrThrow()
+          const staff = await tx.staffUser.create({
+            data: { email: `r285-${Date.now()}@example.test`, name: 'R-285' },
+          })
+          // Org #0 bridge (D-339): the membership is created, not refused.
+          await tx.staffAssignment.create({ data: { staffUserId: staff.id, roleId: role.id } })
+          expect(
+            await tx.orgMembership.count({ where: { orgId: 'org_0', staffUserId: staff.id } }),
+          ).toBe(1)
+          await tx.staffAssignment.create({
+            data: { orgId: orgB.id, staffUserId: staff.id, roleId: role.id },
+          })
+        },
+        { timeout: 30_000 },
+      ),
+    ).rejects.toThrow(/needs a live membership/)
   })
 })
