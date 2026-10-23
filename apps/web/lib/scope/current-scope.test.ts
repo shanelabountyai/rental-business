@@ -47,17 +47,19 @@ afterAll(async () => {
 function writerOnAReaderOnB(): Actor {
   return {
     id: 'staff_sec03',
+    orgId: 'org_0',
     kind: 'staff',
     active: true,
     mfaVerified: true,
     assignments: [
       {
+        orgId: 'org_0',
         roleKey: 'property_manager',
         permissions: ['property.read', 'property.write', 'vendor.write', 'ledger.adjust'],
         propertyId: propA,
         legalEntityId: null,
       },
-      { roleKey: 'read_only', permissions: ['property.read'], propertyId: propB, legalEntityId: null },
+      { orgId: 'org_0', roleKey: 'read_only', permissions: ['property.read'], propertyId: propB, legalEntityId: null },
     ],
     leaseIds: [],
     ceilings: { approveWorkOrderCents: 0, waiveFeeCents: 0 },

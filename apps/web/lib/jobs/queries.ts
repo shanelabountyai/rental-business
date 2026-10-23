@@ -62,9 +62,10 @@ export interface JobHealthRow {
   failed: FailedRun[]
 }
 
-export async function jobHealth(now = new Date()): Promise<JobHealthRow[]> {
+// R-285b: portfolio-wide means the actor's org - its properties and its runs.
+export async function jobHealth(orgId: string, now = new Date()): Promise<JobHealthRow[]> {
   const properties = await prisma.property.findMany({
-    where: { active: true },
+    where: { orgId, active: true },
     select: { id: true, name: true, timezone: true },
     orderBy: { name: 'asc' },
   })
@@ -78,11 +79,11 @@ export async function jobHealth(now = new Date()): Promise<JobHealthRow[]> {
   )
   const [recent, failed, lastSuccesses] = await Promise.all([
     prisma.jobRun.findMany({
-      where: { businessDate: { gte: businessDateToUtc(floor) } },
+      where: { orgId, businessDate: { gte: businessDateToUtc(floor) } },
       select: { jobType: true, propertyId: true, businessDate: true },
     }),
     prisma.jobRun.findMany({
-      where: { status: 'FAILED' },
+      where: { orgId, status: 'FAILED' },
       select: {
         id: true,
         jobType: true,
@@ -103,7 +104,7 @@ export async function jobHealth(now = new Date()): Promise<JobHealthRow[]> {
     }),
     prisma.jobRun.groupBy({
       by: ['jobType'],
-      where: { status: 'SUCCEEDED' },
+      where: { orgId, status: 'SUCCEEDED' },
       _max: { finishedAt: true },
     }),
   ])

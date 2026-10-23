@@ -76,9 +76,11 @@ export async function saveVendorRecord(
   }
 
   const vendor = await prisma.$transaction(async (tx) => {
+    // R-285b: a vendor is an org root - created in the actor's org, edited
+    // only there (`{ id, orgId }` matches nothing elsewhere and throws).
     const saved = vendorId
-      ? await tx.vendor.update({ where: { id: vendorId }, data })
-      : await tx.vendor.create({ data })
+      ? await tx.vendor.update({ where: { id: vendorId, orgId: actor.orgId }, data })
+      : await tx.vendor.create({ data: { ...data, orgId: actor.orgId } })
     // A new certificate date answers any open COI flag, the way a new renter's
     // policy closes its own (insurance-actions.ts). Only a date still in the
     // future does: re-saving a lapsed date must leave the flag where it is.
@@ -114,8 +116,8 @@ export async function saveVendorRecord(
 /// posture this product takes everywhere a record has real history behind
 /// it.
 export async function deactivateVendor(vendorId: string): Promise<VendorFormState> {
-  await requirePermission('vendor.write')
-  await prisma.vendor.update({ where: { id: vendorId }, data: { active: false } })
+  const actor = await requirePermission('vendor.write')
+  await prisma.vendor.update({ where: { id: vendorId, orgId: actor.orgId }, data: { active: false } })
   revalidatePath('/vendors')
   revalidatePath(`/vendors/${vendorId}`)
   return { notice: 'Deactivated.' }
@@ -136,8 +138,9 @@ export async function markInvoicePaid(
     }
   }
 
+  // R-285b: the guard above is resource-less, so the org bound is here.
   const workOrder = await prisma.workOrder.findUniqueOrThrow({
-    where: { id: workOrderId },
+    where: { id: workOrderId, orgId: actor.orgId },
     select: { id: true, propertyId: true, invoiceCents: true, invoicePaidAt: true },
   })
   if (workOrder.invoiceCents == null) {

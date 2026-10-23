@@ -29,12 +29,18 @@ const ASSIGNMENT_INCLUDE = {
  * realistically holds five people would be machinery with nothing to do.
  * ponytail: unpaginated, add a page size if a real deployment passes ~200.
  */
-export async function listStaff({ includeInactive = false } = {}) {
+// R-285b: the directory is the actor's ORG - staff with a live membership
+// there, and only the grants they hold there (PRD 10 §M3).
+export function memberOf(orgId: string) {
+  return { orgMemberships: { some: { orgId, removedAt: null } } }
+}
+
+export async function listStaff(orgId: string, { includeInactive = false } = {}) {
   return prisma.staffUser.findMany({
-    where: includeInactive ? {} : { active: true },
+    where: includeInactive ? memberOf(orgId) : { ...memberOf(orgId), active: true },
     include: {
       assignments: {
-        where: { revokedAt: null },
+        where: { orgId, revokedAt: null },
         include: ASSIGNMENT_INCLUDE,
         orderBy: { grantedAt: 'asc' },
       },
@@ -50,12 +56,13 @@ export async function listStaff({ includeInactive = false } = {}) {
  * evidence that the access existed (ROLE-06), and "when did we take this
  * away" is the question asked after an incident, not before one.
  */
-export async function staffDetail(id: string) {
-  return prisma.staffUser.findUnique({
-    where: { id },
+export async function staffDetail(id: string, orgId: string) {
+  return prisma.staffUser.findFirst({
+    where: { id, ...memberOf(orgId) },
     include: {
       credential: { select: { mfaEnrolledAt: true, passwordUpdatedAt: true } },
       assignments: {
+        where: { orgId },
         include: { ...ASSIGNMENT_INCLUDE, grantedBy: { select: { name: true } } },
         orderBy: [{ revokedAt: 'asc' }, { grantedAt: 'desc' }],
       },
@@ -65,9 +72,11 @@ export async function staffDetail(id: string) {
 
 /// Every assignment in the deployment, in the shape `rules.ts` reasons over.
 /// The lockout rules are about the deployment as a whole - "is this the last
-/// owner" cannot be answered from one staff member's rows.
-export async function allAssignmentSummaries() {
+/// owner" cannot be answered from one staff member's rows. R-285b: "the
+/// deployment" is now the org - each organisation keeps its own last owner.
+export async function allAssignmentSummaries(orgId: string) {
   const rows = await prisma.staffAssignment.findMany({
+    where: { orgId },
     select: { id: true, staffUserId: true, revokedAt: true, role: { select: { key: true } } },
   })
   return rows.map((row) => ({
@@ -81,15 +90,15 @@ export async function allAssignmentSummaries() {
 /// Scope choices for a grant. Both lists are unscoped on purpose: only an
 /// actor holding portfolio-wide `staff.manage` reaches this form at all, and
 /// a grant they cannot see the target of is a grant they cannot make.
-export async function grantScopeOptions() {
+export async function grantScopeOptions(orgId: string) {
   const [properties, legalEntities] = await Promise.all([
     prisma.property.findMany({
-      where: { active: true },
+      where: { orgId, active: true },
       select: { id: true, name: true, legalEntity: { select: { name: true } } },
       orderBy: { name: 'asc' },
     }),
     prisma.legalEntity.findMany({
-      where: { active: true },
+      where: { orgId, active: true },
       select: { id: true, name: true },
       orderBy: { name: 'asc' },
     }),

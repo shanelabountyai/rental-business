@@ -50,7 +50,7 @@ export async function placeLeaseHold(
 
   const lease = await prisma.lease.findUnique({
     where: { id: leaseId },
-    select: { id: true, propertyId: true, property: { select: { id: true, legalEntityId: true } } },
+    select: { id: true, propertyId: true, property: { select: { id: true, legalEntityId: true, orgId: true } } },
   })
   if (!lease) return { error: 'That tenancy no longer exists.' }
 
@@ -125,7 +125,7 @@ export async function liftLeaseHold(
       propertyId: true,
       type: true,
       liftedAt: true,
-      lease: { select: { property: { select: { id: true, legalEntityId: true } } } },
+      lease: { select: { property: { select: { id: true, legalEntityId: true, orgId: true } } } },
     },
   })
   if (!hold) return { error: 'That hold no longer exists.' }

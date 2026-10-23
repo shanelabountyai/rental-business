@@ -14,7 +14,7 @@ export default async function NewInspectionPage() {
   const scope = await currentScope(actor, 'inspection.write')
   const [units, templates] = await Promise.all([
     unitsForNewInspection(scope),
-    listInspectionTemplates(),
+    listInspectionTemplates(actor.orgId),
   ])
   const activeTemplates = templates.filter((template) => template.active)
 

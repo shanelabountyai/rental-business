@@ -65,7 +65,7 @@ export async function createLegalEntity(
 ): Promise<FormState> {
   // No resource: per R-004 this only clears for a portfolio-wide grant.
   // Entity-scoped and property-scoped managers cannot mint new entities.
-  await requirePermission('property.write')
+  const actor = await requirePermission('property.write')
 
   const input: LegalEntityInput = {
     name: str(formData, 'name'),
@@ -78,6 +78,8 @@ export async function createLegalEntity(
   const entity = await prisma.$transaction(async (tx) => {
     const created = await tx.legalEntity.create({
       data: {
+        // R-285b: an entity is minted into the actor's org, never the default.
+        orgId: actor.orgId,
         name: input.name,
         type: input.type as never,
         formationState: input.formationState,
@@ -111,7 +113,7 @@ export async function updateLegalEntity(
   const existing = await prisma.legalEntity.findUniqueOrThrow({
     where: { id: entityId },
   })
-  await requirePermission('property.write', { legalEntityId: entityId })
+  await requirePermission('property.write', { orgId: existing.orgId, legalEntityId: entityId })
 
   const input: LegalEntityInput = {
     name: str(formData, 'name'),
@@ -217,7 +219,14 @@ export async function createProperty(
   // the actor needs to know about a duplicate even if it turns out they
   // cannot create the property at all - the message is more useful than a
   // generic denial in that order.
+  // R-285b: the posted entity's org goes into the check - a property derives
+  // its org from its entity, so an id from another org would create there.
+  const entity = await prisma.legalEntity.findUnique({
+    where: { id: input.legalEntityId },
+    select: { orgId: true },
+  })
   const actor = await requirePermission('property.write', {
+    orgId: entity?.orgId,
     legalEntityId: input.legalEntityId,
   })
 

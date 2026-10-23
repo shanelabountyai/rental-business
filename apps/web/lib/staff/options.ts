@@ -15,8 +15,8 @@ export function roleOptions() {
   }))
 }
 
-export async function scopeOptions() {
-  const { properties, legalEntities } = await grantScopeOptions()
+export async function scopeOptions(orgId: string) {
+  const { properties, legalEntities } = await grantScopeOptions(orgId)
   return [
     { value: 'all', label: 'All properties (portfolio-wide)' },
     ...legalEntities.map((entity) => ({

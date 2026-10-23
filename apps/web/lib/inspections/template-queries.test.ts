@@ -43,7 +43,7 @@ afterAll(async () => {
 
 describe('listInspectionTemplates', () => {
   it('lists both active and retired checklists, active first', async () => {
-    const templates = await listInspectionTemplates()
+    const templates = await listInspectionTemplates('org_0')
     const ours = templates.filter((t) => templateIds.includes(t.id))
     expect(ours).toHaveLength(2)
     expect(ours[0]?.active).toBe(true)
@@ -53,11 +53,11 @@ describe('listInspectionTemplates', () => {
 
 describe('getInspectionTemplate', () => {
   it('returns a checklist by id, items intact', async () => {
-    const template = await getInspectionTemplate(templateIds[0]!)
+    const template = await getInspectionTemplate(templateIds[0]!, 'org_0')
     expect(template?.items).toEqual([{ room: 'Kitchen', item: 'Sink' }])
   })
 
   it('returns null for an id that does not exist', async () => {
-    expect(await getInspectionTemplate('not-a-real-id')).toBeNull()
+    expect(await getInspectionTemplate('not-a-real-id', 'org_0')).toBeNull()
   })
 })

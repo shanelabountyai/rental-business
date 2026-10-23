@@ -20,12 +20,15 @@ const PROPERTY_A = 'prop_a'
 const PROPERTY_B = 'prop_b'
 const ENTITY_1 = 'entity_1'
 const ENTITY_2 = 'entity_2'
+const ORG = 'org_0'
+const OTHER_ORG = 'org_other'
 
 function assignment(
   roleKey: keyof typeof ROLE_DEFINITIONS,
   scope: { legalEntityId?: string; propertyId?: string } = {},
 ): Assignment {
   return {
+    orgId: ORG,
     roleKey,
     permissions: ROLE_DEFINITIONS[roleKey].permissions,
     legalEntityId: scope.legalEntityId ?? null,
@@ -36,6 +39,7 @@ function assignment(
 function actor(overrides: Partial<Actor> = {}): Actor {
   return {
     id: 'staff_1',
+    orgId: ORG,
     kind: 'staff',
     active: true,
     mfaVerified: true,
@@ -352,10 +356,52 @@ describe('can — tenants and guarantors are scoped to their lease', () => {
   })
 })
 
+// R-285b (PRD 10 §1.3, ORG-07): a grant counts only inside the organisation
+// the actor is acting in, and portfolio-wide means the whole of THAT org.
+describe('organisation bound', () => {
+  it('a grant from another org grants nothing through can, holdsAnywhere or propertyScope', () => {
+    const elsewhere = actor({
+      assignments: [{ ...assignment('owner'), orgId: OTHER_ORG }],
+    })
+    expect(can(elsewhere, 'property.read')).toEqual({
+      allowed: false,
+      reason: 'no_permission',
+    })
+    expect(can(elsewhere, 'property.read', { propertyId: PROPERTY_A })).toEqual({
+      allowed: false,
+      reason: 'no_permission',
+    })
+    expect(holdsAnywhere(elsewhere, 'property.read')).toEqual({
+      allowed: false,
+      reason: 'no_permission',
+    })
+    expect(scopeIsEmpty(propertyScope(elsewhere, 'property.read'))).toBe(true)
+    expect(propertyScope(elsewhere, 'property.read').orgId).toBe(ORG)
+  })
+
+  it("refuses a resource in another org even for a portfolio-wide owner", () => {
+    const owner = actor({ assignments: [assignment('owner')] })
+    expect(
+      can(owner, 'property.read', { orgId: OTHER_ORG, propertyId: PROPERTY_A }),
+    ).toEqual({ allowed: false, reason: 'out_of_scope' })
+    expect(
+      can(owner, 'property.read', { orgId: ORG, propertyId: PROPERTY_A }),
+    ).toEqual({ allowed: true })
+  })
+
+  it("an owner's portfolio-wide scope names their org", () => {
+    const owner = actor({ assignments: [assignment('owner')] })
+    expect(propertyScope(owner, 'property.read')).toEqual({
+      orgId: ORG,
+      everything: true,
+    })
+  })
+})
+
 describe('propertyScope', () => {
   it('reports portfolio-wide access for a null scope', () => {
     const owner = actor({ assignments: [assignment('owner')] })
-    expect(propertyScope(owner, 'property.read')).toEqual({ everything: true })
+    expect(propertyScope(owner, 'property.read')).toEqual({ orgId: ORG, everything: true })
   })
 
   it('collects the specific properties and entities otherwise', () => {
@@ -367,6 +413,7 @@ describe('propertyScope', () => {
     })
     const scope = propertyScope(staff, 'property.read')
     expect(scope).toEqual({
+      orgId: ORG,
       everything: false,
       legalEntityIds: [ENTITY_1],
       propertyIds: [PROPERTY_A],
@@ -385,6 +432,7 @@ describe('propertyScope', () => {
       propertyIds: expect.arrayContaining([PROPERTY_A, PROPERTY_B]),
     })
     expect(propertyScope(staff, 'property.write')).toEqual({
+      orgId: ORG,
       everything: false,
       legalEntityIds: [],
       propertyIds: [PROPERTY_A],
@@ -405,7 +453,7 @@ describe('propertyScope', () => {
       assignments: [assignment('owner')],
     })
     expect(scopeIsEmpty(propertyScope(owner, 'ledger.adjust'))).toBe(true)
-    expect(propertyScope(owner, 'ledger.read')).toEqual({ everything: true })
+    expect(propertyScope(owner, 'ledger.read')).toEqual({ orgId: ORG, everything: true })
   })
 
   it('agrees with can() for every permission and both scope shapes', () => {

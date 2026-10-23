@@ -107,6 +107,9 @@ export async function createCriteriaVersion(
 
     const created = await tx.screeningCriteria.create({
       data: {
+        // R-285b: named into the actor's org. Which version is current, and
+        // the global version number, stay as they are until R-297.
+        orgId: actor.orgId,
         version,
         incomeToRentMultiplierX100: input.incomeToRentMultiplierX100,
         minCreditScore: input.minCreditScore,

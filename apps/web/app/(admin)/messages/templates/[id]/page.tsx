@@ -29,14 +29,14 @@ export default async function TemplatePage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
-  const { scope } = await requireScope('template.write')
+  const { actor, scope } = await requireScope('template.write')
 
-  const template = await getTemplate(id)
+  const template = await getTemplate(id, actor.orgId)
   if (!template) notFound()
 
   const [canApprove, sample, versions, zoneProperty] = await Promise.all([
     actorCan('template.approve'),
-    previewTenancy(null),
+    previewTenancy(null, actor.orgId),
     listTemplateVersions(id),
     // No property owns a template, so no zone is exactly right: the first
     // property in scope, with the abbreviation printed, as the announcement

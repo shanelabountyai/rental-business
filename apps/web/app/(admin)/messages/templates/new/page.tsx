@@ -8,12 +8,12 @@ import { previewTenancy, templateValues } from '@/lib/comms/template-values.ts'
 export const metadata = { title: 'New template — Rental Operations' }
 
 export default async function NewTemplatePage() {
-  await requirePermission('template.write')
+  const actor = await requirePermission('template.write')
 
   // Resolved SERVER-SIDE, by the same function the send path uses. The editor
   // renders the preview in the browser as somebody types, but it never looks
   // anything up — it is handed the values.
-  const sample = await previewTenancy(null)
+  const sample = await previewTenancy(null, actor.orgId)
   const values = sample ? await templateValues(sample) : null
 
   return (

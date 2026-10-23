@@ -33,16 +33,18 @@ export const TEMPLATE_SELECT = {
   },
 } as const
 
-export async function listTemplates(includeRetired = false) {
+// R-285b: a template belongs to one organisation (PRD 10 §M3), so every read
+// names the org - by id included, so org A cannot open org B's template.
+export async function listTemplates(orgId: string, includeRetired = false) {
   return prisma.messageTemplate.findMany({
-    where: includeRetired ? {} : { active: true },
+    where: includeRetired ? { orgId } : { orgId, active: true },
     orderBy: [{ active: 'desc' }, { name: 'asc' }],
     select: TEMPLATE_SELECT,
   })
 }
 
-export async function getTemplate(id: string) {
-  return prisma.messageTemplate.findUnique({ where: { id }, select: TEMPLATE_SELECT })
+export async function getTemplate(id: string, orgId: string) {
+  return prisma.messageTemplate.findFirst({ where: { id, orgId }, select: TEMPLATE_SELECT })
 }
 
 export interface RenderedForRecipient {

@@ -36,7 +36,7 @@ export async function recordUtilityBill(
 ): Promise<UtilityBillFormState> {
   const property = await prisma.property.findUniqueOrThrow({
     where: { id: propertyId },
-    select: { id: true, legalEntityId: true },
+    select: { id: true, legalEntityId: true, orgId: true },
   })
   await requirePermission('property.write', propertyResource(property))
 
@@ -128,7 +128,7 @@ export async function splitUtilityBill(
     select: {
       id: true,
       propertyId: true,
-      property: { select: { id: true, legalEntityId: true } },
+      property: { select: { id: true, legalEntityId: true, orgId: true } },
     },
   })
   // The privileged one. This bills every tenant at the property at once.

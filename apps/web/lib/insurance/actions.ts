@@ -66,7 +66,7 @@ async function claimForWrite(claimId: string) {
   if (!found) return null
   const property = await prisma.property.findUniqueOrThrow({
     where: { id: found.propertyId },
-    select: { id: true, legalEntityId: true },
+    select: { id: true, legalEntityId: true, orgId: true },
   })
   await requirePermission('property.write', propertyResource(property))
   return { found, actor }
@@ -79,7 +79,7 @@ export async function openClaim(
 ): Promise<ClaimFormState> {
   const property = await prisma.property.findUnique({
     where: { id: propertyId },
-    select: { id: true, legalEntityId: true, timezone: true },
+    select: { id: true, legalEntityId: true, orgId: true, timezone: true },
   })
   if (!property) return { error: 'That property no longer exists.' }
 

@@ -11,8 +11,8 @@ export const metadata = { title: 'Inspection checklists — Rental Operations' }
 // /documents/templates gives its own library, one level over.
 
 export default async function InspectionTemplatesPage() {
-  await requirePermission('inspection.write')
-  const templates = await listInspectionTemplates()
+  const actor = await requirePermission('inspection.write')
+  const templates = await listInspectionTemplates(actor.orgId)
 
   return (
     <div className="flex max-w-3xl flex-col gap-6">

@@ -97,6 +97,8 @@ test.afterAll(async () => {
     ).map((row) => row.propertyId!),
   )
   await prisma.unit.deleteMany({ where: { id: { in: unitIds } } })
+  // Before the properties: StaffAssignment's scope FKs are RESTRICT (R-285b).
+  await prisma.staffAssignment.deleteMany({ where: { staffUserId: { in: staffIds } } })
   await prisma.property.deleteMany({
     where: { id: { in: propertyIds.filter((id) => !auditedProperties.has(id)) } },
   })
@@ -116,7 +118,6 @@ test.afterAll(async () => {
     where: { id: { in: entityIds.filter((id) => !stillReferenced.has(id)) } },
   })
 
-  await prisma.staffAssignment.deleteMany({ where: { staffUserId: { in: staffIds } } })
   const auditedStaff = new Set(
     (
       await prisma.auditLog.findMany({

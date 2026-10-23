@@ -81,7 +81,7 @@ export async function agreePaymentPlan(
     select: {
       id: true,
       propertyId: true,
-      property: { select: { id: true, legalEntityId: true, timezone: true, addressLine1: true } },
+      property: { select: { id: true, legalEntityId: true, orgId: true, timezone: true, addressLine1: true } },
       leaseTenants: {
         select: {
           tenant: {
@@ -336,7 +336,7 @@ export async function cancelPaymentPlan(
       leaseId: true,
       propertyId: true,
       status: true,
-      lease: { select: { property: { select: { id: true, legalEntityId: true } } } },
+      lease: { select: { property: { select: { id: true, legalEntityId: true, orgId: true } } } },
       hold: { select: { id: true, liftedAt: true } },
     },
   })

@@ -453,6 +453,7 @@ export async function raiseReplyTask(threadId: string, body: string, receivedAt:
     const thread = await prisma.thread.findUniqueOrThrow({
       where: { id: threadId },
       select: {
+        orgId: true,
         propertyId: true,
         property: { select: { timezone: true, legalEntityId: true } },
         tenant: { select: { firstName: true, lastName: true } },
@@ -465,6 +466,7 @@ export async function raiseReplyTask(threadId: string, body: string, receivedAt:
     const assigneeStaffId = await replyTaskAssignee({
       id: thread.propertyId,
       legalEntityId: thread.property.legalEntityId,
+      orgId: thread.orgId,
     })
     const snippet = body.trim().replace(/\s+/g, ' ').slice(0, 60)
     await createTask(prisma, {

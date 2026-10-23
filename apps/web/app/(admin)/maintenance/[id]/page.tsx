@@ -73,7 +73,7 @@ export default async function StaffTicketDetailPage({
   const trade = emergencyDefinition(ticket.category)?.trade ?? null
   const isEmergency = ticket.priority === 'EMERGENCY'
   const [vendors, canEditVendors] = isEmergency
-    ? await Promise.all([emergencyVendorsForTrade(trade), actorCan('vendor.write')])
+    ? await Promise.all([emergencyVendorsForTrade(trade, actor.orgId), actorCan('vendor.write')])
     : [[], false]
   // R-223. Offered on any open ticket, not only a habitability one: the
   // keyword scan is a prompt for a person, never the gate on their decision.

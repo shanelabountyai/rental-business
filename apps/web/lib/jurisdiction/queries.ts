@@ -126,10 +126,11 @@ export async function currentRuleVersion(
 /// property states plus whatever is currently configured, handed to the pure
 /// predicate. Portfolio-wide, like `listCurrentRules`; the same small-N
 /// justification applies.
-export async function portfolioCoverage(asOf: Date): Promise<PortfolioCoverage> {
+// R-285b: the rules are global; the states to cover are the actor's org's.
+export async function portfolioCoverage(asOf: Date, orgId: string): Promise<PortfolioCoverage> {
   const [properties, currentRules] = await Promise.all([
     prisma.property.findMany({
-      where: { active: true },
+      where: { orgId, active: true },
       distinct: ['state'],
       select: { state: true },
     }),

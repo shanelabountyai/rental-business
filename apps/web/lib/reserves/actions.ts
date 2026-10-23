@@ -36,7 +36,7 @@ export async function setPropertyReserve(
 ): Promise<FormState> {
   const property = await prisma.property.findUnique({
     where: { id: propertyId },
-    select: { id: true, legalEntityId: true },
+    select: { id: true, legalEntityId: true, orgId: true },
   })
   if (!property) return { error: 'That property no longer exists.' }
   const actor = await requirePermission('property.write', propertyResource(property))

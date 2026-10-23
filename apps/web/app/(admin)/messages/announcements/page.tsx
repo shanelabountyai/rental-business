@@ -53,18 +53,18 @@ export default async function AnnouncementsPage({
 
   const [options, templates, audiences, scheduled, recipients] = await Promise.all([
     segmentOptions(scope),
-    listTemplates(),
-    listAudiences(),
+    listTemplates(actor.orgId),
+    listAudiences(actor.orgId),
     listScheduledAnnouncements(scope, actor.id),
     segment ? reviewSegment(scope, segment) : Promise.resolve(null),
   ])
   // The preview needs the template, so it is chosen in step one beside the
   // segment (R-260). An id that is gone or retired previews nothing.
   const chosen = templateId ? templates.find((t) => t.id === templateId) ?? null : null
-  const template = chosen ? await getTemplate(chosen.id) : null
+  const template = chosen ? await getTemplate(chosen.id, actor.orgId) : null
   const preview =
     template && recipients && recipients.length > 0
-      ? await previewAnnouncement(template, recipients.map((r) => r.leaseId))
+      ? await previewAnnouncement(template, recipients.map((r) => r.leaseId), actor.orgId)
       : null
   const groups = options.groups.filter((group) => group.choices.length > 0)
   const segmentLabels = new Map<string, string>([

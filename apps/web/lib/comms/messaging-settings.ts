@@ -8,11 +8,12 @@ import { prisma } from '@rental/db'
 
 export const COMPANY_NAME = 'Rental Operations'
 
-export async function messagingSettings(): Promise<{
+// R-285b: one row per organisation, keyed by `orgId` (unique).
+export async function messagingSettings(orgId: string): Promise<{
   businessName: string
   replyTaskAssigneeStaffId: string | null
 }> {
-  const row = await prisma.messagingSettings.findUnique({ where: { id: 'default' } })
+  const row = await prisma.messagingSettings.findUnique({ where: { orgId } })
   return {
     businessName: row?.businessName ?? COMPANY_NAME,
     replyTaskAssigneeStaffId: row?.replyTaskAssigneeStaffId ?? null,
@@ -25,11 +26,14 @@ export async function messagingSettings(): Promise<{
 export async function replyTaskAssignee(property: {
   id: string
   legalEntityId: string
+  orgId: string
 }): Promise<string | null> {
-  const { replyTaskAssigneeStaffId: staffUserId } = await messagingSettings()
+  const { replyTaskAssigneeStaffId: staffUserId } = await messagingSettings(property.orgId)
   if (!staffUserId) return null
   const grant = await prisma.staffAssignment.findFirst({
     where: {
+      // A portfolio-wide grant is the property's org's, never another's.
+      orgId: property.orgId,
       staffUserId,
       revokedAt: null,
       staffUser: { active: true },

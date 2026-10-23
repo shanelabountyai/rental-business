@@ -42,10 +42,13 @@ SCHEDULED_JOBS.push({
   run: async ({ propertyId, businessDate: today }) => {
     let checked = 0
     let scheduled = 0
+    // R-285b: the default checklist is the property's org's ((orgId,
+    // defaultForType) unique) - never another org's.
+    const { orgId } = await prisma.property.findUniqueOrThrow({ where: { id: propertyId }, select: { orgId: true } })
 
     for (const type of PERIODIC_TYPES) {
       const template = await prisma.inspectionTemplate.findFirst({
-        where: { defaultForType: type, active: true },
+        where: { orgId, defaultForType: type, active: true },
       })
       if (!template) continue
 

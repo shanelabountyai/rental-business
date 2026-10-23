@@ -36,7 +36,7 @@ const caseInclude = {
       state: true,
       county: true,
       // propertyResource() needs this to build the RBAC resource.
-      legalEntityId: true,
+      legalEntityId: true, orgId: true,
     },
   },
   unit: { select: { id: true, name: true } },

@@ -65,7 +65,7 @@ export async function loadLeaseForPartyChange(leaseId: string) {
       property: {
         select: {
           id: true,
-          legalEntityId: true,
+          legalEntityId: true, orgId: true,
           name: true,
           addressLine1: true,
           timezone: true,
@@ -250,7 +250,8 @@ export async function buildPartyChange(
   const incomingTenants = await prisma.$transaction(
     applicants.map((a) =>
       prisma.tenant.create({
-        data: { firstName: a.firstName, lastName: a.lastName, email: a.email, phone: a.phone },
+        // R-285b: a root row, named into the lease's org.
+        data: { orgId: lease.orgId, firstName: a.firstName, lastName: a.lastName, email: a.email, phone: a.phone },
         select: { id: true, firstName: true, lastName: true, email: true, phone: true },
       }),
     ),

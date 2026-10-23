@@ -37,7 +37,7 @@ export default async function RentRollPage({
   // then silently vanish for exactly the person whose job this screen is.
   const canSend = !scopeIsEmpty(propertyScope(actor, 'message.send'))
 
-  const [fullRoll, templates] = await Promise.all([rentRoll(scope), listTemplates()])
+  const [fullRoll, templates] = await Promise.all([rentRoll(scope), listTemplates(actor.orgId)])
 
   // R-050's dashboard drills in with `?bucket=` or `?pastGrace=1` - filtered
   // in-page rather than in `rentRoll()` itself, because the aging summary

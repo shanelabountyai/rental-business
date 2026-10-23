@@ -29,7 +29,7 @@ const HOURS = [
 ]
 
 export default async function MessagingSettingsPage() {
-  const { scope } = await requireScope('template.write')
+  const { actor, scope } = await requireScope('template.write')
   const where = propertyWhere(scope)
   const [portfolio, properties] = await Promise.all([
     actorCan('template.write'),
@@ -43,11 +43,12 @@ export default async function MessagingSettingsPage() {
   ])
   const [settings, staff] = portfolio
     ? await Promise.all([
-        prisma.messagingSettings.findUnique({ where: { id: 'default' } }),
+        prisma.messagingSettings.findUnique({ where: { orgId: actor.orgId } }),
         prisma.staffUser.findMany({
           where: {
             active: true,
-            assignments: { some: { revokedAt: null, role: { permissions: { has: 'task.write' } } } },
+            // R-285b: staff who can work tasks in THIS org.
+            assignments: { some: { orgId: actor.orgId, revokedAt: null, role: { permissions: { has: 'task.write' } } } },
           },
           orderBy: { name: 'asc' },
           select: { id: true, name: true },

@@ -40,7 +40,7 @@ export default async function AccountPage({
       select: { mfaEnrolledAt: true },
     }),
     prisma.staffAssignment.findMany({
-      where: { staffUserId: actor.id, revokedAt: null },
+      where: { orgId: actor.orgId, staffUserId: actor.id, revokedAt: null },
       select: {
         id: true,
         role: { select: { name: true } },

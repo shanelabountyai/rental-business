@@ -71,7 +71,7 @@ export async function handleInboundEmail(args: {
 
   const thread = await prisma.thread.findUniqueOrThrow({
     where: { id: routed.threadId },
-    select: { id: true, propertyId: true, tenantId: true, vendorId: true },
+    select: { id: true, orgId: true, propertyId: true, tenantId: true, vendorId: true },
   })
 
   // R-097e. AFTER the message is filed and before any ticket: somebody
@@ -79,8 +79,8 @@ export async function handleInboundEmail(args: {
   // maintenance ticket titled "please unsubscribe me" would be the visible
   // half of getting that wrong.
   if (isEmailOptOutRequest(args.body)) {
-    if (thread.tenantId) await honourEmailOptOut('TENANT', thread.tenantId, args.from)
-    else if (thread.vendorId) await honourEmailOptOut('VENDOR', thread.vendorId, args.from)
+    if (thread.tenantId) await honourEmailOptOut('TENANT', thread.tenantId, thread.orgId, args.from)
+    else if (thread.vendorId) await honourEmailOptOut('VENDOR', thread.vendorId, thread.orgId, args.from)
     return { outcome: 'threaded', threadId: thread.id }
   }
 

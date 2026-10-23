@@ -59,7 +59,8 @@ export async function generateDocumentFromTemplate(
     select: { name: true },
   })
 
-  const template = await prisma.documentTemplate.findUnique({ where: { id: templateId } })
+  // R-285b: the property's org's template only.
+  const template = await prisma.documentTemplate.findFirst({ where: { id: templateId, orgId: property.orgId } })
   if (!template) return { error: 'That template no longer exists.' }
   if (!template.active) return { error: 'This template has been retired.' }
 

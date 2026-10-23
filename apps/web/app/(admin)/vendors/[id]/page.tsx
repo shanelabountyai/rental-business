@@ -20,8 +20,8 @@ export default async function VendorPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
-  await requirePermission('vendor.read')
-  const vendor = await getVendor(id)
+  const actor = await requirePermission('vendor.read')
+  const vendor = await getVendor(id, actor.orgId)
   if (!vendor) notFound()
 
   const year = new Date().getUTCFullYear()

@@ -63,7 +63,7 @@ async function depositForWrite(depositId: string) {
       propertyId: true,
       leaseId: true,
       dispositionSentAt: true,
-      property: { select: { id: true, legalEntityId: true } },
+      property: { select: { id: true, legalEntityId: true, orgId: true } },
     },
   })
   const actor = await requirePermission('ledger.adjust', propertyResource(deposit.property))
@@ -184,7 +184,7 @@ export async function removeDeduction(deductionId: string): Promise<DepositFormS
           leaseId: true,
           propertyId: true,
           dispositionSentAt: true,
-          property: { select: { id: true, legalEntityId: true } },
+          property: { select: { id: true, legalEntityId: true, orgId: true } },
         },
       },
     },
@@ -237,7 +237,7 @@ export async function finalizeDisposition(
       dispositionDueOn: true,
       dispositionSentAt: true,
       forwardingAddress: true,
-      property: { select: { id: true, legalEntityId: true, addressLine1: true, timezone: true } },
+      property: { select: { id: true, legalEntityId: true, orgId: true, addressLine1: true, timezone: true } },
       lease: {
         select: {
           id: true,
@@ -656,7 +656,7 @@ export async function recordDepositRefund(
       creditRefundedCents: true,
       dispositionSentAt: true,
       refundPaidOn: true,
-      property: { select: { id: true, legalEntityId: true, timezone: true } },
+      property: { select: { id: true, legalEntityId: true, orgId: true, timezone: true } },
       // D-306: whose ledger the paid-out credit comes off. The same one
       // active payer `finalizeDisposition` reads.
       lease: { select: { leasePayers: { where: { active: true }, take: 1, select: { id: true } } } },

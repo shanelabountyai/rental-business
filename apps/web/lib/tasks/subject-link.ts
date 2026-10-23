@@ -173,7 +173,7 @@ export async function subjectLinks(
   tasks: readonly {
     subjectType: string
     subjectId: string
-    property: { id: string; legalEntityId: string }
+    property: { id: string; legalEntityId: string; orgId: string }
   }[],
 ): Promise<(SubjectLink | null)[]> {
   const links: (SubjectLink | null)[] = tasks.map(() => null)

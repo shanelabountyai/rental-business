@@ -81,7 +81,7 @@ export async function sendPlanForSignature(planId: string): Promise<PlanEsignRes
           property: {
             select: {
               id: true,
-              legalEntityId: true,
+              legalEntityId: true, orgId: true,
               name: true,
               addressLine1: true,
               timezone: true,

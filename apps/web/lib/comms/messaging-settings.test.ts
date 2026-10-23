@@ -11,8 +11,8 @@ import { replyTaskAssignee } from './messaging-settings.ts'
 let previous: { replyTaskAssigneeStaffId: string | null } | null
 const staffIds: string[] = []
 const propertyIds: string[] = []
-let covered: { id: string; legalEntityId: string }
-let uncovered: { id: string; legalEntityId: string }
+let covered: { id: string; legalEntityId: string; orgId: string }
+let uncovered: { id: string; legalEntityId: string; orgId: string }
 
 async function setAssignee(staffUserId: string | null) {
   await prisma.messagingSettings.upsert({
@@ -50,7 +50,7 @@ beforeAll(async () => {
         timezone: 'America/Chicago',
         propertyType: 'SINGLE_FAMILY',
       },
-      select: { id: true, legalEntityId: true },
+      select: { id: true, legalEntityId: true, orgId: true },
     })
     propertyIds.push(property.id)
     if (name === 'covered') covered = property

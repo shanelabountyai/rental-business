@@ -59,7 +59,7 @@ async function leaseForEsign(leaseId: string) {
       property: {
         select: {
           id: true,
-          legalEntityId: true,
+          legalEntityId: true, orgId: true,
           name: true,
           addressLine1: true,
           state: true,
@@ -104,12 +104,15 @@ async function leaseForEsign(leaseId: string) {
  * TEMPLATE.
  */
 async function findTemplate(input: {
+  orgId: string
   documentType: 'LEASE' | 'ADDENDUM'
   addendumKey: AddendumKey | null
   state: string
 }) {
   const candidates = await prisma.documentTemplate.findMany({
     where: {
+      // R-285b: the lease's org's templates only.
+      orgId: input.orgId,
       documentType: input.documentType,
       addendumKey: input.addendumKey,
       active: true,
@@ -184,7 +187,7 @@ export async function generateAndSendLease(
     return { error: 'Add at least one tenant before sending the lease for signature.' }
   }
 
-  const template = await findTemplate({ documentType: 'LEASE', addendumKey: null, state: lease.property.state })
+  const template = await findTemplate({ orgId: lease.orgId, documentType: 'LEASE', addendumKey: null, state: lease.property.state })
   if (!template) {
     return {
       error: `No lease template is configured for ${lease.property.state} (or a default). Add one at /documents/templates.`,
@@ -201,7 +204,7 @@ export async function generateAndSendLease(
   })
   const addendumTemplates: { key: AddendumKey; body: string }[] = []
   for (const key of addendumKeys) {
-    const t = await findTemplate({ documentType: 'ADDENDUM', addendumKey: key, state: lease.property.state })
+    const t = await findTemplate({ orgId: lease.orgId, documentType: 'ADDENDUM', addendumKey: key, state: lease.property.state })
     if (!t) {
       return {
         error: `This property needs a ${ADDENDUM_LABELS[key]}, and no template is configured for it. Add one at /documents/templates before sending.`,

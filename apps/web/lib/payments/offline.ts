@@ -95,7 +95,7 @@ export async function recordOfflinePayment(
       property: {
         select: {
           id: true,
-          legalEntityId: true,
+          legalEntityId: true, orgId: true,
           timezone: true,
           name: true,
           legalEntity: { select: { name: true } },

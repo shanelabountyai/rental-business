@@ -49,12 +49,12 @@ export default async function JurisdictionRulesPage({
 }: {
   searchParams: Promise<{ versioned?: string }>
 }) {
-  await requirePermission('jurisdiction.read')
+  const actor = await requirePermission('jurisdiction.read')
   const [rules, canWrite, { versioned }, coverage] = await Promise.all([
     listCurrentRules(new Date()),
     actorCan('jurisdiction.write'),
     searchParams,
-    portfolioCoverage(new Date()),
+    portfolioCoverage(new Date(), actor.orgId),
   ])
 
   // R-148: the version history D-4 promises. Old versions are never edited

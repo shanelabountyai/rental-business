@@ -65,7 +65,7 @@ export async function switchCollectionMethod(
       stripeSubscriptionId: true,
       externalPayerName: true,
       tenant: { select: { email: true } },
-      property: { select: { id: true, legalEntityId: true } },
+      property: { select: { id: true, legalEntityId: true, orgId: true } },
     },
   })
   await requirePermission('lease.write', propertyResource(payer.property))

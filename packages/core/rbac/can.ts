@@ -17,6 +17,10 @@ import { type Permission, requiresMfa } from './permissions.ts'
 /// One grant, already resolved from the database. `propertyId` and
 /// `legalEntityId` both null means portfolio-wide (D-5).
 export interface Assignment {
+  /// The organisation the grant is in (R-285b, D-339). A grant only ever
+  /// counts in its own org, so a null/null grant is "everything in THIS org"
+  /// and never a cross-org superuser.
+  orgId: string
   roleKey: string
   permissions: readonly Permission[]
   legalEntityId: string | null
@@ -25,6 +29,9 @@ export interface Assignment {
 
 export interface Actor {
   id: string
+  /// The organisation this request is acting in (PRD 10 §1.3). Assignments
+  /// from any other org are ignored by `can()` and `propertyScope()`.
+  orgId: string
   kind: 'staff' | 'tenant' | 'guarantor' | 'vendor' | 'system'
   /// A deactivated actor can do nothing, whatever their assignments say
   /// (ROLE-06).
@@ -52,6 +59,9 @@ export interface Actor {
 /// concept like a JurisdictionRule, and the wrong one for "should this link
 /// be visible" - use `holdsAnywhere()` for that.
 export interface Resource {
+  /// When given and not the actor's org, nothing covers the resource - not
+  /// even a portfolio-wide grant (R-285b). `propertyResource()` always sets it.
+  orgId?: string
   propertyId?: string | null
   legalEntityId?: string | null
   leaseId?: string | null
@@ -84,16 +94,16 @@ export function can(
 ): Decision {
   if (!actor.active) return { allowed: false, reason: 'inactive' }
 
-  const granting = actor.assignments.filter((assignment) =>
+  const granting = inOrg(actor).filter((assignment) =>
     assignment.permissions.includes(permission),
   )
   if (granting.length === 0) {
     return { allowed: false, reason: 'no_permission' }
   }
 
-  const inScope = granting.some((assignment) =>
-    assignmentCovers(actor, assignment, resource),
-  )
+  const inScope =
+    (resource.orgId === undefined || resource.orgId === actor.orgId) &&
+    granting.some((assignment) => assignmentCovers(actor, assignment, resource))
   if (!inScope) return { allowed: false, reason: 'out_of_scope' }
 
   // ROLE-05. Checked last so it only ever blocks someone who would otherwise
@@ -104,6 +114,13 @@ export function can(
   }
 
   return ALLOWED
+}
+
+/// The actor's grants in the org they are acting in. The loader already reads
+/// only those; filtering again here means a hand-built Actor cannot carry
+/// another org's grant into a decision either.
+function inOrg(actor: Actor): readonly Assignment[] {
+  return actor.assignments.filter((assignment) => assignment.orgId === actor.orgId)
 }
 
 /// Convenience for call sites that only branch on yes/no.
@@ -147,13 +164,20 @@ function assignmentCovers(
  * than applied here so this stays pure and so there is exactly one place that
  * knows how a scope becomes SQL.
  *
- * `everything: true` is portfolio-wide access. It is NOT a bypass: it is the
- * honest answer for an assignment with a null scope, and the caller still has
- * to have passed a permission check to get here.
+ * `everything: true` is portfolio-wide access WITHIN `orgId` (PRD 10 §1.3).
+ * It is NOT a bypass: it is the honest answer for an assignment with a null
+ * scope, and the caller still has to have passed a permission check to get
+ * here. Every reader of a scope bounds by `orgId` - `propertyWhere` and its
+ * siblings return `{ orgId }` for `everything`, never `{}`.
  */
 export type PropertyScope =
-  | { everything: true }
-  | { everything: false; legalEntityIds: string[]; propertyIds: string[] }
+  | { orgId: string; everything: true }
+  | {
+      orgId: string
+      everything: false
+      legalEntityIds: string[]
+      propertyIds: string[]
+    }
 
 /**
  * "Does this actor hold this permission over ANYTHING?" - for deciding
@@ -195,7 +219,7 @@ export type PropertyScope =
 export function holdsAnywhere(actor: Actor, permission: Permission): Decision {
   if (!actor.active) return { allowed: false, reason: 'inactive' }
 
-  const granting = actor.assignments.some((assignment) =>
+  const granting = inOrg(actor).some((assignment) =>
     assignment.permissions.includes(permission),
   )
   if (!granting) return { allowed: false, reason: 'no_permission' }
@@ -207,29 +231,30 @@ export function holdsAnywhere(actor: Actor, permission: Permission): Decision {
   return ALLOWED
 }
 
-/// Denies everything. Named so the intent is obvious at call sites.
-export const SCOPE_NONE: PropertyScope = {
-  everything: false,
-  legalEntityIds: [],
-  propertyIds: [],
+/// Denies everything. Named so the intent is obvious at call sites. An empty
+/// scope never reaches a where clause (`propertyWhere` returns null first),
+/// so `orgId` here only has to be a value no organisation has.
+export function scopeNone(orgId = ''): PropertyScope {
+  return { orgId, everything: false, legalEntityIds: [], propertyIds: [] }
 }
 
 export function propertyScope(
   actor: Actor,
   permission: Permission,
 ): PropertyScope {
-  if (!actor.active) return SCOPE_NONE
+  const none = scopeNone(actor.orgId)
+  if (!actor.active) return none
   // A tenant's world is their leases, not a set of properties. Callers
   // filtering properties for a tenant get nothing, which is correct - the
   // tenant portal queries by lease.
-  if (actor.kind === 'tenant' || actor.kind === 'guarantor') return SCOPE_NONE
-  if (requiresMfa(permission) && !actor.mfaVerified) return SCOPE_NONE
+  if (actor.kind === 'tenant' || actor.kind === 'guarantor') return none
+  if (requiresMfa(permission) && !actor.mfaVerified) return none
 
-  const granting = actor.assignments.filter((assignment) =>
+  const granting = inOrg(actor).filter((assignment) =>
     assignment.permissions.includes(permission),
   )
   if (granting.some((a) => a.propertyId === null && a.legalEntityId === null)) {
-    return { everything: true }
+    return { orgId: actor.orgId, everything: true }
   }
 
   const legalEntityIds = new Set<string>()
@@ -242,6 +267,7 @@ export function propertyScope(
   }
 
   return {
+    orgId: actor.orgId,
     everything: false,
     legalEntityIds: [...legalEntityIds],
     propertyIds: [...propertyIds],

@@ -10,6 +10,8 @@ import { getDocumentTemplate, listDocumentTemplates } from './template-queries.t
 
 const staffIds: string[] = []
 const templateIds: string[] = []
+let otherOrgId = ''
+let otherTemplateId = ''
 
 beforeAll(async () => {
   const stamp = `doctemplate-${randomUUID().slice(0, 8)}`
@@ -36,16 +38,27 @@ beforeAll(async () => {
     },
   })
   templateIds.push(active.id, retired.id)
+
+  // R-285b: a template in a second organisation, which org #0 must not see.
+  const other = await prisma.organization.create({ data: { slug: stamp, name: `${stamp} Org` } })
+  otherOrgId = other.id
+  otherTemplateId = (
+    await prisma.documentTemplate.create({
+      data: { orgId: other.id, name: `${stamp}-other-org`, documentType: 'LETTER', body: 'Hi', createdByStaffId: staff.id },
+    })
+  ).id
 })
 
 afterAll(async () => {
   await prisma.documentTemplate.deleteMany({ where: { id: { in: templateIds } } })
+  await prisma.documentTemplate.deleteMany({ where: { orgId: otherOrgId } })
+  await prisma.organization.deleteMany({ where: { id: otherOrgId } })
   await prisma.staffUser.updateMany({ where: { id: { in: staffIds } }, data: { active: false } })
 })
 
 describe('listDocumentTemplates', () => {
   it('lists both active and retired templates, active first', async () => {
-    const templates = await listDocumentTemplates()
+    const templates = await listDocumentTemplates('org_0')
     const ours = templates.filter((t) => templateIds.includes(t.id))
     expect(ours).toHaveLength(2)
     expect(ours[0]?.active).toBe(true)
@@ -53,13 +66,22 @@ describe('listDocumentTemplates', () => {
   })
 })
 
+describe('organisation bound (R-285b, PRD 10 §M3)', () => {
+  it("neither lists nor opens another org's template", async () => {
+    expect((await listDocumentTemplates('org_0')).map((t) => t.id)).not.toContain(otherTemplateId)
+    expect(await getDocumentTemplate(otherTemplateId, 'org_0')).toBeNull()
+    expect((await listDocumentTemplates(otherOrgId)).map((t) => t.id)).toEqual([otherTemplateId])
+    expect((await getDocumentTemplate(otherTemplateId, otherOrgId))?.id).toBe(otherTemplateId)
+  })
+})
+
 describe('getDocumentTemplate', () => {
   it('returns a template by id', async () => {
-    const template = await getDocumentTemplate(templateIds[0]!)
+    const template = await getDocumentTemplate(templateIds[0]!, 'org_0')
     expect(template?.documentType).toBe('LETTER')
   })
 
   it('returns null for an id that does not exist', async () => {
-    expect(await getDocumentTemplate('not-a-real-id')).toBeNull()
+    expect(await getDocumentTemplate('not-a-real-id', 'org_0')).toBeNull()
   })
 })

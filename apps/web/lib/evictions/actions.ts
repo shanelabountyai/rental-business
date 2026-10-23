@@ -82,7 +82,7 @@ export async function openEvictionCase(
       id: true,
       propertyId: true,
       unitId: true,
-      property: { select: { id: true, legalEntityId: true, state: true, county: true, timezone: true } },
+      property: { select: { id: true, legalEntityId: true, orgId: true, state: true, county: true, timezone: true } },
     },
   })
   if (!lease) return { error: 'That lease no longer exists.' }

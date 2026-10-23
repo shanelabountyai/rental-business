@@ -10,14 +10,16 @@ import { prisma } from '@rental/db'
 // different entity, different scoping shape (that one is property-scoped;
 // this one is not).
 
-export async function listDocumentTemplates() {
+// R-285b: portfolio-wide means the actor's org - every read names it.
+export async function listDocumentTemplates(orgId: string) {
   return prisma.documentTemplate.findMany({
+    where: { orgId },
     orderBy: [{ active: 'desc' }, { name: 'asc' }],
   })
 }
 
-export async function getDocumentTemplate(id: string) {
-  return prisma.documentTemplate.findUnique({ where: { id } })
+export async function getDocumentTemplate(id: string, orgId: string) {
+  return prisma.documentTemplate.findFirst({ where: { id, orgId } })
 }
 
 /// For the template form's document-type picker - every closed type this

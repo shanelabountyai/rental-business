@@ -272,6 +272,8 @@ export async function listScheduledAnnouncements(
 ) {
   return prisma.announcementSchedule.findMany({
     where: {
+      // R-285b: `everything` is the actor's org.
+      orgId: scope.orgId,
       cancelledAt: null,
       lastSendAfter: { gt: now },
       ...(scope.everything ? {} : { createdByStaffId: actorId }),
@@ -288,9 +290,10 @@ export async function listScheduledAnnouncements(
   })
 }
 
-export async function listAudiences(): Promise<{ id: string; name: string; segment: string }[]> {
+// R-285b: an audience is an org root - only the actor's org's are offered.
+export async function listAudiences(orgId: string): Promise<{ id: string; name: string; segment: string }[]> {
   return prisma.audience.findMany({
-    where: { active: true },
+    where: { orgId, active: true },
     select: { id: true, name: true, segment: true },
     orderBy: { name: 'asc' },
   })
@@ -315,7 +318,7 @@ export async function segmentOptions(
   // A saved audience posts its stored segment, so it is counted and sent by
   // exactly the same path as the segment it was saved from. One whose
   // segment no longer parses is dropped rather than offered as "everyone".
-  const saved = (await listAudiences()).flatMap((a) =>
+  const saved = (await listAudiences(scope.orgId)).flatMap((a) =>
     parseSegment(a.segment) ? [choice(a.segment, a.name)] : [],
   )
 

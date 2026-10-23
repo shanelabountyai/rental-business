@@ -458,8 +458,10 @@ export async function requestBids(
   const vendorIds = formData.getAll('vendorIds').filter((v): v is string => typeof v === 'string')
   if (vendorIds.length === 0) return { error: 'Choose at least one vendor to ask.' }
 
+  // R-285b: a posted id from another org is dropped, never asked - the
+  // work order's org is the only one its bids may go to (PRD 10 §M3).
   const vendors = await prisma.vendor.findMany({
-    where: { id: { in: vendorIds }, active: true },
+    where: { id: { in: vendorIds }, orgId: workOrder.orgId, active: true },
   })
   if (vendors.length === 0) return { error: 'Those vendors could not be found.' }
 

@@ -30,7 +30,15 @@ export async function grantAssignment(
   roleKey: string,
   scope: AssignmentScope = {},
 ) {
+  // R-285b: the scope target's org goes into the check, so a posted property
+  // or entity id from another org is out of scope even for a portfolio owner.
+  const target = scope.propertyId
+    ? await prisma.property.findUnique({ where: { id: scope.propertyId }, select: { orgId: true } })
+    : scope.legalEntityId
+      ? await prisma.legalEntity.findUnique({ where: { id: scope.legalEntityId }, select: { orgId: true } })
+      : null
   const grantor = await requirePermission('staff.manage', {
+    orgId: target?.orgId,
     propertyId: scope.propertyId,
     legalEntityId: scope.legalEntityId,
   })
@@ -40,6 +48,7 @@ export async function grantAssignment(
   return prisma.$transaction(async (tx) => {
     const assignment = await tx.staffAssignment.create({
       data: {
+        orgId: grantor.orgId,
         staffUserId,
         roleId: role.id,
         propertyId: scope.propertyId ?? null,
@@ -83,6 +92,7 @@ export async function revokeAssignment(assignmentId: string, reason?: string) {
     include: { role: { select: { key: true } } },
   })
   await requirePermission('staff.manage', {
+    orgId: existing.orgId,
     propertyId: existing.propertyId,
     legalEntityId: existing.legalEntityId,
   })

@@ -111,6 +111,8 @@ export async function announcementHistory(
 
   const rows = await prisma.auditLog.findMany({
     where: {
+      // R-285b: `everything` is the actor's org, never the database.
+      orgId: scope.orgId,
       entityType: 'MessageTemplate',
       action: {
         in: [

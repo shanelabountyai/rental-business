@@ -498,7 +498,7 @@ export async function logPhoneMaintenanceRequest(
         select: {
           id: true,
           unitId: true,
-          property: { select: { id: true, legalEntityId: true } },
+          property: { select: { id: true, legalEntityId: true, orgId: true } },
         },
       },
     },
@@ -716,7 +716,7 @@ async function declareEmergency(ticketId: string): Promise<MaintenanceFormState 
       status: true,
       firstResponseAt: true,
       propertyId: true,
-      property: { select: { id: true, legalEntityId: true } },
+      property: { select: { id: true, legalEntityId: true, orgId: true } },
     },
   })
   if (!ticket) return { error: 'That ticket could not be found.' }
@@ -920,7 +920,7 @@ export async function acknowledgeEmergency(
       id: true,
       propertyId: true,
       acknowledgedAt: true,
-      property: { select: { id: true, legalEntityId: true } },
+      property: { select: { id: true, legalEntityId: true, orgId: true } },
     },
   })
   if (!ticket) return { error: 'That ticket could not be found.' }
@@ -977,8 +977,9 @@ export async function setVendorEmergencyAvailability(
   // about this being reachable from a ticket makes it a ticket permission.
   const actor = await requirePermission('vendor.write')
 
-  const vendor = await prisma.vendor.findUnique({
-    where: { id: vendorId },
+  // R-285b: resource-less guard, so the org bound is here.
+  const vendor = await prisma.vendor.findFirst({
+    where: { id: vendorId, orgId: actor.orgId },
     select: { id: true, emergencyAvailable: true },
   })
   if (!vendor) return { error: 'That vendor could not be found.' }

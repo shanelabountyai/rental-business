@@ -70,7 +70,7 @@ export async function sendAnnouncement(
     return { error: 'Choose who this goes to.' }
   }
 
-  const template = await getTemplate(templateId)
+  const template = await getTemplate(templateId, actor.orgId)
   if (!template || !template.active) {
     return { error: 'That template is no longer available.' }
   }
@@ -94,7 +94,7 @@ export async function sendAnnouncement(
   // template or unticks the tenant, rather than learning from the results
   // table that someone was quietly left out. The per-lease skip below stays
   // for a tenancy that changed between this check and the loop.
-  const { problems, smsFooter } = await previewAnnouncement(template, leaseIds)
+  const { problems, smsFooter } = await previewAnnouncement(template, leaseIds, actor.orgId)
   if (problems.length > 0) {
     return { error: `Not sent. ${problems.slice(0, 5).join('; ')}.` }
   }
@@ -387,7 +387,7 @@ export async function saveAudience(
   if (!parseSegment(posted)) return { error: 'Choose who this goes to first.' }
 
   const audience = await prisma.audience.create({
-    data: { name, segment: posted, createdByStaffId: actor.id },
+    data: { orgId: actor.orgId, name, segment: posted, createdByStaffId: actor.id },
   })
   await audit({
     action: 'message.audience_saved',
@@ -407,7 +407,7 @@ export async function cancelScheduledAnnouncement(formData: FormData): Promise<v
   const { actor, scope } = await requireScope('message.send')
   const id = String(formData.get('scheduleId') ?? '')
   const schedule = await prisma.announcementSchedule.findFirst({
-    where: { id, cancelledAt: null },
+    where: { id, orgId: actor.orgId, cancelledAt: null },
     include: { template: { select: { name: true } } },
   })
   if (!schedule) return
@@ -460,6 +460,7 @@ export async function resendFailedAnnouncement(formData: FormData): Promise<void
   const source = await prisma.auditLog.findFirst({
     where: {
       id: auditLogId,
+      orgId: actor.orgId,
       action: { in: ['message.announcement_sent', 'message.announcement_scheduled'] },
     },
   })
@@ -538,9 +539,10 @@ export async function resendFailedAnnouncement(formData: FormData): Promise<void
 }
 
 export async function retireAudience(formData: FormData): Promise<void> {
-  await requireScope('message.send')
+  const { actor } = await requireScope('message.send')
   const id = String(formData.get('audienceId') ?? '')
-  const audience = await prisma.audience.findFirst({ where: { id, active: true } })
+  // R-285b: by id AND org, so org A cannot retire org B's audience.
+  const audience = await prisma.audience.findFirst({ where: { id, orgId: actor.orgId, active: true } })
   if (!audience) return
   await prisma.audience.update({ where: { id }, data: { active: false } })
   await audit({

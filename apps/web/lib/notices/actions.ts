@@ -48,7 +48,7 @@ function str(formData: FormData, name: string): string {
 
 const NOTICE_INCLUDE = {
   property: {
-    select: { id: true, name: true, timezone: true, state: true, county: true, legalEntityId: true, active: true, addressLine1: true },
+    select: { id: true, name: true, timezone: true, state: true, county: true, legalEntityId: true, orgId: true, active: true, addressLine1: true },
   },
   lease: {
     select: {
@@ -405,7 +405,7 @@ export async function recordNoticeService(
 /// places nothing - "at most one active hold of a type", as `placeLeaseHold`
 /// enforces it.
 async function placeNoticeServedHold(
-  notice: { id: string; type: string; leaseId: string | null; propertyId: string; property: { id: string; legalEntityId: string } },
+  notice: { id: string; type: string; leaseId: string | null; propertyId: string; property: { id: string; legalEntityId: string; orgId: string } },
   actorStaffId: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   if (!notice.leaseId) return { ok: false, error: 'This notice has no lease to stop late fees on.' }
@@ -475,7 +475,7 @@ async function placeNoticeServedHold(
 /// actors who hold it, but a hand-made POST must meet the same bar as the
 /// lease page's own panel.
 async function placeServiceHold(
-  notice: { id: string; type: string; leaseId: string | null; property: { id: string; legalEntityId: string } },
+  notice: { id: string; type: string; leaseId: string | null; property: { id: string; legalEntityId: string; orgId: string } },
   formData: FormData,
   actorStaffId: string,
 ): Promise<{ ok: true; linksRevoked: number } | { ok: false; error: string }> {

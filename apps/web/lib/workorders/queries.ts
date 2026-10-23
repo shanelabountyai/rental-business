@@ -54,7 +54,7 @@ const workOrderInclude = {
       id: true,
       name: true,
       timezone: true,
-      legalEntityId: true,
+      legalEntityId: true, orgId: true,
       state: true,
       county: true,
       addressLine1: true,
@@ -114,12 +114,14 @@ export async function warrantiesForProperty(propertyId: string) {
 export async function staffForWorkOrderAssignment(propertyId: string) {
   const property = await prisma.property.findUnique({
     where: { id: propertyId },
-    select: { legalEntityId: true },
+    select: { legalEntityId: true, orgId: true },
   })
   if (!property) return []
 
   const assignments = await prisma.staffAssignment.findMany({
     where: {
+      // R-285b: a portfolio-wide grant counts only in the property's org.
+      orgId: property.orgId,
       revokedAt: null,
       staffUser: { active: true },
       role: { permissions: { has: 'workorder.write' } },
@@ -165,9 +167,10 @@ export async function unitsInScope(scope: ResolvedScope) {
  * order - a turnover job, say) skips the filter and ranks every active
  * vendor instead.
  */
-export async function vendorsForAssignment(trade: string | null) {
+export async function vendorsForAssignment(trade: string | null, orgId: string) {
   const vendors = await prisma.vendor.findMany({
-    where: { active: true },
+    // R-285b: the work order's org only - a vendor is an org root.
+    where: { orgId, active: true },
     select: { id: true, name: true, trades: true, preferredRank: true, active: true, w9OnFile: true, coiExpiresOn: true },
   })
   return fallbackVendorsForTrade(vendors, trade?.toLowerCase() ?? null, new Date())

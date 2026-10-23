@@ -24,7 +24,7 @@ export default async function DocumentTemplatePage({
   const { id } = await params
   const actor = await requirePermission('template.write')
 
-  const template = await getDocumentTemplate(id)
+  const template = await getDocumentTemplate(id, actor.orgId)
   if (!template) notFound()
 
   const scope = await currentScope(actor, 'template.write')

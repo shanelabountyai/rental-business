@@ -38,7 +38,7 @@ export async function addRecurringCharge(
       id: true,
       propertyId: true,
       startsOn: true,
-      property: { select: { id: true, legalEntityId: true } },
+      property: { select: { id: true, legalEntityId: true, orgId: true } },
     },
   })
   await requirePermission('lease.write', propertyResource(lease.property))
@@ -148,7 +148,7 @@ export async function endRecurringCharge(
       description: true,
       amountCents: true,
       active: true,
-      property: { select: { id: true, legalEntityId: true } },
+      property: { select: { id: true, legalEntityId: true, orgId: true } },
     },
   })
   await requirePermission('lease.write', propertyResource(charge.property))

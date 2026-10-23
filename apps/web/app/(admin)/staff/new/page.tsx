@@ -11,8 +11,8 @@ export default async function NewStaffPage() {
   // `staff.manage` is on PRIVILEGED_PERMISSIONS, so an owner who has not
   // enrolled a second factor is redirected to enrol rather than refused
   // (ROLE-05). That is the guard doing its job, not a bug in this page.
-  await requirePermission('staff.manage')
-  const scopes = await scopeOptions()
+  const actor = await requirePermission('staff.manage')
+  const scopes = await scopeOptions(actor.orgId)
 
   return (
     <div className="flex max-w-xl flex-col gap-6">

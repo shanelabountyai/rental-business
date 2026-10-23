@@ -76,7 +76,10 @@ export async function bulkUploadDocuments(
   const uploaded = formData.getAll('files').filter((f): f is File => f instanceof File)
   const fileByName = new Map(uploaded.map((f) => [f.name, f]))
 
+  // R-285b: match addresses in the actor's org only - never file a document
+  // onto another org's house at the same address.
   const properties = await prisma.property.findMany({
+    where: { orgId: actor.orgId },
     select: { id: true, addressLine1: true, postalCode: true },
   })
   const propertyIdByKey = new Map(properties.map((p) => [addressComparisonKey(p), p.id]))

@@ -17,9 +17,9 @@ export const metadata = { title: 'Staff member — Rental Operations' }
 /// and is the same choice the announcement history already makes for the same
 /// reason - a portfolio-wide screen with a silent server zone (UTC on Vercel)
 /// is the defect R-115 fixed there.
-async function portfolioZone(): Promise<string> {
+async function portfolioZone(orgId: string): Promise<string> {
   const property = await prisma.property.findFirst({
-    where: { active: true },
+    where: { orgId, active: true },
     orderBy: { name: 'asc' },
     select: { timezone: true },
   })
@@ -34,13 +34,13 @@ export default async function StaffMemberPage({
 }: {
   params: Promise<{ id: string }>
 }) {
-  await requirePermission('staff.read')
+  const actor = await requirePermission('staff.read')
   const { id } = await params
   const [member, manage, zone, scopes] = await Promise.all([
-    staffDetail(id),
+    staffDetail(id, actor.orgId),
     actorDecision('staff.manage'),
-    portfolioZone(),
-    scopeOptions(),
+    portfolioZone(actor.orgId),
+    scopeOptions(actor.orgId),
   ])
   if (!member) notFound()
   const canManage = manage.allowed

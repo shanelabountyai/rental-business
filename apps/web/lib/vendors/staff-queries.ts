@@ -8,14 +8,17 @@ import { prisma } from '@rental/db'
 // so nothing here is scoped through `ResolvedScope` the way a property-
 // owned record would be.
 
-export async function listVendors() {
+// R-285b: portfolio-wide means the actor's ORG (PRD 10 §M3) - a vendor is
+// an org root, so every read names it, by id included.
+export async function listVendors(orgId: string) {
   return prisma.vendor.findMany({
+    where: { orgId },
     orderBy: [{ active: 'desc' }, { name: 'asc' }],
   })
 }
 
-export async function getVendor(id: string) {
-  return prisma.vendor.findUnique({ where: { id } })
+export async function getVendor(id: string, orgId: string) {
+  return prisma.vendor.findFirst({ where: { id, orgId } })
 }
 
 export interface VendorPaymentTotals {

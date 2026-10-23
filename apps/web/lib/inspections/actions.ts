@@ -52,7 +52,7 @@ async function inspectionForWrite(inspectionId: string) {
   const inspection = await prisma.inspection.findUniqueOrThrow({
     where: { id: inspectionId },
     include: {
-      property: { select: { id: true, legalEntityId: true, addressLine1: true, timezone: true } },
+      property: { select: { id: true, legalEntityId: true, orgId: true, addressLine1: true, timezone: true } },
       unit: { select: { name: true } },
       // For the entry-notice gate on finishing the walk (R-157): whether
       // anybody is living in the unit this inspection entered.
@@ -90,7 +90,7 @@ export async function startInspection(
 
   const unit = await prisma.unit.findUniqueOrThrow({
     where: { id: unitId },
-    include: { property: { select: { id: true, legalEntityId: true, addressLine1: true } } },
+    include: { property: { select: { id: true, legalEntityId: true, orgId: true, addressLine1: true } } },
   })
   await requirePermission('inspection.write', propertyResource(unit.property))
 
@@ -121,7 +121,8 @@ export async function startInspection(
     if (!templateId) {
       return { error: 'Choose a checklist.', fieldErrors: { templateId: 'Required.' } }
     }
-    template = await prisma.inspectionTemplate.findUnique({ where: { id: templateId } })
+    // R-285b: the property's org's checklist only.
+    template = await prisma.inspectionTemplate.findFirst({ where: { id: templateId, orgId: unit.property.orgId } })
     if (!template) return { error: 'That checklist no longer exists.' }
     checklist = template.items as unknown as TemplateChecklistItem[]
   }
@@ -214,7 +215,7 @@ export async function recordItem(
 ): Promise<InspectionFormState> {
   const item = await prisma.inspectionItem.findUniqueOrThrow({
     where: { id: itemId },
-    include: { inspection: { include: { property: { select: { id: true, legalEntityId: true } } } } },
+    include: { inspection: { include: { property: { select: { id: true, legalEntityId: true, orgId: true } } } } },
   })
   await requirePermission('inspection.write', propertyResource(item.inspection.property))
 
@@ -247,7 +248,7 @@ export async function recordItemPhoto(
 ): Promise<InspectionFormState> {
   const item = await prisma.inspectionItem.findUniqueOrThrow({
     where: { id: itemId },
-    include: { inspection: { include: { property: { select: { id: true, legalEntityId: true } } } } },
+    include: { inspection: { include: { property: { select: { id: true, legalEntityId: true, orgId: true } } } } },
   })
   await requirePermission('inspection.write', propertyResource(item.inspection.property))
 

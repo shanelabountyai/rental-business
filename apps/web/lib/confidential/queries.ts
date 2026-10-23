@@ -28,7 +28,7 @@ const caseInclude = {
         select: {
           id: true,
           name: true,
-          legalEntityId: true,
+          legalEntityId: true, orgId: true,
           timezone: true,
           state: true,
           county: true,

@@ -240,11 +240,14 @@ export async function assignWorkOrder(
   const violations = validateAssignment({ assignedStaffId, vendorId })
   if (violations.length > 0) return violationsToState(violations)
 
+  // R-285b: only the work order's org - a member of it, or its own vendor.
   if (assignedStaffId) {
-    const staff = await prisma.staffUser.findUnique({ where: { id: assignedStaffId } })
+    const staff = await prisma.staffUser.findFirst({
+      where: { id: assignedStaffId, orgMemberships: { some: { orgId: workOrder.orgId, removedAt: null } } },
+    })
     if (!staff || !staff.active) return { error: 'That staff member could not be found.' }
   } else if (vendorId) {
-    const vendor = await prisma.vendor.findUnique({ where: { id: vendorId } })
+    const vendor = await prisma.vendor.findFirst({ where: { id: vendorId, orgId: workOrder.orgId } })
     if (!vendor || !vendor.active) return { error: 'That vendor could not be found.' }
   }
 
@@ -818,7 +821,7 @@ async function workOrderForCommsWrite(workOrderId: string) {
   const workOrder = await prisma.workOrder.findUniqueOrThrow({
     where: { id: workOrderId },
     include: {
-      property: { select: { id: true, legalEntityId: true } },
+      property: { select: { id: true, legalEntityId: true, orgId: true } },
       ticket: {
         select: {
           id: true,

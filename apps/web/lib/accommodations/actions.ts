@@ -60,7 +60,7 @@ async function leaseForWrite(leaseId: string) {
     select: {
       id: true,
       propertyId: true,
-      property: { select: { id: true, legalEntityId: true, timezone: true, addressLine1: true } },
+      property: { select: { id: true, legalEntityId: true, orgId: true, timezone: true, addressLine1: true } },
     },
   })
   if (!lease) return null
@@ -252,7 +252,7 @@ export async function requestDocumentation(
       kind: true,
       disabilityObservable: true,
       needObservable: true,
-      lease: { select: { property: { select: { id: true, legalEntityId: true, timezone: true } } } },
+      lease: { select: { property: { select: { id: true, legalEntityId: true, orgId: true, timezone: true } } } },
     },
   })
   if (!request) return { error: 'That request no longer exists.' }
@@ -336,7 +336,7 @@ export async function decideAccommodationRequest(
       lease: {
         select: {
           property: {
-            select: { id: true, legalEntityId: true, timezone: true, addressLine1: true },
+            select: { id: true, legalEntityId: true, orgId: true, timezone: true, addressLine1: true },
           },
         },
       },

@@ -11,8 +11,8 @@ export const metadata = { title: 'Vendors — Rental Operations' }
 // this existed before this item; a vendor row could only ever be created
 // directly in the database.
 export default async function VendorsPage() {
-  await requirePermission('vendor.read')
-  const vendors = await listVendors()
+  const actor = await requirePermission('vendor.read')
+  const vendors = await listVendors(actor.orgId)
   const today = new Date()
 
   return (

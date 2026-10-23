@@ -121,11 +121,13 @@ afterAll(async () => {
 function readerOf(scope: { propertyId?: string; legalEntityId?: string } | 'all') {
   const actor: Actor = {
     id: 'staff_test',
+    orgId: 'org_0',
     kind: 'staff',
     active: true,
     mfaVerified: true,
     assignments: [
       {
+        orgId: 'org_0',
         roleKey: 'read_only',
         permissions: ['property.read', 'ticket.read'],
         propertyId: scope === 'all' ? null : (scope.propertyId ?? null),
@@ -232,12 +234,14 @@ describe('scoping rows that carry propertyId', () => {
       ...mixed,
       assignments: [
         {
+          orgId: 'org_0',
           roleKey: 'read_only',
           permissions: ['ticket.read'],
           propertyId: propA,
           legalEntityId: null,
         },
         {
+          orgId: 'org_0',
           roleKey: 'read_only',
           permissions: ['ticket.read'],
           propertyId: null,

@@ -39,6 +39,12 @@ function knownPermissions(stored: string[]): Permission[] {
 /// `mfaVerified: false`, which is the honest value - a link in a calendar
 /// app is not a proved second factor - and is safe because the feed reads
 /// nothing that needs one.
+///
+/// The org (R-285b, PRD 10 §1.3): the actor acts in exactly one organisation
+/// and only that org's grants are loaded. With no live membership there is no
+/// org and no grant, so the actor can do nothing. The session does not carry
+/// an org until R-288 resolves it from the host; until then it is the
+/// earliest live membership, which for every user today is org #0.
 export async function loadStaffActor(staffUserId: string, mfaVerified: boolean) {
   const staffUser = await prisma.staffUser.findUnique({
     where: { id: staffUserId },
@@ -47,10 +53,18 @@ export async function loadStaffActor(staffUserId: string, mfaVerified: boolean) 
       active: true,
       approveWorkOrderCents: true,
       waiveFeeCents: true,
+      // Removed members keep their row for history and must never act.
+      orgMemberships: {
+        where: { removedAt: null },
+        orderBy: { joinedAt: 'asc' },
+        select: { orgId: true },
+        take: 1,
+      },
       assignments: {
         // Revoked grants are kept for history (ROLE-06) and must never grant.
         where: { revokedAt: null },
         select: {
+          orgId: true,
           legalEntityId: true,
           propertyId: true,
           role: {
@@ -67,17 +81,23 @@ export async function loadStaffActor(staffUserId: string, mfaVerified: boolean) 
   })
   if (!staffUser) return null
 
-  const assignments: Assignment[] = staffUser.assignments.map((row) => ({
+  // '' is no organisation's id, so a member of none matches no row anywhere.
+  const orgId = staffUser.orgMemberships[0]?.orgId ?? ''
+  const inOrg = staffUser.assignments.filter((row) => row.orgId === orgId)
+
+  const assignments: Assignment[] = inOrg.map((row) => ({
+    orgId: row.orgId,
     roleKey: row.role.key,
     permissions: knownPermissions(row.role.permissions),
     legalEntityId: row.legalEntityId,
     propertyId: row.propertyId,
   }))
 
-  const roles = staffUser.assignments.map((row) => row.role)
+  const roles = inOrg.map((row) => row.role)
 
   const actor: Actor = {
     id: staffUser.id,
+    orgId,
     kind: 'staff',
     active: staffUser.active,
     mfaVerified,
@@ -102,6 +122,7 @@ async function loadTenantActor(tenantId: string) {
     where: { id: tenantId },
     select: {
       id: true,
+      orgId: true,
       active: true,
       leaseTenants: { select: { leaseId: true } },
     },
@@ -120,6 +141,8 @@ async function loadTenantActor(tenantId: string) {
 
   const actor: Actor = {
     id: tenant.id,
+    // A tenant row belongs to one org (D-318), so the tenant acts in it.
+    orgId: tenant.orgId,
     kind: 'tenant',
     active: tenant.active,
     // Tenants have no second factor; magic links are the whole credential
@@ -127,6 +150,7 @@ async function loadTenantActor(tenantId: string) {
     mfaVerified: false,
     assignments: [
       {
+        orgId: tenant.orgId,
         roleKey: role.key,
         permissions: knownPermissions(role.permissions),
         legalEntityId: null,
@@ -144,7 +168,7 @@ async function loadTenantActor(tenantId: string) {
 async function loadGuarantorActor(guarantorId: string) {
   const guarantor = await prisma.guarantor.findUnique({
     where: { id: guarantorId },
-    select: { id: true, active: true, leaseId: true },
+    select: { id: true, orgId: true, active: true, leaseId: true },
   })
   if (!guarantor) return null
 
@@ -159,6 +183,7 @@ async function loadGuarantorActor(guarantorId: string) {
 
   const actor: Actor = {
     id: guarantor.id,
+    orgId: guarantor.orgId,
     kind: 'guarantor',
     active: guarantor.active,
     // No second factor and nothing on the privileged list, same reasoning
@@ -166,6 +191,7 @@ async function loadGuarantorActor(guarantorId: string) {
     mfaVerified: false,
     assignments: [
       {
+        orgId: guarantor.orgId,
         roleKey: role.key,
         permissions: knownPermissions(role.permissions),
         legalEntityId: null,

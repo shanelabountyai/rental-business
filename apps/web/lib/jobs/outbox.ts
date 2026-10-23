@@ -198,9 +198,10 @@ function isAlreadyConsumed(error: unknown): boolean {
 
 /// Events that exhausted their retries. Nothing consumes this yet; it is the
 /// query a dead-letter view would run, and R-007's shell is where it belongs.
-export async function deadLetteredEvents(limit = 50) {
+// R-285b: the panel is portfolio-wide, which means the actor's org.
+export async function deadLetteredEvents(orgId: string, limit = 50) {
   return prisma.outboxEvent.findMany({
-    where: { publishedAt: null, attempts: { gte: MAX_ATTEMPTS } },
+    where: { orgId, publishedAt: null, attempts: { gte: MAX_ATTEMPTS } },
     orderBy: { occurredAt: 'asc' },
     take: limit,
   })

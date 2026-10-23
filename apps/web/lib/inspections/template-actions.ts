@@ -68,9 +68,10 @@ export async function saveInspectionTemplate(
     }
   }
 
+  // R-285b: by id AND org - org A cannot edit org B's checklist by id.
   const existing = templateId
-    ? await prisma.inspectionTemplate.findUnique({
-        where: { id: templateId },
+    ? await prisma.inspectionTemplate.findFirst({
+        where: { id: templateId, orgId: actor.orgId },
         select: { name: true, items: true, defaultForType: true },
       })
     : null
@@ -85,7 +86,7 @@ export async function saveInspectionTemplate(
             data: { name: input.name, items: input.items, defaultForType, updatedByStaffId: actor.id },
           })
         : await tx.inspectionTemplate.create({
-            data: { name: input.name, items: input.items, defaultForType, createdByStaffId: actor.id },
+            data: { orgId: actor.orgId, name: input.name, items: input.items, defaultForType, createdByStaffId: actor.id },
           })
       savedId = saved.id
 
@@ -101,7 +102,7 @@ export async function saveInspectionTemplate(
       )
     })
   } catch (error) {
-    // The unique index (InspectionTemplate.defaultForType) refuses a second
+    // The unique index (orgId, defaultForType) refuses a second
     // checklist claiming the same auto-scheduled type - the honest error is
     // "pick another checklist's default first", not a generic save failure.
     if (isUniqueViolation(error)) {
@@ -125,8 +126,8 @@ export async function retireInspectionTemplate(
 ): Promise<InspectionTemplateFormState> {
   const actor = await requirePermission('inspection.write')
 
-  const existing = await prisma.inspectionTemplate.findUnique({
-    where: { id: templateId },
+  const existing = await prisma.inspectionTemplate.findFirst({
+    where: { id: templateId, orgId: actor.orgId },
     select: { active: true },
   })
   if (!existing) return { error: 'That checklist no longer exists.' }

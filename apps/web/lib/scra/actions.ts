@@ -90,7 +90,7 @@ export async function recordScraLookup(
     select: {
       id: true,
       propertyId: true,
-      property: { select: { id: true, legalEntityId: true, timezone: true } },
+      property: { select: { id: true, legalEntityId: true, orgId: true, timezone: true } },
     },
   })
   if (!lease) return { error: 'That tenancy no longer exists.' }
@@ -286,7 +286,7 @@ export async function recordScraTermination(
       rentDueDay: true,
       noticeGivenAt: true,
       scraTerminationBasis: true,
-      property: { select: { id: true, legalEntityId: true, timezone: true } },
+      property: { select: { id: true, legalEntityId: true, orgId: true, timezone: true } },
     },
   })
   if (!lease) return { error: 'That tenancy no longer exists.' }

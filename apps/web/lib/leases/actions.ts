@@ -127,7 +127,7 @@ async function leaseForWrite(leaseId: string) {
       property: {
         select: {
           id: true,
-          legalEntityId: true,
+          legalEntityId: true, orgId: true,
           timezone: true,
           state: true,
           county: true,
@@ -158,7 +158,7 @@ export async function createLease(
   const unit = unitId
     ? await prisma.unit.findUnique({
         where: { id: unitId },
-        include: { property: { select: { id: true, legalEntityId: true } } },
+        include: { property: { select: { id: true, legalEntityId: true, orgId: true } } },
       })
     : null
   if (!unit) {

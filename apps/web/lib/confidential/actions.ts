@@ -116,7 +116,7 @@ export async function openConfidentialCase(
       id: true,
       status: true,
       propertyId: true,
-      property: { select: { id: true, legalEntityId: true, timezone: true } },
+      property: { select: { id: true, legalEntityId: true, orgId: true, timezone: true } },
     },
   })
   if (!lease) return { error: 'That tenancy could not be found.' }

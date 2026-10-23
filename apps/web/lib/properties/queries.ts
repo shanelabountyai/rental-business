@@ -47,15 +47,16 @@ export async function getPropertyDetail(id: string, scope: ResolvedScope) {
 export async function listWritableLegalEntities(actor: Actor) {
   const scope = propertyScope(actor, 'property.write')
   if (scope.everything) {
+    // R-285b: portfolio-wide is the actor's org, never every entity.
     return prisma.legalEntity.findMany({
-      where: { active: true },
+      where: { orgId: scope.orgId, active: true },
       orderBy: { name: 'asc' },
       select: { id: true, name: true },
     })
   }
   if (scope.legalEntityIds.length === 0) return []
   return prisma.legalEntity.findMany({
-    where: { active: true, id: { in: scope.legalEntityIds } },
+    where: { orgId: scope.orgId, active: true, id: { in: scope.legalEntityIds } },
     orderBy: { name: 'asc' },
     select: { id: true, name: true },
   })

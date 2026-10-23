@@ -12,8 +12,8 @@ export const metadata = { title: 'Preventive-maintenance template — Rental Ope
 // NO `loading.tsx` HERE OR ABOVE (R-099): this page calls notFound().
 export default async function PreventiveTemplatePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  await requirePermission('workorder.write')
-  const template = await getPreventiveTemplate(id)
+  const actor = await requirePermission('workorder.write')
+  const template = await getPreventiveTemplate(id, actor.orgId)
   if (!template) notFound()
 
   return (

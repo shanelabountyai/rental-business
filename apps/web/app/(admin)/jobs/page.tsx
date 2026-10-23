@@ -35,8 +35,8 @@ export const metadata = { title: 'Scheduled jobs — Rental Operations' }
  * up turns every `notFound()` beneath it into an HTTP 200 (R-099).
  */
 export default async function JobsPage() {
-  await requirePermission('job.manage')
-  const jobs = await jobHealth()
+  const actor = await requirePermission('job.manage')
+  const jobs = await jobHealth(actor.orgId)
 
   const failing = jobs.filter((job) => job.failed.length > 0)
   const overdue = jobs.filter(

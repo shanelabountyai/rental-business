@@ -4298,8 +4298,10 @@ model StaffAssignment {
 
   staffUser   StaffUser    @relation(fields: [staffUserId], references: [id])
   role        Role         @relation(fields: [roleId], references: [id])
-  legalEntity LegalEntity? @relation(fields: [legalEntityId], references: [id])
-  property    Property?    @relation(fields: [propertyId], references: [id])
+  /// Restrict, never SetNull (R-285b): a null/null grant is portfolio-wide,
+  /// so deleting the scope must not widen the grant.
+  legalEntity LegalEntity? @relation(fields: [legalEntityId], references: [id], onDelete: Restrict)
+  property    Property?    @relation(fields: [propertyId], references: [id], onDelete: Restrict)
   grantedBy   StaffUser?   @relation("AssignmentGrantedBy", fields: [grantedByStaffId], references: [id])
 
   @@index([staffUserId, revokedAt])

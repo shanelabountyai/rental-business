@@ -78,7 +78,7 @@ export async function sendReminders(
     return { error: 'Nobody is selected. Tick the tenants you want to remind.' }
   }
 
-  const template = await getTemplate(templateId)
+  const template = await getTemplate(templateId, actor.orgId)
   if (!template || !template.active) {
     return { error: 'That template is no longer available.' }
   }
@@ -89,7 +89,7 @@ export async function sendReminders(
       id: true,
       propertyId: true,
       property: {
-        select: { id: true, legalEntityId: true, state: true, county: true, timezone: true },
+        select: { id: true, legalEntityId: true, orgId: true, state: true, county: true, timezone: true },
       },
       leaseTenants: {
         select: {

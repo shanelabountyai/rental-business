@@ -24,9 +24,12 @@ export interface FormState {
   error?: string
 }
 
+// R-285b: `orgId` is the SUBJECT's org - the tenant's or guarantor's own row,
+// or the org a staff member is acting in - never the 'org_0' default.
 async function writePreference(
   recipientType: NotificationRecipientType,
   recipientId: string,
+  orgId: string,
   formData: FormData,
 ): Promise<FormState> {
   const category = String(formData.get('category') ?? '')
@@ -67,6 +70,7 @@ async function writePreference(
       },
     },
     create: {
+      orgId,
       recipientType,
       recipientId,
       category,
@@ -87,7 +91,7 @@ export async function setNotificationPreference(
   formData: FormData,
 ): Promise<FormState> {
   const actor = await requireStaff()
-  const result = await writePreference('STAFF', actor.id, formData)
+  const result = await writePreference('STAFF', actor.id, actor.orgId, formData)
   revalidatePath('/account')
   return result
 }
@@ -99,7 +103,8 @@ export async function setOwnNotificationPreference(
   formData: FormData,
 ): Promise<FormState> {
   const tenant = await requireTenant()
-  const result = await writePreference('TENANT', tenant.id, formData)
+  const { orgId } = await prisma.tenant.findUniqueOrThrow({ where: { id: tenant.id }, select: { orgId: true } })
+  const result = await writePreference('TENANT', tenant.id, orgId, formData)
   revalidatePath('/portal/account')
   return result
 }
@@ -115,7 +120,8 @@ export async function setOwnGuarantorNotificationPreference(
   formData: FormData,
 ): Promise<FormState> {
   const guarantor = await requireGuarantor()
-  const result = await writePreference('GUARANTOR', guarantor.id, formData)
+  const { orgId } = await prisma.guarantor.findUniqueOrThrow({ where: { id: guarantor.id }, select: { orgId: true } })
+  const result = await writePreference('GUARANTOR', guarantor.id, orgId, formData)
   revalidatePath('/portal/guarantor/account')
   return result
 }
@@ -136,7 +142,7 @@ export async function setTenantNotificationPreference(
   if (!found) return { error: 'That tenant is not on a lease at any property you can see.' }
   await requirePermission('tenant.write', propertyResource(found.property))
 
-  const result = await writePreference('TENANT', tenantId, formData)
+  const result = await writePreference('TENANT', tenantId, found.property.orgId, formData)
   revalidatePath(`/leases/${found.leaseId}`)
   return result
 }

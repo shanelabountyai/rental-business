@@ -71,6 +71,7 @@ afterAll(async () => {
 function actorWith(assignments: Actor['assignments']): Actor {
   return {
     id: 'staff_test',
+    orgId: 'org_0',
     kind: 'staff',
     active: true,
     mfaVerified: true,
@@ -82,6 +83,7 @@ function actorWith(assignments: Actor['assignments']): Actor {
 
 const portfolioWide = actorWith([
   {
+    orgId: 'org_0',
     roleKey: 'owner',
     permissions: ['property.read', 'property.write'],
     propertyId: null,
@@ -152,6 +154,7 @@ describe('listWritableLegalEntities', () => {
   it('lists only the entity an entity-scoped manager may write to', async () => {
     const scoped = actorWith([
       {
+        orgId: 'org_0',
         roleKey: 'manager',
         permissions: ['property.read', 'property.write'],
         propertyId: null,
@@ -170,6 +173,7 @@ describe('listWritableLegalEntities', () => {
   it('lists nothing for a property-scoped manager, who cannot create new properties at all', async () => {
     const scoped = actorWith([
       {
+        orgId: 'org_0',
         roleKey: 'manager',
         permissions: ['property.read', 'property.write'],
         propertyId: propA,
@@ -184,6 +188,7 @@ describe('candidateDuplicateProperties', () => {
   it('only returns properties the actor can already read', async () => {
     const scoped = actorWith([
       {
+        orgId: 'org_0',
         roleKey: 'manager',
         permissions: ['property.read'],
         propertyId: propA,

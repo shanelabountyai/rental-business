@@ -12,8 +12,8 @@ export const metadata = { title: 'Document templates — Rental Operations' }
 // generated PDF instead of an email/SMS.
 
 export default async function DocumentTemplatesPage() {
-  await requirePermission('template.write')
-  const templates = await listDocumentTemplates()
+  const actor = await requirePermission('template.write')
+  const templates = await listDocumentTemplates(actor.orgId)
 
   return (
     <div className="flex max-w-3xl flex-col gap-6">

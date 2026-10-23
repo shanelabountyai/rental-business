@@ -63,6 +63,7 @@ export async function templateValues(
   const lease = await prisma.lease.findUnique({
     where: { id: ref.leaseId },
     select: {
+      orgId: true,
       startsOn: true,
       endsOn: true,
       rentCents: true,
@@ -105,7 +106,7 @@ export async function templateValues(
   })
   const owed = balanceCents(rows)
 
-  const owner = await propertyOwner({ id: lease.propertyId, legalEntityId: lease.property.legalEntityId })
+  const owner = await propertyOwner({ id: lease.propertyId, legalEntityId: lease.property.legalEntityId, orgId: lease.orgId })
 
   // The PROPERTY's calendar day, not the server's (D-3). A reminder that says
   // "today" and names yesterday is a reminder nobody trusts again.
@@ -143,7 +144,7 @@ export async function templateValues(
     'balance.total': owed > 0 ? formatCents(owed) : null,
     'balance.due_on': friendlyBusinessDate(dueDateOnOrAfter(today, lease.rentDueDay)),
     today: friendlyBusinessDate(today),
-    'company.name': (await messagingSettings()).businessName,
+    'company.name': (await messagingSettings(lease.orgId)).businessName,
     // No per-property contact number exists on Property yet, so this is the
     // one merge field with nothing behind it. Null rather than a placeholder:
     // `renderTemplate` leaves the token visible and the send path refuses,
@@ -174,9 +175,13 @@ export async function templateValues(
  */
 export async function previewTenancy(
   propertyIds: readonly string[] | null,
+  // R-285b: the sample is always from the actor's org - `null` property ids
+  // means "any of THEIR leases", never any lease in the database.
+  orgId: string,
 ): Promise<TemplateAudience | null> {
   const lease = await prisma.lease.findFirst({
     where: {
+      orgId,
       status: { in: ['ACTIVE', 'MONTH_TO_MONTH'] },
       ...(propertyIds ? { propertyId: { in: [...propertyIds] } } : {}),
       leaseTenants: { some: {} },

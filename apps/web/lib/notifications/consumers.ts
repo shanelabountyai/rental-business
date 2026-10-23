@@ -97,12 +97,14 @@ CONSUMERS.push({
 export async function staffForProperty(propertyId: string, permission = 'unit.write') {
   const property = await prisma.property.findUnique({
     where: { id: propertyId },
-    select: { legalEntityId: true },
+    select: { legalEntityId: true, orgId: true },
   })
   if (!property) return []
 
   const assignments = await prisma.staffAssignment.findMany({
     where: {
+      // R-285b: a portfolio-wide grant counts only in the property's org.
+      orgId: property.orgId,
       revokedAt: null,
       staffUser: { active: true },
       role: { permissions: { has: permission } },

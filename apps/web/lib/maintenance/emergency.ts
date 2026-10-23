@@ -75,12 +75,14 @@ export async function shutoffForEmergency(
 export async function onCallStaffForProperty(propertyId: string) {
   const property = await prisma.property.findUnique({
     where: { id: propertyId },
-    select: { legalEntityId: true },
+    select: { legalEntityId: true, orgId: true },
   })
   if (!property) return []
 
   const assignments = await prisma.staffAssignment.findMany({
     where: {
+      // R-285b: a portfolio-wide grant counts only in the property's org.
+      orgId: property.orgId,
       revokedAt: null,
       staffUser: { active: true },
       role: { permissions: { has: 'ticket.write' } },
@@ -237,10 +239,11 @@ export async function unitForEmergency(scope: TenantScope) {
  * showed nothing until somebody did the data entry would be worse than the
  * phone numbers in somebody's contacts, which is what this replaces.
  */
-export async function emergencyVendorsForTrade(trade: string | null) {
+export async function emergencyVendorsForTrade(trade: string | null, orgId: string) {
   if (!trade) return []
   const vendors = await prisma.vendor.findMany({
-    where: { active: true, trades: { has: trade } },
+    // R-285b: the ticket's org only - a vendor is an org root.
+    where: { orgId, active: true, trades: { has: trade } },
     select: {
       id: true,
       name: true,

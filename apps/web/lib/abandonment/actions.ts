@@ -61,7 +61,7 @@ async function caseForWrite(caseId: string) {
   if (!found) return null
   const property = await prisma.property.findUniqueOrThrow({
     where: { id: found.propertyId },
-    select: { id: true, legalEntityId: true },
+    select: { id: true, legalEntityId: true, orgId: true },
   })
   await requirePermission('eviction.manage', propertyResource(property))
   return { found, actor }
@@ -79,7 +79,7 @@ export async function openAbandonmentCase(
       propertyId: true,
       unitId: true,
       status: true,
-      property: { select: { id: true, legalEntityId: true, timezone: true } },
+      property: { select: { id: true, legalEntityId: true, orgId: true, timezone: true } },
     },
   })
   if (!lease) return { error: 'That tenancy no longer exists.' }

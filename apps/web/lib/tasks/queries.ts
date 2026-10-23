@@ -13,10 +13,10 @@ import type { ResolvedScope } from '@/lib/scope/current-scope.ts'
 export const OPEN_STATUSES = ['OPEN', 'IN_PROGRESS', 'BLOCKED'] as const
 
 export type TaskWithProperty = Task & {
-  property: { id: string; name: string; legalEntityId: string }
+  property: { id: string; name: string; legalEntityId: string; orgId: string }
 }
 export type TaskDetail = Task & {
-  property: { id: string; name: string; legalEntityId: string }
+  property: { id: string; name: string; legalEntityId: string; orgId: string }
   assignee: { id: string; name: string } | null
   completedBy: { id: string; name: string } | null
 }
@@ -57,7 +57,7 @@ export async function myDayTasks(
         })),
       },
     },
-    include: { property: { select: { id: true, name: true, legalEntityId: true } } },
+    include: { property: { select: { id: true, name: true, legalEntityId: true, orgId: true } } },
   })
 
   return tasks.sort(
@@ -131,7 +131,7 @@ export async function openTasksOfType(
 
   const tasks = await prisma.task.findMany({
     where: openTasksWhere(scope, type),
-    include: { property: { select: { id: true, name: true, legalEntityId: true } } },
+    include: { property: { select: { id: true, name: true, legalEntityId: true, orgId: true } } },
   })
 
   return tasks.sort(
@@ -172,7 +172,7 @@ export async function getTask(
   const task = await prisma.task.findUnique({
     where: { id: taskId },
     include: {
-      property: { select: { id: true, name: true, legalEntityId: true } },
+      property: { select: { id: true, name: true, legalEntityId: true, orgId: true } },
       assignee: { select: { id: true, name: true } },
       completedBy: { select: { id: true, name: true } },
     },

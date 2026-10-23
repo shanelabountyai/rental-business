@@ -91,7 +91,7 @@ const staffTicketInclude = {
   // server's (R-101c). Cheap column on a row already being fetched.
   // legalEntityId: R-223's "Mark as emergency" checks `ticket.write` against
   // this property, which needs its entity.
-  property: { select: { id: true, name: true, timezone: true, legalEntityId: true } },
+  property: { select: { id: true, name: true, timezone: true, legalEntityId: true, orgId: true } },
   unit: { select: { id: true, name: true } },
   tenant: { select: { id: true, firstName: true, lastName: true, phone: true } },
   // R-029's emergency panel: who took responsibility, and when. Cheap

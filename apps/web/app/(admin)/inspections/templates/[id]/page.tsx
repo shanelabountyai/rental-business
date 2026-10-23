@@ -18,9 +18,9 @@ export default async function InspectionTemplatePage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
-  await requirePermission('inspection.write')
+  const actor = await requirePermission('inspection.write')
 
-  const template = await getInspectionTemplate(id)
+  const template = await getInspectionTemplate(id, actor.orgId)
   if (!template) notFound()
 
   return (

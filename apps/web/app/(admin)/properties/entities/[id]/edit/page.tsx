@@ -15,9 +15,10 @@ export default async function EditLegalEntityPage({
   const { id } = await params
   // Scoped to THIS entity, so an entity-scoped manager may edit their own
   // entity but not someone else's (ROLE-01).
-  await requirePermission('property.write', { legalEntityId: id })
-
+  // R-285b: read first so the check carries the entity's org - a
+  // portfolio-wide owner elsewhere is out of scope here.
   const entity = await prisma.legalEntity.findUnique({ where: { id } })
+  await requirePermission('property.write', { orgId: entity?.orgId, legalEntityId: id })
   if (!entity) notFound()
 
   return (

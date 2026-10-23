@@ -78,7 +78,7 @@ export async function offerRenewal(
   const lease = await prisma.lease.findUniqueOrThrow({
     where: { id: leaseId },
     include: {
-      property: { select: { id: true, legalEntityId: true, state: true, county: true, timezone: true } },
+      property: { select: { id: true, legalEntityId: true, orgId: true, state: true, county: true, timezone: true } },
       leaseTenants: { select: { tenantId: true, isPrimary: true } },
     },
   })

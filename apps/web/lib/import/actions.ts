@@ -58,14 +58,17 @@ async function readCsvText(formData: FormData): Promise<string | null> {
   return typeof carried === 'string' && carried.trim() ? carried : null
 }
 
-async function buildSnapshot(): Promise<ImportSnapshot> {
+// R-285b: the importer reuses only the actor's org's rows - matching an
+// address or entity name in another org would attach to someone else's book.
+async function buildSnapshot(orgId: string): Promise<ImportSnapshot> {
   const [legalEntities, properties, units, leases] = await Promise.all([
-    prisma.legalEntity.findMany({ select: { id: true, name: true } }),
+    prisma.legalEntity.findMany({ where: { orgId }, select: { id: true, name: true } }),
     prisma.property.findMany({
+      where: { orgId },
       select: { id: true, legalEntityId: true, addressLine1: true, postalCode: true, historyStartsOn: true },
     }),
-    prisma.unit.findMany({ select: { id: true, propertyId: true, name: true } }),
-    prisma.lease.findMany({ select: { id: true, unitId: true, startsOn: true } }),
+    prisma.unit.findMany({ where: { orgId }, select: { id: true, propertyId: true, name: true } }),
+    prisma.lease.findMany({ where: { orgId }, select: { id: true, unitId: true, startsOn: true } }),
   ])
   return {
     legalEntities,
@@ -93,11 +96,11 @@ function planToState(csvText: string, plan: ImportPlan): ImportFormState {
   }
 }
 
-async function previewImport(csvText: string): Promise<ImportFormState> {
+async function previewImport(csvText: string, orgId: string): Promise<ImportFormState> {
   const rows = parseCsv(csvText)
   if (rows.length === 0) return { error: 'That file has no rows.', csvText }
   const [header, ...data] = rows
-  const snapshot = await buildSnapshot()
+  const snapshot = await buildSnapshot(orgId)
   const plan = planImport(header!, data, snapshot)
 
   if (plan.headerErrors.length > 0) {
@@ -123,17 +126,17 @@ export async function runImport(
   _previous: ImportFormState,
   formData: FormData,
 ): Promise<ImportFormState> {
-  await requirePermission('property.write')
+  const actor = await requirePermission('property.write')
 
   const csvText = await readCsvText(formData)
   if (!csvText) return { error: 'Choose a CSV file.' }
 
-  if (formData.get('intent') !== 'commit') return previewImport(csvText)
+  if (formData.get('intent') !== 'commit') return previewImport(csvText, actor.orgId)
 
   const rows = parseCsv(csvText)
   if (rows.length === 0) return { error: 'That file has no rows.', csvText }
   const [header, ...data] = rows
-  const snapshot = await buildSnapshot()
+  const snapshot = await buildSnapshot(actor.orgId)
   const plan = planImport(header!, data, snapshot)
 
   if (!plan.ok) {
@@ -154,12 +157,15 @@ export async function runImport(
     const leaseIds = new Map<string, string>()
 
     for (const row of plan.rows) {
-      const legalEntityId = await resolveLegalEntity(tx, row, entityIds, batchId)
+      const legalEntityId = await resolveLegalEntity(tx, row, entityIds, batchId, actor.orgId)
       const propertyId = await resolveProperty(tx, row, legalEntityId, propertyIds, batchId)
       const unitId = await resolveUnit(tx, row, propertyId, unitIds, batchId)
 
+      // R-285b: a root row - named into the org the property is in, which the
+      // snapshot above bounds to the actor's.
       const tenant = await tx.tenant.create({
         data: {
+          orgId: actor.orgId,
           firstName: row.tenant.firstName,
           lastName: row.tenant.lastName,
           email: row.tenant.email,
@@ -333,12 +339,14 @@ async function resolveLegalEntity(
   row: RowPlan,
   createdIds: Map<string, string>,
   batchId: string,
+  orgId: string,
 ): Promise<string> {
   if (row.legalEntity.action === 'reuse') return row.legalEntity.id
   const existing = createdIds.get(row.legalEntity.key)
   if (existing) return existing
   const created = await tx.legalEntity.create({
     data: {
+      orgId,
       name: row.legalEntity.data.name,
       type: row.legalEntity.data.type as never,
       formationState: row.legalEntity.data.formationState,

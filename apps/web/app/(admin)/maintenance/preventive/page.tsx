@@ -18,7 +18,7 @@ export const metadata = { title: 'Preventive maintenance — Rental Operations' 
 export default async function PreventiveMaintenancePage() {
   const actor = await requirePermission('workorder.write')
   const scope = await currentScope(actor, 'workorder.write')
-  const templates = await listPreventiveTemplates()
+  const templates = await listPreventiveTemplates(actor.orgId)
 
   const withCounts = await Promise.all(
     templates.map(async (template) => ({

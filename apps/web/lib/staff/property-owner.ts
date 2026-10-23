@@ -9,9 +9,12 @@ import { prisma } from '@rental/db'
  * scope, so the same property always names the same person. Shared by the
  * `{{owner.*}}` merge fields and the application-review Task (R-269).
  */
-export async function propertyOwner(property: { id: string; legalEntityId: string }) {
+export async function propertyOwner(property: { id: string; legalEntityId: string; orgId: string }) {
   const ownerGrants = await prisma.staffAssignment.findMany({
     where: {
+      // R-285b: "the whole deployment" is the property's org - never an owner
+      // of somebody else's portfolio.
+      orgId: property.orgId,
       revokedAt: null,
       role: { key: 'owner' },
       staffUser: { active: true },

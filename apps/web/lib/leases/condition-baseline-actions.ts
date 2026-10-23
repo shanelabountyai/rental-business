@@ -52,7 +52,7 @@ export async function uploadConditionBaseline(
       id: true,
       propertyId: true,
       unitId: true,
-      property: { select: { id: true, legalEntityId: true } },
+      property: { select: { id: true, legalEntityId: true, orgId: true } },
     },
   })
   const actor = await requirePermission('document.write', propertyResource(lease.property))

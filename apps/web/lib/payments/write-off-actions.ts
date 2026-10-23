@@ -36,7 +36,7 @@ export async function writeOffReceivable(
       id: true,
       status: true,
       propertyId: true,
-      property: { select: { id: true, legalEntityId: true, timezone: true } },
+      property: { select: { id: true, legalEntityId: true, orgId: true, timezone: true } },
     },
   })
   const actor = await requirePermission('ledger.adjust', propertyResource(lease.property))

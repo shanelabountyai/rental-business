@@ -54,14 +54,14 @@ export async function createComplianceItem(
   if (entityLevel) {
     const entity = await prisma.legalEntity.findUniqueOrThrow({
       where: { id: legalEntityId! },
-      select: { id: true, name: true },
+      select: { id: true, name: true, orgId: true },
     })
-    await requirePermission('property.write', { legalEntityId: entity.id })
+    await requirePermission('property.write', { orgId: entity.orgId, legalEntityId: entity.id })
     scopeName = entity.name
   } else {
     const property = await prisma.property.findUniqueOrThrow({
       where: { id: propertyId! },
-      select: { id: true, legalEntityId: true, name: true },
+      select: { id: true, legalEntityId: true, orgId: true, name: true },
     })
     await requirePermission('property.write', propertyResource(property))
     scopeName = property.name
@@ -125,13 +125,13 @@ export async function recordCompletion(
   const item = await prisma.complianceItem.findUniqueOrThrow({
     where: { id: itemId },
     include: {
-      property: { select: { id: true, legalEntityId: true } },
-      legalEntity: { select: { id: true } },
+      property: { select: { id: true, legalEntityId: true, orgId: true } },
+      legalEntity: { select: { id: true, orgId: true } },
     },
   })
   const actor = item.property
     ? await requirePermission('property.write', propertyResource(item.property))
-    : await requirePermission('property.write', { legalEntityId: item.legalEntity!.id })
+    : await requirePermission('property.write', { orgId: item.legalEntity!.orgId, legalEntityId: item.legalEntity!.id })
 
   const completedOn = str(formData, 'completedOn')
   if (!completedOn || Number.isNaN(new Date(`${completedOn}T00:00:00.000Z`).getTime())) {

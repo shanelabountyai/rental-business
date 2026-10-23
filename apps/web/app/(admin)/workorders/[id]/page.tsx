@@ -134,7 +134,7 @@ export default async function WorkOrderDetailPage({
     warrantiesForProperty(workOrder.propertyId).then((w) => activeWarranties(w, new Date())),
     canWrite ? staffForWorkOrderAssignment(workOrder.propertyId) : Promise.resolve([]),
     canWrite && canSeeVendors
-      ? vendorsForAssignment(workOrder.ticket?.category ?? null)
+      ? vendorsForAssignment(workOrder.ticket?.category ?? null, workOrder.orgId)
       : Promise.resolve([]),
     policyFor(workOrder.propertyId),
   ])

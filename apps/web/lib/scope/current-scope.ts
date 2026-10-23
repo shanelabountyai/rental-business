@@ -4,6 +4,7 @@ import { type Actor, type Permission, propertyScope } from '@rental/core/rbac'
 import { prisma } from '@rental/db'
 import { cookies } from 'next/headers'
 import { cache } from 'react'
+import { propertyWhere } from '@/lib/auth/scope.ts'
 
 // The property switcher's server half.
 //
@@ -45,20 +46,13 @@ function parseCookie(raw: string | undefined): ScopeSelection {
  */
 export const currentScope = cache(
   async (actor: Actor, permission: Permission): Promise<ResolvedScope> => {
-    const scope = propertyScope(actor, permission)
+    // The switcher reads through `propertyWhere` like every other list, so
+    // an owner's "all" is all of THEIR org (R-285b). It used to hand-roll the
+    // `everything ? {} : …` branch and listed every property in the database.
+    const where = propertyWhere(propertyScope(actor, permission))
 
-    const properties = await prisma.property.findMany({
-      where: {
-        active: true,
-        ...(scope.everything
-          ? {}
-          : {
-              OR: [
-                { id: { in: scope.propertyIds } },
-                { legalEntityId: { in: scope.legalEntityIds } },
-              ],
-            }),
-      },
+    const properties = where === null ? [] : await prisma.property.findMany({
+      where: { active: true, ...where },
       select: { id: true, name: true, legalEntityId: true, timezone: true },
       orderBy: { name: 'asc' },
     })

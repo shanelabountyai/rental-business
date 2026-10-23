@@ -20,7 +20,7 @@ export async function saveMessagingSettings(
   _previous: FormState,
   formData: FormData,
 ): Promise<FormState> {
-  await requirePermission('template.write')
+  const actor = await requirePermission('template.write')
 
   const businessName = String(formData.get('businessName') ?? '').trim()
   if (businessName.length > BUSINESS_NAME_MAX) {
@@ -35,6 +35,7 @@ export async function saveMessagingSettings(
     // a reply comes in for is asked per reply (`replyTaskAssignee`).
     const grant = await prisma.staffAssignment.findFirst({
       where: {
+        orgId: actor.orgId,
         staffUserId: replyTaskAssigneeStaffId,
         revokedAt: null,
         staffUser: { active: true },
@@ -45,22 +46,25 @@ export async function saveMessagingSettings(
     if (!grant) return { error: 'That person cannot work tasks. Pick someone else.' }
   }
 
+  // R-285b: one row per org - keyed by the org, not the old 'default' id.
+  // A new org's row takes its org id as its id (the column defaults to
+  // 'default', which org #0's row already holds).
   const before = await prisma.messagingSettings.findUnique({
-    where: { id: 'default' },
+    where: { orgId: actor.orgId },
     select: { businessName: true, replyTaskAssigneeStaffId: true },
   })
   const after = { businessName: businessName || null, replyTaskAssigneeStaffId }
   await prisma.$transaction(async (tx) => {
-    await tx.messagingSettings.upsert({
-      where: { id: 'default' },
-      create: { id: 'default', ...after },
+    const saved = await tx.messagingSettings.upsert({
+      where: { orgId: actor.orgId },
+      create: { id: actor.orgId, orgId: actor.orgId, ...after },
       update: after,
     })
     await audit(
       {
         action: 'messaging_settings.updated',
         entityType: 'MessagingSettings',
-        entityId: 'default',
+        entityId: saved.id,
         before: before ?? undefined,
         after,
       },
@@ -85,7 +89,7 @@ export async function saveQuietHours(_previous: FormState, formData: FormData): 
   const propertyId = String(formData.get('propertyId') ?? '')
   const property = await prisma.property.findUnique({
     where: { id: propertyId },
-    select: { id: true, legalEntityId: true, quietHoursStart: true, quietHoursEnd: true },
+    select: { id: true, legalEntityId: true, orgId: true, quietHoursStart: true, quietHoursEnd: true },
   })
   if (!property) return { error: 'That property no longer exists.' }
   await requirePermission('template.write', propertyResource(property))

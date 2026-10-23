@@ -52,7 +52,7 @@ async function threadForWrite(threadId: string) {
     include: {
       // timezone too: a logged call's wall-clock time is property-local, and
       // resolving it in any other zone misdates the evidence (D-3).
-      property: { select: { id: true, legalEntityId: true, timezone: true } },
+      property: { select: { id: true, legalEntityId: true, orgId: true, timezone: true } },
       tenant: { select: { email: true, phone: true } },
       vendor: { select: { email: true, phone: true } },
     },
@@ -174,7 +174,7 @@ export async function fileUnroutedMessage(
 
   const property = await prisma.property.findUniqueOrThrow({
     where: { id: propertyId },
-    select: { id: true, legalEntityId: true },
+    select: { id: true, legalEntityId: true, orgId: true },
   })
   const actor = await requirePermission(
     'message.send',

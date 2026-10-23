@@ -96,8 +96,8 @@ export async function saveTemplate(
   }
 
   const existing = templateId
-    ? await prisma.messageTemplate.findUnique({
-        where: { id: templateId },
+    ? await prisma.messageTemplate.findFirst({
+        where: { id: templateId, orgId: actor.orgId },
         select: { name: true, kind: true, subject: true, body: true },
       })
     : null
@@ -111,7 +111,9 @@ export async function saveTemplate(
           data: { ...input, updatedByStaffId: actor.id },
         })
       : await tx.messageTemplate.create({
-          data: { ...input, createdByStaffId: actor.id },
+          // R-285b: an org root - created in the actor's org. Every read by id
+          // in this file is `{ id, orgId }`, and each update follows one.
+          data: { ...input, orgId: actor.orgId, createdByStaffId: actor.id },
         })
     savedId = saved.id
     // A save that changed nothing is not a version. Otherwise pressing Save
@@ -155,8 +157,8 @@ export async function restoreTemplateVersion(
   const versionId = str(formData, 'versionId')
 
   const [current, old] = await Promise.all([
-    prisma.messageTemplate.findUnique({
-      where: { id: templateId },
+    prisma.messageTemplate.findFirst({
+      where: { id: templateId, orgId: actor.orgId },
       select: { name: true, kind: true, subject: true, body: true },
     }),
     prisma.messageTemplateVersion.findFirst({
@@ -215,9 +217,10 @@ export async function duplicateTemplate(
 ): Promise<TemplateFormState> {
   const actor = await requirePermission('template.write')
 
-  const source = await prisma.messageTemplate.findUnique({
-    where: { id: templateId },
+  const source = await prisma.messageTemplate.findFirst({
+    where: { id: templateId, orgId: actor.orgId },
     select: {
+      orgId: true,
       name: true,
       kind: true,
       subject: true,
@@ -239,6 +242,8 @@ export async function duplicateTemplate(
     const copy = await tx.messageTemplate.create({
       data: {
         ...content,
+        // The copy stays in the source's org (which the read bounds to the actor's).
+        orgId: source.orgId,
         createdByStaffId: actor.id,
         translations: { create: source.translations },
       },
@@ -267,8 +272,8 @@ export async function retireTemplate(
 ): Promise<TemplateFormState> {
   const actor = await requirePermission('template.write')
 
-  const existing = await prisma.messageTemplate.findUnique({
-    where: { id: templateId },
+  const existing = await prisma.messageTemplate.findFirst({
+    where: { id: templateId, orgId: actor.orgId },
     select: { active: true, name: true },
   })
   if (!existing) return { error: 'That template no longer exists.' }
@@ -302,15 +307,15 @@ export async function saveTranslation(
   _previous: TemplateFormState,
   formData: FormData,
 ): Promise<TemplateFormState> {
-  await requirePermission('template.write')
+  const actor = await requirePermission('template.write')
 
   const locale = str(formData, 'locale').toLowerCase()
   const body = str(formData, 'body')
   if (!locale) return { error: 'Which language is this?', fieldErrors: { locale: 'Required.' } }
   if (!body) return { error: 'A translation needs a body.', fieldErrors: { body: 'Required.' } }
 
-  const template = await prisma.messageTemplate.findUnique({
-    where: { id: templateId },
+  const template = await prisma.messageTemplate.findFirst({
+    where: { id: templateId, orgId: actor.orgId },
     select: { kind: true },
   })
   if (!template) return { error: 'That template no longer exists.' }
@@ -381,8 +386,8 @@ export async function approveTranslation(
     }
   }
 
-  const translation = await prisma.messageTemplateTranslation.findUnique({
-    where: { id: translationId },
+  const translation = await prisma.messageTemplateTranslation.findFirst({
+    where: { id: translationId, orgId: actor.orgId },
     select: { id: true, locale: true, templateId: true, approvedAt: true },
   })
   if (!translation) return { error: 'That translation no longer exists.' }

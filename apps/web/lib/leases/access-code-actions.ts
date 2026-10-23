@@ -46,7 +46,7 @@ export async function issueAccessCodeToTenant(
       unitId: true,
       propertyId: true,
       depositCents: true,
-      property: { select: { id: true, legalEntityId: true } },
+      property: { select: { id: true, legalEntityId: true, orgId: true } },
       deposits: { select: { id: true }, take: 1 },
     },
   })
@@ -147,7 +147,7 @@ export async function issueTenantLockCode(
       id: true,
       propertyId: true,
       depositCents: true,
-      property: { select: { id: true, legalEntityId: true } },
+      property: { select: { id: true, legalEntityId: true, orgId: true } },
       deposits: { select: { id: true }, take: 1 },
     },
   })
@@ -210,7 +210,7 @@ export async function revokeTenantLockCode(
 ): Promise<TenantLockCodeState> {
   const lease = await prisma.lease.findUniqueOrThrow({
     where: { id: leaseId },
-    select: { id: true, propertyId: true, property: { select: { id: true, legalEntityId: true } } },
+    select: { id: true, propertyId: true, property: { select: { id: true, legalEntityId: true, orgId: true } } },
   })
   const actor = await requirePermission('lease.write', propertyResource(lease.property))
 

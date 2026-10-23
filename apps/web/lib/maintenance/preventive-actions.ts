@@ -50,11 +50,13 @@ export async function savePreventiveTemplate(
     }
   }
 
+  // R-285b: a template is an org root. Created in the actor's org; edited only
+  // there - `{ id, orgId }` matches nothing in another org, and the update throws.
   await prisma.$transaction(async (tx) => {
     const saved = templateId
-      ? await tx.preventiveMaintenanceTemplate.update({ where: { id: templateId }, data: input })
+      ? await tx.preventiveMaintenanceTemplate.update({ where: { id: templateId, orgId: actor.orgId }, data: input })
       : await tx.preventiveMaintenanceTemplate.create({
-          data: { ...input, createdByStaffId: actor.id },
+          data: { ...input, orgId: actor.orgId, createdByStaffId: actor.id },
         })
     await audit(
       { action: 'preventive.template_saved', entityType: 'PreventiveMaintenanceTemplate', entityId: saved.id, after: input },
@@ -67,8 +69,8 @@ export async function savePreventiveTemplate(
 }
 
 export async function deactivatePreventiveTemplate(templateId: string): Promise<PreventiveFormState> {
-  await requirePermission('workorder.write')
-  await prisma.preventiveMaintenanceTemplate.update({ where: { id: templateId }, data: { active: false } })
+  const actor = await requirePermission('workorder.write')
+  await prisma.preventiveMaintenanceTemplate.update({ where: { id: templateId, orgId: actor.orgId }, data: { active: false } })
   revalidatePath('/maintenance/preventive')
   return { notice: 'Deactivated.' }
 }
@@ -87,7 +89,7 @@ export async function runPreventiveBatch(
 ): Promise<PreventiveFormState> {
   const actor = await requirePermission('workorder.write')
 
-  const template = await prisma.preventiveMaintenanceTemplate.findUnique({ where: { id: templateId } })
+  const template = await prisma.preventiveMaintenanceTemplate.findFirst({ where: { id: templateId, orgId: actor.orgId } })
   if (!template || !template.active) return { error: 'This template is no longer active.' }
 
   const scope = await currentScope(actor, 'workorder.write')
@@ -95,7 +97,8 @@ export async function runPreventiveBatch(
   if (due.length === 0) return { notice: 'Nothing due right now.' }
 
   const vendors = await prisma.vendor.findMany({
-    where: { active: true },
+    // R-285b: auto-assignment never reaches another org's vendor.
+    where: { orgId: actor.orgId, active: true },
     select: {
       id: true,
       name: true,

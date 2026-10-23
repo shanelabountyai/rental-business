@@ -132,6 +132,10 @@ test.afterAll(async () => {
     ).map((row) => row.propertyId!),
   )
   const undeletable = new Set([...notified, ...auditedProperties])
+  // Before the properties: StaffAssignment's scope FKs are RESTRICT (R-285b).
+  await prisma.staffAssignment.deleteMany({
+    where: { staffUserId: { in: staffIds } },
+  })
   await prisma.property.deleteMany({
     where: { id: { in: propertyIds.filter((id) => !undeletable.has(id)) } },
   })
@@ -154,9 +158,6 @@ test.afterAll(async () => {
 
   await prisma.notificationPreference.deleteMany({
     where: { recipientId: { in: staffIds } },
-  })
-  await prisma.staffAssignment.deleteMany({
-    where: { staffUserId: { in: staffIds } },
   })
   const auditedStaff = new Set(
     (

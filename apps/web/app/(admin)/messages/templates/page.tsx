@@ -18,9 +18,9 @@ export const metadata = { title: 'Message templates — Rental Operations' }
 // a 200 before it ran (R-099).
 
 export default async function TemplatesPage() {
-  await requirePermission('template.write')
+  const actor = await requirePermission('template.write')
   const [templates, canApprove] = await Promise.all([
-    listTemplates(true),
+    listTemplates(actor.orgId, true),
     actorCan('template.approve'),
   ])
 

@@ -46,6 +46,7 @@ export interface AnnouncementPreview {
 export async function previewAnnouncement(
   template: Parameters<typeof renderForRecipient>[0],
   leaseIds: string[],
+  orgId: string,
   now = new Date(),
 ): Promise<AnnouncementPreview> {
   const leases = await prisma.lease.findMany({
@@ -75,7 +76,7 @@ export async function previewAnnouncement(
     return tenant ? [{ lease, tenant }] : []
   })
   const blocked = await blockedNumbers(rows.map((r) => r.tenant.phone))
-  const smsFooter = announcementSmsFooter((await messagingSettings()).businessName)
+  const smsFooter = announcementSmsFooter((await messagingSettings(orgId)).businessName)
 
   const preview: AnnouncementPreview = {
     sample: null,

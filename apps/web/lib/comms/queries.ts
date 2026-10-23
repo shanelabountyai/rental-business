@@ -59,7 +59,7 @@ export async function getThread(threadId: string, scope: ResolvedScope) {
       // BOTH ids to match an entity-scoped grant, and passing a placeholder
       // for the entity is how R-008 wrongly hid its own Edit button.
       property: {
-        select: { id: true, name: true, legalEntityId: true, timezone: true },
+        select: { id: true, name: true, legalEntityId: true, orgId: true, timezone: true },
       },
       tenant: {
         select: {

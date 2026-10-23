@@ -35,7 +35,7 @@ export async function GET(
 
   const document = await prisma.document.findUnique({
     where: { id },
-    include: { property: { select: { id: true, legalEntityId: true } } },
+    include: { property: { select: { id: true, legalEntityId: true, orgId: true } } },
   })
   if (!document) {
     return new Response('Not found', { status: 404 })
@@ -90,7 +90,8 @@ export async function GET(
     return serve(document)
   }
   if (document.legalEntityId) {
-    await requirePermission('document.read', { legalEntityId: document.legalEntityId })
+    // R-285b: the document's org, so a portfolio-wide grant elsewhere misses.
+    await requirePermission('document.read', { orgId: document.orgId, legalEntityId: document.legalEntityId })
     return serve(document)
   }
   return new Response('Not found', { status: 404 })

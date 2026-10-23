@@ -31,7 +31,7 @@ export async function resyncPayer(
 
   const payer = await prisma.leasePayer.findUniqueOrThrow({
     where: { id: leasePayerId },
-    select: { property: { select: { id: true, legalEntityId: true } } },
+    select: { property: { select: { id: true, legalEntityId: true, orgId: true } } },
   })
   await requirePermission('ledger.read', propertyResource(payer.property))
 
@@ -54,7 +54,7 @@ export async function resyncLease(
 
   const lease = await prisma.lease.findUniqueOrThrow({
     where: { id: leaseId },
-    select: { property: { select: { id: true, legalEntityId: true } } },
+    select: { property: { select: { id: true, legalEntityId: true, orgId: true } } },
   })
   await requirePermission('ledger.read', propertyResource(lease.property))
 
@@ -115,7 +115,7 @@ export async function setPaymentHold(
 
   const payer = await prisma.leasePayer.findUnique({
     where: { id: leasePayerId },
-    select: { id: true, leaseId: true, property: { select: { id: true, legalEntityId: true } } },
+    select: { id: true, leaseId: true, property: { select: { id: true, legalEntityId: true, orgId: true } } },
   })
   if (!payer) return { error: 'That payer no longer exists.' }
 

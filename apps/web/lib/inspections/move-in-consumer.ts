@@ -49,6 +49,7 @@ CONSUMERS.push({
       where: { id: event.aggregateId },
       select: {
         id: true,
+        orgId: true,
         unitId: true,
         propertyId: true,
         origin: true,
@@ -99,7 +100,8 @@ CONSUMERS.push({
     // completed, and the overdue job would raise a Task every day about a
     // report no one could ever satisfy.
     const template = await tx.inspectionTemplate.findFirst({
-      where: { defaultForType: 'MOVE_IN', active: true },
+      // R-285b: the default is per org now ((orgId, defaultForType) unique).
+      where: { orgId: lease.orgId, defaultForType: 'MOVE_IN', active: true },
       select: { id: true, name: true, items: true },
     })
     if (!template) return

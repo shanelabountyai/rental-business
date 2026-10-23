@@ -84,8 +84,9 @@ export async function openLeaseDraft(
       })
       const tenantIds: string[] = []
       for (const [index, a] of application.applicants.entries()) {
+        // R-285b: a root row, named into the lease's org (no staff actor here).
         const tenant = await tx.tenant.create({
-          data: { firstName: a.firstName, lastName: a.lastName, email: a.email, phone: a.phone },
+          data: { orgId: created.orgId, firstName: a.firstName, lastName: a.lastName, email: a.email, phone: a.phone },
         })
         await tx.leaseTenant.create({
           data: { leaseId: created.id, tenantId: tenant.id, isPrimary: index === 0 },

@@ -9,6 +9,11 @@ import type { Prisma } from '@rental/db'
 // This is the ONE place that knows how a scope becomes SQL. A second place
 // would eventually disagree with the first, and the disagreement would be
 // invisible until the wrong person opened the rent roll.
+//
+// EVERY fragment below carries `orgId`, including the `everything` case,
+// which used to be `{}` (R-285b, PRD 10 §1.3). `everything` means everything
+// in ONE organisation. A `{}` here is the cross-org superuser D-339 closed,
+// so never return one.
 
 /**
  * A Prisma `where` fragment restricting Property rows to a scope.
@@ -22,10 +27,11 @@ import type { Prisma } from '@rental/db'
 export function propertyWhere(
   scope: PropertyScope,
 ): Prisma.PropertyWhereInput | null {
-  if (scope.everything) return {}
+  if (scope.everything) return { orgId: scope.orgId }
   if (scopeIsEmpty(scope)) return null
 
   return {
+    orgId: scope.orgId,
     OR: [
       ...(scope.propertyIds.length > 0
         ? [{ id: { in: scope.propertyIds } }]
@@ -38,8 +44,8 @@ export function propertyWhere(
 }
 
 /**
- * Tenant rows within a scope (SEC-02). `Tenant` is global - it carries no
- * property - so a tenant is in scope when they are a party to a lease at a
+ * Tenant rows within a scope (SEC-02). `Tenant` is an org root - it carries
+ * `orgId` but no property - so a tenant is in scope when they are a party to a lease at a
  * property the actor can see. Every tenant is created onto a lease (import,
  * party change), so none is stranded by this. Same `null` contract as
  * `propertyWhere`.
@@ -49,8 +55,8 @@ export function tenantWhere(
 ): Prisma.TenantWhereInput | null {
   const property = propertyWhere(scope)
   if (property === null) return null
-  if (scope.everything) return {}
-  return { leaseTenants: { some: { lease: { property } } } }
+  if (scope.everything) return { orgId: scope.orgId }
+  return { orgId: scope.orgId, leaseTenants: { some: { lease: { property } } } }
 }
 
 /**
@@ -65,13 +71,14 @@ export function tenantWhere(
 export function scopedByProperty(
   scope: PropertyScope,
 ): Prisma.TicketWhereInput | null {
-  if (scope.everything) return {}
+  if (scope.everything) return { orgId: scope.orgId }
   if (scopeIsEmpty(scope)) return null
 
   if (scope.legalEntityIds.length === 0) {
-    return { propertyId: { in: scope.propertyIds } }
+    return { orgId: scope.orgId, propertyId: { in: scope.propertyIds } }
   }
   return {
+    orgId: scope.orgId,
     property: {
       OR: [
         ...(scope.propertyIds.length > 0

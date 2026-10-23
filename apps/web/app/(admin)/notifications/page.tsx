@@ -73,7 +73,7 @@ export default async function NotificationsPage() {
   // not get through" this screen can show. Dead letters can belong to any
   // property or none, so the panel is portfolio-wide only - the same rule
   // the money screen's drift panel and announcement history follow.
-  const deadLetters = permissionScope.everything ? await deadLetteredEvents() : null
+  const deadLetters = permissionScope.everything ? await deadLetteredEvents(actor.orgId) : null
 
   // R-173. This screen exists to answer "did they get it, and if not, why
   // not?", so it is where the one unanswerable case belongs: a recipient with

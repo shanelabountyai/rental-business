@@ -66,8 +66,9 @@ export async function saveDocumentTemplate(
   }
 
   const existing = templateId
-    ? await prisma.documentTemplate.findUnique({
-        where: { id: templateId },
+    ? await prisma.documentTemplate.findFirst({
+        // R-285b: by id AND org - org A cannot edit org B's template by id.
+        where: { id: templateId, orgId: actor.orgId },
         select: { name: true, documentType: true, body: true, state: true, addendumKey: true },
       })
     : null
@@ -81,7 +82,7 @@ export async function saveDocumentTemplate(
           data: { ...input, updatedByStaffId: actor.id },
         })
       : await tx.documentTemplate.create({
-          data: { ...input, createdByStaffId: actor.id },
+          data: { ...input, orgId: actor.orgId, createdByStaffId: actor.id },
         })
     savedId = saved.id
 
@@ -112,8 +113,8 @@ export async function retireDocumentTemplate(
 ): Promise<DocumentTemplateFormState> {
   const actor = await requirePermission('template.write')
 
-  const existing = await prisma.documentTemplate.findUnique({
-    where: { id: templateId },
+  const existing = await prisma.documentTemplate.findFirst({
+    where: { id: templateId, orgId: actor.orgId },
     select: { active: true },
   })
   if (!existing) return { error: 'That template no longer exists.' }

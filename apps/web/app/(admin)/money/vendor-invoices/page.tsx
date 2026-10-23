@@ -29,7 +29,8 @@ export default async function VendorInvoicesPage() {
   const entityIds = [...new Set(scope.availableProperties.map((p) => p.legalEntityId))]
   const [vendors, invoices] = await Promise.all([
     prisma.vendor.findMany({
-      where: { active: true },
+      // R-285b: only the actor's org's vendors (PRD 10 §M3).
+      where: { orgId: actor.orgId, active: true },
       select: { id: true, name: true },
       orderBy: { name: 'asc' },
     }),

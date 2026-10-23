@@ -64,7 +64,7 @@ export async function exportDepositPacket(
         select: {
           id: true,
           name: true,
-          legalEntityId: true,
+          legalEntityId: true, orgId: true,
           addressLine1: true,
           timezone: true,
         },

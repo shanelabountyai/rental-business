@@ -32,7 +32,7 @@ const THREAD_INCLUDE = {
     select: {
       id: true,
       name: true,
-      legalEntityId: true,
+      legalEntityId: true, orgId: true,
       timezone: true,
       addressLine1: true,
       active: true,

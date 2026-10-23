@@ -43,7 +43,7 @@ export async function recordRenterInsurance(
 ): Promise<InsuranceFormState> {
   const lease = await prisma.lease.findUniqueOrThrow({
     where: { id: leaseId },
-    include: { property: { select: { id: true, legalEntityId: true } } },
+    include: { property: { select: { id: true, legalEntityId: true, orgId: true } } },
   })
   await requirePermission('lease.write', propertyResource(lease.property))
 

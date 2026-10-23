@@ -164,7 +164,7 @@ async function openApplicationReviewTask(applicationId: string): Promise<void> {
   const application = await prisma.application.findUniqueOrThrow({
     where: { id: applicationId },
     include: {
-      property: { select: { id: true, legalEntityId: true, timezone: true, addressLine1: true } },
+      property: { select: { id: true, legalEntityId: true, orgId: true, timezone: true, addressLine1: true } },
       applicants: { select: { firstName: true, lastName: true, isLead: true } },
     },
   })

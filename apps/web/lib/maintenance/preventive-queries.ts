@@ -7,12 +7,13 @@ import type { ResolvedScope } from '@/lib/scope/current-scope.ts'
 
 // Reads for preventive-maintenance batch templates (MAINT-08, R-080).
 
-export async function listPreventiveTemplates() {
-  return prisma.preventiveMaintenanceTemplate.findMany({ orderBy: { name: 'asc' } })
+// R-285b: a PM template is an org root - every read names the org.
+export async function listPreventiveTemplates(orgId: string) {
+  return prisma.preventiveMaintenanceTemplate.findMany({ where: { orgId }, orderBy: { name: 'asc' } })
 }
 
-export async function getPreventiveTemplate(id: string) {
-  return prisma.preventiveMaintenanceTemplate.findUnique({ where: { id } })
+export async function getPreventiveTemplate(id: string, orgId: string) {
+  return prisma.preventiveMaintenanceTemplate.findFirst({ where: { id, orgId } })
 }
 
 type UnitWithLastPerformed = {

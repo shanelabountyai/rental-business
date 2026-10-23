@@ -300,7 +300,7 @@ describe('"stop emailing me" (R-097e)', () => {
   it('switches off what it can and leaves the locked categories alone', async () => {
     const email = `optout-${randomUUID().slice(0, 8)}@example.test`
     const tenant = await tenantAt([propertyA], email)
-    const outcome = await honourEmailOptOut('TENANT', tenant.id, email)
+    const outcome = await honourEmailOptOut('TENANT', tenant.id, tenant.orgId, email)
 
     expect(outcome.stopped).toBeGreaterThan(0)
     const stored = await prisma.notificationPreference.findMany({

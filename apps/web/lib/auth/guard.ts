@@ -12,6 +12,7 @@ import {
   propertyScope,
   requiresMfa,
   scopeIsEmpty,
+  scopeNone,
 } from '@rental/core/rbac'
 import { redirect } from 'next/navigation'
 import { currentActor } from './actor.ts'
@@ -158,8 +159,16 @@ export async function actorDecision(
 export function propertyResource(property: {
   id: string
   legalEntityId: string
+  orgId: string
 }): Resource {
-  return { propertyId: property.id, legalEntityId: property.legalEntityId }
+  // `orgId` is required (R-285b) so a by-id action that loaded a row from
+  // another org is refused even by a portfolio-wide grant, which on its own
+  // covers any property id it is shown.
+  return {
+    orgId: property.orgId,
+    propertyId: property.id,
+    legalEntityId: property.legalEntityId,
+  }
 }
 
 /// Convenience: the scope for a permission the current actor holds.
@@ -167,7 +176,7 @@ export async function currentScope(
   permission: Permission,
 ): Promise<PropertyScope> {
   const actor = await currentActor()
-  if (!actor) return { everything: false, legalEntityIds: [], propertyIds: [] }
+  if (!actor) return scopeNone()
   return propertyScope(actor, permission)
 }
 

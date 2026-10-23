@@ -39,7 +39,7 @@ export async function settleHousehold(
   const application = await prisma.application.findUniqueOrThrow({
     where: { id: applicationId },
     include: {
-      property: { select: { id: true, legalEntityId: true, addressLine1: true, timezone: true } },
+      property: { select: { id: true, legalEntityId: true, orgId: true, addressLine1: true, timezone: true } },
       applicants: {
         include: {
           screeningReport: {

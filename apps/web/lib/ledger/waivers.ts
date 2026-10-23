@@ -56,7 +56,7 @@ export async function waiveCharge(
       amountCents: true,
       description: true,
       waivedAt: true,
-      property: { select: { id: true, legalEntityId: true } },
+      property: { select: { id: true, legalEntityId: true, orgId: true } },
       lease: {
         select: {
           leasePayers: {

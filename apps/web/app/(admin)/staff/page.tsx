@@ -20,10 +20,10 @@ export default async function StaffPage({
 }: {
   searchParams: Promise<{ show?: string }>
 }) {
-  await requirePermission('staff.read')
+  const actor = await requirePermission('staff.read')
   const includeInactive = (await searchParams).show === 'all'
   const [staff, manage] = await Promise.all([
-    listStaff({ includeInactive }),
+    listStaff(actor.orgId, { includeInactive }),
     actorDecision('staff.manage'),
   ])
   const canManage = manage.allowed

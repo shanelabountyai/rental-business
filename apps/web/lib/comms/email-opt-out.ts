@@ -57,6 +57,8 @@ export interface OptOutOutcome {
 export async function honourEmailOptOut(
   recipientType: NotificationRecipientType,
   recipientId: string,
+  // R-285b: the thread's org, which is the recipient's - never the default.
+  orgId: string,
   toAddress: string | null,
 ): Promise<OptOutOutcome> {
   const switchable: NotificationCategory[] = NOTIFICATION_CATEGORIES.filter(
@@ -75,7 +77,7 @@ export async function honourEmailOptOut(
       },
       // A deliberate override, which is exactly what this table holds - see
       // its own comment. Somebody asked; that is a deliberate choice.
-      create: { recipientType, recipientId, category, channel: 'EMAIL', enabled: false },
+      create: { orgId, recipientType, recipientId, category, channel: 'EMAIL', enabled: false },
       update: { enabled: false },
     })
   }

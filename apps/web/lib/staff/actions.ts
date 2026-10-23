@@ -9,7 +9,7 @@ import { authUrl, deliverAuthLink } from '@/lib/auth/delivery.ts'
 import { requirePermission } from '@/lib/auth/guard.ts'
 import { issueToken } from '@/lib/auth/store.ts'
 import { grantAssignment, revokeAssignment } from '@/lib/staff/assignments.ts'
-import { allAssignmentSummaries } from '@/lib/staff/queries.ts'
+import { allAssignmentSummaries, memberOf } from '@/lib/staff/queries.ts'
 import { deactivationRefusal, isStaffRoleKey, revokeRefusal } from '@/lib/staff/rules.ts'
 
 // The screen R-004's `assignments.ts` said R-007 would build, and R-007 did
@@ -61,7 +61,7 @@ export async function inviteStaff(
   _previous: StaffFormState,
   formData: FormData,
 ): Promise<StaffFormState> {
-  await requirePermission('staff.manage')
+  const actor = await requirePermission('staff.manage')
 
   const email = str(formData, 'email').toLowerCase()
   const name = str(formData, 'name')
@@ -98,6 +98,8 @@ export async function inviteStaff(
       email,
       name,
       credential: { create: { passwordHash: await hashPassword(unusable) } },
+      // R-285b: staff of the inviter's org - a grant needs the membership.
+      orgMemberships: { create: { orgId: actor.orgId } },
     },
   })
 
@@ -145,8 +147,10 @@ export async function manageStaff(
   const actor = await requirePermission('staff.manage')
   const intent = str(formData, 'intent')
 
-  const target = await prisma.staffUser.findUnique({
-    where: { id: staffUserId },
+  // R-285b: only a member of the actor's org - org A cannot deactivate,
+  // re-grant or reset org B's staff by id.
+  const target = await prisma.staffUser.findFirst({
+    where: { id: staffUserId, ...memberOf(actor.orgId) },
     select: { id: true, name: true, email: true, active: true },
   })
   if (!target) return { error: 'That staff member no longer exists.' }
@@ -172,14 +176,14 @@ export async function manageStaff(
 
   if (intent === 'revoke') {
     const assignmentId = str(formData, 'assignmentId')
-    const refusal = revokeRefusal(assignmentId, await allAssignmentSummaries())
+    const refusal = revokeRefusal(assignmentId, await allAssignmentSummaries(actor.orgId))
     if (refusal) return { error: refusal }
     await revokeAssignment(assignmentId, str(formData, 'reason') || undefined)
     return done(`Revoked. ${target.name} loses that access on their next request.`)
   }
 
   if (intent === 'deactivate') {
-    const refusal = deactivationRefusal(staffUserId, actor.id, await allAssignmentSummaries())
+    const refusal = deactivationRefusal(staffUserId, actor.id, await allAssignmentSummaries(actor.orgId))
     if (refusal) return { error: refusal }
 
     const now = new Date()
