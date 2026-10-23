@@ -14790,7 +14790,7 @@ Re-opens the project for two rows from the post-closure second-pass review of th
 
 
 ## R-285a — orgId on every org-owned table
-**Commit:** `PENDING`  ·  **Date:** 2026-10-23
+**Commit:** `d7e099b`  ·  **Date:** 2026-10-23
 
 **What it built.** Migration `20261023120000_org_id_everywhere`. 109 tables gain a required `orgId` (default `org_0`, indexed, FK to `Organization`). Every existing row is backfilled by the column default. One generic `org_scope(parentTable, fkColumn, …)` trigger is on every one of them, and on `Property` in place of R-274's `property_derive_org`. It copies `orgId` from the row's first non-null org-owned parent and refuses any other parent in a different org. It also refuses any change to `orgId`. A new `OrgMembership` table (backfilled for every staff user into org #0; it cascades when a `StaffUser` is deleted, which only test cleanup does). An AFTER trigger on `StaffAssignment` requires a live membership in the grant's org. `StaffAssignment_one_live_grant` now includes `orgId`, so one person can hold the same role in two orgs. Per-org uniques: `InspectionTemplate(orgId, defaultForType)`, `SmartLock(orgId, provider, externalId)`, `LeaseEnvelope(orgId, providerId)`, `MessagingSettings(orgId)`. Four tests in `packages/db/schema.test.ts`, including ORG-06's schema half: every model has `orgId` and an `org_scope` trigger unless it is on the org-less list.
 
