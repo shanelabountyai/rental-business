@@ -346,3 +346,58 @@ describe('task queue idempotency', () => {
     ).rejects.toThrow(/[Uu]nique constraint/)
   })
 })
+
+describe('organisation root (R-274)', () => {
+  // A property's org is derived from its entity by trigger, so a writer that
+  // names the wrong org - or none - still lands in the right one, and an
+  // entity cannot be moved into another customer's org.
+  it('derives Property.orgId from its entity, on insert and on re-parenting', async () => {
+    await expect(
+      prisma.$transaction(
+        async (tx) => {
+          const orgB = await tx.organization.create({
+            data: { slug: `r274-${Date.now()}`, name: 'Org B' },
+          })
+          const { legalEntity, property } = await seedLease(tx)
+          expect(property.orgId).toBe('org_0')
+
+          const entityB = await tx.legalEntity.create({
+            data: { orgId: orgB.id, name: 'B Holdings LLC', type: 'LLC' },
+          })
+          const moved = await tx.property.update({
+            where: { id: property.id },
+            data: { legalEntityId: entityB.id },
+          })
+          expect(moved.orgId).toBe(orgB.id)
+
+          // Naming org #0 explicitly is overwritten, not honoured.
+          const forced = await tx.property.update({
+            where: { id: property.id },
+            data: { orgId: legalEntity.orgId },
+          })
+          expect(forced.orgId).toBe(orgB.id)
+          throw new Rollback()
+        },
+        { timeout: 30_000 },
+      ),
+    ).rejects.toThrow(Rollback)
+  })
+
+  it('refuses to move a LegalEntity to another organisation', async () => {
+    await expect(
+      prisma.$transaction(
+        async (tx) => {
+          const orgB = await tx.organization.create({
+            data: { slug: `r274-move-${Date.now()}`, name: 'Org B' },
+          })
+          const { legalEntity } = await seedLease(tx)
+          await tx.legalEntity.update({
+            where: { id: legalEntity.id },
+            data: { orgId: orgB.id },
+          })
+        },
+        { timeout: 30_000 },
+      ),
+    ).rejects.toThrow(/orgId cannot change/)
+  })
+})

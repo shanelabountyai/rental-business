@@ -454,8 +454,30 @@ enum ActorType {
 // Ownership & inventory
 // ---------------------------------------------------------------------------
 
+/// R-274 (D-315): the tenant root. Every org-owned row reaches exactly one
+/// organisation; the existing portfolio is org #0, id "org_0", created by the
+/// migration that introduced this table. Nothing reads orgId to SCOPE yet -
+/// PropertyScope, Actor, memberships and the other tables are R-285.
+/// Never deleted (D-319): offboarding is export, freeze, purge.
+model Organization {
+  id        String   @id @default(cuid())
+  slug      String   @unique
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  legalEntities LegalEntity[]
+  properties    Property[]
+}
+
 model LegalEntity {
   id                      String          @id @default(cuid())
+  /// Immutable once written (trigger). The "org_0" default is a bridge so the
+  /// ~105 fixture and seed creates keep working until R-301 gives them an
+  /// org and R-288 gives the session one; R-301 drops it, after which a
+  /// create that names no org fails instead of landing in org #0.
+  orgId                   String          @default("org_0")
+  organization            Organization    @relation(fields: [orgId], references: [id], onDelete: Restrict)
   name                    String
   type                    LegalEntityType
   formationState          String? // two-letter, e.g. "TX"
@@ -485,12 +507,19 @@ model LegalEntity {
   expenses        PropertyExpense[]
   settlements     EntitySettlement[]
 
+  @@index([orgId])
   @@index([active])
 }
 
 model Property {
   id                 String       @id @default(cuid())
   legalEntityId      String
+  /// ALWAYS its entity's org: a trigger overwrites whatever is written here
+  /// on insert and on any change of legalEntityId, so a property can never
+  /// sit in a different org from the LLC that owns it. Writers leave it
+  /// out; the default only satisfies Prisma's create type.
+  orgId              String       @default("org_0")
+  organization       Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
   name               String
   addressLine1       String
   addressLine2       String?
@@ -607,6 +636,7 @@ model Property {
   violationCases      ViolationCase[]
 
   @@index([legalEntityId])
+  @@index([orgId])
   @@index([state])
   @@index([active])
 }

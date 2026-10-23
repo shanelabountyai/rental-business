@@ -14774,3 +14774,16 @@ Re-opens the project for two rows from the post-closure second-pass review of th
 
 **Gate.** lint and typecheck clean, `npm run build` clean, `npm test`: 3,578 passed + 4 skipped of 3,582. e2e `screening.spec.ts` + `applications.spec.ts` + `prospects.spec.ts`, both projects, production build: 34 of 34, matching `--list`.
 
+
+## R-274 — organisation as the tenant root
+**Commit:** _see follow-up_  ·  **Date:** 2026-10-23
+
+**What it built.** An `Organization` table and org #0 (`org_0`, slug `default`), created by migration `20261023100000_organization_root` so every environment has it. `LegalEntity.orgId` and `Property.orgId` are both required, and every existing row is backfilled to org #0. Two triggers: a property's org is always copied from its entity, on insert and on re-parenting, and an entity's org can never change. Two unit tests in `packages/db/schema.test.ts` cover both.
+
+**What it decided.** D-338. R-274 is the root only. The scope change, `Actor.orgId`, memberships and `orgId` on every other table stay with R-285. A property's org is derived, never written, so no writer needs to know it. The `org_0` column default is a bridge for the ~105 fixture creates, and R-301 removes it.
+
+**What it left behind.** Nothing reads `orgId` yet: `propertyWhere` still returns `{}` for `everything` (R-285). `Organization` has no status, brand or lifecycle fields (R-289, R-300). Production is not migrated (auto-deploy off, D-277).
+
+**Found along the way.** R-274's backlog row and R-285's both claimed the scope change. D-338 records the split.
+
+**Gate.** lint and typecheck clean. `npm test`: 3,580 passed + 4 skipped of 3,584. `npm run db:ci`: every migration from scratch, seed, no drift. No e2e: no route or UI changed, and the two app writers that create properties need no change.
