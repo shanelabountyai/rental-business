@@ -14776,7 +14776,7 @@ Re-opens the project for two rows from the post-closure second-pass review of th
 
 
 ## R-274 — organisation as the tenant root
-**Commit:** _see follow-up_  ·  **Date:** 2026-10-23
+**Commit:** `ec0e0eb`  ·  **Date:** 2026-10-23
 
 **What it built.** An `Organization` table and org #0 (`org_0`, slug `default`), created by migration `20261023100000_organization_root` so every environment has it. `LegalEntity.orgId` and `Property.orgId` are both required, and every existing row is backfilled to org #0. Two triggers: a property's org is always copied from its entity, on insert and on re-parenting, and an entity's org can never change. Two unit tests in `packages/db/schema.test.ts` cover both.
 
