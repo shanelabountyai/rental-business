@@ -14817,3 +14817,13 @@ Two full unit runs also timed out in `verify.test.ts` at 20s. The cause was mach
 
 **Gate.** lint clean (16 existing warnings), typecheck clean, `npm run db:drift` and `npm run db:ci` clean, build and `check:ship-deps` clean. `npm test`: 3,591 passed + 4 skipped of 3,595, 0 failed (full run by the subagent after its last change; the four scope test files rerun here, 81 of 81). No local e2e: the nine edited specs only reorder cleanup, so CI's sweep covers them.
 
+
+### R-285b fix — CI red on the R-285b push (2026-10-24)
+
+R-285b's CI run (`40013225946`) failed 8 e2e tests across three files; none had been run locally. Three causes.
+
+- **`import.spec.ts` cleanup** deleted properties before the grants naming them — a tenth spec the nine-file reorder missed. Its leftover "imported house" rows then failed the reserve report's axe scan (duplicate landmark names) in `vendor-invoice-splits.spec.ts`.
+- **Messaging settings could not be saved on a database with no row yet** (a real product bug). R-266's `MessagingSettings_singleton_check` (`id = 'default'`) survived R-285a's move to `@@unique([orgId])`, and R-285b's save creates a missing row with `id = orgId`. New migration `20261024120000_messaging_settings_per_org` drops the check. The spec and `messaging-settings.test.ts` now key org #0's row by `orgId`, not by the `'default'` id.
+- **`<fieldset>` overflowed a phone.** Its UA default `min-inline-size: min-content` grew the vendor invoice form to 448px in a 412px viewport once the entity list held a 46-character name, and mobile-chrome's clicks on "Record invoice" were intercepted (third instance of the R-170a trap). R-285b's code didn't cause it; the test data grew past the threshold. Fixed once in `globals.css` (`fieldset { min-inline-size: 0 }`) for all 27 files that use one, not per form.
+
+**Gate.** lint, typecheck, `db:drift` clean. `npm test`: 3,591 passed + 4 skipped of 3,595; one earlier full run timed out 20 tests in 10 unrelated files right after an e2e teardown and passed in isolation (164/164) and on a full rerun — cause unknown. e2e, both projects, `messaging-settings`, `import`, `vendor-invoice-splits`, `shell`: 57 passed + 1 skipped of 58.

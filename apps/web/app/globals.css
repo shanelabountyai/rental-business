@@ -122,4 +122,13 @@
   a:hover {
     color: var(--accent-strong);
   }
+  /* A fieldset's UA default is min-inline-size: min-content, so it grows to
+     its widest descendant's min-content - for a native select, the longest
+     option label - and no min-w-0 inside it can shrink it back. The vendor
+     invoice form hit 448px in a 412px phone once the entity list held a
+     46-character name, and mobile-chrome's clicks stopped landing (third
+     instance of the R-170a trap). Here once, for all 27 files with one. */
+  fieldset {
+    min-inline-size: 0;
+  }
 }

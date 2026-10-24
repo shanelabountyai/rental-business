@@ -42,7 +42,7 @@ async function signIn(page: import('@playwright/test').Page, email: string) {
 
 test.beforeAll(async () => {
   previousName =
-    (await prisma.messagingSettings.findUnique({ where: { id: 'default' } }))?.businessName ?? null
+    (await prisma.messagingSettings.findUnique({ where: { orgId: 'org_0' } }))?.businessName ?? null
   const entity = await prisma.legalEntity.create({ data: { name: `Settings LLC-${stamp}`, type: 'LLC' } })
   entityId = entity.id
   property = await prisma.property.create({
@@ -66,7 +66,7 @@ test.beforeEach(async ({ page }) => {
 
 test.afterAll(async () => {
   await prisma.messagingSettings.updateMany({
-    where: { id: 'default' },
+    where: { orgId: 'org_0' },
     data: { businessName: previousName },
   })
   await prisma.staffAssignment.deleteMany({ where: { staffUserId: { in: staffIds } } })

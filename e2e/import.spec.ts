@@ -98,6 +98,9 @@ test.afterAll(async () => {
   await prisma.lease.deleteMany({ where: { id: { in: leaseIds } } })
   await prisma.document.deleteMany({ where: { propertyId: { in: propertyIds } } })
   await prisma.unit.deleteMany({ where: { propertyId: { in: propertyIds } } })
+  // Grants before properties: R-285b made `StaffAssignment`'s scope keys
+  // RESTRICT, so a property a grant names can no longer be deleted under it.
+  await prisma.staffAssignment.deleteMany({ where: { staffUserId: { in: staffIds } } })
 
   const auditedProperties = new Set(
     (
@@ -118,7 +121,6 @@ test.afterAll(async () => {
     data: { active: false },
   })
 
-  await prisma.staffAssignment.deleteMany({ where: { staffUserId: { in: staffIds } } })
   // A staff row an AuditLog entry points at cannot be deleted - the FK is
   // `onDelete: Restrict` and the log itself refuses the UPDATE a cascading
   // SetNull would otherwise need (see e2e/documents.spec.ts's identical

@@ -16,8 +16,8 @@ let uncovered: { id: string; legalEntityId: string; orgId: string }
 
 async function setAssignee(staffUserId: string | null) {
   await prisma.messagingSettings.upsert({
-    where: { id: 'default' },
-    create: { id: 'default', replyTaskAssigneeStaffId: staffUserId },
+    where: { orgId: 'org_0' },
+    create: { id: 'org_0', orgId: 'org_0', replyTaskAssigneeStaffId: staffUserId },
     update: { replyTaskAssigneeStaffId: staffUserId },
   })
 }
@@ -34,7 +34,7 @@ async function staff(roleKey: string, propertyId: string) {
 
 beforeAll(async () => {
   previous = await prisma.messagingSettings.findUnique({
-    where: { id: 'default' },
+    where: { orgId: 'org_0' },
     select: { replyTaskAssigneeStaffId: true },
   })
   const entity = await prisma.legalEntity.create({ data: { name: `assignee-${Date.now()}`, type: 'LLC' } })
