@@ -9,7 +9,7 @@ import {
 import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { audit } from '@/lib/audit/index.ts'
-import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
+import { propertyResource, requirePermission, requireStaff } from '@/lib/auth/guard.ts'
 import { dispatchPendingNotifications, notify } from '@/lib/notifications/send.ts'
 import { settleHousehold, tellApplicant } from './household.ts'
 import { outOfOrderApplicationIds } from './order.ts'
@@ -91,8 +91,9 @@ export async function recordScreeningDecision(
     return { error: 'Choose the reason for this decision from the list.' }
   }
 
+  const guarded = await requireStaff()
   const applicant = await prisma.applicant.findUniqueOrThrow({
-    where: { id: applicantId },
+    where: { id: applicantId, orgId: guarded.orgId },
     include: {
       application: { include: { property: true, listing: true } },
       screeningReport: true,
@@ -380,8 +381,9 @@ export async function requestApplicantInfo(
   if (!applicantId) return { error: 'Nothing was selected.' }
   if (!request) return { error: 'Say what you need from the applicant.' }
 
+  const guarded = await requireStaff()
   const applicant = await prisma.applicant.findUniqueOrThrow({
-    where: { id: applicantId },
+    where: { id: applicantId, orgId: guarded.orgId },
     include: { application: { include: { property: true } }, screeningReport: true },
   })
   const { application } = applicant

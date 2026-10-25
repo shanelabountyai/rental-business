@@ -490,8 +490,9 @@ export async function logPhoneMaintenanceRequest(
   const leaseTenantId = str(formData, 'leaseTenantId')
   if (!leaseTenantId) return { error: 'Choose who this call is about.' }
 
+  const { actor: guarded } = await requireScope('ticket.write')
   const leaseTenant = await prisma.leaseTenant.findUnique({
-    where: { id: leaseTenantId },
+    where: { id: leaseTenantId, orgId: guarded.orgId },
     select: {
       tenantId: true,
       lease: {

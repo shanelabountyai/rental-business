@@ -139,10 +139,8 @@ export async function setTenantNotificationPreference(
   formData: FormData,
 ): Promise<FormState> {
   const { actor } = await requireScope('tenant.write')
-  // propertyForTenant (shared, lib/consent) is not org-scoped, so the org
-  // check is here: another org's tenant gets the same answer as no tenant.
-  const found = await propertyForTenant(tenantId)
-  if (!found || found.property.orgId !== actor.orgId) return { error: 'That tenant is not on a lease at any property you can see.' }
+  const found = await propertyForTenant(tenantId, actor.orgId)
+  if (!found) return { error: 'That tenant is not on a lease at any property you can see.' }
   await requirePermission('tenant.write', propertyResource(found.property))
 
   const result = await writePreference('TENANT', tenantId, found.property.orgId, formData)

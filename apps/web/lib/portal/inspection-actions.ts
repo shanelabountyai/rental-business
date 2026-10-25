@@ -34,10 +34,12 @@ export async function signInspectionAsTenant(
 ): Promise<InspectionSignFormState> {
   const { scope } = await requireTenantWithScope()
 
-  const inspection = await prisma.inspection.findUniqueOrThrow({ where: { id: inspectionId } })
-  if (!inspection.leaseId || !scope.leaseIds.includes(inspection.leaseId)) {
+  const inspection = await prisma.inspection.findUnique({ where: { id: inspectionId } })
+  if (!inspection?.leaseId || !scope.leaseIds.includes(inspection.leaseId)) {
     // "Not yours" reads the same as "does not exist" (DOC-03's own rule) -
     // no signal to a tenant probing an id that it belongs to someone else.
+    // `findUnique`, not `OrThrow`: a missing id threw while another tenant's
+    // returned this, which was exactly that signal (R-286c).
     return { error: 'That report could not be found.' }
   }
 
@@ -106,7 +108,7 @@ function str(formData: FormData, name: string): string {
 }
 
 async function selfGuidedItemForWrite(itemId: string, scope: { leaseIds: readonly string[] }) {
-  const item = await prisma.inspectionItem.findUniqueOrThrow({
+  const item = await prisma.inspectionItem.findUnique({
     where: { id: itemId },
     include: {
       inspection: {
@@ -118,6 +120,7 @@ async function selfGuidedItemForWrite(itemId: string, scope: { leaseIds: readonl
   // own rule) - neither is a signal worth giving back to a tenant probing an
   // id.
   if (
+    !item ||
     !item.inspection.selfGuided ||
     !item.inspection.leaseId ||
     !scope.leaseIds.includes(item.inspection.leaseId)
@@ -179,11 +182,11 @@ export async function finishInspectionAsTenant(
   _formData: FormData,
 ): Promise<InspectionSignFormState> {
   const { scope } = await requireTenantWithScope()
-  const inspection = await prisma.inspection.findUniqueOrThrow({
+  const inspection = await prisma.inspection.findUnique({
     where: { id: inspectionId },
     include: { items: { select: { condition: true } } },
   })
-  if (!inspection.selfGuided || !inspection.leaseId || !scope.leaseIds.includes(inspection.leaseId)) {
+  if (!inspection?.selfGuided || !inspection.leaseId || !scope.leaseIds.includes(inspection.leaseId)) {
     return { error: 'That report could not be found.' }
   }
 

@@ -158,7 +158,8 @@ export async function fileUnroutedMessage(
   _previous: FormState,
   formData: FormData,
 ): Promise<FormState> {
-  if (!triagesUnrouted(await requireStaff(), true)) {
+  const staff = await requireStaff()
+  if (!triagesUnrouted(staff, true)) {
     redirect('/no-access?permission=message.send&reason=no_permission')
   }
   const tenantId = str(formData, 'tenantId')
@@ -166,7 +167,7 @@ export async function fileUnroutedMessage(
     return { error: 'Choose who this message is from.' }
   }
 
-  const propertyId = await propertyForTenant(tenantId)
+  const propertyId = await propertyForTenant(tenantId, staff.orgId)
   if (!propertyId) {
     return {
       error: 'That tenant has no lease on file, so there is no property to file this under.',
@@ -191,6 +192,7 @@ export async function fileUnroutedMessage(
   try {
     await routeUnroutedMessage({
       unroutedId,
+      orgId: actor.orgId,
       threadId: thread.id,
       staffUserId: actor.id,
     })

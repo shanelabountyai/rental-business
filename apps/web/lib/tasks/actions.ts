@@ -41,13 +41,14 @@ function str(formData: FormData, name: string): string {
   return typeof value === 'string' ? value.trim() : ''
 }
 
-async function propertyOrThrow(propertyId: string) {
-  return prisma.property.findUniqueOrThrow({ where: { id: propertyId } })
+// Both by `{ id, orgId }`, so another org's id throws exactly as a missing one does (R-286c).
+async function propertyOrThrow(propertyId: string, orgId: string) {
+  return prisma.property.findUniqueOrThrow({ where: { id: propertyId, orgId } })
 }
 
-async function taskWithPropertyOrThrow(taskId: string) {
+async function taskWithPropertyOrThrow(taskId: string, orgId: string) {
   return prisma.task.findUniqueOrThrow({
-    where: { id: taskId },
+    where: { id: taskId, orgId },
     include: { property: true },
   })
 }
@@ -69,7 +70,8 @@ export async function addTask(
   if (!propertyId) {
     return { error: 'Choose a property.' }
   }
-  const property = await propertyOrThrow(propertyId)
+  const guarded = await requireStaff()
+  const property = await propertyOrThrow(propertyId, guarded.orgId)
   await requirePermission('task.write', propertyResource(property))
 
   const input: TaskInput = {
@@ -102,7 +104,7 @@ export async function addTask(
 /// parameters than the type it satisfies, and the form carries no fields.
 export async function claimTask(taskId: string): Promise<FormState> {
   const actor = await requireStaff()
-  const task = await taskWithPropertyOrThrow(taskId)
+  const task = await taskWithPropertyOrThrow(taskId, actor.orgId)
   await requirePermission('task.write', propertyResource(task.property))
 
   if (task.assigneeStaffId && task.assigneeStaffId !== actor.id) {
@@ -125,7 +127,7 @@ export async function completeTask(
   formData: FormData,
 ): Promise<FormState> {
   const actor = await requireStaff()
-  const task = await taskWithPropertyOrThrow(taskId)
+  const task = await taskWithPropertyOrThrow(taskId, actor.orgId)
   await requirePermission('task.write', propertyResource(task.property))
 
   if (task.status === 'DONE' || task.status === 'CANCELED') {
@@ -150,7 +152,7 @@ export async function completeTask(
 /// worth doing; who closed it out either way is the useful fact.
 export async function cancelTask(taskId: string): Promise<FormState> {
   const actor = await requireStaff()
-  const task = await taskWithPropertyOrThrow(taskId)
+  const task = await taskWithPropertyOrThrow(taskId, actor.orgId)
   await requirePermission('task.write', propertyResource(task.property))
 
   if (task.status === 'DONE' || task.status === 'CANCELED') {

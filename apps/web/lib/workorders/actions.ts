@@ -76,6 +76,8 @@ export async function createWorkOrder(
   formData: FormData,
 ): Promise<WorkOrderFormState> {
   const ticketId = str(formData, 'ticketId') || null
+  const { actor: guarded } = await requireScope('workorder.write')
+  const orgId = guarded.orgId
 
   // The ticket, when there is one, is the source of truth for property and
   // unit - not a second, separately-submitted pair that could disagree with
@@ -84,14 +86,14 @@ export async function createWorkOrder(
   let propertyId: string
   let unitId: string
   if (ticketId) {
-    ticket = await prisma.ticket.findUnique({ where: { id: ticketId } })
+    ticket = await prisma.ticket.findUnique({ where: { id: ticketId, orgId } })
     if (!ticket) return { error: 'That ticket could not be found.' }
     propertyId = ticket.propertyId
     unitId = ticket.unitId
   } else {
     unitId = str(formData, 'unitId')
     if (!unitId) return { error: 'Choose a unit.' }
-    const unit = await prisma.unit.findUnique({ where: { id: unitId } })
+    const unit = await prisma.unit.findUnique({ where: { id: unitId, orgId } })
     if (!unit) return { error: 'That unit could not be found.' }
     propertyId = unit.propertyId
   }

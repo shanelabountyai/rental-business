@@ -22,13 +22,30 @@ export function withWriteSpy<C>(client: C): C {
   return (client as unknown as { $extends: (extension: unknown) => C }).$extends({
     query: {
       async $allOperations({ model, operation, args, query }: Query) {
-        if (model) ops.push({ name: `${model}.${operation}`, write: WRITE.test(operation) })
-        else {
-          const sql = rawSql(args)
-          ops.push({ name: `raw ${sql.trim().slice(0, 60)}`, write: RAW_WRITE.test(sql) })
+        const op: Op = model
+          ? { name: `${model}.${operation}`, write: WRITE.test(operation) }
+          : { name: `raw ${rawSql(args).trim().slice(0, 60)}`, write: RAW_WRITE.test(rawSql(args)) }
+        ops.push(op)
+        let result: unknown
+        try {
+          result = await query(args)
+        } catch (e) {
+          // A write that threw changed nothing: `update({ where: { id, orgId } })`
+          // on another org's id throws, and that is the scoping working.
+          op.write = false
+          throw e
         }
-        return query(args)
+        // A *Many or raw write that matched no row changed nothing: the shape
+        // of an id lookup filtered by its org (`deleteMany({ id, orgId })`).
+        const count = typeof result === 'number' ? result : (result as { count?: unknown } | null)?.count
+        if (op.write && count === 0) op.write = false
+        return result
       },
     },
   })
 }
+
+// Who the next call is made as. Here for the same reason as `ops`: the test
+// file's `@/auth.ts` mock reads it while the module graph is still loading.
+export type Principal = { id: string; kind: 'staff' | 'tenant' | 'guarantor'; email: null; name: string; mfaEnrolled: boolean; mfaVerified: boolean }
+export const session: { principal: Principal | null } = { principal: null }

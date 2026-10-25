@@ -424,6 +424,7 @@ describe('filing an unrouted message', () => {
 
     const message = await routeUnroutedMessage({
       unroutedId: inbound.unroutedId,
+      orgId: thread.orgId,
       threadId: thread.id,
       staffUserId: staffId,
     })
@@ -460,11 +461,13 @@ describe('filing an unrouted message', () => {
     const attempts = await Promise.allSettled([
       routeUnroutedMessage({
         unroutedId: inbound.unroutedId,
+        orgId: thread.orgId,
         threadId: thread.id,
         staffUserId: staffId,
       }),
       routeUnroutedMessage({
         unroutedId: inbound.unroutedId,
+        orgId: thread.orgId,
         threadId: thread.id,
         staffUserId: staffId,
       }),

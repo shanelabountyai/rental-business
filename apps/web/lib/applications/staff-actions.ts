@@ -126,8 +126,9 @@ export async function addApplicantNote(
   if (!body) return { error: 'Write the note first.' }
   if (body.length > 4000) return { error: 'Keep a note under 4,000 characters.' }
 
+  const { actor: guarded } = await requireScope('screening.decide')
   const applicant = await prisma.applicant.findUniqueOrThrow({
-    where: { id: applicantId },
+    where: { id: applicantId, orgId: guarded.orgId },
     include: { application: { include: { property: true } } },
   })
   const { application } = applicant

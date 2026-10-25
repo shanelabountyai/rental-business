@@ -83,8 +83,10 @@ export async function sendReminders(
     return { error: 'That template is no longer available.' }
   }
 
+  // By org first: another org's lease is simply not found, as a missing one
+  // is, rather than reported back as "outside your properties" (R-286c).
   const leases = await prisma.lease.findMany({
-    where: { id: { in: leaseIds } },
+    where: { id: { in: leaseIds }, orgId: actor.orgId },
     select: {
       id: true,
       propertyId: true,

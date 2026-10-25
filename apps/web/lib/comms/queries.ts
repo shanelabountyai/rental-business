@@ -113,7 +113,10 @@ export function triagesUnrouted(actor: Actor, filing = false): boolean {
 export async function listUnroutedMessages(actor: Actor, limit = 50) {
   if (!triagesUnrouted(actor)) return []
   return prisma.unroutedMessage.findMany({
-    where: { routedAt: null },
+    // The actor's org only: portfolio-wide means this org's portfolio (PRD 10
+    // §3). Until R-292 routes inbound by `To`, every unrouted message lands in
+    // org #0, so org #0 sees what it always saw and nobody else sees it.
+    where: { routedAt: null, orgId: actor.orgId },
     orderBy: { receivedAt: 'asc' },
     take: limit,
   })
@@ -121,5 +124,5 @@ export async function listUnroutedMessages(actor: Actor, limit = 50) {
 
 export async function unroutedCount(actor: Actor): Promise<number> {
   if (!triagesUnrouted(actor)) return 0
-  return prisma.unroutedMessage.count({ where: { routedAt: null } })
+  return prisma.unroutedMessage.count({ where: { routedAt: null, orgId: actor.orgId } })
 }

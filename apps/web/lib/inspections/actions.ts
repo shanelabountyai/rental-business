@@ -89,8 +89,9 @@ export async function startInspection(
     return { error: 'Choose an inspection type.', fieldErrors: { type: 'Required.' } }
   }
 
+  const { actor: guarded } = await requireScope('inspection.write')
   const unit = await prisma.unit.findUniqueOrThrow({
-    where: { id: unitId },
+    where: { id: unitId, orgId: guarded.orgId },
     include: { property: { select: { id: true, legalEntityId: true, orgId: true, addressLine1: true } } },
   })
   await requirePermission('inspection.write', propertyResource(unit.property))

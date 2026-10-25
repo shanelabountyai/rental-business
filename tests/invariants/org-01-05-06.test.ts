@@ -133,6 +133,7 @@ describe('controls', () => {
       'unscoped.ts#untagged: untagged parameter "workOrderId"',
       'unscoped.ts#missing: no manifest entry: add one to tests/invariants/actions.manifest.ts',
       'unscoped.ts: untagged id-like form field "ticketId"',
+      'unscoped.ts: untagged id-like form field "unitId"',
     ])
   })
 

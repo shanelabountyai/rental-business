@@ -46,8 +46,10 @@ export async function createDepositBatch(
   const { actor } = await requireScope('ledger.adjust')
   const scope = await currentScope(actor, 'ledger.adjust')
 
+  // By org, so another org's payment is "no longer exists", not "outside what
+  // you can see": the second answer confirms the id is real (R-286c).
   const payments = await prisma.payment.findMany({
-    where: { id: { in: paymentIds } },
+    where: { id: { in: paymentIds }, orgId: actor.orgId },
     select: {
       id: true,
       propertyId: true,

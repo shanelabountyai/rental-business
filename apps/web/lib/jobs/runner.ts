@@ -440,9 +440,11 @@ export type RerunResult =
  * is the thing the panel exists to show; a re-run must not erase it.
  * ==========================================================================
  */
-export async function rerunJobRun(jobRunId: string): Promise<RerunResult> {
+/// `orgId` is the caller's: another org's run answers `not_found`, exactly as
+/// a missing one does (R-286c found this unscoped).
+export async function rerunJobRun(jobRunId: string, orgId: string): Promise<RerunResult> {
   const run = await prisma.jobRun.findUnique({
-    where: { id: jobRunId },
+    where: { id: jobRunId, orgId },
     select: {
       id: true,
       jobType: true,

@@ -134,6 +134,20 @@ describe('SEC-16: the unrouted inbox is portfolio-wide only', () => {
     expect(await unroutedCount(actor)).toBeGreaterThan(0)
   })
 
+  // R-286c: "portfolio-wide" is this org's portfolio. The query had no org
+  // at all, so another org's strangers' texts were listed here too.
+  it("portfolio-wide staff do not see another org's", async () => {
+    const other = await prisma.organization.create({ data: { slug: `unrouted-${unique}`, name: 'Other org' } })
+    const theirs = await prisma.unroutedMessage.create({
+      data: { orgId: other.id, channel: 'SMS', fromAddress: '+15550000000', body: `theirs ${unique}`, reason: 'UNKNOWN_SENDER', receivedAt: new Date() },
+    })
+    const actor = (await loadStaffActor(portfolio, true))!
+    const listed = await listUnroutedMessages(actor, 10_000)
+    await prisma.unroutedMessage.delete({ where: { id: theirs.id } })
+    await prisma.organization.delete({ where: { id: other.id } })
+    expect(listed.map((m) => m.id)).not.toContain(theirs.id)
+  })
+
   it('a one-house manager cannot file, even into their own house', async () => {
     const row = await stray()
     await expect(fileAs(oneHouse, row.id, a.tenant.id)).rejects.toThrow('REDIRECT /no-access')

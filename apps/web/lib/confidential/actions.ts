@@ -110,8 +110,9 @@ export async function openConfidentialCase(
   const leaseId = str(formData, 'leaseId')
   if (!leaseId) return { error: 'No tenancy named.' }
 
+  const { actor: guarded } = await requireScope('confidential.manage')
   const lease = await prisma.lease.findUnique({
-    where: { id: leaseId },
+    where: { id: leaseId, orgId: guarded.orgId },
     select: {
       id: true,
       status: true,

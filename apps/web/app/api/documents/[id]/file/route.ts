@@ -2,6 +2,7 @@
 import { tenantCanSeeDocument } from '@rental/core/portal'
 import { prisma } from '@rental/db'
 import { auth } from '@/auth.ts'
+import { currentActor } from '@/lib/auth/actor.ts'
 import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
 import { tenantScope } from '@/lib/portal/guard.ts'
 import { documentFileResponse } from '@/lib/documents/serve.ts'
@@ -90,6 +91,12 @@ export async function GET(
   // completion) was unreachable to everybody, including the owner who produced
   // it. `assignmentCovers` picks ONE branch per assignment and never falls
   // back, which is why the entity id is passed on both paths.
+  //
+  // Another org's document is a 404 before any permission check, as a missing
+  // one is: `requirePermission` would send it to /no-access, which confirms the
+  // id is real (R-286c, page-level ORG-04).
+  const actor = await currentActor()
+  if (!actor || document.orgId !== actor.orgId) return new Response('Not found', { status: 404 })
   if (document.property) {
     await requirePermission('document.read', propertyResource(document.property))
     return serve(document)

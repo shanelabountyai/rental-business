@@ -659,7 +659,9 @@ describe('missed and failed runs', () => {
     expect(failed.status).toBe('FAILED')
 
     explode = false
-    expect(await rerunJobRun(failed.id)).toEqual({ ok: true })
+    // Another org's owner holds job.manage too, and must not reach this run (R-286c).
+    expect(await rerunJobRun(failed.id, 'org-that-is-not-this-one')).toEqual({ ok: false, reason: 'not_found' })
+    expect(await rerunJobRun(failed.id, failed.orgId)).toEqual({ ok: true })
 
     const after = await prisma.jobRun.findUniqueOrThrow({
       where: { id: failed.id },
@@ -709,7 +711,7 @@ describe('missed and failed runs', () => {
     })
     expect(succeeded.status).toBe('SUCCEEDED')
 
-    expect(await rerunJobRun(succeeded.id)).toEqual({
+    expect(await rerunJobRun(succeeded.id, succeeded.orgId)).toEqual({
       ok: false,
       reason: 'not_failed',
     })
@@ -732,7 +734,7 @@ describe('missed and failed runs', () => {
     })
 
     SCHEDULED_JOBS.length = 0
-    expect(await rerunJobRun(failed.id)).toEqual({
+    expect(await rerunJobRun(failed.id, failed.orgId)).toEqual({
       ok: false,
       reason: 'unknown_job',
     })

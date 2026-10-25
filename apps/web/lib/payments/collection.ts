@@ -9,7 +9,7 @@ import type { CollectionMethod } from '@rental/core/payments'
 import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { audit } from '@/lib/audit/index.ts'
-import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
+import { propertyResource, requirePermission, requireStaff } from '@/lib/auth/guard.ts'
 import { getBillingProvider } from '@/lib/billing/provider.ts'
 import type { WorkOrderFormState } from '@/lib/workorders/actions.ts'
 
@@ -54,8 +54,9 @@ export async function switchCollectionMethod(
     }
   }
 
+  const guarded = await requireStaff()
   const payer = await prisma.leasePayer.findUniqueOrThrow({
-    where: { id: leasePayerId },
+    where: { id: leasePayerId, orgId: guarded.orgId },
     select: {
       id: true,
       leaseId: true,

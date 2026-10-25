@@ -10,7 +10,7 @@ import { businessDate, friendlyBusinessDate } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { audit } from '@/lib/audit/index.ts'
-import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
+import { propertyResource, requirePermission, requireStaff } from '@/lib/auth/guard.ts'
 import { renderBlocksPdf } from '@/lib/pdf/render.ts'
 import { generateStorageKey, storage } from '@/lib/storage/index.ts'
 
@@ -47,8 +47,9 @@ export async function generateDocumentFromTemplate(
     return { error: 'Who is this for?', fieldErrors: { recipientName: 'Required.' } }
   }
 
+  const guarded = await requireStaff()
   const property = await prisma.property.findUniqueOrThrow({
-    where: { id: propertyId },
+    where: { id: propertyId, orgId: guarded.orgId },
     include: { legalEntity: { select: { name: true } } },
   })
   const actor = await requirePermission('document.write', propertyResource(property))

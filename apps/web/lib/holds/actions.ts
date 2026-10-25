@@ -4,7 +4,7 @@ import { HOLD_DEFINITIONS, holdTypeLabel, isHoldType, liftIsPrivileged } from '@
 import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { audit } from '@/lib/audit/index.ts'
-import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
+import { propertyResource, requirePermission, requireStaff } from '@/lib/auth/guard.ts'
 import { toCoreHoldType, toDbHoldType } from '@/lib/holds/queries.ts'
 
 // Placing and lifting lease holds (RISK-11, RISK-12; R-084).
@@ -48,8 +48,9 @@ export async function placeLeaseHold(
   }
   if (!reason) return { error: 'A reason is required. It is what the hold is defended from later.' }
 
+  const guarded = await requireStaff()
   const lease = await prisma.lease.findUnique({
-    where: { id: leaseId },
+    where: { id: leaseId, orgId: guarded.orgId },
     select: { id: true, propertyId: true, property: { select: { id: true, legalEntityId: true, orgId: true } } },
   })
   if (!lease) return { error: 'That tenancy no longer exists.' }
@@ -117,8 +118,9 @@ export async function liftLeaseHold(
     }
   }
 
+  const guarded = await requireStaff()
   const hold = await prisma.leaseHold.findUnique({
-    where: { id: holdId },
+    where: { id: holdId, orgId: guarded.orgId },
     select: {
       id: true,
       leaseId: true,

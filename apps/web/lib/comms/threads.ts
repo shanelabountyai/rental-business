@@ -75,10 +75,11 @@ export async function resolveThread(
  */
 export async function propertyForTenant(
   tenantId: string,
+  orgId: string,
   db: Db = prisma,
 ): Promise<string | null> {
   const leaseTenant = await db.leaseTenant.findFirst({
-    where: { tenantId },
+    where: { tenantId, orgId },
     orderBy: { lease: { startsOn: 'desc' } },
     select: { lease: { select: { propertyId: true } } },
   })

@@ -156,9 +156,10 @@ export async function createLease(
   formData: FormData,
 ): Promise<LeaseFormState> {
   const unitId = str(formData, 'unitId')
+  const { actor: guarded } = await requireScope('lease.write')
   const unit = unitId
     ? await prisma.unit.findUnique({
-        where: { id: unitId },
+        where: { id: unitId, orgId: guarded.orgId },
         include: { property: { select: { id: true, legalEntityId: true, orgId: true } } },
       })
     : null

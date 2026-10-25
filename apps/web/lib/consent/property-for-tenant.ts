@@ -14,9 +14,12 @@ import { prisma } from '@rental/db'
 /// mirror in lib/notifications/actions.ts. "Consent" in this file's name is
 /// history, not scope - this helper answers "which property may staff edit
 /// this tenant through", which is the same question for either table.
-export async function propertyForTenant(tenantId: string) {
+///
+/// `orgId` is the caller's: another org's tenant has no property here, the
+/// same answer as no tenant at all (R-286c).
+export async function propertyForTenant(tenantId: string, orgId: string) {
   const leaseTenant = await prisma.leaseTenant.findFirst({
-    where: { tenantId },
+    where: { tenantId, orgId },
     orderBy: { createdAt: 'desc' },
     select: { leaseId: true, lease: { select: { property: true } } },
   })

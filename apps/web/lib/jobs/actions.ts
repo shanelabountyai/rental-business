@@ -39,11 +39,11 @@ export async function rerunJobAction(
   _state: FormState,
   formData: FormData,
 ): Promise<FormState> {
-  await requirePermission('job.manage')
+  const actor = await requirePermission('job.manage')
   const jobRunId = String(formData.get('jobRunId') ?? '')
   if (!jobRunId) return { error: 'Which run?' }
 
-  const result = await rerunJobRun(jobRunId)
+  const result = await rerunJobRun(jobRunId, actor.orgId)
 
   // Audited whether it worked or not. Re-running a nightly job is a staff act
   // with side effects on somebody's ledger and somebody's statutory clock, and

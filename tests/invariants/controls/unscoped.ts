@@ -13,6 +13,8 @@ export async function untagged(workOrderId: string) {
   return workOrderId
 }
 
+const str = (formData: FormData, key: string) => String(formData.get(key) ?? '')
+
 export async function missing(_previous: unknown, formData: FormData) {
-  return formData.get('ticketId')
+  return [formData.get('ticketId'), str(formData, 'unitId')]
 }

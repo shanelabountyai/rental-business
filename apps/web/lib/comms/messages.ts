@@ -516,11 +516,15 @@ async function storeAttachments(
  */
 export async function routeUnroutedMessage(args: {
   unroutedId: string
+  /// The filer's org. Another org's unrouted message throws exactly as a
+  /// missing one does; unscoped, it copied that org's message body into this
+  /// org's thread until the database's cross-org trigger refused (R-286c).
+  orgId: string
   threadId: string
   staffUserId: string
 }) {
   const unrouted = await prisma.unroutedMessage.findUniqueOrThrow({
-    where: { id: args.unroutedId },
+    where: { id: args.unroutedId, orgId: args.orgId },
   })
   if (unrouted.routedMessageId) {
     // Already filed by somebody else. Not an error - two people opening the

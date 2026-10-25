@@ -5,7 +5,7 @@ import type { ConsentBasisName, ConsentChannelName } from '@rental/core/consent'
 import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { audit } from '@/lib/audit/index.ts'
-import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
+import { propertyResource, requirePermission, requireScope } from '@/lib/auth/guard.ts'
 import { requireTenant } from '@/lib/portal/guard.ts'
 import { propertyForTenant } from './property-for-tenant.ts'
 
@@ -31,14 +31,14 @@ function str(formData: FormData, name: string): string {
 /// (R-196). A tenant goes through any lease they hold; a guarantor row is
 /// itself per-lease, so it is that lease. `tenant.write` either way: "who may
 /// assert what a party to this tenancy agreed to" is one question.
-async function consentSubject(key: { tenantId: string | null; guarantorId: string | null }) {
+async function consentSubject(key: { tenantId: string | null; guarantorId: string | null }, orgId: string) {
   if (key.tenantId) {
-    const found = await propertyForTenant(key.tenantId)
+    const found = await propertyForTenant(key.tenantId, orgId)
     return found && { ...found, key: { tenantId: key.tenantId }, entityType: 'Tenant', entityId: key.tenantId }
   }
   if (key.guarantorId) {
     const guarantor = await prisma.guarantor.findUnique({
-      where: { id: key.guarantorId },
+      where: { id: key.guarantorId, orgId },
       select: { leaseId: true, lease: { select: { property: true } } },
     })
     return (
@@ -67,10 +67,14 @@ export async function recordConsent(
   if (!partyId || (partyType !== 'TENANT' && partyType !== 'GUARANTOR')) {
     return { error: 'Choose who consented.' }
   }
-  const found = await consentSubject({
-    tenantId: partyType === 'TENANT' ? partyId : null,
-    guarantorId: partyType === 'GUARANTOR' ? partyId : null,
-  })
+  const { actor: guarded } = await requireScope('tenant.write')
+  const found = await consentSubject(
+    {
+      tenantId: partyType === 'TENANT' ? partyId : null,
+      guarantorId: partyType === 'GUARANTOR' ? partyId : null,
+    },
+    guarded.orgId,
+  )
   if (!found) return { error: 'That person is not on a lease at any property you can see.' }
   const { property, leaseId } = found
   const actor = await requirePermission('tenant.write', propertyResource(property))
@@ -145,11 +149,13 @@ export async function withdrawConsent(
   // way: one action serves every row in the list.
   const consentId = str(formData, 'consentId')
   if (!consentId) return { error: 'That consent record could not be found.' }
-  const consent = await prisma.tenantConsent.findUniqueOrThrow({
-    where: { id: consentId },
+  const { actor: guarded } = await requireScope('tenant.write')
+  const consent = await prisma.tenantConsent.findFirst({
+    where: { id: consentId, orgId: guarded.orgId },
     select: { id: true, tenantId: true, guarantorId: true, channel: true, basis: true, revokedAt: true },
   })
-  const found = await consentSubject(consent)
+  if (!consent) return { error: 'That consent record could not be found.' }
+  const found = await consentSubject(consent, guarded.orgId)
   if (!found) return { error: 'That person is not on a lease at any property you can see.' }
   const { property, leaseId } = found
   await requirePermission('tenant.write', propertyResource(property))

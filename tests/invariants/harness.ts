@@ -14,7 +14,8 @@ import path from 'node:path'
 import { Prisma } from '@rental/db'
 import { PUBLIC_ROUTES } from '@/app/public-routes.ts'
 import { type Entry, type Tag, manifest } from './actions.manifest.ts'
-import { type Op, ops } from './write-spy.ts'
+import type { Org } from './fixture.ts'
+import { type Op, ops, session } from './write-spy.ts'
 
 export type Finding = { inv: 'ORG-01' | 'HARNESS'; action: string; detail: string }
 type Found = { file: string; name: string; fn: unknown }
@@ -145,25 +146,27 @@ export function manifestFindings(found: Found[], entries: Record<string, Entry> 
       if (!PLAIN.test(p) && !(p in entry)) out.push({ inv: 'HARNESS', action, detail: `untagged parameter "${p}"` })
     }
     for (const [k, tag] of Object.entries(entry)) {
-      if (k === 'public') continue
+      if (k === 'public' || k === 'unreached') continue
       if (k.startsWith('form.')) {
         const fields = tagged.get(f.file) ?? new Set()
         fields.add(k.slice(5))
         tagged.set(f.file, fields)
       }
-      if (tag !== 'token' && tag !== 'value' && !MODELS.has(tag.replace(/\[\]$/, ''))) {
+      if (tag !== 'token' && tag !== 'value' && !tag.startsWith('=') && !MODELS.has(tag.replace(/\[\]$/, ''))) {
         out.push({ inv: 'HARNESS', action, detail: `"${k}" names "${tag}", which is not a model` })
       }
     }
   }
   // An id-like field the file reads that no entry in the file tags would be
   // filled with nothing and skip the cross-org swap silently.
-  // ponytail: literal `formData.get('x')` in the action file only; a field read
-  // in an imported builder is invisible here, and R-286b's own-org sanity call
-  // is what catches an action that cannot be driven.
+  // Both `formData.get('x')` and a helper's `str(formData, 'x')`: R-286a saw
+  // only the first, and 49 fields read through `str`/`all` went untagged.
+  // ponytail: literal names in the action file only; a field read in an
+  // imported builder is invisible here, and the own-org sanity call is what
+  // catches an action that cannot be driven.
   for (const file of new Set(found.map((f) => f.file))) {
     const src = readFileSync(path.join(cwd, file), 'utf8')
-    for (const m of src.matchAll(/\.get(?:All)?\(\s*['"](\w+)['"]/g)) {
+    for (const m of src.matchAll(/(?:\.get(?:All)?\(|\b\w+\(\s*formData\s*,)\s*['"](\w+)['"]/g)) {
       if (ID_LIKE.test(m[1]!) && !tagged.get(file)?.has(m[1]!)) {
         out.push({ inv: 'HARNESS', action: file, detail: `untagged id-like form field "${m[1]}"` })
       }
@@ -191,18 +194,18 @@ export type Outcome = { kind: 'guard' | 'redirect' | 'notFound' | 'returned' | '
 export const NONEXISTENT = 'org-harness-nonexistent'
 
 /** Calls an export the way a form post does: positional ids, then previous state, then FormData. */
-export async function call(f: Found, pick: (tag: Tag) => string, entries: Record<string, Entry> = manifest): Promise<Outcome> {
+export async function call(f: Found, pick: (tag: Tag, path: string) => string, entries: Record<string, Entry> = manifest): Promise<Outcome> {
   const entry = entries[keyOf(f)]!
   const fn = f.fn as (...args: unknown[]) => Promise<unknown>
   const form = new FormData()
   for (const [k, tag] of Object.entries(entry)) {
-    if (k.startsWith('form.')) form.append(k.slice(5), pick(tag))
+    if (k.startsWith('form.')) form.append(k.slice(5), pick(tag, k))
   }
   const args = paramsOf(fn).map((p) => {
     if (/formData$/i.test(p)) return form
     if (PLAIN.test(p)) return undefined
     const tag = entry[p]!
-    return tag === 'value' ? undefined : pick(tag)
+    return tag === 'value' ? undefined : pick(tag, p)
   })
   ops.length = 0
   let o: Omit<Outcome, 'ops'>
@@ -235,7 +238,7 @@ export async function runAnonymous(found: Found[], entries: Record<string, Entry
   for (const f of found) {
     const entry = entries[keyOf(f)]
     if (!entry || typeof f.fn !== 'function') continue
-    const o = await call(f, (tag) => (tag === 'token' ? 'org-harness-bad-token' : NONEXISTENT), entries)
+    const o = await call(f, (tag) => (tag === 'token' ? 'org-harness-bad-token' : tag.startsWith('=') ? tag.slice(1) : NONEXISTENT), entries)
     const action = keyOf(f)
     const stray = o.ops.filter((op) => op.write && !STRANGER_WRITES.test(op.name))
     const linkOrPublic = entry.public !== undefined || Object.values(entry).includes('token')
@@ -244,4 +247,153 @@ export async function runAnonymous(found: Found[], entries: Record<string, Entry
     else if (!linkOrPublic && o.ops.length) out.push({ inv: 'ORG-01', action, detail: `anonymous call queried before refusing: ${detail}` })
   }
   return out
+}
+
+// ---- ORG-02/03/04: the two-org fixture (R-286c)
+
+type Pick = (tag: Tag, path: string) => string
+const ID_TAG = (tag: Tag) => tag !== 'token' && tag !== 'value' && !tag.startsWith('=')
+const KINDS = { staff: 'owner', tenant: 'tenant', guarantor: 'guarantor' } as const
+type Kind = keyof typeof KINDS
+const PORTAL_LOGIN: Record<string, Kind> = { '/portal/login': 'tenant', '/portal/guarantor/login': 'guarantor' }
+
+/** The paths of an entry that carry a row id: positional names and `form.` fields. */
+export const idPaths = (entry: Entry) =>
+  Object.entries(entry).filter(([k, t]) => k !== 'public' && k !== 'unreached' && ID_TAG(t)).map(([k]) => k)
+
+/** Every model the manifest names, for the fixture to make one row of. */
+export const manifestModels = (entries: Record<string, Entry> = manifest) => [
+  ...new Set(Object.values(entries).flatMap((e) => idPaths(e).map((p) => e[p]!.replace(/\[\]$/, '')))),
+]
+
+function as(o: Org, kind: Kind) {
+  session.principal = { id: o[KINDS[kind]], kind, email: null, name: `${kind} ${o.key}`, mfaEnrolled: true, mfaVerified: true }
+}
+
+const idOf = (o: Org) => (tag: Tag) => {
+  const id = o.rows.get(tag[0]!.toUpperCase() + tag.replace(/\[\]$/, '').slice(1))
+  if (!id) throw new Error(`no fixture row for "${tag}"`)
+  return id
+}
+const pickFrom = (org: (path: string) => Org | null): Pick => (tag, path) => {
+  if (tag === 'token') return 'org-harness-bad-token'
+  if (tag === 'value') return ''
+  if (tag.startsWith('=')) return tag.slice(1)
+  const o = org(path)
+  return o ? idOf(o)(tag) : NONEXISTENT
+}
+
+/** The outcome with every id the caller supplied replaced, so an echo of the id cannot differ. */
+function shape(o: Outcome, ids: string[]): string {
+  // A production build answers every thrown action error with the same
+  // generic message and a digest, so two throws look identical to the caller
+  // whatever their text (and their text names source lines, which differ).
+  if (o.kind === 'threw') return '["threw"]'
+  let s = JSON.stringify([o.kind, o.detail ?? null])
+  for (const id of ids) s = s.split(id).join('<id>')
+  // A row each call created (a redirect to `/compliance/<new id>`) is not an
+  // answer that depends on the id supplied.
+  return s.replace(/\bc[a-z0-9]{24}\b/g, '<new>')
+}
+
+// A cross-org call may write what the same call naming a missing row writes
+// (an audit of the refusal, a rate-limit hit): ORG-04 asks for exactly that
+// equivalence. Anything more is a write the other org's id caused.
+const writes = (o: Outcome) => o.ops.filter((op) => op.write).map((op) => op.name)
+function strays(cross: Outcome, missing: Outcome) {
+  const left = writes(missing)
+  return writes(cross).filter((w) => {
+    const i = left.indexOf(w)
+    return i < 0 || (left.splice(i, 1), false)
+  })
+}
+
+export type OrgFinding = { inv: 'ORG-02' | 'ORG-03' | 'ORG-04' | 'SANITY'; action: string; detail: string }
+
+/**
+ * As org A's owner (or tenant, or guarantor: whichever the action's guard
+ * asks for), each action is called with:
+ *   - every id from org B (ORG-02): no write;
+ *   - each id path swapped to org B alone, the rest org A's (ORG-03 when there
+ *     is more than one): no write, and the same answer, byte for byte, as the
+ *     same path naming a row that does not exist (ORG-04);
+ *   - org A's own ids (sanity): the guard lets it through and the ids make a
+ *     difference, or every check above was comparing two refusals of nothing.
+ * Own-org calls run last, in a second pass, because they write: an earlier
+ * action's success must not change what a later one is compared against.
+ */
+export async function runCrossOrg(
+  found: Found[],
+  { a, b, fresh }: { a: Org; b: Org; fresh: () => Promise<Org> },
+  entries: Record<string, Entry> = manifest,
+): Promise<OrgFinding[]> {
+  const out: OrgFinding[] = []
+  const bIds = [...b.rows.values(), NONEXISTENT]
+  const driven: { f: Found; kind: Kind; missing: Outcome }[] = []
+  for (const f of found) {
+    const entry = entries[keyOf(f)]
+    if (!entry || entry.public !== undefined || typeof f.fn !== 'function') continue
+    const paths = idPaths(entry)
+    if (!paths.length) continue
+    const action = keyOf(f)
+    const go = (pick: Pick) => call(f, pick, entries)
+
+    // Whose guard is it? An all-missing call as staff answers "sign in at the
+    // portal" for a tenant action, and changes nothing either way.
+    let kind: Kind = 'staff'
+    as(a, kind)
+    let missing = await go(pickFrom(() => null))
+    const portal = missing.kind === 'guard' ? PORTAL_LOGIN[String(missing.detail).split('?')[0]!] : undefined
+    if (portal) {
+      kind = portal
+      as(a, kind)
+      missing = await go(pickFrom(() => null))
+    }
+
+    const allB = await go(pickFrom(() => b))
+    const leaked = strays(allB, missing)
+    if (leaked.length) out.push({ inv: 'ORG-02', action, detail: `every id from org B wrote ${leaked.join(', ')}` })
+
+    for (const p of paths) {
+      // Missing first: a write org A's own ids cause (opening its own thread)
+      // then happens on this call, and cannot read as caused by org B's id.
+      const none = await go(pickFrom((at) => (at === p ? null : a)))
+      const cross = await go(pickFrom((at) => (at === p ? b : a)))
+      const extra = strays(cross, none)
+      if (paths.length > 1 && extra.length) out.push({ inv: 'ORG-03', action, detail: `"${p}" from org B wrote ${extra.join(', ')}` })
+      const [c, m] = [shape(cross, bIds), shape(none, bIds)]
+      if (c !== m) out.push({ inv: 'ORG-04', action, detail: `"${p}": cross-org ${c.slice(0, 200)} ≠ nonexistent ${m.slice(0, 200)}` })
+    }
+    driven.push({ f, kind, missing })
+  }
+
+  for (const { f, kind, missing } of driven) {
+    // ponytail: a token-link action is driven with a bad token, so its ids are
+    // never reached and a sanity call proves nothing; minting a real link per
+    // token kind is what would cover them.
+    const entry = entries[keyOf(f)]!
+    if (entry.unreached !== undefined || Object.values(entry).includes('token')) continue
+    // Org A has absorbed every earlier own-org call (a tenant removed from
+    // the lease, a template deactivated), so a failure is retried once on a
+    // fresh org before it counts.
+    let problem = await sanity(f, kind, missing, a, entries)
+    if (problem) problem = await sanity(f, kind, missing, await fresh(), entries)
+    if (problem) out.push({ inv: 'SANITY', action: keyOf(f), detail: problem })
+  }
+  session.principal = null
+  return out
+}
+
+async function sanity(f: Found, kind: Kind, missing: Outcome, o: Org, entries: Record<string, Entry>): Promise<string | null> {
+  as(o, kind)
+  const own = await call(f, pickFrom(() => o), entries)
+  const raw = JSON.stringify([own.kind, own.detail ?? null]).slice(0, 300)
+  if (own.kind === 'guard' || (own.kind === 'redirect' && String(own.detail).startsWith('/no-access'))) return `own-org call was stopped: ${raw}`
+  // Raw, not `shape`: two throws look alike to a caller, but a foreign-key
+  // error on the row is not "no such row", and that difference is the question.
+  const unshaped = (x: Outcome, ids: string[]) => ids.reduce((t, id) => t.split(id).join('<id>'), JSON.stringify([x.kind, x.detail ?? null]))
+  if (unshaped(own, [...o.rows.values()]) === unshaped(missing, [NONEXISTENT]) && !own.ops.some((op) => op.write)) {
+    return `own-org ids answer as nonexistent ones do: ${raw}`
+  }
+  return null
 }

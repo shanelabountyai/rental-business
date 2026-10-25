@@ -52,15 +52,17 @@ export async function createComplianceItem(
 
   let scopeName: string
   if (entityLevel) {
+    const { actor: guarded } = await requireScope('property.write')
     const entity = await prisma.legalEntity.findUniqueOrThrow({
-      where: { id: legalEntityId! },
+      where: { id: legalEntityId!, orgId: guarded.orgId },
       select: { id: true, name: true, orgId: true },
     })
     await requirePermission('property.write', { orgId: entity.orgId, legalEntityId: entity.id })
     scopeName = entity.name
   } else {
+    const { actor: guarded } = await requireScope('property.write')
     const property = await prisma.property.findUniqueOrThrow({
-      where: { id: propertyId! },
+      where: { id: propertyId!, orgId: guarded.orgId },
       select: { id: true, legalEntityId: true, orgId: true, name: true },
     })
     await requirePermission('property.write', propertyResource(property))

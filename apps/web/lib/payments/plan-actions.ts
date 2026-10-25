@@ -76,8 +76,9 @@ export async function agreePaymentPlan(
     }
   }
 
+  const { actor: guarded } = await requireScope('hold.manage')
   const lease = await prisma.lease.findUnique({
-    where: { id: leaseId },
+    where: { id: leaseId, orgId: guarded.orgId },
     select: {
       id: true,
       propertyId: true,
@@ -320,6 +321,7 @@ export async function cancelPaymentPlan(
   _previous: PlanFormState,
   formData: FormData,
 ): Promise<PlanFormState> {
+  const { actor: guarded } = await requireScope('hold.manage')
   const planId = String(formData.get('planId') ?? '')
   const reason = String(formData.get('cancelReason') ?? '').trim()
 
@@ -332,7 +334,7 @@ export async function cancelPaymentPlan(
   }
 
   const plan = await prisma.paymentPlan.findUnique({
-    where: { id: planId },
+    where: { id: planId, orgId: guarded.orgId },
     select: {
       id: true,
       leaseId: true,

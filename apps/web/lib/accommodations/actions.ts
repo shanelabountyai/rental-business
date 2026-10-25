@@ -243,8 +243,9 @@ export async function requestDocumentation(
   const requestId = str(formData, 'requestId')
   if (!requestId) return { error: 'No request named.' }
 
+  const { actor: guarded } = await requireScope('lease.write')
   const request = await prisma.accommodationRequest.findUnique({
-    where: { id: requestId },
+    where: { id: requestId, orgId: guarded.orgId },
     select: {
       id: true,
       leaseId: true,
@@ -320,8 +321,9 @@ export async function decideAccommodationRequest(
   const requestId = str(formData, 'requestId')
   if (!requestId) return { error: 'No request named.' }
 
+  const { actor: guarded } = await requireScope('lease.write')
   const request = await prisma.accommodationRequest.findUnique({
-    where: { id: requestId },
+    where: { id: requestId, orgId: guarded.orgId },
     select: {
       id: true,
       leaseId: true,
