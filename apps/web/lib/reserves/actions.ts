@@ -4,7 +4,7 @@ import { businessDateToUtc } from '@rental/core/scheduling'
 import { type PropertyReserveInput, validatePropertyReserve } from '@rental/core/property'
 import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
-import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
+import { propertyResource, requirePermission, requireScope } from '@/lib/auth/guard.ts'
 
 // The reserve target and last-counted balance (PAY-11, R-082). Both figures
 // are typed in - see `PropertyReserve`'s schema comment for why the balance is
@@ -34,8 +34,9 @@ export async function setPropertyReserve(
   _previous: FormState,
   formData: FormData,
 ): Promise<FormState> {
+  const { actor: guarded } = await requireScope('property.write')
   const property = await prisma.property.findUnique({
-    where: { id: propertyId },
+    where: { id: propertyId, orgId: guarded.orgId },
     select: { id: true, legalEntityId: true, orgId: true },
   })
   if (!property) return { error: 'That property no longer exists.' }

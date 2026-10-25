@@ -6,7 +6,7 @@ import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { audit } from '@/lib/audit/index.ts'
-import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
+import { propertyResource, requirePermission, requireScope } from '@/lib/auth/guard.ts'
 import { renewalRentCheckFor } from './renewal-check.ts'
 import {
   retaliationAckAudit,
@@ -75,14 +75,15 @@ export async function offerRenewal(
   _previous: RenewalFormState,
   formData: FormData,
 ): Promise<RenewalFormState> {
+  const { actor } = await requireScope('lease.write')
   const lease = await prisma.lease.findUniqueOrThrow({
-    where: { id: leaseId },
+    where: { id: leaseId, orgId: actor.orgId },
     include: {
       property: { select: { id: true, legalEntityId: true, orgId: true, state: true, county: true, timezone: true } },
       leaseTenants: { select: { tenantId: true, isPrimary: true } },
     },
   })
-  const actor = await requirePermission('lease.write', propertyResource(lease.property))
+  await requirePermission('lease.write', propertyResource(lease.property))
 
   if (lease.status !== 'ACTIVE' && lease.status !== 'MONTH_TO_MONTH') {
     return { error: 'Only a running lease can be offered a renewal.' }

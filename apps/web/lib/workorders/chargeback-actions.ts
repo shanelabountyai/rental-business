@@ -8,7 +8,7 @@ import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { audit } from '@/lib/audit/index.ts'
 import { authUrl, canReceiveAuthLink } from '@/lib/auth/delivery.ts'
-import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
+import { propertyResource, requirePermission, requireScope } from '@/lib/auth/guard.ts'
 import { getBillingProvider } from '@/lib/billing/provider.ts'
 import { isUniqueViolation } from '@/lib/db/unique-violation.ts'
 import { dispatchPendingNotifications, notify } from '@/lib/notifications/send.ts'
@@ -63,8 +63,9 @@ export async function postChargeback(
   _previous: WorkOrderFormState,
   formData: FormData,
 ): Promise<WorkOrderFormState> {
+  const { actor: scoped } = await requireScope('ledger.adjust')
   const workOrder = await prisma.workOrder.findUniqueOrThrow({
-    where: { id: workOrderId },
+    where: { id: workOrderId, orgId: scoped.orgId },
     select: { id: true, property: true },
   })
   const actor = await requirePermission(

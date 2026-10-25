@@ -5,7 +5,7 @@ import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { audit } from '@/lib/audit/index.ts'
 import { authUrl } from '@/lib/auth/delivery.ts'
-import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
+import { propertyResource, requirePermission, requireScope } from '@/lib/auth/guard.ts'
 import { issueToken } from '@/lib/auth/store.ts'
 import { rulesFor } from '@/lib/jurisdiction/queries.ts'
 import { notify } from '@/lib/notifications/send.ts'
@@ -33,8 +33,9 @@ export async function inviteToApply(
   _previous: InviteFormState,
   _formData: FormData,
 ): Promise<InviteFormState> {
+  const { actor: guarded } = await requireScope('lease.write')
   const prospect = await prisma.prospect.findUnique({
-    where: { id: prospectId },
+    where: { id: prospectId, orgId: guarded.orgId },
     include: { property: true, listing: true },
   })
   if (!prospect) return { error: 'That prospect no longer exists.' }

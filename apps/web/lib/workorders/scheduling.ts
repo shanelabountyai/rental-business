@@ -11,7 +11,7 @@ import { wallClockToUtc } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { audit } from '@/lib/audit/index.ts'
-import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
+import { propertyResource, requirePermission, requireScope } from '@/lib/auth/guard.ts'
 import { canReceiveAuthLink } from '@/lib/auth/delivery.ts'
 import { rulesFor } from '@/lib/jurisdiction/queries.ts'
 import { dispatchPendingNotifications, notify } from '@/lib/notifications/send.ts'
@@ -44,9 +44,9 @@ function str(formData: FormData, name: string): string {
 /// notice is served, and a version that takes effect between serving and
 /// entering does not retroactively invalidate a notice already given (D-4's
 /// "rules apply prospectively; changing a rule never rewrites history").
-async function entryContextFor(workOrderId: string) {
+async function entryContextFor(workOrderId: string, orgId: string) {
   const workOrder = await prisma.workOrder.findUniqueOrThrow({
-    where: { id: workOrderId },
+    where: { id: workOrderId, orgId },
     include: {
       property: true,
       unit: true,
@@ -123,7 +123,8 @@ export async function scheduleEntry(
   _previous: ScheduleResult,
   formData: FormData,
 ): Promise<ScheduleResult> {
-  const { workOrder, rule, leaseId, tenant } = await entryContextFor(workOrderId)
+  const { actor: scoped } = await requireScope('workorder.write')
+  const { workOrder, rule, leaseId, tenant } = await entryContextFor(workOrderId, scoped.orgId)
   const actor = await requirePermission('workorder.write', propertyResource(workOrder.property))
 
   if (workOrder.status === 'CLOSED' || workOrder.status === 'CANCELED') {
@@ -395,8 +396,9 @@ export async function scheduleEntry(
 export async function logEntryPermission(
   workOrderId: string,
 ): Promise<WorkOrderFormState> {
+  const { actor: scoped } = await requireScope('workorder.write')
   const workOrder = await prisma.workOrder.findUniqueOrThrow({
-    where: { id: workOrderId },
+    where: { id: workOrderId, orgId: scoped.orgId },
     include: { property: true },
   })
   const actor = await requirePermission('workorder.write', propertyResource(workOrder.property))
@@ -433,8 +435,9 @@ export async function logEntryPermission(
 export async function logTenantNoShow(
   workOrderId: string,
 ): Promise<WorkOrderFormState> {
+  const { actor: scoped } = await requireScope('workorder.write')
   const workOrder = await prisma.workOrder.findUniqueOrThrow({
-    where: { id: workOrderId },
+    where: { id: workOrderId, orgId: scoped.orgId },
     include: { property: true },
   })
   await requirePermission('workorder.write', propertyResource(workOrder.property))

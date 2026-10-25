@@ -11,11 +11,12 @@ import {
   validateShutoffLocation,
   validateUtilityAccount,
 } from '@rental/core/operational'
+import type { Permission } from '@rental/core/rbac'
 import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { audit } from '@/lib/audit/index.ts'
-import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
+import { propertyResource, requirePermission, requireScope } from '@/lib/auth/guard.ts'
 
 // Writes for unit operational data (PROP-03, R-014). Same shape as every
 // other lib/*/actions.ts: a resource-carrying permission check first, then a
@@ -50,8 +51,14 @@ function str(formData: FormData, name: string): string {
   return typeof value === 'string' ? value.trim() : ''
 }
 
-async function unitWithPropertyOrThrow(unitId: string) {
-  return prisma.unit.findUniqueOrThrow({ where: { id: unitId }, include: { property: true } })
+/// Guards first (anonymous or another org's unit id gets no read), then loads.
+/// Callers still run the per-property requirePermission on the result.
+async function unitWithPropertyOrThrow(unitId: string, permission: Permission) {
+  const { actor } = await requireScope(permission)
+  return prisma.unit.findUniqueOrThrow({
+    where: { id: unitId, orgId: actor.orgId },
+    include: { property: true },
+  })
 }
 
 /**
@@ -65,7 +72,7 @@ export async function addAccessCode(
   _previous: FormState,
   formData: FormData,
 ): Promise<FormState> {
-  const unit = await unitWithPropertyOrThrow(unitId)
+  const unit = await unitWithPropertyOrThrow(unitId, 'unit.write')
   const actor = await requirePermission('unit.write', propertyResource(unit.property))
 
   const input: AccessCodeInput = {
@@ -127,10 +134,12 @@ export async function revealAccessCode(
   accessCodeId: string,
   workOrderId: string | null,
 ): Promise<RevealState> {
-  const unit = await unitWithPropertyOrThrow(unitId)
+  const unit = await unitWithPropertyOrThrow(unitId, 'accesscode.reveal')
   await requirePermission('accesscode.reveal', propertyResource(unit.property))
 
-  const accessCode = await prisma.accessCode.findUniqueOrThrow({ where: { id: accessCodeId } })
+  const accessCode = await prisma.accessCode.findUniqueOrThrow({
+    where: { id: accessCodeId, orgId: unit.orgId },
+  })
   if (accessCode.unitId !== unitId) {
     return { error: 'This code does not belong to this unit.' }
   }
@@ -156,7 +165,7 @@ export async function addAppliance(
   _previous: FormState,
   formData: FormData,
 ): Promise<FormState> {
-  const unit = await unitWithPropertyOrThrow(unitId)
+  const unit = await unitWithPropertyOrThrow(unitId, 'unit.write')
   await requirePermission('unit.write', propertyResource(unit.property))
 
   const input: ApplianceInput = {
@@ -190,7 +199,7 @@ export async function addAppliance(
 }
 
 export async function deleteAppliance(unitId: string, applianceId: string): Promise<FormState> {
-  const unit = await unitWithPropertyOrThrow(unitId)
+  const unit = await unitWithPropertyOrThrow(unitId, 'unit.write')
   await requirePermission('unit.write', propertyResource(unit.property))
 
   await prisma.appliance.deleteMany({ where: { id: applianceId, unitId } })
@@ -203,7 +212,7 @@ export async function addUtilityAccount(
   _previous: FormState,
   formData: FormData,
 ): Promise<FormState> {
-  const unit = await unitWithPropertyOrThrow(unitId)
+  const unit = await unitWithPropertyOrThrow(unitId, 'unit.write')
   await requirePermission('unit.write', propertyResource(unit.property))
 
   const input: UtilityAccountInput = {
@@ -240,7 +249,7 @@ export async function deleteUtilityAccount(
   unitId: string,
   utilityAccountId: string,
 ): Promise<FormState> {
-  const unit = await unitWithPropertyOrThrow(unitId)
+  const unit = await unitWithPropertyOrThrow(unitId, 'unit.write')
   await requirePermission('unit.write', propertyResource(unit.property))
 
   await prisma.utilityAccount.deleteMany({ where: { id: utilityAccountId, unitId } })
@@ -256,7 +265,7 @@ export async function setShutoffLocation(
   _previous: FormState,
   formData: FormData,
 ): Promise<FormState> {
-  const unit = await unitWithPropertyOrThrow(unitId)
+  const unit = await unitWithPropertyOrThrow(unitId, 'unit.write')
   await requirePermission('unit.write', propertyResource(unit.property))
 
   const input: ShutoffLocationInput = {

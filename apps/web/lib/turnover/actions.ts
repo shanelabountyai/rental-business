@@ -4,7 +4,7 @@ import { WORK_PERFORMED_STATUSES } from '@rental/core/turnover'
 import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { audit } from '@/lib/audit/index.ts'
-import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
+import { propertyResource, requirePermission, requireScope } from '@/lib/auth/guard.ts'
 
 // Writes for TurnoverProject (LEASE-12, R-072). Same resource-carrying
 // permission check, then transaction-plus-audit shape every other
@@ -33,8 +33,9 @@ function str(formData: FormData, name: string): string {
 }
 
 async function turnoverForWrite(projectId: string) {
+  const { actor: guarded } = await requireScope('workorder.write')
   const project = await prisma.turnoverProject.findUniqueOrThrow({
-    where: { id: projectId },
+    where: { id: projectId, orgId: guarded.orgId },
     include: { property: true },
   })
   const actor = await requirePermission('workorder.write', propertyResource(project.property))

@@ -20,7 +20,7 @@ import { prisma, type PaymentChannel } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { audit } from '@/lib/audit/index.ts'
-import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
+import { propertyResource, requirePermission, requireScope } from '@/lib/auth/guard.ts'
 import { getBillingProvider } from '@/lib/billing/provider.ts'
 import { recordAcrossInvoices } from '@/lib/payments/out-of-band.ts'
 import { generateStorageKey, storage } from '@/lib/storage/index.ts'
@@ -56,8 +56,9 @@ function optionalInt(formData: FormData, name: string): number | null {
 }
 
 async function depositForWrite(depositId: string) {
+  const { actor: guarded } = await requireScope('ledger.adjust')
   const deposit = await prisma.deposit.findUniqueOrThrow({
-    where: { id: depositId },
+    where: { id: depositId, orgId: guarded.orgId },
     select: {
       id: true,
       propertyId: true,
@@ -172,8 +173,9 @@ export async function addDeduction(
 }
 
 export async function removeDeduction(deductionId: string): Promise<DepositFormState> {
+  const { actor: guarded } = await requireScope('ledger.adjust')
   const deduction = await prisma.depositDeduction.findUniqueOrThrow({
-    where: { id: deductionId },
+    where: { id: deductionId, orgId: guarded.orgId },
     select: {
       id: true,
       description: true,
@@ -227,8 +229,9 @@ export async function finalizeDisposition(
   _previous: DepositFormState,
   formData: FormData,
 ): Promise<DepositFormState> {
+  const { actor: guarded } = await requireScope('ledger.adjust')
   const deposit = await prisma.deposit.findUniqueOrThrow({
-    where: { id: depositId },
+    where: { id: depositId, orgId: guarded.orgId },
     select: {
       id: true,
       propertyId: true,
@@ -646,8 +649,9 @@ export async function recordDepositRefund(
   _previous: DepositFormState,
   formData: FormData,
 ): Promise<DepositFormState> {
+  const { actor: guarded } = await requireScope('ledger.adjust')
   const deposit = await prisma.deposit.findUniqueOrThrow({
-    where: { id: depositId },
+    where: { id: depositId, orgId: guarded.orgId },
     select: {
       id: true,
       propertyId: true,

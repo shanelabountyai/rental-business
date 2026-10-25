@@ -11,7 +11,7 @@ import {
 } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { audit } from '@/lib/audit/index.ts'
-import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
+import { propertyResource, requirePermission, requireScope } from '@/lib/auth/guard.ts'
 import { getBillingProvider } from '@/lib/billing/provider.ts'
 import { appendPdfs, renderBlocksPdf } from '@/lib/pdf/render.ts'
 import { generateStorageKey, storage } from '@/lib/storage/index.ts'
@@ -51,6 +51,7 @@ export async function exportLedgerStatement(
   _prev: FormState,
   formData: FormData,
 ): Promise<FormState> {
+  const { actor } = await requireScope('ledger.read')
   const fromDate = optionalDate(formData, 'fromDate')
   const toDate = optionalDate(formData, 'toDate')
   if (fromDate && toDate && fromDate > toDate) {
@@ -60,7 +61,7 @@ export async function exportLedgerStatement(
   }
 
   const lease = await prisma.lease.findUnique({
-    where: { id: leaseId },
+    where: { id: leaseId, orgId: actor.orgId },
     include: {
       property: {
         select: {
@@ -81,7 +82,7 @@ export async function exportLedgerStatement(
   })
   if (!lease) return { error: 'That lease no longer exists.' }
 
-  const actor = await requirePermission('ledger.read', propertyResource(lease.property))
+  await requirePermission('ledger.read', propertyResource(lease.property))
   const zone = lease.property.timezone
 
   // EVERY entry, not just the window's - `statementForPeriod` needs the whole

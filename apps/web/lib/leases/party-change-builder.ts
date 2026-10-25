@@ -7,7 +7,7 @@ import { businessDate, utcToBusinessDate } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { audit } from '@/lib/audit/index.ts'
 import { authUrl } from '@/lib/auth/delivery.ts'
-import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
+import { propertyResource, requirePermission, requireScope } from '@/lib/auth/guard.ts'
 import { issueToken } from '@/lib/auth/store.ts'
 import { esignAdapter } from '@/lib/esign/provider.ts'
 import { notify } from '@/lib/notifications/send.ts'
@@ -59,8 +59,11 @@ export type LeaseForPartyChange = Awaited<ReturnType<typeof loadLeaseForPartyCha
  * be able to do it from a case file either.
  */
 export async function loadLeaseForPartyChange(leaseId: string) {
+  // Guard first, then the org-scoped lookup: another org's lease answers as a
+  // missing one does (ORG-01, ORG-04).
+  const { actor: scoped } = await requireScope('lease.execute')
   const lease = await prisma.lease.findUniqueOrThrow({
-    where: { id: leaseId },
+    where: { id: leaseId, orgId: scoped.orgId },
     include: {
       property: {
         select: {

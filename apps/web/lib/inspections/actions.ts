@@ -14,7 +14,7 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { audit } from '@/lib/audit/index.ts'
 import { authUrl } from '@/lib/auth/delivery.ts'
-import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
+import { propertyResource, requirePermission, requireScope } from '@/lib/auth/guard.ts'
 import { writeItemCondition, writeItemPhoto } from '@/lib/inspections/item-writes.ts'
 import { recordMoveInFromWalk } from '@/lib/inspections/move-in.ts'
 import { itemsFromMoveIn } from '@/lib/inspections/move-out-copy.ts'
@@ -49,8 +49,9 @@ function str(formData: FormData, name: string): string {
 }
 
 async function inspectionForWrite(inspectionId: string) {
+  const { actor: scoped } = await requireScope('inspection.write')
   const inspection = await prisma.inspection.findUniqueOrThrow({
-    where: { id: inspectionId },
+    where: { id: inspectionId, orgId: scoped.orgId },
     include: {
       property: { select: { id: true, legalEntityId: true, orgId: true, addressLine1: true, timezone: true } },
       unit: { select: { name: true } },
@@ -213,8 +214,9 @@ export async function recordItem(
   _previous: InspectionFormState,
   formData: FormData,
 ): Promise<InspectionFormState> {
+  const { actor } = await requireScope('inspection.write')
   const item = await prisma.inspectionItem.findUniqueOrThrow({
-    where: { id: itemId },
+    where: { id: itemId, orgId: actor.orgId },
     include: { inspection: { include: { property: { select: { id: true, legalEntityId: true, orgId: true } } } } },
   })
   await requirePermission('inspection.write', propertyResource(item.inspection.property))
@@ -246,8 +248,9 @@ export async function recordItemPhoto(
   _previous: InspectionFormState,
   formData: FormData,
 ): Promise<InspectionFormState> {
+  const { actor } = await requireScope('inspection.write')
   const item = await prisma.inspectionItem.findUniqueOrThrow({
-    where: { id: itemId },
+    where: { id: itemId, orgId: actor.orgId },
     include: { inspection: { include: { property: { select: { id: true, legalEntityId: true, orgId: true } } } } },
   })
   await requirePermission('inspection.write', propertyResource(item.inspection.property))

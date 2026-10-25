@@ -36,7 +36,7 @@ import { revokeTenantLockCodes } from '@/lib/locks/tenant-codes.ts'
 import { retireUnitAccessCodes } from '@/lib/locks/access-codes.ts'
 import { startTurnoverProjectForLease } from '@/lib/turnover/start.ts'
 import { authUrl, canReceiveAuthLink } from '@/lib/auth/delivery.ts'
-import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
+import { propertyResource, requirePermission, requireScope } from '@/lib/auth/guard.ts'
 import { tenantWhere } from '@/lib/auth/scope.ts'
 import { rulesForConfigured } from '@/lib/jurisdiction/queries.ts'
 import { dispatchPendingNotifications, notify } from '@/lib/notifications/send.ts'
@@ -121,8 +121,9 @@ function violationsToState(
 /// only matches when the resource names a property they actually hold - the
 /// id itself is never the authorization.
 async function leaseForWrite(leaseId: string) {
+  const { actor } = await requireScope('lease.write')
   const lease = await prisma.lease.findUniqueOrThrow({
-    where: { id: leaseId },
+    where: { id: leaseId, orgId: actor.orgId },
     include: {
       property: {
         select: {
@@ -137,7 +138,7 @@ async function leaseForWrite(leaseId: string) {
       leaseTenants: { select: { id: true } },
     },
   })
-  const actor = await requirePermission('lease.write', propertyResource(lease.property))
+  await requirePermission('lease.write', propertyResource(lease.property))
   return { lease, actor }
 }
 

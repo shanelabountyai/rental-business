@@ -10,7 +10,7 @@ import {
 import type { NotificationRecipientType } from '@rental/db'
 import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
-import { propertyResource, requirePermission, requireStaff } from '@/lib/auth/guard.ts'
+import { propertyResource, requirePermission, requireScope, requireStaff } from '@/lib/auth/guard.ts'
 import { propertyForTenant } from '@/lib/consent/property-for-tenant.ts'
 import { requireGuarantor } from '@/lib/portal/guarantor-guard.ts'
 import { requireTenant } from '@/lib/portal/guard.ts'
@@ -138,8 +138,11 @@ export async function setTenantNotificationPreference(
   _previous: FormState,
   formData: FormData,
 ): Promise<FormState> {
+  const { actor } = await requireScope('tenant.write')
+  // propertyForTenant (shared, lib/consent) is not org-scoped, so the org
+  // check is here: another org's tenant gets the same answer as no tenant.
   const found = await propertyForTenant(tenantId)
-  if (!found) return { error: 'That tenant is not on a lease at any property you can see.' }
+  if (!found || found.property.orgId !== actor.orgId) return { error: 'That tenant is not on a lease at any property you can see.' }
   await requirePermission('tenant.write', propertyResource(found.property))
 
   const result = await writePreference('TENANT', tenantId, found.property.orgId, formData)

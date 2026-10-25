@@ -14,6 +14,7 @@ import {
   propertyResource,
   requireMonetaryAuthority,
   requirePermission,
+  requireScope,
 } from '@/lib/auth/guard.ts'
 import { completeTaskWork } from '@/lib/tasks/complete.ts'
 import { createTask } from '@/lib/tasks/create.ts'
@@ -79,8 +80,9 @@ async function raiseApprovalTask(workOrder: {
 export async function submitForApproval(
   workOrderId: string,
 ): Promise<WorkOrderFormState> {
+  const { actor: scoped } = await requireScope('workorder.write')
   const workOrder = await prisma.workOrder.findUniqueOrThrow({
-    where: { id: workOrderId },
+    where: { id: workOrderId, orgId: scoped.orgId },
     include: { property: true },
   })
   await requirePermission('workorder.write', propertyResource(workOrder.property))
@@ -266,8 +268,9 @@ export async function decideApproval(
   _previous: WorkOrderFormState,
   formData: FormData,
 ): Promise<WorkOrderFormState> {
+  const { actor: scoped } = await requireScope('workorder.approve')
   const workOrder = await prisma.workOrder.findUniqueOrThrow({
-    where: { id: workOrderId },
+    where: { id: workOrderId, orgId: scoped.orgId },
     include: { property: true },
   })
   await requirePermission('workorder.approve', propertyResource(workOrder.property))
@@ -345,8 +348,9 @@ export async function recordActuals(
   _previous: WorkOrderFormState,
   formData: FormData,
 ): Promise<WorkOrderFormState> {
+  const { actor: scoped } = await requireScope('workorder.write')
   const workOrder = await prisma.workOrder.findUniqueOrThrow({
-    where: { id: workOrderId },
+    where: { id: workOrderId, orgId: scoped.orgId },
     include: { property: true },
   })
   await requirePermission('workorder.write', propertyResource(workOrder.property))
@@ -449,8 +453,9 @@ export async function requestBids(
   _previous: WorkOrderFormState,
   formData: FormData,
 ): Promise<WorkOrderFormState> {
+  const { actor: scoped } = await requireScope('workorder.write')
   const workOrder = await prisma.workOrder.findUniqueOrThrow({
-    where: { id: workOrderId },
+    where: { id: workOrderId, orgId: scoped.orgId },
     include: { property: true, unit: true },
   })
   await requirePermission('workorder.write', propertyResource(workOrder.property))

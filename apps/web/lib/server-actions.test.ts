@@ -27,7 +27,6 @@ const PUBLIC_BY_DESIGN: Record<string, string> = {
   'lib/vendors/actions.ts#markWorkComplete': 'vendor token (verifyVendorLink)',
   'lib/vendors/actions.ts#sendVendorMessage': 'vendor token (verifyVendorLink)',
   'lib/payments/actions.ts#startPaymentFromLink': 'pay token (verifyPayLink)',
-  'lib/payments/plan-actions.ts#sendPaymentPlanForSignature': 'guarded in plan-esign.ts',
   'lib/portal/verify-link-actions.ts#answerFromLink': 'verify token (verifyVerifyLink)',
   'lib/prospects/prescreen-actions.ts#submitPrescreenAnswers': 'prescreen token',
   'lib/prospects/actions.ts#submitInquiry': 'public listing inquiry, rate-limited',

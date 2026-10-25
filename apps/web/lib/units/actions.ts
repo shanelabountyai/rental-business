@@ -5,7 +5,7 @@ import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { audit } from '@/lib/audit/index.ts'
-import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
+import { propertyResource, requirePermission, requireScope } from '@/lib/auth/guard.ts'
 
 // Writes for Unit (PROP-02). Same shape as packages/properties/actions.ts:
 // permission checks always carry the resource being acted on, and every
@@ -61,8 +61,9 @@ export async function createUnit(
   _previous: FormState,
   formData: FormData,
 ): Promise<FormState> {
+  const { actor } = await requireScope('unit.write')
   const property = await prisma.property.findUniqueOrThrow({
-    where: { id: propertyId },
+    where: { id: propertyId, orgId: actor.orgId },
   })
   await requirePermission('unit.write', propertyResource(property))
 
@@ -110,8 +111,9 @@ export async function updateUnit(
   _previous: FormState,
   formData: FormData,
 ): Promise<FormState> {
+  const { actor } = await requireScope('unit.write')
   const [property, existing] = await Promise.all([
-    prisma.property.findUniqueOrThrow({ where: { id: propertyId } }),
+    prisma.property.findUniqueOrThrow({ where: { id: propertyId, orgId: actor.orgId } }),
     // SEC-10: the unit must belong to the property the permission is checked
     // on. By id alone, `unit.write` on A rewrote B's unit, audited under A.
     prisma.unit.findFirstOrThrow({ where: { id: unitId, propertyId } }),

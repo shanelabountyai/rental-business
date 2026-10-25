@@ -11,7 +11,7 @@ import { prisma } from '@rental/db'
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { audit } from '@/lib/audit/index.ts'
-import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
+import { propertyResource, requirePermission, requireScope } from '@/lib/auth/guard.ts'
 import { candidateDuplicateProperties } from './queries.ts'
 
 // Writes for LegalEntity and Property (PROP-01, PROP-04).
@@ -110,8 +110,9 @@ export async function updateLegalEntity(
   _previous: FormState,
   formData: FormData,
 ): Promise<FormState> {
+  const { actor } = await requireScope('property.write')
   const existing = await prisma.legalEntity.findUniqueOrThrow({
-    where: { id: entityId },
+    where: { id: entityId, orgId: actor.orgId },
   })
   await requirePermission('property.write', { orgId: existing.orgId, legalEntityId: entityId })
 
@@ -305,8 +306,9 @@ export async function updateProperty(
   _previous: PropertyFormState,
   formData: FormData,
 ): Promise<PropertyFormState> {
+  const { actor } = await requireScope('property.write')
   const existing = await prisma.property.findUniqueOrThrow({
-    where: { id: propertyId },
+    where: { id: propertyId, orgId: actor.orgId },
   })
   // Both ids, not just propertyId - see propertyResource's own comment. An
   // entity-scoped manager editing a property that genuinely belongs to their

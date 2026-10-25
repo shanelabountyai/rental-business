@@ -76,8 +76,9 @@ export async function openEvictionCase(
   const reason = str(formData, 'reason')
   const retaliationReason = str(formData, 'retaliationReason') || null
 
+  const { actor: guarded } = await requireScope('eviction.manage')
   const lease = await prisma.lease.findUnique({
-    where: { id: leaseId },
+    where: { id: leaseId, orgId: guarded.orgId },
     select: {
       id: true,
       propertyId: true,

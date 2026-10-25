@@ -7,7 +7,7 @@ import { SERVICE_METHOD_LABELS } from '@rental/core/notices'
 import { businessDate, friendlyTimestamp } from '@rental/core/scheduling'
 import { type Prisma, prisma } from '@rental/db'
 import { audit } from '@/lib/audit/index.ts'
-import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
+import { propertyResource, requirePermission, requireScope } from '@/lib/auth/guard.ts'
 import { renderBlocksPdf } from '@/lib/pdf/render.ts'
 import { generateStorageKey, storage } from '@/lib/storage/index.ts'
 
@@ -220,8 +220,9 @@ export async function exportThreadTranscript(
   _prev: FormState,
   _formData: FormData,
 ): Promise<FormState> {
+  const { actor: guarded } = await requireScope('message.read')
   const thread = await prisma.thread.findUnique({
-    where: { id: threadId },
+    where: { id: threadId, orgId: guarded.orgId },
     include: THREAD_INCLUDE,
   })
   if (!thread) return { error: 'That conversation no longer exists.' }

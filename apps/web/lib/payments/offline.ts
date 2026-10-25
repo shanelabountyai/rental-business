@@ -15,7 +15,7 @@ import { businessDate, friendlyDate, friendlyTimestamp } from '@rental/core/sche
 import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { audit } from '@/lib/audit/index.ts'
-import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
+import { propertyResource, requirePermission, requireScope } from '@/lib/auth/guard.ts'
 import { getBillingProvider } from '@/lib/billing/provider.ts'
 import { recordAcrossInvoices } from '@/lib/payments/out-of-band.ts'
 import { renderBlocksPdf } from '@/lib/pdf/render.ts'
@@ -72,8 +72,9 @@ export async function recordOfflinePayment(
   _previous: OfflineFormState,
   formData: FormData,
 ): Promise<OfflineFormState> {
+  const { actor: staff } = await requireScope('ledger.adjust')
   const payer = await prisma.leasePayer.findUniqueOrThrow({
-    where: { id: leasePayerId },
+    where: { id: leasePayerId, orgId: staff.orgId },
     select: {
       id: true,
       leaseId: true,

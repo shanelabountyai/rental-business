@@ -3,7 +3,7 @@
 import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { audit } from '@/lib/audit/index.ts'
-import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
+import { propertyResource, requirePermission, requireScope } from '@/lib/auth/guard.ts'
 import { smartLockAdapter } from '@/lib/locks/provider.ts'
 import { revokeShowingAccessFor } from './revoke.ts'
 
@@ -27,8 +27,9 @@ export interface CancelResult {
  * `Showing.entryNoticeId` to imply the visit still stands.
  */
 export async function cancelShowing(showingId: string): Promise<CancelResult> {
+  const { actor } = await requireScope('lease.write')
   const showing = await prisma.showing.findUniqueOrThrow({
-    where: { id: showingId },
+    where: { id: showingId, orgId: actor.orgId },
     include: { property: true },
   })
   await requirePermission('lease.write', propertyResource(showing.property))
@@ -119,8 +120,9 @@ export async function revokeShowingAccess(
   _previous: AccessAdminState,
   formData: FormData,
 ): Promise<AccessAdminState> {
+  const { actor: guarded } = await requireScope('lease.write')
   const showing = await prisma.showing.findUniqueOrThrow({
-    where: { id: showingId },
+    where: { id: showingId, orgId: guarded.orgId },
     include: { property: true },
   })
   const actor = await requirePermission('lease.write', propertyResource(showing.property))
@@ -168,8 +170,9 @@ export async function revokeShowingAccess(
  * last night actually needs.
  */
 export async function syncLockEvents(unitId: string): Promise<AccessAdminState> {
+  const { actor } = await requireScope('unit.read')
   const unit = await prisma.unit.findUniqueOrThrow({
-    where: { id: unitId },
+    where: { id: unitId, orgId: actor.orgId },
     include: { property: true, smartLock: true },
   })
   await requirePermission('unit.read', propertyResource(unit.property))

@@ -4,7 +4,7 @@ import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import type { FormState } from '@/components/auth-form.tsx'
 import { audit } from '@/lib/audit/index.ts'
-import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
+import { propertyResource, requirePermission, requireScope } from '@/lib/auth/guard.ts'
 
 // The messaging settings page's two forms (R-266, PRD 08 B5).
 //
@@ -87,8 +87,9 @@ function parseHour(value: FormDataEntryValue | null): number | 'default' | null 
 
 export async function saveQuietHours(_previous: FormState, formData: FormData): Promise<FormState> {
   const propertyId = String(formData.get('propertyId') ?? '')
+  const { actor: guarded } = await requireScope('template.write')
   const property = await prisma.property.findUnique({
-    where: { id: propertyId },
+    where: { id: propertyId, orgId: guarded.orgId },
     select: { id: true, legalEntityId: true, orgId: true, quietHoursStart: true, quietHoursEnd: true },
   })
   if (!property) return { error: 'That property no longer exists.' }

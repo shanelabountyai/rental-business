@@ -12,7 +12,7 @@ import { wallClockToUtc } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { audit } from '@/lib/audit/index.ts'
-import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
+import { propertyResource, requirePermission, requireScope } from '@/lib/auth/guard.ts'
 import { canReceiveAuthLink } from '@/lib/auth/delivery.ts'
 import { rulesFor } from '@/lib/jurisdiction/queries.ts'
 import { dispatchPendingNotifications, notify } from '@/lib/notifications/send.ts'
@@ -65,8 +65,9 @@ export async function scheduleInspectionEntry(
   _previous: InspectionScheduleResult,
   formData: FormData,
 ): Promise<InspectionScheduleResult> {
+  const { actor: scoped } = await requireScope('inspection.write')
   const inspection = await prisma.inspection.findUniqueOrThrow({
-    where: { id: inspectionId },
+    where: { id: inspectionId, orgId: scoped.orgId },
     include: {
       property: true,
       unit: { select: { name: true } },

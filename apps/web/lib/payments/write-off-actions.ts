@@ -5,7 +5,7 @@ import { businessDate, businessDateToUtc } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { audit } from '@/lib/audit/index.ts'
-import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
+import { propertyResource, requirePermission, requireScope } from '@/lib/auth/guard.ts'
 import { formerTenantReceivables } from '@/lib/payments/former-tenants.ts'
 
 export interface WriteOffFormState {
@@ -30,8 +30,9 @@ export async function writeOffReceivable(
   _previous: WriteOffFormState,
   formData: FormData,
 ): Promise<WriteOffFormState> {
+  const { actor: staff } = await requireScope('ledger.adjust')
   const lease = await prisma.lease.findUniqueOrThrow({
-    where: { id: leaseId },
+    where: { id: leaseId, orgId: staff.orgId },
     select: {
       id: true,
       status: true,

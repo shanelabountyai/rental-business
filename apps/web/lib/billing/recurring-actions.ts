@@ -8,7 +8,7 @@ import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { audit } from '@/lib/audit/index.ts'
 import { hasApprovedAssistanceAnimal } from '@/lib/accommodations/queries.ts'
-import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
+import { propertyResource, requirePermission, requireScope } from '@/lib/auth/guard.ts'
 import { createRecurringCharge, deactivateRecurringCharge } from './recurring.ts'
 
 // Agreeing and ending a monthly charge (PAY-08, R-042).
@@ -32,8 +32,9 @@ export async function addRecurringCharge(
   _previous: RecurringChargeFormState,
   formData: FormData,
 ): Promise<RecurringChargeFormState> {
+  const { actor: guarded } = await requireScope('lease.write')
   const lease = await prisma.lease.findUniqueOrThrow({
-    where: { id: leaseId },
+    where: { id: leaseId, orgId: guarded.orgId },
     select: {
       id: true,
       propertyId: true,
@@ -139,8 +140,9 @@ export async function endRecurringCharge(
   const id = String(formData.get('recurringChargeId') ?? '')
   if (!id) return { error: 'Nothing was selected to end.' }
 
+  const { actor: guarded } = await requireScope('lease.write')
   const charge = await prisma.recurringCharge.findUniqueOrThrow({
-    where: { id },
+    where: { id, orgId: guarded.orgId },
     select: {
       id: true,
       leaseId: true,

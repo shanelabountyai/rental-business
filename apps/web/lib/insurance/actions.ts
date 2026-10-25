@@ -77,8 +77,9 @@ export async function openClaim(
   _previous: ClaimFormState,
   formData: FormData,
 ): Promise<ClaimFormState> {
+  const { actor: scoped } = await requireScope('property.write')
   const property = await prisma.property.findUnique({
-    where: { id: propertyId },
+    where: { id: propertyId, orgId: scoped.orgId },
     select: { id: true, legalEntityId: true, orgId: true, timezone: true },
   })
   if (!property) return { error: 'That property no longer exists.' }

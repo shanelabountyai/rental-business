@@ -72,8 +72,9 @@ export async function openAbandonmentCase(
   _previous: AbandonmentFormState,
   formData: FormData,
 ): Promise<AbandonmentFormState> {
+  const { actor: guarded } = await requireScope('eviction.manage')
   const lease = await prisma.lease.findUnique({
-    where: { id: leaseId },
+    where: { id: leaseId, orgId: guarded.orgId },
     select: {
       id: true,
       propertyId: true,

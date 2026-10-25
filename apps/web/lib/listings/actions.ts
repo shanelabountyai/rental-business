@@ -5,7 +5,7 @@ import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { audit } from '@/lib/audit/index.ts'
-import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
+import { propertyResource, requirePermission, requireScope } from '@/lib/auth/guard.ts'
 
 // Writes for Listing (LEASE-01, R-056). Same shape as units/actions.ts: a
 // resource-carrying permission check first, then a transaction pairing the
@@ -76,8 +76,9 @@ export async function createListing(
   _previous: FormState,
   formData: FormData,
 ): Promise<FormState> {
+  const { actor: staff } = await requireScope('unit.write')
   const unit = await prisma.unit.findUniqueOrThrow({
-    where: { id: unitId },
+    where: { id: unitId, orgId: staff.orgId },
     include: { property: true },
   })
   const actor = await requirePermission('unit.write', propertyResource(unit.property))
@@ -120,8 +121,9 @@ export async function createListing(
 }
 
 async function listingForWriteOrThrow(listingId: string) {
+  const { actor } = await requireScope('unit.write')
   const listing = await prisma.listing.findUniqueOrThrow({
-    where: { id: listingId },
+    where: { id: listingId, orgId: actor.orgId },
     include: { property: true },
   })
   await requirePermission('unit.write', propertyResource(listing.property))

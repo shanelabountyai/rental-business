@@ -53,6 +53,7 @@ export async function startPartyChange(
   _previous: PartyChangeFormState,
   formData: FormData,
 ): Promise<PartyChangeFormState> {
+  // Guard before the loader's read: no existence answer for an anonymous caller.
   const { lease, actor } = await loadLeaseForPartyChange(leaseId)
 
   // The form speaks in LeaseTenant rows because that is what the panel
@@ -100,6 +101,7 @@ export async function releaseGuarantor(
   _previous: PartyChangeFormState,
   formData: FormData,
 ): Promise<PartyChangeFormState> {
+  // Guard before the loader's read: no existence answer for an anonymous caller.
   const { lease, actor } = await loadLeaseForPartyChange(leaseId)
 
   const result = await buildPartyChange({

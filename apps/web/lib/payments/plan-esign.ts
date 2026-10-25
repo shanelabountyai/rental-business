@@ -8,7 +8,7 @@ import { businessDate, utcToBusinessDate } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { audit } from '@/lib/audit/index.ts'
 import { authUrl } from '@/lib/auth/delivery.ts'
-import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
+import { propertyResource, requirePermission, requireScope } from '@/lib/auth/guard.ts'
 import { issueToken } from '@/lib/auth/store.ts'
 import { esignAdapter } from '@/lib/esign/provider.ts'
 import { notify } from '@/lib/notifications/send.ts'
@@ -60,8 +60,9 @@ export async function sendPlanForSignature(planId: string): Promise<PlanEsignRes
   // Inlined rather than hoisted to a `const ... as const`: Prisma's argument
   // types reject a readonly `orderBy` tuple, and this one needs two keys to
   // make the signer order deterministic.
+  const { actor: scoped } = await requireScope('hold.manage')
   const plan = await prisma.paymentPlan.findUnique({
-    where: { id: planId },
+    where: { id: planId, orgId: scoped.orgId },
     select: {
       id: true,
       status: true,

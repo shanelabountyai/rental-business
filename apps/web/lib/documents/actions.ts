@@ -12,7 +12,7 @@ import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { audit } from '@/lib/audit/index.ts'
-import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
+import { propertyResource, requirePermission, requireScope } from '@/lib/auth/guard.ts'
 import { extractCapturedAt } from './exif.ts'
 import { generateStorageKey, storage } from '@/lib/storage/index.ts'
 
@@ -52,13 +52,16 @@ export async function uploadDocument(
   _previous: FormState,
   formData: FormData,
 ): Promise<FormState> {
+  const { actor: scoped } = await requireScope('document.write')
   let resolvedPropertyId = propertyId
   if (unitId) {
-    const unit = await prisma.unit.findUniqueOrThrow({ where: { id: unitId } })
+    const unit = await prisma.unit.findUniqueOrThrow({
+      where: { id: unitId, orgId: scoped.orgId },
+    })
     resolvedPropertyId = unit.propertyId
   }
   const property = await prisma.property.findUniqueOrThrow({
-    where: { id: resolvedPropertyId },
+    where: { id: resolvedPropertyId, orgId: scoped.orgId },
   })
   const actor = await requirePermission('document.write', propertyResource(property))
 
@@ -135,9 +138,9 @@ export async function uploadDocument(
   redirect(returnTo)
 }
 
-async function documentWithPropertyOrThrow(documentId: string) {
+async function documentWithPropertyOrThrow(documentId: string, orgId: string) {
   const document = await prisma.document.findUniqueOrThrow({
-    where: { id: documentId },
+    where: { id: documentId, orgId },
     include: { property: true },
   })
   if (!document.property) {
@@ -154,7 +157,8 @@ export async function deleteDocument(
   _previous: FormState,
   formData: FormData,
 ): Promise<FormState> {
-  const document = await documentWithPropertyOrThrow(documentId)
+  const { actor } = await requireScope('document.delete')
+  const document = await documentWithPropertyOrThrow(documentId, actor.orgId)
   await requirePermission('document.delete', propertyResource(document.property!))
 
   if (document.deletedAt) return { error: 'Already deleted.' }
@@ -195,7 +199,8 @@ export async function deleteDocument(
 }
 
 export async function restoreDocument(documentId: string): Promise<FormState> {
-  const document = await documentWithPropertyOrThrow(documentId)
+  const { actor } = await requireScope('document.delete')
+  const document = await documentWithPropertyOrThrow(documentId, actor.orgId)
   await requirePermission('document.delete', propertyResource(document.property!))
 
   if (!document.deletedAt) return { error: 'This document was never deleted.' }

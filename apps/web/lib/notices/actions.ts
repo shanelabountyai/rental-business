@@ -9,7 +9,7 @@ import { businessDate, wallClockToUtc } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { audit } from '@/lib/audit/index.ts'
-import { actorCan, propertyResource, requirePermission } from '@/lib/auth/guard.ts'
+import { actorCan, propertyResource, requirePermission, requireScope } from '@/lib/auth/guard.ts'
 import { applyPaymentHold } from '@/lib/payments/legal-hold.ts'
 import { settleHousehold } from '@/lib/screening/household.ts'
 import { extractCapturedAt } from '@/lib/documents/exif.ts'
@@ -81,8 +81,9 @@ const NOTICE_INCLUDE = {
  * question "which of these did the tenant actually receive" has no answer.
  */
 export async function generateNoticePdf(noticeId: string): Promise<FormState> {
+  const { actor: staff } = await requireScope('notice.send')
   const notice = await prisma.notice.findUniqueOrThrow({
-    where: { id: noticeId },
+    where: { id: noticeId, orgId: staff.orgId },
     include: NOTICE_INCLUDE,
   })
   const actor = await requirePermission('notice.send', propertyResource(notice.property))
@@ -199,8 +200,9 @@ export async function recordNoticeService(
   _previous: FormState,
   formData: FormData,
 ): Promise<FormState> {
+  const { actor: staff } = await requireScope('notice.send')
   const notice = await prisma.notice.findUniqueOrThrow({
-    where: { id: noticeId },
+    where: { id: noticeId, orgId: staff.orgId },
     include: NOTICE_INCLUDE,
   })
   const actor = await requirePermission('notice.send', propertyResource(notice.property))

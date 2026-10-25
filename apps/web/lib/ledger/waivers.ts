@@ -5,7 +5,7 @@ import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { audit } from '@/lib/audit/index.ts'
 import { checkMonetaryAuthority } from '@rental/core/rbac'
-import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
+import { propertyResource, requirePermission, requireScope } from '@/lib/auth/guard.ts'
 import { getBillingProvider } from '@/lib/billing/provider.ts'
 
 // Waiving a fee, and being able to prove it was done evenly (PAY-04, R-040).
@@ -34,6 +34,7 @@ export async function waiveCharge(
   _previous: WaiverFormState,
   formData: FormData,
 ): Promise<WaiverFormState> {
+  const { actor } = await requireScope('fee.waive')
   // The charge id comes from the FORM, not from a bound argument.
   //
   // Binding one action per fee meant handing a client component a Record of
@@ -47,7 +48,7 @@ export async function waiveCharge(
   if (!chargeId) return { error: 'Nothing was selected to waive.' }
 
   const charge = await prisma.charge.findUniqueOrThrow({
-    where: { id: chargeId },
+    where: { id: chargeId, orgId: actor.orgId },
     select: {
       id: true,
       leaseId: true,
@@ -78,7 +79,7 @@ export async function waiveCharge(
   // day-to-day work. Gating it on `ledger.adjust` locked the people whose
   // job this is out of doing it, which an e2e test found immediately by
   // failing to locate the button.
-  const actor = await requirePermission('fee.waive', propertyResource(charge.property))
+  await requirePermission('fee.waive', propertyResource(charge.property))
 
   // AND a monetary ceiling, which R-004 also built and nothing had ever
   // called: `waive_fee` is one of two MonetaryActions, and every role carries

@@ -23,7 +23,7 @@ import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { audit } from '@/lib/audit/index.ts'
-import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
+import { propertyResource, requirePermission, requireScope } from '@/lib/auth/guard.ts'
 import { emitEvent } from '@/lib/jobs/outbox.ts'
 import { requireTenantWithScope } from '@/lib/portal/guard.ts'
 import { generateStorageKey, storage } from '@/lib/storage/index.ts'
@@ -596,14 +596,17 @@ const TRIAGE_PRIORITY_OPTIONS = ['EMERGENCY', 'URGENT', 'ROUTINE'] as const
 /// applies, so a stale or narrowed switcher selection can never be the only
 /// thing standing between an actor and a ticket outside their scope.
 async function ticketTriageTaskOrThrow(taskId: string) {
+  const { actor: staff } = await requireScope('ticket.write')
   const task = await prisma.task.findUniqueOrThrow({
-    where: { id: taskId },
+    where: { id: taskId, orgId: staff.orgId },
     include: { property: true },
   })
   if (task.subjectType !== 'Ticket') {
     throw new Error(`Task ${taskId} is not a ticket-triage task`)
   }
-  const ticket = await prisma.ticket.findUniqueOrThrow({ where: { id: task.subjectId } })
+  const ticket = await prisma.ticket.findUniqueOrThrow({
+    where: { id: task.subjectId, orgId: staff.orgId },
+  })
   const actor = await requirePermission('ticket.write', propertyResource(task.property))
   return { task, ticket, actor }
 }
@@ -708,8 +711,9 @@ export async function markTicketEmergency(
 /// The one path that makes an existing ticket EMERGENCY. Returns a refusal,
 /// or undefined once the ticket is an emergency and on-call has been paged.
 async function declareEmergency(ticketId: string): Promise<MaintenanceFormState | undefined> {
+  const { actor } = await requireScope('ticket.write')
   const ticket = await prisma.ticket.findUnique({
-    where: { id: ticketId },
+    where: { id: ticketId, orgId: actor.orgId },
     select: {
       id: true,
       priority: true,
@@ -853,7 +857,9 @@ export async function mergeTicketDuplicate(
   const targetTicketId = String(formData.get('targetTicketId') ?? '')
   if (!targetTicketId) return { error: 'Choose the ticket to merge into.' }
 
-  const target = await prisma.ticket.findUnique({ where: { id: targetTicketId } })
+  const target = await prisma.ticket.findUnique({
+    where: { id: targetTicketId, orgId: actor.orgId },
+  })
   if (!target) return { error: 'That ticket could not be found.' }
 
   const violations = canMergeTicket(ticket, target)
@@ -913,9 +919,10 @@ export async function acknowledgeEmergency(
   _previous: MaintenanceFormState,
   formData: FormData,
 ): Promise<MaintenanceFormState> {
+  const { actor: staff } = await requireScope('ticket.write')
   const ticketId = String(formData.get('ticketId') ?? '')
   const ticket = await prisma.ticket.findUnique({
-    where: { id: ticketId },
+    where: { id: ticketId, orgId: staff.orgId },
     select: {
       id: true,
       propertyId: true,

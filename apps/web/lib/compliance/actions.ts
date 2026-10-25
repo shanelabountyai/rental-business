@@ -6,7 +6,7 @@ import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { audit } from '@/lib/audit/index.ts'
-import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
+import { propertyResource, requirePermission, requireScope } from '@/lib/auth/guard.ts'
 import { generateStorageKey, storage } from '@/lib/storage/index.ts'
 
 // Writes for the compliance calendar (PROP-05, R-077). `property.write`,
@@ -122,8 +122,9 @@ export async function recordCompletion(
   _previous: ComplianceFormState,
   formData: FormData,
 ): Promise<ComplianceFormState> {
+  const { actor: guarded } = await requireScope('property.write')
   const item = await prisma.complianceItem.findUniqueOrThrow({
-    where: { id: itemId },
+    where: { id: itemId, orgId: guarded.orgId },
     include: {
       property: { select: { id: true, legalEntityId: true, orgId: true } },
       legalEntity: { select: { id: true, orgId: true } },

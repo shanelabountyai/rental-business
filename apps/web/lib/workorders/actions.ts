@@ -16,7 +16,7 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { audit } from '@/lib/audit/index.ts'
 import { isUniqueViolation } from '@/lib/db/unique-violation.ts'
-import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
+import { propertyResource, requirePermission, requireScope } from '@/lib/auth/guard.ts'
 import { resolveThread } from '@/lib/comms/threads.ts'
 import { sendThreadMessage } from '@/lib/comms/messages.ts'
 import { emitEvent } from '@/lib/jobs/outbox.ts'
@@ -217,8 +217,9 @@ export async function assignWorkOrder(
   _previous: WorkOrderFormState,
   formData: FormData,
 ): Promise<WorkOrderFormState> {
+  const { actor } = await requireScope('workorder.write')
   const workOrder = await prisma.workOrder.findUniqueOrThrow({
-    where: { id: workOrderId },
+    where: { id: workOrderId, orgId: actor.orgId },
     include: { property: true },
   })
   await requirePermission('workorder.write', propertyResource(workOrder.property))
@@ -318,8 +319,9 @@ export async function setWorkOrderWarrantyHold(
   workOrderId: string,
   onHold: boolean,
 ): Promise<WorkOrderFormState> {
+  const { actor } = await requireScope('workorder.write')
   const workOrder = await prisma.workOrder.findUniqueOrThrow({
-    where: { id: workOrderId },
+    where: { id: workOrderId, orgId: actor.orgId },
     include: { property: true },
   })
   await requirePermission('workorder.write', propertyResource(workOrder.property))
@@ -388,8 +390,9 @@ export async function setWorkOrderWarrantyHold(
 export async function dispatchToVendor(
   workOrderId: string,
 ): Promise<WorkOrderFormState> {
+  const { actor } = await requireScope('workorder.write')
   const workOrder = await prisma.workOrder.findUniqueOrThrow({
-    where: { id: workOrderId },
+    where: { id: workOrderId, orgId: actor.orgId },
     include: { property: true, unit: true, vendor: true },
   })
   await requirePermission('workorder.write', propertyResource(workOrder.property))
@@ -521,8 +524,9 @@ export async function dispatchToVendor(
 export async function markWorkComplete(
   workOrderId: string,
 ): Promise<WorkOrderFormState> {
+  const { actor } = await requireScope('workorder.write')
   const workOrder = await prisma.workOrder.findUniqueOrThrow({
-    where: { id: workOrderId },
+    where: { id: workOrderId, orgId: actor.orgId },
     include: { property: true },
   })
   await requirePermission('workorder.write', propertyResource(workOrder.property))
@@ -583,8 +587,9 @@ export async function closeWorkOrder(
   _previous: WorkOrderFormState,
   formData: FormData,
 ): Promise<WorkOrderFormState> {
+  const { actor: scoped } = await requireScope('workorder.write')
   const workOrder = await prisma.workOrder.findUniqueOrThrow({
-    where: { id: workOrderId },
+    where: { id: workOrderId, orgId: scoped.orgId },
     include: {
       property: true,
       ticket: { select: { id: true, status: true } },
@@ -818,8 +823,9 @@ const CLOSE_REFUSALS: Record<string, string> = {
  * of it.
  */
 async function workOrderForCommsWrite(workOrderId: string) {
+  const { actor: scoped } = await requireScope('workorder.write')
   const workOrder = await prisma.workOrder.findUniqueOrThrow({
-    where: { id: workOrderId },
+    where: { id: workOrderId, orgId: scoped.orgId },
     include: {
       property: { select: { id: true, legalEntityId: true, orgId: true } },
       ticket: {

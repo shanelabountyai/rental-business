@@ -21,7 +21,7 @@ import { businessDateToUtc } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
-import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
+import { propertyResource, requirePermission, requireScope } from '@/lib/auth/guard.ts'
 
 // Writes for the property filing cabinet (PROP-06, R-015). Same shape as
 // lib/operational/actions.ts: a resource-carrying permission check first.
@@ -63,8 +63,12 @@ function optionalCents(formData: FormData, name: string): number | null {
   return dollars != null ? Math.round(dollars * 100) : null
 }
 
-function propertyOrThrow(propertyId: string) {
-  return prisma.property.findUniqueOrThrow({ where: { id: propertyId } })
+/// Guard before the read (R-286b): every caller checks 'property.write', so
+/// an anonymous caller is refused before any id is looked up, and another
+/// org's id reads exactly like a nonexistent one.
+async function propertyOrThrow(propertyId: string) {
+  const { actor } = await requireScope('property.write')
+  return prisma.property.findUniqueOrThrow({ where: { id: propertyId, orgId: actor.orgId } })
 }
 
 export async function setCostBasis(

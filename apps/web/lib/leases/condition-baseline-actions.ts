@@ -6,7 +6,7 @@ import { CONDITION_BASELINE_DOCUMENT_TYPE } from '@rental/core/leases'
 import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { audit } from '@/lib/audit/index.ts'
-import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
+import { propertyResource, requirePermission, requireScope } from '@/lib/auth/guard.ts'
 import { extractCapturedAt } from '@/lib/documents/exif.ts'
 import { generateStorageKey, storage } from '@/lib/storage/index.ts'
 
@@ -46,8 +46,9 @@ export async function uploadConditionBaseline(
   _previous: BaselineFormState,
   formData: FormData,
 ): Promise<BaselineFormState> {
+  const { actor } = await requireScope('document.write')
   const lease = await prisma.lease.findUniqueOrThrow({
-    where: { id: leaseId },
+    where: { id: leaseId, orgId: actor.orgId },
     select: {
       id: true,
       propertyId: true,
@@ -55,7 +56,7 @@ export async function uploadConditionBaseline(
       property: { select: { id: true, legalEntityId: true, orgId: true } },
     },
   })
-  const actor = await requirePermission('document.write', propertyResource(lease.property))
+  await requirePermission('document.write', propertyResource(lease.property))
 
   const files = formData
     .getAll('files')

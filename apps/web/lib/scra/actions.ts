@@ -13,7 +13,7 @@ import { businessDate, businessDateToUtc, friendlyBusinessDate } from '@rental/c
 import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { audit } from '@/lib/audit/index.ts'
-import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
+import { propertyResource, requirePermission, requireScope } from '@/lib/auth/guard.ts'
 import { extractCapturedAt } from '@/lib/documents/exif.ts'
 import { toDbLookupResult } from '@/lib/scra/queries.ts'
 import { generateStorageKey, storage } from '@/lib/storage/index.ts'
@@ -85,8 +85,9 @@ export async function recordScraLookup(
   _previous: ScraFormState,
   formData: FormData,
 ): Promise<ScraFormState> {
+  const { actor: guarded } = await requireScope('lease.write')
   const lease = await prisma.lease.findUnique({
-    where: { id: leaseId },
+    where: { id: leaseId, orgId: guarded.orgId },
     select: {
       id: true,
       propertyId: true,
@@ -277,8 +278,9 @@ export async function recordScraTermination(
   _previous: ScraFormState,
   formData: FormData,
 ): Promise<ScraFormState> {
+  const { actor: guarded } = await requireScope('lease.write')
   const lease = await prisma.lease.findUnique({
-    where: { id: leaseId },
+    where: { id: leaseId, orgId: guarded.orgId },
     select: {
       id: true,
       propertyId: true,

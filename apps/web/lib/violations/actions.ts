@@ -70,8 +70,9 @@ export async function openViolationCase(
   _previous: ViolationFormState,
   formData: FormData,
 ): Promise<ViolationFormState> {
+  const { actor: guarded } = await requireScope('lease.write')
   const lease = await prisma.lease.findUnique({
-    where: { id: leaseId },
+    where: { id: leaseId, orgId: guarded.orgId },
     select: {
       id: true,
       propertyId: true,

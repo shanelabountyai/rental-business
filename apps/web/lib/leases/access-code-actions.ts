@@ -4,7 +4,7 @@ import { openSecret } from '@rental/core/auth'
 import { holdTypeLabel, holdsCausing } from '@rental/core/holds'
 import { prisma } from '@rental/db'
 import { audit } from '@/lib/audit/index.ts'
-import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
+import { propertyResource, requirePermission, requireScope } from '@/lib/auth/guard.ts'
 import { activeHoldsForLease } from '@/lib/holds/queries.ts'
 import {
   ISSUE_REFUSAL_MESSAGES,
@@ -39,8 +39,9 @@ export async function issueAccessCodeToTenant(
   leaseId: string,
   accessCodeId: string,
 ): Promise<IssueCodeState> {
+  const { actor } = await requireScope('accesscode.issue')
   const lease = await prisma.lease.findUniqueOrThrow({
-    where: { id: leaseId },
+    where: { id: leaseId, orgId: actor.orgId },
     select: {
       id: true,
       unitId: true,
@@ -141,8 +142,9 @@ export async function issueTenantLockCode(
   leaseId: string,
   tenantId: string,
 ): Promise<TenantLockCodeState> {
+  const { actor } = await requireScope('accesscode.issue')
   const lease = await prisma.lease.findUniqueOrThrow({
-    where: { id: leaseId },
+    where: { id: leaseId, orgId: actor.orgId },
     select: {
       id: true,
       propertyId: true,
@@ -151,7 +153,7 @@ export async function issueTenantLockCode(
       deposits: { select: { id: true }, take: 1 },
     },
   })
-  const actor = await requirePermission('accesscode.issue', propertyResource(lease.property))
+  await requirePermission('accesscode.issue', propertyResource(lease.property))
 
   const holds = await activeHoldsForLease(lease.id)
   const halting = holdsCausing(holds, 'halt_access_changes')
@@ -208,11 +210,12 @@ export async function revokeTenantLockCode(
   _previous: TenantLockCodeState,
   formData: FormData,
 ): Promise<TenantLockCodeState> {
+  const { actor } = await requireScope('lease.write')
   const lease = await prisma.lease.findUniqueOrThrow({
-    where: { id: leaseId },
+    where: { id: leaseId, orgId: actor.orgId },
     select: { id: true, propertyId: true, property: { select: { id: true, legalEntityId: true, orgId: true } } },
   })
-  const actor = await requirePermission('lease.write', propertyResource(lease.property))
+  await requirePermission('lease.write', propertyResource(lease.property))
 
   const reason = String(formData.get('reason') ?? '').trim()
   if (!reason) {

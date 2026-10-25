@@ -5,7 +5,7 @@ import { parseLeaseDate } from '@rental/core/leases'
 import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { audit } from '@/lib/audit/index.ts'
-import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
+import { propertyResource, requirePermission, requireScope } from '@/lib/auth/guard.ts'
 import { generateStorageKey, storage } from '@/lib/storage/index.ts'
 
 // Recording a tenant's renter's-insurance certificate (LEASE-10, R-067).
@@ -41,8 +41,9 @@ export async function recordRenterInsurance(
   _previous: InsuranceFormState,
   formData: FormData,
 ): Promise<InsuranceFormState> {
+  const { actor } = await requireScope('lease.write')
   const lease = await prisma.lease.findUniqueOrThrow({
-    where: { id: leaseId },
+    where: { id: leaseId, orgId: actor.orgId },
     include: { property: { select: { id: true, legalEntityId: true, orgId: true } } },
   })
   await requirePermission('lease.write', propertyResource(lease.property))

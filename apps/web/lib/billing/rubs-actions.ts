@@ -5,7 +5,7 @@ import { dollarsToCents } from '@rental/core/money'
 import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { audit } from '@/lib/audit/index.ts'
-import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
+import { propertyResource, requirePermission, requireScope } from '@/lib/auth/guard.ts'
 import { allocateBill, allocationSummary } from './rubs.ts'
 
 // Recording a utility bill and charging it on (PAY-08, R-042).
@@ -34,8 +34,9 @@ export async function recordUtilityBill(
   _previous: UtilityBillFormState,
   formData: FormData,
 ): Promise<UtilityBillFormState> {
+  const { actor: guarded } = await requireScope('property.write')
   const property = await prisma.property.findUniqueOrThrow({
-    where: { id: propertyId },
+    where: { id: propertyId, orgId: guarded.orgId },
     select: { id: true, legalEntityId: true, orgId: true },
   })
   await requirePermission('property.write', propertyResource(property))
@@ -123,8 +124,9 @@ export async function splitUtilityBill(
   const id = String(formData.get('utilityBillId') ?? '')
   if (!id) return { error: 'No bill was named.' }
 
+  const { actor: guarded } = await requireScope('ledger.adjust')
   const bill = await prisma.utilityBill.findUniqueOrThrow({
-    where: { id },
+    where: { id, orgId: guarded.orgId },
     select: {
       id: true,
       propertyId: true,

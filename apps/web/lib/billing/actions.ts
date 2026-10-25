@@ -2,7 +2,7 @@
 
 import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
-import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
+import { propertyResource, requirePermission, requireScope } from '@/lib/auth/guard.ts'
 import { audit } from '@/lib/audit/index.ts'
 import { applyPaymentHold } from '@/lib/payments/legal-hold.ts'
 import { syncLease, syncLeasePayer } from './lifecycle.ts'
@@ -29,8 +29,9 @@ export async function resyncPayer(
   const leasePayerId = String(formData.get('leasePayerId') ?? '')
   if (!leasePayerId) return { error: 'No payer named.' }
 
+  const { actor: guarded } = await requireScope('ledger.read')
   const payer = await prisma.leasePayer.findUniqueOrThrow({
-    where: { id: leasePayerId },
+    where: { id: leasePayerId, orgId: guarded.orgId },
     select: { property: { select: { id: true, legalEntityId: true, orgId: true } } },
   })
   await requirePermission('ledger.read', propertyResource(payer.property))
@@ -52,8 +53,9 @@ export async function resyncLease(
   const leaseId = String(formData.get('leaseId') ?? '')
   if (!leaseId) return { error: 'No lease named.' }
 
+  const { actor: guarded } = await requireScope('ledger.read')
   const lease = await prisma.lease.findUniqueOrThrow({
-    where: { id: leaseId },
+    where: { id: leaseId, orgId: guarded.orgId },
     select: { property: { select: { id: true, legalEntityId: true, orgId: true } } },
   })
   await requirePermission('ledger.read', propertyResource(lease.property))
@@ -113,8 +115,9 @@ export async function setPaymentHold(
   const leasePayerId = String(formData.get('leasePayerId') ?? '')
   if (!leasePayerId) return { error: 'No payer named.' }
 
+  const { actor: guarded } = await requireScope('ledger.adjust')
   const payer = await prisma.leasePayer.findUnique({
-    where: { id: leasePayerId },
+    where: { id: leasePayerId, orgId: guarded.orgId },
     select: { id: true, leaseId: true, property: { select: { id: true, legalEntityId: true, orgId: true } } },
   })
   if (!payer) return { error: 'That payer no longer exists.' }

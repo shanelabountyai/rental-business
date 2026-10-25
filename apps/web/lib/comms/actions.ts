@@ -9,7 +9,7 @@ import { wallClockToUtc } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
-import { propertyResource, requirePermission, requireStaff } from '@/lib/auth/guard.ts'
+import { propertyResource, requirePermission, requireScope, requireStaff } from '@/lib/auth/guard.ts'
 import { logCall, routeUnroutedMessage, sendThreadMessage } from './messages.ts'
 import { triagesUnrouted } from './queries.ts'
 import { propertyForTenant, resolveThread } from './threads.ts'
@@ -47,8 +47,9 @@ function str(formData: FormData, name: string): string {
  * The id itself is not the authorization.
  */
 async function threadForWrite(threadId: string) {
+  const { actor: guarded } = await requireScope('message.send')
   const thread = await prisma.thread.findUniqueOrThrow({
-    where: { id: threadId },
+    where: { id: threadId, orgId: guarded.orgId },
     include: {
       // timezone too: a logged call's wall-clock time is property-local, and
       // resolving it in any other zone misdates the evidence (D-3).

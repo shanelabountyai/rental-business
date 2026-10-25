@@ -6,7 +6,7 @@ import { businessDate, businessDateToUtc, friendlyBusinessDate } from '@rental/c
 import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { audit } from '@/lib/audit/index.ts'
-import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
+import { propertyResource, requirePermission, requireScope } from '@/lib/auth/guard.ts'
 import { authUrl } from '@/lib/auth/delivery.ts'
 import { dispatchPendingNotifications, notify } from '@/lib/notifications/send.ts'
 import { reachOf } from '@/lib/notifications/reach.ts'
@@ -305,6 +305,8 @@ export async function sendPaymentPlanForSignature(
   _previous: PlanFormState,
   formData: FormData,
 ): Promise<PlanFormState> {
+  // Guard before sendPlanForSignature's lookup; it re-checks per property.
+  await requireScope('hold.manage')
   const planId = String(formData.get('planId') ?? '')
   if (!planId) return { error: 'No plan named.' }
 

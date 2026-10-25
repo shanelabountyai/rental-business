@@ -3,7 +3,7 @@
 import { type SyndicationNetwork, buildFeed, isSyndicationNetwork } from '@rental/core/listings'
 import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
-import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
+import { propertyResource, requirePermission, requireScope } from '@/lib/auth/guard.ts'
 import { feedListingContextFor } from './queries.ts'
 import { syndicationAdapter } from './provider.ts'
 
@@ -31,8 +31,9 @@ export async function syndicateListing(
   _previous: SyndicationFormState,
   formData: FormData,
 ): Promise<SyndicationFormState> {
+  const { actor } = await requireScope('unit.write')
   const listing = await prisma.listing.findUnique({
-    where: { id: listingId },
+    where: { id: listingId, orgId: actor.orgId },
     include: { property: true },
   })
   if (!listing) return { error: 'That listing no longer exists.' }

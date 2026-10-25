@@ -16,7 +16,7 @@ import { businessDate, friendlyBusinessDate, utcToBusinessDate } from '@rental/c
 import { prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { audit } from '@/lib/audit/index.ts'
-import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
+import { propertyResource, requirePermission, requireScope } from '@/lib/auth/guard.ts'
 import { issueToken } from '@/lib/auth/store.ts'
 import { authUrl } from '@/lib/auth/delivery.ts'
 import { esignAdapter } from '@/lib/esign/provider.ts'
@@ -53,8 +53,9 @@ const UTILITY_LABELS: Record<string, string> = {
 }
 
 async function leaseForEsign(leaseId: string) {
+  const { actor } = await requireScope('lease.execute')
   const lease = await prisma.lease.findUniqueOrThrow({
-    where: { id: leaseId },
+    where: { id: leaseId, orgId: actor.orgId },
     include: {
       property: {
         select: {
@@ -91,7 +92,7 @@ async function leaseForEsign(leaseId: string) {
       },
     },
   })
-  const actor = await requirePermission('lease.execute', propertyResource(lease.property))
+  await requirePermission('lease.execute', propertyResource(lease.property))
   return { lease, actor }
 }
 
