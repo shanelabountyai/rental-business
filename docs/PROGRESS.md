@@ -14854,7 +14854,7 @@ R-285b's CI run (`40013225946`) failed 8 e2e tests across three files; none had 
 
 
 ## R-286c — two-org fixture, ORG-02/03/04, own-org sanity call
-**Commit:** _recorded in the follow-up_  ·  **Date:** 2026-10-25
+**Commit:** `50806a3`  ·  **Date:** 2026-10-25
 
 **What it built.** `tests/invariants/fixture.ts`: one row of every model `actions.manifest.ts` names, in each of two orgs, generated from `Prisma.dmmf` (52 models, three CHECK-constraint overrides plus four row-state ones), with an owner, a second owner, a tenant on the lease and a guarantor to act as. `runCrossOrg()` in `harness.ts` and `org-02-03-04.test.ts`: as org A, every action that takes an id is called with all of org B's ids (ORG-02: no write), each id path swapped to org B alone (ORG-03: no write) and the same path naming no row (ORG-04: the same answer, byte for byte, and no write the missing-id call did not make), then with org A's own ids (sanity: not stopped, and a different answer from the missing-id call), retried once on a fresh org. The principal is whichever the guard asks for: staff, tenant or guarantor. Page-level ORG-04 for `GET /api/documents/[id]/file`. A control for each new check (`controls/cross-org.ts`). The write spy now counts only writes that changed something (a `*Many` with count 0 and a write that threw are not writes). The manifest gains `'=literal'` form values and an `unreached` marker; its untagged-field check now sees `str(formData, 'x')` as well as `formData.get('x')`. The whole file runs in about 5 seconds.
 
