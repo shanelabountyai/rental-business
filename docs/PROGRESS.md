@@ -14842,7 +14842,7 @@ R-285b's CI run (`40013225946`) failed 8 e2e tests across three files; none had 
 **Gate.** lint (the 16 baseline warnings, 0 errors), typecheck. `npm test`: 3,603 passed + 4 skipped of 3,607. e2e `desktop-chrome`, `documents`, `properties`, `units`, `listings`: 36 of 36. No layout or form control changed, so no `mobile-chrome` run.
 
 ## R-286b — guard first on every action; ORG-01's ratchet is empty
-**Commit:** `PENDING`  ·  **Date:** 2026-10-25
+**Commit:** `32308dd`  ·  **Date:** 2026-10-25
 
 **What it built.** All 118 actions that loaded a record before refusing a stranger now await `requireScope(<permission>)` first (or the shared helper they call does), and look the record up by `{ id, orgId: actor.orgId }`, so another org's id gets the same "no longer exists"/throw as a missing one. The existing per-record `requirePermission(…, propertyResource(…))` is unchanged in every case; a diff check confirmed each added scope names the same permission as the file's existing check. Helpers fixed once for all their callers: `leaseForWrite` (8 lease actions), `propertyOrThrow` (12 filing-cabinet actions), `unitWithPropertyOrThrow` (7 operational actions, now taking the permission), `inspectionForWrite`, `threadForWrite`, `turnoverForWrite`, `workOrderForCommsWrite`, `listingForWriteOrThrow`, `ticketTriageTaskOrThrow`, `declareEmergency`, `leaseForEsign`, `documentWithPropertyOrThrow`, `entryContextFor`, `loadLeaseForPartyChange` and `sendPlanForSignature`. `org-01.pending.ts` is now `[]`, asserted exactly.
 
