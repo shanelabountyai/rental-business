@@ -3,7 +3,7 @@ import { addBusinessDays, utcToBusinessDate } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { ListingForm } from '@/components/listings/listing-form.tsx'
 import { PageHeader } from '@/components/page-header.tsx'
-import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
+import { propertyResource, requirePermission, requireStaff } from '@/lib/auth/guard.ts'
 import { createListing } from '@/lib/listings/actions.ts'
 
 export const metadata = { title: 'New listing — Rental Operations' }
@@ -14,6 +14,8 @@ export default async function NewListingPage({
   params: Promise<{ id: string; unitId: string }>
 }) {
   const { id: propertyId, unitId } = await params
+  // ORG-05: signed in before the lookup, so a stranger cannot tell an id that exists from one that does not.
+  await requireStaff()
 
   const [property, unit, underNotice] = await Promise.all([
     prisma.property.findUnique({ where: { id: propertyId } }),

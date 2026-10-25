@@ -1,3 +1,4 @@
+// public: the root layout renders no data
 import type { Metadata } from 'next'
 import { Albert_Sans } from 'next/font/google'
 import './globals.css'

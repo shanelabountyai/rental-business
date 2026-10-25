@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation'
 import { prisma } from '@rental/db'
 import { PageHeader } from '@/components/page-header.tsx'
 import { UnitForm } from '@/components/units/unit-form.tsx'
-import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
+import { propertyResource, requirePermission, requireStaff } from '@/lib/auth/guard.ts'
 import { createUnit } from '@/lib/units/actions.ts'
 
 export const metadata = { title: 'New unit — Rental Operations' }
@@ -13,6 +13,8 @@ export default async function NewUnitPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
+  // ORG-05: signed in before the lookup, so a stranger cannot tell an id that exists from one that does not.
+  await requireStaff()
 
   const property = await prisma.property.findUnique({ where: { id } })
   if (!property) notFound()

@@ -259,7 +259,8 @@ test.describe('uploading and downloading', () => {
       headers: { cookie: '' },
       maxRedirects: 0,
     })
-    expect([302, 307]).toContain(anonymous.status())
+    // ORG-05 (R-286a): 404 before any lookup, so a stranger cannot tell a real id from a guessed one.
+    expect(anonymous.status()).toBe(404)
   })
 })
 

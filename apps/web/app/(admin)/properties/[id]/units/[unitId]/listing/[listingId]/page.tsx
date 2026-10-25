@@ -6,7 +6,7 @@ import { ListingForm } from '@/components/listings/listing-form.tsx'
 import { ListingPublishControls } from '@/components/listings/listing-publish-controls.tsx'
 import { ListingSyndicationSection } from '@/components/listings/listing-syndication.tsx'
 import { PageHeader } from '@/components/page-header.tsx'
-import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
+import { propertyResource, requirePermission, requireStaff } from '@/lib/auth/guard.ts'
 import { publishListing, unpublishListing, updateListing } from '@/lib/listings/actions.ts'
 import { leadCountsForListing, listingSyndications } from '@/lib/listings/queries.ts'
 import { syndicateListing } from '@/lib/listings/syndication.ts'
@@ -20,6 +20,8 @@ export default async function ListingDetailPage({
   params: Promise<{ id: string; unitId: string; listingId: string }>
 }) {
   const { id: propertyId, unitId, listingId } = await params
+  // ORG-05: signed in before the lookup, so a stranger cannot tell an id that exists from one that does not.
+  await requireStaff()
 
   const listing = await prisma.listing.findUnique({
     where: { id: listingId },

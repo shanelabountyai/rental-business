@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation'
 import { prisma } from '@rental/db'
 import { PageHeader } from '@/components/page-header.tsx'
 import { EntityForm } from '@/components/properties/entity-form.tsx'
-import { requirePermission } from '@/lib/auth/guard.ts'
+import { requirePermission, requireStaff } from '@/lib/auth/guard.ts'
 import { updateLegalEntity } from '@/lib/properties/actions.ts'
 
 export const metadata = { title: 'Edit legal entity — Rental Operations' }
@@ -13,6 +13,8 @@ export default async function EditLegalEntityPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
+  // ORG-05: signed in before the lookup, so a stranger cannot tell an id that exists from one that does not.
+  await requireStaff()
   // Scoped to THIS entity, so an entity-scoped manager may edit their own
   // entity but not someone else's (ROLE-01).
   // R-285b: read first so the check carries the entity's org - a

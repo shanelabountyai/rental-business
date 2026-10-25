@@ -1,3 +1,4 @@
+// public: three principal kinds, so no single guard; the session is read first and no session is a 404 before any lookup
 import { tenantCanSeeDocument } from '@rental/core/portal'
 import { prisma } from '@rental/db'
 import { auth } from '@/auth.ts'
@@ -33,6 +34,12 @@ export async function GET(
 ) {
   const { id } = await params
 
+  // ORG-05: the session first. Looking the document up before knowing who
+  // asked answered a stranger 404 for a missing id and a sign-in redirect for
+  // a real one, which confirms the id exists.
+  const session = await auth()
+  if (!session?.principal) return new Response('Not found', { status: 404 })
+
   const document = await prisma.document.findUnique({
     where: { id },
     include: { property: { select: { id: true, legalEntityId: true, orgId: true } } },
@@ -41,9 +48,7 @@ export async function GET(
     return new Response('Not found', { status: 404 })
   }
 
-  const session = await auth()
-
-  if (session?.principal.kind === 'tenant') {
+  if (session.principal.kind === 'tenant') {
     const scope = await tenantScope(session.principal.id)
     if (!tenantCanSeeDocument(document, scope)) {
       // 404, not 403. "Not yours" and "does not exist" must be
@@ -54,7 +59,7 @@ export async function GET(
     return serve(document)
   }
 
-  if (session?.principal.kind === 'guarantor') {
+  if (session.principal.kind === 'guarantor') {
     const guarantor = await prisma.guarantor.findUnique({
       where: { id: session.principal.id },
       select: { leaseId: true },

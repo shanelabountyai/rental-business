@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation'
 import { prisma } from '@rental/db'
 import { PageHeader } from '@/components/page-header.tsx'
 import { PropertyForm } from '@/components/properties/property-form.tsx'
-import { propertyResource, requirePermission } from '@/lib/auth/guard.ts'
+import { propertyResource, requirePermission, requireStaff } from '@/lib/auth/guard.ts'
 import { updateProperty } from '@/lib/properties/actions.ts'
 
 export const metadata = { title: 'Edit property — Rental Operations' }
@@ -13,6 +13,8 @@ export default async function EditPropertyPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
+  // ORG-05: signed in before the lookup, so a stranger cannot tell an id that exists from one that does not.
+  await requireStaff()
 
   // Fetched before the guard, not after: the guard needs the property's
   // legalEntityId to correctly match an entity-scoped grant (propertyResource
