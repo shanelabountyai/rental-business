@@ -4,7 +4,7 @@ import { actorCan, requirePermission } from '@/lib/auth/guard.ts'
 import { listTemplates } from '@/lib/comms/templates.ts'
 import { PRIMARY_BUTTON_CLASSES } from '@/components/ui-classes.ts'
 
-export const metadata = { title: 'Message templates — Rental Operations' }
+export const metadata = { title: 'Message templates' }
 
 // The managed template library (COMM-03, R-049).
 //

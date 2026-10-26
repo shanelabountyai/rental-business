@@ -16,7 +16,7 @@ import { requestPasswordReset } from '@/lib/auth/actions.ts'
 export const dynamic = 'force-dynamic'
 
 
-export const metadata = { title: 'Reset your password — Rental Operations' }
+export const metadata = { title: 'Reset your password' }
 
 export default function ForgotPasswordPage() {
   return (

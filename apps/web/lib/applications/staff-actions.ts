@@ -95,7 +95,7 @@ export async function inviteToApply(
     context: {
       firstName: applicant.firstName,
       addressLine1: prospect.property.addressLine1,
-      url: authUrl(`/apply/${issued.token}`),
+      url: await authUrl(applicant.orgId, `/apply/${issued.token}`),
     },
     propertyId: prospect.propertyId,
     idempotencyKey: `applicant-invite:${applicant.id}`,

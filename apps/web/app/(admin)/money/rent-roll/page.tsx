@@ -10,7 +10,7 @@ import { rentRoll } from '@/lib/payments/rent-roll.ts'
 import { sendReminders } from '@/lib/payments/reminders.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 
-export const metadata = { title: 'Rent roll — Rental Operations' }
+export const metadata = { title: 'Rent roll' }
 
 // The Monday-morning report (PAY-06, RPT-02, R-044).
 //

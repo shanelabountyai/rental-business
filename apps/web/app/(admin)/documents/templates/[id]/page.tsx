@@ -11,7 +11,7 @@ import { retireDocumentTemplate, saveDocumentTemplate } from '@/lib/documents/te
 import { DOCUMENT_TYPE_OPTIONS, getDocumentTemplate } from '@/lib/documents/template-queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 
-export const metadata = { title: 'Document template — Rental Operations' }
+export const metadata = { title: 'Document template' }
 
 // NO `loading.tsx` HERE OR ABOVE. This page calls notFound() and a Suspense
 // boundary above it would stream a 200 before the page ran (R-099).

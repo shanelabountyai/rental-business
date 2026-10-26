@@ -377,6 +377,7 @@ export async function inviteToClarify(ticketId: string): Promise<void> {
       where: { id: ticketId },
       select: {
         id: true,
+        orgId: true,
         propertyId: true,
         description: true,
         property: { select: { addressLine1: true } },
@@ -410,7 +411,7 @@ export async function inviteToClarify(ticketId: string): Promise<void> {
         // ABSOLUTE, from AUTH_URL. A relative path in an SMS is not a link,
         // it is a string a tenant cannot tap — on the one message whose
         // entire value is the tap.
-        url: authUrl(`/clarify/${token}`),
+        url: await authUrl(ticket.orgId, `/clarify/${token}`),
       },
       propertyId: ticket.propertyId,
       // One invitation per ticket, ever. A tenant who sends three texts about

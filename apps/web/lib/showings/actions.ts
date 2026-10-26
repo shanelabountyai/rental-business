@@ -312,7 +312,7 @@ export async function bookShowing(
           scheduledStart: requested.toISOString(),
           scheduledEnd: scheduledEnd.toISOString(),
           timezone: link.timezone,
-          url: authUrl(`/showings/access/${issued.token}`),
+          url: await authUrl(showing.orgId, `/showings/access/${issued.token}`),
         },
         propertyId: link.propertyId,
         idempotencyKey: `showing-access-link:${showing.id}`,

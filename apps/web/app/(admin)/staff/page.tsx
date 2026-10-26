@@ -5,7 +5,7 @@ import { listStaff } from '@/lib/staff/queries.ts'
 import { PageHeader } from '@/components/page-header.tsx'
 import { SUBMIT_BUTTON_CLASSES } from '@/components/ui-classes.ts'
 
-export const metadata = { title: 'Staff — Rental Operations' }
+export const metadata = { title: 'Staff' }
 
 // ROLE-04's directory (R-138). `grantAssignment` and `revokeAssignment` have
 // existed since R-004 with a comment saying R-007 would build this screen;

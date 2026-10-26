@@ -6,7 +6,7 @@ import { actorCan, requireScope } from '@/lib/auth/guard.ts'
 import { listThreads, unroutedCount } from '@/lib/comms/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 
-export const metadata = { title: 'Messages — Rental Operations' }
+export const metadata = { title: 'Messages' }
 
 // COMM-01's one inbox: every conversation, whatever channel it arrived on.
 //

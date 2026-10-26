@@ -6,6 +6,7 @@ import { requireStaff } from '@/lib/auth/guard.ts'
 import { currentActor } from '@/lib/auth/actor.ts'
 import { selectScope } from '@/lib/scope/actions.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
+import { currentBrand } from '@/lib/brand.ts'
 import { can, holdsAnywhere } from '@rental/core/rbac'
 
 // The admin shell. Everything under (admin) renders inside it.
@@ -26,6 +27,7 @@ export default async function AdminLayout({
 }) {
   const actor = await requireStaff()
   const scope = await currentScope(actor, 'property.read')
+  const brand = await currentBrand()
 
   // Filtered on the server: a maintenance tech is never sent the markup for a
   // financial section, so there is nothing to reveal in the DOM.
@@ -61,7 +63,7 @@ export default async function AdminLayout({
           href="/dashboard"
           className="focus-visible:ring-ring rounded-md text-sm font-semibold tracking-tight focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
         >
-          Rental Operations
+          {brand.name}
         </Link>
 
         <PropertySwitcher scope={scope} onSelect={selectScope} />

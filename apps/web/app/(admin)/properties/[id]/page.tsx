@@ -33,7 +33,7 @@ const UNIT_STATUS_LABELS: Record<string, string> = {
   DOWN: 'Down',
 }
 
-export const metadata = { title: 'Property — Rental Operations' }
+export const metadata = { title: 'Property' }
 
 const PROPERTY_TYPE_LABELS: Record<string, string> = {
   SINGLE_FAMILY: 'Single-family',

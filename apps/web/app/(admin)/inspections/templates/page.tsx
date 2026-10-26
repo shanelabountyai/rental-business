@@ -5,7 +5,7 @@ import { requirePermission } from '@/lib/auth/guard.ts'
 import { listInspectionTemplates } from '@/lib/inspections/template-queries.ts'
 import { PRIMARY_BUTTON_CLASSES } from '@/components/ui-classes.ts'
 
-export const metadata = { title: 'Inspection checklists — Rental Operations' }
+export const metadata = { title: 'Inspection checklists' }
 
 // The checklist template library (INSP-01, R-068) - the same shape
 // /documents/templates gives its own library, one level over.

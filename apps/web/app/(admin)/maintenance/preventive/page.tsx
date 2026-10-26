@@ -7,7 +7,7 @@ import { dueCountForTemplate, listPreventiveTemplates } from '@/lib/maintenance/
 import { currentScope } from '@/lib/scope/current-scope.ts'
 import { SUBMIT_BUTTON_CLASSES } from '@/components/ui-classes.ts'
 
-export const metadata = { title: 'Preventive maintenance — Rental Operations' }
+export const metadata = { title: 'Preventive maintenance' }
 
 // "As a PM, I can run recurring/preventive maintenance from schedules and
 // seasonal batch templates ... one click creates the batch across

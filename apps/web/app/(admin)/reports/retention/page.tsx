@@ -6,7 +6,7 @@ import { requireScope } from '@/lib/auth/guard.ts'
 import { documentsPastRetention } from '@/lib/documents/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 
-export const metadata = { title: 'Retention review — Rental Operations' }
+export const metadata = { title: 'Retention review' }
 
 // R-148: DOC-05's retention report, unread since R-081-era code wrote it.
 // A report for a HUMAN to act on, never an automated purge - the reader's

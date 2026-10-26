@@ -5,7 +5,7 @@ import { requirePermission } from '@/lib/auth/guard.ts'
 import { listDocumentTemplates } from '@/lib/documents/template-queries.ts'
 import { PRIMARY_BUTTON_CLASSES } from '@/components/ui-classes.ts'
 
-export const metadata = { title: 'Document templates — Rental Operations' }
+export const metadata = { title: 'Document templates' }
 
 // The document template library (DOC-04, R-062) - the same shape
 // /messages/templates already gives message templates, one level over: a

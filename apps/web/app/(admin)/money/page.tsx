@@ -22,7 +22,7 @@ import { waiverPatternByTenant } from '@/lib/ledger/waiver-report.ts'
 import { planOfferPatternByTenant } from '@/lib/payments/plan-report.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 
-export const metadata = { title: 'Money — Rental Operations' }
+export const metadata = { title: 'Money' }
 
 // Guards itself rather than relying on the layout. The layout proves the
 // visitor is staff; this proves they may see THIS section (ROLE-01).

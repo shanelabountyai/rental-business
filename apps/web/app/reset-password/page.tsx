@@ -2,7 +2,7 @@ import { MIN_PASSWORD_LENGTH } from '@rental/core/auth'
 import { AuthCard, AuthForm, Field } from '@/components/auth-form.tsx'
 import { completePasswordReset } from '@/lib/auth/actions.ts'
 
-export const metadata = { title: 'Choose a new password — Rental Operations' }
+export const metadata = { title: 'Choose a new password' }
 
 export default async function ResetPasswordPage({
   searchParams,

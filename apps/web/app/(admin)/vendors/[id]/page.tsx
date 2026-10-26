@@ -11,7 +11,7 @@ import { deactivateVendor, saveVendorRecord } from '@/lib/vendors/staff-actions.
 import { getVendor, vendorPaymentTotalsForYear } from '@/lib/vendors/staff-queries.ts'
 import { Panel } from '@/components/panel.tsx'
 
-export const metadata = { title: 'Vendor — Rental Operations' }
+export const metadata = { title: 'Vendor' }
 
 // NO `loading.tsx` HERE OR ABOVE (R-099): this page calls notFound().
 export default async function VendorPage({

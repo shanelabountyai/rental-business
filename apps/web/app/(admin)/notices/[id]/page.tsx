@@ -22,7 +22,7 @@ import { holdFrom } from '@/lib/payments/legal-hold.ts'
 import { getNotice } from '@/lib/notices/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 
-export const metadata = { title: 'Notice — Rental Operations' }
+export const metadata = { title: 'Notice' }
 
 // One notice, its archived PDF, and every service event against it
 // (COMM-02, R-051).

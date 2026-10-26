@@ -7,7 +7,7 @@ import { requirePermission } from '@/lib/auth/guard.ts'
 import { deactivatePreventiveTemplate, savePreventiveTemplate } from '@/lib/maintenance/preventive-actions.ts'
 import { getPreventiveTemplate } from '@/lib/maintenance/preventive-queries.ts'
 
-export const metadata = { title: 'Preventive-maintenance template — Rental Operations' }
+export const metadata = { title: 'Preventive-maintenance template' }
 
 // NO `loading.tsx` HERE OR ABOVE (R-099): this page calls notFound().
 export default async function PreventiveTemplatePage({ params }: { params: Promise<{ id: string }> }) {

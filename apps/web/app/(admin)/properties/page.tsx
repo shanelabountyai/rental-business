@@ -5,7 +5,7 @@ import { currentScope as switcherScope } from '@/lib/scope/current-scope.ts'
 import { canCreateAnyProperty, listProperties } from '@/lib/properties/queries.ts'
 import { SUBMIT_BUTTON_CLASSES } from '@/components/ui-classes.ts'
 
-export const metadata = { title: 'Properties — Rental Operations' }
+export const metadata = { title: 'Properties' }
 
 // PROP-01/PROP-04. Guards itself with requireScope() rather than a bare
 // requirePermission('property.read') - a resource-less permission check only

@@ -11,6 +11,7 @@ import {
 } from '@rental/core/notifications'
 import type { NotificationRecipientType } from '@rental/db'
 import { prisma } from '@rental/db'
+import { messagingSettings } from '@/lib/comms/messaging-settings.ts'
 import { deliverOverChannel } from '@/lib/notifications/deliver.ts'
 
 // Honouring "stop emailing me" (COMM-08, NOTIF-02; R-097e).
@@ -32,8 +33,6 @@ import { deliverOverChannel } from '@/lib/notifications/deliver.ts'
 // own words, and why sending one more email to somebody who asked for none is
 // the right call rather than a violation of the request.
 // ==========================================================================
-
-const BUSINESS_NAME = 'Rental Operations'
 
 export interface OptOutOutcome {
   stopped: number
@@ -88,7 +87,7 @@ export async function honourEmailOptOut(
 
   if (toAddress) {
     const message = emailOptOutConfirmation({
-      businessName: BUSINESS_NAME,
+      businessName: (await messagingSettings(orgId)).businessName,
       stoppedCount: switchable.length,
       stillSending: stillSending.map((category) => ({
         label: CATEGORY_LABELS[category],

@@ -10,6 +10,7 @@ import {
 import { type Priority, prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { audit } from '@/lib/audit/index.ts'
+import { authUrl } from '@/lib/auth/delivery.ts'
 import {
   propertyResource,
   requireMonetaryAuthority,
@@ -480,7 +481,9 @@ export async function requestBids(
       update: { requestedAt: new Date() },
     })
     const { token } = await issueBidLink(workOrderId, vendor.id)
-    const link = `${process.env.AUTH_URL ?? ''}/vendor/bid/${token}`
+    const link = process.env.AUTH_URL
+      ? await authUrl(workOrder.orgId, `/vendor/bid/${token}`)
+      : `/vendor/bid/${token}`
 
     try {
       const outcomes = await notify({

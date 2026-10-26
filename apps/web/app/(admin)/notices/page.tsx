@@ -7,7 +7,7 @@ import { listNotices } from '@/lib/notices/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 import { Badge } from '@/components/badge.tsx'
 
-export const metadata = { title: 'Notices — Rental Operations' }
+export const metadata = { title: 'Notices' }
 
 // The notice register (COMM-02, R-051).
 //

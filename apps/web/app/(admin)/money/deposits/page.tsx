@@ -8,7 +8,7 @@ import { createDepositBatch } from '@/lib/payments/deposit-actions.ts'
 import { listUndepositedDepositGroups } from '@/lib/payments/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 
-export const metadata = { title: 'Deposits — Rental Operations' }
+export const metadata = { title: 'Deposits' }
 
 // PAY-05's other named leftover, R-166: undeposited checks, money orders and
 // cash, grouped into the trip to the bank they would make.

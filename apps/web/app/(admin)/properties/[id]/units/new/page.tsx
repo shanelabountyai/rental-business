@@ -5,7 +5,7 @@ import { UnitForm } from '@/components/units/unit-form.tsx'
 import { propertyResource, requirePermission, requireStaff } from '@/lib/auth/guard.ts'
 import { createUnit } from '@/lib/units/actions.ts'
 
-export const metadata = { title: 'New unit — Rental Operations' }
+export const metadata = { title: 'New unit' }
 
 export default async function NewUnitPage({
   params,

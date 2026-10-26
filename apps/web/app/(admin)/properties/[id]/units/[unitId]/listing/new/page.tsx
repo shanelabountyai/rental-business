@@ -6,7 +6,7 @@ import { PageHeader } from '@/components/page-header.tsx'
 import { propertyResource, requirePermission, requireStaff } from '@/lib/auth/guard.ts'
 import { createListing } from '@/lib/listings/actions.ts'
 
-export const metadata = { title: 'New listing — Rental Operations' }
+export const metadata = { title: 'New listing' }
 
 export default async function NewListingPage({
   params,

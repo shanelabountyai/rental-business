@@ -3,7 +3,7 @@ import { PageHeader } from '@/components/page-header.tsx'
 import { requirePermission } from '@/lib/auth/guard.ts'
 import { savePreventiveTemplate } from '@/lib/maintenance/preventive-actions.ts'
 
-export const metadata = { title: 'New preventive-maintenance template — Rental Operations' }
+export const metadata = { title: 'New preventive-maintenance template' }
 
 export default async function NewPreventiveTemplatePage() {
   await requirePermission('workorder.write')

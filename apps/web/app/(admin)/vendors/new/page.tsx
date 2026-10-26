@@ -4,7 +4,7 @@ import { VendorRecordForm } from '@/components/vendors/vendor-record-form.tsx'
 import { requirePermission } from '@/lib/auth/guard.ts'
 import { saveVendorRecord } from '@/lib/vendors/staff-actions.ts'
 
-export const metadata = { title: 'New vendor — Rental Operations' }
+export const metadata = { title: 'New vendor' }
 
 export default async function NewVendorPage() {
   await requirePermission('vendor.write')

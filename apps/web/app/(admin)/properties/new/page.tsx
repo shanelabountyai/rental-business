@@ -5,7 +5,7 @@ import { actorCan, requireScope } from '@/lib/auth/guard.ts'
 import { createProperty } from '@/lib/properties/actions.ts'
 import { listWritableLegalEntities } from '@/lib/properties/queries.ts'
 
-export const metadata = { title: 'New property — Rental Operations' }
+export const metadata = { title: 'New property' }
 
 export default async function NewPropertyPage() {
   // requireScope, not a bare requirePermission('property.write') - see that

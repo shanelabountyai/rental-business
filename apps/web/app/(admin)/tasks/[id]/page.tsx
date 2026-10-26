@@ -35,7 +35,7 @@ import { actualTotalCents } from '@rental/core/approvals'
 import { decideApproval } from '@/lib/workorders/approvals.ts'
 import { getWorkOrder, jobContextForWorkOrder } from '@/lib/workorders/queries.ts'
 
-export const metadata = { title: 'Task — Rental Operations' }
+export const metadata = { title: 'Task' }
 
 const PRIORITY_LABELS: Record<string, string> = {
   EMERGENCY: 'Emergency',

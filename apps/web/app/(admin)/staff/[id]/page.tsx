@@ -10,7 +10,7 @@ import { manageStaff } from '@/lib/staff/actions.ts'
 import { roleOptions, scopeOptions } from '@/lib/staff/options.ts'
 import { staffDetail } from '@/lib/staff/queries.ts'
 
-export const metadata = { title: 'Staff member — Rental Operations' }
+export const metadata = { title: 'Staff member' }
 
 /// A staff member hangs off no property, so there is no property-local zone to
 /// print these in. The first property by name is the closest available answer

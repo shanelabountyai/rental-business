@@ -2,6 +2,7 @@ import { checkToken, hashToken } from '@rental/core/auth'
 import { icalendarFeed } from '@rental/core/scheduling'
 import { prisma } from '@rental/db'
 import { loadStaffActor } from '@/lib/auth/actor.ts'
+import { brandFor } from '@/lib/brand.ts'
 import { calendarEventsFor, feedWindow } from '@/lib/calendar/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 
@@ -53,7 +54,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ tok
   const events = await calendarEventsFor(scope.propertyIds, feedWindow(now))
 
   const body = icalendarFeed({
-    name: 'Visits — Rental Operations',
+    name: `Visits — ${(await brandFor(actor.orgId)).name}`,
     events,
     generatedAt: now,
   })

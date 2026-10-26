@@ -2,7 +2,7 @@ import { requirePermission, requireScope } from '@/lib/auth/guard.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 import { PageHeader } from '@/components/page-header.tsx'
 
-export const metadata = { title: 'Search — Rental Operations' }
+export const metadata = { title: 'Search' }
 
 // The universal search stub the shell's header posts to.
 //

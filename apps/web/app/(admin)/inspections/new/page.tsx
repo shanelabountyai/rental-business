@@ -7,7 +7,7 @@ import { unitsForNewInspection } from '@/lib/inspections/queries.ts'
 import { listInspectionTemplates } from '@/lib/inspections/template-queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 
-export const metadata = { title: 'New inspection — Rental Operations' }
+export const metadata = { title: 'New inspection' }
 
 export default async function NewInspectionPage() {
   const { actor } = await requireScope('inspection.write')

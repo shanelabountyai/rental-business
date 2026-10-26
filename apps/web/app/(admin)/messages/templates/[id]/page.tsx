@@ -18,7 +18,7 @@ import {
 import { getTemplate, listTemplateVersions } from '@/lib/comms/templates.ts'
 import { previewTenancy, templateValues } from '@/lib/comms/template-values.ts'
 
-export const metadata = { title: 'Template — Rental Operations' }
+export const metadata = { title: 'Template' }
 
 // NO `loading.tsx` HERE OR ABOVE. This page calls notFound() and a Suspense
 // boundary above it would stream a 200 before the page ran (R-099).

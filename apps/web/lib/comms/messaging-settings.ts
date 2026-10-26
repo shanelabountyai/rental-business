@@ -2,11 +2,11 @@ import 'server-only'
 
 import { prisma } from '@rental/db'
 
+import { brandFor } from '@/lib/brand.ts'
+
 // The deployment's messaging settings (R-266, PRD 08 B5): one row until
 // R-285 makes it one per organisation. Quiet hours are per property and read
 // through `quietHoursOf` instead.
-
-export const COMPANY_NAME = 'Rental Operations'
 
 // R-285b: one row per organisation, keyed by `orgId` (unique).
 export async function messagingSettings(orgId: string): Promise<{
@@ -15,7 +15,8 @@ export async function messagingSettings(orgId: string): Promise<{
 }> {
   const row = await prisma.messagingSettings.findUnique({ where: { orgId } })
   return {
-    businessName: row?.businessName ?? COMPANY_NAME,
+    // Unset means the org's own name (R-289), never another org's.
+    businessName: row?.businessName ?? (await brandFor(orgId)).name,
     replyTaskAssigneeStaffId: row?.replyTaskAssigneeStaffId ?? null,
   }
 }

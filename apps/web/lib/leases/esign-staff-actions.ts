@@ -435,7 +435,7 @@ export async function generateAndSendLease(
         email: s.email,
         phone: s.phone,
       },
-      context: { name: s.name, addressLine1: lease.property.addressLine1, url: authUrl(`/sign/${issued.token}`) },
+      context: { name: s.name, addressLine1: lease.property.addressLine1, url: await authUrl(lease.orgId, `/sign/${issued.token}`) },
       propertyId: lease.propertyId,
       idempotencyKey: `lease-sign-invite:${s.id}`,
     })

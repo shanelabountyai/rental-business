@@ -71,6 +71,7 @@ export async function reissueOnExpiry(
     where: { id: stored.subjectId },
     select: {
       id: true,
+      orgId: true,
       status: true,
       scope: true,
       propertyId: true,
@@ -119,7 +120,7 @@ export async function reissueOnExpiry(
         addressLine1: workOrder.property.addressLine1,
         unitName: workOrder.unit.name,
         priority: workOrder.priority,
-        link: authUrl(`/vendor/${token}`),
+        link: await authUrl(workOrder.orgId, `/vendor/${token}`),
       },
       propertyId: workOrder.propertyId,
       // Same rule as the first dispatch (R-207): a vendor tapping a dead link

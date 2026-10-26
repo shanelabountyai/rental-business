@@ -26,7 +26,7 @@ import {
 import { getClaim } from '@/lib/insurance/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 
-export const metadata = { title: 'Claim — Rental Operations' }
+export const metadata = { title: 'Claim' }
 
 // NO `loading.tsx` HERE OR ABOVE (R-099): this page calls notFound(), and a
 // Suspense boundary above it puts a 200 on the wire before the page runs.

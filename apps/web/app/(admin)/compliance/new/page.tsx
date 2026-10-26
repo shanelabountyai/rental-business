@@ -6,7 +6,7 @@ import { createComplianceItem } from '@/lib/compliance/actions.ts'
 import { complianceScopeOptions } from '@/lib/compliance/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 
-export const metadata = { title: 'New compliance item — Rental Operations' }
+export const metadata = { title: 'New compliance item' }
 
 export default async function NewComplianceItemPage() {
   const { actor } = await requireScope('property.read')

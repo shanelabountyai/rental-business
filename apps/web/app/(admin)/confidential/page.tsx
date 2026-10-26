@@ -6,7 +6,7 @@ import { currentScope } from '@/lib/scope/current-scope.ts'
 import { listConfidentialCases } from '@/lib/confidential/queries.ts'
 
 export const metadata = {
-  title: 'Confidential — Rental Operations',
+  title: 'Confidential',
   // Never indexed, and the title says nothing beyond "restricted". A browser
   // tab and a history entry are both read by whoever is standing behind the
   // person using the laptop.

@@ -10,6 +10,7 @@ import {
 import { prisma } from '@rental/db'
 import { type OnCallCandidate, pagingPlan } from '@rental/core/oncall'
 import type { TenantScope } from '@rental/core/portal'
+import { authUrl } from '@/lib/auth/delivery.ts'
 import { dispatchPendingNotifications, notify } from '@/lib/notifications/send.ts'
 
 // Reads for the emergency intake path (MAINT-01, PROP-03, R-020).
@@ -268,6 +269,7 @@ export function emergencyLabelFor(category: string): string {
 
 const PAGE_SELECT = {
   id: true,
+  orgId: true,
   propertyId: true,
   category: true,
   description: true,
@@ -312,7 +314,9 @@ async function pageRota(
       petWarning: ticket.petWarning,
       entryPermission: ticket.entryPermission,
       tenantWords: ticket.description,
-      ticketUrl: `${process.env.AUTH_URL ?? ''}/maintenance/${ticket.id}`,
+      ticketUrl: process.env.AUTH_URL
+        ? await authUrl(ticket.orgId, `/maintenance/${ticket.id}`)
+        : `/maintenance/${ticket.id}`,
     }
 
     // In PARALLEL, and `allSettled`: every page is independent, a tenant

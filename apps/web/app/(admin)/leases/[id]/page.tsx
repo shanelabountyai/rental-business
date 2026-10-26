@@ -121,7 +121,7 @@ import {
 import { releaseGuarantor, startPartyChange, voidPartyChange } from '@/lib/leases/party-change-actions.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 
-export const metadata = { title: 'Lease — Rental Operations' }
+export const metadata = { title: 'Lease' }
 
 // One tenancy in full (LEASE-06, RISK-08, R-033).
 

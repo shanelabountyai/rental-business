@@ -8,7 +8,7 @@ import { subjectLinks } from '@/lib/tasks/subject-link.ts'
 import { PageHeader } from '@/components/page-header.tsx'
 import { SUBMIT_BUTTON_CLASSES, scrollableRegionProps } from '@/components/ui-classes.ts'
 
-export const metadata = { title: 'Tasks — Rental Operations' }
+export const metadata = { title: 'Tasks' }
 
 const PRIORITY_LABELS: Record<string, string> = {
   EMERGENCY: 'Emergency',

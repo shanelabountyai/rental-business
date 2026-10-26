@@ -5,7 +5,7 @@ import { EntityForm } from '@/components/properties/entity-form.tsx'
 import { requirePermission, requireStaff } from '@/lib/auth/guard.ts'
 import { updateLegalEntity } from '@/lib/properties/actions.ts'
 
-export const metadata = { title: 'Edit legal entity — Rental Operations' }
+export const metadata = { title: 'Edit legal entity' }
 
 export default async function EditLegalEntityPage({
   params,

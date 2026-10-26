@@ -38,7 +38,7 @@ export async function sendCardExpiringNotices(
 ): Promise<CardExpiryResult> {
   const property = await prisma.property.findUniqueOrThrow({
     where: { id: propertyId },
-    select: { timezone: true, addressLine1: true },
+    select: { orgId: true, timezone: true, addressLine1: true },
   })
 
   const payers = await prisma.leasePayer.findMany({
@@ -88,7 +88,7 @@ export async function sendCardExpiringNotices(
         tenantName: payer.tenant.firstName,
         addressLine1: property.addressLine1,
         expiresOn: `${expiry.expMonth}/${expiry.expYear}`,
-        url: authUrl('/portal/pay'),
+        url: await authUrl(property.orgId, '/portal/pay'),
       },
       propertyId,
       // Keyed on the CARD'S OWN EXPIRY, not on today's date. The scan runs

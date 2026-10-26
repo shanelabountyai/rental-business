@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from 'react'
 import { PageHeader } from '@/components/page-header.tsx'
+import { VendorHelpLine } from '@/components/vendors/vendor-help-line.tsx'
 import { SUBMIT_BUTTON_CLASSES } from '@/components/ui-classes.ts'
 
 // What a VENDOR sees when the job page throws (U1, R-099).
@@ -16,15 +17,6 @@ import { SUBMIT_BUTTON_CLASSES } from '@/components/ui-classes.ts'
 // help line is the same component the rejection screen uses, and renders
 // nothing when the number is unset — which is a deployment gap, not a reason
 // to print a dead "call the office" (R-098).
-//
-// THE VARIABLE IS NEXT_PUBLIC_ ON PURPOSE, and it is the same single variable
-// the server-rendered help line reads. `error.tsx` is a client component that
-// takes no props, so it cannot be handed a server-read value — and a second
-// variable holding the same number is the kind of thing that ends up set in
-// one place and not the other. A phone number printed on a screen we hand to
-// strangers has nothing to protect by being server-only.
-
-const OPERATIONS_PHONE = process.env.NEXT_PUBLIC_OPERATIONS_PHONE?.trim()
 
 export default function VendorError({ reset }: { error: Error; reset: () => void }) {
   const heading = useRef<HTMLHeadingElement>(null)
@@ -49,17 +41,7 @@ export default function VendorError({ reset }: { error: Error; reset: () => void
         Try again
       </button>
 
-      {OPERATIONS_PHONE && (
-        <p className="text-base">
-          Still stuck? Call the office:{' '}
-          <a
-            href={`tel:${OPERATIONS_PHONE.replace(/[^+\d]/g, '')}`}
-            className="focus-visible:ring-ring inline-flex min-h-12 items-center rounded-md font-medium underline underline-offset-2 focus-visible:ring-2 focus-visible:outline-none"
-          >
-            {OPERATIONS_PHONE}
-          </a>
-        </p>
-      )}
+      <VendorHelpLine />
     </main>
   )
 }

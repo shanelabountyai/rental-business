@@ -8,7 +8,7 @@ import { currentScope } from '@/lib/scope/current-scope.ts'
 import { SUBMIT_BUTTON_CLASSES } from '@/components/ui-classes.ts'
 import { Badge } from '@/components/badge.tsx'
 
-export const metadata = { title: 'Compliance calendar — Rental Operations' }
+export const metadata = { title: 'Compliance calendar' }
 
 // The compliance calendar (PROP-05, R-077): every licensed, certified or
 // filed obligation with a due date, property- or entity-scoped, soonest

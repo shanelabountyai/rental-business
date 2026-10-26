@@ -5,7 +5,7 @@ import { MagicLinkConfirm } from '@/components/portal/magic-link-confirm.tsx'
 export const dynamic = 'force-dynamic'
 
 export const metadata = {
-  title: 'Continue to your home — Rental Operations',
+  title: 'Continue to your home',
   robots: { index: false, follow: false },
 }
 

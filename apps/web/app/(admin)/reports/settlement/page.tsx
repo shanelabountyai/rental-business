@@ -16,7 +16,7 @@ import { PageHeader } from '@/components/page-header.tsx'
 import { SettlementTransferForm } from '@/components/reports/settlement-transfer-form.tsx'
 import { SUBMIT_BUTTON_CLASSES, scrollableRegionProps } from '@/components/ui-classes.ts'
 
-export const metadata = { title: 'Settlement by entity — Rental Operations' }
+export const metadata = { title: 'Settlement by entity' }
 
 // Review finding 12's cheap half (R-180): three LLCs collect into one bank
 // account, and nothing told the owner whose money was whose.

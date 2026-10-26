@@ -8,7 +8,7 @@ import { thisWeekLeasingActivity, vacantUnitsWithTurnover } from '@/lib/reports/
 import { currentScope } from '@/lib/scope/current-scope.ts'
 import { PageHeader } from '@/components/page-header.tsx'
 
-export const metadata = { title: 'Vacancies — Rental Operations' }
+export const metadata = { title: 'Vacancies' }
 
 
 // The dashboard's vacancies tile drilling into a real list (R-050, RPT-01),

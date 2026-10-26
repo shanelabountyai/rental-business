@@ -10,7 +10,7 @@ test('home renders and has no detectable accessibility violations', async ({
   await page.goto('/')
 
   await expect(
-    page.getByRole('heading', { name: 'Rental Operations Platform', level: 1 }),
+    page.getByRole('heading', { name: 'Rental Operations', level: 1, exact: true }),
   ).toBeVisible()
 
   const results = await axeScan(page)

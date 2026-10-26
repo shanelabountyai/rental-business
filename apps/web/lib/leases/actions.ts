@@ -1059,7 +1059,7 @@ export async function recordLeaseNotice(
           tenantName: primaryTenant.tenant.firstName,
           addressLine1: lease.property.addressLine1,
           effectiveOn: businessDate(effectiveOn, lease.property.timezone),
-          url: authUrl(`/portal/notices/${noticeId}`),
+          url: await authUrl(lease.orgId, `/portal/notices/${noticeId}`),
         },
         propertyId: lease.propertyId,
         idempotencyKey: `non-renewal:${noticeId}`,

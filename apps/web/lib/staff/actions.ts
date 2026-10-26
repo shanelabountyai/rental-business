@@ -111,7 +111,7 @@ export async function inviteStaff(
     type: 'StaffUser',
     id: created.id,
   })
-  const url = authUrl(`/reset-password?token=${issued.token}`)
+  const url = await authUrl(actor.orgId, `/reset-password?token=${issued.token}`)
   await deliverAuthLink({
     // A SETUP link, not a reset: nobody asked for this one, so "ignore it if
     // you did not request it" would be exactly the wrong advice.
@@ -242,7 +242,7 @@ export async function manageStaff(
       type: 'StaffUser',
       id: staffUserId,
     })
-    const url = authUrl(`/reset-password?token=${issued.token}`)
+    const url = await authUrl(actor.orgId, `/reset-password?token=${issued.token}`)
     await deliverAuthLink({
       kind: 'staff_setup_link',
       recipient: { type: 'STAFF', id: staffUserId, name: target.name },

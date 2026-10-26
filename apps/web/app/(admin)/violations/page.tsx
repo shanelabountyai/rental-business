@@ -9,7 +9,7 @@ import { currentScope } from '@/lib/scope/current-scope.ts'
 import { listViolationCases } from '@/lib/violations/queries.ts'
 import { PageHeader } from '@/components/page-header.tsx'
 
-export const metadata = { title: 'Violations — Rental Operations' }
+export const metadata = { title: 'Violations' }
 
 // The register (RISK-02, RISK-03; R-088).
 //

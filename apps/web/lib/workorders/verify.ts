@@ -31,6 +31,7 @@ export async function requestVerification(workOrderId: string): Promise<void> {
       where: { id: workOrderId },
       select: {
         id: true,
+        orgId: true,
         propertyId: true,
         reopenCount: true,
         scope: true,
@@ -90,7 +91,7 @@ export async function requestVerification(workOrderId: string): Promise<void> {
         // phone and no email, the exact persona R-021 exists for, this
         // message was a dead end, and for everyone else it was six steps.
         // The reply rate IS the feature.
-        url: authUrl(`/verify/${verifyToken}`),
+        url: await authUrl(workOrder.orgId, `/verify/${verifyToken}`),
       },
       propertyId: workOrder.propertyId,
       // Keyed on the ROUND, so a reopened job asks again and a job marked

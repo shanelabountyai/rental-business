@@ -65,6 +65,7 @@ export async function sendPlanForSignature(planId: string): Promise<PlanEsignRes
     where: { id: planId, orgId: scoped.orgId },
     select: {
       id: true,
+      orgId: true,
       status: true,
       arrearsCents: true,
       startedOn: true,
@@ -324,7 +325,7 @@ export async function sendPlanForSignature(planId: string): Promise<PlanEsignRes
         total: formatCents(plan.arrearsCents),
         instalmentCount: instalments.length,
         firstDueOn: instalments[0]!.dueOn,
-        url: authUrl(`/sign/${issued.token}`),
+        url: await authUrl(plan.orgId, `/sign/${issued.token}`),
       },
       propertyId: plan.propertyId,
       // The envelope and the person, not the plan: a withdrawn-and-resent

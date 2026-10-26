@@ -30,7 +30,7 @@ import {
 import { leaseStatement } from '@/lib/ledger/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 
-export const metadata = { title: 'Deposit disposition — Rental Operations' }
+export const metadata = { title: 'Deposit disposition' }
 
 // The deposit disposition (INSP-03, R-071): itemized deductions, each
 // linked to evidence or flagged unsupported; a depreciation check on each;

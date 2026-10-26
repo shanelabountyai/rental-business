@@ -7,7 +7,7 @@ import { listEvictionCases } from '@/lib/evictions/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 import { SUBMIT_BUTTON_CLASSES } from '@/components/ui-classes.ts'
 
-export const metadata = { title: 'Evictions — Rental Operations' }
+export const metadata = { title: 'Evictions' }
 
 // The delinquency-to-eviction path as a case file (PAY-14, R-083).
 //

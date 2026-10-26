@@ -62,7 +62,7 @@ import { attachableNotices, cureClockFor, cureDemandFor, getEvictionCase } from 
 import { currentScope } from '@/lib/scope/current-scope.ts'
 import { Panel } from '@/components/panel.tsx'
 
-export const metadata = { title: 'Eviction case — Rental Operations' }
+export const metadata = { title: 'Eviction case' }
 
 /// Which stage follows which, and what date that stage actually records. The
 /// labels are deliberately specific - "date" on a court form is never just a

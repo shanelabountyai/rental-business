@@ -480,11 +480,18 @@ model OrgMembership {
 /// reads it to SCOPE until R-285b.
 /// Never deleted (D-319): offboarding is export, freeze, purge.
 model Organization {
-  id        String   @id @default(cuid())
-  slug      String   @unique
-  name      String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           String   @id @default(cuid())
+  slug         String   @unique
+  /// The brand name (R-289): page titles, the SMS footer default, the opt-out page.
+  name         String
+  /// `#rrggbb` (CHECK-enforced) over Homestead's `--primary` / `--accent`; null = default.
+  colorPrimary String?
+  colorAccent  String?
+  /// Shown to vendors and renters as "call the office"; null shows no number.
+  supportPhone String?
+  supportEmail String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   legalEntities LegalEntity[]
   properties    Property[]

@@ -7,7 +7,7 @@ import { actorCan, requireScope } from '@/lib/auth/guard.ts'
 import { propertyWhere } from '@/lib/auth/scope.ts'
 import { saveMessagingSettings, saveQuietHours } from '@/lib/comms/messaging-settings-actions.ts'
 
-export const metadata = { title: 'Messaging settings — Rental Operations' }
+export const metadata = { title: 'Messaging settings' }
 
 // R-266 (PRD 08 B5, M2.2, M2.3). requireScope, not a bare requirePermission:
 // a property-scoped manager with `template.write` sets their own properties'

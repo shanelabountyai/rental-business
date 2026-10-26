@@ -6,7 +6,7 @@ import { requirePermission, requireScope } from '@/lib/auth/guard.ts'
 import { listClaims } from '@/lib/insurance/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 
-export const metadata = { title: 'Claims — Rental Operations' }
+export const metadata = { title: 'Claims' }
 
 // The register (RISK-07, R-089).
 //

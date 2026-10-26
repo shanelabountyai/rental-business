@@ -11,7 +11,7 @@ import { rulesFor } from '@/lib/jurisdiction/queries.ts'
 import { getPropertyDetail } from '@/lib/properties/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 
-export const metadata = { title: 'Utility bills — Rental Operations' }
+export const metadata = { title: 'Utility bills' }
 
 // One meter, several units (PAY-08, R-042).
 //

@@ -40,7 +40,7 @@ import { prisma } from '@rental/db'
 import { rulesFor } from '@/lib/jurisdiction/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 
-export const metadata = { title: 'Gone dark — Rental Operations' }
+export const metadata = { title: 'Gone dark' }
 
 // NO `loading.tsx` HERE OR ABOVE (R-099): this page calls notFound().
 export default async function AbandonmentCasePage({

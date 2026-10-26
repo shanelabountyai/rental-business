@@ -4,7 +4,7 @@ import { requireScope } from '@/lib/auth/guard.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 import { addTask } from '@/lib/tasks/actions.ts'
 
-export const metadata = { title: 'New task — Rental Operations' }
+export const metadata = { title: 'New task' }
 
 // requireScope, not a bare requirePermission: this is the guard for "may this
 // actor create a task ANYWHERE", the same shape as /properties/new. The

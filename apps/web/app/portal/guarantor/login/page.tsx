@@ -5,7 +5,7 @@ import { requestGuarantorMagicLink } from '@/lib/auth/actions.ts'
 // no CSP nonce to stamp on its scripts (D-138).
 export const dynamic = 'force-dynamic'
 
-export const metadata = { title: 'Sign in — Rental Operations' }
+export const metadata = { title: 'Sign in' }
 
 // A guarantor is not a tenant (LEASE-06) and D-10's tenant lexicon does not
 // apply to them - they never lived there, so "your home" would be wrong on

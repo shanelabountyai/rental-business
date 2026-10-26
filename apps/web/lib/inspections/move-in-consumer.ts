@@ -183,7 +183,7 @@ CONSUMERS.push({
           tenantName: primary.tenant.firstName,
           addressLine1: lease.property.addressLine1,
           unitName: lease.unit.name,
-          url: authUrl(`/portal/papers/inspections/${inspection.id}`),
+          url: await authUrl(lease.orgId, `/portal/papers/inspections/${inspection.id}`),
         },
         propertyId: lease.propertyId,
         eventId: event.id,

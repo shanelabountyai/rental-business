@@ -11,7 +11,7 @@ import { currentScope } from '@/lib/scope/current-scope.ts'
 import { exportableEntities } from '@/lib/tax/queries.ts'
 import { Panel } from '@/components/panel.tsx'
 
-export const metadata = { title: 'Property expenses — Rental Operations' }
+export const metadata = { title: 'Property expenses' }
 
 // R-193: the property tax bill, the landlord policy, the management fee -
 // owner-side outlay nobody invoiced, feeding the tax export and

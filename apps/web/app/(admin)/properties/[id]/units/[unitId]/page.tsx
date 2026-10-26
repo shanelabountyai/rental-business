@@ -19,7 +19,7 @@ import { LeasesSection, MaintenanceSection } from '@/components/properties/lease
 import { getUnitDetail } from '@/lib/units/queries.ts'
 import { createWorkOrder } from '@/lib/workorders/actions.ts'
 
-export const metadata = { title: 'Unit — Rental Operations' }
+export const metadata = { title: 'Unit' }
 
 const STATUS_LABELS: Record<string, string> = {
   OCCUPIED: 'Occupied',

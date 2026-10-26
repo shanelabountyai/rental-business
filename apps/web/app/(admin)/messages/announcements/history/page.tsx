@@ -12,7 +12,7 @@ import {
 import { friendlyWallClock } from '@/lib/comms/announcements.ts'
 import { scrollableRegionProps } from '@/components/ui-classes.ts'
 
-export const metadata = { title: 'Announcement history — Rental Operations' }
+export const metadata = { title: 'Announcement history' }
 
 // R-054, left behind by R-053: "persistent announcement history beyond the
 // immediate per-send result table." See announcement-history.ts for why this

@@ -9,7 +9,7 @@ import { currentScope } from '@/lib/scope/current-scope.ts'
 import { countOpenTasksOfType } from '@/lib/tasks/queries.ts'
 import { Badge, type BadgeTone } from '@/components/badge.tsx'
 
-export const metadata = { title: 'Notifications — Rental Operations' }
+export const metadata = { title: 'Notifications' }
 
 // The central send log (NOTIF-01: "all attempts/failures/retries logged
 // centrally"). Read-only by construction - Notification is append-only at the

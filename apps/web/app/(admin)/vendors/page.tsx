@@ -4,7 +4,7 @@ import { listVendors } from '@/lib/vendors/staff-queries.ts'
 import { PageHeader } from '@/components/page-header.tsx'
 import { SUBMIT_BUTTON_CLASSES } from '@/components/ui-classes.ts'
 
-export const metadata = { title: 'Vendors — Rental Operations' }
+export const metadata = { title: 'Vendors' }
 
 // "As a PM, I manage vendor records" (MAINT-11, R-079) - trades, service
 // areas, W-9/COI status, license, preferred rank. No admin surface for

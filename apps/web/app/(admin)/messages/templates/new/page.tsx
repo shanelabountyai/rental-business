@@ -5,7 +5,7 @@ import { requirePermission } from '@/lib/auth/guard.ts'
 import { saveTemplate } from '@/lib/comms/template-actions.ts'
 import { previewTenancy, templateValues } from '@/lib/comms/template-values.ts'
 
-export const metadata = { title: 'New template — Rental Operations' }
+export const metadata = { title: 'New template' }
 
 export default async function NewTemplatePage() {
   const actor = await requirePermission('template.write')

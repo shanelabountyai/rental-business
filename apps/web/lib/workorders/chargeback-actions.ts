@@ -276,7 +276,7 @@ export async function postChargeback(
         // Only when it differs — "the repair cost $412 and you owe $412"
         // twice is noise.
         jobCost: decision.partial ? formatCents(context.jobCostCents) : undefined,
-        url: authUrl('/portal/pay/history'),
+        url: await authUrl(workOrder.property.orgId, '/portal/pay/history'),
       },
       propertyId: context.propertyId,
       // Keyed on the job: one chargeback per job, so one message.

@@ -6,7 +6,7 @@ import { activeDecisionReasons } from '@/lib/screening/queries.ts'
 import { PageHeader } from '@/components/page-header.tsx'
 import { SUBMIT_BUTTON_CLASSES } from '@/components/ui-classes.ts'
 
-export const metadata = { title: 'Screening criteria — Rental Operations' }
+export const metadata = { title: 'Screening criteria' }
 
 // R-242 (OQ-6): a screen to see and version ScreeningCriteria, which had
 // none - the seeded v1 placeholder (07-decisions.md OQ-6) could be read only

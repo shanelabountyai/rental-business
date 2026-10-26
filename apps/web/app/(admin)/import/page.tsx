@@ -4,7 +4,7 @@ import { ImportForm } from '@/components/import/import-form.tsx'
 import { PageHeader } from '@/components/page-header.tsx'
 import { requirePermission } from '@/lib/auth/guard.ts'
 
-export const metadata = { title: 'Import — Rental Operations' }
+export const metadata = { title: 'Import' }
 
 /// One line per CSV column: which ones are always required, and when the
 /// rest actually matter. Matches `packages/core/import/plan.ts`'s own

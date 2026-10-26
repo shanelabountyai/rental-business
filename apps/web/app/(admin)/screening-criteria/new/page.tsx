@@ -4,7 +4,7 @@ import { requirePermission } from '@/lib/auth/guard.ts'
 import { createCriteriaVersion } from '@/lib/screening/criteria-actions.ts'
 import { currentCriteriaVersion } from '@/lib/screening/criteria-queries.ts'
 
-export const metadata = { title: 'New screening criteria — Rental Operations' }
+export const metadata = { title: 'New screening criteria' }
 
 // No resource: per R-004 this only clears for a portfolio-wide
 // screening.criteria.write grant - see permissions.ts's own comment.

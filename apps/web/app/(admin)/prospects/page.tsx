@@ -4,7 +4,7 @@ import { requireScope } from '@/lib/auth/guard.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 import { prospectsForScope } from '@/lib/prospects/queries.ts'
 
-export const metadata = { title: 'Prospects — Rental Operations' }
+export const metadata = { title: 'Prospects' }
 
 const STATUS_LABELS: Record<string, string> = {
   INQUIRY: 'Inquiry',

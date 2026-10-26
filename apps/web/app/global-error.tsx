@@ -16,16 +16,11 @@
 // audit angle 10). `reset` is worth offering - a transient render failure does
 // recover - but if the failure is in the bundle then the only control on the
 // last page in the application does nothing when pressed and explains nothing.
-// A plain `<a href>` needs no bundle and the operations number needs no network
-// at all. The vendor dead end next door already offered all three; this page,
-// the one that fires when everything else is gone, offered none of them.
+// A plain `<a href>` needs no bundle.
 //
-// VendorHelpLine's Tailwind classes are inert here, for the reason above. It is
-// reused anyway: what it carries is the number and the `tel:`, and one place
-// reading NEXT_PUBLIC_OPERATIONS_PHONE is worth more than a second copy that
-// happens to match the inline styles.
-
-import { VendorHelpLine } from '@/components/vendors/vendor-help-line.tsx'
+// NO PHONE NUMBER, since R-289. The number is the support phone of the org the
+// host names, and that comes from the root layout - the thing that just
+// failed. A number guessed here could be a different business's.
 
 export default function GlobalError({ reset }: { error: Error; reset: () => void }) {
   return (
@@ -68,7 +63,6 @@ export default function GlobalError({ reset }: { error: Error; reset: () => void
           {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
           <a href="/">Go back to the start</a>
         </p>
-        <VendorHelpLine />
       </body>
     </html>
   )

@@ -13,7 +13,7 @@ import { reportToday } from '@/lib/scope/report-today.ts'
 import { SUBMIT_BUTTON_CLASSES, scrollableRegionProps } from '@/components/ui-classes.ts'
 import { Panel } from '@/components/panel.tsx'
 
-export const metadata = { title: 'Maintenance analytics — Rental Operations' }
+export const metadata = { title: 'Maintenance analytics' }
 
 // MAINT-10 (R-081c): time-to-resolve by priority, repeat-issue detection,
 // reopen rate and cost per vendor.

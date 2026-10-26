@@ -8,7 +8,7 @@ import { RESERVE_HORIZON_YEARS, reserveReport } from '@/lib/reserves/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 import { scrollableRegionProps } from '@/components/ui-classes.ts'
 
-export const metadata = { title: 'Reserves & capital plan — Rental Operations' }
+export const metadata = { title: 'Reserves & capital plan' }
 
 // PAY-11 (R-082): per-property reserve targets and actuals, and the crude
 // capital plan that says whether the target is anywhere near the bill coming.

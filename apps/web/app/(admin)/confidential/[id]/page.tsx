@@ -21,7 +21,7 @@ import { getConfidentialCase } from '@/lib/confidential/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 
 export const metadata = {
-  title: 'Confidential — Rental Operations',
+  title: 'Confidential',
   robots: { index: false, follow: false },
 }
 

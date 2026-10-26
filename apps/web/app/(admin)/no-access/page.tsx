@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { PageHeader } from '@/components/page-header.tsx'
 import { requireStaff } from '@/lib/auth/guard.ts'
 
-export const metadata = { title: 'No access — Rental Operations' }
+export const metadata = { title: 'No access' }
 
 // Where an authenticated staff member lands when they lack a permission.
 //

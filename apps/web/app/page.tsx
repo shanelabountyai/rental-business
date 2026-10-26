@@ -12,6 +12,8 @@
 import Link from 'next/link'
 
 import { PageHeader } from '@/components/page-header.tsx'
+import { hostOrgId } from '@/lib/auth/org.ts'
+import { currentBrand } from '@/lib/brand.ts'
 
 export const dynamic = 'force-dynamic'
 
@@ -29,10 +31,27 @@ export const dynamic = 'force-dynamic'
 // left for this page is to say which door is which. Plain `<a>`s in a server
 // component, so it works with no JavaScript at all - the same standard the
 // vendor surface is held to, and for the same reason.
-export default function Home() {
+export default async function Home() {
+  const brand = await currentBrand()
+
+  // The bare base host and an unknown slug name no org (D-344), so neither
+  // sign-in door would work here: say where the real address is instead.
+  if (!(await hostOrgId())) {
+    return (
+      <main className="mx-auto flex min-h-screen max-w-2xl flex-col justify-center gap-6 p-8">
+        <PageHeader title={brand.name} />
+        <p className="text-base">
+          This address is not one business&rsquo;s site. Open the link your
+          landlord, property manager or employer sent you &mdash; it carries
+          their address.
+        </p>
+      </main>
+    )
+  }
+
   return (
     <main className="mx-auto flex min-h-screen max-w-2xl flex-col justify-center gap-6 p-8">
-      <PageHeader title="Rental Operations Platform">
+      <PageHeader title={brand.name}>
         <p className="text-muted-foreground mt-2 text-sm">
           Property management for the homes we look after.
         </p>

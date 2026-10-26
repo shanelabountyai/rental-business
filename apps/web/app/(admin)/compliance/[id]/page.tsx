@@ -9,7 +9,7 @@ import { recordCompletion } from '@/lib/compliance/actions.ts'
 import { getComplianceItem } from '@/lib/compliance/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 
-export const metadata = { title: 'Compliance item — Rental Operations' }
+export const metadata = { title: 'Compliance item' }
 
 // NO `loading.tsx` HERE OR ABOVE (R-099): this page calls notFound() for a
 // record outside scope, and a Suspense boundary above would stream a 200

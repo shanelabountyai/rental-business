@@ -1098,6 +1098,7 @@ async function sendPaymentFailedFix(
     prisma.lease.findUnique({
       where: { id: payer.leaseId },
       select: {
+        orgId: true,
         property: { select: { addressLine1: true } },
         leaseTenants: {
           select: { tenant: { select: { id: true, firstName: true, email: true, phone: true } } },
@@ -1130,7 +1131,7 @@ async function sendPaymentFailedFix(
       // fix: a tenant with a balance sees the pay form there and can retry
       // immediately. A dedicated "update your card on file" flow is not
       // built yet; paying again is the fix that exists today.
-      url: authUrl('/portal/pay'),
+      url: await authUrl(lease.orgId, '/portal/pay'),
     },
     propertyId: payer.propertyId,
     // One notice per failed attempt, however many times Stripe redelivers.

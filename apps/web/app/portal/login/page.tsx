@@ -15,7 +15,7 @@ import { requestTenantMagicLink } from '@/lib/auth/actions.ts'
 export const dynamic = 'force-dynamic'
 
 
-export const metadata = { title: 'Sign in to your home — Rental Operations' }
+export const metadata = { title: 'Sign in to your home' }
 
 // Tenant-facing, so D-10's lexicon applies: "home", "rent", "maintenance
 // request". No internal identifier, no entity name, no status enum reaches

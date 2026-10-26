@@ -21,7 +21,7 @@ import { repairDeadlineFor } from '@/lib/maintenance/habitability-clock.ts'
 import { getStaffTicket } from '@/lib/maintenance/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 
-export const metadata = { title: 'Maintenance request — Rental Operations' }
+export const metadata = { title: 'Maintenance request' }
 
 const SOURCE_LABELS: Record<string, string> = {
   PORTAL: 'Portal',

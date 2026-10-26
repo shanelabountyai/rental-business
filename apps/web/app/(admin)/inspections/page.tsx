@@ -10,7 +10,7 @@ import { inspectionsForScope } from '@/lib/inspections/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 import { PRIMARY_BUTTON_CLASSES } from '@/components/ui-classes.ts'
 
-export const metadata = { title: 'Inspections — Rental Operations' }
+export const metadata = { title: 'Inspections' }
 
 export default async function InspectionsPage() {
   const { actor } = await requireScope('inspection.read')

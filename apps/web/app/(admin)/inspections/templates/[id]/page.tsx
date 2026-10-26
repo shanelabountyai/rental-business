@@ -7,7 +7,7 @@ import { requirePermission } from '@/lib/auth/guard.ts'
 import { retireInspectionTemplate, saveInspectionTemplate } from '@/lib/inspections/template-actions.ts'
 import { getInspectionTemplate } from '@/lib/inspections/template-queries.ts'
 
-export const metadata = { title: 'Inspection checklist — Rental Operations' }
+export const metadata = { title: 'Inspection checklist' }
 
 // NO `loading.tsx` HERE OR ABOVE. This page calls notFound() and a Suspense
 // boundary above it would stream a 200 before the page ran (R-099).

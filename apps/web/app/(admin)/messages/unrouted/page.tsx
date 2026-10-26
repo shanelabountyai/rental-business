@@ -10,7 +10,7 @@ import { fileUnroutedMessage } from '@/lib/comms/actions.ts'
 import { listUnroutedMessages, triagesUnrouted } from '@/lib/comms/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 
-export const metadata = { title: 'Unsorted messages — Rental Operations' }
+export const metadata = { title: 'Unsorted messages' }
 
 // Inbound messages the engine refused to file (COMM-01, R-017).
 //

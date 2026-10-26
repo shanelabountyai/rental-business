@@ -366,7 +366,7 @@ export async function requestPasswordReset(
       kind: 'staff_password_reset',
       recipient: { type: 'STAFF', id: staffUser.id, name: staffUser.name },
       to: staffUser.email,
-      url: authUrl(`/reset-password?token=${issued.token}`),
+      url: await authUrl(orgId, `/reset-password?token=${issued.token}`),
       expiresAt: issued.expiresAt,
       tokenId: issued.id,
     })
@@ -533,7 +533,7 @@ export async function requestTenantMagicLink(
       recipient: { type: 'TENANT', id: tenant.id, name: tenant.firstName },
       to: tenant.to,
       channel: tenant.channel,
-      url: authUrl(`/portal/verify?token=${issued.token}`),
+      url: await authUrl(orgId, `/portal/verify?token=${issued.token}`),
       expiresAt: issued.expiresAt,
       tokenId: issued.id,
     })
@@ -578,7 +578,7 @@ export async function requestGuarantorMagicLink(
       recipient: { type: 'GUARANTOR', id: guarantor.id, name: guarantor.firstName },
       to: guarantor.to,
       channel: guarantor.channel,
-      url: authUrl(`/portal/guarantor/verify?token=${issued.token}`),
+      url: await authUrl(orgId, `/portal/guarantor/verify?token=${issued.token}`),
       expiresAt: issued.expiresAt,
       tokenId: issued.id,
     })

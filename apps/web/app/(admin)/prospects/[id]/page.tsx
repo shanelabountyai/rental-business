@@ -43,7 +43,7 @@ const DECISION_LABELS: Record<string, string> = {
   DECLINED: 'Declined',
 }
 
-export const metadata = { title: 'Prospect — Rental Operations' }
+export const metadata = { title: 'Prospect' }
 
 const STATUS_LABELS: Record<string, string> = {
   INQUIRY: 'Inquiry',

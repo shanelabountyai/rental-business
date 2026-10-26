@@ -10,7 +10,7 @@ import { exportableEntities } from '@/lib/tax/queries.ts'
 import { SUBMIT_BUTTON_CLASSES, scrollableRegionProps } from '@/components/ui-classes.ts'
 import { Panel } from '@/components/panel.tsx'
 
-export const metadata = { title: 'Operating report — Rental Operations' }
+export const metadata = { title: 'Operating report' }
 
 // RPT-05 (R-081a): the per-property operating snapshot - "which house is a
 // lemon" - plus the monthly P&L, vendor spend by trade, renewal rate and

@@ -11,6 +11,7 @@ import {
 import { prisma } from '@rental/db'
 
 import { authUrl } from '../auth/delivery.ts'
+import { brandFor } from '@/lib/brand.ts'
 import { messagingSettings } from '@/lib/comms/messaging-settings.ts'
 import { propertyOwner } from '@/lib/staff/property-owner.ts'
 
@@ -145,12 +146,9 @@ export async function templateValues(
     'balance.due_on': friendlyBusinessDate(dueDateOnOrAfter(today, lease.rentDueDay)),
     today: friendlyBusinessDate(today),
     'company.name': (await messagingSettings(lease.orgId)).businessName,
-    // No per-property contact number exists on Property yet, so this is the
-    // one merge field with nothing behind it. Null rather than a placeholder:
-    // `renderTemplate` leaves the token visible and the send path refuses,
-    // which is the honest outcome for a field the product cannot fill. R-081's
-    // property contact details is where it gets a value.
-    'company.phone': null,
+    // The org's support phone (R-289). Null when the org has none: the token
+    // stays visible and the send path refuses, which beats a placeholder.
+    'company.phone': (await brandFor(lease.orgId)).supportPhone,
     // Null when the owner has no phone on file: the send refuses, which is
     // better than a message telling a tenant to call nobody.
     'owner.name': owner?.name ?? null,
@@ -159,7 +157,7 @@ export async function templateValues(
     // them on a login that refuses them — the same call `plan-actions` makes.
     // Null without AUTH_URL rather than `authUrl`'s throw, which would turn a
     // missing setting into a 500 on the preview page.
-    'portal.link': lease.leaseTenants[0] && process.env.AUTH_URL ? authUrl('/portal') : null,
+    'portal.link': lease.leaseTenants[0] && process.env.AUTH_URL ? await authUrl(lease.orgId, '/portal') : null,
   }
 }
 

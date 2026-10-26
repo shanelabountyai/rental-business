@@ -12,7 +12,7 @@ import {
 import { SUBMIT_BUTTON_CLASSES, scrollableRegionProps } from '@/components/ui-classes.ts'
 import { Panel } from '@/components/panel.tsx'
 
-export const metadata = { title: 'Leasing funnel — Rental Operations' }
+export const metadata = { title: 'Leasing funnel' }
 
 // RPT-06 (R-081c): leads by source, showing→application→approval conversion,
 // days-to-fill per vacancy, and channel quality.

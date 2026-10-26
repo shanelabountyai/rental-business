@@ -7,7 +7,7 @@ import '@/lib/jobs/registrations.ts'
 import { jobHealth } from '@/lib/jobs/queries.ts'
 import { RerunForm } from '@/components/jobs/rerun-form.tsx'
 
-export const metadata = { title: 'Scheduled jobs — Rental Operations' }
+export const metadata = { title: 'Scheduled jobs' }
 
 /**
  * Scheduled-job health (R-174).

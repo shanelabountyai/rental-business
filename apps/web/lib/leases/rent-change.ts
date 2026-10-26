@@ -286,6 +286,7 @@ export async function notifyRentIncrease(rentChangeId: string): Promise<void> {
         notice: { select: { servedAt: true } },
         lease: {
           select: {
+            orgId: true,
             propertyId: true,
             property: { select: { addressLine1: true } },
             leaseTenants: {
@@ -308,7 +309,7 @@ export async function notifyRentIncrease(rentChangeId: string): Promise<void> {
         addressLine1: change.lease.property.addressLine1,
         toCents: change.toCents,
         effectiveOn: utcToBusinessDate(change.effectiveOn),
-        url: authUrl(`/portal/notices/${change.noticeId}`),
+        url: await authUrl(change.lease.orgId, `/portal/notices/${change.noticeId}`),
       },
       propertyId: change.lease.propertyId,
       idempotencyKey: `rent-increase:${change.noticeId}`,

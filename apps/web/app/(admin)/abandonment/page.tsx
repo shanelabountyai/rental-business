@@ -10,7 +10,7 @@ import { listAbandonmentCases } from '@/lib/abandonment/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 import { Badge } from '@/components/badge.tsx'
 
-export const metadata = { title: 'Gone dark — Rental Operations' }
+export const metadata = { title: 'Gone dark' }
 
 // The tenant-gone-dark register (RISK-01, R-087).
 //

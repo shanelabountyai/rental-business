@@ -10,7 +10,7 @@ import { currentScope } from '@/lib/scope/current-scope.ts'
 import { recordVendorInvoice } from '@/lib/vendor-invoices/actions.ts'
 import { Panel } from '@/components/panel.tsx'
 
-export const metadata = { title: 'Vendor invoices — Rental Operations' }
+export const metadata = { title: 'Vendor invoices' }
 
 // PAY-10 (R-082): one vendor bill, split across properties and categories.
 //

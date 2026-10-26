@@ -517,7 +517,7 @@ export async function buildPartyChange(
         addressLine1: lease.property.addressLine1,
         summary,
         effectiveOn: input.effectiveOn,
-        url: authUrl(`/sign/${issued.token}`),
+        url: await authUrl(lease.orgId, `/sign/${issued.token}`),
       },
       propertyId: lease.propertyId,
       idempotencyKey: `party-change-sign-invite:${s.id}`,

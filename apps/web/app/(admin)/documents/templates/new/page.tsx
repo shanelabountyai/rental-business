@@ -5,7 +5,7 @@ import { requirePermission } from '@/lib/auth/guard.ts'
 import { saveDocumentTemplate } from '@/lib/documents/template-actions.ts'
 import { DOCUMENT_TYPE_OPTIONS } from '@/lib/documents/template-queries.ts'
 
-export const metadata = { title: 'New document template — Rental Operations' }
+export const metadata = { title: 'New document template' }
 
 export default async function NewDocumentTemplatePage() {
   await requirePermission('template.write')

@@ -29,7 +29,7 @@ export function MessagingSettingsForm({
         label="Business name"
         name="businessName"
         defaultValue={businessName ?? ''}
-        hint="Every announcement text ends with this name and “Reply STOP to opt out.” Empty uses Rental Operations."
+        hint="Every announcement text ends with this name and “Reply STOP to opt out.” Empty uses your organisation’s name."
       />
       <SelectField
         label="Assign tenant replies to"

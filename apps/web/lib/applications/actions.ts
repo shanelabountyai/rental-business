@@ -251,7 +251,7 @@ export async function inviteCoApplicant(
       firstName: created.firstName,
       leadName: `${status.applicant.firstName} ${status.applicant.lastName}`,
       addressLine1: property.addressLine1,
-      url: authUrl(`/apply/${issued.token}`),
+      url: await authUrl(created.orgId, `/apply/${issued.token}`),
     },
     propertyId: status.application.propertyId,
     idempotencyKey: `applicant-invite:${created.id}`,

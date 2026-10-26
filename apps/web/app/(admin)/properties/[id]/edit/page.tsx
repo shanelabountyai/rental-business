@@ -5,7 +5,7 @@ import { PropertyForm } from '@/components/properties/property-form.tsx'
 import { propertyResource, requirePermission, requireStaff } from '@/lib/auth/guard.ts'
 import { updateProperty } from '@/lib/properties/actions.ts'
 
-export const metadata = { title: 'Edit property — Rental Operations' }
+export const metadata = { title: 'Edit property' }
 
 export default async function EditPropertyPage({
   params,

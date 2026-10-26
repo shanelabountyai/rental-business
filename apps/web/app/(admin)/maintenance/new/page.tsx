@@ -6,7 +6,7 @@ import { logPhoneMaintenanceRequest } from '@/lib/maintenance/actions.ts'
 import { listLoggableLeaseTenants } from '@/lib/maintenance/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 
-export const metadata = { title: 'Log a phone-reported request — Rental Operations' }
+export const metadata = { title: 'Log a phone-reported request' }
 
 const CATEGORY_OPTIONS = MAINTENANCE_CATEGORIES.map((category) => ({
   value: category,

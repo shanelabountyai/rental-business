@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { AuthCard, AuthForm, Field, FocusedStatus } from '@/components/auth-form.tsx'
 import { startStaffSignIn } from '@/lib/auth/actions.ts'
 
-export const metadata = { title: 'Sign in — Rental Operations' }
+export const metadata = { title: 'Sign in' }
 
 export default async function StaffLoginPage({
   searchParams,

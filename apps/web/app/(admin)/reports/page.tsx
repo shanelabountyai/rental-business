@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { PageHeader } from '@/components/page-header.tsx'
 import { requireScope } from '@/lib/auth/guard.ts'
 
-export const metadata = { title: 'Reports — Rental Operations' }
+export const metadata = { title: 'Reports' }
 
 // The five weekly operating reports, as first-class views (RPT-04, R-076).
 //

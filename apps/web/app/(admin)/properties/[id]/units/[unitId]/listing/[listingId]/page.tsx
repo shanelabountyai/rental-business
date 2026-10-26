@@ -12,7 +12,7 @@ import { leadCountsForListing, listingSyndications } from '@/lib/listings/querie
 import { syndicateListing } from '@/lib/listings/syndication.ts'
 import { rulesFor } from '@/lib/jurisdiction/queries.ts'
 
-export const metadata = { title: 'Listing — Rental Operations' }
+export const metadata = { title: 'Listing' }
 
 export default async function ListingDetailPage({
   params,

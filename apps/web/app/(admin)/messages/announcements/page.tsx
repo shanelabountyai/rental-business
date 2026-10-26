@@ -24,7 +24,7 @@ import {
 } from '@/lib/comms/announcements.ts'
 import { getTemplate, listTemplates } from '@/lib/comms/templates.ts'
 
-export const metadata = { title: 'Announcements — Rental Operations' }
+export const metadata = { title: 'Announcements' }
 
 // Segment announcements (COMM-04, R-053) — "the city is flushing hydrants
 // Tuesday". `requireScope`, not a bare `requirePermission`: a property-scoped

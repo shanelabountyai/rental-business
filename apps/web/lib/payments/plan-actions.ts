@@ -227,7 +227,7 @@ async function sendPlanSchedule(
   planId: string,
   lease: Parameters<typeof chaseParties>[0] & {
     propertyId: string
-    property: { addressLine1: string }
+    property: { addressLine1: string; orgId: string }
   },
   agreedOn: string,
   instalments: readonly { dueOn: string; amountCents: number }[],
@@ -254,7 +254,7 @@ async function sendPlanSchedule(
           addressLine1: lease.property.addressLine1,
           agreedOn,
           instalments,
-          url: party.type === 'TENANT' ? authUrl('/portal') : null,
+          url: party.type === 'TENANT' ? await authUrl(lease.property.orgId, '/portal') : null,
         },
         propertyId: lease.propertyId,
         // The plan and the person: a plan is agreed once, and two people on

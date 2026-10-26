@@ -12,7 +12,7 @@ import { exportThreadTranscript } from '@/lib/comms/transcript.ts'
 import { getThread } from '@/lib/comms/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 
-export const metadata = { title: 'Conversation — Rental Operations' }
+export const metadata = { title: 'Conversation' }
 
 // One thread's full transcript (COMM-01: "Given any staff member opens a
 // thread, when reading, then full history shows including which staff member

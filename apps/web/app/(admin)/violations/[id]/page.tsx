@@ -21,7 +21,7 @@ import {
 } from '@/lib/violations/actions.ts'
 import { accommodationPosture, getViolationCase } from '@/lib/violations/queries.ts'
 
-export const metadata = { title: 'Violation case — Rental Operations' }
+export const metadata = { title: 'Violation case' }
 
 // NO `loading.tsx` HERE OR ABOVE (R-099): this page calls notFound(), and a
 // Suspense boundary above it puts a 200 on the wire before the page runs.

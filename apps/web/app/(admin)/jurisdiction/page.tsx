@@ -9,7 +9,7 @@ import {
 } from '@/lib/jurisdiction/queries.ts'
 import { SUBMIT_BUTTON_CLASSES } from '@/components/ui-classes.ts'
 
-export const metadata = { title: 'Jurisdiction rules — Rental Operations' }
+export const metadata = { title: 'Jurisdiction rules' }
 
 function summarize(rule: {
   graceDays: number

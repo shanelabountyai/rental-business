@@ -7,16 +7,22 @@
 // was unactionable.
 //
 // A `tel:` link, so it dials on the phone they are already holding. The token
-// is invalid at this point so there is no property to look up; this is one
-// operations number for the whole portfolio.
+// is invalid at this point so there is no property to look up; the number is
+// the support phone of the org the HOST names (R-289), read from the brand
+// the root layout provides - a client component, because the vendor error
+// boundary is one and takes no props.
 //
 // Renders nothing when unset rather than an empty link. Better to say less
-// than to show a dead control — and the deployment checklist in .env.example
-// is where this belongs, not a hardcoded fallback nobody would notice was
-// wrong.
+// than to show a dead control. Also nothing in `global-error.tsx`, which
+// renders outside the root layout and so outside any org: a number guessed
+// there could be a different business's.
+
+'use client'
+
+import { useBrand } from '@/components/brand-context.tsx'
 
 export function VendorHelpLine() {
-  const phone = process.env.NEXT_PUBLIC_OPERATIONS_PHONE?.trim()
+  const phone = useBrand()?.supportPhone
   if (!phone) return null
 
   return (

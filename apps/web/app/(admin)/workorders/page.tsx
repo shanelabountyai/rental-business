@@ -9,7 +9,7 @@ import { PageHeader } from '@/components/page-header.tsx'
 import { SUBMIT_BUTTON_CLASSES } from '@/components/ui-classes.ts'
 import { Badge, type BadgeTone } from '@/components/badge.tsx'
 
-export const metadata = { title: 'Work orders — Rental Operations' }
+export const metadata = { title: 'Work orders' }
 
 const PRIORITY_LABELS: Record<string, string> = {
   EMERGENCY: 'Emergency',

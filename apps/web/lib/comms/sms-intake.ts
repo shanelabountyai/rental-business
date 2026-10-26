@@ -249,6 +249,8 @@ export { isOpenTicketStatus }
 /// The business name on a carrier keyword reply. Same constant and same
 /// shape as `email-opt-out.ts`'s, deliberately: a tenant who texts HELP and
 /// a tenant who clicks unsubscribe are being told about the same business.
+/// ponytail: one name for the one Twilio number. The number does not yet say
+/// which org it belongs to; R-292 gives each org its own and this the org's name.
 const BUSINESS_NAME = 'Rental Operations'
 
 /**

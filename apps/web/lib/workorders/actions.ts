@@ -15,6 +15,7 @@ import { type Prisma, prisma } from '@rental/db'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { audit } from '@/lib/audit/index.ts'
+import { authUrl } from '@/lib/auth/delivery.ts'
 import { isUniqueViolation } from '@/lib/db/unique-violation.ts'
 import { propertyResource, requirePermission, requireScope } from '@/lib/auth/guard.ts'
 import { resolveThread } from '@/lib/comms/threads.ts'
@@ -426,7 +427,9 @@ export async function dispatchToVendor(
         : ''
 
   const { token, expiresAt } = await issueVendorLink(workOrder.id, workOrder.vendorId)
-  const link = `${process.env.AUTH_URL ?? ''}/vendor/${token}`
+  const link = process.env.AUTH_URL
+    ? await authUrl(workOrder.orgId, `/vendor/${token}`)
+    : `/vendor/${token}`
   let sendNotice = `Link sent to ${workOrder.vendor.name}.`
 
   await prisma.$transaction(async (tx) => {

@@ -15,7 +15,7 @@ import { completeStaffMfa } from '@/lib/auth/actions.ts'
 export const dynamic = 'force-dynamic'
 
 
-export const metadata = { title: 'Two-factor code — Rental Operations' }
+export const metadata = { title: 'Two-factor code' }
 
 export default function MfaChallengePage() {
   return (

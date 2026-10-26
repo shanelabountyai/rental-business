@@ -10,7 +10,7 @@ import { currentScope } from '@/lib/scope/current-scope.ts'
 import { createWorkOrder } from '@/lib/workorders/actions.ts'
 import { unitsInScope, warrantiesForProperty } from '@/lib/workorders/queries.ts'
 
-export const metadata = { title: 'New work order — Rental Operations' }
+export const metadata = { title: 'New work order' }
 
 // requireScope, not a bare requirePermission: "may this actor create a work
 // order ANYWHERE" (same shape as /tasks/new, /maintenance/new). The

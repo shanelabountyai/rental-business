@@ -40,7 +40,7 @@ export async function sendPrescreenInvite(prospectId: string): Promise<void> {
     context: {
       firstName: prospect.firstName,
       addressLine1: prospect.property.addressLine1,
-      url: authUrl(`/prescreen/${issued.token}`),
+      url: await authUrl(prospect.orgId, `/prescreen/${issued.token}`),
     },
     propertyId: prospect.propertyId,
     // Idempotent per prospect - a resend deliberately reuses this key so a

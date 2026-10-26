@@ -4,7 +4,7 @@ import { PageHeader } from '@/components/page-header.tsx'
 import { requirePermission } from '@/lib/auth/guard.ts'
 import { saveInspectionTemplate } from '@/lib/inspections/template-actions.ts'
 
-export const metadata = { title: 'New checklist — Rental Operations' }
+export const metadata = { title: 'New checklist' }
 
 export default async function NewInspectionTemplatePage() {
   await requirePermission('inspection.write')

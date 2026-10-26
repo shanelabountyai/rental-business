@@ -11,7 +11,7 @@ import { type FormerTenantRow, formerTenantReceivables } from '@/lib/payments/fo
 import { writeOffReceivable } from '@/lib/payments/write-off-actions.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 
-export const metadata = { title: 'Former tenants — Rental Operations' }
+export const metadata = { title: 'Former tenants' }
 
 // Money owed by tenants who have moved out (R-215). The rent roll's
 // arithmetic over ended tenancies - see lib/payments/former-tenants.ts.

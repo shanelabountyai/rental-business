@@ -5,7 +5,7 @@ import { requireScope } from '@/lib/auth/guard.ts'
 import { upcomingCriticalDates } from '@/lib/reports/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 
-export const metadata = { title: 'Critical dates — Rental Operations' }
+export const metadata = { title: 'Critical dates' }
 
 // RPT-04's "upcoming critical dates, next 60 days": lease expirations,
 // insurance/mortgage renewals, renter's-insurance expiry, deposit-return

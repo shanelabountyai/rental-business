@@ -3,7 +3,7 @@ import { EntityForm } from '@/components/properties/entity-form.tsx'
 import { requirePermission } from '@/lib/auth/guard.ts'
 import { createLegalEntity } from '@/lib/properties/actions.ts'
 
-export const metadata = { title: 'New legal entity — Rental Operations' }
+export const metadata = { title: 'New legal entity' }
 
 // No resource: per R-004 this clears only for a portfolio-wide property.write
 // grant. Entity- and property-scoped managers do not create new entities -

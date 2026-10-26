@@ -43,7 +43,7 @@ export async function regenerateCalendarFeed(): Promise<CalendarFeedState> {
 
   revalidatePath('/account')
   return {
-    url: authUrl(`/api/calendar/${issued.token}`),
+    url: await authUrl(actor.orgId, `/api/calendar/${issued.token}`),
     notice:
       revoked > 0
         ? 'A new link. Any calendar still subscribed to the old one will stop updating — resubscribe with this.'

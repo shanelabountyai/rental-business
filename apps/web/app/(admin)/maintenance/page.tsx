@@ -8,7 +8,7 @@ import { currentScope } from '@/lib/scope/current-scope.ts'
 import { SUBMIT_BUTTON_CLASSES } from '@/components/ui-classes.ts'
 import { Badge } from '@/components/badge.tsx'
 
-export const metadata = { title: 'Maintenance — Rental Operations' }
+export const metadata = { title: 'Maintenance' }
 
 const SOURCE_LABELS: Record<string, string> = {
   PORTAL: 'Portal',

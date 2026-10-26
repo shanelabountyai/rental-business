@@ -52,7 +52,7 @@ export async function sendDueNotices(
 ): Promise<DueNoticeResult> {
   const property = await prisma.property.findUniqueOrThrow({
     where: { id: propertyId },
-    select: { timezone: true, addressLine1: true },
+    select: { orgId: true, timezone: true, addressLine1: true },
   })
 
   const today = businessDate(now, property.timezone)
@@ -141,7 +141,7 @@ export async function sendDueNotices(
           leaseId: payer.leaseId,
           notificationKey: idempotencyKey,
         })
-        url = authUrl(`/pay/${link.token}`)
+        url = await authUrl(property.orgId, `/pay/${link.token}`)
       } catch (error) {
         // Never fails the reminder. A tenant who does not get a link still
         // needs to know rent is due.

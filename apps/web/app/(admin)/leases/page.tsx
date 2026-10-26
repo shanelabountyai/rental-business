@@ -8,7 +8,7 @@ import { listLeases } from '@/lib/leases/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 import { Badge } from '@/components/badge.tsx'
 
-export const metadata = { title: 'Leases — Rental Operations' }
+export const metadata = { title: 'Leases' }
 
 // The tenancy list (LEASE-06, R-033). Running leases first - see
 // listLeases's own comment on why the ordering is by meaning rather than by

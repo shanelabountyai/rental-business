@@ -5,7 +5,7 @@ import { requireScope } from '@/lib/auth/guard.ts'
 import { dashboardSummary, type DashboardSummary } from '@/lib/dashboard/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 
-export const metadata = { title: 'Dashboard — Rental Operations' }
+export const metadata = { title: 'Dashboard' }
 
 // The owner's exception-first landing screen (RPT-01, RPT-04, R-050).
 //

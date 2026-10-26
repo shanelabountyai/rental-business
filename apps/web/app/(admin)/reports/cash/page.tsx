@@ -5,7 +5,7 @@ import { requireScope } from '@/lib/auth/guard.ts'
 import { cashSummaryByEntity } from '@/lib/reports/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 
-export const metadata = { title: 'Cash summary — Rental Operations' }
+export const metadata = { title: 'Cash summary' }
 
 // RPT-04's cash summary: collected vs. billed and the biggest outflows,
 // grouped by legal entity rather than the portfolio total the dashboard

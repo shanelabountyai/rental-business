@@ -5,7 +5,7 @@ import { requirePermission } from '@/lib/auth/guard.ts'
 import { inviteStaff } from '@/lib/staff/actions.ts'
 import { roleOptions, scopeOptions } from '@/lib/staff/options.ts'
 
-export const metadata = { title: 'Add staff member — Rental Operations' }
+export const metadata = { title: 'Add staff member' }
 
 export default async function NewStaffPage() {
   // `staff.manage` is on PRIVILEGED_PERMISSIONS, so an owner who has not

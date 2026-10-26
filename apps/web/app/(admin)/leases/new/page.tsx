@@ -7,7 +7,7 @@ import { createLease } from '@/lib/leases/actions.ts'
 import { unitsForNewLease } from '@/lib/leases/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 
-export const metadata = { title: 'New lease — Rental Operations' }
+export const metadata = { title: 'New lease' }
 
 // Both paths start here (LEASE-06, RISK-08). The origin radio is the fork:
 // an ordinary application, or a tenancy inherited at acquisition. Everything

@@ -11,7 +11,7 @@ import { taxPacket } from '@/lib/tax/packet.ts'
 import { exportableEntities } from '@/lib/tax/queries.ts'
 import { SUBMIT_BUTTON_CLASSES } from '@/components/ui-classes.ts'
 
-export const metadata = { title: 'Tax packet — Rental Operations' }
+export const metadata = { title: 'Tax packet' }
 
 // RPT-07 (R-081b): the year-end packet — Schedule E per property, the CapEx
 // schedule, deposit liability, and the 1099-NEC candidate list.

@@ -18,7 +18,7 @@ import { getPreferences } from '@/lib/notifications/queries.ts'
 import { CalendarFeedPanel } from '@/components/account/calendar-feed-panel.tsx'
 import { regenerateCalendarFeed } from '@/lib/calendar/actions.ts'
 
-export const metadata = { title: 'Your account — Rental Operations' }
+export const metadata = { title: 'Your account' }
 
 // Lives inside the admin shell (R-007). Shows the resolved permission set and
 // ceilings, and owns MFA enrolment - which every privileged action depends on

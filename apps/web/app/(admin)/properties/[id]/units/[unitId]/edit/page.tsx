@@ -5,7 +5,7 @@ import { UnitForm } from '@/components/units/unit-form.tsx'
 import { propertyResource, requirePermission, requireStaff } from '@/lib/auth/guard.ts'
 import { updateUnit } from '@/lib/units/actions.ts'
 
-export const metadata = { title: 'Edit unit — Rental Operations' }
+export const metadata = { title: 'Edit unit' }
 
 export default async function EditUnitPage({
   params,

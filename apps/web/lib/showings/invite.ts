@@ -34,7 +34,7 @@ export async function sendShowingInvite(prospectId: string): Promise<void> {
     context: {
       firstName: prospect.firstName,
       addressLine1: prospect.property.addressLine1,
-      url: authUrl(`/showings/${issued.token}`),
+      url: await authUrl(prospect.orgId, `/showings/${issued.token}`),
     },
     propertyId: prospect.propertyId,
     // Idempotent per prospect - a resend deliberately reuses this key so a

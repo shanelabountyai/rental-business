@@ -4,7 +4,7 @@ import { MagicLinkConfirm } from '@/components/portal/magic-link-confirm.tsx'
 export const dynamic = 'force-dynamic'
 
 export const metadata = {
-  title: 'Continue to your guarantor page — Rental Operations',
+  title: 'Continue to your guarantor page',
   robots: { index: false, follow: false },
 }
 

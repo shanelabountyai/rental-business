@@ -6,7 +6,7 @@ import { openEvictionCase } from '@/lib/evictions/actions.ts'
 import { leasesWithoutOpenCase } from '@/lib/evictions/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 
-export const metadata = { title: 'Open an eviction case — Rental Operations' }
+export const metadata = { title: 'Open an eviction case' }
 
 export default async function NewEvictionCasePage() {
   // R-103: `requireScope`, never a resource-less `requirePermission` - an

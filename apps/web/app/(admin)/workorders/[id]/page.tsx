@@ -76,7 +76,7 @@ import {
 } from '@/lib/workorders/queries.ts'
 import { markInvoicePaid } from '@/lib/vendors/staff-actions.ts'
 
-export const metadata = { title: 'Work order — Rental Operations' }
+export const metadata = { title: 'Work order' }
 
 /// Mirrors APPROVAL_DEFAULTS.bidThresholdCents - imported as a constant
 /// rather than re-deriving the whole policy here, since this page only needs

@@ -7,7 +7,7 @@ import { requirePermission } from '@/lib/auth/guard.ts'
 import { createRuleVersion } from '@/lib/jurisdiction/actions.ts'
 import { currentRuleVersion, listCurrentRules } from '@/lib/jurisdiction/queries.ts'
 
-export const metadata = { title: 'New jurisdiction rule — Rental Operations' }
+export const metadata = { title: 'New jurisdiction rule' }
 
 // No resource: per R-004 this only clears for a portfolio-wide
 // jurisdiction.write grant, correct here since a JurisdictionRule applies by

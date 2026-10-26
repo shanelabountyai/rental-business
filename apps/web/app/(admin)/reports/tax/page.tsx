@@ -7,7 +7,7 @@ import { exportableEntities, taxExportFacts } from '@/lib/tax/queries.ts'
 import { PageHeader } from '@/components/page-header.tsx'
 import { SUBMIT_BUTTON_CLASSES } from '@/components/ui-classes.ts'
 
-export const metadata = { title: 'Tax export — Rental Operations' }
+export const metadata = { title: 'Tax export' }
 
 // RPT-03 (R-078): the year-end income/expense export per legal entity,
 // mapped to Schedule E lines and QuickBooks accounts.

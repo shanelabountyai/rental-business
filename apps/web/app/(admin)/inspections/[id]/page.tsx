@@ -27,7 +27,7 @@ import { getInspection } from '@/lib/inspections/queries.ts'
 import { rulesFor } from '@/lib/jurisdiction/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 
-export const metadata = { title: 'Inspection — Rental Operations' }
+export const metadata = { title: 'Inspection' }
 
 // NO `loading.tsx` HERE OR ABOVE. This page calls notFound() and a Suspense
 // boundary above it would stream a 200 before the page ran (R-099).

@@ -10,7 +10,7 @@ import { requireScope } from '@/lib/auth/guard.ts'
 import { filingCabinetAlertsDue } from '@/lib/filing-cabinet/queries.ts'
 import { currentScope } from '@/lib/scope/current-scope.ts'
 
-export const metadata = { title: 'Renewals & alerts — Rental Operations' }
+export const metadata = { title: 'Renewals & alerts' }
 
 const KIND_LABELS: Record<string, string> = {
   ARM_ADJUSTMENT: 'ARM rate adjustment',
